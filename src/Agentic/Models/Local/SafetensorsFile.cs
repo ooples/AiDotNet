@@ -159,6 +159,79 @@ public sealed class SafetensorsFile : INamedTensorSource
         }
     }
 
+    /// <summary>Receives one decoded run of a tensor's values: the index of the run's first element and the values.</summary>
+    internal delegate void DecodedChunk(int offset, ReadOnlySpan<double> values);
+
+    /// <summary>
+    /// Decodes a float tensor (F64, F32, F16, BF16) in row-major order through a small reused buffer, handing each run of
+    /// values to <paramref name="sink"/>. Unlike <see cref="ReadAsDouble"/>, nothing the size of the tensor is allocated, so
+    /// a loader can copy a multi-gigabyte checkpoint straight into its own storage.
+    /// </summary>
+    internal void Decode(string name, DecodedChunk sink)
+    {
+        Guard.NotNull(sink);
+        var tensor = Require(name);
+        int elementSize = tensor.DataType switch
+        {
+            "F64" => 8,
+            "F32" => 4,
+            "F16" or "BF16" => 2,
+            _ => throw new NotSupportedException($"Decoding dtype '{tensor.DataType}' is not supported; use GetRawBytes for raw access."),
+        };
+        if (tensor.EndByte > _payloadLength)
+            throw new InvalidDataException($"Tensor '{tensor.Name}' has a byte range outside the file payload.");
+        if (tensor.ByteLength % elementSize != 0)
+            throw new InvalidDataException(
+                $"Tensor '{tensor.Name}' has byte length {tensor.ByteLength}, which is not a whole multiple of the {elementSize}-byte '{tensor.DataType}' element size.");
+
+        int kind = tensor.DataType switch { "F64" => 0, "F32" => 1, "F16" => 2, _ => 3 };
+        long total = tensor.ByteLength / elementSize;
+        const int ChunkElements = 1 << 16;
+        var bytes = System.Buffers.ArrayPool<byte>.Shared.Rent(ChunkElements * elementSize);
+        var values = System.Buffers.ArrayPool<double>.Shared.Rent(ChunkElements);
+        try
+        {
+            lock (_streamGate)
+            {
+                if (_data is null && _stream is null) throw new InvalidOperationException("The safetensors file has no backing data source.");
+                long position = _dataStart + tensor.BeginByte;
+                if (_stream is { } stream) stream.Seek(position, SeekOrigin.Begin);
+                for (long done = 0; done < total;)
+                {
+                    int count = (int)Math.Min(ChunkElements, total - done);
+                    int byteCount = count * elementSize;
+                    if (_data is { } data)
+                    {
+                        Array.Copy(data, position + done * elementSize, bytes, 0, byteCount);
+                    }
+                    else
+                    {
+                        for (int read = 0; read < byteCount;)
+                        {
+                            int n = _stream!.Read(bytes, read, byteCount - read);
+                            if (n <= 0) throw new InvalidDataException($"safetensors stream ended before tensor '{tensor.Name}' was fully read.");
+                            read += n;
+                        }
+                    }
+                    switch (kind)
+                    {
+                        case 0: for (int i = 0; i < count; i++) values[i] = BitConverter.ToDouble(bytes, i * 8); break;
+                        case 1: for (int i = 0; i < count; i++) values[i] = BitConverter.ToSingle(bytes, i * 4); break;
+                        case 2: for (int i = 0; i < count; i++) values[i] = HalfToFloat(BitConverter.ToUInt16(bytes, i * 2)); break;
+                        default: for (int i = 0; i < count; i++) values[i] = BFloat16ToFloat(BitConverter.ToUInt16(bytes, i * 2)); break;
+                    }
+                    sink(checked((int)done), new ReadOnlySpan<double>(values, 0, count));
+                    done += count;
+                }
+            }
+        }
+        finally
+        {
+            System.Buffers.ArrayPool<byte>.Shared.Return(bytes);
+            System.Buffers.ArrayPool<double>.Shared.Return(values);
+        }
+    }
+
     private SafetensorsTensor Require(string name)
     {
         Guard.NotNull(name);

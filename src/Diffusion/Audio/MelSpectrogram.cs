@@ -260,6 +260,11 @@ public partial class MelSpectrogram<T>
                 // filterbank -- the expensive part -- still run on the GPU.
                 bool fusedLog = _logMel && _logOffset is null;
                 var gpuMel = Engine.MelSpectrogram(signal, _sampleRate, _nFft, _hopLength, _nMels, fMinT, fMaxT, _windowTensor, fusedLog);
+                // The engine kernel returns [..., mel bins, frames]; this feature extractor's
+                // public contract, shared with the CPU path, is [..., frames, mel bins].
+                var axes = Enumerable.Range(0, gpuMel.Rank).ToArray();
+                (axes[axes.Length - 2], axes[axes.Length - 1]) = (axes[axes.Length - 1], axes[axes.Length - 2]);
+                gpuMel = Engine.TensorPermute(gpuMel, axes);
                 return _logOffset is null ? gpuMel : ApplyLogOffset(gpuMel);
             }
             catch

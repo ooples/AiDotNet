@@ -29,15 +29,13 @@ namespace AiDotNet.Generators;
 /// so a fix cannot land without removing its line.</item>
 /// </list>
 /// <para>
-/// <b>What counts as a read (ADNOPT001).</b> Deliberately conservative, so a report is always a real
-/// unread option: any member access of the property, anywhere in the AiDotNet assembly, that is not
-/// the target of a plain assignment and is not inside <c>nameof</c>, the options class hierarchy that
-/// declares the property, a copy constructor, or a <c>Clone</c> method. Being assembly-wide rather
-/// than per-model means a property read by a base class, a helper the options are handed to, or a
-/// sibling model counts as read; the generated runtime option-sensitivity test is what then checks
-/// each individual model. Generated code is analyzed for reads too (a generated consumer is still a
-/// consumer), but no diagnostic is reported inside it. The generated clone plan and YAML binder do not
-/// count against this: the plan reaches members by reflection and the binder only assigns.
+/// <b>What counts as a read (ADNOPT001).</b> Reads outside the options hierarchy count directly.
+/// Reads inside value-producing options helpers and computed getters count only when a consumer
+/// reaches them, including calls through other options helpers. Uncalled helpers, options constructors,
+/// Clone, nameof, plain writes and validation-only void methods do not count. Reads may be implicit
+/// identifiers as well as member accesses. The analysis is assembly-wide; generated runtime option-
+/// sensitivity tests then check each model individually. Generated consumers count too, but diagnostics
+/// are reported only in user code.
 /// </para>
 /// </remarks>
 [DiagnosticAnalyzer(LanguageNames.CSharp)]
@@ -97,13 +95,33 @@ public sealed class OptionsFidelityAnalyzer : DiagnosticAnalyzer
             // Only member accesses whose name is some options property's name can be a read that
             // matters, so the semantic lookup is skipped for every other member access in the assembly.
             var candidateNames = new HashSet<string>(StringComparer.Ordinal);
-            foreach (var type in SourceTypes(start.Compilation.Assembly.GlobalNamespace).Where(t => DerivesFrom(t, modelOptions)))
+            var candidateMethods = new HashSet<string>(StringComparer.Ordinal);
+            var sourceOptions = SourceTypes(start.Compilation.Assembly.GlobalNamespace).Where(t => DerivesFrom(t, modelOptions)).ToList();
+            foreach (var type in sourceOptions)
             {
                 foreach (var property in type.GetMembers().OfType<IPropertySymbol>())
                     candidateNames.Add(property.Name);
+                foreach (var method in type.GetMembers().OfType<IMethodSymbol>().Where(m => !m.ReturnsVoid))
+                    candidateMethods.Add(method.Name);
             }
+            // OptionReadGraph drops every Clone target, so binding the assembly's Clone calls (tensor clones
+            // among them) found nothing and cost most of the invocation pass.
+            candidateMethods.Remove("Clone");
 
-            var read = new ConcurrentDictionary<IPropertySymbol, byte>(SymbolEqualityComparer.Default);
+            // A simple name binds to an options property only through member scope (code inside an options
+            // type or a type nested in one) or a using static import; property patterns have their own action.
+            // Without this check every identifier sharing a name with some option (LearningRate, SampleRate,
+            // ModelPath in model code) was bound: the compat build's net471 compile spent 684 s here.
+            var usingStaticTrees = new HashSet<SyntaxTree>(start.Compilation.SyntaxTrees.Where(tree =>
+                tree.GetRoot(start.CancellationToken)
+                    .DescendantNodes(n => n is CompilationUnitSyntax || n is BaseNamespaceDeclarationSyntax)
+                    .OfType<UsingDirectiveSyntax>()
+                    .Any(u => u.StaticKeyword.IsKind(SyntaxKind.StaticKeyword))));
+            bool globalUsingStatic = usingStaticTrees.Any(tree =>
+                tree.GetRoot(start.CancellationToken).ChildNodes().OfType<UsingDirectiveSyntax>()
+                    .Any(u => u.StaticKeyword.IsKind(SyntaxKind.StaticKeyword) && u.GlobalKeyword.IsKind(SyntaxKind.GlobalKeyword)));
+
+            var read = new OptionReadGraph(modelOptions, sourceOptions);
             var models = new ConcurrentBag<(INamedTypeSymbol Model, INamedTypeSymbol Options, bool CitesPaper)>();
 
             start.RegisterSyntaxNodeAction(
@@ -136,8 +154,48 @@ public sealed class OptionsFidelityAnalyzer : DiagnosticAnalyzer
             start.RegisterSymbolAction(symbolContext =>
                 ValidateClassPaperDefaults(symbolContext, (INamedTypeSymbol)symbolContext.Symbol), SymbolKind.NamedType);
 
+            start.RegisterSyntaxNodeAction(nodeContext =>
+            {
+                var name = (IdentifierNameSyntax)nodeContext.Node;
+                if ((name.Parent is MemberAccessExpressionSyntax access && access.Name == name)
+                    || name.Parent is MemberBindingExpressionSyntax) return;
+                if (!candidateNames.Contains(name.Identifier.ValueText)) return;
+                if (!globalUsingStatic && !usingStaticTrees.Contains(name.SyntaxTree)
+                    && !InOptionsMemberScope(nodeContext.ContainingSymbol, modelOptions)) return;
+                RecordRead(nodeContext, name, modelOptions, candidateNames, read);
+            }, SyntaxKind.IdentifierName);
+            start.RegisterSyntaxNodeAction(nodeContext =>
+            {
+                var expression = ((InvocationExpressionSyntax)nodeContext.Node).Expression;
+                string? methodName = expression switch
+                {
+                    MemberAccessExpressionSyntax access => access.Name.Identifier.ValueText,
+                    MemberBindingExpressionSyntax binding => binding.Name.Identifier.ValueText,
+                    SimpleNameSyntax name => name.Identifier.ValueText,
+                    _ => null
+                };
+                if (methodName is null || !candidateMethods.Contains(methodName)) return;
+                if (nodeContext.SemanticModel.GetSymbolInfo(nodeContext.Node, nodeContext.CancellationToken).Symbol is IMethodSymbol method)
+                    read.Call(nodeContext.ContainingSymbol, method);
+            }, SyntaxKind.InvocationExpression);
+            start.RegisterSyntaxNodeAction(nodeContext =>
+            {
+                if (nodeContext.ContainingSymbol is not IMethodSymbol
+                    { MethodKind: MethodKind.PropertySet, AssociatedSymbol: IPropertySymbol alias } setter
+                    || !DerivesFrom(alias.ContainingType, modelOptions)) return;
+                var assignment = (AssignmentExpressionSyntax)nodeContext.Node;
+                if (!assignment.Right.DescendantNodesAndSelf().OfType<IdentifierNameSyntax>().Any(name =>
+                    name.Identifier.ValueText == "value" && !IsInsideNameof(name) &&
+                    nodeContext.SemanticModel.GetSymbolInfo(name, nodeContext.CancellationToken).Symbol is IParameterSymbol parameter &&
+                    SymbolEqualityComparer.Default.Equals(parameter.ContainingSymbol, setter))) return;
+                if (nodeContext.SemanticModel.GetSymbolInfo(assignment.Left, nodeContext.CancellationToken).Symbol is IPropertySymbol target)
+                    read.Forward(alias, target);
+            }, SyntaxKind.SimpleAssignmentExpression);
+
+
             start.RegisterCompilationEndAction(end =>
             {
+                read.Resolve();
                 var optionsTypes = models.Select(m => m.Options.OriginalDefinition)
                     .Distinct<INamedTypeSymbol>(SymbolEqualityComparer.Default)
                     .ToList();
@@ -256,19 +314,19 @@ public sealed class OptionsFidelityAnalyzer : DiagnosticAnalyzer
         SimpleNameSyntax name,
         INamedTypeSymbol modelOptions,
         HashSet<string> candidateNames,
-        ConcurrentDictionary<IPropertySymbol, byte> read)
+        OptionReadGraph read)
     {
         if (!candidateNames.Contains(name.Identifier.ValueText)) return;
+        // XML cref links describe an option; they never consume its runtime value.
+        // Binding these links depends on whether XML documentation output is enabled.
+        if (name.Ancestors().OfType<DocumentationCommentTriviaSyntax>().Any()) return;
         if (context.SemanticModel.GetSymbolInfo(name, context.CancellationToken).Symbol is not IPropertySymbol property) return;
         var declaring = property.OriginalDefinition.ContainingType;
-        if (declaring is null || !DerivesFrom(declaring, modelOptions)) return;
-        if (IsWriteOnly(context.Node) || IsInsideNameof(context.Node)) return;
-        if (IsExcludedLocation(context.ContainingSymbol, declaring)) return;
-
-        // A read through a base declaration reaches every override, and a read of an override reaches
-        // the declaration it overrides; both count, since either is the option being consumed.
-        for (IPropertySymbol? walk = property.OriginalDefinition; walk is not null; walk = walk.OverriddenProperty?.OriginalDefinition)
-            read.TryAdd(walk, 0);
+        if (declaring is null || IsWriteOnly(context.Node) || IsInsideNameof(context.Node)) return;
+        if (DerivesFrom(declaring, modelOptions))
+            read.Record(context.ContainingSymbol, property);
+        else
+            read.RecordInterface(context.ContainingSymbol, property);
     }
 
     /// <summary>True when the access is only the target of a plain assignment.</summary>
@@ -289,6 +347,15 @@ public sealed class OptionsFidelityAnalyzer : DiagnosticAnalyzer
         return target.Parent is AssignmentExpressionSyntax assignment
             && assignment.IsKind(SyntaxKind.SimpleAssignmentExpression)
             && assignment.Left == target;
+    }
+
+    /// <summary>True when code in <paramref name="containing"/> can reach an options property by its simple
+    /// name: an enclosing type (the type itself or one it is nested in) derives from the options base.</summary>
+    private static bool InOptionsMemberScope(ISymbol? containing, INamedTypeSymbol modelOptions)
+    {
+        for (var type = containing as INamedTypeSymbol ?? containing?.ContainingType; type is not null; type = type.ContainingType)
+            if (DerivesFrom(type, modelOptions)) return true;
+        return false;
     }
 
     private static bool IsInsideNameof(SyntaxNode node)
@@ -563,5 +630,107 @@ public sealed class OptionsFidelityAnalyzer : DiagnosticAnalyzer
     {
         foreach (var entry in baseline.Where(e => !current.Contains(e)).OrderBy(e => e, StringComparer.Ordinal))
             end.ReportDiagnostic(Diagnostic.Create(StaleBaseline, Location.None, entry, name));
+    }
+    // Follow value-producing options helpers only when a consumer reaches them. Uncalled helpers,
+    // validation-only void methods, copy constructors and Clone do not make an option consumed.
+    private sealed class OptionReadGraph
+    {
+        private readonly INamedTypeSymbol _modelOptions;
+        private readonly ConcurrentDictionary<IPropertySymbol, byte> _properties = new(SymbolEqualityComparer.Default);
+        private readonly ConcurrentDictionary<IMethodSymbol, byte> _roots = new(SymbolEqualityComparer.Default);
+        private readonly ConcurrentDictionary<IMethodSymbol, ConcurrentDictionary<IPropertySymbol, byte>> _reads = new(SymbolEqualityComparer.Default);
+        private readonly ConcurrentDictionary<IMethodSymbol, ConcurrentDictionary<IMethodSymbol, byte>> _calls = new(SymbolEqualityComparer.Default);
+
+        private readonly Dictionary<IPropertySymbol, List<IPropertySymbol>> _interfaces = new(SymbolEqualityComparer.Default);
+        private readonly ConcurrentDictionary<IPropertySymbol, ConcurrentDictionary<IPropertySymbol, byte>> _forwarded = new(SymbolEqualityComparer.Default);
+
+        internal OptionReadGraph(INamedTypeSymbol modelOptions, IEnumerable<INamedTypeSymbol> options)
+        {
+            _modelOptions = modelOptions;
+            foreach (var type in options)
+            foreach (var contract in type.AllInterfaces)
+            foreach (var member in contract.GetMembers().OfType<IPropertySymbol>())
+            {
+                if (type.FindImplementationForInterfaceMember(member) is not IPropertySymbol implementation) continue;
+                var key = member.OriginalDefinition;
+                if (!_interfaces.TryGetValue(key, out var implementations))
+                    _interfaces[key] = implementations = new List<IPropertySymbol>();
+                implementations.Add(implementation.OriginalDefinition);
+            }
+        }
+
+        internal void RecordInterface(ISymbol? containing, IPropertySymbol property)
+        {
+            if (_interfaces.TryGetValue(property.OriginalDefinition, out var implementations))
+                foreach (var implementation in implementations) Record(containing, implementation);
+        }
+
+        internal void Forward(IPropertySymbol alias, IPropertySymbol target) =>
+            _forwarded.GetOrAdd(alias.OriginalDefinition, _ => new(SymbolEqualityComparer.Default))
+                .TryAdd(target.OriginalDefinition, 0);
+        internal bool ContainsKey(IPropertySymbol property) => _properties.ContainsKey(property);
+
+        private static IMethodSymbol? Method(ISymbol? symbol)
+        {
+            while (symbol is IMethodSymbol { MethodKind: MethodKind.AnonymousFunction or MethodKind.LocalFunction })
+                symbol = symbol.ContainingSymbol;
+            return symbol as IMethodSymbol;
+        }
+
+        private bool Excluded(IMethodSymbol? method) => method is not null &&
+            (method.Name == "Clone" || (method.MethodKind == MethodKind.Constructor && DerivesFrom(method.ContainingType, _modelOptions)));
+        internal void Record(ISymbol? containing, IPropertySymbol property)
+        {
+            var caller = Method(containing);
+            if (Excluded(caller)) return;
+            bool insideOptions = IsExcludedLocation(containing, property.OriginalDefinition.ContainingType);
+            if (insideOptions && (caller is null || caller.ReturnsVoid)) return;
+            for (IPropertySymbol? walk = property.OriginalDefinition; walk is not null; walk = walk.OverriddenProperty?.OriginalDefinition)
+            {
+                if (insideOptions)
+                    _reads.GetOrAdd(caller!.OriginalDefinition, _ => new(SymbolEqualityComparer.Default)).TryAdd(walk, 0);
+                else
+                    _properties.TryAdd(walk, 0);
+                if (walk.GetMethod is { } getter) Call(containing, getter);
+            }
+        }
+
+        internal void Call(ISymbol? containing, IMethodSymbol target)
+        {
+            if (target.ReturnsVoid || Excluded(target) || !DerivesFrom(target.ContainingType, _modelOptions)) return;
+            var caller = Method(containing);
+            if (Excluded(caller)) return;
+            target = target.OriginalDefinition;
+            if (caller is not null && DerivesFrom(caller.ContainingType, _modelOptions))
+            {
+                if (!caller.ReturnsVoid)
+                    _calls.GetOrAdd(caller.OriginalDefinition, _ => new(SymbolEqualityComparer.Default)).TryAdd(target, 0);
+            }
+            else if (containing?.ContainingType is not { } owner || !DerivesFrom(owner, _modelOptions))
+                _roots.TryAdd(target, 0);
+        }
+
+        internal void Resolve()
+        {
+            var visited = new HashSet<IMethodSymbol>(SymbolEqualityComparer.Default);
+            var pending = new Stack<IMethodSymbol>(_roots.Keys);
+            while (pending.Count > 0)
+            {
+                var method = pending.Pop();
+                if (!visited.Add(method)) continue;
+                if (_reads.TryGetValue(method, out var properties))
+                    foreach (var property in properties.Keys) _properties.TryAdd(property, 0);
+                if (_calls.TryGetValue(method, out var calls))
+                    foreach (var call in calls.Keys) pending.Push(call);
+            }
+            bool changed;
+            do
+            {
+                changed = false;
+                foreach (var pair in _forwarded)
+                    if (pair.Value.Keys.Any(_properties.ContainsKey))
+                        changed |= _properties.TryAdd(pair.Key, 0);
+            } while (changed);
+        }
     }
 }

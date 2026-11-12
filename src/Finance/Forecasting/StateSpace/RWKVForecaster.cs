@@ -82,6 +82,7 @@ public partial class RWKVForecaster<T> : ForecastingModelBase<T>
     private DenseLayer<T>? _inputEmbedding;
     /// <summary>The RWKV-7 stack. One layer owning N blocks, because the value residual is cross-layer.</summary>
     private Rwkv7Stack<T>? _rwkvStack;
+    private DropoutLayer<T>? _embeddingDropout;
     private List<DenseLayer<T>>? _outputProjectionLayers;
     #endregion
 
@@ -277,6 +278,7 @@ public partial class RWKVForecaster<T> : ForecastingModelBase<T>
     {
         _inputEmbedding = Layers.OfType<DenseLayer<T>>().FirstOrDefault();
         _rwkvStack = Layers.OfType<Rwkv7Stack<T>>().FirstOrDefault();
+        _embeddingDropout = Layers.OfType<DropoutLayer<T>>().FirstOrDefault();
         _outputProjectionLayers = Layers.OfType<DenseLayer<T>>().Skip(1).ToList();
     }
 
@@ -512,6 +514,10 @@ public partial class RWKVForecaster<T> : ForecastingModelBase<T>
             current = _inputEmbedding.Forward(current);
             current = Engine.Reshape(current, new[] { batchSize, seqLen, _modelDimension });
         }
+
+        // DropoutRate on the embedding (RWKV-LM's drop0); identity outside training mode.
+        if (_embeddingDropout is not null)
+            current = _embeddingDropout.Forward(current);
 
         // RWKV layers: [batch, seqLen, modelDim] -> [batch, seqLen, modelDim]
         // One call: the stack threads v_first across its blocks internally. Looping the blocks here
