@@ -171,12 +171,7 @@ public class SubgraphFederatedTrainer<T> : FederatedLearningComponentBase<T>, IF
     {
         // Create a local copy of global parameters
         int modelSize = globalParams.Shape[0];
-        var localParams = new Tensor<T>(new[] { modelSize });
-
-        for (int i = 0; i < modelSize; i++)
-        {
-            localParams[i] = globalParams[i];
-        }
+        var localParams = Engine.TensorMultiplyScalar(globalParams.Reshape(new[] { globalParams.Length }), NumOps.One);
 
         if (labels is null)
         {
@@ -184,71 +179,73 @@ public class SubgraphFederatedTrainer<T> : FederatedLearningComponentBase<T>, IF
         }
 
         // Simple GNN forward pass simulation: message passing + update
-        int numNodes = expanded.NodeFeatures.Shape[0];
-        int featureDim = expanded.NodeFeatures.Shape.Length > 1 ? expanded.NodeFeatures.Shape[1] : 1;
-
         // Compute aggregated neighbor features using adjacency
-        var nodeEmbeddings = ComputeNodeEmbeddings(expanded, featureDim);
+        var nodeEmbeddings = ComputeNodeEmbeddings(expanded);
+        int numNodes = nodeEmbeddings.Length;
 
         // Compute gradient-like update based on label error
         int labelCount = Math.Min(labels.Shape[0], numNodes);
-        double totalError = 0;
-
-        for (int n = 0; n < labelCount; n++)
+        double gradientScale = 0;
+        if (labelCount > 0)
         {
-            double predicted = NumOps.ToDouble(nodeEmbeddings[n]);
-            double target = NumOps.ToDouble(labels[n]);
-            totalError += (predicted - target) * (predicted - target);
+            var errors = Engine.TensorSubtract(
+                Engine.TensorSlice(nodeEmbeddings, new[] { 0 }, new[] { labelCount }),
+                Engine.TensorSlice(labels.Reshape(new[] { labels.Length }), new[] { 0 }, new[] { labelCount }));
+            gradientScale = SumOfSquares(errors) / labelCount;
         }
 
-        // Apply a simple gradient scaling to the local parameters
+        // Apply a simple gradient scaling to the local parameters: p -= lr * scale * p * 0.01
         double learningRate = 0.01;
-        double gradientScale = labelCount > 0 ? totalError / labelCount : 0;
-
-        for (int i = 0; i < modelSize; i++)
-        {
-            double param = NumOps.ToDouble(localParams[i]);
-            param -= learningRate * gradientScale * param * 0.01; // Simple L2-like update
-            localParams[i] = NumOps.FromDouble(param);
-        }
-
-        return localParams;
+        return Engine.TensorMultiplyScalar(localParams, NumOps.FromDouble(1.0 - learningRate * gradientScale * 0.01));
     }
 
-    private Tensor<T> ComputeNodeEmbeddings(ExpandedSubgraph<T> expanded, int featureDim)
+    /// <summary>
+    /// Mean over each node's neighbors of the neighbor's summed features. The node count comes from the
+    /// adjacency (N x N, flattened) and the feature width from the flattened features (N * F).
+    /// </summary>
+    private Tensor<T> ComputeNodeEmbeddings(ExpandedSubgraph<T> expanded)
     {
-        int numNodes = expanded.NodeFeatures.Shape[0];
-        var embeddings = new Tensor<T>(new[] { numNodes });
-
-        for (int i = 0; i < numNodes; i++)
+        int numNodes = (int)Math.Sqrt(expanded.Adjacency.Length);
+        if (numNodes == 0)
         {
-            double sum = 0;
-            int neighbors = 0;
-
-            // Aggregate neighbor features (message passing)
-            for (int j = 0; j < numNodes; j++)
-            {
-                double adjValue = NumOps.ToDouble(expanded.Adjacency[i * numNodes + j]);
-                if (adjValue > 0)
-                {
-                    for (int f = 0; f < featureDim && (i * featureDim + f) < expanded.NodeFeatures.Shape[0]; f++)
-                    {
-                        int idx = j * featureDim + f;
-                        if (idx < expanded.NodeFeatures.Shape[0])
-                        {
-                            sum += NumOps.ToDouble(expanded.NodeFeatures[idx]);
-                        }
-                    }
-
-                    neighbors++;
-                }
-            }
-
-            // Mean aggregation
-            embeddings[i] = NumOps.FromDouble(neighbors > 0 ? sum / neighbors : 0);
+            return new Tensor<T>(new[] { 0 });
         }
 
-        return embeddings;
+        int featureDim = expanded.NodeFeatures.Length / numNodes;
+
+        // Aggregate neighbor features (message passing)
+        var adjacency = Engine.TensorSlice(expanded.Adjacency.Reshape(new[] { expanded.Adjacency.Length }), new[] { 0 }, new[] { numNodes * numNodes })
+            .Reshape(new[] { numNodes, numNodes });
+        var neighborMask = Engine.TensorGreaterThan(adjacency, NumOps.Zero);
+        var featureSums = featureDim == 0
+            ? new Tensor<T>(new[] { numNodes, 1 })
+            : Engine.ReduceSum(
+                Engine.TensorSlice(expanded.NodeFeatures.Reshape(new[] { expanded.NodeFeatures.Length }), new[] { 0 }, new[] { numNodes * featureDim })
+                    .Reshape(new[] { numNodes, featureDim }),
+                new[] { 1 }, true);
+        var sums = Engine.TensorMatMul(neighborMask, featureSums).Reshape(new[] { numNodes });
+        var counts = Engine.ReduceSum(neighborMask, new[] { 1 }, false);
+
+        // Mean aggregation (nodes without neighbors embed to 0)
+        var hasNeighbors = Engine.TensorGreaterThan(counts, NumOps.Zero);
+        var safeCounts = Engine.TensorWhere(hasNeighbors, counts, Engine.TensorOnesLike(counts));
+        return Engine.TensorMultiply(Engine.TensorDivide(sums, safeCounts), hasNeighbors);
+    }
+
+    /// <summary>
+    /// Σ v² computed as max|v|² · Σ (v / max|v|)² so the squares cannot overflow narrow T.
+    /// </summary>
+    private double SumOfSquares(Tensor<T> values)
+    {
+        T maxAbs = Engine.TensorMaxValue(Engine.TensorAbs(values));
+        if (!NumOps.GreaterThan(maxAbs, NumOps.Zero))
+        {
+            return 0;
+        }
+
+        double scaled = NumOps.ToDouble(Engine.TensorSum(Engine.TensorSquare(Engine.TensorDivideScalar(values, maxAbs))));
+        double max = NumOps.ToDouble(maxAbs);
+        return max * max * scaled;
     }
 
     private Dictionary<int, Tensor<T>> GetCrossClientNeighborFeatures(int clientId)
@@ -301,11 +298,13 @@ public class SubgraphFederatedTrainer<T> : FederatedLearningComponentBase<T>, IF
         double scale = Math.Sqrt(2.0 / (_options.NodeFeatureDimension + _options.HiddenDimension));
         var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSecureRandom();
 
+        var values = new double[modelSize];
         for (int i = 0; i < modelSize; i++)
         {
-            double val = (rng.NextDouble() * 2 - 1) * scale;
-            _globalModel[i] = NumOps.FromDouble(val);
+            values[i] = (rng.NextDouble() * 2 - 1) * scale;
         }
+
+        _globalModel = new Tensor<double>(values, new[] { modelSize }).Cast<T>();
     }
 
     private ClientGraphStats ComputeGraphStats(Tensor<T> adjacency, Tensor<T> nodeFeatures, Tensor<T>? nodeLabels)
@@ -318,15 +317,10 @@ public class SubgraphFederatedTrainer<T> : FederatedLearningComponentBase<T>, IF
 
         int totalElements = adjacency.Shape[0];
         int matrixSize = (int)Math.Sqrt(totalElements);
-        int edgeCount = 0;
-
-        for (int i = 0; i < totalElements; i++)
-        {
-            if (NumOps.GreaterThan(adjacency[i], NumOps.Zero))
-            {
-                edgeCount++;
-            }
-        }
+        int edgeCount = totalElements == 0
+            ? 0
+            : Engine.TensorCountNonzero(Engine.TensorGreaterThan(
+                Engine.TensorSlice(adjacency.Reshape(new[] { adjacency.Length }), new[] { 0 }, new[] { totalElements }), NumOps.Zero));
 
         return new ClientGraphStats
         {

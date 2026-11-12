@@ -701,4 +701,37 @@ public class FederatedElementwiseSweep29bReferenceTests
             }
         }
     }
+
+    [Fact(Timeout = 60000)]
+    public async Task SubgraphFederatedTrainer_RoundWithMultiFeatureNodesScalesModelByLabelError()
+    {
+        await Task.Yield();
+
+        // Two linked nodes with flattened features [1, 2 | 3, 4]. Each embedding is the mean summed features of
+        // the neighbors: node 0 -> 7, node 1 -> 3. Labels [7, 0] give squared errors 0 and 9, mean 4.5, so the
+        // local update scales every parameter by 1 - 0.01 * 4.5 * 0.01. The old embedding loop took the node
+        // count from the flattened feature length and indexed past the adjacency.
+        var options = new AiDotNet.Models.Options.FederatedGraphOptions
+        {
+            PseudoNodeStrategy = AiDotNet.Models.Options.PseudoNodeStrategy.None,
+            HiddenDimension = 2,
+        };
+        var trainer = new AiDotNet.FederatedLearning.Graph.SubgraphFederatedTrainer<double>(
+            options, new AiDotNet.FederatedLearning.Graph.FedGnnAggregationStrategy<double>());
+        trainer.RegisterSubgraph(
+            0,
+            new Tensor<double>(new[] { 0.0, 1.0, 1.0, 0.0 }, new[] { 4 }),
+            new Tensor<double>(new[] { 1.0, 2.0, 3.0, 4.0 }, new[] { 4 }),
+            new Tensor<double>(new[] { 7.0, 0.0 }, new[] { 2 }));
+
+        var before = trainer.GetGlobalModel().ToArray();
+        var after = trainer.ExecuteRound(0).ToArray();
+
+        double factor = 1.0 - 0.01 * 4.5 * 0.01;
+        Assert.Equal(before.Length, after.Length);
+        for (int i = 0; i < before.Length; i++)
+        {
+            Assert.Equal(before[i] * factor, after[i], Precision);
+        }
+    }
 }
