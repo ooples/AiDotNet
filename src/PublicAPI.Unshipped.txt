@@ -22565,3 +22565,15 @@ override AiDotNet.Diffusion.LatentDiffusionModelBase<T>.IsBatchedTrainingSample(
 virtual AiDotNet.Diffusion.DiffusionModelBase<T>.IsBatchedTrainingSample(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! sample) -> bool
 *REMOVED*AiDotNet.Document.Options.DocBankOptions.LearningRate.get -> double
 AiDotNet.Document.Options.DocBankOptions.LearningRate.get -> double?
+*REMOVED*AiDotNet.NeuralNetworks.Layers.MixtureOfExpertsLayer<T>.MixtureOfExpertsLayer(System.Collections.Generic.List<AiDotNet.Interfaces.ILayer<T>!>! experts, AiDotNet.Interfaces.ILayer<T>! router, int[]! inputShape, int[]! outputShape, int topK = 0, AiDotNet.Interfaces.IActivationFunction<T>? activationFunction = null, bool useLoadBalancing = false, T? loadBalancingWeight = default(T?)) -> void
+AiDotNet.NeuralNetworks.Layers.MixtureOfExpertsLayer<T>.MixtureOfExpertsLayer(System.Collections.Generic.List<AiDotNet.Interfaces.ILayer<T>!>! experts, AiDotNet.Interfaces.ILayer<T>! router, int[]! inputShape, int[]! outputShape, int topK = 0, AiDotNet.Interfaces.IActivationFunction<T>? activationFunction = null, bool useLoadBalancing = false, T? loadBalancingWeight = default(T?), AiDotNet.Enums.MixtureOfExpertsGatingNoise gatingNoise = AiDotNet.Enums.MixtureOfExpertsGatingNoise.LearnedNoiseWeights) -> void
+*REMOVED*AiDotNet.NeuralNetworks.Layers.ObliviousDecisionTreeLayer<T>.ObliviousDecisionTreeLayer(int depth = 6, int outputDim = 1, double initScale = 0.01) -> void
+AiDotNet.NeuralNetworks.Layers.ObliviousDecisionTreeLayer<T>.ObliviousDecisionTreeLayer(int depth = 6, int outputDim = 1, double initScale = 0.01, AiDotNet.Enums.ObliviousTreeChoiceFunction choiceFunction = AiDotNet.Enums.ObliviousTreeChoiceFunction.Entmax15) -> void
+*REMOVED*AiDotNet.NeuralNetworks.Layers.ObliviousDecisionTreeLayer<T>.ObliviousDecisionTreeLayer(int inputDim, int depth = 6, int outputDim = 1, double initScale = 0.01) -> void
+AiDotNet.NeuralNetworks.Layers.ObliviousDecisionTreeLayer<T>.ObliviousDecisionTreeLayer(int inputDim, int depth = 6, int outputDim = 1, double initScale = 0.01, AiDotNet.Enums.ObliviousTreeChoiceFunction choiceFunction = AiDotNet.Enums.ObliviousTreeChoiceFunction.Entmax15) -> void
+AiDotNet.Enums.MixtureOfExpertsGatingNoise
+AiDotNet.Enums.MixtureOfExpertsGatingNoise.LearnedNoiseWeights = 0 -> AiDotNet.Enums.MixtureOfExpertsGatingNoise
+AiDotNet.Enums.MixtureOfExpertsGatingNoise.SoftplusOfRouterLogits = 1 -> AiDotNet.Enums.MixtureOfExpertsGatingNoise
+AiDotNet.Enums.ObliviousTreeChoiceFunction
+AiDotNet.Enums.ObliviousTreeChoiceFunction.Entmax15 = 0 -> AiDotNet.Enums.ObliviousTreeChoiceFunction
+AiDotNet.Enums.ObliviousTreeChoiceFunction.SoftmaxSigmoid = 1 -> AiDotNet.Enums.ObliviousTreeChoiceFunction
