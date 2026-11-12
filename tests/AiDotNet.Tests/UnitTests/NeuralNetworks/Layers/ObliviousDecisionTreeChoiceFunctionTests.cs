@@ -116,4 +116,85 @@ public sealed class ObliviousDecisionTreeChoiceFunctionTests
             Assert.Equal(expectedGradient[i], gradient.GetFlat(i), precision: 10);
         }
     }
+
+    [Fact]
+    public void Entmax15_HalfWideFiniteSpreadDoesNotOverflowTheThreshold()
+    {
+        // The sorted moments square the shifted logits: 500^2 = 250000 > Half.MaxValue (65504), which made
+        // the threshold inf - inf = NaN. Reference entmax15([0, 1000, -1000]) = [0, 1, 0].
+        var input = new Tensor<Half>(new Half[] { (Half)0, (Half)1000, (Half)(-1000) }, new[] { 1, 3 });
+        var probabilities = Entmax15<Half>.Forward(AiDotNetEngine.Current, input).ToArray();
+        Assert.Equal(new Half[] { (Half)0, (Half)1, (Half)0 }, probabilities);
+    }
+
+    [Fact]
+    public void Entmax15_HalfWideSpreadKeepsTheExactTwoEntrySupport()
+    {
+        // entmax15([1000, 999.5, -1000]): z = x / 2 has support {500, 499.75}; tau solves
+        // tau^2 + (tau + 0.25)^2 = 1 relative to the max, tau = -(0.5 + sqrt(7.75)) / 4, so
+        // p = [0.6739926363, 0.3260073637, 0]. 999.5 is exact in Half (spacing 0.5 at 1000).
+        var input = new Tensor<Half>(new Half[] { (Half)1000, (Half)999.5, (Half)(-1000) }, new[] { 1, 3 });
+        var probabilities = Entmax15<Half>.Forward(AiDotNetEngine.Current, input).ToArray();
+        double[] expected = { 0.6739926363384383, 0.3260073636615617, 0.0 };
+        for (int i = 0; i < expected.Length; i++)
+        {
+            Assert.InRange(Math.Abs((double)probabilities[i] - expected[i]), 0, 2e-3);
+        }
+    }
+
+    [Fact]
+    public void Constructors_RejectUndefinedChoiceFunction()
+    {
+        var undefined = (ObliviousTreeChoiceFunction)2;
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            new ObliviousDecisionTreeLayer<double>(3, 2, 1, 0.01, undefined));
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            new ObliviousDecisionTreeLayer<double>(2, 1, 0.01, undefined));
+    }
+
+    [Fact]
+    public void NewLayer_DefaultsToEntmax15AndRoundTripsIt()
+    {
+        var layer = new ObliviousDecisionTreeLayer<double>(depth: 2, outputDim: 1);
+        Assert.Equal(ObliviousTreeChoiceFunction.Entmax15, ChoiceFunction(layer));
+
+        var metadata = layer.GetMetadata().ToDictionary(pair => pair.Key, pair => (object)pair.Value);
+        Assert.True(metadata.ContainsKey("choiceFunction"));
+        var restored = AiDotNet.Helpers.DeserializationHelper.CreateLayerFromType<double>(
+            "ObliviousDecisionTreeLayer`1", new[] { 3 }, new[] { 1 }, metadata);
+
+        Assert.Equal(ObliviousTreeChoiceFunction.Entmax15,
+            ChoiceFunction(Assert.IsType<ObliviousDecisionTreeLayer<double>>(restored)));
+    }
+
+    [Fact]
+    public void LegacyCheckpointWithoutChoiceFunction_RestoresSoftmaxSigmoidAndItsPredictions()
+    {
+        // A file written before the option existed: master's [LayerState] keys only, trained with softmax
+        // feature choice and sigmoid splits.
+        var original = new ObliviousDecisionTreeLayer<double>(3, 2, 2, 0.01, ObliviousTreeChoiceFunction.SoftmaxSigmoid);
+        var input = new Tensor<double>(new[] { 0.5, -1.0, 2.0, 1.5, 0.25, -0.75 }, new[] { 2, 3 });
+        var expected = original.Forward(input).ToArray();
+        var weights = original.GetParameters();
+        var legacy = new Dictionary<string, object> { ["depth"] = 2, ["outputDim"] = 2, ["initScale"] = 0.01 };
+
+        var restored = Assert.IsType<ObliviousDecisionTreeLayer<double>>(
+            AiDotNet.Helpers.DeserializationHelper.CreateLayerFromType<double>("ObliviousDecisionTreeLayer`1", new[] { 3 }, new[] { 2 }, legacy));
+        Assert.Equal(ObliviousTreeChoiceFunction.SoftmaxSigmoid, ChoiceFunction(restored));
+        restored.SetParameters(weights);
+
+        var actual = restored.Forward(input).ToArray();
+        Assert.Equal(expected.Length, actual.Length);
+        for (int i = 0; i < expected.Length; i++) Assert.Equal(expected[i], actual[i], 12);
+    }
+
+    private static ObliviousTreeChoiceFunction ChoiceFunction(ObliviousDecisionTreeLayer<double> layer)
+    {
+        var field = typeof(ObliviousDecisionTreeLayer<double>).GetField("_choiceFunction",
+            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)
+            ?? throw new MissingFieldException("_choiceFunction");
+        return field.GetValue(layer) is ObliviousTreeChoiceFunction value
+            ? value
+            : throw new Xunit.Sdk.XunitException("_choiceFunction is not an ObliviousTreeChoiceFunction.");
+    }
 }

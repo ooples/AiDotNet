@@ -50,6 +50,12 @@ internal static class Entmax15<T>
             frozen = z.Clone();
             var max = engine.ReduceMax(frozen, new[] { axis }, true);
             var shifted = engine.TensorSubtract(frozen, engine.TensorBroadcastTo(max, shape));
+            // The largest probability is (max - tau)^2 <= 1, so tau >= max - 1 and no entry below
+            // max - 1 is ever in the support. Raising those entries to max - 2 leaves them outside the
+            // support, so the exact threshold is unchanged, while every value the moment computation
+            // squares stays in [0, 4]. Without the bound a finite Half spread such as [0, 1000, -1000]
+            // squares to 250000 > Half.MaxValue and the threshold becomes inf - inf = NaN.
+            shifted = engine.TensorClampMin(shifted, NumOps.FromDouble(-2.0));
             var sorted = engine.TensorSort(shifted, axis, true).Values;
 
             var rhoShape = new int[shape.Length];
