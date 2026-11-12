@@ -338,6 +338,35 @@ public class LEOExactGradientTests
     }
 
     [Fact]
+    public void WeightScales_AreOffsetByGlorotsStandardDeviation_AsTheReferenceDecoderSamples()
+    {
+        // DeepMind's reference forward_decoder samples the classifier weights with
+        // stddev = max(exp(u) - (1 - sqrt(2 / (fan_in + fan_out))), 1e-10), fan_in the embedding width and fan_out
+        // the task's class count, while the latent codes keep max(exp(u) - 1, 1e-10). Both are recomputed here from
+        // the decoder weights and the adapted codes the decoder was last applied to.
+        var learner = CreateLearner(o => o.DropoutRate = 0);
+        var task = CreateTask(seed: 13);
+        var codes = learner.LatentCodesForTesting(task);
+        var decoder = learner.DecoderWeightsForTesting.ToArray();
+        var scales = learner.ScalesForTesting(task).ToArray();
+
+        int latentScales = Classes * Latent;
+        Assert.Equal(latentScales + Classes * Width, scales.Length);
+        double offset = Math.Sqrt(2.0 / (Width + Classes));
+        for (int n = 0; n < Classes; n++)
+        {
+            for (int k = 0; k < Width; k++)
+            {
+                // The decoder is [2 * Width, Latent]; rows Width.. give the weight scales' pre-activations.
+                double u = 0;
+                for (int j = 0; j < Latent; j++) u += codes.Adapted[n * Latent + j] * decoder[(Width + k) * Latent + j];
+                double expected = Math.Max(Math.Exp(u) - (1.0 - offset), 1e-10);
+                Assert.Equal(expected, scales[latentScales + n * Width + k], 10);
+            }
+        }
+    }
+
+    [Fact]
     public void Defaults_AreThePapers()
     {
         var options = new LEOOptions<double, Matrix<double>, Tensor<double>>(new LinearEmbeddingModel(Features, Width));
