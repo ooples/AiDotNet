@@ -402,16 +402,7 @@ public partial class RWKVForecaster<T> : ForecastingModelBase<T>
     public override Dictionary<string, T> Evaluate(Tensor<T> predictions, Tensor<T> actuals)
     {
         var metrics = new Dictionary<string, T>();
-        T mse = NumOps.Zero, mae = NumOps.Zero;
-        int count = 0;
-
-        for (int i = 0; i < predictions.Length && i < actuals.Length; i++)
-        {
-            var diff = NumOps.Subtract(predictions[i], actuals[i]);
-            mse = NumOps.Add(mse, NumOps.Multiply(diff, diff));
-            mae = NumOps.Add(mae, NumOps.Abs(diff));
-            count++;
-        }
+        var (mse, mae, count) = SumSquaredAndAbsoluteError(predictions, actuals);
 
         if (count > 0)
         {
@@ -456,11 +447,8 @@ public partial class RWKVForecaster<T> : ForecastingModelBase<T>
 
         var meanT = new Tensor<T>(new[] { batch, 1 });
         var stdT = new Tensor<T>(new[] { batch, 1 });
-        for (int b = 0; b < batch; b++)
-        {
-            meanT.Data.Span[b] = _revinMean[b];
-            stdT.Data.Span[b] = _revinStd[b];
-        }
+        _revinMean.AsSpan().Slice(0, batch).CopyTo(meanT.Data.Span);
+        _revinStd.AsSpan().Slice(0, batch).CopyTo(stdT.Data.Span);
 
         bool reshaped = forecast.Rank != 2;
         var work = reshaped ? Engine.Reshape(forecast, new[] { batch, forecast.Length / batch }) : forecast;
@@ -642,8 +630,7 @@ public partial class RWKVForecaster<T> : ForecastingModelBase<T>
         if (OnnxSession is null) throw new InvalidOperationException("ONNX session not initialized.");
 
         var inputData = new float[input.Length];
-        for (int i = 0; i < input.Length; i++)
-            inputData[i] = Convert.ToSingle(NumOps.ToDouble(input.Data.Span[i]));
+        NumOps.ToFloatSpan(input.Data.Span.Slice(0, input.Length), inputData.AsSpan(0, input.Length));
 
         var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input._shape);
         string inputName = OnnxSession.InputMetadata.Keys.First();
@@ -652,8 +639,7 @@ public partial class RWKVForecaster<T> : ForecastingModelBase<T>
         using var results = OnnxSession.Run(inputs);
         var outputTensor = results.First().AsTensor<float>();
         var outputData = new T[outputTensor.Length];
-        for (int i = 0; i < outputTensor.Length; i++)
-            outputData[i] = NumOps.FromDouble(outputTensor.GetValue(i));
+        NumOps.FromFloatSpan(outputTensor.ToDenseTensor().Buffer.Span.Slice(0, (int)outputTensor.Length), outputData.AsSpan(0, (int)outputTensor.Length));
         return new Tensor<T>(outputTensor.Dimensions.ToArray(), new Vector<T>(outputData));
     }
 
@@ -668,6 +654,9 @@ public partial class RWKVForecaster<T> : ForecastingModelBase<T>
         SetTrainingMode(true);
         for (int s = 0; s < numSamples; s++) samples.Add(Forward(input));
         SetTrainingMode(false);
+
+        if (TrySortedSampleQuantiles(samples, quantiles, _forecastHorizon, out var sortedQuantiles))
+            return sortedQuantiles;
 
         var result = new Tensor<T>(new[] { 1, _forecastHorizon, quantiles.Length });
         for (int t = 0; t < _forecastHorizon; t++)

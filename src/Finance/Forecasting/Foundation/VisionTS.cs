@@ -357,15 +357,7 @@ public partial class VisionTS<T> : TimeSeriesFoundationModelBase<T>
     /// <inheritdoc/>
     public override Dictionary<string, T> Evaluate(Tensor<T> predictions, Tensor<T> actuals)
     {
-        T mse = NumOps.Zero, mae = NumOps.Zero;
-        int count = 0;
-        for (int i = 0; i < predictions.Length && i < actuals.Length; i++)
-        {
-            var diff = NumOps.Subtract(predictions[i], actuals[i]);
-            mse = NumOps.Add(mse, NumOps.Multiply(diff, diff));
-            mae = NumOps.Add(mae, NumOps.Abs(diff));
-            count++;
-        }
+        var (mse, mae, count) = SumSquaredAndAbsoluteError(predictions, actuals);
         if (count > 0) { mse = NumOps.Divide(mse, NumOps.FromDouble(count)); mae = NumOps.Divide(mae, NumOps.FromDouble(count)); }
         return new Dictionary<string, T> { ["MSE"] = mse, ["MAE"] = mae, ["RMSE"] = NumOps.Sqrt(mse) };
     }
@@ -392,11 +384,8 @@ public partial class VisionTS<T> : TimeSeriesFoundationModelBase<T>
 
         var meanT = new Tensor<T>(new[] { batch, 1 });
         var stdT = new Tensor<T>(new[] { batch, 1 });
-        for (int b = 0; b < batch; b++)
-        {
-            meanT.Data.Span[b] = _revinMean[b];
-            stdT.Data.Span[b] = _revinStd[b];
-        }
+        _revinMean.AsSpan().Slice(0, batch).CopyTo(meanT.Data.Span);
+        _revinStd.AsSpan().Slice(0, batch).CopyTo(stdT.Data.Span);
 
         bool reshaped = forecast.Rank != 2;
         var work = reshaped ? Engine.Reshape(forecast, new[] { batch, forecast.Length / batch }) : forecast;
@@ -479,7 +468,7 @@ public partial class VisionTS<T> : TimeSeriesFoundationModelBase<T>
         int seqLen = input.Rank > 1 ? input.Shape[1] : input.Length;
         int features = input.Rank > 2 ? input.Shape[2] : 1;
         var inputData = new float[batchSize * seqLen * features];
-        for (int i = 0; i < input.Length && i < inputData.Length; i++) inputData[i] = (float)NumOps.ToDouble(input[i]);
+        NumOps.ToFloatSpan(input.AsSpan().Slice(0, Math.Min(input.Length, inputData.Length)), inputData.AsSpan(0, Math.Min(input.Length, inputData.Length)));
         var inputTensor = new OnnxTensors.DenseTensor<float>(inputData, new[] { batchSize, seqLen, features });
         var inputs = new List<NamedOnnxValue> { NamedOnnxValue.CreateFromTensor("input", inputTensor) };
         using var results = OnnxSession.Run(inputs);
@@ -488,7 +477,7 @@ public partial class VisionTS<T> : TimeSeriesFoundationModelBase<T>
         var output = new Tensor<T>(outputShape);
         int totalElements = 1;
         foreach (var dim in outputShape) totalElements *= dim;
-        for (int i = 0; i < totalElements && i < output.Length; i++) output.Data.Span[i] = NumOps.FromDouble(outputTensor.GetValue(i));
+        NumOps.FromFloatSpan(outputTensor.ToDenseTensor().Buffer.Span.Slice(0, Math.Min(totalElements, output.Length)), output.Data.Span.Slice(0, Math.Min(totalElements, output.Length)));
         return output;
     }
 
