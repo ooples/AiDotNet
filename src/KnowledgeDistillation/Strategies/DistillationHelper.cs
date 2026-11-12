@@ -144,6 +144,30 @@ internal static class DistillationHelper<T>
     }
 
     /// <summary>
+    /// Cosine similarity of every row of <paramref name="a"/> with every row of <paramref name="b"/>
+    /// ([n, d] and [m, d] -> [n, m]) with VectorHelper.CosineSimilarity semantics: clamped to [-1, 1],
+    /// and 0 where the norm product is at most 1e-10.
+    /// </summary>
+    public static Tensor<T> CosineSimilarityMatrix(Tensor<T> a, Tensor<T> b)
+    {
+        var dot = Engine.TensorMatMul(a, Engine.TensorTranspose(b));
+        var squaredNormsA = Engine.ReduceSum(Engine.TensorMultiply(a, a), [1], keepDims: true); // [n, 1]
+        var squaredNormsB = Engine.ReduceSum(Engine.TensorMultiply(b, b), [1], keepDims: true); // [m, 1]
+        var denom = Engine.TensorSqrt(Engine.TensorMatMul(squaredNormsA, Engine.TensorTranspose(squaredNormsB)));
+        var cosine = Engine.TensorClamp(Engine.TensorDivide(dot, denom), NumOps.FromDouble(-1.0), NumOps.One);
+        return Engine.TensorWhere(
+            Engine.TensorGreaterThan(denom, NumOps.FromDouble(1e-10)), cosine, new Tensor<T>(dot.Shape.ToArray()));
+    }
+
+    /// <summary>
+    /// Stacks equally sized vectors as the rows of an [n, d] tensor.
+    /// </summary>
+    public static Tensor<T> StackRows(Vector<T>[] rows)
+    {
+        return Engine.TensorStack(rows.Select(row => Tensor<T>.FromVector(row)).ToArray(), 0);
+    }
+
+    /// <summary>
     /// Sums each row of a [rows, cols] tensor into a vector of length rows.
     /// </summary>
     public static Vector<T> RowSums(Tensor<T> matrix)
