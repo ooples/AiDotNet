@@ -704,6 +704,48 @@ internal static class FeatureSelectionTensorOps
         var engine = AiDotNetEngine.Current;
         return engine.TensorSumOfSquares(engine.TensorSubtractScalar(values, engine.TensorMean(values)));
     }
+
+    /// <summary>
+    /// Double-centred absolute-distance matrix of a 1-D tensor (Szekely, Rizzo and Bakirov 2007):
+    /// <c>A_ik = d_ik - mean_k d_ik - mean_i d_ik + mean d</c> with <c>d_ik = |v_i - v_k|</c>.
+    /// </summary>
+    public static Tensor<T> DoubleCentredDistances<T>(Tensor<T> values)
+    {
+        var engine = AiDotNetEngine.Current;
+        int s = values.Length;
+        var shape = new[] { s, s };
+        var distances = engine.TensorAbs(engine.TensorSubtract(
+            engine.TensorBroadcastTo(engine.Reshape(values, new[] { s, 1 }), shape),
+            engine.TensorBroadcastTo(engine.Reshape(values, new[] { 1, s }), shape)));
+        var rowMeans = engine.TensorBroadcastTo(engine.ReduceMean(distances, new[] { 1 }, true), shape);
+        var colMeans = engine.TensorBroadcastTo(engine.ReduceMean(distances, new[] { 0 }, true), shape);
+        return engine.TensorAddScalar(engine.TensorSubtract(engine.TensorSubtract(distances, rowMeans), colMeans),
+            engine.TensorMean(distances));
+    }
+
+    /// <summary>
+    /// Squared sample distance covariances (V-statistics) of every column of <paramref name="x"/> ([s, p]) with
+    /// <paramref name="y"/> ([s]): <c>dCov^2(x_j, y) = mean(A_j * B)</c>; <paramref name="xVariances"/> receives
+    /// <c>dVar^2(x_j) = mean(A_j^2)</c> and <paramref name="yVariance"/> <c>dVar^2(y)</c>. Returns [p].
+    /// </summary>
+    public static Tensor<T> SquaredDistanceCovariances<T>(Tensor<T> x, Tensor<T> y, out Tensor<T> xVariances, out T yVariance)
+    {
+        var engine = AiDotNetEngine.Current;
+        int p = x.Shape[1];
+        var b = DoubleCentredDistances(y);
+        yVariance = engine.TensorMean(engine.TensorSquare(b));
+        var covariances = new Tensor<T>[p];
+        var variances = new Tensor<T>[p];
+        for (int j = 0; j < p; j++)
+        {
+            var a = DoubleCentredDistances(PreprocessingTensorOps.ColumnVector(x, j));
+            covariances[j] = engine.ReduceMean(engine.Reshape(engine.TensorMultiply(a, b), new[] { a.Length }), new[] { 0 }, true);
+            variances[j] = engine.ReduceMean(engine.Reshape(engine.TensorSquare(a), new[] { a.Length }), new[] { 0 }, true);
+        }
+
+        xVariances = p == 0 ? new Tensor<T>(new[] { 0 }) : engine.TensorConcatenate(variances, 0);
+        return p == 0 ? new Tensor<T>(new[] { 0 }) : engine.TensorConcatenate(covariances, 0);
+    }
 }
 
 /// <summary>Impurity used by <see cref="FeatureSelectionTensorOps.TryBestSplit{T}"/>.</summary>
