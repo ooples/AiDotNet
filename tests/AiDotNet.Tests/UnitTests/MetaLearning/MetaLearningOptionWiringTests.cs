@@ -236,4 +236,22 @@ public class MetaLearningOptionWiringTests
             Assert.Equal(0.25 * (fixedStep[i] - start[i]), warmupStep[i] - start[i], 1e-12);
         }
     }
+
+    [Fact]
+    public void MetaSGD_Defaults_DrawAlphaFromThePaperRange()
+    {
+        // Li et al. (2017), Sec. 4: alpha is initialised randomly in [0.005, 0.1]; meta step 0.001; one inner step.
+        var options = new MetaSGDOptions<double, Matrix<double>, Vector<double>>(new LinearVectorModel(3)) { RandomSeed = 5 };
+        var learner = new MetaSGDAlgorithm<double, Matrix<double>, Vector<double>>(options);
+        var alpha = learner.LearnedOptimizer.LearningRates;
+
+        Assert.Equal(0.001, options.OuterLearningRate);
+        Assert.Equal(1, options.InnerSteps);
+        for (int i = 0; i < alpha.Length; i++)
+        {
+            Assert.InRange(alpha[i], 0.005, 0.1);
+        }
+
+        Assert.True(alpha[0] != alpha[1] || alpha[1] != alpha[2], "alpha must be drawn per parameter, not shared.");
+    }
 }
