@@ -226,4 +226,16 @@ public class WaveletReferenceValueTests
             Assert.Equal(m < g.Length ? g[m] : 0.0, fromDetail[m], 1e-12);
         }
     }
+
+    [Fact(Timeout = 120000)]
+    public async Task ComplexMorlet_ScalingFilter_IsSinc()
+    {
+        // 64 taps at x = (i - 32) / 16 normalized by the sum of magnitudes; ratios to the centre tap are sinc values.
+        var wavelet = new ComplexMorletWavelet<double>();
+        var h = wavelet.GetScalingCoefficients();
+        Assert.Equal(64, h.Length);
+        Assert.Equal(2.0 / Math.PI, h[40].Real / h[32].Real, Tolerance);
+        Assert.Equal(-2.0 / (3.0 * Math.PI), h[56].Real / h[32].Real, Tolerance);
+        Assert.Equal(0.0, h[40].Imaginary, Tolerance);
+    }
 }
