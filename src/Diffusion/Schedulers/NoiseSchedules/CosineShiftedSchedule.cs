@@ -46,18 +46,20 @@ public class CosineShiftedSchedule<T>
     /// <returns>Alpha cumulative product values with resolution-aware cosine schedule.</returns>
     public Vector<T> ComputeAlphasCumprod(int numTimesteps)
     {
-        var result = new Vector<T>(numTimesteps);
+        // Improved-DDPM cosine schedule (Nichol and Dhariwal, 2021): alpha_cumprod(t) = f(t) / f(0) with
+        // f(t) = cos^2((t + s) / (1 + s) * pi / 2), t = i / numTimesteps. The resolution shift follows simple
+        // diffusion (Hoogeboom et al., 2023), which divides the SNR by shift^2:
+        // alpha_cumprod_shifted = alpha_cumprod / (alpha_cumprod + shift^2 * (1 - alpha_cumprod)).
+        var engine = AiDotNetEngine.Current;
         double s = 0.008; // Small offset to prevent singularity at t=0
-
-        for (int i = 0; i < numTimesteps; i++)
-        {
-            double t = (double)i / numTimesteps;
-            // Shifted cosine: cos((t + s) / (1 + s) * pi/2)^2, with resolution shift
-            double cosArg = (t * _shift + s) / (1.0 + s) * Math.PI / 2.0;
-            double alpha = Math.Cos(cosArg);
-            result[i] = NumOps.FromDouble(Math.Max(0, alpha * alpha));
-        }
-
-        return result;
+        double angleScale = Math.PI / 2.0 / (1.0 + s);
+        var t = engine.TensorMultiplyScalar(engine.TensorArange<T>(0.0, numTimesteps, 1.0), NumOps.FromDouble(1.0 / numTimesteps));
+        var angle = engine.TensorMultiplyScalar(engine.TensorAddScalar(t, NumOps.FromDouble(s)), NumOps.FromDouble(angleScale));
+        double f0 = Math.Cos(s * angleScale);
+        var alphas = engine.TensorMultiplyScalar(engine.TensorSquare(engine.TensorCos(angle)), NumOps.FromDouble(1.0 / (f0 * f0)));
+        var shiftSquared = NumOps.FromDouble(_shift * _shift);
+        var denominator = engine.TensorAdd(alphas,
+            engine.TensorMultiplyScalar(engine.ScalarMinusTensor(NumOps.One, alphas), shiftSquared));
+        return engine.TensorDivide(alphas, denominator).ToVector();
     }
 }

@@ -194,11 +194,13 @@ public sealed partial class FlowMatchingScheduler<T> : NoiseSchedulerBase<T>
         }
         else if (Config.PredictionType == DiffusionPredictionType.Epsilon)
         {
-            // If predicting noise, convert to velocity: v = (x_t - x_0) / t
-            // x_0 = x_t - t * noise (approximately, using flow matching formulation)
-            // Then apply Euler step
+            // If predicting noise, invert x_t = (1 - t) * x_0 + t * noise: x_0 = (x_t - t * noise) / (1 - t).
+            // At t = 1 the sample is pure noise and carries no x_0 information, so x_t - t * noise is kept.
             var tScaled = Engine.Multiply(modelOutput, currentT);
             var predictedOriginal = Engine.Subtract(sample, tScaled);
+            var oneMinusT = NumOps.Subtract(NumOps.One, currentT);
+            if (NumOps.GreaterThan(oneMinusT, NumOps.Zero))
+                predictedOriginal = Engine.Divide(predictedOriginal, oneMinusT);
             predictedOriginal = ClipSampleIfNeeded(predictedOriginal);
 
             // Compute velocity from predicted original: v = (noise - x_0) ≈ (x_t - x_0) / t
@@ -334,15 +336,10 @@ public sealed partial class FlowMatchingScheduler<T> : NoiseSchedulerBase<T>
     /// <returns>Vector of continuous time values t = timestep / (trainTimesteps - 1).</returns>
     private static Vector<T> ComputeTimeValues(int trainTimesteps)
     {
-        var timeValues = new Vector<T>(trainTimesteps);
+        var engine = AiDotNetEngine.Current;
         double scale = 1.0 / (trainTimesteps - 1);
-
-        for (int i = 0; i < trainTimesteps; i++)
-        {
-            timeValues[i] = NumOps.FromDouble(i * scale);
-        }
-
-        return timeValues;
+        var indices = engine.TensorArange<T>(0.0, trainTimesteps, 1.0);
+        return engine.TensorMultiplyScalar(indices, NumOps.FromDouble(scale)).ToVector();
     }
 
     /// <summary>
@@ -352,18 +349,14 @@ public sealed partial class FlowMatchingScheduler<T> : NoiseSchedulerBase<T>
     /// <returns>Sigma values derived from the continuous time schedule.</returns>
     private Vector<T> ComputeSigmas(int inferenceSteps)
     {
-        var sigmas = new Vector<T>(inferenceSteps + 1);
         var timesteps = Timesteps;
+        int count = Math.Min(timesteps.Length, inferenceSteps);
+        var scheduled = new int[count];
+        Array.Copy(timesteps, scheduled, count);
 
-        for (int i = 0; i < timesteps.Length && i < inferenceSteps; i++)
-        {
-            // Sigma is proportional to t (noise level) in flow matching
-            sigmas[i] = GetContinuousTime(timesteps[i]);
-        }
-
-        // Final sigma = 0 (clean sample)
-        sigmas[inferenceSteps] = NumOps.Zero;
-
-        return sigmas;
+        // Sigma is proportional to t (noise level) in flow matching; the trailing entries (final sigma = 0 for
+        // the clean sample) stay zero.
+        var sigmas = SchedulerTensorOps.Gather(_timeValues, scheduled);
+        return Vector<T>.Concatenate(sigmas, new Vector<T>(inferenceSteps + 1 - count));
     }
 }

@@ -36,24 +36,19 @@ public sealed class StochasticInterpolantScheduler<T> : NoiseSchedulerBase<T>
     /// <inheritdoc />
     public override Vector<T> Step(Vector<T> modelOutput, int timestep, Vector<T> sample, T eta, Vector<T>? noise = null)
     {
-        double t = (double)timestep / TrainTimesteps;
-        double dt = 1.0 / Math.Max(1, Timesteps.Length);
-        var dtT = NumOps.FromDouble(dt);
+        // Linear interpolant x_t = (1 - t) x_0 + t * eps with drift b = v = eps - x_0. The deterministic part is the
+        // Euler step x_{t - dt} = x_t - dt * v over the gap to the next scheduled time.
+        double t = SchedulerTensorOps.FlowTime(timestep, TrainTimesteps);
+        double dt = SchedulerTensorOps.FlowStepSize(Timesteps, timestep, TrainTimesteps, 1.0 / Math.Max(1, Timesteps.Length));
+        var result = Engine.Subtract(sample, Engine.Multiply(modelOutput, NumOps.FromDouble(dt)));
+        if (noise is null || _stochasticity <= 0 || t <= 0.0)
+            return result;
 
-        var result = new Vector<T>(sample.Length);
-        for (int i = 0; i < sample.Length; i++)
-        {
-            var stepped = NumOps.Subtract(sample[i], NumOps.Multiply(dtT, modelOutput[i]));
-
-            if (noise != null && _stochasticity > 0)
-            {
-                double noiseLevel = _stochasticity * Math.Sqrt(dt * t);
-                stepped = NumOps.Add(stepped, NumOps.Multiply(NumOps.FromDouble(noiseLevel), noise[i]));
-            }
-
-            result[i] = stepped;
-        }
-
-        return result;
+        // Albergo et al. (2023) backward SDE dX = (b - eps(t) s) dt + sqrt(2 eps(t)) dW keeps the interpolant's
+        // marginals. The noise std lambda * sqrt(dt * t) means eps(t) = lambda^2 t / 2, and with the score
+        // s = -eps_hat / t (eps_hat = x_t + (1 - t) v) the drift correction is -(lambda^2 dt / 2) * eps_hat.
+        var epsilon = Engine.Add(sample, Engine.Multiply(modelOutput, NumOps.FromDouble(1.0 - t)));
+        result = Engine.Subtract(result, Engine.Multiply(epsilon, NumOps.FromDouble(_stochasticity * _stochasticity * dt / 2.0)));
+        return Engine.Add(result, Engine.Multiply(noise, NumOps.FromDouble(_stochasticity * Math.Sqrt(dt * t))));
     }
 }

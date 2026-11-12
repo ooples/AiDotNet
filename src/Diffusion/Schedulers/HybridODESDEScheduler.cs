@@ -33,27 +33,23 @@ public sealed class HybridODESDEScheduler<T> : NoiseSchedulerBase<T>
     /// <inheritdoc />
     public override Vector<T> Step(Vector<T> modelOutput, int timestep, Vector<T> sample, T eta, Vector<T>? noise = null)
     {
-        double t = (double)timestep / TrainTimesteps;
-        double dt = 1.0 / Math.Max(1, Timesteps.Length);
-        var dtT = NumOps.FromDouble(dt);
+        // Flow path x_t = (1 - t) x_0 + t * eps with velocity v = eps - x_0. The ODE phase is the Euler step
+        // x_{t - dt} = x_t - dt * v over the gap to the next scheduled time.
+        double t = SchedulerTensorOps.FlowTime(timestep, TrainTimesteps);
+        double dt = SchedulerTensorOps.FlowStepSize(Timesteps, timestep, TrainTimesteps, 1.0 / Math.Max(1, Timesteps.Length));
+        var result = Engine.Subtract(sample, Engine.Multiply(modelOutput, NumOps.FromDouble(dt)));
 
-        var result = new Vector<T>(sample.Length);
         bool useSDE = t < _transitionPoint;
+        if (!useSDE || noise is null || t <= 0.0)
+            return result;
 
-        for (int i = 0; i < sample.Length; i++)
-        {
-            var stepped = NumOps.Subtract(sample[i], NumOps.Multiply(dtT, modelOutput[i]));
-
-            // Add SDE noise in the detail phase
-            if (useSDE && noise != null)
-            {
-                double noiseLevel = Math.Sqrt(dt) * NumOps.ToDouble(eta);
-                stepped = NumOps.Add(stepped, NumOps.Multiply(NumOps.FromDouble(noiseLevel), noise[i]));
-            }
-
-            result[i] = stepped;
-        }
-
-        return result;
+        // SDE phase: the reverse-time SDE dx = [v - (g^2 / 2) * score] dt + g dW with diffusion g = eta keeps the
+        // marginals of the ODE (Ma et al., SiT 2024). On this path score = -eps / t with eps = x_t + (1 - t) v,
+        // so the step adds -(g^2 dt / 2t) * eps plus the Brownian increment g * sqrt(dt) * z.
+        var epsilon = Engine.Add(sample, Engine.Multiply(modelOutput, NumOps.FromDouble(1.0 - t)));
+        T scoreScale = NumOps.Multiply(NumOps.Multiply(eta, eta), NumOps.FromDouble(dt / (2.0 * t)));
+        result = Engine.Subtract(result, Engine.Multiply(epsilon, scoreScale));
+        T noiseScale = NumOps.Multiply(eta, NumOps.FromDouble(Math.Sqrt(dt)));
+        return Engine.Add(result, Engine.Multiply(noise, noiseScale));
     }
 }
