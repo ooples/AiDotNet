@@ -183,57 +183,20 @@ public class RelationalDistillationStrategy<T> : DistillationStrategyBase<T>
         ValidateLabelDimensions(studentBatchOutput, trueLabelsBatch);
 
         int batchSize = studentBatchOutput.Rows;
-        T totalLoss = NumOps.Zero;
 
         // Collect all batch outputs for relational loss computation
-        var studentOutputs = new Vector<T>[batchSize];
-        var teacherOutputs = new Vector<T>[batchSize];
-        for (int r = 0; r < batchSize; r++)
-        {
-            studentOutputs[r] = studentBatchOutput.GetRow(r);
-            teacherOutputs[r] = teacherBatchOutput.GetRow(r);
-        }
+        var studentOutputs = Rows(studentBatchOutput);
+        var teacherOutputs = Rows(teacherBatchOutput);
 
         // Compute relational loss once for entire batch
         T relationalLoss = ComputeRelationalLoss(studentOutputs, teacherOutputs);
 
-        // Compute standard loss for each sample and add amortized relational loss
-        for (int r = 0; r < batchSize; r++)
-        {
-            Vector<T> studentOutput = studentOutputs[r];
-            Vector<T> teacherOutput = teacherOutputs[r];
-            Vector<T>? trueLabels = trueLabelsBatch?.GetRow(r);
-
-            // Standard distillation loss
-            var studentSoft = DistillationHelper<T>.Softmax(studentOutput, Temperature);
-            var teacherSoft = DistillationHelper<T>.Softmax(teacherOutput, Temperature);
-            var softLoss = DistillationHelper<T>.KLDivergence(teacherSoft, studentSoft);
-            softLoss = NumOps.Multiply(softLoss, NumOps.FromDouble(Temperature * Temperature));
-
-            T baseLoss;
-            if (trueLabels != null)
-            {
-                var studentProbs = DistillationHelper<T>.Softmax(studentOutput, 1.0);
-                var hardLoss = DistillationHelper<T>.CrossEntropy(studentProbs, trueLabels);
-
-                var alphaT = NumOps.FromDouble(Alpha);
-                var oneMinusAlpha = NumOps.FromDouble(1.0 - Alpha);
-
-                baseLoss = NumOps.Add(
-                    NumOps.Multiply(alphaT, hardLoss),
-                    NumOps.Multiply(oneMinusAlpha, softLoss));
-            }
-            else
-            {
-                baseLoss = softLoss;
-            }
-
-            // Add amortized relational loss
-            T relationalContribution = NumOps.Divide(relationalLoss, NumOps.FromDouble(batchSize));
-            T sampleLoss = NumOps.Add(baseLoss, relationalContribution);
-
-            totalLoss = NumOps.Add(totalLoss, sampleLoss);
-        }
+        // Standard loss for each sample plus the amortized relational loss
+        var sampleLosses = DistillationHelper<T>.StandardSampleLosses(
+            studentBatchOutput, teacherBatchOutput, trueLabelsBatch, Temperature, Alpha);
+        T relationalContribution = NumOps.Divide(relationalLoss, NumOps.FromDouble(batchSize));
+        T totalLoss = NumOps.Add(
+            Engine.Sum(sampleLosses), NumOps.Multiply(relationalContribution, NumOps.FromDouble(batchSize)));
 
         return NumOps.Divide(totalLoss, NumOps.FromDouble(batchSize));
     }
@@ -251,498 +214,217 @@ public class RelationalDistillationStrategy<T> : DistillationStrategyBase<T>
         ValidateLabelDimensions(studentBatchOutput, trueLabelsBatch);
 
         int batchSize = studentBatchOutput.Rows;
-        int outputDim = studentBatchOutput.Columns;
-        var gradientBatch = new Matrix<T>(batchSize, outputDim);
 
-        // Collect all batch outputs for relational gradient computation
-        var studentOutputs = new Vector<T>[batchSize];
-        var teacherOutputs = new Vector<T>[batchSize];
-        for (int r = 0; r < batchSize; r++)
-        {
-            studentOutputs[r] = studentBatchOutput.GetRow(r);
-            teacherOutputs[r] = teacherBatchOutput.GetRow(r);
-        }
+        // Standard soft gradient, plus the hard gradient if labels are provided
+        var standardGradient = DistillationHelper<T>.StandardSampleGradients(
+            studentBatchOutput, teacherBatchOutput, trueLabelsBatch, Temperature, Alpha);
 
-        // Compute per-sample relational gradients (NOT averaged — each sample
+        // Add each sample's own relational gradient (NOT averaged — each sample
         // gets its own gradient based on its specific pairwise relationships)
-        var perSampleRelGradients = ComputePerSampleRelationalGradients(studentOutputs, teacherOutputs);
-
-        for (int r = 0; r < batchSize; r++)
-        {
-            Vector<T> studentOutput = studentOutputs[r];
-            Vector<T> teacherOutput = teacherOutputs[r];
-            Vector<T>? trueLabels = trueLabelsBatch?.GetRow(r);
-
-            var gradient = new Vector<T>(outputDim);
-
-            // Standard soft gradient
-            var studentSoft = DistillationHelper<T>.Softmax(studentOutput, Temperature);
-            var teacherSoft = DistillationHelper<T>.Softmax(teacherOutput, Temperature);
-
-            for (int i = 0; i < outputDim; i++)
-            {
-                T diff = NumOps.Subtract(studentSoft[i], teacherSoft[i]);
-                gradient[i] = NumOps.Multiply(diff, NumOps.FromDouble(Temperature));
-            }
-
-            // Add hard gradient if labels provided
-            if (trueLabels != null)
-            {
-                var studentProbs = DistillationHelper<T>.Softmax(studentOutput, 1.0);
-                T alphaT = NumOps.FromDouble(Alpha);
-                T oneMinusAlpha = NumOps.FromDouble(1.0 - Alpha);
-
-                for (int i = 0; i < outputDim; i++)
-                {
-                    T hardGrad = NumOps.Subtract(studentProbs[i], trueLabels[i]);
-                    gradient[i] = NumOps.Add(
-                        NumOps.Multiply(alphaT, hardGrad),
-                        NumOps.Multiply(oneMinusAlpha, gradient[i]));
-                }
-            }
-
-            // Add THIS sample's relational gradient
-            for (int i = 0; i < outputDim; i++)
-            {
-                gradient[i] = NumOps.Add(gradient[i], perSampleRelGradients[r][i]);
-            }
-
-            gradientBatch.SetRow(r, gradient);
-        }
+        var perSampleRelGradients = ComputePerSampleRelationalGradients(
+            Rows(studentBatchOutput), Rows(teacherBatchOutput));
+        var gradientBatch = Engine.MatrixAdd(standardGradient, perSampleRelGradients.ToMatrix());
 
         // Average gradients over the batch
         T oneOverBatch = NumOps.Divide(NumOps.One, NumOps.FromDouble(batchSize));
-        for (int r2 = 0; r2 < batchSize; r2++)
-            for (int c = 0; c < outputDim; c++)
-                gradientBatch[r2, c] = NumOps.Multiply(gradientBatch[r2, c], oneOverBatch);
-
-        return gradientBatch;
+        return Engine.MatrixMultiplyScalar(gradientBatch, oneOverBatch);
     }
 
     /// <summary>
-    /// Computes gradient of relational loss with respect to a single student output.
+    /// Splits a batch matrix into its row vectors.
     /// </summary>
-    /// <param name="currentStudentOutput">The current sample's student output.</param>
-    /// <param name="currentTeacherOutput">The current sample's teacher output.</param>
-    /// <param name="batchStudentOutputs">Accumulated batch of student outputs.</param>
-    /// <param name="batchTeacherOutputs">Accumulated batch of teacher outputs.</param>
-    /// <returns>Gradient vector for the current sample.</returns>
-    /// <remarks>
-    /// <para>This computes ∂L_relational/∂studentOutput for all pairs and triplets involving
-    /// the current sample in the batch.</para>
-    /// </remarks>
-    private Vector<T> ComputeRelationalGradient(
-        Vector<T> currentStudentOutput,
-        Vector<T> currentTeacherOutput,
-        List<Vector<T>> batchStudentOutputs,
-        List<Vector<T>> batchTeacherOutputs)
+    private static Vector<T>[] Rows(Matrix<T> batch)
     {
-        int dim = currentStudentOutput.Length;
-        var gradient = new Vector<T>(dim);
+        return Enumerable.Range(0, batch.Rows).Select(r => batch.GetRow(r)).ToArray();
+    }
 
-        // Initialize gradient to zero
-        for (int i = 0; i < dim; i++)
-        {
-            gradient[i] = NumOps.Zero;
-        }
+    /// <summary>
+    /// Computes each sample's analytical gradient of <see cref="ComputeRelationalLoss"/>.
+    /// </summary>
+    /// <param name="studentEmbeddings">Student's output embeddings/features for batch.</param>
+    /// <param name="teacherEmbeddings">Teacher's output embeddings/features for batch.</param>
+    /// <returns>[batch, dim] gradient; row i is ∂L_rel/∂studentEmbeddings[i]. Rows beyond the first
+    /// maxSamplesPerBatch samples are zero, because the relational loss only looks at those samples.</returns>
+    private Tensor<T> ComputePerSampleRelationalGradients(Vector<T>[] studentEmbeddings, Vector<T>[] teacherEmbeddings)
+    {
+        int batchSize = studentEmbeddings.Length;
+        int dim = batchSize > 0 ? studentEmbeddings[0].Length : 0;
+        if (batchSize < 2 || dim == 0)
+            return new Tensor<T>([batchSize, dim]); // Need at least 2 samples for relations
 
-        if (batchStudentOutputs.Count < 2)
-            return gradient;
+        int n = Math.Min(batchSize, _maxSamplesPerBatch);
+        var students = DistillationHelper<T>.StackRows(studentEmbeddings.Take(n).ToArray());
+        var teachers = DistillationHelper<T>.StackRows(teacherEmbeddings.Take(n).ToArray());
+        var gradient = new Tensor<T>([n, dim]);
 
-        int currentIdx = batchStudentOutputs.Count - 1; // Current sample is last in batch
-
-        // Distance-wise gradient: for all pairs involving current sample
+        // Distance-wise gradient
         if (_distanceWeight > 0)
         {
-            for (int j = 0; j < batchStudentOutputs.Count - 1; j++)
-            {
-                var distGrad = ComputePairwiseDistanceGradient(
-                    currentStudentOutput,
-                    batchStudentOutputs[j],
-                    currentTeacherOutput,
-                    batchTeacherOutputs[j]);
-
-                for (int k = 0; k < dim; k++)
-                {
-                    var weighted = NumOps.Multiply(distGrad[k], NumOps.FromDouble(_distanceWeight));
-                    gradient[k] = NumOps.Add(gradient[k], weighted);
-                }
-            }
+            gradient = Engine.TensorAdd(gradient, Engine.TensorMultiplyScalar(
+                ComputeDistanceWiseGradient(students, teachers), NumOps.FromDouble(_distanceWeight)));
         }
 
-        // Angle-wise gradient: for triplets involving current sample
-        // (Simplified - only consider a subset of triplets for efficiency)
-        if (_angleWeight > 0 && batchStudentOutputs.Count >= 3)
+        // Angle-wise gradient
+        if (_angleWeight > 0 && n >= 3)
         {
-            int maxTriplets = Math.Min(10, batchStudentOutputs.Count - 1);
-            for (int t = 0; t < maxTriplets; t++)
-            {
-                if (t >= batchStudentOutputs.Count - 1)
-                    break;
-
-                int j = t;
-                int k = (t + 1) % (batchStudentOutputs.Count - 1);
-
-                var angleGrad = ComputeTripletAngleGradient(
-                    currentStudentOutput,
-                    batchStudentOutputs[j],
-                    batchStudentOutputs[k],
-                    currentTeacherOutput,
-                    batchTeacherOutputs[j],
-                    batchTeacherOutputs[k]);
-
-                for (int d = 0; d < dim; d++)
-                {
-                    var weighted = NumOps.Multiply(angleGrad[d], NumOps.FromDouble(_angleWeight));
-                    gradient[d] = NumOps.Add(gradient[d], weighted);
-                }
-            }
+            gradient = Engine.TensorAdd(gradient, Engine.TensorMultiplyScalar(
+                ComputeAngleWiseGradient(students, teachers), NumOps.FromDouble(_angleWeight)));
         }
 
-        // Normalize by batch size
-        for (int i = 0; i < dim; i++)
-        {
-            gradient[i] = NumOps.Divide(gradient[i], NumOps.FromDouble(batchStudentOutputs.Count));
-        }
+        if (n == batchSize)
+            return gradient;
 
-        return gradient;
+        return Engine.TensorConcatenate([gradient, new Tensor<T>([batchSize - n, dim])], 0);
     }
 
     /// <summary>
-    /// Computes gradient of distance-wise loss for a pair.
+    /// Gradient of <see cref="ComputeDistanceWiseLoss"/> with respect to every student row.
     /// </summary>
-    private Vector<T> ComputePairwiseDistanceGradient(
-        Vector<T> studentI,
-        Vector<T> studentJ,
-        Vector<T> teacherI,
-        Vector<T> teacherJ)
+    /// <remarks>
+    /// <para>Each pair (i, j) contributes h'(d_s(i, j) - d_t(i, j)) · ∂d_s(i, j)/∂x_i to row i, where h is
+    /// the Huber loss (h' = 2·diff when |diff| &lt; 1, else 2·sign(diff)), normalized by the pair count.</para>
+    /// </remarks>
+    private Tensor<T> ComputeDistanceWiseGradient(Tensor<T> students, Tensor<T> teachers)
     {
-        int dim = studentI.Length;
-        var gradient = new Vector<T>(dim);
+        int n = students.Shape[0];
+        int dim = students.Shape[1];
+        int pairCount = n * (n - 1) / 2;
+        var zeros = new Tensor<T>([n, n]);
 
-        var studentDist = ComputeDistance(studentI, studentJ);
-        var teacherDist = ComputeDistance(teacherI, teacherJ);
+        var studentDistances = PairwiseDistances(students);
+        var diff = Engine.TensorSubtract(studentDistances, PairwiseDistances(teachers));
 
-        var diff = NumOps.Subtract(studentDist, teacherDist);
-        double diffVal = Convert.ToDouble(diff);
+        // Huber loss gradient: quadratic region 2·diff, linear region 2·sign(diff)
+        var huberGrad = Engine.TensorMultiplyScalar(
+            Engine.TensorWhere(Engine.TensorLessThan(Engine.TensorAbs(diff), NumOps.One), diff, Engine.TensorSign(diff)),
+            NumOps.FromDouble(2.0 / pairCount));
+        var weights = Engine.TensorWhere(OffDiagonalMask(n), huberGrad, zeros);
 
-        // Huber loss gradient
-        double gradScale;
-        if (Math.Abs(diffVal) < 1.0)
-        {
-            gradScale = 2.0 * diffVal; // Quadratic region
-        }
-        else
-        {
-            gradScale = 2.0 * Math.Sign(diffVal); // Linear region
-        }
-
-        // Compute gradient of distance metric w.r.t. studentI
         switch (_distanceMetric)
         {
             case RelationalDistanceMetric.Euclidean:
-                // ∇||x-y|| = (x-y) / ||x-y||
-                double euclideanDist = Convert.ToDouble(studentDist) + Epsilon;
-                for (int k = 0; k < dim; k++)
-                {
-                    double component = Convert.ToDouble(NumOps.Subtract(studentI[k], studentJ[k]));
-                    gradient[k] = NumOps.FromDouble(gradScale * component / euclideanDist);
-                }
-                break;
+            {
+                // ∇||x-y|| = (x-y) / ||x-y|| (no direction for coincident points)
+                var positive = Engine.TensorGreaterThan(studentDistances, NumOps.Zero);
+                var safeDistances = Engine.TensorWhere(positive, studentDistances, Tensor<T>.CreateDefault([n, n], NumOps.One));
+                var coefficients = Engine.TensorWhere(positive, Engine.TensorDivide(weights, safeDistances), zeros);
+
+                // Σ_j c_ij (x_i - x_j) = x_i Σ_j c_ij - (C X)_i
+                return Engine.TensorSubtract(
+                    Engine.TensorMultiply(students, Column(Engine.ReduceSum(coefficients, [1], keepDims: false), dim)),
+                    Engine.TensorMatMul(coefficients, students));
+            }
 
             case RelationalDistanceMetric.Cosine:
-                // ∇(1 - cos(x,y)) = ∇(1 - (x·y)/(||x|| ||y||))
-                // = -[(y/||x|| ||y||) - (x·y)x/(||x||^3 ||y||)]
-                double dot = 0;
-                double norm1Sq = 0;
-                double norm2Sq = 0;
-                for (int k = 0; k < dim; k++)
-                {
-                    double xi = Convert.ToDouble(studentI[k]);
-                    double xj = Convert.ToDouble(studentJ[k]);
-                    dot += xi * xj;
-                    norm1Sq += xi * xi;
-                    norm2Sq += xj * xj;
-                }
-                double norm1 = Math.Sqrt(norm1Sq) + Epsilon;
-                double norm2 = Math.Sqrt(norm2Sq) + Epsilon;
-                double denom = norm1 * norm2;
+            {
+                // ∇(1 - cos(x,y)) = -[y/(||x|| ||y||) - (x·y)x/(||x||^3 ||y||)], zero where the
+                // similarity is clamped to ±1 or set to 0 for vanishing norms
+                var dots = Engine.TensorMatMul(students, Engine.TensorTranspose(students));
+                var squaredNorms = Engine.ReduceSum(Engine.TensorMultiply(students, students), [1], keepDims: true); // [n, 1]
+                var denom = Engine.TensorSqrt(Engine.TensorMatMul(squaredNorms, Engine.TensorTranspose(squaredNorms)));
+                var nonDegenerate = Engine.TensorGreaterThan(denom, NumOps.FromDouble(1e-10));
+                var safeDenom = Engine.TensorWhere(nonDegenerate, denom, Tensor<T>.CreateDefault([n, n], NumOps.One));
+                var rawCosine = Engine.TensorDivide(dots, safeDenom);
+                var valid = Engine.TensorMultiply(
+                    nonDegenerate, Engine.TensorLessThan(Engine.TensorAbs(rawCosine), NumOps.One));
 
-                for (int k = 0; k < dim; k++)
-                {
-                    double xi = Convert.ToDouble(studentI[k]);
-                    double xj = Convert.ToDouble(studentJ[k]);
-                    // Gradient component: -(xj/(||x|| ||y||) - (x·y)xi/(||x||^3 ||y||))
-                    double grad = -(xj / denom - (dot * xi) / (norm1Sq * denom));
-                    gradient[k] = NumOps.FromDouble(gradScale * grad);
-                }
-                break;
+                var crossWeights = Engine.TensorWhere(valid, Engine.TensorDivide(weights, safeDenom), zeros);
+                var selfWeights = Engine.TensorWhere(
+                    valid,
+                    Engine.TensorDivide(
+                        Engine.TensorMultiply(weights, dots),
+                        Engine.TensorMultiply(safeDenom, Engine.TensorBroadcastTo(squaredNorms, [n, n]))),
+                    zeros);
+
+                return Engine.TensorSubtract(
+                    Engine.TensorMultiply(students, Column(Engine.ReduceSum(selfWeights, [1], keepDims: false), dim)),
+                    Engine.TensorMatMul(crossWeights, students));
+            }
 
             case RelationalDistanceMetric.Manhattan:
+            {
                 // ∇Σ|x_i - y_i| = sign(x_i - y_i) for each component
-                for (int k = 0; k < dim; k++)
-                {
-                    double component = Convert.ToDouble(NumOps.Subtract(studentI[k], studentJ[k]));
-                    double sign = component > 0 ? 1.0 : (component < 0 ? -1.0 : 0.0);
-                    gradient[k] = NumOps.FromDouble(gradScale * sign);
-                }
-                break;
+                var pairWeights = Engine.TensorBroadcastTo(Engine.Reshape(weights, [n, n, 1]), [n, n, dim]);
+                return Engine.ReduceSum(
+                    Engine.TensorMultiply(pairWeights, Engine.TensorSign(PairwiseDifferences(students))), [1], keepDims: false);
+            }
 
             default:
                 throw new ArgumentOutOfRangeException(nameof(_distanceMetric), _distanceMetric, $"Gradient is not defined for distance metric '{_distanceMetric}'. Valid metrics: Euclidean, Cosine, Manhattan.");
         }
-
-        return gradient;
     }
 
     /// <summary>
-    /// Computes gradient of angle-wise loss for a triplet using analytical gradient.
+    /// Gradient of <see cref="ComputeAngleWiseLoss"/> with respect to every student row.
     /// </summary>
     /// <remarks>
-    /// Uses analytical gradient formula instead of finite differences for O(d) improvement.
-    /// For d=512, this reduces computation from ~163,000 angle computations to ~320 per batch.
+    /// <para>For a triplet with sides A = x_i - x_j and B = x_k - x_j, θ = arccos(cos) with
+    /// cos = (A · B) / (||A|| ||B|| + ε), so ∂θ/∂A = -1/sin(θ) · [B/D - (A · B) ||B|| A / (||A|| D²)] with
+    /// D = ||A|| ||B|| + ε (and symmetrically for B). Row i receives ∂/∂A, row k receives ∂/∂B and the
+    /// vertex row j receives -(∂/∂A + ∂/∂B). Clamped cosines contribute nothing.</para>
     /// </remarks>
-    private Vector<T> ComputeTripletAngleGradient(
-        Vector<T> studentI,
-        Vector<T> studentJ,
-        Vector<T> studentK,
-        Vector<T> teacherI,
-        Vector<T> teacherJ,
-        Vector<T> teacherK)
+    private Tensor<T> ComputeAngleWiseGradient(Tensor<T> students, Tensor<T> teachers)
     {
-        int dim = studentI.Length;
+        int n = students.Shape[0];
+        int dim = students.Shape[1];
+        var (first, vertex, third) = SampleTriplets(n);
+        int tripletCount = first.Length;
+        if (tripletCount == 0)
+            return new Tensor<T>([n, dim]);
 
-        var studentAngle = ComputeAngle(studentI, studentJ, studentK);
-        var teacherAngle = ComputeAngle(teacherI, teacherJ, teacherK);
+        var i = new Tensor<int>(first, [tripletCount]);
+        var j = new Tensor<int>(vertex, [tripletCount]);
+        var k = new Tensor<int>(third, [tripletCount]);
+        var ones = Tensor<T>.CreateDefault([tripletCount], NumOps.One);
+        var zeros = new Tensor<T>([tripletCount]);
 
-        var angleDiff = NumOps.Subtract(studentAngle, teacherAngle);
-        double diffVal = Convert.ToDouble(angleDiff);
+        var vertexRows = Engine.TensorIndexSelect(students, j, 0);
+        var sideA = Engine.TensorSubtract(Engine.TensorIndexSelect(students, i, 0), vertexRows);
+        var sideB = Engine.TensorSubtract(Engine.TensorIndexSelect(students, k, 0), vertexRows);
+        var dot = Engine.ReduceSum(Engine.TensorMultiply(sideA, sideB), [1], keepDims: false);
+        var normA = Engine.TensorSqrt(Engine.ReduceSum(Engine.TensorMultiply(sideA, sideA), [1], keepDims: false));
+        var normB = Engine.TensorSqrt(Engine.ReduceSum(Engine.TensorMultiply(sideB, sideB), [1], keepDims: false));
+        var denom = Engine.TensorAddScalar(Engine.TensorMultiply(normA, normB), NumOps.FromDouble(Epsilon));
+        var rawCosine = Engine.TensorDivide(dot, denom);
+        var cosine = Engine.TensorClamp(rawCosine, NumOps.FromDouble(-1.0), NumOps.One);
+        var angleDiff = Engine.TensorSubtract(Engine.TensorAcos(cosine), TripletAngles(teachers, i, j, k));
 
-        // Compute analytical gradient of angle with respect to studentI
-        var angleGrad = ComputeAnalyticalAngleGradient(studentI, studentJ, studentK);
+        // dθ/dcos = -1/sqrt(1 - cos²) inside (-1, 1); zero where the clamp is active
+        var inside = Engine.TensorLessThan(Engine.TensorAbs(rawCosine), NumOps.One);
+        var angleSlope = Engine.TensorWhere(
+            inside,
+            Engine.TensorNegate(Engine.TensorDivide(
+                ones, Engine.TensorSqrt(Engine.TensorSubtract(ones, Engine.TensorMultiply(cosine, cosine))))),
+            zeros);
 
-        // Apply chain rule: gradient of loss = 2 * (studentAngle - teacherAngle) * d(angle)/d(studentI)
-        var gradient = new Vector<T>(dim);
-        double scaleFactor = 2.0 * diffVal;
-        for (int d = 0; d < dim; d++)
-        {
-            gradient[d] = NumOps.Multiply(angleGrad[d], NumOps.FromDouble(scaleFactor));
-        }
+        // Chain rule for the mean of (θ_s - θ_t)²
+        var coefficient = Engine.TensorMultiplyScalar(
+            Engine.TensorMultiply(angleDiff, angleSlope), NumOps.FromDouble(2.0 / tripletCount));
 
-        return gradient;
+        // Zero-length sides contribute no direction; guard their norms against division by zero
+        var safeNormA = Engine.TensorWhere(Engine.TensorGreaterThan(normA, NumOps.Zero), normA, ones);
+        var safeNormB = Engine.TensorWhere(Engine.TensorGreaterThan(normB, NumOps.Zero), normB, ones);
+        var denomSquared = Engine.TensorMultiply(denom, denom);
+        var crossScale = Column(Engine.TensorDivide(coefficient, denom), dim);
+        var selfScaleA = Column(Engine.TensorDivide(
+            Engine.TensorMultiply(Engine.TensorMultiply(coefficient, dot), normB),
+            Engine.TensorMultiply(safeNormA, denomSquared)), dim);
+        var selfScaleB = Column(Engine.TensorDivide(
+            Engine.TensorMultiply(Engine.TensorMultiply(coefficient, dot), normA),
+            Engine.TensorMultiply(safeNormB, denomSquared)), dim);
+        var gradA = Engine.TensorSubtract(Engine.TensorMultiply(crossScale, sideB), Engine.TensorMultiply(selfScaleA, sideA));
+        var gradB = Engine.TensorSubtract(Engine.TensorMultiply(crossScale, sideA), Engine.TensorMultiply(selfScaleB, sideB));
+
+        // Scatter back to the rows: one-hot selectors [triplets, n] transposed onto the triplet gradients
+        var identity = Tensor<T>.FromMatrix(Matrix<T>.CreateIdentity(n));
+        var toI = Engine.TensorTranspose(Engine.TensorIndexSelect(identity, i, 0));
+        var toJ = Engine.TensorTranspose(Engine.TensorIndexSelect(identity, j, 0));
+        var toK = Engine.TensorTranspose(Engine.TensorIndexSelect(identity, k, 0));
+
+        return Engine.TensorSubtract(
+            Engine.TensorAdd(Engine.TensorMatMul(toI, gradA), Engine.TensorMatMul(toK, gradB)),
+            Engine.TensorMatMul(toJ, Engine.TensorAdd(gradA, gradB)));
     }
-
-    /// <summary>
-    /// Computes the analytical gradient of angle θ at vertex j with respect to vector i.
-    /// </summary>
-    /// <remarks>
-    /// <para>Given three vectors i, j, k, the angle θ at vertex j is formed by vectors A = i - j and B = k - j.</para>
-    /// <para>θ = arccos((A · B) / (||A|| · ||B||))</para>
-    /// <para>The analytical gradient is:
-    /// ∇_i θ = (-1 / sin(θ)) · [B / (||A|| · ||B||) - (cos(θ) · A / ||A||²)]</para>
-    /// <para>This is O(d) instead of O(d²) for numerical approximation.</para>
-    /// </remarks>
-    private Vector<T> ComputeAnalyticalAngleGradient(Vector<T> i, Vector<T> j, Vector<T> k)
-    {
-        int dim = i.Length;
-        var gradient = new Vector<T>(dim);
-
-        // Compute A = i - j and B = k - j
-        var A = new Vector<T>(dim);
-        var B = new Vector<T>(dim);
-        for (int d = 0; d < dim; d++)
-        {
-            A[d] = NumOps.Subtract(i[d], j[d]);
-            B[d] = NumOps.Subtract(k[d], j[d]);
-        }
-
-        // Compute dot products and norms
-        double dotAB = 0;
-        double normASq = 0;
-        double normBSq = 0;
-        for (int d = 0; d < dim; d++)
-        {
-            double aVal = Convert.ToDouble(A[d]);
-            double bVal = Convert.ToDouble(B[d]);
-            dotAB += aVal * bVal;
-            normASq += aVal * aVal;
-            normBSq += bVal * bVal;
-        }
-
-        double normA = Math.Sqrt(normASq) + Epsilon;
-        double normB = Math.Sqrt(normBSq) + Epsilon;
-
-        // Compute cos(θ) and sin(θ)
-        double cosTheta = dotAB / (normA * normB);
-        cosTheta = Math.Max(-1.0, Math.Min(1.0, cosTheta)); // Clamp to [-1, 1]
-        double sinTheta = Math.Sqrt(1.0 - cosTheta * cosTheta) + Epsilon;
-
-        // Compute gradient: ∇_i θ = (-1 / sin(θ)) · [B / (||A|| · ||B||) - (cos(θ) · A / ||A||²)]
-        double coeff = -1.0 / sinTheta;
-        double normAB = normA * normB;
-        double normASqPlusEps = normASq + Epsilon;
-
-        for (int d = 0; d < dim; d++)
-        {
-            double bVal = Convert.ToDouble(B[d]);
-            double aVal = Convert.ToDouble(A[d]);
-
-            double term1 = bVal / normAB;
-            double term2 = (cosTheta * aVal) / normASqPlusEps;
-
-            gradient[d] = NumOps.FromDouble(coeff * (term1 - term2));
-        }
-
-        return gradient;
-    }
-
-    /// <summary>
-    /// Computes the average relational gradient for all samples in a batch.
-    /// </summary>
-    /// <param name="studentEmbeddings">Student's output embeddings/features for batch.</param>
-    /// <param name="teacherEmbeddings">Teacher's output embeddings/features for batch.</param>
-    /// <returns>Average relational gradient vector to be distributed across samples.</returns>
-    /// <remarks>
-    /// <para>This method computes relational gradients for all samples in the batch and averages
-    /// them to produce a single gradient that can be applied to subsequent samples receiving the
-    /// amortized relational loss. This ensures gradient-loss consistency.</para>
-    /// </remarks>
-    private Vector<T> ComputeAverageRelationalGradientForBatch(Vector<T>[] studentEmbeddings, Vector<T>[] teacherEmbeddings)
-    {
-        if (studentEmbeddings.Length == 0 || teacherEmbeddings.Length == 0)
-        {
-            int dimension = studentEmbeddings.Length > 0 ? studentEmbeddings[0].Length :
-                     (teacherEmbeddings.Length > 0 ? teacherEmbeddings[0].Length : 0);
-            return new Vector<T>(dimension);
-        }
-
-        int n = studentEmbeddings.Length;
-        int dim = studentEmbeddings[0].Length;
-        var sumGradient = new Vector<T>(dim);
-
-        // Initialize to zero
-        for (int i = 0; i < dim; i++)
-        {
-            sumGradient[i] = NumOps.Zero;
-        }
-
-        // Compute gradient for each sample in the batch and accumulate
-        for (int sampleIdx = 0; sampleIdx < n; sampleIdx++)
-        {
-            var sampleGrad = new Vector<T>(dim);
-            for (int i = 0; i < dim; i++)
-            {
-                sampleGrad[i] = NumOps.Zero;
-            }
-
-            // Distance-wise gradient: for all pairs involving this sample
-            if (_distanceWeight > 0)
-            {
-                for (int j = 0; j < n; j++)
-                {
-                    if (j == sampleIdx) continue;
-
-                    var distGrad = ComputePairwiseDistanceGradient(
-                        studentEmbeddings[sampleIdx],
-                        studentEmbeddings[j],
-                        teacherEmbeddings[sampleIdx],
-                        teacherEmbeddings[j]);
-
-                    for (int k = 0; k < dim; k++)
-                    {
-                        var weighted = NumOps.Multiply(distGrad[k], NumOps.FromDouble(_distanceWeight));
-                        sampleGrad[k] = NumOps.Add(sampleGrad[k], weighted);
-                    }
-                }
-            }
-
-            // Angle-wise gradient: for triplets involving this sample
-            if (_angleWeight > 0 && n >= 3)
-            {
-                int maxTriplets = Math.Min(10, n - 1);
-                for (int t = 0; t < maxTriplets; t++)
-                {
-                    int j = (sampleIdx + t + 1) % n;
-                    int k = (sampleIdx + t + 2) % n;
-
-                    if (j == sampleIdx || k == sampleIdx || j == k)
-                        continue;
-
-                    var angleGrad = ComputeTripletAngleGradient(
-                        studentEmbeddings[sampleIdx],
-                        studentEmbeddings[j],
-                        studentEmbeddings[k],
-                        teacherEmbeddings[sampleIdx],
-                        teacherEmbeddings[j],
-                        teacherEmbeddings[k]);
-
-                    for (int d = 0; d < dim; d++)
-                    {
-                        var weighted = NumOps.Multiply(angleGrad[d], NumOps.FromDouble(_angleWeight));
-                        sampleGrad[d] = NumOps.Add(sampleGrad[d], weighted);
-                    }
-                }
-            }
-
-            // Add this sample's gradient to the sum
-            for (int i = 0; i < dim; i++)
-            {
-                sumGradient[i] = NumOps.Add(sumGradient[i], sampleGrad[i]);
-            }
-        }
-
-        // Average across all samples
-        for (int i = 0; i < dim; i++)
-        {
-            sumGradient[i] = NumOps.Divide(sumGradient[i], NumOps.FromDouble(n));
-        }
-
-        return sumGradient;
-    }
-
-    /// <summary>
-    /// Computes per-sample relational gradients using finite differences on the
-    /// relational loss. This guarantees the gradient matches the loss exactly,
-    /// regardless of how distance and angle components interact.
-    /// </summary>
-    private Vector<T>[] ComputePerSampleRelationalGradients(Vector<T>[] studentEmbeddings, Vector<T>[] teacherEmbeddings)
-    {
-        int n = studentEmbeddings.Length;
-        int dim = n > 0 ? studentEmbeddings[0].Length : 0;
-        var result = new Vector<T>[n];
-        T eps = NumOps.FromDouble(1e-5);
-
-        for (int sampleIdx = 0; sampleIdx < n; sampleIdx++)
-        {
-            var sampleGrad = new Vector<T>(dim);
-
-            for (int k = 0; k < dim; k++)
-            {
-                // Perturb studentEmbeddings[sampleIdx][k] by +epsilon
-                T origVal = studentEmbeddings[sampleIdx][k];
-
-                studentEmbeddings[sampleIdx][k] = NumOps.Add(origVal, eps);
-                T lossPlus = ComputeRelationalLoss(studentEmbeddings, teacherEmbeddings);
-
-                studentEmbeddings[sampleIdx][k] = NumOps.Subtract(origVal, eps);
-                T lossMinus = ComputeRelationalLoss(studentEmbeddings, teacherEmbeddings);
-
-                // Restore
-                studentEmbeddings[sampleIdx][k] = origVal;
-
-                // Finite difference: ∂L_rel/∂z_{sample,k}
-                T grad = NumOps.Divide(
-                    NumOps.Subtract(lossPlus, lossMinus),
-                    NumOps.FromDouble(2e-5));
-                sampleGrad[k] = grad;
-            }
-
-            result[sampleIdx] = sampleGrad;
-        }
-
-        return result;
-    }
-
     /// <summary>
     /// Computes relational knowledge distillation loss for a batch of samples.
     /// </summary>
@@ -820,40 +502,28 @@ public class RelationalDistillationStrategy<T> : DistillationStrategyBase<T>
     /// </summary>
     private T ComputeDistanceWiseLoss(Vector<T>[] studentEmbeddings, Vector<T>[] teacherEmbeddings, int n)
     {
-        T loss = NumOps.Zero;
-        int pairCount = 0;
+        int pairCount = n * (n - 1) / 2;
+        if (pairCount == 0)
+            return NumOps.Zero;
 
         // Compute all pairwise distances for both student and teacher
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = i + 1; j < n; j++)
-            {
-                var studentDist = ComputeDistance(studentEmbeddings[i], studentEmbeddings[j]);
-                var teacherDist = ComputeDistance(teacherEmbeddings[i], teacherEmbeddings[j]);
+        var diff = Engine.TensorSubtract(
+            PairwiseDistances(DistillationHelper<T>.StackRows(studentEmbeddings.Take(n).ToArray())),
+            PairwiseDistances(DistillationHelper<T>.StackRows(teacherEmbeddings.Take(n).ToArray())));
 
-                // Huber loss for robust distance matching
-                var diff = NumOps.Subtract(studentDist, teacherDist);
-                var absDiff = Math.Abs(Convert.ToDouble(diff));
+        // Huber loss for robust distance matching: quadratic for small differences,
+        // linear for large differences (more robust)
+        var absDiff = Engine.TensorAbs(diff);
+        var pairLoss = Engine.TensorWhere(
+            Engine.TensorLessThan(absDiff, NumOps.One),
+            Engine.TensorMultiply(diff, diff),
+            Engine.TensorSubtractScalar(Engine.TensorMultiplyScalar(absDiff, NumOps.FromDouble(2.0)), NumOps.One));
 
-                T pairLoss;
-                if (absDiff < 1.0)
-                {
-                    // Quadratic for small differences
-                    pairLoss = NumOps.Multiply(diff, diff);
-                }
-                else
-                {
-                    // Linear for large differences (more robust)
-                    pairLoss = NumOps.FromDouble(2.0 * absDiff - 1.0);
-                }
-
-                loss = NumOps.Add(loss, pairLoss);
-                pairCount++;
-            }
-        }
+        // Distances are symmetric, so the off-diagonal entries hold every pair (i < j) twice
+        T loss = Engine.TensorSum(Engine.TensorWhere(OffDiagonalMask(n), pairLoss, new Tensor<T>([n, n])));
 
         // Normalize by number of pairs
-        return pairCount > 0 ? NumOps.Divide(loss, NumOps.FromDouble(pairCount)) : NumOps.Zero;
+        return NumOps.Divide(loss, NumOps.FromDouble(2.0 * pairCount));
     }
 
     /// <summary>
@@ -861,8 +531,33 @@ public class RelationalDistillationStrategy<T> : DistillationStrategyBase<T>
     /// </summary>
     private T ComputeAngleWiseLoss(Vector<T>[] studentEmbeddings, Vector<T>[] teacherEmbeddings, int n)
     {
-        T loss = NumOps.Zero;
-        int tripletCount = 0;
+        var (first, vertex, third) = SampleTriplets(n);
+        int tripletCount = first.Length;
+        if (tripletCount == 0)
+            return NumOps.Zero;
+
+        var i = new Tensor<int>(first, [tripletCount]);
+        var j = new Tensor<int>(vertex, [tripletCount]);
+        var k = new Tensor<int>(third, [tripletCount]);
+        var studentAngles = TripletAngles(DistillationHelper<T>.StackRows(studentEmbeddings.Take(n).ToArray()), i, j, k);
+        var teacherAngles = TripletAngles(DistillationHelper<T>.StackRows(teacherEmbeddings.Take(n).ToArray()), i, j, k);
+
+        // Squared difference in angles
+        var diff = Engine.TensorSubtract(studentAngles, teacherAngles);
+        T loss = Engine.TensorSum(Engine.TensorMultiply(diff, diff));
+
+        return NumOps.Divide(loss, NumOps.FromDouble(tripletCount));
+    }
+
+    /// <summary>
+    /// Samples the triplets (i, j, k) used by the angle-wise loss with a fixed seed, so the loss and
+    /// its gradient always see the same triplets.
+    /// </summary>
+    private static (int[] First, int[] Vertex, int[] Third) SampleTriplets(int n)
+    {
+        var first = new List<int>();
+        var vertex = new List<int>();
+        var third = new List<int>();
 
         // Sample triplets (all combinations would be O(n³))
         int maxTriplets = Math.Min(n * n, 1000); // Limit for efficiency
@@ -878,74 +573,92 @@ public class RelationalDistillationStrategy<T> : DistillationStrategyBase<T>
             if (i == j || j == k || i == k)
                 continue;
 
-            var studentAngle = ComputeAngle(studentEmbeddings[i], studentEmbeddings[j], studentEmbeddings[k]);
-            var teacherAngle = ComputeAngle(teacherEmbeddings[i], teacherEmbeddings[j], teacherEmbeddings[k]);
-
-            // Squared difference in angles
-            var diff = NumOps.Subtract(studentAngle, teacherAngle);
-            var squaredDiff = NumOps.Multiply(diff, diff);
-            loss = NumOps.Add(loss, squaredDiff);
-            tripletCount++;
+            first.Add(i);
+            vertex.Add(j);
+            third.Add(k);
         }
 
-        return tripletCount > 0 ? NumOps.Divide(loss, NumOps.FromDouble(tripletCount)) : NumOps.Zero;
+        return (first.ToArray(), vertex.ToArray(), third.ToArray());
     }
 
     /// <summary>
-    /// Computes distance between two vectors based on the selected metric.
+    /// [n, n] distances between every pair of rows, based on the selected metric.
     /// </summary>
-    private T ComputeDistance(Vector<T> v1, Vector<T> v2)
+    private Tensor<T> PairwiseDistances(Tensor<T> rows)
     {
         switch (_distanceMetric)
         {
             case RelationalDistanceMetric.Euclidean:
-                return VectorHelper.EuclideanDistance(v1, v2);
+            {
+                var diff = PairwiseDifferences(rows);
+                return Engine.TensorSqrt(Engine.ReduceSum(Engine.TensorMultiply(diff, diff), [2], keepDims: false));
+            }
 
             case RelationalDistanceMetric.Cosine:
-                return ComputeCosineDistance(v1, v2);
+            {
+                // Distance = 1 - similarity
+                var similarity = DistillationHelper<T>.CosineSimilarityMatrix(rows, rows);
+                return Engine.TensorSubtract(Tensor<T>.CreateDefault(similarity.Shape.ToArray(), NumOps.One), similarity);
+            }
 
             case RelationalDistanceMetric.Manhattan:
-                return ComputeManhattanDistance(v1, v2);
+                return Engine.ReduceSum(Engine.TensorAbs(PairwiseDifferences(rows)), [2], keepDims: false);
 
             default:
                 throw new ArgumentOutOfRangeException(nameof(_distanceMetric), _distanceMetric, $"Unrecognised RelationalDistanceMetric '{_distanceMetric}'. Valid metrics: Euclidean, Cosine, Manhattan.");
         }
     }
 
-
-    private T ComputeCosineDistance(Vector<T> v1, Vector<T> v2)
+    /// <summary>
+    /// [n, n, d] tensor of row differences x_i - x_j.
+    /// </summary>
+    private Tensor<T> PairwiseDifferences(Tensor<T> rows)
     {
-        double similarity = VectorHelper.CosineSimilarity(v1, v2);
-        return NumOps.FromDouble(1.0 - similarity); // Distance = 1 - similarity
-    }
-
-    private T ComputeManhattanDistance(Vector<T> v1, Vector<T> v2)
-    {
-        return VectorHelper.ManhattanDistance(v1, v2);
+        int n = rows.Shape[0];
+        int dim = rows.Shape[1];
+        int[] shape = [n, n, dim];
+        return Engine.TensorSubtract(
+            Engine.TensorBroadcastTo(Engine.Reshape(rows, [n, 1, dim]), shape),
+            Engine.TensorBroadcastTo(Engine.Reshape(rows, [1, n, dim]), shape));
     }
 
     /// <summary>
-    /// Computes angle between three points (angle at point j).
+    /// [n, n] mask that is 1 off the diagonal (pairs i != j) and 0 on it.
     /// </summary>
-    private T ComputeAngle(Vector<T> vi, Vector<T> vj, Vector<T> vk)
+    private Tensor<T> OffDiagonalMask(int n)
+    {
+        return Engine.TensorEquals(Tensor<T>.FromMatrix(Matrix<T>.CreateIdentity(n)), NumOps.Zero);
+    }
+
+    /// <summary>
+    /// Broadcasts a length-m vector tensor to an [m, width] tensor whose row r repeats element r.
+    /// </summary>
+    private Tensor<T> Column(Tensor<T> values, int width)
+    {
+        return Engine.TensorBroadcastTo(Engine.Reshape(values, [values.Length, 1]), [values.Length, width]);
+    }
+
+    /// <summary>
+    /// Computes the angle (in radians) at vertex j of each triplet (i, j, k) of rows.
+    /// </summary>
+    private Tensor<T> TripletAngles(Tensor<T> rows, Tensor<int> i, Tensor<int> j, Tensor<int> k)
     {
         // Vectors from j to i and j to k
-        var ji = Engine.Subtract(vi, vj);
-        var jk = Engine.Subtract(vk, vj);
+        var vertexRows = Engine.TensorIndexSelect(rows, j, 0);
+        var ji = Engine.TensorSubtract(Engine.TensorIndexSelect(rows, i, 0), vertexRows);
+        var jk = Engine.TensorSubtract(Engine.TensorIndexSelect(rows, k, 0), vertexRows);
 
         // Dot product and norms
-        T dot = VectorHelper.DotProduct(ji, jk);
-        T normJi = VectorHelper.L2Norm(ji);
-        T normJk = VectorHelper.L2Norm(jk);
+        var dot = Engine.ReduceSum(Engine.TensorMultiply(ji, jk), [1], keepDims: false);
+        var normJi = Engine.TensorSqrt(Engine.ReduceSum(Engine.TensorMultiply(ji, ji), [1], keepDims: false));
+        var normJk = Engine.TensorSqrt(Engine.ReduceSum(Engine.TensorMultiply(jk, jk), [1], keepDims: false));
 
-        // cos(angle) = dot / (norm1 * norm2)
-        double cosAngle = Convert.ToDouble(dot) /
-            (Convert.ToDouble(normJi) * Convert.ToDouble(normJk) + Epsilon);
+        // cos(angle) = dot / (norm1 * norm2), clamped to [-1, 1] for numerical stability
+        var cosAngle = Engine.TensorDivide(
+            dot, Engine.TensorAddScalar(Engine.TensorMultiply(normJi, normJk), NumOps.FromDouble(Epsilon)));
+        cosAngle = Engine.TensorClamp(cosAngle, NumOps.FromDouble(-1.0), NumOps.One);
 
-        // Clamp to [-1, 1] for numerical stability
-        cosAngle = Math.Max(-1.0, Math.Min(1.0, cosAngle));
-
-        return NumOps.FromDouble(Math.Acos(cosAngle)); // Return angle in radians
+        return Engine.TensorAcos(cosAngle); // Return angle in radians
     }
 
 
