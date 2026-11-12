@@ -81,4 +81,26 @@ public class WaveletReferenceValueTests
         Assert.Equal(-0.1348671062689471, wavelet.Calculate(1.0), 1e-9);
         Assert.Equal(0.014155651473988687, wavelet.Calculate(2.0), 1e-9);
     }
+
+    // ================================================================
+    // DOG: d^n/dx^n exp(-x^2/2) = (-1)^n He_n(x) exp(-x^2/2), scaled by 1 / (sqrt(n!) 2^((n+1)/2))
+    // ================================================================
+
+    [Fact(Timeout = 120000)]
+    public async Task Dog_Order5_UsesHermitePolynomial()
+    {
+        // He_5(1) = 1 - 10 + 15 = 6, so psi(1) = -6 e^-0.5 / (sqrt(120) * 8)
+        var wavelet = new DOGWavelet<double>(order: 5);
+        double expected = -6.0 * Math.Exp(-0.5) / (Math.Sqrt(120.0) * 8.0);
+        Assert.Equal(expected, wavelet.Calculate(1.0), Tolerance);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task Dog_Order6_UsesHermitePolynomial()
+    {
+        // He_6(0.5) = 0.5^6 - 15 * 0.5^4 + 45 * 0.5^2 - 15 = -4.671875
+        var wavelet = new DOGWavelet<double>(order: 6);
+        double expected = -4.671875 * Math.Exp(-0.125) / (Math.Sqrt(720.0) * Math.Pow(2.0, 3.5));
+        Assert.Equal(expected, wavelet.Calculate(0.5), Tolerance);
+    }
 }
