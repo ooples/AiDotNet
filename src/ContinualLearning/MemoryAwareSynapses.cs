@@ -50,6 +50,7 @@ namespace AiDotNet.ContinualLearning;
 public class MemoryAwareSynapses<T> : IContinualLearningStrategy<T>
 {
     private readonly INumericOperations<T> _numOps;
+    private static IEngine Engine => AiDotNetEngine.Current;
     private Vector<T> _omega;                    // Accumulated importance
     private Vector<T> _optimalParameters;        // Parameters at end of last task
     private double _lambda;
@@ -105,15 +106,10 @@ public class MemoryAwareSynapses<T> : IContinualLearningStrategy<T>
 
         // Compute importance using output sensitivity via tape-based gradients
         var grads = network.ComputeGradients(taskData.inputs, taskData.targets);
-        var newOmega = new Vector<T>(grads.Length);
-        for (int i = 0; i < grads.Length; i++)
-            newOmega[i] = _numOps.Abs(grads[i]); // Importance = |gradient|
+        var newOmega = Engine.Abs(grads); // Importance = |gradient|
 
-        // Accumulate importance
-        for (int i = 0; i < _omega.Length; i++)
-        {
-            _omega[i] = _numOps.Add(_omega[i], newOmega[i]);
-        }
+        // Accumulate importance (in place)
+        Engine.TensorAddInPlace(_omega.AsTensor(), Head(newOmega, _omega.Length));
 
         // Store current parameters as optimal
         _optimalParameters = network.GetParameters().Clone();
@@ -131,16 +127,12 @@ public class MemoryAwareSynapses<T> : IContinualLearningStrategy<T>
         }
 
         var currentParams = network.GetParameters();
-        var loss = _numOps.Zero;
+        int n = currentParams.Length;
 
         // MAS loss: λ/2 * Σ Ω_i * (θ_i - θ*_i)²
-        for (int i = 0; i < currentParams.Length; i++)
-        {
-            var diff = _numOps.Subtract(currentParams[i], _optimalParameters[i]);
-            var squaredDiff = _numOps.Multiply(diff, diff);
-            var penalty = _numOps.Multiply(_omega[i], squaredDiff);
-            loss = _numOps.Add(loss, penalty);
-        }
+        var diff = Engine.TensorSubtract(currentParams.AsTensor(), Head(_optimalParameters, n));
+        var penalty = Engine.TensorMultiply(Head(_omega, n), Engine.TensorMultiply(diff, diff));
+        var loss = Engine.TensorSum(penalty);
 
         var halfLambda = _numOps.FromDouble(_lambda / 2.0);
         return _numOps.Multiply(halfLambda, loss);
@@ -160,14 +152,12 @@ public class MemoryAwareSynapses<T> : IContinualLearningStrategy<T>
         var currentParams = network.GetParameters();
         var lambdaT = _numOps.FromDouble(_lambda);
 
-        // Add MAS gradient: λ * Ω_i * (θ_i - θ*_i)
-        for (int i = 0; i < gradients.Length; i++)
-        {
-            var diff = _numOps.Subtract(currentParams[i], _optimalParameters[i]);
-            var masGrad = _numOps.Multiply(_omega[i], diff);
-            masGrad = _numOps.Multiply(lambdaT, masGrad);
-            gradients[i] = _numOps.Add(gradients[i], masGrad);
-        }
+        int n = gradients.Length;
+
+        // Add MAS gradient: λ * Ω_i * (θ_i - θ*_i), in place like master
+        var diff = Engine.TensorSubtract(Head(currentParams, n), Head(_optimalParameters, n));
+        var masGrad = Engine.TensorMultiplyScalar(Engine.TensorMultiply(Head(_omega, n), diff), lambdaT);
+        Engine.TensorAddInPlace(gradients.AsTensor(), masGrad);
 
         return gradients;
     }
@@ -186,15 +176,8 @@ public class MemoryAwareSynapses<T> : IContinualLearningStrategy<T>
     private Tensor<T> ComputeOutputNormGradient(Tensor<T> output)
     {
         // Gradient of ||F||² = 2 * F
-        var gradData = new Vector<T>(output.Length);
         var two = _numOps.FromDouble(2.0);
-
-        for (int i = 0; i < output.Length; i++)
-        {
-            gradData[i] = _numOps.Multiply(two, output[i]);
-        }
-
-        return new Tensor<T>(output._shape, gradData);
+        return Engine.TensorMultiplyScalar(output, two);
     }
 
     /// <summary>
@@ -217,11 +200,18 @@ public class MemoryAwareSynapses<T> : IContinualLearningStrategy<T>
 
         var data = new Vector<T>(sampleSize);
         var startIdx = index * sampleSize;
-        for (int i = 0; i < sampleSize; i++)
-        {
-            data[i] = batch[startIdx + i];
-        }
+        batch.Contiguous().AsSpan().Slice(startIdx, sampleSize).CopyTo(data.AsWritableSpan());
 
         return new Tensor<T>(newShape, data);
+    }
+
+    /// <summary>
+    /// Zero-copy rank-1 tensor view over the first <paramref name="count"/> elements of a vector.
+    /// </summary>
+    private static Tensor<T> Head(Vector<T> vector, int count)
+    {
+        return count == vector.Length
+            ? vector.AsTensor()
+            : Tensor<T>.FromMemory(vector.AsWritableMemory().Slice(0, count), new[] { count });
     }
 }
