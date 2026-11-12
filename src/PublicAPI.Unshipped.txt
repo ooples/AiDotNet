@@ -22579,3 +22579,11 @@ AiDotNet.Kernels.AdditiveStructureKernel<T>.AdditiveStructureKernel(int numFeatu
 AiDotNet.Kernels.AdditiveStructureKernel<T>.CalculateComponent(AiDotNet.Tensors.LinearAlgebra.Vector<T>! x1, AiDotNet.Tensors.LinearAlgebra.Vector<T>! x2, int componentIndex) -> T
 AiDotNet.Kernels.AdditiveStructureKernel<T>.GetComponentImportances(AiDotNet.Tensors.LinearAlgebra.Vector<T>! x) -> AiDotNet.Tensors.LinearAlgebra.Vector<T>!
 AiDotNet.Kernels.AdditiveStructureKernel<T>.GetWeight(int componentIndex) -> T
+*REMOVED*AiDotNet.Kernels.CylindricalKernel<T>.CylindricalKernel(AiDotNet.Interfaces.IKernelFunction<T>! regularKernel, int[]! regularDims, int[]! angularDims, double[]? periods = null, double[]? angularLengthScales = null) -> void
+*REMOVED*static AiDotNet.Kernels.CylindricalKernel<T>.WithRBF(int totalDims, int[]! angularDimIndices, double regularLengthScale = 1, double[]? periods = null, double[]? angularLengthScales = null) -> AiDotNet.Kernels.CylindricalKernel<T>!
+AiDotNet.Kernels.CylindricalKernel<T>.CylindricalKernel(AiDotNet.Interfaces.IKernelFunction<T>! regularKernel, int[]! regularDims, int[]! angularDims, AiDotNet.Tensors.LinearAlgebra.Vector<T>? periods = null, AiDotNet.Tensors.LinearAlgebra.Vector<T>? angularLengthScales = null) -> void
+static AiDotNet.Kernels.CylindricalKernel<T>.WithRBF(int totalDims, int[]! angularDimIndices, double regularLengthScale = 1, AiDotNet.Tensors.LinearAlgebra.Vector<T>? periods = null, AiDotNet.Tensors.LinearAlgebra.Vector<T>? angularLengthScales = null) -> AiDotNet.Kernels.CylindricalKernel<T>!
+*REMOVED*AiDotNet.Kernels.GibbsKernel<T>.GetLengthScale(AiDotNet.Tensors.LinearAlgebra.Vector<T>! x) -> double
+*REMOVED*AiDotNet.Kernels.GibbsKernel<T>.GibbsKernel(System.Func<AiDotNet.Tensors.LinearAlgebra.Vector<T>!, double>! lengthScaleFunction, double variance = 1) -> void
+AiDotNet.Kernels.GibbsKernel<T>.GetLengthScale(AiDotNet.Tensors.LinearAlgebra.Vector<T>! x) -> T
+AiDotNet.Kernels.GibbsKernel<T>.GibbsKernel(System.Func<AiDotNet.Tensors.LinearAlgebra.Vector<T>!, T>! lengthScaleFunction, double variance = 1) -> void

@@ -178,28 +178,21 @@ public class BesselKernel<T> : IKernelFunction<T>
     /// </remarks>
     private T BesselFunctionSeries(T order, T x)
     {
-        int maxIterations = 100;
-        T sum = _numOps.Zero;
-        T term = _numOps.One;
-        T factorial = _numOps.One;
+        // J_v(x) = (x/2)^v * sum_k (-x^2/4)^k / (k! * Gamma(k + v + 1)).
+        // Term k is term(k-1) * r_k with r_k = -(x^2/4) / (k * (v + k)), and term 0 = 1 / Gamma(v + 1),
+        // so all terms are one cumulative product of the ratios.
+        const int maxIterations = 100;
+        var engine = AiDotNetEngine.Current;
         T xSquaredOver4 = _numOps.Divide(_numOps.Square(x), _numOps.FromDouble(4));
 
-        for (int k = 0; k < maxIterations; k++)
-        {
-            sum = _numOps.Add(sum, term);
+        var k = engine.TensorLinspace(_numOps.One, _numOps.FromDouble(maxIterations - 1), maxIterations - 1);
+        var denominators = engine.TensorMultiply(k, engine.TensorAddScalar(k, order));
+        var ratios = engine.TensorDivide(
+            Tensor<T>.CreateDefault(new[] { maxIterations - 1 }, _numOps.Negate(xSquaredOver4)), denominators);
+        T relativeSum = _numOps.Add(_numOps.One, engine.TensorSum(engine.TensorCumProd(ratios, 0)));
 
-            term = _numOps.Divide(
-                _numOps.Multiply(_numOps.Negate(term), xSquaredOver4),
-                _numOps.Multiply(factorial, _numOps.Add(order, _numOps.FromDouble(k + 1)))
-            );
-
-            if (_numOps.LessThan(_numOps.Abs(term), _numOps.FromDouble(1e-15)))
-            {
-                break;
-            }
-
-            factorial = _numOps.Multiply(factorial, _numOps.FromDouble(k + 1));
-        }
+        T logGamma = engine.TensorLgamma(Tensor<T>.FromScalar(_numOps.Add(order, _numOps.One))).GetFlatIndexValue(0);
+        T sum = _numOps.Multiply(relativeSum, _numOps.Exp(_numOps.Negate(logGamma)));
 
         return _numOps.Multiply(sum, _numOps.Power(_numOps.Divide(x, _numOps.FromDouble(2)), order));
     }
