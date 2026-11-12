@@ -11,6 +11,86 @@ namespace AiDotNet.Tests.UnitTests.Evaluation;
 public class EvaluationNumericalMemoryTests
 {
     [Fact]
+    public void HalfVarianceRatios_PreserveFiniteRatiosAndConstantCases()
+    {
+        Half[] actual = { (Half)(-60000), (Half)(-30000), (Half)30000, (Half)60000 };
+        var predicted = new Half[actual.Length];
+        Assert.Equal((Half)1, new NormalizedMSEMetric<Half>().Compute(predicted, actual));
+        Assert.Equal((Half)1, new RelativeAbsoluteErrorMetric<Half>().Compute(predicted, actual));
+        Assert.Equal((Half)1, new RelativeSquaredErrorMetric<Half>().Compute(predicted, actual));
+        Assert.Equal((Half)0, new ExplainedVarianceMetric<Half>().Compute(predicted, actual));
+        Assert.Equal((Half)(-0.5), new AdjustedR2Metric<Half>(1).Compute(predicted, actual));
+        var constant = Enumerable.Repeat((Half)1, 4).ToArray();
+        Assert.Equal((Half)1, new AdjustedR2Metric<Half>(1).Compute(constant, constant));
+        Assert.Equal((Half)1, new ExplainedVarianceMetric<Half>().Compute(predicted, constant));
+        Assert.Equal((Half)0, new NormalizedMSEMetric<Half>().Compute(constant, constant));
+        Assert.Equal((Half)0, new RelativeAbsoluteErrorMetric<Half>().Compute(constant, constant));
+        Assert.Equal((Half)0, new RelativeSquaredErrorMetric<Half>().Compute(constant, constant));
+        Assert.Equal((Half)0, new AdjustedR2Metric<Half>(int.MaxValue).Compute(predicted, actual));
+        Assert.Equal(1f, new NormalizedMSEMetric<float>().Compute(new[] { 0f, 0f }, new[] { -1e20f, 1e20f }));
+    }
+
+    [Fact]
+    public void HalfSpearman_PreservesLargeTiedRankSumsAndConstantRanks()
+    {
+        var values = Enumerable.Range(0, 70000).Select(i => (Half)(i % 2)).ToArray();
+        var reversed = values.Select(value => (Half)(1 - (double)value)).ToArray();
+        var metric = new SpearmanCorrelationMetric<Half>();
+        Assert.Equal((Half)1, metric.Compute(values, values));
+        Assert.Equal((Half)(-1), metric.Compute(values, reversed));
+        Assert.Equal((Half)0, metric.Compute(new Half[values.Length], values));
+    }
+
+    [Fact]
+    public void WideMedianErrors_AverageBeforeRoundingToHalf()
+    {
+        var metric = new MedianAbsoluteErrorMetric<Half>();
+        Assert.Equal((Half)60000, metric.Compute(new[] { (Half)60000, (Half)60000 }, new Half[2]));
+        Assert.Equal((Half)60000, metric.Compute(new[] { (Half)0, (Half)60000 }, new[] { (Half)0, (Half)(-60000) }));
+        Assert.Equal(1.0, new MedianAbsoluteErrorMetric<double>().Compute(new[] { double.NaN, 1.0, 2.0 }, new double[3]));
+    }
+
+    [Theory]
+    [InlineData(3, 5)]
+    [InlineData(257, 259)]
+    public void DeLong_BoundedComponentsMatchScalarPairOracle(int positives, int negatives)
+    {
+        double[] scores = positives == 3
+            ? new[] { 0.5, 1.0, double.PositiveInfinity, 0.5, 0.5 + 5e-11, double.NegativeInfinity, double.PositiveInfinity, double.NaN }
+            : Enumerable.Range(0, positives + negatives).Select(i => (double)(i % 7)).ToArray();
+        var positiveMask = new Tensor<double>(Enumerable.Range(0, scores.Length).Select(i => i < positives ? 1.0 : 0.0).ToArray(), new[] { scores.Length });
+        var negativeMask = new Tensor<double>(Enumerable.Range(0, scores.Length).Select(i => i < positives ? 0.0 : 1.0).ToArray(), new[] { scores.Length });
+        var method = typeof(DeLongTest<double>).GetMethod("ComputeComponents", System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic)!;
+        var (auc, rows, columns) = Assert.IsType<(double, Tensor<double>, Tensor<double>)>(method.Invoke(null, new object[] { scores, positiveMask, negativeMask }));
+        var rowSums = new double[positives];
+        var columnSums = new double[negatives];
+        double total = 0;
+        for (int i = 0; i < positives; i++)
+        for (int j = 0; j < negatives; j++)
+        {
+            double left = scores[i], right = scores[positives + j];
+            double kernel = left > right ? 1 : Math.Abs(left - right) < 1e-10 ? 0.5 : 0;
+            rowSums[i] += kernel;
+            columnSums[j] += kernel;
+            total += kernel;
+        }
+        Assert.Equal(total / ((double)positives * negatives), auc, 12);
+        for (int i = 0; i < positives; i++) Assert.Equal(rowSums[i] / negatives, rows.GetFlat(i), 12);
+        for (int j = 0; j < negatives; j++) Assert.Equal(columnSums[j] / positives, columns.GetFlat(j), 12);
+    }
+
+    [Fact]
+    public void DeLong_HalfKeepsPairTotalsWide()
+    {
+        var labels = Enumerable.Range(0, 514).Select(i => i < 257 ? (Half)1 : (Half)0).ToArray();
+        var tied = Enumerable.Repeat((Half)0.5, labels.Length).ToArray();
+        var result = new DeLongTest<Half>().Test(labels, tied, labels);
+        Assert.Equal((Half)0.5, result.EffectSize);
+        Assert.Equal((Half)0, result.Statistic);
+        Assert.Equal((Half)1, result.PValue);
+    }
+
+    [Fact]
     public void HingeLoss_SelectsInfiniteMarginsWithoutMaskMultiplication()
     {
         var metric = new HingeLossMetric<double>();

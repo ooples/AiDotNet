@@ -51,25 +51,17 @@ public class SpearmanCorrelationMetric<T> : IRegressionMetric<T>
 
         var engine = AiDotNetEngine.Current;
         using var noGrad = new NoGradScope<T>();
-
-        // Compute ranks (tied values share their mean rank)
-        var predRanks = EvaluationTensorOps<T>.MidRanks(EvaluationTensorOps<T>.ToTensor(predictions));
-        var actualRanks = EvaluationTensorOps<T>.MidRanks(EvaluationTensorOps<T>.ToTensor(actuals));
-
-        // Compute Spearman correlation using Pearson correlation on ranks
-        // This correctly handles ties (the d² formula assumes no ties)
-        var dp = engine.TensorSubtractScalar(predRanks, engine.TensorMean(predRanks));
+        var pred = EvaluationTensorOps<T>.ToTensor(predictions).Cast<double>();
+        var actual = EvaluationTensorOps<T>.ToTensor(actuals).Cast<double>();
+        var predictedRanks = EvaluationTensorOps<double>.MidRanks(pred);
+        var actualRanks = EvaluationTensorOps<double>.MidRanks(actual);
+        var dp = engine.TensorSubtractScalar(predictedRanks, engine.TensorMean(predictedRanks));
         var da = engine.TensorSubtractScalar(actualRanks, engine.TensorMean(actualRanks));
-        T cov = engine.TensorSum(engine.TensorMultiply(dp, da));
-        T varPred = engine.TensorSumOfSquares(dp);
-        T varActual = engine.TensorSumOfSquares(da);
-
-        // Guard against zero variance (constant ranks)
-        var tolerance = NumOps.FromDouble(1e-12);
-        if (NumOps.LessThan(varPred, tolerance) || NumOps.LessThan(varActual, tolerance))
-            return NumOps.Zero;
-
-        return NumOps.Divide(cov, NumOps.Sqrt(NumOps.Multiply(varPred, varActual)));
+        double covariance = engine.TensorSum(engine.TensorMultiply(dp, da));
+        double predictedVariance = engine.TensorSumOfSquares(dp);
+        double actualVariance = engine.TensorSumOfSquares(da);
+        if (predictedVariance < 1e-12 || actualVariance < 1e-12) return NumOps.Zero;
+        return NumOps.FromDouble(covariance / (Math.Sqrt(predictedVariance) * Math.Sqrt(actualVariance)));
     }
 
     /// <inheritdoc />

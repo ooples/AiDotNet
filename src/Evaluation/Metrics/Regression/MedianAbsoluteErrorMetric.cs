@@ -49,16 +49,12 @@ public class MedianAbsoluteErrorMetric<T> : IRegressionMetric<T>
 
         var engine = AiDotNetEngine.Current;
         using var noGrad = new NoGradScope<T>();
-        var pred = EvaluationTensorOps<T>.ToTensor(predictions);
-        var actual = EvaluationTensorOps<T>.ToTensor(actuals);
+        var pred = EvaluationTensorOps<T>.ToTensor(predictions).Cast<double>();
+        var actual = EvaluationTensorOps<T>.ToTensor(actuals).Cast<double>();
         var errors = engine.TensorAbs(engine.TensorSubtract(actual, pred));
-
-        // Middle order statistics in Array.Sort order (NaN first)
-        int n = errors.Length;
-        var (lower, upper) = EvaluationTensorOps<T>.OrderStatistics(errors, (n - 1) / 2, n / 2);
-        return n % 2 == 1
-            ? upper
-            : NumOps.Divide(NumOps.Add(lower, upper), NumOps.FromDouble(2.0));
+        int count = errors.Length;
+        var (lower, upper) = EvaluationTensorOps<double>.OrderStatistics(errors, (count - 1) / 2, count / 2);
+        return NumOps.FromDouble(count % 2 == 1 ? upper : (lower + upper) / 2.0);
     }
 
     /// <inheritdoc />

@@ -50,17 +50,12 @@ public class NormalizedMSEMetric<T> : IRegressionMetric<T>
 
         var engine = AiDotNetEngine.Current;
         using var noGrad = new NoGradScope<T>();
-        var pred = EvaluationTensorOps<T>.ToTensor(predictions);
-        var actual = EvaluationTensorOps<T>.ToTensor(actuals);
-        var tolerance = NumOps.FromDouble(1e-10);
-
-        // MSE over the variance of actuals
-        T meanActual = engine.TensorMean(actual);
-        T mse = engine.TensorMean(engine.TensorSquare(engine.TensorSubtract(actual, pred)));
-        T variance = engine.TensorMean(engine.TensorSquare(engine.TensorSubtractScalar(actual, meanActual)));
-
-        if (NumOps.LessThan(variance, tolerance)) return NumOps.Zero;
-        return NumOps.Divide(mse, variance);
+        var pred = EvaluationTensorOps<T>.ToTensor(predictions).Cast<double>();
+        var actual = EvaluationTensorOps<T>.ToTensor(actuals).Cast<double>();
+        double mean = engine.TensorMean(actual);
+        double error = engine.TensorMean(engine.TensorSquare(engine.TensorSubtract(actual, pred)));
+        double variance = engine.TensorMean(engine.TensorSquare(engine.TensorSubtractScalar(actual, mean)));
+        return variance < 1e-10 ? NumOps.Zero : NumOps.FromDouble(error / variance);
     }
 
     /// <inheritdoc />

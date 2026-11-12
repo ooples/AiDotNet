@@ -50,17 +50,12 @@ public class RelativeAbsoluteErrorMetric<T> : IRegressionMetric<T>
 
         var engine = AiDotNetEngine.Current;
         using var noGrad = new NoGradScope<T>();
-        var pred = EvaluationTensorOps<T>.ToTensor(predictions);
-        var actual = EvaluationTensorOps<T>.ToTensor(actuals);
-        var tolerance = NumOps.FromDouble(1e-10);
-
-        // Sum of absolute errors over the sum of absolute deviations from the mean of actuals
-        T meanActual = engine.TensorMean(actual);
-        T sae = engine.TensorSum(engine.TensorAbs(engine.TensorSubtract(actual, pred)));
-        T sat = engine.TensorSum(engine.TensorAbs(engine.TensorSubtractScalar(actual, meanActual)));
-
-        if (NumOps.LessThan(sat, tolerance)) return NumOps.Zero;
-        return NumOps.Divide(sae, sat);
+        var pred = EvaluationTensorOps<T>.ToTensor(predictions).Cast<double>();
+        var actual = EvaluationTensorOps<T>.ToTensor(actuals).Cast<double>();
+        double mean = engine.TensorMean(actual);
+        double error = engine.TensorSum(engine.TensorAbs(engine.TensorSubtract(actual, pred)));
+        double total = engine.TensorSum(engine.TensorAbs(engine.TensorSubtractScalar(actual, mean)));
+        return total < 1e-10 ? NumOps.Zero : NumOps.FromDouble(error / total);
     }
 
     /// <inheritdoc />

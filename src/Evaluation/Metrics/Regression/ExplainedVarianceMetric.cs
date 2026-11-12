@@ -42,21 +42,14 @@ public class ExplainedVarianceMetric<T> : IRegressionMetric<T>
             throw new ArgumentException("Predictions and actuals must have the same length.");
         if (predictions.Length == 0) return NumOps.Zero;
 
-        int n = predictions.Length;
-
         var engine = AiDotNetEngine.Current;
         using var noGrad = new NoGradScope<T>();
-        var pred = EvaluationTensorOps<T>.ToTensor(predictions);
-        var actual = EvaluationTensorOps<T>.ToTensor(actuals);
-        var tolerance = NumOps.FromDouble(1e-10);
-
-        // Explained variance = 1 - Var(actual - pred) / Var(actual), each as a sum of squares around its mean
-        var residuals = engine.TensorSubtract(actual, pred);
-        T varActuals = engine.TensorSumOfSquares(engine.TensorSubtractScalar(actual, engine.TensorMean(actual)));
-        T varResiduals = engine.TensorSumOfSquares(engine.TensorSubtractScalar(residuals, engine.TensorMean(residuals)));
-
-        if (NumOps.LessThan(NumOps.Abs(varActuals), tolerance)) return NumOps.One;
-        return NumOps.Subtract(NumOps.One, NumOps.Divide(varResiduals, varActuals));
+        var pred = EvaluationTensorOps<T>.ToTensor(predictions).Cast<double>();
+        var actual = EvaluationTensorOps<T>.ToTensor(actuals).Cast<double>();
+        var residual = engine.TensorSubtract(actual, pred);
+        double total = engine.TensorSumOfSquares(engine.TensorSubtractScalar(actual, engine.TensorMean(actual)));
+        double error = engine.TensorSumOfSquares(engine.TensorSubtractScalar(residual, engine.TensorMean(residual)));
+        return Math.Abs(total) < 1e-10 ? NumOps.One : NumOps.FromDouble(1 - error / total);
     }
 
     /// <inheritdoc />

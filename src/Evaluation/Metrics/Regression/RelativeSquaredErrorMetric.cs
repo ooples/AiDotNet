@@ -50,17 +50,12 @@ public class RelativeSquaredErrorMetric<T> : IRegressionMetric<T>
 
         var engine = AiDotNetEngine.Current;
         using var noGrad = new NoGradScope<T>();
-        var pred = EvaluationTensorOps<T>.ToTensor(predictions);
-        var actual = EvaluationTensorOps<T>.ToTensor(actuals);
-        var tolerance = NumOps.FromDouble(1e-10);
-
-        // Sum of squared errors over the total sum of squares around the mean of actuals
-        T meanActual = engine.TensorMean(actual);
-        T sse = engine.TensorSumOfSquares(engine.TensorSubtract(actual, pred));
-        T sst = engine.TensorSumOfSquares(engine.TensorSubtractScalar(actual, meanActual));
-
-        if (NumOps.LessThan(sst, tolerance)) return NumOps.Zero;
-        return NumOps.Divide(sse, sst);
+        var pred = EvaluationTensorOps<T>.ToTensor(predictions).Cast<double>();
+        var actual = EvaluationTensorOps<T>.ToTensor(actuals).Cast<double>();
+        double mean = engine.TensorMean(actual);
+        double error = engine.TensorSumOfSquares(engine.TensorSubtract(actual, pred));
+        double total = engine.TensorSumOfSquares(engine.TensorSubtractScalar(actual, mean));
+        return total < 1e-10 ? NumOps.Zero : NumOps.FromDouble(error / total);
     }
 
     /// <inheritdoc />

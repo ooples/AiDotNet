@@ -57,30 +57,19 @@ public class AdjustedR2Metric<T> : IRegressionMetric<T>
         if (predictions.Length != actuals.Length)
             throw new ArgumentException("Predictions and actuals must have the same length.");
         if (predictions.Length == 0) return NumOps.Zero;
-
         int n = predictions.Length;
-        if (n <= _numPredictors + 1) return NumOps.Zero; // Not enough samples
+        if (n <= (long)_numPredictors + 1) return NumOps.Zero;
 
         var engine = AiDotNetEngine.Current;
         using var noGrad = new NoGradScope<T>();
-        var pred = EvaluationTensorOps<T>.ToTensor(predictions);
-        var actual = EvaluationTensorOps<T>.ToTensor(actuals);
-        var tolerance = NumOps.FromDouble(1e-10);
-
-        // Calculate R² from SS_res and SS_tot around the mean of actuals
-        T mean = engine.TensorMean(actual);
-        T ssRes = engine.TensorSumOfSquares(engine.TensorSubtract(actual, pred));
-        T ssTot = engine.TensorSumOfSquares(engine.TensorSubtractScalar(actual, mean));
-
-        // If actuals are constant (zero variance), R² is only 1 if predictions are also perfect
-        if (NumOps.LessThan(NumOps.Abs(ssTot), tolerance))
-            return NumOps.LessThan(NumOps.Abs(ssRes), tolerance) ? NumOps.One : NumOps.Zero;
-
-        T r2 = NumOps.Subtract(NumOps.One, NumOps.Divide(ssRes, ssTot));
-
-        // Adjusted R² = 1 - (1 - R²) * (n - 1) / (n - p - 1)
-        T scale = NumOps.FromDouble((n - 1.0) / (n - _numPredictors - 1.0));
-        return NumOps.Subtract(NumOps.One, NumOps.Multiply(NumOps.Subtract(NumOps.One, r2), scale));
+        var pred = EvaluationTensorOps<T>.ToTensor(predictions).Cast<double>();
+        var actual = EvaluationTensorOps<T>.ToTensor(actuals).Cast<double>();
+        double mean = engine.TensorMean(actual);
+        double residual = engine.TensorSumOfSquares(engine.TensorSubtract(actual, pred));
+        double total = engine.TensorSumOfSquares(engine.TensorSubtractScalar(actual, mean));
+        if (Math.Abs(total) < 1e-10) return Math.Abs(residual) < 1e-10 ? NumOps.One : NumOps.Zero;
+        double scale = (n - 1.0) / (n - _numPredictors - 1.0);
+        return NumOps.FromDouble(1 - residual / total * scale);
     }
 
     /// <inheritdoc />
