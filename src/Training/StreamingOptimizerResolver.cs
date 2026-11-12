@@ -39,7 +39,7 @@ internal static class StreamingOptimizerResolver<T>
             c.Beta1, c.Beta2, c.Epsilon, c.Decay, c.Rho, c.Momentum, c.WeightDecay,
             c.TrustCoefficient, c.FtrlAlpha, c.FtrlBeta, c.Lambda1, c.Lambda2, c.MaxTrustRatio,
             c.UseAMSGrad, c.UseNesterov, c.ClipTrustRatio, c.UseBiasCorrection, c.MemorySize,
-            c.BlockSize, c.UseBf16Moments, c.Min8BitSize);
+            c.BlockSize, c.UseBf16Moments, c.Min8BitSize, c.CoupledWeightDecay);
     }
 
     public static IStreamingOptimizer<T> Create(
@@ -55,7 +55,7 @@ internal static class StreamingOptimizerResolver<T>
         {
             return fullPrecision
                 ? new FullPrecisionStreamingAdam<T>(lr, weightDecay: fallbackWeightDecay)
-                : new StreamingAdam8Bit<T>(lr, weightDecay: fallbackWeightDecay);
+                : new StreamingAdam8Bit<T>(lr, weightDecay: fallbackWeightDecay, decoupledWeightDecay: true);
         }
 
         StreamingConfig c = Resolve(optimizer, fallbackWeightDecay);
@@ -74,7 +74,12 @@ internal static class StreamingOptimizerResolver<T>
                     useBf16Moments: c.UseBf16Moments,
                     min8BitSize: c.Min8BitSize);
             case StreamingKind.AmsGrad:
-                return new StreamingAMSGrad8Bit<T>(lr, c.Beta1, c.Beta2, c.Epsilon, c.WeightDecay);
+                return new StreamingAMSGrad8Bit<T>(
+                    lr, c.Beta1, c.Beta2, c.Epsilon, c.WeightDecay,
+                    decoupledWeightDecay: !c.CoupledWeightDecay,
+                    blockSize: c.BlockSize > 0 ? c.BlockSize : 2048,
+                    useBf16Moments: c.UseBf16Moments,
+                    min8BitSize: c.Min8BitSize);
             case StreamingKind.Nadam:
                 return new StreamingNadam8Bit<T>(lr, c.Beta1, c.Beta2, c.Epsilon);
             case StreamingKind.AdaMax:
@@ -110,6 +115,7 @@ internal static class StreamingOptimizerResolver<T>
                 return new StreamingAdam8Bit<T>(
                     lr, c.Beta1, c.Beta2, c.Epsilon, c.WeightDecay,
                     blockSize: c.BlockSize > 0 ? c.BlockSize : 2048,
+                    decoupledWeightDecay: !c.CoupledWeightDecay,
                     useBf16Moments: c.UseBf16Moments,
                     min8BitSize: c.Min8BitSize);
         }
@@ -153,6 +159,9 @@ internal static class StreamingOptimizerResolver<T>
         public int BlockSize;
         public bool UseBf16Moments;
         public int Min8BitSize;
+        // False (the default) applies weight decay decoupled, as the streaming Adam path always has; true adds it to
+        // the gradient, for an Adam8Bit configured with UseDecoupledWeightDecay = false.
+        public bool CoupledWeightDecay;
     }
 
     /// <summary>
@@ -259,6 +268,7 @@ internal static class StreamingOptimizerResolver<T>
                         : (opt.UseDecoupledWeightDecay && wd > 0.0 ? StreamingKind.AdamW : StreamingKind.Adam),
                     Beta1 = opt.Beta1, Beta2 = opt.Beta2, Epsilon = opt.Epsilon, WeightDecay = wd,
                     UseAMSGrad = opt.UseAMSGrad,
+                    CoupledWeightDecay = !opt.UseDecoupledWeightDecay,
                     BlockSize = opt.BlockSize,
                     UseBf16Moments = opt.UseBFloat16MomentStorage,
                     Min8BitSize = opt.Min8BitSize,
