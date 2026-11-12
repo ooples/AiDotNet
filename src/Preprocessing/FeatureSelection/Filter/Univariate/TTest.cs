@@ -72,8 +72,8 @@ public class TTest<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFea
         var engine = Engine;
 
         // Separate samples by class (binary)
-        var class0 = FeatureSelectionTensorOps.BelowMask(target, 0.5, out int n0);
-        var class1 = FeatureSelectionTensorOps.OneMinus(class0);
+        var class0 = FilterStatisticTensorOps.BelowMask(target, 0.5, out int n0);
+        var class1 = FilterStatisticTensorOps.OneMinus(class0);
         int n1 = n - n0;
 
         if (n0 < 2 || n1 < 2)
@@ -82,25 +82,25 @@ public class TTest<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFea
         int df = n0 + n1 - 2;
 
         // Means and sums of squared deviations of every feature within each class
-        var x = FeatureSelectionTensorOps.AsTensor(data);
-        var (mean0, ss0) = FeatureSelectionTensorOps.MaskedColumnMoments(x, class0, n0);
-        var (mean1, ss1) = FeatureSelectionTensorOps.MaskedColumnMoments(x, class1, n1);
+        var x = FilterStatisticTensorOps.AsTensor(data);
+        var (mean0, ss0) = FilterStatisticTensorOps.MaskedColumnMoments(x, class0, n0);
+        var (mean1, ss1) = FilterStatisticTensorOps.MaskedColumnMoments(x, class1, n1);
 
         // Pooled variance ((n0 - 1) var0 + (n1 - 1) var1) / df and its standard error
         var pooledStdErr = engine.TensorSqrt(engine.TensorMultiplyScalar(
             engine.TensorAdd(ss0, ss1), NumOps.FromDouble((1.0 / n0 + 1.0 / n1) / df)));
 
         // t-statistic; classes that do not overlap at all give +-inf
-        var tStatistics = FeatureSelectionTensorOps.SignedSeparationAwareRatio(
+        var tStatistics = FilterStatisticTensorOps.SignedSeparationAwareRatio(
             engine.TensorSubtract(mean0, mean1), pooledStdErr, 1e-10);
         _tStatistics = tStatistics.ToVector();
 
         // Two-tailed p-value from the t-distribution with df degrees of freedom (scipy.stats.ttest_ind)
-        var pValues = FeatureSelectionTensorOps.StudentTTwoSided(tStatistics, df);
+        var pValues = FilterStatisticTensorOps.StudentTTwoSided(tStatistics, df);
         _pValues = pValues.ToVector();
 
         // Select significant features or top by |t|
-        _selectedIndices = FeatureSelectionTensorOps.SignificantOrTopK(
+        _selectedIndices = FilterStatisticTensorOps.SignificantOrTopK(
             pValues, NumOps.FromDouble(_pValueThreshold), engine.TensorAbs(tStatistics), _nFeaturesToSelect);
 
         IsFitted = true;
@@ -119,7 +119,7 @@ public class TTest<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFea
         if (_selectedIndices is null)
             throw new InvalidOperationException("TTest has not been fitted.");
 
-        return FeatureSelectionTensorOps.SelectColumns(data, _selectedIndices);
+        return FilterStatisticTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

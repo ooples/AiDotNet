@@ -71,28 +71,28 @@ public class SignalToNoiseRatio<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, I
         var engine = Engine;
 
         // Separate samples by class (binary)
-        var class0 = FeatureSelectionTensorOps.BelowMask(target, 0.5, out int n0);
-        var class1 = FeatureSelectionTensorOps.OneMinus(class0);
+        var class0 = FilterStatisticTensorOps.BelowMask(target, 0.5, out int n0);
+        var class1 = FilterStatisticTensorOps.OneMinus(class0);
         int n1 = n - n0;
 
         if (n0 == 0 || n1 == 0)
             throw new ArgumentException("Both classes must have at least one sample.");
 
         // Class means and (population) standard deviations of every feature
-        var x = FeatureSelectionTensorOps.AsTensor(data);
-        var (mean0, ss0) = FeatureSelectionTensorOps.MaskedColumnMoments(x, class0, n0);
-        var (mean1, ss1) = FeatureSelectionTensorOps.MaskedColumnMoments(x, class1, n1);
+        var x = FilterStatisticTensorOps.AsTensor(data);
+        var (mean0, ss0) = FilterStatisticTensorOps.MaskedColumnMoments(x, class0, n0);
+        var (mean1, ss1) = FilterStatisticTensorOps.MaskedColumnMoments(x, class1, n1);
         var std0 = engine.TensorSqrt(engine.TensorDivideScalar(ss0, NumOps.FromDouble(n0)));
         var std1 = engine.TensorSqrt(engine.TensorDivideScalar(ss1, NumOps.FromDouble(n1)));
 
         // Signal-to-Noise Ratio |mean0 - mean1| / (std0 + std1); classes that do not overlap at all have
         // infinite SNR, a constant feature 0
-        var snr = FeatureSelectionTensorOps.SeparationAwareRatio(
+        var snr = FilterStatisticTensorOps.SeparationAwareRatio(
             engine.TensorAbs(engine.TensorSubtract(mean0, mean1)), engine.TensorAdd(std0, std1), 1e-10);
         _snrValues = snr.ToVector();
 
         // Select features above threshold or top by SNR
-        _selectedIndices = FeatureSelectionTensorOps.CandidatesOrTopK(snr, NumOps.FromDouble(_minSNR), _nFeaturesToSelect);
+        _selectedIndices = FilterStatisticTensorOps.CandidatesOrTopK(snr, NumOps.FromDouble(_minSNR), _nFeaturesToSelect);
 
         IsFitted = true;
     }
@@ -110,7 +110,7 @@ public class SignalToNoiseRatio<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, I
         if (_selectedIndices is null)
             throw new InvalidOperationException("SignalToNoiseRatio has not been fitted.");
 
-        return FeatureSelectionTensorOps.SelectColumns(data, _selectedIndices);
+        return FilterStatisticTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

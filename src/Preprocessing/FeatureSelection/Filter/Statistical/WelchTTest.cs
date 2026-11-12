@@ -77,30 +77,30 @@ public class WelchTTest<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervis
         var engine = Engine;
 
         // Split samples by class
-        var group0 = FeatureSelectionTensorOps.BelowMask(target, 0.5, out int n0);
-        var group1 = FeatureSelectionTensorOps.OneMinus(group0);
+        var group0 = FilterStatisticTensorOps.BelowMask(target, 0.5, out int n0);
+        var group1 = FilterStatisticTensorOps.OneMinus(group0);
         int n1 = n - n0;
 
         if (n0 < 2 || n1 < 2)
         {
             _tStatistics = new Vector<T>(p);
-            _pValues = FeatureSelectionTensorOps.Filled(new[] { p }, NumOps.One).ToVector();
-            _degreesOfFreedom = FeatureSelectionTensorOps.Filled(new[] { p }, NumOps.FromDouble(n - 2)).ToVector();
+            _pValues = FilterStatisticTensorOps.Filled(new[] { p }, NumOps.One).ToVector();
+            _degreesOfFreedom = FilterStatisticTensorOps.Filled(new[] { p }, NumOps.FromDouble(n - 2)).ToVector();
             _selectedIndices = Enumerable.Range(0, Math.Min(_nFeaturesToSelect, p)).ToArray();
             IsFitted = true;
             return;
         }
 
         // Means and sample variances of every feature within each group
-        var x = FeatureSelectionTensorOps.AsTensor(data);
-        var (mean0, ss0) = FeatureSelectionTensorOps.MaskedColumnMoments(x, group0, n0);
-        var (mean1, ss1) = FeatureSelectionTensorOps.MaskedColumnMoments(x, group1, n1);
+        var x = FilterStatisticTensorOps.AsTensor(data);
+        var (mean0, ss0) = FilterStatisticTensorOps.MaskedColumnMoments(x, group0, n0);
+        var (mean1, ss1) = FilterStatisticTensorOps.MaskedColumnMoments(x, group1, n1);
         var s20 = engine.TensorDivideScalar(ss0, NumOps.FromDouble((n0 - 1.0) * n0));
         var s21 = engine.TensorDivideScalar(ss1, NumOps.FromDouble((n1 - 1.0) * n1));
         var sum = engine.TensorAdd(s20, s21);
 
         // Welch's t-statistic; groups that do not overlap at all give +-inf
-        var tStatistics = FeatureSelectionTensorOps.SignedSeparationAwareRatio(
+        var tStatistics = FilterStatisticTensorOps.SignedSeparationAwareRatio(
             engine.TensorSubtract(mean0, mean1), engine.TensorSqrt(sum), 1e-10);
         _tStatistics = tStatistics.ToVector();
 
@@ -108,16 +108,16 @@ public class WelchTTest<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervis
         var den = engine.TensorAdd(
             engine.TensorDivideScalar(engine.TensorSquare(s20), NumOps.FromDouble(n0 - 1)),
             engine.TensorDivideScalar(engine.TensorSquare(s21), NumOps.FromDouble(n1 - 1)));
-        var degreesOfFreedom = FeatureSelectionTensorOps.GuardedDivide(
+        var degreesOfFreedom = FilterStatisticTensorOps.GuardedDivide(
             engine.TensorSquare(sum), den, 0.0, NumOps.FromDouble(n0 + n1 - 2));
         _degreesOfFreedom = degreesOfFreedom.ToVector();
 
         // Two-tailed p-value from the t-distribution (scipy.stats.ttest_ind(equal_var=False))
-        var pValues = FeatureSelectionTensorOps.StudentTTwoSided(tStatistics, degreesOfFreedom);
+        var pValues = FilterStatisticTensorOps.StudentTTwoSided(tStatistics, degreesOfFreedom);
         _pValues = pValues.ToVector();
 
         // Select features with smallest p-values
-        _selectedIndices = FeatureSelectionTensorOps.BottomKIndicesSorted(pValues, Math.Min(_nFeaturesToSelect, p));
+        _selectedIndices = FilterStatisticTensorOps.BottomKIndicesSorted(pValues, Math.Min(_nFeaturesToSelect, p));
 
         IsFitted = true;
     }
@@ -135,7 +135,7 @@ public class WelchTTest<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervis
         if (_selectedIndices is null)
             throw new InvalidOperationException("WelchTTest has not been fitted.");
 
-        return FeatureSelectionTensorOps.SelectColumns(data, _selectedIndices);
+        return FilterStatisticTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

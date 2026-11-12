@@ -70,28 +70,28 @@ public class ANOVA<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFea
         var engine = Engine;
 
         // Group samples by class
-        var classIndex = FeatureSelectionTensorOps.ClassIndex(target, out int k);
+        var classIndex = FilterStatisticTensorOps.ClassIndex(target, out int k);
         int dfBetween = k - 1;
         int dfWithin = n - k;
 
         // SS_between = sum n_c (class_mean - overall_mean)^2, SS_within = sum (x - class_mean)^2, per feature
-        var (ssBetween, ssWithin) = FeatureSelectionTensorOps.AnovaSums(
-            FeatureSelectionTensorOps.AsTensor(data), FeatureSelectionTensorOps.ClassOneHot<T>(classIndex, k));
+        var (ssBetween, ssWithin) = FilterStatisticTensorOps.AnovaSums(
+            FilterStatisticTensorOps.AsTensor(data), FilterStatisticTensorOps.ClassOneHot<T>(classIndex, k));
         var msBetween = engine.TensorDivideScalar(ssBetween, NumOps.FromDouble(Math.Max(1, dfBetween)));
         var msWithin = engine.TensorDivideScalar(ssWithin, NumOps.FromDouble(Math.Max(1, dfWithin)));
 
         // F = MS_between / MS_within; with no within-class scatter a feature whose class means differ
         // separates the classes perfectly (F = +inf, as scikit-learn's f_classif reports), a constant one scores 0
-        var fStatistics = FeatureSelectionTensorOps.SeparationAwareRatio(msBetween, msWithin, 1e-10);
+        var fStatistics = FilterStatisticTensorOps.SeparationAwareRatio(msBetween, msWithin, 1e-10);
         _fStatistics = fStatistics.ToVector();
 
         // p = P(F(k - 1, n - k) > F), the F-distribution survival function (scipy.stats.f.sf)
         _pValues = dfBetween > 0 && dfWithin > 0
-            ? FeatureSelectionTensorOps.FSurvival(fStatistics, dfBetween, dfWithin).ToVector()
-            : FeatureSelectionTensorOps.FilledLike(fStatistics, NumOps.One).ToVector();
+            ? FilterStatisticTensorOps.FSurvival(fStatistics, dfBetween, dfWithin).ToVector()
+            : FilterStatisticTensorOps.FilledLike(fStatistics, NumOps.One).ToVector();
 
         // Select top features by F-statistic
-        _selectedIndices = FeatureSelectionTensorOps.TopKIndicesSorted(fStatistics, Math.Min(_nFeaturesToSelect, p));
+        _selectedIndices = FilterStatisticTensorOps.TopKIndicesSorted(fStatistics, Math.Min(_nFeaturesToSelect, p));
 
         IsFitted = true;
     }
@@ -109,7 +109,7 @@ public class ANOVA<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFea
         if (_selectedIndices is null)
             throw new InvalidOperationException("ANOVA has not been fitted.");
 
-        return FeatureSelectionTensorOps.SelectColumns(data, _selectedIndices);
+        return FilterStatisticTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

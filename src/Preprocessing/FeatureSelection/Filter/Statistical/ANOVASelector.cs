@@ -69,23 +69,23 @@ public class ANOVASelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISuper
         var engine = Engine;
 
         // Group samples by class
-        var classIndex = FeatureSelectionTensorOps.ClassIndex(target, out int nClasses);
+        var classIndex = FilterStatisticTensorOps.ClassIndex(target, out int nClasses);
 
         // Between-group (SSB) and within-group (SSW) sums of squares of every feature
-        var (ssb, ssw) = FeatureSelectionTensorOps.AnovaSums(
-            FeatureSelectionTensorOps.AsTensor(data), FeatureSelectionTensorOps.ClassOneHot<T>(classIndex, nClasses));
+        var (ssb, ssw) = FilterStatisticTensorOps.AnovaSums(
+            FilterStatisticTensorOps.AsTensor(data), FilterStatisticTensorOps.ClassOneHot<T>(classIndex, nClasses));
 
         // F = (SSB / dfb) / (SSW / dfw) = (SSB dfw / dfb) / SSW; a feature with no within-class scatter but
         // distinct class means separates the classes perfectly (+inf), a constant one scores 0
         int dfb = nClasses - 1;
         int dfw = n - nClasses;
         var fStatistics = dfw > 0
-            ? FeatureSelectionTensorOps.SeparationAwareRatio(
+            ? FilterStatisticTensorOps.SeparationAwareRatio(
                 engine.TensorMultiplyScalar(ssb, NumOps.Divide(NumOps.FromDouble(dfw), NumOps.FromDouble(dfb))), ssw, 1e-10)
-            : FeatureSelectionTensorOps.FilledLike(ssb, NumOps.Zero);
+            : FilterStatisticTensorOps.FilledLike(ssb, NumOps.Zero);
         _fStatistics = fStatistics.ToVector();
 
-        _selectedIndices = FeatureSelectionTensorOps.TopKIndicesSorted(fStatistics, Math.Min(_nFeaturesToSelect, p));
+        _selectedIndices = FilterStatisticTensorOps.TopKIndicesSorted(fStatistics, Math.Min(_nFeaturesToSelect, p));
 
         IsFitted = true;
     }
@@ -103,7 +103,7 @@ public class ANOVASelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISuper
         if (_selectedIndices is null)
             throw new InvalidOperationException("ANOVASelector has not been fitted.");
 
-        return FeatureSelectionTensorOps.SelectColumns(data, _selectedIndices);
+        return FilterStatisticTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

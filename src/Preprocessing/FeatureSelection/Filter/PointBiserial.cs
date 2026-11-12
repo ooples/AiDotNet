@@ -71,8 +71,8 @@ public class PointBiserial<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISuper
         var engine = Engine;
 
         // Separate samples by class (binary)
-        var class0 = FeatureSelectionTensorOps.BelowMask(target, 0.5, out int n0);
-        var class1 = FeatureSelectionTensorOps.OneMinus(class0);
+        var class0 = FilterStatisticTensorOps.BelowMask(target, 0.5, out int n0);
+        var class1 = FilterStatisticTensorOps.OneMinus(class0);
         int n1 = n - n0;
 
         if (n0 == 0 || n1 == 0)
@@ -82,20 +82,20 @@ public class PointBiserial<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISuper
         double qProp = (double)n0 / n;
 
         // Overall (population) standard deviation and class means of every feature
-        var x = FeatureSelectionTensorOps.AsTensor(data);
+        var x = FilterStatisticTensorOps.AsTensor(data);
         var overallStd = engine.TensorSqrt(engine.TensorDivideScalar(
-            FeatureSelectionTensorOps.ColumnSumOfSquaredDeviations(x), NumOps.FromDouble(n)));
-        var (mean0, _) = FeatureSelectionTensorOps.MaskedColumnMoments(x, class0, n0);
-        var (mean1, _) = FeatureSelectionTensorOps.MaskedColumnMoments(x, class1, n1);
+            FilterStatisticTensorOps.ColumnSumOfSquaredDeviations(x), NumOps.FromDouble(n)));
+        var (mean0, _) = FilterStatisticTensorOps.MaskedColumnMoments(x, class0, n0);
+        var (mean1, _) = FilterStatisticTensorOps.MaskedColumnMoments(x, class1, n1);
 
         // Point-biserial correlation ((mean1 - mean0) / std) sqrt(p q); 0 for a constant feature
         var correlations = engine.TensorMultiplyScalar(
-            FeatureSelectionTensorOps.GuardedDivide(engine.TensorSubtract(mean1, mean0), overallStd, 1e-10, NumOps.Zero),
+            FilterStatisticTensorOps.GuardedDivide(engine.TensorSubtract(mean1, mean0), overallStd, 1e-10, NumOps.Zero),
             NumOps.FromDouble(Math.Sqrt(pProp * qProp)));
         _correlations = correlations.ToVector();
 
         // Select features above threshold or top by absolute correlation
-        _selectedIndices = FeatureSelectionTensorOps.CandidatesOrTopK(
+        _selectedIndices = FilterStatisticTensorOps.CandidatesOrTopK(
             engine.TensorAbs(correlations), NumOps.FromDouble(_minCorrelation), _nFeaturesToSelect);
 
         IsFitted = true;
@@ -114,7 +114,7 @@ public class PointBiserial<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISuper
         if (_selectedIndices is null)
             throw new InvalidOperationException("PointBiserial has not been fitted.");
 
-        return FeatureSelectionTensorOps.SelectColumns(data, _selectedIndices);
+        return FilterStatisticTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />
