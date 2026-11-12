@@ -88,6 +88,10 @@ public static class StatisticsHelper<T>
     /// <summary>The first <paramref name="length"/> entries of <paramref name="values"/> (throws when it is shorter).</summary>
     private static Tensor<T> Prefix(Vector<T> values, int length) => Engine.TensorNarrow(values.AsTensor(), 0, 0, length);
 
+    /// <summary>1 / ln(i + 2) for ranks i = 0 .. count - 1 (the DCG position discount).</summary>
+    private static Tensor<T> RankDiscounts(int count)
+        => Engine.TensorDivide(Filled(new[] { count }, _numOps.One), Engine.TensorLog(Engine.TensorArange<T>(2, count + 2, 1)));
+
     /// <summary>Gathers <paramref name="values"/> at <paramref name="indices"/> into a rank-1 tensor.</summary>
     private static Tensor<T> Gather(Tensor<T> values, List<int> indices)
         => Engine.TensorIndexSelect(values, new Tensor<int>(indices.ToArray(), new[] { indices.Count }), 0);
@@ -6756,13 +6760,14 @@ public static class StatisticsHelper<T>
         T sum = _numOps.Zero;
         T relevantCount = _numOps.Zero;
 
-        for (int i = 0; i < sortedPairs.Count; i++)
+        if (sortedPairs.Count > 0)
         {
-            if (_numOps.GreaterThan(sortedPairs[i].Actual, _numOps.Zero))
-            {
-                relevantCount = _numOps.Add(relevantCount, _numOps.One);
-                sum = _numOps.Add(sum, _numOps.Divide(relevantCount, _numOps.FromDouble(i + 1)));
-            }
+            // Precision at each relevant rank: (relevant items so far) / (rank + 1).
+            var relevant = Engine.TensorGreaterThan(AsTensor(sortedPairs.Select(pair => pair.Actual)), _numOps.Zero);
+            var precisionAtRank = Engine.TensorDivide(Engine.TensorCumSum(relevant, 0),
+                Engine.TensorArange<T>(1, sortedPairs.Count + 1, 1));
+            sum = Engine.TensorSum(Engine.TensorMultiply(relevant, precisionAtRank));
+            relevantCount = Count(relevant);
         }
 
         return _numOps.Divide(sum, relevantCount);
@@ -6799,21 +6804,13 @@ public static class StatisticsHelper<T>
         T dcg = _numOps.Zero;
         T idcg = _numOps.Zero;
 
-        for (int i = 0; i < sortedPairs.Count; i++)
+        if (sortedPairs.Count > 0)
         {
-            T relevance = sortedPairs[i].Actual;
-            T position = _numOps.FromDouble(i + 1);
-            T logDenominator = _numOps.Log(_numOps.Add(position, _numOps.One));
-            dcg = _numOps.Add(dcg, _numOps.Divide(relevance, logDenominator));
-        }
+            var discounts = RankDiscounts(sortedPairs.Count);
+            dcg = Engine.TensorSum(Engine.TensorMultiply(AsTensor(sortedPairs.Select(pair => pair.Actual)), discounts));
 
-        var idealOrder = sortedPairs.OrderByDescending(pair => pair.Actual).ToList();
-        for (int i = 0; i < idealOrder.Count; i++)
-        {
-            T relevance = idealOrder[i].Actual;
-            T position = _numOps.FromDouble(i + 1);
-            T logDenominator = _numOps.Log(_numOps.Add(position, _numOps.One));
-            idcg = _numOps.Add(idcg, _numOps.Divide(relevance, logDenominator));
+            var idealOrder = sortedPairs.OrderByDescending(pair => pair.Actual).Select(pair => pair.Actual);
+            idcg = Engine.TensorSum(Engine.TensorMultiply(AsTensor(idealOrder), discounts));
         }
 
         return _numOps.Divide(dcg, idcg);
@@ -6845,12 +6842,17 @@ public static class StatisticsHelper<T>
                                 .OrderByDescending(pair => pair.Predicted)
                                 .ToList();
 
-        for (int i = 0; i < sortedPairs.Count; i++)
+        if (sortedPairs.Count == 0)
         {
-            if (_numOps.GreaterThan(sortedPairs[i].Actual, _numOps.Zero))
-            {
-                return _numOps.Divide(_numOps.One, _numOps.FromDouble(i + 1));
-            }
+            return _numOps.Zero;
+        }
+
+        // First relevant rank (TensorNonzero lists coordinates in row-major order).
+        var relevantRanks = Engine.TensorNonzero(
+            Engine.TensorGreaterThan(AsTensor(sortedPairs.Select(pair => pair.Actual)), _numOps.Zero));
+        if (relevantRanks.Shape[0] > 0)
+        {
+            return _numOps.Divide(_numOps.One, _numOps.FromDouble(relevantRanks.GetFlat(0) + 1));
         }
 
         return _numOps.Zero;
