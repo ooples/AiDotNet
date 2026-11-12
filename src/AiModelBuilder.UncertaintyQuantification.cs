@@ -717,10 +717,10 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         var numOps = MathHelper.GetNumericOperations<T>();
         var priorPrecision = numOps.FromDouble(options.LaplacePriorPrecision);
 
-        Vector<T> gradients;
+        Vector<T> fisherDiagonal;
         try
         {
-            gradients = InterfaceGuard.GradientComputable(model).ComputeGradients(input, target, lossFunction: null);
+            fisherDiagonal = EmpiricalFisherDiagonal(InterfaceGuard.GradientComputable(model), input, target);
         }
         catch (Exception ex)
         {
@@ -728,10 +728,9 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             return;
         }
 
-        // Diagonal posterior precision prior + g^2, variance = 1 / precision.
+        // Diagonal Laplace (Daxberger et al. 2021): precision = prior precision + sum_i g_i^2, variance = 1 / precision.
         var engine = AiDotNetEngine.Current;
-        var gradientTensor = gradients.AsTensor();
-        var hDiag = engine.TensorAddScalar(engine.TensorMultiply(gradientTensor, gradientTensor), priorPrecision);
+        var hDiag = engine.TensorAddScalar(fisherDiagonal.AsTensor(), priorPrecision);
         var variance = engine.Reciprocal(hDiag.ToVector());
 
         artifacts.HasLaplacePosterior = true;
@@ -760,10 +759,10 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         var numOps = MathHelper.GetNumericOperations<T>();
         var priorPrecision = numOps.FromDouble(options.LaplacePriorPrecision);
 
-        Vector<T> gradients;
+        Vector<T> fisherDiagonal;
         try
         {
-            gradients = InterfaceGuard.GradientComputable(model).ComputeGradients(input, target, lossFunction: null);
+            fisherDiagonal = EmpiricalFisherDiagonal(InterfaceGuard.GradientComputable(model), input, target);
         }
         catch (Exception ex)
         {
@@ -771,10 +770,9 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             return;
         }
 
-        // Diagonal posterior precision prior + g^2, variance = 1 / precision.
+        // Diagonal Laplace (Daxberger et al. 2021): precision = prior precision + sum_i g_i^2, variance = 1 / precision.
         var engine = AiDotNetEngine.Current;
-        var gradientTensor = gradients.AsTensor();
-        var hDiag = engine.TensorAddScalar(engine.TensorMultiply(gradientTensor, gradientTensor), priorPrecision);
+        var hDiag = engine.TensorAddScalar(fisherDiagonal.AsTensor(), priorPrecision);
         var variance = engine.Reciprocal(hDiag.ToVector());
 
         artifacts.HasLaplacePosterior = true;
@@ -1118,6 +1116,55 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         }
 
         return false;
+    }
+
+    /// <summary>
+    /// Diagonal of the empirical Fisher, sum over samples of the squared per-sample loss gradient g_i^2 (the
+    /// diagonal "EF" Hessian approximation of laplace-torch; Daxberger et al. 2021, Sec. 2). The squared gradient
+    /// of the whole batch is not this: it drops every per-sample term that cancels in the sum.
+    /// </summary>
+    internal static Vector<T> EmpiricalFisherDiagonal(IGradientComputable<T, TInput, TOutput> model, TInput input, TOutput target)
+    {
+        var engine = AiDotNetEngine.Current;
+        int samples = LeadingSampleCount(input);
+        Tensor<T>? fisher = null;
+        foreach (int i in Enumerable.Range(0, samples))
+        {
+            var sampleInput = samples == 1 ? input : SliceSample(input, i);
+            var sampleTarget = samples == 1 ? target : SliceSample(target, i);
+            var g = model.ComputeGradients(sampleInput, sampleTarget, lossFunction: null).AsTensor();
+            var squared = engine.TensorMultiply(g, g);
+            fisher = fisher is null ? squared : engine.TensorAdd(fisher, squared);
+        }
+
+        return fisher is null ? new Vector<T>(0) : fisher.ToVector();
+    }
+
+    private static int LeadingSampleCount<TValue>(TValue value)
+    {
+        return value switch
+        {
+            Tensor<T> tensor when tensor.Rank >= 2 => tensor.Shape[0],
+            Matrix<T> matrix => matrix.Rows,
+            _ => 1
+        };
+    }
+
+    /// <summary>
+    /// Sample <paramref name="index"/> of a batched value, keeping its rank: [1, ...] for a tensor, a one-row
+    /// matrix, or a one-element vector (one target per sample).
+    /// </summary>
+    private static TValue SliceSample<TValue>(TValue value, int index)
+    {
+        object sample = value switch
+        {
+            Tensor<T> tensor when tensor.Rank >= 2 => tensor.Slice(0, index, index + 1).Contiguous(),
+            Matrix<T> matrix => Matrix<T>.FromRowVectors(new[] { matrix.GetRow(index) }),
+            Vector<T> vector => vector.GetSubVector(index, 1),
+            _ => throw new NotSupportedException($"Per-sample gradients need a Tensor, Matrix or Vector batch, not {typeof(TValue).Name}.")
+        };
+
+        return (TValue)sample;
     }
 
     private static bool TryCreateOneHotTarget(Vector<int> labels, int batch, int classes, out TOutput target)
