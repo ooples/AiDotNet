@@ -263,7 +263,83 @@ internal static class AudioEngineOps
     internal static Tensor<T> SymmetricHannWindow<T>(IEngine engine, int size)
     {
         if (size == 1) return Tensor<T>.CreateDefault(new[] { 1 }, MathHelper.GetNumericOperations<T>().FromDouble(double.NaN));
-        if (size <= 0) return new Tensor<T>(new[] { Math.Max(size, 0) });
+        if (size < 0) throw new OverflowException("Window size must be non-negative.");
+        if (size == 0) return new Tensor<T>(new[] { 0 });
         return engine.TensorHannWindow<T>(size, periodic: false);
+    }
+
+    /// <summary>
+    /// <paramref name="x"/> (same shape) with its first <paramref name="count"/> row-major elements
+    /// replaced by <paramref name="map"/> applied to them; the remaining elements are unchanged.
+    /// </summary>
+    internal static Tensor<T> MapPrefix<T>(IEngine engine, Tensor<T> x, int count, Func<Tensor<T>, Tensor<T>> map)
+    {
+        if (count <= 0) return x;
+        var flat = Flatten(engine, x);
+        var head = map(engine.TensorSlice(flat, new[] { 0 }, new[] { count }));
+        var joined = count >= flat.Length
+            ? head
+            : engine.Concat(new[] { head, engine.TensorSlice(flat, new[] { count }, new[] { flat.Length - count }) }, 0);
+        return engine.Reshape(joined, x.Shape.ToArray());
+    }
+
+    /// <summary>
+    /// Spectral subtraction over the overlapping prefix: <c>x[i] - noise[i]</c> where that is greater
+    /// than zero, else zero (NaN maps to zero), for <c>i &lt; min(|x|, |noise|)</c>.
+    /// </summary>
+    internal static Tensor<T> SubtractNoiseClampPrefix<T>(IEngine engine, Tensor<T> x, Tensor<T> noise)
+    {
+        int count = Math.Min(x.Length, noise.Length);
+        return MapPrefix(engine, x, count, head =>
+        {
+            var subtracted = engine.TensorSubtract(head, FitLength(engine, noise, count));
+            return engine.TensorWhere(engine.TensorGreaterThan(subtracted, MathHelper.GetNumericOperations<T>().Zero), subtracted, new Tensor<T>(new[] { count }));
+        });
+    }
+
+    /// <summary>
+    /// <c>max(0, x[i] - noiseScale * noise[i])</c> (NaN propagates, as <c>Math.Max</c> does) for
+    /// <c>i &lt; min(|x|, |noise|)</c>; the remaining elements are unchanged.
+    /// </summary>
+    internal static Tensor<T> SubtractScaledNoiseFloorPrefix<T>(IEngine engine, Tensor<T> x, Tensor<T> noise, double noiseScale)
+    {
+        int count = Math.Min(x.Length, noise.Length);
+        var numOps = MathHelper.GetNumericOperations<T>();
+        return MapPrefix(engine, x, count, head =>
+        {
+            var value = engine.TensorSubtract(head, engine.TensorMultiplyScalar(FitLength(engine, noise, count), numOps.FromDouble(noiseScale)));
+            return engine.TensorWhere(engine.TensorLessThan(value, numOps.Zero), new Tensor<T>(new[] { count }), value);
+        });
+    }
+
+    /// <summary>
+    /// <c>s * result[i] + inv * other[i]</c> for <c>i &lt; min(|result|, |other|)</c>; the remaining
+    /// elements of <paramref name="result"/> are unchanged.
+    /// </summary>
+    internal static Tensor<T> BlendPrefix<T>(IEngine engine, Tensor<T> result, Tensor<T> other, T s, T inv)
+    {
+        int count = Math.Min(result.Length, other.Length);
+        return MapPrefix(engine, result, count, head =>
+            engine.TensorAdd(engine.TensorMultiplyScalar(head, s), engine.TensorMultiplyScalar(FitLength(engine, other, count), inv)));
+    }
+
+    /// <summary>
+    /// A tensor shaped like <paramref name="a"/> holding <c>a[i] * b[i]</c> for
+    /// <c>i &lt; min(|a|, |b|)</c> and zero after.
+    /// </summary>
+    internal static Tensor<T> MultiplyPrefix<T>(IEngine engine, Tensor<T> a, Tensor<T> b)
+    {
+        int count = Math.Min(a.Length, b.Length);
+        if (count == 0) return new Tensor<T>(a.Shape.ToArray());
+        var product = engine.TensorMultiply(FitLength(engine, a, count), FitLength(engine, b, count));
+        return engine.Reshape(FitLength(engine, product, a.Length), a.Shape.ToArray());
+    }
+
+    /// <summary><c>sign(v) * |v|^exponent</c> element-wise (a negative value keeps its sign).</summary>
+    internal static Tensor<T> SignedPower<T>(IEngine engine, Tensor<T> values, double exponent)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var magnitude = engine.TensorPower(engine.TensorAbs(values), numOps.FromDouble(exponent));
+        return engine.TensorWhere(engine.TensorLessThan(values, numOps.Zero), engine.TensorNegate(magnitude), magnitude);
     }
 }
