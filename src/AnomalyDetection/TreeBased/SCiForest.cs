@@ -128,14 +128,7 @@ public partial class SCiForest<T> : AnomalyDetectorBase<T>
 
             // Sample data
             var sampleIndices = SampleIndices(X.Rows, nSamples, random);
-            var sampleData = new Matrix<T>(sampleIndices.Length, X.Columns);
-            for (int si = 0; si < sampleIndices.Length; si++)
-            {
-                for (int j = 0; j < X.Columns; j++)
-                {
-                    sampleData[si, j] = X[sampleIndices[si], j];
-                }
-            }
+            var sampleData = AnomalyTensorOps.SelectRows(AnomalyTensorOps.ToTensor(X), sampleIndices).ToMatrix();
 
             // Build tree
             var tree = new SCiTree(_nFeatures, _sparsity, random, NumOps);
@@ -168,8 +161,6 @@ public partial class SCiForest<T> : AnomalyDetectorBase<T>
                 nameof(X));
         }
 
-        var scores = new Vector<T>(X.Rows);
-
         // Expected path length for BST — must use the training subsample size, not the scoring batch size
         T c = _trainingSampleSize > 2
             ? NumOps.FromDouble(2 * (Math.Log(_trainingSampleSize - 1) + 0.5772156649) - (2.0 * (_trainingSampleSize - 1) / _trainingSampleSize))
@@ -181,32 +172,24 @@ public partial class SCiForest<T> : AnomalyDetectorBase<T>
             throw new InvalidOperationException("Model not properly fitted.");
         }
 
-        for (int i = 0; i < X.Rows; i++)
+        // Anomaly score: s = 2^(-avgPathLength/c), or 0.5 when c is not positive
+        if (!NumOps.GreaterThan(c, NumOps.Zero))
         {
-            var point = new Vector<T>(X.GetRowReadOnlySpan(i).ToArray());
-
-            // Average path length across all trees
-            T totalPathLength = NumOps.Zero;
-            for (int t = 0; t < trees.Count; t++)
-            {
-                totalPathLength = NumOps.Add(totalPathLength, trees[t].PathLength(point, 0));
-            }
-            T avgPathLength = NumOps.Divide(totalPathLength, NumOps.FromDouble(trees.Count));
-
-            // Anomaly score: s = 2^(-avgPathLength/c)
-            if (NumOps.GreaterThan(c, NumOps.Zero))
-            {
-                T exponent = NumOps.Negate(NumOps.Divide(avgPathLength, c));
-                T ln2 = NumOps.FromDouble(Math.Log(2));
-                scores[i] = NumOps.Exp(NumOps.Multiply(exponent, ln2));
-            }
-            else
-            {
-                scores[i] = NumOps.FromDouble(0.5);
-            }
+            return Engine.Fill(X.Rows, NumOps.FromDouble(0.5));
         }
 
-        return scores;
+        // Average path length across all trees (summed in tree order for every point)
+        var data = AnomalyTensorOps.ToTensor(X);
+        var allRows = AnomalyTensorOps.Range(X.Rows);
+        var totalPathLength = Tensor<T>.CreateZeros(new[] { X.Rows });
+        for (int t = 0; t < trees.Count; t++)
+        {
+            totalPathLength = Engine.TensorAdd(totalPathLength, trees[t].PathLengths(data, allRows));
+        }
+
+        var avgPathLength = Engine.TensorDivideScalar(totalPathLength, NumOps.FromDouble(trees.Count));
+        var exponent = Engine.TensorNegate(Engine.TensorDivideScalar(avgPathLength, c));
+        return Engine.TensorExp(Engine.TensorMultiplyScalar(exponent, NumOps.FromDouble(Math.Log(2)))).ToVector();
     }
 
     private static int[] SampleIndices(int total, int sampleSize, Random random)
@@ -277,25 +260,12 @@ public partial class SCiForest<T> : AnomalyDetectorBase<T>
             }
 
             // Compute projections
-            var projections = new Vector<T>(data.Rows);
-            for (int i = 0; i < data.Rows; i++)
-            {
-                var row = new Vector<T>(data.GetRowReadOnlySpan(i).ToArray());
-                T proj = _ops.Zero;
-                for (int j = 0; j < _nFeatures; j++)
-                {
-                    proj = _ops.Add(proj, _ops.Multiply(row[j], _sparseWeights[j]));
-                }
-                projections[i] = proj;
-            }
+            var engine = AiDotNetEngine.Current;
+            var dataTensor = AnomalyTensorOps.ToTensor(data);
+            var projections = AnomalyTensorOps.Project(dataTensor, _sparseWeights);
 
-            T minProj = projections[0];
-            T maxProj = projections[0];
-            for (int i = 1; i < data.Rows; i++)
-            {
-                if (_ops.LessThan(projections[i], minProj)) minProj = projections[i];
-                if (_ops.GreaterThan(projections[i], maxProj)) maxProj = projections[i];
-            }
+            T minProj = engine.TensorMinValue(projections);
+            T maxProj = engine.TensorMaxValue(projections);
 
             T range = _ops.Subtract(maxProj, minProj);
             if (_ops.LessThan(range, _minRangeTolerance))
@@ -306,19 +276,12 @@ public partial class SCiForest<T> : AnomalyDetectorBase<T>
 
             _threshold = _ops.Add(minProj, _ops.Multiply(_ops.FromDouble(_random.NextDouble()), range));
 
-            // Split data
-            var leftIndices = new List<int>();
-            var rightIndices = new List<int>();
+            // Split data: projections below the threshold go left (order preserved)
+            var goesLeft = engine.TensorLessThan(projections, _threshold);
+            var leftIndices = AnomalyTensorOps.NonzeroIndices(goesLeft);
+            var rightIndices = AnomalyTensorOps.NonzeroIndices(engine.ScalarMinusTensor(_ops.One, goesLeft));
 
-            for (int i = 0; i < data.Rows; i++)
-            {
-                if (_ops.LessThan(projections[i], _threshold))
-                    leftIndices.Add(i);
-                else
-                    rightIndices.Add(i);
-            }
-
-            if (leftIndices.Count == 0 || rightIndices.Count == 0)
+            if (leftIndices.Length == 0 || rightIndices.Length == 0)
             {
                 _isLeaf = true;
                 return;
@@ -328,15 +291,37 @@ public partial class SCiForest<T> : AnomalyDetectorBase<T>
             _left = new SCiTree(_nFeatures, _sparsity, _random, _ops);
             _right = new SCiTree(_nFeatures, _sparsity, _random, _ops);
 
-            _left.Build(ExtractRows(data, leftIndices), currentDepth + 1, maxDepth);
-            _right.Build(ExtractRows(data, rightIndices), currentDepth + 1, maxDepth);
+            _left.Build(AnomalyTensorOps.SelectRows(dataTensor, leftIndices).ToMatrix(), currentDepth + 1, maxDepth);
+            _right.Build(AnomalyTensorOps.SelectRows(dataTensor, rightIndices).ToMatrix(), currentDepth + 1, maxDepth);
         }
 
-        public T PathLength(Vector<T> point, int currentDepth)
+        /// <summary>
+        /// The path length of each of the given rows of data in this (sub)tree, as a [rows.Length] tensor in
+        /// the order of <paramref name="rows"/>.
+        /// </summary>
+        public Tensor<T> PathLengths(Tensor<T> data, Tensor<int> rows)
         {
+            var leafRows = new List<Tensor<int>>();
+            var leafValues = new List<Tensor<T>>();
+            Route(data, rows, AnomalyTensorOps.Range(rows.Length), 0, leafRows, leafValues);
+            return AnomalyTensorOps.AssembleByRow(leafRows, leafValues);
+        }
+
+        // Routes rows (identified by their positions in the caller's row list) down the tree; each leaf
+        // contributes depth + c(size) for the rows that reach it.
+        private void Route(Tensor<T> data, Tensor<int> rows, Tensor<int> positions, int currentDepth,
+            List<Tensor<int>> leafRows, List<Tensor<T>> leafValues)
+        {
+            if (rows.Length == 0)
+            {
+                return;
+            }
+
             if (_isLeaf)
             {
-                return _ops.Add(_ops.FromDouble(currentDepth), EstimateC(_size));
+                leafRows.Add(positions);
+                leafValues.Add(AiDotNetEngine.Current.Fill(rows.Length, _ops.Add(_ops.FromDouble(currentDepth), EstimateC(_size))).AsTensor());
+                return;
             }
 
             var sparseWeights = _sparseWeights;
@@ -350,29 +335,13 @@ public partial class SCiForest<T> : AnomalyDetectorBase<T>
                     "This indicates a corrupted tree structure.");
             }
 
-            T projection = _ops.Zero;
-            for (int i = 0; i < point.Length; i++)
-            {
-                projection = _ops.Add(projection, _ops.Multiply(point[i], sparseWeights[i]));
-            }
-
-            if (_ops.LessThan(projection, _threshold))
-                return left.PathLength(point, currentDepth + 1);
-            else
-                return right.PathLength(point, currentDepth + 1);
-        }
-
-        private static Matrix<T> ExtractRows(Matrix<T> data, List<int> indices)
-        {
-            var result = new Matrix<T>(indices.Count, data.Columns);
-            for (int i = 0; i < indices.Count; i++)
-            {
-                for (int j = 0; j < data.Columns; j++)
-                {
-                    result[i, j] = data[indices[i], j];
-                }
-            }
-            return result;
+            var engine = AiDotNetEngine.Current;
+            var projections = AnomalyTensorOps.Project(engine.TensorIndexSelect(data, rows, 0), sparseWeights);
+            var goesLeft = engine.TensorLessThan(projections, _threshold);
+            left.Route(data, AnomalyTensorOps.SelectWhere(rows, goesLeft, _ops.One),
+                AnomalyTensorOps.SelectWhere(positions, goesLeft, _ops.One), currentDepth + 1, leafRows, leafValues);
+            right.Route(data, AnomalyTensorOps.SelectWhere(rows, goesLeft, _ops.Zero),
+                AnomalyTensorOps.SelectWhere(positions, goesLeft, _ops.Zero), currentDepth + 1, leafRows, leafValues);
         }
 
         private T EstimateC(int n)
