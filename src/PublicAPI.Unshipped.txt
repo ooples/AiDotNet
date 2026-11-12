@@ -22567,7 +22567,8 @@ virtual AiDotNet.Diffusion.DiffusionModelBase<T>.IsBatchedTrainingSample(AiDotNe
 AiDotNet.Document.Options.DocBankOptions.LearningRate.get -> double?
 *REMOVED*AiDotNet.Kernels.ARDKernel<T>.ARDKernel(double[]! lengthScales, double variance = 1) -> void
 *REMOVED*AiDotNet.Kernels.ARDKernel<T>.GetLengthScales() -> double[]!
-AiDotNet.Kernels.ARDKernel<T>.ARDKernel(AiDotNet.Tensors.LinearAlgebra.Vector<T>! lengthScales, double variance = 1) -> void
+AiDotNet.Kernels.ARDKernel<T>.ARDKernel(AiDotNet.Tensors.LinearAlgebra.Vector<T>! lengthScales) -> void
+AiDotNet.Kernels.ARDKernel<T>.ARDKernel(AiDotNet.Tensors.LinearAlgebra.Vector<T>! lengthScales, double variance) -> void
 AiDotNet.Kernels.ARDKernel<T>.GetLengthScales() -> AiDotNet.Tensors.LinearAlgebra.Vector<T>!
 *REMOVED*AiDotNet.Kernels.AdditiveStructureKernel<T>.AdditiveStructureKernel(AiDotNet.Interfaces.IKernelFunction<T>![]! componentKernels, int[]![]! featureGroups, double[]? weights = null) -> void
 *REMOVED*AiDotNet.Kernels.AdditiveStructureKernel<T>.AdditiveStructureKernel(int numFeatures, AiDotNet.Interfaces.IKernelFunction<T>! baseKernel, double[]? weights = null) -> void
@@ -22575,7 +22576,8 @@ AiDotNet.Kernels.ARDKernel<T>.GetLengthScales() -> AiDotNet.Tensors.LinearAlgebr
 *REMOVED*AiDotNet.Kernels.AdditiveStructureKernel<T>.GetComponentImportances(AiDotNet.Tensors.LinearAlgebra.Vector<T>! x) -> double[]!
 *REMOVED*AiDotNet.Kernels.AdditiveStructureKernel<T>.GetWeight(int componentIndex) -> double
 AiDotNet.Kernels.AdditiveStructureKernel<T>.AdditiveStructureKernel(AiDotNet.Interfaces.IKernelFunction<T>![]! componentKernels, int[]![]! featureGroups, AiDotNet.Tensors.LinearAlgebra.Vector<T>? weights = null) -> void
-AiDotNet.Kernels.AdditiveStructureKernel<T>.AdditiveStructureKernel(int numFeatures, AiDotNet.Interfaces.IKernelFunction<T>! baseKernel, AiDotNet.Tensors.LinearAlgebra.Vector<T>? weights = null) -> void
+AiDotNet.Kernels.AdditiveStructureKernel<T>.AdditiveStructureKernel(int numFeatures, AiDotNet.Interfaces.IKernelFunction<T>! baseKernel) -> void
+AiDotNet.Kernels.AdditiveStructureKernel<T>.AdditiveStructureKernel(int numFeatures, AiDotNet.Interfaces.IKernelFunction<T>! baseKernel, AiDotNet.Tensors.LinearAlgebra.Vector<T>? weights) -> void
 AiDotNet.Kernels.AdditiveStructureKernel<T>.CalculateComponent(AiDotNet.Tensors.LinearAlgebra.Vector<T>! x1, AiDotNet.Tensors.LinearAlgebra.Vector<T>! x2, int componentIndex) -> T
 AiDotNet.Kernels.AdditiveStructureKernel<T>.GetComponentImportances(AiDotNet.Tensors.LinearAlgebra.Vector<T>! x) -> AiDotNet.Tensors.LinearAlgebra.Vector<T>!
 AiDotNet.Kernels.AdditiveStructureKernel<T>.GetWeight(int componentIndex) -> T

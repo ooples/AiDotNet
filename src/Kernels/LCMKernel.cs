@@ -164,6 +164,7 @@ public class LCMKernel<T> : IKernelFunction<T>
         var engine = AiDotNetEngine.Current;
         _coregMatrices = new Matrix<T>[_numComponents];
         T bound = _numOps.FromDouble(1.0 / Math.Sqrt(effectiveRank));
+        T lowerBound = _numOps.Negate(bound);
         var stabilizer = engine.MatrixMultiplyScalar(Matrix<T>.CreateIdentity(numOutputs), _numOps.FromDouble(0.1));
 
         for (int i = 0; i < _numComponents; i++)
@@ -174,7 +175,7 @@ public class LCMKernel<T> : IKernelFunction<T>
             // Generate random factor matrix L_i with entries uniform in [-1/sqrt(rank), 1/sqrt(rank)),
             // then B_i = L_i × L_i^T plus a small diagonal for stability
             var factor = engine.TensorRandomUniformRange(new[] { numOutputs, effectiveRank },
-                _numOps.Negate(bound), bound, rand.Next());
+                lowerBound, bound, rand.Next());
             var gram = engine.TensorMatMul(factor, engine.TensorTranspose(factor)).ToMatrix();
             _coregMatrices[i] = engine.MatrixAdd(gram, stabilizer);
         }

@@ -717,7 +717,7 @@ public abstract partial class SurvivalModelBase<T> : ISurvivalModel<T>, IModelSh
     /// <param name="coefficients">The p coefficients.</param>
     /// <param name="intercept">The intercept added to every row.</param>
     /// <returns>The n linear predictors.</returns>
-    protected Tensor<T> LinearPredictor(Tensor<T> design, Vector<T> coefficients, T intercept)
+    private protected Tensor<T> LinearPredictor(Tensor<T> design, Vector<T> coefficients, T intercept)
     {
         var engine = AiDotNetEngine.Current;
         int n = design.Shape[0];
@@ -734,7 +734,7 @@ public abstract partial class SurvivalModelBase<T> : ISurvivalModel<T>, IModelSh
     /// <param name="times">The observed times.</param>
     /// <param name="eventTimes">The times to form risk sets at.</param>
     /// <returns>A [eventTimes.Length, times.Length] 0/1 mask.</returns>
-    protected Tensor<T> AtRiskMask(Vector<T> times, Vector<T> eventTimes)
+    private protected Tensor<T> AtRiskMask(Vector<T> times, Vector<T> eventTimes)
     {
         var engine = AiDotNetEngine.Current;
         int numTimes = eventTimes.Length;
@@ -757,7 +757,7 @@ public abstract partial class SurvivalModelBase<T> : ISurvivalModel<T>, IModelSh
     /// <param name="events">Event indicators (1 = event occurred, 0 = censored).</param>
     /// <param name="eventTimes">The sorted unique event times.</param>
     /// <returns>The at-risk counts and event counts, one per event time.</returns>
-    protected (Tensor<T> AtRisk, Tensor<T> Events) CountAtRiskAndEvents(
+    private protected (Tensor<T> AtRisk, Tensor<T> Events) CountAtRiskAndEvents(
         Vector<T> times, Vector<int> events, Vector<T> eventTimes)
     {
         var engine = AiDotNetEngine.Current;
@@ -787,7 +787,7 @@ public abstract partial class SurvivalModelBase<T> : ISurvivalModel<T>, IModelSh
     /// <param name="values">The function value from each step time on.</param>
     /// <param name="before">The value before the first step time.</param>
     /// <returns>The step function value at each query time.</returns>
-    protected Tensor<T> EvaluateStepFunction(Vector<T> queryTimes, Vector<T> stepTimes, Vector<T> values, T before)
+    private protected Tensor<T> EvaluateStepFunction(Vector<T> queryTimes, Vector<T> stepTimes, Vector<T> values, T before)
     {
         var engine = AiDotNetEngine.Current;
         int q = queryTimes.Length;

@@ -99,7 +99,17 @@ public class ARDKernel<T> : IKernelFunction<T>
     /// and optimize them using gradient descent on the log marginal likelihood.
     /// </para>
     /// </remarks>
-    public ARDKernel(Vector<T> lengthScales, double variance = 1.0)
+    public ARDKernel(Vector<T> lengthScales)
+        : this(lengthScales, 1.0)
+    {
+    }
+
+    /// <summary>
+    /// Initializes a new ARD kernel with per-dimension length scales and a signal variance.
+    /// </summary>
+    /// <param name="lengthScales">The length scale for each input dimension.</param>
+    /// <param name="variance">The signal variance (output scale).</param>
+    public ARDKernel(Vector<T> lengthScales, double variance)
     {
         if (lengthScales is null || lengthScales.Length == 0)
             throw new ArgumentException("Length scales array must not be empty.", nameof(lengthScales));
