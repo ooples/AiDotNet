@@ -130,19 +130,10 @@ public class FedAGHNPersonalization<T> : Infrastructure.FederatedLearningCompone
                 $"Projection matrix must have {_sharedDimension * localDim} elements (shared={_sharedDimension} x local={localDim}). Got {projectionMatrix.Length}.");
         }
 
-        var projected = new T[_sharedDimension];
-        for (int s = 0; s < _sharedDimension; s++)
-        {
-            T sum = NumOps.Zero;
-            for (int l = 0; l < localDim; l++)
-            {
-                sum = NumOps.Add(sum, NumOps.Multiply(projectionMatrix[s * localDim + l], localParams[l]));
-            }
-
-            projected[s] = sum;
-        }
-
-        return projected;
+        // projected = P (sharedDim x localDim, row-major) * localParams.
+        var projection = Vector<T>.Wrap(projectionMatrix).AsTensor().Reshape(_sharedDimension, localDim);
+        var local = Vector<T>.Wrap(localParams).AsTensor().Reshape(localDim, 1);
+        return Engine.TensorMatMul(projection, local).ToArray();
     }
 
     /// <summary>
@@ -161,19 +152,10 @@ public class FedAGHNPersonalization<T> : Infrastructure.FederatedLearningCompone
                 $"Gradient lengths must match. Got gradA={gradA.Length}, gradB={gradB.Length}.");
         }
 
-        int len = gradA.Length;
-        double dot = 0, normA = 0, normB = 0;
-
-        for (int i = 0; i < len; i++)
-        {
-            double a = NumOps.ToDouble(gradA[i]);
-            double b = NumOps.ToDouble(gradB[i]);
-            dot += a * b;
-            normA += a * a;
-            normB += b * b;
-        }
-
-        double denom = Math.Sqrt(normA) * Math.Sqrt(normB);
+        var a = Vector<T>.Wrap(gradA);
+        var b = Vector<T>.Wrap(gradB);
+        double dot = NumOps.ToDouble(Engine.DotProduct(a, b));
+        double denom = NumOps.ToDouble(Engine.Norm(a)) * NumOps.ToDouble(Engine.Norm(b));
         return denom > 1e-10 ? dot / denom : 0;
     }
 

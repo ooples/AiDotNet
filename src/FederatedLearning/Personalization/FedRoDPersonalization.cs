@@ -110,18 +110,11 @@ public class FedRoDPersonalization<T> : Infrastructure.FederatedLearningComponen
                 $"Predictions must have equal length. Got generic={genericPrediction.Length}, personalized={personalizedPrediction.Length}.");
         }
 
-        var result = new T[genericPrediction.Length];
         var alpha = NumOps.FromDouble(_mixingAlpha);
         var oneMinusAlpha = NumOps.FromDouble(1.0 - _mixingAlpha);
-
-        for (int i = 0; i < result.Length; i++)
-        {
-            result[i] = NumOps.Add(
-                NumOps.Multiply(genericPrediction[i], alpha),
-                NumOps.Multiply(personalizedPrediction[i], oneMinusAlpha));
-        }
-
-        return result;
+        return Engine.Add(
+            Engine.Multiply(Vector<T>.Wrap(genericPrediction), alpha),
+            Engine.Multiply(Vector<T>.Wrap(personalizedPrediction), oneMinusAlpha)).ToArray();
     }
 
     /// <summary>

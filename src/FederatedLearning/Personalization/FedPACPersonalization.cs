@@ -132,9 +132,13 @@ public class FedPACPersonalization<T> : Infrastructure.FederatedLearningComponen
             return 0;
         }
 
-        double totalSim = 0;
-        foreach (var classLabel in commonClasses)
+        int numCommon = commonClasses.Count;
+        var dots = new T[numCommon];
+        var normsA = new T[numCommon];
+        var normsB = new T[numCommon];
+        for (int k = 0; k < numCommon; k++)
         {
+            int classLabel = commonClasses[k];
             var pA = protosA[classLabel];
             var pB = protosB[classLabel];
             if (pA.Length != pB.Length)
@@ -143,23 +147,19 @@ public class FedPACPersonalization<T> : Infrastructure.FederatedLearningComponen
                     $"Prototype dimension mismatch for class {classLabel}: {pA.Length} != {pB.Length}.");
             }
 
-            int len = pA.Length;
-
-            double dot = 0, normA = 0, normB = 0;
-            for (int i = 0; i < len; i++)
-            {
-                double a = NumOps.ToDouble(pA[i]);
-                double b = NumOps.ToDouble(pB[i]);
-                dot += a * b;
-                normA += a * a;
-                normB += b * b;
-            }
-
-            double denom = Math.Sqrt(normA) * Math.Sqrt(normB);
-            totalSim += denom > 0 ? dot / denom : 0;
+            var a = Vector<T>.Wrap(pA);
+            var b = Vector<T>.Wrap(pB);
+            dots[k] = Engine.DotProduct(a, b);
+            normsA[k] = Engine.Norm(a);
+            normsB[k] = Engine.Norm(b);
         }
 
-        return totalSim / commonClasses.Count;
+        // Per-class cosine similarity; a zero-norm prototype contributes 0.
+        var denom = Engine.Multiply(Vector<T>.Wrap(normsA), Vector<T>.Wrap(normsB)).AsTensor();
+        var cosine = Engine.TensorDivide(Vector<T>.Wrap(dots).AsTensor(), denom);
+        var similarities = Engine.TensorWhere(
+            Engine.TensorGreaterThan(denom, NumOps.Zero), cosine, new Tensor<T>(new[] { numCommon }));
+        return NumOps.ToDouble(Engine.TensorSum(similarities)) / numCommon;
     }
 
     /// <summary>
@@ -189,34 +189,36 @@ public class FedPACPersonalization<T> : Infrastructure.FederatedLearningComponen
         }
 
         int featureDim = features[0].Length;
-        var classSums = new Dictionary<int, (double[] Sum, int Count)>();
+        var classSums = new Dictionary<int, (Vector<T> Sum, int Count)>();
 
         for (int i = 0; i < features.Length; i++)
         {
             int label = labels[i];
             if (!classSums.TryGetValue(label, out var entry))
             {
-                entry = (new double[featureDim], 0);
+                entry = (new Vector<T>(featureDim), 0);
             }
 
-            for (int d = 0; d < Math.Min(featureDim, features[i].Length); d++)
+            // Features shorter than featureDim contribute only to their leading coordinates.
+            var feature = features[i];
+            Vector<T> featureVec;
+            if (feature.Length >= featureDim)
             {
-                entry.Sum[d] += NumOps.ToDouble(features[i][d]);
+                featureVec = Vector<T>.Wrap(feature, 0, featureDim);
+            }
+            else
+            {
+                featureVec = new Vector<T>(featureDim);
+                feature.AsSpan().CopyTo(featureVec.AsWritableSpan());
             }
 
-            classSums[label] = (entry.Sum, entry.Count + 1);
+            classSums[label] = (Engine.Add(entry.Sum, featureVec), entry.Count + 1);
         }
 
         var prototypes = new Dictionary<int, T[]>(classSums.Count);
         foreach (var (label, (sum, count)) in classSums)
         {
-            var proto = new T[featureDim];
-            for (int d = 0; d < featureDim; d++)
-            {
-                proto[d] = NumOps.FromDouble(sum[d] / count);
-            }
-
-            prototypes[label] = proto;
+            prototypes[label] = Engine.Divide(sum, NumOps.FromDouble(count)).ToArray();
         }
 
         return prototypes;
@@ -246,7 +248,7 @@ public class FedPACPersonalization<T> : Infrastructure.FederatedLearningComponen
         var globalProtos = new Dictionary<int, T[]>();
         foreach (int classLabel in allClasses)
         {
-            double[]? sumProto = null;
+            Vector<T>? sumProto = null;
             double totalWeight = 0;
 
             foreach (var (clientId, protos) in clientPrototypes)
@@ -258,9 +260,9 @@ public class FedPACPersonalization<T> : Infrastructure.FederatedLearningComponen
 
                 double weight = clientSampleCounts?.GetValueOrDefault(clientId)?.GetValueOrDefault(classLabel, 1) ?? 1.0;
 
-                if (sumProto == null)
+                if (sumProto is null)
                 {
-                    sumProto = new double[proto.Length];
+                    sumProto = new Vector<T>(proto.Length);
                 }
                 else if (proto.Length != sumProto.Length)
                 {
@@ -269,23 +271,13 @@ public class FedPACPersonalization<T> : Infrastructure.FederatedLearningComponen
                         nameof(clientPrototypes));
                 }
 
-                for (int d = 0; d < proto.Length; d++)
-                {
-                    sumProto[d] += weight * NumOps.ToDouble(proto[d]);
-                }
-
+                sumProto = Engine.Add(sumProto, Engine.Multiply(Vector<T>.Wrap(proto), NumOps.FromDouble(weight)));
                 totalWeight += weight;
             }
 
-            if (sumProto != null && totalWeight > 0)
+            if (sumProto is not null && totalWeight > 0)
             {
-                var globalProto = new T[sumProto.Length];
-                for (int d = 0; d < sumProto.Length; d++)
-                {
-                    globalProto[d] = NumOps.FromDouble(sumProto[d] / totalWeight);
-                }
-
-                globalProtos[classLabel] = globalProto;
+                globalProtos[classLabel] = Engine.Divide(sumProto, NumOps.FromDouble(totalWeight)).ToArray();
             }
         }
 
@@ -327,15 +319,8 @@ public class FedPACPersonalization<T> : Infrastructure.FederatedLearningComponen
                     $"but global prototype has dimension {globalProto.Length}.");
             }
 
-            int dim = localProto.Length;
-            double l2sq = 0;
-            for (int d = 0; d < dim; d++)
-            {
-                double diff = NumOps.ToDouble(localProto[d]) - NumOps.ToDouble(globalProto[d]);
-                l2sq += diff * diff;
-            }
-
-            totalLoss += l2sq;
+            var diff = Engine.Subtract(Vector<T>.Wrap(localProto), Vector<T>.Wrap(globalProto));
+            totalLoss += NumOps.ToDouble(Engine.DotProduct(diff, diff));
             numClasses++;
         }
 
