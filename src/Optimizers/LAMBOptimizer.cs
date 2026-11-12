@@ -382,7 +382,7 @@ public partial class LAMBOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
             T stepScale = skipLayers.Contains(layerIndex)
                 ? baseLr
                 : LambStepScale(baseLr, VectorHelper.L2Norm(layerParams), VectorHelper.L2Norm(fullUpdate),
-                    maxTrustRatio, clampBelowZero: true);
+                    maxTrustRatio);
 
             // Final update: w = w - lr * trust_ratio * r
             var scaledUpdate = (Vector<T>)Engine.Multiply(fullUpdate, stepScale);
@@ -501,17 +501,17 @@ public partial class LAMBOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
 
         // Trust ratio ||w|| / ||r||, then w - (lr * trust_ratio) * r.
         T stepScale = LambStepScale(baseLr, VectorHelper.L2Norm(parameters), VectorHelper.L2Norm(fullUpdate.AsVector()),
-            maxTrustRatio, clampBelowZero: false);
+            maxTrustRatio);
         return engine.TensorSubtract(p, engine.TensorMultiplyScalar(fullUpdate, stepScale)).AsVector();
     }
 
     /// <summary>
     /// The LAMB step scale baseLr * trust ratio, with trust ratio ||w|| / ||r||: 1 when either norm is zero (the
     /// reference implementations and the fused kernel; Adam's epsilon is not a norm threshold), clipped to
-    /// MaxTrustRatio when ClipTrustRatio is set and, for the per-layer path, also floored at zero. One scalar per
-    /// layer or parameter tensor.
+    /// MaxTrustRatio when ClipTrustRatio is set. Both norms are positive past the guard, so the ratio is never
+    /// negative and needs no floor. One scalar per layer or parameter tensor.
     /// </summary>
-    private T LambStepScale(T baseLr, T paramNorm, T updateNorm, T maxTrustRatio, bool clampBelowZero)
+    private T LambStepScale(T baseLr, T paramNorm, T updateNorm, T maxTrustRatio)
     {
         if (!NumOps.GreaterThan(paramNorm, NumOps.Zero) || !NumOps.GreaterThan(updateNorm, NumOps.Zero))
         {
@@ -519,16 +519,9 @@ public partial class LAMBOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
         }
 
         T trustRatio = NumOps.Divide(paramNorm, updateNorm);
-        if (_options.ClipTrustRatio)
+        if (_options.ClipTrustRatio && NumOps.GreaterThan(trustRatio, maxTrustRatio))
         {
-            if (NumOps.GreaterThan(trustRatio, maxTrustRatio))
-            {
-                trustRatio = maxTrustRatio;
-            }
-            if (clampBelowZero && NumOps.LessThan(trustRatio, NumOps.Zero))
-            {
-                trustRatio = NumOps.Zero;
-            }
+            trustRatio = maxTrustRatio;
         }
 
         return NumOps.Multiply(baseLr, trustRatio);
@@ -622,8 +615,7 @@ public partial class LAMBOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
             var fullUpdate = Engine.TensorAdd(adamUpdate, Engine.TensorMultiplyScalar(param, parameterDecay));
 
             // LAMB trust ratio: phi(||param||) / ||fullUpdate||, falling back to 1 only for a zero norm.
-            T stepScale = LambStepScale(baseLr, TensorL2Norm(param), TensorL2Norm(fullUpdate), maxTrustRatio,
-                clampBelowZero: false);
+            T stepScale = LambStepScale(baseLr, TensorL2Norm(param), TensorL2Norm(fullUpdate), maxTrustRatio);
 
             // param -= baseLr * trustRatio * fullUpdate
             var scaledUpdate = Engine.TensorMultiplyScalar(fullUpdate, stepScale);
