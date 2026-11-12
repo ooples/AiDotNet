@@ -107,4 +107,32 @@ internal static class FeatureSelectionTensorOps
             engine.TensorGreaterThan(engine.ReduceSum(member, new[] { 1 }, false), ops.Zero));
         return Array.ConvertAll(nonEmpty, g => best[g]);
     }
+
+    /// <summary>
+    /// Per-column least-squares slope of <paramref name="ys"/> ([count, p]) on <paramref name="xs"/> ([count]),
+    /// using only the points where the 0/1 <paramref name="valid"/> mask ([count, p]) is set.
+    /// <paramref name="fitted"/> marks the columns with at least two valid points and a centred x sum of squares
+    /// of at least <paramref name="minDenominator"/>; other columns' slopes are meaningless.
+    /// </summary>
+    public static Tensor<T> MaskedSlope<T>(Tensor<T> xs, Tensor<T> ys, Tensor<T> valid, double minDenominator, out Tensor<T> fitted)
+    {
+        var engine = AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<T>();
+        int count = ys.Shape[0];
+        int p = ys.Shape[1];
+        var shape = new[] { count, p };
+        var x = engine.TensorBroadcastTo(engine.Reshape(xs, new[] { count, 1 }), shape);
+        var y = engine.TensorWhere(valid, ys, new Tensor<T>(shape));
+        var points = engine.ReduceSum(valid, new[] { 0 }, true);
+        var meanX = engine.TensorDivide(engine.ReduceSum(engine.TensorMultiply(x, valid), new[] { 0 }, true), points);
+        var meanY = engine.TensorDivide(engine.ReduceSum(y, new[] { 0 }, true), points);
+        var dx = engine.TensorMultiply(engine.TensorSubtract(x, engine.TensorBroadcastTo(meanX, shape)), valid);
+        var dy = engine.TensorMultiply(engine.TensorSubtract(y, engine.TensorBroadcastTo(meanY, shape)), valid);
+        var numerator = engine.ReduceSum(engine.TensorMultiply(dx, dy), new[] { 0 }, false);
+        var denominator = engine.ReduceSum(engine.TensorMultiply(dx, dx), new[] { 0 }, false);
+        fitted = engine.TensorMultiply(
+            PreprocessingTensorOps.AtLeast(engine.Reshape(points, new[] { p }), ops.FromDouble(2)),
+            PreprocessingTensorOps.Not(engine.TensorLessThan(denominator, ops.FromDouble(minDenominator))));
+        return engine.TensorDivide(numerator, denominator);
+    }
 }
