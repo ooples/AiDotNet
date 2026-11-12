@@ -1,5 +1,6 @@
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.Tensors.Engines.Autodiff;
 
 namespace AiDotNet.Evaluation.Statistics;
 
@@ -39,17 +40,14 @@ public class WilcoxonSignedRankTest<T> : IPairedTest<T>
         int n = sample1.Length;
 
         // Calculate differences and remove zeros
-        var diffsWithIndex = new List<(double diff, int sign, double absVal)>();
-        for (int i = 0; i < n; i++)
-        {
-            double diff = NumOps.ToDouble(sample1[i]) - NumOps.ToDouble(sample2[i]);
-            if (Math.Abs(diff) > 1e-10) // Exclude exact ties
-            {
-                diffsWithIndex.Add((diff, diff > 0 ? 1 : -1, Math.Abs(diff)));
-            }
-        }
+        var engine = AiDotNetEngine.Current;
+        using var noGrad = new NoGradScope<T>();
+        var tolerance = NumOps.FromDouble(1e-10);
+        var allDiffs = engine.TensorSubtract(new Tensor<T>(sample1, new[] { n }), new Tensor<T>(sample2, new[] { n }));
+        var nonZero = engine.TensorGreaterThan(engine.TensorAbs(allDiffs), tolerance); // Exclude exact ties
+        int nr = EvaluationTensorOps<T>.Count(nonZero); // Number of non-zero differences
 
-        if (diffsWithIndex.Count < 3)
+        if (nr < 3)
         {
             return new StatisticalTestResult<T>
             {
@@ -62,39 +60,16 @@ public class WilcoxonSignedRankTest<T> : IPairedTest<T>
             };
         }
 
-        int nr = diffsWithIndex.Count; // Number of non-zero differences
+        // Rank by absolute value; a run of absolute values whose neighbouring gaps are below 1e-10 shares its
+        // average rank
+        var diffs = EvaluationTensorOps<T>.Select(allDiffs, nonZero);
+        var (_, order, ranks) = EvaluationTensorOps<T>.SortedRunRanks(engine.TensorAbs(diffs), tolerance);
 
-        // Rank by absolute value
-        var sorted = diffsWithIndex.OrderBy(x => x.absVal).ToList();
-
-        // Assign ranks (handle ties by averaging)
-        var ranks = new double[nr];
-        int i2 = 0;
-        while (i2 < nr)
-        {
-            int j = i2;
-            // Find run of ties
-            while (j < nr - 1 && Math.Abs(sorted[j].absVal - sorted[j + 1].absVal) < 1e-10)
-                j++;
-
-            // Average rank for ties
-            double avgRank = (i2 + j + 2.0) / 2.0; // +2 because ranks start at 1
-            for (int k = i2; k <= j; k++)
-                ranks[k] = avgRank;
-
-            i2 = j + 1;
-        }
-
-        // Calculate W+ (sum of ranks for positive differences)
-        double wPlus = 0;
-        double wMinus = 0;
-        for (int i = 0; i < nr; i++)
-        {
-            if (sorted[i].sign > 0)
-                wPlus += ranks[i];
-            else
-                wMinus += ranks[i];
-        }
+        // Calculate W+ (sum of ranks for positive differences) and W- (the rest)
+        var positive = engine.TensorGather(engine.TensorGreaterThan(diffs, NumOps.Zero), order, 0);
+        T wPlusT = engine.TensorSum(engine.TensorMultiply(ranks, positive));
+        double wPlus = NumOps.ToDouble(wPlusT);
+        double wMinus = NumOps.ToDouble(NumOps.Subtract(engine.TensorSum(ranks), wPlusT));
 
         // Test statistic is the smaller of W+ and W-
         double w = Math.Min(wPlus, wMinus);

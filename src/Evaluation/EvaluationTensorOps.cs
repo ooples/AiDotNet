@@ -180,6 +180,85 @@ internal static class EvaluationTensorOps<T>
         return engine.TensorMultiplyScalar(doubled, NumOps.FromDouble(0.5));
     }
 
+    /// <summary>The entries of <paramref name="values"/> where the 1/0 <paramref name="mask"/> is 1, in order.</summary>
+    internal static Tensor<T> Select(Tensor<T> values, Tensor<T> mask)
+    {
+        using var noGrad = new NoGradScope<T>();
+        var engine = AiDotNetEngine.Current;
+        return engine.TensorMaskedSelect(values, engine.TensorEqScalar(mask, NumOps.One));
+    }
+
+    /// <summary>
+    /// Sorts <paramref name="values"/> ascending and gives every sorted position the mean 1-based rank of its tie
+    /// run, a run being consecutive sorted values whose neighbouring gaps are below <paramref name="tolerance"/>.
+    /// </summary>
+    /// <returns>The sorted values, the source index of each sorted position, and the rank of each sorted position.</returns>
+    internal static (Tensor<T> Sorted, Tensor<int> Order, Tensor<T> Ranks) SortedRunRanks(Tensor<T> values, T tolerance)
+    {
+        using var noGrad = new NoGradScope<T>();
+        var engine = AiDotNetEngine.Current;
+        var (sorted, order) = engine.TensorSort(values);
+        var runStart = new Tensor<T>(new[] { 1 });
+        if (values.Length > 1)
+        {
+            // A gap that is not below the tolerance (NaN included) starts a new run.
+            var gaps = engine.TensorAbs(engine.TensorDiff(sorted, 1, 0));
+            runStart = engine.TensorConcatenate(new[] { runStart, Not(engine.TensorLessThan(gaps, tolerance)) }, 0);
+        }
+
+        // Run ids are non-decreasing, so a run occupies sorted positions [below, atOrBelow) of its id.
+        var runId = engine.TensorCumSum(runStart, 0);
+        var below = engine.TensorSearchSorted(runId, runId, false);
+        var atOrBelow = engine.TensorSearchSorted(runId, runId, true);
+        var doubled = engine.TensorAddScalar(engine.TensorAdd(below.Cast<T>(), atOrBelow.Cast<T>()), NumOps.One);
+        return (sorted, order, engine.TensorMultiplyScalar(doubled, NumOps.FromDouble(0.5)));
+    }
+
+    /// <summary>Stacks equal-length rows into a [rows.Length, length] tensor.</summary>
+    internal static Tensor<T> StackRows(T[][] rows, int length)
+    {
+        using var noGrad = new NoGradScope<T>();
+        var tensors = new Tensor<T>[rows.Length];
+        for (int r = 0; r < rows.Length; r++)
+        {
+            tensors[r] = new Tensor<T>(rows[r], new[] { length });
+        }
+
+        return AiDotNetEngine.Current.TensorStack(tensors, 0);
+    }
+
+    /// <summary>
+    /// Ranks every row of an [n, k] matrix in descending order (rank 1 is the largest), a tie run of consecutive
+    /// sorted values whose neighbouring gaps are below <paramref name="tolerance"/> sharing its mean rank.
+    /// </summary>
+    /// <returns>The [n, k] ranks in the matrix's own positions.</returns>
+    internal static Tensor<T> RowRanksDescending(Tensor<T> matrix, T tolerance)
+    {
+        using var noGrad = new NoGradScope<T>();
+        var engine = AiDotNetEngine.Current;
+        int rows = matrix.Shape[0];
+        int columns = matrix.Shape[1];
+        var (sorted, order) = engine.TensorSort(matrix, 1, true);
+        var runStart = new Tensor<T>(new[] { rows, 1 });
+        if (columns > 1)
+        {
+            // A gap that is not below the tolerance (NaN included) starts a new run.
+            var gaps = engine.TensorAbs(engine.TensorDiff(sorted, 1, 1));
+            runStart = engine.TensorConcatenate(new[] { runStart, Not(engine.TensorLessThan(gaps, tolerance)) }, 1);
+        }
+
+        // Per row, run ids are non-decreasing, so a run occupies sorted positions [below, atOrBelow) of its id.
+        var runId = engine.TensorCumSum(runStart, 1);
+        var below = engine.TensorSearchSorted(runId, runId, false);
+        var atOrBelow = engine.TensorSearchSorted(runId, runId, true);
+        var doubled = engine.TensorAddScalar(engine.TensorAdd(below.Cast<T>(), atOrBelow.Cast<T>()), NumOps.One);
+        var sortedRanks = engine.TensorMultiplyScalar(doubled, NumOps.FromDouble(0.5));
+
+        // Back to the matrix positions: the inverse of each row's sort permutation.
+        var inverse = engine.TensorArgsort(order, 1, false);
+        return engine.TensorTakeAlongDim(sortedRanks, inverse, 1);
+    }
+
     /// <summary>
     /// The distinct labels of the given tensors in ascending order, with a single NaN last when any is present
     /// (one class, as a <c>HashSet&lt;double&gt;</c> of the labels had).

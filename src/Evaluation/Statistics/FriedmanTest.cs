@@ -1,5 +1,6 @@
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.Tensors.Engines.Autodiff;
 
 namespace AiDotNet.Evaluation.Statistics;
 
@@ -57,34 +58,17 @@ public class FriedmanTest<T> : IMultipleSampleTest<T>
         if (n < 3)
             throw new ArgumentException("Need at least 3 datasets for Friedman test.");
 
-        // Convert to double and transpose: results[dataset][algorithm]
-        var results = new double[n][];
-        for (int i = 0; i < n; i++)
-        {
-            results[i] = new double[k];
-            for (int j = 0; j < k; j++)
-            {
-                results[i][j] = NumOps.ToDouble(samples[j][i]);
-            }
-        }
+        // Transpose to results[dataset, algorithm]
+        var engine = AiDotNetEngine.Current;
+        using var noGrad = new NoGradScope<T>();
+        var results = engine.TensorPermute(EvaluationTensorOps<T>.StackRows(samples, n), new[] { 1, 0 });
 
-        // Rank each dataset (higher value = rank 1 for performance metrics)
-        var ranks = new double[k];
-        for (int i = 0; i < n; i++)
-        {
-            var datasetRanks = RankWithTies(results[i], ascending: false);
-            for (int j = 0; j < k; j++)
-            {
-                ranks[j] += datasetRanks[j];
-            }
-        }
-
-        // Average ranks
-        for (int j = 0; j < k; j++)
-            ranks[j] /= n;
+        // Rank each dataset (higher value = rank 1 for performance metrics), then average over datasets
+        var datasetRanks = EvaluationTensorOps<T>.RowRanksDescending(results, NumOps.FromDouble(1e-10));
+        var ranks = engine.TensorDivideScalar(engine.ReduceSum(datasetRanks, new[] { 0 }, false), NumOps.FromDouble(n));
 
         // Friedman statistic (chi-squared approximation)
-        double sumSquaredRanks = ranks.Sum(r => r * r);
+        double sumSquaredRanks = NumOps.ToDouble(engine.TensorSumOfSquares(ranks));
         double chiSquared = 12.0 * n / ((double)k * (k + 1)) * (sumSquaredRanks - k * Math.Pow((k + 1) / 2.0, 2));
 
         // Iman-Davenport correction (more conservative, recommended)
@@ -97,9 +81,10 @@ public class FriedmanTest<T> : IMultipleSampleTest<T>
 
         // Build description with average ranks
         var rankDescriptions = new List<string>();
-        for (int j = 0; j < k; j++)
+        int algorithm = 1;
+        foreach (T rank in ranks)
         {
-            rankDescriptions.Add($"Algo{j + 1}={ranks[j]:F2}");
+            rankDescriptions.Add($"Algo{algorithm++}={rank:F2}");
         }
 
         return new StatisticalTestResult<T>
@@ -112,36 +97,6 @@ public class FriedmanTest<T> : IMultipleSampleTest<T>
             DegreesOfFreedom = df1,
             Description = $"Avg ranks: {string.Join(", ", rankDescriptions)}. F({df1},{df2}) = {fStat:F4}"
         };
-    }
-
-    private static double[] RankWithTies(double[] values, bool ascending = true)
-    {
-        int n = values.Length;
-        var indexed = values.Select((v, i) => (value: v, index: i)).ToList();
-
-        if (ascending)
-            indexed = indexed.OrderBy(x => x.value).ToList();
-        else
-            indexed = indexed.OrderByDescending(x => x.value).ToList();
-
-        var ranks = new double[n];
-        int i = 0;
-        while (i < n)
-        {
-            int j = i;
-            // Find run of ties
-            while (j < n - 1 && Math.Abs(indexed[j].value - indexed[j + 1].value) < 1e-10)
-                j++;
-
-            // Average rank for ties
-            double avgRank = (i + j + 2.0) / 2.0;
-            for (int m = i; m <= j; m++)
-                ranks[indexed[m].index] = avgRank;
-
-            i = j + 1;
-        }
-
-        return ranks;
     }
 
     private static double FDistributionPValue(double f, int df1, int df2)
