@@ -232,22 +232,26 @@ public partial class CCDM<T> : TimeSeriesFoundationModelBase<T>, ITrainingObject
             throw new ArgumentOutOfRangeException(nameof(_diffusionSteps), "DiffusionSteps must be positive.");
 
         int k = _diffusionSteps;
-        var betas = new double[k];
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        T one = NumOps.One;
+        var index = Engine.TensorArange<T>(0, k, 1);
+        T denom = NumOps.FromDouble(Math.Max(1, k - 1));
+        Tensor<T> betas;
         switch (_betaSchedule)
         {
             case BetaSchedule.Linear:
-                for (int i = 0; i < k; i++)
-                    betas[i] = _betaStart + (_betaEnd - _betaStart) * i / Math.Max(1, k - 1);
+                // start + (end - start) * i / max(1, k - 1)
+                betas = Engine.TensorAddScalar(
+                    Engine.TensorDivideScalar(Engine.TensorMultiplyScalar(index, NumOps.FromDouble(_betaEnd - _betaStart)), denom),
+                    NumOps.FromDouble(_betaStart));
                 break;
             case BetaSchedule.ScaledLinear:
             {
                 // torch.linspace(beta_start**0.5, beta_end**0.5, K)**2 - the reference "quad".
-                double a = Math.Sqrt(_betaStart), b = Math.Sqrt(_betaEnd);
-                for (int i = 0; i < k; i++)
-                {
-                    double root = a + (b - a) * i / Math.Max(1, k - 1);
-                    betas[i] = root * root;
-                }
+                T a = NumOps.Sqrt(NumOps.FromDouble(_betaStart)), b = NumOps.Sqrt(NumOps.FromDouble(_betaEnd));
+                var root = Engine.TensorAddScalar(
+                    Engine.TensorDivideScalar(Engine.TensorMultiplyScalar(index, NumOps.Subtract(b, a)), denom), a);
+                betas = Engine.TensorMultiply(root, root);
                 break;
             }
             case BetaSchedule.SquaredCosine:
@@ -255,37 +259,40 @@ public partial class CCDM<T> : TimeSeriesFoundationModelBase<T>, ITrainingObject
                 // cosine_beta_schedule(n_steps, s=0.008): alpha-bar from a squared cosine, betas
                 // from consecutive ratios, clipped to [0, 0.999].
                 const double s = 0.008;
-                double Bar(double x) => Math.Pow(Math.Cos((x / k + s) / (1 + s) * Math.PI * 0.5), 2);
-                double bar0 = Bar(0);
-                for (int i = 0; i < k; i++)
-                {
-                    double beta = 1 - (Bar(i + 1) / bar0) / (Bar(i) / bar0);
-                    betas[i] = Math.Min(0.999, Math.Max(0.0, beta));
-                }
+                var x = Engine.TensorArange<T>(0, k + 1, 1);
+                var angle = Engine.TensorMultiplyScalar(
+                    Engine.TensorMultiplyScalar(
+                        Engine.TensorDivideScalar(
+                            Engine.TensorAddScalar(Engine.TensorDivideScalar(x, NumOps.FromDouble(k)), NumOps.FromDouble(s)),
+                            NumOps.FromDouble(1 + s)),
+                        NumOps.FromDouble(Math.PI)),
+                    NumOps.FromDouble(0.5));
+                var cosine = Engine.TensorCos(angle);
+                var square = Engine.TensorMultiply(cosine, cosine);
+                var bar = Engine.TensorDivideScalar(square, square.AsSpan()[0]);
+                var ratio = Engine.TensorDivide(Engine.TensorNarrow(bar, 0, 1, k), Engine.TensorNarrow(bar, 0, 0, k));
+                betas = Engine.TensorClamp(
+                    Engine.TensorSubtract(Engine.TensorFullLike(ratio, one), ratio), NumOps.Zero, NumOps.FromDouble(0.999));
                 break;
             }
             default:
                 throw new NotSupportedException($"CCDM does not support the {_betaSchedule} beta schedule.");
         }
 
-        _betas = new Vector<T>(k);
-        _alphas = new Vector<T>(k);
-        _alphasCumprod = new Vector<T>(k);
-        _alphasCumprodPrev = new Vector<T>(k);
-        _sqrtAlphasCumprod = new Vector<T>(k);
-        _sqrtOneMinusAlphasCumprod = new Vector<T>(k);
-        double bar = 1.0;
-        for (int i = 0; i < k; i++)
-        {
-            _alphasCumprodPrev[i] = NumOps.FromDouble(bar);
-            double alpha = 1.0 - betas[i];
-            bar *= alpha;
-            _betas[i] = NumOps.FromDouble(betas[i]);
-            _alphas[i] = NumOps.FromDouble(alpha);
-            _alphasCumprod[i] = NumOps.FromDouble(bar);
-            _sqrtAlphasCumprod[i] = NumOps.FromDouble(Math.Sqrt(bar));
-            _sqrtOneMinusAlphasCumprod[i] = NumOps.FromDouble(Math.Sqrt(1.0 - bar));
-        }
+        // Alpha-bar is the running product of alphas; the "previous" value starts at 1.
+        var alphas = Engine.TensorSubtract(Engine.TensorFullLike(betas, one), betas);
+        var alphasCumprod = Engine.TensorCumProd(alphas, 0);
+        var leadingOne = Engine.TensorFullLike(Engine.TensorNarrow(alphasCumprod, 0, 0, 1), one);
+        var alphasCumprodPrev = k == 1
+            ? leadingOne
+            : Engine.TensorConcatenate(new[] { leadingOne, Engine.TensorNarrow(alphasCumprod, 0, 0, k - 1) }, 0);
+        _betas = betas.ToVector();
+        _alphas = alphas.ToVector();
+        _alphasCumprod = alphasCumprod.ToVector();
+        _alphasCumprodPrev = alphasCumprodPrev.ToVector();
+        _sqrtAlphasCumprod = Engine.TensorSqrt(alphasCumprod).ToVector();
+        _sqrtOneMinusAlphasCumprod = Engine.TensorSqrt(
+            Engine.TensorSubtract(Engine.TensorFullLike(alphasCumprod, one), alphasCumprod)).ToVector();
     }
 
     private T SampleStandardNormal(Random rand)
