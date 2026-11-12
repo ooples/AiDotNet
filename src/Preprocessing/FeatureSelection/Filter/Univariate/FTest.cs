@@ -27,15 +27,15 @@ public class FTest<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFea
 {
     private readonly int _nFeaturesToSelect;
 
-    private double[]? _fScores;
-    private double[]? _pValues;
+    private Vector<T>? _fScores;
+    private Vector<T>? _pValues;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
-    public double[]? FScores => _fScores;
-    public double[]? PValues => _pValues;
+    public Vector<T>? FScores => _fScores;
+    public Vector<T>? PValues => _pValues;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -68,120 +68,44 @@ public class FTest<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFea
         _nInputFeatures = data.Columns;
         int n = data.Rows;
         int p = data.Columns;
+        var engine = Engine;
 
-        _fScores = new double[p];
-        _pValues = new double[p];
+        // Centred sums of every feature with the target
+        var (sxx, sxy, ssTotal) = FeatureSelectionTensorOps.CenteredCrossSums(
+            FeatureSelectionTensorOps.AsTensor(data), FeatureSelectionTensorOps.AsTensor(target));
 
-        // Compute target statistics
-        double yMean = 0;
-        for (int i = 0; i < n; i++)
-            yMean += NumOps.ToDouble(target[i]);
-        yMean /= n;
+        // Simple linear regression y = a + b x: slope b = Sxy / Sxx (0 for a constant feature)
+        var slope = FeatureSelectionTensorOps.GuardedDivide(sxy, sxx, 1e-10, NumOps.Zero);
 
-        double ssTotal = 0;
-        for (int i = 0; i < n; i++)
-        {
-            double diff = NumOps.ToDouble(target[i]) - yMean;
-            ssTotal += diff * diff;
-        }
+        // SS regression = b^2 Sxx, SS residual = Syy - 2 b Sxy + b^2 Sxx
+        var ssReg = engine.TensorMultiply(engine.TensorSquare(slope), sxx);
+        var ssRes = engine.TensorMax(
+            engine.TensorAdd(
+                engine.TensorSubtract(
+                    FeatureSelectionTensorOps.FilledLike(sxx, ssTotal),
+                    engine.TensorMultiplyScalar(engine.TensorMultiply(slope, sxy), NumOps.FromDouble(2))),
+                ssReg),
+            NumOps.Zero);
 
-        for (int j = 0; j < p; j++)
-        {
-            // Compute feature statistics
-            double xMean = 0;
-            for (int i = 0; i < n; i++)
-                xMean += NumOps.ToDouble(data[i, j]);
-            xMean /= n;
+        // F-statistic = (SS_reg / df_reg) / (SS_res / df_res), df_reg = 1, df_res = n - 2; a perfect linear
+        // fit leaves no residual and gets F = +inf (constant features score 0)
+        int dfReg = 1;
+        int dfRes = n - 2;
+        var msRes = dfRes > 0
+            ? engine.TensorDivideScalar(ssRes, NumOps.FromDouble(dfRes))
+            : FeatureSelectionTensorOps.FilledLike(ssRes, NumOps.One);
+        var fScores = FeatureSelectionTensorOps.SeparationAwareRatio(ssReg, msRes, 1e-10);
+        _fScores = fScores.ToVector();
 
-            // Simple linear regression: y = a + b*x
-            double sxy = 0, sxx = 0;
-            for (int i = 0; i < n; i++)
-            {
-                double xDiff = NumOps.ToDouble(data[i, j]) - xMean;
-                double yDiff = NumOps.ToDouble(target[i]) - yMean;
-                sxy += xDiff * yDiff;
-                sxx += xDiff * xDiff;
-            }
-
-            double slope = sxx > 1e-10 ? sxy / sxx : 0;
-            double intercept = yMean - slope * xMean;
-
-            // Compute SS regression and SS residual
-            double ssReg = 0;
-            double ssRes = 0;
-            for (int i = 0; i < n; i++)
-            {
-                double predicted = intercept + slope * NumOps.ToDouble(data[i, j]);
-                double actual = NumOps.ToDouble(target[i]);
-                ssReg += (predicted - yMean) * (predicted - yMean);
-                ssRes += (actual - predicted) * (actual - predicted);
-            }
-
-            // F-statistic = (SS_reg / df_reg) / (SS_res / df_res)
-            // df_reg = 1, df_res = n - 2
-            int dfReg = 1;
-            int dfRes = n - 2;
-
-            double msReg = ssReg / dfReg;
-            double msRes = dfRes > 0 ? ssRes / dfRes : 1;
-
-            _fScores[j] = msRes > 1e-10 ? msReg / msRes : 0;
-
-            // Approximate p-value using F-distribution approximation
-            // (simplified - for accurate p-values would need proper F-distribution CDF)
-            _pValues[j] = ApproximateFPValue(_fScores[j], dfReg, dfRes);
-        }
+        // p = P(F(1, n - 2) > F) from the F distribution (scipy.stats.f.sf)
+        _pValues = dfRes > 0
+            ? FeatureSelectionTensorOps.FSurvival(fScores, dfReg, dfRes).ToVector()
+            : FeatureSelectionTensorOps.FilledLike(fScores, NumOps.One).ToVector();
 
         // Select top features by F-score
-        int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = _fScores
-            .Select((s, idx) => (Score: s, Index: idx))
-            .OrderByDescending(x => x.Score)
-            .Take(numToSelect)
-            .Select(x => x.Index)
-            .OrderBy(x => x)
-            .ToArray();
+        _selectedIndices = FeatureSelectionTensorOps.TopKIndicesSorted(fScores, Math.Min(_nFeaturesToSelect, p));
 
         IsFitted = true;
-    }
-
-    private double ApproximateFPValue(double f, int df1, int df2)
-    {
-        // Simple approximation of F-distribution p-value
-        // For accurate values, use proper statistical libraries
-        if (f <= 0 || df2 <= 0)
-            return 1.0;
-
-        double x = df2 / (df2 + df1 * f);
-
-        // Very rough approximation using normal approximation for large df
-        if (df1 >= 30 && df2 >= 30)
-        {
-            double z = Math.Sqrt(2 * f) - Math.Sqrt(2.0 * df1 - 1);
-            return 0.5 * (1 - Erf(z / Math.Sqrt(2)));
-        }
-
-        // For smaller df, use simpler approximation
-        return Math.Exp(-0.5 * f * df1 / (df1 + df2));
-    }
-
-    private double Erf(double x)
-    {
-        // Approximation of error function
-        double a1 = 0.254829592;
-        double a2 = -0.284496736;
-        double a3 = 1.421413741;
-        double a4 = -1.453152027;
-        double a5 = 1.061405429;
-        double p = 0.3275911;
-
-        int sign = x < 0 ? -1 : 1;
-        x = Math.Abs(x);
-
-        double t = 1.0 / (1.0 + p * x);
-        double y = 1.0 - (((((a5 * t + a4) * t) + a3) * t + a2) * t + a1) * t * Math.Exp(-x * x);
-
-        return sign * y;
     }
 
     /// <inheritdoc />
@@ -197,15 +121,7 @@ public class FTest<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFea
         if (_selectedIndices is null)
             throw new InvalidOperationException("FTest has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return FeatureSelectionTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

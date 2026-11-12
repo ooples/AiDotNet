@@ -27,13 +27,13 @@ public class ANOVASelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISuper
 {
     private readonly int _nFeaturesToSelect;
 
-    private double[]? _fStatistics;
+    private Vector<T>? _fStatistics;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
-    public double[]? FStatistics => _fStatistics;
+    public Vector<T>? FStatistics => _fStatistics;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -66,61 +66,26 @@ public class ANOVASelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISuper
         _nInputFeatures = data.Columns;
         int n = data.Rows;
         int p = data.Columns;
+        var engine = Engine;
 
         // Group samples by class
-        var classSamples = new Dictionary<int, List<int>>();
-        for (int i = 0; i < n; i++)
-        {
-            int label = (int)Math.Round(NumOps.ToDouble(target[i]));
-            if (!classSamples.ContainsKey(label))
-                classSamples[label] = new List<int>();
-            classSamples[label].Add(i);
-        }
+        var classIndex = FeatureSelectionTensorOps.ClassIndex(target, out int nClasses);
 
-        int nClasses = classSamples.Count;
-        _fStatistics = new double[p];
+        // Between-group (SSB) and within-group (SSW) sums of squares of every feature
+        var (ssb, ssw) = FeatureSelectionTensorOps.AnovaSums(
+            FeatureSelectionTensorOps.AsTensor(data), FeatureSelectionTensorOps.ClassOneHot<T>(classIndex, nClasses));
 
-        for (int j = 0; j < p; j++)
-        {
-            // Overall mean
-            double grandMean = 0;
-            for (int i = 0; i < n; i++)
-                grandMean += NumOps.ToDouble(data[i, j]);
-            grandMean /= n;
+        // F = (SSB / dfb) / (SSW / dfw) = (SSB dfw / dfb) / SSW; a feature with no within-class scatter but
+        // distinct class means separates the classes perfectly (+inf), a constant one scores 0
+        int dfb = nClasses - 1;
+        int dfw = n - nClasses;
+        var fStatistics = dfw > 0
+            ? FeatureSelectionTensorOps.SeparationAwareRatio(
+                engine.TensorMultiplyScalar(ssb, NumOps.Divide(NumOps.FromDouble(dfw), NumOps.FromDouble(dfb))), ssw, 1e-10)
+            : FeatureSelectionTensorOps.FilledLike(ssb, NumOps.Zero);
+        _fStatistics = fStatistics.ToVector();
 
-            // Between-group sum of squares (SSB)
-            double ssb = 0;
-            foreach (var kvp in classSamples)
-            {
-                double classMean = kvp.Value.Sum(i => NumOps.ToDouble(data[i, j])) / kvp.Value.Count;
-                ssb += kvp.Value.Count * Math.Pow(classMean - grandMean, 2);
-            }
-
-            // Within-group sum of squares (SSW)
-            double ssw = 0;
-            foreach (var kvp in classSamples)
-            {
-                double classMean = kvp.Value.Sum(i => NumOps.ToDouble(data[i, j])) / kvp.Value.Count;
-                foreach (int i in kvp.Value)
-                    ssw += Math.Pow(NumOps.ToDouble(data[i, j]) - classMean, 2);
-            }
-
-            // F-statistic
-            int dfb = nClasses - 1;
-            int dfw = n - nClasses;
-
-            if (dfw > 0 && ssw > 1e-10)
-                _fStatistics[j] = (ssb / dfb) / (ssw / dfw);
-            else
-                _fStatistics[j] = 0;
-        }
-
-        int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = Enumerable.Range(0, p)
-            .OrderByDescending(j => _fStatistics[j])
-            .Take(numToSelect)
-            .OrderBy(x => x)
-            .ToArray();
+        _selectedIndices = FeatureSelectionTensorOps.TopKIndicesSorted(fStatistics, Math.Min(_nFeaturesToSelect, p));
 
         IsFitted = true;
     }
@@ -138,15 +103,7 @@ public class ANOVASelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISuper
         if (_selectedIndices is null)
             throw new InvalidOperationException("ANOVASelector has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return FeatureSelectionTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />
