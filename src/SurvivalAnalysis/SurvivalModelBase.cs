@@ -710,6 +710,71 @@ public abstract partial class SurvivalModelBase<T> : ISurvivalModel<T>, IModelSh
         return AiDotNetEngine.Current.TensorUnique(eventTimes.AsTensor(), sorted: true).ToVector();
     }
 
+    /// <summary>
+    /// Counts, for each sorted event time, the subjects at risk (observed time &gt;= event time) and
+    /// the events observed at that time (within 1e-10).
+    /// </summary>
+    /// <param name="times">The observed times.</param>
+    /// <param name="events">Event indicators (1 = event occurred, 0 = censored).</param>
+    /// <param name="eventTimes">The sorted unique event times.</param>
+    /// <returns>The at-risk counts and event counts, one per event time.</returns>
+    protected (Tensor<T> AtRisk, Tensor<T> Events) CountAtRiskAndEvents(
+        Vector<T> times, Vector<int> events, Vector<T> eventTimes)
+    {
+        var engine = AiDotNetEngine.Current;
+        int numTimes = eventTimes.Length;
+        int n = times.Length;
+        var grid = new[] { numTimes, n };
+        var observed = engine.TensorBroadcastTo(times.AsTensor().Reshape(new[] { 1, n }), grid);
+        var eventGrid = engine.TensorBroadcastTo(eventTimes.AsTensor().Reshape(new[] { numTimes, 1 }), grid);
+
+        // At risk if observation time >= event time
+        var atRiskMask = engine.TensorAdd(
+            engine.TensorGreaterThan(observed, eventGrid),
+            engine.TensorEquals(observed, eventGrid));
+
+        // Event at this time if event occurred and time matches
+        var hadEvent = engine.TensorBroadcastTo(
+            engine.TensorEquals(events.AsTensor().Cast<T>(), NumOps.One).Reshape(new[] { 1, n }), grid);
+        var atEventTime = engine.TensorLessThan(
+            engine.TensorAbs(engine.TensorSubtract(observed, eventGrid)), NumOps.FromDouble(1e-10));
+
+        return (engine.ReduceSum(atRiskMask, new[] { 1 }),
+            engine.ReduceSum(engine.TensorMultiply(hadEvent, atEventTime), new[] { 1 }));
+    }
+
+    /// <summary>
+    /// Evaluates a right-continuous step function at each query time: the value at the last step time
+    /// &lt;= t, or <paramref name="before"/> when t precedes the first step time.
+    /// </summary>
+    /// <param name="queryTimes">The times to evaluate at.</param>
+    /// <param name="stepTimes">The sorted step times.</param>
+    /// <param name="values">The function value from each step time on.</param>
+    /// <param name="before">The value before the first step time.</param>
+    /// <returns>The step function value at each query time.</returns>
+    protected Tensor<T> EvaluateStepFunction(Vector<T> queryTimes, Vector<T> stepTimes, Vector<T> values, T before)
+    {
+        var engine = AiDotNetEngine.Current;
+        int q = queryTimes.Length;
+        int m = stepTimes.Length;
+        var grid = new[] { q, m };
+        var query = engine.TensorBroadcastTo(queryTimes.AsTensor().Reshape(new[] { q, 1 }), grid);
+        var steps = engine.TensorBroadcastTo(stepTimes.AsTensor().Reshape(new[] { 1, m }), grid);
+
+        // The count of sorted step times <= t indexes [before, v_0, v_1, ...].
+        var reached = engine.TensorAdd(
+            engine.TensorLessThan(steps, query),
+            engine.TensorEquals(steps, query));
+        var stepIndex = engine.ReduceSum(reached, new[] { 1 }).Cast<int>();
+        var padded = engine.TensorConcatenate(new[]
+        {
+            Tensor<T>.CreateDefault(new[] { 1 }, before),
+            values.AsTensor()
+        });
+
+        return engine.TensorGather(padded, stepIndex, 0);
+    }
+
     #endregion
 
     #region IFullModel Implementation
