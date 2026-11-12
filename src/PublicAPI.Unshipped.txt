@@ -22589,3 +22589,13 @@ AiDotNet.MetaLearning.Options.SparseMAMLGateFunction.Sigmoid = 1 -> AiDotNet.Met
 *REMOVED*AiDotNet.MetaLearning.Options.OMLOptions<T, TInput, TOutput>.RepresentationRegWeight.set -> void
 AiDotNet.MetaLearning.Options.OMLOptions<T, TInput, TOutput>.OnlineInnerLoop.get -> bool
 AiDotNet.MetaLearning.Options.OMLOptions<T, TInput, TOutput>.OnlineInnerLoop.set -> void
+*REMOVED*AiDotNet.MetaLearning.Options.iTAMLOptions<T, TInput, TOutput>.DistillationTemperature.get -> double
+*REMOVED*AiDotNet.MetaLearning.Options.iTAMLOptions<T, TInput, TOutput>.DistillationTemperature.set -> void
+*REMOVED*AiDotNet.MetaLearning.Options.iTAMLOptions<T, TInput, TOutput>.DistillationWeight.get -> double
+*REMOVED*AiDotNet.MetaLearning.Options.iTAMLOptions<T, TInput, TOutput>.DistillationWeight.set -> void
+*REMOVED*AiDotNet.MetaLearning.Options.iTAMLOptions<T, TInput, TOutput>.TaskBalancingEnabled.get -> bool
+*REMOVED*AiDotNet.MetaLearning.Options.iTAMLOptions<T, TInput, TOutput>.TaskBalancingEnabled.set -> void
+*REMOVED*AiDotNet.MetaLearning.Options.iTAMLOptions<T, TInput, TOutput>.TeacherEmaDecay.get -> double
+*REMOVED*AiDotNet.MetaLearning.Options.iTAMLOptions<T, TInput, TOutput>.TeacherEmaDecay.set -> void
+AiDotNet.MetaLearning.Options.iTAMLOptions<T, TInput, TOutput>.EtaDecay.get -> double
+AiDotNet.MetaLearning.Options.iTAMLOptions<T, TInput, TOutput>.EtaDecay.set -> void
