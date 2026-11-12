@@ -1,4 +1,5 @@
 using System;
+using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 
@@ -53,6 +54,37 @@ namespace AiDotNet.AutoML.NAS
             }
 
             return AiDotNetEngine.Current.TensorSoftmax(Tensor<T>.FromMatrix(logits), 1).ToMatrix();
+        }
+
+        /// <summary>
+        /// Argmax of every row of a [rows, cols] tensor, ties going to the lowest column like a strict
+        /// greater-than scan. The tie-break is explicit (the maxima are ranked by reversed column index) so it
+        /// does not depend on a backend's argmax tie order.
+        /// </summary>
+        internal static int[] ArgMaxRows<T>(Tensor<T> values, out T[] rowMax)
+        {
+            var engine = AiDotNetEngine.Current;
+            int rows = values.Shape[0];
+            int cols = values.Shape[1];
+            var shape = new[] { rows, cols };
+            var max = engine.ReduceMax(values, new[] { 1 }, true);
+            var isMax = engine.TensorEquals(values, engine.TensorBroadcastTo(max, shape));
+            var columnIndex = engine.TensorArange<T>(0, cols, 1);
+            var reversedRank = engine.TensorAddScalar(engine.TensorNegate(columnIndex),
+                MathHelper.GetNumericOperations<T>().FromDouble(cols));
+            var key = engine.TensorMultiply(isMax, engine.TensorBroadcastTo(reversedRank.Reshape(new[] { 1, cols }), shape));
+            rowMax = max.ToArray();
+            return engine.TensorArgMax(key, 1).ToArray();
+        }
+
+        internal static int[] ArgMaxRows<T>(Matrix<T> values, out T[] rowMax)
+        {
+            return ArgMaxRows(Tensor<T>.FromMatrix(values), out rowMax);
+        }
+
+        internal static int ArgMax<T>(Vector<T> values)
+        {
+            return ArgMaxRows(values.AsTensor().Reshape(new[] { 1, values.Length }), out _)[0];
         }
 
         internal static Vector<T> GumbelSoftmax<T>(Vector<T> logits, T temperature, INumericOperations<T> ops, Random random, bool hard = false)

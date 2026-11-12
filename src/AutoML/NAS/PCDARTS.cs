@@ -59,6 +59,9 @@ namespace AiDotNet.AutoML.NAS
         private readonly List<Matrix<T>> _architectureParams;
         private readonly List<Matrix<T>> _architectureGradients;
 
+        // Edge-normalization parameters beta: one per incoming edge of each node (PC-DARTS Sec. 3.3)
+        private readonly List<Vector<T>> _edgeParams;
+
         // PC-DARTS specific: channel sampling ratio
         private readonly double _channelSamplingRatio;
         private readonly bool _useEdgeNormalization;
@@ -99,6 +102,17 @@ namespace AiDotNet.AutoML.NAS
                 _architectureParams.Add(alpha);
                 _architectureGradients.Add(new Matrix<T>(i + 1, _numOperations));
             }
+
+            // beta starts at 1e-3 * N(0, 1) like the reference implementation; drawn after alpha so the alpha
+            // stream is unchanged, one seed per node from the search's Random.
+            _edgeParams = new List<Vector<T>>();
+            var engine = AiDotNetEngine.Current;
+            for (int i = 0; i < _numNodes; i++)
+            {
+                var beta = new Tensor<T>(new[] { i + 1 });
+                engine.TensorNormalInPlace(beta, 0.0, 1e-3, _random.Next());
+                _edgeParams.Add(beta.ToVector());
+            }
         }
 
         /// <summary>
@@ -121,7 +135,9 @@ namespace AiDotNet.AutoML.NAS
         }
 
         /// <summary>
-        /// Applies edge normalization to prevent operation collapse
+        /// Applies edge normalization to prevent operation collapse: the operation mixture of edge (i, j) is
+        /// weighted by softmax over the incoming edges of node j of the edge parameters beta, so the final
+        /// weight is softmax(beta)_i * softmax(alpha_i)_o (PC-DARTS, Xu et al. 2020, Sec. 3.3, Eq. 4).
         /// </summary>
         public Matrix<T> ApplyEdgeNormalization(Matrix<T> alpha)
         {
@@ -129,18 +145,18 @@ namespace AiDotNet.AutoML.NAS
                 return NasSamplingHelper.SoftmaxRows(alpha, _ops);
 
             var result = NasSamplingHelper.SoftmaxRows(alpha, _ops);
-
-            // Apply edge normalization: scale by 1/sqrt(num_edges)
-            T edgeNormalizationFactor = _ops.FromDouble(1.0 / Math.Sqrt(alpha.Rows));
-            for (int row = 0; row < result.Rows; row++)
+            if (alpha.Rows == 0 || alpha.Columns == 0)
             {
-                for (int col = 0; col < result.Columns; col++)
-                {
-                    result[row, col] = _ops.Multiply(result[row, col], edgeNormalizationFactor);
-                }
+                return result;
             }
 
-            return result;
+            // A matrix with k rows holds the k incoming edges of node k - 1; any other shape has no learned beta
+            // and gets the uniform edge weights beta = 0 starts from.
+            var engine = AiDotNetEngine.Current;
+            var beta = alpha.Rows <= _edgeParams.Count ? _edgeParams[alpha.Rows - 1] : new Vector<T>(alpha.Rows);
+            var edgeWeights = engine.Softmax(beta).AsTensor().Reshape(new[] { alpha.Rows, 1 });
+            return engine.TensorMultiply(Tensor<T>.FromMatrix(result),
+                engine.TensorBroadcastTo(edgeWeights, new[] { alpha.Rows, alpha.Columns })).ToMatrix();
         }
 
         /// <summary>
@@ -158,21 +174,11 @@ namespace AiDotNet.AutoML.NAS
                 // Select top-2 edges for each intermediate node (following DARTS convention)
                 var edgeScores = new List<(int prevNode, int opIdx, T score)>();
 
+                int[] bestOps = NasSamplingHelper.ArgMaxRows(weights, out T[] bestWeights);
+
                 for (int prevNodeIdx = 0; prevNodeIdx <= nodeIdx; prevNodeIdx++)
                 {
-                    int bestOpIdx = 0;
-                    T bestWeight = weights[prevNodeIdx, 0];
-
-                    for (int opIdx = 1; opIdx < _numOperations; opIdx++)
-                    {
-                        if (_ops.GreaterThan(weights[prevNodeIdx, opIdx], bestWeight))
-                        {
-                            bestWeight = weights[prevNodeIdx, opIdx];
-                            bestOpIdx = opIdx;
-                        }
-                    }
-
-                    edgeScores.Add((prevNodeIdx, bestOpIdx, bestWeight));
+                    edgeScores.Add((prevNodeIdx, bestOps[prevNodeIdx], bestWeights[prevNodeIdx]));
                 }
 
                 // Select top-2 edges

@@ -129,24 +129,22 @@ namespace AiDotNet.AutoML.NAS
         public T ComputeExpectedLatency()
         {
             T totalLatency = _ops.Zero;
+            var operations = _nasSearchSpace.Operations;
+            int pricedOps = operations == null ? 0 : Math.Min(_numOperations, operations.Count);
+            var opLatency = pricedOps == 0 || operations == null
+                ? new Vector<T>(0)
+                : new Vector<T>(operations.Take(pricedOps)
+                    .Select(op => _hardwareCostModel.EstimateOperationCost(op, _inputChannels, _inputChannels, _spatialSize).Latency));
 
+            var engine = AiDotNetEngine.Current;
             for (int layerIdx = 0; layerIdx < _numLayers; layerIdx++)
             {
-                var theta = _architectureParams[layerIdx];
-                var probs = GumbelSoftmax(theta, hard: false);
-
-                // Compute expected latency for this layer
-                for (int opIdx = 0; opIdx < _numOperations; opIdx++)
+                // LAT(a) = sum_l sum_i m_l,i * LAT(b_l,i) with Gumbel-softmax masks m (FBNet, Eq. 4). Every layer
+                // still draws its mask in order, so the seeded noise stream is unchanged.
+                var probs = GumbelSoftmax(_architectureParams[layerIdx], hard: false);
+                if (pricedOps > 0)
                 {
-                    if (_nasSearchSpace.Operations != null && opIdx < _nasSearchSpace.Operations.Count)
-                    {
-                        var operation = _nasSearchSpace.Operations[opIdx];
-                        var cost = _hardwareCostModel.EstimateOperationCost(
-                            operation, _inputChannels, _inputChannels, _spatialSize);
-
-                        T weightedLatency = _ops.Multiply(probs[opIdx], cost.Latency);
-                        totalLatency = _ops.Add(totalLatency, weightedLatency);
-                    }
+                    totalLatency = _ops.Add(totalLatency, engine.DotProduct(probs.GetSubVector(0, pricedOps), opLatency));
                 }
             }
 
@@ -178,17 +176,7 @@ namespace AiDotNet.AutoML.NAS
 
             for (int layerIdx = 0; layerIdx < _numLayers; layerIdx++)
             {
-                var theta = _architectureParams[layerIdx];
-                int selectedOp = 0;
-                T maxLogit = theta[0];
-                for (int opIdx = 1; opIdx < _numOperations; opIdx++)
-                {
-                    if (_ops.GreaterThan(theta[opIdx], maxLogit))
-                    {
-                        maxLogit = theta[opIdx];
-                        selectedOp = opIdx;
-                    }
-                }
+                int selectedOp = NasSamplingHelper.ArgMax(_architectureParams[layerIdx]);
 
                 if (_nasSearchSpace.Operations != null && selectedOp < _nasSearchSpace.Operations.Count)
                 {
