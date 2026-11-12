@@ -797,12 +797,7 @@ public partial class NonStationaryTransformer<T> : ForecastingModelBase<T>
         var mse = _lossFunction.CalculateLoss(predictions.ToVector(), testLabels.ToVector());
 
         // Calculate MAE
-        T mae = NumOps.Zero;
-        for (int i = 0; i < predictions.Length && i < testLabels.Length; i++)
-        {
-            var diff = NumOps.Subtract(predictions.Data.Span[i], testLabels.Data.Span[i]);
-            mae = NumOps.Add(mae, NumOps.Abs(diff));
-        }
+        var (_, mae, _) = SumSquaredAndAbsoluteError(predictions, testLabels);
         mae = NumOps.Divide(mae, NumOps.FromDouble(predictions.Length));
 
         return new Dictionary<string, T>

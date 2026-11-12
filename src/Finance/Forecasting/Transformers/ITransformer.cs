@@ -775,21 +775,8 @@ public partial class ITransformer<T> : ForecastingModelBase<T>
         var expected = targets.IsContiguous ? targets : targets.Contiguous();
         var metrics = new Dictionary<string, T>();
 
-        T maeSum = NumOps.Zero;
-        int count = Math.Min(predictions.Length, expected.Length);
-        for (int i = 0; i < count; i++)
-        {
-            T diff = NumOps.Subtract(predictions.Data.Span[i], expected.Data.Span[i]);
-            maeSum = NumOps.Add(maeSum, NumOps.Abs(diff));
-        }
+        var (mseSum, maeSum, count) = SumSquaredAndAbsoluteError(predictions, expected);
         metrics["MAE"] = NumOps.Divide(maeSum, NumOps.FromDouble(count));
-
-        T mseSum = NumOps.Zero;
-        for (int i = 0; i < count; i++)
-        {
-            T diff = NumOps.Subtract(predictions.Data.Span[i], expected.Data.Span[i]);
-            mseSum = NumOps.Add(mseSum, NumOps.Multiply(diff, diff));
-        }
         metrics["MSE"] = NumOps.Divide(mseSum, NumOps.FromDouble(count));
         metrics["RMSE"] = NumOps.Sqrt(metrics["MSE"]);
 
