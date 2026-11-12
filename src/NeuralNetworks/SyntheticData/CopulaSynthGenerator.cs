@@ -169,7 +169,7 @@ public class CopulaSynthGenerator<T> : SyntheticTabularGeneratorBase<T>
     /// strictly inside (0, 1), so no boundary clamping is needed and the tails
     /// are not squashed.
     /// </summary>
-    private Tensor<T> EmpiricalCdf(Tensor<T> sorted, Tensor<T> values)
+    internal static Tensor<T> EmpiricalCdf(Tensor<T> sorted, Tensor<T> values)
     {
         var engine = AiDotNetEngine.Current;
         int n = sorted.Length;
@@ -180,13 +180,13 @@ public class CopulaSynthGenerator<T> : SyntheticTabularGeneratorBase<T>
             return middle;
         }
 
-        // Rank = number of values strictly less than `value`, plus half the ties
-        // (mid-rank), so equal values map to a single shared plotting position and
-        // the transform stays monotone: the two bisection bounds.
+        // A value's tie block occupies the 0-based sorted indices lower .. upper - 1 (the two bisection bounds), so
+        // its mid-rank is (lower + upper - 1) / 2 and its Hazen position (midRank + 0.5) / n = (lower + upper) / (2n).
+        // Equal values share one plotting position and the transform stays monotone; a unique value at index i
+        // maps to (i + 0.5) / n, which InverseEmpiricalCdf maps back to sorted[i].
         var lower = engine.TensorSearchSorted(sorted, values, right: false).Cast<T>(); // first index >= value
         var upper = engine.TensorSearchSorted(sorted, values, right: true).Cast<T>();  // first index > value
-        var rank = engine.TensorMultiplyScalar(engine.TensorAdd(lower, upper), NumOps.FromDouble(0.5));
-        return engine.TensorMultiplyScalar(engine.TensorAddScalar(rank, NumOps.FromDouble(0.5)), NumOps.FromDouble(1.0 / n));
+        return engine.TensorMultiplyScalar(engine.TensorAdd(lower, upper), NumOps.FromDouble(0.5 / n));
     }
 
     /// <summary>
@@ -245,28 +245,24 @@ public class CopulaSynthGenerator<T> : SyntheticTabularGeneratorBase<T>
     /// <summary>
     /// Computes the correlation matrix from normal-transformed data.
     /// </summary>
-    private Tensor<T> ComputeCorrelation(Tensor<T> data, int n)
+    internal static Tensor<T> ComputeCorrelation(Tensor<T> data, int n)
     {
         var engine = AiDotNetEngine.Current;
         int d = data.Shape[1];
-        T one = NumOps.One;
 
-        // Sample covariance (n - 1 denominator) and standard deviations (1 when n = 1), floored at 1e-10.
+        // One row has no sample covariance (its n - 1 denominator is zero): the features are taken as uncorrelated.
+        if (n <= 1)
+        {
+            return engine.TensorEye<T>(d);
+        }
+
+        // Sample covariance (n - 1 denominator) and standard deviations, floored at 1e-10.
         var mean = engine.ReduceMean(data, [0], keepDims: true);
         var centered = engine.TensorSubtract(data, engine.TensorTile(mean, [n, 1]));
         var cov = engine.TensorDivideScalar(
             engine.TensorMatMul(engine.TensorTranspose(centered), centered), NumOps.FromDouble(n - 1));
         var identity = engine.TensorEye<T>(d);
-        Tensor<T> stds;
-        if (n > 1)
-        {
-            stds = engine.TensorSqrt(engine.ReduceSum(engine.TensorMultiply(cov, identity), [1], keepDims: false));
-        }
-        else
-        {
-            stds = new Tensor<T>([d]);
-            stds.Fill(one);
-        }
+        var stds = engine.TensorSqrt(engine.ReduceSum(engine.TensorMultiply(cov, identity), [1], keepDims: false));
         var floor = NumOps.FromDouble(1e-10);
         var floorTensor = new Tensor<T>([d]);
         floorTensor.Fill(floor);

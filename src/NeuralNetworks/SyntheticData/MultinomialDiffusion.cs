@@ -190,7 +190,7 @@ public class MultinomialDiffusion<T>
             MixWithUniform(probs, AlphaBarPrev(t)));
 
         T posteriorSum = engine.TensorSum(unnormalized);
-        var posterior = NumOps.GreaterThan(posteriorSum, NumOps.FromDouble(1e-10))
+        var posterior = NumOps.GreaterThan(posteriorSum, NumOps.Zero)
             ? engine.TensorDivideScalar(unnormalized, posteriorSum)
             : probs;
 

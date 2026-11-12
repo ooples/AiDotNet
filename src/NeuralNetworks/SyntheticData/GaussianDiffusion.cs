@@ -87,9 +87,16 @@ public class GaussianDiffusion<T>
     /// any other value uses the linear schedule.</param>
     /// <param name="varianceType">Reverse-step variance; TabDDPM uses <see cref="ReverseDiffusionVariance.FixedLarge"/>.</param>
     /// <param name="random">Random number generator.</param>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="varianceType"/> is not a defined value.</exception>
     public GaussianDiffusion(int numTimesteps, double betaStart, double betaEnd,
         BetaSchedule schedule, ReverseDiffusionVariance varianceType, Random random)
     {
+        if (varianceType != ReverseDiffusionVariance.FixedLarge && varianceType != ReverseDiffusionVariance.FixedSmall)
+        {
+            throw new ArgumentOutOfRangeException(nameof(varianceType), varianceType,
+                "The reverse-step variance must be FixedLarge or FixedSmall.");
+        }
+
         _numTimesteps = numTimesteps;
         _random = random;
         _varianceType = varianceType;
