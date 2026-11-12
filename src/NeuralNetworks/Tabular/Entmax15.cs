@@ -35,6 +35,12 @@ internal static class Entmax15<T>
         int width = logits.Shape[axis];
         var shape = logits._shape;
         var z = engine.TensorMultiplyScalar(logits, NumOps.FromDouble(0.5));   // (alpha - 1) x
+        // Keep the threshold relative to a detached maximum. Adding a large offset back to tau
+        // rounds away the threshold and can make equal finite logits produce probabilities summing to two.
+        Tensor<T> center;
+        using (new NoGradScope<T>()) center = engine.ReduceMax(z, new[] { axis }, true);
+        z = engine.TensorSubtract(z, engine.TensorBroadcastTo(center, shape));
+
 
         Tensor<T> tau;
         Tensor<T> weights;

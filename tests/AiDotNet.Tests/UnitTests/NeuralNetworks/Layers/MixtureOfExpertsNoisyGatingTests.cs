@@ -13,6 +13,30 @@ namespace AiDotNet.Tests.UnitTests.NeuralNetworks.Layers;
 public sealed class MixtureOfExpertsNoisyGatingTests
 {
     [Fact]
+    public void BatchedTopK_RetainsExactlyTheSelectedExpertsAndNormalizesEachRow()
+    {
+        var layer = Build(MixtureOfExpertsGatingNoise.LearnedNoiseWeights);
+        var weights = new Tensor<double>(new[] { 0.7, 0.2, 0.1, 0.1, 0.3, 0.6 }, new[] { 2, 3 });
+        var method = layer.GetType().GetMethod("ApplyTopK", BindingFlags.Instance | BindingFlags.NonPublic)!;
+        var (sparse, indices) = ((Tensor<double>, int[,]))method.Invoke(layer, new object[] { weights, 2 })!;
+        var expected = new[] { 7.0 / 9, 2.0 / 9, 0, 0, 1.0 / 3, 2.0 / 3 };
+        for (int i = 0; i < expected.Length; i++) Assert.InRange(Math.Abs(sparse.GetFlat(i) - expected[i]), 0, 1e-9);
+        Assert.Equal(0, indices[0, 0]);
+        Assert.Equal(2, indices[1, 0]);
+    }
+
+    [Fact]
+    public void LearnedNoiseWeights_LargeFiniteLogitsDoNotOverflowSoftplus()
+    {
+        var layer = Build(MixtureOfExpertsGatingNoise.LearnedNoiseWeights);
+        var projection = NoiseProjection(layer);
+        projection.SetParameters(new Vector<double>(Enumerable.Repeat(1000.0, checked((int)projection.ParameterCount)).ToArray()));
+        layer.SetTrainingMode(true);
+        var input = new Tensor<double>(new[] { 0.3, 1.2, 0.8, 2.0, 1.1, 0.4, 0.6, 0.9 }, new[] { 2, 4 });
+        Assert.All(layer.Forward(input).ToArray(), value => Assert.True(!double.IsNaN(value) && !double.IsInfinity(value)));
+    }
+
+    [Fact]
     public void TrainingForward_DrawsFreshGatingNoiseEachStep()
     {
         // A Random re-seeded with 42 inside every forward produced the same "noise" each step, so two

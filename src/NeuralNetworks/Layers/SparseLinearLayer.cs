@@ -413,6 +413,7 @@ public partial class SparseLinearLayer<T> : LayerBase<T>, IShapeContract
         var storedValues = new Tensor<T>(_weights.Values, new[] { nonZeroCount });
         var updatedValues = Engine.TensorSubtract(storedValues, Engine.TensorMultiplyScalar(storedGradients, learningRate));
         updatedValues.AsSpan().CopyTo(_weights.DataVector.AsWritableSpan());
+        _weights.IncrementVersion();
     }
 
     /// <summary>

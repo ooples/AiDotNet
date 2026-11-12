@@ -702,9 +702,7 @@ public partial class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLaye
             // Softplus(x) = log(1 + exp(x)) — noise scale. The paper's noise logits are x·W_noise; the
             // legacy option reuses the router logits instead.
             var noiseLogits = _noiseProjection is not null ? _noiseProjection.Forward(input2D) : routingLogits;
-            var expLogits = Engine.TensorExp(noiseLogits);
-            var onePlusExp = Engine.TensorAddScalar(expLogits, NumOps.One);
-            var noiseScale = Engine.TensorLog(onePlusExp);
+            var noiseScale = Engine.Softplus(noiseLogits);
 
             // Standard normal noise, freshly drawn every training forward from the layer's RNG stream.
             // A Random re-seeded with 42 on every call made the "noise" the same tensor at every step,
@@ -1315,7 +1313,10 @@ public partial class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLaye
         Tensor<T> mask;
         using (new NoGradScope<T>())
         {
-            mask = Engine.ReduceSum(Engine.TensorOneHot<T>(topKIndicesTensor, numExperts), new[] { 1 }); // [batchSize, numExperts]
+            // OneHot flattens its index input; restore [batch, k, expert] before reducing k.
+            var oneHot = Engine.Reshape(Engine.TensorOneHot<T>(topKIndicesTensor, numExperts),
+                new[] { batchSize, k, numExperts });
+            mask = Engine.ReduceSum(oneHot, new[] { 1 }); // [batchSize, numExperts]
         }
         _lastTopKMask = mask;
 
@@ -1325,7 +1326,8 @@ public partial class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLaye
         // Step 4: Renormalize using tape-tracked operations (epsilon scalar for numerical stability)
         var sumPerRow = Engine.ReduceSum(maskedWeights, new[] { 1 }, keepDims: true); // [batchSize, 1]
         var safeSumPerRow = Engine.TensorAddScalar(sumPerRow, NumOps.FromDouble(1e-10));
-        var sparseWeights = Engine.TensorDivide(maskedWeights, safeSumPerRow); // [batchSize, numExperts]
+        var sparseWeights = Engine.TensorDivide(maskedWeights,
+            Engine.TensorBroadcastTo(safeSumPerRow, maskedWeights._shape)); // [batchSize, numExperts]
 
         // Copy the indices into int[,] for the IsExpertActive bookkeeping (bulk copy, no arithmetic).
         var topKIndices = new int[batchSize, k];

@@ -337,7 +337,8 @@ public partial class SSMStateCache<T>
         long levels = (1L << _compressionBitWidth) - 1;
         T levelsT = NumOps.FromDouble(levels);
         using var noGrad = new NoGradScope<T>();
-        var normalized = Engine.TensorDivideScalar(Engine.TensorSubtractScalar(state, minVal), range);
+        var centered = Engine.TensorSubtractScalar(state, minVal);
+        var normalized = Engine.TensorDivide(centered, Engine.TensorFullLike(centered, range));
         var quantized = Engine.TensorRound(Engine.TensorMultiplyScalar(normalized, levelsT));
         return Engine.TensorAddScalar(
             Engine.TensorMultiplyScalar(Engine.TensorDivideScalar(quantized, levelsT), range), minVal);

@@ -137,10 +137,11 @@ public partial class PiecewiseLinearEncodingLayer<T> : LayerBase<T>, IShapeContr
         // Linearly interpolated quantile at t / T: position p = t (S - 1) / T, lower = floor(p),
         // upper = min(lower + 1, S - 1), edge = x[lower] + (x[upper] - x[lower]) (p - lower).
         // p is computed exactly in integers: t (S - 1) = lower T + remainder.
-        var scaled = Engine.TensorMultiplyScalar(Engine.TensorArange<int>(0, _numBins + 1, 1), samples - 1);
-        var lowerIndex = Engine.TensorDivideScalar(scaled, _numBins);
-        var remainder = Engine.TensorSubtract(scaled, Engine.TensorMultiplyScalar(lowerIndex, _numBins));
-        var upperIndex = Engine.TensorClamp(Engine.TensorAddScalar(lowerIndex, 1), 0, samples - 1);
+        var scaled = Engine.TensorMultiplyScalar(Engine.TensorArange<long>(0, _numBins + 1, 1), (long)samples - 1);
+        var lowerWide = Engine.TensorDivideScalar(scaled, (long)_numBins);
+        var remainder = Engine.TensorSubtract(scaled, Engine.TensorMultiplyScalar(lowerWide, (long)_numBins));
+        var lowerIndex = lowerWide.Cast<int>();
+        var upperIndex = Engine.TensorClamp(Engine.TensorAddScalar(lowerWide, 1L), 0L, (long)samples - 1).Cast<int>();
         var fraction = Engine.Reshape(
             Engine.TensorDivideScalar(remainder.Cast<T>(), NumOps.FromDouble(_numBins)), [_numBins + 1, 1]);
         var lowerValue = Engine.TensorIndexSelect(sorted, lowerIndex, 0);                    // [T + 1, F]
