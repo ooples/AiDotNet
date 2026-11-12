@@ -338,14 +338,8 @@ public partial class LoRETTAAdapter<T> : LoRAAdapterBase<T>
         // For simplicity, we'll use a matrix-based contraction approach
 
         // Flatten input to [batchSize × inputSize]
-        Matrix<T> currentMatrix = new Matrix<T>(batchSize, inputSize);
-        for (int i = 0; i < batchSize; i++)
-        {
-            for (int j = 0; j < inputSize; j++)
-            {
-                currentMatrix[i, j] = input[i * inputSize + j];
-            }
-        }
+        Matrix<T> currentMatrix = Engine.Reshape(input, [batchSize, inputSize]).ToMatrix();
+
 
         // Contract through each core
         for (int k = 0; k < _numCores; k++)
@@ -361,26 +355,8 @@ public partial class LoRETTAAdapter<T> : LoRAAdapterBase<T>
 
         // Extract output
         int outputSize = GetOutputLayerShape().RequireConcrete("Sizing a LoRA adapter's low-rank factors")[0];
-        Vector<T> outputData = new Vector<T>(batchSize * outputSize);
-
-        int idx = 0;
-
-        for (int i = 0; i < batchSize; i++)
-        {
-            for (int j = 0; j < outputSize; j++)
-            {
-                // Direct extraction without modulo wrapping
-                if (j < currentMatrix.Columns && i < currentMatrix.Rows)
-                {
-                    outputData[idx] = currentMatrix[i, j];
-                }
-                else
-                {
-                    outputData[idx] = NumOps.Zero;
-                }
-                idx++;
-            }
-        }
+        // Direct extraction without modulo wrapping: the first outputSize columns, zero beyond
+        Tensor<T> outputData = TakeColumnsZeroPadded(Tensor<T>.FromMatrix(currentMatrix), outputSize);
 
         // Apply scaling (alpha / rank)
         T scaling = NumOps.Divide(
@@ -388,11 +364,7 @@ public partial class LoRETTAAdapter<T> : LoRAAdapterBase<T>
             NumOps.FromDouble(TTRank)
         );
 
-        for (int i = 0; i < outputData.Length; i++)
-        {
-            outputData[i] = NumOps.Multiply(outputData[i], scaling);
-        }
-
+        return Engine.TensorMultiplyScalar(outputData, scaling);
         return new Tensor<T>(new[] { batchSize, outputSize }, outputData);
     }
 
@@ -417,38 +389,17 @@ public partial class LoRETTAAdapter<T> : LoRAAdapterBase<T>
         int inputDim = input.Columns;
         int outputDim = coreShape * rightRank;
 
-        Matrix<T> output = new Matrix<T>(batchSize, outputDim);
-
-        // For each batch element
-        for (int b = 0; b < batchSize; b++)
+        // Simplified: use first 'leftRank' dimensions of input:
+        // output[b, c * rightRank + r] = sum_{l < min(leftRank, inputDim)} input[b, l] * core[l, c, r]
+        int usedRank = Math.Min(leftRank, inputDim);
+        if (usedRank == 0)
         {
-            // Contract input with core
-            // Simplified: use first 'leftRank' dimensions of input
-            for (int r = 0; r < rightRank; r++)
-            {
-                for (int c = 0; c < coreShape; c++)
-                {
-                    T sum = NumOps.Zero;
-
-                    for (int l = 0; l < leftRank && l < inputDim; l++)
-                    {
-                        int coreIdx = (l * coreShape * rightRank) + (c * rightRank) + r;
-                        if (coreIdx < core.Length)
-                        {
-                            T inputVal = input[b, l];
-                            T coreVal = core[coreIdx];
-                            sum = NumOps.Add(sum, NumOps.Multiply(inputVal, coreVal));
-                        }
-                    }
-
-                    int outIdx = c * rightRank + r;
-                    if (outIdx < outputDim)
-                    {
-                        output[b, outIdx] = sum;
-                    }
-                }
-            }
+            return new Matrix<T>(batchSize, outputDim);
         }
+
+        Matrix<T> output = Engine.TensorMatMul(
+            Engine.TensorNarrow(Tensor<T>.FromMatrix(input), 1, 0, usedRank),
+            Engine.TensorNarrow(Engine.Reshape(core, [leftRank, outputDim]), 0, 0, usedRank)).ToMatrix();
 
         return output;
     }
@@ -458,15 +409,27 @@ public partial class LoRETTAAdapter<T> : LoRAAdapterBase<T>
     /// </summary>
     private Tensor<T> TensorFromMatrix(Matrix<T> matrix)
     {
-        Vector<T> data = new Vector<T>(matrix.Rows * matrix.Columns);
-        int idx = 0;
-        for (int i = 0; i < matrix.Rows; i++)
+        return Tensor<T>.FromMatrix(matrix);
+    }
+
+    /// <summary>
+    /// Returns the first <paramref name="columns"/> columns of a [rows, cols] tensor, padding with
+    /// zero columns when it has fewer.
+    /// </summary>
+    private Tensor<T> TakeColumnsZeroPadded(Tensor<T> matrix, int columns)
+    {
+        int rows = matrix.Shape[0];
+        int kept = Math.Min(columns, matrix.Shape[1]);
+        if (kept == 0)
         {
-            for (int j = 0; j < matrix.Columns; j++)
-            {
-                data[idx++] = matrix[i, j];
-            }
+            return new Tensor<T>([rows, columns]);
         }
+
+        Tensor<T> taken = Engine.TensorNarrow(matrix, 1, 0, kept);
+        return kept < columns
+            ? Engine.TensorConcatenate([taken, new Tensor<T>([rows, columns - kept])], 1)
+            : taken;
+    }
         return new Tensor<T>(new[] { matrix.Rows, matrix.Columns }, data);
     }
 
@@ -480,17 +443,7 @@ public partial class LoRETTAAdapter<T> : LoRAAdapterBase<T>
             throw new ArgumentException($"Expected 2D tensor, got {tensor.Shape.Length}D");
         }
 
-        int rows = tensor.Shape[0];
-        int cols = tensor.Shape[1];
-        Matrix<T> matrix = new Matrix<T>(rows, cols);
-
-        for (int i = 0; i < rows; i++)
-        {
-            for (int j = 0; j < cols; j++)
-            {
-                matrix[i, j] = tensor[i * cols + j];
-            }
-        }
+        Matrix<T> matrix = tensor.ToMatrix();
 
         return matrix;
     }
@@ -519,21 +472,9 @@ public partial class LoRETTAAdapter<T> : LoRAAdapterBase<T>
             NumOps.FromDouble(TTRank)
         );
 
-        Vector<T> scaledOutputGrad = new Vector<T>(outputGradient.Length);
-        for (int i = 0; i < outputGradient.Length; i++)
-        {
-            scaledOutputGrad[i] = NumOps.Multiply(outputGradient[i], scaling);
-        }
-
-        // Convert output gradient to matrix form [batchSize, outputSize]
-        Matrix<T> gradMatrix = new Matrix<T>(batchSize, outputSize);
-        for (int i = 0; i < batchSize; i++)
-        {
-            for (int j = 0; j < outputSize; j++)
-            {
-                gradMatrix[i, j] = scaledOutputGrad[i * outputSize + j];
-            }
-        }
+        // Scaled output gradient in matrix form [batchSize, outputSize]
+        Tensor<T> gradMatrix = Engine.Reshape(
+            Engine.TensorMultiplyScalar(outputGradient, scaling), [batchSize, outputSize]);
 
         // Backpropagate through cores in reverse order
         for (int k = _numCores - 1; k >= 0; k--)
@@ -544,74 +485,56 @@ public partial class LoRETTAAdapter<T> : LoRAAdapterBase<T>
 
             Tensor<T> core = _ttCores[k];
 
-            // Get the input to this core from forward intermediates
-            Matrix<T> coreInput = (k > 0 && _forwardIntermediates != null && k <= _forwardIntermediates.Count)
-                ? MatrixFromTensor(_forwardIntermediates[k - 1])
-                : new Matrix<T>(batchSize, leftRank); // First core gets zero input
+            // Get the input to this core from forward intermediates (the first core gets zero input)
+            bool hasCoreInput = k > 0 && _forwardIntermediates != null && k <= _forwardIntermediates.Count;
 
-            // Compute gradient for this core using outer product of input and gradient
-            // ∂L/∂core_k = input_{k-1}^T ⊗ grad_k
-            for (int l = 0; l < leftRank; l++)
+            // Only core slices c < min(coreShape, gradient columns) receive gradient; with
+            // g = gradMatrix[:, 0 : usableCore * rightRank] and x = coreInput[:, 0 : min(leftRank, cols)]:
+            // ∂L/∂core_k[l, c, r] = sum_b x[b, l] * g[b, c * rightRank + r]
+            int usableCore = Math.Min(coreShape, gradMatrix.Shape[1]);
+            int width = usableCore * rightRank;
+            Tensor<T> g = width > 0 ? Engine.TensorNarrow(gradMatrix, 1, 0, width) : new Tensor<T>([batchSize, 0]);
+
+            if (hasCoreInput && width > 0 && _forwardIntermediates != null)
             {
-                for (int c = 0; c < coreShape && c < gradMatrix.Columns; c++)
-                {
-                    for (int r = 0; r < rightRank; r++)
-                    {
-                        T grad = NumOps.Zero;
-                        for (int b = 0; b < batchSize; b++)
-                        {
-                            T inputVal = (l < coreInput.Columns) ? coreInput[b, l] : NumOps.Zero;
-                            T gradVal = gradMatrix[b, c * rightRank + r];
-                            grad = NumOps.Add(grad, NumOps.Multiply(inputVal, gradVal));
-                        }
+                Tensor<T> coreInput = _forwardIntermediates[k - 1]; // [batchSize, cols] from TensorFromMatrix
 
-                        int coreIdx = (l * coreShape * rightRank) + (c * rightRank) + r;
-                        if (coreIdx < _ttCoreGradients[k].Length)
-                        {
-                            _ttCoreGradients[k][coreIdx] = grad;
-                        }
+                int usedRank = Math.Min(leftRank, coreInput.Shape[1]);
+                if (usedRank > 0)
+                {
+                    Tensor<T> partial = Engine.TensorMatMul(
+                        Engine.TensorTranspose(Engine.TensorNarrow(coreInput, 1, 0, usedRank)), g); // [usedRank, width]
+                    if (width < coreShape * rightRank)
+                    {
+                        partial = Engine.TensorConcatenate(
+                            [partial, new Tensor<T>([usedRank, coreShape * rightRank - width])], 1);
                     }
+
+                    if (usedRank < leftRank)
+                    {
+                        partial = Engine.TensorConcatenate(
+                            [partial, new Tensor<T>([leftRank - usedRank, coreShape * rightRank])], 0);
+                    }
+
+                    _ttCoreGradients[k] = Engine.Reshape(partial, core.Shape.ToArray());
                 }
             }
 
-            // Compute gradient to pass to previous core
+            // Compute gradient to pass to previous core:
+            // prevGrad[b, l] = sum_{c < usableCore, r} core[l, c, r] * g[b, c * rightRank + r]
             if (k > 0)
             {
-                Matrix<T> prevGrad = new Matrix<T>(batchSize, leftRank);
-                for (int b = 0; b < batchSize; b++)
-                {
-                    for (int l = 0; l < leftRank; l++)
-                    {
-                        T sum = NumOps.Zero;
-                        for (int c = 0; c < coreShape && c < gradMatrix.Columns; c++)
-                        {
-                            for (int r = 0; r < rightRank; r++)
-                            {
-                                int coreIdx = (l * coreShape * rightRank) + (c * rightRank) + r;
-                                if (coreIdx < core.Length)
-                                {
-                                    T coreVal = core[coreIdx];
-                                    T gradVal = gradMatrix[b, c * rightRank + r];
-                                    sum = NumOps.Add(sum, NumOps.Multiply(coreVal, gradVal));
-                                }
-                            }
-                        }
-                        prevGrad[b, l] = sum;
-                    }
-                }
-                gradMatrix = prevGrad;
+                gradMatrix = width > 0
+                    ? Engine.TensorMatMul(
+                        g,
+                        Engine.TensorTranspose(Engine.TensorNarrow(
+                            Engine.Reshape(core, [leftRank, coreShape * rightRank]), 1, 0, width)))
+                    : new Tensor<T>([batchSize, leftRank]);
             }
         }
 
-        // Convert final gradient matrix to input gradient tensor
-        Tensor<T> inputGradient = new Tensor<T>(new[] { batchSize, inputSize });
-        for (int i = 0; i < batchSize; i++)
-        {
-            for (int j = 0; j < inputSize && j < gradMatrix.Columns; j++)
-            {
-                inputGradient[i * inputSize + j] = gradMatrix[i, j];
-            }
-        }
+        // Convert final gradient matrix to input gradient tensor (first inputSize columns, zero beyond)
+        Tensor<T> inputGradient = TakeColumnsZeroPadded(gradMatrix, inputSize);
 
         return inputGradient;
     }
@@ -639,14 +562,10 @@ public partial class LoRETTAAdapter<T> : LoRAAdapterBase<T>
             return;
         }
 
-        // Update each TT core
+        // Update each TT core: core -= learningRate * dcore
         for (int k = 0; k < _numCores; k++)
         {
-            for (int i = 0; i < _ttCores[k].Length; i++)
-            {
-                T update = NumOps.Multiply(_ttCoreGradients[k][i], learningRate);
-                _ttCores[k][i] = NumOps.Subtract(_ttCores[k][i], update);
-            }
+            Engine.TensorSubtractInPlace(_ttCores[k], Engine.TensorMultiplyScalar(_ttCoreGradients[k], learningRate));
         }
 
         // Update base layer if not frozen
@@ -701,29 +620,9 @@ public partial class LoRETTAAdapter<T> : LoRAAdapterBase<T>
         int outputSize = GetOutputLayerShape().RequireConcrete("Sizing a LoRA adapter's low-rank factors")[0];
         int weightCount = inputSize * outputSize;
 
-        // Create new parameters with merged weights
-        Vector<T> mergedParams = new Vector<T>(baseParams.Length);
-
-        // Merge weights (add LoRETTA contribution to base weights)
-        for (int i = 0; i < weightCount && i < baseParams.Length; i++)
-        {
-            int row = i / inputSize;
-            int col = i % inputSize;
-
-            T ttContribution = NumOps.Zero;
-            if (row < ttWeights.Rows && col < ttWeights.Columns)
-            {
-                ttContribution = ttWeights[row, col];
-            }
-
-            mergedParams[i] = NumOps.Add(baseParams[i], ttContribution);
-        }
-
-        // Copy biases unchanged
-        for (int i = weightCount; i < baseParams.Length; i++)
-        {
-            mergedParams[i] = baseParams[i];
-        }
+        // Merge weights (add LoRETTA contribution, [outputSize, inputSize] row-major, to the base
+        // weights). Biases are kept unchanged.
+        Vector<T> mergedParams = AddFlatWeightsToParameters(baseParams, ttWeights, weightCount);
 
         // Create a new dense layer with merged parameters
         DenseLayer<T> mergedLayer = new DenseLayer<T>(
@@ -753,19 +652,10 @@ public partial class LoRETTAAdapter<T> : LoRAAdapterBase<T>
         int n1 = _coreShapes[0];
         int r1 = _ttRanks[1];
 
-        // Extract first core as matrix [n1, r1]
-        Matrix<T> contracted = new Matrix<T>(n1, r1);
+        // Extract first core as matrix [n1, r1]: core [r0=1, n1, r1], index 0 * n1 * r1 + i * r1 + j
         Tensor<T> firstCore = _ttCores[0];
-
-        for (int i = 0; i < n1; i++)
-        {
-            for (int j = 0; j < r1; j++)
-            {
-                // First core: [r0=1, n1, r1], index: 0 * n1 * r1 + i * r1 + j
-                int idx = i * r1 + j;
-                contracted[i, j] = (idx < firstCore.Length) ? firstCore[idx] : NumOps.Zero;
-            }
-        }
+        Tensor<T> contracted = Engine.Reshape(
+            Engine.TensorNarrow(Engine.Reshape(firstCore, [firstCore.Length]), 0, 0, n1 * r1), [n1, r1]);
 
         // Contract with remaining cores
         for (int k = 1; k < _numCores; k++)
@@ -780,64 +670,38 @@ public partial class LoRETTAAdapter<T> : LoRAAdapterBase<T>
             // Core has shape [leftRank, coreShape, rightRank]
             // Result will have shape [prevDim, coreShape, rightRank] → [prevDim * coreShape, rightRank]
 
-            int prevDim = contracted.Rows;
+            int prevDim = contracted.Shape[0];
             int newDim = prevDim * coreShape;
 
-            Matrix<T> newContracted = new Matrix<T>(newDim, rightRank);
-
-            // Perform contraction: newContracted[i*coreShape + c, r] = sum_l contracted[i, l] * core[l, c, r]
-            for (int i = 0; i < prevDim; i++)
-            {
-                for (int c = 0; c < coreShape; c++)
-                {
-                    for (int r = 0; r < rightRank; r++)
-                    {
-                        T sum = NumOps.Zero;
-                        for (int l = 0; l < leftRank && l < contracted.Columns; l++)
-                        {
-                            // Core index: [l, c, r] → l * coreShape * rightRank + c * rightRank + r
-                            int coreIdx = l * coreShape * rightRank + c * rightRank + r;
-                            if (coreIdx < core.Length)
-                            {
-                                T contractedVal = contracted[i, l];
-                                T coreVal = core[coreIdx];
-                                sum = NumOps.Add(sum, NumOps.Multiply(contractedVal, coreVal));
-                            }
-                        }
-                        newContracted[i * coreShape + c, r] = sum;
-                    }
-                }
-            }
+            // newContracted[i*coreShape + c, r] = sum_{l < min(leftRank, cols)} contracted[i, l] * core[l, c, r]
+            int usedRank = Math.Min(leftRank, contracted.Shape[1]);
+            Tensor<T> newContracted = usedRank == 0
+                ? new Tensor<T>([newDim, rightRank])
+                : Engine.Reshape(
+                    Engine.TensorMatMul(
+                        Engine.TensorNarrow(contracted, 1, 0, usedRank),
+                        Engine.TensorNarrow(Engine.Reshape(core, [leftRank, coreShape * rightRank]), 0, 0, usedRank)),
+                    [newDim, rightRank]);
 
             contracted = newContracted;
         }
 
         // Final contracted tensor has shape [totalDim, rd=1]
         // Reshape to [outputSize, inputSize]
-        int totalDim = contracted.Rows;
-        Matrix<T> result = new Matrix<T>(outputSize, inputSize);
-
-        // Initialize with zeros
-        for (int i = 0; i < outputSize; i++)
-        {
-            for (int j = 0; j < inputSize; j++)
-            {
-                result[i, j] = NumOps.Zero;
-            }
-        }
-
-        // Copy contracted values to result
+        // Copy column 0 of the contraction (the last rank should be 1) into the first
+        // min(totalDim, outputSize * inputSize) row-major positions; the rest stay zero.
+        int totalDim = contracted.Shape[0];
         int matrixSize = outputSize * inputSize;
-        for (int idx = 0; idx < Math.Min(totalDim, matrixSize); idx++)
+        int copied = Math.Min(totalDim, matrixSize);
+        Tensor<T> flat = contracted.Shape[1] > 0 && copied > 0
+            ? Engine.TensorNarrow(Engine.Reshape(Engine.TensorNarrow(contracted, 1, 0, 1), [totalDim]), 0, 0, copied)
+            : new Tensor<T>([0]);
+        if (copied < matrixSize)
         {
-            int row = idx / inputSize;
-            int col = idx % inputSize;
-            if (row < outputSize && col < inputSize && idx < contracted.Rows)
-            {
-                // Last rank should be 1, so we just take column 0
-                result[row, col] = (contracted.Columns > 0) ? contracted[idx, 0] : NumOps.Zero;
-            }
+            flat = Engine.TensorConcatenate([flat, new Tensor<T>([matrixSize - copied])], 0);
         }
+
+        Matrix<T> result = Engine.Reshape(flat, [outputSize, inputSize]).ToMatrix();
 
         // Apply scaling
         T scaling = NumOps.Divide(
@@ -845,7 +709,7 @@ public partial class LoRETTAAdapter<T> : LoRAAdapterBase<T>
             NumOps.FromDouble(TTRank)
         );
 
-        return result.Multiply(scaling);
+        return Engine.MatrixMultiplyScalar(result, scaling);
     }
 
     /// <summary>
