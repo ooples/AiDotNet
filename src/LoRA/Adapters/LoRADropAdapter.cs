@@ -357,7 +357,7 @@ public partial class LoRADropAdapter<T> : LoRAAdapterBase<T>
         int outputSize = GetOutputLayerShape().RequireConcrete("Sizing a LoRA adapter's low-rank factors")[0];
         int weightCount = inputSize * outputSize;
 
-        // Merge weights â€” loraWeights from MergeWeights() is [inputSize, outputSize].
+        // Merge weights — loraWeights from MergeWeights() is [inputSize, outputSize].
         // DenseLayer stores weights as [inputSize, outputSize] (input-major).
         // FullyConnectedLayer stores weights as [outputSize, inputSize] (output-major).
         // Biases are kept unchanged.

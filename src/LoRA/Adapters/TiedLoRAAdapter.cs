@@ -395,7 +395,7 @@ public partial class TiedLoRAAdapter<T> : LoRAAdapterBase<T>
             int inputSize = input.Shape.Length > 1 ? input.Shape[1] : input.Length;
             int outputSize = GetOutputLayerShape().RequireConcrete("Sizing a LoRA adapter's low-rank factors")[0];
 
-            // Compute: input * A_shared â†’ [batchSize, rank], then * B_shared â†’ [batchSize, outputSize]
+            // Compute: input * A_shared → [batchSize, rank], then * B_shared → [batchSize, outputSize]
             Tensor<T> afterA = Engine.TensorMatMul(
                 Engine.Reshape(input, [batchSize, inputSize]), Tensor<T>.FromMatrix(_sharedMatrixA));
             Tensor<T> afterB = Engine.TensorMatMul(afterA, Tensor<T>.FromMatrix(_sharedMatrixB));

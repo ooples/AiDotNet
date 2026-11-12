@@ -212,11 +212,11 @@ public partial class PiSSAAdapter<T> : LoRAAdapterBase<T>
 
         // Create A matrix from top-r right singular vectors: A = V_r
         // V^T has dimensions (inputSize x inputSize), we take first r rows and transpose to get V_r
-        Matrix<T> matrixA = Engine.MatrixTranspose(svd.Vt.GetSubMatrix(0, 0, r, inputSize)); // V_r: inputSize Ã— rank
+        Matrix<T> matrixA = Engine.MatrixTranspose(svd.Vt.GetSubMatrix(0, 0, r, inputSize)); // V_r: inputSize × rank
 
-        // Create B matrix from top-r left singular vectors scaled by singular values: B = Î£_r * U_r^T
+        // Create B matrix from top-r left singular vectors scaled by singular values: B = Σ_r * U_r^T
         // U has dimensions (outputSize x outputSize), we take first r columns, scale, and transpose
-        // (row i of U_r^T is scaled by the i-th singular value; dimensions: rank Ã— outputSize).
+        // (row i of U_r^T is scaled by the i-th singular value; dimensions: rank × outputSize).
         Tensor<T> topSingularValues = Engine.Reshape(Tensor<T>.FromVector(svd.S.GetSubVector(0, r)), [r, 1]);
         Matrix<T> matrixB = Engine.TensorMultiply(
             Tensor<T>.FromMatrix(Engine.MatrixTranspose(svd.U.GetSubMatrix(0, 0, outputSize, r))),
