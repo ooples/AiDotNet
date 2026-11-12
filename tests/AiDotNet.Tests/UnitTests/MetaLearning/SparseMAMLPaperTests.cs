@@ -2,7 +2,9 @@ using AiDotNet.Data.Structures;
 using AiDotNet.LossFunctions;
 using AiDotNet.MetaLearning.Algorithms;
 using AiDotNet.MetaLearning.Options;
+using System;
 using AiDotNet.Tensors.LinearAlgebra;
+using AiDotNet.Tests.Helpers;
 using AiDotNet.Tests.IntegrationTests.MetaLearning;
 using Xunit;
 
@@ -85,5 +87,17 @@ public class SparseMAMLPaperTests
         {
             Assert.Equal(1.0 + 0.1 * 0.5 * gOut[d] * gIn[d], algorithm.GateLogits[d], 10);
         }
+    }
+
+    [Fact]
+    public void Sparsity_CountsEveryClosedGateOfALargeHalfModel()
+    {
+        // 70000 gates, all closed (logit -1 under the step gate): sparsity is 1. Summing the mask in Half overflowed
+        // past 65504 to inf, and so did the parameter count, so the ratio was inf / inf = NaN.
+        var model = new MockFullModel<Half>(numParameters: 70000);
+        var algorithm = new SparseMAMLAlgorithm<Half, Tensor<Half>, Tensor<Half>>(
+            new SparseMAMLOptions<Half, Tensor<Half>, Tensor<Half>>(model) { InitialGateLogit = -1.0 });
+
+        Assert.Equal(1.0, (double)(float)algorithm.Sparsity, 6);
     }
 }

@@ -133,11 +133,14 @@ public partial class SparseMAMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T
     /// <summary>
     /// Gets the fraction of parameters currently gated OFF, i.e. the discovered sparsity.
     /// </summary>
+    /// <remarks>
+    /// The closed gates are counted as an int and the ratio is formed in double: summing the 0/1 mask in T stalls
+    /// a Half count at 2048, and a model past 65504 parameters made both count and size inf in Half (inf / inf = NaN).
+    /// </remarks>
     public T Sparsity
-        => NumOps.Divide(
-            Engine.TensorSum(Engine.TensorLessThan(
-                Tensor<T>.FromVector(Gates(_gateLogits)), NumOps.FromDouble(_algoOptions.SparsityThreshold))),
-            NumOps.FromDouble(_paramDim));
+        => NumOps.FromDouble((double)Engine.TensorCountNonzero(Engine.TensorLessThan(
+                Tensor<T>.FromVector(Gates(_gateLogits)), NumOps.FromDouble(_algoOptions.SparsityThreshold)))
+            / _paramDim);
     /// <summary>
     /// Initializes sparse-MAML over a model.
     /// </summary>
