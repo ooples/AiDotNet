@@ -99,7 +99,7 @@ internal static class CausalTensorHelpers
     }
 
     /// <summary>
-    /// Pearson correlation of two columns: sum(dx dy) / sqrt(sum(dx^2) sum(dy^2)) over the centered
+    /// Pearson correlation of two columns: sum(dx dy) / (sqrt(sum(dx^2)) sqrt(sum(dy^2))) over the centered
     /// columns, or 0 unless both centered sums of squares are above 1e-10.
     /// </summary>
     internal static T PearsonCorrelation<T>(Matrix<T> data, int col1, int col2)
@@ -109,7 +109,7 @@ internal static class CausalTensorHelpers
     }
 
     /// <summary>
-    /// Pearson correlation of two 1-D tensors: sum(dx dy) / sqrt(sum(dx^2) sum(dy^2)) over the centered
+    /// Pearson correlation of two 1-D tensors: sum(dx dy) / (sqrt(sum(dx^2)) sqrt(sum(dy^2))) over the centered
     /// values, or 0 unless both centered sums of squares are above 1e-10.
     /// </summary>
     internal static T PearsonCorrelation<T>(Tensor<T> x, Tensor<T> y)
@@ -123,12 +123,12 @@ internal static class CausalTensorHelpers
         T syy = engine.TensorSum(engine.TensorSquare(dy));
         T tiny = ops.FromDouble(1e-10);
         return ops.GreaterThan(sxx, tiny) && ops.GreaterThan(syy, tiny)
-            ? ops.Divide(sxy, ops.Sqrt(ops.Multiply(sxx, syy)))
+            ? ops.Divide(sxy, ops.Multiply(ops.Sqrt(sxx), ops.Sqrt(syy)))
             : ops.Zero;
     }
 
     /// <summary>
-    /// sum(a b) / sqrt(sum(a^2) sum(b^2)) without centering, or 0 unless both sums of squares are above 1e-10.
+    /// sum(a b) / (sqrt(sum(a^2)) sqrt(sum(b^2))) without centering, or 0 unless both sums of squares are above 1e-10.
     /// </summary>
     internal static T UncenteredCorrelation<T>(Tensor<T> a, Tensor<T> b)
     {
@@ -139,7 +139,7 @@ internal static class CausalTensorHelpers
         T sbb = engine.TensorSum(engine.TensorSquare(b));
         T tiny = ops.FromDouble(1e-10);
         return ops.GreaterThan(saa, tiny) && ops.GreaterThan(sbb, tiny)
-            ? ops.Divide(sab, ops.Sqrt(ops.Multiply(saa, sbb)))
+            ? ops.Divide(sab, ops.Multiply(ops.Sqrt(saa), ops.Sqrt(sbb)))
             : ops.Zero;
     }
 
@@ -175,7 +175,7 @@ internal static class CausalTensorHelpers
         T sxy = engine.TensorMean(engine.TensorMultiply(dx, dy));
         T tiny = ops.FromDouble(1e-15);
         T corr = ops.GreaterThan(sxx, tiny) && ops.GreaterThan(syy, tiny)
-            ? ops.Divide(sxy, ops.Sqrt(ops.Multiply(sxx, syy)))
+            ? ops.Divide(sxy, ops.Multiply(ops.Sqrt(sxx), ops.Sqrt(syy)))
             : ops.Zero;
         T bound = ops.FromDouble(0.9999);
         if (ops.GreaterThan(corr, bound)) corr = bound;
@@ -311,12 +311,8 @@ internal static class CausalTensorHelpers
         if (distinct.Count == 0)
             return flat.Reshape(new[] { rows, cols }).ToMatrix();
 
-        if (distinct.Count > 0)
-        {
-            var index = new Tensor<int>(distinct.ToArray(), new[] { distinct.Count });
-            flat = engine.TensorScatter(flat, index, engine.TensorIndexSelect(flatSource, index, 0), 0);
-        }
-
+        var index = new Tensor<int>(distinct.ToArray(), new[] { distinct.Count });
+        flat = engine.TensorScatter(flat, index, engine.TensorIndexSelect(flatSource, index, 0), 0);
         return flat.Reshape(new[] { rows, cols }).ToMatrix();
     }
 }
