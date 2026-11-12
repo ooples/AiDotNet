@@ -28,7 +28,7 @@ public class ElasticNetSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, I
     private readonly double _l1Ratio;
     private readonly int _maxIterations;
 
-    private double[]? _coefficients;
+    private Vector<T>? _coefficients;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
@@ -36,7 +36,7 @@ public class ElasticNetSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, I
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public double Alpha => _alpha;
     public double L1Ratio => _l1Ratio;
-    public double[]? Coefficients => _coefficients;
+    public Vector<T>? Coefficients => _coefficients;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -77,99 +77,22 @@ public class ElasticNetSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, I
             throw new ArgumentException("Target length must match rows in data.");
 
         _nInputFeatures = data.Columns;
-        int n = data.Rows;
         int p = data.Columns;
 
-        var X = new double[n, p];
-        var y = new double[n];
-        for (int i = 0; i < n; i++)
-        {
-            y[i] = NumOps.ToDouble(target[i]);
-            for (int j = 0; j < p; j++)
-                X[i, j] = NumOps.ToDouble(data[i, j]);
-        }
+        // Standardize features (population std, 1 for a constant column)
+        var x = SelectorTensorOps.StandardizeColumns(Tensor<T>.FromMatrix(data));
+        var y = Engine.Reshape(Tensor<T>.FromVector(target), new[] { data.Rows, 1 });
 
-        // Standardize
-        var means = new double[p];
-        var stds = new double[p];
-        for (int j = 0; j < p; j++)
-        {
-            double sum = 0;
-            for (int i = 0; i < n; i++)
-                sum += X[i, j];
-            means[j] = sum / n;
+        // Elastic net (scikit-learn ElasticNet objective
+        // (1/2n) ||y - X b||^2 + alpha l1Ratio ||b||_1 + alpha (1 - l1Ratio) / 2 ||b||^2)
+        var coefficients = SparseRegressionOps.SparseGroupElasticNet(x, y, Enumerable.Range(0, p).ToArray(),
+            _alpha * _l1Ratio, _alpha * (1 - _l1Ratio), 0, _maxIterations, 1e-6);
+        _coefficients = coefficients.ToVector();
 
-            double sumSq = 0;
-            for (int i = 0; i < n; i++)
-            {
-                double diff = X[i, j] - means[j];
-                sumSq += diff * diff;
-            }
-            stds[j] = Math.Sqrt(sumSq / n);
-            if (stds[j] < 1e-10) stds[j] = 1;
-
-            for (int i = 0; i < n; i++)
-                X[i, j] = (X[i, j] - means[j]) / stds[j];
-        }
-
-        // Coordinate descent for Elastic Net
-        _coefficients = new double[p];
-        double l1 = _alpha * _l1Ratio;
-        double l2 = _alpha * (1 - _l1Ratio);
-
-        var xNorms = new double[p];
-        for (int j = 0; j < p; j++)
-        {
-            double norm = 0;
-            for (int i = 0; i < n; i++)
-                norm += X[i, j] * X[i, j];
-            xNorms[j] = norm;
-        }
-
-        for (int iter = 0; iter < _maxIterations; iter++)
-        {
-            double maxChange = 0;
-
-            for (int j = 0; j < p; j++)
-            {
-                double denom = xNorms[j] + l2 * n;
-                if (denom < 1e-10) continue;
-
-                double rho = 0;
-                for (int i = 0; i < n; i++)
-                {
-                    double residual = y[i];
-                    for (int k = 0; k < p; k++)
-                        if (k != j)
-                            residual -= X[i, k] * _coefficients[k];
-                    rho += X[i, j] * residual;
-                }
-
-                double oldCoef = _coefficients[j];
-                _coefficients[j] = SoftThreshold(rho, l1 * n) / denom;
-
-                maxChange = Math.Max(maxChange, Math.Abs(_coefficients[j] - oldCoef));
-            }
-
-            if (maxChange < 1e-6)
-                break;
-        }
-
-        int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = Enumerable.Range(0, p)
-            .OrderByDescending(j => Math.Abs(_coefficients[j]))
-            .Take(numToSelect)
-            .OrderBy(x => x)
-            .ToArray();
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(
+            Engine.TensorAbs(coefficients), Math.Min(_nFeaturesToSelect, p));
 
         IsFitted = true;
-    }
-
-    private double SoftThreshold(double x, double lambda)
-    {
-        if (x > lambda) return x - lambda;
-        if (x < -lambda) return x + lambda;
-        return 0;
     }
 
     /// <inheritdoc />
@@ -185,15 +108,7 @@ public class ElasticNetSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, I
         if (_selectedIndices is null)
             throw new InvalidOperationException("ElasticNetSelector has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />
