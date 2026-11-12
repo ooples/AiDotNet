@@ -174,6 +174,29 @@ public sealed class DeepScaleTrack2UpstreamTests
         }
     }
 
+    [Fact]
+    public void HouseholderSubspaceLayer_SmallReflectorStillReflects_AndZeroReflectorIsIdentity()
+    {
+        // H = I - 2 u u^T / (u^T u) does not depend on the length of u, so a reflector of length 1e-10 must still map
+        // [1, 0] to [-1, 0]. A zero reflector has no direction and leaves the input unchanged.
+        var input = new Tensor<double>(new[] { 1, 2 });
+        input.SetFlat(0, 1.0);
+
+        var small = new HouseholderSubspaceLayer<double>(2, 1, transpose: false);
+        small.Reflectors.SetFlat(0, 1e-10);
+        small.Reflectors.SetFlat(1, 0.0);
+        var reflected = small.Forward(input);
+        Assert.Equal(-1.0, reflected.GetFlat(0), 12);
+        Assert.Equal(0.0, reflected.GetFlat(1), 12);
+
+        var zero = new HouseholderSubspaceLayer<double>(2, 1, transpose: false);
+        zero.Reflectors.SetFlat(0, 0.0);
+        zero.Reflectors.SetFlat(1, 0.0);
+        var unchanged = zero.Forward(input);
+        Assert.Equal(1.0, unchanged.GetFlat(0), 12);
+        Assert.Equal(0.0, unchanged.GetFlat(1), 12);
+    }
+
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
