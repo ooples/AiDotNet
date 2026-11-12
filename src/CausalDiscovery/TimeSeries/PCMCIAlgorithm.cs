@@ -67,6 +67,9 @@ public class PCMCIAlgorithm<T> : TimeSeriesCausalBase<T>
         int effectiveN = n - MaxLag;
         if (effectiveN < 2 * d) return new Matrix<T>(d, d);
 
+        // One tensor copy of the data shared by every partial-correlation test.
+        var x = Tensor<T>.FromMatrix(data);
+
         // Step 1: PC condition selection — find candidate parents for each variable.
         // Uses the PC algorithm's iterative conditioning set size expansion:
         // test with conditioning set size 0, then 1, then 2, etc.
@@ -98,7 +101,7 @@ public class PCMCIAlgorithm<T> : TimeSeriesCausalBase<T>
                     var condSet = new HashSet<(int var, int lag)>(otherParents.Take(condSize));
 
                     double partCorr = ComputeLaggedPartialCorrelation(
-                        data, j, pVar, pLag, condSet, effectiveN);
+                        x, j, pVar, pLag, condSet, effectiveN);
 
                     double pValue = FisherZTestPValue(partCorr, effectiveN, condSet.Count);
 
@@ -132,7 +135,7 @@ public class PCMCIAlgorithm<T> : TimeSeriesCausalBase<T>
                     mciCondSet.Add(parent);
 
                 double partCorr = ComputeLaggedPartialCorrelation(
-                    data, j, pVar, pLag, mciCondSet, effectiveN);
+                    x, j, pVar, pLag, mciCondSet, effectiveN);
 
                 double pValue = FisherZTestPValue(partCorr, effectiveN, mciCondSet.Count);
 
@@ -155,7 +158,6 @@ public class PCMCIAlgorithm<T> : TimeSeriesCausalBase<T>
         if (!hasEdges)
         {
             int offset = n - effectiveN;
-            var x = Tensor<T>.FromMatrix(data);
             for (int i = 0; i < d; i++)
             {
                 for (int j = i + 1; j < d; j++)
@@ -189,12 +191,11 @@ public class PCMCIAlgorithm<T> : TimeSeriesCausalBase<T>
     /// Computes partial correlation between target(t) and source(t-lag) conditioned on a set of
     /// lagged parent variables, using OLS residualization.
     /// </summary>
-    private double ComputeLaggedPartialCorrelation(Matrix<T> data,
+    private double ComputeLaggedPartialCorrelation(Tensor<T> x,
         int target, int source, int lag, HashSet<(int var, int lag)> condSet, int effectiveN)
     {
-        int n = data.Rows;
+        int n = x.Shape[0];
         int offset = n - effectiveN;
-        var x = Tensor<T>.FromMatrix(data);
 
         // Build target and source vectors
         // offset = MaxLag, lag <= MaxLag, so the source rows offset + t - lag are always >= 0

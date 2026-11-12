@@ -83,6 +83,9 @@ public class LPCMCIAlgorithm<T> : TimeSeriesCausalBase<T>
         int effectiveN = n - MaxLag;
         if (effectiveN < 2 * d + 3 || d < 2) return new Matrix<T>(d, d);
 
+        // One tensor copy of the data shared by every partial-correlation test.
+        var x = Tensor<T>.FromMatrix(data);
+
         // Phase 1 — PCMCI condition selection (PC1). For each target j, start from every
         // lagged variable X_i(t-τ) as a candidate parent and iteratively drop the ones that
         // become conditionally independent of X_j(t) as the conditioning-set size grows. The
@@ -120,7 +123,7 @@ public class LPCMCIAlgorithm<T> : TimeSeriesCausalBase<T>
                 foreach (var p in current)
                 {
                     strength[p] = Math.Abs(ComputeLaggedPartialCorrelation(
-                        data, j, p.var, p.lag, new HashSet<(int var, int lag)>(), effectiveN));
+                        x, j, p.var, p.lag, new HashSet<(int var, int lag)>(), effectiveN));
                 }
 
                 // Descending strength, then (var, lag) so equal strengths still give a total order
@@ -141,7 +144,7 @@ public class LPCMCIAlgorithm<T> : TimeSeriesCausalBase<T>
                     // `others` inherits the strength ordering, so this takes the strongest remaining
                     // parents rather than whichever ones enumeration happened to yield first.
                     var condSet = new HashSet<(int var, int lag)>(others.Take(condSize));
-                    double partCorr = ComputeLaggedPartialCorrelation(data, j, pVar, pLag, condSet, effectiveN);
+                    double partCorr = ComputeLaggedPartialCorrelation(x, j, pVar, pLag, condSet, effectiveN);
                     double pValue = FisherZPValue(Math.Abs(partCorr), effectiveN, condSet.Count);
 
                     if (pValue > _alpha) // conditionally independent -> not a parent
@@ -169,7 +172,7 @@ public class LPCMCIAlgorithm<T> : TimeSeriesCausalBase<T>
                 condSet.Remove((pVar, pLag));
                 foreach (var parent in parents[pVar]) condSet.Add(parent);
 
-                double partCorr = ComputeLaggedPartialCorrelation(data, j, pVar, pLag, condSet, effectiveN);
+                double partCorr = ComputeLaggedPartialCorrelation(x, j, pVar, pLag, condSet, effectiveN);
                 double pValue = FisherZPValue(Math.Abs(partCorr), effectiveN, condSet.Count);
 
                 if (pValue <= _alpha)
@@ -200,9 +203,9 @@ public class LPCMCIAlgorithm<T> : TimeSeriesCausalBase<T>
                     int bi = i, bj = j;
                     for (int lag = 1; lag <= MaxLag; lag++)
                     {
-                        double cij = Math.Abs(ComputeLaggedPartialCorrelation(data, j, i, lag, empty, effectiveN)); // i(t-lag) → j(t)
+                        double cij = Math.Abs(ComputeLaggedPartialCorrelation(x, j, i, lag, empty, effectiveN)); // i(t-lag) → j(t)
                         if (cij > best) { best = cij; bi = i; bj = j; }
-                        double cji = Math.Abs(ComputeLaggedPartialCorrelation(data, i, j, lag, empty, effectiveN)); // j(t-lag) → i(t)
+                        double cji = Math.Abs(ComputeLaggedPartialCorrelation(x, i, j, lag, empty, effectiveN)); // j(t-lag) → i(t)
                         if (cji > best) { best = cji; bi = j; bj = i; }
                     }
                     if (best > _correlationThreshold)
@@ -265,12 +268,11 @@ public class LPCMCIAlgorithm<T> : TimeSeriesCausalBase<T>
     /// TIME-ALIGNED lagged variables x_k[t-cLag], via OLS residualization. Conditioning on
     /// the correctly-lagged past of shared causes is what removes common-cause confounding.
     /// </summary>
-    private double ComputeLaggedPartialCorrelation(Matrix<T> data,
+    private double ComputeLaggedPartialCorrelation(Tensor<T> x,
         int target, int source, int lag, HashSet<(int var, int lag)> condSet, int effectiveN)
     {
-        int n = data.Rows;
+        int n = x.Shape[0];
         int offset = n - effectiveN;
-        var x = Tensor<T>.FromMatrix(data);
 
         var targetVals = LaggedSeries(x, target, 0, offset, effectiveN);
         var sourceVals = LaggedSeries(x, source, lag, offset, effectiveN); // offset = MaxLag ≥ lag ⇒ index ≥ 0
