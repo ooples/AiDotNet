@@ -245,7 +245,7 @@ public class SMOTENCGenerator<T> : SyntheticTabularGeneratorBase<T>
     /// minority sample: squared differences over the continuous features plus (median std)^2 for each categorical
     /// feature whose values differ by more than 0.5, square-rooted.
     /// </summary>
-    private Tensor<T> DistancesFrom(int sampleIndex)
+    internal Tensor<T> DistancesFrom(int sampleIndex)
     {
         if (_minorityTensor is null || _continuousMask is null || _categoricalMask is null)
             throw new InvalidOperationException("Generator is not fitted.");
@@ -254,8 +254,10 @@ public class SMOTENCGenerator<T> : SyntheticTabularGeneratorBase<T>
         int n = _minorityTensor.Shape[0];
         var sample = engine.TensorSlice(_minorityTensor, [sampleIndex, 0], [1, _numFeatures]);
         var diff = engine.TensorSubtract(_minorityTensor, engine.TensorTile(sample, [n, 1]));
-        var continuousTerm = engine.TensorMultiply(engine.TensorMultiply(diff, diff),
-            engine.TensorTile(_continuousMask, [n, 1]));
+        // The continuous differences are selected before squaring, so a non-finite categorical cell contributes
+        // nothing here (NaN * 0 would be NaN); categorical cells only count through the mismatch penalty below.
+        var continuousDiff = engine.TensorWhere(engine.TensorTile(_continuousMask, [n, 1]), diff, new Tensor<T>(diff._shape));
+        var continuousTerm = engine.TensorMultiply(continuousDiff, continuousDiff);
         var mismatch = engine.TensorMultiply(engine.TensorGreaterThan(engine.TensorAbs(diff), NumOps.FromDouble(0.5)),
             engine.TensorTile(_categoricalMask, [n, 1]));
         var penalty = NumOps.Multiply(_medianStdContinuous, _medianStdContinuous);
@@ -267,7 +269,7 @@ public class SMOTENCGenerator<T> : SyntheticTabularGeneratorBase<T>
     /// <summary>
     /// Returns the majority vote value for a categorical feature among the given neighbors.
     /// </summary>
-    private T MajorityVoteAmongNeighbors(int featureIndex, int[] neighbors)
+    internal T MajorityVoteAmongNeighbors(int featureIndex, int[] neighbors)
     {
         if (_minorityTensor is null || neighbors.Length == 0) return NumOps.Zero;
 
@@ -277,9 +279,27 @@ public class SMOTENCGenerator<T> : SyntheticTabularGeneratorBase<T>
         var values = engine.TensorRound(engine.TensorGather(
             engine.TensorSlice(_minorityTensor, [0, featureIndex], [_minorityTensor.Shape[0], 1]).Reshape([_minorityTensor.Shape[0]]),
             new Tensor<int>(neighbors, [k]), 0));
-        var same = engine.TensorEquals(
-            engine.TensorTile(values.Reshape([k, 1]), [1, k]), engine.TensorTile(values.Reshape([1, k]), [k, 1]));
-        var counts = engine.ReduceSum(same, [1], keepDims: false);
+
+        // Each neighbor's count is the size of its value's block in the sorted values (two bisections), so the vote
+        // needs O(k) memory. NaN values form one group, as equal keys of a dictionary would: they are sorted as +inf
+        // and then separated from the real +inf values by the NaN count.
+        T positiveInfinity = NumOps.FromDouble(double.PositiveInfinity);
+        var zeros = new Tensor<T>([k]);
+        var ones = new Tensor<T>([k]);
+        ones.Fill(NumOps.One);
+        var isNaN = engine.TensorWhere(engine.TensorIsFinite(values), zeros,
+            engine.TensorWhere(engine.TensorIsInf(values), zeros, ones));
+        T nanCount = engine.TensorSum(isNaN);
+        var keys = engine.TensorNanToNum(values, double.PositiveInfinity, double.PositiveInfinity, double.NegativeInfinity);
+        var sorted = engine.TensorSort(keys, 0, false).Values;
+        var blockSize = engine.TensorSubtract(
+            engine.TensorSearchSorted(sorted, keys, right: true).Cast<T>(),
+            engine.TensorSearchSorted(sorted, keys, right: false).Cast<T>());
+        var realInfinity = engine.TensorEquals(values, positiveInfinity);
+        var finiteOrInfinite = engine.TensorSubtract(blockSize, engine.TensorMultiplyScalar(realInfinity, nanCount));
+        var nanCounts = new Tensor<T>([k]);
+        nanCounts.Fill(nanCount);
+        var counts = engine.TensorWhere(isNaN, nanCounts, finiteOrInfinite);
         var best = engine.TensorArgMax(counts.Reshape([1, k]), 1);
         return engine.TensorGather(values, best, 0).ToArray()[0];
     }

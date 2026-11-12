@@ -204,7 +204,7 @@ public abstract class SyntheticTabularGeneratorBase<T> : ISyntheticTabularGenera
     /// <summary>
     /// Computes min, max, mean, and standard deviation for a numerical column.
     /// </summary>
-    private static void ComputeColumnStatistics(Matrix<T> data, int colIndex, ColumnMetadata meta)
+    internal static void ComputeColumnStatistics(Matrix<T> data, int colIndex, ColumnMetadata meta)
     {
         int n = data.Rows;
         if (n == 0)
@@ -221,9 +221,11 @@ public abstract class SyntheticTabularGeneratorBase<T> : ISyntheticTabularGenera
         var column = Tensor<T>.FromVector(data.GetColumn(colIndex));
         T mean = engine.TensorMean(column);
 
-        // Sample standard deviation (n - 1), floored at 1e-10 to prevent division by zero.
-        T sumSqDiff = engine.TensorSumOfSquares(engine.TensorSubtractScalar(column, mean));
-        double std = n > 1 ? Math.Sqrt(NumOps.ToDouble(sumSqDiff) / (n - 1)) : 1.0;
+        // Sample standard deviation (n - 1), floored at 1e-10 to prevent division by zero. The deviations' L2 norm
+        // is taken scaled, so a column whose squared deviations exceed T's range still gets a finite std.
+        double std = n > 1
+            ? NumOps.ToDouble(ScaledL2Norm(engine.TensorSubtractScalar(column, mean))) / Math.Sqrt(n - 1)
+            : 1.0;
         if (std < 1e-10) std = 1e-10;
 
         meta.Min = NumOps.ToDouble(engine.TensorMinValue(column));
@@ -233,6 +235,26 @@ public abstract class SyntheticTabularGeneratorBase<T> : ISyntheticTabularGenera
     }
 
     #region Gradient Safety Utilities
+
+    /// <summary>
+    /// The L2 norm of <paramref name="x"/>, computed as m * sqrt(sum((x / m)^2)) with m = max |x| (as LAPACK's
+    /// nrm2 scales), so squares that would overflow T (e.g. a float entry of 1e20) do not make the norm infinite or
+    /// zero. A NaN entry gives a NaN norm and an infinite entry an infinite one.
+    /// </summary>
+    internal static T ScaledL2Norm(Tensor<T> x)
+    {
+        if (x.Length == 0) return NumOps.Zero;
+
+        var engine = AiDotNetEngine.Current;
+        T scale = engine.TensorMaxValue(engine.TensorAbs(x));
+        if (!NumOps.GreaterThan(scale, NumOps.Zero) || NumOps.IsInfinity(scale))
+        {
+            // All zeros (norm 0), a NaN maximum or an infinite entry: the plain sum already gives the answer.
+            return NumOps.Sqrt(engine.TensorSumOfSquares(x));
+        }
+
+        return NumOps.Multiply(scale, NumOps.Sqrt(engine.TensorSumOfSquares(engine.TensorDivideScalar(x, scale))));
+    }
 
     /// <summary>
     /// Clips a gradient tensor to a maximum L2 norm, preventing exploding gradients.
@@ -252,7 +274,7 @@ public abstract class SyntheticTabularGeneratorBase<T> : ISyntheticTabularGenera
         if (maxNorm <= 0) return grad;
 
         var engine = AiDotNetEngine.Current;
-        T norm = NumOps.Sqrt(engine.TensorSumOfSquares(grad));
+        T norm = ScaledL2Norm(grad);
         T max = NumOps.FromDouble(maxNorm);
         if (NumOps.LessThanOrEquals(norm, max)) return grad;
 
@@ -353,7 +375,7 @@ public abstract class SyntheticTabularGeneratorBase<T> : ISyntheticTabularGenera
 
         var engine = AiDotNetEngine.Current;
         var gradTensor = grad.AsTensor();
-        T norm = NumOps.Sqrt(engine.TensorSumOfSquares(gradTensor));
+        T norm = ScaledL2Norm(gradTensor);
         T max = NumOps.FromDouble(maxNorm);
         if (NumOps.LessThanOrEquals(norm, max)) return grad;
 
