@@ -1148,6 +1148,28 @@ public class MetricsIntegrationTests
     }
 
     [Fact(Timeout = 120000)]
+    public async Task IoU3D_HalfPrecision_CountsVoxelsAboveTheHalfIntegerRange()
+    {
+        // 4096 occupied voxels in A, the first 2048 of them in B: IoU = 2048 / 4096. Summing the masks in Half
+        // stops at 2048 (increments of 1 are lost there), which gave 2048 / 2048 = 1.
+        var iou = new IoU3D<Half>();
+        var dataA = new Half[4096];
+        var dataB = new Half[4096];
+        for (int i = 0; i < dataA.Length; i++)
+        {
+            dataA[i] = (Half)1.0f;
+            dataB[i] = i < 2048 ? (Half)1.0f : (Half)0.0f;
+        }
+
+        var voxelsA = new Tensor<Half>(new[] { 64, 64, 1 }, new Vector<Half>(dataA));
+        var voxelsB = new Tensor<Half>(new[] { 64, 64, 1 }, new Vector<Half>(dataB));
+
+        var result = iou.ComputeVoxelIoU(voxelsA, voxelsB);
+
+        Assert.Equal(0.5f, (float)result, 3);
+    }
+
+    [Fact(Timeout = 120000)]
     public async Task IoU3D_NoOverlap_ReturnsZero()
     {
         var iou = new IoU3D<double>();

@@ -507,12 +507,14 @@ public class IoU3D<T> where T : struct
         var a = engine.TensorGreaterThan(voxelsA.Reshape(new[] { count }), half);
         var b = engine.TensorGreaterThan(voxelsB.Reshape(new[] { count }), half);
 
-        T intersection = engine.TensorSum(engine.TensorMultiply(a, b));
-        T unionCount = engine.TensorSum(engine.TensorMax(a, b));
+        // Count as integers: summing the 0/1 masks in T saturates Half at 65504 and drops increments of 1 above
+        // 2048 (Half) or 256 (BFloat16).
+        long intersection = engine.TensorCountNonzero(engine.TensorMultiply(a, b));
+        long unionCount = engine.TensorCountNonzero(engine.TensorMax(a, b));
 
-        if (!_numOps.GreaterThan(unionCount, _numOps.Zero)) return _numOps.Zero;
+        if (unionCount == 0) return _numOps.Zero;
 
-        return _numOps.Divide(intersection, unionCount);
+        return _numOps.FromDouble((double)intersection / unionCount);
     }
 
     /// <summary>
