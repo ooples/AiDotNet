@@ -353,20 +353,34 @@ public partial class JanusPro<T> : VisionLanguageModelBase<T>, IUnifiedVisionMod
 
         double cfgScale = _options.CfgScale;
         int bestId = 0;
-        double bestScore = double.NegativeInfinity;
         int outOffset = searchStart - (codebookEnd > codebookStart ? codebookStart : 0);
+        int count = searchEnd - searchStart;
 
-        for (int idx = searchStart; idx < searchEnd; idx++)
+        if (count > 0)
         {
-            double cond = NumOps.ToDouble(conditionalLogits[idx]);
-            double uncond =
-                idx < unconditionalLogits.Length ? NumOps.ToDouble(unconditionalLogits[idx]) : 0.0;
-            double guided = uncond + cfgScale * (cond - uncond);
-            if (guided > bestScore)
+            var engine = Engine;
+            var cond = engine.TensorSlice(conditionalLogits.Reshape([conditionalLogits.Length]), [searchStart], [count]);
+            // Unconditional logits past their length count as 0.
+            int uncondAvailable = Math.Max(0, Math.Min(count, unconditionalLogits.Length - searchStart));
+            Tensor<T> uncond;
+            if (uncondAvailable == 0)
             {
-                bestScore = guided;
-                bestId = idx - searchStart + outOffset;
+                uncond = new Tensor<T>([count]);
             }
+            else
+            {
+                uncond = engine.TensorSlice(
+                    unconditionalLogits.Reshape([unconditionalLogits.Length]), [searchStart], [uncondAvailable]);
+                if (uncondAvailable < count)
+                    uncond = engine.TensorConcatenate([uncond, new Tensor<T>([count - uncondAvailable])], 0);
+            }
+
+            // guided = uncond + cfgScale * (cond - uncond); the first strictly greater score wins.
+            var guided = engine.TensorAdd(
+                uncond, engine.TensorMultiplyScalar(engine.TensorSubtract(cond, uncond), NumOps.FromDouble(cfgScale)));
+            int best = FirstArgMax(guided);
+            if (best >= 0)
+                bestId = best + outOffset;
         }
         return Math.Max(0, Math.Min(codebookSize - 1, bestId));
     }
@@ -427,50 +441,44 @@ public partial class JanusPro<T> : VisionLanguageModelBase<T>, IUnifiedVisionMod
         if (patchSize < 1)
             patchSize = 1;
 
-        int outPixels = outSize * outSize * 3;
-        var result = new Tensor<T>([outPixels]);
+        var engine = Engine;
+        int cells = gridSize * gridSize;
+        // Decode every cell's codebook embedding in one batch: [cells, embedDim] -> [cells, 3].
+        var rgb = _pixelDecoderOut.Forward(_pixelDecoderHidden.Forward(embedGrid.Reshape([cells, embedDim])));
+        // Bound each channel to [0, 1] (image pixel range); tanh keeps gradients well-behaved.
+        T half = NumOps.FromDouble(0.5);
+        var colors = engine.TensorAddScalar(engine.TensorMultiplyScalar(engine.TensorTanh(rgb), half), half);
 
-        for (int gy = 0; gy < gridSize; gy++)
+        // Bilinear-style smoothing per patch position: 1.0 at patch centre, slightly reduced at edges.
+        // c = (p + 0.5) / patchSize - 0.5; smooth[py, px] = 1 - 0.15 * (cx^2 + cy^2).
+        var offsets = engine.TensorSubtractScalar(
+            engine.TensorDivideScalar(
+                engine.TensorAddScalar(engine.TensorArange<T>(0, patchSize, 1), half), NumOps.FromDouble(patchSize)),
+            half);
+        var offsetSq = engine.TensorMultiply(offsets, offsets);
+        var radiusSq = engine.TensorAdd(
+            engine.TensorBroadcastTo(offsetSq.Reshape([patchSize, 1]), [patchSize, patchSize]),
+            engine.TensorBroadcastTo(offsetSq.Reshape([1, patchSize]), [patchSize, patchSize]));
+        var smooth = engine.ScalarMinusTensor(NumOps.One, engine.TensorMultiplyScalar(radiusSq, NumOps.FromDouble(0.15)));
+
+        // Nearest-neighbour upsample each cell's colour across its patch: [gy, py, gx, px, c].
+        var upsampled = engine.TensorMultiply(
+            engine.TensorBroadcastTo(colors.Reshape([gridSize, 1, gridSize, 1, 3]), [gridSize, patchSize, gridSize, patchSize, 3]),
+            smooth.Reshape([1, patchSize, 1, patchSize, 1]));
+        int covered = gridSize * patchSize;
+        var image = upsampled.Reshape([covered, covered, 3]);
+
+        // Patches past the output edge are dropped; pixels no patch reaches stay 0.
+        int kept = Math.Min(covered, outSize);
+        if (kept < covered)
+            image = engine.TensorSlice(image, [0, 0, 0], [kept, kept, 3]);
+        if (kept < outSize)
         {
-            for (int gx = 0; gx < gridSize; gx++)
-            {
-                int gridIdx = gy * gridSize + gx;
-                int baseEmbed = gridIdx * embedDim;
-
-                var cellEmbed = new Tensor<T>([embedDim]);
-                for (int e = 0; e < embedDim; e++)
-                    cellEmbed[e] = embedGrid[baseEmbed + e];
-
-                var rgb = _pixelDecoderOut.Forward(_pixelDecoderHidden.Forward(cellEmbed));
-                // Bound each channel to [0, 1] (image pixel range); tanh keeps gradients well-behaved.
-                double r = 0.5 + 0.5 * Math.Tanh(NumOps.ToDouble(rgb[0]));
-                double g = 0.5 + 0.5 * Math.Tanh(NumOps.ToDouble(rgb[1]));
-                double b = 0.5 + 0.5 * Math.Tanh(NumOps.ToDouble(rgb[2]));
-
-                for (int py = 0; py < patchSize; py++)
-                {
-                    for (int px = 0; px < patchSize; px++)
-                    {
-                        int imgY = gy * patchSize + py;
-                        int imgX = gx * patchSize + px;
-                        if (imgY >= outSize || imgX >= outSize)
-                            continue;
-                        int pixelIdx = (imgY * outSize + imgX) * 3;
-                        if (pixelIdx + 2 >= outPixels)
-                            continue;
-
-                        // Bilinear-style smoothing: 1.0 at patch centre, slightly reduced at edges.
-                        double cx = (px + 0.5) / patchSize - 0.5;
-                        double cy = (py + 0.5) / patchSize - 0.5;
-                        double smooth = 1.0 - 0.15 * (cx * cx + cy * cy);
-
-                        result[pixelIdx] = NumOps.FromDouble(r * smooth);
-                        result[pixelIdx + 1] = NumOps.FromDouble(g * smooth);
-                        result[pixelIdx + 2] = NumOps.FromDouble(b * smooth);
-                    }
-                }
-            }
+            image = engine.TensorConcatenate([image, new Tensor<T>([kept, outSize - kept, 3])], 1);
+            image = engine.TensorConcatenate([image, new Tensor<T>([outSize - kept, outSize, 3])], 0);
         }
+
+        var result = image.Reshape([outSize * outSize * 3]);
         return result;
     }
 

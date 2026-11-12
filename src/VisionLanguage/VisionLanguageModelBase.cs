@@ -288,6 +288,30 @@ public abstract partial class VisionLanguageModelBase<T> : NeuralNetworkBase<T>,
     }
 
     /// <summary>
+    /// Returns the position of the first maximum of <paramref name="values"/> (flattened), matching a
+    /// scalar scan that starts at negative infinity and replaces the best only on a strictly greater value:
+    /// NaN never wins, ties keep the lowest position, and -1 is returned when no value exceeds -infinity.
+    /// </summary>
+    /// <param name="values">Scores to search.</param>
+    /// <returns>The first position holding the maximum, or -1 when there is none.</returns>
+    protected int FirstArgMax(Tensor<T> values)
+    {
+        int n = values.Length;
+        if (n == 0)
+            return -1;
+        var flat = values.Reshape([n]);
+        T negInfValue = NumOps.FromDouble(double.NegativeInfinity);
+        var comparable = Engine.TensorWhere(Engine.TensorIsNan(flat), Tensor<T>.CreateDefault([n], negInfValue), flat);
+        T best = Engine.TensorMaxValue(comparable);
+        if (!NumOps.GreaterThan(best, negInfValue))
+            return -1;
+        var isBest = Engine.TensorEquals(comparable, best);
+        var positions = Engine.TensorArange<T>(0, n, 1);
+        var sentinel = Tensor<T>.CreateDefault([n], NumOps.FromDouble(n));
+        return NumOps.ToInt(Engine.TensorMinValue(Engine.TensorWhere(isBest, positions, sentinel)));
+    }
+
+    /// <summary>
     /// Validates image/token settings used to derive patch sizes for native VLM layer factories.
     /// </summary>
     private protected static void ValidateVisualPatchOptions(int imageSize, int maxVisualTokens)
