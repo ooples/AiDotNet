@@ -124,10 +124,11 @@ public abstract class AudioFeatureExtractorBase<T> : IAudioFeatureExtractor<T>
     /// <returns>The Hamming window coefficients.</returns>
     protected T[] CreateHammingWindow(int length)
     {
-        // 0.54 - 0.46 cos(2 pi i / (length - 1)); a one-sample window evaluates 0/0 and is NaN.
+        // 0.54 - 0.46 cos(2 pi i / (length - 1)); a one-sample window is defined as [1] (NumPy/SciPy
+        // hamming(1)), not the 0/0 the formula would give.
         if (length < 0) throw new OverflowException("Window length must be non-negative.");
         if (length == 0) return new T[0];
-        if (length == 1) return new[] { NumOps.FromDouble(double.NaN) };
+        if (length == 1) return new[] { NumOps.One };
         return Engine.TensorHammingWindow<T>(length, periodic: false).ToArray();
     }
 

@@ -87,6 +87,9 @@ public class ChromaExtractor<T> : AudioFeatureExtractorBase<T>
     /// <inheritdoc/>
     public override Tensor<T> Extract(Tensor<T> audio)
     {
+        // Features are computed from fresh values (not part of the autodiff graph).
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+
         // Compute STFT magnitude
         var stftResult = _stft.Forward(audio);
 
