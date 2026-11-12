@@ -22595,3 +22595,5 @@ AiDotNet.Kernels.ProductStructureKernel<T>.LogDeterminant(AiDotNet.Tensors.Linea
 *REMOVED*AiDotNet.Kernels.GridKernel<T>.LogDeterminant() -> double
 AiDotNet.Kernels.GridKernel<T>.GetEigenvalues() -> AiDotNet.Tensors.LinearAlgebra.Vector<T>!
 AiDotNet.Kernels.GridKernel<T>.LogDeterminant() -> T
+*REMOVED*AiDotNet.Kernels.InducingPointKernel<T>.EstimateApproximationError(AiDotNet.Tensors.LinearAlgebra.Matrix<T>! X) -> double
+AiDotNet.Kernels.InducingPointKernel<T>.EstimateApproximationError(AiDotNet.Tensors.LinearAlgebra.Matrix<T>! X) -> T
