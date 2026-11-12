@@ -209,4 +209,44 @@ public class FeatureSelectionPopulationReferenceTests
         Assert.Equal(new[] { 0.9, 0.85, 0.8 }, ToArray(best));
         Assert.Equal(new[] { 0.9, 0.85, 0.8 }, ToArray(fitness));
     }
+
+    // ---------------------------------------------------------------- Whale Optimization (Mirjalili and Lewis 2016)
+
+    [Fact]
+    public void WhaleOptimization_Spiral_UsesLBetweenA2AndOne()
+    {
+        // l = (a2 - 1) u + 1 with a2 = -1.5 and u = 0.5 gives l = -0.25 (the old code drew l in [-1, 1])
+        double a = 1.0, a2 = -1.5, l = (a2 - 1) * 0.5 + 1;
+        var position = Tensor1D(0.3, 0.9);
+        var leader = Tensor1D(0.5, 0.5);
+        var moved = ToArray(WhaleOptimization<double>.Move(position, leader, null, Tensor1D(0.1, 0.2, 0.5, 0.7), a, a2, 1.0));
+        double factor = System.Math.Exp(l) * System.Math.Cos(2 * System.Math.PI * l);
+        Assert.Equal(System.Math.Max(0, System.Math.Min(1, 0.2 * factor + 0.5)), moved[0], Tolerance);
+        Assert.Equal(System.Math.Max(0, System.Math.Min(1, 0.4 * factor + 0.5)), moved[1], Tolerance);
+    }
+
+    [Fact]
+    public void WhaleOptimization_Encircling_And_Search_MatchPaper()
+    {
+        var position = Tensor1D(0.3);
+        var leader = Tensor1D(0.6);
+
+        // |A| < 1: X = X* - A |C X* - X| with A = 2 a r - a, C = 2 r2
+        double a = 1.0, r = 0.75, r2 = 0.4;
+        double coefficientA = 2 * a * r - a, coefficientC = 2 * r2;
+        var draws = Tensor1D(r, r2, 0.5, 0.2);
+        Assert.False(WhaleOptimization<double>.Explores(draws, a));
+        var encircled = ToArray(WhaleOptimization<double>.Move(position, leader, null, draws, a, -1.0, 1.0));
+        Assert.Equal(0.6 - coefficientA * System.Math.Abs(coefficientC * 0.6 - 0.3), encircled[0], Tolerance);
+
+        // |A| >= 1: the same equation around a random whale
+        a = 2.0;
+        r = 0.0;
+        coefficientA = 2 * a * r - a;
+        draws = Tensor1D(r, r2, 0.5, 0.2);
+        Assert.True(WhaleOptimization<double>.Explores(draws, a));
+        var searched = ToArray(WhaleOptimization<double>.Move(position, leader, Tensor1D(0.4), draws, a, -1.0, 1.0));
+        double expected = 0.4 - coefficientA * System.Math.Abs(coefficientC * 0.4 - 0.3);
+        Assert.Equal(System.Math.Max(0, System.Math.Min(1, expected)), searched[0], Tolerance);
+    }
 }
