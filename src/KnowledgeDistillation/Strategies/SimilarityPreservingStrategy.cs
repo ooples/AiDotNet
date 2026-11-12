@@ -68,8 +68,12 @@ public class SimilarityPreservingStrategy<T> : DistillationStrategyBase<T>
 
         int batchSize = studentBatchOutput.Rows;
 
-        var gradientBatch = DistillationHelper<T>.StandardSampleGradients(
-            studentBatchOutput, teacherBatchOutput, trueLabelsBatch, Temperature, Alpha);
+        // Standard gradient, averaged over the batch like the standard loss. The similarity loss is already a
+        // batch-level quantity, so its gradient is not divided by the batch size again.
+        T oneOverBatch = NumOps.Divide(NumOps.One, NumOps.FromDouble(batchSize));
+        var gradientBatch = Engine.MatrixMultiplyScalar(
+            DistillationHelper<T>.StandardSampleGradients(studentBatchOutput, teacherBatchOutput, trueLabelsBatch, Temperature, Alpha),
+            oneOverBatch);
 
         if (_similarityWeight > 0)
         {
@@ -92,10 +96,6 @@ public class SimilarityPreservingStrategy<T> : DistillationStrategyBase<T>
             var simGrad = Engine.TensorMultiplyScalar(dLdz, NumOps.FromDouble(_similarityWeight));
             gradientBatch = Engine.TensorAdd(standardGrad, simGrad).ToMatrix();
         }
-
-        // Average gradients over the batch
-        T oneOverBatch = NumOps.Divide(NumOps.One, NumOps.FromDouble(batchSize));
-        gradientBatch = Engine.MatrixMultiplyScalar(gradientBatch, oneOverBatch);
 
         return gradientBatch;
     }
