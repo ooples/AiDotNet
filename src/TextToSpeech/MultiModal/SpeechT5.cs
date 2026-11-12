@@ -231,10 +231,9 @@ public partial class SpeechT5<T> : TtsModelBase<T>
 
     private int[] TokenIds(Tensor<T> tensor, string name)
     {
-        var ids = new int[tensor.Length];
+        var ids = RoundedIds(tensor);
         for (int i = 0; i < ids.Length; i++)
         {
-            ids[i] = (int)Math.Round(Ops.ToDouble(tensor.GetFlat(i)));
             if (ids[i] < 0 || ids[i] >= _options.VocabSize)
                 throw new ArgumentOutOfRangeException(name, $"Text token ids lie in [0, {_options.VocabSize}).");
         }
@@ -337,15 +336,19 @@ public partial class SpeechT5<T> : TtsModelBase<T>
         int frames = mel.Shape[0], m = _options.MelChannels;
         if (mel.Rank != 2 || mel.Shape[1] != m) throw new ArgumentException($"The spectrogram is [frames, {m}].", nameof(mel));
         using var _ = new NoGradScope<T>();
-        var shift = new Tensor<T>(new[] { frames, m });
-        var scale = new Tensor<T>(new[] { frames, m });
-        for (int f = 0; f < frames; f++)
-            for (int c = 0; c < m; c++)
-            {
-                shift[f, c] = Ops.FromDouble(_vocoderMean![c]);
-                scale[f, c] = Ops.FromDouble(1.0 / _vocoderScale![c]);
-            }
+        var vocoderMean = _vocoderMean ?? throw NotNative();
+        var vocoderScale = _vocoderScale ?? throw NotNative();
+        var meanRow = new T[m];
+        var scaleRow = new T[m];
+        for (int c = 0; c < m; c++)
+        {
+            meanRow[c] = Ops.FromDouble(vocoderMean[c]);
+            scaleRow[c] = Ops.FromDouble(vocoderScale[c]);
+        }
+        var shift = Engine.TensorTile(new Tensor<T>(meanRow, new[] { 1, m }), new[] { frames, 1 });
+        var scale = Engine.TensorTile(Engine.TensorReciprocal(new Tensor<T>(scaleRow, new[] { 1, m })), new[] { frames, 1 });
         var normalized = Engine.TensorMultiply(Engine.TensorSubtract(mel, shift), scale);
+
         var wave = Vocoder.Forward(Engine.Reshape(Engine.TensorTranspose(normalized), new[] { 1, m, frames }));
         return Engine.Reshape(wave, new[] { wave.Length });
     }
