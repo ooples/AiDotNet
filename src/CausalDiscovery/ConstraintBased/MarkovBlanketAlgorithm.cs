@@ -188,14 +188,19 @@ public class MarkovBlanketAlgorithm<T> : ConstraintBasedBase<T>
         var max = Engine.ReduceMax(Engine.TensorWhere(finite, x, lowest), new[] { 0 }, true);
         var min = Engine.TensorNegate(
             Engine.ReduceMax(Engine.TensorWhere(finite, Engine.TensorNegate(x), lowest), new[] { 0 }, true));
-        var range = Engine.TensorSubtract(max, min);
+        // The range and the offsets from the minimum are formed from halved values: max/2 - min/2 and
+        // x/2 - min/2 are finite for every finite x in T, where max - min can overflow (e.g. Half with
+        // -40000 and 40000). Halving scales numerator and denominator alike, so the bins are unchanged.
+        T half = NumOps.FromDouble(0.5);
+        var halfMin = Engine.TensorMultiplyScalar(min, half);
+        var halfRange = Engine.TensorSubtract(Engine.TensorMultiplyScalar(max, half), halfMin);
 
         // A column with no finite values (min > max) or a range at most MinDiscretizationRange maps to bin 0.
-        var spread = Engine.TensorGreaterThan(range, NumOps.FromDouble(MinDiscretizationRange));
-        var safeRange = Engine.TensorWhere(spread, range, Engine.TensorOnesLike(range));
+        var spread = Engine.TensorGreaterThan(halfRange, NumOps.FromDouble(MinDiscretizationRange * 0.5));
+        var safeRange = Engine.TensorWhere(spread, halfRange, Engine.TensorOnesLike(halfRange));
         var scaled = Engine.TensorMultiplyScalar(
             Engine.TensorDivide(
-                Engine.TensorSubtract(x, Engine.TensorBroadcastTo(min, shape)),
+                Engine.TensorSubtract(Engine.TensorMultiplyScalar(x, half), Engine.TensorBroadcastTo(halfMin, shape)),
                 Engine.TensorBroadcastTo(safeRange, shape)),
             NumOps.FromDouble(_nBins - 1));
         var bins = Engine.TensorMin(Engine.TensorFloor(scaled), NumOps.FromDouble(_nBins - 1));
