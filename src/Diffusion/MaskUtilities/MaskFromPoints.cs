@@ -31,8 +31,6 @@ namespace AiDotNet.Diffusion.MaskUtilities;
 [PipelineStage(PipelineStage.Preprocessing)]
 public class MaskFromPoints<T> : IDataTransformer<T, Tensor<T>, Tensor<T>>
 {
->>>>
-
     private readonly int _pointRadius;
     private readonly (int y, int x)[] _positivePoints;
     private readonly (int y, int x)[]? _negativePoints;

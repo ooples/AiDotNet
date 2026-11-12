@@ -31,8 +31,6 @@ namespace AiDotNet.Diffusion.MaskUtilities;
 [PipelineStage(PipelineStage.Preprocessing)]
 public class MaskFromBoundingBox<T> : IDataTransformer<T, Tensor<T>, Tensor<T>>
 {
->>>>
-
     private readonly (int top, int left, int bottom, int right)[] _boxes;
 
     /// <inheritdoc />
