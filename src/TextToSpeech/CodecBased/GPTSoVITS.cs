@@ -534,7 +534,8 @@ public partial class GPTSoVITS<T> : TtsModelBase<T>
     {
         if (!HasPaperLayers) return base.PreprocessText(text);
         var (phones, _, _) = Text.PhonesAndBert(GptSoVitsText.EndSentence(text, _options.TextLanguage), _options.TextLanguage);
-        return Wave(phones.Select(p => (double)p).ToArray());
+        return IdTensor(phones);
+
     }
 
     /// <inheritdoc />
@@ -570,10 +571,9 @@ public partial class GPTSoVITS<T> : TtsModelBase<T>
         if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(input);
         if (!HasPaperLayers) return base.PredictCore(input);
         int vocabulary = TextToSemantic.Configuration.PhonemeVocab;
-        var phones = new int[input.Length];
+        var phones = RoundedIds(input);
         for (int i = 0; i < phones.Length; i++)
         {
-            phones[i] = (int)Math.Round(Ops.ToDouble(input.GetFlat(i)));
             if (phones[i] < 0 || phones[i] >= vocabulary) throw new ArgumentOutOfRangeException(nameof(input), $"Phone ids lie in [0, {vocabulary}).");
         }
         if (phones.Length == 0) throw new ArgumentException("There are no phones.", nameof(input));
