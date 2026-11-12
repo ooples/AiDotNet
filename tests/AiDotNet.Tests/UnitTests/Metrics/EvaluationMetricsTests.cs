@@ -173,7 +173,9 @@ public class EvaluationMetricsTests
     {
         // Arrange
         var stoi = new ShortTimeObjectiveIntelligibility<double>(sampleRate: 16000);
-        var signal = new Tensor<double>(new[] { 1600 }); // 100ms at 16kHz
+        // 1 s at 16 kHz: STOI needs at least 30 frames (384 ms at 10 kHz) to form a segment;
+        // Taal et al. / pystoi return 1e-5 for the 100 ms signal this test used before.
+        var signal = new Tensor<double>(new[] { 16000 });
         var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
         for (int i = 0; i < signal.Length; i++)
         {
