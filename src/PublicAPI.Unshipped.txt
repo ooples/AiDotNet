@@ -22589,3 +22589,9 @@ AiDotNet.Kernels.GibbsKernel<T>.GetLengthScale(AiDotNet.Tensors.LinearAlgebra.Ve
 AiDotNet.Kernels.GibbsKernel<T>.GibbsKernel(System.Func<AiDotNet.Tensors.LinearAlgebra.Vector<T>!, T>! lengthScaleFunction, double variance = 1) -> void
 *REMOVED*AiDotNet.Kernels.RationalQuadraticKernel<T>.CalculateHyperparameterGradients(AiDotNet.Tensors.LinearAlgebra.Vector<T>! x1, AiDotNet.Tensors.LinearAlgebra.Vector<T>! x2) -> System.Collections.Generic.Dictionary<string!, double>!
 AiDotNet.Kernels.RationalQuadraticKernel<T>.CalculateHyperparameterGradients(AiDotNet.Tensors.LinearAlgebra.Vector<T>! x1, AiDotNet.Tensors.LinearAlgebra.Vector<T>! x2) -> System.Collections.Generic.Dictionary<string!, T>!
+*REMOVED*AiDotNet.Kernels.ProductStructureKernel<T>.LogDeterminant(AiDotNet.Tensors.LinearAlgebra.Matrix<T>![]! groupKernelMatrices) -> double
+AiDotNet.Kernels.ProductStructureKernel<T>.LogDeterminant(AiDotNet.Tensors.LinearAlgebra.Matrix<T>![]! groupKernelMatrices) -> T
+*REMOVED*AiDotNet.Kernels.GridKernel<T>.GetEigenvalues() -> double[]!
+*REMOVED*AiDotNet.Kernels.GridKernel<T>.LogDeterminant() -> double
+AiDotNet.Kernels.GridKernel<T>.GetEigenvalues() -> AiDotNet.Tensors.LinearAlgebra.Vector<T>!
+AiDotNet.Kernels.GridKernel<T>.LogDeterminant() -> T
