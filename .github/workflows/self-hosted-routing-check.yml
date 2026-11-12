@@ -1,0 +1,45 @@
+name: Self-hosted routing check
+
+# Runs on a self-hosted runner and plans routing exactly as select-shards does, from the
+# SELF_HOSTED_RUNNERS and SELF_HOSTED_RUNNER_TOKEN secrets. It fails unless the plan routes shards,
+# so a green run proves the runner takes jobs, the secrets reach a job, and the token can list runners.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: self-hosted-routing-check
+  cancel-in-progress: false
+
+jobs:
+  check:
+    name: Plan self-hosted routing
+    runs-on: [self-hosted, linux]
+    timeout-minutes: 10
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          sparse-checkout: tools/TestImpact
+
+      - name: Plan routing
+        shell: pwsh
+        env:
+          SELF_HOSTED_RUNNERS: ${{ secrets.SELF_HOSTED_RUNNERS }}
+          SELF_HOSTED_RUNNER_TOKEN: ${{ secrets.SELF_HOSTED_RUNNER_TOKEN }}
+        run: |
+          . ./tools/TestImpact/CiWorkloadKinds.ps1
+          $runners = Get-SelfHostedRunners -Repository $env:GITHUB_REPOSITORY -Token $env:SELF_HOSTED_RUNNER_TOKEN
+          $plan = Get-SelfHostedShardPlan -Config $env:SELF_HOSTED_RUNNERS -Runners $runners
+          Write-Host "Self-hosted routing: $($plan.Count) shard(s). $($plan.Reason)"
+          $shards = 1..40 | ForEach-Object { [pscustomobject]@{ name = "Shard $_" } }
+          $routed = @(Set-CiShardRunners -Shards $shards -Count $plan.Count -Label $plan.Label |
+              Where-Object { $_.PSObject.Properties['runner'] })
+          Write-Host "Of 40 sample shards, $($routed.Count) would run on the self-hosted label."
+          "Self-hosted routing: **$($plan.Count) shard(s)**. $($plan.Reason)" |
+              Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+          if ($plan.Warning -or $plan.Count -le 0 -or $routed.Count -ne $plan.Count) {
+              throw "Self-hosted routing would send no shards: $($plan.Reason)"
+          }
