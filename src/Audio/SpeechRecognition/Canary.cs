@@ -267,43 +267,62 @@ public partial class Canary<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 
     private string DecodeTokens(Tensor<T> output)
     {
-        int numTokens = Math.Max(0, Math.Min(_options.MaxOutputTokens, output.Length));
-        if (numTokens == 0) return _tokenizer.Decode(new List<int>());
+        var ids = DecodeTokenIds(Engine, output, _options.VocabSize, _options.MaxOutputTokens, _tokenizer.VocabularySize);
+        return _tokenizer.Decode(ids.ToList());
+    }
 
-        // Round the leading outputs to ids and clamp them into the vocabulary (NaN maps to id 0).
-        var leading = new Tensor<T>(output.AsSpan().Slice(0, numTokens).ToArray(), [numTokens]);
-        var rounded = Engine.TensorRound(Engine.TensorNanToNum(leading, 0.0, double.PositiveInfinity, double.NegativeInfinity));
-        var clamped = Engine.TensorClamp(rounded, NumOps.Zero, NumOps.FromDouble(_tokenizer.VocabularySize - 1));
-        return _tokenizer.Decode(clamped.Cast<int>().ToArray().ToList());
+    /// <summary>
+    /// Token ids from the decoder's vocabulary logits: one row of <paramref name="vocabSize"/> logits per output
+    /// position, the id is the row's argmax (NaN never wins, ties go to the lowest id). At most
+    /// <paramref name="maxTokens"/> positions are read and ids outside the tokenizer are dropped.
+    /// </summary>
+    internal static int[] DecodeTokenIds(IEngine engine, Tensor<T> logits, int vocabSize, int maxTokens, int tokenizerSize)
+    {
+        if (vocabSize < 1) throw new ArgumentOutOfRangeException(nameof(vocabSize));
+        if (logits.Length % vocabSize != 0)
+        {
+            throw new ArgumentException($"The output holds {logits.Length} values, not whole rows of {vocabSize} vocabulary logits.", nameof(logits));
+        }
+
+        int positions = Math.Min(Math.Max(0, maxTokens), logits.Length / vocabSize);
+        if (positions == 0) return Array.Empty<int>();
+
+        var rows = engine.TensorSlice(logits.Reshape(new[] { logits.Length / vocabSize, vocabSize }), new[] { 0, 0 }, new[] { positions, vocabSize });
+        var cleaned = engine.TensorNanToNum(rows, double.NegativeInfinity, double.PositiveInfinity, double.NegativeInfinity);
+        return engine.TensorArgMax(cleaned, 1).ToArray().Where(id => id < tokenizerSize).ToArray();
     }
 
     private IReadOnlyList<TranscriptionSegment<T>> GenerateTimestamps(Tensor<T> output, string text, double duration)
     {
         var segments = new List<TranscriptionSegment<T>>();
         var words = text.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
-        if (words.Length == 0 || output.Length == 0) return segments;
+        int vocabSize = Math.Max(1, _options.VocabSize);
+        int positions = output.Length / vocabSize;
+        if (words.Length == 0 || positions == 0) return segments;
 
-        // CTC-based greedy alignment: use output token magnitudes to find word boundaries
-        int tokensPerWord = Math.Max(1, output.Length / words.Length);
-        double timePerToken = duration / output.Length;
+        // Output positions are spread evenly over the words; a word's confidence is the highest softmax
+        // probability its positions gave their decoded token.
+        int tokensPerWord = Math.Max(1, positions / words.Length);
+        double timePerToken = duration / positions;
 
-        // Word w covers tokens [start_w, end_w); tokens past the last word belong to no word (-1).
+        // Word w covers positions [start_w, end_w); positions past the last word belong to no word (-1).
         var starts = new int[words.Length];
         var ends = new int[words.Length];
-        var wordOfToken = new int[output.Length];
+        var wordOfToken = new int[positions];
         for (int i = 0; i < wordOfToken.Length; i++) wordOfToken[i] = -1;
         int tokenIdx = 0;
         for (int w = 0; w < words.Length; w++)
         {
             starts[w] = tokenIdx;
-            ends[w] = Math.Min(output.Length, tokenIdx + tokensPerWord);
+            ends[w] = Math.Min(positions, tokenIdx + tokensPerWord);
             for (int t = starts[w]; t < ends[w]; t++) wordOfToken[t] = w;
             tokenIdx = ends[w];
         }
 
-        // Peak |output| per word (0 for an empty range, NaN never wins), capped at 1.
-        var magnitudes = Engine.TensorAbs(new Tensor<T>(output.ToArray(), [output.Length]));
-        var peaks = Engine.ScatterMax(magnitudes, new Tensor<int>(wordOfToken, [wordOfToken.Length]), out _, 0, words.Length);
+        var rows = Engine.TensorSlice(output.Reshape(new[] { output.Length / vocabSize, vocabSize }), new[] { 0, 0 }, new[] { positions, vocabSize });
+        var probabilities = Engine.TensorSoftmax(Engine.TensorNanToNum(rows, double.NegativeInfinity, double.PositiveInfinity, double.NegativeInfinity), 1);
+        var tokenConfidence = Engine.ReduceMax(probabilities, new[] { 1 }, false);
+        var peaks = Engine.ScatterMax(tokenConfidence, new Tensor<int>(wordOfToken, [wordOfToken.Length]), out _, 0, words.Length);
         var confidences = Engine.TensorMin(Engine.TensorMax(peaks, NumOps.Zero), NumOps.One).ToArray();
 
         for (int w = 0; w < words.Length; w++)
