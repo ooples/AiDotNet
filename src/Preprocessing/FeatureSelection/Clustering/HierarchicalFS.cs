@@ -28,13 +28,13 @@ public class HierarchicalFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IFixe
     private readonly int _nFeaturesToSelect;
     private readonly string _linkage;
 
-    private double[]? _featureScores;
+    private Vector<T>? _featureScores;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
-    public double[]? FeatureScores => _featureScores;
+    public Vector<T>? FeatureScores => _featureScores;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -70,11 +70,8 @@ public class HierarchicalFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IFixe
         if (n < 2)
             throw new ArgumentException("HierarchicalFS requires at least 2 rows to compute variance/correlation.", nameof(data));
 
-        // Convert to arrays
-        var X = new double[n, p];
-        for (int i = 0; i < n; i++)
-            for (int j = 0; j < p; j++)
-                X[i, j] = NumOps.ToDouble(data[i, j]);
+        var engine = Engine;
+        var X = Tensor<T>.FromMatrix(data);
 
         // Compute feature distance matrix based on correlation
         var distances = ComputeFeatureDistances(X, n, p);
@@ -82,117 +79,66 @@ public class HierarchicalFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IFixe
         // Perform hierarchical clustering
         var clusterAssignments = AgglomerativeClustering(distances, p, _nFeaturesToSelect);
 
-        // Compute feature scores (variance)
-        _featureScores = new double[p];
-        for (int j = 0; j < p; j++)
-        {
-            double mean = 0;
-            for (int i = 0; i < n; i++)
-                mean += X[i, j];
-            mean /= n;
-
-            for (int i = 0; i < n; i++)
-            {
-                double diff = X[i, j] - mean;
-                _featureScores[j] += diff * diff;
-            }
-            _featureScores[j] /= (n - 1);
-        }
+        // Compute feature scores (sample variance)
+        var scores = engine.TensorDivideScalar(
+            FeatureSelectionTensorOps.ColumnSumSquaredDeviations(X), NumOps.FromDouble(n - 1));
+        _featureScores = scores.ToVector();
 
         // Select best feature from each cluster
         int numClusters = clusterAssignments.Max() + 1;
-        var selectedList = new List<int>();
-
-        for (int c = 0; c < numClusters; c++)
-        {
-            var clusterFeatures = Enumerable.Range(0, p)
-                .Where(j => clusterAssignments[j] == c)
-                .ToList();
-
-            if (clusterFeatures.Count > 0)
-            {
-                int bestFeature = clusterFeatures
-                    .OrderByDescending(j => _featureScores[j])
-                    .First();
-                selectedList.Add(bestFeature);
-            }
-        }
-
-        _selectedIndices = selectedList.OrderBy(x => x).ToArray();
+        _selectedIndices = FeatureSelectionTensorOps.BestPerGroup(scores, clusterAssignments, numClusters)
+            .OrderBy(x => x).ToArray();
         IsFitted = true;
     }
 
-    private double[,] ComputeFeatureDistances(double[,] X, int n, int p)
+    private Tensor<T> ComputeFeatureDistances(Tensor<T> X, int n, int p)
     {
-        var distances = new double[p, p];
-        var means = new double[p];
-        var stds = new double[p];
+        var engine = Engine;
 
-        // Compute means and stds
-        for (int j = 0; j < p; j++)
-        {
-            for (int i = 0; i < n; i++)
-                means[j] += X[i, j];
-            means[j] /= n;
+        // Compute means and stds (n - 1 denominator, plus 1e-10)
+        var centered = engine.TensorSubtract(X, engine.TensorBroadcastTo(engine.ReduceMean(X, new[] { 0 }, true), new[] { n, p }));
+        T dof = NumOps.FromDouble(n - 1);
+        var stds = engine.TensorAddScalar(
+            engine.TensorSqrt(engine.TensorDivideScalar(engine.ReduceSum(engine.TensorSquare(centered), new[] { 0 }, false), dof)),
+            NumOps.FromDouble(1e-10));
 
-            for (int i = 0; i < n; i++)
-            {
-                double diff = X[i, j] - means[j];
-                stds[j] += diff * diff;
-            }
-            stds[j] = Math.Sqrt(stds[j] / (n - 1)) + 1e-10;
-        }
-
-        // Compute distance = 1 - |correlation|
-        for (int j1 = 0; j1 < p; j1++)
-        {
-            distances[j1, j1] = 0;
-            for (int j2 = j1 + 1; j2 < p; j2++)
-            {
-                double sum = 0;
-                for (int i = 0; i < n; i++)
-                    sum += (X[i, j1] - means[j1]) * (X[i, j2] - means[j2]);
-                double corr = sum / ((n - 1) * stds[j1] * stds[j2]);
-                distances[j1, j2] = 1 - Math.Abs(corr);
-                distances[j2, j1] = distances[j1, j2];
-            }
-        }
-
-        return distances;
+        // Compute distance = 1 - |correlation|, 0 on the diagonal
+        var corr = engine.TensorDivide(
+            engine.TensorMatMul(engine.TensorTranspose(centered), centered),
+            engine.TensorMultiplyScalar(engine.TensorOuter(stds, stds), dof));
+        var distances = PreprocessingTensorOps.OneMinus(engine.TensorAbs(corr));
+        return engine.TensorWhere(engine.TensorEye<T>(p), new Tensor<T>(new[] { p, p }), distances);
     }
 
-    private int[] AgglomerativeClustering(double[,] distances, int p, int nClusters)
+    private int[] AgglomerativeClustering(Tensor<T> distances, int p, int nClusters)
     {
+        var engine = Engine;
         var assignments = Enumerable.Range(0, p).ToArray();
         var clusterSizes = new int[p];
         for (int j = 0; j < p; j++)
             clusterSizes[j] = 1;
 
-        var clusterDistances = (double[,])distances.Clone();
+        var clusterDistances = distances;
         int numActiveClusters = p;
+        var shape = new[] { p, p };
+        T maxValue = NumOps.MaxValue;
+        var unreachable = PreprocessingTensorOps.Filled(shape, maxValue);
+        var upper = engine.TensorTriu(PreprocessingTensorOps.Filled(shape, NumOps.One), 1);
+        var positions = PreprocessingTensorOps.Range<T>(p);
+        bool average = _linkage != "single" && _linkage != "complete";
 
         while (numActiveClusters > nClusters)
         {
-            // Find closest pair of clusters
-            double minDist = double.MaxValue;
-            int merge1 = -1, merge2 = -1;
+            // Find closest pair of active clusters c1 < c2 (first pair in row-major order among ties)
+            var active = new Tensor<int>(Array.ConvertAll(clusterSizes, s => s > 0 ? 1 : 0), new[] { p }).Cast<T>();
+            var pairMask = engine.TensorMultiply(engine.TensorOuter(active, active), upper);
+            var candidates = engine.TensorWhere(pairMask, clusterDistances, unreachable);
+            if (!PreprocessingTensorOps.IsBelow(engine.TensorMinValue(candidates), maxValue))
+                break;
 
-            for (int c1 = 0; c1 < p; c1++)
-            {
-                if (clusterSizes[c1] == 0) continue;
-                for (int c2 = c1 + 1; c2 < p; c2++)
-                {
-                    if (clusterSizes[c2] == 0) continue;
-                    if (clusterDistances[c1, c2] < minDist)
-                    {
-                        minDist = clusterDistances[c1, c2];
-                        merge1 = c1;
-                        merge2 = c2;
-                    }
-                }
-            }
-
-            if (merge1 < 0) break;
+            int flat = FeatureSelectionTensorOps.FirstArgMinPerRow(engine.Reshape(candidates, new[] { 1, p * p }))[0];
+            int merge1 = flat / p;
+            int merge2 = flat % p;
 
             // Merge clusters
             for (int j = 0; j < p; j++)
@@ -203,24 +149,30 @@ public class HierarchicalFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IFixe
 
             int newSize = clusterSizes[merge1] + clusterSizes[merge2];
 
-            // Update distances using linkage method
-            for (int c = 0; c < p; c++)
+            // Update distances using linkage method, for every other active cluster at once
+            var row1 = PreprocessingTensorOps.RowVector(clusterDistances, merge1);
+            var row2 = PreprocessingTensorOps.RowVector(clusterDistances, merge2);
+            Tensor<T> newDist;
+            if (average)
             {
-                if (c == merge1 || c == merge2 || clusterSizes[c] == 0) continue;
-
-                double newDist = _linkage switch
-                {
-                    "single" => Math.Min(clusterDistances[merge1, c], clusterDistances[merge2, c]),
-                    "complete" => Math.Max(clusterDistances[merge1, c], clusterDistances[merge2, c]),
-                    "average" => (clusterDistances[merge1, c] * clusterSizes[merge1] +
-                                 clusterDistances[merge2, c] * clusterSizes[merge2]) / newSize,
-                    _ => (clusterDistances[merge1, c] * clusterSizes[merge1] +
-                         clusterDistances[merge2, c] * clusterSizes[merge2]) / newSize
-                };
-
-                clusterDistances[merge1, c] = newDist;
-                clusterDistances[c, merge1] = newDist;
+                newDist = engine.TensorDivideScalar(
+                    engine.TensorAdd(
+                        engine.TensorMultiplyScalar(row1, PreprocessingTensorOps.CountAsScalar<T>(clusterSizes[merge1])),
+                        engine.TensorMultiplyScalar(row2, PreprocessingTensorOps.CountAsScalar<T>(clusterSizes[merge2]))),
+                    PreprocessingTensorOps.CountAsScalar<T>(newSize));
             }
+            else
+            {
+                newDist = _linkage == "single" ? engine.TensorMin(row1, row2) : engine.TensorMax(row1, row2);
+            }
+
+            var isMerge1 = engine.TensorEquals(positions, PreprocessingTensorOps.CountAsScalar<T>(merge1));
+            var isMerge2 = engine.TensorEquals(positions, PreprocessingTensorOps.CountAsScalar<T>(merge2));
+            var others = engine.TensorMultiply(active, PreprocessingTensorOps.OneMinus(engine.TensorAdd(isMerge1, isMerge2)));
+            clusterDistances = engine.TensorWhere(engine.TensorOuter(isMerge1, others),
+                engine.TensorBroadcastTo(engine.Reshape(newDist, new[] { 1, p }), shape), clusterDistances);
+            clusterDistances = engine.TensorWhere(engine.TensorOuter(others, isMerge1),
+                engine.TensorBroadcastTo(engine.Reshape(newDist, new[] { p, 1 }), shape), clusterDistances);
 
             clusterSizes[merge1] = newSize;
             clusterSizes[merge2] = 0;
@@ -235,7 +187,6 @@ public class HierarchicalFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IFixe
 
         return assignments.Select(c => renumbering[c]).ToArray();
     }
-
     /// <inheritdoc />
     protected override Matrix<T> TransformCore(Matrix<T> data)
     {
@@ -245,15 +196,7 @@ public class HierarchicalFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IFixe
         if (data.Columns != _nInputFeatures)
             throw new ArgumentException($"Expected {_nInputFeatures} columns but got {data.Columns}.", nameof(data));
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />
