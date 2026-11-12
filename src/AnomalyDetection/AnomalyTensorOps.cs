@@ -257,6 +257,65 @@ internal static class AnomalyTensorOps
         return engine.Reshape(engine.TensorMatMul(rows, column), new[] { n });
     }
 
+    /// <summary>Inlier/outlier labels: -1 where score &gt; threshold, 1 otherwise (NaN scores are inliers).</summary>
+    internal static Vector<T> LabelsFromThreshold<T>(Vector<T> scores, T threshold)
+    {
+        if (scores.Length == 0)
+        {
+            return new Vector<T>(0);
+        }
+
+        var engine = Engine;
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var above = engine.TensorGreaterThan(scores.AsTensor(), threshold);
+        return engine.TensorAddScalar(engine.TensorMultiplyScalar(above, numOps.FromDouble(-2)), numOps.One).ToVector();
+    }
+
+    /// <summary>
+    /// The number of real entries in each window of <see cref="SlidingWindows"/>: for row i of a length-n
+    /// series, min(n, i + after + 1) - max(0, i - before).
+    /// </summary>
+    internal static int[] SlidingWindowLengths(int n, int before, int after)
+    {
+        var lengths = new int[n];
+        for (int i = 0; i < n; i++)
+        {
+            lengths[i] = Math.Min(n, i + after + 1) - Math.Max(0, i - before);
+        }
+
+        return lengths;
+    }
+
+    /// <summary>
+    /// The median of the real entries of each row of a padded window matrix ([n, w], mask 1 at real
+    /// entries); row i has lengths[i] real entries. Even counts average the two middle values.
+    /// </summary>
+    internal static Tensor<T> MaskedRowMedians<T>(Tensor<T> windows, Tensor<T> mask, int[] lengths)
+    {
+        var engine = Engine;
+        var numOps = MathHelper.GetNumericOperations<T>();
+        int n = windows.Shape[0];
+
+        // Padding sorts after every real value, so the real entries occupy the first lengths[i] slots.
+        var padded = engine.TensorMaskedFill(windows, engine.TensorEqScalar(mask, numOps.Zero), numOps.MaxValue);
+        var (sorted, _) = engine.TensorSort(padded, 1, false);
+
+        var lower = new int[n];
+        var upper = new int[n];
+        for (int i = 0; i < n; i++)
+        {
+            lower[i] = (lengths[i] - 1) / 2;
+            upper[i] = lengths[i] / 2;
+        }
+
+        var low = engine.TensorTakeAlongDim(sorted, Tensor<int>.FromVector(Vector<int>.Wrap(lower), new[] { n, 1 }), 1);
+        var high = engine.TensorTakeAlongDim(sorted, Tensor<int>.FromVector(Vector<int>.Wrap(upper), new[] { n, 1 }), 1);
+
+        // For an odd count both picks are the middle value and (v + v) / 2 == v exactly.
+        var median = engine.TensorMultiplyScalar(engine.TensorAdd(low, high), numOps.FromDouble(0.5));
+        return engine.Reshape(median, new[] { n });
+    }
+
     /// <summary>The positions of the non-zero entries of a 1-D tensor, ascending.</summary>
     internal static int[] NonzeroIndices<T>(Tensor<T> values)
     {
