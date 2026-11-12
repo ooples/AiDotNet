@@ -73,52 +73,44 @@ public class InfoNCELoss<T> : ContrastiveLossBase<T>
         if (negativeKeys is null) throw new ArgumentNullException(nameof(negativeKeys));
 
         var batchSize = queries.Shape[0];
-        var dim = queries.Shape[1];
-        var numNegatives = negativeKeys.Shape[0];
 
         // Normalize if required
         var q = _normalize ? L2Normalize(queries) : queries;
         var kPos = _normalize ? L2Normalize(positiveKeys) : positiveKeys;
         var kNeg = _normalize ? L2Normalize(negativeKeys) : negativeKeys;
 
-        T totalLoss = NumOps.Zero;
+        // Logits [batch, 1 + numNegatives], positive in column 0
+        var logits = Engine.TensorDivideScalar(
+            PositiveFirstSimilarities(q, kPos, kNeg), NumOps.FromDouble(_temperature));
 
-        for (int i = 0; i < batchSize; i++)
-        {
-            // Engine-accelerated q·k dot products
-            var qRow = new Vector<T>(dim);
-            for (int d = 0; d < dim; d++) qRow[d] = q[i, d];
-            var kPosRow = new Vector<T>(dim);
-            for (int d = 0; d < dim; d++) kPosRow[d] = kPos[i, d];
-
-            T posLogit = NumOps.Divide(Engine.DotProduct(qRow, kPosRow), NumOps.FromDouble(_temperature));
-
-            var negLogits = new Vector<T>(numNegatives);
-            T maxLogit = posLogit;
-
-            for (int j = 0; j < numNegatives; j++)
-            {
-                var kNegRow = new Vector<T>(dim);
-                for (int d = 0; d < dim; d++) kNegRow[d] = kNeg[j, d];
-                negLogits[j] = NumOps.Divide(Engine.DotProduct(qRow, kNegRow), NumOps.FromDouble(_temperature));
-
-                if (NumOps.GreaterThan(negLogits[j], maxLogit))
-                    maxLogit = negLogits[j];
-            }
-
-            // Compute log-softmax with numerical stability
-            T sumExp = NumOps.Exp(NumOps.Subtract(posLogit, maxLogit));
-            for (int j = 0; j < numNegatives; j++)
-            {
-                sumExp = NumOps.Add(sumExp, NumOps.Exp(NumOps.Subtract(negLogits[j], maxLogit)));
-            }
-
-            var logSumExp = NumOps.Add(maxLogit, NumOps.Log(sumExp));
-            var loss = NumOps.Subtract(logSumExp, posLogit);
-            totalLoss = NumOps.Add(totalLoss, loss);
-        }
+        // Loss = logsumexp(logits) - positive logit (numerically stable log-softmax)
+        var (logSumExp, _) = RowLogSumExpAndSoftmax(logits);
+        var posLogits = Engine.TensorSlice(logits, new[] { 0, 0 }, new[] { batchSize, 1 });
+        T totalLoss = Engine.TensorSum(Engine.TensorSubtract(logSumExp, posLogits));
 
         return NumOps.Divide(totalLoss, NumOps.FromDouble(batchSize));
+    }
+
+    /// <summary>
+    /// Row-wise q . kPos in column 0 followed by q . kNeg_j, as a [batch, 1 + numNegatives] tensor.
+    /// </summary>
+    private Tensor<T> PositiveFirstSimilarities(Tensor<T> q, Tensor<T> kPos, Tensor<T> kNeg)
+    {
+        var posSims = Engine.ReduceSum(Engine.TensorMultiply(q, kPos), new[] { 1 }, keepDims: true);
+        var negSims = Engine.TensorMatMul(q, Engine.TensorTranspose(kNeg));
+        return Engine.TensorConcatenate(new[] { posSims, negSims }, 1);
+    }
+
+    /// <summary>
+    /// Per row: max + log(sum exp(logits - max)) as [batch, 1], and the softmax probabilities.
+    /// </summary>
+    private (Tensor<T> LogSumExp, Tensor<T> Probabilities) RowLogSumExpAndSoftmax(Tensor<T> logits)
+    {
+        var maxLogit = Engine.ReduceMax(logits, new[] { 1 }, keepDims: true);
+        var exps = Engine.TensorExp(Engine.TensorSubtract(logits, maxLogit));
+        var sumExp = Engine.ReduceSum(exps, new[] { 1 }, keepDims: true);
+        var logSumExp = Engine.TensorAdd(maxLogit, Engine.TensorLog(sumExp));
+        return (logSumExp, Engine.TensorDivide(exps, sumExp));
     }
 
     /// <summary>
@@ -133,43 +125,18 @@ public class InfoNCELoss<T> : ContrastiveLossBase<T>
         if (keys is null) throw new ArgumentNullException(nameof(keys));
 
         var batchSize = queries.Shape[0];
-        var dim = queries.Shape[1];
 
         var q = _normalize ? L2Normalize(queries) : queries;
         var k = _normalize ? L2Normalize(keys) : keys;
 
-        T totalLoss = NumOps.Zero;
+        // All logits: q_i . k_j / tau
+        var logits = Engine.TensorDivideScalar(
+            Engine.TensorMatMul(q, Engine.TensorTranspose(k)), NumOps.FromDouble(_temperature));
 
-        for (int i = 0; i < batchSize; i++)
-        {
-            // Compute all logits: q_i · k_j / τ
-            var logits = new T[batchSize];
-            T maxLogit = NumOps.MinValue;
-
-            for (int j = 0; j < batchSize; j++)
-            {
-                T dot = NumOps.Zero;
-                for (int d = 0; d < dim; d++)
-                {
-                    dot = NumOps.Add(dot, NumOps.Multiply(q[i, d], k[j, d]));
-                }
-                logits[j] = NumOps.Divide(dot, NumOps.FromDouble(_temperature));
-
-                if (NumOps.GreaterThan(logits[j], maxLogit))
-                    maxLogit = logits[j];
-            }
-
-            // Positive is at index i (diagonal)
-            T sumExp = NumOps.Zero;
-            for (int j = 0; j < batchSize; j++)
-            {
-                sumExp = NumOps.Add(sumExp, NumOps.Exp(NumOps.Subtract(logits[j], maxLogit)));
-            }
-
-            var logSumExp = NumOps.Add(maxLogit, NumOps.Log(sumExp));
-            var loss = NumOps.Subtract(logSumExp, logits[i]);
-            totalLoss = NumOps.Add(totalLoss, loss);
-        }
+        // Positive is at index i (diagonal)
+        var (logSumExp, _) = RowLogSumExpAndSoftmax(logits);
+        var posLogits = Engine.TensorDiagonal(logits).Reshape(batchSize, 1);
+        T totalLoss = Engine.TensorSum(Engine.TensorSubtract(logSumExp, posLogits));
 
         return NumOps.Divide(totalLoss, NumOps.FromDouble(batchSize));
     }
@@ -187,81 +154,32 @@ public class InfoNCELoss<T> : ContrastiveLossBase<T>
         if (keys is null) throw new ArgumentNullException(nameof(keys));
 
         var batchSize = queries.Shape[0];
-        var dim = queries.Shape[1];
 
         var q = _normalize ? L2Normalize(queries) : queries;
         var k = _normalize ? L2Normalize(keys) : keys;
 
-        var gradQ = new T[batchSize * dim];
-        var gradK = new T[batchSize * dim];
-        T totalLoss = NumOps.Zero;
-
         var invTemp = NumOps.FromDouble(1.0 / _temperature);
 
-        for (int i = 0; i < batchSize; i++)
-        {
-            // Compute all logits: q_i · k_j / τ
-            var logits = new T[batchSize];
-            T maxLogit = NumOps.MinValue;
+        // All logits: q_i . k_j / tau
+        var logits = Engine.TensorMultiplyScalar(Engine.TensorMatMul(q, Engine.TensorTranspose(k)), invTemp);
 
-            for (int j = 0; j < batchSize; j++)
-            {
-                T dot = NumOps.Zero;
-                for (int d = 0; d < dim; d++)
-                {
-                    dot = NumOps.Add(dot, NumOps.Multiply(q[i, d], k[j, d]));
-                }
-                logits[j] = NumOps.Multiply(dot, invTemp);
+        // Softmax probabilities; positive is at index i (diagonal)
+        var (logSumExp, probs) = RowLogSumExpAndSoftmax(logits);
+        var posLogits = Engine.TensorDiagonal(logits).Reshape(batchSize, 1);
+        T totalLoss = Engine.TensorSum(Engine.TensorSubtract(logSumExp, posLogits));
 
-                if (NumOps.GreaterThan(logits[j], maxLogit))
-                    maxLogit = logits[j];
-            }
+        // dL/dlogit_ij = p_ij - 1 for the positive (j == i), p_ij for negatives, times 1/tau
+        var gradScale = Engine.TensorMultiplyScalar(
+            Engine.TensorSubtract(probs, Engine.TensorEye<T>(batchSize)), invTemp);
 
-            // Compute softmax probabilities
-            T sumExp = NumOps.Zero;
-            var exps = new T[batchSize];
-            for (int j = 0; j < batchSize; j++)
-            {
-                exps[j] = NumOps.Exp(NumOps.Subtract(logits[j], maxLogit));
-                sumExp = NumOps.Add(sumExp, exps[j]);
-            }
-
-            // Positive is at index i (diagonal)
-            var logSumExp = NumOps.Add(maxLogit, NumOps.Log(sumExp));
-            var loss = NumOps.Subtract(logSumExp, logits[i]);
-            totalLoss = NumOps.Add(totalLoss, loss);
-
-            // Compute gradients
-            for (int j = 0; j < batchSize; j++)
-            {
-                var prob = NumOps.Divide(exps[j], sumExp);
-                var gradScale = j == i
-                    ? NumOps.Subtract(prob, NumOps.One)  // p_j - 1 for positive
-                    : prob;                               // p_j for negatives
-
-                for (int d = 0; d < dim; d++)
-                {
-                    // Gradient w.r.t. query_i from logit_j
-                    var gradFromLogit = NumOps.Multiply(NumOps.Multiply(gradScale, invTemp), k[j, d]);
-                    gradQ[i * dim + d] = NumOps.Add(gradQ[i * dim + d], gradFromLogit);
-
-                    // Gradient w.r.t. key_j from query_i's loss
-                    var gradToKey = NumOps.Multiply(NumOps.Multiply(gradScale, invTemp), q[i, d]);
-                    gradK[j * dim + d] = NumOps.Add(gradK[j * dim + d], gradToKey);
-                }
-            }
-        }
+        // Gradient w.r.t. query_i: sum_j gradScale_ij k_j; w.r.t. key_j: sum_i gradScale_ij q_i
+        var gradQ = Engine.TensorMatMul(gradScale, k);
+        var gradK = Engine.TensorMatMul(Engine.TensorTranspose(gradScale), q);
 
         var avgLoss = NumOps.Divide(totalLoss, NumOps.FromDouble(batchSize));
         var scale = NumOps.FromDouble(1.0 / batchSize);
 
-        for (int i = 0; i < gradQ.Length; i++)
-        {
-            gradQ[i] = NumOps.Multiply(gradQ[i], scale);
-            gradK[i] = NumOps.Multiply(gradK[i], scale);
-        }
-
-        return (avgLoss, new Tensor<T>(gradQ, [batchSize, dim]), new Tensor<T>(gradK, [batchSize, dim]));
+        return (avgLoss, Engine.TensorMultiplyScalar(gradQ, scale), Engine.TensorMultiplyScalar(gradK, scale));
     }
 
     /// <summary>
@@ -271,91 +189,39 @@ public class InfoNCELoss<T> : ContrastiveLossBase<T>
         Tensor<T> queries, Tensor<T> positiveKeys, Tensor<T> negativeKeys)
     {
         var batchSize = queries.Shape[0];
-        var dim = queries.Shape[1];
         var numNegatives = negativeKeys.Shape[0];
 
         var q = _normalize ? L2Normalize(queries) : queries;
         var kPos = _normalize ? L2Normalize(positiveKeys) : positiveKeys;
         var kNeg = _normalize ? L2Normalize(negativeKeys) : negativeKeys;
 
-        var gradQ = new T[batchSize * dim];
-        var gradKPos = new T[batchSize * dim];
-        T totalLoss = NumOps.Zero;
-
         var invTemp = NumOps.FromDouble(1.0 / _temperature);
 
-        for (int i = 0; i < batchSize; i++)
-        {
-            // Compute logits
-            T posLogit = NumOps.Zero;
-            for (int d = 0; d < dim; d++)
-            {
-                posLogit = NumOps.Add(posLogit, NumOps.Multiply(q[i, d], kPos[i, d]));
-            }
-            posLogit = NumOps.Multiply(posLogit, invTemp);
+        // Logits [batch, 1 + numNegatives], positive in column 0
+        var logits = Engine.TensorMultiplyScalar(PositiveFirstSimilarities(q, kPos, kNeg), invTemp);
 
-            var negLogits = new T[numNegatives];
-            T maxLogit = posLogit;
+        // Softmax
+        var (logSumExp, probs) = RowLogSumExpAndSoftmax(logits);
+        var posLogits = Engine.TensorSlice(logits, new[] { 0, 0 }, new[] { batchSize, 1 });
+        T totalLoss = Engine.TensorSum(Engine.TensorSubtract(logSumExp, posLogits));
 
-            for (int j = 0; j < numNegatives; j++)
-            {
-                T dot = NumOps.Zero;
-                for (int d = 0; d < dim; d++)
-                {
-                    dot = NumOps.Add(dot, NumOps.Multiply(q[i, d], kNeg[j, d]));
-                }
-                negLogits[j] = NumOps.Multiply(dot, invTemp);
-                if (NumOps.GreaterThan(negLogits[j], maxLogit))
-                    maxLogit = negLogits[j];
-            }
+        // Gradients: positive weight (p_pos - 1) / tau, negative weights p_neg / tau
+        var posProbMinusOne = Engine.TensorAddScalar(
+            Engine.TensorSlice(probs, new[] { 0, 0 }, new[] { batchSize, 1 }), NumOps.Negate(NumOps.One));
+        var posWeight = Engine.TensorMultiplyScalar(posProbMinusOne, invTemp);
+        var negWeights = Engine.TensorMultiplyScalar(
+            Engine.TensorSlice(probs, new[] { 0, 1 }, new[] { batchSize, numNegatives }), invTemp);
 
-            // Softmax
-            T posExp = NumOps.Exp(NumOps.Subtract(posLogit, maxLogit));
-            T sumExp = posExp;
-            var negExps = new T[numNegatives];
+        // Gradient w.r.t. query: posWeight * kPos + sum_j negWeight_j * kNeg_j
+        var gradQ = Engine.TensorAdd(Engine.TensorMultiply(posWeight, kPos), Engine.TensorMatMul(negWeights, kNeg));
 
-            for (int j = 0; j < numNegatives; j++)
-            {
-                negExps[j] = NumOps.Exp(NumOps.Subtract(negLogits[j], maxLogit));
-                sumExp = NumOps.Add(sumExp, negExps[j]);
-            }
-
-            var logSumExp = NumOps.Add(maxLogit, NumOps.Log(sumExp));
-            totalLoss = NumOps.Add(totalLoss, NumOps.Subtract(logSumExp, posLogit));
-
-            // Gradients
-            var posProb = NumOps.Divide(posExp, sumExp);
-            var posProbMinusOne = NumOps.Subtract(posProb, NumOps.One);
-
-            for (int d = 0; d < dim; d++)
-            {
-                // Gradient w.r.t. query
-                var gradFromPos = NumOps.Multiply(NumOps.Multiply(posProbMinusOne, invTemp), kPos[i, d]);
-                gradQ[i * dim + d] = NumOps.Add(gradQ[i * dim + d], gradFromPos);
-
-                // Add gradients from negatives
-                for (int j = 0; j < numNegatives; j++)
-                {
-                    var negProb = NumOps.Divide(negExps[j], sumExp);
-                    var gradFromNeg = NumOps.Multiply(NumOps.Multiply(negProb, invTemp), kNeg[j, d]);
-                    gradQ[i * dim + d] = NumOps.Add(gradQ[i * dim + d], gradFromNeg);
-                }
-
-                // Gradient w.r.t. positive key
-                gradKPos[i * dim + d] = NumOps.Multiply(NumOps.Multiply(posProbMinusOne, invTemp), q[i, d]);
-            }
-        }
+        // Gradient w.r.t. positive key
+        var gradKPos = Engine.TensorMultiply(posWeight, q);
 
         var avgLoss = NumOps.Divide(totalLoss, NumOps.FromDouble(batchSize));
         var scale = NumOps.FromDouble(1.0 / batchSize);
 
-        for (int i = 0; i < gradQ.Length; i++)
-        {
-            gradQ[i] = NumOps.Multiply(gradQ[i], scale);
-            gradKPos[i] = NumOps.Multiply(gradKPos[i], scale);
-        }
-
-        return (avgLoss, new Tensor<T>(gradQ, [batchSize, dim]), new Tensor<T>(gradKPos, [batchSize, dim]));
+        return (avgLoss, Engine.TensorMultiplyScalar(gradQ, scale), Engine.TensorMultiplyScalar(gradKPos, scale));
     }
 
     /// <summary>
@@ -364,68 +230,27 @@ public class InfoNCELoss<T> : ContrastiveLossBase<T>
     public double ComputeAccuracy(Tensor<T> queries, Tensor<T> positiveKeys, Tensor<T> negativeKeys)
     {
         var batchSize = queries.Shape[0];
-        var dim = queries.Shape[1];
-        var numNegatives = negativeKeys.Shape[0];
 
         var q = _normalize ? L2Normalize(queries) : queries;
         var kPos = _normalize ? L2Normalize(positiveKeys) : positiveKeys;
         var kNeg = _normalize ? L2Normalize(negativeKeys) : negativeKeys;
 
-        int correct = 0;
-
-        for (int i = 0; i < batchSize; i++)
-        {
-            // Compute positive similarity
-            T posSim = NumOps.Zero;
-            for (int d = 0; d < dim; d++)
-            {
-                posSim = NumOps.Add(posSim, NumOps.Multiply(q[i, d], kPos[i, d]));
-            }
-
-            // Check if positive has highest similarity
-            bool isCorrect = true;
-            for (int j = 0; j < numNegatives && isCorrect; j++)
-            {
-                T negSim = NumOps.Zero;
-                for (int d = 0; d < dim; d++)
-                {
-                    negSim = NumOps.Add(negSim, NumOps.Multiply(q[i, d], kNeg[j, d]));
-                }
-
-                if (NumOps.GreaterThan(negSim, posSim))
-                    isCorrect = false;
-            }
-
-            if (isCorrect) correct++;
-        }
+        // A query is correct when no negative is strictly more similar than its positive
+        var posSims = Engine.ReduceSum(Engine.TensorMultiply(q, kPos), new[] { 1 }, keepDims: true);
+        var negSims = Engine.TensorMatMul(q, Engine.TensorTranspose(kNeg));
+        var beatsPositive = Engine.TensorGreaterThan(Engine.TensorSubtract(negSims, posSims), NumOps.Zero);
+        var violations = Engine.ReduceSum(beatsPositive, new[] { 1 }, keepDims: false);
+        int correct = batchSize - Engine.TensorCountNonzero(violations);
 
         return (double)correct / batchSize;
     }
 
     private Tensor<T> L2Normalize(Tensor<T> tensor)
     {
-        var batchSize = tensor.Shape[0];
-        var dim = tensor.Shape[1];
-        var result = new T[batchSize * dim];
-
-        for (int i = 0; i < batchSize; i++)
-        {
-            T sumSquared = NumOps.Zero;
-            for (int j = 0; j < dim; j++)
-            {
-                var val = tensor[i, j];
-                sumSquared = NumOps.Add(sumSquared, NumOps.Multiply(val, val));
-            }
-
-            var norm = NumOps.Sqrt(NumOps.Add(sumSquared, NumOps.FromDouble(1e-8)));
-
-            for (int j = 0; j < dim; j++)
-            {
-                result[i * dim + j] = NumOps.Divide(tensor[i, j], norm);
-            }
-        }
-
-        return new Tensor<T>(result, [batchSize, dim]);
+        // x / sqrt(sum(x^2) + 1e-8) per row
+        var sumSquared = Engine.ReduceSum(Engine.TensorSquare(tensor), new[] { 1 }, keepDims: true);
+        var norm = Engine.TensorSqrt(Engine.TensorAddScalar(sumSquared, NumOps.FromDouble(1e-8)));
+        return Engine.TensorDivide(tensor, norm);
     }
     /// <summary>
     /// Differentiable in-batch InfoNCE: queries against keys, positives on the diagonal.
