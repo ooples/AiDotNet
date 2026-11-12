@@ -1076,20 +1076,23 @@ public partial class LSTMNeuralNetwork<T> : SequenceModelLayoutBase<T>
             // no explicit projection layers exist, or as a fallback for debugging.
             // If your architecture includes dense output layers after LSTM, those layers
             // handle the gradient transformation via their Backward() methods.
-            // Output feature outF averages hidden features [outF * H / O, (outF + 1) * H / O): a sum through
-            // a bucket indicator, divided by the bucket size.
+            // Scatter each hidden feature into its integer bucket, then divide by the bucket width.
+            // This needs linear storage instead of a hiddenFeatures-by-outputFeatures indicator.
             if (rows > 0 && outputFeatures > 0)
             {
                 var bucketOfHidden = Enumerable.Range(0, hiddenFeatures)
-                    .Select(hidF => Enumerable.Range(0, outputFeatures)
-                        .First(outF => hidF < ((outF + 1) * hiddenFeatures) / outputFeatures))
+                    .Select(hidF => (int)(((hidF + 1L) * outputFeatures - 1) / hiddenFeatures))
                     .ToArray();
                 using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
                 {
-                    var indicator = Engine.TensorOneHot<T>(new Tensor<int>(bucketOfHidden, [hiddenFeatures]), outputFeatures);
-                    var counts = Engine.ReduceSum(indicator, new[] { 0 }, keepDims: true);   // [1, O], all >= 1
-                    var hiddenRows = FlatRows(hiddenGradient, rows, hiddenFeatures);
-                    Engine.TensorDivide(Engine.TensorMatMul(hiddenRows, indicator), counts)
+                    var counts = new Tensor<double>(
+                        Enumerable.Range(0, outputFeatures).Select(outF =>
+                            (double)(((outF + 1L) * hiddenFeatures) / outputFeatures
+                                - ((long)outF * hiddenFeatures) / outputFeatures)).ToArray(), [1, outputFeatures]);
+                    var hiddenRows = FlatRows(hiddenGradient, rows, hiddenFeatures).Cast<double>();
+                    var sums = Engine.TensorScatterAdd(new Tensor<double>([rows, outputFeatures]),
+                        new Tensor<int>(bucketOfHidden, [hiddenFeatures]), hiddenRows, axis: 1);
+                    Engine.TensorDivide(sums, Engine.TensorBroadcastTo(counts, [rows, outputFeatures])).Cast<T>()
                         .CopyTo(transformedGradient.AsWritableSpan().Slice(0, rows * outputFeatures));
                 }
             }

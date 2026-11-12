@@ -11,7 +11,7 @@ using Xunit;
 
 namespace AiDotNet.Tests.UnitTests.NeuralNetworks;
 
-public class Elementwise01NumericalRegressionTests
+public partial class Elementwise01NumericalRegressionTests
 {
     private static object? Invoke(Type type, object? instance, string name, params object[] args)
         => (type.GetMethod(name, BindingFlags.NonPublic | BindingFlags.Static | BindingFlags.Instance)
