@@ -598,4 +598,148 @@ public class PreprocessingReferenceTests
         Assert.Equal(new[] { 7.0, 8, 9 }, folds[2].XTest.GetColumn(0).ToArray());
         Assert.Equal(new[] { 0.0, 1, 2, 3, 7, 8, 9 }, folds[1].XTrain.GetColumn(0).ToArray());
     }
+    private static Matrix<Half> HalfColumn(int rows, Func<int, double> value)
+    {
+        var data = new Half[rows, 1];
+        for (int i = 0; i < rows; i++)
+        {
+            data[i, 0] = (Half)value(i);
+        }
+
+        return new Matrix<Half>(data);
+    }
+
+    // Counting a 0/1 mask must not saturate for Half: 2048 + 1 rounds back to 2048 in Half, so a count kept in
+    // T reports 2048 for 2049 outliers.
+    [Fact(Timeout = 120000)]
+    public async Task IQRClipper_Half_CountsMoreThan2048Outliers()
+    {
+        await Task.CompletedTask;
+        var clipper = new IQRClipper<Half>();
+        clipper.Fit(HalfColumn(5, i => i)); // Q1 = 1, Q3 = 3, bounds [-2, 6]
+
+        var counts = clipper.CountOutliersPerFeature(HalfColumn(2049, _ => 100));
+
+        Assert.Equal(2049, counts[0]);
+    }
+
+    // imbalanced-learn counts the class sizes exactly; summed in Half the 2049-sample class would count as 2048.
+    [Fact(Timeout = 120000)]
+    public async Task ResamplingClassCounts_Half_CountMoreThan2048Samples()
+    {
+        await Task.CompletedTask;
+        var labels = new Half[2052];
+        for (int i = 2049; i < labels.Length; i++)
+        {
+            labels[i] = (Half)1;
+        }
+
+        var counts = ResamplingTensorOps.ClassCounts(new Vector<Half>(labels));
+
+        Assert.Equal(2049, counts[(Half)0]);
+        Assert.Equal(3, counts[(Half)1]);
+    }
+
+    // scikit-learn IterativeImputer(imputation_order="ascending") imputes the feature with fewer missing values
+    // first; with 2050 and 2049 missing entries a Half count saturates both at 2048 and ties them.
+    [Fact(Timeout = 120000)]
+    public async Task IterativeImputer_Half_OrdersMissingCountsAbove2048()
+    {
+        await Task.CompletedTask;
+        var mask = new Half[2050, 2];
+        for (int i = 0; i < 2050; i++)
+        {
+            mask[i, 0] = (Half)1;
+            mask[i, 1] = i < 2049 ? (Half)1 : (Half)0;
+        }
+
+        var order = IterativeImputer<Half>.AscendingMissingOrder(Tensor<Half>.FromMatrix(new Matrix<Half>(mask)));
+
+        Assert.Equal(new[] { 1, 0 }, order);
+    }
+
+    // The fitted imputation sequence is replayed by every Transform, so it must not alias engine scratch that
+    // a tensor arena hands out again after the fit.
+    [Fact(Timeout = 120000)]
+    public async Task IterativeImputer_FittedInArena_KeepsItsModels()
+    {
+        await Task.CompletedTask;
+        var data = M(new double[,]
+        {
+            { 1, 2 }, { 2, 4.1 }, { 3, 6.2 }, { 4, double.NaN }, { 5, 9.9 }, { double.NaN, 12 }
+        });
+        var reference = new IterativeImputer<double>(estimator: IterativeImputerEstimator.LinearRegression);
+        var expected = reference.FitTransform(data);
+
+        var imputer = new IterativeImputer<double>(estimator: IterativeImputerEstimator.LinearRegression);
+        using (AiDotNet.Tensors.Helpers.TensorArena.Create())
+        {
+            imputer.Fit(data);
+        }
+
+        using (AiDotNet.Tensors.Helpers.TensorArena.Create())
+        {
+            var engine = AiDotNet.Tensors.Engines.AiDotNetEngine.Current;
+            for (int i = 0; i < 64; i++)
+            {
+                _ = engine.TensorAddScalar(new Tensor<double>(new[] { 2 }), 1e6 + i);
+                _ = engine.TensorAddScalar(new Tensor<double>(new[] { 2, 1 }), -1e6 - i);
+            }
+        }
+
+        var actual = imputer.Transform(data);
+        for (int i = 0; i < data.Rows; i++)
+        {
+            for (int j = 0; j < data.Columns; j++)
+            {
+                Assert.Equal(expected[i, j], actual[i, j], Tolerance);
+            }
+        }
+    }
+
+    // sklearn.preprocessing.normalize only reads the columns it normalizes: a NaN or infinity in a
+    // passed-through column must not reach the norm of the selected ones.
+    [Fact(Timeout = 120000)]
+    public async Task Normalizer_NaNInUnselectedColumn_DoesNotPoisonTheRow()
+    {
+        await Task.CompletedTask;
+        var normalizer = new Normalizer<double>(NormType.L2, columnIndices: new[] { 0, 1 });
+        var result = normalizer.FitTransform(M(new double[,] { { 3, 4, double.NaN }, { 6, 8, double.PositiveInfinity } }));
+
+        Assert.Equal(0.6, result[0, 0], Tolerance);
+        Assert.Equal(0.8, result[0, 1], Tolerance);
+        Assert.True(double.IsNaN(result[0, 2]));
+        Assert.Equal(0.6, result[1, 0], Tolerance);
+        Assert.Equal(0.8, result[1, 1], Tolerance);
+        Assert.True(double.IsPositiveInfinity(result[1, 2]));
+    }
+
+    // numpy computes the percentile positions q (n - 1) in float64; in Half they overflow past 65504 samples
+    // (and integers past 2048 are inexact), so the quantiles were read from invalid positions.
+    [Fact(Timeout = 120000)]
+    public async Task QuantileTransformer_Half_MoreThan65504Samples_MatchesDouble()
+    {
+        await Task.CompletedTask;
+        const int rows = 70000;
+        Func<int, double> value = i => (i % 1000) / 1000.0;
+        var halfTransformer = new QuantileTransformer<Half>(nQuantiles: 11);
+        halfTransformer.Fit(HalfColumn(rows, value));
+
+        var doubleData = new double[rows, 1];
+        for (int i = 0; i < rows; i++)
+        {
+            doubleData[i, 0] = (double)(Half)value(i);
+        }
+
+        var doubleTransformer = new QuantileTransformer<double>(nQuantiles: 11);
+        doubleTransformer.Fit(M(doubleData));
+
+        var probes = new[] { 0.0, 0.25, 0.5, 0.75, 0.999 };
+        var halfResult = halfTransformer.Transform(HalfColumn(probes.Length, i => probes[i]));
+        var doubleResult = doubleTransformer.Transform(M(new double[,] { { 0.0 }, { 0.25 }, { 0.5 }, { 0.75 }, { 0.999 } }));
+        for (int i = 0; i < probes.Length; i++)
+        {
+            Assert.Equal(doubleResult[i, 0], (double)halfResult[i, 0], 5e-3);
+        }
+    }
 }
