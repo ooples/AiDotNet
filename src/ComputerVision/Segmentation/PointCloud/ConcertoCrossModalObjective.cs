@@ -116,8 +116,8 @@ public static class ConcertoCrossModalObjective<T>
     /// </summary>
     /// <remarks>
     /// Only occupied patches are gathered (as the training loss always did), so an unoccupied patch's
-    /// image feature never enters the loss. Point counts are integers, and the final mean scales each
-    /// similarity by 1 / M before summing, so no Half count or sum rounds or overflows.
+    /// image feature never enters the loss. Point counts are integers, and for Half the patch pooling and
+    /// the final mean accumulate in double, so no Half count or running sum stalls or overflows.
     /// </remarks>
     private static Tensor<T> CrossModalLoss(
         Tensor<T> pointFeatures,
@@ -127,7 +127,6 @@ public static class ConcertoCrossModalObjective<T>
     {
         var engine = Engine;
         int numPoints = pointCoordinates.Shape[0];
-        int featureDim = pointFeatures.Shape[^1];
         var similarities = new List<Tensor<T>>();
         T epsilonSquared = RepresentableEpsilon(CosineEpsilon * CosineEpsilon);
 
@@ -143,13 +142,9 @@ public static class ConcertoCrossModalObjective<T>
             int[] occupied = Enumerable.Range(0, patchCount).Where(p => countValues[p] > 0).ToArray();
             if (occupied.Length == 0) continue;
 
-            // Mean-pool: each point carries 1 / (its patch's point count) and a scatter-add sums every
-            // patch's share, which is exactly the per-patch mean and stays on the gradient tape.
-            var weights = engine.TensorReciprocal(engine.TensorIndexSelect(counts, patchOfPoint, 0).Cast<T>());
-            var weighted = engine.TensorMultiply(pointFeatures, engine.TensorBroadcastTo(
-                engine.Reshape(weights, new[] { numPoints, 1 }), new[] { numPoints, featureDim }));
-            var pooledAll = engine.TensorScatterAdd(
-                new Tensor<T>(new[] { patchCount + 1, featureDim }), patchOfPoint, weighted, 0);
+            // Mean-pool every patch on the gradient tape (accumulated in double for Half, whose own running
+            // sum stalls once a patch holds more than 2048 points).
+            var pooledAll = ConcertoWideAccumulation<T>.SegmentMean(pointFeatures, patchOfPoint, counts, patchCount + 1);
 
             var occupiedIndex = new Tensor<int>(new[] { occupied.Length }, new Vector<int>(occupied));
             var pooled = engine.TensorIndexSelect(pooledAll, occupiedIndex, 0);
@@ -165,9 +160,26 @@ public static class ConcertoCrossModalObjective<T>
         var allSimilarities = similarities.Count == 1
             ? similarities[0]
             : engine.TensorConcatenate(similarities.ToArray(), 0);
-        T inverseMatched = NumOps.FromDouble(1.0 / allSimilarities.Shape[0]);
-        var meanSimilarity = engine.ReduceSum(
-            engine.TensorMultiplyScalar(allSimilarities, inverseMatched), new[] { 0 }, false);
+        int matched = allSimilarities.Shape[0];
+        Tensor<T> meanSimilarity;
+        if (ConcertoWideAccumulation<T>.AccumulatesInDouble)
+        {
+            // Half: the mean of the M matched similarities as one double-accumulated segment ([M, 1] -> [1, 1]);
+            // the final one-element ReduceSum is exact and gives the same shape as the float path.
+            var pooled = ConcertoWideAccumulation<T>.SegmentMean(
+                engine.Reshape(allSimilarities, new[] { matched, 1 }),
+                new Tensor<int>(new[] { matched }),
+                new Tensor<int>(new[] { 1 }, new Vector<int>(new[] { matched })),
+                1);
+            meanSimilarity = engine.ReduceSum(engine.Reshape(pooled, new[] { 1 }), new[] { 0 }, false);
+        }
+        else
+        {
+            T inverseMatched = NumOps.FromDouble(1.0 / matched);
+            meanSimilarity = engine.ReduceSum(
+                engine.TensorMultiplyScalar(allSimilarities, inverseMatched), new[] { 0 }, false);
+        }
+
         return engine.ScalarMinusTensor(NumOps.One, meanSimilarity);
     }
 

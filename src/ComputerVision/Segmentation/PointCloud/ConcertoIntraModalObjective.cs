@@ -185,8 +185,9 @@ public static class ConcertoIntraModalObjective<T>
         int numPoints = teacherLogits.Shape[0];
         if (numPoints == 0) return;
 
-        // center = m * center + (1 - m) * mean over points of the teacher logits, written back in place.
-        var batchMean = Engine.ReduceMean(teacherLogits, new[] { 0 }, false);
+        // center = m * center + (1 - m) * mean over points of the teacher logits, written back in place. The mean
+        // accumulates in double for Half, whose own running sum stalls past 2048 points and overflows past 65504.
+        var batchMean = ConcertoWideAccumulation<T>.MeanOverRows(teacherLogits);
         var updated = Engine.TensorLerp(batchMean, center, NumOps.FromDouble(momentum));
         updated.AsSpan().CopyTo(center.AsWritableSpan());
     }

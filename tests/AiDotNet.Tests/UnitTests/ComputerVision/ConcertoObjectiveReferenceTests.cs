@@ -222,4 +222,133 @@ public class ConcertoObjectiveReferenceTests
         double expected = 10.0 + Math.Log(1.0 + Math.Exp(-10.0));
         Assert.Equal(expected, (double)(float)loss, 0.05);
     }
+
+    private static Tensor<Half> HalfTensor(int[] shape, Func<int, double> valueAt)
+    {
+        int size = 1;
+        foreach (int dim in shape) size *= dim;
+        var values = new Half[size];
+        for (int i = 0; i < size; i++) values[i] = (Half)(float)valueAt(i);
+        return new Tensor<Half>(shape, new Vector<Half>(values));
+    }
+
+    [Fact]
+    public void UpdateCenter_Half_ManyPointsAccumulatesTheMeanInDouble()
+    {
+        // 4096 points of (1, 30). Summed in Half the first column stalls at 2048 (1 is half an ulp there) and
+        // the second overflows past 65504, so the old center was (0.25, inf); the mean is (1, 30).
+        const int points = 4096;
+        var center = HalfTensor(new[] { 2 }, _ => 0.0);
+        var logits = HalfTensor(new[] { points, 2 }, i => i % 2 == 0 ? 1.0 : 30.0);
+
+        ConcertoIntraModalObjective<Half>.UpdateCenter(center, logits, 0.5);
+
+        Assert.Equal(0.5, (double)(float)center[0], 1e-3);
+        Assert.Equal(15.0, (double)(float)center[1], 1e-2);
+    }
+
+    private static ConcertoPairedView<Half> HalfGridView(int grid, Func<int, double> imageFeatureAt) => new()
+    {
+        // Identity pose, unit pinhole, a grid x grid depth map at depth 1 and a grid x grid patch grid, so
+        // every pixel is its own patch.
+        Extrinsics = HalfTensor(new[] { 4, 4 }, i => i % 5 == 0 ? 1.0 : 0.0),
+        Intrinsics = HalfTensor(new[] { 3, 3 }, i => i % 4 == 0 ? 1.0 : 0.0),
+        DepthMap = HalfTensor(new[] { grid, grid }, _ => 1.0),
+        PatchGridSize = grid,
+        ImagePatchFeatures = HalfTensor(new[] { grid * grid, 2 }, imageFeatureAt),
+    };
+
+    [Fact]
+    public void CrossModalLoss_Half_LargePatchMeanPoolsInDouble()
+    {
+        // 8192 points in patch 0: 6144 with feature (1, 0), then 2048 with (0, 1), against image feature (1, -1).
+        // The pooled mean is (0.75, 0.25): cos = 0.5 / (sqrt(0.625) * sqrt(2)) = 1 / sqrt(5). Pooled in Half each
+        // point adds 2^-13, which is half an ulp once the first column reaches 0.25, so the old pooled feature
+        // was (0.25, 0.25), orthogonal to the target, and the loss was 1.
+        const int points = 8192;
+        const int firstGroup = 6144;
+        var view = HalfGridView(2, i => i == 0 ? 1.0 : i == 1 ? -1.0 : 1.0);
+        var coordinates = HalfTensor(new[] { points, 3 }, i => i % 3 == 2 ? 1.0 : 0.5);
+        var features = HalfTensor(new[] { points, 2 }, i => (i / 2 < firstGroup) == (i % 2 == 0) ? 1.0 : 0.0);
+        var views = new List<ConcertoPairedView<Half>> { view };
+
+        double expected = 1.0 - (1.0 / Math.Sqrt(5.0));
+
+        Half loss = ConcertoCrossModalObjective<Half>.ComputeLoss(features, coordinates, views, 0.5);
+        Assert.Equal(expected, (double)(float)loss, 2e-3);
+        var tape = ConcertoCrossModalObjective<Half>.ComputeTapeLoss(features, coordinates, views, 0.5);
+        Assert.Equal(expected, (double)(float)tape.ToArray()[0], 2e-3);
+    }
+
+    [Fact]
+    public void CrossModalLoss_Half_ManyMatchedPatchesAveragesInDouble()
+    {
+        // A 64 x 64 grid with one point per pixel, every point and patch feature (1, 0): all 4096 similarities are
+        // 1 and the loss is 0. Averaged in Half each similarity adds 2^-12, half an ulp once the sum reaches 0.5,
+        // so the old mean stalled at 0.5 and the loss was 0.5.
+        const int grid = 64;
+        const int points = grid * grid;
+        var view = HalfGridView(grid, i => i % 2 == 0 ? 1.0 : 0.0);
+        var coordinates = HalfTensor(new[] { points, 3 }, i =>
+        {
+            int point = i / 3;
+            return (i % 3) switch
+            {
+                0 => (point % grid) + 0.5,
+                1 => (point / grid) + 0.5,
+                _ => 1.0,
+            };
+        });
+        var features = HalfTensor(new[] { points, 2 }, i => i % 2 == 0 ? 1.0 : 0.0);
+        var views = new List<ConcertoPairedView<Half>> { view };
+
+        Half loss = ConcertoCrossModalObjective<Half>.ComputeLoss(features, coordinates, views, 0.5);
+        Assert.Equal(0.0, (double)(float)loss, 2e-3);
+        var tape = ConcertoCrossModalObjective<Half>.ComputeTapeLoss(features, coordinates, views, 0.5);
+        Assert.Equal(0.0, (double)(float)tape.ToArray()[0], 2e-3);
+    }
+
+    [Fact]
+    public void CrossModalLoss_Half_TapeGradientMatchesDouble()
+    {
+        // The double-accumulated Half pooling is one recorded operation; its backward must give the same
+        // feature gradient as the double objective.
+        var doubleFeatures = T(new[] { 5, 2 }, 1, 0, 0, 1, 1, 2, 5, 5, 7, 7);
+        Tensor<double> doubleGrad;
+        using (var tape = new AiDotNet.Tensors.Engines.Autodiff.GradientTape<double>())
+        {
+            var loss = ConcertoCrossModalObjective<double>.ComputeTapeLoss(
+                doubleFeatures, Coordinates(), new List<ConcertoPairedView<double>> { UnitCameraView() }, 0.5);
+            doubleGrad = tape.ComputeGradients(loss, new[] { doubleFeatures })[doubleFeatures];
+        }
+
+        static Tensor<Half> ToHalf(Tensor<double> source)
+            => new(source.Shape.ToArray(), new Vector<Half>(Array.ConvertAll(source.ToArray(), v => (Half)(float)v)));
+
+        var reference = UnitCameraView();
+        var halfView = new ConcertoPairedView<Half>
+        {
+            Extrinsics = ToHalf(reference.Extrinsics),
+            Intrinsics = ToHalf(reference.Intrinsics),
+            DepthMap = ToHalf(reference.DepthMap),
+            PatchGridSize = reference.PatchGridSize,
+            ImagePatchFeatures = ToHalf(reference.ImagePatchFeatures),
+        };
+        var halfFeatures = ToHalf(doubleFeatures);
+        Tensor<Half> halfGrad;
+        using (var tape = new AiDotNet.Tensors.Engines.Autodiff.GradientTape<Half>())
+        {
+            var loss = ConcertoCrossModalObjective<Half>.ComputeTapeLoss(
+                halfFeatures, ToHalf(Coordinates()), new List<ConcertoPairedView<Half>> { halfView }, 0.5);
+            halfGrad = tape.ComputeGradients(loss, new[] { halfFeatures })[halfFeatures];
+        }
+
+        double[] expected = doubleGrad.ToArray();
+        Half[] actual = halfGrad.ToArray();
+        Assert.Equal(expected.Length, actual.Length);
+        for (int i = 0; i < expected.Length; i++)
+        {
+            Assert.Equal(expected[i], (double)(float)actual[i], 5e-3);
+        }
+    }
 }
