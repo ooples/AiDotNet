@@ -434,4 +434,36 @@ internal static class FeatureSelectionTensorOps
         var engine = AiDotNetEngine.Current;
         return engine.TensorSubtractScalar(y, engine.TensorMean(y));
     }
+
+    /// <summary>
+    /// MCP thresholding (Zhang 2010) for a standardized column: <c>S(z, lambda) * gamma / (gamma - 1)</c> for
+    /// <c>|z| &lt;= gamma * lambda</c>, and <c>z</c> (no shrinkage) beyond.
+    /// </summary>
+    public static Tensor<T> McpThreshold<T>(Tensor<T> z, double lambda, double gamma)
+    {
+        var engine = AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<T>();
+        var shrunk = engine.TensorMultiplyScalar(SoftThreshold(z, ops.FromDouble(lambda)), ops.FromDouble(gamma / (gamma - 1)));
+        var inside = PreprocessingTensorOps.Not(engine.TensorGreaterThan(engine.TensorAbs(z), ops.FromDouble(gamma * lambda)));
+        return engine.TensorWhere(inside, shrunk, z);
+    }
+
+    /// <summary>
+    /// SCAD thresholding (Fan and Li 2001) for a standardized column: <c>S(z, lambda)</c> for
+    /// <c>|z| &lt;= 2 lambda</c>, <c>((a - 1) z - sign(z) a lambda) / (a - 2)</c> for <c>2 lambda &lt; |z| &lt;= a lambda</c>,
+    /// and <c>z</c> beyond.
+    /// </summary>
+    public static Tensor<T> ScadThreshold<T>(Tensor<T> z, double lambda, double a)
+    {
+        var engine = AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<T>();
+        var magnitude = engine.TensorAbs(z);
+        var soft = SoftThreshold(z, ops.FromDouble(lambda));
+        var transition = engine.TensorDivideScalar(engine.TensorSubtract(
+            engine.TensorMultiplyScalar(z, ops.FromDouble(a - 1)),
+            engine.TensorMultiplyScalar(engine.TensorSign(z), ops.FromDouble(a * lambda))), ops.FromDouble(a - 2));
+        var inSoft = PreprocessingTensorOps.Not(engine.TensorGreaterThan(magnitude, ops.FromDouble(2 * lambda)));
+        var inTransition = PreprocessingTensorOps.Not(engine.TensorGreaterThan(magnitude, ops.FromDouble(a * lambda)));
+        return engine.TensorWhere(inSoft, soft, engine.TensorWhere(inTransition, transition, z));
+    }
 }

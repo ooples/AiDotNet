@@ -31,13 +31,13 @@ public class MCPSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervi
     private readonly int _maxIterations;
     private readonly double _tolerance;
 
-    private double[]? _coefficients;
+    private Vector<T>? _coefficients;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
-    public double[]? Coefficients => _coefficients;
+    public Vector<T>? Coefficients => _coefficients;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -83,119 +83,36 @@ public class MCPSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervi
         int n = data.Rows;
         int p = data.Columns;
 
-        // Standardize data
-        var X = new double[n, p];
-        var y = new double[n];
-        var means = new double[p];
-        var stds = new double[p];
+        var engine = Engine;
 
-        double yMean = 0;
-        for (int i = 0; i < n; i++)
-            yMean += NumOps.ToDouble(target[i]);
-        yMean /= n;
+        // Standardize data (population std; a near-zero std is replaced by 1) and center the target
+        var X = FeatureSelectionTensorOps.Standardize(Tensor<T>.FromMatrix(data), out _);
+        var y = FeatureSelectionTensorOps.Center(Tensor<T>.FromVector(target));
 
-        for (int j = 0; j < p; j++)
-        {
-            for (int i = 0; i < n; i++)
-                means[j] += NumOps.ToDouble(data[i, j]);
-            means[j] /= n;
+        // Coordinate descent with MCP penalty on the partial residual correlation x_j . r_j / n
+        T count = NumOps.FromDouble(n);
+        var coefficients = FeatureSelectionTensorOps.CoordinateDescent(X, y, _maxIterations, _tolerance,
+            (partial, j) => FeatureSelectionTensorOps.McpThreshold(engine.TensorDivideScalar(partial, count), _lambda, _gamma), out _);
+        _coefficients = coefficients.ToVector();
 
-            for (int i = 0; i < n; i++)
-                stds[j] += Math.Pow(NumOps.ToDouble(data[i, j]) - means[j], 2);
-            stds[j] = Math.Sqrt(stds[j] / n);
-            if (stds[j] < 1e-10) stds[j] = 1;
-        }
-
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < p; j++)
-                X[i, j] = (NumOps.ToDouble(data[i, j]) - means[j]) / stds[j];
-            y[i] = NumOps.ToDouble(target[i]) - yMean;
-        }
-
-        // Coordinate descent with MCP penalty
-        _coefficients = new double[p];
-        var residuals = new double[n];
-        Array.Copy(y, residuals, n);
-
-        for (int iter = 0; iter < _maxIterations; iter++)
-        {
-            double maxChange = 0;
-
-            for (int j = 0; j < p; j++)
-            {
-                double oldBeta = _coefficients[j];
-
-                // Compute partial residual
-                double partial = 0;
-                for (int i = 0; i < n; i++)
-                    partial += X[i, j] * (residuals[i] + oldBeta * X[i, j]);
-                partial /= n;
-
-                // Apply MCP thresholding
-                double newBeta = MCPThreshold(partial, _lambda, _gamma);
-
-                if (Math.Abs(newBeta - oldBeta) > 1e-10)
-                {
-                    // Update residuals
-                    for (int i = 0; i < n; i++)
-                        residuals[i] -= (newBeta - oldBeta) * X[i, j];
-                }
-
-                _coefficients[j] = newBeta;
-                maxChange = Math.Max(maxChange, Math.Abs(newBeta - oldBeta));
-            }
-
-            if (maxChange < _tolerance)
-                break;
-        }
-
-        // Select top features by absolute coefficient
+        // Select top features by absolute coefficient, dropping (near-)zero ones unless none is left
         int nToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = _coefficients
-            .Select((c, idx) => (Coef: Math.Abs(c), Index: idx))
-            .OrderByDescending(x => x.Coef)
+        var magnitude = engine.TensorAbs(coefficients);
+        var nonZero = new HashSet<int>(PreprocessingTensorOps.MaskPositions(
+            engine.TensorGreaterThan(magnitude, NumOps.FromDouble(1e-10))));
+        _selectedIndices = PreprocessingTensorOps.StableOrder(magnitude, descending: true)
             .Take(nToSelect)
-            .Where(x => x.Coef > 1e-10)
-            .Select(x => x.Index)
+            .Where(j => nonZero.Contains(j))
             .OrderBy(x => x)
             .ToArray();
 
         if (_selectedIndices.Length == 0)
         {
-            _selectedIndices = _coefficients
-                .Select((c, idx) => (Coef: Math.Abs(c), Index: idx))
-                .OrderByDescending(x => x.Coef)
-                .Take(nToSelect)
-                .Select(x => x.Index)
-                .OrderBy(x => x)
-                .ToArray();
+            _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(magnitude, nToSelect);
         }
 
         IsFitted = true;
     }
-
-    private double MCPThreshold(double z, double lambda, double gamma)
-    {
-        double absZ = Math.Abs(z);
-
-        if (absZ <= lambda)
-        {
-            // Region 1: Full shrinkage to zero
-            return 0;
-        }
-        else if (absZ <= gamma * lambda)
-        {
-            // Region 2: Soft thresholding with MCP adjustment
-            return Math.Sign(z) * (absZ - lambda) * gamma / (gamma - 1);
-        }
-        else
-        {
-            // Region 3: No shrinkage for large coefficients
-            return z;
-        }
-    }
-
     /// <inheritdoc />
     public Matrix<T> FitTransform(Matrix<T> data, Vector<T> target)
     {

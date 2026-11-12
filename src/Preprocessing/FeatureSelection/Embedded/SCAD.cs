@@ -31,7 +31,7 @@ public class SCAD<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFeat
     private readonly int _maxIterations;
     private readonly double _tolerance;
 
-    private double[]? _coefficients;
+    private Vector<T>? _coefficients;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
@@ -39,7 +39,7 @@ public class SCAD<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFeat
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public double Lambda => _lambda;
     public double A => _a;
-    public double[]? Coefficients => _coefficients;
+    public Vector<T>? Coefficients => _coefficients;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -85,161 +85,39 @@ public class SCAD<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFeat
         int n = data.Rows;
         int p = data.Columns;
 
-        // Standardize data
-        var means = new double[p];
-        var stds = new double[p];
-        var X = new double[n, p];
+        var engine = Engine;
 
-        for (int j = 0; j < p; j++)
-        {
-            for (int i = 0; i < n; i++)
-                means[j] += NumOps.ToDouble(data[i, j]);
-            means[j] /= n;
+        // Standardize data (population std; a near-zero std is replaced by 1) and center the target
+        var X = FeatureSelectionTensorOps.Standardize(Tensor<T>.FromMatrix(data), out _);
+        var y = FeatureSelectionTensorOps.Center(Tensor<T>.FromVector(target));
 
-            for (int i = 0; i < n; i++)
-            {
-                double diff = NumOps.ToDouble(data[i, j]) - means[j];
-                stds[j] += diff * diff;
-            }
-            stds[j] = Math.Sqrt(stds[j] / n);
-            if (stds[j] < 1e-10) stds[j] = 1;
+        // Coordinate descent with SCAD penalty on the partial residual correlation rho = x_j . r_j / n
+        T count = NumOps.FromDouble(n);
+        var coefficients = FeatureSelectionTensorOps.CoordinateDescent(X, y, _maxIterations, _tolerance,
+            (rho, j) => FeatureSelectionTensorOps.ScadThreshold(engine.TensorDivideScalar(rho, count), _lambda, _a), out _);
+        _coefficients = coefficients.ToVector();
 
-            for (int i = 0; i < n; i++)
-                X[i, j] = (NumOps.ToDouble(data[i, j]) - means[j]) / stds[j];
-        }
-
-        double yMean = 0;
-        for (int i = 0; i < n; i++)
-            yMean += NumOps.ToDouble(target[i]);
-        yMean /= n;
-
-        var y = new double[n];
-        for (int i = 0; i < n; i++)
-            y[i] = NumOps.ToDouble(target[i]) - yMean;
-
-        // Initialize coefficients
-        _coefficients = new double[p];
-
-        // Coordinate descent with SCAD penalty
-        for (int iter = 0; iter < _maxIterations; iter++)
-        {
-            double maxChange = 0;
-
-            for (int j = 0; j < p; j++)
-            {
-                // Compute partial residual
-                double rho = 0;
-                for (int i = 0; i < n; i++)
-                {
-                    double residual = y[i];
-                    for (int k = 0; k < p; k++)
-                    {
-                        if (k != j)
-                            residual -= X[i, k] * _coefficients[k];
-                    }
-                    rho += X[i, j] * residual;
-                }
-                rho /= n;
-
-                // SCAD threshold
-                double newCoef = SCADThreshold(rho, _lambda, _a);
-
-                double change = Math.Abs(newCoef - _coefficients[j]);
-                if (change > maxChange) maxChange = change;
-
-                _coefficients[j] = newCoef;
-            }
-
-            if (maxChange < _tolerance)
-                break;
-        }
-
-        // Select features with non-zero coefficients
-        var nonZero = new List<(int Index, double AbsCoef)>();
-        for (int j = 0; j < p; j++)
-        {
-            if (Math.Abs(_coefficients[j]) > 1e-10)
-                nonZero.Add((j, Math.Abs(_coefficients[j])));
-        }
-
+        // Select features with non-zero coefficients (largest first); fall back to the top correlations
+        var magnitude = engine.TensorAbs(coefficients);
+        var nonZero = new HashSet<int>(PreprocessingTensorOps.MaskPositions(
+            engine.TensorGreaterThan(magnitude, NumOps.FromDouble(1e-10))));
         if (nonZero.Count == 0)
         {
-            // Fallback: select top by correlation
-            _selectedIndices = SelectByCorrelation(data, target, p);
+            var correlations = engine.TensorAbs(PreprocessingTensorOps.TargetCorrelations(
+                Tensor<T>.FromMatrix(data), Tensor<T>.FromVector(target)));
+            _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(correlations, Math.Min(_nFeaturesToSelect, p));
         }
         else
         {
-            _selectedIndices = nonZero
-                .OrderByDescending(x => x.AbsCoef)
+            _selectedIndices = PreprocessingTensorOps.StableOrder(magnitude, descending: true)
+                .Where(j => nonZero.Contains(j))
                 .Take(_nFeaturesToSelect)
-                .Select(x => x.Index)
                 .OrderBy(x => x)
                 .ToArray();
         }
 
         IsFitted = true;
     }
-
-    private double SCADThreshold(double z, double lambda, double a)
-    {
-        double absZ = Math.Abs(z);
-
-        if (absZ <= lambda)
-        {
-            // Soft threshold (like LASSO)
-            return Math.Sign(z) * Math.Max(0, absZ - lambda);
-        }
-        else if (absZ <= a * lambda)
-        {
-            // SCAD region
-            return ((a - 1) * z - Math.Sign(z) * a * lambda) / (a - 2);
-        }
-        else
-        {
-            // No shrinkage for very large values
-            return z;
-        }
-    }
-
-    private int[] SelectByCorrelation(Matrix<T> data, Vector<T> target, int p)
-    {
-        int n = data.Rows;
-        var scores = new double[p];
-
-        double yMean = 0;
-        for (int i = 0; i < n; i++)
-            yMean += NumOps.ToDouble(target[i]);
-        yMean /= n;
-
-        for (int j = 0; j < p; j++)
-        {
-            double xMean = 0;
-            for (int i = 0; i < n; i++)
-                xMean += NumOps.ToDouble(data[i, j]);
-            xMean /= n;
-
-            double sxy = 0, sxx = 0, syy = 0;
-            for (int i = 0; i < n; i++)
-            {
-                double xDiff = NumOps.ToDouble(data[i, j]) - xMean;
-                double yDiff = NumOps.ToDouble(target[i]) - yMean;
-                sxy += xDiff * yDiff;
-                sxx += xDiff * xDiff;
-                syy += yDiff * yDiff;
-            }
-
-            scores[j] = (sxx > 1e-10 && syy > 1e-10) ? Math.Abs(sxy / Math.Sqrt(sxx * syy)) : 0;
-        }
-
-        return scores
-            .Select((s, idx) => (Score: s, Index: idx))
-            .OrderByDescending(x => x.Score)
-            .Take(Math.Min(_nFeaturesToSelect, p))
-            .Select(x => x.Index)
-            .OrderBy(x => x)
-            .ToArray();
-    }
-
     /// <inheritdoc />
     public Matrix<T> FitTransform(Matrix<T> data, Vector<T> target)
     {
