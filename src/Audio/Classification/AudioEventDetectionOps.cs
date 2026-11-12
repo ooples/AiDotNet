@@ -101,6 +101,32 @@ internal static class AudioEventDetectionOps
         return engine.TensorNonzero(mask).ToArray();
     }
 
+    /// <summary>
+    /// Indices <c>i &lt; min(scores.Length, count)</c> (row-major) with <c>scores[i] &gt;= threshold</c>,
+    /// ascending. NaN scores never qualify.
+    /// </summary>
+    internal static int[] IndicesAtOrAbove<T>(IEngine engine, Tensor<T> scores, int count, T threshold)
+    {
+        int n = Math.Min(scores.Length, count);
+        if (n <= 0) return Array.Empty<int>();
+        var flat = Flatten(engine, scores);
+        var head = n == flat.Length ? flat : engine.TensorSlice(flat, new[] { 0 }, new[] { n });
+        var mask = engine.TensorGreaterEqual(head, Tensor<T>.CreateDefault(new[] { n }, threshold));
+        return engine.TensorNonzero(mask).ToArray();
+    }
+
+    /// <summary>
+    /// The first <c>min(scores.Length, classCount)</c> scores (row-major) as a rank-1 tensor of
+    /// <paramref name="classCount"/> elements, zero-padded.
+    /// </summary>
+    internal static Tensor<T> ScoreRow<T>(IEngine engine, Tensor<T> scores, int classCount)
+    {
+        int n = Math.Min(scores.Length, classCount);
+        if (n <= 0) return new Tensor<T>(new[] { classCount });
+        var flat = Flatten(engine, scores);
+        return ZeroPadTo(engine, n == flat.Length ? flat : engine.TensorSlice(flat, new[] { 0 }, new[] { n }), classCount);
+    }
+
     /// <summary>Wraps one window's class scores as a rank-1 tensor of <paramref name="classCount"/> elements.</summary>
     internal static Tensor<T> ScoreRow<T>(T[] scores, int classCount)
     {
@@ -116,10 +142,11 @@ internal static class AudioEventDetectionOps
     /// <summary>
     /// Merges detections of the same class that overlap or are separated by at most
     /// <paramref name="gap"/> seconds. A merged event spans the first start to the furthest end and takes
-    /// the confidence and peak time of its highest-confidence member (the latest one on ties), exactly
-    /// as the pairwise sequential merge did. Output is ordered by start time (stable).
+    /// the confidence and peak time of its highest-confidence member - the latest one on ties when
+    /// <paramref name="latestWinsTies"/> is true, the earliest otherwise - exactly as the pairwise
+    /// sequential merge did. Output is ordered by start time (stable).
     /// </summary>
-    internal static List<AudioEvent<T>> MergeEvents<T>(IEngine engine, List<AudioEvent<T>> events, double gap)
+    internal static List<AudioEvent<T>> MergeEvents<T>(IEngine engine, List<AudioEvent<T>> events, double gap, bool latestWinsTies = true)
     {
         if (events.Count == 0) return events;
         var merged = new List<AudioEvent<T>>();
@@ -144,7 +171,7 @@ internal static class AudioEventDetectionOps
                 segmentOf[i] = segmentStarts.Count - 1;
             }
 
-            int[] winners = LastArgMaxPerSegment(engine, sorted.Select(e => e.Confidence).ToArray(), segmentOf, segmentStarts.Count);
+            int[] winners = ArgMaxPerSegment(engine, sorted.Select(e => e.Confidence).ToArray(), segmentOf, segmentStarts.Count, latestWinsTies);
             for (int s = 0; s < segmentStarts.Count; s++)
             {
                 int first = segmentStarts[s];
@@ -169,21 +196,24 @@ internal static class AudioEventDetectionOps
     }
 
     /// <summary>
-    /// For each segment id in <c>[0, segmentCount)</c>, the index of the LAST element holding the segment's
-    /// maximum value. Computed with scatter-max over the values and then over 1-based positions masked to
-    /// the maxima, so it does not depend on any tie order inside the engine.
+    /// For each segment id in <c>[0, segmentCount)</c>, the index of the last (or, when
+    /// <paramref name="last"/> is false, the first) element holding the segment's maximum value.
+    /// Computed with scatter-max over the values and then over positions masked to the maxima, so it
+    /// does not depend on any tie order inside the engine.
     /// </summary>
-    internal static int[] LastArgMaxPerSegment<T>(IEngine engine, T[] values, int[] segmentOf, int segmentCount)
+    internal static int[] ArgMaxPerSegment<T>(IEngine engine, T[] values, int[] segmentOf, int segmentCount, bool last)
     {
         int n = values.Length;
         var v = new Tensor<T>(values, new[] { n });
         var seg = new Tensor<int>(segmentOf, new[] { n });
         var segMax = engine.ScatterMax(v, seg, out _, 0, segmentCount);
         var isMax = engine.TensorEquals(v, engine.TensorIndexSelect(segMax, seg, 0));
-        var position1 = engine.TensorMultiply(isMax, engine.TensorArange<T>(1, n + 1));
-        int[] last1 = engine.ScatterMax(position1, seg, out _, 0, segmentCount).Cast<int>().ToArray();
+        // Rank r(i) = i + 1 to prefer later indices, n - i to prefer earlier ones; both are >= 1, so a
+        // masked-out element (rank 0) never wins.
+        var rank = last ? engine.TensorArange<T>(1, n + 1) : engine.TensorArange<T>(n, 0, -1);
+        int[] best = engine.ScatterMax(engine.TensorMultiply(isMax, rank), seg, out _, 0, segmentCount).Cast<int>().ToArray();
         var result = new int[segmentCount];
-        for (int s = 0; s < segmentCount; s++) result[s] = last1[s] - 1;
+        for (int s = 0; s < segmentCount; s++) result[s] = last ? best[s] - 1 : n - best[s];
         return result;
     }
 
