@@ -20,7 +20,7 @@ internal static class AudioEngineOps
     internal static T NegativeInfinityOrMin<T>()
     {
         var numOps = MathHelper.GetNumericOperations<T>();
-        return IsFloating<T>() ? NegativeInfinityOrMin<T>() : numOps.MinValue;
+        return IsFloating<T>() ? numOps.FromDouble(double.NegativeInfinity) : numOps.MinValue;
     }
 
     /// <summary>NaN for floating element types, otherwise zero (only reachable where no NaN exists).</summary>
@@ -49,7 +49,24 @@ internal static class AudioEngineOps
         int n = values.Length;
         if (n == 0) return Array.Empty<int>();
         if (n == 1) return new[] { 0 };
-        var numOps = MathHelper.GetNumericOperations<T>();
+        var rank = GreaterCountTensor(engine, values);
+        var key = engine.TensorAdd(
+            engine.TensorMultiplyScalar(rank.Cast<long>(), (long)n),
+            engine.TensorArange<int>(0, n).Cast<long>());
+        return engine.TensorArgsort(key, 0, descending: false).ToArray();
+    }
+
+    /// <summary>
+    /// For each element of <paramref name="values"/> (row-major), the number of elements strictly
+    /// greater than it; a NaN element gets <c>n</c> (it ranks after everything). O(n log n) time, O(n)
+    /// memory.
+    /// </summary>
+    internal static int[] GreaterCounts<T>(IEngine engine, Tensor<T> values)
+        => values.Length == 0 ? Array.Empty<int>() : GreaterCountTensor(engine, values).ToArray();
+
+    private static Tensor<int> GreaterCountTensor<T>(IEngine engine, Tensor<T> values)
+    {
+        int n = values.Length;
         var v = Flatten(engine, values);
         var isNan = engine.TensorIsNan(v);
         bool anyNan = engine.TensorCountNonzero(isNan) > 0;
@@ -62,12 +79,7 @@ internal static class AudioEngineOps
         // Elements strictly greater than v[i] = n - (elements <= v[i]).
         var atMost = engine.TensorSearchSorted(sorted, comparable, right: true);
         var rank = engine.TensorSubtract(Tensor<int>.CreateDefault(new[] { n }, n), atMost);
-        if (anyNan)
-            rank = engine.TensorWhere(isNan, Tensor<int>.CreateDefault(new[] { n }, n), rank);
-        var key = engine.TensorAdd(
-            engine.TensorMultiplyScalar(rank.Cast<long>(), (long)n),
-            engine.TensorArange<int>(0, n).Cast<long>());
-        return engine.TensorArgsort(key, 0, descending: false).ToArray();
+        return anyNan ? engine.TensorWhere(isNan, Tensor<int>.CreateDefault(new[] { n }, n), rank) : rank;
     }
 
     /// <summary>

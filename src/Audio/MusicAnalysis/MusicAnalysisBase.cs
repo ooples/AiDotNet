@@ -224,10 +224,7 @@ public abstract class MusicAnalysisBase<T>
 
         // Candidates are never NaN, so v[a] > v[b] exactly when fewer candidates exceed v[a] than v[b]
         var values = Engine.TensorIndexSelect(x, new Tensor<int>(candidates, [m]), 0);
-        var square = new[] { m, m };
-        var others = Engine.TensorBroadcastTo(Engine.Reshape(values, [1, m]), square);
-        var self = Engine.TensorBroadcastTo(Engine.Reshape(values, [m, 1]), square);
-        int[] exceededBy = Engine.ReduceSum(Engine.TensorGreaterThan(others, self), [1], keepDims: false).Cast<int>().ToArray();
+        int[] exceededBy = AudioEngineOps.GreaterCounts(Engine, values);
 
         int lastCandidate = -1;
         for (int k = 0; k < m; k++)
