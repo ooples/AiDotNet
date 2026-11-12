@@ -25,18 +25,9 @@ public class ToGray<T> : ImageAugmenterBase<T>
 
         var result = data.Clone();
 
-        for (int y = 0; y < data.Height; y++)
-            for (int x = 0; x < data.Width; x++)
-            {
-                double r = NumOps.ToDouble(data.GetPixel(y, x, 0));
-                double g = NumOps.ToDouble(data.GetPixel(y, x, 1));
-                double b = NumOps.ToDouble(data.GetPixel(y, x, 2));
-                double gray = r * w1 + g * w2 + b * w3;
-
-                result.SetPixel(y, x, 0, NumOps.FromDouble(gray));
-                result.SetPixel(y, x, 1, NumOps.FromDouble(gray));
-                result.SetPixel(y, x, 2, NumOps.FromDouble(gray));
-            }
+        var image = data.ToPlanarTensor();
+        var gray = ImageTensor<T>.MixChannels(image, w1, w2, w3);
+        result.SetFromPlanarTensor(ImageTensor<T>.ReplaceLeadingChannels(image, gray, gray, gray));
 
         return result;
     }

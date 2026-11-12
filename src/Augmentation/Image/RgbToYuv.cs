@@ -53,36 +53,15 @@ public class RgbToYuv<T> : ImageAugmenterBase<T>
             OriginalRange = data.OriginalRange
         };
 
-        for (int y = 0; y < data.Height; y++)
-        {
-            for (int x = 0; x < data.Width; x++)
-            {
-                double r = NumOps.ToDouble(data.GetPixel(y, x, 0));
-                double g = NumOps.ToDouble(data.GetPixel(y, x, 1));
-                double b = NumOps.ToDouble(data.GetPixel(y, x, 2));
+        var image = data.ToPlanarTensor();
+        var (r, g, b) = ImageTensor<T>.UnitRgbPlanes(image, data.IsNormalized);
 
-                if (!data.IsNormalized)
-                {
-                    r /= 255.0;
-                    g /= 255.0;
-                    b /= 255.0;
-                }
+        // BT.601 conversion matrix
+        var yLum = ImageTensor<T>.MixPlanes(r, g, b, 0.299, 0.587, 0.114);
+        var u = ImageTensor<T>.MixPlanes(r, g, b, -0.14713, -0.28886, 0.436);
+        var v = ImageTensor<T>.MixPlanes(r, g, b, 0.615, -0.51499, -0.10001);
 
-                // BT.601 conversion matrix
-                double yLum = 0.299 * r + 0.587 * g + 0.114 * b;
-                double u = -0.14713 * r - 0.28886 * g + 0.436 * b;
-                double v = 0.615 * r - 0.51499 * g - 0.10001 * b;
-
-                result.SetPixel(y, x, 0, NumOps.FromDouble(yLum));
-                result.SetPixel(y, x, 1, NumOps.FromDouble(u));
-                result.SetPixel(y, x, 2, NumOps.FromDouble(v));
-
-                for (int c = 3; c < data.Channels; c++)
-                {
-                    result.SetPixel(y, x, c, data.GetPixel(y, x, c));
-                }
-            }
-        }
+        result.SetFromPlanarTensor(ImageTensor<T>.ReplaceLeadingChannels(image, yLum, u, v));
 
         return result;
     }

@@ -1,48 +1,46 @@
 using AiDotNet.LearningRateSchedulers;
 using AiDotNet.Attributes;
-using AiDotNet.Audio.Features;
-using AiDotNet.Diffusion.Audio;
+using AiDotNet.Audio.Fingerprinting;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Onnx;
 using AiDotNet.Optimizers;
+using AiDotNet.Tensors.Engines.Autodiff;
 using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.Audio.Classification;
 
 /// <summary>
-/// CLAP (Contrastive Language-Audio Pre-training) model for zero-shot and fine-tuned audio classification.
+/// CLAP (Contrastive Language-Audio Pre-training) as an audio classifier: zero-shot against text prompts, or
+/// fine-tuned with a linear head.
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
 /// <para>
 /// CLAP (Wu et al., ICASSP 2023) learns joint audio-text representations through contrastive learning,
-/// similar to CLIP for images. It enables zero-shot audio classification by comparing audio embeddings
-/// with text descriptions, achieving 26.7% zero-shot accuracy on ESC-50 and 46.8% mAP on AudioSet
-/// with fine-tuning.
-/// </para>
-/// <para>
-/// <b>Architecture:</b> CLAP consists of two encoders:
-/// <list type="number">
-/// <item><b>Audio encoder</b>: HTS-AT or PANN backbone processing 64-bin mel spectrograms at 48 kHz</item>
-/// <item><b>Text encoder</b>: RoBERTa-based encoder for natural language sound descriptions</item>
-/// <item><b>Projection heads</b>: Map both modalities into a shared 512-dim embedding space</item>
-/// <item><b>Contrastive loss</b>: InfoNCE with learnable temperature aligns matching audio-text pairs</item>
+/// similar to CLIP for images. This class is the classification task over that network: it runs the audio and
+/// text towers of <see cref="CLAPModel{T}"/> (built by the same factories from the same
+/// <see cref="CLAPOptions.Network"/> options), and adds
+/// <list type="bullet">
+/// <item><b>zero-shot classification</b>: each prompt's text embedding against the audio embedding, both
+/// L2-normalized, scaled by 1/τ and turned into probabilities with a softmax over the prompts;</item>
+/// <item><b>fine-tuning</b>: LAION-CLAP's linear probe (<c>LinearProbe(mlp=False)</c>), a linear layer on the
+/// audio projection, trained with binary cross-entropy on logits, read through a sigmoid.</item>
 /// </list>
 /// </para>
 /// <para>
 /// <b>For Beginners:</b> CLAP is special because it understands both audio and text. Instead of having
 /// fixed labels like "dog bark" or "siren", you can describe any sound in plain English and CLAP will
-/// find it in audio. For example, you can search for "the sound of rain hitting a tin roof" without
-/// ever training on that specific label. This is called "zero-shot" classification.
+/// find it in audio. This is called "zero-shot" classification.
 ///
 /// <b>Usage:</b>
 /// <code>
-/// var arch = new NeuralNetworkArchitecture&lt;float&gt;(inputFeatures: 768, outputSize: 527);
-/// var clap = new CLAP&lt;float&gt;(arch, "clap_audio_encoder.onnx");
-/// clap.SetTextPrompts(new[] { "a dog barking", "rain falling", "a car engine" });
+/// var clap = new CLAP&lt;float&gt;(new NeuralNetworkArchitecture&lt;float&gt;(InputType.OneDimensional,
+///     NeuralNetworkTaskType.MultiLabelClassification, inputSize: 480000, outputSize: 527));
+/// clap.SetTextPrompts(new[] { "a dog barking", "rain falling", "a car engine" }, tokenizer);
 /// var result = clap.Detect(audioTensor);
 /// </code>
 /// </para>
@@ -70,16 +68,26 @@ namespace AiDotNet.Audio.Classification;
                         + "warm-up and cosine learning rate decay at a basic learning rate of 1e-4. The "
                         + "betas are declared in the order the paper gives them, which is the reverse of "
                         + "the usual 0.9 and 0.99.")]
+[PreprocessesInput("PreprocessAudio converts the waveform to CLAPModel's log-mel image before the audio "
+    + "tower runs, so Layers[0] never sees the raw samples.")]
+[StackInputLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    BatchOptional = true)]
+[TaskVariantOf(typeof(AiDotNet.Audio.Fingerprinting.CLAPModel<>), "zero-shot and fine-tuned audio classification")]
 public partial class CLAP<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
 {
     #region Fields
 
     private readonly CLAPOptions _options;
-    private MelSpectrogram<T>? _melSpectrogram;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
-    private bool _useNativeMode;
+    private readonly bool _useNativeMode;
     private bool _disposed;
-    private string[] _textPrompts;
+    // CLAPModel's waveform -> log-mel pipeline (clip fitting, fusion views, filterbank), built on first use.
+    private AiDotNet.Audio.Fingerprinting.ClapAudioFrontEnd<T>? _frontEnd;
+    // Random crops of long clips while fine-tuning; inference reseeds per call, as CLAPModel does.
+    private Random? _trainingRandom;
+    private string[] _textPrompts = Array.Empty<string>();
+    private int[][] _promptTokens = Array.Empty<int[]>();
+    private string[] _headLabels;
     private OnnxModel<T>? _textEncoder;
     public static readonly string[] AudioSetLabels = BEATs<T>.AudioSetLabels;
 
@@ -88,26 +96,20 @@ public partial class CLAP<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
     #region Constructors
 
     /// <summary>
-    /// Creates a CLAP model in ONNX inference mode from a pre-trained audio encoder model file.
+    /// Creates a CLAP classifier in ONNX inference mode from a pre-trained audio encoder model file.
     /// </summary>
     /// <param name="architecture">The neural network architecture defining input/output dimensions.</param>
-    /// <param name="modelPath">Path to the pre-trained ONNX audio encoder file.</param>
+    /// <param name="modelPath">Path to the pre-trained ONNX audio encoder, which reads CLAP's log-mel image.</param>
     /// <param name="options">Optional configuration. Defaults are used if null.</param>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> This constructor loads a pre-trained CLAP model for immediate
-    /// audio classification. The model runs on CPU using ONNX Runtime.</para>
-    /// </remarks>
     public CLAP(NeuralNetworkArchitecture<T> architecture, string modelPath, CLAPOptions? options = null)
-        : base(architecture)
+        : base(architecture, new BinaryCrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new CLAPOptions();
         Options = _options;
+        _options.Network.Validate();
         _useNativeMode = false;
-        base.SampleRate = _options.SampleRate;
-        base.NumMels = _options.NumMels;
-        _melSpectrogram = new MelSpectrogram<T>(
-            _options.SampleRate, _options.NumMels, _options.FftSize,
-            _options.HopLength, _options.FMin, _options.FMax, logMel: true);
+        base.SampleRate = _options.Network.SampleRate;
+        base.NumMels = _options.Network.NumMelBands;
         if (string.IsNullOrWhiteSpace(modelPath))
             throw new ArgumentException("Model path cannot be null or empty.", nameof(modelPath));
         if (!File.Exists(modelPath))
@@ -120,27 +122,24 @@ public partial class CLAP<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
                 throw new FileNotFoundException($"Text encoder ONNX model not found: {tp}", tp);
             _textEncoder = new OnnxModel<T>(tp, _options.OnnxOptions);
         }
-        _textPrompts = _options.TextPrompts ?? Array.Empty<string>();
-        ClassLabels = _options.CustomLabels ?? (_textPrompts.Length > 0 ? _textPrompts : AudioSetLabels);
+        _headLabels = _options.CustomLabels ?? AudioSetLabels;
+        ClassLabels = _headLabels;
         InitializeLayers();
     }
 
     /// <summary>
-    /// Creates a CLAP model in native training mode for training from scratch.
+    /// Creates a trainable CLAP classifier.
     /// </summary>
     /// <param name="architecture">The neural network architecture defining input/output dimensions.</param>
     /// <param name="options">Optional configuration. Defaults are used if null.</param>
-    /// <param name="optimizer">Optional gradient-based optimizer. AdamW is used if null.</param>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> This constructor builds a trainable CLAP model. Training CLAP
-    /// requires paired audio-text data to learn the joint embedding space.</para>
-    /// </remarks>
+    /// <param name="optimizer">Optional gradient-based optimizer; the paper's Adam is used if null.</param>
     public CLAP(NeuralNetworkArchitecture<T> architecture, CLAPOptions? options = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null)
-        : base(architecture)
+        : base(architecture, new BinaryCrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new CLAPOptions();
         Options = _options;
+        _options.Network.Validate();
         _useNativeMode = true;
         // The rate this model publishes on its own options. Built bare, the optimizer
         // would use its own default instead and LearningRate would be configuration that
@@ -150,27 +149,20 @@ public partial class CLAP<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
     ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this,
         new AiDotNet.Models.Options.AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
         { InitialLearningRate = _options.LearningRate });
-        base.SampleRate = _options.SampleRate;
-        base.NumMels = _options.NumMels;
-        _textPrompts = _options.TextPrompts ?? Array.Empty<string>();
-        ClassLabels = _options.CustomLabels ?? (_textPrompts.Length > 0 ? _textPrompts : AudioSetLabels);
-        _melSpectrogram = new MelSpectrogram<T>(
-            _options.SampleRate, _options.NumMels, _options.FftSize,
-            _options.HopLength, _options.FMin, _options.FMax, logMel: true);
+        base.SampleRate = _options.Network.SampleRate;
+        base.NumMels = _options.Network.NumMelBands;
+        _headLabels = _options.CustomLabels ?? AudioSetLabels;
+        ClassLabels = _headLabels;
         InitializeLayers();
     }
 
     /// <summary>
-    /// Downloads and creates a CLAP model asynchronously from a model repository.
+    /// Downloads and creates a CLAP classifier asynchronously from a model repository.
     /// </summary>
     /// <param name="options">Optional configuration. Defaults are used if null.</param>
     /// <param name="progress">Optional progress reporter (0.0 to 1.0).</param>
     /// <param name="cancellationToken">Optional cancellation token.</param>
-    /// <returns>A fully initialized CLAP model ready for inference.</returns>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> This is the easiest way to get started with CLAP. It downloads
-    /// a pre-trained model automatically and sets everything up for you.</para>
-    /// </remarks>
+    /// <returns>A fully initialized CLAP classifier ready for inference.</returns>
     internal static async Task<CLAP<T>> CreateAsync(
         CLAPOptions? options = null,
         IProgress<double>? progress = null,
@@ -186,12 +178,11 @@ public partial class CLAP<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
             options.ModelPath = mp;
         }
 
-        var customLabels = options.CustomLabels;
-        var labels = customLabels
-            ?? (options.TextPrompts is { Length: > 0 } tp ? tp : AudioSetLabels);
         var arch = new NeuralNetworkArchitecture<T>(
-            inputFeatures: options.AudioEmbeddingDim,
-            outputSize: labels.Length);
+            inputType: InputType.OneDimensional,
+            taskType: NeuralNetworkTaskType.MultiLabelClassification,
+            inputSize: (int)(options.WindowSize * options.Network.SampleRate),
+            outputSize: (options.CustomLabels ?? AudioSetLabels).Length);
         return new CLAP<T>(arch, mp, options);
     }
 
@@ -224,16 +215,14 @@ public partial class CLAP<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
     {
         ThrowIfDisposed();
         double tv = NumOps.ToDouble(threshold);
-        double dur = audio.Length / (double)_options.SampleRate;
+        double dur = audio.Length / (double)_options.Network.SampleRate;
         var wins = SplitIntoWindows(audio);
         var all = new List<AudioEvent<T>>();
 
         for (int w = 0; w < wins.Count; w++)
         {
             double st = w * TimeResolution;
-            var mel = _melSpectrogram?.Forward(wins[w])
-                ?? throw new InvalidOperationException("MelSpectrogram not initialized.");
-            var sc = ClassifyWindow(mel);
+            var sc = ClassifyWindow(wins[w]);
 
             for (int i = 0; i < sc.Length && i < ClassLabels.Count; i++)
             {
@@ -292,9 +281,7 @@ public partial class CLAP<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
         var p = new Tensor<T>([wins.Count, ClassLabels.Count]);
         for (int w = 0; w < wins.Count; w++)
         {
-            var mel = _melSpectrogram?.Forward(wins[w])
-                ?? throw new InvalidOperationException("MelSpectrogram not initialized.");
-            var sc = ClassifyWindow(mel);
+            var sc = ClassifyWindow(wins[w]);
             for (int i = 0; i < ClassLabels.Count && i < sc.Length; i++)
                 p[w, i] = sc[i];
         }
@@ -303,15 +290,15 @@ public partial class CLAP<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
 
     /// <inheritdoc />
     public IStreamingEventDetectionSession<T> StartStreamingSession()
-        => StartStreamingSession(_options.SampleRate, NumOps.FromDouble(_options.Threshold));
+        => StartStreamingSession(_options.Network.SampleRate, NumOps.FromDouble(_options.Threshold));
 
     /// <inheritdoc />
     public IStreamingEventDetectionSession<T> StartStreamingSession(int sr, T thr)
     {
         if (sr <= 0)
             throw new ArgumentOutOfRangeException(nameof(sr), "Sample rate must be positive.");
-        if (sr != _options.SampleRate)
-            throw new ArgumentException($"Sample rate {sr} does not match model's configured sample rate {_options.SampleRate}. Resample audio before streaming.", nameof(sr));
+        if (sr != _options.Network.SampleRate)
+            throw new ArgumentException($"Sample rate {sr} does not match model's configured sample rate {_options.Network.SampleRate}. Resample audio before streaming.", nameof(sr));
         return new CLAPStreamingSession(this, sr, thr);
     }
 
@@ -322,26 +309,45 @@ public partial class CLAP<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
     /// <summary>
     /// Sets the text prompts for zero-shot classification.
     /// </summary>
-    /// <param name="prompts">Natural language descriptions of sounds to detect.</param>
+    /// <param name="prompts">Natural language descriptions of sounds to detect; empty returns to the
+    /// fine-tuning head.</param>
+    /// <param name="tokenize">The text tower's tokenizer (RoBERTa's BPE for the published checkpoints), giving
+    /// at most <see cref="CLAPModelOptions.MaxTextLength"/> ids below <see cref="CLAPModelOptions.VocabSize"/>.</param>
     /// <remarks>
-    /// <para>When text prompts are set, CLAP compares audio embeddings with text embeddings
-    /// to classify audio without fine-tuning. The class labels are automatically updated
-    /// to match the prompts.</para>
-    /// <para><b>For Beginners:</b> Call this to tell CLAP what sounds to look for. For example:
+    /// <para>Each window's audio embedding is compared with each prompt's text embedding; the class labels
+    /// become the prompts.</para>
+    /// <para><b>For Beginners:</b> Call this to tell CLAP what sounds to look for:
     /// <code>
-    /// clap.SetTextPrompts(new[] { "a dog barking", "rain falling", "a car horn honking" });
-    /// </code>
-    /// CLAP will then classify audio into these categories.</para>
+    /// clap.SetTextPrompts(new[] { "a dog barking", "rain falling", "a car horn honking" }, tokenizer);
+    /// </code></para>
     /// </remarks>
-    public void SetTextPrompts(string[] prompts)
+    public void SetTextPrompts(string[] prompts, Func<string, int[]> tokenize)
     {
-        _textPrompts = prompts ?? Array.Empty<string>();
-        if (_textPrompts.Length > 0)
-            ClassLabels = _textPrompts;
+        ThrowIfDisposed();
+        if (prompts is null) throw new ArgumentNullException(nameof(prompts));
+        if (tokenize is null) throw new ArgumentNullException(nameof(tokenize));
+        if (prompts.Length > 0 && !_useNativeMode && _textEncoder is null)
+            throw new InvalidOperationException(
+                "Zero-shot prompts in ONNX mode need a text encoder; set CLAPOptions.TextEncoderModelPath.");
+        var tokens = new int[prompts.Length][];
+        for (int i = 0; i < prompts.Length; i++)
+        {
+            var ids = tokenize(prompts[i]) ?? throw new ArgumentException($"The tokenizer returned null for \"{prompts[i]}\".", nameof(tokenize));
+            if (ids.Length == 0 || ids.Length > _options.Network.MaxTextLength)
+                throw new ArgumentException(
+                    $"\"{prompts[i]}\" tokenizes to {ids.Length} ids; the text tower reads 1 to {_options.Network.MaxTextLength}.", nameof(tokenize));
+            foreach (int id in ids)
+                if (id < 0 || id >= _options.Network.VocabSize)
+                    throw new ArgumentException($"Token id {id} is outside the vocabulary of {_options.Network.VocabSize}.", nameof(tokenize));
+            tokens[i] = ids;
+        }
+        _textPrompts = (string[])prompts.Clone();
+        _promptTokens = tokens;
+        ClassLabels = _textPrompts.Length > 0 ? _textPrompts : _headLabels;
     }
 
     /// <summary>
-    /// Extracts audio embeddings from the audio encoder.
+    /// Extracts the audio embedding in the joint audio-text space, L2-normalized.
     /// </summary>
     /// <param name="audio">Raw audio waveform tensor.</param>
     /// <returns>Audio embedding in the joint space.</returns>
@@ -352,9 +358,7 @@ public partial class CLAP<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
     public Tensor<T> ExtractAudioEmbedding(Tensor<T> audio)
     {
         ThrowIfDisposed();
-        var mel = _melSpectrogram?.Forward(audio)
-            ?? throw new InvalidOperationException("MelSpectrogram not initialized.");
-        return GetAudioEmbedding(mel);
+        return InEvaluationMode(() => CLAPModel<T>.L2Normalize(Engine, AudioProjection(audio)));
     }
 
     #endregion
@@ -362,34 +366,48 @@ public partial class CLAP<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
     #region NeuralNetworkBase Implementation
 
     /// <inheritdoc />
+    /// <remarks>
+    /// <c>Layers</c> holds CLAP's audio tower followed by the linear head, so the fine-tuning forward is a plain
+    /// fold; the text tower lives in <c>TextEncoderLayers</c>, which the base saves and counts with the rest.
+    /// </remarks>
     protected override void InitializeLayers()
     {
         if (!_useNativeMode) return;
         if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
             Layers.AddRange(Architecture.Layers);
         else
-            Layers.AddRange(LayerHelper<T>.CreateDefaultCLAPLayers(
-                embeddingDim: _options.AudioEmbeddingDim,
-                projectionDim: _options.ProjectionDim,
-                numEncoderLayers: _options.NumAudioEncoderLayers,
-                numAttentionHeads: _options.NumAudioAttentionHeads,
-                feedForwardDim: _options.AudioEmbeddingDim * 4,
-                numClasses: ClassLabels.Count,
-                dropoutRate: _options.DropoutRate));
+        {
+            Layers.AddRange(CLAPModel<T>.AudioTower(_options.Network));
+            Layers.Add(new DenseLayer<T>(outputSize: _headLabels.Length,
+                activationFunction: new AiDotNet.ActivationFunctions.IdentityActivation<T>()));
+        }
+        TextEncoderLayers.AddRange(CLAPModel<T>.TextTower(_options.Network));
     }
 
     /// <inheritdoc />
+    /// <remarks>The fine-tuning head's sigmoid probabilities, per label.</remarks>
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         ThrowIfDisposed();
         if (IsOnnxMode && OnnxEncoder is not null)
-            return OnnxEncoder.Run(input);
-
-        var c = input;
-        foreach (var l in Layers)
-            c = l.Forward(c);
-        return c;
+            return PostprocessOutput(OnnxEncoder.Run(PreprocessAudio(input)));
+        bool wasTraining = IsTrainingMode;
+        if (wasTraining) SetTrainingMode(false);
+        try
+        {
+            var (features, longer) = PrepareAudio(input);
+            var c = CLAPModel<T>.RunAudioTower(Layers, Layers.Count, features, longer);
+            return PostprocessOutput(Unbatch(input, c));
+        }
+        finally
+        {
+            if (wasTraining) SetTrainingMode(true);
+        }
     }
+
+    /// <inheritdoc />
+    public override Tensor<T> ForwardForTraining(Tensor<T> input)
+        => Unbatch(input, base.ForwardForTraining(PreprocessAudio(input)));
 
     /// <inheritdoc />
     protected override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> GetOrCreateBaseOptimizer()
@@ -400,19 +418,25 @@ public partial class CLAP<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
     /// write on every parameter surface, so the guard is stated once here instead of being
     /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
     protected override bool SupportsParameterMutation => _useNativeMode;
-    /// <inheritdoc />
-    protected override Tensor<T> PreprocessAudio(Tensor<T> rawAudio)
-        => _melSpectrogram?.Forward(rawAudio)
-            ?? throw new InvalidOperationException("MelSpectrogram not initialized.");
 
     /// <inheritdoc />
-    protected override Tensor<T> PostprocessOutput(Tensor<T> o)
+    /// <remarks>CLAPModel's log-mel image, <c>[batch, 1, frames, mels]</c>.</remarks>
+    protected override Tensor<T> PreprocessAudio(Tensor<T> rawAudio) => PrepareAudio(rawAudio).Features;
+
+    // CLAPModel's audio input: the features [batch, views, frames, mels] and LAION-CLAP's fusion mask.
+    private (Tensor<T> Features, Tensor<T> Longer) PrepareAudio(Tensor<T> rawAudio)
     {
-        var r = new Tensor<T>(o._shape);
-        for (int i = 0; i < o.Length; i++)
-            r[i] = NumOps.FromDouble(1.0 / (1.0 + Math.Exp(-NumOps.ToDouble(o[i]))));
-        return r;
+        Guard.NotNull(rawAudio);
+        _frontEnd ??= new AiDotNet.Audio.Fingerprinting.ClapAudioFrontEnd<T>(_options.Network);
+        var random = IsTrainingMode
+            ? _trainingRandom ??= RandomHelper.CreateSeededRandom(_options.Network.Seed ?? 0)
+            : RandomHelper.CreateSeededRandom(_options.Network.Seed ?? 0);
+        using (new NoGradScope<T>())
+            return _frontEnd.Prepare(Engine, rawAudio, random);
     }
+
+    /// <inheritdoc />
+    protected override Tensor<T> PostprocessOutput(Tensor<T> o) => Engine.Sigmoid(o);
 
     /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata()
@@ -422,111 +446,110 @@ public partial class CLAP<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
             Name = _useNativeMode ? "CLAP-Native" : "CLAP-ONNX",
             Description = "CLAP Contrastive Language-Audio Pre-training (Wu et al., ICASSP 2023)",
             FeatureCount = ClassLabels.Count,
-            Complexity = _options.NumAudioEncoderLayers
+            Complexity = _options.Network.AudioStageDepths.Sum()
         };
         m.AdditionalInfo["Architecture"] = "CLAP";
-        m.AdditionalInfo["AudioEncoder"] = _options.AudioEncoderType;
-        m.AdditionalInfo["TextEncoder"] = _options.TextEncoderType;
-        m.AdditionalInfo["ProjectionDim"] = _options.ProjectionDim.ToString();
-        m.AdditionalInfo["AudioEmbeddingDim"] = _options.AudioEmbeddingDim.ToString();
+        m.AdditionalInfo["ProjectionDim"] = _options.Network.ProjectionDim.ToString();
+        m.AdditionalInfo["AudioEmbedDim"] = _options.Network.AudioEmbedDim.ToString();
         m.AdditionalInfo["NumClasses"] = ClassLabels.Count.ToString();
         m.AdditionalInfo["ZeroShotMode"] = (_textPrompts.Length > 0).ToString();
         return m;
     }
 
-    /// <inheritdoc />
-
-
-    /// <inheritdoc />
-
-
     #endregion
 
     #region Private Helpers
 
-    private Tensor<T> GetAudioEmbedding(Tensor<T> melSpec)
+    /// <summary>
+    /// Runs <paramref name="inference"/> with the towers in evaluation mode and restores the previous mode, as PredictCore
+    /// does. Networks and layers start in training mode, so an embedding taken without this ran the text tower's dropout
+    /// and the same caption encoded differently on every call.
+    /// </summary>
+    private TResult InEvaluationMode<TResult>(Func<TResult> inference)
     {
-        Tensor<T> output;
-        if (IsOnnxMode && OnnxEncoder is not null)
+        bool wasTraining = IsTrainingMode;
+        if (wasTraining) SetTrainingMode(false);
+        try
         {
-            var inp = new Tensor<T>([1, 1, melSpec.Shape[0], melSpec.Shape[1]]);
-            for (int t = 0; t < melSpec.Shape[0]; t++)
-                for (int f = 0; f < melSpec.Shape[1]; f++)
-                    inp[0, 0, t, f] = melSpec[t, f];
-            output = OnnxEncoder.Run(inp);
+            return inference();
         }
-        else if (_useNativeMode)
+        finally
         {
-            var inp = new Tensor<T>([melSpec.Length]);
-            int idx = 0;
-            for (int t = 0; t < melSpec.Shape[0]; t++)
-                for (int f = 0; f < melSpec.Shape[1]; f++)
-                    inp[idx++] = melSpec[t, f];
-            output = Predict(inp);
+            if (wasTraining) SetTrainingMode(true);
         }
-        else
-        {
-            throw new InvalidOperationException(
-                "No model available for audio embedding. Provide an ONNX model path or use native training mode.");
-        }
-
-        return output;
     }
 
-    private T[] ClassifyWindow(Tensor<T> melSpec)
+    // A single waveform [samples] gives [labels]; a batch [batch, samples] keeps its batch axis.
+    private Tensor<T> Unbatch(Tensor<T> input, Tensor<T> output)
+        => input.Rank == 1 && output.Rank == 2 && output.Shape[0] == 1
+            ? Engine.Reshape(output, new[] { output.Shape[1] })
+            : output;
+
+    // The audio tower's projection into the joint space, before normalization (what the linear head reads).
+    private Tensor<T> AudioProjection(Tensor<T> audio)
     {
-        var embedding = GetAudioEmbedding(melSpec);
+        var (features, longer) = PrepareAudio(audio);
+        if (IsOnnxMode && OnnxEncoder is not null)
+            return OnnxEncoder.Run(features);
+        if (!_useNativeMode)
+            throw new InvalidOperationException(
+                "No model available for audio embedding. Provide an ONNX model path or use native training mode.");
+        using var _ = new NoGradScope<T>();
+        return CLAPModel<T>.RunAudioTower(Layers, Layers.Count - 1, features, longer);
+    }
 
-        // If in zero-shot mode with text encoder, compare audio embedding with text embeddings
-        // via cosine similarity; otherwise treat output as standard classification logits
-        if (_textEncoder is not null && _textPrompts.Length > 0)
-        {
-            return ComputeZeroShotScores(embedding);
-        }
+    private Tensor<T> TextEmbedding(int[] ids)
+    {
+        var tokens = new Tensor<T>([1, ids.Length]);
+        for (int i = 0; i < ids.Length; i++) tokens[0, i] = NumOps.FromDouble(ids[i]);
+        if (_textEncoder is not null)
+            return CLAPModel<T>.L2Normalize(Engine, _textEncoder.Run(tokens));
+        using var _ = new NoGradScope<T>();
+        var c = tokens;
+        foreach (var l in TextEncoderLayers) c = l.Forward(c);
+        return CLAPModel<T>.L2Normalize(Engine, c);
+    }
 
-        // Standard classification via sigmoid
+    private T[] ClassifyWindow(Tensor<T> window)
+    {
+        if (_textPrompts.Length > 0)
+            return ZeroShotScores(window);
+        var probabilities = Predict(window);
         var scores = new T[ClassLabels.Count];
-        for (int i = 0; i < Math.Min(embedding.Length, scores.Length); i++)
-            scores[i] = NumOps.FromDouble(1.0 / (1.0 + Math.Exp(-NumOps.ToDouble(embedding[i]))));
+        for (int i = 0; i < Math.Min(probabilities.Length, scores.Length); i++)
+            scores[i] = probabilities[i];
         return scores;
     }
 
-    private T[] ComputeZeroShotScores(Tensor<T> audioEmbedding)
+    // Zero-shot (Wu et al. 2023, §4.2; LAION-CLAP's evaluation): the softmax over the prompts of the cosine
+    // similarities scaled by 1/τ.
+    private T[] ZeroShotScores(Tensor<T> window) => InEvaluationMode(() => ZeroShotScoresCore(window));
+
+    private T[] ZeroShotScoresCore(Tensor<T> window)
     {
-        if (_textEncoder is null)
-            throw new InvalidOperationException("Text encoder is required for zero-shot classification.");
-
-        var scores = new T[_textPrompts.Length];
-        double temp = _options.Temperature;
-
-        for (int i = 0; i < _textPrompts.Length; i++)
+        var audio = ExtractAudioEmbedding(window).ToVector();
+        var logits = new double[_textPrompts.Length];
+        double scale = 1.0 / _options.Network.InitialTemperature, max = double.NegativeInfinity;
+        for (int i = 0; i < logits.Length; i++)
         {
-            // Encode text prompt through the ONNX text encoder
-            var textInput = new Tensor<T>([_options.ProjectionDim]);
-            // Create input features from text for the text encoder
-            // A stable hash, computed once per prompt: string.GetHashCode() changed per process, so the ONNX text
-            // features did too (#2361).
-            int promptHash = AiDotNet.Helpers.StableHash.Seed(_textPrompts[i]);
-            for (int d = 0; d < _options.ProjectionDim; d++)
-            {
-                int hash = promptHash ^ (int)((uint)d * 2654435761U);
-                textInput[d] = NumOps.FromDouble((hash & 0xFFFF) / 65535.0 * 2.0 - 1.0);
-            }
-            var textEmbedding = _textEncoder.Run(textInput);
-
-            // Compute cosine similarity between audio and text embeddings
-            double cosSim = VectorHelper.CosineSimilarity(audioEmbedding.ToVector(), textEmbedding.ToVector());
-            double logit = cosSim / temp;
-            scores[i] = NumOps.FromDouble(1.0 / (1.0 + Math.Exp(-logit)));
+            var text = TextEmbedding(_promptTokens[i]).ToVector();
+            double dot = 0;
+            for (int d = 0; d < Math.Min(audio.Length, text.Length); d++)
+                dot += NumOps.ToDouble(audio[d]) * NumOps.ToDouble(text[d]);
+            logits[i] = scale * dot;
+            max = Math.Max(max, logits[i]);
         }
-
+        double sum = 0;
+        for (int i = 0; i < logits.Length; i++) sum += logits[i] = Math.Exp(logits[i] - max);
+        var scores = new T[logits.Length];
+        for (int i = 0; i < logits.Length; i++) scores[i] = NumOps.FromDouble(logits[i] / sum);
         return scores;
     }
 
     private List<Tensor<T>> SplitIntoWindows(Tensor<T> audio)
     {
         var w = new List<Tensor<T>>();
-        int ws = (int)(_options.WindowSize * _options.SampleRate);
+        int ws = (int)(_options.WindowSize * _options.Network.SampleRate);
         int hs = (int)(ws * (1 - _options.WindowOverlap));
         if (hs <= 0) hs = 1;
         int ls = 0;
@@ -674,9 +697,7 @@ public partial class CLAP<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
                 {
                     var w = new Tensor<T>([_ws]);
                     for (int i = 0; i < _ws; i++) w[i] = _buf[i];
-                    var mel = _det._melSpectrogram?.Forward(w)
-                        ?? throw new InvalidOperationException("MelSpectrogram not initialized.");
-                    var scores = _det.ClassifyWindow(mel);
+                    var scores = _det.ClassifyWindow(w);
                     double tv = _det.NumOps.ToDouble(_thr);
 
                     for (int i = 0; i < scores.Length && i < _det.ClassLabels.Count; i++)
@@ -701,7 +722,7 @@ public partial class CLAP<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
                     int hs = (int)(_ws * (1 - _det._options.WindowOverlap));
                     if (hs <= 0) hs = 1;
                     _buf.RemoveRange(0, hs);
-                    _pt += hs / (double)_det._options.SampleRate;
+                    _pt += hs / (double)_det._options.Network.SampleRate;
                 }
             }
 

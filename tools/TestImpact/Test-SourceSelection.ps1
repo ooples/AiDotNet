@@ -62,6 +62,16 @@ function Build([string] $Name, [string] $Define = '') {
     if ($Define) { $buildOptions += "-p:DefineConstants=$Define" }
     dotnet build (Join-Path $checkout 'SourceCases.csproj') -c Release -o $bundle --nologo -v:quiet -p:EmbedAllSources=true @buildOptions | Out-Host
     Check ($LASTEXITCODE -eq 0) "$Name build failed."
+    if ($CrossAssembly -and $Define) {
+        # A new OutDir can rebuild project references even when DefineConstants is
+        # removed. On CI that changes ManagedLibrary's DLL/PDB identity and correctly
+        # forces full execution, invalidating this deliberately one-body control.
+        # Keep that external dependency byte-for-byte identical to the baseline;
+        # only SourceLibrary/SourceCases are the compiler-variant subjects here.
+        foreach ($file in @('ManagedLibrary.dll', 'ManagedLibrary.pdb', 'ManagedLibrary.deps.json')) {
+            Copy-Item -LiteralPath (Join-Path $newBundle $file) -Destination (Join-Path $bundle $file)
+        }
+    }
     return $bundle
 }
 function Snapshot([string] $Name, [string] $Bundle) {

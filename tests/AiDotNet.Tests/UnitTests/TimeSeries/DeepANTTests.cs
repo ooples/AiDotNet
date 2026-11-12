@@ -44,7 +44,7 @@ public class DeepANTTests
     {
         var options = new DeepANTOptions<double>
         {
-            WindowSize = 8,
+            WindowSize = 12,
             LearningRate = 0.001,
             Epochs = 2,
             BatchSize = 2
@@ -63,7 +63,7 @@ public class DeepANTTests
     {
         var options = new DeepANTOptions<double>
         {
-            WindowSize = 4,
+            WindowSize = 10,
             LearningRate = 0.001,
             Epochs = 1,
             BatchSize = 1
@@ -86,7 +86,7 @@ public class DeepANTTests
     {
         var options = new DeepANTOptions<double>
         {
-            WindowSize = 8,
+            WindowSize = 12,
             LearningRate = 0.001,
             Epochs = 2,
             BatchSize = 2
@@ -113,7 +113,7 @@ public class DeepANTTests
     {
         var options = new DeepANTOptions<double>
         {
-            WindowSize = 8,
+            WindowSize = 12,
             LearningRate = 0.001,
             Epochs = 2,
             BatchSize = 2
@@ -144,7 +144,7 @@ public class DeepANTTests
     {
         var options = new DeepANTOptions<double>
         {
-            WindowSize = 8,
+            WindowSize = 12,
             LearningRate = 0.001,
             Epochs = 2,
             BatchSize = 2
@@ -194,7 +194,7 @@ public class DeepANTTests
     {
         var options = new DeepANTOptions<double>
         {
-            WindowSize = 8,
+            WindowSize = 12,
             LearningRate = 0.001,
             Epochs = 2,
             BatchSize = 2
@@ -249,7 +249,7 @@ public class DeepANTTests
     {
         var options = new DeepANTOptions<double>
         {
-            WindowSize = 8,
+            WindowSize = 12,
             LearningRate = 0.001,
             Epochs = 2,
             BatchSize = 2
@@ -287,7 +287,7 @@ public class DeepANTTests
     {
         var options = new DeepANTOptions<float>
         {
-            WindowSize = 8,
+            WindowSize = 12,
             LearningRate = 0.001,
             Epochs = 2,
             BatchSize = 2

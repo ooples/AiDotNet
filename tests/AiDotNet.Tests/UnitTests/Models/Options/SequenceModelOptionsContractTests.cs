@@ -46,7 +46,7 @@ public class SequenceModelOptionsContractTests
         var options = new VisionMambaOptions();
         Assert.Equal(typeof(VisionMambaOptions), Assert.Single(ImageSequenceTypes));
         Assert.IsAssignableFrom<SequenceModelOptions>(options);
-        Assert.Equal(new[] { 224, 224, 16, 3, 192, 4, 10, 16 },
+        Assert.Equal(new[] { 224, 224, 16, 3, 192, 24, 10, 16 },   // Vim-Tiny: 24 layers at width 192
             new[] { options.ImageHeight, options.ImageWidth, options.PatchSize, options.Channels,
                 options.ModelDimension, options.NumLayers, options.NumClasses, options.StateDimension });
         Assert.Equal(0, options.VocabSize);
