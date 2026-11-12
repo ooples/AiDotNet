@@ -4,6 +4,7 @@ using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Extensions;
 using AiDotNet.Helpers;
+using AiDotNet.Tensors.Engines.Autodiff;
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
@@ -86,13 +87,16 @@ public partial class PiecewiseLinearEncodingLayer<T> : LayerBase<T>, IShapeContr
 
         _numFeatures = numFeatures;
         _numBins = numBins;
-        _binEdges = new Tensor<T>([numFeatures, numBins + 1]);
-        for (int f = 0; f < numFeatures; f++)
+
+        // Evenly spaced edges b_t = -2 + 4t/T, the same row for every feature: ones[F, 1] @ row[1, T + 1].
+        using (new NoGradScope<T>())
         {
-            for (int t = 0; t <= numBins; t++)
-            {
-                _binEdges[f * (numBins + 1) + t] = NumOps.FromDouble(-2.0 + 4.0 * t / numBins);
-            }
+            var edgeRow = Engine.TensorAddScalar(
+                Engine.TensorMultiplyScalar(Engine.TensorArange<T>(0, numBins + 1, 1.0), NumOps.FromDouble(4.0 / numBins)),
+                NumOps.FromDouble(-2.0));
+            var featureOnes = new Tensor<T>([numFeatures, 1]);
+            featureOnes.Fill(NumOps.One);
+            _binEdges = Engine.TensorMatMul(featureOnes, Engine.Reshape(edgeRow, [1, numBins + 1]));
         }
     }
 
@@ -112,32 +116,56 @@ public partial class PiecewiseLinearEncodingLayer<T> : LayerBase<T>, IShapeContr
         int samples = features.Shape[0];
         if (samples < 1) throw new ArgumentException("Need at least one sample.", nameof(features));
 
-        var column = new double[samples];
-        for (int f = 0; f < _numFeatures; f++)
-        {
-            for (int s = 0; s < samples; s++)
-            {
-                double value = NumOps.ToDouble(features[s * _numFeatures + f]);
-                if (double.IsNaN(value) || double.IsInfinity(value))
-                    throw new ArgumentException($"Feature {f} has a non-finite value at sample {s}.", nameof(features));
-                column[s] = value;
-            }
-            Array.Sort(column);
+        using var noGrad = new NoGradScope<T>();
 
-            double previous = double.NegativeInfinity;
-            for (int t = 0; t <= _numBins; t++)
-            {
-                // Linearly interpolated quantile at t / T.
-                double position = (double)t / _numBins * (samples - 1);
-                int lower = (int)Math.Floor(position);
-                int upper = Math.Min(lower + 1, samples - 1);
-                double edge = column[lower] + (column[upper] - column[lower]) * (position - lower);
-                if (edge <= previous)
-                    edge = previous + Math.Max(Math.Abs(previous), 1.0) * 1e-6;
-                _binEdges[f * (_numBins + 1) + t] = NumOps.FromDouble(edge);
-                previous = edge;
-            }
+        // Reject non-finite values, reporting the first one in (feature, sample) order.
+        var byFeature = Engine.TensorTranspose(features);                                   // [F, S]
+        var finiteValue = new Tensor<T>(byFeature._shape);
+        finiteValue.Fill(NumOps.Zero);
+        var nonFiniteValue = new Tensor<T>(byFeature._shape);
+        nonFiniteValue.Fill(NumOps.One);
+        var nonFinite = Engine.TensorNonzero(
+            Engine.TensorWhere(Engine.TensorIsFinite(byFeature), finiteValue, nonFiniteValue)); // [count, 2]
+        if (nonFinite.Shape[0] > 0)
+        {
+            var first = nonFinite.Contiguous().AsSpan();
+            throw new ArgumentException($"Feature {first[0]} has a non-finite value at sample {first[1]}.", nameof(features));
         }
+
+        var sorted = Engine.TensorSort(features, 0).Values;                                  // [S, F], ascending
+
+        // Linearly interpolated quantile at t / T: position p = t (S - 1) / T, lower = floor(p),
+        // upper = min(lower + 1, S - 1), edge = x[lower] + (x[upper] - x[lower]) (p - lower).
+        // p is computed exactly in integers: t (S - 1) = lower T + remainder.
+        var scaled = Engine.TensorMultiplyScalar(Engine.TensorArange<int>(0, _numBins + 1, 1), samples - 1);
+        var lowerIndex = Engine.TensorDivideScalar(scaled, _numBins);
+        var remainder = Engine.TensorSubtract(scaled, Engine.TensorMultiplyScalar(lowerIndex, _numBins));
+        var upperIndex = Engine.TensorClamp(Engine.TensorAddScalar(lowerIndex, 1), 0, samples - 1);
+        var fraction = Engine.Reshape(
+            Engine.TensorDivideScalar(remainder.Cast<T>(), NumOps.FromDouble(_numBins)), [_numBins + 1, 1]);
+        var lowerValue = Engine.TensorIndexSelect(sorted, lowerIndex, 0);                    // [T + 1, F]
+        var upperValue = Engine.TensorIndexSelect(sorted, upperIndex, 0);
+        var quantiles = Engine.TensorTranspose(Engine.TensorAdd(lowerValue,
+            Engine.TensorMultiply(Engine.TensorSubtract(upperValue, lowerValue), fraction)));  // [F, T + 1]
+
+        // Repeated quantiles would make a zero-width bin: move such an edge just past the previous one,
+        // edge = previous + max(|previous|, 1) * 1e-6. Each edge depends on the adjusted previous one, so
+        // this walks the T + 1 edges, all features at once.
+        T minStep = NumOps.FromDouble(1e-6);
+        T one = NumOps.One;
+        var previous = Engine.TensorNarrow(quantiles, 1, 0, 1);                             // [F, 1]
+        var columns = new Tensor<T>[_numBins + 1];
+        columns[0] = previous;
+        for (int t = 1; t <= _numBins; t++)
+        {
+            var edge = Engine.TensorNarrow(quantiles, 1, t, 1);
+            var nudged = Engine.TensorAdd(previous,
+                Engine.TensorMultiplyScalar(Engine.TensorClampMin(Engine.TensorAbs(previous), one), minStep));
+            previous = Engine.TensorWhere(Engine.TensorLessThan(previous, edge), edge, nudged);
+            columns[t] = previous;
+        }
+
+        Engine.TensorCopy(Engine.TensorConcatenate(columns, 1), _binEdges);
     }
 
     /// <summary>
@@ -158,21 +186,26 @@ public partial class PiecewiseLinearEncodingLayer<T> : LayerBase<T>, IShapeContr
 
         // Per-bin constants: lower edge, width, and the clamp bounds (no lower clamp on the first bin, no upper clamp
         // on the last). None of them needs a gradient.
-        var lowerEdge = new Tensor<T>([1, _numFeatures, bins]);
-        var width = new Tensor<T>([1, _numFeatures, bins]);
-        var floor = new Tensor<T>([1, _numFeatures, bins]);
-        var ceiling = new Tensor<T>([1, _numFeatures, bins]);
-        for (int f = 0; f < _numFeatures; f++)
+        Tensor<T> lowerEdge, width, floor, ceiling;
+        using (new NoGradScope<T>())
         {
-            for (int t = 0; t < bins; t++)
-            {
-                int i = f * bins + t;
-                var lo = _binEdges[f * (bins + 1) + t];
-                lowerEdge[i] = lo;
-                width[i] = NumOps.Subtract(_binEdges[f * (bins + 1) + t + 1], lo);
-                floor[i] = t == 0 ? NumOps.FromDouble(double.NegativeInfinity) : NumOps.Zero;
-                ceiling[i] = t == bins - 1 ? NumOps.FromDouble(double.PositiveInfinity) : NumOps.One;
-            }
+            var lowerEdges = Engine.TensorNarrow(_binEdges, 1, 0, bins);                     // [F, T]
+            var upperEdges = Engine.TensorNarrow(_binEdges, 1, 1, bins);
+            lowerEdge = Engine.Reshape(lowerEdges.Contiguous(), [1, _numFeatures, bins]);
+            width = Engine.Reshape(Engine.TensorSubtract(upperEdges, lowerEdges), [1, _numFeatures, bins]);
+
+            var negativeInfinity = new Tensor<T>([1]);
+            negativeInfinity.Fill(NumOps.FromDouble(double.NegativeInfinity));
+            var zeros = new Tensor<T>([bins - 1]);
+            zeros.Fill(NumOps.Zero);
+            var positiveInfinity = new Tensor<T>([1]);
+            positiveInfinity.Fill(NumOps.FromDouble(double.PositiveInfinity));
+            var ones = new Tensor<T>([bins - 1]);
+            ones.Fill(NumOps.One);
+            var floorRow = Engine.Reshape(Engine.TensorConcatenate(new[] { negativeInfinity, zeros }, 0), [1, 1, bins]);
+            var ceilingRow = Engine.Reshape(Engine.TensorConcatenate(new[] { ones, positiveInfinity }, 0), [1, 1, bins]);
+            floor = Engine.TensorBroadcastTo(floorRow, [1, _numFeatures, bins]);
+            ceiling = Engine.TensorBroadcastTo(ceilingRow, [1, _numFeatures, bins]);
         }
 
         var x = Engine.TensorBroadcastTo(Engine.Reshape(input, new[] { batch, _numFeatures, 1 }), shape);
