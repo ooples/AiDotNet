@@ -323,10 +323,7 @@ public partial class CapsuleLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, ISh
 
         // Copy values to original tensor using flat index setter to preserve tensor.Shape
         // Note: Array.Copy into ToArray() doesn't work because ToArray() returns a copy
-        for (int i = 0; i < totalElements; i++)
-        {
-            tensor[i] = scaled[i];
-        }
+        scaled.CopyTo(tensor.AsWritableSpan());
     }
 
     /// <summary>

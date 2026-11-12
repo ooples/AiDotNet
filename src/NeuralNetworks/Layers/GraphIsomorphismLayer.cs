@@ -290,17 +290,11 @@ public partial class GraphIsomorphismLayer<T> : LayerBase<T>, IGraphConvolutionL
         {
             // Tile adjacency matrix for batch
             int adjN = _adjacencyMatrix.Shape[0];
-            adjForBatch = TensorAllocator.Rent<T>([batchSize, adjN, adjN]);
-            for (int b = 0; b < batchSize; b++)
-            {
-                for (int i = 0; i < adjN; i++)
-                {
-                    for (int j = 0; j < adjN; j++)
-                    {
-                        adjForBatch[new int[] { b, i, j }] = _adjacencyMatrix[new int[] { i, j }];
-                    }
-                }
-            }
+            // Each batch entry gets the leading [adjN, adjN] block (the whole matrix when square).
+            var square = _adjacencyMatrix.Shape[1] == adjN
+                ? _adjacencyMatrix
+                : Engine.TensorSlice(_adjacencyMatrix, new[] { 0, 0 }, new[] { adjN, adjN });
+            adjForBatch = Engine.TensorTile(Engine.Reshape(square, [1, adjN, adjN]), new[] { batchSize, 1, 1 });
         }
         else
         {
