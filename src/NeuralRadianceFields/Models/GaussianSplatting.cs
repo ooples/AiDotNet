@@ -2562,12 +2562,12 @@ public partial class GaussianSplatting<T> : AiDotNet.NeuralNetworks.VectorModelL
 
         // Densification keys off the gradient of the projected mean (the paper's view-space positional gradient),
         // in normalised device coordinates as the reference rasteriser reports it: d(pixel)/d(ndc) = (W / 2, H / 2).
-        var screenGrad = engine.TensorStack(new[]
+        var ndcMeanGrad = engine.TensorStack(new[]
         {
             engine.TensorMultiplyScalar(gradMeanX, NumOps.FromDouble(0.5 * imageWidth)),
             engine.TensorMultiplyScalar(gradMeanY, NumOps.FromDouble(0.5 * imageHeight)),
         }, 1);
-        gradients.Add(new GaussianGradient(rows, densificationGrad, screenGrad));
+        gradients.Add(new GaussianGradient(rows, densificationGrad, ndcMeanGrad));
         return gradients;
     }
 
