@@ -52,6 +52,17 @@ namespace AiDotNet.CausalDiscovery.Functional;
 [ResearchPaper("A Linear Non-Gaussian Acyclic Model for Causal Discovery", "https://jmlr.org/papers/v7/shimizu06a.html", Year = 2006, Authors = "Shohei Shimizu, Patrik O. Hoyer, Aapo Hyvarinen, Antti Kerminen")]
 public class ICALiNGAMAlgorithm<T> : FunctionalBase<T>
 {
+    /// <summary>
+    /// Magnitude below which a diagonal entry of the row-assigned unmixing matrix makes the assignment
+    /// degenerate (the empty graph is returned).
+    /// </summary>
+    private const double AssignmentDiagonalFloor = 1e-12;
+
+    /// <summary>
+    /// Lower bound on the covariance eigenvalues used to scale the whitening transform.
+    /// </summary>
+    private const double WhiteningEigenvalueFloor = 1e-12;
+
     /// <inheritdoc/>
     public override string Name => "ICA-LiNGAM";
 
@@ -112,7 +123,7 @@ public class ICALiNGAMAlgorithm<T> : FunctionalBase<T>
         var assigned = Engine.TensorIndexSelect(Tensor<T>.FromMatrix(unmixing),
             new Tensor<int>(rowForColumn, new[] { d }), 0);
         var diagonal = Engine.TensorDiagonal(assigned);
-        if (CausalTensorHelpers.AnyBelow(Engine.TensorAbs(diagonal), NumOps.FromDouble(1e-12)))
+        if (CausalTensorHelpers.AnyBelow(Engine.TensorAbs(diagonal), NumOps.FromDouble(AssignmentDiagonalFloor)))
             return new Matrix<T>(d, d);
 
         var normalized = Engine.TensorDivide(assigned,
@@ -152,9 +163,9 @@ public class ICALiNGAMAlgorithm<T> : FunctionalBase<T>
         gram = Engine.TensorAdd(Engine.TensorTriu(gram, 0), Engine.TensorTranspose(Engine.TensorTriu(gram, 1)));
         var covariance = Engine.TensorMultiplyScalar(gram, NumOps.FromDouble(1.0 / n)).ToMatrix();
 
-        // whitening[component, feature] = V[feature, component] / sqrt(max(lambda_component, 1e-12)).
+        // whitening[component, feature] = V[feature, component] / sqrt(max(lambda_component, WhiteningEigenvalueFloor)).
         var eigen = new EigenDecomposition<T>(covariance, EigenAlgorithmType.Jacobi);
-        var eigenvalues = Engine.TensorMax(eigen.EigenValues.AsTensor(), NumOps.FromDouble(1e-12));
+        var eigenvalues = Engine.TensorMax(eigen.EigenValues.AsTensor(), NumOps.FromDouble(WhiteningEigenvalueFloor));
         var scale = Engine.TensorReciprocal(Engine.TensorSqrt(eigenvalues)).Reshape(new[] { d, 1 });
         var whitening = Engine.TensorMultiply(Engine.TensorTranspose(Tensor<T>.FromMatrix(eigen.EigenVectors)),
             Engine.TensorBroadcastTo(scale, new[] { d, d }));

@@ -45,6 +45,12 @@ namespace AiDotNet.CausalDiscovery.Functional;
 [ResearchPaper("DirectLiNGAM: A Direct Method for Learning a Linear Non-Gaussian Structural Equation Model", "https://jmlr.org/papers/v12/shimizu11a.html", Year = 2011, Authors = "Shohei Shimizu, Takanori Inazumi, Yasuhiro Sogawa, Aapo Hyvarinen, Yoshinobu Kawahara, Takashi Washio, Patrik O. Hoyer, Kenneth Bollen")]
 public class DirectLiNGAMAlgorithm<T> : FunctionalBase<T>
 {
+    /// <summary>
+    /// Centered sum of squares at or below which a regressor has no variation and its coefficient is 0,
+    /// in both the root-residualization and the final regression stage.
+    /// </summary>
+    private const double VarianceFloor = 1e-10;
+
     private double _threshold = 0.1;
 
     /// <summary>
@@ -82,7 +88,7 @@ public class DirectLiNGAMAlgorithm<T> : FunctionalBase<T>
         var standardized = StandardizeData(data);
 
         var remaining = Enumerable.Range(0, d).ToList();
-        T varianceFloor = NumOps.FromDouble(1e-10);
+        T varianceFloor = NumOps.FromDouble(VarianceFloor);
         var causalOrder = new List<int>();
         var currentData = standardized;
 
@@ -150,11 +156,11 @@ public class DirectLiNGAMAlgorithm<T> : FunctionalBase<T>
         // every coefficient below the edge threshold is treated as an exact zero rather than as the
         // small value it is. Thresholding belongs to the reported GRAPH, not to the algebra.
         // Simple regression coefficient of every column j on every column p: G[p, j] / G[p, p] with
-        // G the centered Gram matrix, 0 when G[p, p] is not above 1e-10.
+        // G the centered Gram matrix, 0 when G[p, p] is not above VarianceFloor.
         var standardCentered = CenterColumns(Tensor<T>.FromMatrix(standardized));
         var gram = Engine.TensorMatMul(Engine.TensorTranspose(standardCentered), standardCentered);
         var sxxColumn = Engine.TensorDiagonal(gram).Reshape(new[] { d, 1 });
-        var validRow = Engine.TensorBroadcastTo(Engine.TensorGreaterThan(sxxColumn, NumOps.FromDouble(1e-10)), new[] { d, d });
+        var validRow = Engine.TensorBroadcastTo(Engine.TensorGreaterThan(sxxColumn, varianceFloor), new[] { d, d });
         var safeSxx = Engine.TensorWhere(validRow, Engine.TensorBroadcastTo(sxxColumn, new[] { d, d }),
             Engine.TensorOnesLike(gram));
         var coefficients = Engine.TensorWhere(validRow, Engine.TensorDivide(gram, safeSxx), Engine.TensorZerosLike(gram));
