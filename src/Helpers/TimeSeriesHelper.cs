@@ -27,13 +27,16 @@ public static class TimeSeriesHelper<T>
     /// </remarks>
     public static Vector<T> DifferenceSeries(Vector<T> y, int d)
     {
+        var engine = AiDotNetEngine.Current;
         Vector<T> result = y;
         for (int i = 0; i < d; i++)
         {
-            Vector<T> temp = new Vector<T>(result.Length - 1);
-            for (int j = 1; j < result.Length; j++)
+            int length = result.Length - 1;
+            Vector<T> temp = new Vector<T>(length);
+            if (length > 0)
             {
-                temp[j - 1] = _numOps.Subtract(result[j], result[j - 1]);
+                // temp[j - 1] = result[j] - result[j - 1]
+                temp = engine.Subtract(result.GetSubVector(1, length), result.GetSubVector(0, length));
             }
             result = temp;
         }
@@ -68,13 +71,11 @@ public static class TimeSeriesHelper<T>
             if (nRows > 0 && y.Length > 1)
             {
                 var numOps = MathHelper.GetNumericOperations<T>();
-                T sum = numOps.Zero;
-                T sumSq = numOps.Zero;
-                for (int i = 1; i < y.Length; i++)
-                {
-                    sum = numOps.Add(sum, numOps.Multiply(y[i], y[i - 1]));
-                    sumSq = numOps.Add(sumSq, numOps.Multiply(y[i - 1], y[i - 1]));
-                }
+                var engine = AiDotNetEngine.Current;
+                var current = y.GetSubVector(1, y.Length - 1);
+                var previous = y.GetSubVector(0, y.Length - 1);
+                T sum = engine.DotProduct(current, previous);
+                T sumSq = engine.DotProduct(previous, previous);
                 if (!numOps.Equals(sumSq, numOps.Zero))
                 {
                     fallback[0] = numOps.Divide(sum, sumSq);
@@ -83,17 +84,8 @@ public static class TimeSeriesHelper<T>
             return fallback;
         }
 
-        Matrix<T> X = new Matrix<T>(nRows, p);
-        Vector<T> Y = new Vector<T>(nRows);
-
-        for (int i = p; i < y.Length; i++)
-        {
-            for (int j = 0; j < p; j++)
-            {
-                X[i - p, j] = y[i - j - 1];
-            }
-            Y[i - p] = y[i];
-        }
+        Matrix<T> X = BuildLagMatrix(y, p, nRows);
+        Vector<T> Y = y.GetSubVector(p, nRows);
 
         var coefficients = MatrixSolutionHelper.SolveLinearSystem(X, Y, decompositionType);
 
@@ -120,18 +112,35 @@ public static class TimeSeriesHelper<T>
         int n = y.Length;
         int p = arCoefficients.Length;
         Vector<T> residuals = new Vector<T>(n - p);
-
-        for (int i = p; i < n; i++)
+        if (n - p == 0)
         {
-            T predicted = _numOps.Zero;
-            for (int j = 0; j < p; j++)
-            {
-                predicted = _numOps.Add(predicted, _numOps.Multiply(arCoefficients[j], y[i - j - 1]));
-            }
-            residuals[i - p] = _numOps.Subtract(y[i], predicted);
+            return residuals;
         }
 
-        return residuals;
+        // residual_r = y[p + r] - sum_j a_j * y[p + r - j - 1] = (Y - X a)_r with X the lag matrix
+        var engine = AiDotNetEngine.Current;
+        var observed = y.GetSubVector(p, n - p);
+        if (p == 0)
+        {
+            return observed;
+        }
+
+        var predicted = engine.MatrixVectorMultiply(BuildLagMatrix(y, p, n - p), arCoefficients);
+        return engine.Subtract(observed, predicted);
+    }
+
+    /// <summary>
+    /// The [rows, p] autoregressive design matrix: entry (r, j) is y[p + r - j - 1], so column j is the
+    /// series shifted by j + 1 steps.
+    /// </summary>
+    private static Matrix<T> BuildLagMatrix(Vector<T> y, int p, int rows)
+    {
+        if (p == 0)
+        {
+            return new Matrix<T>(rows, 0);
+        }
+
+        return Matrix<T>.FromColumnVectors(Enumerable.Range(0, p).Select(j => y.GetSubVector(p - j - 1, rows)));
     }
 
     /// <summary>
@@ -148,10 +157,11 @@ public static class TimeSeriesHelper<T>
     /// </remarks>
     public static Vector<T> EstimateMACoefficients(Vector<T> residuals, int q)
     {
+        // Lag-1..q autocorrelations, each one engine dot-product reduction.
         Vector<T> maCoefficients = new Vector<T>(q);
-        for (int i = 0; i < q; i++)
+        if (q > 0)
         {
-            maCoefficients[i] = CalculateAutoCorrelation(residuals, i + 1);
+            maCoefficients = new Vector<T>(Enumerable.Range(1, q).Select(lag => CalculateAutoCorrelation(residuals, lag)));
         }
 
         // Enforce invertibility: |sum| < 1 for well-defined AR(infinity) representation.
@@ -181,9 +191,10 @@ public static class TimeSeriesHelper<T>
         acf[0] = _numOps.One;
 
         // Calculate autocorrelation for each lag using the existing method
-        for (int lag = 1; lag <= maxLag; lag++)
+        if (maxLag > 0)
         {
-            acf[lag] = CalculateAutoCorrelation(y, lag);
+            acf = new Vector<T>(new[] { _numOps.One }.Concat(
+                Enumerable.Range(1, maxLag).Select(lag => CalculateAutoCorrelation(y, lag))));
         }
 
         return acf;
@@ -207,10 +218,12 @@ public static class TimeSeriesHelper<T>
         T sumSquared = _numOps.Zero;
         int n = y.Length;
 
-        for (int i = 0; i < n - lag; i++)
+        if (n - lag > 0)
         {
-            sum = _numOps.Add(sum, _numOps.Multiply(y[i], y[i + lag]));
-            sumSquared = _numOps.Add(sumSquared, _numOps.Multiply(y[i], y[i]));
+            var engine = AiDotNetEngine.Current;
+            var head = y.GetSubVector(0, n - lag);
+            sum = engine.DotProduct(head, y.GetSubVector(lag, n - lag));
+            sumSquared = engine.DotProduct(head, head);
         }
 
         // Guard against division by zero (constant or zero series)
@@ -245,28 +258,24 @@ public static class TimeSeriesHelper<T>
         double triggerThreshold = 0.99,
         double targetSum = 0.95)
     {
-        double absSum = 0;
-        for (int i = 0; i < coefficients.Length; i++)
+        if (coefficients.Length == 0)
         {
-            var val = _numOps.ToDouble(coefficients[i]);
-            if (double.IsNaN(val) || double.IsInfinity(val))
-            {
-                coefficients[i] = _numOps.Zero;
-            }
-            else
-            {
-                absSum += Math.Abs(val);
-            }
+            return;
         }
+
+        // Zero the non-finite coefficients, then measure the L1 norm of what remains.
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        var engine = AiDotNetEngine.Current;
+        var values = Tensor<T>.FromVector(coefficients);
+        var cleaned = engine.TensorWhere(engine.TensorIsFinite(values), values, new Tensor<T>(values._shape));
+        double absSum = _numOps.ToDouble(engine.TensorSum(engine.TensorAbs(cleaned)));
 
         if (absSum >= triggerThreshold && absSum > 0)
         {
             double scaleFactor = targetSum / absSum;
-            for (int i = 0; i < coefficients.Length; i++)
-            {
-                var val = _numOps.ToDouble(coefficients[i]);
-                coefficients[i] = _numOps.FromDouble(val * scaleFactor);
-            }
+            cleaned = engine.TensorMultiplyScalar(cleaned, _numOps.FromDouble(scaleFactor));
         }
+
+        cleaned.AsSpan().CopyTo(coefficients.AsWritableSpan());
     }
 }
