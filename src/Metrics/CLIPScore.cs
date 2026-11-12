@@ -61,7 +61,7 @@ public class CLIPScore<T> where T : struct
     /// <param name="imageData">Image data as a flattened array (CHW format, normalized to [0,1] or [-1,1])</param>
     /// <param name="text">The text description to compare against</param>
     /// <returns>CLIPScore on a 0-100 scale. Higher is better.</returns>
-    public double ComputeTextImageScore(double[] imageData, string text)
+    public T ComputeTextImageScore(double[] imageData, string text)
     {
         if (imageData == null || imageData.Length == 0)
         {
@@ -81,10 +81,7 @@ public class CLIPScore<T> where T : struct
 
         // Scale to 0-100 range
         // CLIP similarity is typically in [-1, 1], with good matches being > 0.2
-        double simDouble = _numOps.ToDouble(similarity);
-        double score = Math.Max(0, simDouble) * 100.0;
-
-        return score;
+        return ScaleSimilarity(similarity);
     }
 
     /// <summary>
@@ -93,7 +90,7 @@ public class CLIPScore<T> where T : struct
     /// <param name="images">List of image data arrays</param>
     /// <param name="texts">List of text descriptions (same length as images)</param>
     /// <returns>Average CLIPScore across all pairs.</returns>
-    public double ComputeTextImageScoreBatch(IList<double[]> images, IList<string> texts)
+    public T ComputeTextImageScoreBatch(IList<double[]> images, IList<string> texts)
     {
         if (images.Count != texts.Count)
         {
@@ -102,16 +99,12 @@ public class CLIPScore<T> where T : struct
 
         if (images.Count == 0)
         {
-            return 0.0;
+            return _numOps.Zero;
         }
 
-        double totalScore = 0.0;
-        for (int i = 0; i < images.Count; i++)
-        {
-            totalScore += ComputeTextImageScore(images[i], texts[i]);
-        }
-
-        return totalScore / images.Count;
+        // One model call per pair (the model's own ComputeSimilarity), then one engine mean.
+        var scores = images.Select((image, index) => ComputeTextImageScore(image, texts[index])).ToArray();
+        return Engine.Mean(Vector<T>.Wrap(scores));
     }
 
     /// <summary>
@@ -120,7 +113,7 @@ public class CLIPScore<T> where T : struct
     /// <param name="generatedImageData">Generated image data</param>
     /// <param name="referenceImageData">Reference image data</param>
     /// <returns>RefCLIPScore on a 0-100 scale. Higher is better.</returns>
-    public double ComputeImageImageScore(double[] generatedImageData, double[] referenceImageData)
+    public T ComputeImageImageScore(double[] generatedImageData, double[] referenceImageData)
     {
         if (generatedImageData == null || generatedImageData.Length == 0)
         {
@@ -139,10 +132,7 @@ public class CLIPScore<T> where T : struct
         T similarity = _clipModel.ComputeSimilarity(genEmbedding, refEmbedding);
 
         // Scale to 0-100 range
-        double simDouble = _numOps.ToDouble(similarity);
-        double score = Math.Max(0, simDouble) * 100.0;
-
-        return score;
+        return ScaleSimilarity(similarity);
     }
 
     /// <summary>
@@ -153,23 +143,25 @@ public class CLIPScore<T> where T : struct
     /// <param name="referenceImageData">Reference image (optional)</param>
     /// <param name="textWeight">Weight for text-image score (default 0.7)</param>
     /// <returns>Combined CLIPScore on a 0-100 scale.</returns>
-    public double ComputeCombinedScore(
+    public T ComputeCombinedScore(
         double[] generatedImageData,
         string text,
         double[]? referenceImageData = null,
         double textWeight = 0.7)
     {
-        double textScore = ComputeTextImageScore(generatedImageData, text);
+        T textScore = ComputeTextImageScore(generatedImageData, text);
 
         if (referenceImageData == null)
         {
             return textScore;
         }
 
-        double imageScore = ComputeImageImageScore(generatedImageData, referenceImageData);
+        T imageScore = ComputeImageImageScore(generatedImageData, referenceImageData);
 
         // Weighted combination
-        return textWeight * textScore + (1.0 - textWeight) * imageScore;
+        return _numOps.Add(
+            _numOps.Multiply(_numOps.FromDouble(textWeight), textScore),
+            _numOps.Multiply(_numOps.FromDouble(1.0 - textWeight), imageScore));
     }
 
     /// <summary>
@@ -179,42 +171,40 @@ public class CLIPScore<T> where T : struct
     /// <param name="candidateCaption">Generated caption to evaluate</param>
     /// <param name="referenceCaptions">Reference captions (optional, for RefCLIPScore)</param>
     /// <returns>CLIPScore for the caption.</returns>
-    public double ComputeCaptionScore(
+    public T ComputeCaptionScore(
         double[] imageData,
         string candidateCaption,
         IEnumerable<string>? referenceCaptions = null)
     {
         // Compute image-caption CLIPScore
-        double imageTextScore = ComputeTextImageScore(imageData, candidateCaption);
+        T imageTextScore = ComputeTextImageScore(imageData, candidateCaption);
 
         if (referenceCaptions == null || !referenceCaptions.Any())
         {
             return imageTextScore;
         }
 
-        // Compute text-text similarity with reference captions
+        // Compute text-text similarity with reference captions (one model call per reference), then
+        // RefCLIPScore's max(max_r cos(c, r), 0) as one engine reduction.
         var candidateEmbedding = _clipModel.EncodeText(candidateCaption);
-        double maxTextSim = 0.0;
-
-        foreach (string refCaption in referenceCaptions)
-        {
-            var refEmbedding = _clipModel.EncodeText(refCaption);
-            T similarity = _clipModel.ComputeSimilarity(candidateEmbedding, refEmbedding);
-            double simDouble = _numOps.ToDouble(similarity);
-            maxTextSim = Math.Max(maxTextSim, simDouble);
-        }
+        var similarities = referenceCaptions
+            .Select(refCaption => _clipModel.ComputeSimilarity(candidateEmbedding, _clipModel.EncodeText(refCaption)))
+            .ToArray();
+        T maxTextSim = MathHelper.Max(_numOps.Zero, Engine.TensorMaxValue(Vector<T>.Wrap(similarities).AsTensor()));
 
         // Combine image-text score with text-text similarity
         // This helps ensure the caption is both relevant to the image AND similar to reference captions
-        double textRefScore = maxTextSim * 100.0;
+        T textRefScore = _numOps.Multiply(maxTextSim, _numOps.FromDouble(100.0));
 
         // Harmonic mean of the two scores (rewards both aspects)
-        if (imageTextScore <= 0 || textRefScore <= 0)
+        if (!_numOps.GreaterThan(imageTextScore, _numOps.Zero) || !_numOps.GreaterThan(textRefScore, _numOps.Zero))
         {
-            return 0.0;
+            return _numOps.Zero;
         }
 
-        return 2.0 * imageTextScore * textRefScore / (imageTextScore + textRefScore);
+        return _numOps.Divide(
+            _numOps.Multiply(_numOps.FromDouble(2.0), _numOps.Multiply(imageTextScore, textRefScore)),
+            _numOps.Add(imageTextScore, textRefScore));
     }
 
     /// <summary>
@@ -229,7 +219,7 @@ public class CLIPScore<T> where T : struct
     /// <param name="sourceText">Source text description</param>
     /// <param name="editText">Target/edit text description</param>
     /// <returns>Directional similarity score on a 0-100 scale.</returns>
-    public double ComputeDirectionalSimilarity(
+    public T ComputeDirectionalSimilarity(
         double[] sourceImageData,
         double[] editedImageData,
         string sourceText,
@@ -246,15 +236,14 @@ public class CLIPScore<T> where T : struct
         var textDirection = SubtractVectors(editTextEmb, srcTextEmb);
 
         // Normalize direction vectors
-        imgDirection = VectorHelper.Normalize(imgDirection);
-        textDirection = VectorHelper.Normalize(textDirection);
+        imgDirection = NormalizeDirection(imgDirection);
+        textDirection = NormalizeDirection(textDirection);
 
         // Compute cosine similarity between directions
-        T similarity = _numOps.FromDouble(VectorHelper.CosineSimilarity(imgDirection, textDirection));
-        double simDouble = _numOps.ToDouble(similarity);
+        T similarity = CosineSimilarity(imgDirection, textDirection);
 
-        // Scale to 0-100 range
-        return (simDouble + 1.0) * 50.0; // Maps [-1, 1] to [0, 100]
+        // Scale to 0-100 range: maps [-1, 1] to [0, 100]
+        return _numOps.Multiply(_numOps.Add(similarity, _numOps.One), _numOps.FromDouble(50.0));
     }
 
     /// <summary>
@@ -264,15 +253,58 @@ public class CLIPScore<T> where T : struct
     /// <param name="afterImageData">Image after processing</param>
     /// <param name="text">Text description to measure alignment against</param>
     /// <returns>Improvement in CLIPScore (positive = after is better aligned).</returns>
-    public double ComputeScoreImprovement(
+    public T ComputeScoreImprovement(
         double[] beforeImageData,
         double[] afterImageData,
         string text)
     {
-        double beforeScore = ComputeTextImageScore(beforeImageData, text);
-        double afterScore = ComputeTextImageScore(afterImageData, text);
+        T beforeScore = ComputeTextImageScore(beforeImageData, text);
+        T afterScore = ComputeTextImageScore(afterImageData, text);
 
-        return afterScore - beforeScore;
+        return _numOps.Subtract(afterScore, beforeScore);
+    }
+
+    /// <summary>
+    /// Maps a cosine similarity to CLIPScore's 0-100 scale: 100 * max(cos, 0) (Hessel et al. 2021; torchmetrics).
+    /// </summary>
+    private T ScaleSimilarity(T similarity)
+    {
+        return _numOps.Multiply(MathHelper.Max(similarity, _numOps.Zero), _numOps.FromDouble(100.0));
+    }
+
+    /// <summary>
+    /// Scales a direction to unit length; a direction shorter than 1e-10 is returned unchanged.
+    /// </summary>
+    private Vector<T> NormalizeDirection(Vector<T> direction)
+    {
+        T norm = _numOps.Sqrt(Engine.DotProduct(direction, direction));
+        if (_numOps.LessThan(norm, _numOps.FromDouble(1e-10)))
+        {
+            return direction;
+        }
+
+        return Engine.Divide(direction, norm);
+    }
+
+    /// <summary>
+    /// Cosine similarity clamped to [-1, 1]; 0 when the norm product is at most 1e-10.
+    /// </summary>
+    private T CosineSimilarity(Vector<T> a, Vector<T> b)
+    {
+        if (a.Length != b.Length)
+        {
+            throw new ArgumentException(
+                $"Vectors must have equal length for cosine similarity; got {a.Length} and {b.Length}.");
+        }
+
+        T dot = Engine.DotProduct(a, b);
+        T denom = _numOps.Sqrt(_numOps.Multiply(Engine.DotProduct(a, a), Engine.DotProduct(b, b)));
+        if (!_numOps.GreaterThan(denom, _numOps.FromDouble(1e-10)))
+        {
+            return _numOps.Zero;
+        }
+
+        return MathHelper.Clamp(_numOps.Divide(dot, denom), _numOps.Negate(_numOps.One), _numOps.One);
     }
 
     /// <summary>
@@ -307,6 +339,7 @@ public class AestheticScore<T> where T : struct
     private readonly INumericOperations<T> _numOps;
     private readonly IMultimodalEmbedding<T> _clipModel;
     private readonly Vector<T>? _aestheticWeights;
+    private readonly T _aestheticBias;
     private readonly string[] _positivePrompts;
     private readonly string[] _negativePrompts;
 
@@ -341,16 +374,19 @@ public class AestheticScore<T> where T : struct
     /// <param name="aestheticWeights">Pre-trained aesthetic prediction weights (optional).</param>
     /// <param name="positivePrompts">Custom positive aesthetic prompts for zero-shot scoring (optional, uses defaults if null).</param>
     /// <param name="negativePrompts">Custom negative aesthetic prompts for zero-shot scoring (optional, uses defaults if null).</param>
+    /// <param name="aestheticBias">Bias of the trained linear aesthetic head (optional, default 0).</param>
     public AestheticScore(
         IMultimodalEmbedding<T> clipModel,
         Vector<T>? aestheticWeights = null,
         string[]? positivePrompts = null,
-        string[]? negativePrompts = null)
+        string[]? negativePrompts = null,
+        T? aestheticBias = null)
     {
         Guard.NotNull(clipModel);
         _clipModel = clipModel;
         _numOps = MathHelper.GetNumericOperations<T>();
         _aestheticWeights = aestheticWeights;
+        _aestheticBias = aestheticBias ?? _numOps.Zero;
         _positivePrompts = positivePrompts ?? DefaultPositivePrompts;
         _negativePrompts = negativePrompts ?? DefaultNegativePrompts;
 
@@ -370,8 +406,11 @@ public class AestheticScore<T> where T : struct
     /// Computes aesthetic score for an image.
     /// </summary>
     /// <param name="imageData">Image data as a flattened array</param>
-    /// <returns>Aesthetic score on a 1-10 scale. Higher is better.</returns>
-    public double Compute(double[] imageData)
+    /// <returns>
+    /// Aesthetic score. With trained weights this is the linear head's rating of the L2-normalised CLIP image
+    /// embedding (the LAION aesthetic predictor's 1-10 scale); zero-shot it is mapped to [1, 10].
+    /// </returns>
+    public T Compute(double[] imageData)
     {
         if (_aestheticWeights != null)
         {
@@ -386,11 +425,15 @@ public class AestheticScore<T> where T : struct
     /// <summary>
     /// Computes aesthetic score using trained weights.
     /// </summary>
-    private double ComputeWithTrainedWeights(double[] imageData)
+    /// <remarks>
+    /// Follows the LAION aesthetic predictor (Schuhmann et al., LAION-5B 2022): the CLIP image embedding is
+    /// L2-normalised and passed through the linear head, score = w . (e / ||e||) + b, read directly as the rating.
+    /// </remarks>
+    private T ComputeWithTrainedWeights(double[] imageData)
     {
         var imageEmbedding = _clipModel.EncodeImage(imageData);
 
-        // Linear projection: score = weights^T * embedding
+        // Linear projection: score = weights^T * normalized embedding + bias
         var aestheticWeights = _aestheticWeights ?? throw new InvalidOperationException(
             "Aesthetic weights have not been initialized.");
 
@@ -401,78 +444,60 @@ public class AestheticScore<T> where T : struct
                 $"but image embedding has {imageEmbedding.Length} dimensions.");
         }
 
-        T score = _numOps.Zero;
-        for (int i = 0; i < aestheticWeights.Length; i++)
-        {
-            score = _numOps.Add(score, _numOps.Multiply(aestheticWeights[i], imageEmbedding[i]));
-        }
-
-        // Sigmoid to map to [0, 1] then scale to [1, 10]
-        double scoreDouble = _numOps.ToDouble(score);
-        double sigmoid = 1.0 / (1.0 + Math.Exp(-scoreDouble));
-        return 1.0 + sigmoid * 9.0;
+        var engine = AiDotNetEngine.Current;
+        T norm = _numOps.Sqrt(engine.DotProduct(imageEmbedding, imageEmbedding));
+        T dot = engine.DotProduct(aestheticWeights, imageEmbedding);
+        T projection = _numOps.GreaterThan(norm, _numOps.Zero) ? _numOps.Divide(dot, norm) : dot;
+        return _numOps.Add(projection, _aestheticBias);
     }
 
     /// <summary>
     /// Computes aesthetic score using zero-shot comparison with aesthetic prompts.
     /// </summary>
-    private double ComputeZeroShot(double[] imageData)
+    private T ComputeZeroShot(double[] imageData)
     {
+        var engine = AiDotNetEngine.Current;
         var imageEmbedding = _clipModel.EncodeImage(imageData);
 
-        // Compute similarity with positive prompts
-        double positiveScore = 0.0;
-        foreach (string prompt in _positivePrompts)
-        {
-            var textEmbedding = _clipModel.EncodeText(prompt);
-            T similarity = _clipModel.ComputeSimilarity(imageEmbedding, textEmbedding);
-            positiveScore += _numOps.ToDouble(similarity);
-        }
-        positiveScore /= _positivePrompts.Length;
+        // Mean similarity with the positive and with the negative prompts (one model call per prompt).
+        var positiveSimilarities = _positivePrompts
+            .Select(prompt => _clipModel.ComputeSimilarity(imageEmbedding, _clipModel.EncodeText(prompt)))
+            .ToArray();
+        T positiveScore = engine.Mean(Vector<T>.Wrap(positiveSimilarities));
 
-        // Compute similarity with negative prompts
-        double negativeScore = 0.0;
-        foreach (string prompt in _negativePrompts)
-        {
-            var textEmbedding = _clipModel.EncodeText(prompt);
-            T similarity = _clipModel.ComputeSimilarity(imageEmbedding, textEmbedding);
-            negativeScore += _numOps.ToDouble(similarity);
-        }
-        negativeScore /= _negativePrompts.Length;
+        var negativeSimilarities = _negativePrompts
+            .Select(prompt => _clipModel.ComputeSimilarity(imageEmbedding, _clipModel.EncodeText(prompt)))
+            .ToArray();
+        T negativeScore = engine.Mean(Vector<T>.Wrap(negativeSimilarities));
 
         // Compute relative aesthetic score
         // Higher positive similarity + lower negative similarity = higher aesthetic score
-        double aestheticDiff = positiveScore - negativeScore;
+        T aestheticDiff = _numOps.Subtract(positiveScore, negativeScore);
 
         // Map to 1-10 scale using sigmoid-like function
         // Typical values for aestheticDiff are in range [-0.3, 0.3]
-        double normalized = 1.0 / (1.0 + Math.Exp(-aestheticDiff * 10));
-        return 1.0 + normalized * 9.0;
+        T normalized = MathHelper.Sigmoid(_numOps.Multiply(aestheticDiff, _numOps.FromDouble(10.0)));
+        return _numOps.Add(_numOps.One, _numOps.Multiply(normalized, _numOps.FromDouble(9.0)));
     }
 
     /// <summary>
     /// Computes aesthetic scores for a batch of images.
     /// </summary>
     /// <param name="images">List of image data arrays</param>
-    /// <returns>Array of aesthetic scores.</returns>
-    public double[] ComputeBatch(IList<double[]> images)
+    /// <returns>Vector of aesthetic scores, one per image.</returns>
+    public Vector<T> ComputeBatch(IList<double[]> images)
     {
-        var scores = new double[images.Count];
-        for (int i = 0; i < images.Count; i++)
-        {
-            scores[i] = Compute(images[i]);
-        }
-        return scores;
+        return Vector<T>.Wrap(images.Select(Compute).ToArray());
     }
 
     /// <summary>
     /// Ranks images by aesthetic score.
     /// </summary>
     /// <param name="images">List of image data arrays</param>
-    /// <returns>Indices of images sorted by aesthetic score (highest first).</returns>
+    /// <returns>Indices of images sorted by aesthetic score (highest first; ties keep input order).</returns>
     public int[] RankByAesthetic(IList<double[]> images)
     {
-        var scores = ComputeBatch(images);
+        var scores = images.Select(Compute).ToArray();
 
         return scores
             .Select((score, index) => (score, index))
