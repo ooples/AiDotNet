@@ -492,14 +492,8 @@ public partial class LSTMNeuralNetwork<T> : SequenceModelLayoutBase<T>
                 var cellState = new Tensor<T>(new int[] { batchSize, hiddenSize });
 
                 // Initialize with zeros
-                for (int b = 0; b < batchSize; b++)
-                {
-                    for (int h = 0; h < hiddenSize; h++)
-                    {
-                        hiddenState[b, h] = NumOps.Zero;
-                        cellState[b, h] = NumOps.Zero;
-                    }
-                }
+                hiddenState.Fill(NumOps.Zero);
+                cellState.Fill(NumOps.Zero);
 
                 states[i] = (hiddenState, cellState);
                 lstmIndex++;
@@ -708,19 +702,15 @@ public partial class LSTMNeuralNetwork<T> : SequenceModelLayoutBase<T>
         int batchSize = input.Shape[0];
         int features = input.Shape[2];
 
-        // Create result tensor with shape [batch_size, features]
-        var result = TensorAllocator.Rent<T>(new int[] { batchSize, features });
+        // Copy data for this time step: [batch_size, features]
+        if (batchSize == 0 || features == 0)
+            return TensorAllocator.Rent<T>(new int[] { batchSize, features });
 
-        // Copy data for this time step
-        for (int b = 0; b < batchSize; b++)
+        using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
         {
-            for (int f = 0; f < features; f++)
-            {
-                result[b, f] = input[b, timeStep, f];
-            }
+            return Engine.Reshape(
+                Engine.TensorSlice(input, [0, timeStep, 0], [batchSize, 1, features]), [batchSize, features]).Clone();
         }
-
-        return result;
     }
 
     /// <summary>
@@ -791,35 +781,19 @@ public partial class LSTMNeuralNetwork<T> : SequenceModelLayoutBase<T>
             resultShape[i + 1] = shape[i];
         }
 
-        // Create result tensor
-        var result = TensorAllocator.Rent<T>(resultShape);
-
-        // Copy data from each tensor
-        for (int t = 0; t < tensors.Count; t++)
+        if (shape.Length != 2)
         {
-            var tensor = tensors[t];
-
-            // Copy based on tensor rank
-            if (shape.Length == 2)
-            {
-                int batchSize = shape[0];
-                int features = shape[1];
-
-                for (int b = 0; b < batchSize; b++)
-                {
-                    for (int f = 0; f < features; f++)
-                    {
-                        result[b, t, f] = tensor[b, f];
-                    }
-                }
-            }
-            else
-            {
-                throw new NotSupportedException("Only 2D tensor stacking is currently supported");
-            }
+            throw new NotSupportedException("Only 2D tensor stacking is currently supported");
         }
 
-        return result;
+        // Stack the [batch, features] steps along a new time axis 1 (a plain copy, off the tape).
+        if (resultShape[0] == 0 || resultShape[2] == 0)
+            return TensorAllocator.Rent<T>(resultShape);
+
+        using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
+        {
+            return Tensor<T>.Stack(tensors.ToArray(), 1);
+        }
     }
 
     /// <summary>
@@ -841,34 +815,10 @@ public partial class LSTMNeuralNetwork<T> : SequenceModelLayoutBase<T>
             resultShape[i + 1] = inputShape[i];
         }
 
-        // Create result tensor
-        var result = TensorAllocator.Rent<T>(resultShape);
-
-        // Copy data
-        if (inputShape.Length == 2)
-        {
-            int seqLength = inputShape[0];
-            int features = inputShape[1];
-
-            for (int s = 0; s < seqLength; s++)
-            {
-                for (int f = 0; f < features; f++)
-                {
-                    result[0, s, f] = input[s, f];
-                }
-            }
-        }
-        else if (inputShape.Length == 1)
-        {
-            int features = inputShape[0];
-
-            for (int f = 0; f < features; f++)
-            {
-                result[0, f] = input[f];
-            }
-        }
-
-        return result;
+        // Copy data (ranks 1 and 2; other ranks get an uncopied result, as before)
+        return inputShape.Length == 1 || inputShape.Length == 2
+            ? DetachedReshapeCopy(input, resultShape)
+            : TensorAllocator.Rent<T>(resultShape);
     }
 
     /// <summary>
@@ -894,34 +844,10 @@ public partial class LSTMNeuralNetwork<T> : SequenceModelLayoutBase<T>
             resultShape[i - 1] = inputShape[i];
         }
 
-        // Create result tensor
-        var result = TensorAllocator.Rent<T>(resultShape);
-
-        // Copy data
-        if (inputShape.Length == 3)
-        {
-            int seqLength = inputShape[1];
-            int features = inputShape[2];
-
-            for (int s = 0; s < seqLength; s++)
-            {
-                for (int f = 0; f < features; f++)
-                {
-                    result[s, f] = input[0, s, f];
-                }
-            }
-        }
-        else if (inputShape.Length == 2)
-        {
-            int features = inputShape[1];
-
-            for (int f = 0; f < features; f++)
-            {
-                result[f] = input[0, f];
-            }
-        }
-
-        return result;
+        // Copy data (ranks 2 and 3; other ranks get an uncopied result, as before)
+        return inputShape.Length == 2 || inputShape.Length == 3
+            ? DetachedReshapeCopy(input, resultShape)
+            : TensorAllocator.Rent<T>(resultShape);
     }
 
     /// <summary>
@@ -946,25 +872,10 @@ public partial class LSTMNeuralNetwork<T> : SequenceModelLayoutBase<T>
             resultShape[i + 1] = inputShape[i];
         }
 
-        // Create result tensor
-        var result = TensorAllocator.Rent<T>(resultShape);
-
-        // Copy data
-        if (inputShape.Length == 2)
-        {
-            int batchSize = inputShape[0];
-            int features = inputShape[1];
-
-            for (int b = 0; b < batchSize; b++)
-            {
-                for (int f = 0; f < features; f++)
-                {
-                    result[b, 0, f] = input[b, f];
-                }
-            }
-        }
-
-        return result;
+        // Copy data (rank 2; other ranks get an uncopied result, as before)
+        return inputShape.Length == 2
+            ? DetachedReshapeCopy(input, resultShape)
+            : TensorAllocator.Rent<T>(resultShape);
     }
 
     /// <summary>
@@ -993,25 +904,10 @@ public partial class LSTMNeuralNetwork<T> : SequenceModelLayoutBase<T>
             resultShape[i - 1] = inputShape[i];
         }
 
-        // Create result tensor
-        var result = TensorAllocator.Rent<T>(resultShape);
-
-        // Copy data
-        if (inputShape.Length == 3)
-        {
-            int batchSize = inputShape[0];
-            int features = inputShape[2];
-
-            for (int b = 0; b < batchSize; b++)
-            {
-                for (int f = 0; f < features; f++)
-                {
-                    result[b, f] = input[b, 0, f];
-                }
-            }
-        }
-
-        return result;
+        // Copy data (rank 3; other ranks get an uncopied result, as before)
+        return inputShape.Length == 3
+            ? DetachedReshapeCopy(input, resultShape)
+            : TensorAllocator.Rent<T>(resultShape);
     }
 
     /// <summary>
@@ -1034,21 +930,10 @@ public partial class LSTMNeuralNetwork<T> : SequenceModelLayoutBase<T>
             resultShape[i + 2] = inputShape[i];
         }
 
-        // Create result tensor
-        var result = TensorAllocator.Rent<T>(resultShape);
-
-        // Copy data
-        if (inputShape.Length == 1)
-        {
-            int features = inputShape[0];
-
-            for (int f = 0; f < features; f++)
-            {
-                result[0, 0, f] = input[f];
-            }
-        }
-
-        return result;
+        // Copy data (rank 1; other ranks get an uncopied result, as before)
+        return inputShape.Length == 1
+            ? DetachedReshapeCopy(input, resultShape)
+            : TensorAllocator.Rent<T>(resultShape);
     }
 
     /// <summary>
@@ -1074,21 +959,22 @@ public partial class LSTMNeuralNetwork<T> : SequenceModelLayoutBase<T>
             resultShape[i - 2] = inputShape[i];
         }
 
-        // Create result tensor
-        var result = TensorAllocator.Rent<T>(resultShape);
+        // Copy data (rank 3; other ranks get an uncopied result, as before)
+        return inputShape.Length == 3
+            ? DetachedReshapeCopy(input, resultShape)
+            : TensorAllocator.Rent<T>(resultShape);
+    }
 
-        // Copy data
-        if (inputShape.Length == 3)
+    /// <summary>
+    /// The same elements in a new shape of equal size, as a plain copy (off the tape), as the
+    /// element-wise copies were.
+    /// </summary>
+    private Tensor<T> DetachedReshapeCopy(Tensor<T> input, int[] shape)
+    {
+        using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
         {
-            int features = inputShape[2];
-
-            for (int f = 0; f < features; f++)
-            {
-                result[f] = input[0, 0, f];
-            }
+            return Engine.Reshape(input, shape).Clone();
         }
-
-        return result;
     }
 
     /// <summary>
@@ -1149,10 +1035,7 @@ public partial class LSTMNeuralNetwork<T> : SequenceModelLayoutBase<T>
         // Case 1: Shapes match exactly - direct copy
         if (hiddenGradient._shape.SequenceEqual(outputShape))
         {
-            for (int i = 0; i < hiddenGradient.Length; i++)
-            {
-                transformedGradient[i] = hiddenGradient[i];
-            }
+            CopyFlatPrefix(hiddenGradient, transformedGradient, hiddenGradient.Length);
             return transformedGradient;
         }
 
@@ -1169,23 +1052,20 @@ public partial class LSTMNeuralNetwork<T> : SequenceModelLayoutBase<T>
         if (hiddenFirstDim != outputFirstDim && hiddenFirstDim != 1 && outputFirstDim != 1)
         {
             // Incompatible batch sizes - use fallback
-            int minLength = Math.Min(hiddenGradient.Length, transformedGradient.Length);
-            for (int i = 0; i < minLength; i++)
-            {
-                transformedGradient[i] = hiddenGradient[i];
-            }
+            CopyFlatPrefix(hiddenGradient, transformedGradient, Math.Min(hiddenGradient.Length, transformedGradient.Length));
             return transformedGradient;
         }
+
+        // Rows b < min(first dims) of the flat [rows, features] layouts that both tensors hold.
+        int rows = Math.Min(outputFirstDim, hiddenFirstDim);
+        if (hiddenFeatures > 0) rows = Math.Min(rows, hiddenGradient.Length / hiddenFeatures);
+        if (outputFeatures > 0) rows = Math.Min(rows, transformedGradient.Length / outputFeatures);
 
         // Transform based on feature dimension relationship
         if (hiddenFeatures == outputFeatures)
         {
             // Same feature dimension, might differ in batch/sequence dims
-            int minLength = Math.Min(hiddenGradient.Length, transformedGradient.Length);
-            for (int i = 0; i < minLength; i++)
-            {
-                transformedGradient[i] = hiddenGradient[i];
-            }
+            CopyFlatPrefix(hiddenGradient, transformedGradient, Math.Min(hiddenGradient.Length, transformedGradient.Length));
         }
         else if (hiddenFeatures > outputFeatures)
         {
@@ -1196,33 +1076,21 @@ public partial class LSTMNeuralNetwork<T> : SequenceModelLayoutBase<T>
             // no explicit projection layers exist, or as a fallback for debugging.
             // If your architecture includes dense output layers after LSTM, those layers
             // handle the gradient transformation via their Backward() methods.
-            for (int b = 0; b < Math.Min(outputFirstDim, hiddenFirstDim); b++)
+            // Output feature outF averages hidden features [outF * H / O, (outF + 1) * H / O): a sum through
+            // a bucket indicator, divided by the bucket size.
+            if (rows > 0 && outputFeatures > 0)
             {
-                for (int outF = 0; outF < outputFeatures; outF++)
+                var bucketOfHidden = Enumerable.Range(0, hiddenFeatures)
+                    .Select(hidF => Enumerable.Range(0, outputFeatures)
+                        .First(outF => hidF < ((outF + 1) * hiddenFeatures) / outputFeatures))
+                    .ToArray();
+                using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
                 {
-                    T accumulatedGrad = NumOps.Zero;
-                    int startHiddenF = (outF * hiddenFeatures) / outputFeatures;
-                    int endHiddenF = ((outF + 1) * hiddenFeatures) / outputFeatures;
-
-                    // Average gradients from corresponding hidden features
-                    for (int hidF = startHiddenF; hidF < endHiddenF && hidF < hiddenFeatures; hidF++)
-                    {
-                        int hiddenIdx = b * hiddenFeatures + hidF;
-                        if (hiddenIdx < hiddenGradient.Length)
-                        {
-                            accumulatedGrad = NumOps.Add(accumulatedGrad, hiddenGradient[hiddenIdx]);
-                        }
-                    }
-
-                    // Store averaged gradient
-                    int outIdx = b * outputFeatures + outF;
-                    if (outIdx < transformedGradient.Length)
-                    {
-                        int count = endHiddenF - startHiddenF;
-                        transformedGradient[outIdx] = count > 0
-                            ? NumOps.Divide(accumulatedGrad, NumOps.FromDouble(count))
-                            : accumulatedGrad;
-                    }
+                    var indicator = Engine.TensorOneHot<T>(new Tensor<int>(bucketOfHidden, [hiddenFeatures]), outputFeatures);
+                    var counts = Engine.ReduceSum(indicator, new[] { 0 }, keepDims: true);   // [1, O], all >= 1
+                    var hiddenRows = FlatRows(hiddenGradient, rows, hiddenFeatures);
+                    Engine.TensorDivide(Engine.TensorMatMul(hiddenRows, indicator), counts)
+                        .CopyTo(transformedGradient.AsWritableSpan().Slice(0, rows * outputFeatures));
                 }
             }
         }
@@ -1232,27 +1100,38 @@ public partial class LSTMNeuralNetwork<T> : SequenceModelLayoutBase<T>
             // NOTE: This is an approximation using gradient replication. For learned projections,
             // the correct approach would use the transpose of the projection matrix.
             // This approximation is suitable when no explicit projection layers exist.
-            for (int b = 0; b < Math.Min(outputFirstDim, hiddenFirstDim); b++)
+            // Output feature outF copies hidden feature outF * H / O.
+            if (rows > 0 && outputFeatures > 0 && hiddenFeatures > 0)
             {
-                for (int outF = 0; outF < outputFeatures; outF++)
+                var sourceFeature = Enumerable.Range(0, outputFeatures)
+                    .Select(outF => (outF * hiddenFeatures) / outputFeatures).ToArray();
+                using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
                 {
-                    // Map output feature to corresponding hidden feature
-                    int hidF = (outF * hiddenFeatures) / outputFeatures;
-                    int hiddenIdx = b * hiddenFeatures + hidF;
-
-                    if (hiddenIdx < hiddenGradient.Length)
-                    {
-                        int outIdx = b * outputFeatures + outF;
-                        if (outIdx < transformedGradient.Length)
-                        {
-                            transformedGradient[outIdx] = hiddenGradient[hiddenIdx];
-                        }
-                    }
+                    Engine.TensorGather(FlatRows(hiddenGradient, rows, hiddenFeatures), new Tensor<int>(sourceFeature, [outputFeatures]), axis: 1)
+                        .CopyTo(transformedGradient.AsWritableSpan().Slice(0, rows * outputFeatures));
                 }
             }
         }
 
         return transformedGradient;
+    }
+
+    /// <summary>The first rows * features elements of a tensor, row-major, as [rows, features].</summary>
+    private Tensor<T> FlatRows(Tensor<T> source, int rows, int features)
+    {
+        return Engine.Reshape(
+            Engine.TensorSlice(Engine.Reshape(source, [source.Length]), [0], [rows * features]), [rows, features]);
+    }
+
+    /// <summary>Copies the first count elements of source into destination (row-major order).</summary>
+    private void CopyFlatPrefix(Tensor<T> source, Tensor<T> destination, int count)
+    {
+        if (count <= 0) return;
+        using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
+        {
+            Engine.TensorSlice(Engine.Reshape(source, [source.Length]), [0], [count])
+                .CopyTo(destination.AsWritableSpan().Slice(0, count));
+        }
     }
 
     /// <summary>
@@ -1262,15 +1141,10 @@ public partial class LSTMNeuralNetwork<T> : SequenceModelLayoutBase<T>
     /// <returns>True if the tensor contains only zeros; otherwise, false.</returns>
     private bool IsZeroTensor(Tensor<T> tensor)
     {
-        for (int i = 0; i < tensor.Length; i++)
-        {
-            if (!MathHelper.AlmostEqual(tensor[i], NumOps.Zero))
-            {
-                return false;
-            }
-        }
-
-        return true;
+        // Every |x - 0| below 1e-8 (MathHelper.AlmostEqual's default); NaN is not.
+        if (tensor.Length == 0) return true;
+        var nearZero = Engine.TensorLessThan(Engine.TensorAbs(tensor), NumOps.FromDouble(1e-8));
+        return NumOps.Equals(Engine.TensorSum(nearZero), NumOps.FromDouble(tensor.Length));
     }
 
     /// <summary>
@@ -1319,22 +1193,17 @@ public partial class LSTMNeuralNetwork<T> : SequenceModelLayoutBase<T>
         Tensor<T> dh = dhPrev != null ? dhNext.Add(dhPrev) : dhNext.Clone();
         Tensor<T> dc = dcPrev != null ? dcPrev.Clone() : new Tensor<T>([batchSize, hiddenSize]);
 
-        // Calculate gradients for the gates
-        Tensor<T> do_ = new Tensor<T>([batchSize, hiddenSize]);
-        Tensor<T> di = new Tensor<T>([batchSize, hiddenSize]);
-        Tensor<T> df = new Tensor<T>([batchSize, hiddenSize]);
-        Tensor<T> dg = new Tensor<T>([batchSize, hiddenSize]);
-        Tensor<T> dc_tanh = new Tensor<T>([batchSize, hiddenSize]);
-
-        // Calculate activated cell state
+        // Calculate activated cell state and its derivative per element (scalar activation dispatch, as before)
         Tensor<T> c_tanh = new Tensor<T>([batchSize, hiddenSize]);
+        Tensor<T> cDerivative = new Tensor<T>([batchSize, hiddenSize]);
+        var tanh = new TanhActivation<T>();
         for (int b = 0; b < batchSize; b++)
         {
             for (int j = 0; j < hiddenSize; j++)
             {
                 c_tanh[b, j] = ScalarActivation != null
                     ? ScalarActivation.Activate(c[b, j])
-                    : (new TanhActivation<T>()).Activate(c[b, j]);
+                    : tanh.Activate(c[b, j]);
             }
         }
 
@@ -1344,140 +1213,93 @@ public partial class LSTMNeuralNetwork<T> : SequenceModelLayoutBase<T>
             throw new InvalidOperationException("Gate activations must be stored during forward pass for backpropagation.");
         }
 
-        // Backward pass through output gate
-        for (int b = 0; b < batchSize; b++)
+        // Gradient for c through tanh(c): the activation's derivative, or 1 - tanh(c)^2
+        if (ScalarActivation != null)
         {
-            for (int j = 0; j < hiddenSize; j++)
+            for (int b = 0; b < batchSize; b++)
             {
-                do_[b, j] = NumOps.Multiply(dh[b, j], c_tanh[b, j]);
-
-                // Gradient for tanh(c)
-                dc_tanh[b, j] = NumOps.Multiply(dh[b, j], o[b, j]);
-
-                // Gradient for c
-                T tanh_derivative;
-                if (ScalarActivation != null)
+                for (int j = 0; j < hiddenSize; j++)
                 {
-                    tanh_derivative = ScalarActivation.Derivative(c[b, j]);
+                    cDerivative[b, j] = ScalarActivation.Derivative(c[b, j]);
                 }
-                else
-                {
-                    T tanh_value = (new TanhActivation<T>()).Activate(c[b, j]);
-                    tanh_derivative = NumOps.Subtract(NumOps.One, NumOps.Multiply(tanh_value, tanh_value));
-                }
-
-                // Add gradient from next cell state
-                T dc_value = NumOps.Multiply(dc_tanh[b, j], tanh_derivative);
-                if (dcPrev != null)
-                {
-                    dc_value = NumOps.Add(dc_value, dc[b, j]);
-                }
-                dc[b, j] = dc_value;
-
-                // Gradients for gates
-                di[b, j] = NumOps.Multiply(dc[b, j], g[b, j]);
-                dg[b, j] = NumOps.Multiply(dc[b, j], i[b, j]);
-                df[b, j] = NumOps.Multiply(dc[b, j], cPrev[b, j]);
-
-                // Gradient to previous cell state
-                dc[b, j] = NumOps.Multiply(dc[b, j], f[b, j]);
             }
         }
 
-        // Apply gate activation derivatives
-        Tensor<T> di_input = new Tensor<T>([batchSize, hiddenSize]);
-        Tensor<T> df_input = new Tensor<T>([batchSize, hiddenSize]);
-        Tensor<T> dg_input = new Tensor<T>([batchSize, hiddenSize]);
-        Tensor<T> do_input = new Tensor<T>([batchSize, hiddenSize]);
-
-        for (int b = 0; b < batchSize; b++)
+        // Cell gate derivative: the activation's derivative per element, or 1 - g^2
+        Tensor<T>? gDerivative = null;
+        if (CellGateActivation != null)
         {
-            for (int j = 0; j < hiddenSize; j++)
+            gDerivative = new Tensor<T>([batchSize, hiddenSize]);
+            for (int b = 0; b < batchSize; b++)
             {
-                // Sigmoid derivative: sigmoid(x) * (1 - sigmoid(x))
-                di_input[b, j] = NumOps.Multiply(di[b, j],
-                    NumOps.Multiply(i[b, j], NumOps.Subtract(NumOps.One, i[b, j])));
-
-                df_input[b, j] = NumOps.Multiply(df[b, j],
-                    NumOps.Multiply(f[b, j], NumOps.Subtract(NumOps.One, f[b, j])));
-
-                do_input[b, j] = NumOps.Multiply(do_[b, j],
-                    NumOps.Multiply(o[b, j], NumOps.Subtract(NumOps.One, o[b, j])));
-
-                // Tanh derivative: 1 - tanh(x)^2
-                T tanh_derivative;
-                if (CellGateActivation != null)
+                for (int j = 0; j < hiddenSize; j++)
                 {
-                    tanh_derivative = CellGateActivation.Derivative(g[b, j]);
+                    gDerivative[b, j] = CellGateActivation.Derivative(g[b, j]);
                 }
-                else
-                {
-                    tanh_derivative = NumOps.Subtract(NumOps.One, NumOps.Multiply(g[b, j], g[b, j]));
-                }
-
-                dg_input[b, j] = NumOps.Multiply(dg[b, j], tanh_derivative);
             }
         }
 
         // Get LSTM layer parameters
         var parameters = GetLSTMLayerParameters(layerIndex);
 
-        // Calculate gradient for input x
-        Tensor<T> dx = new Tensor<T>([batchSize, inputSize]);
-
-        // Calculate gradients for weights
-        Tensor<T> dWi = new Tensor<T>([hiddenSize, inputSize]);
-        Tensor<T> dWf = new Tensor<T>([hiddenSize, inputSize]);
-        Tensor<T> dWg = new Tensor<T>([hiddenSize, inputSize]);
-        Tensor<T> dWo = new Tensor<T>([hiddenSize, inputSize]);
-
-        Tensor<T> dUi = new Tensor<T>([hiddenSize, hiddenSize]);
-        Tensor<T> dUf = new Tensor<T>([hiddenSize, hiddenSize]);
-        Tensor<T> dUg = new Tensor<T>([hiddenSize, hiddenSize]);
-        Tensor<T> dUo = new Tensor<T>([hiddenSize, hiddenSize]);
-
-        Tensor<T> dbi = new Tensor<T>([hiddenSize]);
-        Tensor<T> dbf = new Tensor<T>([hiddenSize]);
-        Tensor<T> dbg = new Tensor<T>([hiddenSize]);
-        Tensor<T> dbo = new Tensor<T>([hiddenSize]);
-
-        // Calculate gradients for input, weights, and biases
-        for (int b = 0; b < batchSize; b++)
+        Tensor<T> dx, dWi, dWf, dWg, dWo, dUi, dUf, dUg, dUo, dbi, dbf, dbg, dbo;
+        using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
         {
-            for (int j = 0; j < hiddenSize; j++)
-            {
-                // Bias gradients
-                dbi[j] = NumOps.Add(dbi[j], di_input[b, j]);
-                dbf[j] = NumOps.Add(dbf[j], df_input[b, j]);
-                dbg[j] = NumOps.Add(dbg[j], dg_input[b, j]);
-                dbo[j] = NumOps.Add(dbo[j], do_input[b, j]);
+            var ones = new Tensor<T>([batchSize, hiddenSize]);
+            ones.Fill(NumOps.One);
+            if (ScalarActivation == null)
+                cDerivative = Engine.TensorSubtract(ones, Engine.TensorMultiply(c_tanh, c_tanh));
 
-                // Input gradients
-                for (int k = 0; k < inputSize; k++)
-                {
-                    T dxi = NumOps.Multiply(parameters.Wi[j, k], di_input[b, j]);
-                    T dxf = NumOps.Multiply(parameters.Wf[j, k], df_input[b, j]);
-                    T dxg = NumOps.Multiply(parameters.Wg[j, k], dg_input[b, j]);
-                    T dxo = NumOps.Multiply(parameters.Wo[j, k], do_input[b, j]);
+            // Backward pass through output gate
+            var do_ = Engine.TensorMultiply(dh, c_tanh);
 
-                    dx[b, k] = NumOps.Add(dx[b, k], NumOps.Add(NumOps.Add(dxi, dxf), NumOps.Add(dxg, dxo)));
+            // Gradient for tanh(c), then for c (plus the gradient from the next cell state)
+            var dc_tanh = Engine.TensorMultiply(dh, o);
+            var dcCurrent = Engine.TensorMultiply(dc_tanh, cDerivative);
+            if (dcPrev != null)
+                dcCurrent = Engine.TensorAdd(dcCurrent, dc);
 
-                    // Weight gradients (input)
-                    dWi[j, k] = NumOps.Add(dWi[j, k], NumOps.Multiply(di_input[b, j], x[b, k]));
-                    dWf[j, k] = NumOps.Add(dWf[j, k], NumOps.Multiply(df_input[b, j], x[b, k]));
-                    dWg[j, k] = NumOps.Add(dWg[j, k], NumOps.Multiply(dg_input[b, j], x[b, k]));
-                    dWo[j, k] = NumOps.Add(dWo[j, k], NumOps.Multiply(do_input[b, j], x[b, k]));
-                }
+            // Gradients for gates
+            var di = Engine.TensorMultiply(dcCurrent, g);
+            var dg = Engine.TensorMultiply(dcCurrent, i);
+            var df = Engine.TensorMultiply(dcCurrent, cPrev);
 
-                // Weight gradients (hidden)
-                for (int k = 0; k < hiddenSize; k++)
-                {
-                    dUi[j, k] = NumOps.Add(dUi[j, k], NumOps.Multiply(di_input[b, j], hPrev[b, k]));
-                    dUf[j, k] = NumOps.Add(dUf[j, k], NumOps.Multiply(df_input[b, j], hPrev[b, k]));
-                    dUg[j, k] = NumOps.Add(dUg[j, k], NumOps.Multiply(dg_input[b, j], hPrev[b, k]));
-                    dUo[j, k] = NumOps.Add(dUo[j, k], NumOps.Multiply(do_input[b, j], hPrev[b, k]));
-                }
-            }
+            // Gradient to previous cell state
+            dc = Engine.TensorMultiply(dcCurrent, f);
+
+            // Apply gate activation derivatives. Sigmoid derivative: sigmoid(x) * (1 - sigmoid(x))
+            var di_input = Engine.TensorMultiply(di, Engine.TensorMultiply(i, Engine.TensorSubtract(ones, i)));
+            var df_input = Engine.TensorMultiply(df, Engine.TensorMultiply(f, Engine.TensorSubtract(ones, f)));
+            var do_input = Engine.TensorMultiply(do_, Engine.TensorMultiply(o, Engine.TensorSubtract(ones, o)));
+            var dg_input = Engine.TensorMultiply(
+                dg, gDerivative ?? Engine.TensorSubtract(ones, Engine.TensorMultiply(g, g)));
+
+            // Bias gradients: sums over the batch
+            dbi = Engine.ReduceSum(di_input, new[] { 0 }, keepDims: false);
+            dbf = Engine.ReduceSum(df_input, new[] { 0 }, keepDims: false);
+            dbg = Engine.ReduceSum(dg_input, new[] { 0 }, keepDims: false);
+            dbo = Engine.ReduceSum(do_input, new[] { 0 }, keepDims: false);
+
+            // Input gradients: dx = sum over gates of dgate_input @ W_gate
+            var wi = Tensor<T>.FromMatrix(parameters.Wi);
+            var wf = Tensor<T>.FromMatrix(parameters.Wf);
+            var wg = Tensor<T>.FromMatrix(parameters.Wg);
+            var wo = Tensor<T>.FromMatrix(parameters.Wo);
+            dx = Engine.TensorAdd(
+                Engine.TensorAdd(Engine.TensorMatMul(di_input, wi), Engine.TensorMatMul(df_input, wf)),
+                Engine.TensorAdd(Engine.TensorMatMul(dg_input, wg), Engine.TensorMatMul(do_input, wo)));
+
+            // Weight gradients: dgate_input^T @ x (input) and dgate_input^T @ hPrev (hidden)
+            var xRows = Engine.TensorSlice(x, [0, 0], [batchSize, inputSize]);
+            var hRows = Engine.TensorSlice(hPrev, [0, 0], [batchSize, hiddenSize]);
+            dWi = Engine.TensorMatMul(Engine.TensorTranspose(di_input), xRows);
+            dWf = Engine.TensorMatMul(Engine.TensorTranspose(df_input), xRows);
+            dWg = Engine.TensorMatMul(Engine.TensorTranspose(dg_input), xRows);
+            dWo = Engine.TensorMatMul(Engine.TensorTranspose(do_input), xRows);
+            dUi = Engine.TensorMatMul(Engine.TensorTranspose(di_input), hRows);
+            dUf = Engine.TensorMatMul(Engine.TensorTranspose(df_input), hRows);
+            dUg = Engine.TensorMatMul(Engine.TensorTranspose(dg_input), hRows);
+            dUo = Engine.TensorMatMul(Engine.TensorTranspose(do_input), hRows);
         }
 
         // Store weight gradients for parameter updates
@@ -1589,16 +1411,8 @@ public partial class LSTMNeuralNetwork<T> : SequenceModelLayoutBase<T>
     /// <returns>The extracted matrix.</returns>
     private Matrix<T> ExtractMatrix(Vector<T> parameters, int startIndex, int rows, int cols)
     {
-        var matrix = new Matrix<T>(rows, cols);
-        for (int i = 0; i < rows; i++)
-        {
-            for (int j = 0; j < cols; j++)
-            {
-                matrix[i, j] = parameters[startIndex + i * cols + j];
-            }
-        }
-
-        return matrix;
+        if (rows == 0 || cols == 0) return new Matrix<T>(rows, cols);
+        return Tensor<T>.FromVector(parameters.GetSubVector(startIndex, rows * cols), [rows, cols]).ToMatrix();
     }
 
     /// <summary>
@@ -1610,13 +1424,8 @@ public partial class LSTMNeuralNetwork<T> : SequenceModelLayoutBase<T>
     /// <returns>The extracted vector.</returns>
     private Vector<T> ExtractVector(Vector<T> parameters, int startIndex, int length)
     {
-        var vector = new Vector<T>(length);
-        for (int i = 0; i < length; i++)
-        {
-            vector[i] = parameters[startIndex + i];
-        }
-
-        return vector;
+        if (length == 0) return new Vector<T>(0);
+        return parameters.GetSubVector(startIndex, length);
     }
 
     /// <summary>
@@ -1669,47 +1478,23 @@ public partial class LSTMNeuralNetwork<T> : SequenceModelLayoutBase<T>
             var dUgVector = dUg.ToMatrix().ToColumnVector();
             var dUoVector = dUo.ToMatrix().ToColumnVector();
 
-            // Combine all vectors into the final gradient vector
+            // Combine all vectors into the final gradient vector: input weights, recurrent weights, biases
+            var parts = new[]
+            {
+                dWiVector, dWfVector, dWgVector, dWoVector,
+                dUiVector, dUfVector, dUgVector, dUoVector,
+                dbi.ToVector(), dbf.ToVector(), dbg.ToVector(), dbo.ToVector()
+            };
             int index = 0;
-
-            // Copy input weights
-            var dWiLength = dWiVector.Length;
-            for (int i = 0; i < dWiLength; i++) gradients[index++] = dWiVector[i];
-
-            var dWfLength = dWfVector.Length;
-            for (int i = 0; i < dWfLength; i++) gradients[index++] = dWfVector[i];
-
-            var dWgLength = dWgVector.Length;
-            for (int i = 0; i < dWgLength; i++) gradients[index++] = dWgVector[i];
-
-            var dWoLength = dWoVector.Length;
-            for (int i = 0; i < dWoLength; i++) gradients[index++] = dWoVector[i];
-
-            // Copy recurrent weights
-            var dUiLength = dUiVector.Length;
-            for (int i = 0; i < dUiLength; i++) gradients[index++] = dUiVector[i];
-
-            var dUfLength = dUfVector.Length;
-            for (int i = 0; i < dUfLength; i++) gradients[index++] = dUfVector[i];
-
-            var dUgLength = dUgVector.Length;
-            for (int i = 0; i < dUgLength; i++) gradients[index++] = dUgVector[i];
-
-            var dUoLength = dUoVector.Length;
-            for (int i = 0; i < dUoLength; i++) gradients[index++] = dUoVector[i];
-
-            // Copy biases
-            var dbiLength = dbi.ToVector().Length;
-            for (int i = 0; i < dbiLength; i++) gradients[index++] = dbi.ToVector()[i];
-
-            var dbfLength = dbf.ToVector().Length;
-            for (int i = 0; i < dbfLength; i++) gradients[index++] = dbf.ToVector()[i];
-
-            var dbgLength = dbg.ToVector().Length;
-            for (int i = 0; i < dbgLength; i++) gradients[index++] = dbg.ToVector()[i];
-
-            var dboLength = dbo.ToVector().Length;
-            for (int i = 0; i < dboLength; i++) gradients[index++] = dbo.ToVector()[i];
+            var gradientSpan = gradients.AsWritableSpan();
+            foreach (var part in parts)
+            {
+                if (index + part.Length > gradientSpan.Length)
+                    throw new ArgumentOutOfRangeException(nameof(layerIndex),
+                        $"LSTM gradients ({index + part.Length}+ values) exceed the layer's {gradientSpan.Length} parameters.");
+                part.AsSpan().CopyTo(gradientSpan.Slice(index));
+                index += part.Length;
+            }
 
             T learningRate = NumOps.FromDouble(0.01); // Use appropriate learning rate
 
@@ -1724,10 +1509,7 @@ public partial class LSTMNeuralNetwork<T> : SequenceModelLayoutBase<T>
             var updatedSlice = (Vector<T>)Engine.Subtract(paramSlice, scaledGradients);
 
             // Copy updated values back
-            for (int i = 0; i < updateLength; i++)
-            {
-                currentParams[i] = updatedSlice[i];
-            }
+            updatedSlice.AsSpan().Slice(0, updateLength).CopyTo(currentParams.AsWritableSpan());
 
             // Apply updated parameters to the layer
             layer.UpdateParameters(currentParams);
