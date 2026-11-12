@@ -188,19 +188,21 @@ public class RFECV<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFea
 
     private Matrix<T> ExtractSubset(Matrix<T> data, List<int> rows, List<int> cols)
     {
-        var result = new T[rows.Count, cols.Count];
-        for (int i = 0; i < rows.Count; i++)
-            for (int j = 0; j < cols.Count; j++)
-                result[i, j] = data[rows[i], cols[j]];
-        return new Matrix<T>(result);
+        if (rows.Count == 0 || cols.Count == 0)
+            return new Matrix<T>(rows.Count, cols.Count);
+
+        var selectedRows = Engine.TensorIndexSelect(Tensor<T>.FromMatrix(data),
+            new Tensor<int>(rows.ToArray(), new[] { rows.Count }), 0);
+        return Engine.TensorIndexSelect(selectedRows, new Tensor<int>(cols.ToArray(), new[] { cols.Count }), 1).ToMatrix();
     }
 
     private Vector<T> ExtractVector(Vector<T> vec, List<int> indices)
     {
-        var result = new T[indices.Count];
-        for (int i = 0; i < indices.Count; i++)
-            result[i] = vec[indices[i]];
-        return new Vector<T>(result);
+        if (indices.Count == 0)
+            return new Vector<T>(0);
+
+        return Engine.TensorIndexSelect(Tensor<T>.FromVector(vec),
+            new Tensor<int>(indices.ToArray(), new[] { indices.Count }), 0).ToVector();
     }
 
     private double EvaluateScore(Matrix<T> trainData, Vector<T> trainTarget,
@@ -209,43 +211,25 @@ public class RFECV<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFea
         if (_scoringFunc is not null)
             return _scoringFunc(valData, valTarget);
 
-        // Default: correlation-based score
-        return ComputeCorrelationScore(trainData, trainTarget, valData, valTarget);
+        // Default: validation R^2 of a least-squares fit on the training folds
+        return ComputeValidationRSquared(trainData, trainTarget, valData, valTarget);
     }
 
-    private double ComputeCorrelationScore(Matrix<T> trainData, Vector<T> trainTarget,
+    /// <summary>
+    /// R^2 on the validation fold of the least-squares linear regression (with intercept) fitted on the training
+    /// folds, as scikit-learn's RFECV scores a LinearRegression; 0 when either part has no rows. (The score used to
+    /// be the mean |Pearson r| on the training folds, which ignored the validation fold.)
+    /// </summary>
+    private double ComputeValidationRSquared(Matrix<T> trainData, Vector<T> trainTarget,
         Matrix<T> valData, Vector<T> valTarget)
     {
-        int p = trainData.Columns;
-        int nTrain = trainData.Rows;
+        if (trainData.Rows == 0 || valData.Rows == 0)
+            return 0;
 
-        double totalCorr = 0;
-        for (int j = 0; j < p; j++)
-        {
-            double xMean = 0, yMean = 0;
-            for (int i = 0; i < nTrain; i++)
-            {
-                xMean += NumOps.ToDouble(trainData[i, j]);
-                yMean += NumOps.ToDouble(trainTarget[i]);
-            }
-            xMean /= nTrain;
-            yMean /= nTrain;
-
-            double ssXY = 0, ssXX = 0, ssYY = 0;
-            for (int i = 0; i < nTrain; i++)
-            {
-                double dx = NumOps.ToDouble(trainData[i, j]) - xMean;
-                double dy = NumOps.ToDouble(trainTarget[i]) - yMean;
-                ssXY += dx * dy;
-                ssXX += dx * dx;
-                ssYY += dy * dy;
-            }
-
-            if (ssXX > 1e-10 && ssYY > 1e-10)
-                totalCorr += Math.Abs(ssXY / Math.Sqrt(ssXX * ssYY));
-        }
-
-        return totalCorr / p;
+        var slopes = WrapperScoringOps.LeastSquaresSlopes(
+            Tensor<T>.FromMatrix(trainData), Tensor<T>.FromVector(trainTarget), out var xMean, out T yMean);
+        var predictions = WrapperScoringOps.Predict(Tensor<T>.FromMatrix(valData), slopes, xMean, yMean);
+        return WrapperScoringOps.RSquared(Tensor<T>.FromVector(valTarget), predictions);
     }
 
     private double[] GetImportances(Matrix<T> data, Vector<T> target, List<int> activeFeatures, int n)
@@ -257,35 +241,7 @@ public class RFECV<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFea
         }
 
         // Default: absolute correlation
-        var importances = new double[activeFeatures.Count];
-        double yMean = 0;
-        for (int i = 0; i < n; i++)
-            yMean += NumOps.ToDouble(target[i]);
-        yMean /= n;
-
-        for (int j = 0; j < activeFeatures.Count; j++)
-        {
-            int f = activeFeatures[j];
-            double xMean = 0;
-            for (int i = 0; i < n; i++)
-                xMean += NumOps.ToDouble(data[i, f]);
-            xMean /= n;
-
-            double ssXY = 0, ssXX = 0, ssYY = 0;
-            for (int i = 0; i < n; i++)
-            {
-                double dx = NumOps.ToDouble(data[i, f]) - xMean;
-                double dy = NumOps.ToDouble(target[i]) - yMean;
-                ssXY += dx * dy;
-                ssXX += dx * dx;
-                ssYY += dy * dy;
-            }
-
-            if (ssXX > 1e-10 && ssYY > 1e-10)
-                importances[j] = Math.Abs(ssXY / Math.Sqrt(ssXX * ssYY));
-        }
-
-        return importances;
+        return WrapperScoringOps.ToDoubleArray(WrapperScoringOps.AbsTargetCorrelations(data, target, activeFeatures.ToArray()));
     }
 
     /// <inheritdoc />
