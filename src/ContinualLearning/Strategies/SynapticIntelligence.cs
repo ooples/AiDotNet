@@ -253,22 +253,14 @@ public class SynapticIntelligence<T, TInput, TOutput> : ContinualLearningStrateg
         // Initialize omega if this is the first task
         if (_omega == null || _omega.Length != paramCount)
         {
-            _omega = new Vector<T>(paramCount);
-            for (int i = 0; i < paramCount; i++)
-            {
-                _omega[i] = _minImportanceValue;
-            }
+            _omega = Engine.Fill(paramCount, _minImportanceValue);
         }
 
         // Store parameters at the start of this task
         _taskStartParameters = CloneVector(InterfaceGuard.Parameterizable(model).GetParameters());
 
         // Reset path integral for new task
-        _pathIntegral = new Vector<T>(paramCount);
-        for (int i = 0; i < paramCount; i++)
-        {
-            _pathIntegral[i] = NumOps.Zero;
-        }
+        _pathIntegral = Engine.Fill(paramCount, NumOps.Zero);
 
         // Reset tracking state
         _lastGradients = null;
@@ -296,15 +288,9 @@ public class SynapticIntelligence<T, TInput, TOutput> : ContinualLearningStrateg
         }
 
         // SI loss: (λ/2) × Σ Ω_i × (θ_i - θ*_i)²
-        T loss = NumOps.Zero;
-
-        for (int i = 0; i < currentParams.Length; i++)
-        {
-            var diff = NumOps.Subtract(currentParams[i], _taskStartParameters[i]);
-            var squaredDiff = NumOps.Multiply(diff, diff);
-            var weightedDiff = NumOps.Multiply(_omega[i], squaredDiff);
-            loss = NumOps.Add(loss, weightedDiff);
-        }
+        var diff = Engine.TensorSubtract(currentParams.AsTensor(), Head(_taskStartParameters, currentParams.Length));
+        var weightedDiff = Engine.TensorMultiply(_omega.AsTensor(), Engine.TensorMultiply(diff, diff));
+        T loss = Engine.TensorSum(weightedDiff);
 
         var halfLambda = NumOps.Divide(_lambda, NumOps.FromDouble(2.0));
         return NumOps.Multiply(halfLambda, loss);
@@ -355,33 +341,43 @@ public class SynapticIntelligence<T, TInput, TOutput> : ContinualLearningStrateg
         // But since we don't know the learning rate, we track the actual delta
         // In practice, this should be called with parameters AFTER optimizer step
 
-        for (int i = 0; i < Math.Min(_pathIntegral.Length, currentGradients.Length); i++)
-        {
-            // ω_i += -g_i × Δθ_i
-            // The parameter change happened between calls, so we use the gradient
-            // that caused the change (previous gradient)
-            if (_lastGradients != null && i < _lastGradients.Length)
-            {
-                // Use previous gradient with the parameter delta
-                var negGrad = NumOps.Negate(_lastGradients[i]);
-                // For now, we approximate parameter change as proportional to gradient
-                // A more accurate implementation would get actual parameter change from optimizer
-                var contribution = NumOps.Multiply(negGrad, currentGradients[i]);
+        // ω_i += -g_i × Δθ_i
+        // The parameter change happened between calls, so we use the gradient
+        // that caused the change (previous gradient)
+        if (_lastGradients == null)
+            return;
 
-                if (_useRunningAverage && _updateCount > 0)
-                {
-                    // Running average for numerical stability
-                    var alpha = NumOps.FromDouble(1.0 / (_updateCount + 1));
-                    var oneMinusAlpha = NumOps.Subtract(NumOps.FromDouble(1.0), alpha);
-                    _pathIntegral[i] = NumOps.Add(
-                        NumOps.Multiply(oneMinusAlpha, _pathIntegral[i]),
-                        NumOps.Multiply(alpha, contribution));
-                }
-                else
-                {
-                    _pathIntegral[i] = NumOps.Add(_pathIntegral[i], contribution);
-                }
-            }
+        int count = Math.Min(Math.Min(_pathIntegral.Length, currentGradients.Length), _lastGradients.Length);
+        if (count <= 0)
+            return;
+
+        // Use previous gradient with the parameter delta
+        // For now, we approximate parameter change as proportional to gradient
+        // A more accurate implementation would get actual parameter change from optimizer
+        var contribution = Engine.TensorMultiply(
+            Engine.TensorNegate(Head(_lastGradients, count)), Head(currentGradients, count));
+        AccumulatePathIntegral(Head(_pathIntegral, count), contribution);
+    }
+
+    /// <summary>
+    /// Adds a contribution to the path integral in place: a running average with weight 1 / (updates + 1)
+    /// when enabled and at least one update was seen, a plain sum otherwise.
+    /// </summary>
+    private void AccumulatePathIntegral(Tensor<T> pathIntegral, Tensor<T> contribution)
+    {
+        if (_useRunningAverage && _updateCount > 0)
+        {
+            // Running average for numerical stability
+            var alpha = NumOps.FromDouble(1.0 / (_updateCount + 1));
+            var oneMinusAlpha = NumOps.Subtract(NumOps.FromDouble(1.0), alpha);
+            var averaged = Engine.TensorAdd(
+                Engine.TensorMultiplyScalar(pathIntegral, oneMinusAlpha),
+                Engine.TensorMultiplyScalar(contribution, alpha));
+            averaged.AsSpan().CopyTo(pathIntegral.AsWritableSpan());
+        }
+        else
+        {
+            Engine.TensorAdd(pathIntegral, contribution).AsSpan().CopyTo(pathIntegral.AsWritableSpan());
         }
     }
 
@@ -398,26 +394,14 @@ public class SynapticIntelligence<T, TInput, TOutput> : ContinualLearningStrateg
         }
 
         // Compute actual parameter delta
-        for (int i = 0; i < Math.Min(_pathIntegral.Length, currentParameters.Length); i++)
+        int count = Math.Min(_pathIntegral.Length, currentParameters.Length);
+        if (count > 0)
         {
-            var delta = NumOps.Subtract(currentParameters[i], _lastParameters[i]);
+            var delta = Engine.TensorSubtract(Head(currentParameters, count), Head(_lastParameters, count));
 
             // ω_i += -g_i × Δθ_i
-            var negGrad = NumOps.Negate(_lastGradients[i]);
-            var contribution = NumOps.Multiply(negGrad, delta);
-
-            if (_useRunningAverage && _updateCount > 0)
-            {
-                var alpha = NumOps.FromDouble(1.0 / (_updateCount + 1));
-                var oneMinusAlpha = NumOps.Subtract(NumOps.FromDouble(1.0), alpha);
-                _pathIntegral[i] = NumOps.Add(
-                    NumOps.Multiply(oneMinusAlpha, _pathIntegral[i]),
-                    NumOps.Multiply(alpha, contribution));
-            }
-            else
-            {
-                _pathIntegral[i] = NumOps.Add(_pathIntegral[i], contribution);
-            }
+            var contribution = Engine.TensorMultiply(Engine.TensorNegate(Head(_lastGradients, count)), delta);
+            AccumulatePathIntegral(Head(_pathIntegral, count), contribution);
         }
 
         _lastParameters = CloneVector(currentParameters);
@@ -438,25 +422,16 @@ public class SynapticIntelligence<T, TInput, TOutput> : ContinualLearningStrateg
 
         // Compute task-specific importance and consolidate
         // Ω_i = ω_i / (Δθ_i² + ξ)
-        var taskImportance = new Vector<T>(currentParams.Length);
+        int n = currentParams.Length;
+        var delta = Engine.TensorSubtract(currentParams.AsTensor(), Head(_taskStartParameters, n));
+        var denominator = Engine.TensorAddScalar(Engine.TensorMultiply(delta, delta), _damping);
+        var importance = Engine.TensorDivide(Head(_pathIntegral, n), denominator);
 
-        for (int i = 0; i < currentParams.Length; i++)
-        {
-            var delta = NumOps.Subtract(currentParams[i], _taskStartParameters[i]);
-            var deltaSquared = NumOps.Multiply(delta, delta);
-            var denominator = NumOps.Add(deltaSquared, _damping);
-            var importance = NumOps.Divide(_pathIntegral[i], denominator);
-
-            // Only keep positive importance (contributed to loss reduction)
-            if (NumOps.GreaterThan(importance, NumOps.Zero))
-            {
-                taskImportance[i] = importance;
-            }
-            else
-            {
-                taskImportance[i] = _minImportanceValue;
-            }
-        }
+        // Only keep positive importance (contributed to loss reduction)
+        var taskImportance = Engine.TensorWhere(
+            Engine.TensorGreaterThan(importance, NumOps.Zero),
+            importance,
+            Engine.Fill(n, _minImportanceValue).AsTensor()).AsVector();
 
         // Normalize importance if requested
         if (_normalizeImportance)
@@ -504,14 +479,13 @@ public class SynapticIntelligence<T, TInput, TOutput> : ContinualLearningStrateg
                 break;
 
             case ImportanceAccumulationMode.Max:
-                for (int i = 0; i < _omega.Length; i++)
-                {
-                    if (NumOps.GreaterThan(taskImportance[i], _omega[i]))
-                    {
-                        _omega[i] = taskImportance[i];
-                    }
-                }
+            {
+                var omega = _omega.AsTensor();
+                var incoming = Head(taskImportance, _omega.Length);
+                var merged = Engine.TensorWhere(Engine.TensorGreaterThan(incoming, omega), incoming, omega);
+                merged.AsSpan().CopyTo(_omega.AsWritableSpan());
                 break;
+            }
 
             case ImportanceAccumulationMode.WeightedSum:
                 // Vectorized: omega = decay*omega + taskImportance
@@ -526,11 +500,12 @@ public class SynapticIntelligence<T, TInput, TOutput> : ContinualLearningStrateg
     private Vector<T> NormalizeImportanceValues(Vector<T> importance)
     {
         T maxVal = _minImportanceValue;
-        for (int i = 0; i < importance.Length; i++)
+        if (importance.Length > 0)
         {
-            if (NumOps.GreaterThan(importance[i], maxVal))
+            T largest = Engine.TensorMaxValue(importance.AsTensor());
+            if (NumOps.GreaterThan(largest, maxVal))
             {
-                maxVal = importance[i];
+                maxVal = largest;
             }
         }
 
@@ -550,18 +525,30 @@ public class SynapticIntelligence<T, TInput, TOutput> : ContinualLearningStrateg
     {
         _layerImportance.Clear();
         int chunkSize = Math.Max(1, importance.Length / 10);
-        int layerIndex = 0;
+        int fullChunks = importance.Length / chunkSize;
+        int remainder = importance.Length - fullChunks * chunkSize;
+        var values = importance.AsTensor();
+        var chunkMeans = new List<T>();
 
-        for (int start = 0; start < importance.Length; start += chunkSize)
+        if (fullChunks > 0)
         {
-            int end = Math.Min(start + chunkSize, importance.Length);
-            double sum = 0;
-            for (int i = start; i < end; i++)
-            {
-                sum += Convert.ToDouble(importance[i]);
-            }
-            double mean = sum / (end - start);
-            _layerImportance[layerIndex] = mean;
+            var full = fullChunks * chunkSize == values.Length
+                ? values
+                : Engine.TensorSlice(values, new[] { 0 }, new[] { fullChunks * chunkSize });
+            var means = Engine.ReduceMean(full.Reshape(fullChunks, chunkSize), new[] { 1 }, keepDims: false);
+            chunkMeans.AddRange(means.AsVector());
+        }
+
+        if (remainder > 0)
+        {
+            var tail = Engine.TensorSlice(values, new[] { fullChunks * chunkSize }, new[] { remainder });
+            chunkMeans.Add(Engine.TensorMean(tail));
+        }
+
+        int layerIndex = 0;
+        foreach (var mean in chunkMeans)
+        {
+            _layerImportance[layerIndex] = Convert.ToDouble(mean);
             layerIndex++;
         }
     }
@@ -574,14 +561,8 @@ public class SynapticIntelligence<T, TInput, TOutput> : ContinualLearningStrateg
         if (_omega == null || TaskCount == 0)
             return false;
 
-        for (int i = 0; i < _omega.Length; i++)
-        {
-            if (NumOps.GreaterThan(_omega[i], _minImportanceValue))
-            {
-                return true;
-            }
-        }
-        return false;
+        return _omega.Length > 0
+            && Engine.TensorCountNonzero(Engine.TensorGreaterThan(_omega.AsTensor(), _minImportanceValue)) > 0;
     }
 
     /// <inheritdoc/>
@@ -650,12 +631,8 @@ public class SynapticIntelligence<T, TInput, TOutput> : ContinualLearningStrateg
     /// </summary>
     private double ComputeMean(Vector<T> vector)
     {
-        double sum = 0;
-        for (int i = 0; i < vector.Length; i++)
-        {
-            sum += Convert.ToDouble(vector[i]);
-        }
-        return sum / vector.Length;
+        // Reported as a double metric, like master
+        return Convert.ToDouble(Engine.Mean(vector));
     }
 
     /// <summary>
@@ -663,14 +640,8 @@ public class SynapticIntelligence<T, TInput, TOutput> : ContinualLearningStrateg
     /// </summary>
     private double ComputeMax(Vector<T> vector)
     {
-        double max = Convert.ToDouble(vector[0]);
-        for (int i = 1; i < vector.Length; i++)
-        {
-            double val = Convert.ToDouble(vector[i]);
-            if (val > max)
-                max = val;
-        }
-        return max;
+        // Reported as a double metric, like master
+        return Convert.ToDouble(Engine.TensorMaxValue(vector.AsTensor()));
     }
 
     /// <summary>
@@ -678,13 +649,9 @@ public class SynapticIntelligence<T, TInput, TOutput> : ContinualLearningStrateg
     /// </summary>
     private int CountNonZero(Vector<T> vector)
     {
-        int count = 0;
-        double minVal = Convert.ToDouble(_minImportanceValue);
-        for (int i = 0; i < vector.Length; i++)
-        {
-            if (Convert.ToDouble(vector[i]) > minVal)
-                count++;
-        }
-        return count;
+        if (vector.Length == 0)
+            return 0;
+
+        return Engine.TensorCountNonzero(Engine.TensorGreaterThan(vector.AsTensor(), _minImportanceValue));
     }
 }
