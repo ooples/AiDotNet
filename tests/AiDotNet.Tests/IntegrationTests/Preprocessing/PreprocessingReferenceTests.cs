@@ -6,6 +6,7 @@ using AiDotNet.Preprocessing.OutlierHandling;
 using AiDotNet.Preprocessing.Scalers;
 using Xunit;
 using System.Threading.Tasks;
+using AiDotNet.Preprocessing;
 
 namespace AiDotNet.Tests.IntegrationTests.Preprocessing;
 
@@ -568,5 +569,33 @@ public class PreprocessingReferenceTests
         var transformed = mixed.Transform(M(new double[,] { { -2 }, { 1 } }));
         Assert.Equal(-1.1220341395151565, transformed[0, 0], 1e-6);
         Assert.Equal(0.012290038542442674, transformed[1, 0], 1e-6);
+    }
+
+    // sklearn train_test_split: n_test = ceil(test_size * n_samples), so 10 samples at test_size=0.25 give
+    // 3 test samples (the last 3 without shuffling) and 7 train samples; KFold(3) on 10 samples gives folds of
+    // 4, 3, 3 (the first n % k folds take one extra sample).
+    [Fact(Timeout = 120000)]
+    public async Task TrainTestSplit_SizesMatchSklearn()
+    {
+        await Task.CompletedTask;
+        var data = new double[10, 1];
+        for (int i = 0; i < 10; i++)
+        {
+            data[i, 0] = i;
+        }
+
+        var x = M(data);
+        var y = new Vector<double>(new List<double> { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9 });
+
+        var (xTrain, xTest, _, yTest) = TrainTestSplit<double>.Split(x, y, testSize: 0.25, shuffle: false);
+        Assert.Equal(7, xTrain.Rows);
+        Assert.Equal(new[] { 7.0, 8, 9 }, xTest.GetColumn(0).ToArray());
+        Assert.Equal(new[] { 7.0, 8, 9 }, yTest.ToArray());
+
+        var folds = TrainTestSplit<double>.KFoldSplit(x, y, k: 3, shuffle: false);
+        Assert.Equal(new[] { 0.0, 1, 2, 3 }, folds[0].XTest.GetColumn(0).ToArray());
+        Assert.Equal(new[] { 4.0, 5, 6 }, folds[1].XTest.GetColumn(0).ToArray());
+        Assert.Equal(new[] { 7.0, 8, 9 }, folds[2].XTest.GetColumn(0).ToArray());
+        Assert.Equal(new[] { 0.0, 1, 2, 3, 7, 8, 9 }, folds[1].XTrain.GetColumn(0).ToArray());
     }
 }
