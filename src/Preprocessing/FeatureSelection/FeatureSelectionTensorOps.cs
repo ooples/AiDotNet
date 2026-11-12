@@ -466,4 +466,55 @@ internal static class FeatureSelectionTensorOps
         var inTransition = PreprocessingTensorOps.Not(engine.TensorGreaterThan(magnitude, ops.FromDouble(a * lambda)));
         return engine.TensorWhere(inSoft, soft, engine.TensorWhere(inTransition, transition, z));
     }
+
+    /// <summary>
+    /// Ridge coefficients on centered data: solves <c>(Xc'Xc + alpha I) beta = Xc'yc</c> by Cholesky factorization
+    /// (the system is symmetric positive definite for <c>alpha &gt; 0</c>), as sklearn Ridge with fit_intercept.
+    /// </summary>
+    public static Tensor<T> RidgeCoefficients<T>(Tensor<T> x, Tensor<T> y, double alpha)
+    {
+        var engine = AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<T>();
+        int n = x.Shape[0];
+        int p = x.Shape[1];
+        var centered = engine.TensorSubtract(x, engine.TensorBroadcastTo(engine.ReduceMean(x, new[] { 0 }, true), new[] { n, p }));
+        var transposed = engine.TensorTranspose(centered);
+        var gram = engine.TensorAdd(engine.TensorMatMul(transposed, centered),
+            engine.TensorMultiplyScalar(engine.TensorEye<T>(p), ops.FromDouble(alpha)));
+        var rhs = engine.TensorMatMul(transposed, engine.Reshape(Center(y), new[] { n, 1 }));
+        var factor = AiDotNet.Helpers.LinalgDispatch<T>.CholeskyEx(gram).L;
+        return engine.Reshape(AiDotNet.Helpers.LinalgDispatch<T>.CholeskySolve(rhs, factor), new[] { p });
+    }
+
+    /// <summary>
+    /// Solves <c>(X'X + alpha I) beta = X'y</c> for an already standardized/centered <paramref name="x"/> and
+    /// <paramref name="y"/>. Uses LU with partial pivoting; when a pivot falls to 1e-10 or below (singular system,
+    /// possible for <c>alpha = 0</c>) it returns the minimum-norm least-squares solution through the SVD
+    /// pseudo-inverse, as numpy.linalg.lstsq / sklearn do.
+    /// </summary>
+    public static Tensor<T> RegularizedNormalSolve<T>(Tensor<T> x, Tensor<T> y, double alpha)
+    {
+        var engine = AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<T>();
+        int n = x.Shape[0];
+        int p = x.Shape[1];
+        var transposed = engine.TensorTranspose(x);
+        var gram = engine.TensorAdd(engine.TensorMatMul(transposed, x),
+            engine.TensorMultiplyScalar(engine.TensorEye<T>(p), ops.FromDouble(alpha)));
+        var rhs = engine.TensorMatMul(transposed, engine.Reshape(y, new[] { n, 1 }));
+        T tolerance = ops.FromDouble(1e-10);
+
+        var (lu, pivots) = AiDotNet.Helpers.LinalgDispatch<T>.LuFactor(gram);
+        var pivotMagnitudes = engine.TensorAbs(AiDotNet.Helpers.LinalgDispatch<T>.Diagonal(lu));
+        if (PreprocessingTensorOps.CountNonZero(engine.TensorGreaterThan(pivotMagnitudes, tolerance)) == p)
+            return engine.Reshape(AiDotNet.Helpers.LinalgDispatch<T>.LuSolve(lu, pivots, rhs), new[] { p });
+
+        var (u, s, vh) = AiDotNet.Helpers.LinalgDispatch<T>.Svd(gram, false);
+        var kept = engine.TensorGreaterThan(s, tolerance);
+        var safe = engine.TensorWhere(kept, s, PreprocessingTensorOps.Filled(new[] { p }, ops.One));
+        var inverse = engine.TensorWhere(kept, engine.TensorDivide(PreprocessingTensorOps.Filled(new[] { p }, ops.One), safe),
+            PreprocessingTensorOps.Filled(new[] { p }, ops.Zero));
+        var projected = engine.TensorMultiply(engine.Reshape(engine.TensorMatMul(engine.TensorTranspose(u), rhs), new[] { p }), inverse);
+        return engine.Reshape(engine.TensorMatMul(engine.TensorTranspose(vh), engine.Reshape(projected, new[] { p, 1 })), new[] { p });
+    }
 }
