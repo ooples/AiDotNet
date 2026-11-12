@@ -332,6 +332,36 @@ public class Elementwise02bNumericalRegressionTests
     }
 
     [Fact]
+    public void MoEFeedForwardRouting_KeepsLowestIndexTiesWithTokenByExpertStorage()
+    {
+        // Master's first-max selection: among equal probabilities the lower expert index wins.
+        // Row 0: experts 1, 2, 3 tie at the top, k = 2 keeps 1 and 2. Row 1: expert 0 leads and the
+        // single remaining slot goes to expert 1 of the four tied. Row 2: all tie, keep 0 and 1.
+        var layer = new MoEFeedForwardLayer<double>(hiddenSize: 2, ffnDim: 2, numExperts: 5, topK: 2);
+        var logits = new Tensor<double>(new[]
+        {
+            1.0, 2.0, 2.0, 2.0, 0.0,
+            3.0, 1.0, 1.0, 1.0, 1.0,
+            0.0, 0.0, 0.0, 0.0, 0.0,
+        }, new[] { 3, 5 });
+        var method = typeof(MoEFeedForwardLayer<double>).GetMethod("ComputeRouting",
+            BindingFlags.Instance | BindingFlags.NonPublic)
+            ?? throw new MissingMethodException("ComputeRouting");
+        var routing = method.Invoke(layer, new object[] { logits, 3 }) as Tensor<double>
+            ?? throw new InvalidOperationException("ComputeRouting returned no tensor.");
+
+        double lead = Math.Exp(3.0) / (Math.Exp(3.0) + Math.Exp(1.0));
+        var expected = new[]
+        {
+            0.0, 0.5, 0.5, 0.0, 0.0,
+            lead, 1.0 - lead, 0.0, 0.0, 0.0,
+            0.5, 0.5, 0.0, 0.0, 0.0,
+        };
+        Assert.Equal(new[] { 3, 5 }, routing.Shape.ToArray());
+        AssertClose(expected, routing.ToArray(), 1e-12);
+    }
+
+    [Fact]
     public void StateCacheCompression_SubnormalFiniteRangePreservesTheEndpoints()
     {
         var cache = new SSMStateCache<float>(enableCompression: true, compressionBitWidth: 8);
