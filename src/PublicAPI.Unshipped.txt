@@ -22576,3 +22576,12 @@ AiDotNet.MetaLearning.Options.MetaTaskOptions<T, TInput, TOutput>.MixSource.set 
 AiDotNet.MetaLearning.Options.MetaMixSource
 AiDotNet.MetaLearning.Options.MetaMixSource.Query = 0 -> AiDotNet.MetaLearning.Options.MetaMixSource
 AiDotNet.MetaLearning.Options.MetaMixSource.SupportAndQuery = 1 -> AiDotNet.MetaLearning.Options.MetaMixSource
+*REMOVED*AiDotNet.MetaLearning.Algorithms.SparseMAMLAlgorithm<T, TInput, TOutput>.Gate(int index) -> double
+*REMOVED*AiDotNet.MetaLearning.Algorithms.SparseMAMLAlgorithm<T, TInput, TOutput>.Sparsity.get -> double
+AiDotNet.MetaLearning.Algorithms.SparseMAMLAlgorithm<T, TInput, TOutput>.Gate(int index) -> T
+AiDotNet.MetaLearning.Algorithms.SparseMAMLAlgorithm<T, TInput, TOutput>.Sparsity.get -> T
+AiDotNet.MetaLearning.Options.SparseMAMLOptions<T, TInput, TOutput>.GateFunction.get -> AiDotNet.MetaLearning.Options.SparseMAMLGateFunction
+AiDotNet.MetaLearning.Options.SparseMAMLOptions<T, TInput, TOutput>.GateFunction.set -> void
+AiDotNet.MetaLearning.Options.SparseMAMLGateFunction
+AiDotNet.MetaLearning.Options.SparseMAMLGateFunction.Step = 0 -> AiDotNet.MetaLearning.Options.SparseMAMLGateFunction
+AiDotNet.MetaLearning.Options.SparseMAMLGateFunction.Sigmoid = 1 -> AiDotNet.MetaLearning.Options.SparseMAMLGateFunction
