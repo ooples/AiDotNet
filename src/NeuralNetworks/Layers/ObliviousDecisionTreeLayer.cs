@@ -123,7 +123,22 @@ public partial class ObliviousDecisionTreeLayer<T> : LayerBase<T>, IShapeContrac
     /// <param name="depth">Tree depth (number of split levels).</param>
     /// <param name="outputDim">Output dimension per leaf.</param>
     /// <param name="initScale">Initialization scale.</param>
-    /// <param name="choiceFunction">Feature-choice and split functions. Defaults to NODE's 1.5-entmax and 1.5-entmoid.</param>
+    /// <remarks>
+    /// Uses NODE's 1.5-entmax feature choice and 1.5-entmoid splits.
+    /// </remarks>
+    public ObliviousDecisionTreeLayer(int inputDim, int depth = 6, int outputDim = 1, double initScale = 0.01)
+        : this(inputDim, depth, outputDim, initScale, ObliviousTreeChoiceFunction.Entmax15)
+    {
+    }
+
+    /// <summary>
+    /// Initializes an oblivious decision tree with explicit choice functions.
+    /// </summary>
+    /// <param name="inputDim">Input feature dimension.</param>
+    /// <param name="depth">Tree depth (number of split levels).</param>
+    /// <param name="outputDim">Output dimension per leaf.</param>
+    /// <param name="initScale">Initialization scale.</param>
+    /// <param name="choiceFunction">Feature-choice and split functions; NODE uses <see cref="ObliviousTreeChoiceFunction.Entmax15"/>.</param>
     /// <remarks>
     /// Not marked <c>[LayerState]</c>; the lazy overload below carries the annotation. The generator
     /// takes one constructor per type, first by source order, and this one takes <c>inputDim</c>,
@@ -131,8 +146,8 @@ public partial class ObliviousDecisionTreeLayer<T> : LayerBase<T>, IShapeContrac
     /// overload re-resolves <c>inputDim</c> from the first input and so restores layers built
     /// either way.
     /// </remarks>
-    public ObliviousDecisionTreeLayer(int inputDim, int depth = 6, int outputDim = 1, double initScale = 0.01,
-        ObliviousTreeChoiceFunction choiceFunction = ObliviousTreeChoiceFunction.Entmax15)
+    public ObliviousDecisionTreeLayer(int inputDim, int depth, int outputDim, double initScale,
+        ObliviousTreeChoiceFunction choiceFunction)
         : base([inputDim], [outputDim])
     {
         if (inputDim <= 0)
@@ -190,9 +205,25 @@ public partial class ObliviousDecisionTreeLayer<T> : LayerBase<T>, IShapeContrac
     /// <param name="depth">Tree depth (number of split levels).</param>
     /// <param name="outputDim">Output dimension per leaf.</param>
     /// <param name="initScale">Initialization scale.</param>
-    /// <param name="choiceFunction">Feature-choice and split functions. Defaults to NODE's 1.5-entmax and 1.5-entmoid.</param>
-    public ObliviousDecisionTreeLayer([LayerState] int depth = 6, [LayerState] int outputDim = 1, [LayerState] double initScale = 0.01,
-        [LayerState] ObliviousTreeChoiceFunction choiceFunction = ObliviousTreeChoiceFunction.Entmax15)
+    /// <remarks>
+    /// Uses NODE's 1.5-entmax feature choice and 1.5-entmoid splits. Not marked <c>[LayerState]</c>; the
+    /// overload below carries the annotation so the choice functions round-trip.
+    /// </remarks>
+    public ObliviousDecisionTreeLayer(int depth = 6, int outputDim = 1, double initScale = 0.01)
+        : this(depth, outputDim, initScale, ObliviousTreeChoiceFunction.Entmax15)
+    {
+    }
+
+    /// <summary>
+    /// Lazy constructor with explicit choice functions: resolves <c>inputDim</c> from
+    /// <c>input.Shape[^1]</c> on first <see cref="Forward"/>.
+    /// </summary>
+    /// <param name="depth">Tree depth (number of split levels).</param>
+    /// <param name="outputDim">Output dimension per leaf.</param>
+    /// <param name="initScale">Initialization scale.</param>
+    /// <param name="choiceFunction">Feature-choice and split functions; NODE uses <see cref="ObliviousTreeChoiceFunction.Entmax15"/>.</param>
+    public ObliviousDecisionTreeLayer([LayerState] int depth, [LayerState] int outputDim, [LayerState] double initScale,
+        [LayerState] ObliviousTreeChoiceFunction choiceFunction)
         : base([-1], [outputDim])
     {
         if (depth <= 0 || depth > 30)
