@@ -65,6 +65,31 @@ internal static class FeatureSelectionTensorOps
         AiDotNetEngine.Current.TensorQuantile(x, quantile, 0, false, QuantileInterpolation.Linear);
 
     /// <summary>
+    /// Sliding-window maximum along the last axis of a 2-D tensor ([rows, n]): entry i becomes the maximum over
+    /// positions i - halfWindow .. i + halfWindow, clipped to the row (a flat dilation with border replication).
+    /// </summary>
+    public static Tensor<T> SlidingMax<T>(Tensor<T> x, int halfWindow)
+    {
+        if (halfWindow <= 0 || x.Length == 0)
+            return x;
+
+        var engine = AiDotNetEngine.Current;
+        var padded = engine.PadNd(x, new[] { halfWindow, halfWindow }, PadMode.Replicate, MathHelper.GetNumericOperations<T>().Zero);
+        var windows = engine.TensorUnfold(padded, 1, 2 * halfWindow + 1, 1);
+        return engine.ReduceMax(windows, new[] { 2 }, false);
+    }
+
+    /// <summary>Sliding-window minimum along the last axis of a 2-D tensor (a flat erosion), see <see cref="SlidingMax{T}"/>.</summary>
+    public static Tensor<T> SlidingMin<T>(Tensor<T> x, int halfWindow)
+    {
+        if (halfWindow <= 0 || x.Length == 0)
+            return x;
+
+        var engine = AiDotNetEngine.Current;
+        return engine.TensorNegate(SlidingMax(engine.TensorNegate(x), halfWindow));
+    }
+
+    /// <summary>
     /// The positions of the <paramref name="k"/> largest entries of a 1-D score tensor, returned in ascending
     /// index order; ties keep the lower index first (LINQ <c>OrderByDescending(...).Take(k).OrderBy(i)</c>).
     /// </summary>

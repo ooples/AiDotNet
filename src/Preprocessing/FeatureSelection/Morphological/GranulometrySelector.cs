@@ -2,6 +2,7 @@ using AiDotNet.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Enums;
 using AiDotNet.Attributes;
+using AiDotNet.Preprocessing.FeatureSelection.Helpers;
 
 namespace AiDotNet.Preprocessing.FeatureSelection.Morphological;
 
@@ -25,14 +26,14 @@ public class GranulometrySelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>,
     private readonly int _nFeaturesToSelect;
     private readonly int _maxWindowSize;
 
-    private double[]? _granulometryScores;
+    private Vector<T>? _granulometryScores;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public int MaxWindowSize => _maxWindowSize;
-    public double[]? GranulometryScores => _granulometryScores;
+    public Vector<T>? GranulometryScores => _granulometryScores;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -58,95 +59,57 @@ public class GranulometrySelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>,
         int n = data.Rows;
         int p = data.Columns;
 
-        var X = new double[n, p];
-        for (int i = 0; i < n; i++)
-            for (int j = 0; j < p; j++)
-                X[i, j] = NumOps.ToDouble(data[i, j]);
+        // Columns as rows ([p, n]) so the structuring elements slide along the samples
+        var engine = Engine;
+        var x = Tensor<T>.FromMatrix(data);
+        var columns = engine.TensorTranspose(x);
 
-        _granulometryScores = new double[p];
+        // Normalize each column to [0, 1] (columns whose range is not above 1e-10 stay as they are)
+        var min = engine.Reshape(FeatureSelectionTensorOps.ColumnMin(x), new[] { p, 1 });
+        var max = engine.Reshape(FeatureSelectionTensorOps.ColumnMax(x), new[] { p, 1 });
+        var range = engine.TensorSubtract(max, min);
+        var varying = engine.TensorBroadcastTo(engine.TensorGreaterThan(range, NumOps.FromDouble(1e-10)), new[] { p, n });
+        var safeRange = engine.TensorWhere(
+            engine.TensorGreaterThan(range, NumOps.FromDouble(1e-10)), range, FeatureSelectionTensorOps.Filled(new[] { p, 1 }, NumOps.One));
+        var normalized = engine.TensorWhere(varying, engine.TensorDivide(engine.TensorSubtract(columns, min), safeRange), columns);
 
-        for (int j = 0; j < p; j++)
+        // Pattern spectrum: the mass each opening (erosion then dilation) of growing size removes
+        var spectrum = new List<Tensor<T>>();
+        var previousSum = engine.ReduceSum(normalized, new[] { 1 }, false);
+        for (int ws = 1; ws <= _maxWindowSize; ws++)
         {
-            var col = new double[n];
-            for (int i = 0; i < n; i++)
-                col[i] = X[i, j];
-
-            // Normalize to [0, 1]
-            double minVal = col.Min();
-            double maxVal = col.Max();
-            double range = maxVal - minVal;
-            if (range > 1e-10)
-                for (int i = 0; i < n; i++)
-                    col[i] = (col[i] - minVal) / range;
-
-            // Compute pattern spectrum (granulometry curve)
-            var patternSpectrum = new double[_maxWindowSize];
-            double prevSum = col.Sum();
-
-            for (int ws = 1; ws <= _maxWindowSize; ws++)
-            {
-                // Opening: erosion followed by dilation
-                var opened = ApplyOpening(col, ws);
-                double currSum = opened.Sum();
-                patternSpectrum[ws - 1] = prevSum - currSum;
-                prevSum = currSum;
-            }
-
-            // Score: entropy of pattern spectrum (diverse size distribution is interesting)
-            double total = patternSpectrum.Sum();
-            if (total > 1e-10)
-            {
-                double entropy = 0;
-                for (int ws = 0; ws < _maxWindowSize; ws++)
-                {
-                    double prob = patternSpectrum[ws] / total;
-                    if (prob > 1e-10)
-                        entropy -= prob * Math.Log(prob) / Math.Log(2);
-                }
-                _granulometryScores[j] = entropy;
-            }
-            else
-            {
-                _granulometryScores[j] = 0;
-            }
+            int halfWindow = ws / 2;
+            var opened = FeatureSelectionTensorOps.SlidingMax(FeatureSelectionTensorOps.SlidingMin(normalized, halfWindow), halfWindow);
+            var currentSum = engine.ReduceSum(opened, new[] { 1 }, false);
+            spectrum.Add(engine.TensorSubtract(previousSum, currentSum));
+            previousSum = currentSum;
         }
+
+        // Score: entropy (bits) of the pattern spectrum; a diverse size distribution is interesting
+        var scores = new Tensor<T>(new[] { p });
+        if (spectrum.Count > 0)
+        {
+            var patternSpectrum = engine.TensorStack(spectrum.ToArray(), 1); // [p, sizes]
+            var total = engine.ReduceSum(patternSpectrum, new[] { 1 }, true);
+            var hasMass = engine.TensorGreaterThan(total, NumOps.FromDouble(1e-10));
+            var safeTotal = engine.TensorWhere(hasMass, total, FeatureSelectionTensorOps.Filled(new[] { p, 1 }, NumOps.One));
+            var prob = engine.TensorDivide(patternSpectrum, safeTotal);
+            var counted = engine.TensorGreaterThan(prob, NumOps.FromDouble(1e-10));
+            var safeProb = engine.TensorWhere(counted, prob, FeatureSelectionTensorOps.Filled(prob.Shape.ToArray(), NumOps.One));
+            var terms = engine.TensorWhere(
+                counted,
+                engine.TensorDivideScalar(engine.TensorMultiply(prob, engine.TensorLog(safeProb)), NumOps.FromDouble(-Math.Log(2))),
+                new Tensor<T>(prob.Shape.ToArray()));
+            var entropy = engine.ReduceSum(terms, new[] { 1 }, false);
+            scores = engine.TensorWhere(engine.Reshape(hasMass, new[] { p }), entropy, scores);
+        }
+
+        _granulometryScores = scores.ToVector();
 
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = Enumerable.Range(0, p)
-            .OrderByDescending(j => _granulometryScores[j])
-            .Take(numToSelect)
-            .OrderBy(x => x)
-            .ToArray();
+        _selectedIndices = FeatureSelectionTensorOps.TopKIndicesSorted(scores, numToSelect);
 
         IsFitted = true;
-    }
-
-    private double[] ApplyOpening(double[] signal, int windowSize)
-    {
-        int n = signal.Length;
-        int halfWindow = windowSize / 2;
-
-        // Erosion (local minimum)
-        var eroded = new double[n];
-        for (int i = 0; i < n; i++)
-        {
-            double minVal = signal[i];
-            for (int k = Math.Max(0, i - halfWindow); k <= Math.Min(n - 1, i + halfWindow); k++)
-                minVal = Math.Min(minVal, signal[k]);
-            eroded[i] = minVal;
-        }
-
-        // Dilation (local maximum)
-        var opened = new double[n];
-        for (int i = 0; i < n; i++)
-        {
-            double maxVal = eroded[i];
-            for (int k = Math.Max(0, i - halfWindow); k <= Math.Min(n - 1, i + halfWindow); k++)
-                maxVal = Math.Max(maxVal, eroded[k]);
-            opened[i] = maxVal;
-        }
-
-        return opened;
     }
 
     public new Matrix<T> FitTransform(Matrix<T> data)
@@ -161,15 +124,7 @@ public class GranulometrySelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>,
         if (_selectedIndices is null)
             throw new InvalidOperationException("GranulometrySelector has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return FeatureSelectionTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

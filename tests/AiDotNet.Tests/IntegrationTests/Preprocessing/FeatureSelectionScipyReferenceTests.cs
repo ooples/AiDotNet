@@ -1,4 +1,5 @@
 using AiDotNet.Preprocessing.FeatureSelection.Moment;
+using AiDotNet.Preprocessing.FeatureSelection.Morphological;
 using AiDotNet.Preprocessing.FeatureSelection.Quantile;
 using AiDotNet.Preprocessing.FeatureSelection.Range;
 using AiDotNet.Tensors.LinearAlgebra;
@@ -89,6 +90,23 @@ public class FeatureSelectionScipyReferenceTests
         AssertValues(new[] { 7.771929824561405, 2.823529411764705, 3.458333333333333 }, ratio.RatioValues);
         Assert.Equal(new[] { 0 }, iqr.SelectedIndices);
         Assert.Equal(new[] { 0 }, ratio.SelectedIndices);
+    }
+
+    [Fact]
+    public void MorphologicalSelectors_MatchScipyNdimageFlatStructuringElements()
+    {
+        // gradient: (grey_dilation(c, size=3, mode='nearest') - grey_erosion(c, size=3, mode='nearest')).mean()
+        // granulometry: c normalized to [0, 1]; for ws in 1..5 the opening grey_opening(c, size=2*(ws//2)+1,
+        // mode='nearest') gives the pattern spectrum ps[ws] = sum(previous) - sum(opening); score = entropy(ps, base 2)
+        var gradient = new ErosionDilationSelector<double>(nFeaturesToSelect: 1, windowSize: 3);
+        gradient.Fit(MomentData());
+        var granulometry = new GranulometrySelector<double>(nFeaturesToSelect: 1, maxWindowSize: 5);
+        granulometry.Fit(MomentData());
+
+        AssertValues(new[] { 5.0, 3.325, 1.0 }, gradient.MorphologicalScores);
+        AssertValues(new[] { 0.9148210087144519, 0.9239841591414172, 0.9182958340544896 }, granulometry.GranulometryScores);
+        Assert.Equal(new[] { 0 }, gradient.SelectedIndices);
+        Assert.Equal(new[] { 1 }, granulometry.SelectedIndices);
     }
 
     private static void AssertValues(double[] expected, Vector<double>? actual)
