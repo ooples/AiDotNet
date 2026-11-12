@@ -2,6 +2,7 @@ using AiDotNet.Evaluation.Enums;
 using AiDotNet.Evaluation.Results.Core;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.Tensors.Engines.Autodiff;
 
 namespace AiDotNet.Evaluation.Metrics.Classification;
 
@@ -64,34 +65,21 @@ public class BrierScoreMetric<T> : IProbabilisticClassificationMetric<T>
 
     private T ComputeBinaryBrier(ReadOnlySpan<T> probs, ReadOnlySpan<T> actuals)
     {
-        int n = probs.Length;
-        double sum = 0;
-        for (int i = 0; i < n; i++)
-        {
-            double p = NumOps.ToDouble(probs[i]);
-            double y = NumOps.ToDouble(actuals[i]);
-            double diff = p - y;
-            sum += diff * diff;
-        }
-        return NumOps.FromDouble(sum / n);
+        var engine = AiDotNetEngine.Current;
+        using var noGrad = new NoGradScope<T>();
+        var diff = engine.TensorSubtract(EvaluationTensorOps<T>.ToTensor(probs), EvaluationTensorOps<T>.ToTensor(actuals));
+        return engine.TensorMean(engine.TensorSquare(diff));
     }
 
     private T ComputeMultiClassBrier(ReadOnlySpan<T> probs, ReadOnlySpan<T> actuals, int numClasses)
     {
+        // Mean over the n * numClasses cells of (p - y)^2 with y the one-hot rounded true class.
+        var engine = AiDotNetEngine.Current;
+        using var noGrad = new NoGradScope<T>();
         int n = actuals.Length;
-        double sum = 0;
-        for (int i = 0; i < n; i++)
-        {
-            int trueClass = (int)Math.Round(NumOps.ToDouble(actuals[i]));
-            for (int c = 0; c < numClasses; c++)
-            {
-                double p = NumOps.ToDouble(probs[i * numClasses + c]);
-                double y = (c == trueClass) ? 1.0 : 0.0;
-                double diff = p - y;
-                sum += diff * diff;
-            }
-        }
-        return NumOps.FromDouble(sum / ((double)n * numClasses));
+        var probMatrix = engine.Reshape(EvaluationTensorOps<T>.ToTensor(probs), new[] { n, numClasses });
+        var oneHot = EvaluationTensorOps<T>.RoundedOneHot(EvaluationTensorOps<T>.ToTensor(actuals), numClasses);
+        return engine.TensorMean(engine.TensorSquare(engine.TensorSubtract(probMatrix, oneHot)));
     }
 
     /// <inheritdoc />

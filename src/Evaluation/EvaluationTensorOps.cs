@@ -127,6 +127,22 @@ internal static class EvaluationTensorOps<T>
     }
 
     /// <summary>
+    /// An [n, numClasses] 1/0 mask that marks, in row i, the class equal to labels[i] rounded half to even (as
+    /// <c>(int)Math.Round(label)</c>); a row whose rounded label is not a class index stays all zero.
+    /// </summary>
+    internal static Tensor<T> RoundedOneHot(Tensor<T> labels, int numClasses)
+    {
+        using var noGrad = new NoGradScope<T>();
+        var engine = AiDotNetEngine.Current;
+        int n = labels.Length;
+        var shape = new[] { n, numClasses };
+        var rounded = engine.TensorBroadcastTo(engine.Reshape(engine.TensorRound(labels), new[] { n, 1 }), shape);
+        var classIndex = engine.TensorBroadcastTo(
+            engine.Reshape(engine.TensorArange<T>(0, numClasses, 1), new[] { 1, numClasses }), shape);
+        return engine.TensorEquals(rounded, classIndex);
+    }
+
+    /// <summary>
     /// The distinct labels of the given tensors in ascending order, with a single NaN last when any is present
     /// (one class, as a <c>HashSet&lt;double&gt;</c> of the labels had).
     /// </summary>
