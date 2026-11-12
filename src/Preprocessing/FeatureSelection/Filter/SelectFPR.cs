@@ -1,3 +1,5 @@
+using AiDotNet.Preprocessing.FeatureSelection.Filter.Univariate;
+using AiDotNet.Preprocessing.FeatureSelection.Helpers;
 using AiDotNet.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Enums;
@@ -26,32 +28,71 @@ namespace AiDotNet.Preprocessing.FeatureSelection.Filter;
 public class SelectFPR<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFeatureSelector<T>
 {
     private readonly double _alpha;
-    private readonly Func<Matrix<T>, Vector<T>, int, double>? _scoringFunction;
+    private readonly SelectKBestScoreFunc _scoreFunction;
+    private readonly Func<Matrix<T>, Vector<T>, (Vector<T> Scores, Vector<T>? PValues)>? _customScoreFunction;
 
-    private double[]? _scores;
-    private double[]? _pValues;
+    private Vector<T>? _scores;
+    private Vector<T>? _pValues;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     public double Alpha => _alpha;
-    public double[]? Scores => _scores;
-    public double[]? PValues => _pValues;
+    /// <summary>
+    /// Gets the built-in scoring function, used when no custom scorer was supplied.
+    /// </summary>
+    public SelectKBestScoreFunc ScoreFunction => _scoreFunction;
+
+    /// <summary>Gets the score of every feature after fitting.</summary>
+    public Vector<T>? Scores => _scores;
+
+    /// <summary>Gets the p-value of every feature after fitting.</summary>
+    public Vector<T>? PValues => _pValues;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
     public override bool SupportsInverseTransform => false;
 
+    /// <summary>
+    /// Creates a selector that scores features with a built-in scikit-learn scoring function.
+    /// </summary>
+    /// <param name="alpha">The highest p-value of a kept feature (exclusive).</param>
+    /// <param name="scoreFunction">
+    /// The scoring function; defaults to <see cref="SelectKBestScoreFunc.FClassif"/> (scikit-learn's default); it must produce p-values.
+    /// </param>
+    /// <param name="columnIndices">The column indices to consider, or null for all columns.</param>
     public SelectFPR(
         double alpha = 0.05,
-        Func<Matrix<T>, Vector<T>, int, double>? scoringFunction = null,
+        SelectKBestScoreFunc scoreFunction = SelectKBestScoreFunc.FClassif,
         int[]? columnIndices = null)
         : base(columnIndices)
     {
         if (alpha <= 0 || alpha >= 1)
             throw new ArgumentException("Alpha must be between 0 and 1.", nameof(alpha));
+        _alpha = alpha;
+        _scoreFunction = scoreFunction;
+    }
+
+    /// <summary>
+    /// Creates a selector with a custom scorer, like scikit-learn's <c>score_func</c>: it receives the data and the
+    /// target and returns one score per feature (higher is better) and one p-value per feature.
+    /// </summary>
+    /// <param name="alpha">The highest p-value of a kept feature (exclusive).</param>
+    /// <param name="scoreFunction">The scorer.</param>
+    /// <param name="columnIndices">The column indices to consider, or null for all columns.</param>
+    public SelectFPR(
+        double alpha,
+        Func<Matrix<T>, Vector<T>, (Vector<T> Scores, Vector<T>? PValues)> scoreFunction,
+        int[]? columnIndices = null)
+        : base(columnIndices)
+    {
+        if (alpha <= 0 || alpha >= 1)
+            throw new ArgumentException("Alpha must be between 0 and 1.", nameof(alpha));
+        if (scoreFunction is null)
+            throw new ArgumentNullException(nameof(scoreFunction));
 
         _alpha = alpha;
-        _scoringFunction = scoringFunction;
+        _scoreFunction = SelectKBestScoreFunc.FClassif;
+        _customScoreFunction = scoreFunction;
     }
 
     /// <inheritdoc />
@@ -68,143 +109,34 @@ public class SelectFPR<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervise
             throw new ArgumentException("Target length must match rows in data.");
 
         _nInputFeatures = data.Columns;
-        int n = data.Rows;
         int p = data.Columns;
 
-        _scores = new double[p];
-        _pValues = new double[p];
-
-        for (int j = 0; j < p; j++)
+        Vector<T> scores;
+        Vector<T>? pValues;
+        if (_customScoreFunction is not null)
         {
-            if (_scoringFunction is not null)
-            {
-                _scores[j] = _scoringFunction(data, target, j);
-                _pValues[j] = 1.0 / (1.0 + _scores[j]);
-            }
-            else
-            {
-                var (fStat, pVal) = ComputeFStatistic(data, target, j, n);
-                _scores[j] = fStat;
-                _pValues[j] = pVal;
-            }
+            (scores, pValues) = _customScoreFunction(data, target);
+            if (scores is null || scores.Length != p)
+                throw new InvalidOperationException("The scoring function must return one score per feature.");
+            if (pValues is not null && pValues.Length != p)
+                throw new InvalidOperationException("The scoring function must return one p-value per feature.");
         }
-
-        // Select features with p-value < alpha
-        var selected = new List<int>();
-        for (int j = 0; j < p; j++)
-        {
-            if (_pValues[j] < _alpha)
-                selected.Add(j);
-        }
-
-        // If none selected, select the best one
-        if (selected.Count == 0)
-        {
-            int best = 0;
-            for (int j = 1; j < p; j++)
-                if (_pValues[j] < _pValues[best])
-                    best = j;
-            selected.Add(best);
-        }
-
-        _selectedIndices = selected.OrderBy(x => x).ToArray();
-        IsFitted = true;
-    }
-
-    private (double FStat, double PValue) ComputeFStatistic(Matrix<T> data, Vector<T> target, int featureIdx, int n)
-    {
-        // Compute correlation F-statistic
-        double xMean = 0, yMean = 0;
-        for (int i = 0; i < n; i++)
-        {
-            xMean += NumOps.ToDouble(data[i, featureIdx]);
-            yMean += NumOps.ToDouble(target[i]);
-        }
-        xMean /= n;
-        yMean /= n;
-
-        double ssXY = 0, ssXX = 0, ssYY = 0;
-        for (int i = 0; i < n; i++)
-        {
-            double dx = NumOps.ToDouble(data[i, featureIdx]) - xMean;
-            double dy = NumOps.ToDouble(target[i]) - yMean;
-            ssXY += dx * dy;
-            ssXX += dx * dx;
-            ssYY += dy * dy;
-        }
-
-        if (ssXX < 1e-10 || ssYY < 1e-10)
-            return (0, 1);
-
-        double r2 = (ssXY * ssXY) / (ssXX * ssYY);
-        double fStat = r2 * (n - 2) / (1 - r2 + 1e-10);
-
-        // Approximate p-value using F-distribution
-        double pValue = ApproximateFPValue(fStat, 1, n - 2);
-        return (fStat, pValue);
-    }
-
-    private double ApproximateFPValue(double f, int df1, int df2)
-    {
-        if (f <= 0 || df1 <= 0 || df2 <= 0)
-            return 1;
-
-        // Using incomplete beta function approximation
-        double x = df2 / (df2 + df1 * f);
-        double a = df2 / 2.0;
-        double b = df1 / 2.0;
-
-        return IncompleteBeta(x, a, b);
-    }
-
-    private double IncompleteBeta(double x, double a, double b)
-    {
-        if (x < 0 || x > 1) return 1;
-        if (x == 0) return 0;
-        if (x == 1) return 1;
-
-        double bt = Math.Exp(a * Math.Log(x) + b * Math.Log(1 - x));
-        if (x < (a + 1) / (a + b + 2))
-            return bt * BetaCF(x, a, b) / a;
         else
-            return 1 - bt * BetaCF(1 - x, b, a) / b;
-    }
-
-    private double BetaCF(double x, double a, double b)
-    {
-        double qab = a + b;
-        double qap = a + 1;
-        double qam = a - 1;
-        double c = 1;
-        double d = 1 - qab * x / qap;
-        if (Math.Abs(d) < 1e-30) d = 1e-30;
-        d = 1 / d;
-        double h = d;
-
-        for (int m = 1; m <= 100; m++)
         {
-            int m2 = 2 * m;
-            double aa = m * (b - m) * x / ((qam + m2) * (a + m2));
-            d = 1 + aa * d;
-            if (Math.Abs(d) < 1e-30) d = 1e-30;
-            c = 1 + aa / c;
-            if (Math.Abs(c) < 1e-30) c = 1e-30;
-            d = 1 / d;
-            h *= d * c;
-
-            aa = -(a + m) * (qab + m) * x / ((a + m2) * (qap + m2));
-            d = 1 + aa * d;
-            if (Math.Abs(d) < 1e-30) d = 1e-30;
-            c = 1 + aa / c;
-            if (Math.Abs(c) < 1e-30) c = 1e-30;
-            d = 1 / d;
-            double del = d * c;
-            h *= del;
-
-            if (Math.Abs(del - 1) < 1e-7) break;
+            (scores, pValues) = StatisticalTestHelper.ComputeScores(data, target, _scoreFunction);
         }
 
-        return h;
+        _scores = scores;
+        _pValues = pValues;
+
+        if (pValues is null)
+            throw new InvalidOperationException("SelectFPR needs a scoring function that returns p-values.");
+
+        // keep every feature whose p-value is below alpha (scikit-learn's SelectFpr); none passing selects none
+        _selectedIndices = FilterStatisticTensorOps.MaskPositions(
+            Engine.TensorLessThan(FilterStatisticTensorOps.AsTensor(pValues), NumOps.FromDouble(_alpha)));
+
+        IsFitted = true;
     }
 
     /// <inheritdoc />

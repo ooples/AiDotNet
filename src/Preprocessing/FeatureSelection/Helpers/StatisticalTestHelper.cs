@@ -1,332 +1,315 @@
 using AiDotNet.Preprocessing.FeatureSelection.Filter.Univariate;
+using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.Preprocessing.FeatureSelection.Helpers;
 
 /// <summary>
-/// Helper class for statistical tests used in feature selection.
+/// The univariate scoring functions of scikit-learn's <c>sklearn.feature_selection</c> module, generic in T and
+/// computed for every feature at once with engine operations.
 /// </summary>
+/// <remarks>
+/// <list type="bullet">
+/// <item><see cref="SelectKBestScoreFunc.FClassif"/>: one-way ANOVA F of each feature across the classes of the
+/// target (<c>f_classif</c>), p-value from the F distribution.</item>
+/// <item><see cref="SelectKBestScoreFunc.FRegression"/>: F of the univariate linear regression of the target on each
+/// feature, <c>r^2 / (1 - r^2) (n - 2)</c> (<c>f_regression</c>), p-value from F(1, n - 2).</item>
+/// <item><see cref="SelectKBestScoreFunc.Chi2"/>: chi-squared statistic of the class-wise feature sums against
+/// their expectation (<c>chi2</c>), p-value from the chi-squared distribution with (classes - 1) degrees of
+/// freedom. Features must be non-negative.</item>
+/// <item><see cref="SelectKBestScoreFunc.MutualInfoRegression"/>: the Kraskov k-nearest-neighbour estimate of the
+/// mutual information between each feature and a continuous target (<c>mutual_info_regression</c>, 3 neighbours).
+/// It has no p-values.</item>
+/// </list>
+/// </remarks>
 internal static class StatisticalTestHelper
 {
+    // Below this, a centred sum of squares is treated as zero (a constant feature or target).
+    private const double ZeroVariance = 1e-10;
+
+    // scikit-learn's mutual_info_regression default neighbour count.
+    private const int MutualInfoNeighbors = 3;
+
+    // Euler-Mascheroni constant: digamma(m) = H(m - 1) - gamma for a positive integer m.
+    private const double EulerGamma = 0.57721566490153286060651209;
+
     /// <summary>
-    /// Computes the score and p-value for a feature.
+    /// Scores every feature (column) of <paramref name="data"/> against <paramref name="target"/>.
     /// </summary>
-    public static (double Score, double PValue) ComputeScore(double[] x, double[] y, SelectKBestScoreFunc scoringFunction)
+    /// <returns>The scores and the p-values; the p-values are null for mutual information, which has none.</returns>
+    public static (Vector<T> Scores, Vector<T>? PValues) ComputeScores<T>(
+        Matrix<T> data, Vector<T> target, SelectKBestScoreFunc scoringFunction)
     {
-        int n = x.Length;
+        if (data.Rows != target.Length)
+            throw new ArgumentException("Target length must match the number of rows in data.");
 
         switch (scoringFunction)
         {
             case SelectKBestScoreFunc.FRegression:
-                return ComputeFRegression(x, y, n);
-
+                return FRegression(data, target);
             case SelectKBestScoreFunc.MutualInfoRegression:
-                return (ComputeMutualInfo(x, y, n), 0);
-
+                return (MutualInfoRegression(data, target), null);
             case SelectKBestScoreFunc.FClassif:
-                return ComputeFClassif(x, y, n);
-
+                return FClassif(data, target);
             case SelectKBestScoreFunc.Chi2:
-                return ComputeChi2(x, y, n);
-
+                return Chi2(data, target);
             default:
-                return ComputeFRegression(x, y, n);
+                throw new ArgumentOutOfRangeException(nameof(scoringFunction), scoringFunction, "Unknown scoring function.");
         }
-    }
-
-    private static (double Score, double PValue) ComputeFRegression(double[] x, double[] y, int n)
-    {
-        double xMean = x.Average();
-        double yMean = y.Average();
-
-        double ssXY = 0, ssXX = 0, ssYY = 0;
-        for (int i = 0; i < n; i++)
-        {
-            double dx = x[i] - xMean;
-            double dy = y[i] - yMean;
-            ssXY += dx * dy;
-            ssXX += dx * dx;
-            ssYY += dy * dy;
-        }
-
-        if (ssXX < 1e-10 || ssYY < 1e-10)
-        {
-            return (0, 1);
-        }
-
-        double r = ssXY / Math.Sqrt(ssXX * ssYY);
-        double r2 = r * r;
-
-        int df1 = 1;
-        int df2 = n - 2;
-
-        if (df2 <= 0)
-        {
-            return (0, 1);
-        }
-
-        double fStat = (r2 / df1) / ((1 - r2) / df2);
-        double pValue = 1.0 - FDistributionCdf(fStat, df1, df2);
-
-        return (fStat, pValue);
-    }
-
-    private static (double Score, double PValue) ComputeFClassif(double[] x, double[] y, int n)
-    {
-        var classes = y.Distinct().OrderBy(c => c).ToArray();
-        int nClasses = classes.Length;
-
-        if (nClasses < 2)
-        {
-            return (0, 1);
-        }
-
-        double grandMean = x.Average();
-
-        double ssBetween = 0;
-        double ssWithin = 0;
-
-        foreach (double c in classes)
-        {
-            var classX = new List<double>();
-            for (int i = 0; i < n; i++)
-            {
-                if (Math.Abs(y[i] - c) < 1e-10)
-                {
-                    classX.Add(x[i]);
-                }
-            }
-
-            if (classX.Count == 0) continue;
-
-            double classMean = classX.Average();
-            ssBetween += classX.Count * (classMean - grandMean) * (classMean - grandMean);
-
-            foreach (double v in classX)
-            {
-                ssWithin += (v - classMean) * (v - classMean);
-            }
-        }
-
-        int df1 = nClasses - 1;
-        int df2 = n - nClasses;
-
-        if (df1 <= 0 || df2 <= 0 || ssWithin < 1e-10)
-        {
-            return (0, 1);
-        }
-
-        double fStat = (ssBetween / df1) / (ssWithin / df2);
-        double pValue = 1.0 - FDistributionCdf(fStat, df1, df2);
-
-        return (fStat, pValue);
-    }
-
-    private static (double Score, double PValue) ComputeChi2(double[] x, double[] y, int n)
-    {
-        var classes = y.Distinct().OrderBy(c => c).ToArray();
-        int nClasses = classes.Length;
-
-        if (nClasses < 2)
-        {
-            return (0, 1);
-        }
-
-        double xMin = x.Min();
-        if (xMin < 0)
-        {
-            return (0, 1);
-        }
-
-        double[] sumPerClass = new double[nClasses];
-        int[] countPerClass = new int[nClasses];
-        double totalSum = 0;
-
-        for (int i = 0; i < n; i++)
-        {
-            int classIdx = Array.IndexOf(classes, y[i]);
-            sumPerClass[classIdx] += x[i];
-            countPerClass[classIdx]++;
-            totalSum += x[i];
-        }
-
-        if (totalSum < 1e-10)
-        {
-            return (0, 1);
-        }
-
-        double chi2 = 0;
-        for (int c = 0; c < nClasses; c++)
-        {
-            double expected = totalSum * countPerClass[c] / n;
-            if (expected > 1e-10)
-            {
-                double diff = sumPerClass[c] - expected;
-                chi2 += diff * diff / expected;
-            }
-        }
-
-        int df = nClasses - 1;
-        double pValue = 1.0 - ChiSquaredCdf(chi2, df);
-
-        return (chi2, pValue);
-    }
-
-    private static double ComputeMutualInfo(double[] x, double[] y, int n)
-    {
-        int nBins = (int)Math.Sqrt(n);
-        nBins = Math.Max(2, Math.Min(20, nBins));
-
-        double xMin = x.Min();
-        double xMax = x.Max();
-        double yMin = y.Min();
-        double yMax = y.Max();
-
-        if (xMax - xMin < 1e-10 || yMax - yMin < 1e-10)
-        {
-            return 0;
-        }
-
-        var joint = new int[nBins, nBins];
-        var marginalX = new int[nBins];
-        var marginalY = new int[nBins];
-
-        for (int i = 0; i < n; i++)
-        {
-            int xBin = (int)((x[i] - xMin) / (xMax - xMin) * (nBins - 1));
-            int yBin = (int)((y[i] - yMin) / (yMax - yMin) * (nBins - 1));
-            xBin = Math.Max(0, Math.Min(nBins - 1, xBin));
-            yBin = Math.Max(0, Math.Min(nBins - 1, yBin));
-
-            joint[xBin, yBin]++;
-            marginalX[xBin]++;
-            marginalY[yBin]++;
-        }
-
-        double mi = 0;
-        for (int i = 0; i < nBins; i++)
-        {
-            for (int j = 0; j < nBins; j++)
-            {
-                if (joint[i, j] > 0 && marginalX[i] > 0 && marginalY[j] > 0)
-                {
-                    double pxy = (double)joint[i, j] / n;
-                    double px = (double)marginalX[i] / n;
-                    double py = (double)marginalY[j] / n;
-                    mi += pxy * Math.Log(pxy / (px * py));
-                }
-            }
-        }
-
-        return Math.Max(0, mi);
-    }
-
-    public static double FDistributionCdf(double x, int df1, int df2)
-    {
-        if (x <= 0) return 0;
-        double a = df1 / 2.0;
-        double b = df2 / 2.0;
-        double z = df1 * x / (df1 * x + df2);
-        return IncompleteBeta(a, b, z);
-    }
-
-    public static double ChiSquaredCdf(double x, int df)
-    {
-        if (x <= 0) return 0;
-        return IncompleteGamma(df / 2.0, x / 2.0);
-    }
-
-    private static double IncompleteBeta(double a, double b, double x)
-    {
-        if (x <= 0) return 0;
-        if (x >= 1) return 1;
-
-        double sum = 0;
-        double term = 1;
-        int maxIter = 100;
-
-        for (int n = 0; n < maxIter; n++)
-        {
-            sum += term;
-            term *= (a + n) / (a + b + n) * x * (n + 1) / (n + 1);
-            if (Math.Abs(term) < 1e-10) break;
-        }
-
-        return Math.Pow(x, a) * Math.Pow(1 - x, b) * sum / (a * Beta(a, b));
-    }
-
-    private static double Beta(double a, double b)
-    {
-        return Math.Exp(LogGamma(a) + LogGamma(b) - LogGamma(a + b));
-    }
-
-    private static double IncompleteGamma(double a, double x)
-    {
-        if (x <= 0) return 0;
-
-        double sum = 0;
-        double term = 1.0 / a;
-        int maxIter = 100;
-
-        for (int n = 0; n < maxIter; n++)
-        {
-            sum += term;
-            term *= x / (a + n + 1);
-            if (Math.Abs(term) < 1e-10) break;
-        }
-
-        return Math.Exp(-x + a * Math.Log(x) - LogGamma(a)) * sum;
-    }
-
-    private static double LogGamma(double x)
-    {
-        double[] c = { 76.18009172947146, -86.50532032941677, 24.01409824083091,
-                       -1.231739572450155, 0.1208650973866179e-2, -0.5395239384953e-5 };
-
-        double y = x;
-        double tmp = x + 5.5;
-        tmp -= (x + 0.5) * Math.Log(tmp);
-
-        double ser = 1.000000000190015;
-        for (int j = 0; j < 6; j++)
-        {
-            y += 1;
-            ser += c[j] / y;
-        }
-
-        return -tmp + Math.Log(2.5066282746310005 * ser / x);
     }
 
     /// <summary>
-    /// Applies Benjamini-Hochberg correction for multiple testing.
+    /// Scores every feature and requires p-values, as the p-value based selectors (false positive rate, false
+    /// discovery rate, family-wise error) do; scikit-learn rejects a scorer without p-values there too.
     /// </summary>
-    /// <param name="pValues">Original p-values.</param>
-    /// <returns>Adjusted p-values (FDR-corrected).</returns>
-    public static double[] BenjaminiHochbergCorrection(double[] pValues)
+    public static (Vector<T> Scores, Vector<T> PValues) ComputeScoresWithPValues<T>(
+        Matrix<T> data, Vector<T> target, SelectKBestScoreFunc scoringFunction)
     {
-        int n = pValues.Length;
-        var indexed = pValues.Select((p, i) => (p, i)).OrderBy(x => x.p).ToArray();
-        var adjusted = new double[n];
-
-        double cumMin = 1.0;
-        for (int rank = n; rank >= 1; rank--)
-        {
-            var (p, origIdx) = indexed[rank - 1];
-            double adjustedP = p * n / rank;
-            cumMin = Math.Min(cumMin, adjustedP);
-            adjusted[origIdx] = Math.Min(1.0, cumMin);
-        }
-
-        return adjusted;
+        var (scores, pValues) = ComputeScores(data, target, scoringFunction);
+        if (pValues is null)
+            throw new ArgumentException(
+                $"The {scoringFunction} scoring function produces no p-values; p-value based selection needs one that does.",
+                nameof(scoringFunction));
+        return (scores, pValues);
     }
 
     /// <summary>
-    /// Applies Bonferroni correction for multiple testing.
+    /// The class of every row as its position among the sorted distinct target values (numpy.unique), and the
+    /// one-hot [n, classes] membership.
     /// </summary>
-    /// <param name="pValues">Original p-values.</param>
-    /// <returns>Adjusted p-values (Bonferroni-corrected).</returns>
-    public static double[] BonferroniCorrection(double[] pValues)
+    public static Tensor<T> ClassOneHot<T>(Vector<T> target, out int classCount)
     {
+        var engine = AiDotNetEngine.Current;
+        if (target.Length == 0)
+        {
+            classCount = 0;
+            return new Tensor<T>(new[] { 0, 0 });
+        }
+
+        var (classes, inverse, _) = engine.TensorUniqueWithInfo(FilterStatisticTensorOps.AsTensor(target), true, true, false);
+        if (inverse is null)
+            throw new InvalidOperationException("The engine returned no inverse map for the class labels.");
+        classCount = classes.Length;
+        return FilterStatisticTensorOps.ClassOneHot<T>(inverse.ToArray(), classCount);
+    }
+
+    // sklearn.feature_selection.f_classif
+    private static (Vector<T> Scores, Vector<T>? PValues) FClassif<T>(Matrix<T> data, Vector<T> target)
+    {
+        var engine = AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<T>();
+        int n = data.Rows;
+        int p = data.Columns;
+
+        var oneHot = ClassOneHot(target, out int k);
+        int dfBetween = k - 1;
+        int dfWithin = n - k;
+        if (dfBetween <= 0 || dfWithin <= 0)
+            return Uninformative<T>(p);
+
+        var (ssBetween, ssWithin) = FilterStatisticTensorOps.AnovaSums(FilterStatisticTensorOps.AsTensor(data), oneHot);
+        var msBetween = engine.TensorDivideScalar(ssBetween, ops.FromDouble(dfBetween));
+        var msWithin = engine.TensorDivideScalar(ssWithin, ops.FromDouble(dfWithin));
+
+        // no within-class scatter: class means that differ separate the classes exactly (F = +inf)
+        var f = FilterStatisticTensorOps.SeparationAwareRatio(msBetween, msWithin, ZeroVariance);
+        return (f.ToVector(), FilterStatisticTensorOps.FSurvival(f, dfBetween, dfWithin).ToVector());
+    }
+
+    // sklearn.feature_selection.f_regression (center=True, force_finite=True)
+    private static (Vector<T> Scores, Vector<T>? PValues) FRegression<T>(Matrix<T> data, Vector<T> target)
+    {
+        var engine = AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<T>();
+        int n = data.Rows;
+        int p = data.Columns;
+        int df = n - 2;
+        if (df <= 0)
+            return Uninformative<T>(p);
+
+        var (sxx, sxy, syy) = FilterStatisticTensorOps.CenteredCrossSums(
+            FilterStatisticTensorOps.AsTensor(data), FilterStatisticTensorOps.AsTensor(target));
+        if (!ops.GreaterThan(syy, ops.FromDouble(ZeroVariance)))
+            return Uninformative<T>(p);
+
+        // r^2 = Sxy^2 / (Sxx Syy); a constant feature (Sxx = 0) has an undefined correlation, scored 0 with p = 1
+        var r2 = FilterStatisticTensorOps.GuardedDivide(
+            engine.TensorSquare(sxy), engine.TensorMultiplyScalar(sxx, syy), ZeroVariance, ops.Zero);
+        var informative = engine.TensorGreaterThan(sxx, ops.FromDouble(ZeroVariance));
+
+        // F = r^2 / (1 - r^2) (n - 2); a perfect fit (r^2 within numpy.isclose of 1) is the largest finite value
+        var oneMinusR2 = FilterStatisticTensorOps.OneMinus(r2);
+        var perfect = engine.TensorLessThan(engine.TensorAbs(oneMinusR2), ops.FromDouble(1e-8 + 1e-5));
+        var f = engine.TensorMultiplyScalar(
+            FilterStatisticTensorOps.GuardedDivide(r2, oneMinusR2, 0.0, ops.Zero), ops.FromDouble(df));
+        f = engine.TensorWhere(perfect, FilterStatisticTensorOps.FilledLike(f, ops.MaxValue), f);
+        f = engine.TensorWhere(informative, f, FilterStatisticTensorOps.FilledLike(f, ops.Zero));
+
+        var pValues = FilterStatisticTensorOps.FSurvival(f, 1, df);
+        pValues = engine.TensorWhere(perfect, FilterStatisticTensorOps.FilledLike(pValues, ops.Zero), pValues);
+        pValues = engine.TensorWhere(informative, pValues, FilterStatisticTensorOps.FilledLike(pValues, ops.One));
+        return (f.ToVector(), pValues.ToVector());
+    }
+
+    // sklearn.feature_selection.chi2
+    private static (Vector<T> Scores, Vector<T>? PValues) Chi2<T>(Matrix<T> data, Vector<T> target)
+    {
+        var engine = AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<T>();
+        int n = data.Rows;
+        int p = data.Columns;
+        var x = FilterStatisticTensorOps.AsTensor(data);
+
+        if (n > 0 && engine.TensorCountNonzero(engine.TensorLessThan(x, ops.Zero)) > 0)
+            throw new ArgumentException("The chi-squared score needs non-negative feature values (counts or frequencies).");
+
+        var oneHot = ClassOneHot(target, out int k);
+        if (k < 2)
+            return Uninformative<T>(p);
+
+        // observed[c, j] = sum of feature j over class c; expected = P(class c) * total of feature j
+        var observed = engine.TensorMatMul(engine.TensorTranspose(oneHot), x);
+        var classProbability = engine.TensorDivideScalar(engine.ReduceSum(oneHot, new[] { 0 }, false), ops.FromDouble(n));
+        var featureTotal = engine.ReduceSum(x, new[] { 0 }, false);
+        var expected = engine.TensorOuter(classProbability, featureTotal);
+
+        // a feature that is zero everywhere has no expected mass: scored 0 with p = 1
+        var terms = FilterStatisticTensorOps.GuardedDivide(
+            engine.TensorSquare(engine.TensorSubtract(observed, expected)), expected, 0.0, ops.Zero);
+        var chi2 = engine.ReduceSum(terms, new[] { 0 }, false);
+        var pValues = FilterStatisticTensorOps.ChiSquareSurvival(chi2, k - 1);
+        var informative = engine.TensorGreaterThan(featureTotal, ops.Zero);
+        pValues = engine.TensorWhere(informative, pValues, FilterStatisticTensorOps.FilledLike(pValues, ops.One));
+        return (chi2.ToVector(), pValues.ToVector());
+    }
+
+    // sklearn.feature_selection.mutual_info_regression (n_neighbors = 3) without its 1e-10 tie-breaking noise:
+    // MI = psi(n) + psi(k) - mean psi(n_x + 1) - mean psi(n_y + 1), the Kraskov et al. (2004) estimator 1,
+    // on features and target scaled to unit (population) standard deviation.
+    private static Vector<T> MutualInfoRegression<T>(Matrix<T> data, Vector<T> target)
+    {
+        var engine = AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<T>();
+        int n = data.Rows;
+        int p = data.Columns;
+        if (n <= MutualInfoNeighbors)
+            return new Vector<T>(p);
+
+        // digamma at the integers 1..n from the harmonic numbers: psi(m) = H(m - 1) - gamma
+        var harmonic = engine.TensorCumSum(engine.TensorReciprocal(engine.TensorArange<T>(1, n, 1)), 0);
+        var digammaTable = engine.TensorAddScalar(
+            engine.TensorConcatenate(new[] { new Tensor<T>(new[] { 1 }), harmonic }, 0), ops.FromDouble(-EulerGamma));
+        T constant = ops.Add(
+            ops.Subtract(ops.FromDouble(HarmonicNumber(n - 1)), ops.FromDouble(EulerGamma)),
+            ops.Subtract(ops.FromDouble(HarmonicNumber(MutualInfoNeighbors - 1)), ops.FromDouble(EulerGamma)));
+
+        var y = ScaleToUnitStd(FilterStatisticTensorOps.AsTensor(target));
+        var self = engine.TensorEye<T>(n);
+        var infinity = FilterStatisticTensorOps.Filled(new[] { n, n }, ops.FromDouble(double.PositiveInfinity));
+        var dy = engine.TensorWhere(self, infinity, AbsoluteDifferences(y));
+
+        var x = FilterStatisticTensorOps.AsTensor(data);
+        var scores = new List<Tensor<T>>(p);
+        for (int j = 0; j < p; j++)
+        {
+            var column = engine.Reshape(engine.TensorIndexSelect(x, new Tensor<int>(new[] { j }, new[] { 1 }), 1), new[] { n });
+            var dx = engine.TensorWhere(self, infinity, AbsoluteDifferences(ScaleToUnitStd(column)));
+
+            // distance to the k-th nearest neighbour in the joint space (max norm), self excluded
+            var joint = engine.TensorMax(dx, dy);
+            var radius = engine.TensorIndexSelect(
+                engine.TensorSort(joint, 1, false).Item1, new Tensor<int>(new[] { MutualInfoNeighbors - 1 }, new[] { 1 }), 1);
+            var radiusGrid = engine.TensorBroadcastTo(radius, new[] { n, n });
+
+            // neighbours strictly inside that radius in each marginal space
+            var nx = engine.ReduceSum(engine.TensorLessThan(dx, radiusGrid), new[] { 1 }, false);
+            var ny = engine.ReduceSum(engine.TensorLessThan(dy, radiusGrid), new[] { 1 }, false);
+            var psiX = engine.TensorGather(digammaTable, engine.TensorRound(nx).Cast<int>(), 0);
+            var psiY = engine.TensorGather(digammaTable, engine.TensorRound(ny).Cast<int>(), 0);
+            scores.Add(engine.TensorAdd(
+                engine.ReduceMean(psiX, new[] { 0 }, true), engine.ReduceMean(psiY, new[] { 0 }, true)));
+        }
+
+        if (p == 0)
+            return new Vector<T>(0);
+
+        // MI = psi(n) + psi(k) - (mean psi(n_x + 1) + mean psi(n_y + 1)), clipped at 0 as scikit-learn does
+        var mi = engine.TensorAddScalar(engine.TensorNegate(engine.TensorConcatenate(scores.ToArray(), 0)), constant);
+        return engine.TensorMax(mi, ops.Zero).ToVector();
+    }
+
+    // The entries of a vector divided by its population standard deviation (sklearn.preprocessing.scale without
+    // centring); a constant vector stays as it is.
+    private static Tensor<T> ScaleToUnitStd<T>(Tensor<T> values)
+    {
+        var engine = AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<T>();
+        var centered = engine.TensorSubtractScalar(values, engine.TensorMean(values));
+        T std = ops.Sqrt(ops.Divide(engine.TensorSumOfSquares(centered), ops.FromDouble(values.Length)));
+        return ops.GreaterThan(std, ops.Zero) ? engine.TensorDivideScalar(values, std) : values;
+    }
+
+    // |v[i] - v[j]| for every pair ([n] to [n, n]).
+    private static Tensor<T> AbsoluteDifferences<T>(Tensor<T> values)
+    {
+        var engine = AiDotNetEngine.Current;
+        int n = values.Length;
+        return engine.TensorAbs(engine.TensorSubtract(
+            FilterStatisticTensorOps.ColumnBroadcast(values, n), FilterStatisticTensorOps.RowBroadcast(values, n)));
+    }
+
+    // H(m) = 1 + 1/2 + ... + 1/m, H(0) = 0; a scalar constant of the estimator, not data.
+    private static double HarmonicNumber(int m)
+    {
+        double sum = 0;
+        for (int i = 1; i <= m; i++)
+            sum += 1.0 / i;
+        return sum;
+    }
+
+    // Every feature scored 0 with p-value 1 (the statistic is undefined for this sample).
+    private static (Vector<T> Scores, Vector<T>? PValues) Uninformative<T>(int p)
+    {
+        var ops = MathHelper.GetNumericOperations<T>();
+        return (new Vector<T>(p), FilterStatisticTensorOps.Filled(new[] { p }, ops.One).ToVector());
+    }
+
+    /// <summary>
+    /// Benjamini-Hochberg adjusted p-values: <c>min(1, min_{r' &gt;= r} p_(r') n / r')</c> for the p-value of rank r
+    /// (statsmodels <c>multipletests(method="fdr_bh")</c>). Comparing them with alpha (<c>&lt;=</c>) is the selection
+    /// rule of scikit-learn's <c>SelectFdr</c>.
+    /// </summary>
+    public static Vector<T> BenjaminiHochbergCorrection<T>(Vector<T> pValues)
+    {
+        var engine = AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<T>();
         int n = pValues.Length;
-        return pValues.Select(p => Math.Min(1.0, p * n)).ToArray();
+        if (n == 0)
+            return new Vector<T>(0);
+
+        var p = FilterStatisticTensorOps.AsTensor(pValues);
+        var order = FilterStatisticTensorOps.StableOrder(p, descending: false);
+        var orderTensor = new Tensor<int>(order, new[] { n });
+        var sorted = engine.TensorGather(p, orderTensor, 0);
+
+        // p_(r) n / r, then the running minimum from the largest rank down
+        var scaled = engine.TensorMultiplyScalar(
+            engine.TensorDivide(sorted, engine.TensorArange<T>(1, n + 1, 1)), ops.FromDouble(n));
+        var runningMin = engine.TensorFlip(engine.TensorCumMin(engine.TensorFlip(scaled, new[] { 0 }), 0), new[] { 0 });
+        var adjustedSorted = engine.TensorMin(runningMin, ops.One);
+
+        // back to the original feature order
+        var inverse = engine.TensorArgsort(orderTensor, 0, false);
+        return engine.TensorGather(adjustedSorted, inverse, 0).ToVector();
+    }
+
+    /// <summary>Bonferroni adjusted p-values: <c>min(1, p n)</c>.</summary>
+    public static Vector<T> BonferroniCorrection<T>(Vector<T> pValues)
+    {
+        var engine = AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<T>();
+        return engine.TensorMin(
+            engine.TensorMultiplyScalar(FilterStatisticTensorOps.AsTensor(pValues), ops.FromDouble(pValues.Length)),
+            ops.One).ToVector();
     }
 }

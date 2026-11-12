@@ -1,4 +1,6 @@
 using AiDotNet.Helpers;
+using AiDotNet.Preprocessing.FeatureSelection.Helpers;
+using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Enums;
 using AiDotNet.Attributes;
@@ -37,8 +39,8 @@ public class SelectKBest<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     private readonly SelectKBestScoreFunc _scoreFunc;
 
     // Fitted parameters
-    private double[]? _scores;
-    private double[]? _pvalues;
+    private Vector<T>? _scores;
+    private Vector<T>? _pvalues;
     private int[]? _selectedFeatures;
     private int _nInputFeatures;
 
@@ -55,12 +57,12 @@ public class SelectKBest<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     /// <summary>
     /// Gets the computed scores for each feature.
     /// </summary>
-    public double[]? Scores => _scores;
+    public Vector<T>? Scores => _scores;
 
     /// <summary>
-    /// Gets the p-values for each feature (if applicable).
+    /// Gets the p-values for each feature, or null when the scoring function has none (mutual information).
     /// </summary>
-    public double[]? PValues => _pvalues;
+    public Vector<T>? PValues => _pvalues;
 
     /// <summary>
     /// Gets the indices of selected features.
@@ -76,11 +78,11 @@ public class SelectKBest<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     /// Creates a new instance of <see cref="SelectKBest{T}"/>.
     /// </summary>
     /// <param name="k">Number of features to select. Defaults to 10.</param>
-    /// <param name="scoreFunc">Scoring function to use. Defaults to FRegression.</param>
+    /// <param name="scoreFunc">Scoring function to use. Defaults to FClassif, scikit-learn's default (f_classif).</param>
     /// <param name="columnIndices">The column indices to consider, or null for all columns.</param>
     public SelectKBest(
         int k = 10,
-        SelectKBestScoreFunc scoreFunc = SelectKBestScoreFunc.FRegression,
+        SelectKBestScoreFunc scoreFunc = SelectKBestScoreFunc.FClassif,
         int[]? columnIndices = null)
         : base(columnIndices)
     {
@@ -106,48 +108,22 @@ public class SelectKBest<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         _nInputFeatures = data.Columns;
         var columnsToProcess = GetColumnsToProcess(_nInputFeatures);
         int n = data.Rows;
+        var engine = AiDotNetEngine.Current;
 
-        _scores = new double[_nInputFeatures];
-        _pvalues = new double[_nInputFeatures];
-
-        // Use variance as the score for unsupervised selection
-        for (int col = 0; col < _nInputFeatures; col++)
-        {
-            if (!columnsToProcess.Contains(col))
-            {
-                _scores[col] = double.NegativeInfinity;
-                _pvalues[col] = 1.0;
-                continue;
-            }
-
-            // Compute variance for this column
-            double sum = 0;
-            for (int i = 0; i < n; i++)
-            {
-                sum += NumOps.ToDouble(data[i, col]);
-            }
-            double mean = sum / n;
-
-            double variance = 0;
-            for (int i = 0; i < n; i++)
-            {
-                double diff = NumOps.ToDouble(data[i, col]) - mean;
-                variance += diff * diff;
-            }
-            variance /= (n > 1) ? (n - 1) : 1;
-
-            _scores[col] = variance;
-            _pvalues[col] = 0.0; // Not applicable for variance-based selection
-        }
+        // Use the sample variance (divisor n - 1) as the score for unsupervised selection; columns outside the
+        // processed set score -infinity with p-value 1, processed ones have no p-value (0)
+        var processed = FilterStatisticTensorOps.AsTensor(FilterStatisticTensorOps.SelectColumns(data, columnsToProcess));
+        var variance = engine.TensorDivideScalar(
+            FilterStatisticTensorOps.ColumnSumOfSquaredDeviations(processed), NumOps.FromDouble(n > 1 ? n - 1 : 1));
+        var scores = FeatureSelectionTensorOps.ScatterToFeatures(
+            variance, columnsToProcess, _nInputFeatures, NumOps.FromDouble(double.NegativeInfinity));
+        _scores = scores.ToVector();
+        _pvalues = FeatureSelectionTensorOps.ScatterToFeatures(
+            FilterStatisticTensorOps.Filled(new[] { columnsToProcess.Length }, NumOps.Zero),
+            columnsToProcess, _nInputFeatures, NumOps.One).ToVector();
 
         // Select top K features by variance
-        _selectedFeatures = _scores
-            .Select((score, idx) => (score, idx))
-            .OrderByDescending(x => x.score)
-            .Take(Math.Min(_k, _nInputFeatures))
-            .Select(x => x.idx)
-            .OrderBy(x => x) // Maintain original order
-            .ToArray();
+        _selectedFeatures = FilterStatisticTensorOps.TopKIndicesSorted(scores, Math.Min(_k, _nInputFeatures));
 
         IsFitted = true;
     }
@@ -167,32 +143,20 @@ public class SelectKBest<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         _nInputFeatures = data.Columns;
         var columnsToProcess = GetColumnsToProcess(_nInputFeatures);
 
-        _scores = new double[_nInputFeatures];
-        _pvalues = new double[_nInputFeatures];
+        // Score the processed columns; the others score -infinity with p-value 1
+        var (scores, pValues) = StatisticalTestHelper.ComputeScores(
+            FilterStatisticTensorOps.SelectColumns(data, columnsToProcess), target, _scoreFunc);
+        var allScores = FeatureSelectionTensorOps.ScatterToFeatures(
+            FilterStatisticTensorOps.AsTensor(scores), columnsToProcess, _nInputFeatures,
+            NumOps.FromDouble(double.NegativeInfinity));
+        _scores = allScores.ToVector();
+        _pvalues = pValues is null
+            ? null
+            : FeatureSelectionTensorOps.ScatterToFeatures(
+                FilterStatisticTensorOps.AsTensor(pValues), columnsToProcess, _nInputFeatures, NumOps.One).ToVector();
 
-        // Compute scores for each feature
-        for (int col = 0; col < _nInputFeatures; col++)
-        {
-            if (!columnsToProcess.Contains(col))
-            {
-                _scores[col] = double.NegativeInfinity;
-                _pvalues[col] = 1.0;
-                continue;
-            }
-
-            var (score, pvalue) = ComputeScore(data, target, col);
-            _scores[col] = score;
-            _pvalues[col] = pvalue;
-        }
-
-        // Select top K features
-        int effectiveK = Math.Min(_k, columnsToProcess.Length);
-
-        _selectedFeatures = columnsToProcess
-            .OrderByDescending(col => _scores[col])
-            .Take(effectiveK)
-            .OrderBy(col => col) // Preserve original order
-            .ToArray();
+        // Select top K features (equal scores go to the lower column)
+        _selectedFeatures = FeatureSelectionTensorOps.TopKOfColumns(allScores, columnsToProcess, _k);
 
         IsFitted = true;
     }
@@ -204,258 +168,6 @@ public class SelectKBest<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     {
         Fit(data, target);
         return Transform(data);
-    }
-
-    private (double Score, double PValue) ComputeScore(Matrix<T> data, Vector<T> target, int col)
-    {
-        switch (_scoreFunc)
-        {
-            case SelectKBestScoreFunc.FRegression:
-                return ComputeFRegression(data, target, col);
-            case SelectKBestScoreFunc.MutualInfoRegression:
-                return (ComputeMutualInfo(data, target, col), 0);
-            case SelectKBestScoreFunc.FClassif:
-                return ComputeFClassif(data, target, col);
-            case SelectKBestScoreFunc.Chi2:
-                return ComputeChi2(data, target, col);
-            default:
-                return ComputeFRegression(data, target, col);
-        }
-    }
-
-    private (double Score, double PValue) ComputeFRegression(Matrix<T> data, Vector<T> target, int col)
-    {
-        // Compute F-score for linear correlation with target
-        int n = data.Rows;
-
-        // Calculate means
-        double meanX = 0, meanY = 0;
-        for (int i = 0; i < n; i++)
-        {
-            meanX += NumOps.ToDouble(data[i, col]);
-            meanY += NumOps.ToDouble(target[i]);
-        }
-        meanX /= n;
-        meanY /= n;
-
-        // Calculate correlation coefficient
-        double sumXY = 0, sumX2 = 0, sumY2 = 0;
-        for (int i = 0; i < n; i++)
-        {
-            double x = NumOps.ToDouble(data[i, col]) - meanX;
-            double y = NumOps.ToDouble(target[i]) - meanY;
-            sumXY += x * y;
-            sumX2 += x * x;
-            sumY2 += y * y;
-        }
-
-        if (sumX2 < 1e-10 || sumY2 < 1e-10)
-        {
-            return (0, 1);
-        }
-
-        double r = sumXY / Math.Sqrt(sumX2 * sumY2);
-
-        // F-statistic: F = r^2 * (n-2) / (1 - r^2)
-        double r2 = r * r;
-        if (r2 >= 1)
-        {
-            return (double.MaxValue, 0);
-        }
-
-        double fScore = r2 * (n - 2) / (1 - r2);
-
-        // Approximate p-value (simplified)
-        double pValue = 1.0 / (1.0 + fScore);
-
-        return (fScore, pValue);
-    }
-
-    private (double Score, double PValue) ComputeFClassif(Matrix<T> data, Vector<T> target, int col)
-    {
-        // ANOVA F-score for classification
-        int n = data.Rows;
-
-        // Group values by class
-        var groups = new Dictionary<double, List<double>>();
-        for (int i = 0; i < n; i++)
-        {
-            double classVal = NumOps.ToDouble(target[i]);
-            double featureVal = NumOps.ToDouble(data[i, col]);
-
-            if (!groups.TryGetValue(classVal, out var list))
-            {
-                list = new List<double>();
-                groups[classVal] = list;
-            }
-            list.Add(featureVal);
-        }
-
-        // Calculate grand mean
-        double grandMean = 0;
-        for (int i = 0; i < n; i++)
-        {
-            grandMean += NumOps.ToDouble(data[i, col]);
-        }
-        grandMean /= n;
-
-        // Calculate between-group and within-group sum of squares
-        double ssBetween = 0;
-        double ssWithin = 0;
-
-        foreach (var kvp in groups)
-        {
-            var groupValues = kvp.Value;
-            double groupMean = groupValues.Average();
-
-            ssBetween += groupValues.Count * Math.Pow(groupMean - grandMean, 2);
-
-            foreach (double val in groupValues)
-            {
-                ssWithin += Math.Pow(val - groupMean, 2);
-            }
-        }
-
-        int k = groups.Count;
-        double dfBetween = k - 1;
-        double dfWithin = n - k;
-
-        if (dfBetween < 1 || dfWithin < 1 || ssWithin < 1e-10)
-        {
-            return (0, 1);
-        }
-
-        double msBetween = ssBetween / dfBetween;
-        double msWithin = ssWithin / dfWithin;
-
-        double fScore = msBetween / msWithin;
-        double pValue = 1.0 / (1.0 + fScore); // Simplified p-value
-
-        return (fScore, pValue);
-    }
-
-    private (double Score, double PValue) ComputeChi2(Matrix<T> data, Vector<T> target, int col)
-    {
-        // Chi-squared test (feature must be non-negative)
-        int n = data.Rows;
-
-        // Get unique classes
-        var classes = new HashSet<double>();
-        for (int i = 0; i < n; i++)
-        {
-            classes.Add(NumOps.ToDouble(target[i]));
-        }
-
-        // Sum of feature values per class
-        var classSums = new Dictionary<double, double>();
-        var classCounts = new Dictionary<double, int>();
-        double totalSum = 0;
-
-        foreach (double c in classes)
-        {
-            classSums[c] = 0;
-            classCounts[c] = 0;
-        }
-
-        for (int i = 0; i < n; i++)
-        {
-            double classVal = NumOps.ToDouble(target[i]);
-            double featureVal = Math.Max(0, NumOps.ToDouble(data[i, col])); // Chi2 requires non-negative
-            classSums[classVal] += featureVal;
-            classCounts[classVal]++;
-            totalSum += featureVal;
-        }
-
-        if (totalSum < 1e-10)
-        {
-            return (0, 1);
-        }
-
-        // Expected values
-        double chi2 = 0;
-        foreach (double c in classes)
-        {
-            double observed = classSums[c];
-            double expected = totalSum * classCounts[c] / n;
-
-            if (expected > 1e-10)
-            {
-                chi2 += Math.Pow(observed - expected, 2) / expected;
-            }
-        }
-
-        double pValue = 1.0 / (1.0 + chi2); // Simplified p-value
-
-        return (chi2, pValue);
-    }
-
-    private double ComputeMutualInfo(Matrix<T> data, Vector<T> target, int col)
-    {
-        // Simplified mutual information using discretization
-        int n = data.Rows;
-        int nBins = Math.Min(10, (int)Math.Sqrt(n));
-
-        // Discretize feature
-        var featureValues = new List<double>();
-        for (int i = 0; i < n; i++)
-        {
-            featureValues.Add(NumOps.ToDouble(data[i, col]));
-        }
-
-        double minVal = featureValues.Min();
-        double maxVal = featureValues.Max();
-        double range = maxVal - minVal;
-
-        if (range < 1e-10)
-        {
-            return 0;
-        }
-
-        // Calculate joint and marginal distributions
-        var jointCounts = new Dictionary<(int, double), int>();
-        var featureCounts = new int[nBins];
-        var targetCounts = new Dictionary<double, int>();
-
-        for (int i = 0; i < n; i++)
-        {
-            int featureBin = Math.Min(nBins - 1, (int)((featureValues[i] - minVal) / range * nBins));
-            double targetVal = NumOps.ToDouble(target[i]);
-
-            var key = (featureBin, targetVal);
-            if (!jointCounts.TryGetValue(key, out int count))
-            {
-                count = 0;
-            }
-            jointCounts[key] = count + 1;
-
-            featureCounts[featureBin]++;
-
-            if (!targetCounts.TryGetValue(targetVal, out count))
-            {
-                count = 0;
-            }
-            targetCounts[targetVal] = count + 1;
-        }
-
-        // Calculate mutual information
-        double mi = 0;
-        foreach (var kvp in jointCounts)
-        {
-            int featureBin = kvp.Key.Item1;
-            double targetVal = kvp.Key.Item2;
-            int jointCount = kvp.Value;
-
-            double pJoint = (double)jointCount / n;
-            double pFeature = (double)featureCounts[featureBin] / n;
-            double pTarget = (double)targetCounts[targetVal] / n;
-
-            if (pJoint > 0 && pFeature > 0 && pTarget > 0)
-            {
-                mi += pJoint * Math.Log(pJoint / (pFeature * pTarget));
-            }
-        }
-
-        return Math.Max(0, mi);
     }
 
     /// <summary>

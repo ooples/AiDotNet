@@ -1,4 +1,6 @@
 using AiDotNet.Helpers;
+using AiDotNet.Preprocessing.FeatureSelection.Filter.Univariate;
+using AiDotNet.Preprocessing.FeatureSelection.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Enums;
 using AiDotNet.Attributes;
@@ -6,13 +8,16 @@ using AiDotNet.Attributes;
 namespace AiDotNet.Preprocessing.FeatureSelection.Filter;
 
 /// <summary>
-/// Selects the K best features based on a scoring function.
+/// Selects the K best features based on a scoring function (scikit-learn's <c>SelectKBest</c>).
 /// </summary>
 /// <remarks>
 /// <para>
-/// A simple univariate feature selection that computes a score for each feature
-/// and selects the K highest scoring features. The default scoring function
-/// uses F-statistics for regression or classification.
+/// A simple univariate feature selection that computes a score for each feature and selects the K highest
+/// scoring features. As in scikit-learn the default scoring function is the ANOVA F-value for classification
+/// (<see cref="SelectKBestScoreFunc.FClassif"/>, <c>f_classif</c>). For a continuous (regression) target pass
+/// <see cref="SelectKBestScoreFunc.FRegression"/> (<c>f_regression</c>) or
+/// <see cref="SelectKBestScoreFunc.MutualInfoRegression"/>, or supply any scorer of your own; the target is
+/// never re-interpreted behind your back.
 /// </para>
 /// <para><b>For Beginners:</b> SelectKBest is the simplest approach - compute a score
 /// for each feature independently and keep the top K. It's fast and works well when
@@ -25,24 +30,45 @@ namespace AiDotNet.Preprocessing.FeatureSelection.Filter;
 public class SelectKBest<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFeatureSelector<T>
 {
     private readonly int _k;
-    private readonly Func<Matrix<T>, Vector<T>, int, double>? _scoringFunction;
+    private readonly SelectKBestScoreFunc _scoreFunction;
+    private readonly Func<Matrix<T>, Vector<T>, (Vector<T> Scores, Vector<T>? PValues)>? _customScoreFunction;
 
-    private double[]? _scores;
-    private double[]? _pValues;
+    private Vector<T>? _scores;
+    private Vector<T>? _pValues;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
+    /// <summary>Gets the number of features to select.</summary>
     public int K => _k;
-    public double[]? Scores => _scores;
-    public double[]? PValues => _pValues;
+
+    /// <summary>
+    /// Gets the built-in scoring function, used when no custom scorer was supplied.
+    /// </summary>
+    public SelectKBestScoreFunc ScoreFunction => _scoreFunction;
+
+    /// <summary>Gets the score of every feature after fitting.</summary>
+    public Vector<T>? Scores => _scores;
+
+    /// <summary>
+    /// Gets the p-value of every feature after fitting, or null when the scoring function has none.
+    /// </summary>
+    public Vector<T>? PValues => _pValues;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
     public override bool SupportsInverseTransform => false;
 
+    /// <summary>
+    /// Creates a selector that scores features with a built-in scikit-learn scoring function.
+    /// </summary>
+    /// <param name="k">Number of features to select.</param>
+    /// <param name="scoreFunction">
+    /// The scoring function; defaults to <see cref="SelectKBestScoreFunc.FClassif"/> (scikit-learn's default).
+    /// </param>
+    /// <param name="columnIndices">The column indices to consider, or null for all columns.</param>
     public SelectKBest(
         int k = 10,
-        Func<Matrix<T>, Vector<T>, int, double>? scoringFunction = null,
+        SelectKBestScoreFunc scoreFunction = SelectKBestScoreFunc.FClassif,
         int[]? columnIndices = null)
         : base(columnIndices)
     {
@@ -50,7 +76,30 @@ public class SelectKBest<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervi
             throw new ArgumentException("K must be at least 1.", nameof(k));
 
         _k = k;
-        _scoringFunction = scoringFunction;
+        _scoreFunction = scoreFunction;
+    }
+
+    /// <summary>
+    /// Creates a selector with a custom scorer, like scikit-learn's <c>score_func</c>: it receives the data and the
+    /// target and returns one score per feature (higher is better) and optionally one p-value per feature.
+    /// </summary>
+    /// <param name="k">Number of features to select.</param>
+    /// <param name="scoreFunction">The scorer.</param>
+    /// <param name="columnIndices">The column indices to consider, or null for all columns.</param>
+    public SelectKBest(
+        int k,
+        Func<Matrix<T>, Vector<T>, (Vector<T> Scores, Vector<T>? PValues)> scoreFunction,
+        int[]? columnIndices = null)
+        : base(columnIndices)
+    {
+        if (k < 1)
+            throw new ArgumentException("K must be at least 1.", nameof(k));
+        if (scoreFunction is null)
+            throw new ArgumentNullException(nameof(scoreFunction));
+
+        _k = k;
+        _scoreFunction = SelectKBestScoreFunc.FClassif;
+        _customScoreFunction = scoreFunction;
     }
 
     /// <inheritdoc />
@@ -67,115 +116,30 @@ public class SelectKBest<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervi
             throw new ArgumentException("Target length must match rows in data.");
 
         _nInputFeatures = data.Columns;
-        int n = data.Rows;
         int p = data.Columns;
 
-        _scores = new double[p];
-        _pValues = new double[p];
-
-        for (int j = 0; j < p; j++)
+        Vector<T> scores;
+        Vector<T>? pValues;
+        if (_customScoreFunction is not null)
         {
-            if (_scoringFunction is not null)
-            {
-                _scores[j] = _scoringFunction(data, target, j);
-                _pValues[j] = 1.0 / (1.0 + _scores[j]);  // Approximate
-            }
-            else
-            {
-                var (fStat, pVal) = ComputeFStatistic(data, target, j, n);
-                _scores[j] = fStat;
-                _pValues[j] = pVal;
-            }
+            (scores, pValues) = _customScoreFunction(data, target);
+            if (scores is null || scores.Length != p)
+                throw new InvalidOperationException("The scoring function must return one score per feature.");
+            if (pValues is not null && pValues.Length != p)
+                throw new InvalidOperationException("The scoring function must return one p-value per feature.");
+        }
+        else
+        {
+            (scores, pValues) = StatisticalTestHelper.ComputeScores(data, target, _scoreFunction);
         }
 
-        int nToSelect = Math.Min(_k, p);
-        _selectedIndices = _scores
-            .Select((s, idx) => (Score: s, Index: idx))
-            .OrderByDescending(x => x.Score)
-            .Take(nToSelect)
-            .Select(x => x.Index)
-            .OrderBy(x => x)
-            .ToArray();
+        _scores = scores;
+        _pValues = pValues;
+
+        // the K highest scores (NaN counts as the lowest score, equal scores go to the lower column)
+        _selectedIndices = FilterStatisticTensorOps.TopKIndicesSorted(FilterStatisticTensorOps.AsTensor(scores), Math.Min(_k, p));
 
         IsFitted = true;
-    }
-
-    private (double FStat, double PValue) ComputeFStatistic(Matrix<T> data, Vector<T> target, int featureIdx, int n)
-    {
-        // ANOVA F-statistic for classification, correlation F for regression
-        var classes = new Dictionary<double, List<double>>();
-
-        for (int i = 0; i < n; i++)
-        {
-            double y = NumOps.ToDouble(target[i]);
-            double x = NumOps.ToDouble(data[i, featureIdx]);
-
-            if (!classes.ContainsKey(y))
-                classes[y] = new List<double>();
-            classes[y].Add(x);
-        }
-
-        if (classes.Count <= 1)
-        {
-            // Regression mode - use correlation-based F
-            double xMean = 0, yMean = 0;
-            for (int i = 0; i < n; i++)
-            {
-                xMean += NumOps.ToDouble(data[i, featureIdx]);
-                yMean += NumOps.ToDouble(target[i]);
-            }
-            xMean /= n;
-            yMean /= n;
-
-            double ssXY = 0, ssXX = 0, ssYY = 0;
-            for (int i = 0; i < n; i++)
-            {
-                double dx = NumOps.ToDouble(data[i, featureIdx]) - xMean;
-                double dy = NumOps.ToDouble(target[i]) - yMean;
-                ssXY += dx * dy;
-                ssXX += dx * dx;
-                ssYY += dy * dy;
-            }
-
-            if (ssXX < 1e-10 || ssYY < 1e-10)
-                return (0, 1);
-
-            double r2 = (ssXY * ssXY) / (ssXX * ssYY);
-            double fStat = r2 * (n - 2) / (1 - r2 + 1e-10);
-            return (fStat, 1.0 / (1 + fStat));  // Approximate p-value
-        }
-
-        // ANOVA F-statistic for classification
-        double grandMean = 0;
-        foreach (var kv in classes)
-            grandMean += kv.Value.Sum();
-        grandMean /= n;
-
-        double ssBetween = 0;
-        double ssWithin = 0;
-
-        foreach (var kv in classes)
-        {
-            double classMean = kv.Value.Average();
-            int nk = kv.Value.Count;
-            ssBetween += nk * Math.Pow(classMean - grandMean, 2);
-
-            foreach (double x in kv.Value)
-                ssWithin += Math.Pow(x - classMean, 2);
-        }
-
-        int k = classes.Count;
-        double dfBetween = k - 1;
-        double dfWithin = n - k;
-
-        if (dfBetween <= 0 || dfWithin <= 0 || ssWithin < 1e-10)
-            return (0, 1);
-
-        double msBetween = ssBetween / dfBetween;
-        double msWithin = ssWithin / dfWithin;
-        double fStat2 = msBetween / msWithin;
-
-        return (fStat2, 1.0 / (1 + fStat2));  // Approximate p-value
     }
 
     /// <inheritdoc />
