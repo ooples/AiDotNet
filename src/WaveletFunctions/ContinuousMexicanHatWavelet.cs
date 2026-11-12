@@ -183,26 +183,15 @@ public class ContinuousMexicanHatWavelet<T> : WaveletFunctionBase<T>
     public override Vector<T> GetScalingCoefficients()
     {
         int length = 64;
-        var coeffs = new T[length];
-        T sum = NumOps.Zero;
+        var engine = AiDotNetEngine.Current;
+        var x = engine.TensorDivideScalar(WaveletEngineOps<T>.CenteredGrid(length), NumOps.FromDouble(length / 4));
 
-        for (int i = 0; i < length; i++)
-        {
-            T x = NumOps.Divide(NumOps.FromDouble(i - length / 2), NumOps.FromDouble(length / 4));
-            T value = NumOps.Equals(x, NumOps.Zero)
-                ? NumOps.One
-                : NumOps.Divide(MathHelper.Sin(NumOps.Divide(MathHelper.Pi<T>(), x)), NumOps.Multiply(MathHelper.Pi<T>(), x));
-            coeffs[i] = value;
-            sum = NumOps.Add(sum, NumOps.Abs(value));
-        }
-
-        // Normalize
-        for (int i = 0; i < length; i++)
-        {
-            coeffs[i] = NumOps.Divide(coeffs[i], sum);
-        }
-
-        return new Vector<T>(coeffs);
+        // sinc(x) = sin(pi x) / (pi x), with sinc(0) = 1, normalized by the sum of absolute values
+        var piX = engine.TensorMultiplyScalar(x, MathHelper.Pi<T>());
+        var sinc = engine.TensorDivide(engine.TensorSin(piX), piX);
+        var values = engine.TensorWhere(engine.TensorEquals(x, NumOps.Zero), engine.TensorOnesLike(x), sinc);
+        T sum = engine.TensorSum(engine.TensorAbs(values));
+        return engine.TensorDivideScalar(values, sum).ToVector();
     }
 
     /// <summary>
@@ -236,28 +225,16 @@ public class ContinuousMexicanHatWavelet<T> : WaveletFunctionBase<T>
     public override Vector<T> GetWaveletCoefficients()
     {
         int length = 256;
-        var coeffs = new T[length];
-        T sum = NumOps.Zero;
+        var engine = AiDotNetEngine.Current;
+        var t = engine.TensorDivideScalar(WaveletEngineOps<T>.CenteredGrid(length), NumOps.FromDouble(length / 4));
+        var t2 = engine.TensorMultiply(t, t);
 
-        for (int i = 0; i < length; i++)
-        {
-            T t = NumOps.Divide(NumOps.FromDouble(i - length / 2), NumOps.FromDouble(length / 4));
-            T t2 = NumOps.Multiply(t, t);
-            T value = NumOps.Multiply(
-                NumOps.Subtract(NumOps.One, t2),
-                NumOps.Exp(NumOps.Divide(NumOps.Negate(t2), NumOps.FromDouble(2.0)))
-            );
-            coeffs[i] = value;
-            sum = NumOps.Add(sum, NumOps.Abs(value));
-        }
-
-        // Normalize
-        for (int i = 0; i < length; i++)
-        {
-            coeffs[i] = NumOps.Divide(coeffs[i], sum);
-        }
-
-        return new Vector<T>(coeffs);
+        // (1 - t^2) * exp(-t^2 / 2), normalized by the sum of absolute values
+        var values = engine.TensorMultiply(
+            engine.ScalarMinusTensor(NumOps.One, t2),
+            engine.TensorExp(engine.TensorDivideScalar(engine.TensorNegate(t2), NumOps.FromDouble(2.0))));
+        T sum = engine.TensorSum(engine.TensorAbs(values));
+        return engine.TensorDivideScalar(values, sum).ToVector();
     }
 
     /// <summary>
@@ -289,24 +266,8 @@ public class ContinuousMexicanHatWavelet<T> : WaveletFunctionBase<T>
     /// </remarks>
     private Vector<T> Convolve(Vector<T> input, Vector<T> kernel)
     {
-        int resultLength = input.Length + kernel.Length - 1;
-        var result = new T[resultLength];
-
-        for (int i = 0; i < resultLength; i++)
-        {
-            T sum = NumOps.Zero;
-            for (int j = 0; j < kernel.Length; j++)
-            {
-                if (i - j >= 0 && i - j < input.Length)
-                {
-                    sum = NumOps.Add(sum, NumOps.Multiply(input[i - j], kernel[j]));
-                }
-            }
-
-            result[i] = sum;
-        }
-
-        return new Vector<T>(result);
+        // Full linear convolution, length n + k - 1
+        return WaveletEngineOps<T>.FullConvolve(input, kernel);
     }
 
     /// <summary>
@@ -337,15 +298,7 @@ public class ContinuousMexicanHatWavelet<T> : WaveletFunctionBase<T>
     /// </remarks>
     private Vector<T> Downsample(Vector<T> input, int factor)
     {
-        int newLength = input.Length / factor;
-        var result = new T[newLength];
-
-        for (int i = 0; i < newLength; i++)
-        {
-            result[i] = input[i * factor];
-        }
-
-        return new Vector<T>(result);
+        return WaveletEngineOps<T>.Decimate(input, factor, input.Length / factor);
     }
 
     /// <summary>
@@ -382,14 +335,7 @@ public class ContinuousMexicanHatWavelet<T> : WaveletFunctionBase<T>
         var detailRecon = ConvolveReversed(detailUpsampled, waveletCoeffs);
 
         // Add contributions
-        int outputLength = Math.Min(approxRecon.Length, detailRecon.Length);
-        var reconstructed = new Vector<T>(outputLength);
-        for (int i = 0; i < outputLength; i++)
-        {
-            reconstructed[i] = NumOps.Add(approxRecon[i], detailRecon[i]);
-        }
-
-        return reconstructed;
+        return WaveletEngineOps<T>.AddTruncated(approxRecon, detailRecon);
     }
 
     /// <summary>
@@ -397,22 +343,7 @@ public class ContinuousMexicanHatWavelet<T> : WaveletFunctionBase<T>
     /// </summary>
     private Vector<T> Upsample(Vector<T> input, int factor)
     {
-        int newLength = input.Length * factor;
-        var result = new T[newLength];
-
-        // Initialize all elements to zero
-        for (int i = 0; i < newLength; i++)
-        {
-            result[i] = NumOps.Zero;
-        }
-
-        // Place input values at every factor-th position
-        for (int i = 0; i < input.Length; i++)
-        {
-            result[i * factor] = input[i];
-        }
-
-        return new Vector<T>(result);
+        return WaveletEngineOps<T>.Upsample(input, factor);
     }
 
     /// <summary>
@@ -420,24 +351,7 @@ public class ContinuousMexicanHatWavelet<T> : WaveletFunctionBase<T>
     /// </summary>
     private Vector<T> ConvolveReversed(Vector<T> input, Vector<T> kernel)
     {
-        int resultLength = input.Length;
-        var result = new T[resultLength];
-
-        for (int i = 0; i < resultLength; i++)
-        {
-            T sum = NumOps.Zero;
-            for (int j = 0; j < kernel.Length; j++)
-            {
-                int inputIndex = i - j + kernel.Length / 2;
-                if (inputIndex >= 0 && inputIndex < input.Length)
-                {
-                    int revJ = kernel.Length - 1 - j;
-                    sum = NumOps.Add(sum, NumOps.Multiply(input[inputIndex], kernel[revJ]));
-                }
-            }
-            result[i] = sum;
-        }
-
-        return new Vector<T>(result);
+        // result[i] = sum_j input[i - j + K / 2] * kernel[K - 1 - j]: a centred convolution with the reversed kernel
+        return WaveletEngineOps<T>.CenteredConvolve(input, WaveletEngineOps<T>.Reverse(kernel));
     }
 }

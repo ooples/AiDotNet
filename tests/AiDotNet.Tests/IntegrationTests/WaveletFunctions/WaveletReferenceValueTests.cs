@@ -103,4 +103,21 @@ public class WaveletReferenceValueTests
         double expected = -4.671875 * Math.Exp(-0.125) / (Math.Sqrt(720.0) * Math.Pow(2.0, 3.5));
         Assert.Equal(expected, wavelet.Calculate(0.5), Tolerance);
     }
+
+    // ================================================================
+    // CONTINUOUS MEXICAN HAT: the scaling filter is the documented sinc(x) = sin(pi x) / (pi x)
+    // ================================================================
+
+    [Fact(Timeout = 120000)]
+    public async Task ContinuousMexicanHat_ScalingFilter_IsSinc()
+    {
+        // 64 taps at x = (i - 32) / 16, normalized by the sum of magnitudes, so ratios to the centre tap are
+        // sinc values: x = 0.5 -> 2 / pi, x = 1 -> 0, x = 1.5 -> -2 / (3 pi).
+        var wavelet = new ContinuousMexicanHatWavelet<double>();
+        var h = wavelet.GetScalingCoefficients();
+        Assert.Equal(64, h.Length);
+        Assert.Equal(2.0 / Math.PI, h[40] / h[32], Tolerance);
+        Assert.Equal(0.0, h[48] / h[32], Tolerance);
+        Assert.Equal(-2.0 / (3.0 * Math.PI), h[56] / h[32], Tolerance);
+    }
 }
