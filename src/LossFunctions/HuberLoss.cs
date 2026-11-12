@@ -63,28 +63,18 @@ public class HuberLoss<T> : LossFunctionBase<T>
     {
         ValidateVectorLengths(predicted, actual);
 
-        T sum = NumOps.Zero;
-        for (int i = 0; i < predicted.Length; i++)
-        {
-            T diff = NumOps.Abs(NumOps.Subtract(predicted[i], actual[i]));
+        T half = NumOps.FromDouble(0.5);
+        var diff = Engine.TensorAbs(Engine.TensorSubtract(predicted.AsTensor(), actual.AsTensor()));
 
-            if (NumOps.LessThanOrEquals(diff, _delta))
-            {
-                // 0.5 * error²
-                sum = NumOps.Add(sum, NumOps.Multiply(
-                    NumOps.FromDouble(0.5),
-                    NumOps.Multiply(diff, diff)
-                ));
-            }
-            else
-            {
-                // delta * (|error| - 0.5 * delta)
-                sum = NumOps.Add(sum, NumOps.Subtract(
-                    NumOps.Multiply(_delta, diff),
-                    NumOps.Multiply(NumOps.FromDouble(0.5), NumOps.Multiply(_delta, _delta))
-                ));
-            }
-        }
+        // |error| <= delta: 0.5 * error²
+        var quadratic = Engine.TensorMultiplyScalar(Engine.TensorMultiply(diff, diff), half);
+
+        // |error| > delta: delta * (|error| - 0.5 * delta)
+        var linear = Engine.TensorSubtractScalar(
+            Engine.TensorMultiplyScalar(diff, _delta),
+            NumOps.Multiply(half, NumOps.Multiply(_delta, _delta)));
+
+        T sum = Engine.TensorSum(Engine.TensorWhere(Engine.TensorGreaterThan(diff, _delta), linear, quadratic));
 
         return NumOps.Divide(sum, NumOps.FromDouble(predicted.Length));
     }

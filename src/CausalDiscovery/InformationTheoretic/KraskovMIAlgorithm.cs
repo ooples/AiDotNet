@@ -48,6 +48,12 @@ public class KraskovMIAlgorithm<T> : InfoTheoreticBase<T>
 {
     private const double CoincidenceTolerance = 1e-15;
 
+    /// <summary>
+    /// Maximum number of entries in one block of the pairwise distance matrix (rows per block times n),
+    /// which bounds the working memory of the neighbour search.
+    /// </summary>
+    private const int MaxDistanceBlockElements = 1 << 21;
+
     /// <inheritdoc/>
     public override string Name => "KraskovMI";
 
@@ -106,86 +112,72 @@ public class KraskovMIAlgorithm<T> : InfoTheoreticBase<T>
 
     private double ComputeKSGMutualInformation(Matrix<T> data, int col1, int col2, int n, int k)
     {
-        // Extract column vectors
-        var x = new double[n];
-        var y = new double[n];
-        for (int t = 0; t < n; t++)
-        {
-            x[t] = NumOps.ToDouble(data[t, col1]);
-            y[t] = NumOps.ToDouble(data[t, col2]);
-        }
+        // Column vectors as rows [1 x n], compared against blocks of points [len x 1]
+        var x = Engine.GetColumn(data, col1).AsTensor();
+        var y = Engine.GetColumn(data, col2).AsTensor();
+        var xRow = x.Reshape(new[] { 1, n });
+        var yRow = y.Reshape(new[] { 1, n });
+        var xColumn = x.Reshape(new[] { n, 1 });
+        var yColumn = y.Reshape(new[] { n, 1 });
+        T farAway = NumOps.MaxValue;
+        T tolerance = NumOps.FromDouble(CoincidenceTolerance);
+        T one = NumOps.One;
 
         // For each point, find k-th nearest neighbor distance in joint space (Chebyshev/max norm)
-        // Then count marginal neighbors within that distance
-        double sumPsiNx = 0, sumPsiNy = 0;
-
-        for (int i = 0; i < n; i++)
+        // Then count marginal neighbors within that distance. Points are processed in row blocks so
+        // the [len x n] distance matrices stay bounded.
+        int block = Math.Max(1, Math.Min(n, MaxDistanceBlockElements / Math.Max(1, n)));
+        var psiX = new List<Tensor<T>>();
+        var psiY = new List<Tensor<T>>();
+        for (int start = 0; start < n; start += block)
         {
-            // Compute Chebyshev distances to all other points in joint space
-            var jointDists = new double[n];
-            for (int j = 0; j < n; j++)
-            {
-                if (j == i) { jointDists[j] = double.MaxValue; continue; }
-                jointDists[j] = Math.Max(Math.Abs(x[j] - x[i]), Math.Abs(y[j] - y[i]));
-            }
+            int len = Math.Min(block, n - start);
+            var shape = new[] { len, n };
+
+            // self[r, start + r] = 1: a point is never its own neighbour
+            var selfParts = new List<Tensor<T>>();
+            if (start > 0) selfParts.Add(new Tensor<T>(new[] { len, start }));
+            selfParts.Add(Engine.TensorEye<T>(len));
+            if (start + len < n) selfParts.Add(new Tensor<T>(new[] { len, n - start - len }));
+            var self = Engine.TensorConcatenate(selfParts.ToArray(), 1);
+            var far = Engine.TensorFullLike(self, farAway);
+
+            var dx = Engine.TensorWhere(self, far, Engine.TensorAbs(Engine.TensorSubtract(
+                Engine.TensorBroadcastTo(xRow, shape),
+                Engine.TensorBroadcastTo(Engine.TensorSlice(xColumn, new[] { start, 0 }, new[] { len, 1 }), shape))));
+            var dy = Engine.TensorWhere(self, far, Engine.TensorAbs(Engine.TensorSubtract(
+                Engine.TensorBroadcastTo(yRow, shape),
+                Engine.TensorBroadcastTo(Engine.TensorSlice(yColumn, new[] { start, 0 }, new[] { len, 1 }), shape))));
 
             // Find k-th nearest neighbor distance
-            double epsilon = FindKthSmallest(jointDists, n, k);
+            var (sortedDistances, _) = Engine.TensorSort(Engine.TensorMax(dx, dy), 1, false);
+            var epsilon = Engine.TensorSlice(sortedDistances, new[] { 0, k - 1 }, new[] { len, 1 });
 
             // Handle zero-distance ties: when duplicate samples collapse epsilon to 0,
             // strict < epsilon would leave nx/ny at 0, producing spurious MI.
-            // Use <= for ties and ensure at least k neighbors are counted.
-            if (epsilon < CoincidenceTolerance)
-            {
-                // Degenerate case: k-th neighbor is at distance ~0
-                // Count exact duplicates in each marginal
-                int nx0 = 0, ny0 = 0;
-                for (int j = 0; j < n; j++)
-                {
-                    if (j == i) continue;
-                    if (Math.Abs(x[j] - x[i]) < CoincidenceTolerance) nx0++;
-                    if (Math.Abs(y[j] - y[i]) < CoincidenceTolerance) ny0++;
-                }
-                sumPsiNx += Digamma(Math.Max(nx0, 1) + 1);
-                sumPsiNy += Digamma(Math.Max(ny0, 1) + 1);
-                continue;
-            }
+            // Degenerate case (k-th neighbor at distance ~0): count exact duplicates in each
+            // marginal and use at least one neighbor.
+            var degenerate = Engine.TensorLessThan(epsilon, tolerance);
+            var radius = Engine.TensorBroadcastTo(
+                Engine.TensorWhere(degenerate, Engine.TensorFullLike(epsilon, tolerance), epsilon), shape);
 
-            // Count marginal neighbors within epsilon (strict inequality per KSG)
-            int nx = 0, ny = 0;
-            for (int j = 0; j < n; j++)
-            {
-                if (j == i) continue;
-                if (Math.Abs(x[j] - x[i]) < epsilon) nx++;
-                if (Math.Abs(y[j] - y[i]) < epsilon) ny++;
-            }
+            // Count marginal neighbors within the radius (strict inequality per KSG)
+            var nx = Engine.ReduceSum(Engine.TensorLessThan(dx, radius), new[] { 1 }, true);
+            var ny = Engine.ReduceSum(Engine.TensorLessThan(dy, radius), new[] { 1 }, true);
+            nx = Engine.TensorWhere(degenerate, Engine.TensorMax(nx, one), nx);
+            ny = Engine.TensorWhere(degenerate, Engine.TensorMax(ny, one), ny);
 
-            sumPsiNx += Digamma(nx + 1);
-            sumPsiNy += Digamma(ny + 1);
+            psiX.Add(Engine.TensorDigamma(Engine.TensorAddScalar(nx, one)));
+            psiY.Add(Engine.TensorDigamma(Engine.TensorAddScalar(ny, one)));
         }
+
+        T sumPsiNx = Engine.TensorSum(Engine.TensorConcatenate(psiX.ToArray(), 0));
+        T sumPsiNy = Engine.TensorSum(Engine.TensorConcatenate(psiY.ToArray(), 0));
 
         // MI = psi(k) - <psi(nx+1) + psi(ny+1)> / N + psi(N)
-        double mi = Digamma(k) - (sumPsiNx + sumPsiNy) / n + Digamma(n);
-        return Math.Max(mi, 0); // MI is non-negative
-    }
-
-    private static double FindKthSmallest(double[] arr, int n, int k)
-    {
-        // Simple partial sort to find k-th smallest (excluding MaxValue sentinels)
-        var sorted = new double[k];
-        for (int i = 0; i < k; i++) sorted[i] = double.MaxValue;
-
-        for (int i = 0; i < n; i++)
-        {
-            if (arr[i] >= sorted[k - 1]) continue;
-            sorted[k - 1] = arr[i];
-
-            // Bubble down to maintain sorted order
-            for (int j = k - 1; j > 0 && sorted[j] < sorted[j - 1]; j--)
-                (sorted[j], sorted[j - 1]) = (sorted[j - 1], sorted[j]);
-        }
-
-        return sorted[k - 1];
+        T mi = NumOps.Add(NumOps.Subtract(NumOps.FromDouble(Digamma(k)),
+            NumOps.Divide(NumOps.Add(sumPsiNx, sumPsiNy), NumOps.FromDouble(n))), NumOps.FromDouble(Digamma(n)));
+        return Math.Max(NumOps.ToDouble(mi), 0); // MI is non-negative
     }
 
     private static double Digamma(int x)

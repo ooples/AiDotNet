@@ -508,9 +508,11 @@ public class AnomalyDetectionDeepMathIntegrationTests
     #region GrubbsTestDetector Tests
 
     [Fact(Timeout = 120000)]
-    public async Task Grubbs_ScoresIdenticalToZScores()
+    public async Task Grubbs_ScoresAreZScoresWithSampleStd()
     {
-        // G = |x-mean|/std, same formula as Z-score
+        // Grubbs (1950) / NIST e-Handbook 1.3.5.17.1: G = |x - mean| / s with s the SAMPLE std (n - 1).
+        // The Z-score detector divides by the population std sigma = s sqrt((n - 1) / n), so
+        // G = Z * sqrt((n - 1) / n).
         var data = ToMatrix1D([1, 3, 5, 7, 9]);
 
         var grubbs = new GrubbsTestDetector<double>(contamination: 0.3);
@@ -521,20 +523,21 @@ public class AnomalyDetectionDeepMathIntegrationTests
         zscore.Fit(data);
         var zScores = zscore.ScoreAnomalies(data);
 
+        double bessel = Math.Sqrt(4.0 / 5.0);
         for (int i = 0; i < 5; i++)
-            Assert.Equal(gScores[i], zScores[i], Tolerance);
+            Assert.Equal(zScores[i] * bessel, gScores[i], Tolerance);
     }
 
     [Fact(Timeout = 120000)]
     public async Task Grubbs_HandCalculated_MatchesFormula()
     {
-        // Data: [2,4,6], mean=4, pop_std=sqrt(8/3)
+        // Data: [2,4,6], mean=4, sample std s = sqrt(8 / 2) = 2 (Grubbs 1950 uses the n - 1 divisor)
         var data = ToMatrix1D([2, 4, 6]);
         var detector = new GrubbsTestDetector<double>(contamination: 0.4);
         detector.Fit(data);
 
         var scores = detector.ScoreAnomalies(data);
-        double std = Math.Sqrt(8.0 / 3.0);
+        double std = 2.0;
 
         Assert.Equal(2.0 / std, scores[0], Tolerance);
         Assert.Equal(0.0, scores[1], Tolerance);
@@ -562,7 +565,7 @@ public class AnomalyDetectionDeepMathIntegrationTests
         detector.Fit(data);
 
         var scores = detector.ScoreAnomalies(data);
-        double std = Math.Sqrt(8.0 / 3.0);
+        double std = 2.0; // sample std of [1, 3, 5]
 
         Assert.Equal(2.0 / std, scores[0], Tolerance);
     }
@@ -592,7 +595,7 @@ public class AnomalyDetectionDeepMathIntegrationTests
     }
 
     [Fact(Timeout = 120000)]
-    public async Task ZScore_And_Grubbs_ProduceSameScores()
+    public async Task ZScore_And_Grubbs_DifferByBesselFactor()
     {
         var data = ToMatrix1D([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
 
@@ -604,8 +607,10 @@ public class AnomalyDetectionDeepMathIntegrationTests
         gDet.Fit(data);
         var gScores = gDet.ScoreAnomalies(data);
 
+        // Grubbs divides by the sample std, the Z-score by the population std: G = Z * sqrt((n - 1) / n)
+        double bessel = Math.Sqrt(9.0 / 10.0);
         for (int i = 0; i < 10; i++)
-            Assert.Equal(zScores[i], gScores[i], Tolerance);
+            Assert.Equal(zScores[i] * bessel, gScores[i], Tolerance);
     }
 
     [Fact(Timeout = 120000)]

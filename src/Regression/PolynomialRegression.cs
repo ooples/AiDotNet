@@ -113,22 +113,7 @@ public partial class PolynomialRegression<T> : RegressionBase<T>
     /// </remarks>
     private Matrix<T> CreatePolynomialFeatures(Matrix<T> x)
     {
-        var rows = x.Rows;
-        var cols = x.Columns * _polyOptions.Degree;
-        var polyX = new Matrix<T>(rows, cols);
-
-        for (int i = 0; i < rows; i++)
-        {
-            for (int j = 0; j < x.Columns; j++)
-            {
-                for (int d = 0; d < _polyOptions.Degree; d++)
-                {
-                    polyX[i, j * _polyOptions.Degree + d] = NumOps.Power(x[i, j], NumOps.FromDouble(d + 1));
-                }
-            }
-        }
-
-        return polyX;
+        return RegressionEngineOps2.PolynomialExpand(x, _polyOptions.Degree);
     }
 
     /// <summary>

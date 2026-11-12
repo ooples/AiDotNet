@@ -65,9 +65,7 @@ public partial class PchipInterpolation<T> : IInterpolation<T>
         _x = x;
         _y = y;
         _numOps = MathHelper.GetNumericOperations<T>();
-        _slopes = new Vector<T>(x.Length);
-
-        CalculateSlopes();
+        _slopes = CalculateSlopes();
     }
 
     /// <summary>
@@ -112,110 +110,103 @@ public partial class PchipInterpolation<T> : IInterpolation<T>
     }
 
     /// <summary>
-    /// Calculates the slopes at each data point to ensure a smooth, shape-preserving curve.
+    /// Calculates the derivative at each data point the way Fritsch and Butland (1984) do, as SciPy's
+    /// <c>PchipInterpolator</c> does.
     /// </summary>
     /// <remarks>
     /// <para>
     /// <b>For Beginners:</b> This method determines how steep the curve should be at each data point.
     /// </para>
     /// <para>
-    /// The slopes are calculated in two steps:
-    /// 1. Initial calculation: For points in the middle, it uses a weighted average of the slopes
-    ///    of the segments on either side. For endpoints, it uses the slope of the adjacent segment.
-    /// 2. Adjustment for monotonicity: The slopes are adjusted to ensure the curve doesn't create
-    ///    artificial bumps or wiggles between data points.
-    /// </para>
-    /// <para>
-    /// This is what makes PCHIP special - it preserves the shape of your data by ensuring
-    /// that if your data is increasing between two points, the curve will only increase (not wiggle up and down).
+    /// With <c>h_k</c> the interval widths and <c>m_k</c> the secant slopes, an interior point whose neighbouring
+    /// secants have the same sign gets the weighted harmonic mean
+    /// <c>(w1 + w2) / (w1 / m_(k-1) + w2 / m_k)</c>, where <c>w1 = 2 h_k + h_(k-1)</c> and <c>w2 = h_k + 2 h_(k-1)</c>.
+    /// A point where the secants change sign, or either is zero, is a local extremum and gets slope 0. Each end uses
+    /// the one-sided three-point estimate, set to 0 when its sign disagrees with the first (last) secant and limited
+    /// to three times that secant when the data turns there. These slopes keep every segment monotone without a
+    /// separate limiting pass. Two points give a straight line.
     /// </para>
     /// </remarks>
-    private void CalculateSlopes()
+    private Vector<T> CalculateSlopes()
     {
+        var engine = AiDotNetEngine.Current;
         int n = _x.Length;
+        Tensor<T> xs = _x.AsTensor();
+        Tensor<T> ys = _y.AsTensor();
 
-        for (int i = 0; i < n - 1; i++)
+        Tensor<T> widths = engine.TensorSubtract(Slice(xs, 1, n - 1), Slice(xs, 0, n - 1));
+        Tensor<T> secants = engine.TensorDivide(engine.TensorSubtract(Slice(ys, 1, n - 1), Slice(ys, 0, n - 1)), widths);
+        if (n == 2)
         {
-            T dx = _numOps.Subtract(_x[i + 1], _x[i]);
-            T dy = _numOps.Subtract(_y[i + 1], _y[i]);
-            T slope = _numOps.Divide(dy, dx);
-
-            if (i == 0)
-            {
-                _slopes[i] = slope;
-            }
-            else if (i == n - 2)
-            {
-                _slopes[n - 1] = slope;
-            }
-            else
-            {
-                T dx_prev = _numOps.Subtract(_x[i], _x[i - 1]);
-                T dy_prev = _numOps.Subtract(_y[i], _y[i - 1]);
-                T slope_prev = _numOps.Divide(dy_prev, dx_prev);
-
-                _slopes[i] = WeightedHarmonicMean(slope_prev, slope);
-            }
+            return engine.TensorConcatenate(new[] { secants, secants }, 0).ToVector();
         }
 
-        // Adjust slopes to ensure monotonicity
-        for (int i = 0; i < n - 1; i++)
+        Tensor<T> left = Slice(secants, 0, n - 2);
+        Tensor<T> right = Slice(secants, 1, n - 2);
+        Tensor<T> hLeft = Slice(widths, 0, n - 2);
+        Tensor<T> hRight = Slice(widths, 1, n - 2);
+        Tensor<T> w1 = engine.TensorAdd(engine.TensorMultiplyScalar(hRight, _numOps.FromDouble(2)), hLeft);
+        Tensor<T> w2 = engine.TensorAdd(hRight, engine.TensorMultiplyScalar(hLeft, _numOps.FromDouble(2)));
+        // Same-sign, nonzero neighbours keep the mean; a sign change or a flat neighbour is an extremum with slope 0.
+        // The signs are compared separately ((l > 0 and r > 0) or (l < 0 and r < 0)), so a secant product cannot
+        // overflow or underflow. The 0/1 indicator products below never leave {0, 1}.
+        Tensor<T> bothPositive = engine.TensorMultiply(
+            engine.TensorGreaterThan(left, _numOps.Zero), engine.TensorGreaterThan(right, _numOps.Zero));
+        Tensor<T> bothNegative = engine.TensorMultiply(
+            engine.TensorLessThan(left, _numOps.Zero), engine.TensorLessThan(right, _numOps.Zero));
+        Tensor<T> sameSign = engine.TensorAdd(bothPositive, bothNegative);
+
+        // Weighted harmonic mean (w1 + w2) / (w1 / l + w2 / r), evaluated with normalized weights
+        // a = w1 / (w1 + w2), b = w2 / (w1 + w2) and secants scaled by s = max(|l|, |r|):
+        // s / (a / (l / s) + b / (r / s)). The scaled secants lie in [-1, 1], so the divisions cannot overflow for
+        // representable slopes. Masked-out secants are replaced by 1 first (a decimal division by zero throws).
+        Tensor<T> ones = engine.TensorOnesLike(left);
+        Tensor<T> safeLeft = engine.TensorWhere(sameSign, left, ones);
+        Tensor<T> safeRight = engine.TensorWhere(sameSign, right, ones);
+        Tensor<T> scale = engine.TensorMax(engine.TensorAbs(safeLeft), engine.TensorAbs(safeRight));
+        Tensor<T> totalWeight = engine.TensorAdd(w1, w2);
+        Tensor<T> weightLeft = engine.TensorDivide(w1, totalWeight);
+        Tensor<T> weightRight = engine.TensorDivide(w2, totalWeight);
+        Tensor<T> interior = engine.TensorDivide(
+            scale,
+            engine.TensorAdd(
+                engine.TensorDivide(weightLeft, engine.TensorDivide(safeLeft, scale)),
+                engine.TensorDivide(weightRight, engine.TensorDivide(safeRight, scale))));
+        interior = engine.TensorWhere(sameSign, interior, engine.TensorZerosLike(interior));
+
+        var slopes = new[]
         {
-            T dx = _numOps.Subtract(_x[i + 1], _x[i]);
-            T dy = _numOps.Subtract(_y[i + 1], _y[i]);
-            T slope = _numOps.Divide(dy, dx);
-
-            if (_numOps.Equals(slope, _numOps.Zero))
-            {
-                _slopes[i] = _numOps.Zero;
-                _slopes[i + 1] = _numOps.Zero;
-            }
-            else
-            {
-                T alpha = _numOps.Divide(_slopes[i], slope);
-                T beta = _numOps.Divide(_slopes[i + 1], slope);
-
-                if (_numOps.GreaterThan(_numOps.Add(_numOps.Power(alpha, _numOps.FromDouble(2)), _numOps.Power(beta, _numOps.FromDouble(2))), _numOps.FromDouble(9)))
-                {
-                    T tau = _numOps.Divide(_numOps.FromDouble(3), _numOps.Sqrt(_numOps.Add(_numOps.Power(alpha, _numOps.FromDouble(2)), _numOps.Power(beta, _numOps.FromDouble(2)))));
-                    _slopes[i] = _numOps.Multiply(tau, _numOps.Multiply(alpha, slope));
-                    _slopes[i + 1] = _numOps.Multiply(tau, _numOps.Multiply(beta, slope));
-                }
-            }
-        }
+            Tensor<T>.FromScalar(EndSlope(widths[0], widths[1], secants[0], secants[1])),
+            interior,
+            Tensor<T>.FromScalar(EndSlope(widths[n - 2], widths[n - 3], secants[n - 2], secants[n - 3]))
+        };
+        return engine.TensorConcatenate(slopes, 0).ToVector();
     }
 
     /// <summary>
-    /// Calculates a weighted harmonic mean of two values.
+    /// The one-sided three-point derivative at an end point, limited so the end segment stays monotone.
     /// </summary>
-    /// <param name="a">The first value.</param>
-    /// <param name="b">The second value.</param>
-    /// <returns>The weighted harmonic mean.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> This method combines two slope values in a special way that gives
-    /// more importance to the smaller value.
-    /// </para>
-    /// <para>
-    /// A harmonic mean is a type of average that works well when averaging rates or slopes.
-    /// The "weighted" part means that each value's importance in the calculation depends on
-    /// the size of the other value.
-    /// </para>
-    /// <para>
-    /// This helps create a smoother curve by preventing the slope at a point from being
-    /// too influenced by a very steep segment nearby.
-    /// </para>
-    /// </remarks>
-    private T WeightedHarmonicMean(T a, T b)
+    /// <param name="h0">The width of the end interval.</param>
+    /// <param name="h1">The width of the interval next to it.</param>
+    /// <param name="m0">The secant slope of the end interval.</param>
+    /// <param name="m1">The secant slope of the interval next to it.</param>
+    private T EndSlope(T h0, T h1, T m0, T m1)
     {
-        if (_numOps.Equals(a, _numOps.Zero) || _numOps.Equals(b, _numOps.Zero))
+        T two = _numOps.FromDouble(2);
+        T three = _numOps.FromDouble(3);
+        T d = _numOps.Divide(
+            _numOps.Subtract(_numOps.Multiply(_numOps.Add(_numOps.Multiply(two, h0), h1), m0), _numOps.Multiply(h0, m1)),
+            _numOps.Add(h0, h1));
+
+        if (!_numOps.Equals(_numOps.SignOrZero(d), _numOps.SignOrZero(m0)))
+        {
             return _numOps.Zero;
+        }
 
-        T w1 = _numOps.Abs(b);
-        T w2 = _numOps.Abs(a);
-
-        return _numOps.Divide(_numOps.Add(_numOps.Multiply(w1, a), _numOps.Multiply(w2, b)),
-                               _numOps.Add(w1, w2));
+        bool turns = !_numOps.Equals(_numOps.SignOrZero(m0), _numOps.SignOrZero(m1));
+        return turns && _numOps.GreaterThan(_numOps.Abs(d), _numOps.Multiply(three, _numOps.Abs(m0)))
+            ? _numOps.Multiply(three, m0)
+            : d;
     }
 
     /// <summary>
@@ -247,12 +238,14 @@ public partial class PchipInterpolation<T> : IInterpolation<T>
     /// </remarks>
     private int FindInterval(T x)
     {
-        for (int i = 0; i < _x.Length - 1; i++)
-        {
-            if (_numOps.LessThanOrEquals(x, _x[i + 1]))
-                return i;
-        }
+        return InterpolationSearch.FirstSegmentReaching(_x, x, 0, _x.Length - 2);
+    }
 
-        return _x.Length - 2;
+    /// <summary>
+    /// Returns <paramref name="length"/> consecutive elements of a vector tensor starting at <paramref name="start"/>.
+    /// </summary>
+    private static Tensor<T> Slice(Tensor<T> values, int start, int length)
+    {
+        return AiDotNetEngine.Current.TensorSlice(values, new[] { start }, new[] { length });
     }
 }

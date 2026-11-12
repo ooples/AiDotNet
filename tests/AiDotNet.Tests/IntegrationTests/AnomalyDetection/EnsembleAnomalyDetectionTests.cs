@@ -344,4 +344,50 @@ public class EnsembleAnomalyDetectionTests
     }
 
     #endregion
+
+    #region LSCP Reference Tests (Zhao et al. 2019, PyOD lscp.py)
+
+    [Fact(Timeout = 120000)]
+    public async Task LSCP_CompetentDetectorsAreTheMostPopulatedHistogramBin()
+    {
+        // Row 1: correlations .1, .2, .25, .9 with min(10, 4) = 4 bins over [.1, .9]: edges .1, .3, .5, .7, .9;
+        // counts 3, 0, 0, 1, so the first bin wins and the detectors with .1 <= r <= .3 are competent.
+        // Row 2: .5, .5 is flat, so the range is [0, 1] with 2 bins (edges 0, .5, 1); both fall in the last
+        // bin (numpy closes the last bin) and both are competent.
+        // Row 3: 0, 1 with edges 0, .5, 1: one per bin, the tie goes to the last bin, only r = 1 is competent.
+        var detector = new LSCPDetector<double>(nEstimators: 4);
+        var correlations = new AiDotNet.Tensors.LinearAlgebra.Tensor<double>(
+            new[] { 0.1, 0.2, 0.25, 0.9 }, new[] { 1, 4 });
+        Assert.Equal(new[] { 1.0, 1.0, 1.0, 0.0 }, detector.CompetentDetectors(correlations).ToArray());
+
+        var flat = new AiDotNet.Tensors.LinearAlgebra.Tensor<double>(new[] { 0.5, 0.5, 0.0, 1.0 }, new[] { 2, 2 });
+        Assert.Equal(new[] { 1.0, 1.0, 0.0, 1.0 }, detector.CompetentDetectors(flat).ToArray());
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task LSCP_LocalRegionIsTheConsistentNearestNeighbours()
+    {
+        // One feature, so every one of the 20 iterations uses all features and finds the same 3 nearest
+        // training rows; each is counted 20 > 10 times and forms the region. Query .1 against 0..9: rows 0,
+        // 1, 2. Query .5: rows 0 and 1 tie at .5, then row 2 at 1.5: rows 0, 1, 2. Query 8.8: rows 9, 8, 7.
+        var training = new Matrix<double>(10, 1);
+        for (int i = 0; i < 10; i++)
+        {
+            training[i, 0] = i;
+        }
+
+        var query = new Matrix<double>(new double[,] { { 0.1 }, { 0.5 }, { 8.8 } });
+        var detector = new LSCPDetector<double>(localRegionSize: 3);
+        var region = detector.LocalRegions(query, training).ToArray();
+
+        var expected = new double[30];
+        foreach (var (row, column) in new[] { (0, 0), (0, 1), (0, 2), (1, 0), (1, 1), (1, 2), (2, 7), (2, 8), (2, 9) })
+        {
+            expected[row * 10 + column] = 1.0;
+        }
+
+        Assert.Equal(expected, region);
+    }
+
+    #endregion
 }

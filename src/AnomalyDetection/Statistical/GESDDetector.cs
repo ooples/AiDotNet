@@ -65,6 +65,9 @@ public partial class GESDDetector<T> : AnomalyDetectorBase<T>
     /// </summary>
     public int MaxOutliersCount => _maxOutliers;
 
+    /// <summary>The Rosner critical values lambda_1..lambda_r (set by Fit).</summary>
+    internal Vector<T>? CriticalValues => _criticalValues;
+
     /// <summary>
     /// Creates a new GESD anomaly detector.
     /// </summary>
@@ -115,25 +118,26 @@ public partial class GESDDetector<T> : AnomalyDetectorBase<T>
                 nameof(X));
         }
 
-        _nFeatures = X.Columns;
-        _means = new Vector<T>(_nFeatures);
-        _stds = new Vector<T>(_nFeatures);
-
-        for (int j = 0; j < _nFeatures; j++)
+        // lambda_r needs t on n - r - 1 >= 1 degrees of freedom, so two samples must remain after r removals
+        if (n - _maxOutliers < 2)
         {
-            var column = X.GetColumn(j);
-            var (mean, std) = StatisticsHelper<T>.CalculateMeanAndStandardDeviation(column);
-            _means[j] = mean;
-            _stds[j] = std;
+            throw new ArgumentException(
+                $"Number of samples ({n}) must exceed maximum outliers ({_maxOutliers}) by at least two.",
+                nameof(X));
         }
 
-        // Precompute critical values for each iteration
-        _criticalValues = new Vector<T>(_maxOutliers);
+        _nFeatures = X.Columns;
+        // R = max |x - mean| / s with s the sample standard deviation (n - 1 divisor), Rosner (1983)
+        (_means, _stds) = AnomalyTensorOps.ColumnMeanStd(X, 1);
+
+        // Precompute critical values for each iteration, each lambda_i converted to T once
+        var criticalValues = new Vector<T>(_maxOutliers);
         for (int i = 0; i < _maxOutliers; i++)
         {
-            int currentN = n - i;
-            _criticalValues[i] = NumOps.FromDouble(ComputeLambda(currentN, _alpha));
+            criticalValues[i] = NumOps.FromDouble(ComputeLambda(n, i + 1, _alpha));
         }
+
+        _criticalValues = criticalValues;
 
         // Calculate scores for training data to set threshold
         var trainingScores = ScoreAnomaliesInternal(X);
@@ -167,99 +171,18 @@ public partial class GESDDetector<T> : AnomalyDetectorBase<T>
                 nameof(X));
         }
 
-        var scores = new Vector<T>(X.Rows);
-
-        for (int i = 0; i < X.Rows; i++)
-        {
-            // Compute GESD statistic: max standardized residual across features
-            T maxR = NumOps.Zero;
-
-            for (int j = 0; j < X.Columns; j++)
-            {
-                // Skip features with zero std
-                if (NumOps.Equals(stds[j], NumOps.Zero))
-                {
-                    continue;
-                }
-
-                // R = |x - mean| / std
-                T deviation = NumOps.Abs(NumOps.Subtract(X[i, j], means[j]));
-                T r = NumOps.Divide(deviation, stds[j]);
-
-                if (NumOps.GreaterThan(r, maxR))
-                {
-                    maxR = r;
-                }
-            }
-
-            scores[i] = maxR;
-        }
-
-        return scores;
+        // GESD statistic: max standardized residual R = |x - mean| / std across features (zero-std features skipped)
+        return AnomalyTensorOps.MaxStandardizedDeviation(X, means, stds);
     }
 
-    /// <summary>
-    /// Computes the critical value lambda for the GESD test.
-    /// </summary>
-    /// <param name="n">Current sample size.</param>
-    /// <param name="alpha">Significance level.</param>
-    /// <returns>Critical value.</returns>
-    private double ComputeLambda(int n, double alpha)
+    private double ComputeLambda(int n, int i, double alpha)
     {
-        // Rosner 1983 GESD critical value formula:
-        // lambda = n * t_{p, n-2} / sqrt((n - 1 + t^2) * (n + 1))
-        // where p = 1 - alpha / (2(n + 1))
-        // Note: n here is the current sample size (original n minus outliers removed so far)
-
-        if (n < 3) return double.MaxValue; // Cannot compute for very small samples
-
-        double p = 1 - alpha / (2.0 * (n + 1));
-        int df = n - 2;
-
-        // Get t-critical value
-        double t = GetTCritical(p, Math.Max(1, df));
-
-        // Compute lambda using correct Rosner formula
-        double lambda = (n * t) / Math.Sqrt((n - 1 + t * t) * (n + 1));
-
-        return lambda;
-    }
-
-    private double GetTCritical(double p, int df)
-    {
-        // Approximation of t-distribution quantile
-        double z = GetZCritical(1 - p);
-
-        if (df >= 30)
-        {
-            return z;
-        }
-
-        // Cornish-Fisher expansion for small df
-        double g1 = 1.0 / df;
-        double g2 = 1.0 / (df * df);
-
-        return z + (z * z * z - 3 * z) * g1 / 4 +
-               (z * z * z * z * z - 10 * z * z * z + 15 * z) * g2 / 96;
-    }
-
-    private double GetZCritical(double alpha)
-    {
-        // Approximation of inverse standard normal CDF
-        double p = alpha;
-        if (p > 0.5) p = 1 - p;
-        if (p <= 0) p = 1e-10;
-
-        double t = Math.Sqrt(-2 * Math.Log(p));
-        double c0 = 2.515517;
-        double c1 = 0.802853;
-        double c2 = 0.010328;
-        double d1 = 1.432788;
-        double d2 = 0.189269;
-        double d3 = 0.001308;
-
-        double z = t - (c0 + c1 * t + c2 * t * t) / (1 + d1 * t + d2 * t * t + d3 * t * t * t);
-
-        return alpha > 0.5 ? -z : z;
+        // Rosner (1983) GESD critical value for the i-th largest statistic (i = 1..r) of n observations:
+        // lambda_i = (n - i) t_{p, n-i-1} / sqrt((n - i - 1 + t^2)(n - i + 1)), p = 1 - alpha / (2(n - i + 1))
+        // Fit guarantees i <= n - 2, so df >= 1
+        int df = n - i - 1;
+        double p = 1 - alpha / (2.0 * (n - i + 1));
+        double t = AnomalyTensorOps.StudentTQuantile(p, df);
+        return (n - i) * t / Math.Sqrt((n - i - 1 + t * t) * (n - i + 1));
     }
 }

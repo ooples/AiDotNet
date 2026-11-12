@@ -142,52 +142,24 @@ public partial class MaximumDetector<T> : AnomalyDetectorBase<T>
         }
 
         // Take maximum of normalized scores
-        var maxScores = new Vector<T>(X.Rows);
-
-        for (int i = 0; i < X.Rows; i++)
-        {
-            T maxVal = NumOps.MinValue;
-            foreach (var scores in allScores)
-            {
-                if (NumOps.GreaterThan(scores[i], maxVal))
-                {
-                    maxVal = scores[i];
-                }
-            }
-            maxScores[i] = maxVal;
-        }
-
-        return maxScores;
+        return AnomalyTensorOps.ElementwiseMaxIgnoringNaN(allScores, X.Rows);
     }
 
     private (T Min, T Max) ScoreRange(Vector<T> scores)
     {
-        T min = NumOps.MaxValue;
-        T max = NumOps.MinValue;
-        for (int i = 0; i < scores.Length; i++)
-        {
-            if (NumOps.LessThan(scores[i], min)) min = scores[i];
-            if (NumOps.GreaterThan(scores[i], max)) max = scores[i];
-        }
-        return (min, max);
+        return AnomalyTensorOps.MinMaxIgnoringNaN(scores);
     }
 
     private Vector<T> NormalizeScores(Vector<T> scores, T min, T max)
     {
-        int n = scores.Length;
-        var result = new Vector<T>(n);
-
         T range = NumOps.Subtract(max, min);
         T eps = NumOps.FromDouble(1e-10);
 
-        if (NumOps.GreaterThan(range, eps))
+        if (!NumOps.GreaterThan(range, eps) || scores.Length == 0)
         {
-            for (int i = 0; i < n; i++)
-            {
-                result[i] = NumOps.Divide(NumOps.Subtract(scores[i], min), range);
-            }
+            return new Vector<T>(scores.Length);
         }
 
-        return result;
+        return Engine.TensorDivideScalar(Engine.TensorSubtractScalar(scores.AsTensor(), min), range).ToVector();
     }
 }
