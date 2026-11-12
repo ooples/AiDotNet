@@ -304,44 +304,16 @@ public partial class TabTransformerNetwork<T> : TabularNeuralNetworkBase<T>
         var importance = new Dictionary<string, T>();
         int numFeatures = Architecture.CalculatedInputSize;
 
-        // For TabTransformer, importance is derived from attention patterns
-        // Initialize with uniform weights as a baseline
-        var uniformValue = NumOps.FromDouble(1.0 / numFeatures);
+        // Each attention layer gives every feature an equal contribution of one; the sum is normalized by the
+        // number of attention layers. Without attention layers the uniform 1 / numFeatures baseline stands.
+        int attentionLayerCount = Layers.Count(layer => layer is MultiHeadAttentionLayer<T>);
+        var value = attentionLayerCount > 0
+            ? NumOps.Divide(NumOps.FromDouble(attentionLayerCount), NumOps.FromDouble(attentionLayerCount))
+            : NumOps.FromDouble(1.0 / numFeatures);
+
         for (int f = 0; f < numFeatures; f++)
         {
-            importance[$"feature_{f}"] = uniformValue;
-        }
-
-        // Aggregate attention weights from MultiHeadAttentionLayers
-        int attentionLayerCount = 0;
-        var featureScores = new T[numFeatures];
-        for (int f = 0; f < numFeatures; f++)
-        {
-            featureScores[f] = NumOps.Zero;
-        }
-
-        foreach (var layer in Layers)
-        {
-            if (layer is MultiHeadAttentionLayer<T> attentionLayer)
-            {
-                // For transformer models, attention provides indirect feature importance
-                // Each feature gets equal contribution from attention layer
-                for (int f = 0; f < numFeatures; f++)
-                {
-                    featureScores[f] = NumOps.Add(featureScores[f], NumOps.One);
-                }
-                attentionLayerCount++;
-            }
-        }
-
-        // Normalize by number of attention layers
-        if (attentionLayerCount > 0)
-        {
-            var layerCountT = NumOps.FromDouble(attentionLayerCount);
-            for (int f = 0; f < numFeatures; f++)
-            {
-                importance[$"feature_{f}"] = NumOps.Divide(featureScores[f], layerCountT);
-            }
+            importance[$"feature_{f}"] = value;
         }
 
         return importance;

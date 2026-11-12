@@ -168,11 +168,7 @@ public abstract class NODEBase<T> : IParameterSource<T>
             InitializeWeights(_featureSelectionWeights[t]);
 
             // Split thresholds for each depth
-            _splitThresholds[t] = new Tensor<T>(new[] { Options.TreeDepth });
-            for (int d = 0; d < Options.TreeDepth; d++)
-            {
-                _splitThresholds[t][d] = NumOps.Zero;
-            }
+            _splitThresholds[t] = new Tensor<T>(new[] { Options.TreeDepth });  // zero-initialised
 
             // Leaf values
             _leafValues[t] = new Tensor<T>(new[] { Options.NumLeaves, Options.TreeOutputDimension });
@@ -231,122 +227,52 @@ public abstract class NODEBase<T> : IParameterSource<T>
 
     private Tensor<T> ForwardTree(int treeIdx, Tensor<T> features, int batchSize)
     {
-        // Compute leaf weights for each sample
-        var leafWeights = new Tensor<T>(new[] { batchSize, Options.NumLeaves });
+        int depth = Options.TreeDepth;
+        int numLeaves = Options.NumLeaves;
 
-        // Initialize all samples at root (weight 1.0 for leaf index 0's path)
-        for (int b = 0; b < batchSize; b++)
+        // Soft feature selection: selected[b, d] = sum_f softmax(W[d, :])[f] * x[b, f]
+        var x = TabularMetrics.Flat(features, batchSize * NumFeatures).Reshape(batchSize, NumFeatures);
+        var selection = ComputeSoftmax(_featureSelectionWeights[treeIdx]);
+        var selectedFeature = Engine.TensorMatMul(x, Engine.TensorTranspose(selection));
+
+        // Soft split decision using sigmoid (probability of going right) at every depth
+        var thresholds = _splitThresholds[treeIdx].Reshape(1, depth);
+        var temp = NumOps.FromDouble(Options.Temperature);
+        var scaledDiff = Engine.TensorDivideScalar(Engine.TensorSubtract(selectedFeature, thresholds), temp);
+        var splitProbs = Engine.Sigmoid(scaledDiff);
+        var stayLeftProbs = Engine.ScalarMinusTensor(NumOps.One, splitProbs);
+
+        // goesRight[d, leaf] = (leaf >> (depth - 1 - d)) & 1, computed as floor(leaf / 2^k) mod 2
+        var leafIds = Engine.TensorArange<T>(0, numLeaves).Reshape(1, numLeaves);
+        var pathScale = Engine.TensorExp2(Engine.TensorArange<T>(depth - 1, -1, -1)).Reshape(depth, 1);
+        var quotient = Engine.TensorFloor(Engine.TensorDivide(leafIds, pathScale));
+        var goesRight = Engine.TensorSubtract(
+            quotient, Engine.TensorMultiplyScalar(Engine.TensorFloor(Engine.TensorDivideScalar(quotient, NumOps.FromDouble(2.0))), NumOps.FromDouble(2.0)));
+        var goesLeft = Engine.ScalarMinusTensor(NumOps.One, goesRight);
+
+        // Leaf weight = product over depths of p_d (right) or 1 - p_d (left), multiplied in depth order
+        var leafWeights = Engine.TensorFullLike(new Tensor<T>(new[] { batchSize, numLeaves }), NumOps.One);
+        for (int d = 0; d < depth; d++)
         {
-            // For oblivious trees, compute the leaf index based on all split decisions
-            var splitProbs = new Tensor<T>(new[] { Options.TreeDepth });
-
-            for (int d = 0; d < Options.TreeDepth; d++)
-            {
-                // Compute feature selection (soft attention over features)
-                var selectedFeature = NumOps.Zero;
-                var softmaxWeights = ComputeSoftmax(_featureSelectionWeights[treeIdx], d);
-
-                for (int f = 0; f < NumFeatures; f++)
-                {
-                    var weight = softmaxWeights[f];
-                    var featureVal = features[b * NumFeatures + f];
-                    selectedFeature = NumOps.Add(selectedFeature,
-                        NumOps.Multiply(weight, featureVal));
-                }
-
-                // Soft split decision using sigmoid
-                var threshold = _splitThresholds[treeIdx][d];
-                var diff = NumOps.Subtract(selectedFeature, threshold);
-                var temp = NumOps.FromDouble(Options.Temperature);
-                var scaledDiff = NumOps.Divide(diff, temp);
-
-                // Sigmoid for soft split probability (probability of going right)
-                splitProbs[d] = Sigmoid(scaledDiff);
-            }
-
-            // Compute leaf weights using the product of split probabilities
-            // Each leaf corresponds to a binary path through the tree
-            for (int leaf = 0; leaf < Options.NumLeaves; leaf++)
-            {
-                var weight = NumOps.One;
-
-                for (int d = 0; d < Options.TreeDepth; d++)
-                {
-                    // Check if this leaf's path goes right (1) or left (0) at depth d
-                    bool goesRight = ((leaf >> (Options.TreeDepth - 1 - d)) & 1) == 1;
-
-                    if (goesRight)
-                    {
-                        weight = NumOps.Multiply(weight, splitProbs[d]);
-                    }
-                    else
-                    {
-                        weight = NumOps.Multiply(weight,
-                            NumOps.Subtract(NumOps.One, splitProbs[d]));
-                    }
-                }
-
-                leafWeights[b * Options.NumLeaves + leaf] = weight;
-            }
+            var right = Engine.TensorNarrow(goesRight, 0, d, 1);
+            var left = Engine.TensorNarrow(goesLeft, 0, d, 1);
+            var factor = Engine.TensorAdd(
+                Engine.TensorMultiply(right, Engine.TensorNarrow(splitProbs, 1, d, 1)),
+                Engine.TensorMultiply(left, Engine.TensorNarrow(stayLeftProbs, 1, d, 1)));
+            leafWeights = Engine.TensorMultiply(leafWeights, factor);
         }
 
         // Compute tree output as weighted sum of leaf values
-        var output = new Tensor<T>(new[] { batchSize, Options.TreeOutputDimension });
-
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int d = 0; d < Options.TreeOutputDimension; d++)
-            {
-                var sum = NumOps.Zero;
-
-                for (int leaf = 0; leaf < Options.NumLeaves; leaf++)
-                {
-                    var weight = leafWeights[b * Options.NumLeaves + leaf];
-                    var value = _leafValues[treeIdx][leaf * Options.TreeOutputDimension + d];
-                    sum = NumOps.Add(sum, NumOps.Multiply(weight, value));
-                }
-
-                output[b * Options.TreeOutputDimension + d] = sum;
-            }
-        }
-
-        return output;
+        return Engine.TensorMatMul(
+            leafWeights, _leafValues[treeIdx].Reshape(numLeaves, Options.TreeOutputDimension));
     }
 
-    private Vector<T> ComputeSoftmax(Tensor<T> weights, int depthIdx)
+    /// <summary>
+    /// Softmax of each depth's feature-selection logits: [tree_depth, num_features].
+    /// </summary>
+    private Tensor<T> ComputeSoftmax(Tensor<T> weights)
     {
-        var result = new Vector<T>(NumFeatures);
-        var maxVal = weights[depthIdx * NumFeatures + 0];
-
-        for (int f = 1; f < NumFeatures; f++)
-        {
-            var val = weights[depthIdx * NumFeatures + f];
-            if (NumOps.Compare(val, maxVal) > 0)
-                maxVal = val;
-        }
-
-        var sumExp = NumOps.Zero;
-        for (int f = 0; f < NumFeatures; f++)
-        {
-            var val = weights[depthIdx * NumFeatures + f];
-            var exp = NumOps.Exp(NumOps.Subtract(val, maxVal));
-            result[f] = exp;
-            sumExp = NumOps.Add(sumExp, exp);
-        }
-
-        for (int f = 0; f < NumFeatures; f++)
-        {
-            result[f] = NumOps.Divide(result[f], sumExp);
-        }
-
-        return result;
-    }
-
-    private T Sigmoid(T x)
-    {
-        var negX = NumOps.Negate(x);
-        var expNegX = NumOps.Exp(negX);
-        return NumOps.Divide(NumOps.One, NumOps.Add(NumOps.One, expNegX));
+        return Engine.Softmax(weights.Reshape(Options.TreeDepth, NumFeatures), -1);
     }
 
     /// <summary>
@@ -355,29 +281,17 @@ public abstract class NODEBase<T> : IParameterSource<T>
     /// <returns>Feature importance scores [num_features].</returns>
     public Vector<T> GetFeatureImportance()
     {
-        var importance = new Vector<T>(NumFeatures);
+        var importance = new Tensor<T>(new[] { NumFeatures });
 
         for (int t = 0; t < Options.NumTrees; t++)
         {
-            for (int d = 0; d < Options.TreeDepth; d++)
-            {
-                var softmaxWeights = ComputeSoftmax(_featureSelectionWeights[t], d);
-
-                for (int f = 0; f < NumFeatures; f++)
-                {
-                    importance[f] = NumOps.Add(importance[f], softmaxWeights[f]);
-                }
-            }
+            var softmaxWeights = ComputeSoftmax(_featureSelectionWeights[t]);
+            importance = Engine.TensorAdd(importance, Engine.ReduceSum(softmaxWeights, new[] { 0 }, false));
         }
 
         // Normalize
         var scale = NumOps.FromDouble(1.0 / (Options.NumTrees * Options.TreeDepth));
-        for (int f = 0; f < NumFeatures; f++)
-        {
-            importance[f] = NumOps.Multiply(importance[f], scale);
-        }
-
-        return importance;
+        return Engine.TensorMultiplyScalar(importance, scale).ToVector();
     }
 
     /// <summary>
