@@ -334,6 +334,130 @@ namespace AiDotNet.NeuralNetworks
             return nodes[nodes.Count - 1];
         }
 
+        /// <summary>
+        /// The operation names a SuperNet over <paramref name="searchSpace"/> uses: the search space's, or the
+        /// default five when it lists none.
+        /// </summary>
+        internal static IReadOnlyList<string> OperationNamesOf(SearchSpaceBase<T> searchSpace)
+        {
+            if (searchSpace is null) throw new ArgumentNullException(nameof(searchSpace));
+            return searchSpace.Operations is { Count: > 0 } names ? names.ToArray() : DefaultOperationNames.ToArray();
+        }
+
+        /// <summary>Whether a search-space operation name denotes the zero operation (an absent edge).</summary>
+        internal static bool IsZeroOperationName(string? name)
+        {
+            string normalized = (name ?? string.Empty).Trim().ToLowerInvariant();
+            return normalized == "none" || normalized == "zero";
+        }
+
+        /// <summary>The tape view of one operation weight, for use as a gradient source.</summary>
+        internal Tensor<T> GetWeightTensor(string key) => WeightView(key);
+
+        /// <summary>
+        /// The task loss of the cell under PC-DARTS' partial channel connections (Xu et al. 2020, Sec. 3.2) and
+        /// edge normalization (Sec. 3.3), with the architecture given by <paramref name="alphas"/> and
+        /// <paramref name="betas"/> instead of this network's own alpha, on the active tape.
+        /// </summary>
+        /// <param name="input">The inputs; the last axis holds the features (channels).</param>
+        /// <param name="target">The targets, with the cell output's shape.</param>
+        /// <param name="alphas">The operation logits of every node, [node + 1, operations].</param>
+        /// <param name="betas">The edge logits of every node, [node + 1]; null for no edge normalization.</param>
+        /// <param name="k">The partial-channel factor K.</param>
+        internal Tensor<T> PartialChannelLoss(Tensor<T> input, Tensor<T> target, IReadOnlyList<Tensor<T>> alphas,
+            IReadOnlyList<Tensor<T>>? betas, int k)
+            => _defaultLossFunction.ComputeTapeLoss(PartialChannelForward(ToRows(input, out _), alphas, betas, k),
+                ToRows(target, out _));
+
+        /// <summary>
+        /// The cell's forward pass with partial channel connections: on every edge (i, j) only the first
+        /// C / K features of x_i go through the softmax(alpha_(i,j))-weighted operation mixture, the rest bypass
+        /// it, and the result is channel-shuffled with K groups; node j is the softmax(beta_j)-weighted sum of its
+        /// edges, or their plain sum without edge normalization (PC-DARTS Eq. 2 to 4 and the reference
+        /// implementation's MixedOp and channel_shuffle). The feature axis is this cell's channel axis.
+        /// </summary>
+        internal Tensor<T> PartialChannelForward(Tensor<T> rows, IReadOnlyList<Tensor<T>> alphas,
+            IReadOnlyList<Tensor<T>>? betas, int k)
+        {
+            if (rows is null) throw new ArgumentNullException(nameof(rows));
+            if (alphas is null) throw new ArgumentNullException(nameof(alphas));
+            if (alphas.Count != _numNodes)
+                throw new ArgumentException("There must be one alpha per node.", nameof(alphas));
+            if (betas is not null && betas.Count != _numNodes)
+                throw new ArgumentException("There must be one beta per node.", nameof(betas));
+            if (k < 1) throw new ArgumentOutOfRangeException(nameof(k), k, "K must be at least 1.");
+
+            int batch = rows.Shape[0];
+            int features = rows.Shape[1];
+            int sampled = Math.Max(1, features / k);
+            var nodes = new List<Tensor<T>>(_numNodes + 1) { rows };
+
+            for (int node = 0; node < _numNodes; node++)
+            {
+                var mixture = Engine.Softmax(alphas[node], axis: 1);
+                var edgeWeights = betas is null
+                    ? null
+                    : Engine.TensorSoftmax(Engine.Reshape(betas[node], new[] { node + 1, 1 }), 0);
+                Tensor<T>? output = null;
+                for (int from = 0; from <= node; from++)
+                {
+                    var source = nodes[from];
+                    var active = sampled == features
+                        ? source
+                        : Engine.TensorSlice(source, new[] { 0, 0 }, new[] { batch, sampled });
+                    Tensor<T>? mixed = null;
+                    for (int op = 0; op < _numOperations; op++)
+                    {
+                        // The zero operation takes its share of the softmax and contributes nothing.
+                        if (_operations[op].Kind == OperationKind.Zero) continue;
+
+                        var weight = Engine.TensorTile(
+                            Engine.TensorSlice(mixture, new[] { from, op }, new[] { 1, 1 }), new[] { batch, sampled });
+                        var term = Engine.TensorMultiply(weight, ApplyOperation(active, node, from, op));
+                        mixed = mixed is null ? term : Engine.TensorAdd(mixed, term);
+                    }
+
+                    var edge = mixed ?? new Tensor<T>(new[] { batch, sampled });
+                    if (sampled < features)
+                    {
+                        edge = Engine.TensorConcatenate(new[]
+                        {
+                            edge,
+                            Engine.TensorSlice(source, new[] { 0, sampled }, new[] { batch, features - sampled }),
+                        }, axis: 1);
+                    }
+
+                    edge = ChannelShuffle(edge, k);
+                    if (edgeWeights is not null)
+                    {
+                        edge = Engine.TensorMultiply(Engine.TensorTile(
+                            Engine.TensorSlice(edgeWeights, new[] { from, 0 }, new[] { 1, 1 }), new[] { batch, features }), edge);
+                    }
+
+                    output = output is null ? edge : Engine.TensorAdd(output, edge);
+                }
+
+                nodes.Add(output ?? new Tensor<T>(new[] { batch, features }));
+            }
+
+            return nodes[nodes.Count - 1];
+        }
+
+        /// <summary>
+        /// ShuffleNet's channel shuffle with <paramref name="groups"/> groups on a [batch, channels] tensor:
+        /// reshape to [batch, groups, channels / groups], swap the last two axes, flatten. Channels that do not
+        /// divide into the groups are left in order.
+        /// </summary>
+        private Tensor<T> ChannelShuffle(Tensor<T> x, int groups)
+        {
+            int batch = x.Shape[0];
+            int channels = x.Shape[1];
+            if (groups <= 1 || channels % groups != 0) return x;
+
+            var grouped = Engine.Reshape(x, new[] { batch, groups, channels / groups });
+            return Engine.Reshape(Engine.TensorPermute(grouped, new[] { 0, 2, 1 }), new[] { batch, channels });
+        }
+
         /// <summary>Flattens any input to [batch, features], remembering the caller's shape.</summary>
         private static Tensor<T> ToRows(Tensor<T> input, out int[] originalShape)
         {
