@@ -530,7 +530,7 @@ internal static class LocalObjectiveGradientComputer<T>
                                 double scale = progressive ? m : m * baseWeight;
                                 var scaledBatched = BitConverter.DoubleToInt64Bits(scale) == BitConverter.DoubleToInt64Bits(1.0)
                                     ? batchedLoss
-                                    : engine.TensorMultiplyScalar(batchedLoss, numOps.FromDouble(scale));
+                                    : engine.TensorMultiplyScalar(batchedLoss, MathHelper.GetNumericOperations<T>().FromDouble(scale));
                                 combined = engine.TensorAdd(combined, scaledBatched);
                                 locals = m;
                                 handledByBatchedReadout = true;
