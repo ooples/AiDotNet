@@ -32,7 +32,7 @@ public class AntColonySelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IS
     private readonly double _beta;
     private readonly int? _randomState;
 
-    private double[]? _pheromones;
+    private Vector<T>? _pheromones;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
@@ -40,7 +40,7 @@ public class AntColonySelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IS
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public int NAnts => _nAnts;
     public int NIterations => _nIterations;
-    public double[]? Pheromones => _pheromones;
+    public Vector<T>? Pheromones => _pheromones;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -83,173 +83,94 @@ public class AntColonySelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IS
             throw new ArgumentException("Target length must match rows in data.");
 
         _nInputFeatures = data.Columns;
-        int n = data.Rows;
         int p = data.Columns;
 
         var rand = _randomState.HasValue
             ? RandomHelper.CreateSeededRandom(_randomState.Value)
             : RandomHelper.CreateSecureRandom();
 
-        var X = new double[n, p];
-        var y = new double[n];
-        for (int i = 0; i < n; i++)
-        {
-            y[i] = NumOps.ToDouble(target[i]);
-            for (int j = 0; j < p; j++)
-                X[i, j] = NumOps.ToDouble(data[i, j]);
-        }
-
+        // a subset's fitness is the mean absolute correlation of its features with the target
+        var correlation = FeatureSelectionTensorOps.AbsoluteCorrelation(
+            FilterStatisticTensorOps.AsTensor(data), FilterStatisticTensorOps.AsTensor(target));
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
 
-        // Compute heuristic information (feature quality)
-        var heuristic = new double[p];
-        for (int j = 0; j < p; j++)
-        {
-            double corr = ComputeCorrelation(X, y, j, n);
-            heuristic[j] = Math.Abs(corr) + 0.01;
-        }
+        // heuristic information (feature quality) and its weight heuristic^beta
+        T exponentAlpha = NumOps.FromDouble(_alpha);
+        var heuristicWeight = Engine.TensorPow(Engine.TensorAddScalar(correlation, NumOps.FromDouble(0.01)), NumOps.FromDouble(_beta));
 
         // Initialize pheromones
-        _pheromones = new double[p];
-        for (int j = 0; j < p; j++)
-            _pheromones[j] = 1.0;
-
-        var bestSolution = new bool[p];
-        double bestFitness = double.MinValue;
+        var pheromones = FilterStatisticTensorOps.FilledLike(correlation, NumOps.One);
+        var bestSolution = new Tensor<T>(new[] { p });
+        var bestFitness = new Tensor<T>(new[] { NumOps.MinValue }, new[] { 1 });
+        T keep = NumOps.FromDouble(1 - _evaporationRate);
 
         // ACO iterations
         for (int iter = 0; iter < _nIterations; iter++)
         {
-            var solutions = new bool[_nAnts][];
-            var fitness = new double[_nAnts];
-
             // Each ant constructs a solution
+            var weights = Engine.TensorMultiply(Engine.TensorPow(pheromones, exponentAlpha), heuristicWeight);
+            var solutions = new Tensor<T>[_nAnts];
             for (int ant = 0; ant < _nAnts; ant++)
-            {
-                solutions[ant] = ConstructSolution(rand, _pheromones, heuristic, numToSelect, p);
-                fitness[ant] = EvaluateFitness(X, y, solutions[ant], n, p);
+                solutions[ant] = ConstructSolution(rand, weights, numToSelect, p);
+            var masks = Engine.TensorStack(solutions, 0);
+            var fitness = FeatureSelectionTensorOps.MeanOverMask(masks, correlation);
 
-                if (fitness[ant] > bestFitness)
-                {
-                    bestFitness = fitness[ant];
-                    Array.Copy(solutions[ant], bestSolution, p);
-                }
+            // the first ant with this iteration's best fitness replaces the best solution when it improves on it
+            int leader = FilterStatisticTensorOps.FirstArgMax(fitness);
+            var leaderFitness = FeatureSelectionTensorOps.Entries(fitness, new[] { leader });
+            if (Engine.TensorGreaterThan(leaderFitness, bestFitness).Cast<int>().ToArray()[0] == 1)
+            {
+                bestFitness = leaderFitness;
+                bestSolution = solutions[leader];
             }
 
-            // Evaporate pheromones
-            for (int j = 0; j < p; j++)
-                _pheromones[j] *= (1 - _evaporationRate);
-
-            // Deposit pheromones
-            for (int ant = 0; ant < _nAnts; ant++)
-            {
-                double deposit = fitness[ant];
-                for (int j = 0; j < p; j++)
-                {
-                    if (solutions[ant][j])
-                        _pheromones[j] += deposit;
-                }
-            }
-
-            // Reinforce best solution
-            for (int j = 0; j < p; j++)
-            {
-                if (bestSolution[j])
-                    _pheromones[j] += bestFitness;
-            }
+            // Evaporate pheromones, deposit each ant's fitness on its features, then reinforce the best solution
+            pheromones = Engine.TensorMultiplyScalar(pheromones, keep);
+            pheromones = Engine.TensorAdd(pheromones, Engine.Reshape(
+                Engine.TensorMatMul(Engine.TensorTranspose(masks), Engine.Reshape(fitness, new[] { _nAnts, 1 })), new[] { p }));
+            pheromones = Engine.TensorAdd(pheromones, Engine.TensorMultiply(bestSolution, Engine.TensorBroadcastTo(bestFitness, new[] { p })));
         }
 
-        _selectedIndices = Enumerable.Range(0, p)
-            .Where(j => bestSolution[j])
-            .OrderBy(x => x)
-            .ToArray();
+        _selectedIndices = FilterStatisticTensorOps.MaskPositions(bestSolution);
 
-        // Normalize pheromones
-        double maxPheromone = _pheromones.Max();
-        if (maxPheromone > 0)
-        {
-            for (int j = 0; j < p; j++)
-                _pheromones[j] /= maxPheromone;
-        }
+        // Normalize by the largest value when it is positive
+        var largest = FeatureSelectionTensorOps.ColumnMax(Engine.Reshape(pheromones, new[] { p, 1 }));
+        if (Engine.TensorGreaterThan(largest, NumOps.Zero).Cast<int>().ToArray()[0] == 1)
+            pheromones = Engine.TensorDivide(pheromones, Engine.TensorBroadcastTo(largest, new[] { p }));
 
+        _pheromones = pheromones.ToVector();
         IsFitted = true;
     }
 
-    private bool[] ConstructSolution(Random rand, double[] pheromones, double[] heuristic, int numToSelect, int p)
+    // One ant: numToSelect roulette-wheel picks without replacement, each with probability proportional to the
+    // weight pheromone^alpha * heuristic^beta among the features still available (one uniform draw per pick).
+    private Tensor<T> ConstructSolution(Random rand, Tensor<T> weights, int numToSelect, int p)
     {
-        var solution = new bool[p];
-        var available = new HashSet<int>(Enumerable.Range(0, p));
+        var draws = new double[numToSelect];
+        for (int k = 0; k < numToSelect; k++)
+            draws[k] = rand.NextDouble();
+        var uniforms = new Tensor<double>(draws, new[] { numToSelect }).Cast<T>().ToArray();
 
-        for (int k = 0; k < numToSelect && available.Count > 0; k++)
+        T one = NumOps.One;
+        T zero = NumOps.Zero;
+        var available = FilterStatisticTensorOps.FilledLike(weights, one);
+        foreach (T u in uniforms)
         {
-            // Compute probabilities
-            double totalProb = 0;
-            foreach (int j in available)
-            {
-                double prob = Math.Pow(pheromones[j], _alpha) * Math.Pow(heuristic[j], _beta);
-                totalProb += prob;
-            }
+            var candidates = Engine.TensorMultiply(weights, available);
+            var cumulative = Engine.TensorCumSum(candidates, 0);
+            var threshold = Engine.TensorMultiplyScalar(Engine.ReduceSum(candidates, new[] { 0 }, true), u);
+            var reached = Engine.TensorMultiply(
+                FilterStatisticTensorOps.OneMinus(Engine.TensorLessThan(cumulative, Engine.TensorBroadcastTo(threshold, new[] { p }))),
+                available);
 
-            // Roulette wheel selection
-            double r = rand.NextDouble() * totalProb;
-            double cumulative = 0;
-            int selected = available.First();
-
-            foreach (int j in available)
-            {
-                double prob = Math.Pow(pheromones[j], _alpha) * Math.Pow(heuristic[j], _beta);
-                cumulative += prob;
-                if (cumulative >= r)
-                {
-                    selected = j;
-                    break;
-                }
-            }
-
-            solution[selected] = true;
-            available.Remove(selected);
+            // the first available feature whose cumulative weight reaches the draw, else the first available one
+            var pick = FilterStatisticTensorOps.MaskPositions(reached);
+            int selected = pick.Length > 0 ? pick[0] : FilterStatisticTensorOps.MaskPositions(available)[0];
+            available = Engine.TensorSubtract(available, FeatureSelectionTensorOps.ScatterToFeatures(
+                FilterStatisticTensorOps.Filled(new[] { 1 }, one), new[] { selected }, p, zero));
         }
 
-        return solution;
-    }
-
-    private double EvaluateFitness(double[,] X, double[] y, bool[] mask, int n, int p)
-    {
-        var selectedFeatures = Enumerable.Range(0, p).Where(j => mask[j]).ToList();
-        if (selectedFeatures.Count == 0) return 0;
-
-        double totalCorr = 0;
-        foreach (int j in selectedFeatures)
-        {
-            double corr = ComputeCorrelation(X, y, j, n);
-            totalCorr += Math.Abs(corr);
-        }
-
-        return totalCorr / selectedFeatures.Count;
-    }
-
-    private double ComputeCorrelation(double[,] X, double[] y, int j, int n)
-    {
-        double xMean = 0, yMean = 0;
-        for (int i = 0; i < n; i++)
-        {
-            xMean += X[i, j];
-            yMean += y[i];
-        }
-        xMean /= n;
-        yMean /= n;
-
-        double sxy = 0, sxx = 0, syy = 0;
-        for (int i = 0; i < n; i++)
-        {
-            double xd = X[i, j] - xMean;
-            double yd = y[i] - yMean;
-            sxy += xd * yd;
-            sxx += xd * xd;
-            syy += yd * yd;
-        }
-
-        return (sxx > 1e-10 && syy > 1e-10) ? sxy / Math.Sqrt(sxx * syy) : 0;
+        return FilterStatisticTensorOps.OneMinus(available);
     }
 
     /// <inheritdoc />

@@ -919,4 +919,61 @@ internal static class FeatureSelectionTensorOps
             engine.ReduceSum(engine.TensorSquare(counts), new[] { 1 }, false), totals, 0,
             MathHelper.GetNumericOperations<T>().Zero));
     }
+
+    /// <summary>
+    /// |Pearson r| of every column of an [n, p] tensor with a target ([p]); 0 for a column whose centred sum of
+    /// squares is not above 1e-10, and everywhere when the target's is not.
+    /// </summary>
+    public static Tensor<T> AbsoluteCorrelation<T>(Tensor<T> x, Tensor<T> y)
+    {
+        var engine = AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<T>();
+        var (sxx, sxy, syy) = FilterStatisticTensorOps.CenteredCrossSums(x, y);
+        T tolerance = ops.FromDouble(1e-10);
+        if (!ops.GreaterThan(syy, tolerance))
+            return FilterStatisticTensorOps.FilledLike(sxx, ops.Zero);
+        var correlation = engine.TensorAbs(FilterStatisticTensorOps.GuardedDivide(
+            sxy, engine.TensorSqrt(engine.TensorMultiplyScalar(sxx, syy)), 0, ops.Zero));
+        return KeepOrFill(correlation, engine.TensorGreaterThan(sxx, tolerance), ops.Zero);
+    }
+
+    /// <summary>
+    /// Mean of <paramref name="values"/> ([p]) over the features each row of a 0/1 [m, p] mask keeps ([m]); 0 for a
+    /// row that keeps none.
+    /// </summary>
+    public static Tensor<T> MeanOverMask<T>(Tensor<T> masks, Tensor<T> values)
+    {
+        var engine = AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<T>();
+        int m = masks.Shape[0];
+        int p = masks.Shape[1];
+        var sums = engine.Reshape(engine.TensorMatMul(masks, engine.Reshape(values, new[] { p, 1 })), new[] { m });
+        var counts = engine.ReduceSum(masks, new[] { 1 }, false);
+        return FilterStatisticTensorOps.GuardedDivide(sums, counts, 0.5, ops.Zero);
+    }
+
+    /// <summary>
+    /// 0/1 mask ([p]) of the <paramref name="k"/> largest entries of a [p] tensor, ties to the lower index (as
+    /// <c>OrderByDescending(...).Take(k)</c>).
+    /// </summary>
+    public static Tensor<T> TopKMask<T>(Tensor<T> values, int k)
+    {
+        var ops = MathHelper.GetNumericOperations<T>();
+        int p = values.Length;
+        var top = FilterStatisticTensorOps.StableOrder(values, descending: true).Take(k).ToArray();
+        return ScatterToFeatures(FilterStatisticTensorOps.Filled(new[] { top.Length }, ops.One), top, p, ops.Zero);
+    }
+
+    /// <summary>
+    /// For every entry of a 1-D tensor, how many entries are strictly smaller. Comparing these counts orders the
+    /// entries exactly as comparing the values does (<c>a &gt; b</c> exactly when <c>less[a] &gt; less[b]</c>).
+    /// </summary>
+    public static int[] LessCounts<T>(Tensor<T> values)
+    {
+        var engine = AiDotNetEngine.Current;
+        if (values.Length == 0)
+            return Array.Empty<int>();
+        var sorted = engine.TensorSort(values, 0, false).Item1;
+        return engine.TensorSearchSorted(sorted, values, false).ToArray();
+    }
 }

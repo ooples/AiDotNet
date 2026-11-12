@@ -30,7 +30,7 @@ public class DifferentialEvolutionSelector<T> : TransformerBase<T, Matrix<T>, Ma
     private readonly double _crossoverRate;
     private readonly int? _randomState;
 
-    private double[]? _featureImportances;
+    private Vector<T>? _featureImportances;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
@@ -38,7 +38,7 @@ public class DifferentialEvolutionSelector<T> : TransformerBase<T, Matrix<T>, Ma
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public int PopulationSize => _populationSize;
     public int NGenerations => _nGenerations;
-    public double[]? FeatureImportances => _featureImportances;
+    public Vector<T>? FeatureImportances => _featureImportances;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -79,36 +79,34 @@ public class DifferentialEvolutionSelector<T> : TransformerBase<T, Matrix<T>, Ma
             throw new ArgumentException("Target length must match rows in data.");
 
         _nInputFeatures = data.Columns;
-        int n = data.Rows;
         int p = data.Columns;
 
         var rand = _randomState.HasValue
             ? RandomHelper.CreateSeededRandom(_randomState.Value)
             : RandomHelper.CreateSecureRandom();
 
-        var X = new double[n, p];
-        var y = new double[n];
-        for (int i = 0; i < n; i++)
-        {
-            y[i] = NumOps.ToDouble(target[i]);
-            for (int j = 0; j < p; j++)
-                X[i, j] = NumOps.ToDouble(data[i, j]);
-        }
-
+        // a subset's fitness is the mean absolute correlation of its features with the target
+        var correlation = FeatureSelectionTensorOps.AbsoluteCorrelation(
+            FilterStatisticTensorOps.AsTensor(data), FilterStatisticTensorOps.AsTensor(target));
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
 
-        // Initialize population
-        var population = new double[_populationSize, p];
-        var fitness = new double[_populationSize];
-
+        // Initialize population: random keys in [0, 1), the subset is the numToSelect largest keys
+        var draws = new double[_populationSize * p];
+        for (int k = 0; k < draws.Length; k++)
+            draws[k] = rand.NextDouble();
+        var initial = new Tensor<double>(draws, new[] { _populationSize, p }).Cast<T>();
+        var population = new Tensor<T>[_populationSize];
+        var fitness = new Tensor<T>[_populationSize];
         for (int i = 0; i < _populationSize; i++)
         {
-            for (int j = 0; j < p; j++)
-                population[i, j] = rand.NextDouble();
-            fitness[i] = EvaluateSolution(X, y, population, i, numToSelect, n, p);
+            population[i] = Engine.Reshape(FeatureSelectionTensorOps.Rows(initial, new[] { i }), new[] { p });
+            fitness[i] = Fitness(population[i], correlation, numToSelect);
         }
 
-        _featureImportances = new double[p];
+        var importances = new Tensor<T>(new[] { p });
+        T mutationFactor = NumOps.FromDouble(_mutationFactor);
+        T zero = NumOps.Zero;
+        T one = NumOps.One;
 
         // DE iterations
         for (int gen = 0; gen < _nGenerations; gen++)
@@ -121,139 +119,48 @@ public class DifferentialEvolutionSelector<T> : TransformerBase<T, Matrix<T>, Ma
                 do { b = rand.Next(_populationSize); } while (b == i || b == a);
                 do { c = rand.Next(_populationSize); } while (c == i || c == a || c == b);
 
-                // Mutation and crossover
-                var trial = new double[p];
+                // Mutation and crossover: a coordinate crosses over with probability crossoverRate, and jRand always
                 int jRand = rand.Next(p);
-
+                var crossOver = new int[p];
                 for (int j = 0; j < p; j++)
-                {
-                    if (rand.NextDouble() < _crossoverRate || j == jRand)
-                    {
-                        trial[j] = population[a, j] + _mutationFactor * (population[b, j] - population[c, j]);
-                        trial[j] = Math.Max(0, Math.Min(1, trial[j]));
-                    }
-                    else
-                    {
-                        trial[j] = population[i, j];
-                    }
-                }
+                    crossOver[j] = rand.NextDouble() < _crossoverRate || j == jRand ? 1 : 0;
+                var mutant = Engine.TensorClamp(Engine.TensorAdd(population[a], Engine.TensorMultiplyScalar(
+                    Engine.TensorSubtract(population[b], population[c]), mutationFactor)), zero, one);
+                var trial = Engine.TensorWhere(new Tensor<int>(crossOver, new[] { p }).Cast<T>(), mutant, population[i]);
 
                 // Selection
-                double trialFitness = EvaluateTrialFitness(X, y, trial, numToSelect, n, p);
-                if (trialFitness > fitness[i])
+                var trialFitness = Fitness(trial, correlation, numToSelect);
+                if (Engine.TensorGreaterThan(trialFitness, fitness[i]).Cast<int>().ToArray()[0] == 1)
                 {
-                    for (int j = 0; j < p; j++)
-                        population[i, j] = trial[j];
+                    population[i] = trial;
                     fitness[i] = trialFitness;
                 }
 
                 // Track feature importance
-                var mask = GetMask(population, i, numToSelect, p);
-                for (int j = 0; j < p; j++)
-                {
-                    if (mask[j])
-                        _featureImportances[j] += fitness[i];
-                }
+                importances = Engine.TensorAdd(importances, Engine.TensorMultiply(
+                    FeatureSelectionTensorOps.TopKMask(population[i], numToSelect), Engine.TensorBroadcastTo(fitness[i], new[] { p })));
             }
         }
 
-        // Find best solution
-        int bestIdx = 0;
-        for (int i = 1; i < _populationSize; i++)
-        {
-            if (fitness[i] > fitness[bestIdx])
-                bestIdx = i;
-        }
+        // Find best solution (the first with the highest fitness)
+        int bestIdx = FilterStatisticTensorOps.FirstArgMax(Engine.TensorConcatenate(fitness, 0));
+        _selectedIndices = FilterStatisticTensorOps.TopKIndicesSorted(population[bestIdx], numToSelect);
 
-        _selectedIndices = Enumerable.Range(0, p)
-            .OrderByDescending(j => population[bestIdx, j])
-            .Take(numToSelect)
-            .OrderBy(x => x)
-            .ToArray();
+        // Normalize by the largest value when it is positive
+        var largest = FeatureSelectionTensorOps.ColumnMax(Engine.Reshape(importances, new[] { p, 1 }));
+        if (Engine.TensorGreaterThan(largest, NumOps.Zero).Cast<int>().ToArray()[0] == 1)
+            importances = Engine.TensorDivide(importances, Engine.TensorBroadcastTo(largest, new[] { p }));
 
-        // Normalize feature importances
-        double maxImportance = _featureImportances.Max();
-        if (maxImportance > 0)
-        {
-            for (int j = 0; j < p; j++)
-                _featureImportances[j] /= maxImportance;
-        }
-
+        _featureImportances = importances.ToVector();
         IsFitted = true;
     }
 
-    private double EvaluateSolution(double[,] X, double[] y, double[,] population, int idx, int numToSelect, int n, int p)
+    // fitness ([1]) of the subset made of the numToSelect largest keys
+    private static Tensor<T> Fitness(Tensor<T> keys, Tensor<T> correlation, int numToSelect)
     {
-        var mask = GetMask(population, idx, numToSelect, p);
-        return EvaluateFitness(X, y, mask, n, p);
-    }
-
-    private double EvaluateTrialFitness(double[,] X, double[] y, double[] trial, int numToSelect, int n, int p)
-    {
-        var sortedIndices = Enumerable.Range(0, p)
-            .OrderByDescending(j => trial[j])
-            .Take(numToSelect)
-            .ToHashSet();
-        var mask = new bool[p];
-        foreach (int idx in sortedIndices)
-            mask[idx] = true;
-        return EvaluateFitness(X, y, mask, n, p);
-    }
-
-    private bool[] GetMask(double[,] population, int idx, int numToSelect, int p)
-    {
-        var values = new double[p];
-        for (int j = 0; j < p; j++)
-            values[j] = population[idx, j];
-
-        var sortedIndices = Enumerable.Range(0, p)
-            .OrderByDescending(j => values[j])
-            .Take(numToSelect)
-            .ToHashSet();
-
-        var mask = new bool[p];
-        foreach (int i in sortedIndices)
-            mask[i] = true;
-        return mask;
-    }
-
-    private double EvaluateFitness(double[,] X, double[] y, bool[] mask, int n, int p)
-    {
-        var selectedFeatures = Enumerable.Range(0, p).Where(j => mask[j]).ToList();
-        if (selectedFeatures.Count == 0) return 0;
-
-        double totalCorr = 0;
-        foreach (int j in selectedFeatures)
-        {
-            double corr = ComputeCorrelation(X, y, j, n);
-            totalCorr += Math.Abs(corr);
-        }
-
-        return totalCorr / selectedFeatures.Count;
-    }
-
-    private double ComputeCorrelation(double[,] X, double[] y, int j, int n)
-    {
-        double xMean = 0, yMean = 0;
-        for (int i = 0; i < n; i++)
-        {
-            xMean += X[i, j];
-            yMean += y[i];
-        }
-        xMean /= n;
-        yMean /= n;
-
-        double sxy = 0, sxx = 0, syy = 0;
-        for (int i = 0; i < n; i++)
-        {
-            double xd = X[i, j] - xMean;
-            double yd = y[i] - yMean;
-            sxy += xd * yd;
-            sxx += xd * xd;
-            syy += yd * yd;
-        }
-
-        return (sxx > 1e-10 && syy > 1e-10) ? sxy / Math.Sqrt(sxx * syy) : 0;
+        int p = keys.Length;
+        var mask = AiDotNetEngine.Current.Reshape(FeatureSelectionTensorOps.TopKMask(keys, numToSelect), new[] { 1, p });
+        return FeatureSelectionTensorOps.MeanOverMask(mask, correlation);
     }
 
     /// <inheritdoc />

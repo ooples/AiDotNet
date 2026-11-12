@@ -31,7 +31,7 @@ public class ParticleSwarmSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     private readonly double _social;
     private readonly int? _randomState;
 
-    private double[]? _featureImportances;
+    private Vector<T>? _featureImportances;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
@@ -39,7 +39,7 @@ public class ParticleSwarmSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public int SwarmSize => _swarmSize;
     public int NIterations => _nIterations;
-    public double[]? FeatureImportances => _featureImportances;
+    public Vector<T>? FeatureImportances => _featureImportances;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -82,157 +82,98 @@ public class ParticleSwarmSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             throw new ArgumentException("Target length must match rows in data.");
 
         _nInputFeatures = data.Columns;
-        int n = data.Rows;
         int p = data.Columns;
 
         var rand = _randomState.HasValue
             ? RandomHelper.CreateSeededRandom(_randomState.Value)
             : RandomHelper.CreateSecureRandom();
 
-        var X = new double[n, p];
-        var y = new double[n];
-        for (int i = 0; i < n; i++)
-        {
-            y[i] = NumOps.ToDouble(target[i]);
-            for (int j = 0; j < p; j++)
-                X[i, j] = NumOps.ToDouble(data[i, j]);
-        }
-
+        // a subset's fitness is the mean absolute correlation of its features with the target
+        var correlation = FeatureSelectionTensorOps.AbsoluteCorrelation(
+            FilterStatisticTensorOps.AsTensor(data), FilterStatisticTensorOps.AsTensor(target));
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
 
-        // Initialize particles (positions as probabilities)
-        var positions = new double[_swarmSize, p];
-        var velocities = new double[_swarmSize, p];
-        var personalBest = new double[_swarmSize, p];
-        var personalBestFitness = new double[_swarmSize];
-        var globalBest = new double[p];
-        double globalBestFitness = double.MinValue;
-
-        for (int i = 0; i < _swarmSize; i++)
+        // Initialize particles (positions as probabilities): per particle and feature, a position then a velocity draw
+        var positionDraws = new double[_swarmSize * p];
+        var velocityDraws = new double[_swarmSize * p];
+        for (int k = 0; k < positionDraws.Length; k++)
         {
-            personalBestFitness[i] = double.MinValue;
-            for (int j = 0; j < p; j++)
-            {
-                positions[i, j] = rand.NextDouble();
-                velocities[i, j] = (rand.NextDouble() - 0.5) * 0.1;
-                personalBest[i, j] = positions[i, j];
-            }
+            positionDraws[k] = rand.NextDouble();
+            velocityDraws[k] = rand.NextDouble();
         }
 
-        _featureImportances = new double[p];
+        var shape = new[] { _swarmSize, p };
+        var positions = new Tensor<double>(positionDraws, shape).Cast<T>();
+        var velocities = Engine.TensorMultiplyScalar(
+            Engine.TensorSubtractScalar(new Tensor<double>(velocityDraws, shape).Cast<T>(), NumOps.FromDouble(0.5)), NumOps.FromDouble(0.1));
+        var personalBest = positions;
+        var personalBestFitness = FilterStatisticTensorOps.Filled(new[] { _swarmSize }, NumOps.MinValue);
+        var globalBest = new Tensor<T>(new[] { p });
+        var globalBestFitness = new Tensor<T>(new[] { NumOps.MinValue }, new[] { 1 });
+        var importances = new Tensor<T>(new[] { p });
+        T inertia = NumOps.FromDouble(_inertia);
+        T cognitive = NumOps.FromDouble(_cognitive);
+        T social = NumOps.FromDouble(_social);
+        T minusOne = NumOps.FromDouble(-1);
+        T zero = NumOps.Zero;
+        T one = NumOps.One;
+        var r1Draws = new double[_swarmSize * p];
+        var r2Draws = new double[_swarmSize * p];
 
         // PSO iterations
         for (int iter = 0; iter < _nIterations; iter++)
         {
+            // each particle's subset is its numToSelect largest positions
+            var particleMasks = new Tensor<T>[_swarmSize];
             for (int i = 0; i < _swarmSize; i++)
+                particleMasks[i] = FeatureSelectionTensorOps.TopKMask(
+                    Engine.Reshape(FeatureSelectionTensorOps.Rows(positions, new[] { i }), new[] { p }), numToSelect);
+            var masks = Engine.TensorStack(particleMasks, 0);
+            var fitness = FeatureSelectionTensorOps.MeanOverMask(masks, correlation);
+
+            // Update personal bests
+            var improved = Engine.TensorGreaterThan(fitness, personalBestFitness);
+            personalBestFitness = Engine.TensorWhere(improved, fitness, personalBestFitness);
+            personalBest = Engine.TensorWhere(FilterStatisticTensorOps.ColumnBroadcast(improved, p), positions, personalBest);
+
+            // Update global best: the first particle with the best fitness, when it improves on the global best
+            int leader = FilterStatisticTensorOps.FirstArgMax(fitness);
+            var leaderFitness = FeatureSelectionTensorOps.Entries(fitness, new[] { leader });
+            if (Engine.TensorGreaterThan(leaderFitness, globalBestFitness).Cast<int>().ToArray()[0] == 1)
             {
-                // Convert position to binary mask
-                var mask = new bool[p];
-                var sortedIndices = Enumerable.Range(0, p)
-                    .OrderByDescending(j => positions[i, j])
-                    .Take(numToSelect)
-                    .ToList();
-                foreach (int idx in sortedIndices)
-                    mask[idx] = true;
-
-                double fitness = EvaluateFitness(X, y, mask, n, p);
-
-                // Update personal best
-                if (fitness > personalBestFitness[i])
-                {
-                    personalBestFitness[i] = fitness;
-                    for (int j = 0; j < p; j++)
-                        personalBest[i, j] = positions[i, j];
-                }
-
-                // Update global best
-                if (fitness > globalBestFitness)
-                {
-                    globalBestFitness = fitness;
-                    for (int j = 0; j < p; j++)
-                        globalBest[j] = positions[i, j];
-                }
-
-                // Track feature importance
-                for (int j = 0; j < p; j++)
-                {
-                    if (mask[j])
-                        _featureImportances[j] += fitness;
-                }
+                globalBestFitness = leaderFitness;
+                globalBest = Engine.Reshape(FeatureSelectionTensorOps.Rows(positions, new[] { leader }), new[] { p });
             }
 
-            // Update velocities and positions
-            for (int i = 0; i < _swarmSize; i++)
+            // Track feature importance
+            importances = Engine.TensorAdd(importances, Engine.Reshape(
+                Engine.TensorMatMul(Engine.TensorTranspose(masks), Engine.Reshape(fitness, new[] { _swarmSize, 1 })), new[] { p }));
+
+            // Update velocities and positions (per particle and feature, r1 is drawn before r2)
+            for (int k = 0; k < r1Draws.Length; k++)
             {
-                for (int j = 0; j < p; j++)
-                {
-                    double r1 = rand.NextDouble();
-                    double r2 = rand.NextDouble();
-
-                    velocities[i, j] = _inertia * velocities[i, j]
-                        + _cognitive * r1 * (personalBest[i, j] - positions[i, j])
-                        + _social * r2 * (globalBest[j] - positions[i, j]);
-
-                    velocities[i, j] = Math.Max(-1, Math.Min(1, velocities[i, j]));
-                    positions[i, j] = Math.Max(0, Math.Min(1, positions[i, j] + velocities[i, j]));
-                }
+                r1Draws[k] = rand.NextDouble();
+                r2Draws[k] = rand.NextDouble();
             }
+
+            var r1 = new Tensor<double>((double[])r1Draws.Clone(), shape).Cast<T>();
+            var r2 = new Tensor<double>((double[])r2Draws.Clone(), shape).Cast<T>();
+            var toPersonal = Engine.TensorMultiply(Engine.TensorMultiplyScalar(r1, cognitive), Engine.TensorSubtract(personalBest, positions));
+            var toGlobal = Engine.TensorMultiply(Engine.TensorMultiplyScalar(r2, social),
+                Engine.TensorSubtract(FilterStatisticTensorOps.RowBroadcast(globalBest, _swarmSize), positions));
+            velocities = Engine.TensorClamp(
+                Engine.TensorAdd(Engine.TensorAdd(Engine.TensorMultiplyScalar(velocities, inertia), toPersonal), toGlobal), minusOne, one);
+            positions = Engine.TensorClamp(Engine.TensorAdd(positions, velocities), zero, one);
         }
 
-        // Normalize and select
-        double maxImportance = _featureImportances.Max();
-        if (maxImportance > 0)
-        {
-            for (int j = 0; j < p; j++)
-                _featureImportances[j] /= maxImportance;
-        }
+        // Normalize by the largest value when it is positive
+        var largest = FeatureSelectionTensorOps.ColumnMax(Engine.Reshape(importances, new[] { p, 1 }));
+        if (Engine.TensorGreaterThan(largest, NumOps.Zero).Cast<int>().ToArray()[0] == 1)
+            importances = Engine.TensorDivide(importances, Engine.TensorBroadcastTo(largest, new[] { p }));
 
-        _selectedIndices = Enumerable.Range(0, p)
-            .OrderByDescending(j => globalBest[j])
-            .Take(numToSelect)
-            .OrderBy(x => x)
-            .ToArray();
-
+        _featureImportances = importances.ToVector();
+        _selectedIndices = FilterStatisticTensorOps.TopKIndicesSorted(globalBest, numToSelect);
         IsFitted = true;
-    }
-
-    private double EvaluateFitness(double[,] X, double[] y, bool[] mask, int n, int p)
-    {
-        var selectedFeatures = Enumerable.Range(0, p).Where(j => mask[j]).ToList();
-        if (selectedFeatures.Count == 0) return 0;
-
-        double totalCorr = 0;
-        foreach (int j in selectedFeatures)
-        {
-            double corr = ComputeCorrelation(X, y, j, n);
-            totalCorr += Math.Abs(corr);
-        }
-
-        return totalCorr / selectedFeatures.Count;
-    }
-
-    private double ComputeCorrelation(double[,] X, double[] y, int j, int n)
-    {
-        double xMean = 0, yMean = 0;
-        for (int i = 0; i < n; i++)
-        {
-            xMean += X[i, j];
-            yMean += y[i];
-        }
-        xMean /= n;
-        yMean /= n;
-
-        double sxy = 0, sxx = 0, syy = 0;
-        for (int i = 0; i < n; i++)
-        {
-            double xd = X[i, j] - xMean;
-            double yd = y[i] - yMean;
-            sxy += xd * yd;
-            sxx += xd * xd;
-            syy += yd * yd;
-        }
-
-        return (sxx > 1e-10 && syy > 1e-10) ? sxy / Math.Sqrt(sxx * syy) : 0;
     }
 
     /// <inheritdoc />
