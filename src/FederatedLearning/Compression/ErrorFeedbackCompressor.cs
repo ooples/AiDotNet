@@ -33,7 +33,7 @@ namespace AiDotNet.FederatedLearning.Compression;
 public class ErrorFeedbackCompressor<T> : FederatedLearningComponentBase<T>
 {
     private readonly AdvancedCompressionOptions _options;
-    private readonly Dictionary<int, double[]> _clientErrors = new();
+    private readonly Dictionary<int, Tensor<T>> _clientErrors = new();
 
     /// <summary>
     /// Initializes a new instance of <see cref="ErrorFeedbackCompressor{T}"/>.
@@ -57,40 +57,18 @@ public class ErrorFeedbackCompressor<T> : FederatedLearningComponentBase<T>
         if (!_options.UseErrorFeedback) return gradient;
 
         int size = gradient.Shape[0];
-        var combined = new Tensor<T>(new[] { size });
-
-        // Get or create error accumulator
-        if (!_clientErrors.ContainsKey(clientId))
-        {
-            _clientErrors[clientId] = new double[size];
-        }
-
-        var error = _clientErrors[clientId];
-
-        // Resize error if model size changed
-        if (error.Length != size)
-        {
-            _clientErrors[clientId] = new double[size];
-            error = _clientErrors[clientId];
-        }
+        var error = GetOrResetError(clientId, size);
 
         // Combined = gradient + accumulated error
-        for (int i = 0; i < size; i++)
-        {
-            double grad = NumOps.ToDouble(gradient[i]);
-            combined[i] = NumOps.FromDouble(grad + error[i]);
-        }
-
-        return combined;
+        return Engine.TensorAdd(gradient.Reshape(size), error);
     }
 
     /// <summary>
     /// Updates the error accumulator after compression.
-    /// Call this after compressing and decompressing to track what was lost.
     /// </summary>
-    /// <param name="combined">The combined gradient + error that was compressed.</param>
-    /// <param name="decompressed">The decompressed result (what was actually sent).</param>
-    /// <param name="clientId">Client ID for per-client error tracking.</param>
+    /// <param name="combined">The gradient + error before compression.</param>
+    /// <param name="decompressed">The decompressed (lossy) version that was actually sent.</param>
+    /// <param name="clientId">The client ID.</param>
     public void UpdateError(Tensor<T> combined, Tensor<T> decompressed, int clientId)
     {
         if (combined is null) throw new ArgumentNullException(nameof(combined));
@@ -98,36 +76,22 @@ public class ErrorFeedbackCompressor<T> : FederatedLearningComponentBase<T>
         if (!_options.UseErrorFeedback) return;
 
         int size = combined.Shape[0];
+        GetOrResetError(clientId, size);
 
-        if (!_clientErrors.ContainsKey(clientId))
-        {
-            _clientErrors[clientId] = new double[size];
-        }
-
-        var error = _clientErrors[clientId];
-        if (error.Length != size)
-        {
-            _clientErrors[clientId] = new double[size];
-            error = _clientErrors[clientId];
-        }
-
-        // New error = combined - decompressed
-        for (int i = 0; i < size; i++)
-        {
-            double combinedVal = NumOps.ToDouble(combined[i]);
-            double decompressedVal = i < decompressed.Shape[0] ? NumOps.ToDouble(decompressed[i]) : 0;
-            error[i] = combinedVal - decompressedVal;
-        }
+        // New error = combined - decompressed (missing decompressed entries count as 0).
+        var sent = new Tensor<T>(new[] { size });
+        int overlap = Math.Min(size, decompressed.Shape[0]);
+        decompressed.AsSpan().Slice(0, overlap).CopyTo(sent.AsWritableSpan());
+        _clientErrors[clientId] = Engine.TensorSubtract(combined.Reshape(size), sent);
     }
 
     /// <summary>
-    /// Applies 1-bit SGD compression (sign-only encoding) with error feedback.
-    /// Each gradient component is encoded as +1 or -1 (its sign), scaled by the mean magnitude.
+    /// Compresses a gradient using 1-bit SGD with error feedback.
     /// </summary>
-    /// <param name="gradient">The gradient tensor to compress.</param>
-    /// <param name="clientId">Client ID for per-client error tracking.</param>
+    /// <param name="gradient">The raw gradient to compress.</param>
+    /// <param name="clientId">The client ID for error tracking.</param>
     /// <returns>Compressed (sign-encoded) gradient and the scaling factor.</returns>
-    public (Tensor<T> Compressed, double Scale) CompressOneBit(Tensor<T> gradient, int clientId)
+    public (Tensor<T> Compressed, T Scale) CompressOneBit(Tensor<T> gradient, int clientId)
     {
         if (gradient is null) throw new ArgumentNullException(nameof(gradient));
 
@@ -135,23 +99,16 @@ public class ErrorFeedbackCompressor<T> : FederatedLearningComponentBase<T>
         var combined = ApplyErrorFeedback(gradient, clientId);
         int size = combined.Shape[0];
 
-        // Compute mean absolute value for scaling
-        double sumAbs = 0;
-        for (int i = 0; i < size; i++)
-        {
-            sumAbs += Math.Abs(NumOps.ToDouble(combined[i]));
-        }
+        // Mean absolute value for scaling.
+        var scale = size > 0 ? Engine.TensorMean(Engine.TensorAbs(combined)) : NumOps.Zero;
 
-        double scale = size > 0 ? sumAbs / size : 0;
-
-        // 1-bit encode: sign * scale
-        var compressed = new Tensor<T>(new[] { size });
-        for (int i = 0; i < size; i++)
-        {
-            double val = NumOps.ToDouble(combined[i]);
-            double sign = val >= 0 ? 1.0 : -1.0;
-            compressed[i] = NumOps.FromDouble(sign * scale);
-        }
+        // 1-bit encode: sign * scale, with sign(x) = +1 for x >= 0 and -1 otherwise (including NaN).
+        var nonNegative = Engine.TensorAdd(
+            Engine.TensorGreaterThan(combined, NumOps.Zero), Engine.TensorEquals(combined, NumOps.Zero));
+        var compressed = Engine.TensorWhere(
+            nonNegative,
+            Engine.TensorFullLike(combined, scale),
+            Engine.TensorFullLike(combined, NumOps.Negate(scale)));
 
         // Update error feedback
         UpdateError(combined, compressed, clientId);
@@ -160,33 +117,40 @@ public class ErrorFeedbackCompressor<T> : FederatedLearningComponentBase<T>
     }
 
     /// <summary>
-    /// Gets the accumulated error norm for a client (for monitoring convergence).
+    /// Gets the current error norm for a client (useful for monitoring).
     /// </summary>
-    /// <param name="clientId">Client ID.</param>
+    /// <param name="clientId">The client ID.</param>
     /// <returns>L2 norm of the accumulated error, or 0 if no error exists.</returns>
-    public double GetErrorNorm(int clientId)
+    public T GetErrorNorm(int clientId)
     {
-        if (!_clientErrors.ContainsKey(clientId)) return 0;
+        if (!_clientErrors.TryGetValue(clientId, out var error)) return NumOps.Zero;
 
-        var error = _clientErrors[clientId];
-        double sumSq = 0;
-        foreach (double e in error)
-        {
-            sumSq += e * e;
-        }
-
-        return Math.Sqrt(sumSq);
+        return NumOps.Sqrt(Engine.TensorSumOfSquares(error));
     }
 
     /// <summary>
-    /// Resets the accumulated error for a specific client.
+    /// Returns the client's error accumulator, replacing it with zeros when missing or when the model size changed.
     /// </summary>
-    /// <param name="clientId">Client ID whose error to reset.</param>
+    private Tensor<T> GetOrResetError(int clientId, int size)
+    {
+        if (!_clientErrors.TryGetValue(clientId, out var error) || error.Shape[0] != size)
+        {
+            error = new Tensor<T>(new[] { size });
+            _clientErrors[clientId] = error;
+        }
+
+        return error;
+    }
+
+    /// <summary>
+    /// Resets error accumulation for a client.
+    /// </summary>
+    /// <param name="clientId">The client ID.</param>
     public void ResetError(int clientId)
     {
-        if (_clientErrors.ContainsKey(clientId))
+        if (_clientErrors.TryGetValue(clientId, out var error))
         {
-            Array.Clear(_clientErrors[clientId], 0, _clientErrors[clientId].Length);
+            _clientErrors[clientId] = new Tensor<T>(new[] { error.Shape[0] });
         }
     }
 

@@ -157,15 +157,8 @@ public class AdaptiveCompressor<T> : FederatedLearningComponentBase<T>
     {
         // Importance = L2 norm of gradient (larger gradients carry more information)
         int size = gradient.Shape[0];
-        double sumSq = 0;
-
-        for (int i = 0; i < size; i++)
-        {
-            double val = NumOps.ToDouble(gradient[i]);
-            sumSq += val * val;
-        }
-
-        double norm = Math.Sqrt(sumSq);
+        var leading = Engine.TensorSlice(gradient.Reshape(gradient.Length), new[] { 0 }, new[] { size });
+        double norm = Math.Sqrt(NumOps.ToDouble(Engine.TensorSumOfSquares(leading)));
 
         // Map norm to [0, 1] using sigmoid-like scaling
         // norm of 1.0 maps to ~0.5; higher norms approach 1.0
@@ -188,29 +181,21 @@ public class AdaptiveCompressor<T> : FederatedLearningComponentBase<T>
 
     private Tensor<T> ApplyTopK(Tensor<T> gradient, int size, int topK)
     {
-        var result = new Tensor<T>(new[] { size });
-
-        // Find the top-k absolute values
-        var indices = new int[size];
-        var absValues = new double[size];
-
-        for (int i = 0; i < size; i++)
+        var values = Engine.TensorSlice(gradient.Reshape(gradient.Length), new[] { 0 }, new[] { size });
+        int k = Math.Max(0, Math.Min(topK, size));
+        if (k == 0)
         {
-            indices[i] = i;
-            absValues[i] = Math.Abs(NumOps.ToDouble(gradient[i]));
+            return new Tensor<T>(new[] { size });
         }
 
-        // Partial sort to find top-k (selection using nth_element-like approach)
-        // For simplicity, full sort (production would use quickselect)
-        Array.Sort(absValues, indices);
-
-        // Keep only top-k (last k elements after ascending sort)
-        int threshold = size - topK;
-        for (int i = threshold; i < size; i++)
+        // Keep the k entries of largest magnitude; zero the rest.
+        Engine.TensorTopK(Engine.TensorAbs(values), k, 0, out var topIndices);
+        var mask = new int[size];
+        foreach (int index in topIndices.ToArray())
         {
-            result[indices[i]] = gradient[indices[i]];
+            mask[index] = 1;
         }
 
-        return result;
+        return Engine.TensorWhere(Vector<int>.Wrap(mask).AsTensor().Cast<T>(), values, new Tensor<T>(new[] { size }));
     }
 }

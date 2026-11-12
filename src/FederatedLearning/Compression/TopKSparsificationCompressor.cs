@@ -30,7 +30,7 @@ public class TopKSparsificationCompressor<T> : Infrastructure.FederatedLearningC
 {
     private readonly double _compressionRatio;
     private readonly bool _useErrorFeedback;
-    private Dictionary<int, Dictionary<string, double[]>>? _errorAccumulators;
+    private Dictionary<int, Dictionary<string, T[]>>? _errorAccumulators;
 
     /// <summary>
     /// Creates a new Top-k sparsification compressor.
@@ -57,80 +57,14 @@ public class TopKSparsificationCompressor<T> : Infrastructure.FederatedLearningC
     public Dictionary<string, T[]> Compress(Dictionary<string, T[]> gradient, int clientId)
     {
         Guard.NotNull(gradient);
-        _errorAccumulators ??= new Dictionary<int, Dictionary<string, double[]>>();
-        if (!_errorAccumulators.ContainsKey(clientId))
-        {
-            _errorAccumulators[clientId] = new Dictionary<string, double[]>();
-        }
+        var selection = SelectTopK(gradient, clientId);
 
-        var errorAcc = _errorAccumulators[clientId];
         var compressed = new Dictionary<string, T[]>(gradient.Count);
-
-        // Flatten to find global top-k.
-        int totalElements = gradient.Values.Sum(v => v.Length);
-        int k = Math.Max(1, (int)(totalElements * _compressionRatio));
-
-        var allValues = new List<(string Layer, int Index, double AbsValue)>(totalElements);
-
-        foreach (var kvp in gradient)
+        for (int l = 0; l < selection.Layers.Length; l++)
         {
-            if (!errorAcc.ContainsKey(kvp.Key))
-            {
-                errorAcc[kvp.Key] = new double[kvp.Value.Length];
-            }
-
-            var err = errorAcc[kvp.Key];
-            for (int i = 0; i < kvp.Value.Length; i++)
-            {
-                double val = NumOps.ToDouble(kvp.Value[i]);
-                if (_useErrorFeedback)
-                {
-                    err[i] += val;
-                    allValues.Add((kvp.Key, i, Math.Abs(err[i])));
-                }
-                else
-                {
-                    allValues.Add((kvp.Key, i, Math.Abs(val)));
-                }
-            }
-        }
-
-        // Find threshold for top-k.
-        allValues.Sort((a, b) => b.AbsValue.CompareTo(a.AbsValue));
-        double threshold = k < allValues.Count ? allValues[k - 1].AbsValue : 0;
-
-        // Build sparse output.
-        var topKSet = new HashSet<(string, int)>();
-        for (int i = 0; i < Math.Min(k, allValues.Count); i++)
-        {
-            topKSet.Add((allValues[i].Layer, allValues[i].Index));
-        }
-
-        foreach (var kvp in gradient)
-        {
-            var result = new T[kvp.Value.Length];
-            var err = errorAcc[kvp.Key];
-
-            for (int i = 0; i < result.Length; i++)
-            {
-                if (topKSet.Contains((kvp.Key, i)))
-                {
-                    result[i] = _useErrorFeedback
-                        ? NumOps.FromDouble(err[i])
-                        : kvp.Value[i];
-
-                    if (_useErrorFeedback)
-                    {
-                        err[i] = 0; // Reset sent values.
-                    }
-                }
-                else
-                {
-                    result[i] = NumOps.Zero;
-                }
-            }
-
-            compressed[kvp.Key] = result;
+            var result = new T[selection.Lengths[l]];
+            Array.Copy(selection.Selected, selection.Offsets[l], result, 0, result.Length);
+            compressed[selection.Layers[l]] = result;
         }
 
         return compressed;
@@ -151,78 +85,130 @@ public class TopKSparsificationCompressor<T> : Infrastructure.FederatedLearningC
         Dictionary<string, T[]> gradient, int clientId)
     {
         Guard.NotNull(gradient);
-        _errorAccumulators ??= new Dictionary<int, Dictionary<string, double[]>>();
-        if (!_errorAccumulators.ContainsKey(clientId))
-        {
-            _errorAccumulators[clientId] = new Dictionary<string, double[]>();
-        }
-
-        var errorAcc = _errorAccumulators[clientId];
-
-        // Accumulate error feedback.
-        int totalElements = gradient.Values.Sum(v => v.Length);
-        int k = Math.Max(1, (int)(totalElements * _compressionRatio));
-
-        var allValues = new List<(string Layer, int Index, double AbsValue, double Value)>(totalElements);
-
-        foreach (var kvp in gradient)
-        {
-            if (!errorAcc.ContainsKey(kvp.Key))
-            {
-                errorAcc[kvp.Key] = new double[kvp.Value.Length];
-            }
-
-            var err = errorAcc[kvp.Key];
-            for (int i = 0; i < kvp.Value.Length; i++)
-            {
-                double val = NumOps.ToDouble(kvp.Value[i]);
-                if (_useErrorFeedback)
-                {
-                    err[i] += val;
-                    allValues.Add((kvp.Key, i, Math.Abs(err[i]), err[i]));
-                }
-                else
-                {
-                    allValues.Add((kvp.Key, i, Math.Abs(val), val));
-                }
-            }
-        }
-
-        allValues.Sort((a, b) => b.AbsValue.CompareTo(a.AbsValue));
-
-        var topKSet = new HashSet<(string, int)>();
-        for (int i = 0; i < Math.Min(k, allValues.Count); i++)
-        {
-            topKSet.Add((allValues[i].Layer, allValues[i].Index));
-        }
+        var selection = SelectTopK(gradient, clientId);
 
         var sparse = new Dictionary<string, List<(int Index, T Value)>>();
-        foreach (var kvp in gradient)
+        int layer = 0;
+        foreach (int flatIndex in selection.SortedTopIndices)
         {
-            var entries = new List<(int Index, T Value)>();
-            var err = errorAcc[kvp.Key];
-
-            for (int i = 0; i < kvp.Value.Length; i++)
+            while (flatIndex >= selection.Offsets[layer] + selection.Lengths[layer])
             {
-                if (topKSet.Contains((kvp.Key, i)))
-                {
-                    double val = _useErrorFeedback ? err[i] : NumOps.ToDouble(kvp.Value[i]);
-                    entries.Add((i, NumOps.FromDouble(val)));
-
-                    if (_useErrorFeedback)
-                    {
-                        err[i] = 0;
-                    }
-                }
+                layer++;
             }
 
-            if (entries.Count > 0)
+            string layerName = selection.Layers[layer];
+            if (!sparse.TryGetValue(layerName, out var entries))
             {
-                sparse[kvp.Key] = entries;
+                entries = new List<(int Index, T Value)>();
+                sparse[layerName] = entries;
             }
+
+            entries.Add((flatIndex - selection.Offsets[layer], selection.Selected[flatIndex]));
         }
 
         return sparse;
+    }
+
+    /// <summary>
+    /// Adds the gradient to the client's error accumulator (when error feedback is on), keeps the k entries of
+    /// largest magnitude across all layers, and leaves the unsent remainder in the accumulator.
+    /// </summary>
+    private TopKSelection SelectTopK(Dictionary<string, T[]> gradient, int clientId)
+    {
+        _errorAccumulators ??= new Dictionary<int, Dictionary<string, T[]>>();
+        if (!_errorAccumulators.TryGetValue(clientId, out var errorAcc))
+        {
+            errorAcc = new Dictionary<string, T[]>();
+            _errorAccumulators[clientId] = errorAcc;
+        }
+
+        var layers = gradient.Keys.ToArray();
+        var offsets = new int[layers.Length];
+        var lengths = new int[layers.Length];
+        int totalElements = 0;
+        for (int l = 0; l < layers.Length; l++)
+        {
+            offsets[l] = totalElements;
+            lengths[l] = gradient[layers[l]].Length;
+            totalElements += lengths[l];
+        }
+
+        // Candidates: the accumulated error (error feedback) or the raw gradient.
+        var candidates = new T[totalElements];
+        for (int l = 0; l < layers.Length; l++)
+        {
+            var values = gradient[layers[l]];
+            if (!errorAcc.TryGetValue(layers[l], out var err))
+            {
+                err = new T[values.Length];
+                Vector<T>.Wrap(err).Fill(NumOps.Zero);
+                errorAcc[layers[l]] = err;
+            }
+
+            var source = values;
+            if (_useErrorFeedback)
+            {
+                Engine.Add(Vector<T>.Wrap(err), Vector<T>.Wrap(values)).AsSpan().CopyTo(err);
+                source = err;
+            }
+
+            Array.Copy(source, 0, candidates, offsets[l], values.Length);
+        }
+
+        int k = Math.Min(Math.Max(1, (int)(totalElements * _compressionRatio)), totalElements);
+        var selected = new T[totalElements];
+        var sortedTop = new int[k];
+        if (k > 0)
+        {
+            var flat = Vector<T>.Wrap(candidates);
+            Engine.TensorTopK(Engine.Abs(flat).AsTensor(), k, 0, out var topIndices);
+            sortedTop = topIndices.ToArray();
+            Array.Sort(sortedTop);
+
+            var mask = new int[totalElements];
+            foreach (int index in sortedTop)
+            {
+                mask[index] = 1;
+            }
+
+            var isTop = Vector<int>.Wrap(mask).AsTensor().Cast<T>();
+            var zeros = new Tensor<T>(new[] { totalElements });
+            Engine.TensorWhere(isTop, flat.AsTensor(), zeros).ToArray().CopyTo(selected, 0);
+
+            if (_useErrorFeedback)
+            {
+                // Sent values leave the accumulator; the rest carries over to the next round.
+                var remainder = Engine.TensorWhere(isTop, zeros, flat.AsTensor()).ToArray();
+                for (int l = 0; l < layers.Length; l++)
+                {
+                    Array.Copy(remainder, offsets[l], errorAcc[layers[l]], 0, lengths[l]);
+                }
+            }
+        }
+
+        return new TopKSelection(layers, offsets, lengths, selected, sortedTop);
+    }
+
+    private sealed class TopKSelection
+    {
+        public TopKSelection(string[] layers, int[] offsets, int[] lengths, T[] selected, int[] sortedTopIndices)
+        {
+            Layers = layers;
+            Offsets = offsets;
+            Lengths = lengths;
+            Selected = selected;
+            SortedTopIndices = sortedTopIndices;
+        }
+
+        public string[] Layers { get; }
+
+        public int[] Offsets { get; }
+
+        public int[] Lengths { get; }
+
+        public T[] Selected { get; }
+
+        public int[] SortedTopIndices { get; }
     }
 
     /// <summary>
@@ -279,10 +265,10 @@ public class TopKSparsificationCompressor<T> : Infrastructure.FederatedLearningC
             throw new ArgumentException("No client gradients to aggregate.", nameof(clientSparseGradients));
         }
 
-        var aggregated = new Dictionary<string, double[]>(layerSizes.Count);
+        var aggregated = new Dictionary<string, Tensor<T>>(layerSizes.Count);
         foreach (var (layerName, size) in layerSizes)
         {
-            aggregated[layerName] = new double[size];
+            aggregated[layerName] = new Tensor<T>(new[] { size });
         }
 
         foreach (var (clientId, sparseGrad) in clientSparseGradients)
@@ -296,31 +282,36 @@ public class TopKSparsificationCompressor<T> : Infrastructure.FederatedLearningC
                         nameof(clientSparseGradients));
                 }
 
-                foreach (var (index, value) in entries)
+                int size = layerSizes[layerName];
+                var indices = new int[entries.Count];
+                var values = new T[entries.Count];
+                for (int e = 0; e < entries.Count; e++)
                 {
-                    if (index < 0 || index >= agg.Length)
+                    var (index, value) = entries[e];
+                    if (index < 0 || index >= size)
                     {
                         throw new ArgumentOutOfRangeException(nameof(clientSparseGradients),
-                            $"Client {clientId} layer '{layerName}' contains out-of-bounds index {index} (size={agg.Length}).");
+                            $"Client {clientId} layer '{layerName}' contains out-of-bounds index {index} (size={size}).");
                     }
 
-                    agg[index] += NumOps.ToDouble(value);
+                    indices[e] = index;
+                    values[e] = value;
+                }
+
+                if (entries.Count > 0)
+                {
+                    aggregated[layerName] = Engine.TensorScatterAdd(
+                        agg, Vector<int>.Wrap(indices).AsTensor(), Vector<T>.Wrap(values).AsTensor(), 0);
                 }
             }
         }
 
         // Average and convert to T[].
         var result = new Dictionary<string, T[]>(layerSizes.Count);
-        double invClients = 1.0 / numClients;
+        var invClients = NumOps.FromDouble(1.0 / numClients);
         foreach (var (layerName, agg) in aggregated)
         {
-            var values = new T[agg.Length];
-            for (int i = 0; i < agg.Length; i++)
-            {
-                values[i] = NumOps.FromDouble(agg[i] * invClients);
-            }
-
-            result[layerName] = values;
+            result[layerName] = Engine.TensorMultiplyScalar(agg, invClients).ToArray();
         }
 
         return result;
