@@ -137,18 +137,13 @@ public class MexicanHatWavelet<T> : WaveletFunctionBase<T>
     public override (Vector<T> approximation, Vector<T> detail) Decompose(Vector<T> input)
     {
         int size = input.Length;
-        var approximation = new Vector<T>(size);
-        var detail = new Vector<T>(size);
-        for (int i = 0; i < size; i++)
+        if (size == 0)
         {
-            T x = NumOps.FromDouble(i - size / 2);
-            T waveletValue = Calculate(x);
-            T derivativeValue = CalculateDerivative(x);
-            approximation[i] = NumOps.Multiply(waveletValue, input[i]);
-            detail[i] = NumOps.Multiply(derivativeValue, input[i]);
+            return (new Vector<T>(0), new Vector<T>(0));
         }
 
-        return (approximation, detail);
+        var x = WaveletEngineOps<T>.CenteredGrid(size);
+        return WaveletEngineOps<T>.PointwiseDecompose(input, CalculateValues(x), CalculateDerivativeValues(x));
     }
 
     /// <summary>
@@ -176,14 +171,8 @@ public class MexicanHatWavelet<T> : WaveletFunctionBase<T>
     public override Vector<T> GetScalingCoefficients()
     {
         int size = 101; // Odd number to have a center point
-        var coefficients = new Vector<T>(size);
-        for (int i = 0; i < size; i++)
-        {
-            T x = NumOps.Divide(NumOps.FromDouble(i - size / 2), NumOps.FromDouble(size / 4.0));
-            coefficients[i] = Calculate(x);
-        }
-
-        return coefficients;
+        var x = AiDotNetEngine.Current.TensorDivideScalar(WaveletEngineOps<T>.CenteredGrid(size), NumOps.FromDouble(size / 4.0));
+        return CalculateValues(x).ToVector();
     }
 
     /// <summary>
@@ -211,14 +200,8 @@ public class MexicanHatWavelet<T> : WaveletFunctionBase<T>
     public override Vector<T> GetWaveletCoefficients()
     {
         int size = 101; // Odd number to have a center point
-        var coefficients = new Vector<T>(size);
-        for (int i = 0; i < size; i++)
-        {
-            T x = NumOps.Divide(NumOps.FromDouble(i - size / 2), NumOps.FromDouble(size / 4.0));
-            coefficients[i] = CalculateDerivative(x);
-        }
-
-        return coefficients;
+        var x = AiDotNetEngine.Current.TensorDivideScalar(WaveletEngineOps<T>.CenteredGrid(size), NumOps.FromDouble(size / 4.0));
+        return CalculateDerivativeValues(x).ToVector();
     }
 
     /// <summary>
@@ -281,34 +264,43 @@ public class MexicanHatWavelet<T> : WaveletFunctionBase<T>
     public Vector<T> Reconstruct(Vector<T> approximation, Vector<T> detail)
     {
         int size = approximation.Length;
-        var reconstructed = new Vector<T>(size);
-
-        for (int i = 0; i < size; i++)
+        if (size == 0)
         {
-            T x = NumOps.FromDouble(i - size / 2);
-            T waveletValue = Calculate(x);
-            T derivativeValue = CalculateDerivative(x);
-
-            // Use weighted least-squares approach to recover original
-            T waveletSq = NumOps.Square(waveletValue);
-            T derivativeSq = NumOps.Square(derivativeValue);
-            T denominator = NumOps.Add(waveletSq, derivativeSq);
-
-            if (NumOps.GreaterThan(NumOps.Abs(denominator), NumOps.FromDouble(1e-10)))
-            {
-                T numerator = NumOps.Add(
-                    NumOps.Multiply(approximation[i], waveletValue),
-                    NumOps.Multiply(detail[i], derivativeValue)
-                );
-                reconstructed[i] = NumOps.Divide(numerator, denominator);
-            }
-            else
-            {
-                // When both wavelet and derivative are near zero, use sum of coefficients
-                reconstructed[i] = NumOps.Add(approximation[i], detail[i]);
-            }
+            return new Vector<T>(0);
         }
 
-        return reconstructed;
+        var x = WaveletEngineOps<T>.CenteredGrid(size);
+        return WaveletEngineOps<T>.PointwiseReconstruct(approximation, detail, CalculateValues(x), CalculateDerivativeValues(x));
+    }
+
+    /// <summary>
+    /// Evaluates <see cref="Calculate(T)"/> at every entry of <paramref name="x"/>.
+    /// </summary>
+    private Tensor<T> CalculateValues(Tensor<T> x)
+    {
+        var engine = AiDotNetEngine.Current;
+        var x2 = engine.TensorSquare(x);
+        T sigma2 = NumOps.Square(_sigma);
+        var term1 = engine.ScalarMinusTensor(NumOps.FromDouble(2.0), engine.TensorDivideScalar(x2, sigma2));
+        var term2 = engine.TensorExp(engine.TensorNegate(
+            engine.TensorDivideScalar(x2, NumOps.Multiply(NumOps.FromDouble(2.0), sigma2))));
+        return engine.TensorMultiply(term1, term2);
+    }
+
+    /// <summary>
+    /// Evaluates <see cref="CalculateDerivative(T)"/> at every entry of <paramref name="x"/>.
+    /// </summary>
+    private Tensor<T> CalculateDerivativeValues(Tensor<T> x)
+    {
+        var engine = AiDotNetEngine.Current;
+        var x2 = engine.TensorSquare(x);
+        T sigma2 = NumOps.Square(_sigma);
+        T sigma4 = NumOps.Square(sigma2);
+        var cubicTerm = engine.TensorDivideScalar(engine.TensorMultiply(x, x2), sigma4); // x^3/s^4
+        var linearTerm = engine.TensorDivideScalar(engine.TensorMultiplyScalar(x, NumOps.FromDouble(4.0)), sigma2); // 4x/s^2
+        var polynomial = engine.TensorSubtract(cubicTerm, linearTerm);
+        var expTerm = engine.TensorExp(engine.TensorNegate(
+            engine.TensorDivideScalar(x2, NumOps.Multiply(NumOps.FromDouble(2.0), sigma2))));
+        return engine.TensorMultiply(polynomial, expTerm);
     }
 }

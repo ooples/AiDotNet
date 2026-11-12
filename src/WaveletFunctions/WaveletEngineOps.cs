@@ -212,6 +212,35 @@ internal static class WaveletEngineOps<T>
     }
 
     /// <summary>
+    /// Pointwise analysis used by the sampled continuous wavelets: <c>a[i] = w[i] * x[i]</c> and
+    /// <c>d[i] = w'[i] * x[i]</c>.
+    /// </summary>
+    internal static (Vector<T> approximation, Vector<T> detail) PointwiseDecompose(
+        Vector<T> input, Tensor<T> waveletValue, Tensor<T> derivativeValue)
+    {
+        var signal = Tensor<T>.FromVector(input);
+        var approximation = Engine.TensorMultiply(waveletValue, signal).ToVector();
+        var detail = Engine.TensorMultiply(derivativeValue, signal).ToVector();
+        return (approximation, detail);
+    }
+
+    /// <summary>
+    /// Least-squares inverse of <see cref="PointwiseDecompose"/>: <c>(a * w + d * w') / (w^2 + w'^2)</c>, or
+    /// <c>a + d</c> where <c>|w^2 + w'^2| &lt;= 1e-10</c>.
+    /// </summary>
+    internal static Vector<T> PointwiseReconstruct(
+        Vector<T> approximation, Vector<T> detail, Tensor<T> waveletValue, Tensor<T> derivativeValue)
+    {
+        int size = approximation.Length;
+        var a = Tensor<T>.FromVector(approximation);
+        var d = Prefix(detail, size);
+        var denominator = Engine.TensorAdd(Engine.TensorSquare(waveletValue), Engine.TensorSquare(derivativeValue));
+        var numerator = Engine.TensorAdd(Engine.TensorMultiply(a, waveletValue), Engine.TensorMultiply(d, derivativeValue));
+        var usable = Engine.TensorGreaterThan(Engine.TensorAbs(denominator), NumOps.FromDouble(1e-10));
+        return Engine.TensorWhere(usable, Engine.TensorDivide(numerator, denominator), Engine.TensorAdd(a, d)).ToVector();
+    }
+
+    /// <summary>
     /// Element-wise sum of the first <c>min(a.Length, b.Length)</c> entries of two vectors.
     /// </summary>
     internal static Vector<T> AddTruncated(Vector<T> a, Vector<T> b)
