@@ -356,7 +356,7 @@ public sealed class LicenseService : ILicenseService
             if (InactiveStatus(entity) is { } inactive)
             {
                 await transaction.RollbackAsync(cancellationToken).ConfigureAwait(false);
-                return (false, 0, inactive);
+                return (false, 0, (LicenseKeyStatus?)inactive);
             }
 
             // Seats held: active activations whose lease is current (see ActivationLease). Read after the lock, so
