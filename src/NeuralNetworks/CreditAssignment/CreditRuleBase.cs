@@ -174,13 +174,7 @@ public abstract class CreditRuleBase<T> : IFeedbackLearningRule<T>
         int batch = t.Shape[0];
         int flat = 1;
         for (int i = 1; i < t.Shape.Length; i++) flat *= t.Shape[i];
-        var v = t.ToVector();
-        var m = new Matrix<T>(batch, flat);
-        int idx = 0;
-        for (int b = 0; b < batch; b++)
-            for (int j = 0; j < flat; j++)
-                m[b, j] = v[idx++];
-        return m;
+        return new Tensor<T>(new[] { batch, flat }, t.ToVector()).ToMatrix();
     }
 
     /// <summary>
@@ -189,14 +183,7 @@ public abstract class CreditRuleBase<T> : IFeedbackLearningRule<T>
     /// </summary>
     protected static Tensor<T> ToTeachingSignal(Matrix<T> flat, int[] outputShape)
     {
-        int batch = flat.Rows;
-        int m = flat.Columns;
-        var data = new Vector<T>(batch * m);
-        int idx = 0;
-        for (int b = 0; b < batch; b++)
-            for (int j = 0; j < m; j++)
-                data[idx++] = flat[b, j];
-        return new Tensor<T>(outputShape, data);
+        return new Tensor<T>(outputShape, Tensor<T>.FromMatrix(flat).ToVector());
     }
 
     // ---- feedback math helpers ---------------------------------------------------------------
@@ -204,41 +191,55 @@ public abstract class CreditRuleBase<T> : IFeedbackLearningRule<T>
     /// <summary>Element-wise sign matrix (−1 / 0 / +1) of <paramref name="w"/>.</summary>
     protected static Matrix<T> SignMatrix(Matrix<T> w, INumericOperations<T> ops)
     {
-        var s = new Matrix<T>(w.Rows, w.Columns);
-        for (int i = 0; i < w.Rows; i++)
-            for (int j = 0; j < w.Columns; j++)
-                s[i, j] = ops.SignOrZero(w[i, j]);
-        return s;
+        // SignOrZero as (w > 0) - (w < 0): NaN gives 0, as SignOrZero does.
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        var engine = AiDotNetEngine.Current;
+        var wt = Tensor<T>.FromMatrix(w);
+        return engine.TensorSubtract(engine.TensorGreaterThan(wt, ops.Zero), engine.TensorLessThan(wt, ops.Zero)).ToMatrix();
     }
 
     /// <summary>Scales each column of <paramref name="m"/> to unit L2 norm (in place) — used by magnitude-stable variants.</summary>
     protected static void NormalizeColumns(Matrix<T> m, INumericOperations<T> ops)
     {
-        for (int j = 0; j < m.Columns; j++)
-        {
-            double sq = 0;
-            for (int i = 0; i < m.Rows; i++) { double v = ops.ToDouble(m[i, j]); sq += v * v; }
-            double norm = Math.Sqrt(sq);
-            if (norm <= 1e-12) continue;
-            T inv = ops.FromDouble(1.0 / norm);
-            for (int i = 0; i < m.Rows; i++) m[i, j] = ops.Multiply(m[i, j], inv);
-        }
+        if (m.Rows == 0 || m.Columns == 0) return;
+
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        var engine = AiDotNetEngine.Current;
+        var mt = Tensor<T>.FromMatrix(m);
+        var norms = engine.TensorNorm(mt, 0, true); // [1, columns]
+        var scale = ScaleUnlessTiny(engine, norms, engine.TensorReciprocal(norms), ops);
+        engine.TensorMultiply(mt, scale).ToMatrix().AsSpan().CopyTo(m.AsWritableSpan());
     }
 
     /// <summary>Rescales each row of <paramref name="signal"/> so its L2 norm matches the same row of <paramref name="reference"/> (in place).</summary>
     protected static void RescaleRowsToMatch(Matrix<T> signal, Matrix<T> reference, INumericOperations<T> ops)
     {
-        for (int b = 0; b < signal.Rows; b++)
-        {
-            double sig = 0, refN = 0;
-            for (int j = 0; j < signal.Columns; j++) { double v = ops.ToDouble(signal[b, j]); sig += v * v; }
-            for (int c = 0; c < reference.Columns; c++) { double v = ops.ToDouble(reference[b, c]); refN += v * v; }
-            double sigNorm = Math.Sqrt(sig);
-            if (sigNorm <= 1e-12) continue;
-            double scale = Math.Sqrt(refN) / sigNorm;
-            T s = ops.FromDouble(scale);
-            for (int j = 0; j < signal.Columns; j++) signal[b, j] = ops.Multiply(signal[b, j], s);
-        }
+        if (signal.Rows == 0 || signal.Columns == 0) return;
+
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        var engine = AiDotNetEngine.Current;
+        var st = Tensor<T>.FromMatrix(signal);
+        var sigNorms = engine.TensorNorm(st, 1, true); // [rows, 1]
+        var refNorms = reference.Columns == 0
+            ? new Tensor<T>(new[] { signal.Rows, 1 })
+            : engine.TensorNorm(
+                engine.TensorSlice(Tensor<T>.FromMatrix(reference), new[] { 0, 0 }, new[] { signal.Rows, reference.Columns }),
+                1, true);
+        var scale = ScaleUnlessTiny(engine, sigNorms, engine.TensorDivide(refNorms, sigNorms), ops);
+        engine.TensorMultiply(st, scale).ToMatrix().AsSpan().CopyTo(signal.AsWritableSpan());
+    }
+
+    /// <summary>
+    /// <paramref name="scale"/> where <paramref name="norms"/> exceeds 1e-12, else 1 (the vector is left as it is).
+    /// A NaN norm is not "tiny", so its scale stays NaN as the scalar check left it.
+    /// </summary>
+    private static Tensor<T> ScaleUnlessTiny(IEngine engine, Tensor<T> norms, Tensor<T> scale, INumericOperations<T> ops)
+    {
+        var tiny = new Tensor<T>(norms._shape);
+        tiny.Fill(ops.FromDouble(1e-12));
+        var ones = new Tensor<T>(norms._shape);
+        ones.Fill(ops.One);
+        return engine.TensorWhere(engine.TensorLessEqual(norms, tiny), ones, scale);
     }
 
     /// <summary>
@@ -248,17 +249,14 @@ public abstract class CreditRuleBase<T> : IFeedbackLearningRule<T>
     protected static Matrix<T> MeanOuter(Matrix<T> a, Matrix<T> b, INumericOperations<T> ops)
     {
         int rows = a.Columns, cols = b.Columns, batch = a.Rows;
-        var g = new Matrix<T>(rows, cols);
         T invBatch = ops.FromDouble(1.0 / Math.Max(1, batch));
-        for (int i = 0; i < rows; i++)
-            for (int j = 0; j < cols; j++)
-            {
-                T acc = ops.Zero;
-                for (int n = 0; n < batch; n++)
-                    acc = ops.Add(acc, ops.Multiply(a[n, i], b[n, j]));
-                g[i, j] = ops.Multiply(acc, invBatch);
-            }
-        return g;
+        if (rows == 0 || cols == 0 || batch == 0) return new Matrix<T>(rows, cols);
+
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        var engine = AiDotNetEngine.Current;
+        // The scan read the first batch rows of b; take the same rows.
+        var bRows = b.Rows == batch ? b : b.GetSubMatrix(0, 0, batch, cols);
+        return engine.MatrixMultiplyScalar(engine.MatrixMultiply(engine.MatrixTranspose(a), bRows), invBatch);
     }
 
     /// <summary>In-place Kolen-Pollack update of a feedback matrix: <c>B ← (1−decay)·B − lr·grad</c>.</summary>
@@ -266,9 +264,12 @@ public abstract class CreditRuleBase<T> : IFeedbackLearningRule<T>
     {
         T keep = ops.FromDouble(1.0 - decay);
         T rate = ops.FromDouble(lr);
-        for (int i = 0; i < b.Rows; i++)
-            for (int j = 0; j < b.Columns; j++)
-                b[i, j] = ops.Subtract(ops.Multiply(keep, b[i, j]), ops.Multiply(rate, grad[i, j]));
+        if (b.Rows == 0 || b.Columns == 0) return;
+
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        var engine = AiDotNetEngine.Current;
+        var updated = engine.MatrixSubtract(engine.MatrixMultiplyScalar(b, keep), engine.MatrixMultiplyScalar(grad, rate));
+        updated.AsSpan().CopyTo(b.AsWritableSpan());
     }
 
     /// <summary>
