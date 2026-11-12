@@ -590,13 +590,14 @@ public partial class MGTSD<T> : TimeSeriesFoundationModelBase<T>
     {
         int len = Math.Max(1, input.Length);
         T mean = NumOps.Zero;
-        for (int i = 0; i < input.Length; i++) mean = NumOps.Add(mean, input[i]);
-        mean = NumOps.Divide(mean, NumOps.FromDouble(len));
         T variance = NumOps.Zero;
-        for (int i = 0; i < input.Length; i++)
+        if (input.Length > 0)
         {
-            T d = NumOps.Subtract(input[i], mean);
-            variance = NumOps.Add(variance, NumOps.Multiply(d, d));
+            // Whole-series mean and population variance.
+            using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+            var flat = Engine.Reshape(input.Contiguous(), new[] { input.Length });
+            mean = NumOps.Divide(Engine.TensorSum(flat), NumOps.FromDouble(len));
+            variance = Engine.TensorSumOfSquares(Engine.TensorSubtractScalar(flat, mean));
         }
         variance = NumOps.Divide(variance, NumOps.FromDouble(len));
         T std = NumOps.Sqrt(NumOps.Add(variance, NumOps.FromDouble(1e-5)));
