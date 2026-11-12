@@ -5,6 +5,7 @@ using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.SelfSupervisedLearning.Evaluation;
+using AiDotNet.Tensors.Engines;
 using AiDotNet.Validation;
 using JsonSerializer = System.Text.Json.JsonSerializer;
 
@@ -32,6 +33,7 @@ namespace AiDotNet.SelfSupervisedLearning;
 public class SelfSupervisedLearningSession<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
+    private static IEngine Engine => AiDotNetEngine.Current;
 
     private readonly ISelfSupervisedLearningMethod<T> _method;
     private readonly SelfSupervisedLearningConfig<T> _config;
@@ -396,36 +398,27 @@ public class SelfSupervisedLearningSession<T>
     /// <param name="trainingLabels">Corresponding labels.</param>
     public void CacheTrainingFeaturesForKNN(IEnumerable<Tensor<T>> trainingData, int[] trainingLabels)
     {
-        // Encode all training data
-        var allFeatures = new List<T[]>();
+        // Encode all training data, keeping each batch's [batchSize, dim] feature rows
+        var allFeatures = new List<Tensor<T>>();
         foreach (var batch in trainingData)
         {
             var encoded = _method.Encode(batch);
             var batchSize = encoded.Shape[0];
             var dim = encoded.Shape[1];
 
-            for (int i = 0; i < batchSize; i++)
+            if (batchSize > 0)
             {
-                var features = new T[dim];
-                for (int j = 0; j < dim; j++)
-                {
-                    features[j] = encoded[i, j];
-                }
-                allFeatures.Add(features);
+                allFeatures.Add(Engine.TensorSlice(encoded, new[] { 0, 0 }, new[] { batchSize, dim }));
             }
         }
 
-        // Convert to tensor
-        var numSamples = allFeatures.Count;
-        var featureDim = allFeatures[0].Length;
-        var flatFeatures = new T[numSamples * featureDim];
-
-        for (int i = 0; i < numSamples; i++)
+        if (allFeatures.Count == 0)
         {
-            Array.Copy(allFeatures[i], 0, flatFeatures, i * featureDim, featureDim);
+            throw new ArgumentOutOfRangeException(nameof(trainingData), "No training features were encoded.");
         }
 
-        _cachedTrainingFeatures = new Tensor<T>(flatFeatures, [numSamples, featureDim]);
+        // Stack the rows into one [numSamples, featureDim] tensor
+        _cachedTrainingFeatures = Engine.TensorConcatenate(allFeatures.ToArray(), 0);
         _cachedTrainingLabels = trainingLabels;
     }
 
