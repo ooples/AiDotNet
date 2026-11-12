@@ -615,20 +615,21 @@ public partial class GaussianSplatting<T> : AiDotNet.NeuralNetworks.VectorModelL
         // Corners of a unit cube centred on the origin — gives a coarse but
         // varied initial geometry that exercises position / colour / scale /
         // opacity parameter updates symmetrically.
-        var corners = new double[8, 3]
+        // Cube corners at +-0.5 in binary order: corner i has x = bit 2, y = bit 1, z = bit 0 of i.
+        var engine = AiDotNetEngine.Current;
+        var index = engine.TensorArange<T>(0, seedCap, 1);
+        var two = engine.TensorFullLike(index, NumOps.FromDouble(2.0));
+        var xBit = engine.TensorFloor(engine.TensorDivideScalar(index, NumOps.FromDouble(4.0)));
+        var yBit = engine.TensorRemainder(engine.TensorFloor(engine.TensorDivideScalar(index, NumOps.FromDouble(2.0))), two);
+        var zBit = engine.TensorRemainder(index, two);
+        var half = NumOps.FromDouble(0.5);
+        var corners = engine.TensorStack(new[]
         {
-            { -0.5, -0.5, -0.5 }, { -0.5, -0.5,  0.5 },
-            { -0.5,  0.5, -0.5 }, { -0.5,  0.5,  0.5 },
-            {  0.5, -0.5, -0.5 }, {  0.5, -0.5,  0.5 },
-            {  0.5,  0.5, -0.5 }, {  0.5,  0.5,  0.5 }
-        };
-        var pointCloud = new Matrix<T>(seedCap, 3);
-        for (int i = 0; i < seedCap; i++)
-        {
-            pointCloud[i, 0] = NumOps.FromDouble(corners[i, 0]);
-            pointCloud[i, 1] = NumOps.FromDouble(corners[i, 1]);
-            pointCloud[i, 2] = NumOps.FromDouble(corners[i, 2]);
-        }
+            engine.TensorSubtractScalar(xBit, half),
+            engine.TensorSubtractScalar(yBit, half),
+            engine.TensorSubtractScalar(zBit, half)
+        }, 1);
+        var pointCloud = corners.ToMatrix();
         InitializeFromPointCloud(pointCloud, colors: null);
     }
 
@@ -1067,15 +1068,28 @@ public partial class GaussianSplatting<T> : AiDotNet.NeuralNetworks.VectorModelL
     {
         double avgScale = 0.0;
         double maxScale = 0.0;
-        for (int i = 0; i < _gaussians.Count; i++)
+        if (_gaussians.Count > 0)
         {
-            var scale = _gaussians[i].Scale;
-            double sx = Math.Abs(NumOps.ToDouble(scale[0]));
-            double sy = Math.Abs(NumOps.ToDouble(scale[1]));
-            double sz = Math.Abs(NumOps.ToDouble(scale[2]));
-            double max = Math.Max(sx, Math.Max(sy, sz));
-            avgScale += max;
-            maxScale = Math.Max(maxScale, max);
+            var engine = AiDotNetEngine.Current;
+            var rows = new Tensor<T>[_gaussians.Count];
+            for (int i = 0; i < rows.Length; i++)
+            {
+                rows[i] = Tensor<T>.FromVector(_gaussians[i].Scale.GetSubVector(0, 3));
+            }
+
+            var scales = engine.TensorAbs(engine.TensorStack(rows, 0));
+            if (AiDotNet.Geometry.GeometryEngineOps<T>.AnyNan(scales))
+            {
+                // Math.Max and the running sum propagate NaN.
+                avgScale = double.NaN;
+                maxScale = double.NaN;
+            }
+            else
+            {
+                var largest = engine.ReduceMax(scales, new[] { 1 }, false);
+                avgScale = NumOps.ToDouble(engine.TensorSum(largest));
+                maxScale = Math.Max(0.0, NumOps.ToDouble(engine.TensorMaxValue(largest)));
+            }
         }
 
         avgScale = _gaussians.Count > 0 ? avgScale / _gaussians.Count : 0.0;
@@ -2225,11 +2239,17 @@ public partial class GaussianSplatting<T> : AiDotNet.NeuralNetworks.VectorModelL
     private static void MergeInto(Gaussian target, Gaussian source)
     {
         var numOps = MathHelper.GetNumericOperations<T>();
-        for (int i = 0; i < 3; i++)
-        {
-            target.Position[i] = numOps.Divide(numOps.Add(target.Position[i], source.Position[i]), numOps.FromDouble(2.0));
-            target.Scale[i]    = numOps.GreaterThan(target.Scale[i], source.Scale[i]) ? target.Scale[i] : source.Scale[i];
-        }
+        var engine = AiDotNetEngine.Current;
+        var targetPosition = Tensor<T>.FromVector(target.Position.GetSubVector(0, 3));
+        var sourcePosition = Tensor<T>.FromVector(source.Position.GetSubVector(0, 3));
+        var mergedPosition = engine.TensorDivideScalar(engine.TensorAdd(targetPosition, sourcePosition), numOps.FromDouble(2.0));
+        mergedPosition.CopyTo(target.Position.AsWritableSpan().Slice(0, 3));
+
+        // The larger scale per axis wins; ties (and NaN comparisons) keep the source's value.
+        var targetScale = Tensor<T>.FromVector(target.Scale.GetSubVector(0, 3));
+        var sourceScale = Tensor<T>.FromVector(source.Scale.GetSubVector(0, 3));
+        var mergedScale = engine.TensorWhere(engine.TensorGreaterThan(targetScale, sourceScale), targetScale, sourceScale);
+        mergedScale.CopyTo(target.Scale.AsWritableSpan().Slice(0, 3));
         // Opacity: convert both from logit → probability, SUM (matches the doc's
         // "sum opacities" semantics), clamp back into a valid probability range, and
         // convert back to logit. Taking max would leave the merged Gaussian no more
@@ -3372,16 +3392,10 @@ public partial class GaussianSplatting<T> : AiDotNet.NeuralNetworks.VectorModelL
     private Gaussian CloneGaussian(Gaussian source)
     {
         var clone = new Gaussian(source.Color.Length, NumOps);
-        clone.Position[0] = source.Position[0];
-        clone.Position[1] = source.Position[1];
-        clone.Position[2] = source.Position[2];
-        clone.Rotation[0] = source.Rotation[0];
-        clone.Rotation[1] = source.Rotation[1];
-        clone.Rotation[2] = source.Rotation[2];
-        clone.Rotation[3] = source.Rotation[3];
-        clone.Scale[0] = source.Scale[0];
-        clone.Scale[1] = source.Scale[1];
-        clone.Scale[2] = source.Scale[2];
+        source.Position.AsSpan().CopyTo(clone.Position.AsWritableSpan());
+        source.Rotation.AsSpan().CopyTo(clone.Rotation.AsWritableSpan());
+        source.Scale.AsSpan().CopyTo(clone.Scale.AsWritableSpan());
+        source.Color.AsSpan().CopyTo(clone.Color.AsWritableSpan());
         clone.Opacity = source.Opacity;
         clone.PositionLrScale = source.PositionLrScale;
         clone.ScaleLrScale    = source.ScaleLrScale;
@@ -3390,11 +3404,6 @@ public partial class GaussianSplatting<T> : AiDotNet.NeuralNetworks.VectorModelL
         clone.ColorLrScale    = source.ColorLrScale;
         clone.Covariance = source.Covariance?.Clone();
         clone.CovarianceInverse = source.CovarianceInverse?.Clone();
-
-        for (int i = 0; i < source.Color.Length; i++)
-        {
-            clone.Color[i] = source.Color[i];
-        }
 
         return clone;
     }
