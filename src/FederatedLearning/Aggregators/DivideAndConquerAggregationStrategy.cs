@@ -1,5 +1,6 @@
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
+using AiDotNet.Helpers;
 
 namespace AiDotNet.FederatedLearning.Aggregators;
 
@@ -9,23 +10,23 @@ namespace AiDotNet.FederatedLearning.Aggregators;
 /// <remarks>
 /// <para><b>For Beginners:</b> Some poisoning attacks are hard to detect when you look at the
 /// full high-dimensional update vectors — the malicious signal hides in the noise.
-/// DnC projects client updates into random low-dimensional subspaces, then uses spectral
+/// DnC looks at random subsets of the update coordinates, then uses spectral
 /// analysis (top singular vector projection) to identify attackers that might evade
 /// simpler coordinate-wise defenses like median or trimmed mean.</para>
 ///
 /// <para>Algorithm:</para>
 /// <list type="number">
 /// <item>Flatten all client updates into vectors</item>
-/// <item>Project into a random orthogonal subspace of dimension <c>SubspaceDimension</c></item>
-/// <item>Compute centered second-moment matrix and its top right singular vector via power iteration</item>
-/// <item>Score each client by squared projection onto this singular vector</item>
-/// <item>Iteratively remove the top outlier, recompute, repeat for <c>NumByzantine</c> rounds</item>
+/// <item>Sample a random sorted subset of <c>SubspaceDimension</c> coordinates and center the sub-sampled updates</item>
+/// <item>Compute the top right singular vector of the centered matrix</item>
+/// <item>Score each client by its squared projection onto this singular vector</item>
+/// <item>Keep the n - floor(c * NumByzantine) lowest-scoring clients; repeat for <c>Iterations</c> and intersect</item>
 /// <item>Average the remaining (trusted) updates</item>
 /// </list>
 ///
 /// <para>Reference: Shejwalkar, V. &amp; Houmansadr, A. (2021). "Manipulating the Byzantine:
 /// Optimizing Model Poisoning Attacks and Defenses for Federated Learning."
-/// NDSS 2021.</para>
+/// NDSS 2021, Algorithm 2.</para>
 /// </remarks>
 /// <typeparam name="T">The numeric type for model parameters.</typeparam>
 [ComponentType(ComponentType.FederatedAggregator)]
@@ -35,15 +36,24 @@ public class DivideAndConquerAggregationStrategy<T> : ParameterDictionaryAggrega
     private readonly int _numByzantine;
     private readonly int _subspaceDimension;
     private readonly int _seed;
+    private readonly int _iterations;
+    private readonly double _filterFraction;
     private int _roundCounter;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="DivideAndConquerAggregationStrategy{T}"/> class.
     /// </summary>
-    /// <param name="numByzantine">Expected number of Byzantine clients. Default: 1.</param>
-    /// <param name="subspaceDimension">Dimension of random projection subspace. Default: 10.</param>
+    /// <param name="numByzantine">Expected number of Byzantine clients m. Default: 1.</param>
+    /// <param name="subspaceDimension">Number b of randomly sub-sampled coordinates per iteration. Default: 10000 (paper).</param>
     /// <param name="seed">Random seed for reproducibility. Default: 42.</param>
-    public DivideAndConquerAggregationStrategy(int numByzantine = 1, int subspaceDimension = 10, int seed = 42)
+    /// <param name="iterations">Number of filtering iterations (niters). Default: 1 (paper).</param>
+    /// <param name="filterFraction">Filtering fraction c; each iteration removes floor(c * m) clients. Default: 1.0 (paper).</param>
+    public DivideAndConquerAggregationStrategy(
+        int numByzantine = 1,
+        int subspaceDimension = 10000,
+        int seed = 42,
+        int iterations = 1,
+        double filterFraction = 1.0)
     {
         if (numByzantine < 0)
         {
@@ -55,9 +65,21 @@ public class DivideAndConquerAggregationStrategy<T> : ParameterDictionaryAggrega
             throw new ArgumentOutOfRangeException(nameof(subspaceDimension), "Subspace dimension must be at least 1.");
         }
 
+        if (iterations < 1)
+        {
+            throw new ArgumentOutOfRangeException(nameof(iterations), "Iterations must be at least 1.");
+        }
+
+        if (double.IsNaN(filterFraction) || filterFraction <= 0.0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(filterFraction), "Filter fraction must be positive.");
+        }
+
         _numByzantine = numByzantine;
         _subspaceDimension = subspaceDimension;
         _seed = seed;
+        _iterations = iterations;
+        _filterFraction = filterFraction;
     }
 
     /// <inheritdoc/>
@@ -106,108 +128,47 @@ public class DivideAndConquerAggregationStrategy<T> : ParameterDictionaryAggrega
             }
         }
 
-        // Flatten all client models into vectors.
+        // Flatten all client models into one [n, d] matrix of updates.
         int totalParams = layerNames.Sum(ln => referenceModel[ln].Length);
         var clientIds = clientModels.Keys.ToList();
         int n = clientIds.Count;
-
-        var flatVectors = new double[n][];
-        for (int c = 0; c < n; c++)
-        {
-            flatVectors[c] = new double[totalParams];
-            int offset = 0;
-            foreach (var layerName in layerNames)
-            {
-                var cp = clientModels[clientIds[c]][layerName];
-                for (int i = 0; i < cp.Length; i++)
-                {
-                    flatVectors[c][offset++] = NumOps.ToDouble(cp[i]);
-                }
-            }
-        }
+        var updates = Engine.TensorStack(
+            clientIds.Select(id => FlattenLayers(clientModels[id], layerNames, totalParams).AsTensor()).ToArray(), 0);
 
         // Use round-varying seed for fresh randomness each aggregation.
         var rng = RandomHelper.CreateSeededRandom(_seed + _roundCounter++);
 
-        // Generate random orthogonal projection matrix via QR decomposition of Gaussian matrix.
-        int dim = Math.Min(_subspaceDimension, totalParams);
-        var projectionMatrix = GenerateOrthogonalProjection(rng, totalParams, dim);
+        // Algorithm 2: each iteration keeps the n - floor(c * m) clients with the lowest outlier scores on a
+        // random sorted subset of b coordinates; the trusted set is the intersection over iterations.
+        int removeCount = Math.Min((int)Math.Floor(_filterFraction * _numByzantine), n - 1);
+        int subDim = Math.Min(_subspaceDimension, totalParams);
+        var goodSet = new HashSet<int>(Enumerable.Range(0, n));
 
-        // Iterative spectral filtering: remove one outlier per iteration.
-        var activeIndices = new List<int>(Enumerable.Range(0, n));
-        int numToRemove = Math.Min(_numByzantine, n - 1);
-
-        for (int iter = 0; iter < numToRemove; iter++)
+        for (int iter = 0; iter < _iterations && removeCount > 0 && subDim > 0; iter++)
         {
-            if (activeIndices.Count <= 1)
-            {
-                break;
-            }
+            var coordinates = SampleSortedCoordinates(rng, totalParams, subDim);
+            var sub = Engine.TensorIndexSelect(updates, Vector<int>.Wrap(coordinates).AsTensor(), 1);
 
-            // Compute mean of active clients.
-            var mean = new double[totalParams];
-            foreach (int c in activeIndices)
-            {
-                for (int i = 0; i < totalParams; i++)
-                {
-                    mean[i] += flatVectors[c][i] / activeIndices.Count;
-                }
-            }
+            var mu = Engine.ReduceMean(sub, new[] { 0 }, true);
+            var centered = Engine.TensorSubtract(sub, Engine.TensorBroadcastTo(mu, new[] { n, subDim }));
 
-            // Center active vectors.
-            var centered = new double[activeIndices.Count][];
-            for (int idx = 0; idx < activeIndices.Count; idx++)
-            {
-                int c = activeIndices[idx];
-                centered[idx] = new double[totalParams];
-                for (int i = 0; i < totalParams; i++)
-                {
-                    centered[idx][i] = flatVectors[c][i] - mean[i];
-                }
-            }
+            // Top right singular vector v of the centered sub-sampled updates.
+            var (_, _, vh) = LinalgDispatch<T>.Svd(centered, false);
+            var topRight = Engine.TensorSlice(vh, new[] { 0, 0 }, new[] { 1, subDim }).Reshape(subDim, 1);
 
-            // Project into random subspace.
-            var projected = new double[activeIndices.Count][];
-            for (int idx = 0; idx < activeIndices.Count; idx++)
-            {
-                projected[idx] = new double[dim];
-                for (int d = 0; d < dim; d++)
-                {
-                    double sum = 0;
-                    for (int i = 0; i < totalParams; i++)
-                    {
-                        sum += centered[idx][i] * projectionMatrix[d][i];
-                    }
+            // s_i = ((g_i - mu) . v)^2
+            var scores = Engine.TensorSquare(Engine.TensorMatMul(centered, topRight)).ToVector().ToArray();
 
-                    projected[idx][d] = sum;
-                }
-            }
+            // LINQ OrderBy is stable: equal scores keep the lower client index first.
+            var kept = Enumerable.Range(0, n).OrderBy(i => scores[i]).Take(n - removeCount);
+            goodSet.IntersectWith(kept);
+        }
 
-            // Find top right singular vector of projected matrix via power iteration.
-            var topSingularVector = ComputeTopRightSingularVector(projected, activeIndices.Count, dim, rng);
-
-            // Score each client by squared projection onto the top singular vector.
-            double maxScore = double.NegativeInfinity;
-            int maxIdx = 0;
-
-            for (int idx = 0; idx < activeIndices.Count; idx++)
-            {
-                double projection = 0;
-                for (int d = 0; d < dim; d++)
-                {
-                    projection += projected[idx][d] * topSingularVector[d];
-                }
-
-                double score = projection * projection;
-                if (score > maxScore)
-                {
-                    maxScore = score;
-                    maxIdx = idx;
-                }
-            }
-
-            // Remove the top outlier.
-            activeIndices.RemoveAt(maxIdx);
+        var activeIndices = goodSet.OrderBy(i => i).ToList();
+        if (activeIndices.Count == 0)
+        {
+            throw new InvalidOperationException(
+                "DnC filtering removed every client: the per-iteration trusted sets do not intersect.");
         }
 
         // Aggregate remaining (trusted) clients.
@@ -240,12 +201,7 @@ public class DivideAndConquerAggregationStrategy<T> : ParameterDictionaryAggrega
 
             foreach (var layerName in layerNames)
             {
-                var cp = clientModel[layerName];
-                var rp = result[layerName];
-                for (int i = 0; i < rp.Length; i++)
-                {
-                    rp[i] = NumOps.Add(rp[i], NumOps.Multiply(cp[i], nw));
-                }
+                AddScaledInto(result[layerName], clientModel[layerName], nw);
             }
         }
 
@@ -253,146 +209,35 @@ public class DivideAndConquerAggregationStrategy<T> : ParameterDictionaryAggrega
     }
 
     /// <summary>
-    /// Generates an orthogonal projection matrix via modified Gram-Schmidt on Gaussian vectors.
+    /// Draws <paramref name="count"/> distinct coordinates out of <paramref name="dimension"/> uniformly without
+    /// replacement (partial Fisher-Yates) and returns them sorted ascending.
     /// </summary>
-    private static double[][] GenerateOrthogonalProjection(Random rng, int totalParams, int dim)
+    private static int[] SampleSortedCoordinates(Random rng, int dimension, int count)
     {
-        var basis = new double[dim][];
-
-        for (int d = 0; d < dim; d++)
+        var pool = Enumerable.Range(0, dimension).ToArray();
+        for (int i = 0; i < count; i++)
         {
-            // Generate random Gaussian vector.
-            basis[d] = new double[totalParams];
-            for (int i = 0; i < totalParams; i++)
-            {
-                double u1 = 1.0 - rng.NextDouble();
-                double u2 = 1.0 - rng.NextDouble();
-                basis[d][i] = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2);
-            }
-
-            // Gram-Schmidt orthogonalization against previous basis vectors.
-            for (int prev = 0; prev < d; prev++)
-            {
-                double dot = 0;
-                for (int i = 0; i < totalParams; i++)
-                {
-                    dot += basis[d][i] * basis[prev][i];
-                }
-
-                for (int i = 0; i < totalParams; i++)
-                {
-                    basis[d][i] -= dot * basis[prev][i];
-                }
-            }
-
-            // Normalize.
-            double norm = 0;
-            for (int i = 0; i < totalParams; i++)
-            {
-                norm += basis[d][i] * basis[d][i];
-            }
-
-            norm = Math.Sqrt(norm);
-            if (norm > 1e-12)
-            {
-                for (int i = 0; i < totalParams; i++)
-                {
-                    basis[d][i] /= norm;
-                }
-            }
+            int j = i + rng.Next(dimension - i);
+            (pool[i], pool[j]) = (pool[j], pool[i]);
         }
 
-        return basis;
-    }
-
-    /// <summary>
-    /// Computes the top right singular vector of the data matrix via power iteration.
-    /// data is [numSamples x dim], we want the top right singular vector of A^T A.
-    /// </summary>
-    private static double[] ComputeTopRightSingularVector(double[][] data, int numSamples, int dim, Random rng)
-    {
-        const int maxIterations = 50;
-        const double tolerance = 1e-8;
-
-        // Initialize random vector.
-        var v = new double[dim];
-        for (int d = 0; d < dim; d++)
-        {
-            v[d] = rng.NextDouble() - 0.5;
-        }
-
-        NormalizeVector(v);
-
-        double prevEigenvalue = 0;
-
-        for (int iter = 0; iter < maxIterations; iter++)
-        {
-            // Compute A^T A v: first compute u = A v, then result = A^T u.
-            // u = data * v  (u is [numSamples])
-            var u = new double[numSamples];
-            for (int i = 0; i < numSamples; i++)
-            {
-                double sum = 0;
-                for (int d = 0; d < dim; d++)
-                {
-                    sum += data[i][d] * v[d];
-                }
-
-                u[i] = sum;
-            }
-
-            // v_new = A^T u  (v_new is [dim])
-            var vNew = new double[dim];
-            for (int d = 0; d < dim; d++)
-            {
-                double sum = 0;
-                for (int i = 0; i < numSamples; i++)
-                {
-                    sum += data[i][d] * u[i];
-                }
-
-                vNew[d] = sum;
-            }
-
-            double eigenvalue = NormalizeVector(vNew);
-
-            if (Math.Abs(eigenvalue - prevEigenvalue) < tolerance * Math.Max(prevEigenvalue, 1e-10))
-            {
-                return vNew;
-            }
-
-            prevEigenvalue = eigenvalue;
-            v = vNew;
-        }
-
-        return v;
-    }
-
-    private static double NormalizeVector(double[] vec)
-    {
-        double norm = 0;
-        for (int i = 0; i < vec.Length; i++)
-        {
-            norm += vec[i] * vec[i];
-        }
-
-        norm = Math.Sqrt(norm);
-        if (norm > 1e-15)
-        {
-            for (int i = 0; i < vec.Length; i++)
-            {
-                vec[i] /= norm;
-            }
-        }
-
-        return norm;
+        var chosen = new int[count];
+        Array.Copy(pool, chosen, count);
+        Array.Sort(chosen);
+        return chosen;
     }
 
     /// <summary>Gets the expected number of Byzantine clients.</summary>
     public int NumByzantine => _numByzantine;
 
-    /// <summary>Gets the random projection subspace dimension.</summary>
+    /// <summary>Gets the number b of sub-sampled coordinates per iteration.</summary>
     public int SubspaceDimension => _subspaceDimension;
+
+    /// <summary>Gets the number of filtering iterations (niters).</summary>
+    public int Iterations => _iterations;
+
+    /// <summary>Gets the filtering fraction c.</summary>
+    public double FilterFraction => _filterFraction;
 
     /// <inheritdoc/>
     public override string GetStrategyName() => $"DnC(f={_numByzantine},d={_subspaceDimension})";

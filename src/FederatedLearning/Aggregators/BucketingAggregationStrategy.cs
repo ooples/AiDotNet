@@ -144,14 +144,10 @@ public class BucketingAggregationStrategy<T> : ParameterDictionaryAggregationStr
                 totalBucketWeight += w;
                 var clientModel = clientModels[clientId];
 
+                var wT = NumOps.FromDouble(w);
                 foreach (var layerName in layerNames)
                 {
-                    var cp = clientModel[layerName];
-                    var bp = bucketAvg[layerName];
-                    for (int j = 0; j < bp.Length; j++)
-                    {
-                        bp[j] = NumOps.Add(bp[j], NumOps.Multiply(cp[j], NumOps.FromDouble(w)));
-                    }
+                    AddScaledInto(bucketAvg[layerName], clientModel[layerName], wT);
                 }
             }
 
@@ -162,10 +158,7 @@ public class BucketingAggregationStrategy<T> : ParameterDictionaryAggregationStr
                 foreach (var layerName in layerNames)
                 {
                     var bp = bucketAvg[layerName];
-                    for (int j = 0; j < bp.Length; j++)
-                    {
-                        bp[j] = NumOps.Multiply(bp[j], invWeight);
-                    }
+                    Engine.Multiply(Vector<T>.Wrap(bp), invWeight).AsSpan().CopyTo(bp);
                 }
             }
 

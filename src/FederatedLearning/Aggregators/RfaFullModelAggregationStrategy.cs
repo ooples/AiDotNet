@@ -61,34 +61,24 @@ public sealed class RfaFullModelAggregationStrategy<T, TInput, TOutput> :
         var clientIds = clientParameters.Keys.OrderBy(id => id).ToArray();
 
         // Initialize with an unweighted average (stable starting point).
-        var current = new double[parameterCount];
-        for (int i = 0; i < parameterCount; i++)
+        var current = new Vector<T>(parameterCount);
+        foreach (var clientId in clientIds)
         {
-            double sum = 0.0;
-            for (int j = 0; j < clientIds.Length; j++)
-            {
-                sum += NumOps.ToDouble(clientParameters[clientIds[j]][i]);
-            }
-
-            current[i] = sum / clientIds.Length;
+            current = Engine.Add(current, clientParameters[clientId]);
         }
+
+        current = Engine.Divide(current, NumOps.FromDouble(clientIds.Length));
 
         for (int iter = 0; iter < _maxIterations; iter++)
         {
-            var next = new double[parameterCount];
+            var next = new Vector<T>(parameterCount);
             double weightSum = 0.0;
 
             foreach (var clientId in clientIds)
             {
                 var p = clientParameters[clientId];
-                double dist = 0.0;
-                for (int i = 0; i < parameterCount; i++)
-                {
-                    double diff = current[i] - NumOps.ToDouble(p[i]);
-                    dist += diff * diff;
-                }
-
-                dist = Math.Sqrt(dist);
+                var offset = Engine.Subtract(current, p);
+                double dist = Math.Sqrt(NumOps.ToDouble(Engine.DotProduct(offset, offset)));
                 dist = Math.Max(dist, _epsilon);
 
                 double w = 1.0 / dist;
@@ -98,10 +88,7 @@ public sealed class RfaFullModelAggregationStrategy<T, TInput, TOutput> :
                 }
 
                 weightSum += w;
-                for (int i = 0; i < parameterCount; i++)
-                {
-                    next[i] += w * NumOps.ToDouble(p[i]);
-                }
+                next = Engine.Add(next, Engine.Multiply(p, NumOps.FromDouble(w)));
             }
 
             if (weightSum <= 0.0)
@@ -109,33 +96,18 @@ public sealed class RfaFullModelAggregationStrategy<T, TInput, TOutput> :
                 break;
             }
 
-            for (int i = 0; i < parameterCount; i++)
-            {
-                next[i] /= weightSum;
-            }
+            next = Engine.Divide(next, NumOps.FromDouble(weightSum));
 
-            double delta = 0.0;
-            for (int i = 0; i < parameterCount; i++)
-            {
-                double diff = next[i] - current[i];
-                delta += diff * diff;
-            }
-
+            var step = Engine.Subtract(next, current);
+            double delta = NumOps.ToDouble(Engine.DotProduct(step, step));
+            current = next;
             if (Math.Sqrt(delta) <= _tolerance)
             {
-                current = next;
                 break;
             }
-
-            current = next;
         }
 
-        var aggregated = new Vector<T>(parameterCount);
-        for (int i = 0; i < parameterCount; i++)
-        {
-            aggregated[i] = NumOps.FromDouble(current[i]);
-        }
-
+        var aggregated = current;
         return InterfaceGuard.Parameterizable(reference).WithParameters(aggregated);
     }
 
