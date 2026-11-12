@@ -25,15 +25,15 @@ public class ScalersDeepMathIntegrationTests
     {
         // x = {2, 4, 4, 4, 5, 5, 7, 9}
         // mean = 40/8 = 5
-        // variance = sum((x-5)^2) / (8-1) = (9+1+1+1+0+0+4+16)/7 = 32/7
-        // std = sqrt(32/7) ≈ 2.13809
+        // variance (scikit-learn, ddof=0) = sum((x-5)^2) / 8 = (9+1+1+1+0+0+4+16)/8 = 4
+        // std = 2
         // z-scores: (x-5)/std
         var scaler = new StandardScaler<double>();
         var data = CreateMatrix(new double[,] { { 2 }, { 4 }, { 4 }, { 4 }, { 5 }, { 5 }, { 7 }, { 9 } });
         var transformed = scaler.FitTransform(data);
 
         double mean = 5.0;
-        double std = Math.Sqrt(32.0 / 7.0);
+        double std = 2.0;
 
         Assert.Equal((2.0 - mean) / std, transformed[0, 0], MediumTolerance);
         Assert.Equal((4.0 - mean) / std, transformed[1, 0], MediumTolerance);
@@ -65,14 +65,14 @@ public class ScalersDeepMathIntegrationTests
         var data = CreateMatrix(new double[,] { { 1 }, { 2 }, { 3 }, { 4 }, { 5 }, { 6 }, { 7 }, { 8 } });
         var transformed = scaler.FitTransform(data);
 
-        // Calculate sample std of transformed data
+        // Calculate population std (ddof=0, as scikit-learn scales by) of transformed data
         double mean = 0;
         for (int i = 0; i < 8; i++) mean += transformed[i, 0];
         mean /= 8;
         double sumSq = 0;
         for (int i = 0; i < 8; i++)
             sumSq += (transformed[i, 0] - mean) * (transformed[i, 0] - mean);
-        double std = Math.Sqrt(sumSq / 7);
+        double std = Math.Sqrt(sumSq / 8);
 
         Assert.Equal(1.0, std, MediumTolerance);
     }

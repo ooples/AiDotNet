@@ -65,13 +65,13 @@ public class ScalerIntegrationTests
             {
                 variance += Math.Pow(result[i, j] - mean, 2);
             }
-            // AiDotNet uses sample variance (N-1 denominator, Bessel's correction)
-            // Note: This differs from sklearn which uses population variance (N denominator, ddof=0)
-            variance /= (result.Rows - 1);
+            // scikit-learn StandardScaler uses the biased estimator (N denominator, numpy.std ddof=0), so the
+            // transformed columns have unit population standard deviation.
+            variance /= result.Rows;
             double std = Math.Sqrt(variance);
 
             Assert.True(Math.Abs(mean) < 1e-10, $"Column {j} mean should be ~0, got {mean}");
-            Assert.True(Math.Abs(std - 1.0) < 1e-10, $"Column {j} sample std should be ~1, got {std}");
+            Assert.True(Math.Abs(std - 1.0) < 1e-10, $"Column {j} population std should be ~1, got {std}");
         }
     }
 
@@ -102,11 +102,12 @@ public class ScalerIntegrationTests
         var result = scaler.FitTransform(data);
 
         // Assert - Values should be scaled but not centered
-        // Original mean = 10, sample std = sqrt((100+0+100)/2) = sqrt(100) = 10
+        // Original mean = 10, population std (scikit-learn, ddof=0) = sqrt((100+0+100)/3) = sqrt(200/3)
         // Values should be: 0/std, 10/std, 20/std (no mean subtraction)
-        Assert.True(Math.Abs(result[0, 0]) < 1e-10); // 0 / 10 = 0
-        Assert.True(Math.Abs(result[1, 0] - 1.0) < 1e-10); // 10 / 10 = 1
-        Assert.True(Math.Abs(result[2, 0] - 2.0) < 1e-10); // 20 / 10 = 2
+        double std = Math.Sqrt(200.0 / 3.0);
+        Assert.True(Math.Abs(result[0, 0]) < 1e-10); // 0 / std = 0
+        Assert.True(Math.Abs(result[1, 0] - 10.0 / std) < 1e-10); // 1.224744871391589
+        Assert.True(Math.Abs(result[2, 0] - 20.0 / std) < 1e-10); // 2.449489742783178
     }
 
     [Fact(Timeout = 120000)]
@@ -193,19 +194,17 @@ public class ScalerIntegrationTests
     {
         // Arrange
         var scaler = new StandardScaler<double>();
-        // Using values where sample std is easy to calculate
-        // For [0, 1, 2]: mean=1, sample var = (1+0+1)/(3-1) = 1, sample std = 1
+        // For [0, 1, 2]: mean=1, population var (scikit-learn, ddof=0) = (1+0+1)/3 = 2/3
         var data = CreateTestMatrix(new double[,] { { 0 }, { 1 }, { 2 } });
 
         // Act
         scaler.Fit(data);
 
-        // Assert - AiDotNet StandardScaler uses sample std (N-1 denominator, Bessel's correction)
-        // Note: This differs from sklearn which uses population variance (N denominator, ddof=0)
+        // Assert - StandardScaler matches scikit-learn: scale_ = numpy.std(x, ddof=0)
         Assert.NotNull(scaler.StandardDeviation);
-        double expectedStd = 1.0; // Sample std of [0, 1, 2] = sqrt(2/2) = 1
+        double expectedStd = Math.Sqrt(2.0 / 3.0); // 0.816496580927726
         Assert.True(Math.Abs(scaler.StandardDeviation[0] - expectedStd) < 1e-10,
-            $"Expected sample std {expectedStd}, got {scaler.StandardDeviation[0]}");
+            $"Expected population std {expectedStd}, got {scaler.StandardDeviation[0]}");
     }
 
     #endregion
