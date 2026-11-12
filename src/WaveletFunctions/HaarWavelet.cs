@@ -112,16 +112,21 @@ public class HaarWavelet<T> : WaveletFunctionBase<T>
     {
         if (input.Length % 2 != 0)
             throw new ArgumentException("Input length must be even for Haar wavelet decomposition.");
+
         int halfLength = input.Length / 2;
-        var approximation = new Vector<T>(halfLength);
-        var detail = new Vector<T>(halfLength);
-        for (int i = 0; i < halfLength; i++)
+        if (halfLength == 0)
         {
-            T sum = NumOps.Add(input[2 * i], input[2 * i + 1]);
-            T diff = NumOps.Subtract(input[2 * i], input[2 * i + 1]);
-            approximation[i] = NumOps.Multiply(NumOps.FromDouble(1.0 / Math.Sqrt(2)), sum);
-            detail[i] = NumOps.Multiply(NumOps.FromDouble(1.0 / Math.Sqrt(2)), diff);
+            return (new Vector<T>(0), new Vector<T>(0));
         }
+
+        var engine = AiDotNetEngine.Current;
+        T scale = NumOps.FromDouble(1.0 / Math.Sqrt(2));
+        var even = engine.StridedGather(input, 0, 2, halfLength);
+        var odd = engine.StridedGather(input, 1, 2, halfLength);
+
+        // a[i] = (x[2i] + x[2i + 1]) / sqrt(2), d[i] = (x[2i] - x[2i + 1]) / sqrt(2)
+        var approximation = engine.Multiply(engine.Add(even, odd), scale);
+        var detail = engine.Multiply(engine.Subtract(even, odd), scale);
         return (approximation, detail);
     }
 
@@ -147,18 +152,22 @@ public class HaarWavelet<T> : WaveletFunctionBase<T>
     /// </remarks>
     public Vector<T> Reconstruct(Vector<T> approximation, Vector<T> detail)
     {
+        var engine = AiDotNetEngine.Current;
         int outputLength = approximation.Length * 2;
         var reconstructed = new Vector<T>(outputLength);
-        T scale = NumOps.FromDouble(1.0 / Math.Sqrt(2));
-
-        for (int i = 0; i < approximation.Length; i++)
+        if (approximation.Length == 0)
         {
-            T sum = NumOps.Add(approximation[i], detail[i]);
-            T diff = NumOps.Subtract(approximation[i], detail[i]);
-            reconstructed[2 * i] = NumOps.Multiply(scale, sum);
-            reconstructed[2 * i + 1] = NumOps.Multiply(scale, diff);
+            return reconstructed;
         }
 
+        T scale = NumOps.FromDouble(1.0 / Math.Sqrt(2));
+        var paired = detail.Length == approximation.Length ? detail : detail.GetSubVector(0, approximation.Length);
+
+        // x[2i] = (a[i] + d[i]) / sqrt(2), x[2i + 1] = (a[i] - d[i]) / sqrt(2)
+        var even = engine.Multiply(engine.Add(approximation, paired), scale);
+        var odd = engine.Multiply(engine.Subtract(approximation, paired), scale);
+        engine.StridedScatter(reconstructed, even, 0, 2);
+        engine.StridedScatter(reconstructed, odd, 1, 2);
         return reconstructed;
     }
 
