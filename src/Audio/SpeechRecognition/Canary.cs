@@ -171,12 +171,13 @@ public partial class Canary<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
     {
         ThrowIfDisposed();
         var probs = DetectLanguageProbabilities(audio);
-        string best = "en"; T bestScore = NumOps.MinValue;
-        foreach (var (lang, score) in probs)
-        {
-            if (NumOps.GreaterThan(score, bestScore)) { bestScore = score; best = lang; }
-        }
-        return best;
+        if (probs.Count == 0) return "en";
+        // First language with the highest probability; NaN never wins.
+        var languages = probs.Keys.ToArray();
+        var scores = new Tensor<T>(probs.Values.ToArray(), [1, languages.Length]);
+        var cleaned = Engine.TensorNanToNum(scores, double.NegativeInfinity, double.PositiveInfinity, double.NegativeInfinity);
+        int best = Engine.TensorArgMax(cleaned, 1).ToArray()[0];
+        return languages[best];
     }
 
     /// <inheritdoc />
@@ -186,11 +187,21 @@ public partial class Canary<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
         var features = PreprocessAudio(audio);
         var output = IsOnnxMode && OnnxEncoder is not null ? OnnxEncoder.Run(features) : Predict(features);
         var probs = new Dictionary<string, T>();
-        for (int i = 0; i < _options.SupportedLanguages.Length; i++)
+        int languageCount = _options.SupportedLanguages.Length;
+        if (languageCount == 0) return probs;
+
+        // One sigmoid score per language from the leading outputs (missing outputs score sigmoid(0)).
+        int available = Math.Min(languageCount, output.Length);
+        var logits = new Tensor<T>([languageCount]);
+        if (available > 0)
         {
-            double val = i < output.Length ? NumOps.ToDouble(output[i]) : 0;
-            // Softmax-like normalization
-            probs[_options.SupportedLanguages[i]] = NumOps.FromDouble(Math.Max(0, Math.Min(1, 1.0 / (1.0 + Math.Exp(-val)))));
+            output.AsSpan().Slice(0, available).CopyTo(logits.AsWritableSpan());
+        }
+
+        var scores = Engine.TensorClamp(Engine.Sigmoid(logits), NumOps.Zero, NumOps.One).ToArray();
+        for (int i = 0; i < languageCount; i++)
+        {
+            probs[_options.SupportedLanguages[i]] = scores[i];
         }
         return probs;
     }
@@ -256,16 +267,14 @@ public partial class Canary<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 
     private string DecodeTokens(Tensor<T> output)
     {
-        int numTokens = Math.Min(_options.MaxOutputTokens, output.Length);
-        var tokenIds = new List<int>();
-        for (int i = 0; i < numTokens; i++)
-        {
-            int tokenId = (int)Math.Round(NumOps.ToDouble(output[i]));
-            if (tokenId < 0) tokenId = 0;
-            if (tokenId >= _tokenizer.VocabularySize) tokenId = _tokenizer.VocabularySize - 1;
-            tokenIds.Add(tokenId);
-        }
-        return _tokenizer.Decode(tokenIds);
+        int numTokens = Math.Max(0, Math.Min(_options.MaxOutputTokens, output.Length));
+        if (numTokens == 0) return _tokenizer.Decode(new List<int>());
+
+        // Round the leading outputs to ids and clamp them into the vocabulary (NaN maps to id 0).
+        var leading = new Tensor<T>(output.AsSpan().Slice(0, numTokens).ToArray(), [numTokens]);
+        var rounded = Engine.TensorRound(Engine.TensorNanToNum(leading, 0.0, double.PositiveInfinity, double.NegativeInfinity));
+        var clamped = Engine.TensorClamp(rounded, NumOps.Zero, NumOps.FromDouble(_tokenizer.VocabularySize - 1));
+        return _tokenizer.Decode(clamped.Cast<int>().ToArray().ToList());
     }
 
     private IReadOnlyList<TranscriptionSegment<T>> GenerateTimestamps(Tensor<T> output, string text, double duration)
@@ -278,28 +287,34 @@ public partial class Canary<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
         int tokensPerWord = Math.Max(1, output.Length / words.Length);
         double timePerToken = duration / output.Length;
 
+        // Word w covers tokens [start_w, end_w); tokens past the last word belong to no word (-1).
+        var starts = new int[words.Length];
+        var ends = new int[words.Length];
+        var wordOfToken = new int[output.Length];
+        for (int i = 0; i < wordOfToken.Length; i++) wordOfToken[i] = -1;
         int tokenIdx = 0;
         for (int w = 0; w < words.Length; w++)
         {
-            int startToken = tokenIdx;
-            int endToken = Math.Min(output.Length, tokenIdx + tokensPerWord);
+            starts[w] = tokenIdx;
+            ends[w] = Math.Min(output.Length, tokenIdx + tokensPerWord);
+            for (int t = starts[w]; t < ends[w]; t++) wordOfToken[t] = w;
+            tokenIdx = ends[w];
+        }
 
-            // Find peak confidence within this word's token range
-            T maxConf = NumOps.Zero;
-            for (int t = startToken; t < endToken && t < output.Length; t++)
-            {
-                T absVal = NumOps.Abs(output[t]);
-                if (NumOps.GreaterThan(absVal, maxConf)) maxConf = absVal;
-            }
+        // Peak |output| per word (0 for an empty range, NaN never wins), capped at 1.
+        var magnitudes = Engine.TensorAbs(new Tensor<T>(output.ToArray(), [output.Length]));
+        var peaks = Engine.ScatterMax(magnitudes, new Tensor<int>(wordOfToken, [wordOfToken.Length]), out _, 0, words.Length);
+        var confidences = Engine.TensorMin(Engine.TensorMax(peaks, NumOps.Zero), NumOps.One).ToArray();
 
+        for (int w = 0; w < words.Length; w++)
+        {
             segments.Add(new TranscriptionSegment<T>
             {
                 Text = words[w],
-                StartTime = startToken * timePerToken,
-                EndTime = endToken * timePerToken,
-                Confidence = NumOps.FromDouble(Math.Min(1.0, NumOps.ToDouble(maxConf)))
+                StartTime = starts[w] * timePerToken,
+                EndTime = ends[w] * timePerToken,
+                Confidence = confidences[w]
             });
-            tokenIdx = endToken;
         }
         return segments;
     }
@@ -322,12 +337,11 @@ public partial class Canary<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
         public void FeedAudio(Tensor<T> audioChunk)
         {
             if (_disposed) throw new ObjectDisposedException(nameof(CanaryStreamingSession));
-            for (int i = 0; i < audioChunk.Length; i++) _buffer.Add(audioChunk[i]);
+            _buffer.AddRange(audioChunk.ToArray());
             int chunkSize = _model._options.SampleRate; // 1 second chunks
             if (_buffer.Count >= chunkSize)
             {
-                var frame = new Tensor<T>([chunkSize]);
-                for (int i = 0; i < chunkSize; i++) frame[i] = _buffer[i];
+                var frame = new Tensor<T>(_buffer.GetRange(0, chunkSize).ToArray(), [chunkSize]);
                 _buffer.RemoveRange(0, chunkSize);
                 var result = _model.Transcribe(frame, _language);
                 _partialText = string.IsNullOrEmpty(_partialText) ? result.Text : _partialText + " " + result.Text;
@@ -344,8 +358,7 @@ public partial class Canary<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
         {
             if (_buffer.Count > 0)
             {
-                var remaining = new Tensor<T>([_buffer.Count]);
-                for (int i = 0; i < _buffer.Count; i++) remaining[i] = _buffer[i];
+                var remaining = new Tensor<T>(_buffer.ToArray(), [_buffer.Count]);
                 var result = _model.Transcribe(remaining, _language);
                 _partialText = string.IsNullOrEmpty(_partialText) ? result.Text : _partialText + " " + result.Text;
                 _buffer.Clear();
