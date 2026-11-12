@@ -72,6 +72,31 @@ internal static class DistillationHelper<T>
     }
 
     /// <summary>
+    /// Index of the largest element, matching a left-to-right scan that only moves on a strictly
+    /// greater value: ties keep the first index, NaN entries never win, and a NaN first element
+    /// yields 0. Throws for an empty vector, like reading its first element.
+    /// </summary>
+    public static int ArgMax(Vector<T> vector)
+    {
+        T first = vector[0];
+        if (NumOps.IsNaN(first))
+        {
+            return 0;
+        }
+
+        int n = vector.Length;
+        Tensor<T> values = Tensor<T>.FromVector(vector);
+        // NaN entries can never win a strict '>' comparison; standing in the first element keeps them out
+        Tensor<T> cleaned = Engine.TensorWhere(
+            Engine.TensorNotEquals(values, values), Tensor<T>.CreateDefault([n], first), values);
+        T max = Engine.TensorMaxValue(cleaned);
+        Tensor<T> positions = Engine.TensorArange<T>(0, n, 1);
+        T firstIndex = Engine.TensorMinValue(Engine.TensorWhere(
+            Engine.TensorEquals(cleaned, max), positions, Tensor<T>.CreateDefault([n], NumOps.FromDouble(n))));
+        return (int)Math.Round(NumOps.ToDouble(firstIndex));
+    }
+
+    /// <summary>
     /// Sums each row of a [rows, cols] tensor into a vector of length rows.
     /// </summary>
     public static Vector<T> RowSums(Tensor<T> matrix)

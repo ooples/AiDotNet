@@ -113,44 +113,52 @@ public abstract class AdaptiveDistillationStrategyBase<T>
         ValidateLabelDimensions(studentBatchOutput, trueLabelsBatch);
 
         int batchSize = studentBatchOutput.Rows;
-        T totalLoss = NumOps.Zero;
 
+        // Each sample has its own (virtual, possibly stateful) temperature, so rows are visited in order
+        var sampleLosses = new List<T>(batchSize);
         for (int r = 0; r < batchSize; r++)
         {
-            Vector<T> studentOutput = studentBatchOutput.GetRow(r);
-            Vector<T> teacherOutput = teacherBatchOutput.GetRow(r);
-            Vector<T>? trueLabels = trueLabelsBatch?.GetRow(r);
-
-            // Compute adaptive temperature for this sample
-            double adaptiveTemp = ComputeAdaptiveTemperature(studentOutput, teacherOutput);
-
-            // Compute soft loss with adaptive temperature
-            var studentSoft = DistillationHelper<T>.Softmax(studentOutput, adaptiveTemp);
-            var teacherSoft = DistillationHelper<T>.Softmax(teacherOutput, adaptiveTemp);
-
-            var softLoss = DistillationHelper<T>.KLDivergence(teacherSoft, studentSoft);
-            softLoss = NumOps.Multiply(softLoss, NumOps.FromDouble(adaptiveTemp * adaptiveTemp));
-
-            T sampleLoss = softLoss;
-
-            // Add hard loss if labels provided
-            if (trueLabels != null)
-            {
-                var studentProbs = DistillationHelper<T>.Softmax(studentOutput, temperature: 1.0);
-                var hardLoss = DistillationHelper<T>.CrossEntropy(studentProbs, trueLabels);
-
-                var alphaT = NumOps.FromDouble(Alpha);
-                var oneMinusAlpha = NumOps.FromDouble(1.0 - Alpha);
-
-                sampleLoss = NumOps.Add(
-                    NumOps.Multiply(alphaT, hardLoss),
-                    NumOps.Multiply(oneMinusAlpha, softLoss));
-            }
-
-            totalLoss = NumOps.Add(totalLoss, sampleLoss);
+            sampleLosses.Add(ComputeSampleLoss(
+                studentBatchOutput.GetRow(r), teacherBatchOutput.GetRow(r), trueLabelsBatch?.GetRow(r)));
         }
 
+        T totalLoss = Engine.Sum(new Vector<T>(sampleLosses));
         return NumOps.Divide(totalLoss, NumOps.FromDouble(batchSize));
+    }
+
+    /// <summary>
+    /// Loss of one sample with its adaptive temperature: T² KL(teacher || student), blended with the
+    /// hard cross-entropy when labels are provided.
+    /// </summary>
+    private T ComputeSampleLoss(Vector<T> studentOutput, Vector<T> teacherOutput, Vector<T>? trueLabels)
+    {
+        // Compute adaptive temperature for this sample
+        double adaptiveTemp = ComputeAdaptiveTemperature(studentOutput, teacherOutput);
+
+        // Compute soft loss with adaptive temperature
+        var studentSoft = DistillationHelper<T>.Softmax(studentOutput, adaptiveTemp);
+        var teacherSoft = DistillationHelper<T>.Softmax(teacherOutput, adaptiveTemp);
+
+        var softLoss = DistillationHelper<T>.KLDivergence(teacherSoft, studentSoft);
+        softLoss = NumOps.Multiply(softLoss, NumOps.FromDouble(adaptiveTemp * adaptiveTemp));
+
+        T sampleLoss = softLoss;
+
+        // Add hard loss if labels provided
+        if (trueLabels != null)
+        {
+            var studentProbs = DistillationHelper<T>.Softmax(studentOutput, temperature: 1.0);
+            var hardLoss = DistillationHelper<T>.CrossEntropy(studentProbs, trueLabels);
+
+            var alphaT = NumOps.FromDouble(Alpha);
+            var oneMinusAlpha = NumOps.FromDouble(1.0 - Alpha);
+
+            sampleLoss = NumOps.Add(
+                NumOps.Multiply(alphaT, hardLoss),
+                NumOps.Multiply(oneMinusAlpha, softLoss));
+        }
+
+        return sampleLoss;
     }
 
     /// <summary>
@@ -281,12 +289,15 @@ public abstract class AdaptiveDistillationStrategyBase<T>
     /// </summary>
     protected double GetMaxConfidence(Vector<T> probabilities)
     {
-        double max = 0.0;
-        for (int i = 0; i < probabilities.Length; i++)
+        // Largest probability, never below 0 (an empty distribution has confidence 0)
+        if (probabilities.Length == 0)
         {
-            double prob = Convert.ToDouble(probabilities[i]);
-            if (prob > max) max = prob;
+            return 0.0;
         }
+
+        double max = Convert.ToDouble(Engine.TensorMaxValue(Tensor<T>.FromVector(probabilities)));
+        return max > 0.0 ? max : 0.0;
+    }
         return max;
     }
 
@@ -298,15 +309,13 @@ public abstract class AdaptiveDistillationStrategyBase<T>
     /// </remarks>
     protected double ComputeEntropy(Vector<T> probabilities)
     {
-        double entropy = 0.0;
-        for (int i = 0; i < probabilities.Length; i++)
-        {
-            double prob = Convert.ToDouble(probabilities[i]);
-            if (prob > 1e-10) // Avoid log(0)
-            {
-                entropy -= prob * Math.Log(prob);
-            }
-        }
+        // -sum(p * log p) over entries with p > 1e-10 (avoids log(0))
+        Tensor<T> probs = Tensor<T>.FromVector(probabilities);
+        Tensor<T> terms = Engine.TensorWhere(
+            Engine.TensorGreaterThan(probs, NumOps.FromDouble(1e-10)),
+            Engine.TensorMultiply(probs, Engine.TensorLog(probs)),
+            new Tensor<T>(probs.Shape.ToArray()));
+        double entropy = -Convert.ToDouble(Engine.TensorSum(terms));
         // Normalize to [0, 1] range
         return entropy / Math.Log(probabilities.Length);
     }
@@ -324,17 +333,8 @@ public abstract class AdaptiveDistillationStrategyBase<T>
     /// </summary>
     protected int ArgMax(Vector<T> vector)
     {
-        int maxIndex = 0;
-        T maxValue = vector[0];
-
-        for (int i = 1; i < vector.Length; i++)
-        {
-            if (NumOps.GreaterThan(vector[i], maxValue))
-            {
-                maxValue = vector[i];
-                maxIndex = i;
-            }
-        }
+        // First index of the maximum (strictly-greater scan semantics, NaN never wins)
+        int maxIndex = DistillationHelper<T>.ArgMax(vector);
 
         return maxIndex;
     }
