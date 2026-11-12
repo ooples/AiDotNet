@@ -330,6 +330,30 @@ internal static class SafetyTensorOps<T>
         imag = engine.TensorMatMul(rows, engine.TensorSin(angle));
     }
 
+    /// <summary>
+    /// Decodes a vector of character codes into text: each value is rounded half-to-even
+    /// (<c>Math.Round</c>) and codes outside <c>[0, 65535]</c> become <c>'?'</c>; a NaN code
+    /// follows this runtime's <c>(int)double.NaN</c> conversion, as the scalar decoder did.
+    /// </summary>
+    internal static string DecodeCharCodes(Vector<T> content)
+    {
+        if (content.Length == 0) return string.Empty;
+
+        var engine = Engine;
+        var rounded = engine.TensorRound(AsTensor(content));
+        double nan = double.NaN;
+        int nanCode = unchecked((int)nan);
+        T nanReplacement = C(nanCode is >= 0 and <= 65535 ? nanCode : '?');
+
+        var inRange = And(Ge(rounded, 0.0), Le(rounded, 65535.0));
+        var codes = Where(inRange, rounded, (double)'?');
+        codes = engine.TensorWhere(engine.TensorIsNan(rounded), Full(rounded.Shape.ToArray(), nanReplacement), codes);
+
+        // Integral codes 0..65535 -> int: the number of boundaries 0..65534 strictly below each code.
+        var codePoints = engine.TensorBucketize(codes, engine.TensorArange<T>(0, 65535, 1)).ToArray();
+        return new string(Array.ConvertAll(codePoints, code => (char)code));
+    }
+
     /// <summary>Population mean and variance (two-pass, like the scalar code) of a rank-1 tensor.</summary>
     internal static (T Mean, T Variance) MeanVariance(Tensor<T> x)
     {
