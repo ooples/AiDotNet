@@ -107,7 +107,7 @@ public static class RenderingMetrics<T>
         }
 
         T totalSsim = SumWindowSSIM(predicted, groundTruth, halfWindow, c1T, c2T);
-        return NumOps.ToDouble(totalSsim) / numWindows;
+        return NumOps.ToDouble(NumOps.Divide(totalSsim, NumOps.FromDouble(numWindows)));
     }
 
     /// <summary>
@@ -135,14 +135,16 @@ public static class RenderingMetrics<T>
         var predEdges = ComputeEdgeMagnitude(predicted);
         var gtEdges = ComputeEdgeMagnitude(groundTruth);
 
-        double edgeDifference = NumOps.ToDouble(ComputeMSE(predEdges, gtEdges));
+        T edgeDifference = ComputeMSE(predEdges, gtEdges);
 
         var predStats = ComputeLocalStatistics(predicted);
         var gtStats = ComputeLocalStatistics(groundTruth);
 
-        double statsDifference = NumOps.ToDouble(ComputeMSE(predStats, gtStats));
+        T statsDifference = ComputeMSE(predStats, gtStats);
 
-        return Math.Sqrt(edgeDifference) + 0.5 * Math.Sqrt(statsDifference);
+        return NumOps.ToDouble(NumOps.Add(
+            NumOps.Sqrt(edgeDifference),
+            NumOps.Multiply(NumOps.FromDouble(0.5), NumOps.Sqrt(statsDifference))));
     }
 
     /// <summary>

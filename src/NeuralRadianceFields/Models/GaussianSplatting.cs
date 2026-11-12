@@ -1086,13 +1086,15 @@ public partial class GaussianSplatting<T> : AiDotNet.NeuralNetworks.VectorModelL
             }
             else
             {
+                // The mean and maximum are computed in T; only the two grid parameters are converted
+                // for the double-based SpatialHashGrid. Absolute values are never negative, so the
+                // maximum equals master's Math.Max fold seeded with 0.
                 var largest = engine.ReduceMax(scales, new[] { 1 }, false);
-                avgScale = NumOps.ToDouble(engine.TensorSum(largest));
-                maxScale = Math.Max(0.0, NumOps.ToDouble(engine.TensorMaxValue(largest)));
+                avgScale = NumOps.ToDouble(engine.TensorMean(largest));
+                maxScale = NumOps.ToDouble(engine.TensorMaxValue(largest));
             }
         }
 
-        avgScale = _gaussians.Count > 0 ? avgScale / _gaussians.Count : 0.0;
         if (avgScale <= 0.0)
         {
             avgScale = 0.01;
