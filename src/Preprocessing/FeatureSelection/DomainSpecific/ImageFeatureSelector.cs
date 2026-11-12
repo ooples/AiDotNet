@@ -31,7 +31,7 @@ public class ImageFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>,
     private readonly int _numChannels;
     private readonly bool _useSpatialCorrelation;
 
-    private double[]? _featureScores;
+    private Vector<T>? _featureScores;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
@@ -41,7 +41,7 @@ public class ImageFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>,
     public int ImageHeight => _imageHeight;
     public int NumChannels => _numChannels;
     public bool UseSpatialCorrelation => _useSpatialCorrelation;
-    public double[]? FeatureScores => _featureScores;
+    public Vector<T>? FeatureScores => _featureScores;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -90,110 +90,87 @@ public class ImageFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>,
         int p = data.Columns;
 
         // Compute base scores (correlation with target)
-        _featureScores = ComputeBaseScores(data, target);
+        var scores = ComputeBaseScores(data, target);
 
         if (_useSpatialCorrelation)
         {
             // Adjust scores based on spatial diversity
-            AdjustForSpatialDiversity(p);
+            scores = AdjustForSpatialDiversity(scores, p);
         }
+
+        _featureScores = scores.ToVector();
 
         // Select top features
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = _featureScores
-            .Select((s, idx) => (Score: s, Index: idx))
-            .OrderByDescending(x => x.Score)
-            .Take(numToSelect)
-            .Select(x => x.Index)
-            .OrderBy(x => x)
-            .ToArray();
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(scores, numToSelect);
 
         IsFitted = true;
     }
 
-    private double[] ComputeBaseScores(Matrix<T> data, Vector<T> target)
+    private Tensor<T> ComputeBaseScores(Matrix<T> data, Vector<T> target)
     {
+        var engine = Engine;
         int n = data.Rows;
-        int p = data.Columns;
-        var scores = new double[p];
+        var X = Tensor<T>.FromMatrix(data);
 
-        double yMean = 0;
-        for (int i = 0; i < n; i++)
-            yMean += NumOps.ToDouble(target[i]);
-        yMean /= n;
+        // |correlation| with target, plus the standard deviation (pixels with high variance are more informative)
+        var corr = engine.TensorAbs(PreprocessingTensorOps.TargetCorrelations(X, Tensor<T>.FromVector(target)));
+        var variance = engine.TensorDivideScalar(FeatureSelectionTensorOps.ColumnSumSquaredDeviations(X), NumOps.FromDouble(n));
 
-        for (int j = 0; j < p; j++)
-        {
-            double xMean = 0;
-            for (int i = 0; i < n; i++)
-                xMean += NumOps.ToDouble(data[i, j]);
-            xMean /= n;
-
-            double sxy = 0, sxx = 0, syy = 0;
-            for (int i = 0; i < n; i++)
-            {
-                double xDiff = NumOps.ToDouble(data[i, j]) - xMean;
-                double yDiff = NumOps.ToDouble(target[i]) - yMean;
-                sxy += xDiff * yDiff;
-                sxx += xDiff * xDiff;
-                syy += yDiff * yDiff;
-            }
-
-            // Also consider variance (pixels with high variance are more informative)
-            double corr = (sxx > 1e-10 && syy > 1e-10) ? Math.Abs(sxy / Math.Sqrt(sxx * syy)) : 0;
-            double variance = sxx / n;
-
-            scores[j] = corr * 0.7 + Math.Sqrt(variance) * 0.3;
-        }
-
-        return scores;
+        return engine.TensorAdd(
+            engine.TensorMultiplyScalar(corr, NumOps.FromDouble(0.7)),
+            engine.TensorMultiplyScalar(engine.TensorSqrt(variance), NumOps.FromDouble(0.3)));
     }
 
-    private void AdjustForSpatialDiversity(int p)
+    private Tensor<T> AdjustForSpatialDiversity(Tensor<T> scores, int p)
     {
         // Greedy selection ensuring spatial diversity
-        var adjustedScores = (double[])(_featureScores ?? throw new InvalidOperationException("_featureScores has not been initialized.")).Clone();
-        var selected = new HashSet<int>();
+        var engine = Engine;
+        var adjustedScores = scores;
+        var columns = new int[p];
+        var rows = new int[p];
+        for (int j = 0; j < p; j++)
+        {
+            var (x, y, _) = GetSpatialPosition(j);
+            columns[j] = x;
+            rows[j] = y;
+        }
+
+        var xs = new Tensor<int>(columns, new[] { p }).Cast<T>();
+        var ys = new Tensor<int>(rows, new[] { p }).Cast<T>();
+        var positions = PreprocessingTensorOps.Range<T>(p);
+        var selected = new Tensor<T>(new[] { p });
+        var lowest = PreprocessingTensorOps.Filled(new[] { p }, NumOps.MinValue);
+        var unpenalized = PreprocessingTensorOps.Filled(new[] { p }, NumOps.One);
+        T minValue = NumOps.MinValue;
+        T radius = NumOps.FromDouble(3);
+        T negativeHalf = NumOps.FromDouble(-0.5);
+        T half = NumOps.FromDouble(0.5);
 
         for (int k = 0; k < Math.Min(_nFeaturesToSelect * 2, p); k++)
         {
-            // Find best unselected feature
-            int bestIdx = -1;
-            double bestScore = double.MinValue;
+            // Find best unselected feature (first among ties)
+            var candidates = engine.TensorWhere(selected, lowest, adjustedScores);
+            if (!PreprocessingTensorOps.IsAbove(engine.TensorMaxValue(candidates), minValue))
+                break;
 
-            for (int j = 0; j < p; j++)
-            {
-                if (!selected.Contains(j) && adjustedScores[j] > bestScore)
-                {
-                    bestScore = adjustedScores[j];
-                    bestIdx = j;
-                }
-            }
+            int bestIdx = PreprocessingTensorOps.FirstArgMax(candidates);
+            var isBest = engine.TensorEquals(positions, PreprocessingTensorOps.CountAsScalar<T>(bestIdx));
+            selected = engine.TensorMax(selected, isBest);
 
-            if (bestIdx < 0) break;
-
-            selected.Add(bestIdx);
-
-            // Reduce scores of spatially nearby features
+            // Reduce scores of spatially nearby features (within 3 pixels) by 1 - exp(-distance / 2) * 0.5
             var (x1, y1, _) = GetSpatialPosition(bestIdx);
-            for (int j = 0; j < p; j++)
-            {
-                if (!selected.Contains(j))
-                {
-                    var (x2, y2, _) = GetSpatialPosition(j);
-                    double distance = Math.Sqrt((double)(x1 - x2) * (x1 - x2) + (double)(y1 - y2) * (y1 - y2));
-                    if (distance < 3) // Within 3 pixels
-                    {
-                        double penalty = Math.Exp(-distance / 2);
-                        adjustedScores[j] *= (1 - penalty * 0.5);
-                    }
-                }
-            }
+            var distance = engine.TensorSqrt(engine.TensorAdd(
+                engine.TensorSquare(engine.TensorSubtractScalar(xs, PreprocessingTensorOps.CountAsScalar<T>(x1))),
+                engine.TensorSquare(engine.TensorSubtractScalar(ys, PreprocessingTensorOps.CountAsScalar<T>(y1)))));
+            var penalty = engine.TensorExp(engine.TensorMultiplyScalar(distance, negativeHalf));
+            var factor = PreprocessingTensorOps.OneMinus(engine.TensorMultiplyScalar(penalty, half));
+            var nearby = engine.TensorMultiply(PreprocessingTensorOps.Not(selected), engine.TensorLessThan(distance, radius));
+            adjustedScores = engine.TensorMultiply(adjustedScores, engine.TensorWhere(nearby, factor, unpenalized));
         }
 
-        _featureScores = adjustedScores;
+        return adjustedScores;
     }
-
     private (int X, int Y, int Channel) GetSpatialPosition(int featureIdx)
     {
         int pixelIdx = featureIdx / _numChannels;
