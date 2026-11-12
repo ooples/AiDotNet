@@ -153,16 +153,6 @@ public partial class Bark<T> : BarkModel<T>, ICodecTts<T>
     {
         if (tokens.Shape.Length != 2)
             throw new ArgumentException("Bark codec tokens must have shape [codebook, frame].", nameof(tokens));
-        if (tokens.Length > 0)
-        {
-            // Convert.ToInt32's contract: NaN or a value outside Int32 after rounding half to even overflows.
-            var rounded = Engine.TensorRound(tokens);
-            if (NumOps.IsNaN(Engine.TensorSum(rounded))
-                || NumOps.GreaterThanOrEquals(Engine.TensorMaxValue(rounded), NumOps.FromDouble(2147483648.0))
-                || NumOps.LessThan(Engine.TensorMinValue(rounded), NumOps.FromDouble(-2147483648.0)))
-                throw new OverflowException("Value was either too large or too small for an Int32.");
-        }
-        return RoundedIdMatrix(tokens);
-
+        return ToInt32Matrix(tokens);
     }
 }
