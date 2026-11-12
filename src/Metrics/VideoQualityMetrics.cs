@@ -106,7 +106,6 @@ internal static class VideoShape
 /// <typeparam name="T">The numeric type for calculations.</typeparam>
 public class VideoSSIM<T> where T : struct
 {
-    private readonly INumericOperations<T> _numOps;
     private readonly StructuralSimilarity<T> _frameSsim;
 
     /// <summary>
@@ -117,7 +116,6 @@ public class VideoSSIM<T> where T : struct
     /// <param name="k2">SSIM constant K2 (default 0.03).</param>
     public VideoSSIM(T? maxValue = null, double k1 = 0.01, double k2 = 0.03)
     {
-        _numOps = MathHelper.GetNumericOperations<T>();
         _frameSsim = new StructuralSimilarity<T>(maxValue, k1, k2);
     }
 
