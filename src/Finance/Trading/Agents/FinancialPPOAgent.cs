@@ -91,16 +91,16 @@ public partial class FinancialPPOAgent<T> : TradingAgentBase<T>, IGradientComput
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
     private readonly Random _random;
 
-    private double[]? _observationSum;
-    private double[]? _observationSumOfSquares;
-    private double _observationCount = ObservationStatisticsEpsilon;
+    private Vector<T>? _observationSum;
+    private Vector<T>? _observationSumOfSquares;
+    private T _observationCount;
 
     // The rollout: raw observations (normalized at update time, under the statistics the update uses), the actions,
     // rewards, value predictions made when each step was taken, episode ends and legal-action masks.
     [Scratch] private readonly List<Vector<T>> _states = new();
     [Scratch] private readonly List<Vector<T>> _actions = new();
-    [Scratch] private readonly List<double> _rewards = new();
-    [Scratch] private readonly List<double> _values = new();
+    [Scratch] private readonly List<T> _rewards = new();
+    [Scratch] private readonly List<T> _values = new();
     [Scratch] private readonly List<bool> _dones = new();
     [Scratch] private readonly List<bool[]?> _stepMasks = new();
     [Scratch] private Vector<T>? _lastNextState;
@@ -144,6 +144,7 @@ public partial class FinancialPPOAgent<T> : TradingAgentBase<T>, IGradientComput
         : base(options)
     {
         _options = options;
+        _observationCount = NumOps.FromDouble(ObservationStatisticsEpsilon);
         _ppoOptions = options as FinancialPPOAgentOptions<T> ?? new FinancialPPOAgentOptions<T>();
         ValidatePpoOptions(_ppoOptions);
 
@@ -233,57 +234,83 @@ public partial class FinancialPPOAgent<T> : TradingAgentBase<T>, IGradientComput
     #region Observation statistics
 
     // Baselines' RunningMeanStd over the raw observations: mean = sum / count, std = sqrt(max(sumsq / count - mean², 1e-2)).
-    private (double[] Mean, double[] Std) ObservationStatistics(int size)
+    private (Tensor<T> Mean, Tensor<T> Std) ObservationStatistics(int size)
     {
-        var mean = new double[size];
-        var std = new double[size];
-        for (int i = 0; i < size; i++)
+        var engine = AiDotNetEngine.Current;
+        T epsilon = NumOps.FromDouble(ObservationStatisticsEpsilon);
+        Tensor<T> sum;
+        Tensor<T> squares;
+        T count;
+        if (_observationSum is { } s && s.Length == size && _observationSumOfSquares is { } q && q.Length == size)
         {
-            double sum = _observationSum is { } s && s.Length == size ? s[i] : 0.0;
-            double squares = _observationSumOfSquares is { } q && q.Length == size ? q[i] : ObservationStatisticsEpsilon;
-            double count = _observationSum is { } c && c.Length == size ? _observationCount : ObservationStatisticsEpsilon;
-            mean[i] = sum / count;
-            std[i] = Math.Sqrt(Math.Max(squares / count - mean[i] * mean[i], 1e-2));
+            sum = s.AsTensor();
+            squares = q.AsTensor();
+            count = _observationCount;
         }
-        return (mean, std);
+        else
+        {
+            sum = new Tensor<T>(new[] { size });
+            squares = new Tensor<T>(new[] { size });
+            engine.TensorFill(squares, epsilon);
+            count = epsilon;
+        }
+
+        var mean = engine.TensorDivideScalar(sum, count);
+        var variance = engine.TensorSubtract(engine.TensorDivideScalar(squares, count), engine.TensorMultiply(mean, mean));
+        return (mean, engine.TensorSqrt(engine.TensorClampMin(variance, NumOps.FromDouble(1e-2))));
     }
 
     private void UpdateObservationStatistics(IReadOnlyList<Vector<T>> states)
     {
         int size = states[0].Length;
-        var sum = _observationSum;
-        var squares = _observationSumOfSquares;
-        if (sum is null || squares is null || sum.Length != size)
+        RequireStableStateSize(states, size);
+        var engine = AiDotNetEngine.Current;
+        Vector<T> sum;
+        Vector<T> squares;
+        if (_observationSum is { } existingSum && _observationSumOfSquares is { } existingSquares && existingSum.Length == size)
         {
-            sum = _observationSum = new double[size];
-            squares = _observationSumOfSquares = new double[size];
-            for (int i = 0; i < size; i++) squares[i] = ObservationStatisticsEpsilon;
-            _observationCount = ObservationStatisticsEpsilon;
+            sum = existingSum;
+            squares = existingSquares;
         }
-        foreach (var state in states)
-            for (int i = 0; i < size; i++)
-            {
-                double value = NumOps.ToDouble(state[i]);
-                sum[i] += value;
-                squares[i] += value * value;
-            }
-        _observationCount += states.Count;
+        else
+        {
+            sum = new Vector<T>(size);
+            squares = new Vector<T>(size);
+            squares.Fill(NumOps.FromDouble(ObservationStatisticsEpsilon));
+            _observationCount = NumOps.FromDouble(ObservationStatisticsEpsilon);
+        }
+
+        var observations = engine.TensorStack(states.Select(state => state.AsTensor()).ToArray(), 0);
+        _observationSum = engine.TensorAdd(sum.AsTensor(), engine.ReduceSum(observations, new[] { 0 }, false)).ToVector();
+        _observationSumOfSquares = engine.TensorAdd(
+            squares.AsTensor(), engine.ReduceSum(engine.TensorMultiply(observations, observations), new[] { 0 }, false)).ToVector();
+        _observationCount = NumOps.Add(_observationCount, NumOps.FromDouble(states.Count));
     }
 
-    // clip((x - mean) / std, -c, c), Baselines' "obz".
-    private void Normalize(Vector<T> state, double[] mean, double[] std, Span<T> destination)
+    private static void RequireStableStateSize(IEnumerable<Vector<T>> states, int stateSize)
     {
-        double clip = _ppoOptions.ObservationClipRange;
-        for (int i = 0; i < state.Length; i++)
-            destination[i] = NumOps.FromDouble(Math.Max(-clip, Math.Min(clip, (NumOps.ToDouble(state[i]) - mean[i]) / std[i])));
+        var mismatched = states.FirstOrDefault(state => state.Length != stateSize);
+        if (mismatched is not null)
+            throw new InvalidOperationException($"The rollout mixes state sizes ({stateSize} and {mismatched.Length}). Use a stable observation schema.");
+    }
+
+    // clip((x - mean) / std, -c, c) row by row over [rows, size], Baselines' "obz".
+    private Tensor<T> Normalize(Tensor<T> states, Tensor<T> mean, Tensor<T> std)
+    {
+        var engine = AiDotNetEngine.Current;
+        var shape = new[] { states.Shape[0], states.Shape[1] };
+        var row = new[] { 1, states.Shape[1] };
+        var z = engine.TensorDivide(
+            engine.TensorSubtract(states, engine.TensorBroadcastTo(engine.Reshape(mean, row), shape)),
+            engine.TensorBroadcastTo(engine.Reshape(std, row), shape));
+        T clip = NumOps.FromDouble(_ppoOptions.ObservationClipRange);
+        return engine.TensorClamp(z, NumOps.Negate(clip), clip);
     }
 
     private Tensor<T> NormalizedRow(Vector<T> state)
     {
         var (mean, std) = ObservationStatistics(state.Length);
-        var row = new Tensor<T>([1, state.Length]);
-        Normalize(state, mean, std, row.AsWritableSpan());
-        return row;
+        return Normalize(Tensor<T>.FromVector(state, new[] { 1, state.Length }), mean, std);
     }
 
     #endregion
@@ -356,17 +383,23 @@ public partial class FinancialPPOAgent<T> : TradingAgentBase<T>, IGradientComput
 
     private int SampleCategorical(Vector<T> probabilities)
     {
+        var engine = AiDotNetEngine.Current;
         double r = _random.NextDouble();
-        double cumulative = 0;
-        for (int i = 0; i < probabilities.Length; i++)
-        {
-            cumulative += NumOps.ToDouble(probabilities[i]);
-            if (r < cumulative) return i;
-        }
-        // Rounding can leave the cumulative sum a hair under 1; the last legal entry takes the remainder.
-        for (int i = probabilities.Length - 1; i >= 0; i--)
-            if (NumOps.ToDouble(probabilities[i]) > 0) return i;
-        return probabilities.Length - 1;
+        var values = probabilities.AsTensor();
+        int count = probabilities.Length;
+
+        // The cumulative sum is non-decreasing, so the entries at or below r form a prefix and their count is the
+        // first index whose cumulative probability exceeds r.
+        var above = engine.TensorGreaterThan(engine.TensorCumSum(values, 0), NumOps.FromDouble(r));
+        int index = count - NumOps.ToInt32(engine.TensorSum(above));
+        if (index < count) return index;
+
+        // Rounding can leave the cumulative sum a hair under 1; the last legal entry takes the remainder: the
+        // largest position (1-based, so position 0 never wins over a real entry) whose probability is positive.
+        var positions = engine.TensorArange<T>(1, count + 1, 1);
+        var positivePositions = engine.TensorMultiply(engine.TensorGreaterThan(values, NumOps.Zero), positions);
+        int last = NumOps.ToInt32(engine.TensorMaxValue(positivePositions));
+        return last > 0 ? last - 1 : count - 1;
     }
 
     private double StandardNormal()
@@ -436,8 +469,8 @@ public partial class FinancialPPOAgent<T> : TradingAgentBase<T>, IGradientComput
 
         _states.Add(CopyVector(state));
         _actions.Add(CopyVector(action));
-        _rewards.Add(NumOps.ToDouble(reward));
-        _values.Add(NumOps.ToDouble(_critic.Predict(NormalizedRow(state)).ToVector()[0]));
+        _rewards.Add(reward);
+        _values.Add(_critic.Predict(NormalizedRow(state)).GetFlat(0));
         _dones.Add(done);
         _stepMasks.Add(mask);
         _lastNextState = CopyVector(nextState);
@@ -453,22 +486,19 @@ public partial class FinancialPPOAgent<T> : TradingAgentBase<T>, IGradientComput
     private bool VectorsApproximatelyEqual(Vector<T> left, Vector<T> right)
     {
         if (left.Length != right.Length) return false;
-        for (int i = 0; i < left.Length; i++)
-        {
-            double a = NumOps.ToDouble(left[i]);
-            double b = NumOps.ToDouble(right[i]);
-            double tolerance = 1e-6 * Math.Max(1.0, Math.Max(Math.Abs(a), Math.Abs(b)));
-            if (Math.Abs(a - b) > tolerance) return false;
-        }
-        return true;
+        var engine = AiDotNetEngine.Current;
+        var a = left.AsTensor();
+        var b = right.AsTensor();
+
+        // |a - b| <= 1e-6 * max(1, |a|, |b|) at every entry.
+        var tolerance = engine.TensorMultiplyScalar(
+            engine.TensorMax(engine.TensorMax(engine.TensorAbs(a), engine.TensorAbs(b)), NumOps.One),
+            NumOps.FromDouble(1e-6));
+        var outside = engine.TensorGreaterThan(engine.TensorAbs(engine.TensorSubtract(a, b)), tolerance);
+        return NumOps.Equals(engine.TensorSum(outside), NumOps.Zero);
     }
 
-    private static Vector<T> CopyVector(Vector<T> source)
-    {
-        var copy = new Vector<T>(source.Length);
-        for (int i = 0; i < source.Length; i++) copy[i] = source[i];
-        return copy;
-    }
+    private static Vector<T> CopyVector(Vector<T> source) => source.Clone();
 
     #endregion
 
@@ -495,14 +525,13 @@ public partial class FinancialPPOAgent<T> : TradingAgentBase<T>, IGradientComput
         if (n < _ppoOptions.RolloutLength) return NumOps.Zero;
         TrainingSteps++;
 
-        var (advantages, returns) = AdvantagesAndReturns();
-        Standardize(advantages);
+        var (rawAdvantages, returns) = AdvantagesAndReturns();
+        var advantages = Standardize(rawAdvantages);
         UpdateObservationStatistics(_states);
         var order = Enumerable.Range(0, n).ToArray();
         var oldLogProbs = OldLogProbabilities(order);
 
-        double total = 0;
-        int updates = 0;
+        var losses = new List<T>();
         int batch = _ppoOptions.MiniBatchSize;
         Actor.SetTrainingMode(true);
         Critic.SetTrainingMode(true);
@@ -515,8 +544,7 @@ public partial class FinancialPPOAgent<T> : TradingAgentBase<T>, IGradientComput
                 {
                     var indices = new int[batch];
                     Array.Copy(order, start, indices, 0, batch);
-                    total += NumOps.ToDouble(UpdateMiniBatch(indices, oldLogProbs, advantages, returns));
-                    updates++;
+                    losses.Add(UpdateMiniBatch(indices, oldLogProbs, advantages, returns));
                 }
             }
         }
@@ -526,7 +554,9 @@ public partial class FinancialPPOAgent<T> : TradingAgentBase<T>, IGradientComput
             Critic.SetTrainingMode(false);
         }
 
-        var averageLoss = NumOps.FromDouble(updates == 0 ? 0 : total / updates);
+        var averageLoss = losses.Count == 0
+            ? NumOps.Zero
+            : NumOps.Divide(AiDotNetEngine.Current.Sum(new Vector<T>(losses)), NumOps.FromDouble(losses.Count));
         LossHistory.Add(averageLoss);
         ClearRollout();
         return averageLoss;
@@ -542,39 +572,45 @@ public partial class FinancialPPOAgent<T> : TradingAgentBase<T>, IGradientComput
         _stepMasks.Clear();
     }
 
-    // Baselines' add_vtarg_and_adv.
-    private (double[] Advantages, double[] Returns) AdvantagesAndReturns()
+    // Baselines' add_vtarg_and_adv: delta_t = r_t + gamma * V(s_(t+1)) * (1 - done_t) - V(s_t) and
+    // A_t = delta_t + gamma * lambda * (1 - done_t) * A_(t+1), the last step bootstrapping from V(s_T).
+    private (Tensor<T> Advantages, Tensor<T> Returns) AdvantagesAndReturns()
     {
+        var engine = AiDotNetEngine.Current;
         int n = _states.Count;
-        double gamma = NumOps.ToDouble(TradingOptions.DiscountFactor), lambda = TradingOptions.GAELambda;
-        double bootstrap = _dones[n - 1] ? 0.0 : NumOps.ToDouble(_critic.Predict(NormalizedRow(_lastNextState ?? throw new InvalidOperationException("The rollout has no next state."))).ToVector()[0]);
-        var advantages = new double[n];
-        var returns = new double[n];
-        double last = 0;
-        for (int t = n - 1; t >= 0; t--)
+        T gamma = TradingOptions.DiscountFactor;
+        T gammaLambda = NumOps.Multiply(gamma, NumOps.FromDouble(TradingOptions.GAELambda));
+        T bootstrap = _dones[n - 1] ? NumOps.Zero : _critic.Predict(NormalizedRow(_lastNextState ?? throw new InvalidOperationException("The rollout has no next state."))).GetFlat(0);
+
+        var rewards = new Vector<T>(_rewards).AsTensor();
+        var values = new Vector<T>(_values).AsTensor();
+        var dones = Tensor<int>.FromVector(Vector<int>.Wrap(_dones.Select(done => done ? 1 : 0).ToArray()), new[] { n }).Cast<T>();
+        var nonterminal = engine.TensorSubtract(engine.TensorOnesLike(dones), dones);
+        var nextValues = engine.TensorConcatenate(new[]
         {
-            double nonterminal = _dones[t] ? 0.0 : 1.0;
-            double next = t == n - 1 ? bootstrap : _values[t + 1];
-            double delta = _rewards[t] + gamma * next * nonterminal - _values[t];
-            last = delta + gamma * lambda * nonterminal * last;
-            advantages[t] = last;
-            returns[t] = last + _values[t];
-        }
-        return (advantages, returns);
+            engine.TensorSlice(values, new[] { 1 }, new[] { n - 1 }),
+            new Tensor<T>(new[] { bootstrap }, new[] { 1 })
+        }, 0);
+        var deltas = engine.TensorSubtract(
+            engine.TensorAdd(rewards, engine.TensorMultiplyScalar(engine.TensorMultiply(nextValues, nonterminal), gamma)),
+            values);
+        var advantages = EpisodicRecurrence<T>.SolveBackward(deltas, dones, gammaLambda, new Tensor<T>(new[] { 1 }));
+        return (advantages, engine.TensorAdd(advantages, values));
     }
 
     // (A - mean) / std, the population standard deviation as numpy's default.
-    private static void Standardize(double[] values)
+    private Tensor<T> Standardize(Tensor<T> values)
     {
-        double mean = values.Average();
-        double variance = values.Sum(v => (v - mean) * (v - mean)) / values.Length;
-        double std = Math.Sqrt(variance);
-        if (!(std > 0))
+        var engine = AiDotNetEngine.Current;
+        T mean = engine.TensorMean(values);
+        var centered = engine.TensorSubtractScalar(values, mean);
+        T std = NumOps.Sqrt(engine.TensorMean(engine.TensorMultiply(centered, centered)));
+        if (!NumOps.GreaterThan(std, NumOps.Zero))
             throw new InvalidOperationException(
                 $"Every advantage in this rollout of {values.Length} steps equals {mean}, so standardizing them divides by "
                 + "zero. PPO normalizes advantages by their standard deviation over the rollout; a rollout with no "
                 + "variation in reward or value gives it nothing to learn from.");
-        for (int i = 0; i < values.Length; i++) values[i] = (values[i] - mean) / std;
+        return engine.TensorDivideScalar(centered, std);
     }
 
     // Fisher-Yates over the agent's generator (numpy.random.shuffle in the reference).
@@ -589,14 +625,12 @@ public partial class FinancialPPOAgent<T> : TradingAgentBase<T>, IGradientComput
 
     // log π_old(a|s) for every step, under the statistics just updated and the weights before this update
     // (Baselines assigns oldpi = pi after the observation filter's update).
-    private double[] OldLogProbabilities(int[] order)
+    private Tensor<T> OldLogProbabilities(int[] order)
     {
         var (states, actions, bias) = BatchTensors(order);
         using var _ = new NoGradScope<T>();
-        var logProbs = LogProbabilityAndEntropy(_actor.Predict(states), actions, bias).LogProb.ToVector();
-        var result = new double[order.Length];
-        for (int i = 0; i < result.Length; i++) result[i] = NumOps.ToDouble(logProbs[i]);
-        return result;
+        var logProbs = LogProbabilityAndEntropy(_actor.Predict(states), actions, bias).LogProb;
+        return AiDotNetEngine.Current.Reshape(logProbs, new[] { order.Length });
     }
 
     // The minibatch's normalized states [B, S], its actions [B, A] (one-hot, or the continuous values), and the
@@ -604,29 +638,18 @@ public partial class FinancialPPOAgent<T> : TradingAgentBase<T>, IGradientComput
     private (Tensor<T> States, Tensor<T> Actions, Tensor<T>? Bias) BatchTensors(int[] indices)
     {
         int b = indices.Length, stateSize = _states[indices[0]].Length, actionSize = TradingOptions.ActionSize;
+        var engine = AiDotNetEngine.Current;
+        var rows = indices.Select(index => _states[index]).ToArray();
+        RequireStableStateSize(rows, stateSize);
         var (mean, std) = ObservationStatistics(stateSize);
-        var states = new Tensor<T>([b, stateSize]);
-        var actions = new Tensor<T>([b, actionSize]);
-        var stateSpan = states.AsWritableSpan();
-        var actionSpan = actions.AsWritableSpan();
-        bool anyMask = false;
-        for (int i = 0; i < b; i++)
-        {
-            var state = _states[indices[i]];
-            if (state.Length != stateSize)
-                throw new InvalidOperationException($"The rollout mixes state sizes ({stateSize} and {state.Length}). Use a stable observation schema.");
-            Normalize(state, mean, std, stateSpan.Slice(i * stateSize, stateSize));
-            var action = _actions[indices[i]];
-            if (_options.ContinuousActions)
-            {
-                for (int j = 0; j < actionSize; j++) actionSpan[i * actionSize + j] = action[j];
-            }
-            else
-            {
-                actionSpan[i * actionSize + ArgMax(action)] = NumOps.One;
-            }
-            anyMask |= _stepMasks[indices[i]] is not null;
-        }
+        var states = Normalize(engine.TensorStack(rows.Select(state => state.AsTensor()).ToArray(), 0), mean, std);
+
+        // Continuous actions are the stored values; a discrete action is the one-hot of its first maximum.
+        var storedActions = engine.TensorStack(indices.Select(index => _actions[index].AsTensor()).ToArray(), 0);
+        var actions = _options.ContinuousActions
+            ? storedActions
+            : engine.TensorOneHot<T>(FirstArgMaxPerRow(storedActions), actionSize);
+        bool anyMask = indices.Any(index => _stepMasks[index] is not null);
         if (!anyMask || _options.ContinuousActions) return (states, actions, null);
 
         var bias = new Tensor<T>([b, actionSize]);
@@ -642,19 +665,15 @@ public partial class FinancialPPOAgent<T> : TradingAgentBase<T>, IGradientComput
         return (states, actions, bias);
     }
 
-    private T UpdateMiniBatch(int[] indices, double[] oldLogProbs, double[] advantages, double[] returns)
+    private T UpdateMiniBatch(int[] indices, Tensor<T> oldLogProbs, Tensor<T> advantages, Tensor<T> returns)
     {
         int b = indices.Length, actionSize = TradingOptions.ActionSize;
         var (states, actions, bias) = BatchTensors(indices);
-        var old = new Tensor<T>([b]);
-        var adv = new Tensor<T>([b]);
-        var ret = new Tensor<T>([b, 1]);
-        for (int i = 0; i < b; i++)
-        {
-            old[i] = NumOps.FromDouble(oldLogProbs[indices[i]]);
-            adv[i] = NumOps.FromDouble(advantages[indices[i]]);
-            ret[i, 0] = NumOps.FromDouble(returns[indices[i]]);
-        }
+        var engine = AiDotNetEngine.Current;
+        var rows = new Tensor<int>(indices, new[] { b });
+        var old = engine.TensorTake(oldLogProbs, rows);
+        var adv = engine.TensorTake(advantages, rows);
+        var ret = engine.Reshape(engine.TensorTake(returns, rows), new[] { b, 1 });
         int stateSize = states.Shape[1];
         // Everything the objective reads per step travels in the packed input, which a compiled step rebinds on
         // every replay; the bias is packed as zeros when no step was masked.
@@ -750,12 +769,20 @@ public partial class FinancialPPOAgent<T> : TradingAgentBase<T>, IGradientComput
         return (engine.TensorSubtract(chosen, lse), engine.TensorSubtract(lse, expectedLogit));
     }
 
-    private int ArgMax(Vector<T> vector)
+    // The index of each row's FIRST maximum (the scalar loop's strict-greater scan): among the entries equal to the
+    // row maximum, the earliest carries the largest weight (width - j), so the argmax has no ties to break.
+    private Tensor<int> FirstArgMaxPerRow(Tensor<T> rows)
     {
-        int maxIndex = 0;
-        for (int i = 1; i < vector.Length; i++)
-            if (NumOps.GreaterThan(vector[i], vector[maxIndex])) maxIndex = i;
-        return maxIndex;
+        var engine = AiDotNetEngine.Current;
+        int count = rows.Shape[0], width = rows.Shape[1];
+        var shape = new[] { count, width };
+        var rowMax = engine.TensorBroadcastTo(engine.ReduceMax(rows, new[] { 1 }, true), shape);
+        var weights = engine.TensorBroadcastTo(
+            engine.Reshape(
+                engine.TensorAddScalar(engine.TensorNegate(engine.TensorArange<T>(0, width, 1)), NumOps.FromDouble(width)),
+                new[] { 1, width }),
+            shape);
+        return engine.TensorArgMax(engine.TensorMultiply(engine.TensorEquals(rows, rowMax), weights), 1);
     }
 
     #endregion

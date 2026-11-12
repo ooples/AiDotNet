@@ -384,8 +384,8 @@ public partial class FinancialA2CAgent<T> : TradingAgentBase<T>, IGradientComput
             var members = Enumerable.Range(0, ((n - 1 - stream) / streams) + 1).Select(k => stream + (k * streams)).ToArray();
             var index = Tensor<int>.FromVector(Vector<int>.Wrap(members), new[] { members.Length });
             var lastIndex = Tensor<int>.FromVector(Vector<int>.Wrap(new[] { members[members.Length - 1] }), new[] { 1 });
-            var streamReturns = StreamReturns(
-                engine.TensorTake(rewards, index), engine.TensorTake(dones, index), engine.TensorTake(vNext, lastIndex), gamma);
+            var streamReturns = EpisodicRecurrence<T>.SolveBackward(
+                engine.TensorTake(rewards, index), engine.TensorTake(dones, index), gamma, engine.TensorTake(vNext, lastIndex));
             returns = engine.TensorScatter(returns, index, streamReturns, 0);
         }
 
@@ -423,42 +423,6 @@ public partial class FinancialA2CAgent<T> : TradingAgentBase<T>, IGradientComput
         LossHistory.Add(loss);
 
         return loss;
-    }
-
-    /// <summary>
-    /// Discounted returns along one environment stream, <c>G_t = r_t + gamma * (1 - done_t) * G_(t+1)</c>,
-    /// with the stream's tail bootstrapped from <paramref name="bootstrap"/> (V(s') of the last step).
-    /// </summary>
-    /// <remarks>
-    /// Appending the bootstrap as one more "reward" with no episode end makes the recursion a single
-    /// matrix product: <c>G = M r</c> with <c>M[t, k] = gamma^(k - t)</c> for <c>k &gt;= t</c> when no
-    /// episode ends in <c>[t, k)</c> and 0 otherwise. An episode end inside <c>[t, k)</c> is exactly a
-    /// change in the exclusive running count of dones between <c>t</c> and <c>k</c>.
-    /// </remarks>
-    private static Tensor<T> StreamReturns(Tensor<T> rewards, Tensor<T> dones, Tensor<T> bootstrap, T gamma)
-    {
-        var engine = AiDotNetEngine.Current;
-        int m = rewards.Length;
-        int length = m + 1;
-        var extendedRewards = engine.TensorConcatenate(new[] { rewards, bootstrap }, 0);
-        var extendedDones = engine.TensorConcatenate(new[] { dones, new Tensor<T>(new[] { 1 }) }, 0);
-
-        var position = engine.TensorArange<T>(0, length, 1);
-        var lag = engine.TensorSubtract(
-            engine.TensorBroadcastTo(engine.Reshape(position, new[] { 1, length }), new[] { length, length }),
-            engine.TensorBroadcastTo(engine.Reshape(position, new[] { length, 1 }), new[] { length, length }));
-        var gammas = new Tensor<T>(new[] { length, length });
-        engine.TensorFill(gammas, gamma);
-        var discounts = engine.TensorTriu(engine.TensorPower(gammas, engine.TensorClampMin(lag, MathHelper.GetNumericOperations<T>().Zero)), 0);
-
-        var donesBefore = engine.TensorSubtract(engine.TensorCumSum(extendedDones, 0), extendedDones);
-        var sameEpisode = engine.TensorEquals(
-            engine.TensorBroadcastTo(engine.Reshape(donesBefore, new[] { 1, length }), new[] { length, length }),
-            engine.TensorBroadcastTo(engine.Reshape(donesBefore, new[] { length, 1 }), new[] { length, length }));
-
-        var returns = engine.TensorMatMul(
-            engine.TensorMultiply(discounts, sameEpisode), engine.Reshape(extendedRewards, new[] { length, 1 }));
-        return engine.TensorSlice(engine.Reshape(returns, new[] { length }), new[] { 0 }, new[] { m });
     }
 
     private Tensor<T>? BuildMaskBias(PolicyExperience[] batch)
