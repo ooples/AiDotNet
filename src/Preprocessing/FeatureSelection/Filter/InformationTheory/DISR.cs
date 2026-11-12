@@ -79,18 +79,17 @@ public class DISR<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFeat
         var symmetricUncertainty = FilterStatisticTensorOps.GuardedDivide(
             Engine.TensorMultiplyScalar(relevance, NumOps.FromDouble(2)),
             Engine.TensorAddScalar(info.FeatureEntropy(), info.TargetEntropy), 0, NumOps.Zero);
-        T one = NumOps.One;
-        var sum = FilterStatisticTensorOps.FilledLike(relevance, NumOps.Zero);
-        var steps = sum;
+        // mean symmetric relevance with the selected features, kept as a running mean (see
+        // DiscreteInformation.RunningMean)
+        var meanRelevance = FilterStatisticTensorOps.FilledLike(relevance, NumOps.Zero);
         var (selected, scores) = DiscreteInformation<T>.Greedy(p, _nFeaturesToSelect, chosen =>
         {
             if (chosen.Count == 0)
                 return symmetricUncertainty;
             int last = chosen[chosen.Count - 1];
-            sum = Engine.TensorAdd(sum, FilterStatisticTensorOps.GuardedDivide(
-                info.JointRelevance(last), info.PairTargetEntropy(last), 0, NumOps.Zero));
-            steps = Engine.TensorAddScalar(steps, one);
-            return Engine.TensorDivide(sum, steps);
+            meanRelevance = DiscreteInformation<T>.RunningMean(meanRelevance, FilterStatisticTensorOps.GuardedDivide(
+                info.JointRelevance(last), info.PairTargetEntropy(last), 0, NumOps.Zero), chosen.Count);
+            return meanRelevance;
         });
 
         _relevanceScores = symmetricUncertainty.ToVector();

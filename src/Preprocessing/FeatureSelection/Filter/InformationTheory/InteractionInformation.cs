@@ -80,9 +80,9 @@ public class InteractionInformation<T> : TransformerBase<T, Matrix<T>, Matrix<T>
         var info = DiscreteInformation<T>.ForTarget(
             FeatureSelectionTensorOps.RangeBins(FilterStatisticTensorOps.AsTensor(data), _nBins), _nBins, target);
         var relevance = info.Relevance();
-        T one = NumOps.One;
-        var sum = FilterStatisticTensorOps.FilledLike(relevance, NumOps.Zero);
-        var steps = sum;
+        // mean interaction with the selected features, kept as a running mean (see DiscreteInformation.RunningMean);
+        // |sum| / count = |mean|
+        var meanInteraction = FilterStatisticTensorOps.FilledLike(relevance, NumOps.Zero);
         var (selected, scores) = DiscreteInformation<T>.Greedy(p, _nFeaturesToSelect, chosen =>
         {
             if (chosen.Count == 0)
@@ -94,10 +94,8 @@ public class InteractionInformation<T> : TransformerBase<T, Matrix<T>, Matrix<T>
                 Engine.TensorAdd(relevance, Engine.TensorBroadcastTo(
                     FeatureSelectionTensorOps.Entries(relevance, new[] { last }), new[] { p })),
                 info.JointRelevance(last));
-            sum = Engine.TensorAdd(sum, interaction);
-            steps = Engine.TensorAddScalar(steps, one);
-            var meanInteraction = Engine.TensorDivide(_preferSynergy ? sum : Engine.TensorAbs(sum), steps);
-            return Engine.TensorSubtract(relevance, meanInteraction);
+            meanInteraction = DiscreteInformation<T>.RunningMean(meanInteraction, interaction, chosen.Count);
+            return Engine.TensorSubtract(relevance, _preferSynergy ? meanInteraction : Engine.TensorAbs(meanInteraction));
         });
 
         _miScores = relevance.ToVector();

@@ -73,16 +73,15 @@ public class MRMR<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFeat
         var info = DiscreteInformation<T>.ForTarget(
             FeatureSelectionTensorOps.RangeBins(FilterStatisticTensorOps.AsTensor(data), _nBins), _nBins, target);
         var relevance = info.Relevance();
-        T one = NumOps.One;
-        var sum = FilterStatisticTensorOps.FilledLike(relevance, NumOps.Zero);
-        var steps = sum;
+        // mean redundancy with the selected features, kept as a running mean (see DiscreteInformation.RunningMean)
+        var redundancy = FilterStatisticTensorOps.FilledLike(relevance, NumOps.Zero);
         var (selected, scores) = DiscreteInformation<T>.Greedy(p, _nFeaturesToSelect, chosen =>
         {
             if (chosen.Count == 0)
                 return relevance;
-            sum = Engine.TensorAdd(sum, info.FeatureMutualInformation(chosen[chosen.Count - 1]));
-            steps = Engine.TensorAddScalar(steps, one);
-            return Engine.TensorSubtract(relevance, Engine.TensorDivide(sum, steps));
+            redundancy = DiscreteInformation<T>.RunningMean(
+                redundancy, info.FeatureMutualInformation(chosen[chosen.Count - 1]), chosen.Count);
+            return Engine.TensorSubtract(relevance, redundancy);
         });
 
         _mrmrScores = scores;

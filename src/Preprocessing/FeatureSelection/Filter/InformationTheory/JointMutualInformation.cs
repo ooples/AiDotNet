@@ -75,16 +75,16 @@ public class JointMutualInformation<T> : TransformerBase<T, Matrix<T>, Matrix<T>
         var info = DiscreteInformation<T>.ForTarget(
             FeatureSelectionTensorOps.RangeBins(FilterStatisticTensorOps.AsTensor(data), _nBins), _nBins, target);
         var relevance = info.Relevance();
-        T one = NumOps.One;
-        var sum = FilterStatisticTensorOps.FilledLike(relevance, NumOps.Zero);
-        var steps = sum;
+        // mean joint relevance with the selected features, kept as a running mean (see
+        // DiscreteInformation.RunningMean)
+        var meanJoint = FilterStatisticTensorOps.FilledLike(relevance, NumOps.Zero);
         var (selected, scores) = DiscreteInformation<T>.Greedy(p, _nFeaturesToSelect, chosen =>
         {
             if (chosen.Count == 0)
                 return relevance;
-            sum = Engine.TensorAdd(sum, info.JointRelevance(chosen[chosen.Count - 1]));
-            steps = Engine.TensorAddScalar(steps, one);
-            return Engine.TensorDivide(sum, steps);
+            meanJoint = DiscreteInformation<T>.RunningMean(
+                meanJoint, info.JointRelevance(chosen[chosen.Count - 1]), chosen.Count);
+            return meanJoint;
         });
 
         _miScores = relevance.ToVector();

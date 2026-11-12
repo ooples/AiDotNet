@@ -82,6 +82,19 @@ internal sealed class DiscreteInformation<T>
         return (selected.OrderBy(j => j).ToArray(), new Tensor<T>(won, new[] { p }).ToVector());
     }
 
+    /// <summary>
+    /// The running mean after a <paramref name="count"/>-th term: <c>mean + (next - mean) / count</c>. The mean of
+    /// the per-step terms of a greedy criterion, kept as a mean rather than a sum over a step counter in T: in Half
+    /// a counter stops at 2048 (2048 + 1 rounds back to 2048) and a growing sum stops taking terms below half its
+    /// spacing, while the mean stays on the scale of a single term.
+    /// </summary>
+    public static Tensor<T> RunningMean(Tensor<T> mean, Tensor<T> next, int count)
+    {
+        var engine = AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<T>();
+        return engine.TensorAdd(mean, engine.TensorDivideScalar(engine.TensorSubtract(next, mean), ops.FromDouble(count)));
+    }
+
     /// <summary>Number of features.</summary>
     public int FeatureCount => _p;
 
