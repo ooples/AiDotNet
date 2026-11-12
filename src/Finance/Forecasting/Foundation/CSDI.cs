@@ -705,20 +705,24 @@ public partial class CSDI<T> : TimeSeriesFoundationModelBase<T>, ITrainingObject
             xt.Data.Span[i] = SampleStandardNormal(rand);
 
         int condLen = Math.Min(condFlat.Length, _hiddenDimension);
-        int rowLen = outputLen + condLen + 1;
         T eps10 = NumOps.FromDouble(1e-10);
 
         for (int t = _numDiffusionSteps - 1; t >= 0; t--)
         {
-            var denoisingInput = new Tensor<T>(new[] { samples, rowLen });
             T sinT = NumOps.FromDouble(Math.Sin(2.0 * Math.PI * t / Math.Max(1, _numDiffusionSteps - 1)));
-            var din = denoisingInput.Data.Span;
-            for (int s = 0; s < samples; s++)
+            Tensor<T> denoisingInput;
+            using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
             {
-                int baseIdx = s * rowLen;
-                for (int i = 0; i < outputLen; i++) din[baseIdx + i] = xt[s * outputLen + i];
-                for (int i = 0; i < condLen; i++) din[baseIdx + outputLen + i] = condFlat[i];
-                din[baseIdx + outputLen + condLen] = sinT;
+                // Row s = [x_t row s | leading condLen conditioning values | sin timestep] (detached).
+                var parts = new List<Tensor<T>>(3) { xt };
+                if (condLen > 0)
+                {
+                    var cond = Engine.TensorNarrow(Engine.Reshape(condFlat.Contiguous(), new[] { condFlat.Length }), 0, 0, condLen);
+                    parts.Add(Engine.TensorBroadcastTo(Engine.Reshape(cond, new[] { 1, condLen }), new[] { samples, condLen }).Contiguous());
+                }
+
+                parts.Add(Engine.TensorFullLike(new Tensor<T>(new[] { samples, 1 }), sinT));
+                denoisingInput = Engine.TensorConcatenate(parts.ToArray(), 1);
             }
 
             var eps = denoisingInput;
@@ -734,18 +738,41 @@ public partial class CSDI<T> : TimeSeriesFoundationModelBase<T>, ITrainingObject
             T sigmaT = t > 0 ? NumOps.Sqrt(betaT) : NumOps.Zero;
 
             int epsCols = samples > 0 ? eps.Length / samples : 0;
-            for (int s = 0; s < samples; s++)
+            using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
             {
-                for (int i = 0; i < outputLen; i++)
+                // eps row s supplies its first outputLen columns (zero where it has fewer).
+                var gridShape = new[] { samples, outputLen };
+                int usedCols = Math.Min(epsCols, outputLen);
+                Tensor<T> epsAligned;
+                if (usedCols == 0)
                 {
-                    int flat = s * outputLen + i;
-                    if (flat >= xt.Length) break;
-                    int epsIdx = s * epsCols + i;
-                    T epsVal = i < epsCols && epsIdx < eps.Length ? eps[epsIdx] : NumOps.Zero;
-                    T meanT = NumOps.Divide(NumOps.Subtract(xt[flat], NumOps.Multiply(noiseCoeffT, epsVal)), NumOps.Add(sqrtAlphaT, eps10));
-                    T z = t > 0 ? SampleStandardNormal(rand) : NumOps.Zero;
-                    xt.Data.Span[flat] = NumOps.Add(meanT, NumOps.Multiply(sigmaT, z));
+                    epsAligned = new Tensor<T>(gridShape);
                 }
+                else
+                {
+                    var epsGrid = Engine.Reshape(
+                        Engine.TensorNarrow(Engine.Reshape(eps.Contiguous(), new[] { eps.Length }), 0, 0, samples * epsCols),
+                        new[] { samples, epsCols });
+                    var head = usedCols == epsCols ? epsGrid : Engine.TensorNarrow(epsGrid, 1, 0, usedCols).Contiguous();
+                    epsAligned = usedCols == outputLen
+                        ? head
+                        : Engine.TensorConcatenate(new[] { head, new Tensor<T>(new[] { samples, outputLen - usedCols }) }, 1);
+                }
+
+                var meanT = Engine.TensorDivideScalar(
+                    Engine.TensorSubtract(xt, Engine.TensorMultiplyScalar(epsAligned, noiseCoeffT)),
+                    NumOps.Add(sqrtAlphaT, eps10));
+
+                // Noise in the same row-major draw order; none is drawn at the last step.
+                var z = new Tensor<T>(gridShape);
+                if (t > 0)
+                {
+                    var zSpan = z.Data.Span;
+                    for (int k = 0; k < samples * outputLen; k++)
+                        zSpan[k] = SampleStandardNormal(rand);
+                }
+
+                xt = Engine.TensorAdd(meanT, Engine.TensorMultiplyScalar(z, sigmaT));
             }
         }
 
