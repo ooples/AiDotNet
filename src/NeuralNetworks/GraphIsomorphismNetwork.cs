@@ -484,18 +484,15 @@ public partial class GraphIsomorphismNetwork<T> : GraphModelLayoutBase<T>
         int numNodes = nodeFeatures.Shape[0];
         int numFeatures = nodeFeatures.Shape[1];
 
-        var graphRep = new Tensor<T>([1, numFeatures]);
-        for (int f = 0; f < numFeatures; f++)
-        {
-            var sum = NumOps.Zero;
-            for (int n = 0; n < numNodes; n++)
-            {
-                sum = NumOps.Add(sum, nodeFeatures[n, f]);
-            }
-            graphRep[0, f] = sum;
-        }
+        if (numNodes == 0 || numFeatures == 0)
+            return new Tensor<T>([1, numFeatures]);
 
-        return graphRep;
+        // Sum over the nodes, as a plain value (off the tape), as the element-wise sum was.
+        using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
+        {
+            return Engine.ReduceSum(
+                Engine.TensorSlice(nodeFeatures, [0, 0], [numNodes, numFeatures]), new[] { 0 }, keepDims: true);
+        }
     }
 
     /// <summary>
@@ -504,17 +501,11 @@ public partial class GraphIsomorphismNetwork<T> : GraphModelLayoutBase<T>
     private Tensor<T> DistributeGradient(Tensor<T> graphGradient, int numNodes)
     {
         int numFeatures = graphGradient.Shape[1];
-        var nodeGradient = new Tensor<T>([numNodes, numFeatures]);
+        if (numNodes == 0 || numFeatures == 0)
+            return new Tensor<T>([numNodes, numFeatures]);
 
-        for (int n = 0; n < numNodes; n++)
-        {
-            for (int f = 0; f < numFeatures; f++)
-            {
-                nodeGradient[n, f] = graphGradient[0, f];
-            }
-        }
-
-        return nodeGradient;
+        // Every node receives the graph-level gradient row.
+        return Engine.TensorTile(Engine.TensorSlice(graphGradient, [0, 0], [1, numFeatures]), [numNodes, 1]);
     }
 
     /// <summary>
@@ -536,38 +527,29 @@ public partial class GraphIsomorphismNetwork<T> : GraphModelLayoutBase<T>
         if (count == 0) return gradient;
 
         var scale = NumOps.Divide(NumOps.One, NumOps.FromDouble(count));
+        if (numNodes == 0 || numClasses == 0) return gradient;
 
-        for (int i = 0; i < numNodes; i++)
-        {
-            if (mask != null && !mask[i]) continue;
+        // Row softmax with the max as the scan from MinValue found it (strictly larger values only, so NaN
+        // is skipped): a MinValue column in front and ArgMax (first of ties) reproduce it.
+        var logits = Engine.TensorSlice(predictions, [0, 0], [numNodes, numClasses]);
+        var floor = new Tensor<T>([numNodes, 1]);
+        floor.Fill(NumOps.MinValue);
+        var withFloor = Engine.TensorConcatenate(new[] { floor, logits }, 1);
+        var maxIndex = Engine.Reshape(Engine.TensorArgMax(withFloor, 1), [numNodes, 1]);
+        var maxLogit = Engine.TensorTakeAlongDim(withFloor, maxIndex, 1);   // [numNodes, 1]
+        var probs = Engine.TensorExp(Engine.TensorSubtract(logits, maxLogit));
+        var prob = Engine.TensorDivide(probs, Engine.ReduceSum(probs, new[] { 1 }, keepDims: true));
 
-            // Compute softmax probabilities
-            var maxLogit = NumOps.MinValue;
-            for (int c = 0; c < numClasses; c++)
-            {
-                if (NumOps.GreaterThan(predictions[i, c], maxLogit))
-                {
-                    maxLogit = predictions[i, c];
-                }
-            }
+        // Gradient = (softmax - label) / count, on the masked rows only
+        var rowGradient = Engine.TensorMultiplyScalar(
+            Engine.TensorSubtract(prob, Engine.TensorSlice(labels, [0, 0], [numNodes, numClasses])), scale);
+        if (mask == null)
+            return rowGradient;
 
-            var sumExp = NumOps.Zero;
-            var probs = new T[numClasses];
-            for (int c = 0; c < numClasses; c++)
-            {
-                probs[c] = NumOps.Exp(NumOps.Subtract(predictions[i, c], maxLogit));
-                sumExp = NumOps.Add(sumExp, probs[c]);
-            }
-
-            // Gradient = (softmax - label) / count
-            for (int c = 0; c < numClasses; c++)
-            {
-                var prob = NumOps.Divide(probs[c], sumExp);
-                gradient[i, c] = NumOps.Multiply(scale, NumOps.Subtract(prob, labels[i, c]));
-            }
-        }
-
-        return gradient;
+        var rowMask = new Tensor<bool>(
+            Enumerable.Range(0, numNodes * numClasses).Select(flat => mask[flat / numClasses]).ToArray(),
+            [numNodes, numClasses]);
+        return Engine.TensorWhere(rowMask, rowGradient, gradient);
     }
 
     /// <summary>
@@ -578,32 +560,22 @@ public partial class GraphIsomorphismNetwork<T> : GraphModelLayoutBase<T>
         var gradient = new Tensor<T>(predictions._shape);
         int numClasses = predictions.Shape[1];
 
-        // Compute softmax probabilities
-        var maxLogit = NumOps.MinValue;
-        for (int c = 0; c < numClasses; c++)
-        {
-            if (NumOps.GreaterThan(predictions[0, c], maxLogit))
-            {
-                maxLogit = predictions[0, c];
-            }
-        }
+        if (numClasses == 0) return gradient;
 
-        var sumExp = NumOps.Zero;
-        var probs = new T[numClasses];
-        for (int c = 0; c < numClasses; c++)
-        {
-            probs[c] = NumOps.Exp(NumOps.Subtract(predictions[0, c], maxLogit));
-            sumExp = NumOps.Add(sumExp, probs[c]);
-        }
+        // Compute softmax probabilities of row 0, the max as the scan from MinValue found it (strictly
+        // larger values only, so NaN is skipped): a MinValue entry in front and ArgMax reproduce it.
+        var logits = Engine.TensorSlice(predictions, [0, 0], [1, numClasses]);
+        var floor = new Tensor<T>([1, 1]);
+        floor.Fill(NumOps.MinValue);
+        var withFloor = Engine.TensorConcatenate(new[] { floor, logits }, 1);
+        var maxLogit = Engine.TensorTakeAlongDim(withFloor, Engine.Reshape(Engine.TensorArgMax(withFloor, 1), [1, 1]), 1);
+        var probs = Engine.TensorExp(Engine.TensorSubtract(logits, maxLogit));
+        var prob = Engine.TensorDivideScalar(probs, Engine.TensorSum(probs));
 
-        // Gradient = softmax - label
-        for (int c = 0; c < numClasses; c++)
-        {
-            var prob = NumOps.Divide(probs[c], sumExp);
-            gradient[0, c] = NumOps.Subtract(prob, labels[0, c]);
-        }
-
-        return gradient;
+        // Gradient = softmax - label, in row 0 only
+        var row = Engine.TensorSubtract(prob, Engine.TensorSlice(labels, [0, 0], [1, numClasses]));
+        int rows = predictions.Shape[0];
+        return rows == 1 ? row : Engine.TensorConcatenate(new[] { row, new Tensor<T>([rows - 1, numClasses]) }, 0);
     }
 
     /// <summary>
@@ -633,32 +605,20 @@ public partial class GraphIsomorphismNetwork<T> : GraphModelLayoutBase<T>
         int numNodes = predictions.Shape[0];
         int numClasses = predictions.Shape[1];
 
+        // Predicted class: the first strictly largest prediction. True class: the first positive label (0 if none).
+        var predictedClasses = numNodes == 0 ? Array.Empty<int>()
+            : Engine.TensorArgMax(Engine.TensorSlice(predictions, [0, 0], [numNodes, numClasses]), 1).ToVector().ToArray();
+        var trueClasses = numNodes == 0 ? Array.Empty<int>()
+            : Engine.TensorArgMax(
+                Engine.TensorGreaterThan(Engine.TensorSlice(labels, [0, 0], [numNodes, numClasses]), NumOps.Zero), 1)
+                .ToVector().ToArray();
+
         for (int i = 0; i < numNodes; i++)
         {
             if (!testMask[i]) continue;
 
-            // Find predicted class
-            int predClass = 0;
-            var maxProb = predictions[i, 0];
-            for (int c = 1; c < numClasses; c++)
-            {
-                if (NumOps.GreaterThan(predictions[i, c], maxProb))
-                {
-                    maxProb = predictions[i, c];
-                    predClass = c;
-                }
-            }
-
-            // Find true class
-            int trueClass = 0;
-            for (int c = 0; c < numClasses; c++)
-            {
-                if (NumOps.GreaterThan(labels[i, c], NumOps.Zero))
-                {
-                    trueClass = c;
-                    break;
-                }
-            }
+            int predClass = predictedClasses[i];
+            int trueClass = trueClasses[i];
 
             if (predClass == trueClass) correct++;
             total++;
@@ -694,28 +654,10 @@ public partial class GraphIsomorphismNetwork<T> : GraphModelLayoutBase<T>
             var nodeOutput = Forward(graphs[g], adjacencyMatrices[g]);
             var graphRep = SumReadout(nodeOutput);
 
-            // Find predicted class
-            int predClass = 0;
-            var maxProb = graphRep[0, 0];
-            for (int c = 1; c < numClasses; c++)
-            {
-                if (NumOps.GreaterThan(graphRep[0, c], maxProb))
-                {
-                    maxProb = graphRep[0, c];
-                    predClass = c;
-                }
-            }
-
-            // Find true class
-            int trueClass = 0;
-            for (int c = 0; c < numClasses; c++)
-            {
-                if (NumOps.GreaterThan(graphLabels[g, c], NumOps.Zero))
-                {
-                    trueClass = c;
-                    break;
-                }
-            }
+            // Predicted class: the first strictly largest score. True class: the first positive label (0 if none).
+            int predClass = Engine.TensorArgMax(Engine.TensorSlice(graphRep, [0, 0], [1, numClasses]), 1)[0];
+            int trueClass = Engine.TensorArgMax(
+                Engine.TensorGreaterThan(Engine.TensorSlice(graphLabels, [g, 0], [1, numClasses]), NumOps.Zero), 1)[0];
 
             if (predClass == trueClass) correct++;
         }
