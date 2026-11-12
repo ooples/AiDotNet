@@ -900,11 +900,9 @@ public partial class AudioGenModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerat
         var tokens = TokenizePrompt(prompt);
 
         // Create input tensor
-        var inputTensor = new Tensor<T>([1, tokens.Length]);
-        for (int i = 0; i < tokens.Length; i++)
-        {
-            inputTensor[0, i] = NumOps.FromDouble(tokens[i]);
-        }
+        var inputTensor = tokens.Length == 0
+            ? new Tensor<T>([1, 0])
+            : new Tensor<int>(tokens, [1, tokens.Length]).Cast<T>();
 
         if (_useNativeMode)
         {
@@ -962,30 +960,12 @@ public partial class AudioGenModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerat
         int tokensPerSecond = 50;  // EnCodec: ~50 tokens per second at 32kHz
         int numTokens = (int)(durationSeconds * tokensPerSecond);
 
-        var codes = new Tensor<T>([1, _numCodebooks, numTokens]);
-
-        // Pre-allocate currentTokens to avoid O(n²) copy overhead
-        // Start with capacity for all tokens + 1 for start token
-        var currentTokens = new Tensor<T>([1, _numCodebooks, numTokens + 1]);
-        int currentLength = 1;
-
-        // Initialize with start token
-        for (int cb = 0; cb < _numCodebooks; cb++)
-        {
-            currentTokens[0, cb, 0] = NumOps.Zero;
-        }
+        // Sampled token ids [numCodebooks, numTokens]; the running context starts with a zero start token
+        var sampled = new int[Math.Max(0, _numCodebooks * numTokens)];
+        var inputTokens = new Tensor<T>([1, _numCodebooks, 1]);
 
         for (int t = 0; t < numTokens; t++)
         {
-            // Create a view of currentTokens up to currentLength for the forward pass
-            var inputTokens = new Tensor<T>([1, _numCodebooks, currentLength]);
-            for (int cb = 0; cb < _numCodebooks; cb++)
-            {
-                for (int i = 0; i < currentLength; i++)
-                {
-                    inputTokens[0, cb, i] = currentTokens[0, cb, i];
-                }
-            }
 
             Tensor<T> logits;
 
@@ -1007,19 +987,34 @@ public partial class AudioGenModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerat
                 logits = outputs.Values.First();
             }
 
-            // Sample next tokens for each codebook
+            // Sample next tokens for each codebook and append them to the context
+            var nextTokens = new int[_numCodebooks];
             for (int cb = 0; cb < _numCodebooks; cb++)
             {
-                int nextToken = SampleFromLogits(logits, cb, random);
-                codes[0, cb, t] = NumOps.FromDouble(nextToken);
-
-                // Append to pre-allocated tensor (O(1) instead of O(n) copy)
-                currentTokens[0, cb, currentLength] = codes[0, cb, t];
+                nextTokens[cb] = SampleFromLogits(logits, cb, random);
+                sampled[cb * numTokens + t] = nextTokens[cb];
             }
-            currentLength++;
+            inputTokens = AppendTokens(inputTokens, nextTokens);
         }
 
-        return codes;
+        return TokensToTensor(sampled, numTokens);
+    }
+
+    /// <summary><paramref name="context"/> <c>[1, numCodebooks, n]</c> with one more step of token ids appended.</summary>
+    private Tensor<T> AppendTokens(Tensor<T> context, int[] nextTokens)
+    {
+        var column = nextTokens.Length == 0
+            ? new Tensor<T>([1, 0, 1])
+            : new Tensor<int>(nextTokens, [1, nextTokens.Length, 1]).Cast<T>();
+        return Engine.Concat(new[] { context, column }, 2);
+    }
+
+    /// <summary>Sampled token ids (codebook-major) as a <c>[1, numCodebooks, numTokens]</c> tensor.</summary>
+    private Tensor<T> TokensToTensor(int[] sampled, int numTokens)
+    {
+        if (sampled.Length == 0)
+            return new Tensor<T>([1, _numCodebooks, numTokens]);
+        return new Tensor<int>(sampled, [1, _numCodebooks, numTokens]).Cast<T>();
     }
 
     private Tensor<T> ForwardLanguageModel(Tensor<T> textEmbeddings, Tensor<T> audioCodes)
@@ -1061,28 +1056,12 @@ public partial class AudioGenModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerat
         int tokensPerSecond = 50;
         int numTokens = (int)(durationSeconds * tokensPerSecond);
 
-        var codes = new Tensor<T>([1, _numCodebooks, numTokens]);
-
-        // Pre-allocate currentTokens to avoid O(n²) copy overhead
-        var currentTokens = new Tensor<T>([1, _numCodebooks, numTokens + 1]);
-        int currentLength = 1;
-
-        for (int cb = 0; cb < _numCodebooks; cb++)
-        {
-            currentTokens[0, cb, 0] = NumOps.Zero;
-        }
+        // Sampled token ids [numCodebooks, numTokens]; the running context starts with a zero start token
+        var sampled = new int[Math.Max(0, _numCodebooks * numTokens)];
+        var inputTokens = new Tensor<T>([1, _numCodebooks, 1]);
 
         for (int t = 0; t < numTokens; t++)
         {
-            // Create a view of currentTokens up to currentLength for the forward pass
-            var inputTokens = new Tensor<T>([1, _numCodebooks, currentLength]);
-            for (int cb = 0; cb < _numCodebooks; cb++)
-            {
-                for (int i = 0; i < currentLength; i++)
-                {
-                    inputTokens[0, cb, i] = currentTokens[0, cb, i];
-                }
-            }
 
             Tensor<T> condLogits, uncondLogits;
 
@@ -1114,35 +1093,27 @@ public partial class AudioGenModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerat
             // Apply classifier-free guidance
             var guidedLogits = ApplyGuidance(condLogits, uncondLogits, guidanceScale);
 
+            var nextTokens = new int[_numCodebooks];
             for (int cb = 0; cb < _numCodebooks; cb++)
             {
-                int nextToken = SampleFromLogits(guidedLogits, cb, random);
-                codes[0, cb, t] = NumOps.FromDouble(nextToken);
-
-                // Append to pre-allocated tensor (O(1) instead of O(n) copy)
-                currentTokens[0, cb, currentLength] = codes[0, cb, t];
+                nextTokens[cb] = SampleFromLogits(guidedLogits, cb, random);
+                sampled[cb * numTokens + t] = nextTokens[cb];
             }
-            currentLength++;
+            inputTokens = AppendTokens(inputTokens, nextTokens);
         }
 
-        return codes;
+        return TokensToTensor(sampled, numTokens);
     }
 
     private Tensor<T> ApplyGuidance(Tensor<T> condLogits, Tensor<T> uncondLogits, double scale)
     {
-        var guided = new Tensor<T>(condLogits._shape);
+        // CFG formula: guided = uncond + scale * (cond - uncond), over cond's elements (row-major)
+        if (uncondLogits.Length < condLogits.Length)
+            throw new IndexOutOfRangeException("Unconditional logits are shorter than the conditional logits.");
 
-        for (int i = 0; i < condLogits.Length; i++)
-        {
-            double cond = NumOps.ToDouble(condLogits[i]);
-            double uncond = NumOps.ToDouble(uncondLogits[i]);
-
-            // CFG formula: guided = uncond + scale * (cond - uncond)
-            double guidedValue = uncond + scale * (cond - uncond);
-            guided[i] = NumOps.FromDouble(guidedValue);
-        }
-
-        return guided;
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        var uncond = Engine.Reshape(AudioEngineOps.FitLength(Engine, uncondLogits, condLogits.Length), condLogits.Shape.ToArray());
+        return Engine.TensorAdd(uncond, Engine.TensorMultiplyScalar(Engine.TensorSubtract(condLogits, uncond), NumOps.FromDouble(scale)));
     }
 
     private int SampleFromLogits(Tensor<T> logits, int codebook, Random random)
@@ -1258,12 +1229,9 @@ public partial class AudioGenModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerat
         int targetLength = (int)(durationSeconds * _sampleRate);
         if (waveformTensor.Length > targetLength)
         {
-            var trimmed = new Tensor<T>([targetLength]);
-            for (int i = 0; i < targetLength; i++)
-            {
-                trimmed[i] = waveformTensor[i];
-            }
-            return trimmed;
+            // The first targetLength samples (row-major), as a fresh tensor
+            using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+            return AudioEngineOps.FitLength(Engine, waveformTensor, targetLength).Clone();
         }
 
         return waveformTensor;
@@ -1290,130 +1258,91 @@ public partial class AudioGenModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerat
         int samplesPerToken = targetSamples / Math.Max(1, numTokens);
         if (samplesPerToken < 1) samplesPerToken = 1;
 
-        var waveform = new Tensor<T>(channels == 1 ? [targetSamples] : [channels, targetSamples]);
+        int[] outputShape = channels == 1 ? [targetSamples] : [channels, targetSamples];
+        if (numTokens <= 0 || targetSamples <= 0)
+            return new Tensor<T>(outputShape);
 
-        // Process each token and upsample to audio samples
-        for (int t = 0; t < numTokens; t++)
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+
+        // Per-token value: residual sum over codebooks of ((code / size - 0.5) * 2) / 2^cb, clamped to [-1, 1]
+        Tensor<T> codes;
+        if (audioCodes.Shape.Length >= 3)
         {
-            // Aggregate embeddings from all codebooks using residual sum
-            double aggregatedValue = 0.0;
-            for (int cb = 0; cb < _numCodebooks; cb++)
-            {
-                // Get code value and normalize to [-1, 1] range
-                double codeValue;
-                if (audioCodes.Shape.Length >= 3)
-                {
-                    codeValue = NumOps.ToDouble(audioCodes[0, cb, t]);
-                }
-                else
-                {
-                    codeValue = NumOps.ToDouble(audioCodes[cb * numTokens + t]);
-                }
+            codes = Engine.Reshape(
+                Engine.TensorSlice(audioCodes, [0, 0, 0], [1, _numCodebooks, numTokens]), [_numCodebooks, numTokens]);
+        }
+        else
+        {
+            codes = Engine.Reshape(AudioEngineOps.FitLength(Engine, audioCodes, _numCodebooks * numTokens), [_numCodebooks, numTokens]);
+            if (audioCodes.Length < _numCodebooks * numTokens)
+                throw new IndexOutOfRangeException("Audio codes are shorter than numCodebooks * numTokens.");
+        }
+        var normalized = Engine.TensorMultiplyScalar(
+            Engine.TensorSubtractScalar(Engine.TensorDivideScalar(codes, NumOps.FromDouble(_codebookSize)), NumOps.FromDouble(0.5)),
+            NumOps.FromDouble(2.0));
+        var codebookWeight = Engine.TensorPower(
+            Tensor<T>.CreateDefault([_numCodebooks, 1], NumOps.FromDouble(0.5)),
+            Engine.Reshape(Engine.TensorArange<T>(0, _numCodebooks, 1), [_numCodebooks, 1]));
+        var aggregated = Engine.TensorClamp(
+            Engine.ReduceSum(Engine.TensorMultiply(normalized, Engine.TensorBroadcastTo(codebookWeight, [_numCodebooks, numTokens])), [0], keepDims: false),
+            NumOps.FromDouble(-1.0), NumOps.FromDouble(1.0));
+        // Interpolation target: the next token's value (the last token interpolates to itself)
+        var nextValue = numTokens == 1
+            ? aggregated
+            : Engine.Concat(new[] { Engine.TensorSlice(aggregated, [1], [numTokens - 1]), Engine.TensorSlice(aggregated, [numTokens - 1], [1]) }, 0);
 
-                // Normalize code to [-1, 1] with codebook weighting (earlier codebooks carry more signal)
-                double normalized = (codeValue / _codebookSize - 0.5) * 2.0;
-                double weight = 1.0 / Math.Pow(2, cb); // Residual VQ weighting
-                aggregatedValue += normalized * weight;
+        // Sample geometry: token t covers [t * spt, min((t + 1) * spt, target)); samples past
+        // numTokens * spt fade the last value out linearly
+        int filledSamples = numTokens * samplesPerToken;
+        int tailSpan = Math.Max(1, targetSamples - filledSamples);
+        var tokenOf = new int[targetSamples];
+        var offset = new int[targetSamples];
+        var span = new int[targetSamples];
+        var isTail = new int[targetSamples];
+        for (int s = 0; s < targetSamples; s++)
+        {
+            if (s < filledSamples)
+            {
+                int t = s / samplesPerToken;
+                int startSample = t * samplesPerToken;
+                int endSample = Math.Min((t + 1) * samplesPerToken, targetSamples);
+                tokenOf[s] = t;
+                offset[s] = s - startSample;
+                span[s] = Math.Max(1, endSample - startSample);
             }
-
-            // Clamp to valid audio range
-            aggregatedValue = MathHelper.Clamp(aggregatedValue, -1.0, 1.0);
-
-            // Upsample: generate samples for this token with interpolation
-            int startSample = t * samplesPerToken;
-            int endSample = Math.Min((t + 1) * samplesPerToken, targetSamples);
-
-            // Get next token value for interpolation
-            double nextValue = aggregatedValue;
-            if (t + 1 < numTokens)
+            else
             {
-                double nextAggregated = 0.0;
-                for (int cb = 0; cb < _numCodebooks; cb++)
-                {
-                    double codeValue;
-                    if (audioCodes.Shape.Length >= 3)
-                    {
-                        codeValue = NumOps.ToDouble(audioCodes[0, cb, t + 1]);
-                    }
-                    else
-                    {
-                        codeValue = NumOps.ToDouble(audioCodes[cb * numTokens + t + 1]);
-                    }
-                    double normalized = (codeValue / _codebookSize - 0.5) * 2.0;
-                    double weight = 1.0 / Math.Pow(2, cb);
-                    nextAggregated += normalized * weight;
-                }
-                nextValue = MathHelper.Clamp(nextAggregated, -1.0, 1.0);
-            }
-
-            // Linear interpolation between tokens for smoother output
-            for (int s = startSample; s < endSample; s++)
-            {
-                double alpha = (double)(s - startSample) / Math.Max(1, endSample - startSample);
-                double interpolated = aggregatedValue * (1.0 - alpha) + nextValue * alpha;
-
-                // Apply slight smoothing using cosine interpolation for more natural sound
-                double smoothAlpha = (1.0 - Math.Cos(alpha * Math.PI)) / 2.0;
-                double smoothValue = aggregatedValue * (1.0 - smoothAlpha) + nextValue * smoothAlpha;
-
-                T sampleValue = NumOps.FromDouble(smoothValue);
-                if (channels == 1)
-                {
-                    waveform[s] = sampleValue;
-                }
-                else
-                {
-                    // Stereo: same value for both channels in basic mode
-                    for (int c = 0; c < channels; c++)
-                    {
-                        waveform[c, s] = sampleValue;
-                    }
-                }
+                tokenOf[s] = numTokens - 1;
+                offset[s] = s - filledSamples;
+                span[s] = tailSpan;
+                isTail[s] = 1;
             }
         }
 
-        // Fill any remaining samples with the last value
-        if (numTokens > 0)
-        {
-            double lastValue = 0.0;
-            for (int cb = 0; cb < _numCodebooks; cb++)
-            {
-                double codeValue;
-                if (audioCodes.Shape.Length >= 3)
-                {
-                    codeValue = NumOps.ToDouble(audioCodes[0, cb, numTokens - 1]);
-                }
-                else
-                {
-                    codeValue = NumOps.ToDouble(audioCodes[cb * numTokens + numTokens - 1]);
-                }
-                double normalized = (codeValue / _codebookSize - 0.5) * 2.0;
-                double weight = 1.0 / Math.Pow(2, cb);
-                lastValue += normalized * weight;
-            }
-            lastValue = MathHelper.Clamp(lastValue, -1.0, 1.0);
+        var sampleShape = new[] { targetSamples };
+        var alpha = Engine.TensorDivide(
+            new Tensor<int>(offset, sampleShape).Cast<T>(), new Tensor<int>(span, sampleShape).Cast<T>());
+        var tokenIndex = new Tensor<int>(tokenOf, sampleShape);
+        var current = Engine.TensorIndexSelect(aggregated, tokenIndex, 0);
+        var next = Engine.TensorIndexSelect(nextValue, tokenIndex, 0);
 
-            int filledSamples = numTokens * samplesPerToken;
-            for (int s = filledSamples; s < targetSamples; s++)
-            {
-                // Fade out to avoid clicks
-                double fadeOut = 1.0 - (double)(s - filledSamples) / Math.Max(1, targetSamples - filledSamples);
-                T sampleValue = NumOps.FromDouble(lastValue * fadeOut);
-                if (channels == 1)
-                {
-                    waveform[s] = sampleValue;
-                }
-                else
-                {
-                    for (int c = 0; c < channels; c++)
-                    {
-                        waveform[c, s] = sampleValue;
-                    }
-                }
-            }
-        }
+        // Cosine interpolation between tokens for more natural sound: (1 - cos(alpha pi)) / 2
+        T one = NumOps.One;
+        var smoothAlpha = Engine.TensorMultiplyScalar(
+            Engine.TensorAddScalar(Engine.TensorNegate(Engine.TensorCos(Engine.TensorMultiplyScalar(alpha, NumOps.FromDouble(Math.PI)))), one),
+            NumOps.FromDouble(0.5));
+        var body = Engine.TensorAdd(
+            Engine.TensorMultiply(current, Engine.TensorAddScalar(Engine.TensorNegate(smoothAlpha), one)),
+            Engine.TensorMultiply(next, smoothAlpha));
 
-        return waveform;
+        // Fade out to avoid clicks
+        var tail = Engine.TensorMultiply(current, Engine.TensorAddScalar(Engine.TensorNegate(alpha), one));
+        var waveform = Engine.TensorWhere(new Tensor<int>(isTail, sampleShape).Cast<T>(), tail, body);
+
+        // Stereo: same value for both channels in basic mode
+        return channels == 1
+            ? waveform
+            : Engine.TensorBroadcastTo(Engine.Reshape(waveform, [1, targetSamples]), [channels, targetSamples]).Clone();
     }
 
     private void ThrowIfDisposed()
