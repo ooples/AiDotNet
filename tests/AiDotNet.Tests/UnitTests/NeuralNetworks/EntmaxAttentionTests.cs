@@ -10,6 +10,41 @@ namespace AiDotNet.Tests.UnitTests.NeuralNetworks;
 /// </summary>
 public class EntmaxAttentionTests
 {
+    [Theory]
+    [InlineData(1.5)]
+    [InlineData(2.0)]
+    public void LargeCommonOffset_PreservesUniformProbabilities(double alpha)
+    {
+        var output = new EntmaxAttention<double>(alpha).Forward(
+            new Tensor<double>(new[] { 1e16, 1e16 }, new[] { 1, 2 }));
+        Assert.Equal(0.5, output.GetFlat(0), 12);
+        Assert.Equal(0.5, output.GetFlat(1), 12);
+    }
+
+    [Theory]
+    [InlineData(1.5)]
+    [InlineData(2.0)]
+    public void ExtremeFiniteSpread_ConvergesToTheOneHotReference(double alpha)
+    {
+        var output = new EntmaxAttention<double>(alpha).Forward(
+            new Tensor<double>(new[] { 1e308, -1e308, -1e308 }, new[] { 1, 3 }));
+        Assert.Equal(1.0, output.GetFlat(0), 12);
+        Assert.Equal(0.0, output.GetFlat(1), 12);
+        Assert.Equal(0.0, output.GetFlat(2), 12);
+    }
+
+    [Theory]
+    [InlineData(1.0001)]
+    [InlineData(1.5)]
+    [InlineData(2.0)]
+    public void HalfThresholdGeometry_PreservesUniformProbabilities(double alpha)
+    {
+        var output = new EntmaxAttention<System.Half>(alpha).Forward(
+            new Tensor<System.Half>(new[] { (System.Half)10000, (System.Half)10000 }, new[] { 1, 2 }));
+        Assert.Equal((System.Half)0.5, output.GetFlat(0));
+        Assert.Equal((System.Half)0.5, output.GetFlat(1));
+    }
+
     [Fact]
     public void Entmax15_MatchesThePaperClosedForm()
     {

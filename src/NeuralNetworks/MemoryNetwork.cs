@@ -524,8 +524,11 @@ public partial class MemoryNetwork<T> : SequenceModelLayoutBase<T>
         var oldRow = Tensor<T>.FromVector(_memory.GetRow(row));
         var written = Engine.TensorMultiplyScalar(
             Engine.Reshape(Engine.TensorSlice(source, new[] { 0, 0 }, new[] { 1, count }), new[] { count }), write);
-        var head = Engine.TensorAdd(
-            Engine.TensorMultiplyScalar(Engine.TensorSlice(oldRow, new[] { 0 }, new[] { count }), keep), written);
+        // A true overwrite must not read the previous value (0 * NaN/Infinity is not zero).
+        var head = NumOps.Equals(keep, NumOps.Zero)
+            ? written
+            : Engine.TensorAdd(
+                Engine.TensorMultiplyScalar(Engine.TensorSlice(oldRow, new[] { 0 }, new[] { count }), keep), written);
         var newRow = count == _embeddingSize
             ? head
             : Engine.TensorConcatenate(new[] { head, Engine.TensorSlice(oldRow, new[] { count }, new[] { _embeddingSize - count }) }, 0);
@@ -690,11 +693,10 @@ public partial class MemoryNetwork<T> : SequenceModelLayoutBase<T>
     public override ModelMetadata<T> GetModelMetadata()
     {
         // Calculate memory statistics
-        var memoryValues = Tensor<T>.FromMatrix(_memory);
-        double avgMemValue = Convert.ToDouble(NumOps.Divide(
-            Engine.TensorSum(memoryValues), NumOps.FromDouble((double)_memorySize * _embeddingSize)));
-        double minMemValue = Convert.ToDouble(Engine.TensorMinValue(memoryValues));
-        double maxMemValue = Convert.ToDouble(Engine.TensorMaxValue(memoryValues));
+        var memoryValues = Tensor<T>.FromMatrix(_memory).Cast<double>();
+        double avgMemValue = Engine.TensorSum(memoryValues) / ((double)_memorySize * _embeddingSize);
+        double minMemValue = Engine.TensorMinValue(memoryValues);
+        double maxMemValue = Engine.TensorMaxValue(memoryValues);
 
         return new ModelMetadata<T>
         {

@@ -347,7 +347,7 @@ public partial class QuantumNeuralNetwork<T> : VectorModelLayoutBase<T>
             return CreateUniformQuantumState(length);
 
         // Amplitude encoding: scale by the max magnitude first (overflow-safe), then L2-normalise.
-        var scaled = Engine.TensorDivideScalar(values, maxMagnitude);
+        var scaled = Engine.TensorDivide(values, Engine.TensorFullLike(values, maxMagnitude));
         var scaledNorm = NumOps.Sqrt(Engine.TensorSum(Engine.TensorMultiply(scaled, scaled)));
         var amplitudes = Engine.TensorDivideScalar(scaled, scaledNorm);
         return Engine.TensorComplex(amplitudes, new Tensor<T>(new[] { length }));

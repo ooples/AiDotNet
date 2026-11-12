@@ -275,6 +275,14 @@ public class EntmaxAttention<T>
             return ApplySoftmax(scores, batchSize, seqLen);
         }
 
+        // Threshold geometry needs more precision than low-precision storage types provide.
+        if (typeof(T) != typeof(float) && typeof(T) != typeof(double))
+        {
+            using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+            using var noGradWide = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<double>();
+            return new EntmaxAttention<double>(_alpha).Forward(scores.Cast<double>()).Cast<T>();
+        }
+
         // Special case: alpha = 2 is sparsemax
         if (Math.Abs(_alpha - 2.0) < 1e-6)
         {
@@ -301,6 +309,7 @@ public class EntmaxAttention<T>
         using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
         {
             var z = engine.Reshape(scores, new[] { batchSize, seqLen });
+            z = engine.TensorSubtract(z, engine.TensorBroadcastTo(engine.ReduceMax(z, new[] { 1 }, true), z._shape));
             var sorted = engine.TensorSort(z, 1, true).Item1;
             var k = engine.TensorBroadcastTo(
                 engine.Reshape(engine.TensorArange<T>(1, seqLen + 1, 1), new[] { 1, seqLen }), new[] { batchSize, seqLen });
@@ -309,7 +318,8 @@ public class EntmaxAttention<T>
             var supportRank = engine.TensorMultiply(inSupport, k);
             var lastRank = engine.TensorBroadcastTo(engine.ReduceMax(supportRank, new[] { 1 }, true), new[] { batchSize, seqLen });
             var isLast = engine.TensorMultiply(inSupport, engine.TensorEquals(supportRank, lastRank));
-            var tau = engine.ReduceSum(engine.TensorMultiply(threshold, isLast), new[] { 1 }, true);
+            var tau = engine.ReduceSum(engine.TensorWhere(isLast, threshold,
+                new Tensor<T>(new[] { batchSize, seqLen })), new[] { 1 }, true);
 
             var shifted = engine.TensorSubtract(z, engine.TensorBroadcastTo(tau, new[] { batchSize, seqLen }));
             var output = engine.TensorWhere(engine.TensorGreaterThan(shifted, NumOps.Zero), shifted, new Tensor<T>(new[] { batchSize, seqLen }));
@@ -329,7 +339,9 @@ public class EntmaxAttention<T>
         // (Peters et al., 2019, eq. 9), with tau found per row by bisection so the output sums to 1.
         using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
         {
-            var z = engine.TensorMultiplyScalar(engine.Reshape(scores, rowShape), alphaMinusOne);
+            var z = engine.Reshape(scores, rowShape);
+            z = engine.TensorSubtract(z, engine.TensorBroadcastTo(engine.ReduceMax(z, new[] { 1 }, true), rowShape));
+            z = engine.TensorMultiplyScalar(z, alphaMinusOne);
             var zeros = new Tensor<T>(rowShape);
 
             Tensor<T> Powered(Tensor<T> tau)
@@ -339,10 +351,10 @@ public class EntmaxAttention<T>
                 return engine.TensorPower(positive, invAlphaMinusOne);
             }
 
-            // tau lies in [min - 1, max] for every row.
+            // A maximum entry alone reaches probability one at max - 1; a tight bracket
+            // converges independently of the gap between the largest and smallest logits.
             var tauHigh = engine.ReduceMax(z, new[] { 1 }, true);
-            var tauLow = engine.TensorSubtractScalar(
-                engine.TensorNegate(engine.ReduceMax(engine.TensorNegate(z), new[] { 1 }, true)), NumOps.One);
+            var tauLow = engine.TensorSubtractScalar(tauHigh, NumOps.One);
 
             for (int iter = 0; iter < 50; iter++)
             {
