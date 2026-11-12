@@ -123,9 +123,13 @@ public partial class SpeedySpeech<T> : TtsModelBase<T>, IAcousticModel<T>
     }
 
     int ITtsModel<T>.SampleRate => _options.SampleRate;
+    /// <inheritdoc />
     public int MaxTextLength => _options.MaxTextLength;
+    /// <inheritdoc />
     public new int MelChannels => _options.MelChannels;
+    /// <inheritdoc />
     public new int HopSize => _options.HopSize;
+    /// <inheritdoc />
     public int FftSize => _options.FftSize;
 
     /// <summary>Generates a log-mel spectrogram from text (pair it with a vocoder; the paper uses MelGAN).</summary>
@@ -401,6 +405,7 @@ public partial class SpeedySpeech<T> : TtsModelBase<T>, IAcousticModel<T>
             throw new ObjectDisposedException(GetType().FullName ?? nameof(SpeedySpeech<T>));
     }
 
+    /// <inheritdoc />
     protected override void Dispose(bool disposing)
     {
         if (_disposed)

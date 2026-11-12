@@ -1000,6 +1000,7 @@ namespace AiDotNet.NeuralNetworks
 
         // Replaced by the declared parameter source below. Removed under AIDN082.
 
+        /// <inheritdoc />
         public override IFullModel<T, Tensor<T>, Tensor<T>> WithParameters(Vector<T> parameters)
         {
             var clone = (SuperNet<T>)Clone();
@@ -1007,6 +1008,7 @@ namespace AiDotNet.NeuralNetworks
             return clone;
         }
 
+        /// <inheritdoc />
         public override ModelMetadata<T> GetModelMetadata()
         {
             return new ModelMetadata<T>
@@ -1023,6 +1025,7 @@ namespace AiDotNet.NeuralNetworks
             };
         }
 
+        /// <inheritdoc />
         public override void SaveModel(string filePath)
         {
             Helpers.ModelPersistenceGuard.EnforceBeforeSave();
@@ -1078,6 +1081,7 @@ namespace AiDotNet.NeuralNetworks
                 }
             }
         }
+        /// <inheritdoc />
         public override void LoadModel(string filePath)
         {
             Helpers.ModelPersistenceGuard.EnforceBeforeLoad();
@@ -1208,9 +1212,13 @@ namespace AiDotNet.NeuralNetworks
                 });
         }
 
+        /// <inheritdoc />
         public override Dictionary<string, T> GetFeatureImportance() => new Dictionary<string, T>();
+        /// <inheritdoc />
         public override IEnumerable<int> GetActiveFeatureIndices() => Enumerable.Range(0, _inputSize);
+        /// <inheritdoc />
         public override bool IsFeatureUsed(int featureIndex) => featureIndex >= 0 && featureIndex < _inputSize;
+        /// <inheritdoc />
         public override void SetActiveFeatureIndices(IEnumerable<int> featureIndices) { }
 
         #region IInterpretableModel Implementation

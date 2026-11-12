@@ -79,7 +79,7 @@ public partial class CascadeRCNN<T> : ObjectDetectorBase<T>, IDetectionTrainingM
         _numStages = numStages;
         _iouThresholds = new[] { 0.5, 0.6, 0.7 }; // Progressive IoU thresholds
 
-        var (hiddenDim, roiOutputSize) = GetSizeConfig(options.Size);
+        int roiOutputSize = options.Size == ModelSize.Nano ? 5 : 7;
         _roiOutputSize = roiOutputSize;
 
         // Backbone: ResNet-50 with FPN
@@ -87,7 +87,8 @@ public partial class CascadeRCNN<T> : ObjectDetectorBase<T>, IDetectionTrainingM
         Neck = new FPN<T>(Backbone.OutputChannels.ToArray(), outputChannels: 256);
 
         // Region Proposal Network
-        _rpn = new RPN<T>(256, hiddenDim);
+        // The RPN head's 3x3 conv keeps the pyramid's width, as in FasterRCNN and MaskRCNN.
+        _rpn = new RPN<T>(256, 256);
 
         // RoI feature extraction
         _roiAlign = new RoIAlign<T>(roiOutputSize, samplingRatio: 2);
@@ -97,7 +98,8 @@ public partial class CascadeRCNN<T> : ObjectDetectorBase<T>, IDetectionTrainingM
         _stages = new List<CascadeStage<T>>();
         for (int i = 0; i < numStages; i++)
         {
-            _stages.Add(new CascadeStage<T>(roiFeatureSize, hiddenDim, options.NumClasses + 1));
+            // Each stage's head is two 1,024-wide fully connected layers (Cai & Vasconcelos 2018, on the FPN box head).
+            _stages.Add(new CascadeStage<T>(roiFeatureSize, 1024, options.NumClasses + 1));
         }
 
         _nms = new NMS<T>();
@@ -122,15 +124,10 @@ public partial class CascadeRCNN<T> : ObjectDetectorBase<T>, IDetectionTrainingM
         return options;
     }
 
-    private static (int hiddenDim, int roiOutputSize) GetSizeConfig(ModelSize size) => size switch
-    {
-        ModelSize.Nano => (128, 5),
-        ModelSize.Small => (192, 7),
-        ModelSize.Medium => (256, 7),
-        ModelSize.Large => (384, 7),
-        ModelSize.XLarge => (512, 7),
-        _ => (256, 7)
-    };
+    /// <inheritdoc/>
+    /// <remarks>The forward pass classifies one image's proposals, so each image is detected on its own.</remarks>
+    public override BatchDetectionResult<T> DetectBatch(Tensor<T> images, double confidenceThreshold, double nmsThreshold)
+        => DetectEachImage(images, confidenceThreshold, nmsThreshold);
 
     /// <inheritdoc/>
     public override DetectionResult<T> Detect(Tensor<T> image, double confidenceThreshold, double nmsThreshold)
@@ -162,31 +159,32 @@ public partial class CascadeRCNN<T> : ObjectDetectorBase<T>, IDetectionTrainingM
     protected override List<Tensor<T>> Forward(Tensor<T> input)
     {
         var stages = ForwardStages(input, null, out _, out var objectness, out var bboxDeltas);
-        if (stages is null)
-        {
-            return new List<Tensor<T>>
-            {
-                new Tensor<T>(new[] { 0, Options.NumClasses + 1 }),
-                new Tensor<T>(new[] { 0, 4 }),
-                new Tensor<T>(new[] { 0, 4 }),
-                objectness,
-                bboxDeltas
-            };
-        }
 
         // PostProcess reads the first three entries: the last stage's logits, deltas and the boxes that stage
         // received. The earlier stages' outputs and the RPN's follow, so every head reaches a training objective.
-        var last = stages[stages.Count - 1];
-        var outputs = new List<Tensor<T>> { last.ClassLogits, last.BoxDeltas, last.Boxes };
-        for (int stage = 0; stage < stages.Count - 1; stage++)
+        // Every per-RoI head is padded to the proposal cap, as FasterRCNN's Forward explains, so the layout is the
+        // same whether NMS keeps 1000 proposals, fewer, or none.
+        int classColumns = Options.NumClasses + 1;
+        var last = stages is null ? null : stages[stages.Count - 1];
+        var outputs = new List<Tensor<T>>
         {
-            outputs.Add(stages[stage].ClassLogits);
-            outputs.Add(stages[stage].BoxDeltas);
+            PadRoiRows(last?.ClassLogits, classColumns),
+            PadRoiRows(last?.BoxDeltas, 4),
+            PadRoiRows(last?.Boxes, 4)
+        };
+        for (int stage = 0; stage < _numStages - 1; stage++)
+        {
+            outputs.Add(PadRoiRows(stages?[stage].ClassLogits, classColumns));
+            outputs.Add(PadRoiRows(stages?[stage].BoxDeltas, 4));
         }
         outputs.Add(objectness);
         outputs.Add(bboxDeltas);
         return outputs;
     }
+
+    /// <summary>Pads a per-RoI head to the proposal cap; a missing head (no proposals) becomes all padding.</summary>
+    private static Tensor<T> PadRoiRows(Tensor<T>? rows, int width)
+        => CvTensorOps<T>.PadRows(rows ?? new Tensor<T>(new[] { 0, width }), FasterRCNN<T>.PostNmsTopK);
 
     /// <summary>Trains the proposal network and every cascade stage with their published objectives.</summary>
     /// <remarks>
@@ -282,7 +280,7 @@ public partial class CascadeRCNN<T> : ObjectDetectorBase<T>, IDetectionTrainingM
             rpnObjectness, rpnDeltas, levelAnchors,
             imageHeight, imageWidth,
             preNmsTopK: 1000,
-            postNmsTopK: 1000,
+            postNmsTopK: FasterRCNN<T>.PostNmsTopK,
             nmsThreshold: 0.7,
             levelAnchorCounts: levelAnchorCounts);
 

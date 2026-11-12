@@ -75,7 +75,9 @@ public partial class RobustConformer<T> : AudioNeuralNetworkBase<T>, ISpeechReco
     private Random _random;
     internal NoiseRobustWav2Vec2Network<T>? Network => _network;
     public IReadOnlyList<string> SupportedLanguages { get; }
+    /// <inheritdoc />
     public bool SupportsStreaming => false;
+    /// <inheritdoc />
     public bool SupportsWordTimestamps => false;
 
     /// <summary>The last continual pre-training step's reconstruction loss L_r.</summary>
@@ -273,9 +275,11 @@ public partial class RobustConformer<T> : AudioNeuralNetworkBase<T>, ISpeechReco
     /// write on every parameter surface, so the guard is stated once here instead of being
     /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
     protected override bool SupportsParameterMutation => _useNativeMode;
+    /// <inheritdoc />
     protected override Tensor<T> PostprocessOutput(Tensor<T> o) => o;
     public override ModelMetadata<T> GetModelMetadata() => new() { Name = _useNativeMode ? "RobustConformer-Native" : "RobustConformer-ONNX", Description = "Noise-robust wav2vec 2.0 with speech reconstruction (Wang et al. 2021) + CTC", FeatureCount = 1, Complexity = _options.NumEncoderLayers, AdditionalInfo = BaseAudioMetadataInfo() };
 
     private void ThrowIfDisposed() { if (_disposed) throw new ObjectDisposedException(GetType().FullName ?? nameof(RobustConformer<T>)); }
+    /// <inheritdoc />
     protected override void Dispose(bool disposing) { if (_disposed) return; if (disposing) OnnxEncoder?.Dispose(); _disposed = true; base.Dispose(disposing); }
 }

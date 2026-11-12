@@ -201,6 +201,7 @@ public partial class InstantNGP<T> : AiDotNet.NeuralNetworks.VectorModelLayoutBa
     private readonly double[] _sceneInvSize = new double[3];
 
 
+    /// <inheritdoc />
     public override bool SupportsTraining => true;
 
     public InstantNGP()
@@ -616,6 +617,7 @@ public partial class InstantNGP<T> : AiDotNet.NeuralNetworks.VectorModelLayoutBa
         layer.ResolveShapesOnly(new[] { 1, inputDim });
     }
 
+    /// <inheritdoc />
     public (Tensor<T> rgb, Tensor<T> density) QueryField(Tensor<T> positions, Tensor<T> viewingDirections)
     {
         if (positions.Shape.Length != 2 || positions.Shape[1] != 3)
@@ -730,6 +732,7 @@ public partial class InstantNGP<T> : AiDotNet.NeuralNetworks.VectorModelLayoutBa
         return Engine.TensorClamp(scaled, NumOps.Zero, NumOps.One);
     }
 
+    /// <inheritdoc />
     public Tensor<T> RenderImage(
         Vector<T> cameraPosition,
         Matrix<T> cameraRotation,
@@ -764,6 +767,7 @@ public partial class InstantNGP<T> : AiDotNet.NeuralNetworks.VectorModelLayoutBa
         return rendered.Reshape(imageHeight, imageWidth, 3);
     }
 
+    /// <inheritdoc />
     public Tensor<T> RenderRays(
         Tensor<T> rayOrigins,
         Tensor<T> rayDirections,
@@ -1325,6 +1329,7 @@ public partial class InstantNGP<T> : AiDotNet.NeuralNetworks.VectorModelLayoutBa
         => NeuralRadianceFields.Helpers.VolumeRenderer<T>.Render(
             Engine, rgb, density, numRays, numSamples, rayNear, rayFar, sampleTs);
 
+    /// <inheritdoc />
     public override Tensor<T> ForwardWithMemory(Tensor<T> input)
     {
         if (input.Shape.Length != 2 || input.Shape[1] != 6)
@@ -1443,6 +1448,7 @@ public partial class InstantNGP<T> : AiDotNet.NeuralNetworks.VectorModelLayoutBa
     }
 
     // UpdateParameters restated the base verbatim; ModelBase routes it to SetParameters.
+    /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata()
     {
 
@@ -1482,6 +1488,7 @@ public partial class InstantNGP<T> : AiDotNet.NeuralNetworks.VectorModelLayoutBa
         };
     }
 
+    /// <inheritdoc />
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         SetTrainingMode(false);

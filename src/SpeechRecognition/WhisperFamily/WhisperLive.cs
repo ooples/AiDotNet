@@ -64,6 +64,7 @@ public partial class WhisperLive<T> : AudioNeuralNetworkBase<T>, ISpeechRecogniz
     private WhisperRecognizer<T>? _whisper;
     internal WhisperRecognizer<T>? Whisper => _whisper;
     public IReadOnlyList<string> SupportedLanguages { get; }
+    /// <inheritdoc />
     public bool SupportsStreaming => true;
     public bool SupportsWordTimestamps => true;
 
@@ -214,10 +215,12 @@ public partial class WhisperLive<T> : AudioNeuralNetworkBase<T>, ISpeechRecogniz
     /// write on every parameter surface, so the guard is stated once here instead of being
     /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
     protected override bool SupportsParameterMutation => _useNativeMode;
+    /// <inheritdoc />
     protected override Tensor<T> PostprocessOutput(Tensor<T> o) => o;
     public override ModelMetadata<T> GetModelMetadata() => new() { Name = _useNativeMode ? "WhisperLive-Native" : "WhisperLive-ONNX", Description = "WhisperLive: Collabora's near-real-time Whisper server, re-transcribing the growing audio buffer as chunks arrive", FeatureCount = _options.NumMels, Complexity = _options.NumEncoderLayers + _options.NumDecoderLayers, AdditionalInfo = BaseAudioMetadataInfo() };
 
     private void ThrowIfDisposed() { if (_disposed) throw new ObjectDisposedException(GetType().FullName ?? nameof(WhisperLive<T>)); }
+    /// <inheritdoc />
     protected override void Dispose(bool disposing) { if (_disposed) return; if (disposing) OnnxEncoder?.Dispose(); _disposed = true; base.Dispose(disposing); }
 
     private sealed class WhisperLiveStreamingSession : IStreamingTranscriptionSession<T>

@@ -65,7 +65,9 @@ public partial class SenseVoiceLarge<T> : AudioNeuralNetworkBase<T>, ISpeechReco
     private OpenAiWhisperNetwork<T>? _network;
     internal OpenAiWhisperNetwork<T>? Network => _network;
     public IReadOnlyList<string> SupportedLanguages { get; }
+    /// <inheritdoc />
     public bool SupportsStreaming => false;
+    /// <inheritdoc />
     public bool SupportsWordTimestamps => false;
 
     /// <summary>The end-of-text token: the vocabulary's last.</summary>
@@ -294,9 +296,11 @@ public partial class SenseVoiceLarge<T> : AudioNeuralNetworkBase<T>, ISpeechReco
     /// write on every parameter surface, so the guard is stated once here instead of being
     /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
     protected override bool SupportsParameterMutation => _useNativeMode;
+    /// <inheritdoc />
     protected override Tensor<T> PostprocessOutput(Tensor<T> o) => o;
     public override ModelMetadata<T> GetModelMetadata() => new() { Name = _useNativeMode ? "SenseVoiceLarge-Native" : "SenseVoiceLarge-ONNX", Description = "SenseVoice-Large: an autoregressive encoder-decoder with task tokens (FunAudioLLM 2024)", FeatureCount = _options.NumMels, Complexity = _options.NumEncoderLayers + _options.NumDecoderLayers, AdditionalInfo = BaseAudioMetadataInfo() };
 
     private void ThrowIfDisposed() { if (_disposed) throw new ObjectDisposedException(GetType().FullName ?? nameof(SenseVoiceLarge<T>)); }
+    /// <inheritdoc />
     protected override void Dispose(bool disposing) { if (_disposed) return; if (disposing) OnnxEncoder?.Dispose(); _disposed = true; base.Dispose(disposing); }
 }

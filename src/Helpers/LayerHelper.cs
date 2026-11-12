@@ -6560,17 +6560,15 @@ public static partial class LayerHelper<T>
         double dropoutRate = 0.0)
     {
         IActivationFunction<T> geluActivation = new GELUActivation<T>();
-        IActivationFunction<T> identityActivation = new IdentityActivation<T>();
 
         // === AUDIO ENCODER ===
 
-        // Initial projection from mel spectrogram to model dimension
-        // (Simulating convolutional stem with dense layers for framework compatibility)
-        yield return new DenseLayer<T>(modelDim, geluActivation);
-        yield return new DenseLayer<T>(modelDim, geluActivation);
+        // Convolutional stem (§2.2): Conv1d(k3) + GELU, then Conv1d(k3, stride 2) + GELU, halving the frames. Two
+        // Dense layers used to stand in for it, which kept all 3,000 frames and quadrupled the attention cost.
+        yield return new WhisperConvStemLayer<T>(numMels, modelDim);
 
-        // Positional encoding for encoder
-        yield return new PositionalEncodingLayer<T>(maxFrames, modelDim);
+        // Sinusoidal positions for the encoder, one per stem output.
+        yield return new PositionalEncodingLayer<T>(WhisperConvStemLayer<T>.OutputFrames(maxFrames), modelDim);
 
         if (dropoutRate > 0)
         {
@@ -6582,12 +6580,15 @@ public static partial class LayerHelper<T>
         // flat layers drops both residual paths and is not the paper architecture.
         for (int i = 0; i < numEncoderLayers; i++)
         {
-            yield return new TransformerEncoderBlock<T>(
+            var encoderBlock = new TransformerEncoderBlock<T>(
                 hiddenSize: modelDim,
                 numHeads: numHeads,
                 ffnDim: ffDim,
                 dropoutRate: dropoutRate,
                 ffnActivation: geluActivation);
+            // Whisper's attention biases its query and value projections, not its key (whisper/model.py).
+            ((MultiHeadAttentionLayer<T>)encoderBlock.AttentionLayer).ConfigureProjectionBiases(query: true, value: true);
+            yield return encoderBlock;
         }
 
         // Final encoder layer normalization
@@ -6596,36 +6597,42 @@ public static partial class LayerHelper<T>
         // === TEXT DECODER ===
 
         // Token embedding (Whisper vocabulary)
-        yield return LayerGraphContract.FromExternalInput(new EmbeddingLayer<T>(vocabSize, modelDim));
+        var tokenEmbedding = new EmbeddingLayer<T>(vocabSize, modelDim);
+        yield return LayerGraphContract.FromExternalInput(tokenEmbedding);
 
-        // Positional encoding for decoder
-        yield return new PositionalEncodingLayer<T>(maxTokens, modelDim);
+        // Learned positions for the decoder (§2.2: "the decoder uses learned position embeddings").
+        yield return new LearnedPositionalEmbeddingLayer<T>(maxTokens, modelDim);
 
         if (dropoutRate > 0)
         {
             yield return new DropoutLayer<T>(dropoutRate);
         }
 
-        // Decoder transformer layers with cross-attention
+        // Decoder blocks: Whisper's ResidualAttentionBlock is pre-norm (x + attn(ln(x)), then cross-attention, then
+        // the MLP), its self-attention is causal, and its attention biases q and v. TransformerDecoderLayer is
+        // post-norm and was built bidirectional, so teacher-forced training let every position read the token it
+        // was predicting.
         for (int i = 0; i < numDecoderLayers; i++)
         {
-            yield return new TransformerDecoderLayer<T>(
+            var decoderBlock = new TransformerDecoderBlock<T>(
+                hiddenSize: modelDim,
                 numHeads: numHeads,
-                feedForwardDim: ffDim,
-                sequenceLength: maxTokens,
+                ffnDim: ffDim,
+                dropoutRate: dropoutRate,
                 ffnActivation: geluActivation);
-
-            if (dropoutRate > 0 && i < numDecoderLayers - 1)
-            {
-                yield return new DropoutLayer<T>(dropoutRate);
-            }
+            var selfAttention = (MultiHeadAttentionLayer<T>)decoderBlock.SelfAttentionLayer;
+            selfAttention.UseCausalMask = true;
+            selfAttention.ConfigureProjectionBiases(query: true, value: true);
+            decoderBlock.CrossAttentionLayer.ConfigureProjectionBiases(query: true, value: true);
+            yield return decoderBlock;
         }
 
         // Final decoder layer normalization
         yield return new LayerNormalizationLayer<T>();
 
-        // Output projection to vocabulary logits
-        yield return new DenseLayer<T>(vocabSize, identityActivation);
+        // Output logits through the token embedding (§2.2: "tied input-output token representations"). A separate
+        // biased Dense head added vocabSize x (modelDim + 1) parameters, 19.97M of whisper-tiny's 56.6M.
+        yield return new TiedEmbeddingHeadLayer<T>(tokenEmbedding);
     }
 
     /// <summary>
@@ -20497,8 +20504,23 @@ public static partial class LayerHelper<T>
 
     /// <summary>
     /// Creates default layers for the Conformer ASR model (Gulati et al., 2020).
-    /// Architecture: Conv-subsampling → N Conformer blocks (FF/Attn/Conv/FF macaron) → CTC head.
+    /// Architecture: convolution subsampling (4x) → N Conformer blocks (FF/Attn/Conv/FF macaron) → CTC head.
     /// </summary>
+    /// <remarks>
+    /// The front end is the paper's: two stride-2 3x3 convolutions with ReLU over [time, mel], then a linear
+    /// projection to the encoder width, so <c>T</c> input frames give <c>((T - 1) / 2 - 1) / 2</c> output frames.
+    /// Each block is <see cref="NeuralNetworks.Layers.ConformerBlockLayer{T}"/>, the paper's Equation 1 with its
+    /// convolution module. This factory used to build a pre-LN Transformer behind a length-preserving Dense stack.
+    /// </remarks>
+    /// <param name="encoderDim">Encoder width d_model. Conformer-Medium: 256; this default: 512.</param>
+    /// <param name="numLayers">Number of Conformer blocks.</param>
+    /// <param name="numAttentionHeads">Attention heads (reduced to the nearest divisor of the width).</param>
+    /// <param name="feedForwardExpansionFactor">Macaron FFN expansion. Paper default 4.</param>
+    /// <param name="numMels">Mel bins per input frame; fixes the subsampling projection's width.</param>
+    /// <param name="vocabSize">CTC output vocabulary size.</param>
+    /// <param name="dropoutRate">Dropout after the subsampling projection.</param>
+    /// <param name="maxSequenceLength">Longest subsampled sequence the rotary position encoding covers.</param>
+    /// <param name="convKernelSize">Depthwise convolution kernel. Paper: 32; ESPnet's odd equivalent 31.</param>
     public static IEnumerable<ILayer<T>> CreateDefaultConformerLayers(
         int encoderDim = 512,
         int numLayers = 18,
@@ -20507,47 +20529,28 @@ public static partial class LayerHelper<T>
         int numMels = 80,
         int vocabSize = 5000,
         double dropoutRate = 0.1,
-        int maxSequenceLength = 750)
+        int maxSequenceLength = 750,
+        int convKernelSize = 31)
     {
-        var geluActivation = (IActivationFunction<T>)new GELUActivation<T>();
-        var identityActivation = (IActivationFunction<T>)new IdentityActivation<T>();
-        var reluActivation = (IActivationFunction<T>)new ReLUActivation<T>();
-        int ffDim = encoderDim * feedForwardExpansionFactor;
+        if (dropoutRate < 0 || dropoutRate >= 1)
+            throw new ArgumentOutOfRangeException(nameof(dropoutRate), "dropoutRate must be in [0, 1).");
 
-        // --- Conv Subsampling (stride 4) ---
-        // Two conv layers with stride 2 each reduce frame rate 4x.
-        yield return new DenseLayer<T>(encoderDim, reluActivation);
-        yield return new BatchNormalizationLayer<T>();
-        yield return new DenseLayer<T>(encoderDim, reluActivation);
-        yield return new BatchNormalizationLayer<T>();
+        int heads = ChooseDivisibleHeadConfig(encoderDim, numAttentionHeads).heads;
 
+        // --- Convolution subsampling (4x in time) ---
+        yield return new ConvSubsamplingLayer<T>(numMels, encoderDim);
         if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
 
-        // --- Encoder Blocks (Pre-LN residual) ---
-        // Each encoder layer wraps self-attention and a position-wise FFN in Pre-LN
-        // RESIDUAL connections: x = x + Sublayer(LayerNorm(x)). The previous implementation
-        // was a flat, residual-FREE stack of Dense/LayerNorm/MHSA layers — without the skip
-        // connections a deep encoder collapses to an input-INDEPENDENT (uniform) output under
-        // training (the #1208/#1221 degeneracy: DifferentInputs_AfterTraining failed with the
-        // post-training L2 between two distinct inputs ≈ 0 on FireRedASR/FireRedASRLLM, because
-        // gradient could not reach the input-side layers and the encoder learned to ignore its
-        // input). TransformerEncoderBlock provides the residual wiring and the Pre-LN ordering
-        // (Xiong et al. 2020) that lets a deep encoder train stably without warmup. Its
-        // self-attention gives the Conformer its context mixing; the position-wise FFN replaces
-        // the previous dense-approximated "conv module" (which was never a real convolution).
+        // --- Conformer blocks (Equation 1) ---
         for (int i = 0; i < numLayers; i++)
         {
-            yield return new TransformerEncoderBlock<T>(
-                hiddenSize: encoderDim,
-                numHeads: numAttentionHeads,
-                ffnDim: ffDim,
-                dropoutRate: dropoutRate,
-                ffnActivation: geluActivation);
+            yield return new ConformerBlockLayer<T>(
+                encoderDim, heads, feedForwardExpansionFactor, convKernelSize,
+                maxSequenceLength: Math.Max(2048, maxSequenceLength));
         }
 
-        // --- CTC Output Head ---
-        yield return new LayerNormalizationLayer<T>();
-        yield return new DenseLayer<T>(vocabSize, identityActivation);
+        // --- CTC output head (each block already ends in LayerNorm) ---
+        yield return new DenseLayer<T>(vocabSize, (IActivationFunction<T>)new IdentityActivation<T>());
     }
 
     /// <summary>

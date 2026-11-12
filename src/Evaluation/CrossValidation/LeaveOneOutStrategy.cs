@@ -33,10 +33,14 @@ public class LeaveOneOutStrategy<T> : ICrossValidationStrategy<T>
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
     private int _dataSize;
 
+    /// <inheritdoc />
     public string Name => "LeaveOneOut";
+    /// <inheritdoc />
     public int NumSplits => _dataSize > 0 ? _dataSize : -1; // -1 indicates "depends on data"
+    /// <inheritdoc />
     public string Description => "Leave-one-out cross-validation - each sample is held out once.";
 
+    /// <inheritdoc />
     public IEnumerable<(int[] TrainIndices, int[] ValidationIndices)> Split(int dataSize, ReadOnlySpan<T> labels = default)
     {
         if (dataSize < 2)

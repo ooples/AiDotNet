@@ -2198,10 +2198,17 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
             catch (System.Exception) { /* warm-up only; registration is asserted below either way */ }
         }
 
+        // Everything the network exposes. A field marked [ExternalState] refers to a layer another
+        // part of the network owns (TiedEmbeddingHeadLayer reads the token embedding's table), so it
+        // is not a child and registering it would count and clone that layer twice -- but the layer
+        // it names must itself be reachable, or nothing exposes it at all.
+        var reachable = new HashSet<object>(ReferenceIdentityComparer<object>.Instance);
+        foreach (var layer in network.Layers) CollectExposed(layer, reachable);
+
         var offenders = new List<string>();
         foreach (var layer in network.Layers)
         {
-            CheckReachable(layer, offenders);
+            CheckReachable(layer, offenders, reachable);
         }
 
         Assert.True(offenders.Count == 0,
@@ -2226,10 +2233,17 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
     /// diamond (two parents sharing one child) also re-walked the shared subtree once per path,
     /// which is exponential on a deep graph and reported the same offender repeatedly.
     /// </remarks>
-    private static void CheckReachable(ILayer<T> layer, List<string> offenders)
-        => CheckReachable(layer, offenders, new HashSet<object>(ReferenceIdentityComparer<object>.Instance));
+    private static void CheckReachable(ILayer<T> layer, List<string> offenders, HashSet<object> reachable)
+        => CheckReachable(layer, offenders, reachable, new HashSet<object>(ReferenceIdentityComparer<object>.Instance));
 
-    private static void CheckReachable(ILayer<T> layer, List<string> offenders, HashSet<object> visited)
+    private static void CollectExposed(ILayer<T> layer, HashSet<object> reachable)
+    {
+        if (!reachable.Add(layer)) return;
+        foreach (var sub in layer.GetSubLayers()) CollectExposed(sub, reachable);
+    }
+
+    private static void CheckReachable(
+        ILayer<T> layer, List<string> offenders, HashSet<object> reachable, HashSet<object> visited)
     {
         // Identity, not equality: two distinct layers can compare equal by value and must
         // still both be walked.
@@ -2255,6 +2269,8 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
 
             if (value is ILayer<T> child)
             {
+                bool external = System.Attribute.IsDefined(field, typeof(AiDotNet.Attributes.ExternalStateAttribute));
+                if (external && reachable.Contains(child)) continue;
                 held++;
                 if (!exposedSet.Contains(child)) missing++;
             }
@@ -2285,7 +2301,7 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
             offenders.Add($"{layer.GetType().Name}: holds {held} child layer(s), " +
                           $"{missing} not exposed by GetSubLayers() (exposed {exposed.Count})");
 
-        foreach (var sub in exposed) CheckReachable(sub, offenders, visited);
+        foreach (var sub in exposed) CheckReachable(sub, offenders, reachable, visited);
     }
 
     /// <summary>
@@ -3169,12 +3185,24 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         // public Train operation instead of accumulating the entire diagnostic graph beside it.
         _arena.Reset();
 
+        // The first public Train pays one-time costs (compiling the fused plan, allocating optimizer state), so
+        // it is recorded separately; trainStepMs is the second, warm step. Timing only the first made the
+        // census's training amplification compare a cold step with a warm forward: UnifiedMultimodalNetwork
+        // read 779 ms against 62 ms of tape forward plus backward, while its warm steps take about 40 ms.
+        double firstTrainStepMs = 0.0;
         double trainStepMs = 0.0;
         if (!TrainingInvariantsNotApplicable(network))
         {
             WritePerformanceProgress(outputDirectory, performanceFileName, "train-step");
             var trainTimer = System.Diagnostics.Stopwatch.StartNew();
             TrainOn(network, input, target);
+            trainTimer.Stop();
+            firstTrainStepMs = trainTimer.Elapsed.TotalMilliseconds;
+            _arena.Reset();
+
+            WritePerformanceProgress(outputDirectory, performanceFileName, "warm-train-step");
+            trainTimer.Restart();
+            network.Train(input, target);
             trainTimer.Stop();
             trainStepMs = trainTimer.Elapsed.TotalMilliseconds;
             _arena.Reset();
@@ -3264,6 +3292,7 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
             tapeEntries,
             backwardMs,
             gradientTensorCount,
+            firstTrainStepMs,
             trainStepMs,
             requestedTrainingIterations,
             requestedTrainingReduceLossIterations,

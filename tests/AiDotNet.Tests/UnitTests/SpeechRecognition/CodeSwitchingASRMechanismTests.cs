@@ -122,7 +122,8 @@ public class CodeSwitchingASRMechanismTests
 
     // ------------------------------------------------- learned LID
 
-    private static Tensor<double> Audio(int samples = 64, int seed = 5)
+    // One second: the encoder's convolution subsampling needs at least seven feature frames.
+    private static Tensor<double> Audio(int samples = 16000, int seed = 5)
     {
         var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
         var t = new Tensor<double>([samples]);
@@ -191,13 +192,14 @@ public class CodeSwitchingASRMechanismTests
         // resolved their input width and report zero parameters, so comparing vector LENGTHS across
         // the first Train would compare two different parameterizations rather than two states of
         // the same one.
-        model.Predict(new Tensor<double>([4, 8]));
+        // 32 frames: the encoder's convolution subsampling reduces them to 7.
+        model.Predict(new Tensor<double>([32, 8]));
         var before = model.GetParameters();
 
-        var input = new Tensor<double>([4, 8]);
+        var input = new Tensor<double>([32, 8]);
         var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(3);
         for (int i = 0; i < input.Length; i++) input[i] = rng.NextDouble() - 0.5;
-        var target = new Tensor<double>([4, model.GetOptionsTyped().VocabSize]);
+        var target = new Tensor<double>(model.Predict(input).Shape.ToArray());
         for (int i = 0; i < target.Length; i++) target[i] = rng.NextDouble();
 
         model.Train(input, target);
@@ -215,10 +217,10 @@ public class CodeSwitchingASRMechanismTests
         // which is the paper's baseline rather than a broken configuration.
         var model = Model(o => o.LidWeight = 0.0);
 
-        var input = new Tensor<double>([4, 8]);
+        var input = new Tensor<double>([32, 8]);
         var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(9);
         for (int i = 0; i < input.Length; i++) input[i] = rng.NextDouble() - 0.5;
-        var target = new Tensor<double>([4, model.GetOptionsTyped().VocabSize]);
+        var target = new Tensor<double>(model.Predict(input).Shape.ToArray());
         for (int i = 0; i < target.Length; i++) target[i] = rng.NextDouble();
 
         model.Predict(input);

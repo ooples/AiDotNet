@@ -103,6 +103,7 @@ public partial class F5TTS<T> : FlowMatchingTtsModelBase<T>, IAcousticModel<T>
     }
 
     int ITtsModel<T>.SampleRate => _options.SampleRate;
+    /// <inheritdoc />
     public int MaxTextLength => _options.MaxTextLength;
     public new int MelChannels => _options.MelChannels;
     public new int HopSize => _options.HopSize;

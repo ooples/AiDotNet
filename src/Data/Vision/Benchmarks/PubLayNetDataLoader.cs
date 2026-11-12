@@ -27,10 +27,15 @@ public class PubLayNetDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Te
     private readonly string _dataPath;
     private int _sampleCount;
 
+    /// <inheritdoc />
     public override string Name => "PubLayNet";
+    /// <inheritdoc />
     public override string Description => "PubLayNet document layout analysis";
+    /// <inheritdoc />
     public override int TotalCount => _sampleCount;
+    /// <inheritdoc />
     public override int FeatureCount => _options.ImageWidth * _options.ImageHeight * 3;
+    /// <inheritdoc />
     public override int OutputDimension => _options.NumClasses;
 
     public PubLayNetDataLoader(PubLayNetDataLoaderOptions? options = null)
@@ -39,6 +44,7 @@ public class PubLayNetDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Te
         _dataPath = _options.DataPath ?? DatasetDownloader.GetDefaultDataPath("publaynet");
     }
 
+    /// <inheritdoc />
     protected override async Task LoadDataCoreAsync(CancellationToken cancellationToken)
     {
         string splitName = _options.Split == DatasetSplit.Test ? "test"
@@ -88,11 +94,13 @@ public class PubLayNetDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Te
         InitializeIndices(totalSamples);
     }
 
+    /// <inheritdoc />
     protected override void UnloadDataCore()
     {
         LoadedFeatures = default; LoadedLabels = default; Indices = null; _sampleCount = 0;
     }
 
+    /// <inheritdoc />
     protected override (Tensor<T> Features, Tensor<T> Labels) ExtractBatch(int[] indices)
     {
         var features = LoadedFeatures ?? throw new InvalidOperationException("Features not loaded.");
@@ -109,6 +117,7 @@ public class PubLayNetDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Te
         return (bf, bl);
     }
 
+    /// <inheritdoc />
     public override (IInputOutputDataLoader<T, Tensor<T>, Tensor<T>> Train,
         IInputOutputDataLoader<T, Tensor<T>, Tensor<T>> Validation,
         IInputOutputDataLoader<T, Tensor<T>, Tensor<T>> Test) Split(

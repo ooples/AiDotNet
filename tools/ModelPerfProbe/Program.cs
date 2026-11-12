@@ -269,14 +269,33 @@ internal static class Program
             entry => entry,
             new FixtureEnvironmentComparer());
 
+        // A fixture lands on whichever processor its shard drew, so many fixtures are on a different one than in the
+        // latest run: the 2026-11-06 census skipped 667 comparisons that way. Each falls back to the newest run in the
+        // series that measured it on this processor, and is attributed to that run's commit.
+        var older = new Dictionary<(string Fixture, string Environment), (BaselineEntry Entry, BaselineDocument Document)>(
+            new FixtureEnvironmentComparer());
+        foreach (BaselineDocument document in history
+            .Where(document => Array.IndexOf(ComparableBaselineSchemaVersions, document.SchemaVersion) >= 0)
+            .OrderByDescending(document => document.GeneratedUtc))
+        {
+            foreach (BaselineEntry entry in document.Entries)
+                older.TryAdd((entry.Fixture, entry.Environment), (entry, document));
+        }
+
         var missingByEnvironment = new Dictionary<string, int>(StringComparer.Ordinal);
         foreach (CensusRecord record in records.Where(r => r.Status == "ok"))
         {
+            BaselineDocument source = baseline;
             if (!index.TryGetValue((record.Fixture, record.Environment), out BaselineEntry? prior))
             {
-                missingByEnvironment.TryGetValue(record.Environment, out int missingCount);
-                missingByEnvironment[record.Environment] = missingCount + 1;
-                continue;
+                if (!older.TryGetValue((record.Fixture, record.Environment), out var fromSeries))
+                {
+                    missingByEnvironment.TryGetValue(record.Environment, out int missingCount);
+                    missingByEnvironment[record.Environment] = missingCount + 1;
+                    continue;
+                }
+
+                (prior, source) = fromSeries;
             }
 
             // A DIFFERENT WORKLOAD IS NOT A REGRESSION. A fixture whose input shape or parameter count changed
@@ -284,9 +303,11 @@ internal static class Program
             // (FlowState 512 -> 1x2048x1) and was failed for being 122x "slower" than a workload it no longer runs.
             // The prior workload comes from the baseline entry, or, for a baseline written before entries carried
             // it, from that run's own records. Unknown on either side still compares, so nothing escapes silently.
+            // The prior records are the latest run's, so they say nothing about an entry from an older one.
             string priorWorkload = !string.IsNullOrEmpty(prior.Workload)
                 ? prior.Workload
-                : priorWorkloads is not null && priorWorkloads.TryGetValue(record.Fixture, out string? recorded) ? recorded : "";
+                : ReferenceEquals(source, baseline) && priorWorkloads is not null
+                    && priorWorkloads.TryGetValue(record.Fixture, out string? recorded) ? recorded : "";
             if (priorWorkload.Length > 0 && record.Workload.Length > 0
                 && !string.Equals(priorWorkload, record.Workload, StringComparison.Ordinal))
             {
@@ -443,12 +464,12 @@ internal static class Program
                     }
                 }
 
-                PerfIntent? directIntent = IntentForBaseline(intents, baseline.Commit, record.Fixture, metric);
+                PerfIntent? directIntent = IntentForBaseline(intents, source.Commit, record.Fixture, metric);
                 if (directIntent is not null)
                 {
                     diagnostics.Add(Diagnostic.Warning(record.Fixture, metric,
                         $"regressed {ratio:F2}x ({previous:F2} -> {current:F2}) from declared baseline "
-                        + $"{baseline.Commit}"
+                        + $"{source.Commit}"
                         + (directIntent.Origin.Length > 0 ? $", caused by {directIntent.Origin}" : "")
                         + $"; declared: {directIntent.Reason}"));
                     continue;
@@ -462,7 +483,7 @@ internal static class Program
         foreach ((string environment, int missingCount) in missingByEnvironment)
         {
             diagnostics.Add(Diagnostic.Warning("<census>", "baseline",
-                $"no environment-qualified baseline for {environment}; " +
+                $"no environment-qualified baseline in the series for {environment}; " +
                 $"skipped {missingCount} fixture comparison(s)"));
         }
     }
@@ -1241,6 +1262,11 @@ internal static class Program
         return Median(series.Skip(step.BoundaryIndex).Select(point => point.Value).ToList());
     }
 
+    // Floor on a cohort's spread (MAD of log values), so robust z > 6 always means at least twice the cohort median.
+    // Peak working set is mostly the runtime's ~120 MB baseline: a cohort can agree to within a few percent, and
+    // its MAD then made a 7% difference (Emotion2Vec, 131 vs 122 MB among six fixtures) score z = 9.6.
+    private static readonly double MinimumLogSpread = 0.6745 * Math.Log(2.0) / 6.0;
+
     private static void DetectCohortOutliers(
         IReadOnlyList<CensusRecord> records,
         ICollection<Diagnostic> diagnostics)
@@ -1261,6 +1287,7 @@ internal static class Program
             double median = MedianOfSorted(values);
             double mad = MedianOfSorted(values.Select(v => Math.Abs(v - median)).OrderBy(v => v).ToArray());
             if (mad <= 1e-9) continue;
+            mad = Math.Max(mad, MinimumLogSpread);
 
             foreach (CensusRecord record in cohort)
             {
@@ -1284,6 +1311,7 @@ internal static class Program
             double median = MedianOfSorted(values);
             double mad = MedianOfSorted(values.Select(v => Math.Abs(v - median)).OrderBy(v => v).ToArray());
             if (mad <= 1e-9) continue;
+            mad = Math.Max(mad, MinimumLogSpread);
 
             foreach (CensusRecord record in cohort)
             {
@@ -1584,11 +1612,42 @@ internal static class Program
             if (diagnostics.Any(d => d.Metric == "baseline" && d.Message.Contains("not comparable", StringComparison.Ordinal)))
                 return Fail("schema 2 baseline must stay comparable");
 
+            // A fixture the latest run measured on another processor compares with the newest run in the series that
+            // measured it on this one, and the regression names that run's commit.
+            string environmentKey = records[0].Environment;
+            BaselineDocument Measured(string commit, int day, string environment, double peak) => new()
+            {
+                SchemaVersion = CurrentBaselineSchemaVersion,
+                GeneratedUtc = new DateTimeOffset(2026, 1, day, 0, 0, 0, TimeSpan.Zero),
+                Commit = commit,
+                Entries = new[]
+                {
+                    new BaselineEntry
+                    {
+                        Fixture = "F",
+                        Environment = environment,
+                        Metrics = new Dictionary<string, double> { ["peakWorkingSetBytes"] = peak },
+                    },
+                },
+            };
+            BaselineDocument latestElsewhere = Measured("ccccccc", 3, environmentKey + "-other", 10_485_760);
+            diagnostics.Clear();
+            CompareBaseline(records, latestElsewhere, new Options(), diagnostics,
+                new[] { latestElsewhere, Measured("bbbbbbb", 2, environmentKey, 10_485_760), Measured("aaaaaaa", 1, environmentKey, 104_857_600) });
+            if (!diagnostics.Any(d => d.Severity == "error" && d.Metric == "peakWorkingSetBytes")
+                || diagnostics.Any(d => d.Metric == "baseline"))
+                return Fail("a fixture absent from the latest run's environment must compare with the newest series point on its own");
+
+            diagnostics.Clear();
+            CompareBaseline(records, latestElsewhere, new Options(), diagnostics, new[] { latestElsewhere });
+            if (!diagnostics.Any(d => d.Metric == "baseline" && d.Message.Contains("skipped 1", StringComparison.Ordinal)))
+                return Fail("a fixture no run measured on its environment must still be reported as skipped");
+
             if (RunSeriesSelfTest() is int seriesFailure and not 0) return seriesFailure;
 
             // Expensive models are not training hot-path outliers when their train/forward ratio
             // matches their peers; a cheap-forward model with extreme training amplification is.
-            CensusRecord Synthetic(int index, double trainMs, double forwardMs, long parameters)
+            CensusRecord Synthetic(int index, double trainMs, double forwardMs, long parameters, double? peakMegabytes = null)
                 => new()
                 {
                     Fixture = $"Synthetic{index}",
@@ -1603,7 +1662,7 @@ internal static class Program
                     {
                         ["trainStepMs"] = trainMs,
                         ["steadyForwardMedianMs"] = forwardMs,
-                        ["peakWorkingSetBytes"] = parameters * (20.0 + index * 0.25),
+                        ["peakWorkingSetBytes"] = peakMegabytes * 1024 * 1024 ?? parameters * (20.0 + index * 0.25),
                     },
                 };
 
@@ -1627,6 +1686,21 @@ internal static class Program
             DetectCohortOutliers(amplified, diagnostics);
             if (!diagnostics.Any(d => d.Metric == "trainingAmplification"))
                 return Fail("training amplification detection");
+
+            // Peak working set is mostly the runtime baseline, so a cohort can agree to within a percent. A fixture
+            // 7% above it is not a memory outlier; one at three times the median is.
+            var tight = Enumerable.Range(0, 6).Select(i => Synthetic(i, 100, 50, 100_000_000, 122.0 + i * 0.1)).ToArray();
+            tight[^1] = Synthetic(5, 100, 50, 100_000_000, 131.0);
+            diagnostics.Clear();
+            DetectCohortOutliers(tight, diagnostics);
+            if (diagnostics.Any(d => d.Metric == "peakWorkingSetBytes"))
+                return Fail("a 7% memory difference in a tight cohort remains silent");
+
+            tight[^1] = Synthetic(5, 100, 50, 100_000_000, 366.0);
+            diagnostics.Clear();
+            DetectCohortOutliers(tight, diagnostics);
+            if (!diagnostics.Any(d => d.Metric == "peakWorkingSetBytes"))
+                return Fail("memory at three times the cohort median is an outlier");
             Console.WriteLine("ModelPerfProbe self-test passed.");
             return 0;
         }

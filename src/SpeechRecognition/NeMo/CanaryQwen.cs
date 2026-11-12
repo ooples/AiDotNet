@@ -71,6 +71,7 @@ public partial class CanaryQwen<T> : AudioNeuralNetworkBase<T>, ISpeechRecognize
     private CanaryQwenNetwork<T>? _network;
     internal CanaryQwenNetwork<T>? Network => _network;
     public IReadOnlyList<string> SupportedLanguages { get; }
+    /// <inheritdoc />
     public bool SupportsStreaming => false;
     public bool SupportsWordTimestamps => false;
 
@@ -280,9 +281,11 @@ public partial class CanaryQwen<T> : AudioNeuralNetworkBase<T>, ISpeechRecognize
     /// write on every parameter surface, so the guard is stated once here instead of being
     /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
     protected override bool SupportsParameterMutation => _useNativeMode;
+    /// <inheritdoc />
     protected override Tensor<T> PostprocessOutput(Tensor<T> o) => o;
     public override ModelMetadata<T> GetModelMetadata() => new() { Name = _useNativeMode ? "CanaryQwen-Native" : "CanaryQwen-ONNX", Description = "Canary-Qwen-2.5B: Fast Conformer, linear projection and Qwen3-1.7B with LoRA (NVIDIA 2025)", FeatureCount = _options.NumMels, Complexity = _options.NumEncoderLayers + _options.NumDecoderLayers, AdditionalInfo = BaseAudioMetadataInfo() };
 
     private void ThrowIfDisposed() { if (_disposed) throw new ObjectDisposedException(GetType().FullName ?? nameof(CanaryQwen<T>)); }
+    /// <inheritdoc />
     protected override void Dispose(bool disposing) { if (_disposed) return; if (disposing) OnnxEncoder?.Dispose(); _disposed = true; base.Dispose(disposing); }
 }

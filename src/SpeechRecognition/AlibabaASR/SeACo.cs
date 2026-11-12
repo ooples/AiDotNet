@@ -91,7 +91,9 @@ public partial class SeACo<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>,
     internal SeACoBiasNetwork<T>? Bias => _bias;
     internal SanmEncoder<T>? Encoder => _encoder;
     public IReadOnlyList<string> SupportedLanguages { get; }
+    /// <inheritdoc />
     public bool SupportsStreaming => false;
+    /// <inheritdoc />
     public bool SupportsWordTimestamps => false;
 
     public SeACo(NeuralNetworkArchitecture<T> architecture, string modelPath, SeACoOptions? options = null) : base(architecture)
@@ -576,9 +578,11 @@ public partial class SeACo<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>,
     /// write on every parameter surface, so the guard is stated once here instead of being
     /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
     protected override bool SupportsParameterMutation => _useNativeMode;
+    /// <inheritdoc />
     protected override Tensor<T> PostprocessOutput(Tensor<T> o) => o;
     public override ModelMetadata<T> GetModelMetadata() => new() { Name = _useNativeMode ? "SeACo-Native" : "SeACo-ONNX", Description = "SeACo-Paraformer: Paraformer-large with hotword bias modules (Shi et al. 2023)", FeatureCount = 1, Complexity = _options.NumEncoderLayers + _options.NumDecoderLayers, AdditionalInfo = BaseAudioMetadataInfo() };
 
     private void ThrowIfDisposed() { if (_disposed) throw new ObjectDisposedException(GetType().FullName ?? nameof(SeACo<T>)); }
+    /// <inheritdoc />
     protected override void Dispose(bool disposing) { if (_disposed) return; if (disposing) OnnxEncoder?.Dispose(); _disposed = true; base.Dispose(disposing); }
 }

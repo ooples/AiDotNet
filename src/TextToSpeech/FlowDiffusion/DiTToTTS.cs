@@ -328,5 +328,6 @@ public partial class DiTToTTS<T> : TtsModelBase<T>, IEndToEndTts<T>
     }
 
     private void ThrowIfDisposed() { if (_disposed) throw new ObjectDisposedException(GetType().FullName ?? nameof(DiTToTTS<T>)); }
+    /// <inheritdoc />
     protected override void Dispose(bool disposing) { if (_disposed) return; _disposed = true; base.Dispose(disposing); }
 }

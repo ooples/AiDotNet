@@ -546,6 +546,7 @@ public abstract partial class TimeSeriesModelBase<T> : ITimeSeriesModel<T>, ICon
     private const int CurrentSerializationVersion = 1;
     private const int MaxCheckpointTensorRank = 32;
 
+    /// <inheritdoc />
     public void Train(Matrix<T> x, Vector<T> y) => Train(x, y, CancellationToken.None);
 
     public void Train(Matrix<T> x, Vector<T> y, CancellationToken callerToken)
@@ -1261,6 +1262,7 @@ public abstract partial class TimeSeriesModelBase<T> : ITimeSeriesModel<T>, ICon
         }
     }
 
+    /// <inheritdoc />
     public virtual byte[] Serialize()
     {
         ModelPersistenceGuard.EnforceBeforeSerialize();
@@ -1904,6 +1906,7 @@ public abstract partial class TimeSeriesModelBase<T> : ITimeSeriesModel<T>, ICon
         }
     }
 
+    /// <inheritdoc />
     public virtual Vector<T> GetParameters()
     {
         var components = Components;
@@ -2584,6 +2587,7 @@ public abstract partial class TimeSeriesModelBase<T> : ITimeSeriesModel<T>, ICon
         return features;
     }
 
+    /// <inheritdoc />
     public virtual long ParameterCount
     {
         get
@@ -2619,6 +2623,7 @@ public abstract partial class TimeSeriesModelBase<T> : ITimeSeriesModel<T>, ICon
     }
 
 
+    /// <inheritdoc />
     public virtual void SaveModel(string filePath)
     {
         if (string.IsNullOrWhiteSpace(filePath))
@@ -2640,6 +2645,7 @@ public abstract partial class TimeSeriesModelBase<T> : ITimeSeriesModel<T>, ICon
         catch (System.Security.SecurityException ex) { throw new InvalidOperationException($"Security error when saving model to '{filePath}': {ex.Message}", ex); }
     }
 
+    /// <inheritdoc />
     public virtual void LoadModel(string filePath)
     {
         if (string.IsNullOrWhiteSpace(filePath))
@@ -2664,6 +2670,7 @@ public abstract partial class TimeSeriesModelBase<T> : ITimeSeriesModel<T>, ICon
         catch (Exception ex) { throw new InvalidOperationException($"Failed to deserialize model from file '{filePath}'. The file may be corrupted or incompatible: {ex.Message}", ex); }
     }
 
+    /// <inheritdoc />
     public virtual ILossFunction<T> DefaultLossFunction => _defaultLossFunction;
 
     public virtual Vector<T> ComputeGradients(Matrix<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null)

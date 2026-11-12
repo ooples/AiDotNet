@@ -62,6 +62,7 @@ public partial class CanaryFlash<T> : AudioNeuralNetworkBase<T>, ISpeechRecogniz
     private Random _random = Tensors.Helpers.RandomHelper.CreateSeededRandom(43);
     internal ConformerAsrNetwork<T>? Network => _network;
     public IReadOnlyList<string> SupportedLanguages { get; }
+    /// <inheritdoc />
     public bool SupportsStreaming => false;
     public bool SupportsWordTimestamps => false;
 
@@ -105,10 +106,12 @@ public partial class CanaryFlash<T> : AudioNeuralNetworkBase<T>, ISpeechRecogniz
         };
     }
 
+    /// <inheritdoc />
     public Task<TranscriptionResult<T>> TranscribeAsync(Tensor<T> audio, string? language = null, bool? includeTimestamps = null, CancellationToken cancellationToken = default) => Task.Run(() => Transcribe(audio, language, includeTimestamps), cancellationToken);
     public string DetectLanguage(Tensor<T> audio) => _options.Language;
     public IReadOnlyDictionary<string, T> DetectLanguageProbabilities(Tensor<T> audio) => new Dictionary<string, T> { [_options.Language] = NumOps.One };
 
+    /// <inheritdoc />
     public IStreamingTranscriptionSession<T> StartStreamingSession(string? language = null) => throw new NotSupportedException("CanaryFlash does not support streaming.");
 
     // Each token is its vocabulary entry; tokens past the vocabulary list decode as Unicode code points.
@@ -251,9 +254,11 @@ public partial class CanaryFlash<T> : AudioNeuralNetworkBase<T>, ISpeechRecogniz
     /// write on every parameter surface, so the guard is stated once here instead of being
     /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
     protected override bool SupportsParameterMutation => _useNativeMode;
+    /// <inheritdoc />
     protected override Tensor<T> PostprocessOutput(Tensor<T> o) => o;
     public override ModelMetadata<T> GetModelMetadata() => new() { Name = _useNativeMode ? "CanaryFlash-Native" : "CanaryFlash-ONNX", Description = "Canary-1B-Flash: NVIDIA's Canary (Puvvada et al. 2024) with a deeper encoder and a 4-layer decoder for fast decoding", FeatureCount = _options.NumMels, Complexity = _options.NumEncoderLayers, AdditionalInfo = BaseAudioMetadataInfo() };
 
     private void ThrowIfDisposed() { if (_disposed) throw new ObjectDisposedException(GetType().FullName ?? nameof(CanaryFlash<T>)); }
+    /// <inheritdoc />
     protected override void Dispose(bool disposing) { if (_disposed) return; if (disposing) OnnxEncoder?.Dispose(); _disposed = true; base.Dispose(disposing); }
 }

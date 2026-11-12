@@ -77,6 +77,7 @@ public partial class Conv1DTransposeLayer<T> : LayerBase<T>, IShapeContract
     /// </remarks>
     public override bool HasUninitializedParameters => !IsShapeResolved;
 
+    /// <inheritdoc />
     public override bool SupportsTraining => true;
 
     /// <summary>

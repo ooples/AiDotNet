@@ -385,8 +385,10 @@ public partial class DepthwiseSeparableConvolutionalLayer<T> : LayerBase<T>, ISh
     /// </remarks>
     private readonly int _padding;
 
+    /// <inheritdoc />
     public override bool SupportsTraining => true;
 
+    /// <inheritdoc />
     public override void ClearGradients()
     {
         base.ClearGradients();
@@ -552,6 +554,7 @@ public partial class DepthwiseSeparableConvolutionalLayer<T> : LayerBase<T>, ISh
         base.EnsureParametersMaterialized();
     }
 
+    /// <inheritdoc />
     protected override void OnFirstForward(Tensor<T> input)
     {
         int rank = input.Shape.Length;

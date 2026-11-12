@@ -447,7 +447,6 @@ internal static class OptionsFidelityBaselines
             "AiDotNet.Models.Options.PatchTSTOptions<T>.LossFunction",
             "AiDotNet.Models.Options.PatchTSTOptions<T>.UsePreNorm",
             "AiDotNet.Models.Options.ProphetOptions<T, TInput, TOutput>.ForecastHorizon",
-            "AiDotNet.Models.Options.RandomForestClassifierOptions<T>.NJobs",
             "AiDotNet.Models.Options.S4Options<T>.DropoutRate",
             "AiDotNet.Models.Options.S4Options<T>.UseBidirectional",
             "AiDotNet.Models.Options.SECBERTOptions<T>.IntermediateDimension",

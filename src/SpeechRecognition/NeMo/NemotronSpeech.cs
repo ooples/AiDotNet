@@ -73,7 +73,9 @@ public partial class NemotronSpeech<T> : AudioNeuralNetworkBase<T>, ISpeechRecog
     private Random _random = Tensors.Helpers.RandomHelper.CreateSeededRandom(43);
     internal ConformerAsrNetwork<T>? Network => _network;
     public IReadOnlyList<string> SupportedLanguages { get; }
+    /// <inheritdoc />
     public bool SupportsStreaming => false;
+    /// <inheritdoc />
     public bool SupportsWordTimestamps => false;
 
     public NemotronSpeech(NeuralNetworkArchitecture<T> architecture, string modelPath, NemotronSpeechOptions? options = null) : base(architecture)
@@ -286,9 +288,11 @@ public partial class NemotronSpeech<T> : AudioNeuralNetworkBase<T>, ISpeechRecog
     /// write on every parameter surface, so the guard is stated once here instead of being
     /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
     protected override bool SupportsParameterMutation => _useNativeMode;
+    /// <inheritdoc />
     protected override Tensor<T> PostprocessOutput(Tensor<T> o) => o;
     public override ModelMetadata<T> GetModelMetadata() => new() { Name = _useNativeMode ? "NemotronSpeech-Native" : "NemotronSpeech-ONNX", Description = "Nemotron Speech Streaming: a cache-aware Fast Conformer with an RNN-T decoder", FeatureCount = _options.NumMels, Complexity = _options.NumEncoderLayers, AdditionalInfo = BaseAudioMetadataInfo() };
 
     private void ThrowIfDisposed() { if (_disposed) throw new ObjectDisposedException(GetType().FullName ?? nameof(NemotronSpeech<T>)); }
+    /// <inheritdoc />
     protected override void Dispose(bool disposing) { if (_disposed) return; if (disposing) OnnxEncoder?.Dispose(); _disposed = true; base.Dispose(disposing); }
 }

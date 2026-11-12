@@ -456,6 +456,7 @@ public partial class DeepARModel<T> : TimeSeriesModelBase<T>
             (_, c) => NumOps.ToDouble(historyCovariates[length - 1, c]));
     }
 
+    /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata()
     {
         return new ModelMetadata<T>

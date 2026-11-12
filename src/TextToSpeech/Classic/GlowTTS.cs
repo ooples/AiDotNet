@@ -121,9 +121,13 @@ public partial class GlowTTS<T> : TtsModelBase<T>, IAcousticModel<T>, ITrainingO
     protected override double GradientValueClip => 5.0;
 
     int ITtsModel<T>.SampleRate => _options.SampleRate;
+    /// <inheritdoc />
     public int MaxTextLength => _options.MaxTextLength;
+    /// <inheritdoc />
     public new int MelChannels => _options.MelChannels;
+    /// <inheritdoc />
     public new int HopSize => _options.HopSize;
+    /// <inheritdoc />
     public int FftSize => _options.FftSize;
 
     /// <summary>Generates a mel spectrogram from text (the paper pairs it with WaveGlow).</summary>
@@ -412,6 +416,7 @@ public partial class GlowTTS<T> : TtsModelBase<T>, IAcousticModel<T>, ITrainingO
             throw new ObjectDisposedException(GetType().FullName ?? nameof(GlowTTS<T>));
     }
 
+    /// <inheritdoc />
     protected override void Dispose(bool disposing)
     {
         if (_disposed)

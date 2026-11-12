@@ -359,6 +359,7 @@ public partial class SpatialTransformerLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     /// </remarks>
     private readonly int _outputWidth;
 
+    /// <inheritdoc />
     public override bool SupportsTraining => true;
 
     /// <summary>
@@ -890,6 +891,7 @@ public partial class SpatialTransformerLayer<T> : LayerBase<T>, IAuxiliaryLossLa
         Engine.TensorSubtractInPlace(_localizationBias2, scaledB2Grad);
     }
 
+    /// <inheritdoc />
     public override void ClearGradients()
     {
         _localizationWeights1Gradient = null;

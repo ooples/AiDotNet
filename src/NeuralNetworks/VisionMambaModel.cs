@@ -135,6 +135,7 @@ public partial class VisionMambaModel<T> : ImageClassifierModelLayoutBase<T>
         return single ? Engine.Reshape(output, new[] { output.Shape[1] }) : output;
     }
 
+    /// <inheritdoc />
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         SetTrainingMode(false);

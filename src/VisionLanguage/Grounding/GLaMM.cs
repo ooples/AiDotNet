@@ -433,8 +433,10 @@ public partial class GLaMM<T> : VisionLanguageModelBase<T>, IGroundedConversatio
 
     protected override Tensor<T> PreprocessImage(Tensor<T> image) => GlobalInput(Single(image));
 
+    /// <inheritdoc />
     protected override Tensor<T> PostprocessOutput(Tensor<T> output) => output;
 
+    /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata()
     {
         var m = new ModelMetadata<T>
@@ -455,6 +457,7 @@ public partial class GLaMM<T> : VisionLanguageModelBase<T>, IGroundedConversatio
             throw new ObjectDisposedException(GetType().FullName ?? nameof(GLaMM<T>));
     }
 
+    /// <inheritdoc />
     protected override void Dispose(bool disposing)
     {
         if (_disposed)

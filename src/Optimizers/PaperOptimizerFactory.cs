@@ -77,6 +77,9 @@ internal static class PaperOptimizerFactory
         ILearningRateScheduler? learningRateSchedulerOverride = null)
     {
         if (model is null) return null;
+        if (learningRateOverride is { } rate && (double.IsNaN(rate) || double.IsInfinity(rate) || rate <= 0))
+            throw new ArgumentOutOfRangeException(
+                nameof(learningRateOverride), rate, "A learning-rate override must be finite and positive.");
 
         var recipe = Find(model, component, phase);
         // A model whose own options configure a warmup (S4Options.WarmupSteps) applies it to its paper

@@ -101,9 +101,13 @@ public partial class FastSpeech2<T> : VarianceAdaptorTtsModelBase<T>, IAcousticM
     }
 
     int ITtsModel<T>.SampleRate => _options.SampleRate;
+    /// <inheritdoc />
     public int MaxTextLength => _options.MaxTextLength;
+    /// <inheritdoc />
     public new int MelChannels => _options.MelChannels;
+    /// <inheritdoc />
     public new int HopSize => _options.HopSize;
+    /// <inheritdoc />
     public int FftSize => _options.FftSize;
 
     protected override Tensor<T> PreprocessText(string text)
@@ -147,6 +151,7 @@ public partial class FastSpeech2<T> : VarianceAdaptorTtsModelBase<T>, IAcousticM
                 _options.NumEnergyBins, _options.FftSize, _options.UsePitchPredictor, _options.UseEnergyPredictor));
     }
 
+    /// <inheritdoc />
     protected override Tensor<T> PostprocessAudio(Tensor<T> output) => output;
 
     /// <inheritdoc/>

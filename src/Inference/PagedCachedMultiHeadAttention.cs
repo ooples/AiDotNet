@@ -261,6 +261,7 @@ public partial class PagedCachedMultiHeadAttention<T> : LayerBase<T>, IContextAw
         }
     }
 
+    /// <inheritdoc />
     protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         if (!InferenceMode || Kernel == null)
@@ -1108,6 +1109,7 @@ public partial class PagedCachedMultiHeadAttention<T> : LayerBase<T>, IContextAw
         }
     }
 
+    /// <inheritdoc />
     public override void ResetState()
     {
         _currentPosition = 0;
@@ -1115,6 +1117,7 @@ public partial class PagedCachedMultiHeadAttention<T> : LayerBase<T>, IContextAw
         _alibiLayer?.ResetState();
     }
 
+    /// <inheritdoc />
     public override void UpdateParameters(T learningRate)
     {
         throw new NotSupportedException($"{nameof(PagedCachedMultiHeadAttention<T>)} is intended for inference-time usage only.");

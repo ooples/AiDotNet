@@ -69,9 +69,13 @@ public partial class CAMPlusPlus<T> : SpeakerRecognitionBase<T>, ISpeakerVerifie
 
     #region Properties
 
+    /// <inheritdoc />
     public T DefaultThreshold { get; }
+    /// <inheritdoc />
     public ISpeakerEmbeddingExtractor<T> EmbeddingExtractor => this;
+    /// <inheritdoc />
     public new bool IsOnnxMode => !_useNativeMode && OnnxEncoder is not null;
+    /// <inheritdoc />
     public double MinimumDurationSeconds => _options.MinDurationSeconds;
     public double VerificationThreshold => NumOps.ToDouble(DefaultThreshold);
 
@@ -132,9 +136,11 @@ public partial class CAMPlusPlus<T> : SpeakerRecognitionBase<T>, ISpeakerVerifie
 
     #region ISpeakerVerifier
 
+    /// <inheritdoc />
     public SpeakerVerificationResult<T> Verify(Tensor<T> audio, Tensor<T> referenceEmbedding)
         => Verify(audio, referenceEmbedding, DefaultThreshold);
 
+    /// <inheritdoc />
     public SpeakerVerificationResult<T> Verify(Tensor<T> audio, Tensor<T> referenceEmbedding, T threshold)
     {
         ThrowIfDisposed();
@@ -145,6 +151,7 @@ public partial class CAMPlusPlus<T> : SpeakerRecognitionBase<T>, ISpeakerVerifie
         return new SpeakerVerificationResult<T> { IsAccepted = isAccepted, Score = score, Threshold = threshold, Confidence = confidence };
     }
 
+    /// <inheritdoc />
     public SpeakerVerificationResult<T> VerifyWithReferenceAudio(Tensor<T> audio, Tensor<T> referenceAudio)
     {
         ThrowIfDisposed();
@@ -152,9 +159,11 @@ public partial class CAMPlusPlus<T> : SpeakerRecognitionBase<T>, ISpeakerVerifie
         return Verify(audio, refEmb);
     }
 
+    /// <inheritdoc />
     public Task<SpeakerVerificationResult<T>> VerifyAsync(Tensor<T> audio, Tensor<T> referenceEmbedding, CancellationToken cancellationToken = default)
         => Task.Run(() => Verify(audio, referenceEmbedding), cancellationToken);
 
+    /// <inheritdoc />
     public SpeakerProfile<T> Enroll(IReadOnlyList<Tensor<T>> enrollmentAudio)
     {
         ThrowIfDisposed();
@@ -170,8 +179,10 @@ public partial class CAMPlusPlus<T> : SpeakerRecognitionBase<T>, ISpeakerVerifie
         };
     }
 
+    /// <inheritdoc />
     public SpeakerProfile<T> Enroll(Tensor<T> enrollmentAudio) => Enroll([enrollmentAudio]);
 
+    /// <inheritdoc />
     public SpeakerProfile<T> UpdateProfile(SpeakerProfile<T> existingProfile, Tensor<T> newAudio)
     {
         ThrowIfDisposed();
@@ -186,6 +197,7 @@ public partial class CAMPlusPlus<T> : SpeakerRecognitionBase<T>, ISpeakerVerifie
         };
     }
 
+    /// <inheritdoc />
     public T ComputeScore(Tensor<T> audio, Tensor<T> referenceEmbedding)
     {
         ThrowIfDisposed();
@@ -193,6 +205,7 @@ public partial class CAMPlusPlus<T> : SpeakerRecognitionBase<T>, ISpeakerVerifie
         return ComputeCosineSimilarity(testEmb, referenceEmbedding);
     }
 
+    /// <inheritdoc />
     public T GetThresholdForFAR(double targetFAR)
     {
         double threshold = 0.85 - Math.Log10(1.0 / targetFAR) * 0.1;
@@ -204,6 +217,7 @@ public partial class CAMPlusPlus<T> : SpeakerRecognitionBase<T>, ISpeakerVerifie
 
     #region ISpeakerEmbeddingExtractor
 
+    /// <inheritdoc />
     public Tensor<T> ExtractEmbedding(Tensor<T> audio)
     {
         ThrowIfDisposed();
@@ -212,12 +226,15 @@ public partial class CAMPlusPlus<T> : SpeakerRecognitionBase<T>, ISpeakerVerifie
         return NormalizeEmbedding(raw);
     }
 
+    /// <inheritdoc />
     public Task<Tensor<T>> ExtractEmbeddingAsync(Tensor<T> audio, CancellationToken cancellationToken = default)
         => Task.Run(() => ExtractEmbedding(audio), cancellationToken);
 
+    /// <inheritdoc />
     public IReadOnlyList<Tensor<T>> ExtractEmbeddings(IReadOnlyList<Tensor<T>> audioSegments)
         => audioSegments.Select(a => ExtractEmbedding(a)).ToList();
 
+    /// <inheritdoc />
     public T ComputeSimilarity(Tensor<T> embedding1, Tensor<T> embedding2)
         => ComputeCosineSimilarity(embedding1, embedding2);
 
@@ -354,8 +371,10 @@ public partial class CAMPlusPlus<T> : SpeakerRecognitionBase<T>, ISpeakerVerifie
         return Engine.TensorSubtract(features, Engine.TensorBroadcastTo(mean, features.Shape.ToArray()));
     }
 
+    /// <inheritdoc />
     protected override Tensor<T> PostprocessOutput(Tensor<T> o) => NormalizeEmbedding(o);
 
+    /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata()
     {
         var m = new ModelMetadata<T>
@@ -378,6 +397,7 @@ public partial class CAMPlusPlus<T> : SpeakerRecognitionBase<T>, ISpeakerVerifie
     #region Disposal
 
     private void ThrowIfDisposed() { if (_disposed) throw new ObjectDisposedException(GetType().FullName ?? nameof(CAMPlusPlus<T>)); }
+    /// <inheritdoc />
     protected override void Dispose(bool disposing) { if (_disposed) return; if (disposing) OnnxEncoder?.Dispose(); _disposed = true; base.Dispose(disposing); }
 
     #endregion

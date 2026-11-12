@@ -148,9 +148,13 @@ public partial class PortaSpeech<T> : TtsModelBase<T>, IAcousticModel<T>
     }
 
     int ITtsModel<T>.SampleRate => _options.SampleRate;
+    /// <inheritdoc />
     public int MaxTextLength => _options.MaxTextLength;
+    /// <inheritdoc />
     public new int MelChannels => _options.MelChannels;
+    /// <inheritdoc />
     public new int HopSize => _options.HopSize;
+    /// <inheritdoc />
     public int FftSize => _options.FftSize;
 
     /// <summary>
@@ -586,6 +590,7 @@ public partial class PortaSpeech<T> : TtsModelBase<T>, IAcousticModel<T>
             throw new ObjectDisposedException(GetType().FullName ?? nameof(PortaSpeech<T>));
     }
 
+    /// <inheritdoc />
     protected override void Dispose(bool disposing)
     {
         if (_disposed)

@@ -56,7 +56,9 @@ public partial class ConvTransformer<T> : AudioNeuralNetworkBase<T>, ISpeechReco
     private Random _random = Tensors.Helpers.RandomHelper.CreateSeededRandom(43);
     internal ConformerAsrNetwork<T>? Network => _network;
     public IReadOnlyList<string> SupportedLanguages { get; }
+    /// <inheritdoc />
     public bool SupportsStreaming => false;
+    /// <inheritdoc />
     public bool SupportsWordTimestamps => false;
 
     public ConvTransformer(NeuralNetworkArchitecture<T> architecture, string modelPath, ConvTransformerOptions? options = null) : base(architecture)
@@ -249,5 +251,6 @@ public partial class ConvTransformer<T> : AudioNeuralNetworkBase<T>, ISpeechReco
     public override ModelMetadata<T> GetModelMetadata() => new() { Name = _useNativeMode ? "ConvTransformer-Native" : "ConvTransformer-ONNX", Description = "ConvTransformer: convolutions below the encoder and decoder Transformers in place of positional encodings", FeatureCount = _options.NumMels, Complexity = _options.NumEncoderLayers, AdditionalInfo = BaseAudioMetadataInfo() };
 
     private void ThrowIfDisposed() { if (_disposed) throw new ObjectDisposedException(GetType().FullName ?? nameof(ConvTransformer<T>)); }
+    /// <inheritdoc />
     protected override void Dispose(bool disposing) { if (_disposed) return; if (disposing) OnnxEncoder?.Dispose(); _disposed = true; base.Dispose(disposing); }
 }

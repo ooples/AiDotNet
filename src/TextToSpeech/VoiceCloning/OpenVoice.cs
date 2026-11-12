@@ -117,10 +117,13 @@ public partial class OpenVoice<T> : TtsModelBase<T>, IEndToEndTts<T>, IVoiceClon
     }
 
     int ITtsModel<T>.SampleRate => _options.SampleRate;
+    /// <inheritdoc />
     public int MaxTextLength => _options.MaxTextLength;
+    /// <inheritdoc />
     public new int HiddenDim => _options.HiddenDim;
     public int NumFlowSteps => 4;
     public double MinReferenceDuration => 3.0;
+    /// <inheritdoc />
     public int SpeakerEmbeddingDim => _options.SpeakerEmbeddingDim;
 
     /// Synthesizes speech using OpenVoice's tone color conversion pipeline.
@@ -136,6 +139,7 @@ public partial class OpenVoice<T> : TtsModelBase<T>, IEndToEndTts<T>, IVoiceClon
         return OpenVoiceNative<T>.Resample(synthesizer.Synthesize(text), synthesizer.SampleRate);
     }
 
+    /// <inheritdoc />
     public Tensor<T> SynthesizeWithVoice(string text, Tensor<T> referenceAudio)
     {
         ThrowIfDisposed();
@@ -143,6 +147,7 @@ public partial class OpenVoice<T> : TtsModelBase<T>, IEndToEndTts<T>, IVoiceClon
         return ConvertVoice(baseAudio, ExtractSpeakerEmbedding(baseAudio), ExtractSpeakerEmbedding(referenceAudio));
     }
 
+    /// <inheritdoc />
     public Tensor<T> ExtractSpeakerEmbedding(Tensor<T> referenceAudio)
     {
         ThrowIfDisposed();
@@ -150,6 +155,7 @@ public partial class OpenVoice<T> : TtsModelBase<T>, IEndToEndTts<T>, IVoiceClon
         return _native.Embedding(referenceAudio);
     }
 
+    /// <inheritdoc />
     protected override Tensor<T> PostprocessAudio(Tensor<T> output) => output;
 
     protected override void InitializeLayers()
@@ -180,6 +186,7 @@ public partial class OpenVoice<T> : TtsModelBase<T>, IEndToEndTts<T>, IVoiceClon
     /// write on every parameter surface, so the guard is stated once here instead of being
     /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
     protected override bool SupportsParameterMutation => _useNativeMode;
+    /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata()
     {
         var m = new ModelMetadata<T>
@@ -208,6 +215,7 @@ public partial class OpenVoice<T> : TtsModelBase<T>, IEndToEndTts<T>, IVoiceClon
             throw new ObjectDisposedException(GetType().FullName ?? nameof(OpenVoice<T>));
     }
 
+    /// <inheritdoc />
     protected override void Dispose(bool disposing)
     {
         if (_disposed)

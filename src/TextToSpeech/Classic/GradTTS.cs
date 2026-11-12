@@ -118,9 +118,13 @@ public partial class GradTTS<T> : TtsModelBase<T>, IAcousticModel<T>, ITrainingO
     }
 
     int ITtsModel<T>.SampleRate => _options.SampleRate;
+    /// <inheritdoc />
     public int MaxTextLength => _options.MaxTextLength;
+    /// <inheritdoc />
     public new int MelChannels => _options.MelChannels;
+    /// <inheritdoc />
     public new int HopSize => _options.HopSize;
+    /// <inheritdoc />
     public int FftSize => _options.FftSize;
 
     /// <summary>Generates a mel spectrogram from text (the paper pairs it with HiFi-GAN).</summary>
@@ -458,6 +462,7 @@ public partial class GradTTS<T> : TtsModelBase<T>, IAcousticModel<T>, ITrainingO
             throw new ObjectDisposedException(GetType().FullName ?? nameof(GradTTS<T>));
     }
 
+    /// <inheritdoc />
     protected override void Dispose(bool disposing)
     {
         if (_disposed)

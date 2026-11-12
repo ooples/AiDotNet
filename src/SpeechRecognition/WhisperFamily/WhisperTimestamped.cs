@@ -64,7 +64,9 @@ public partial class WhisperTimestamped<T> : AudioNeuralNetworkBase<T>, ISpeechR
     private WhisperRecognizer<T>? _whisper;
     internal WhisperRecognizer<T>? Whisper => _whisper;
     public IReadOnlyList<string> SupportedLanguages { get; }
+    /// <inheritdoc />
     public bool SupportsStreaming => false;
+    /// <inheritdoc />
     public bool SupportsWordTimestamps => true;
 
     public WhisperTimestamped(NeuralNetworkArchitecture<T> architecture, string modelPath, WhisperTimestampedOptions? options = null) : base(architecture)
@@ -98,6 +100,7 @@ public partial class WhisperTimestamped<T> : AudioNeuralNetworkBase<T>, ISpeechR
         return whisper.Transcribe(Samples(audio), language ?? _options.Language, ResolveReturnTimestamps(includeTimestamps) || _options.WordTimestamps, _options.Temperatures);
     }
 
+    /// <inheritdoc />
     public Task<TranscriptionResult<T>> TranscribeAsync(Tensor<T> audio, string? language = null, bool? includeTimestamps = null, CancellationToken cancellationToken = default) => Task.Run(() => Transcribe(audio, language, includeTimestamps), cancellationToken);
 
     public string DetectLanguage(Tensor<T> audio) => DetectLanguageProbabilities(audio).OrderByDescending(p => NumOps.ToDouble(p.Value)).First().Key;
@@ -109,6 +112,7 @@ public partial class WhisperTimestamped<T> : AudioNeuralNetworkBase<T>, ISpeechR
         return whisper.DetectLanguage(Samples(audio)).ToDictionary(p => p.Key, p => NumOps.FromDouble(p.Value));
     }
 
+    /// <inheritdoc />
     public IStreamingTranscriptionSession<T> StartStreamingSession(string? language = null) => throw new NotSupportedException("WhisperTimestamped does not support streaming.");
 
     protected override void InitializeLayers() => InitializeLayersCore();
@@ -218,5 +222,6 @@ public partial class WhisperTimestamped<T> : AudioNeuralNetworkBase<T>, ISpeechR
     public override ModelMetadata<T> GetModelMetadata() => new() { Name = _useNativeMode ? "WhisperTimestamped-Native" : "WhisperTimestamped-ONNX", Description = "whisper-timestamped: Whisper with word timestamps by dynamic time warping over cross-attention", FeatureCount = _options.NumMels, Complexity = _options.NumEncoderLayers + _options.NumDecoderLayers, AdditionalInfo = BaseAudioMetadataInfo() };
 
     private void ThrowIfDisposed() { if (_disposed) throw new ObjectDisposedException(GetType().FullName ?? nameof(WhisperTimestamped<T>)); }
+    /// <inheritdoc />
     protected override void Dispose(bool disposing) { if (_disposed) return; if (disposing) OnnxEncoder?.Dispose(); _disposed = true; base.Dispose(disposing); }
 }

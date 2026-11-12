@@ -980,6 +980,7 @@ public partial class S5Layer<T> : LayerBase<T>, IShapeContract
         _outputProjectionWeights, _outputProjectionBias
     ];
 
+    /// <inheritdoc />
     public override void ClearGradients()
     {
         base.ClearGradients();

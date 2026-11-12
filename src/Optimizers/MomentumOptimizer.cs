@@ -425,6 +425,10 @@ public partial class MomentumOptimizer<T, TInput, TOutput> : GradientBasedOptimi
 
             // The fused SGD kernel stores unscaled gradients; this optimizer's velocity
             // includes the learning rate, so retain that representation across all engines.
+            // Host fast path: velocity and parameter updated in one exact pass over the arrays (see TryFusedHostStep).
+            if (TryFusedHostStep(param, grad, vel))
+                continue;
+
             // velocity = momentum * velocity + lr * grad
             var velNew = Engine.TensorAdd(Engine.TensorMultiplyScalar(vel, CurrentMomentum), Engine.TensorMultiplyScalar(grad, CurrentLearningRate));
             Engine.TensorCopy(velNew, vel);
@@ -432,6 +436,89 @@ public partial class MomentumOptimizer<T, TInput, TOutput> : GradientBasedOptimi
             // param -= velocity
             Engine.TensorSubtractInPlace(param, vel);
         }
+    }
+
+    /// <summary>
+    /// One momentum step on a host parameter in a single pass: velocity = momentum * velocity + lr * grad, then
+    /// parameter -= velocity, both in place, chunked across the pool.
+    /// </summary>
+    /// <remarks>
+    /// The tensor-op path builds momentum * velocity, lr * grad and their sum as new tensors and copies the sum back:
+    /// three parameter-sized allocations per parameter per step, 680 MB over five FasterRCNN steps in an allocation
+    /// trace. Same arithmetic, element for element. False (nothing done) for a GPU engine, an element type other than
+    /// float or double, or a layout without zero-copy host arrays.
+    /// </remarks>
+    private bool TryFusedHostStep(Tensor<T> param, Tensor<T> grad, Tensor<T> velocity)
+    {
+        if (Engine.SupportsGpu || param.Length != grad.Length || param.Length != velocity.Length
+            || !param.IsContiguous || !grad.IsContiguous || !velocity.IsContiguous)
+            return false;
+
+        if (typeof(T) == typeof(float))
+        {
+            var p = ((Tensor<float>)(object)param).GetCpuBackingForContiguousWrite(out int pO);
+            var v = ((Tensor<float>)(object)velocity).GetCpuBackingForContiguousWrite(out int vO);
+            var g = ((Tensor<float>)(object)grad).GetCpuBackingForStridedRead(out int gO);
+            if (p is null || v is null || g is null) return false;
+            float momentum = (float)NumOps.ToDouble(CurrentMomentum), lr = (float)NumOps.ToDouble(CurrentLearningRate);
+            HostMomentumStep(p, pO, g, gO, v, vO, param.Length, momentum, lr);
+        }
+        else if (typeof(T) == typeof(double))
+        {
+            var p = ((Tensor<double>)(object)param).GetCpuBackingForContiguousWrite(out int pO);
+            var v = ((Tensor<double>)(object)velocity).GetCpuBackingForContiguousWrite(out int vO);
+            var g = ((Tensor<double>)(object)grad).GetCpuBackingForStridedRead(out int gO);
+            if (p is null || v is null || g is null) return false;
+            HostMomentumStep(p, pO, g, gO, v, vO, param.Length, NumOps.ToDouble(CurrentMomentum), NumOps.ToDouble(CurrentLearningRate));
+        }
+        else
+        {
+            return false;
+        }
+
+        param.IncrementVersion();
+        velocity.IncrementVersion();
+        return true;
+    }
+
+    // Elements per parallel chunk of the host momentum step: bandwidth-bound, so chunks large enough to stream.
+    private const int HostMomentumChunk = 64 * 1024;
+
+    private static void HostMomentumStep<TNum>(TNum[] param, int pOffset, TNum[] grad, int gOffset, TNum[] velocity,
+        int vOffset, int length, TNum momentum, TNum lr)
+        where TNum : struct
+    {
+        int chunks = (length + HostMomentumChunk - 1) / HostMomentumChunk;
+        AiDotNet.Tensors.Helpers.CpuParallelSettings.ParallelForOrSerial(0, chunks, length, chunk =>
+        {
+            int start = chunk * HostMomentumChunk, end = Math.Min(length, start + HostMomentumChunk);
+            var p = param.AsSpan(pOffset + start, end - start);
+            var g = grad.AsSpan(gOffset + start, end - start);
+            var v = velocity.AsSpan(vOffset + start, end - start);
+            var vMomentum = new System.Numerics.Vector<TNum>(momentum);
+            var vLr = new System.Numerics.Vector<TNum>(lr);
+            int width = System.Numerics.Vector<TNum>.Count, i = 0;
+            var pv = System.Runtime.InteropServices.MemoryMarshal.Cast<TNum, System.Numerics.Vector<TNum>>(p);
+            var gv = System.Runtime.InteropServices.MemoryMarshal.Cast<TNum, System.Numerics.Vector<TNum>>(g);
+            var vv = System.Runtime.InteropServices.MemoryMarshal.Cast<TNum, System.Numerics.Vector<TNum>>(v);
+            for (int k = 0; k < vv.Length; k++)
+            {
+                vv[k] = (vMomentum * vv[k]) + (vLr * gv[k]);
+                pv[k] -= vv[k];
+            }
+
+            i = vv.Length * width;
+            for (; i < v.Length; i++)
+            {
+                // Same expression on the scalar tail, through Vector<TNum> of one lane width's worth of math.
+                var tailV = new System.Numerics.Vector<TNum>(v[i]);
+                var tailG = new System.Numerics.Vector<TNum>(g[i]);
+                var tailP = new System.Numerics.Vector<TNum>(p[i]);
+                tailV = (vMomentum * tailV) + (vLr * tailG);
+                v[i] = tailV[0];
+                p[i] = (tailP - tailV)[0];
+            }
+        }, deterministicSafe: true);
     }
 
     /// <summary>

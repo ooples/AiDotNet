@@ -93,6 +93,7 @@ public partial class TortoiseTTS<T> : TtsModelBase<T>, ICodecTts<T>
     }
 
     int ITtsModel<T>.SampleRate => _options.SampleRate;
+    /// <inheritdoc />
     public int MaxTextLength => _options.MaxTextLength;
     public int NumCodebooks => 1;
     public int CodebookSize => _options.CodebookSize;
@@ -277,6 +278,7 @@ public partial class TortoiseTTS<T> : TtsModelBase<T>, ICodecTts<T>
         return loss;
     }
 
+    /// <inheritdoc />
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         ThrowIfDisposed();
@@ -517,6 +519,7 @@ public partial class TortoiseTTS<T> : TtsModelBase<T>, ICodecTts<T>
         if (_disposed) throw new ObjectDisposedException(GetType().FullName ?? nameof(TortoiseTTS<T>));
     }
 
+    /// <inheritdoc />
     protected override void Dispose(bool disposing)
     {
         if (_disposed) return;

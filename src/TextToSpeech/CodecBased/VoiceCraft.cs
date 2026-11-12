@@ -104,8 +104,11 @@ public partial class VoiceCraft<T> : TtsModelBase<T>, ICodecTts<T>
     }
 
     int ITtsModel<T>.SampleRate => _options.SampleRate;
+    /// <inheritdoc />
     public int MaxTextLength => _options.MaxTextLength;
+    /// <inheritdoc />
     public int NumCodebooks => _options.NumCodebooks;
+    /// <inheritdoc />
     public int CodebookSize => _options.CodebookSize;
     public int CodecFrameRate => _options.CodecFrameRate;
     public override int CodecTokenCodebooks => _options.NumCodebooks;
@@ -308,6 +311,7 @@ public partial class VoiceCraft<T> : TtsModelBase<T>, ICodecTts<T>
         _network = new VoiceCraftNetwork<T>(Engine, ComponentLayers, _options);
     }
 
+    /// <inheritdoc />
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         ThrowIfDisposed();
@@ -637,6 +641,7 @@ public partial class VoiceCraft<T> : TtsModelBase<T>, ICodecTts<T>
         if (_disposed) throw new ObjectDisposedException(GetType().FullName ?? nameof(VoiceCraft<T>));
     }
 
+    /// <inheritdoc />
     protected override void Dispose(bool disposing)
     {
         if (_disposed) return;

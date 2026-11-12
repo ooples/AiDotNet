@@ -583,6 +583,7 @@ public partial class BarkModel<T> : TtsModelBase<T>
         // still discovers all of its trainable child layers through GetExtraTrainableLayers().
     }
 
+    /// <inheritdoc />
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         ThrowIfDisposed();
@@ -607,12 +608,15 @@ public partial class BarkModel<T> : TtsModelBase<T>
         return PredictCore(input);
     }
 
+    /// <inheritdoc />
     protected override Tensor<T> PreprocessText(string text)
         => throw new NotSupportedException(
             "BarkModel is the tokenizer-level API. Use Bark<T>.Synthesize(text), or call Generate with tokenizer IDs.");
 
+    /// <inheritdoc />
     protected override Tensor<T> PostprocessAudio(Tensor<T> modelOutput) => modelOutput;
 
+    /// <inheritdoc />
     protected override long EstimateStructuralParameterCount() => EstimatedBarkTransformerParameterCount;
 
     /// <inheritdoc />
@@ -1010,6 +1014,7 @@ public partial class BarkModel<T> : TtsModelBase<T>
         if (_disposed) throw new ObjectDisposedException(GetType().FullName ?? nameof(BarkModel<T>));
     }
 
+    /// <inheritdoc />
     protected override void Dispose(bool disposing)
     {
         if (_disposed) return;

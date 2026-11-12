@@ -75,7 +75,9 @@ public partial class SALM<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>, 
     private SalmNetwork<T>? _network;
     internal SalmNetwork<T>? Network => _network;
     public IReadOnlyList<string> SupportedLanguages { get; }
+    /// <inheritdoc />
     public bool SupportsStreaming => false;
+    /// <inheritdoc />
     public bool SupportsWordTimestamps => false;
 
     public SALM(NeuralNetworkArchitecture<T> architecture, string modelPath, SALMOptions? options = null) : base(architecture)
@@ -288,9 +290,11 @@ public partial class SALM<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>, 
     /// write on every parameter surface, so the guard is stated once here instead of being
     /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
     protected override bool SupportsParameterMutation => _useNativeMode;
+    /// <inheritdoc />
     protected override Tensor<T> PostprocessOutput(Tensor<T> o) => o;
     public override ModelMetadata<T> GetModelMetadata() => new() { Name = _useNativeMode ? "SALM-Native" : "SALM-ONNX", Description = "SALM: Fast Conformer, Conformer modality adapter and Megatron GPT with LoRA (Chen et al. 2023)", FeatureCount = _options.NumMels, Complexity = _options.NumEncoderLayers + _options.NumAdapterLayers + _options.NumLlmLayers, AdditionalInfo = BaseAudioMetadataInfo() };
 
     private void ThrowIfDisposed() { if (_disposed) throw new ObjectDisposedException(GetType().FullName ?? nameof(SALM<T>)); }
+    /// <inheritdoc />
     protected override void Dispose(bool disposing) { if (_disposed) return; if (disposing) OnnxEncoder?.Dispose(); _disposed = true; base.Dispose(disposing); }
 }

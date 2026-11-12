@@ -44,7 +44,9 @@ public partial class EfficientNet<T> : NeuralNetworkBase<T>, IDetectionBackbone<
 
     public bool IsFrozen { get; private set; }
     public string Name => $"EfficientNet-{_variant}";
+    /// <inheritdoc />
     public IReadOnlyList<int> OutputChannels { get; }
+    /// <inheritdoc />
     public IReadOnlyList<int> Strides => new[] { 4, 8, 16, 32 };
 
     /// <summary>The convolutional trunk, shared with <see cref="EfficientNetNetwork{T}"/>.</summary>
@@ -81,12 +83,14 @@ public partial class EfficientNet<T> : NeuralNetworkBase<T>, IDetectionBackbone<
     /// <summary>Draws the stochastic-depth decisions while a parent detector trains.</summary>
     private readonly Random _trainingRandom = LayerInitializationSeedScope.NextRandom();
 
+    /// <inheritdoc />
     public List<Tensor<T>> ExtractFeatures(Tensor<T> input)
     {
         var stages = Trunk.Forward(Batched(input), IsTrainingMode, _trainingRandom);
         return EfficientNetTrunkConfiguration.PyramidStages.Select(i => stages[i]).ToList();
     }
 
+    /// <inheritdoc />
     public IReadOnlyList<Tensor<T>> GetFeatureMaps(Tensor<T> input) => ExtractFeatures(input);
 
     /// <summary>Loads a timm <c>tf_efficientnet</c> state dict (its head and classifier entries are not read).</summary>
@@ -95,6 +99,7 @@ public partial class EfficientNet<T> : NeuralNetworkBase<T>, IDetectionBackbone<
     /// <summary>Loads the trunk straight from <paramref name="source"/>.</summary>
     internal void LoadTorchWeights(AiDotNet.ModelLoading.TorchTensorSource source) => Trunk.LoadTorchWeights(source);
 
+    /// <inheritdoc />
     public void WriteParameters(BinaryWriter writer)
     {
         writer.Write((int)_variant);
@@ -102,6 +107,7 @@ public partial class EfficientNet<T> : NeuralNetworkBase<T>, IDetectionBackbone<
         foreach (var layer in Layers) BackboneSerialization.WriteLayerParameters(writer, (LayerBase<T>)layer);
     }
 
+    /// <inheritdoc />
     public void ReadParameters(BinaryReader reader)
     {
         var variant = (EfficientNetVariant)reader.ReadInt32();
@@ -135,6 +141,7 @@ public partial class EfficientNet<T> : NeuralNetworkBase<T>, IDetectionBackbone<
     {
     }
 
+    /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata() => new ModelMetadata<T>
     {
         Name = Name,

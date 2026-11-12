@@ -61,7 +61,9 @@ public partial class WhisperX<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<
     private WhisperRecognizer<T>? _whisper;
     internal WhisperRecognizer<T>? Whisper => _whisper;
     public IReadOnlyList<string> SupportedLanguages { get; }
+    /// <inheritdoc />
     public bool SupportsStreaming => false;
+    /// <inheritdoc />
     public bool SupportsWordTimestamps => true;
 
     public WhisperX(NeuralNetworkArchitecture<T> architecture, string modelPath, WhisperXOptions? options = null) : base(architecture)
@@ -210,9 +212,11 @@ public partial class WhisperX<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<
     /// write on every parameter surface, so the guard is stated once here instead of being
     /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
     protected override bool SupportsParameterMutation => _useNativeMode;
+    /// <inheritdoc />
     protected override Tensor<T> PostprocessOutput(Tensor<T> o) => o;
     public override ModelMetadata<T> GetModelMetadata() => new() { Name = _useNativeMode ? "WhisperX-Native" : "WhisperX-ONNX", Description = "WhisperX: Whisper transcription with voice-activity cut-and-merge and word-level timing", FeatureCount = _options.NumMels, Complexity = _options.NumEncoderLayers + _options.NumDecoderLayers, AdditionalInfo = BaseAudioMetadataInfo() };
 
     private void ThrowIfDisposed() { if (_disposed) throw new ObjectDisposedException(GetType().FullName ?? nameof(WhisperX<T>)); }
+    /// <inheritdoc />
     protected override void Dispose(bool disposing) { if (_disposed) return; if (disposing) OnnxEncoder?.Dispose(); _disposed = true; base.Dispose(disposing); }
 }

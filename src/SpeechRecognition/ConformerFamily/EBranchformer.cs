@@ -60,6 +60,7 @@ public partial class EBranchformer<T> : AudioNeuralNetworkBase<T>, ISpeechRecogn
     private Random _random = Tensors.Helpers.RandomHelper.CreateSeededRandom(43);
     internal ConformerAsrNetwork<T>? Network => _network;
     public IReadOnlyList<string> SupportedLanguages { get; }
+    /// <inheritdoc />
     public bool SupportsStreaming => false;
     public bool SupportsWordTimestamps => false;
 
@@ -253,5 +254,6 @@ public partial class EBranchformer<T> : AudioNeuralNetworkBase<T>, ISpeechRecogn
     public override ModelMetadata<T> GetModelMetadata() => new() { Name = _useNativeMode ? "EBranchformer-Native" : "EBranchformer-ONNX", Description = "E-Branchformer: Branchformer with a depthwise-convolution merge and macaron feed-forward modules", FeatureCount = _options.NumMels, Complexity = _options.NumEncoderLayers, AdditionalInfo = BaseAudioMetadataInfo() };
 
     private void ThrowIfDisposed() { if (_disposed) throw new ObjectDisposedException(GetType().FullName ?? nameof(EBranchformer<T>)); }
+    /// <inheritdoc />
     protected override void Dispose(bool disposing) { if (_disposed) return; if (disposing) OnnxEncoder?.Dispose(); _disposed = true; base.Dispose(disposing); }
 }

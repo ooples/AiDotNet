@@ -1374,6 +1374,15 @@ public partial class TestScaffoldGenerator : IIncrementalGenerator
         internal bool DeterministicMemorizationLoss { get; }
     }
 
+    /// <summary>
+    /// Models built on <c>LayerHelper.CreateDefaultConformerLayers</c>, whose convolution subsampling fixes the
+    /// mel width at construction: their fixtures feed [B, frames, NumMels] and vary the frame axis. The other ASR
+    /// models are paper networks with their own frontends and fixtures (only SpeakerDiarizedASR still uses the
+    /// factory); listing them pointed the varied axis past a rank-1 fixture. Conformer's network fixes its mel width too.
+    /// </summary>
+    private static readonly System.Collections.Generic.HashSet<string> ConvSubsamplingAsrClassNames =
+        new System.Collections.Generic.HashSet<string>(System.StringComparer.Ordinal) { "Conformer", "SpeakerDiarizedASR" };
+
     private static readonly System.Collections.Generic.HashSet<string> Fp32TestClassNames =
         new System.Collections.Generic.HashSet<string>(System.StringComparer.Ordinal)
     {
@@ -17564,6 +17573,16 @@ public partial class TestScaffoldGenerator : IIncrementalGenerator
             // is axis 1.
             if (model.ClassName is "ECAPATDNNSpeaker" or "CAMPlusPlus" or "SpeakerEmbeddingExtractor" or "SpeakerVerifier"
                 or "SpeakerDiarizer")
+            {
+                sb.AppendLine("    protected override int VariableLengthAxis => 1;");
+            }
+
+            // The Conformer factory's convolution subsampling projects channels x mel bins with fixed weights, so
+            // the mel axis cannot vary either: these models take time-major [B, frames, mels] and vary the frames.
+            // FullyQualifiedName is rendered in FullyQualifiedFormat, so it carries the global:: prefix.
+            if (ConvSubsamplingAsrClassNames.Contains(model.ClassName)
+                && (model.ClassName != "Conformer"
+                    || model.FullyQualifiedName.StartsWith("global::AiDotNet.Audio.SpeechRecognition.", System.StringComparison.Ordinal)))
             {
                 sb.AppendLine("    protected override int VariableLengthAxis => 1;");
             }

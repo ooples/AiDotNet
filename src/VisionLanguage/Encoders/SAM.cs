@@ -221,8 +221,10 @@ public partial class SAM<T> : VisionLanguageModelBase<T>, IVisualEncoder<T>
     /// through unchanged here.</summary>
     protected override Tensor<T> PreprocessImage(Tensor<T> image) => image;
 
+    /// <inheritdoc />
     protected override Tensor<T> PostprocessOutput(Tensor<T> output) => output;
 
+    /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata()
     {
         var m = new ModelMetadata<T>
@@ -244,6 +246,7 @@ public partial class SAM<T> : VisionLanguageModelBase<T>, IVisualEncoder<T>
             throw new ObjectDisposedException(GetType().FullName ?? nameof(SAM<T>));
     }
 
+    /// <inheritdoc />
     protected override void Dispose(bool disposing)
     {
         if (_disposed)

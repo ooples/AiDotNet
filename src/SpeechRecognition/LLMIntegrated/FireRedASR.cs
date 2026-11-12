@@ -64,7 +64,9 @@ public partial class FireRedASR<T> : AudioNeuralNetworkBase<T>, ISpeechRecognize
     private Random _random = Tensors.Helpers.RandomHelper.CreateSeededRandom(43);
     internal ConformerAsrNetwork<T>? Network => _network;
     public IReadOnlyList<string> SupportedLanguages { get; }
+    /// <inheritdoc />
     public bool SupportsStreaming => false;
+    /// <inheritdoc />
     public bool SupportsWordTimestamps => false;
 
     public FireRedASR(NeuralNetworkArchitecture<T> architecture, string modelPath, FireRedASROptions? options = null) : base(architecture)

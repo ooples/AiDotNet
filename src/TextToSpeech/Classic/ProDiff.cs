@@ -123,9 +123,13 @@ public partial class ProDiff<T> : VarianceAdaptorTtsModelBase<T>, IAcousticModel
     }
 
     int ITtsModel<T>.SampleRate => _options.SampleRate;
+    /// <inheritdoc />
     public int MaxTextLength => _options.MaxTextLength;
+    /// <inheritdoc />
     public new int MelChannels => _options.MelChannels;
+    /// <inheritdoc />
     public new int HopSize => _options.HopSize;
+    /// <inheritdoc />
     public int FftSize => _options.FftSize;
 
     /// <summary>
@@ -465,6 +469,7 @@ public partial class ProDiff<T> : VarianceAdaptorTtsModelBase<T>, IAcousticModel
             throw new ObjectDisposedException(GetType().FullName ?? nameof(ProDiff<T>));
     }
 
+    /// <inheritdoc />
     protected override void Dispose(bool disposing)
     {
         if (_disposed)

@@ -21,7 +21,7 @@ namespace AiDotNet.Preprocessing.FeatureSelection.Statistical;
 /// </remarks>
 [ComponentType(ComponentType.FeatureSelector)]
 [PipelineStage(PipelineStage.Preprocessing)]
-public class BisectingKMeansSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
+public class BisectingKMeansSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IFixedCountFeatureSelector<T>
 {
     private readonly int _nFeaturesToSelect;
     private readonly int _nIterations;
@@ -30,9 +30,12 @@ public class BisectingKMeansSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
+    /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public double[]? FeatureScores => _featureScores;
+    /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
+    /// <inheritdoc />
     public override bool SupportsInverseTransform => false;
 
     public BisectingKMeansSelector(
@@ -48,6 +51,7 @@ public class BisectingKMeansSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T
         _nIterations = nIterations;
     }
 
+    /// <inheritdoc />
     protected override void FitCore(Matrix<T> data)
     {
         _nInputFeatures = data.Columns;
@@ -199,6 +203,7 @@ public class BisectingKMeansSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T
             centroid[i] /= cluster.Count;
     }
 
+    /// <inheritdoc />
     protected override Matrix<T> TransformCore(Matrix<T> data)
     {
         if (_selectedIndices is null)
@@ -215,11 +220,13 @@ public class BisectingKMeansSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T
         return new Matrix<T>(result);
     }
 
+    /// <inheritdoc />
     protected override Matrix<T> InverseTransformCore(Matrix<T> data)
     {
         throw new NotSupportedException("BisectingKMeansSelector does not support inverse transformation.");
     }
 
+    /// <inheritdoc />
     public bool[] GetSupportMask()
     {
         if (_selectedIndices is null)
@@ -232,6 +239,7 @@ public class BisectingKMeansSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T
         return mask;
     }
 
+    /// <inheritdoc />
     public override string[] GetFeatureNamesOut(string[]? inputFeatureNames = null)
     {
         if (_selectedIndices is null) return [];

@@ -84,7 +84,9 @@ public partial class Phi4Audio<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer
     private Phi4AudioNetwork<T>? _network;
     internal Phi4AudioNetwork<T>? Network => _network;
     public IReadOnlyList<string> SupportedLanguages { get; }
+    /// <inheritdoc />
     public bool SupportsStreaming => false;
+    /// <inheritdoc />
     public bool SupportsWordTimestamps => false;
 
     public Phi4Audio(NeuralNetworkArchitecture<T> architecture, string modelPath, Phi4AudioOptions? options = null) : base(architecture)
@@ -308,9 +310,11 @@ public partial class Phi4Audio<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer
     /// write on every parameter surface, so the guard is stated once here instead of being
     /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
     protected override bool SupportsParameterMutation => _useNativeMode;
+    /// <inheritdoc />
     protected override Tensor<T> PostprocessOutput(Tensor<T> o) => o;
     public override ModelMetadata<T> GetModelMetadata() => new() { Name = _useNativeMode ? "Phi4Audio-Native" : "Phi4Audio-ONNX", Description = "Phi-4-multimodal speech: conformer encoder, projector and Phi-4-Mini with speech LoRA (Microsoft 2025)", FeatureCount = _options.NumMels, Complexity = _options.NumEncoderLayers + _options.NumLlmLayers, AdditionalInfo = BaseAudioMetadataInfo() };
 
     private void ThrowIfDisposed() { if (_disposed) throw new ObjectDisposedException(GetType().FullName ?? nameof(Phi4Audio<T>)); }
+    /// <inheritdoc />
     protected override void Dispose(bool disposing) { if (_disposed) return; if (disposing) OnnxEncoder?.Dispose(); _disposed = true; base.Dispose(disposing); }
 }

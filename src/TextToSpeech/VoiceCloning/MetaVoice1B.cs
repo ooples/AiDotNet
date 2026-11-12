@@ -93,6 +93,7 @@ public partial class MetaVoice1B<T> : TtsModelBase<T>, IEndToEndTts<T>, IVoiceCl
     public Tensor<T> ExtractSpeakerEmbedding(Tensor<T> referenceAudio)
         => ExtractSpeakerEmbedding(referenceAudio, _options.ReferenceSampleRate);
 
+    /// <inheritdoc />
     protected override Tensor<T> PostprocessAudio(Tensor<T> output) => output;
 
     protected override Tensor<T> PredictCore(Tensor<T> input)
@@ -153,6 +154,7 @@ public partial class MetaVoice1B<T> : TtsModelBase<T>, IEndToEndTts<T>, IVoiceCl
         if (_disposed) throw new ObjectDisposedException(GetType().FullName ?? nameof(MetaVoice1B<T>));
     }
 
+    /// <inheritdoc />
     protected override void Dispose(bool disposing)
     {
         if (_disposed) return;

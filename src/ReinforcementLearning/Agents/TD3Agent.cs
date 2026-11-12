@@ -224,6 +224,7 @@ public partial class TD3Agent<T> : DeepReinforcementLearningAgentBase<T>, IGradi
             lossFunction: _options.CriticLossFunction);
     }
 
+    /// <inheritdoc />
     public override Vector<T> SelectAction(Vector<T> state, bool training = true)
     {
         var stateTensor = Tensor<T>.FromVector(state);
@@ -244,6 +245,7 @@ public partial class TD3Agent<T> : DeepReinforcementLearningAgentBase<T>, IGradi
         return action;
     }
 
+    /// <inheritdoc />
     public override void StoreExperience(Vector<T> state, Vector<T> action, T reward, Vector<T> nextState, bool done)
     {
         _replayBuffer.Add(new Experience<T, Vector<T>, Vector<T>>(state, action, reward, nextState, done));
@@ -290,6 +292,7 @@ public partial class TD3Agent<T> : DeepReinforcementLearningAgentBase<T>, IGradi
         }
     }
 
+    /// <inheritdoc />
     public override T Train()
     {
         // A supervised one-shot Train(state, target) call bypasses the autonomous-exploration warmup
@@ -454,6 +457,7 @@ public partial class TD3Agent<T> : DeepReinforcementLearningAgentBase<T>, IGradi
         return result;
     }
 
+    /// <inheritdoc />
     public override Dictionary<string, T> GetMetrics()
     {
         return new Dictionary<string, T>
@@ -464,11 +468,13 @@ public partial class TD3Agent<T> : DeepReinforcementLearningAgentBase<T>, IGradi
         };
     }
 
+    /// <inheritdoc />
     public override void ResetEpisode()
     {
         // TD3 doesn't need per-episode reset
     }
 
+    /// <inheritdoc />
     public override Vector<T> Predict(Vector<T> input)
     {
         return SelectAction(input, training: false);

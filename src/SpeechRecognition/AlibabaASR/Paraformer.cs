@@ -70,7 +70,9 @@ public partial class Paraformer<T> : AudioNeuralNetworkBase<T>, ISpeechRecognize
     internal ParaformerNetwork<T>? Network => _network;
     internal ConformerAsrNetwork<T>? Encoder => _encoder;
     public IReadOnlyList<string> SupportedLanguages { get; }
+    /// <inheritdoc />
     public bool SupportsStreaming => false;
+    /// <inheritdoc />
     public bool SupportsWordTimestamps => false;
 
     public Paraformer(NeuralNetworkArchitecture<T> architecture, string modelPath, ParaformerOptions? options = null) : base(architecture)
@@ -294,5 +296,6 @@ public partial class Paraformer<T> : AudioNeuralNetworkBase<T>, ISpeechRecognize
     public override ModelMetadata<T> GetModelMetadata() => new() { Name = _useNativeMode ? "Paraformer-Native" : "Paraformer-ONNX", Description = "Paraformer: a Conformer encoder, CIF predictor and parallel SAN decoder (Gao et al. 2022)", FeatureCount = 1, Complexity = _options.NumEncoderLayers + _options.NumDecoderLayers, AdditionalInfo = BaseAudioMetadataInfo() };
 
     private void ThrowIfDisposed() { if (_disposed) throw new ObjectDisposedException(GetType().FullName ?? nameof(Paraformer<T>)); }
+    /// <inheritdoc />
     protected override void Dispose(bool disposing) { if (_disposed) return; if (disposing) OnnxEncoder?.Dispose(); _disposed = true; base.Dispose(disposing); }
 }

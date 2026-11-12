@@ -223,7 +223,11 @@ public partial class TiedEmbeddingHeadLayer<T> : LayerBase<T>, ILayerGraphBindin
         }
         else
         {
-            logits = Engine.TensorMatMulTransposed(flat, table);
+            // (E · hᵀ)ᵀ rather than h · Eᵀ: the engine's A·Bᵀ kernel ran 6-13x slower than a plain product for a few
+            // rows against a vocabulary-sized table (whisper-tiny, one row: 45.7 vs 3.6 ms; 64 rows: 190 vs 20 ms).
+            // Both transposes are of the small [rows, ...] operands, so the table is never copied, and every op is on
+            // the tape.
+            logits = Engine.TensorTranspose(Engine.TensorMatMul(table, Engine.TensorTranspose(flat)));
         }
 
         // Tape-tracked element-wise multiply; TensorMultiplyScalar would not propagate gradient to the logits.

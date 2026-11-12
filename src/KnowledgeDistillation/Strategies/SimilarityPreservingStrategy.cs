@@ -36,6 +36,7 @@ public class SimilarityPreservingStrategy<T> : DistillationStrategyBase<T>
         _similarityWeight = similarityWeight;
     }
 
+    /// <inheritdoc />
     public override T ComputeLoss(Matrix<T> studentBatchOutput, Matrix<T> teacherBatchOutput, Matrix<T>? trueLabelsBatch = null)
     {
         ValidateOutputDimensions(studentBatchOutput, teacherBatchOutput);
@@ -87,6 +88,7 @@ public class SimilarityPreservingStrategy<T> : DistillationStrategyBase<T>
             similarityLoss);
     }
 
+    /// <inheritdoc />
     public override Matrix<T> ComputeGradient(Matrix<T> studentBatchOutput, Matrix<T> teacherBatchOutput, Matrix<T>? trueLabelsBatch = null)
     {
         ValidateOutputDimensions(studentBatchOutput, teacherBatchOutput);

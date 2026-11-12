@@ -157,3 +157,17 @@ public sealed class PostNormTransformerDecoderBlockInvariantTests : LayerTestBas
     protected override int[][] CompanionInputShapes(int[] primaryShape) => [[primaryShape[0], 5, 8]];
     protected override ILayer<double> CreateLayer() => new PostNormTransformerDecoderBlock<double>(8, 2, 16, 0.0);
 }
+
+public sealed class ConvSubsamplingLayerInvariantTests : LayerTestBase<double>
+{
+    // [batch, time, features]; 8 frames and 8 bins both clear the two stride-2 convolutions' minimum of 7.
+    protected override int[] InputShape => [1, 8, 8];
+    protected override ILayer<double> CreateLayer() => new ConvSubsamplingLayer<double>(inputFeatures: 8, modelDim: 4);
+}
+
+public sealed class WhisperConvStemLayerInvariantTests : LayerTestBase<double>
+{
+    // [batch, frames, mels]; the stride-2 second convolution halves the 6 frames to 3.
+    protected override int[] InputShape => [1, 6, 4];
+    protected override ILayer<double> CreateLayer() => new WhisperConvStemLayer<double>(numMels: 4, width: 4);
+}

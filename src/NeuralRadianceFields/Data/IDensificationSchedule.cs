@@ -27,6 +27,7 @@ public sealed class FixedIntervalDensificationSchedule : IDensificationSchedule
 {
     public int Interval { get; init; } = 100;
 
+    /// <inheritdoc />
     public bool ShouldFire(int iteration, double lastLoss, double lastGradientNorm)
     {
         int step = System.Math.Max(1, Interval);
@@ -66,6 +67,7 @@ public sealed class AdaptiveDensificationSchedule : IDensificationSchedule
     private double _prevLossSum = 0;
     private int _windowCount = 0;
 
+    /// <inheritdoc />
     public bool ShouldFire(int iteration, double lastLoss, double lastGradientNorm)
     {
         _lossSum += lastLoss;

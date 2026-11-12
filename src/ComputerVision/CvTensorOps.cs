@@ -49,19 +49,9 @@ internal static class CvTensorOps<T>
             return x;
         }
 
-        var rows = new int[targetH];
-        for (int h = 0; h < targetH; h++)
-        {
-            rows[h] = Math.Min((int)((long)h * srcH / targetH), srcH - 1);
-        }
-
-        var cols = new int[targetW];
-        for (int w = 0; w < targetW; w++)
-        {
-            cols[w] = Math.Min((int)((long)w * srcW / targetW), srcW - 1);
-        }
-
-        return Select(Select(x, rows, 2), cols, 3);
+        // The engine's nearest rule is floor(dst * in / out), the same index; its kernel copies from per-axis tables
+        // where two gathers materialized an intermediate and scattered back through two index tensors.
+        return Engine.Interpolate(x, new[] { targetH, targetW }, InterpolateMode.Nearest);
     }
 
     /// <summary>
@@ -139,11 +129,6 @@ internal static class CvTensorOps<T>
     /// the output has the input's spatial size and each window's maximum is taken over the cells that
     /// fall inside the image (out-of-bounds positions are ignored, not treated as zero).
     /// </summary>
-    /// <remarks>
-    /// Out-of-bounds positions are filled by clamping their index to the nearest edge. The clamped
-    /// cell always lies inside the same window, so it duplicates an in-bounds candidate and cannot
-    /// change the maximum.
-    /// </remarks>
     public static Tensor<T> MaxPoolSame(Tensor<T> x, int kernelSize)
         => MaxPoolPadded(x, kernelSize, 1, kernelSize / 2);
 
@@ -152,12 +137,6 @@ internal static class CvTensorOps<T>
     /// ignored rather than treated as zero - PyTorch's <c>nn.MaxPool2d(kernel, stride, padding)</c>
     /// in floor mode.
     /// </summary>
-    /// <remarks>
-    /// Out-of-bounds positions are filled by clamping their index to the nearest edge. While
-    /// <paramref name="padding"/> is smaller than <paramref name="kernelSize"/> (which PyTorch itself
-    /// requires), every window reaches at least one in-bounds cell on the side it overhangs, and the
-    /// clamped cell IS that edge cell - a duplicate candidate that cannot change the maximum.
-    /// </remarks>
     public static Tensor<T> MaxPoolPadded(Tensor<T> x, int kernelSize, int stride, int padding)
     {
         if (padding < 0 || padding >= kernelSize)
@@ -166,26 +145,8 @@ internal static class CvTensorOps<T>
                 $"Padding must lie in [0, kernelSize) = [0, {kernelSize}).");
         }
 
-        int h = x.Shape[2];
-        int w = x.Shape[3];
-        int outH = (h + 2 * padding - kernelSize) / stride + 1;
-        int outW = (w + 2 * padding - kernelSize) / stride + 1;
-
-        // Only the cells some window reads: from -padding to the last window's far edge.
-        int endH = (outH - 1) * stride - padding + kernelSize;
-        int endW = (outW - 1) * stride - padding + kernelSize;
-        var padded = x;
-        if (padding > 0 || endH != h)
-        {
-            padded = Select(padded, ClampedRange(-padding, endH, h), 2);
-        }
-
-        if (padding > 0 || endW != w)
-        {
-            padded = Select(padded, ClampedRange(-padding, endW, w), 3);
-        }
-
-        return Engine.MaxPool2DWithIndices(padded, new[] { kernelSize, kernelSize }, new[] { stride, stride }, out _);
+        // The engine pool skips padded positions (PyTorch's -inf padding) and records the padded backward.
+        return Engine.MaxPool2D(x, kernelSize, stride, padding);
     }
 
     /// <summary>
@@ -293,6 +254,24 @@ internal static class CvTensorOps<T>
     {
         int n = x.Shape[0], l = x.Shape[1];
         return Engine.TensorPermute(Engine.Reshape(x, new[] { n, l, numHeads, headDim }), new[] { 0, 2, 1, 3 });
+    }
+
+    /// <summary>
+    /// Pads a <c>[rows, width]</c> tensor with zero rows to exactly <paramref name="count"/> rows.
+    /// </summary>
+    /// <remarks>
+    /// A two-stage detector's per-RoI heads have one row per proposal, and how many proposals survive NMS depends on
+    /// the scores. Padding them to the proposal cap gives the raw prediction a layout fixed by the input size alone.
+    /// </remarks>
+    /// <exception cref="InvalidOperationException">Thrown when <paramref name="rows"/> already has more rows.</exception>
+    public static Tensor<T> PadRows(Tensor<T> rows, int count)
+    {
+        int present = rows.Shape[0];
+        if (present > count)
+            throw new InvalidOperationException($"{present} rows exceed the fixed count of {count}.");
+        return present == count
+            ? rows
+            : Engine.TensorConstantPad(rows, new[] { 0, 0, 0, count - present }, NumOps.Zero);
     }
 
     /// <summary>
@@ -504,17 +483,20 @@ internal static class CvTensorOps<T>
     }
 
     /// <summary>
-    /// RoIAlign: pools each region of interest into an <c>outputSize x outputSize</c> grid by
-    /// averaging <c>samplingRatio^2</c> bilinear samples per bin, over an NCHW feature map.
+    /// RoIAlign: pools each region of interest into an <c>outputSize x outputSize</c> grid by averaging
+    /// <c>samplingRatio^2</c> bilinear samples per bin, over an NCHW feature map - torchvision's <c>roi_align</c>
+    /// with <c>aligned = false</c>, as its <c>MultiScaleRoIAlign</c> runs it for Faster, Mask and Cascade R-CNN.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// The boxes are treated as constants - as in standard RoIAlign, the gradient flows into the
-    /// FEATURES, not the box coordinates - so the whole operation is a fixed sparse linear map of the
-    /// feature map. It is built as one gather of the four bilinear corners of every sample, a
-    /// multiply by the precomputed corner weights (each already divided by the bin's in-bounds sample
-    /// count), and a sum. Samples that fall outside the map contribute nothing and are not counted; a
-    /// bin with no in-bounds samples is zero.
+    /// The boxes are constants: as in torchvision, the gradient flows into the features, not the box coordinates.
+    /// A RoI is at least one feature cell on each side, a sample outside <c>[-1, size]</c> contributes zero but still
+    /// counts in its bin's average, and coordinates in <c>(-1, 0]</c> clamp to the first cell.
+    /// </para>
+    /// <para>
+    /// The engine kernel builds each RoI's bilinear taps once and gathers them per channel. This used to be composed
+    /// from GridSample, a batched product and two permutes, which the tape held as four RoI-sized intermediates (about
+    /// 850 MB over five FasterRCNN training steps), and it averaged only the in-bounds samples, unlike torchvision.
     /// </para>
     /// </remarks>
     /// <param name="features">Feature map <c>[N, C, H, W]</c>.</param>
@@ -522,97 +504,27 @@ internal static class CvTensorOps<T>
     /// <param name="batchIndices">Per-RoI image index into <paramref name="features"/>, length <c>R</c>.</param>
     /// <param name="spatialScale">Image-to-feature-map scale.</param>
     /// <param name="outputSize">Pooled grid side.</param>
-    /// <param name="samplingRatio">Samples per bin side.</param>
+    /// <param name="samplingRatio">Samples per bin side; 0 or less picks <c>ceil(roi size / outputSize)</c> per RoI.</param>
     /// <returns>Pooled features <c>[R, C, outputSize, outputSize]</c>.</returns>
     public static Tensor<T> RoIAlign(
         Tensor<T> features, double[] boxes, int[] batchIndices, double spatialScale, int outputSize, int samplingRatio)
     {
-        int n = features.Shape[0], c = features.Shape[1], h = features.Shape[2], w = features.Shape[3];
         int rois = batchIndices.Length;
-        int side = outputSize * samplingRatio;
-
         if (rois == 0)
         {
-            return new Tensor<T>(new[] { 0, c, outputSize, outputSize });
+            return new Tensor<T>(new[] { 0, features.Shape[1], outputSize, outputSize });
         }
 
-        // Bilinear sampling through the engine's GridSample (align_corners = false, zero padding;
-        // NCHW in and out - the IEngine summary says NHWC, but the engine reads [N, C, H, W]): one grid point per sample, so the op stores [rois * side * side, C] values and
-        // its backward is the engine's native GridSample gradient. The earlier formulation gathered
-        // all four bilinear taps of every sample as separate rows and broadcast a weight per row -
-        // three [rois * bins * 4 * samples, C] tensors, several GB per call at a thousand proposals.
-        //
-        // Exactness against the per-sample loop: a sample with y in [h - 1, h) read its upper tap
-        // clamped to row h - 1, i.e. the edge value; clamping the coordinate to h - 1 reproduces that
-        // under zero padding. A sample outside [0, h) x [0, w) contributes nothing and is excluded
-        // from its bin's average; it is pointed at a valid pixel and given weight zero.
-        var gridValues = new T[rois * side * side * 2];
-        var maskValues = new T[rois * side * side];
-        var zero = NumOps.Zero;
-        for (int r = 0; r < rois; r++)
-        {
-            double x1 = boxes[(4 * r) + 0] * spatialScale, y1 = boxes[(4 * r) + 1] * spatialScale;
-            double x2 = boxes[(4 * r) + 2] * spatialScale, y2 = boxes[(4 * r) + 3] * spatialScale;
-            double binW = (x2 - x1) / outputSize, binH = (y2 - y1) / outputSize;
-
-            for (int ph = 0; ph < outputSize; ph++)
-            {
-                for (int pw = 0; pw < outputSize; pw++)
-                {
-                    double startY = y1 + (ph * binH), startX = x1 + (pw * binW);
-                    int count = 0;
-                    for (int iy = 0; iy < samplingRatio; iy++)
-                    {
-                        for (int ix = 0; ix < samplingRatio; ix++)
-                        {
-                            double y = startY + ((iy + 0.5) * binH / samplingRatio);
-                            double x = startX + ((ix + 0.5) * binW / samplingRatio);
-                            if (y >= 0 && y < h && x >= 0 && x < w)
-                            {
-                                count++;
-                            }
-                        }
-                    }
-
-                    for (int iy = 0; iy < samplingRatio; iy++)
-                    {
-                        for (int ix = 0; ix < samplingRatio; ix++)
-                        {
-                            double y = startY + ((iy + 0.5) * binH / samplingRatio);
-                            double x = startX + ((ix + 0.5) * binW / samplingRatio);
-                            // Bin-major order: each bin's samplingRatio^2 points are contiguous, so the pooled bin
-                            // is one [1, s*s] x [s*s, C] product below rather than a mask broadcast to every channel.
-                            int point = ((((((r * outputSize) + ph) * outputSize) + pw) * samplingRatio) + iy) * samplingRatio + ix;
-                            bool valid = y >= 0 && y < h && x >= 0 && x < w;
-                            double sy = valid ? Math.Min(y, h - 1) : 0;
-                            double sx = valid ? Math.Min(x, w - 1) : 0;
-
-                            // Pixel coordinate p to normalised g under align_corners = false.
-                            gridValues[(2 * point) + 0] = NumOps.FromDouble(((2 * sx) + 1) / w - 1);
-                            gridValues[(2 * point) + 1] = NumOps.FromDouble(((2 * sy) + 1) / h - 1);
-                            maskValues[point] = valid ? NumOps.FromDouble(1.0 / count) : zero;
-                        }
-                    }
-                }
-            }
-        }
-
-        var grid = new Tensor<T>(new[] { rois * side, side, 2 }, new Vector<T>(gridValues));
-        var sampled = SampleByBatch(features, grid, batchIndices, side);                     // [rois * side, side, C]
-        // The bin average as a batched product. Broadcasting the weights to every channel and multiplying
-        // materialised two more tensors the size of the samples, and the tape held all three, per stage: about
-        // 400 MB each in double at a thousand proposals, which is what killed CascadeRCNN's CI runner.
-        int bins = rois * outputSize * outputSize, perBin = samplingRatio * samplingRatio;
-        var weights = new Tensor<T>(new[] { bins, 1, perBin }, new Vector<T>(maskValues));
-        var pooled = Engine.BatchMatMul(weights, Engine.Reshape(sampled, new[] { bins, perBin, c }));   // [bins, 1, C]
-        return Engine.TensorPermute(Engine.Reshape(pooled, new[] { rois, outputSize, outputSize, c }), new[] { 0, 3, 1, 2 });
+        return Engine.RoIAlign(features, RoIRows(boxes, batchIndices), outputSize, outputSize, (float)spatialScale,
+            samplingRatio, aligned: false);
     }
 
     /// <summary>
     /// RoIAlign exactly as torchvision's <c>roi_align</c> (and mmcv's <c>RoIAlign</c>) computes it, on the tape over the
     /// features: with <paramref name="aligned"/> the box is shifted by half a pixel and its size is not clamped to 1; each
     /// bin averages <c>samplingRatio²</c> bilinear samples over ALL samples (a sample beyond [-1, size] contributes zero but
-    /// still counts); and a sample in [-1, 0] reads the edge, as does one at or past size - 1.
+    /// still counts); and a sample in [-1, 0] reads the edge, as does one at or past size - 1. The engine kernel computes
+    /// exactly that; this entry point only fixes the sampling ratio and exposes the alignment.
     /// </summary>
     /// <param name="features">Feature map <c>[N, C, H, W]</c>.</param>
     /// <param name="boxes">Per-RoI <c>(x1, y1, x2, y2)</c> in image coordinates, length <c>4 * R</c>.</param>
@@ -626,121 +538,30 @@ internal static class CvTensorOps<T>
         Tensor<T> features, double[] boxes, int[] batchIndices, double spatialScale, int outputSize, int samplingRatio, bool aligned)
     {
         if (samplingRatio <= 0) throw new ArgumentOutOfRangeException(nameof(samplingRatio));
-        int c = features.Shape[1], h = features.Shape[2], w = features.Shape[3];
-        int rois = batchIndices.Length, side = outputSize * samplingRatio, perBin = samplingRatio * samplingRatio;
-        if (rois == 0) return new Tensor<T>(new[] { 0, c, outputSize, outputSize });
-        double offset = aligned ? 0.5 : 0.0;
-        var gridValues = new T[rois * side * side * 2];
-        var weightValues = new T[rois * side * side];
-        var share = NumOps.FromDouble(1.0 / perBin);
-        for (int r = 0; r < rois; r++)
-        {
-            double x1 = boxes[4 * r] * spatialScale - offset, y1 = boxes[4 * r + 1] * spatialScale - offset;
-            double roiW = boxes[4 * r + 2] * spatialScale - offset - x1, roiH = boxes[4 * r + 3] * spatialScale - offset - y1;
-            if (!aligned)
-            {
-                roiW = Math.Max(roiW, 1.0);
-                roiH = Math.Max(roiH, 1.0);
-            }
-            double binW = roiW / outputSize, binH = roiH / outputSize;
-            for (int ph = 0; ph < outputSize; ph++)
-                for (int pw = 0; pw < outputSize; pw++)
-                    for (int iy = 0; iy < samplingRatio; iy++)
-                        for (int ix = 0; ix < samplingRatio; ix++)
-                        {
-                            double y = y1 + ph * binH + (iy + 0.5) * binH / samplingRatio;
-                            double x = x1 + pw * binW + (ix + 0.5) * binW / samplingRatio;
-                            int point = (((((r * outputSize) + ph) * outputSize + pw) * samplingRatio) + iy) * samplingRatio + ix;
-                            bool valid = !(y < -1.0 || y > h || x < -1.0 || x > w);
-                            double sy = Math.Min(Math.Max(y, 0.0), h - 1), sx = Math.Min(Math.Max(x, 0.0), w - 1);
-                            if (!valid) sy = sx = 0;
-                            gridValues[2 * point] = NumOps.FromDouble(((2 * sx) + 1) / w - 1);
-                            gridValues[2 * point + 1] = NumOps.FromDouble(((2 * sy) + 1) / h - 1);
-                            weightValues[point] = valid ? share : NumOps.Zero;
-                        }
-        }
-        var grid = new Tensor<T>(new[] { rois * side, side, 2 }, new Vector<T>(gridValues));
-        var sampled = SampleByBatch(features, grid, batchIndices, side);                     // [rois * side, side, C]
-        int bins = rois * outputSize * outputSize;
-        var weights = new Tensor<T>(new[] { bins, 1, perBin }, new Vector<T>(weightValues));
-        var pooled = Engine.BatchMatMul(weights, Engine.Reshape(sampled, new[] { bins, perBin, c }));   // [bins, 1, C]
-        return Engine.TensorPermute(Engine.Reshape(pooled, new[] { rois, outputSize, outputSize, c }), new[] { 0, 3, 1, 2 });
+        if (batchIndices.Length == 0) return new Tensor<T>(new[] { 0, features.Shape[1], outputSize, outputSize });
+        // The engine takes the scale as a float, and 1/stride is not exact in float: a double model's region features
+        // read 7e-7 off torchvision's. A double model scales the boxes here, in its own precision, and passes exactly 1.
+        // A float model keeps the kernel's float product, which is the reference's own arithmetic.
+        bool scaleHere = typeof(T) != typeof(float);
+        return Engine.RoIAlign(features, RoIRows(boxes, batchIndices, scaleHere ? spatialScale : 1.0), outputSize,
+            outputSize, scaleHere ? 1f : (float)spatialScale, samplingRatio, aligned);
     }
 
-    /// <summary>
-    /// Bilinearly samples one image <c>[1, C, H, W]</c> at a grid <c>[1, rows, cols, 2]</c>, returning
-    /// <c>[rows, cols, C]</c>.
-    /// </summary>
-    private static Tensor<T> SampleImage(Tensor<T> image, Tensor<T> grid, int rows, int cols, int channels)
+    // The engine's RoI rows: (batch index, x1, y1, x2, y2) per RoI, the box coordinates multiplied by boxScale.
+    private static Tensor<T> RoIRows(double[] boxes, int[] batchIndices, double boxScale = 1.0)
     {
-        var sampled = Engine.GridSample(image, grid);                                     // [1, C, rows, cols]
-        return Engine.TensorPermute(Engine.Reshape(sampled, new[] { channels, rows, cols }), new[] { 1, 2, 0 });
-    }
-
-    /// <summary>
-    /// Samples each RoI's grid rows (<c>side</c> rows per RoI) from the image its batch index names.
-    /// </summary>
-    private static Tensor<T> SampleByBatch(Tensor<T> features, Tensor<T> grid, int[] batchIndices, int side)
-    {
-        int n = features.Shape[0], c = features.Shape[1];
         int rois = batchIndices.Length;
-        if (n == 1)
-        {
-            return SampleImage(features, Engine.Reshape(grid, new[] { 1, rois * side, side, 2 }), rois * side, side, c);
-        }
-
-        var parts = new List<Tensor<T>>();
-        var order = new List<int>();
-        for (int b = 0; b < n; b++)
-        {
-            var members = new List<int>();
-            for (int r = 0; r < rois; r++)
-            {
-                if (batchIndices[r] == b)
-                {
-                    members.Add(r);
-                }
-            }
-
-            if (members.Count == 0)
-            {
-                continue;
-            }
-
-            var rows = new int[members.Count * side];
-            for (int m = 0; m < members.Count; m++)
-            {
-                for (int k = 0; k < side; k++)
-                {
-                    rows[(m * side) + k] = (members[m] * side) + k;
-                }
-            }
-
-            var image = Engine.TensorNarrow(features, 0, b, 1);
-            var imageGrid = Engine.Reshape(Select(grid, rows, 0), new[] { 1, rows.Length, side, 2 });
-            parts.Add(SampleImage(image, imageGrid, rows.Length, side, c));
-            order.AddRange(members);
-        }
-
-        var stacked = parts.Count == 1 ? parts[0] : Engine.TensorConcatenate(parts.ToArray(), 0);
-
-        // stacked holds each RoI's side rows in `order`; put them back in RoI order.
-        var positionOf = new int[rois];
-        for (int k = 0; k < order.Count; k++)
-        {
-            positionOf[order[k]] = k;
-        }
-
-        var back = new int[rois * side];
+        var rows = new T[rois * 5];
         for (int r = 0; r < rois; r++)
         {
-            for (int k = 0; k < side; k++)
+            rows[5 * r] = NumOps.FromDouble(batchIndices[r]);
+            for (int k = 0; k < 4; k++)
             {
-                back[(r * side) + k] = (positionOf[r] * side) + k;
+                rows[(5 * r) + 1 + k] = NumOps.FromDouble(boxes[(4 * r) + k] * boxScale);
             }
         }
 
-        return Select(stacked, back, 0);
+        return new Tensor<T>(new[] { rois, 5 }, new Vector<T>(rows));
     }
 
     /// <summary>

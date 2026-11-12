@@ -212,8 +212,9 @@ public abstract partial class AudioNeuralNetworkBase<T> : NeuralNetworkBase<T>, 
     /// </summary>
     /// <remarks>
     /// <para>
-    /// Defaults to a transform built for <see cref="SampleRate"/> the first time it is read, so a
-    /// model that never assigns one still gets a real front-end instead of nothing.
+    /// Defaults to a transform built for <see cref="SampleRate"/> and <see cref="NumMels"/> the first time it is
+    /// read, so a model that never assigns one still gets a real front-end instead of nothing. It used to ignore
+    /// <see cref="NumMels"/> and always produce 128 bins, whatever width the model's encoder was built for.
     /// </para>
     /// <para>
     /// <b>Why this is not nullable.</b> It used to be, and the two behaviours that grew around that
@@ -227,7 +228,7 @@ public abstract partial class AudioNeuralNetworkBase<T> : NeuralNetworkBase<T>, 
     /// </remarks>
     protected MelSpectrogram<T> MelSpec
     {
-        get => _melSpec ??= new MelSpectrogram<T>(sampleRate: SampleRate);
+        get => _melSpec ??= new MelSpectrogram<T>(sampleRate: SampleRate, nMels: NumMels);
         set => _melSpec = value ?? throw new ArgumentNullException(
             nameof(value),
             "MelSpec cannot be null. Audio models require a front-end; assign a configured " +

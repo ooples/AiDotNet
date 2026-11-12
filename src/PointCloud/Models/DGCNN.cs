@@ -288,6 +288,7 @@ public partial class DGCNN<T> : NeuralNetworkBase<T>, IPointCloudModel<T>, IPoin
     /// </summary>
     public override Tensor<T> ForwardForTraining(Tensor<T> input) => ForwardWithMemory(input);
 
+    /// <inheritdoc />
     public override Tensor<T> ForwardWithMemory(Tensor<T> input)
     {
         if (input.Shape.Length != 2 || input.Shape[1] != _inputFeatureDim)
@@ -338,6 +339,7 @@ public partial class DGCNN<T> : NeuralNetworkBase<T>, IPointCloudModel<T>, IPoin
         return features.Count == 1 ? features[0] : Engine.Concat(features, 1);
     }
 
+    /// <inheritdoc />
     public Vector<T> ExtractGlobalFeatures(Tensor<T> pointCloud)
     {
         bool originalMode = IsTrainingMode;
@@ -360,6 +362,7 @@ public partial class DGCNN<T> : NeuralNetworkBase<T>, IPointCloudModel<T>, IPoin
         }
     }
 
+    /// <inheritdoc />
     public Tensor<T> ExtractPointFeatures(Tensor<T> pointCloud)
     {
         if (pointCloud.Shape.Length != 2 || pointCloud.Shape[1] != _inputFeatureDim)
@@ -379,12 +382,14 @@ public partial class DGCNN<T> : NeuralNetworkBase<T>, IPointCloudModel<T>, IPoin
         return ConcatenateFeatures(edgeFeatures);
     }
 
+    /// <inheritdoc />
     public Vector<T> ClassifyPointCloud(Tensor<T> pointCloud)
     {
         var output = Predict(pointCloud);
         return new Vector<T>(output.Data.ToArray());
     }
 
+    /// <inheritdoc />
     public Tensor<T> SegmentPointCloud(Tensor<T> pointCloud)
     {
         bool originalMode = IsTrainingMode;
@@ -407,16 +412,19 @@ public partial class DGCNN<T> : NeuralNetworkBase<T>, IPointCloudModel<T>, IPoin
         }
     }
 
+    /// <inheritdoc />
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         SetTrainingMode(false);
         return ForwardWithMemory(input);
     }
 
+    /// <inheritdoc />
     public override bool SupportsTraining => true;
 
     // UpdateParameters re-sliced the flat vector across Layers by hand -- the base walks
     // exactly the same enumeration, so this said nothing the base does not already say.
+    /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata()
     {
         return new ModelMetadata<T>
@@ -600,6 +608,7 @@ public partial class EdgeConvLayer<T> : LayerBase<T>, ILayerSerializationExtras<
         RegisterSubLayer(_bn);
     }
 
+    /// <inheritdoc />
     protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         int numPoints = input.Shape[0];
@@ -740,12 +749,14 @@ public partial class EdgeConvLayer<T> : LayerBase<T>, ILayerSerializationExtras<
         return pooled;
     }
 
+    /// <inheritdoc />
     public override void UpdateParameters(T learningRate)
     {
         _mlp.UpdateParameters(learningRate);
         _bn.UpdateParameters(learningRate);
     }
 
+    /// <inheritdoc />
     public override void ClearGradients()
     {
         _mlp.ClearGradients();
@@ -772,6 +783,7 @@ public partial class EdgeConvLayer<T> : LayerBase<T>, ILayerSerializationExtras<
         }
     }
 
+    /// <inheritdoc />
     public override void ResetState()
     {
         _knnIndices = null;
@@ -782,5 +794,6 @@ public partial class EdgeConvLayer<T> : LayerBase<T>, ILayerSerializationExtras<
 
     // ParameterCount is derived by the base from the registered sub-layers (_mlp + _bn).
 
+    /// <inheritdoc />
     public override bool SupportsTraining => true;
 }

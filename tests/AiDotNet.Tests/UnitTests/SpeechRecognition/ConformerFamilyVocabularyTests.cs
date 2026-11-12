@@ -3,6 +3,7 @@ using System.Linq;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks;
+using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.SpeechRecognition.ConformerFamily;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
@@ -59,9 +60,16 @@ public class ConformerFamilyVocabularyTests
     public void Transcript_IsSpelledWithTheConfiguredVocabulary(string model)
     {
         var recognizer = Create(model);
+        // White-noise frames are alike, so an untrained CTC head can pick the blank at every one and the check below
+        // would hold vacuously. Pushing the blank's bias down makes the greedy decoder emit a real token per frame.
+        // The head builds its weights on the first forward, so transcribe once before reading them.
+        _ = recognizer.Transcribe(Audio());
+        if (recognizer is NeuralNetworkBase<double> network
+            && network.Layers.LastOrDefault() is DenseLayer<double> head
+            && head.GetBiases() is { } biases && biases.Length == Vocabulary.Length)
+            biases[0] -= 10.0;
         string text = recognizer.Transcribe(Audio()).Text;
 
-        // Untrained weights still emit non-blank tokens; an empty transcript would make the check below vacuous.
         Assert.False(string.IsNullOrWhiteSpace(text), $"{model} produced no tokens, so the vocabulary check proves nothing.");
         Assert.All(text, c => Assert.Contains(c, "xyz "));
     }

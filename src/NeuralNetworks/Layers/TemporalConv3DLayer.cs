@@ -193,6 +193,7 @@ public sealed partial class TemporalConv3DLayer<T> : LayerBase<T>, IShapeContrac
         return metadata;
     }
 
+    /// <inheritdoc />
     protected override void EnsureParametersMaterialized()
     {
         if (_kernels.Length > 0) return;

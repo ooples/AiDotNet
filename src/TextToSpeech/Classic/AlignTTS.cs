@@ -131,9 +131,13 @@ public partial class AlignTTS<T> : TtsModelBase<T>, IAcousticModel<T>, ITraining
     }
 
     int ITtsModel<T>.SampleRate => _options.SampleRate;
+    /// <inheritdoc />
     public int MaxTextLength => _options.MaxTextLength;
+    /// <inheritdoc />
     public new int MelChannels => _options.MelChannels;
+    /// <inheritdoc />
     public new int HopSize => _options.HopSize;
+    /// <inheritdoc />
     public int FftSize => _options.FftSize;
 
     /// <summary>
@@ -415,6 +419,7 @@ public partial class AlignTTS<T> : TtsModelBase<T>, IAcousticModel<T>, ITraining
             throw new ObjectDisposedException(GetType().FullName ?? nameof(AlignTTS<T>));
     }
 
+    /// <inheritdoc />
     protected override void Dispose(bool disposing)
     {
         if (_disposed)

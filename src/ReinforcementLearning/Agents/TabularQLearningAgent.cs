@@ -93,6 +93,7 @@ public partial class TabularQLearningAgent<T> : ReinforcementLearningAgentBase<T
         _epsilon = _options.EpsilonStart;
     }
 
+    /// <inheritdoc />
     public override Vector<T> SelectAction(Vector<T> state, bool training = true)
     {
         string stateKey = VectorToStateKey(state);
@@ -114,6 +115,7 @@ public partial class TabularQLearningAgent<T> : ReinforcementLearningAgentBase<T
         return result;
     }
 
+    /// <inheritdoc />
     public override void StoreExperience(Vector<T> state, Vector<T> action, T reward, Vector<T> nextState, bool done)
     {
         string stateKey = VectorToStateKey(state);
@@ -138,6 +140,7 @@ public partial class TabularQLearningAgent<T> : ReinforcementLearningAgentBase<T
         _epsilon = Math.Max(_options.EpsilonEnd, _epsilon * _options.EpsilonDecay);
     }
 
+    /// <inheritdoc />
     public override T Train()
     {
         // Tabular Q-learning updates immediately in StoreExperience
@@ -225,6 +228,7 @@ public partial class TabularQLearningAgent<T> : ReinforcementLearningAgentBase<T
         return maxValue;
     }
 
+    /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata()
     {
         return new ModelMetadata<T>
@@ -232,8 +236,10 @@ public partial class TabularQLearningAgent<T> : ReinforcementLearningAgentBase<T
         };
     }
 
+    /// <inheritdoc />
     public override int FeatureCount => _options.StateSize;
 
+    /// <inheritdoc />
     public Vector<T> ComputeGradients(
         Vector<T> input,
         Vector<T> target,
@@ -254,17 +260,20 @@ public partial class TabularQLearningAgent<T> : ReinforcementLearningAgentBase<T
             + "to return. Call Train() instead.");
     }
 
+    /// <inheritdoc />
     public void ApplyGradients(Vector<T> gradients, T learningRate)
     {
         // Tabular methods don't use gradients
     }
 
+    /// <inheritdoc />
     public override void SaveModel(string filepath)
     {
         var data = Serialize();
         System.IO.File.WriteAllBytes(filepath, data);
     }
 
+    /// <inheritdoc />
     public override void LoadModel(string filepath)
     {
         var data = System.IO.File.ReadAllBytes(filepath);

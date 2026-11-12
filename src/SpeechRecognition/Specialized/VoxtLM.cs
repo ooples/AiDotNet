@@ -74,7 +74,9 @@ public partial class VoxtLM<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
     private Random _random = Tensors.Helpers.RandomHelper.CreateSeededRandom(43);
     internal VoxtLMNetwork<T>? Network => _network;
     public IReadOnlyList<string> SupportedLanguages { get; }
+    /// <inheritdoc />
     public bool SupportsStreaming => false;
+    /// <inheritdoc />
     public bool SupportsWordTimestamps => false;
 
     public VoxtLM(NeuralNetworkArchitecture<T> architecture, string modelPath, VoxtLMOptions? options = null) : base(architecture)
@@ -163,6 +165,7 @@ public partial class VoxtLM<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
         };
     }
 
+    /// <inheritdoc />
     public Task<TranscriptionResult<T>> TranscribeAsync(Tensor<T> audio, string? language = null, bool? includeTimestamps = null, CancellationToken cancellationToken = default) => Task.Run(() => Transcribe(audio, language, includeTimestamps), cancellationToken);
     public string DetectLanguage(Tensor<T> audio) => _options.Language;
     public IReadOnlyDictionary<string, T> DetectLanguageProbabilities(Tensor<T> audio) => new Dictionary<string, T> { [_options.Language] = NumOps.One };
@@ -329,9 +332,11 @@ public partial class VoxtLM<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
     /// write on every parameter surface, so the guard is stated once here instead of being
     /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
     protected override bool SupportsParameterMutation => _useNativeMode;
+    /// <inheritdoc />
     protected override Tensor<T> PostprocessOutput(Tensor<T> o) => o;
     public override ModelMetadata<T> GetModelMetadata() => new() { Name = _useNativeMode ? "VoxtLM-Native" : "VoxtLM-ONNX", Description = "VoxtLM: a decoder-only language model over HuBERT units and text (Maiti et al., 2024)", FeatureCount = _options.ModelDim, Complexity = _options.NumLayers, AdditionalInfo = BaseAudioMetadataInfo() };
 
     private void ThrowIfDisposed() { if (_disposed) throw new ObjectDisposedException(GetType().FullName ?? nameof(VoxtLM<T>)); }
+    /// <inheritdoc />
     protected override void Dispose(bool disposing) { if (_disposed) return; if (disposing) OnnxEncoder?.Dispose(); _disposed = true; base.Dispose(disposing); }
 }

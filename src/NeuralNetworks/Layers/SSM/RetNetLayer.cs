@@ -620,6 +620,7 @@ public partial class RetNetLayer<T> : LayerBase<T>, IShapeContract
         _groupNormScale, _groupNormBias
     ];
 
+    /// <inheritdoc />
     public override void ClearGradients()
     {
         base.ClearGradients();

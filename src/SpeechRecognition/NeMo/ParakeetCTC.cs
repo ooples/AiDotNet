@@ -63,7 +63,9 @@ public partial class ParakeetCTC<T> : AudioNeuralNetworkBase<T>, ISpeechRecogniz
     private Random _random = Tensors.Helpers.RandomHelper.CreateSeededRandom(43);
     internal ConformerAsrNetwork<T>? Network => _network;
     public IReadOnlyList<string> SupportedLanguages { get; }
+    /// <inheritdoc />
     public bool SupportsStreaming => false;
+    /// <inheritdoc />
     public bool SupportsWordTimestamps => false;
 
     public ParakeetCTC(NeuralNetworkArchitecture<T> architecture, string modelPath, ParakeetCTCOptions? options = null) : base(architecture)
@@ -106,6 +108,7 @@ public partial class ParakeetCTC<T> : AudioNeuralNetworkBase<T>, ISpeechRecogniz
         };
     }
 
+    /// <inheritdoc />
     public Task<TranscriptionResult<T>> TranscribeAsync(Tensor<T> audio, string? language = null, bool? includeTimestamps = null, CancellationToken cancellationToken = default) => Task.Run(() => Transcribe(audio, language, includeTimestamps), cancellationToken);
     public string DetectLanguage(Tensor<T> audio) => _options.Language;
     public IReadOnlyDictionary<string, T> DetectLanguageProbabilities(Tensor<T> audio) => new Dictionary<string, T> { [_options.Language] = NumOps.One };
@@ -256,5 +259,6 @@ public partial class ParakeetCTC<T> : AudioNeuralNetworkBase<T>, ISpeechRecogniz
     public override ModelMetadata<T> GetModelMetadata() => new() { Name = _useNativeMode ? "ParakeetCTC-Native" : "ParakeetCTC-ONNX", Description = "Parakeet-CTC: NVIDIA NeMo's Fast Conformer (Rekesh et al. 2023) with a CTC layer", FeatureCount = _options.NumMels, Complexity = _options.NumEncoderLayers, AdditionalInfo = BaseAudioMetadataInfo() };
 
     private void ThrowIfDisposed() { if (_disposed) throw new ObjectDisposedException(GetType().FullName ?? nameof(ParakeetCTC<T>)); }
+    /// <inheritdoc />
     protected override void Dispose(bool disposing) { if (_disposed) return; if (disposing) OnnxEncoder?.Dispose(); _disposed = true; base.Dispose(disposing); }
 }

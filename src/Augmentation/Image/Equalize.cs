@@ -17,6 +17,7 @@ public class Equalize<T> : ImageAugmenterBase<T>
         _equalization = new HistogramEqualization<T>(perChannel: true, probability: 1.0);
     }
 
+    /// <inheritdoc />
     protected override ImageTensor<T> ApplyAugmentation(ImageTensor<T> data, AugmentationContext<T> context)
     {
         return _equalization.Apply(data, context);

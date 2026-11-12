@@ -169,7 +169,10 @@ public partial class DiffusionResBlock<T> : LayerBase<T>, IShapeContract
                 InitializationStrategies<T>.Lazy);
         }
 
-        // Second block: GroupNorm(out) → SiLU → Conv3x3(out→out)
+        // Second block: GroupNorm(out) → SiLU → Conv3x3(out→out). The conv starts at zero, so the block starts
+        // as the identity (its skip path): Ho et al.'s diffusion_tf zeroes it (init_scale=0.), and so does every
+        // later diffusion U-Net (guided-diffusion and LDM's zero_module). Without it each block adds a full-size
+        // residual and the stream's variance grows with depth.
         _norm2 = new GroupNormalizationLayer<T>(groups2, outChannels, epsilon);
         _conv2 = ConvolutionalLayer<T>.WithInputDepth(
             inputDepth: outChannels,
@@ -178,7 +181,7 @@ public partial class DiffusionResBlock<T> : LayerBase<T>, IShapeContract
             stride: 1,
             padding: 1,
             activationFunction: new IdentityActivation<T>(),
-            initializationStrategy: InitializationStrategies<T>.Lazy);
+            initializationStrategy: InitializationStrategies<T>.Zero);
 
         // Skip connection: 1x1 conv if channels differ
         if (inChannels != outChannels)
@@ -514,7 +517,7 @@ public partial class DiffusionResBlock<T> : LayerBase<T>, IShapeContract
     /// Computes appropriate number of groups for GroupNorm.
     /// SD uses 32 groups, but we fall back to the largest divisor ≤ numGroups.
     /// </summary>
-    private static int ComputeNumGroups(int channels, int targetGroups)
+    internal static int ComputeNumGroups(int channels, int targetGroups)
     {
         if (channels % targetGroups == 0)
             return targetGroups;

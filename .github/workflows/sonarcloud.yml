@@ -607,6 +607,9 @@ jobs:
           DELTA_MODE: ${{ needs.validation-source.outputs.delta_mode }}
           COLLECT_COVERAGE_EVERYWHERE: ${{ inputs.collect_coverage_everywhere }}
           PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          # The routing select-shards planned, so a narrowed matrix sends the same share to the self-hosted runners.
+          SELF_HOSTED_SHARDS: ${{ needs.select-shards.outputs.self_hosted_shards || '0' }}
+          SELF_HOSTED_LABEL: ${{ needs.select-shards.outputs.self_hosted_label }}
         run: ./tools/TestImpact/Select-AffectedTests.ps1
 
       - name: Upload test-level selection plan
@@ -810,6 +813,8 @@ jobs:
       ledger_matrix: ${{ steps.select.outputs.ledger_matrix }}
       parameter_matrix: ${{ steps.select.outputs.parameter_matrix }}
       shape_matrix: ${{ steps.select.outputs.shape_matrix }}
+      self_hosted_shards: ${{ steps.select.outputs.self_hosted_shards }}
+      self_hosted_label: ${{ steps.select.outputs.self_hosted_label }}
       requires_tests: ${{ steps.select.outputs.requires_tests }}
       requires_sweeps: ${{ steps.select.outputs.requires_sweeps }}
       requires_shapes: ${{ steps.select.outputs.requires_shapes }}
@@ -997,6 +1002,11 @@ jobs:
         env:
           MAP_KIND: ${{ steps.map.outputs.kind }}
           MAP_RUN_ID: ${{ steps.map.outputs.run_id }}
+          # Self-hosted runner routing (Get-SelfHostedShardPlan): a JSON configuration and a token that can
+          # read the repository's runners, both repository secrets. Fork pull requests get neither, so
+          # their code never runs on a self-hosted machine.
+          SELF_HOSTED_RUNNERS: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && secrets.SELF_HOSTED_RUNNERS || '' }}
+          SELF_HOSTED_RUNNER_TOKEN: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && secrets.SELF_HOSTED_RUNNER_TOKEN || '' }}
           # NOT the event's base sha: that is the base branch as it stood when the pull request was
           # opened, so for a pull request behind master it attributes every commit master
           # has gained since to the pull request. The selector verifies the checked-out merge commit's
@@ -1310,7 +1320,14 @@ jobs:
           # Validate the complete catalog, including entries omitted from this selection.
           $null = Split-CiWorkloads -Shards $all
           $workloads = Split-CiWorkloads -Shards @($matrixShards)
-          $json = ConvertTo-Json -InputObject @($workloads.Tests) -Depth 5 -Compress
+          $plan = Get-SelfHostedShardPlan -Config $env:SELF_HOSTED_RUNNERS `
+              -Runners (Get-SelfHostedRunners -Repository $env:GITHUB_REPOSITORY -Token $env:SELF_HOSTED_RUNNER_TOKEN)
+          Write-Host "Self-hosted routing: $($plan.Count) shard(s). $($plan.Reason)"
+          if ($plan.Warning) { Write-Host "::warning::Self-hosted routing is off: $($plan.Reason)" }
+          "self_hosted_shards=$($plan.Count)" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "self_hosted_label=$($plan.Label)" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          $tests = @(Set-CiShardRunners -Shards @($workloads.Tests) -Count $plan.Count -Label $plan.Label)
+          $json = ConvertTo-Json -InputObject $tests -Depth 5 -Compress
           "matrix=$json" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
           "ledger_matrix=$(ConvertTo-Json -InputObject @($ledgerShards) -Depth 5 -Compress)" |
             Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
@@ -1516,7 +1533,9 @@ jobs:
 
   test-net10-sharded:
     name: Tests (${{ matrix.shard.framework }}) - ${{ matrix.shard.name }}
-    runs-on: ubuntu-latest
+    # select-shards routes some shards to online self-hosted runners (secrets.SELF_HOSTED_RUNNERS);
+    # the rest stay on the hosted pool.
+    runs-on: ${{ matrix.shard.runner || 'ubuntu-latest' }}
     needs: [build, validation-source, select-shards]
     # Forced coverage materially extends both test execution and post-test digest work. The live
     # all-shard experiment proved 50 minutes is too short: Generated Layers U passed every test at

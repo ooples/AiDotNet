@@ -141,8 +141,11 @@ public partial class CoMoSpeech<T> : TtsModelBase<T>, IEndToEndTts<T>, IAcoustic
     }
 
     int ITtsModel<T>.SampleRate => _options.SampleRate;
+    /// <inheritdoc />
     public int MaxTextLength => _options.MaxTextLength;
+    /// <inheritdoc />
     public new int HiddenDim => _options.HiddenDim;
+    /// <inheritdoc />
     public int NumFlowSteps => _options.NumFlowSteps;
     public new int MelChannels => _options.MelChannels;
     public new int HopSize => _options.HopSize;
@@ -603,6 +606,7 @@ public partial class CoMoSpeech<T> : TtsModelBase<T>, IEndToEndTts<T>, IAcoustic
             throw new ObjectDisposedException(GetType().FullName ?? nameof(CoMoSpeech<T>));
     }
 
+    /// <inheritdoc />
     protected override void Dispose(bool disposing)
     {
         if (_disposed)

@@ -74,7 +74,9 @@ public partial class SenseVoice<T> : AudioNeuralNetworkBase<T>, ISpeechRecognize
     private EmbeddingLayer<T>? _queries;
     private DenseLayer<T>? _ctcOutput;
     public IReadOnlyList<string> SupportedLanguages { get; }
+    /// <inheritdoc />
     public bool SupportsStreaming => false;
+    /// <inheritdoc />
     public bool SupportsWordTimestamps => false;
 
     public SenseVoice(NeuralNetworkArchitecture<T> architecture, string modelPath, SenseVoiceOptions? options = null) : base(architecture)
@@ -351,9 +353,11 @@ public partial class SenseVoice<T> : AudioNeuralNetworkBase<T>, ISpeechRecognize
     /// write on every parameter surface, so the guard is stated once here instead of being
     /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
     protected override bool SupportsParameterMutation => _useNativeMode;
+    /// <inheritdoc />
     protected override Tensor<T> PostprocessOutput(Tensor<T> o) => o;
     public override ModelMetadata<T> GetModelMetadata() => new() { Name = _useNativeMode ? "SenseVoice-Native" : "SenseVoice-ONNX", Description = "SenseVoice-Small: a SAN-M encoder with task queries and a CTC head (An et al. 2024)", FeatureCount = 1, Complexity = _options.NumEncoderLayers + _options.NumTpEncoderLayers, AdditionalInfo = BaseAudioMetadataInfo() };
 
     private void ThrowIfDisposed() { if (_disposed) throw new ObjectDisposedException(GetType().FullName ?? nameof(SenseVoice<T>)); }
+    /// <inheritdoc />
     protected override void Dispose(bool disposing) { if (_disposed) return; if (disposing) OnnxEncoder?.Dispose(); _disposed = true; base.Dispose(disposing); }
 }

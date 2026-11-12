@@ -306,9 +306,12 @@ public partial class Wav2Vec2<T> : AudioNeuralNetworkBase<T>, IAudioFoundationMo
     }
 
     protected override bool SupportsParameterMutation => _useNativeMode;
+    /// <inheritdoc />
     protected override Tensor<T> PreprocessAudio(Tensor<T> rawAudio) => rawAudio;
+    /// <inheritdoc />
     protected override Tensor<T> PostprocessOutput(Tensor<T> o) => o;
 
+    /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata()
     {
         var m = new ModelMetadata<T>
@@ -327,6 +330,7 @@ public partial class Wav2Vec2<T> : AudioNeuralNetworkBase<T>, IAudioFoundationMo
 
     private void ThrowIfDisposed() { if (_disposed) throw new ObjectDisposedException(GetType().FullName ?? nameof(Wav2Vec2<T>)); }
 
+    /// <inheritdoc />
     protected override void Dispose(bool disposing) { if (_disposed) return; if (disposing) OnnxEncoder?.Dispose(); _disposed = true; base.Dispose(disposing); }
 
     #endregion

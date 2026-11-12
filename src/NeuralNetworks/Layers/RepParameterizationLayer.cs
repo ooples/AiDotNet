@@ -118,6 +118,7 @@ public partial class RepParameterizationLayer<T> : LayerBase<T>, IShapeContract
     /// <summary>The latent log-variances of the most recent forward ([batch, latent]).</summary>
     internal Tensor<T>? LastLogVariance => _lastLogVar;
 
+    /// <inheritdoc />
     public override bool SupportsTraining => false; // Reparameterization trick computes state during forward, no trainable parameters
 
     /// <summary>

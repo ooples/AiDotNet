@@ -42,6 +42,7 @@ public class FlowBasedDistillationStrategy<T> : DistillationStrategyBase<T>
         _flowWeight = flowWeight;
     }
 
+    /// <inheritdoc />
     public override T ComputeLoss(Matrix<T> studentBatchOutput, Matrix<T> teacherBatchOutput, Matrix<T>? trueLabelsBatch = null)
     {
         ValidateOutputDimensions(studentBatchOutput, teacherBatchOutput);
@@ -78,6 +79,7 @@ public class FlowBasedDistillationStrategy<T> : DistillationStrategyBase<T>
         return NumOps.Divide(totalLoss, NumOps.FromDouble(batchSize));
     }
 
+    /// <inheritdoc />
     public override Matrix<T> ComputeGradient(Matrix<T> studentBatchOutput, Matrix<T> teacherBatchOutput, Matrix<T>? trueLabelsBatch = null)
     {
         ValidateOutputDimensions(studentBatchOutput, teacherBatchOutput);

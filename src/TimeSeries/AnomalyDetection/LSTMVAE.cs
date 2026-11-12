@@ -83,6 +83,7 @@ public partial class LSTMVAE<T> : TimeSeriesModelBase<T>
         _reconstructionThreshold = _numOps.FromDouble(0.1);
     }
 
+    /// <inheritdoc />
     protected override void TrainCore(Matrix<T> x, Vector<T> y)
     {
         T learningRate = _numOps.FromDouble(_options.LearningRate);
@@ -286,6 +287,7 @@ public partial class LSTMVAE<T> : TimeSeriesModelBase<T>
         return _numOps.Divide(error, _numOps.FromDouble(len > 0 ? len : 1));
     }
 
+    /// <inheritdoc />
     public override Vector<T> Predict(Matrix<T> input)
     {
         // A one-column input is the series to score: the anomaly score of each value's window.
@@ -307,6 +309,7 @@ public partial class LSTMVAE<T> : TimeSeriesModelBase<T>
         return predictions;
     }
 
+    /// <inheritdoc />
     public override T PredictSingle(Vector<T> input)
     {
         // Return reconstruction error as anomaly score
@@ -362,6 +365,7 @@ public partial class LSTMVAE<T> : TimeSeriesModelBase<T>
 
 
 
+    /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata()
     {
         return new ModelMetadata<T>
@@ -380,11 +384,13 @@ public partial class LSTMVAE<T> : TimeSeriesModelBase<T>
         };
     }
 
+    /// <inheritdoc />
     protected override IFullModel<T, Matrix<T>, Vector<T>> CreateInstance()
     {
         return new LSTMVAE<T>(new LSTMVAEOptions<T>(_options));
     }
 
+    /// <inheritdoc />
     protected override Vector<T> GetLayerParameterGradients()
     {
         var encoderGrads = _encoder.GetParameterGradients();

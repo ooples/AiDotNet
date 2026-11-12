@@ -44,6 +44,7 @@ public sealed class ProgramSynthesisServingClient : IProgramSynthesisServingClie
         }
     }
 
+    /// <inheritdoc />
     public async Task<CodeTaskResultBase> ExecuteCodeTaskAsync(CodeTaskRequestBase request, CancellationToken cancellationToken)
     {
         if (request is null) throw new ArgumentNullException(nameof(request));
@@ -80,18 +81,21 @@ public sealed class ProgramSynthesisServingClient : IProgramSynthesisServingClie
         };
     }
 
+    /// <inheritdoc />
     public Task<ProgramExecuteResponse> ExecuteProgramAsync(ProgramExecuteRequest request, CancellationToken cancellationToken)
     {
         if (request is null) throw new ArgumentNullException(nameof(request));
         return PostAsync<ProgramExecuteResponse>("api/program-synthesis/program/execute", request, cancellationToken);
     }
 
+    /// <inheritdoc />
     public Task<ProgramEvaluateIoResponse> EvaluateProgramIoAsync(ProgramEvaluateIoRequest request, CancellationToken cancellationToken)
     {
         if (request is null) throw new ArgumentNullException(nameof(request));
         return PostAsync<ProgramEvaluateIoResponse>("api/program-synthesis/program/evaluate-io", request, cancellationToken);
     }
 
+    /// <inheritdoc />
     public Task<SqlExecuteResponse> ExecuteSqlAsync(SqlExecuteRequest request, CancellationToken cancellationToken)
     {
         if (request is null) throw new ArgumentNullException(nameof(request));

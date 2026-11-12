@@ -128,13 +128,18 @@ public partial class SmolVLM<T> : VisionLanguageModelBase<T>, IInstructionTunedV
         InitializeLayers();
     }
 
+    /// <inheritdoc />
     public int EmbeddingDimension => _options.DecoderDim;
     int IVisualEncoder<T>.ImageSize => _options.ImageSize;
     int IVisualEncoder<T>.ImageChannels => 3;
+    /// <inheritdoc />
     public int MaxGenerationLength => _options.MaxGenerationLength;
+    /// <inheritdoc />
     public int DecoderEmbeddingDim => _options.DecoderDim;
+    /// <inheritdoc />
     public string LanguageModelName => _options.LanguageModelName;
 
+    /// <inheritdoc />
     public Tensor<T> EncodeImage(Tensor<T> image)
     {
         ThrowIfDisposed();
@@ -188,6 +193,7 @@ public partial class SmolVLM<T> : VisionLanguageModelBase<T>, IInstructionTunedV
         return output;
     }
 
+    /// <inheritdoc />
     public Tensor<T> Chat(
         Tensor<T> image,
         IEnumerable<(string Role, string Content)> conversationHistory,
@@ -286,6 +292,7 @@ public partial class SmolVLM<T> : VisionLanguageModelBase<T>, IInstructionTunedV
         return tokens;
     }
 
+    /// <inheritdoc />
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         ThrowIfDisposed();
@@ -302,11 +309,14 @@ public partial class SmolVLM<T> : VisionLanguageModelBase<T>, IInstructionTunedV
     /// write on every parameter surface, so the guard is stated once here instead of being
     /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
     protected override bool SupportsParameterMutation => _useNativeMode;
+    /// <inheritdoc />
     protected override Tensor<T> PreprocessImage(Tensor<T> image) =>
         NormalizeImage(image, _options.ImageMean, _options.ImageStd);
 
+    /// <inheritdoc />
     protected override Tensor<T> PostprocessOutput(Tensor<T> output) => output;
 
+    /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata()
     {
         var m = new ModelMetadata<T>
@@ -333,6 +343,7 @@ public partial class SmolVLM<T> : VisionLanguageModelBase<T>, IInstructionTunedV
             throw new ObjectDisposedException(GetType().FullName ?? nameof(SmolVLM<T>));
     }
 
+    /// <inheritdoc />
     protected override void Dispose(bool disposing)
     {
         if (_disposed)

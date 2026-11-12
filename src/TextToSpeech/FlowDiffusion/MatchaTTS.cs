@@ -132,8 +132,11 @@ public partial class MatchaTTS<T> : TtsModelBase<T>, IEndToEndTts<T>, IAcousticM
     }
 
     int ITtsModel<T>.SampleRate => _options.SampleRate;
+    /// <inheritdoc />
     public int MaxTextLength => _options.MaxTextLength;
+    /// <inheritdoc />
     public new int HiddenDim => _options.HiddenDim;
+    /// <inheritdoc />
     public int NumFlowSteps => _options.NumFlowSteps;
     public new int MelChannels => _options.MelChannels;
     public new int HopSize => _options.HopSize;
@@ -451,6 +454,7 @@ public partial class MatchaTTS<T> : TtsModelBase<T>, IEndToEndTts<T>, IAcousticM
             throw new ObjectDisposedException(GetType().FullName ?? nameof(MatchaTTS<T>));
     }
 
+    /// <inheritdoc />
     protected override void Dispose(bool disposing)
     {
         if (_disposed)

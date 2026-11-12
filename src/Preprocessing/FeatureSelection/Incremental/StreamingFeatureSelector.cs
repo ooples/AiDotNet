@@ -23,7 +23,7 @@ namespace AiDotNet.Preprocessing.FeatureSelection.Incremental;
 /// <typeparam name="T">The numeric type for calculations.</typeparam>
 [ComponentType(ComponentType.FeatureSelector)]
 [PipelineStage(PipelineStage.Preprocessing)]
-public class StreamingFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
+public class StreamingFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFeatureSelector<T>, IFixedCountFeatureSelector<T>
 {
     private readonly int _nFeaturesToSelect;
     private readonly double _decayFactor;
@@ -38,11 +38,14 @@ public class StreamingFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
+    /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public double DecayFactor => _decayFactor;
     public double[]? CorrelationScores => _correlationScores;
+    /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     public int SampleCount => _sampleCount;
+    /// <inheritdoc />
     public override bool SupportsInverseTransform => false;
 
     public StreamingFeatureSelector(
@@ -61,12 +64,14 @@ public class StreamingFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<
         _sampleCount = 0;
     }
 
+    /// <inheritdoc />
     protected override void FitCore(Matrix<T> data)
     {
         throw new InvalidOperationException(
             "StreamingFeatureSelector requires target values. Use PartialFit or Fit with target.");
     }
 
+    /// <inheritdoc />
     public void Fit(Matrix<T> data, Vector<T> target)
     {
         Reset();
@@ -166,12 +171,14 @@ public class StreamingFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<
         IsFitted = false;
     }
 
+    /// <inheritdoc />
     public Matrix<T> FitTransform(Matrix<T> data, Vector<T> target)
     {
         Fit(data, target);
         return Transform(data);
     }
 
+    /// <inheritdoc />
     protected override Matrix<T> TransformCore(Matrix<T> data)
     {
         if (_selectedIndices is null)
@@ -188,11 +195,13 @@ public class StreamingFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<
         return new Matrix<T>(result);
     }
 
+    /// <inheritdoc />
     protected override Matrix<T> InverseTransformCore(Matrix<T> data)
     {
         throw new NotSupportedException("StreamingFeatureSelector does not support inverse transformation.");
     }
 
+    /// <inheritdoc />
     public bool[] GetSupportMask()
     {
         if (_selectedIndices is null)
@@ -205,6 +214,7 @@ public class StreamingFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<
         return mask;
     }
 
+    /// <inheritdoc />
     public override string[] GetFeatureNamesOut(string[]? inputFeatureNames = null)
     {
         if (_selectedIndices is null) return [];

@@ -1731,6 +1731,8 @@ shard:
       FullyQualifiedName~AiDotNet.Tests.ModelFamilyTests.Layers.LayerInvariantCoverageTests.|
       FullyQualifiedName~AiDotNet.Tests.ModelFamilyTests.Layers.LayerNormalizationInvariantTests.|
       FullyQualifiedName~AiDotNet.Tests.ModelFamilyTests.Layers.RMSNormalizationInvariantTests.|
+      FullyQualifiedName~AiDotNet.Tests.ModelFamilyTests.Layers.ConvSubsamplingLayerInvariantTests.|
+      FullyQualifiedName~AiDotNet.Tests.ModelFamilyTests.Layers.WhisperConvStemLayerInvariantTests.|
       FullyQualifiedName~AiDotNet.Tests.ModelLoading.GgufEndToEndTests.|
       FullyQualifiedName~AiDotNet.Tests.ModelLoading.LlamaRopePermuteTests.|
       FullyQualifiedName~AiDotNet.Tests.NeuralNetworks.GpuTransformerWeightParityTests.|
@@ -1756,6 +1758,8 @@ shard:
       FullyQualifiedName~AiDotNet.Tests.UnitTests.Diffusion.StyleTransfer.UniVSTComponentTests.|
       FullyQualifiedName~AiDotNet.Tests.UnitTests.Diffusion.VaeDecodeAliasingTests.|
       FullyQualifiedName~AiDotNet.Tests.UnitTests.Diffusion.VaeTapeTrainingTests.|
+      FullyQualifiedName~AiDotNet.Tests.UnitTests.Diffusion.DiffusionAttentionSingleWeightSetTests.|
+      FullyQualifiedName~AiDotNet.Tests.UnitTests.Diffusion.DiffusionBlockInitializationTests.|
       FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.APNet2NetworkGradientTests.|
       FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.ArenaLazyWeightPinningTests.|
       FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.ChainedForwardForTrainingTapeTests.|

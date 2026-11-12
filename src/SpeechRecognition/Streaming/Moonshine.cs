@@ -56,7 +56,9 @@ public partial class Moonshine<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer
     private Random _random = Tensors.Helpers.RandomHelper.CreateSeededRandom(43);
     internal ConformerAsrNetwork<T>? Network => _network;
     public IReadOnlyList<string> SupportedLanguages { get; }
+    /// <inheritdoc />
     public bool SupportsStreaming => true;
+    /// <inheritdoc />
     public bool SupportsWordTimestamps => false;
 
     public Moonshine(NeuralNetworkArchitecture<T> architecture, string modelPath, MoonshineOptions? options = null) : base(architecture)
@@ -99,6 +101,7 @@ public partial class Moonshine<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer
         };
     }
 
+    /// <inheritdoc />
     public Task<TranscriptionResult<T>> TranscribeAsync(Tensor<T> audio, string? language = null, bool? includeTimestamps = null, CancellationToken cancellationToken = default) => Task.Run(() => Transcribe(audio, language, includeTimestamps), cancellationToken);
     public string DetectLanguage(Tensor<T> audio) => _options.Language;
     public IReadOnlyDictionary<string, T> DetectLanguageProbabilities(Tensor<T> audio) => new Dictionary<string, T> { [_options.Language] = NumOps.One };
@@ -245,6 +248,7 @@ public partial class Moonshine<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer
     /// write on every parameter surface, so the guard is stated once here instead of being
     /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
     protected override bool SupportsParameterMutation => _useNativeMode;
+    /// <inheritdoc />
     protected override Tensor<T> PostprocessOutput(Tensor<T> o) => o;
     public override ModelMetadata<T> GetModelMetadata() => new() { Name = _useNativeMode ? "Moonshine-Native" : "Moonshine-ONNX", Description = "Moonshine Tiny: an encoder-decoder Transformer over the raw waveform with rotary positions", FeatureCount = 1, Complexity = _options.NumEncoderLayers, AdditionalInfo = BaseAudioMetadataInfo() };
 

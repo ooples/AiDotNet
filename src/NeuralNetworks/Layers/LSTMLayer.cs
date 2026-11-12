@@ -1899,6 +1899,7 @@ public partial class LSTMLayer<T> : LayerBase<T>, IShapeContract
         gateWeight = replacement;
     }
 
+    /// <inheritdoc />
     public override void ClearGradients()
     {
         base.ClearGradients();
@@ -1956,6 +1957,7 @@ public partial class LSTMLayer<T> : LayerBase<T>, IShapeContract
         base.SetTrainingMode(isTraining);
     }
 
+    /// <inheritdoc />
     public override void ResetState()
     {
         // Clear cached values from forward and backward passes

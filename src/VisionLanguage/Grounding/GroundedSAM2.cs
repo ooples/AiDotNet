@@ -335,8 +335,10 @@ public partial class GroundedSAM2<T> : VisionLanguageModelBase<T>, IVisualGround
     /// <summary>SAM 2's preprocessing: images in 0..1 resized to SamImageSize and normalized.</summary>
     protected override Tensor<T> PreprocessImage(Tensor<T> image) => SegmenterInput(GroundingDinoDetector<T>.Batched(Engine, image));
 
+    /// <inheritdoc />
     protected override Tensor<T> PostprocessOutput(Tensor<T> output) => output;
 
+    /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata()
     {
         var m = new ModelMetadata<T>
@@ -357,6 +359,7 @@ public partial class GroundedSAM2<T> : VisionLanguageModelBase<T>, IVisualGround
             throw new ObjectDisposedException(GetType().FullName ?? nameof(GroundedSAM2<T>));
     }
 
+    /// <inheritdoc />
     protected override void Dispose(bool disposing)
     {
         if (_disposed)

@@ -323,6 +323,7 @@ public partial class InformerModel<T> : TimeSeriesModelBase<T>, ISupportsLossFun
         return result;
     }
 
+    /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata()
     {
         var o = _options;

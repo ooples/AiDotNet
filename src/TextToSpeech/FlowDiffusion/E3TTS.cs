@@ -106,6 +106,7 @@ public partial class E3TTS<T> : TtsModelBase<T>, IEndToEndTts<T>
     int ITtsModel<T>.SampleRate => _options.SampleRate;
     public int MaxTextLength => Math.Min(_options.MaxTextLength, _options.BertMaxPositions);
     public new int HiddenDim => _options.HiddenDim;
+    /// <inheritdoc />
     public int NumFlowSteps => _options.NumDiffusionSteps;
     public override bool TrainsOnSampleObjective => true;
     protected override TtsSupervision RequiredSupervision => TtsSupervision.Text | TtsSupervision.Recording;
@@ -325,6 +326,7 @@ public partial class E3TTS<T> : TtsModelBase<T>, IEndToEndTts<T>
         if (_disposed) throw new ObjectDisposedException(GetType().FullName ?? nameof(E3TTS<T>));
     }
 
+    /// <inheritdoc />
     protected override void Dispose(bool disposing)
     {
         if (_disposed) return;

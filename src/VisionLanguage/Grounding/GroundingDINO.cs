@@ -218,8 +218,10 @@ public partial class GroundingDINO<T> : VisionLanguageModelBase<T>, IVisualGroun
     /// <summary>Normalizes images in 0..1 with the options' mean and deviation (ImageNet's).</summary>
     protected override Tensor<T> PreprocessImage(Tensor<T> image) => Detector.Normalize(GroundingDinoDetector<T>.Batched(Engine, image));
 
+    /// <inheritdoc />
     protected override Tensor<T> PostprocessOutput(Tensor<T> output) => output;
 
+    /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata()
     {
         var m = new ModelMetadata<T>
@@ -240,6 +242,7 @@ public partial class GroundingDINO<T> : VisionLanguageModelBase<T>, IVisualGroun
             throw new ObjectDisposedException(GetType().FullName ?? nameof(GroundingDINO<T>));
     }
 
+    /// <inheritdoc />
     protected override void Dispose(bool disposing)
     {
         if (_disposed)

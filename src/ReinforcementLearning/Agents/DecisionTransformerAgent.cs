@@ -358,6 +358,7 @@ public partial class DecisionTransformerAgent<T> : DeepReinforcementLearningAgen
         return input;
     }
 
+    /// <inheritdoc />
     public override Dictionary<string, T> GetMetrics()
     {
         return new Dictionary<string, T>
@@ -374,6 +375,7 @@ public partial class DecisionTransformerAgent<T> : DeepReinforcementLearningAgen
         _runningReturn = InitialReturnToGo();
     }
 
+    /// <inheritdoc />
     public override Vector<T> Predict(Vector<T> input)
     {
         // Pure, stateless single-step inference (the IFullModel.Predict contract): two Predict(state) calls must
@@ -397,6 +399,7 @@ public partial class DecisionTransformerAgent<T> : DeepReinforcementLearningAgen
         return Task.CompletedTask;
     }
 
+    /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata()
     {
         return new ModelMetadata<T>
@@ -404,6 +407,7 @@ public partial class DecisionTransformerAgent<T> : DeepReinforcementLearningAgen
         };
     }
 
+    /// <inheritdoc />
     public override int FeatureCount => _options.StateSize;
 
     /// <summary>
@@ -429,12 +433,14 @@ public partial class DecisionTransformerAgent<T> : DeepReinforcementLearningAgen
         return _transformerNetwork.ComputeGradients(SingleStep(input, training: true), targetAction, lossFunction ?? LossFunction);
     }
 
+    /// <inheritdoc />
     public override void SaveModel(string filepath)
     {
         var data = Serialize();
         System.IO.File.WriteAllBytes(filepath, data);
     }
 
+    /// <inheritdoc />
     public override void LoadModel(string filepath)
     {
         var data = System.IO.File.ReadAllBytes(filepath);

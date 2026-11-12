@@ -171,17 +171,23 @@ public partial class GR00TN1<T> : VisionLanguageModelBase<T>, IVisionLanguageAct
         InitializeLayers();
     }
 
+    /// <inheritdoc />
     public int EmbeddingDimension => _options.DecoderDim;
     int IVisualEncoder<T>.ImageSize => _options.ImageSize;
     int IVisualEncoder<T>.ImageChannels => 3;
+    /// <inheritdoc />
     public int MaxGenerationLength => _options.MaxGenerationLength;
+    /// <inheritdoc />
     public int DecoderEmbeddingDim => _options.DecoderDim;
+    /// <inheritdoc />
     public string LanguageModelName => _options.LanguageModelName;
+    /// <inheritdoc />
     public int ActionDimension => _options.ActionDimension;
 
     /// <summary>The flow-matching action head used by <see cref="PredictAction"/>. Exposed so callers can swap the integration-step count or provide a custom velocity callback.</summary>
     public GR00TFlowMatchingActionHead<T> ActionHead => _actionHead;
 
+    /// <inheritdoc />
     public Tensor<T> EncodeImage(Tensor<T> image)
     {
         ThrowIfDisposed();
@@ -194,6 +200,7 @@ public partial class GR00TN1<T> : VisionLanguageModelBase<T>, IVisionLanguageAct
         return L2Normalize(hidden);
     }
 
+    /// <inheritdoc />
     public Tensor<T> GenerateFromImage(Tensor<T> image, string? prompt = null)
     {
         ThrowIfDisposed();
@@ -404,6 +411,7 @@ public partial class GR00TN1<T> : VisionLanguageModelBase<T>, IVisionLanguageAct
         return tokens;
     }
 
+    /// <inheritdoc />
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         ThrowIfDisposed();
@@ -417,11 +425,14 @@ public partial class GR00TN1<T> : VisionLanguageModelBase<T>, IVisionLanguageAct
 
     // UpdateParameters restated a fold the base now derives from generated component registration.
     // Removed under AIDN082.
+    /// <inheritdoc />
     protected override Tensor<T> PreprocessImage(Tensor<T> image) =>
         NormalizeImage(image, _options.ImageMean, _options.ImageStd);
 
+    /// <inheritdoc />
     protected override Tensor<T> PostprocessOutput(Tensor<T> output) => output;
 
+    /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata()
     {
         var meta = new ModelMetadata<T>
@@ -455,6 +466,7 @@ public partial class GR00TN1<T> : VisionLanguageModelBase<T>, IVisionLanguageAct
             throw new ObjectDisposedException(GetType().FullName ?? nameof(GR00TN1<T>));
     }
 
+    /// <inheritdoc />
     protected override void Dispose(bool disposing)
     {
         if (_disposed)
