@@ -18,7 +18,7 @@ public class ImageVideoQualityReferenceTests
     public void HalfSegmentationIoU_LargePerfectMaskHasUnitScore()
     {
         var labels = new Half[70000];
-        Array.Fill(labels, (Half)1);
+        for (int i = 0; i < labels.Length; i++) labels[i] = (Half)1;
         var mask = new Tensor<Half>(labels, new[] { 280, 250 });
         var metric = new MeanIntersectionOverUnion<Half>(2);
 

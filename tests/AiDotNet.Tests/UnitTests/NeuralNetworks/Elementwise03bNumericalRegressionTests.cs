@@ -95,7 +95,7 @@ public class Elementwise03bNumericalRegressionTests
         var input = new Tensor<Half>(new Half[] { (Half)1, (Half)0 }, new[] { 1, 2 });
         var loss = model.TrainStep(input, new Vector<int>(new[] { 1 }), (Half)0.1);
         Assert.InRange((double)loss, 59, 61);
-        Assert.All(model.GetParameters().ToArray(), value => Assert.True(Half.IsFinite(value)));
+        Assert.All(model.GetParameters().ToArray(), value => Assert.True(AiDotNet.Helpers.NumericalStabilityHelper.IsFinite(value)));
         Assert.True(head.GetParameters()[4] < (Half)30);
         Assert.True(head.GetParameters()[5] > (Half)(-30));
     }
@@ -218,7 +218,7 @@ public class Elementwise03bNumericalRegressionTests
             NeuralNetworkTaskType.Clustering, inputSize: 2, outputSize: 1));
         model.SetParameters(new Vector<float>(new float[] { 0, 0 }));
         model.Train(new Tensor<float>(new[] { 1e20f, 1e20f }, new[] { 2 }), new Tensor<float>(new[] { 1 }));
-        Assert.True(float.IsFinite(model.GetLastLoss()));
+        Assert.True(AiDotNet.Helpers.NumericalStabilityHelper.IsFinite(model.GetLastLoss()));
         Assert.True(model.GetLastLoss() > 1e18f);
     }
 }
