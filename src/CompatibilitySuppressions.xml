@@ -40420,27 +40420,6 @@
   </Suppression>
   <Suppression>
     <DiagnosticId>CP0002</DiagnosticId>
-    <Target>M:AiDotNet.Preprocessing.FeatureSelection.Complexity.LempelZivSelector`1.get_ComplexityValues</Target>
-    <Left>lib/net10.0/AiDotNet.dll</Left>
-    <Right>lib/net10.0/AiDotNet.dll</Right>
-    <IsBaselineSuppression>true</IsBaselineSuppression>
-  </Suppression>
-  <Suppression>
-    <DiagnosticId>CP0002</DiagnosticId>
-    <Target>M:AiDotNet.Preprocessing.FeatureSelection.Complexity.LempelZivSelector`1.get_ComplexityValues</Target>
-    <Left>lib/net471/AiDotNet.dll</Left>
-    <Right>lib/net471/AiDotNet.dll</Right>
-    <IsBaselineSuppression>true</IsBaselineSuppression>
-  </Suppression>
-  <Suppression>
-    <DiagnosticId>CP0002</DiagnosticId>
-    <Target>M:AiDotNet.Preprocessing.FeatureSelection.Complexity.LempelZivSelector`1.get_ComplexityValues</Target>
-    <Left>lib/net8.0/AiDotNet.dll</Left>
-    <Right>lib/net8.0/AiDotNet.dll</Right>
-    <IsBaselineSuppression>true</IsBaselineSuppression>
-  </Suppression>
-  <Suppression>
-    <DiagnosticId>CP0002</DiagnosticId>
     <Target>M:AiDotNet.Preprocessing.FeatureSelection.Complexity.LyapunovSelector`1.get_LyapunovValues</Target>
     <Left>lib/net10.0/AiDotNet.dll</Left>
     <Right>lib/net10.0/AiDotNet.dll</Right>
@@ -41023,27 +41002,6 @@
   <Suppression>
     <DiagnosticId>CP0002</DiagnosticId>
     <Target>M:AiDotNet.Preprocessing.FeatureSelection.Distance.ManhattanDistanceSelector`1.get_DistanceScores</Target>
-    <Left>lib/net8.0/AiDotNet.dll</Left>
-    <Right>lib/net8.0/AiDotNet.dll</Right>
-    <IsBaselineSuppression>true</IsBaselineSuppression>
-  </Suppression>
-  <Suppression>
-    <DiagnosticId>CP0002</DiagnosticId>
-    <Target>M:AiDotNet.Preprocessing.FeatureSelection.Distribution.GaussianitySelector`1.get_JBStatistics</Target>
-    <Left>lib/net10.0/AiDotNet.dll</Left>
-    <Right>lib/net10.0/AiDotNet.dll</Right>
-    <IsBaselineSuppression>true</IsBaselineSuppression>
-  </Suppression>
-  <Suppression>
-    <DiagnosticId>CP0002</DiagnosticId>
-    <Target>M:AiDotNet.Preprocessing.FeatureSelection.Distribution.GaussianitySelector`1.get_JBStatistics</Target>
-    <Left>lib/net471/AiDotNet.dll</Left>
-    <Right>lib/net471/AiDotNet.dll</Right>
-    <IsBaselineSuppression>true</IsBaselineSuppression>
-  </Suppression>
-  <Suppression>
-    <DiagnosticId>CP0002</DiagnosticId>
-    <Target>M:AiDotNet.Preprocessing.FeatureSelection.Distribution.GaussianitySelector`1.get_JBStatistics</Target>
     <Left>lib/net8.0/AiDotNet.dll</Left>
     <Right>lib/net8.0/AiDotNet.dll</Right>
     <IsBaselineSuppression>true</IsBaselineSuppression>

@@ -26,14 +26,14 @@ public class GaussianitySelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, 
     private readonly int _nFeaturesToSelect;
     private readonly bool _preferGaussian;
 
-    private Vector<T>? _jbStatistics;
+    private double[]? _jbStatistics;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public bool PreferGaussian => _preferGaussian;
-    public Vector<T>? JBStatistics => _jbStatistics;
+    public double[]? JBStatistics => _jbStatistics;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -59,50 +59,63 @@ public class GaussianitySelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, 
         int n = data.Rows;
         int p = data.Columns;
 
-        var engine = Engine;
-        var X = Tensor<T>.FromMatrix(data);
-        var shape = new[] { n, p };
+        var X = new double[n, p];
+        for (int i = 0; i < n; i++)
+            for (int j = 0; j < p; j++)
+                X[i, j] = NumOps.ToDouble(data[i, j]);
 
-        // Population moments of every feature
-        var centered = engine.TensorSubtract(X, engine.TensorBroadcastTo(engine.ReduceMean(X, new[] { 0 }, true), shape));
-        var std = engine.TensorSqrt(engine.ReduceMean(engine.TensorSquare(centered), new[] { 0 }, true));
-        var z = engine.TensorDivide(centered, engine.TensorBroadcastTo(std, shape));
-        var zSquared = engine.TensorSquare(z);
+        _jbStatistics = new double[p];
 
-        // Compute skewness
-        var skewness = engine.ReduceMean(engine.TensorMultiply(zSquared, z), new[] { 0 }, false);
+        for (int j = 0; j < p; j++)
+        {
+            var col = new double[n];
+            for (int i = 0; i < n; i++)
+                col[i] = X[i, j];
 
-        // Compute excess kurtosis
-        var kurtosis = engine.TensorSubtractScalar(
-            engine.ReduceMean(engine.TensorSquare(zSquared), new[] { 0 }, false), NumOps.FromDouble(3));
+            double mean = col.Average();
+            double variance = col.Select(v => (v - mean) * (v - mean)).Average();
+            double std = Math.Sqrt(variance);
 
-        // Jarque-Bera test statistic: JB = n/6 * (S² + K²/4)
-        // Lower JB = more Gaussian; a constant feature gets the maximum value (very non-normal)
-        var jb = engine.TensorMultiplyScalar(
-            engine.TensorAdd(engine.TensorSquare(skewness), engine.TensorDivideScalar(engine.TensorSquare(kurtosis), NumOps.FromDouble(4.0))),
-            NumOps.FromDouble(n / 6.0));
-        var constant = engine.TensorLessThan(engine.Reshape(std, new[] { p }), PreprocessingTensorOps.Tolerance<T>(1e-10));
-        jb = engine.TensorWhere(constant, PreprocessingTensorOps.Filled(new[] { p }, NumOps.MaxValue), jb);
-        _jbStatistics = jb.ToVector();
+            if (std < 1e-10)
+            {
+                // Constant feature - infinite JB statistic (very non-normal)
+                _jbStatistics[j] = double.MaxValue;
+                continue;
+            }
+
+            // Compute skewness
+            double skewness = col.Select(v => Math.Pow((v - mean) / std, 3)).Average();
+
+            // Compute excess kurtosis
+            double kurtosis = col.Select(v => Math.Pow((v - mean) / std, 4)).Average() - 3;
+
+            // Jarque-Bera test statistic: JB = n/6 * (S² + K²/4)
+            // Lower JB = more Gaussian
+            _jbStatistics[j] = (n / 6.0) * (skewness * skewness + kurtosis * kurtosis / 4.0);
+        }
 
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
 
         if (_preferGaussian)
         {
             // Prefer features with low JB statistic (more Gaussian)
-            _selectedIndices = PreprocessingTensorOps.BottomKIndicesSorted(jb, numToSelect);
-        }
-        else
-        {
-            // Prefer features with high JB statistic (less Gaussian), excluding constant features
-            var isConstant = new HashSet<int>(PreprocessingTensorOps.MaskPositions(
-                PreprocessingTensorOps.Not(engine.TensorLessThan(jb, NumOps.MaxValue))));
-            _selectedIndices = PreprocessingTensorOps.StableOrder(jb, descending: true)
-                .Where(j => !isConstant.Contains(j))
+            _selectedIndices = Enumerable.Range(0, p)
+                .OrderBy(j => _jbStatistics[j])
                 .Take(numToSelect)
                 .OrderBy(x => x)
                 .ToArray();
         }
+        else
+        {
+            // Prefer features with high JB statistic (less Gaussian)
+            _selectedIndices = Enumerable.Range(0, p)
+                .Where(j => _jbStatistics[j] < double.MaxValue)
+                .OrderByDescending(j => _jbStatistics[j])
+                .Take(numToSelect)
+                .OrderBy(x => x)
+                .ToArray();
+        }
+
         IsFitted = true;
     }
 
@@ -118,7 +131,15 @@ public class GaussianitySelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, 
         if (_selectedIndices is null)
             throw new InvalidOperationException("GaussianitySelector has not been fitted.");
 
-        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
+        int numRows = data.Rows;
+        int numCols = _selectedIndices.Length;
+        var result = new T[numRows, numCols];
+
+        for (int i = 0; i < numRows; i++)
+            for (int j = 0; j < numCols; j++)
+                result[i, j] = data[i, _selectedIndices[j]];
+
+        return new Matrix<T>(result);
     }
 
     /// <inheritdoc />

@@ -22572,7 +22572,6 @@ AiDotNet.Document.Options.DocBankOptions.LearningRate.get -> double?
 *REMOVED*AiDotNet.Preprocessing.FeatureSelection.Clustering.SilhouetteBasedSelector<T>.SilhouetteScores.get -> double[]?
 *REMOVED*AiDotNet.Preprocessing.FeatureSelection.Complexity.FractalDimensionSelector<T>.FractalDimensions.get -> double[]?
 *REMOVED*AiDotNet.Preprocessing.FeatureSelection.Complexity.HurstExponentSelector<T>.HurstValues.get -> double[]?
-*REMOVED*AiDotNet.Preprocessing.FeatureSelection.Complexity.LempelZivSelector<T>.ComplexityValues.get -> double[]?
 *REMOVED*AiDotNet.Preprocessing.FeatureSelection.Complexity.LyapunovSelector<T>.LyapunovValues.get -> double[]?
 *REMOVED*AiDotNet.Preprocessing.FeatureSelection.Compression.CompressionRatioSelector<T>.EntropyScores.get -> double[]?
 *REMOVED*AiDotNet.Preprocessing.FeatureSelection.Compression.NormalizedCompressionSelector<T>.NCDScores.get -> double[]?
@@ -22588,7 +22587,6 @@ AiDotNet.Document.Options.DocBankOptions.LearningRate.get -> double?
 *REMOVED*AiDotNet.Preprocessing.FeatureSelection.Distance.EuclideanDistanceSelector<T>.DistanceScores.get -> double[]?
 *REMOVED*AiDotNet.Preprocessing.FeatureSelection.Distance.ManhattanDistanceSelector<T>.DistanceScores.get -> double[]?
 *REMOVED*AiDotNet.Preprocessing.FeatureSelection.Distance.MahalanobisDistanceSelector<T>.DistanceContributions.get -> double[]?
-*REMOVED*AiDotNet.Preprocessing.FeatureSelection.Distribution.GaussianitySelector<T>.JBStatistics.get -> double[]?
 *REMOVED*AiDotNet.Preprocessing.FeatureSelection.Distribution.UniformitySelector<T>.UniformityScores.get -> double[]?
 *REMOVED*AiDotNet.Preprocessing.FeatureSelection.DomainSpecific.GenomicFeatureSelector<T>.FeatureScores.get -> double[]?
 *REMOVED*AiDotNet.Preprocessing.FeatureSelection.DomainSpecific.GenomicFeatureSelector<T>.FoldChanges.get -> double[]?
@@ -22703,7 +22701,6 @@ AiDotNet.Preprocessing.FeatureSelection.Clustering.HierarchicalFS<T>.FeatureScor
 AiDotNet.Preprocessing.FeatureSelection.Clustering.SilhouetteBasedSelector<T>.SilhouetteScores.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
 AiDotNet.Preprocessing.FeatureSelection.Complexity.FractalDimensionSelector<T>.FractalDimensions.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
 AiDotNet.Preprocessing.FeatureSelection.Complexity.HurstExponentSelector<T>.HurstValues.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
-AiDotNet.Preprocessing.FeatureSelection.Complexity.LempelZivSelector<T>.ComplexityValues.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
 AiDotNet.Preprocessing.FeatureSelection.Complexity.LyapunovSelector<T>.LyapunovValues.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
 AiDotNet.Preprocessing.FeatureSelection.Compression.CompressionRatioSelector<T>.EntropyScores.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
 AiDotNet.Preprocessing.FeatureSelection.Compression.NormalizedCompressionSelector<T>.NCDScores.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
@@ -22719,7 +22716,6 @@ AiDotNet.Preprocessing.FeatureSelection.Distance.ChebyshevDistanceSelector<T>.Di
 AiDotNet.Preprocessing.FeatureSelection.Distance.EuclideanDistanceSelector<T>.DistanceScores.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
 AiDotNet.Preprocessing.FeatureSelection.Distance.ManhattanDistanceSelector<T>.DistanceScores.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
 AiDotNet.Preprocessing.FeatureSelection.Distance.MahalanobisDistanceSelector<T>.DistanceContributions.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
-AiDotNet.Preprocessing.FeatureSelection.Distribution.GaussianitySelector<T>.JBStatistics.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
 AiDotNet.Preprocessing.FeatureSelection.Distribution.UniformitySelector<T>.UniformityScores.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
 AiDotNet.Preprocessing.FeatureSelection.DomainSpecific.GenomicFeatureSelector<T>.FeatureScores.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
 AiDotNet.Preprocessing.FeatureSelection.DomainSpecific.GenomicFeatureSelector<T>.FoldChanges.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
