@@ -771,30 +771,15 @@ public class ScaleInvariantSignalToDistortionRatio<T> where T : struct
         }
 
         // Zero-mean the signals
-        T estMean = ComputeMean(estimated);
-        T tarMean = ComputeMean(target);
-
-        var estCentered = new Tensor<T>(estimated._shape);
-        var tarCentered = new Tensor<T>(target._shape);
-
-        for (int i = 0; i < estimated.Length; i++)
-        {
-            estCentered[i] = _numOps.Subtract(estimated[i], estMean);
-            tarCentered[i] = _numOps.Subtract(target[i], tarMean);
-        }
+        var engine = AiDotNetEngine.Current;
+        var estCentered = engine.TensorSubtractScalar(engine.Reshape(estimated, new[] { estimated.Length }), ComputeMean(estimated));
+        var tarCentered = engine.TensorSubtractScalar(engine.Reshape(target, new[] { target.Length }), ComputeMean(target));
 
         // Compute <s_est, s_tar> / <s_tar, s_tar>
-        T dotProduct = _numOps.Zero;
-        T tarNormSq = _numOps.Zero;
+        T dotProduct = engine.TensorSum(engine.TensorMultiply(estCentered, tarCentered));
+        T tarNormSq = engine.TensorSum(engine.TensorSquare(tarCentered));
 
-        for (int i = 0; i < estimated.Length; i++)
-        {
-            dotProduct = _numOps.Add(dotProduct, _numOps.Multiply(estCentered[i], tarCentered[i]));
-            tarNormSq = _numOps.Add(tarNormSq, _numOps.Multiply(tarCentered[i], tarCentered[i]));
-        }
-
-        double tarNormSqDouble = _numOps.ToDouble(tarNormSq);
-        if (tarNormSqDouble < 1e-10)
+        if (_numOps.LessThan(tarNormSq, _numOps.FromDouble(1e-10)))
         {
             return _numOps.FromDouble(-100.0); // Return very low SI-SDR for zero target
         }
@@ -803,29 +788,18 @@ public class ScaleInvariantSignalToDistortionRatio<T> where T : struct
 
         // s_target = alpha * s_tar (projection of estimate onto target)
         // e_noise = s_est - s_target
-        T sTargetNormSq = _numOps.Zero;
-        T eNoiseNormSq = _numOps.Zero;
+        var sTarget = engine.TensorMultiplyScalar(tarCentered, alpha);
+        var eNoise = engine.TensorSubtract(estCentered, sTarget);
+        T sTargetNormSq = engine.TensorSum(engine.TensorSquare(sTarget));
+        T eNoiseNormSq = engine.TensorSum(engine.TensorSquare(eNoise));
 
-        for (int i = 0; i < estimated.Length; i++)
-        {
-            T sTarget = _numOps.Multiply(alpha, tarCentered[i]);
-            T eNoise = _numOps.Subtract(estCentered[i], sTarget);
-
-            sTargetNormSq = _numOps.Add(sTargetNormSq, _numOps.Multiply(sTarget, sTarget));
-            eNoiseNormSq = _numOps.Add(eNoiseNormSq, _numOps.Multiply(eNoise, eNoise));
-        }
-
-        double eNoiseDouble = _numOps.ToDouble(eNoiseNormSq);
-        if (eNoiseDouble < 1e-10)
+        if (_numOps.LessThan(eNoiseNormSq, _numOps.FromDouble(1e-10)))
         {
             return _numOps.FromDouble(100.0); // Near-perfect reconstruction
         }
 
         // SI-SDR = 10 * log10(||s_target||^2 / ||e_noise||^2)
-        double ratio = _numOps.ToDouble(sTargetNormSq) / eNoiseDouble;
-        double siSdr = 10.0 * Math.Log10(ratio);
-
-        return _numOps.FromDouble(siSdr);
+        return Decibels(_numOps, _numOps.Divide(sTargetNormSq, eNoiseNormSq));
     }
 
     /// <summary>
@@ -844,14 +818,13 @@ public class ScaleInvariantSignalToDistortionRatio<T> where T : struct
     }
 
     private T ComputeMean(Tensor<T> tensor)
-    {
-        T sum = _numOps.Zero;
-        for (int i = 0; i < tensor.Length; i++)
-        {
-            sum = _numOps.Add(sum, tensor[i]);
-        }
-        return _numOps.Divide(sum, _numOps.FromDouble(tensor.Length));
-    }
+        => _numOps.Divide(AiDotNetEngine.Current.TensorSum(tensor), _numOps.FromDouble(tensor.Length));
+
+    /// <summary>
+    /// 10 * log10(ratio).
+    /// </summary>
+    internal static T Decibels(INumericOperations<T> numOps, T ratio)
+        => numOps.Multiply(numOps.FromDouble(10.0 / Math.Log(10.0)), numOps.Log(ratio));
 }
 
 /// <summary>
@@ -894,26 +867,18 @@ public class SignalToNoiseRatio<T> where T : struct
             throw new ArgumentException("Clean and noisy signals must have the same length");
         }
 
-        T signalPower = _numOps.Zero;
-        T noisePower = _numOps.Zero;
+        var engine = AiDotNetEngine.Current;
+        var cleanFlat = engine.Reshape(clean, new[] { clean.Length });
+        var noise = engine.TensorSubtract(engine.Reshape(noisy, new[] { noisy.Length }), cleanFlat);
+        T signalPower = engine.TensorSum(engine.TensorSquare(cleanFlat));
+        T noisePower = engine.TensorSum(engine.TensorSquare(noise));
 
-        for (int i = 0; i < clean.Length; i++)
-        {
-            T noise = _numOps.Subtract(noisy[i], clean[i]);
-            signalPower = _numOps.Add(signalPower, _numOps.Multiply(clean[i], clean[i]));
-            noisePower = _numOps.Add(noisePower, _numOps.Multiply(noise, noise));
-        }
-
-        double noiseDouble = _numOps.ToDouble(noisePower);
-        if (noiseDouble < 1e-10)
+        if (_numOps.LessThan(noisePower, _numOps.FromDouble(1e-10)))
         {
             return _numOps.FromDouble(100.0); // Near-perfect match
         }
 
-        double ratio = _numOps.ToDouble(signalPower) / noiseDouble;
-        double snr = 10.0 * Math.Log10(ratio);
-
-        return _numOps.FromDouble(snr);
+        return ScaleInvariantSignalToDistortionRatio<T>.Decibels(_numOps, _numOps.Divide(signalPower, noisePower));
     }
 
     /// <summary>
@@ -931,44 +896,32 @@ public class SignalToNoiseRatio<T> where T : struct
             return Compute(clean, noisy);
         }
 
-        double sumSnr = 0.0;
-        int validFrames = 0;
+        // Non-overlapping frames [numFrames, frameLength]; a trailing partial frame is ignored.
+        var engine = AiDotNetEngine.Current;
+        int used = numFrames * frameLength;
+        var cleanFrames = engine.Reshape(
+            engine.TensorNarrow(engine.Reshape(clean, new[] { clean.Length }), 0, 0, used), new[] { numFrames, frameLength });
+        var noisyFrames = engine.Reshape(
+            engine.TensorNarrow(engine.Reshape(noisy, new[] { noisy.Length }), 0, 0, used), new[] { numFrames, frameLength });
+        var signalPower = engine.ReduceSum(engine.TensorSquare(cleanFrames), new[] { 1 }, false);
+        var noisePower = engine.ReduceSum(engine.TensorSquare(engine.TensorSubtract(noisyFrames, cleanFrames)), new[] { 1 }, false);
 
-        for (int f = 0; f < numFrames; f++)
-        {
-            int start = f * frameLength;
-            int end = Math.Min(start + frameLength, clean.Length);
-
-            T signalPower = _numOps.Zero;
-            T noisePower = _numOps.Zero;
-
-            for (int i = start; i < end; i++)
-            {
-                T noise = _numOps.Subtract(noisy[i], clean[i]);
-                signalPower = _numOps.Add(signalPower, _numOps.Multiply(clean[i], clean[i]));
-                noisePower = _numOps.Add(noisePower, _numOps.Multiply(noise, noise));
-            }
-
-            double sigDouble = _numOps.ToDouble(signalPower);
-            double noiseDouble = _numOps.ToDouble(noisePower);
-
-            // Skip silent frames
-            if (sigDouble > 1e-10 && noiseDouble > 1e-10)
-            {
-                double snr = 10.0 * Math.Log10(sigDouble / noiseDouble);
-                // Clamp to reasonable range [-10, 35] dB
-                snr = Math.Max(-10.0, Math.Min(35.0, snr));
-                sumSnr += snr;
-                validFrames++;
-            }
-        }
-
-        if (validFrames == 0)
+        // Skip silent frames (and frames reproduced exactly)
+        T floor = _numOps.FromDouble(1e-10);
+        var valid = engine.TensorMultiply(engine.TensorGreaterThan(signalPower, floor), engine.TensorGreaterThan(noisePower, floor));
+        T validFrames = engine.TensorSum(valid);
+        if (_numOps.Equals(validFrames, _numOps.Zero))
         {
             return _numOps.Zero;
         }
 
-        return _numOps.FromDouble(sumSnr / validFrames);
+        var ones = Tensor<T>.CreateDefault(new[] { numFrames }, _numOps.One);
+        var ratios = engine.TensorDivide(engine.TensorWhere(valid, signalPower, ones), engine.TensorWhere(valid, noisePower, ones));
+        var snr = engine.TensorMultiplyScalar(engine.TensorLog10(ratios), _numOps.FromDouble(10.0));
+
+        // Clamp to reasonable range [-10, 35] dB
+        snr = engine.TensorClamp(snr, _numOps.FromDouble(-10.0), _numOps.FromDouble(35.0));
+        return _numOps.Divide(engine.TensorSum(engine.TensorMultiply(snr, valid)), validFrames);
     }
 }
 
