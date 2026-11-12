@@ -116,27 +116,9 @@ public class AutoIntClassifier<T> : AutoIntBase<T>
     {
         var probabilities = PredictProbabilities(numericalFeatures, categoricalIndices);
         int batchSize = probabilities.Shape[0];
-        var predictions = new Vector<int>(batchSize);
 
-        for (int b = 0; b < batchSize; b++)
-        {
-            int maxIdx = 0;
-            var maxProb = probabilities[b * _numClasses + 0];
-
-            for (int c = 1; c < _numClasses; c++)
-            {
-                var prob = probabilities[b * _numClasses + c];
-                if (NumOps.Compare(prob, maxProb) > 0)
-                {
-                    maxProb = prob;
-                    maxIdx = c;
-                }
-            }
-
-            predictions[b] = maxIdx;
-        }
-
-        return predictions;
+        // Per-row argmax over the classes (first index wins ties, as before).
+        return Engine.TensorArgMax(Engine.Reshape(probabilities, new[] { batchSize, _numClasses }), 1).ToVector();
     }
 
     /// <summary>
@@ -152,17 +134,13 @@ public class AutoIntClassifier<T> : AutoIntBase<T>
                 $"Targets length ({targets.Length}) must match batch size ({batchSize}).");
         }
 
-        var totalLoss = NumOps.Zero;
         var epsilon = NumOps.FromDouble(1e-15);
 
-        for (int b = 0; b < batchSize; b++)
-        {
-            int targetClass = targets[b];
-            var prob = probabilities[b * _numClasses + targetClass];
-            var safeProb = NumOps.Add(prob, epsilon);
-            var loss = NumOps.Negate(NumOps.Log(safeProb));
-            totalLoss = NumOps.Add(totalLoss, loss);
-        }
+        // -mean_b log(p[b, target_b] + eps): gather each row's target probability, then reduce.
+        var targetProb = Engine.TensorTakeAlongDim(
+            Engine.Reshape(probabilities, new[] { batchSize, _numClasses }),
+            Tensor<int>.FromVector(targets, new[] { batchSize, 1 }), 1);
+        var totalLoss = NumOps.Negate(Engine.TensorSum(Engine.TensorLog(Engine.TensorAddScalar(targetProb, epsilon))));
 
         return NumOps.Divide(totalLoss, NumOps.FromDouble(batchSize));
     }
@@ -175,13 +153,10 @@ public class AutoIntClassifier<T> : AutoIntBase<T>
         int batchSize = numericalFeatures.Shape[0];
         if (batchSize == 0 || targets.Length != batchSize)
             throw new ArgumentException("Targets must match a nonempty input batch.", nameof(targets));
-        var labels = new Tensor<T>(new[] { batchSize, _numClasses });
-        for (int b = 0; b < batchSize; b++)
-        {
-            if ((uint)targets[b] >= (uint)_numClasses)
-                throw new ArgumentOutOfRangeException(nameof(targets), "Target class is out of range.");
-            labels[b * _numClasses + targets[b]] = NumOps.One;
-        }
+        var targetIndex = Tensor<int>.FromVector(targets, new[] { batchSize });
+        if (Engine.TensorMinValue(targetIndex) < 0 || Engine.TensorMaxValue(targetIndex) >= _numClasses)
+            throw new ArgumentOutOfRangeException(nameof(targets), "Target class is out of range.");
+        var labels = Engine.TensorOneHot<T>(targetIndex, _numClasses);
         return TrainWithTape(() =>
         {
             var probabilities = ApplySoftmax(Forward(numericalFeatures, categoricalIndices));
@@ -197,13 +172,10 @@ public class AutoIntClassifier<T> : AutoIntBase<T>
     public T ComputeAccuracy(Tensor<T> numericalFeatures, Vector<int> targets, Matrix<int>? categoricalIndices = null)
     {
         var predictions = Predict(numericalFeatures, categoricalIndices);
-        int correct = 0;
-
-        for (int i = 0; i < predictions.Length; i++)
-        {
-            if (predictions[i] == targets[i])
-                correct++;
-        }
+        int n = predictions.Length;
+        int correct = Engine.TensorSum(Engine.TensorEquals(
+            Tensor<int>.FromVector(predictions, new[] { n }),
+            Tensor<int>.FromVector(targets.GetSubVector(0, n), new[] { n })));
 
         return NumOps.FromDouble((double)correct / predictions.Length);
     }

@@ -219,13 +219,8 @@ public abstract partial class AutoIntBase<T> : IParameterSource<T>
 
     private void InitializeEmbedding(Tensor<T> embedding)
     {
-        var scale = NumOps.FromDouble(Options.EmbeddingInitScale);
-        for (int i = 0; i < embedding.Length; i++)
-        {
-            embedding[i] = NumOps.Multiply(
-                NumOps.FromDouble(_random.NextGaussian()),
-                scale);
-        }
+        // N(0, EmbeddingInitScale^2) in one engine call, seeded from this model's (secure) Random.
+        Engine.TensorNormalInPlace(embedding, 0.0, Options.EmbeddingInitScale, _random.Next());
     }
 
     /// <summary>Computes the scalar objective's gradients and applies one SGD step to the whole model.</summary>
@@ -275,18 +270,26 @@ public abstract partial class AutoIntBase<T> : IParameterSource<T>
                 throw new ArgumentException("Categorical indices must match the batch and categorical feature counts.", nameof(categoricalIndices));
             var cardinalities = Options.CategoricalCardinalities
                 ?? throw new InvalidOperationException("AutoIntBase: CategoricalCardinalities not configured.");
+
+            // [feature, batch] index table, validated in one pass: the first out-of-range entry in
+            // feature-major order is the one reported, as before.
+            var indexRows = Tensor<int>.FromMatrix(categoricalIndices.Transpose());
+            var limit = Engine.TensorBroadcastTo(
+                Tensor<int>.FromVector(new Vector<int>(cardinalities).GetSubVector(0, NumCategoricalFeatures), new[] { NumCategoricalFeatures, 1 }),
+                new[] { NumCategoricalFeatures, batchSize });
+            var invalid = Engine.TensorAdd(Engine.TensorLessThan(indexRows, 0), Engine.TensorGreaterEqual(indexRows, limit));
+            if (Engine.TensorMaxValue(invalid) > 0)
+            {
+                int first = Engine.TensorArgMax(Engine.Reshape(invalid, new[] { NumCategoricalFeatures * batchSize }), 0).ToArray()[0];
+                int badFeature = first / batchSize;
+                int badRow = first % batchSize;
+                throw new ArgumentOutOfRangeException(nameof(categoricalIndices),
+                    $"Categorical index {categoricalIndices[badRow, badFeature]} for feature {badFeature} (batch {badRow}) is out of range [0, {cardinalities[badFeature]}).");
+            }
+
             for (int f = 0; f < NumCategoricalFeatures; f++)
             {
-                int cardinality = cardinalities[f];
-                var indices = new Tensor<int>(new[] { batchSize });
-                for (int b = 0; b < batchSize; b++)
-                {
-                    int catIdx = categoricalIndices[b, f];
-                    if ((uint)catIdx >= (uint)cardinality)
-                        throw new ArgumentOutOfRangeException(nameof(categoricalIndices),
-                            $"Categorical index {catIdx} for feature {f} (batch {b}) is out of range [0, {cardinality}).");
-                    indices[b] = catIdx;
-                }
+                var indices = Engine.Reshape(Engine.TensorSlice(indexRows, new[] { f, 0 }, new[] { 1, batchSize }), new[] { batchSize });
                 var selected = Engine.TensorEmbeddingLookup<T, int>(_categoricalEmbeddings[f], indices);
                 parts.Add(Engine.Reshape(selected, new[] { batchSize, 1, Options.EmbeddingDimension }));
             }
@@ -352,41 +355,29 @@ public abstract partial class AutoIntBase<T> : IParameterSource<T>
 
         int batchSize = gradEmbedded.Shape[0];
         int embeddingDim = Options.EmbeddingDimension;
+        var grad3 = Engine.Reshape(gradEmbedded, new[] { batchSize, TotalFeatures, embeddingDim });
 
-        // Numerical embeddings: gradient accumulates scaled by feature values
-        for (int b = 0; b < batchSize; b++)
+        // Numerical embeddings: dE[f, :] = sum_b grad[b, f, :] * x[b, f]
+        if (NumNumericalFeatures > 0)
         {
-            for (int f = 0; f < NumNumericalFeatures; f++)
-            {
-                var featureValue = _numericalFeaturesCache[b * NumNumericalFeatures + f];
-                for (int d = 0; d < embeddingDim; d++)
-                {
-                    int gradIdx = (b * TotalFeatures + f) * embeddingDim + d;
-                    int embIdx = f * embeddingDim + d;
-                    _numericalEmbeddingsGrad[embIdx] = NumOps.Add(
-                        _numericalEmbeddingsGrad[embIdx],
-                        NumOps.Multiply(gradEmbedded[gradIdx], featureValue));
-                }
-            }
+            var numericalGrad = Engine.TensorSlice(grad3, new[] { 0, 0, 0 }, new[] { batchSize, NumNumericalFeatures, embeddingDim });
+            var x = Engine.TensorBroadcastTo(
+                Engine.Reshape(_numericalFeaturesCache, new[] { batchSize, NumNumericalFeatures, 1 }),
+                new[] { batchSize, NumNumericalFeatures, embeddingDim });
+            Engine.TensorCopy(Engine.ReduceSum(Engine.TensorMultiply(numericalGrad, x), new[] { 0 }, false), _numericalEmbeddingsGrad);
         }
 
         if (_categoricalEmbeddings != null && _categoricalEmbeddingsGrad != null && _categoricalIndicesCache != null)
         {
-            for (int b = 0; b < batchSize; b++)
+            // Categorical embeddings: scatter-add each row's gradient into its looked-up table row.
+            var indexRows = Tensor<int>.FromMatrix(_categoricalIndicesCache.Transpose());
+            for (int f = 0; f < NumCategoricalFeatures; f++)
             {
-                for (int f = 0; f < NumCategoricalFeatures; f++)
-                {
-                    int catIdx = _categoricalIndicesCache[b, f];
-                    int featureIdx = NumNumericalFeatures + f;
-                    for (int d = 0; d < embeddingDim; d++)
-                    {
-                        int gradIdx = (b * TotalFeatures + featureIdx) * embeddingDim + d;
-                        int embIdx = catIdx * embeddingDim + d;
-                        _categoricalEmbeddingsGrad[f][embIdx] = NumOps.Add(
-                            _categoricalEmbeddingsGrad[f][embIdx],
-                            gradEmbedded[gradIdx]);
-                    }
-                }
+                var rows = Engine.Reshape(
+                    Engine.TensorSlice(grad3, new[] { 0, NumNumericalFeatures + f, 0 }, new[] { batchSize, 1, embeddingDim }),
+                    new[] { batchSize, embeddingDim });
+                var index = Engine.Reshape(Engine.TensorSlice(indexRows, new[] { f, 0 }, new[] { 1, batchSize }), new[] { batchSize });
+                Engine.TensorCopy(Engine.TensorScatterAdd(_categoricalEmbeddingsGrad[f], index, rows, 0), _categoricalEmbeddingsGrad[f]);
             }
         }
     }
@@ -416,22 +407,14 @@ public abstract partial class AutoIntBase<T> : IParameterSource<T>
             : learningRate;
 
         // Note: _numericalEmbeddings is readonly, so we update in-place with subtract
-        var numUpdate = Engine.TensorMultiplyScalar(_numericalEmbeddingsGrad, scaledLr);
-        for (int i = 0; i < _numericalEmbeddings.Length; i++)
-        {
-            _numericalEmbeddings[i] = NumOps.Subtract(_numericalEmbeddings[i], numUpdate[i]);
-        }
+        Engine.TensorSubtractInPlace(_numericalEmbeddings, Engine.TensorMultiplyScalar(_numericalEmbeddingsGrad, scaledLr));
 
         if (_categoricalEmbeddings != null && _categoricalEmbeddingsGrad != null)
         {
             for (int f = 0; f < _categoricalEmbeddings.Length; f++)
             {
-                var emb = _categoricalEmbeddings[f];
-                var scaledGrad = Engine.TensorMultiplyScalar(_categoricalEmbeddingsGrad[f], scaledLr);
-                for (int i = 0; i < emb.Length; i++)
-                {
-                    emb[i] = NumOps.Subtract(emb[i], scaledGrad[i]);
-                }
+                Engine.TensorSubtractInPlace(_categoricalEmbeddings[f],
+                    Engine.TensorMultiplyScalar(_categoricalEmbeddingsGrad[f], scaledLr));
             }
         }
 
