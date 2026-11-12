@@ -483,18 +483,14 @@ public partial class MusicSourceSeparator<T> : AudioNeuralNetworkBase<T>, IMusic
 
             if (output is null)
             {
-                output = new Tensor<T>(kvp.Value._shape);
-                for (int i = 0; i < output.Length; i++)
-                {
-                    output[i] = kvp.Value[i];
-                }
+                using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+                output = kvp.Value.Clone();
             }
             else
             {
-                for (int i = 0; i < output.Length; i++)
-                {
-                    output[i] = NumOps.Add(output[i], kvp.Value[i]);
-                }
+                if (kvp.Value.Length < output.Length)
+                    throw new ArgumentOutOfRangeException("flatIndex", "Flat index is out of range.");
+                output = AudioEngineOps.AddPrefix(Engine, output, kvp.Value);
             }
         }
 
@@ -511,16 +507,11 @@ public partial class MusicSourceSeparator<T> : AudioNeuralNetworkBase<T>, IMusic
         // Compute STFT
         var stft = _stft.Forward(audio);
         var magnitude = ComputeMagnitude(stft);
+        int numFrames = magnitude.Shape[0];
+        int numBins = magnitude.Shape[1];
 
         // Prepare input and get all masks
-        var modelInput = new Tensor<T>([1, magnitude.Shape[0], magnitude.Shape[1]]);
-        for (int t = 0; t < magnitude.Shape[0]; t++)
-        {
-            for (int f = 0; f < magnitude.Shape[1]; f++)
-            {
-                modelInput[0, t, f] = magnitude[t, f];
-            }
-        }
+        var modelInput = MagnitudeModelInput(magnitude);
 
         // Get masks from prediction
         var masks = Predict(modelInput);
@@ -533,26 +524,33 @@ public partial class MusicSourceSeparator<T> : AudioNeuralNetworkBase<T>, IMusic
         }
 
         // Extract mask for the specific source
-        var sourceMask = new Tensor<T>([magnitude.Shape[0], magnitude.Shape[1]]);
-        int numBins = magnitude.Shape[1];
-
-        for (int t = 0; t < magnitude.Shape[0]; t++)
+        if (masks.Shape.Length >= 4 && sourceIndex < masks.Shape[1])
         {
-            for (int f = 0; f < numBins; f++)
-            {
-                if (masks.Shape.Length >= 4 && sourceIndex < masks.Shape[1])
-                {
-                    sourceMask[t, f] = masks[0, sourceIndex, t, f];
-                }
-                else
-                {
-                    // Fallback: equal mask
-                    sourceMask[t, f] = NumOps.FromDouble(1.0 / NumStems);
-                }
-            }
+            if (numFrames == 0 || numBins == 0)
+                return new Tensor<T>([numFrames, numBins]);
+            if (masks.Shape.Length != 4)
+                throw new ArgumentException("Number of indices must match the tensor's rank.");
+            if (masks.Shape[0] == 0 || numFrames > masks.Shape[2] || numBins > masks.Shape[3])
+                throw new ArgumentOutOfRangeException("indices", "Index is out of range.");
+
+            using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+            return Engine.Reshape(
+                Engine.TensorSlice(masks, [0, sourceIndex, 0, 0], [1, 1, numFrames, numBins]), [numFrames, numBins]);
         }
 
-        return sourceMask;
+        // Fallback: equal mask
+        return Tensor<T>.CreateDefault([numFrames, numBins], NumOps.FromDouble(1.0 / NumStems));
+    }
+
+    /// <summary>The <c>[frames, bins]</c> magnitude as a fresh <c>[1, frames, bins]</c> model input.</summary>
+    private Tensor<T> MagnitudeModelInput(Tensor<T> magnitude)
+    {
+        int numFrames = magnitude.Shape[0];
+        int numBins = magnitude.Shape[1];
+        if (numFrames == 0 || numBins == 0)
+            return new Tensor<T>([1, numFrames, numBins]);
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        return Engine.Reshape(Engine.TensorSlice(magnitude, [0, 0], [numFrames, numBins]), [1, numFrames, numBins]);
     }
 
     /// <summary>
@@ -758,14 +756,9 @@ public partial class MusicSourceSeparator<T> : AudioNeuralNetworkBase<T>, IMusic
     /// </summary>
     protected override Tensor<T> PostprocessOutput(Tensor<T> modelOutput)
     {
-        var result = new Tensor<T>(modelOutput._shape);
-        for (int i = 0; i < modelOutput.Length; i++)
-        {
-            double val = NumOps.ToDouble(modelOutput[i]);
-            // Sigmoid to ensure mask values are in [0, 1]
-            result[i] = NumOps.FromDouble(1.0 / (1.0 + Math.Exp(-val)));
-        }
-        return result;
+        // Sigmoid to ensure mask values are in [0, 1] (a fresh tensor)
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        return Engine.Sigmoid(modelOutput);
     }
 
     /// <summary>
@@ -824,14 +817,7 @@ public partial class MusicSourceSeparator<T> : AudioNeuralNetworkBase<T>, IMusic
         var phase = ComputePhase(stft);
 
         // Prepare input for model
-        var modelInput = new Tensor<T>([1, magnitude.Shape[0], magnitude.Shape[1]]);
-        for (int t = 0; t < magnitude.Shape[0]; t++)
-        {
-            for (int f = 0; f < magnitude.Shape[1]; f++)
-            {
-                modelInput[0, t, f] = magnitude[t, f];
-            }
-        }
+        var modelInput = MagnitudeModelInput(magnitude);
 
         // Run model to get masks
         var masks = OnnxEncoder.Run(modelInput);
@@ -856,14 +842,7 @@ public partial class MusicSourceSeparator<T> : AudioNeuralNetworkBase<T>, IMusic
         var magnitude = ComputeMagnitude(stft);
         var phase = ComputePhase(stft);
 
-        var modelInput = new Tensor<T>([1, magnitude.Shape[0], magnitude.Shape[1]]);
-        for (int t = 0; t < magnitude.Shape[0]; t++)
-        {
-            for (int f = 0; f < magnitude.Shape[1]; f++)
-            {
-                modelInput[0, t, f] = magnitude[t, f];
-            }
-        }
+        var modelInput = MagnitudeModelInput(magnitude);
 
         var masks = Predict(modelInput);
         masks = PostprocessOutput(masks);
@@ -888,13 +867,14 @@ public partial class MusicSourceSeparator<T> : AudioNeuralNetworkBase<T>, IMusic
         var sources = new Dictionary<string, Tensor<T>>();
         for (int stem = 0; stem < NumStems && stem < sourceNames.Count; stem++)
         {
-            var waveform = new Tensor<T>([stemLength]);
+            Tensor<T> waveform;
             if (stem < stemRows)
             {
-                for (int i = 0; i < stemLength; i++)
-                {
-                    waveform[i] = stems[stem, i];
-                }
+                // The stem's row (a fresh tensor)
+                using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+                waveform = stemLength == 0
+                    ? new Tensor<T>([stemLength])
+                    : Engine.Reshape(Engine.TensorSlice(stems, [stem, 0], [1, stemLength]), [stemLength]);
             }
             else
             {
@@ -971,32 +951,28 @@ public partial class MusicSourceSeparator<T> : AudioNeuralNetworkBase<T>, IMusic
     {
         int numFrames = stft.Shape[0];
         int numBins = stft.Shape[1];
+        var frameBins = new[] { numFrames, numBins };
 
         var sources = new Dictionary<string, Tensor<T>>();
         var sourceNames = SupportedSources;
+        T one = NumOps.One;
+        T zero = NumOps.Zero;
 
         for (int stem = 0; stem < NumStems && stem < sourceNames.Count; stem++)
         {
-            var stemMag = new Tensor<T>([numFrames, numBins]);
-
-            for (int t = 0; t < numFrames; t++)
+            // magnitude * mask, the mask clamped to [0, 1] (NaN kept)
+            var mask = StemMask(masks, stem, numFrames, numBins);
+            Tensor<T> stemMag;
+            if (numFrames == 0 || numBins == 0)
             {
-                for (int f = 0; f < numBins; f++)
-                {
-                    double mag = NumOps.ToDouble(magnitude[t, f]);
-                    double mask = 0;
-
-                    if (masks.Shape.Length >= 4 && stem < masks.Shape[1] && t < masks.Shape[2] && f < masks.Shape[3])
-                    {
-                        mask = NumOps.ToDouble(masks[0, stem, t, f]);
-                    }
-                    else if (masks.Shape.Length >= 3 && stem < masks.Shape[0])
-                    {
-                        mask = NumOps.ToDouble(masks[stem, t, f]);
-                    }
-
-                    stemMag[t, f] = NumOps.FromDouble(mag * Math.Max(0.0, Math.Min(1.0, mask)));
-                }
+                stemMag = new Tensor<T>(frameBins);
+            }
+            else
+            {
+                using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+                mask = Engine.TensorWhere(Engine.TensorGreaterThan(mask, one), Tensor<T>.CreateDefault(frameBins, one), mask);
+                mask = Engine.TensorWhere(Engine.TensorLessThan(mask, zero), new Tensor<T>(frameBins), mask);
+                stemMag = Engine.TensorMultiply(Engine.TensorSlice(magnitude, [0, 0], frameBins), mask);
             }
 
             sources[sourceNames[stem]] = ReconstructFromMagnitudePhase(stemMag, phase);
@@ -1011,48 +987,70 @@ public partial class MusicSourceSeparator<T> : AudioNeuralNetworkBase<T>, IMusic
         };
     }
 
+    /// <summary>
+    /// The <c>[frames, bins]</c> mask for <paramref name="stem"/>: element (t, f) is
+    /// <c>masks[0, stem, t, f]</c> when a rank-4 mask covers it, else <c>masks[stem, t, f]</c> when the
+    /// mask has rank 3 or more and <c>stem &lt; masks.Shape[0]</c> (an index count only a rank-3 mask
+    /// accepts), else 0. Reads the indexer would reject throw as the indexer does.
+    /// </summary>
+    private Tensor<T> StemMask(Tensor<T> masks, int stem, int numFrames, int numBins)
+    {
+        var frameBins = new[] { numFrames, numBins };
+        var zeros = new Tensor<T>(frameBins);
+        int rank = masks.Shape.Length;
+        if (numFrames == 0 || numBins == 0 || rank < 3)
+            return zeros;
+
+        // The region read through masks[0, stem, t, f]
+        int coveredFrames = 0;
+        int coveredBins = 0;
+        if (rank >= 4 && stem < masks.Shape[1])
+        {
+            coveredFrames = Math.Min(numFrames, masks.Shape[2]);
+            coveredBins = Math.Min(numBins, masks.Shape[3]);
+        }
+        bool anyCovered = coveredFrames > 0 && coveredBins > 0;
+        bool fallbackReads = !(coveredFrames == numFrames && coveredBins == numBins) && stem < masks.Shape[0];
+
+        if ((anyCovered && rank != 4) || (fallbackReads && rank != 3))
+            throw new ArgumentException("Number of indices must match the tensor's rank.");
+        if ((anyCovered && masks.Shape[0] == 0) || (fallbackReads && (numFrames > masks.Shape[1] || numBins > masks.Shape[2])))
+            throw new ArgumentOutOfRangeException("indices", "Index is out of range.");
+
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        if (fallbackReads)
+            return Engine.Reshape(Engine.TensorSlice(masks, [stem, 0, 0], [1, numFrames, numBins]), frameBins);
+        if (!anyCovered)
+            return zeros;
+
+        // The covered top-left region, zero elsewhere
+        var covered = Engine.Reshape(
+            Engine.TensorSlice(masks, [0, stem, 0, 0], [1, 1, coveredFrames, coveredBins]), [coveredFrames, coveredBins]);
+        if (coveredBins < numBins)
+            covered = Engine.Concat(new[] { covered, new Tensor<T>([coveredFrames, numBins - coveredBins]) }, 1);
+        if (coveredFrames < numFrames)
+            covered = Engine.Concat(new[] { covered, new Tensor<T>([numFrames - coveredFrames, numBins]) }, 0);
+        return covered;
+    }
+
     #endregion
 
     #region Signal Processing Helpers
 
     private Tensor<T> ComputeMagnitude(Tensor<Complex<T>> stft)
     {
-        int numFrames = stft.Shape[0];
-        int numBins = stft.Shape[1];
-        var magnitude = new Tensor<T>([numFrames, numBins]);
-
-        for (int t = 0; t < numFrames; t++)
-        {
-            for (int f = 0; f < numBins; f++)
-            {
-                var complex = stft[t, f];
-                double real = NumOps.ToDouble(complex.Real);
-                double imag = NumOps.ToDouble(complex.Imaginary);
-                magnitude[t, f] = NumOps.FromDouble(Math.Sqrt(real * real + imag * imag));
-            }
-        }
-
-        return magnitude;
+        // |z| = sqrt(re^2 + im^2) per bin (a fresh tensor)
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        var real = Engine.TensorReal(stft);
+        var imag = Engine.TensorImag(stft);
+        return Engine.TensorSqrt(Engine.TensorAdd(Engine.TensorSquare(real), Engine.TensorSquare(imag)));
     }
 
     private Tensor<T> ComputePhase(Tensor<Complex<T>> stft)
     {
-        int numFrames = stft.Shape[0];
-        int numBins = stft.Shape[1];
-        var phase = new Tensor<T>([numFrames, numBins]);
-
-        for (int t = 0; t < numFrames; t++)
-        {
-            for (int f = 0; f < numBins; f++)
-            {
-                var complex = stft[t, f];
-                double real = NumOps.ToDouble(complex.Real);
-                double imag = NumOps.ToDouble(complex.Imaginary);
-                phase[t, f] = NumOps.FromDouble(Math.Atan2(imag, real));
-            }
-        }
-
-        return phase;
+        // atan2(im, re) per bin (a fresh tensor)
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        return Engine.TensorAtan2(Engine.TensorImag(stft), Engine.TensorReal(stft));
     }
 
     private (Tensor<T> harmonic, Tensor<T> percussive) HarmonicPercussiveSeparation(Tensor<T> magnitude)
@@ -1064,100 +1062,111 @@ public partial class MusicSourceSeparator<T> : AudioNeuralNetworkBase<T>, IMusic
         var harmonicEnhanced = MedianFilterTime(magnitude, kernelSize);
         var percussiveEnhanced = MedianFilterFrequency(magnitude, kernelSize);
 
-        var harmonicMag = new Tensor<T>([numFrames, numBins]);
-        var percussiveMag = new Tensor<T>([numFrames, numBins]);
+        if (numFrames == 0 || numBins == 0)
+            return (new Tensor<T>([numFrames, numBins]), new Tensor<T>([numFrames, numBins]));
 
-        for (int t = 0; t < numFrames; t++)
-        {
-            for (int f = 0; f < numBins; f++)
-            {
-                double h = NumOps.ToDouble(harmonicEnhanced[t, f]);
-                double p = NumOps.ToDouble(percussiveEnhanced[t, f]);
-                double m = NumOps.ToDouble(magnitude[t, f]);
-
-                double sum = h + p + 1e-10;
-                harmonicMag[t, f] = NumOps.FromDouble(m * h / sum);
-                percussiveMag[t, f] = NumOps.FromDouble(m * p / sum);
-            }
-        }
+        // Soft masks: m * h / (h + p + 1e-10) and m * p / (h + p + 1e-10)
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        var m = Engine.TensorSlice(magnitude, [0, 0], [numFrames, numBins]);
+        var sum = Engine.TensorAddScalar(Engine.TensorAdd(harmonicEnhanced, percussiveEnhanced), NumOps.FromDouble(1e-10));
+        var harmonicMag = Engine.TensorDivide(Engine.TensorMultiply(m, harmonicEnhanced), sum);
+        var percussiveMag = Engine.TensorDivide(Engine.TensorMultiply(m, percussiveEnhanced), sum);
 
         return (harmonicMag, percussiveMag);
     }
 
     private Tensor<T> MedianFilterTime(Tensor<T> input, int kernelSize)
     {
-        int numFrames = input.Shape[0];
-        int numBins = input.Shape[1];
-        var output = new Tensor<T>([numFrames, numBins]);
-        int halfKernel = kernelSize / 2;
-        int windowSize = (2 * halfKernel) + 1;
-
-        for (int f = 0; f < numBins; f++)
-        {
-            var window = new double[windowSize];
-
-            for (int t = 0; t < numFrames; t++)
-            {
-                int count = 0;
-                for (int k = -halfKernel; k <= halfKernel; k++)
-                {
-                    int ti = Math.Max(0, Math.Min(numFrames - 1, t + k));
-                    window[count++] = NumOps.ToDouble(input[ti, f]);
-                }
-
-                Array.Sort(window, 0, count);
-                output[t, f] = NumOps.FromDouble(window[count / 2]);
-            }
-        }
-
-        return output;
+        return SlidingMedian(input, kernelSize, axis: 0);
     }
 
     private Tensor<T> MedianFilterFrequency(Tensor<T> input, int kernelSize)
+    {
+        return SlidingMedian(input, kernelSize, axis: 1);
+    }
+
+    /// <summary>
+    /// Median over the edge-clamped window <c>[i - k/2, i + k/2]</c> along <paramref name="axis"/>
+    /// (0: frames, 1: bins) of a <c>[frames, bins]</c> tensor: the middle of the ascending window with
+    /// NaN ordered first, as <c>Array.Sort</c> orders doubles.
+    /// </summary>
+    private Tensor<T> SlidingMedian(Tensor<T> input, int kernelSize, int axis)
     {
         int numFrames = input.Shape[0];
         int numBins = input.Shape[1];
         var output = new Tensor<T>([numFrames, numBins]);
         int halfKernel = kernelSize / 2;
         int windowSize = (2 * halfKernel) + 1;
+        int length = axis == 0 ? numFrames : numBins;
+        int other = axis == 0 ? numBins : numFrames;
 
-        for (int t = 0; t < numFrames; t++)
+        if (other == 0)
+            return output;
+        if (windowSize < 0)
+            throw new OverflowException("Arithmetic operation resulted in an overflow.");
+        if (length == 0)
+            return output;
+
+        T negativeInfinity = NumOps.FromDouble(double.NegativeInfinity);
+        T nan = NumOps.FromDouble(double.NaN);
+        T one = NumOps.One;
+        T middleIndex = NumOps.FromDouble(halfKernel);
+
+        // Window rows are processed in blocks to bound the gathered [rows, window, other] tensor
+        int blockRows = (int)Math.Max(1, Math.Min(length, (1L << 22) / ((long)other * windowSize)));
+        var pieces = new List<Tensor<T>>();
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        for (int start = 0; start < length; start += blockRows)
         {
-            var window = new double[windowSize];
-
-            for (int f = 0; f < numBins; f++)
+            int rows = Math.Min(blockRows, length - start);
+            var index = new int[rows * windowSize];
+            for (int i = 0; i < rows; i++)
             {
-                int count = 0;
-                for (int k = -halfKernel; k <= halfKernel; k++)
-                {
-                    int fi = Math.Max(0, Math.Min(numBins - 1, f + k));
-                    window[count++] = NumOps.ToDouble(input[t, fi]);
-                }
-
-                Array.Sort(window, 0, count);
-                output[t, f] = NumOps.FromDouble(window[count / 2]);
+                for (int j = 0; j < windowSize; j++)
+                    index[i * windowSize + j] = Math.Max(0, Math.Min(length - 1, start + i + j - halfKernel));
             }
+
+            var gathered = Engine.TensorIndexSelect(input, new Tensor<int>(index, [rows * windowSize]), axis);
+            int sortAxis = axis == 0 ? 1 : 2;
+            var windowShape = axis == 0 ? new[] { rows, windowSize, other } : new[] { other, rows, windowSize };
+            var windows = Engine.Reshape(gathered, windowShape);
+
+            // NaN sorts first: rank it as -inf, and take NaN when more than half the window is NaN
+            var isNaN = Engine.TensorIsNan(windows);
+            var ranked = Engine.TensorWhere(isNaN, Tensor<T>.CreateDefault(windowShape, negativeInfinity), windows);
+            var sorted = Engine.TensorSort(ranked, sortAxis).Values;
+            var nanCount = Engine.ReduceSum(
+                Engine.TensorWhere(isNaN, Tensor<T>.CreateDefault(windowShape, one), new Tensor<T>(windowShape)), [sortAxis], keepDims: false);
+            var pieceShape = axis == 0 ? new[] { rows, other } : new[] { other, rows };
+            var middle = axis == 0
+                ? Engine.Reshape(Engine.TensorSlice(sorted, [0, halfKernel, 0], [rows, 1, other]), pieceShape)
+                : Engine.Reshape(Engine.TensorSlice(sorted, [0, 0, halfKernel], [other, rows, 1]), pieceShape);
+            pieces.Add(Engine.TensorWhere(
+                Engine.TensorGreaterThan(nanCount, middleIndex), Tensor<T>.CreateDefault(pieceShape, nan), middle));
         }
 
-        return output;
+        return pieces.Count == 1 ? pieces[0] : Engine.Concat(pieces.ToArray(), axis);
     }
 
     private Tensor<T> ReconstructFromMagnitudePhase(Tensor<T> magnitude, Tensor<T> phase)
     {
         int numFrames = magnitude.Shape[0];
         int numBins = magnitude.Shape[1];
+        var frameBins = new[] { numFrames, numBins };
 
-        var stft = new Tensor<Complex<T>>([numFrames, numBins]);
-        for (int t = 0; t < numFrames; t++)
+        // mag * (cos(phase) + i sin(phase))
+        Tensor<Complex<T>> stft;
+        if (numFrames == 0 || numBins == 0)
         {
-            for (int f = 0; f < numBins; f++)
-            {
-                double mag = NumOps.ToDouble(magnitude[t, f]);
-                double ph = NumOps.ToDouble(phase[t, f]);
-                T real = NumOps.FromDouble(mag * Math.Cos(ph));
-                T imag = NumOps.FromDouble(mag * Math.Sin(ph));
-                stft[t, f] = new Complex<T>(real, imag);
-            }
+            stft = new Tensor<Complex<T>>(frameBins);
+        }
+        else
+        {
+            using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+            var mag = Engine.TensorSlice(magnitude, [0, 0], frameBins);
+            var ph = Engine.TensorSlice(phase, [0, 0], frameBins);
+            stft = Engine.TensorComplex(
+                Engine.TensorMultiply(mag, Engine.TensorCos(ph)), Engine.TensorMultiply(mag, Engine.TensorSin(ph)));
         }
 
         return _stft.Inverse(stft);
@@ -1165,59 +1174,81 @@ public partial class MusicSourceSeparator<T> : AudioNeuralNetworkBase<T>, IMusic
 
     private (Tensor<T> vocals, Tensor<T> other) SeparateVocals(Tensor<T> harmonicMag, Tensor<T> phase)
     {
-        int numFrames = harmonicMag.Shape[0];
         int numBins = harmonicMag.Shape[1];
 
         double vocalLowBin = 300.0 * _options.FftSize / _options.SampleRate;
         double vocalHighBin = 4000.0 * _options.FftSize / _options.SampleRate;
 
-        var vocalMag = new Tensor<T>([numFrames, numBins]);
-        var otherMag = new Tensor<T>([numFrames, numBins]);
+        // Per-bin vocal weight: 0.7 inside [low, high], a 50-bin rise below it, a 100-bin fall above it
+        var bins = Engine.TensorArange<T>(0, numBins, 1);
+        var binShape = new[] { numBins };
+        var ones = Tensor<T>.CreateDefault(binShape, NumOps.One);
+        var rise = Engine.TensorDivideScalar(
+            Engine.TensorMultiplyScalar(Engine.TensorSubtractScalar(bins, NumOps.FromDouble(vocalLowBin - 50)), NumOps.FromDouble(0.3)),
+            NumOps.FromDouble(50));
+        var fall = Engine.TensorMultiplyScalar(
+            Engine.TensorSubtract(ones, Engine.TensorDivideScalar(Engine.TensorSubtractScalar(bins, NumOps.FromDouble(vocalHighBin)), NumOps.FromDouble(100))),
+            NumOps.FromDouble(0.3));
+        var vocalWeight = Engine.TensorWhere(
+            BinBand(bins, vocalLowBin, true, vocalHighBin, true),
+            Tensor<T>.CreateDefault(binShape, NumOps.FromDouble(0.7)),
+            Engine.TensorWhere(
+                BinBand(bins, vocalLowBin - 50, true, vocalLowBin, false),
+                rise,
+                Engine.TensorWhere(BinBand(bins, vocalHighBin, false, vocalHighBin + 100, true), fall, new Tensor<T>(binShape))));
 
-        for (int t = 0; t < numFrames; t++)
-        {
-            for (int f = 0; f < numBins; f++)
-            {
-                double mag = NumOps.ToDouble(harmonicMag[t, f]);
-                double vocalWeight = 0;
-
-                if (f >= vocalLowBin && f <= vocalHighBin)
-                    vocalWeight = 0.7;
-                else if (f < vocalLowBin && f >= vocalLowBin - 50)
-                    vocalWeight = 0.3 * (f - (vocalLowBin - 50)) / 50;
-                else if (f > vocalHighBin && f <= vocalHighBin + 100)
-                    vocalWeight = 0.3 * (1 - (f - vocalHighBin) / 100);
-
-                vocalMag[t, f] = NumOps.FromDouble(mag * vocalWeight);
-                otherMag[t, f] = NumOps.FromDouble(mag * (1 - vocalWeight));
-            }
-        }
+        var vocalMag = WeightBins(harmonicMag, vocalWeight);
+        var otherMag = WeightBins(harmonicMag, Engine.TensorSubtract(ones, vocalWeight));
 
         return (ReconstructFromMagnitudePhase(vocalMag, phase), ReconstructFromMagnitudePhase(otherMag, phase));
     }
 
     private Tensor<T> ExtractBassline(Tensor<T> harmonicMag, Tensor<T> phase)
     {
-        int numFrames = harmonicMag.Shape[0];
         int numBins = harmonicMag.Shape[1];
         double bassMaxBin = 250.0 * _options.FftSize / _options.SampleRate;
 
-        var bassMag = new Tensor<T>([numFrames, numBins]);
+        // Per-bin weight: 1 up to bassMaxBin, then a linear fade over the next 20 bins, 0 after
+        var bins = Engine.TensorArange<T>(0, numBins, 1);
+        var binShape = new[] { numBins };
+        var fade = Engine.TensorSubtract(
+            Tensor<T>.CreateDefault(binShape, NumOps.One),
+            Engine.TensorDivideScalar(Engine.TensorSubtractScalar(bins, NumOps.FromDouble(bassMaxBin)), NumOps.FromDouble(20)));
+        var weight = Engine.TensorWhere(
+            BinBand(bins, double.NegativeInfinity, true, bassMaxBin, true),
+            Tensor<T>.CreateDefault(binShape, NumOps.One),
+            Engine.TensorWhere(BinBand(bins, bassMaxBin, false, bassMaxBin + 20, true), fade, new Tensor<T>(binShape)));
 
-        for (int t = 0; t < numFrames; t++)
-        {
-            for (int f = 0; f < numBins; f++)
-            {
-                double mag = NumOps.ToDouble(harmonicMag[t, f]);
-                double bassWeight = f <= bassMaxBin ? 1.0 : 0.0;
-                if (f > bassMaxBin && f <= bassMaxBin + 20)
-                    bassWeight = 1.0 - (f - bassMaxBin) / 20;
-
-                bassMag[t, f] = NumOps.FromDouble(mag * bassWeight);
-            }
-        }
-
+        var bassMag = WeightBins(harmonicMag, weight);
         return ReconstructFromMagnitudePhase(bassMag, phase);
+    }
+
+    /// <summary>
+    /// 1 where <c>lo &lt;(=) f &lt;(=) hi</c> for the bin indices <paramref name="bins"/>, else 0 (a NaN
+    /// bound never holds).
+    /// </summary>
+    private Tensor<T> BinBand(Tensor<T> bins, double lo, bool loInclusive, double hi, bool hiInclusive)
+    {
+        var shape = bins.Shape.ToArray();
+        var loBound = Tensor<T>.CreateDefault(shape, NumOps.FromDouble(lo));
+        var hiBound = Tensor<T>.CreateDefault(shape, NumOps.FromDouble(hi));
+        var above = loInclusive ? Engine.TensorGreaterEqual(bins, loBound) : Engine.TensorGreaterThan(bins, loBound);
+        var below = hiInclusive ? Engine.TensorGreaterEqual(hiBound, bins) : Engine.TensorGreaterThan(hiBound, bins);
+        return Engine.TensorMultiply(above, below);
+    }
+
+    /// <summary><c>magnitude[t, f] * weight[f]</c> (a fresh <c>[frames, bins]</c> tensor).</summary>
+    private Tensor<T> WeightBins(Tensor<T> magnitude, Tensor<T> weight)
+    {
+        int numFrames = magnitude.Shape[0];
+        int numBins = magnitude.Shape[1];
+        var frameBins = new[] { numFrames, numBins };
+        if (numFrames == 0 || numBins == 0)
+            return new Tensor<T>(frameBins);
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        return Engine.TensorMultiply(
+            Engine.TensorSlice(magnitude, [0, 0], frameBins),
+            Engine.TensorBroadcastTo(Engine.Reshape(weight, [1, numBins]), frameBins));
     }
 
     private Tensor<T> CreateUniformMasks(Tensor<T> input)
@@ -1226,21 +1257,8 @@ public partial class MusicSourceSeparator<T> : AudioNeuralNetworkBase<T>, IMusic
         int numFrames = input.Shape.Length > 2 ? input.Shape[1] : input.Shape[0];
         int numBins = input.Shape.Length > 2 ? input.Shape[2] : input.Shape[1];
 
-        var masks = new Tensor<T>([1, NumStems, numFrames, numBins]);
         double uniformValue = 1.0 / NumStems;
-
-        for (int stem = 0; stem < NumStems; stem++)
-        {
-            for (int t = 0; t < numFrames; t++)
-            {
-                for (int f = 0; f < numBins; f++)
-                {
-                    masks[0, stem, t, f] = NumOps.FromDouble(uniformValue);
-                }
-            }
-        }
-
-        return masks;
+        return Tensor<T>.CreateDefault([1, NumStems, numFrames, numBins], NumOps.FromDouble(uniformValue));
     }
 
     private static string GetModelRepository(int stemCount)
