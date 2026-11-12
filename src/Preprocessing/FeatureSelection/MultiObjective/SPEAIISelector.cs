@@ -2,6 +2,7 @@ using AiDotNet.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Enums;
 using AiDotNet.Attributes;
+using AiDotNet.Preprocessing.FeatureSelection.Helpers;
 
 namespace AiDotNet.Preprocessing.FeatureSelection.MultiObjective;
 
@@ -27,13 +28,13 @@ public class SPEAIISelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupe
     private readonly int _archiveSize;
     private readonly int _nGenerations;
 
-    private double[]? _featureImportances;
+    private Vector<T>? _featureImportances;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
-    public double[]? FeatureImportances => _featureImportances;
+    public Vector<T>? FeatureImportances => _featureImportances;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -70,189 +71,167 @@ public class SPEAIISelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupe
             throw new ArgumentException("Target length must match rows in data.");
 
         _nInputFeatures = data.Columns;
-        int n = data.Rows;
         int p = data.Columns;
+        var engine = Engine;
 
         var rand = RandomHelper.CreateSecureRandom();
-        var X = new double[n, p];
-        var y = new double[n];
-        for (int i = 0; i < n; i++)
-        {
-            y[i] = NumOps.ToDouble(target[i]);
-            for (int j = 0; j < p; j++)
-                X[i, j] = NumOps.ToDouble(data[i, j]);
-        }
+        var scores = PopulationSearchOps.AbsTargetCorrelations(data, target, NumOps.Zero);
 
-        // Initialize population
-        var population = new List<bool[]>();
-        for (int i = 0; i < _populationSize; i++)
-        {
-            var individual = new bool[p];
-            int numToSelect = rand.Next(1, Math.Min(p, _nFeaturesToSelect) + 1);
-            var indices = Enumerable.Range(0, p).OrderBy(_ => rand.Next()).Take(numToSelect);
-            foreach (int idx in indices) individual[idx] = true;
-            population.Add(individual);
-        }
+        // Initialize population; the archive starts empty
+        var population = ParetoOps.RandomSubsets<T>(rand, _populationSize, p, _nFeaturesToSelect);
+        Tensor<T>? archive = null;
 
-        var archive = new List<bool[]>();
-
-        // SPEA-II main loop
+        // SPEA2 main loop (Zitzler, Laumanns and Thiele 2001)
         for (int gen = 0; gen < _nGenerations; gen++)
         {
-            var combined = population.Concat(archive).ToList();
-            var objectives = combined.Select(ind => EvaluateObjectives(X, y, ind, n, p)).ToList();
+            var combined = archive is null ? population : engine.TensorConcatenate(new[] { population, archive }, 0);
+            var (accuracy, featureCount) = EvaluateObjectives(combined, scores);
 
-            // Compute fitness
-            var fitness = ComputeFitness(objectives);
+            // Fitness assignment and environmental selection into the next archive
+            var fitness = ComputeFitness(accuracy, featureCount, out var distances);
+            var members = EnvironmentalSelection(fitness, distances, _archiveSize);
+            var memberIndex = new Tensor<int>(members, new[] { members.Length });
+            archive = engine.TensorIndexSelect(combined, memberIndex, 0);
+            var archiveFitness = engine.TensorIndexSelect(fitness, memberIndex, 0);
 
-            // Environmental selection
-            archive = EnvironmentalSelection(combined, fitness, objectives);
-
-            // Mating selection and variation
-            population = new List<bool[]>();
-            while (population.Count < _populationSize)
+            // Mating selection on the new archive (binary tournament on its fitness) and variation
+            var children = new Tensor<T>[_populationSize];
+            for (int c = 0; c < _populationSize; c++)
             {
-                int p1 = TournamentSelect(archive, fitness, rand);
-                int p2 = TournamentSelect(archive, fitness, rand);
-                var child = Crossover(archive[p1], archive[p2], p, rand);
-                Mutate(child, p, rand);
-                population.Add(child);
+                int p1 = TournamentSelect(archiveFitness, rand);
+                int p2 = TournamentSelect(archiveFitness, rand);
+                var child = ParetoOps.EnsureNonEmpty(
+                    ParetoOps.UniformCrossover(
+                        PopulationSearchOps.Row(archive, p1), PopulationSearchOps.Row(archive, p2),
+                        PopulationSearchOps.Uniform<T>(rand, p)),
+                    rand);
+                child = ParetoOps.EnsureNonEmpty(ParetoOps.BitFlip(child, PopulationSearchOps.Uniform<T>(rand, p), 0.05), rand);
+                children[c] = engine.Reshape(child, new[] { 1, p });
             }
+
+            population = engine.TensorConcatenate(children, 0);
         }
+
+        if (archive is null)
+            archive = population;
 
         // Track feature importance from archive
-        _featureImportances = new double[p];
-        var archiveObjectives = archive.Select(ind => EvaluateObjectives(X, y, ind, n, p)).ToList();
-        for (int i = 0; i < archive.Count; i++)
-            for (int j = 0; j < p; j++)
-                if (archive[i][j])
-                    _featureImportances[j] += archiveObjectives[i].acc;
+        var (archiveAccuracy, archiveCount) = EvaluateObjectives(archive, scores);
+        var importances = engine.Reshape(
+            engine.TensorMatMul(
+                engine.TensorTranspose(archive), engine.Reshape(archiveAccuracy, new[] { archive.Shape[0], 1 })),
+            new[] { p });
+        _featureImportances = importances.ToVector();
 
-        // Select best solution from archive
-        int bestIdx = 0;
-        double bestScore = double.MinValue;
-        for (int i = 0; i < archive.Count; i++)
-        {
-            var obj = archiveObjectives[i];
-            double score = obj.acc - 0.1 * obj.nFeat / p;
-            if (score > bestScore) { bestScore = score; bestIdx = i; }
-        }
+        // Select best solution from archive: accuracy - 0.1 * features / p
+        var tradeOff = engine.TensorSubtract(archiveAccuracy, engine.TensorMultiplyScalar(archiveCount, NumOps.FromDouble(0.1 / p)));
+        var best = PopulationSearchOps.Row(archive, PopulationSearchOps.ArgMax(tradeOff));
 
-        _selectedIndices = Enumerable.Range(0, p)
-            .Where(j => archive[bestIdx][j])
+        _selectedIndices = FeatureSelectionTensorOps.MaskPositions(best)
             .Take(_nFeaturesToSelect)
-            .OrderBy(x => x)
             .ToArray();
 
         IsFitted = true;
     }
 
-    private (double acc, double nFeat) EvaluateObjectives(double[,] X, double[] y, bool[] selected, int n, int p)
+    /// <summary>
+    /// The two objectives of every row of a 0/1 mask [m, p]: the mean absolute target correlation of the selected
+    /// features (to maximize) and the number of selected features (to minimize); an empty row scores (0, p).
+    /// </summary>
+    private (Tensor<T> Accuracy, Tensor<T> FeatureCount) EvaluateObjectives(Tensor<T> masks, Tensor<T> scores)
     {
-        var indices = Enumerable.Range(0, p).Where(j => selected[j]).ToList();
-        if (indices.Count == 0) return (0, p);
+        var engine = Engine;
+        int m = masks.Shape[0];
+        var count = engine.ReduceSum(masks, new[] { 1 }, false);
+        var emptyCount = FeatureSelectionTensorOps.Filled(new[] { m }, NumOps.FromDouble(masks.Shape[1]));
+        return (PopulationSearchOps.SubsetFitness(masks, scores, 0, NumOps.Zero, NumOps.Zero),
+                engine.TensorWhere(engine.TensorGreaterThan(count, NumOps.Zero), count, emptyCount));
+    }
 
-        double yMean = y.Average();
-        double totalScore = 0;
-        foreach (int j in indices)
+    /// <summary>
+    /// SPEA2 fitness F(i) = R(i) + D(i): the strength S(j) is the number of solutions j dominates, the raw
+    /// fitness R(i) sums S(j) over the solutions j that dominate i, and the density D(i) = 1 / (sigma_i^k + 2)
+    /// with sigma_i^k the objective-space distance to the k-th nearest neighbour, k = floor(sqrt(m)).
+    /// <paramref name="distances"/> is the pairwise distance matrix [m, m] of the objective vectors.
+    /// </summary>
+    internal static Tensor<T> ComputeFitness(Tensor<T> accuracy, Tensor<T> featureCount, out Tensor<T> distances)
+    {
+        var engine = AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<T>();
+        int m = accuracy.Length;
+
+        var dominance = ParetoOps.Dominance(accuracy, featureCount);
+        var strength = engine.ReduceSum(dominance, new[] { 1 }, true); // [m, 1]
+        var raw = engine.Reshape(engine.TensorMatMul(engine.TensorTranspose(dominance), strength), new[] { m });
+
+        var objectives = engine.TensorConcatenate(
+            new[] { engine.Reshape(accuracy, new[] { m, 1 }), engine.Reshape(featureCount, new[] { m, 1 }) }, 1);
+        distances = FeatureSelectionTensorOps.PairwiseDistances(objectives);
+
+        // Row-sorted distances start with the zero distance to the solution itself, so column k is the k-th nearest
+        int k = Math.Min((int)Math.Sqrt(m), m - 1);
+        var sorted = engine.TensorSort(distances, 1, false).Item1;
+        var kth = engine.Reshape(engine.TensorSlice(sorted, new[] { 0, k }, new[] { m, 1 }), new[] { m });
+        var density = engine.TensorDivide(
+            FeatureSelectionTensorOps.Filled(new[] { m }, ops.One), engine.TensorAddScalar(kth, ops.FromDouble(2)));
+        return engine.TensorAdd(raw, density);
+    }
+
+    /// <summary>
+    /// SPEA2 environmental selection: every nondominated solution (F &lt; 1) enters the archive. When they are
+    /// fewer than <paramref name="archiveSize"/>, the best dominated ones by fitness fill it; when they are more,
+    /// the archive truncation operator removes, one at a time, the solution whose sorted distances to the other
+    /// remaining ones are lexicographically smallest.
+    /// </summary>
+    internal static int[] EnvironmentalSelection(Tensor<T> fitness, Tensor<T> distances, int archiveSize)
+    {
+        var engine = AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<T>();
+        var nondominated = FeatureSelectionTensorOps.MaskPositions(engine.TensorLessThan(fitness, ops.One));
+        if (nondominated.Length <= archiveSize)
         {
-            double xMean = 0;
-            for (int i = 0; i < n; i++) xMean += X[i, j];
-            xMean /= n;
-
-            double sxy = 0, sxx = 0, syy = 0;
-            for (int i = 0; i < n; i++)
-            {
-                double xDiff = X[i, j] - xMean;
-                double yDiff = y[i] - yMean;
-                sxy += xDiff * yDiff;
-                sxx += xDiff * xDiff;
-                syy += yDiff * yDiff;
-            }
-            totalScore += (sxx > 1e-10 && syy > 1e-10) ? Math.Abs(sxy / Math.Sqrt(sxx * syy)) : 0;
+            // Nondominated solutions have F < 1 <= F of every dominated one, so they lead the fitness order
+            return FeatureSelectionTensorOps.StableOrder(fitness, descending: false)
+                .Take(Math.Min(archiveSize, fitness.Length))
+                .ToArray();
         }
 
-        return (totalScore / indices.Count, indices.Count);
-    }
-
-    private double[] ComputeFitness(List<(double acc, double nFeat)> objectives)
-    {
-        int n = objectives.Count;
-        var strength = new int[n];
-        var rawFitness = new double[n];
-
-        // Compute strength
-        for (int i = 0; i < n; i++)
-            for (int j = 0; j < n; j++)
-                if (i != j && Dominates(objectives[i], objectives[j]))
-                    strength[i]++;
-
-        // Compute raw fitness
-        for (int i = 0; i < n; i++)
-            for (int j = 0; j < n; j++)
-                if (i != j && Dominates(objectives[j], objectives[i]))
-                    rawFitness[i] += strength[j];
-
-        // Add density
-        var distances = new double[n, n];
-        for (int i = 0; i < n; i++)
-            for (int j = i + 1; j < n; j++)
-            {
-                double d = Math.Sqrt(Math.Pow(objectives[i].acc - objectives[j].acc, 2) +
-                                    Math.Pow(objectives[i].nFeat - objectives[j].nFeat, 2));
-                distances[i, j] = d;
-                distances[j, i] = d;
-            }
-
-        var fitness = new double[n];
-        int k = (int)Math.Sqrt(n);
-        for (int i = 0; i < n; i++)
+        var members = new List<int>(nondominated);
+        while (members.Count > archiveSize)
         {
-            var sortedDist = Enumerable.Range(0, n).Where(j => j != i)
-                .Select(j => distances[i, j]).OrderBy(d => d).ToList();
-            double density = 1.0 / (sortedDist[Math.Min(k, sortedDist.Count - 1)] + 2);
-            fitness[i] = rawFitness[i] + density;
+            var index = new Tensor<int>(members.ToArray(), new[] { members.Count });
+            var among = engine.TensorIndexSelect(engine.TensorIndexSelect(distances, index, 0), index, 1);
+            members.RemoveAt(LexicographicMinimumRow(engine.TensorSort(among, 1, false).Item1));
         }
 
-        return fitness;
+        return members.ToArray();
     }
 
-    private bool Dominates((double acc, double nFeat) a, (double acc, double nFeat) b)
+    /// <summary>The first row of a row-sorted distance matrix [L, L] that is lexicographically smallest.</summary>
+    private static int LexicographicMinimumRow(Tensor<T> sortedRows)
     {
-        return a.acc >= b.acc && a.nFeat <= b.nFeat && (a.acc > b.acc || a.nFeat < b.nFeat);
+        var engine = AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<T>();
+        int count = sortedRows.Shape[0];
+        var candidates = FeatureSelectionTensorOps.Filled(new[] { count }, ops.One);
+        var excluded = FeatureSelectionTensorOps.Filled(new[] { count }, ops.MaxValue);
+        for (int c = 1; c < count && FeatureSelectionTensorOps.CountNonZero(candidates) > 1; c++)
+        {
+            var column = engine.Reshape(engine.TensorSlice(sortedRows, new[] { 0, c }, new[] { count, 1 }), new[] { count });
+            var masked = engine.TensorWhere(engine.TensorGreaterThan(candidates, ops.Zero), column, excluded);
+            var smallest = engine.TensorBroadcastTo(ParetoOps.Min(masked), new[] { count });
+            candidates = engine.TensorMultiply(candidates, engine.TensorEquals(masked, smallest));
+        }
+
+        return FeatureSelectionTensorOps.MaskPositions(candidates)[0];
     }
 
-    private List<bool[]> EnvironmentalSelection(List<bool[]> combined, double[] fitness, List<(double acc, double nFeat)> objectives)
+    /// <summary>Binary tournament with replacement: the solution with the smaller fitness wins (the second on ties).</summary>
+    private static int TournamentSelect(Tensor<T> fitness, Random rand)
     {
-        var sorted = Enumerable.Range(0, combined.Count).OrderBy(i => fitness[i]).ToList();
-        var selected = new List<bool[]>();
-        foreach (int i in sorted.Take(_archiveSize))
-            selected.Add((bool[])combined[i].Clone());
-        return selected;
-    }
-
-    private int TournamentSelect(List<bool[]> archive, double[] fitness, Random rand)
-    {
-        int a = rand.Next(archive.Count);
-        int b = rand.Next(archive.Count);
-        return fitness[a] < fitness[b] ? a : b;
-    }
-
-    private bool[] Crossover(bool[] p1, bool[] p2, int p, Random rand)
-    {
-        var child = new bool[p];
-        for (int i = 0; i < p; i++)
-            child[i] = rand.NextDouble() < 0.5 ? p1[i] : p2[i];
-        if (!child.Any(x => x)) child[rand.Next(p)] = true;
-        return child;
-    }
-
-    private void Mutate(bool[] individual, int p, Random rand)
-    {
-        for (int i = 0; i < p; i++)
-            if (rand.NextDouble() < 0.05)
-                individual[i] = !individual[i];
-        if (!individual.Any(x => x)) individual[rand.Next(p)] = true;
+        int a = rand.Next(fitness.Length);
+        int b = rand.Next(fitness.Length);
+        return PopulationSearchOps.Greater(PopulationSearchOps.At(fitness, b), PopulationSearchOps.At(fitness, a)) ? a : b;
     }
 
     /// <inheritdoc />
@@ -268,15 +247,7 @@ public class SPEAIISelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupe
         if (_selectedIndices is null)
             throw new InvalidOperationException("SPEAIISelector has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return FeatureSelectionTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

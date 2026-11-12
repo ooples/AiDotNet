@@ -1,3 +1,5 @@
+using AiDotNet.Preprocessing.FeatureSelection.MultiObjective;
+using System.Collections.Generic;
 using System.Linq;
 using AiDotNet.Preprocessing.FeatureSelection.Metaheuristic;
 using AiDotNet.Tensors.LinearAlgebra;
@@ -570,5 +572,188 @@ public class FeatureSelectionPopulationReferenceTests
         Assert.NotNull(featureScores);
         for (int j = 0; j < p; j++)
             Assert.Equal(hm[bestIdx][j], featureScores?[j] ?? double.NaN, 12);
+    }
+
+    // ---------------------------------------------------------------- Multi-objective (NSGA-II, SPEA2, MOEA/D)
+
+    private static bool DominatesReference(double accA, double cntA, double accB, double cntB) =>
+        accA >= accB && cntA <= cntB && (accA > accB || cntA < cntB);
+
+    [Fact]
+    public void ParetoFronts_MatchBruteForceNonDominatedSorting()
+    {
+        double[] acc = { 0.5, 0.7, 0.7, 0.2, 0.9, 0.5, 0.3, 0.9 };
+        double[] cnt = { 2, 3, 2, 1, 5, 4, 1, 4 };
+        var fronts = AiDotNet.Preprocessing.FeatureSelection.Helpers.ParetoOps.Fronts(
+            AiDotNet.Preprocessing.FeatureSelection.Helpers.ParetoOps.Dominance(Tensor1D(acc), Tensor1D(cnt)), out var rank);
+
+        // Reference: peel the solutions not dominated by any remaining one
+        var remaining = Enumerable.Range(0, acc.Length).ToList();
+        var expectedRank = new double[acc.Length];
+        int level = 0;
+        var expectedFronts = new List<int[]>();
+        while (remaining.Count > 0)
+        {
+            var front = remaining.Where(j => !remaining.Any(i => DominatesReference(acc[i], cnt[i], acc[j], cnt[j]))).ToArray();
+            foreach (int j in front) expectedRank[j] = level;
+            expectedFronts.Add(front);
+            remaining = remaining.Except(front).ToList();
+            level++;
+        }
+
+        Assert.Equal(expectedFronts.Count, fronts.Count);
+        for (int f = 0; f < fronts.Count; f++)
+            Assert.Equal(expectedFronts[f], fronts[f]);
+        Assert.Equal(expectedRank, ToArray(rank));
+    }
+
+    [Fact]
+    public void CrowdingDistance_GivesBothObjectivesInfiniteBoundaries()
+    {
+        // One front whose extremes differ per objective: accuracy extremes are 1 and 4, count extremes 0 and 2
+        double[] acc = { 0.30, 0.10, 0.25, 0.20, 0.40, 0.35 };
+        double[] cnt = { 1, 4, 6, 2, 3, 5 };
+        var front = new[] { 0, 1, 2, 3, 4, 5 };
+        var distance = ToArray(AiDotNet.Preprocessing.FeatureSelection.Helpers.ParetoOps.CrowdingDistance(
+            new List<int[]> { front }, Tensor1D(acc), Tensor1D(cnt)));
+
+        // Deb et al. (2002): per objective, sorted boundaries are infinite, interior adds the normalized gap
+        var expected = new double[acc.Length];
+        foreach (var objective in new[] { acc, cnt })
+        {
+            var order = front.OrderBy(i => objective[i]).ToArray();
+            double range = objective[order[order.Length - 1]] - objective[order[0]];
+            expected[order[0]] = double.PositiveInfinity;
+            expected[order[order.Length - 1]] = double.PositiveInfinity;
+            for (int r = 1; r < order.Length - 1; r++)
+                expected[order[r]] += (objective[order[r + 1]] - objective[order[r - 1]]) / range;
+        }
+
+        for (int i = 0; i < acc.Length; i++)
+        {
+            if (double.IsPositiveInfinity(expected[i]))
+                Assert.Equal(double.MaxValue, distance[i]);
+            else
+                Assert.Equal(expected[i], distance[i], 12);
+        }
+
+        // Solutions 2 (most features) and 0 (fewest) are boundaries of the count objective only
+        Assert.Equal(double.MaxValue, distance[2]);
+        Assert.Equal(double.MaxValue, distance[0]);
+    }
+
+    [Fact]
+    public void NSGAII_SelectSurvivors_TakesWholeFrontsThenLeastCrowded()
+    {
+        var fronts = new List<int[]> { new[] { 0, 1 }, new[] { 2, 3, 4 }, new[] { 5 } };
+        var crowding = Tensor1D(9, 9, 0.5, double.MaxValue, 1.0, 3);
+        Assert.Equal(new[] { 0, 1, 3, 4 }, NSGAIISelector<double>.SelectSurvivors(fronts, crowding, 4));
+        Assert.Equal(new[] { 0, 1, 2, 3, 4 }, NSGAIISelector<double>.SelectSurvivors(fronts, crowding, 5));
+        Assert.Equal(new[] { 0, 1, 2, 3, 4, 5 }, NSGAIISelector<double>.SelectSurvivors(fronts, crowding, 6));
+    }
+
+    private static double[] Spea2FitnessReference(double[] acc, double[] cnt, out double[,] distances)
+    {
+        int m = acc.Length;
+        var strength = new double[m];
+        for (int i = 0; i < m; i++)
+            for (int j = 0; j < m; j++)
+                if (DominatesReference(acc[i], cnt[i], acc[j], cnt[j])) strength[i]++;
+
+        distances = new double[m, m];
+        for (int i = 0; i < m; i++)
+            for (int j = 0; j < m; j++)
+                distances[i, j] = System.Math.Sqrt((acc[i] - acc[j]) * (acc[i] - acc[j]) + (cnt[i] - cnt[j]) * (cnt[i] - cnt[j]));
+
+        int k = (int)System.Math.Sqrt(m);
+        var fitness = new double[m];
+        for (int i = 0; i < m; i++)
+        {
+            double raw = 0;
+            for (int j = 0; j < m; j++)
+                if (DominatesReference(acc[j], cnt[j], acc[i], cnt[i])) raw += strength[j];
+
+            // sigma_i^k: distance to the k-th nearest other solution
+            var others = Enumerable.Range(0, m).Where(j => j != i).Select(j => distances[i, j]).OrderBy(d => d).ToArray();
+            fitness[i] = raw + 1.0 / (others[k - 1] + 2);
+        }
+
+        return fitness;
+    }
+
+    [Fact]
+    public void SPEAII_Fitness_IsRawStrengthPlusKthNearestDensity()
+    {
+        double[] acc = { 0.5, 0.7, 0.7, 0.2, 0.9, 0.5, 0.3, 0.9, 0.6 };
+        double[] cnt = { 2, 3, 2, 1, 5, 4, 1, 4, 3 };
+        var expected = Spea2FitnessReference(acc, cnt, out _);
+        var fitness = ToArray(SPEAIISelector<double>.ComputeFitness(Tensor1D(acc), Tensor1D(cnt), out _));
+        for (int i = 0; i < acc.Length; i++)
+            Assert.Equal(expected[i], fitness[i], 9);
+    }
+
+    [Fact]
+    public void SPEAII_EnvironmentalSelection_TruncatesNondominatedByNearestDistance()
+    {
+        // Five nondominated solutions on a line of accuracy versus count; 1 and 2 are the closest pair
+        double[] acc = { 0.1, 0.3, 0.35, 0.6, 0.9, 0.05 };
+        double[] cnt = { 1, 2, 2.1, 3, 4, 4 };
+        var fitness = SPEAIISelector<double>.ComputeFitness(Tensor1D(acc), Tensor1D(cnt), out var distances);
+        var fit = ToArray(fitness);
+        var d = new double[acc.Length, acc.Length];
+        var dist = ToArray(distances);
+        for (int i = 0; i < acc.Length; i++)
+            for (int j = 0; j < acc.Length; j++)
+                d[i, j] = dist[i * acc.Length + j];
+
+        // Reference truncation: drop the solution whose sorted distances are lexicographically smallest
+        var members = Enumerable.Range(0, acc.Length).Where(i => fit[i] < 1).ToList();
+        Assert.Equal(5, members.Count);
+        while (members.Count > 3)
+        {
+            int remove = members[0];
+            double[]? bestKey = null;
+            foreach (int i in members)
+            {
+                var key = members.Where(j => j != i).Select(j => d[i, j]).OrderBy(v => v).ToArray();
+                bool smaller = bestKey is null;
+                for (int c = 0; !smaller && bestKey is not null && c < key.Length; c++)
+                {
+                    if (key[c] < bestKey[c]) { smaller = true; break; }
+                    if (key[c] > bestKey[c]) break;
+                }
+
+                if (smaller)
+                {
+                    bestKey = key;
+                    remove = i;
+                }
+            }
+
+            members.Remove(remove);
+        }
+
+        var selected = SPEAIISelector<double>.EnvironmentalSelection(fitness, distances, 3);
+        Assert.Equal(members.OrderBy(i => i).ToArray(), selected.OrderBy(i => i).ToArray());
+        Assert.DoesNotContain(5, selected);
+
+        // With room to spare the dominated solution fills the archive after the nondominated ones
+        var all = SPEAIISelector<double>.EnvironmentalSelection(fitness, distances, 6);
+        Assert.Equal(5, all[5]);
+    }
+
+    [Fact]
+    public void MOEAD_TchebycheffAndWeights_FollowZhangAndLi()
+    {
+        var weights = MOEADSelector<double>.WeightVectors(5);
+        Assert.Equal(new[] { 0, 1, 0.25, 0.75, 0.5, 0.5, 0.75, 0.25, 1, 0 }, ToArray(weights));
+
+        var g = ToArray(MOEADSelector<double>.Tchebycheff(
+            Tensor1D(0.4, 0.8), Tensor1D(3, 6), Tensor2D(new double[,] { { 0.25, 0.75 }, { 0.9, 0.1 } }),
+            Tensor1D(0.9), Tensor1D(2)));
+        Assert.Equal(System.Math.Max(0.25 * 0.5, 0.75 * 1), g[0], 12);
+        Assert.Equal(System.Math.Max(0.9 * 0.1, 0.1 * 4), g[1], 12);
+
+        Assert.Throws<System.ArgumentException>(() => new MOEADSelector<double>(populationSize: 1));
     }
 }

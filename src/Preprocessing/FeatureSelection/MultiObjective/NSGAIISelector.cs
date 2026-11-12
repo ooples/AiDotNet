@@ -2,6 +2,7 @@ using AiDotNet.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Enums;
 using AiDotNet.Attributes;
+using AiDotNet.Preprocessing.FeatureSelection.Helpers;
 
 namespace AiDotNet.Preprocessing.FeatureSelection.MultiObjective;
 
@@ -31,13 +32,13 @@ public class NSGAIISelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupe
     private readonly double _crossoverRate;
     private readonly double _mutationRate;
 
-    private double[]? _featureImportances;
+    private Vector<T>? _featureImportances;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     public int MaxFeatures => _maxFeatures;
     public int PopulationSize => _populationSize;
-    public double[]? FeatureImportances => _featureImportances;
+    public Vector<T>? FeatureImportances => _featureImportances;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -76,330 +77,156 @@ public class NSGAIISelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupe
             throw new ArgumentException("Target length must match rows in data.");
 
         _nInputFeatures = data.Columns;
-        int n = data.Rows;
         int p = data.Columns;
+        var engine = Engine;
 
         var rand = RandomHelper.CreateSecureRandom();
-
-        // Convert to arrays
-        var X = new double[n, p];
-        var y = new double[n];
-        for (int i = 0; i < n; i++)
-        {
-            y[i] = NumOps.ToDouble(target[i]);
-            for (int j = 0; j < p; j++)
-                X[i, j] = NumOps.ToDouble(data[i, j]);
-        }
+        var scores = PopulationSearchOps.AbsTargetCorrelations(data, target, NumOps.Zero);
 
         // Initialize population
-        var population = new bool[_populationSize][];
-        for (int i = 0; i < _populationSize; i++)
-        {
-            population[i] = new bool[p];
-            int numSelected = rand.Next(1, Math.Min(p, _maxFeatures) + 1);
-            var indices = Enumerable.Range(0, p).OrderBy(_ => rand.Next()).Take(numSelected).ToList();
-            foreach (int idx in indices)
-                population[i][idx] = true;
-        }
+        var population = ParetoOps.RandomSubsets<T>(rand, _populationSize, p, _maxFeatures);
 
-        // NSGA-II main loop
+        // NSGA-II main loop (Deb et al. 2002)
         for (int gen = 0; gen < _nGenerations; gen++)
         {
-            // Evaluate objectives
-            var objectives = new (double accuracy, double nFeatures)[_populationSize];
-            for (int i = 0; i < _populationSize; i++)
-                objectives[i] = EvaluateObjectives(X, y, population[i], n, p);
+            // Evaluate objectives, non-dominated sorting and crowding distance of the parents
+            var (accuracy, featureCount) = EvaluateObjectives(population, scores);
+            var fronts = ParetoOps.Fronts(ParetoOps.Dominance(accuracy, featureCount), out var rank);
+            var crowding = ParetoOps.CrowdingDistance(fronts, accuracy, featureCount);
 
-            // Non-dominated sorting
-            var fronts = NonDominatedSort(objectives);
-
-            // Calculate crowding distance
-            var crowdingDistances = CalculateCrowdingDistance(objectives, fronts);
-
-            // Create offspring
-            var offspring = new bool[_populationSize][];
+            // Create offspring by crowded binary tournament, one-point crossover and bit-flip mutation
+            var offspring = new Tensor<T>[_populationSize];
             for (int i = 0; i < _populationSize; i += 2)
             {
-                // Tournament selection
-                int parent1 = TournamentSelect(fronts, crowdingDistances, rand);
-                int parent2 = TournamentSelect(fronts, crowdingDistances, rand);
+                int parent1 = TournamentSelect(rank, crowding, rand);
+                int parent2 = TournamentSelect(rank, crowding, rand);
+                var (child1, child2) = Crossover(
+                    PopulationSearchOps.Row(population, parent1), PopulationSearchOps.Row(population, parent2), p, rand);
 
-                // Crossover
-                var (child1, child2) = Crossover(population[parent1], population[parent2], p, rand);
-
-                // Mutation
-                Mutate(child1, p, rand);
-                Mutate(child2, p, rand);
-
-                offspring[i] = child1;
+                offspring[i] = engine.Reshape(Mutate(child1, p, rand), new[] { 1, p });
+                var mutated2 = Mutate(child2, p, rand);
                 if (i + 1 < _populationSize)
-                    offspring[i + 1] = child2;
+                    offspring[i + 1] = engine.Reshape(mutated2, new[] { 1, p });
             }
 
-            // Combine parent and offspring
-            var combined = population.Concat(offspring).ToArray();
-            var combinedObjectives = new (double accuracy, double nFeatures)[combined.Length];
-            for (int i = 0; i < combined.Length; i++)
-                combinedObjectives[i] = EvaluateObjectives(X, y, combined[i], n, p);
-
-            // Select next generation using NSGA-II selection
-            var nextGen = SelectNextGeneration(combined, combinedObjectives, _populationSize);
-            population = nextGen;
+            // Combine parent and offspring, then keep the best fronts and the least crowded of the last one
+            var combined = engine.TensorConcatenate(new[] { population, engine.TensorConcatenate(offspring, 0) }, 0);
+            var (combinedAccuracy, combinedCount) = EvaluateObjectives(combined, scores);
+            var combinedFronts = ParetoOps.Fronts(ParetoOps.Dominance(combinedAccuracy, combinedCount), out _);
+            var combinedCrowding = ParetoOps.CrowdingDistance(combinedFronts, combinedAccuracy, combinedCount);
+            var survivors = SelectSurvivors(combinedFronts, combinedCrowding, _populationSize);
+            population = engine.TensorIndexSelect(combined, new Tensor<int>(survivors, new[] { survivors.Length }), 0);
         }
 
-        // Select best solution (knee point or best accuracy with acceptable features)
-        var finalObjectives = new (double accuracy, double nFeatures)[_populationSize];
-        for (int i = 0; i < _populationSize; i++)
-            finalObjectives[i] = EvaluateObjectives(X, y, population[i], n, p);
+        // Select best solution (knee point)
+        var (finalAccuracy, finalCount) = EvaluateObjectives(population, scores);
+        int bestIdx = FindKneePoint(finalAccuracy, finalCount);
+        var bestSolution = PopulationSearchOps.Row(population, bestIdx);
 
-        int bestIdx = FindKneePoint(finalObjectives);
-        var bestSolution = population[bestIdx];
+        // Feature importance: the accuracy of every final solution that selects the feature
+        var importances = engine.Reshape(
+            engine.TensorMatMul(
+                engine.TensorTranspose(population), engine.Reshape(finalAccuracy, new[] { population.Shape[0], 1 })),
+            new[] { p });
+        _featureImportances = importances.ToVector();
 
-        // Track feature importance by selection frequency
-        _featureImportances = new double[p];
-        for (int i = 0; i < _populationSize; i++)
-            for (int j = 0; j < p; j++)
-                if (population[i][j])
-                    _featureImportances[j] += finalObjectives[i].accuracy;
-
-        _selectedIndices = Enumerable.Range(0, p)
-            .Where(j => bestSolution[j])
-            .OrderBy(x => x)
-            .ToArray();
+        _selectedIndices = FeatureSelectionTensorOps.MaskPositions(bestSolution);
 
         // Limit to max features
         if (_selectedIndices.Length > _maxFeatures)
-        {
-            _selectedIndices = _selectedIndices
-                .OrderByDescending(j => _featureImportances[j])
-                .Take(_maxFeatures)
-                .OrderBy(x => x)
-                .ToArray();
-        }
+            _selectedIndices = FeatureSelectionTensorOps.TopKWhere(importances, bestSolution, _maxFeatures);
 
         IsFitted = true;
     }
 
-    private (double accuracy, double nFeatures) EvaluateObjectives(double[,] X, double[] y, bool[] selected, int n, int p)
-    {
-        var indices = Enumerable.Range(0, p).Where(j => selected[j]).ToList();
-        if (indices.Count == 0)
-            return (0, 0);
+    /// <summary>
+    /// The two objectives of every row of a 0/1 mask [m, p]: the mean absolute target correlation of the selected
+    /// features (to maximize; 0 for an empty row) and the number of selected features (to minimize).
+    /// </summary>
+    private (Tensor<T> Accuracy, Tensor<T> FeatureCount) EvaluateObjectives(Tensor<T> masks, Tensor<T> scores) =>
+        (PopulationSearchOps.SubsetFitness(masks, scores, 0, NumOps.Zero, NumOps.Zero),
+         Engine.ReduceSum(masks, new[] { 1 }, false));
 
-        double accuracy = ComputeCorrelationScore(X, y, indices, n);
-        return (accuracy, indices.Count);
+    /// <summary>
+    /// Crowded binary tournament: of two uniformly drawn solutions the one in the better front wins, and within a
+    /// front the one with the larger crowding distance.
+    /// </summary>
+    private static int TournamentSelect(Tensor<T> rank, Tensor<T> crowding, Random rand)
+    {
+        int a = rand.Next(rank.Length);
+        int b = rand.Next(rank.Length);
+
+        var rankA = PopulationSearchOps.At(rank, a);
+        var rankB = PopulationSearchOps.At(rank, b);
+        if (PopulationSearchOps.Greater(rankB, rankA)) return a;
+        if (PopulationSearchOps.Greater(rankA, rankB)) return b;
+        return PopulationSearchOps.Greater(PopulationSearchOps.At(crowding, a), PopulationSearchOps.At(crowding, b)) ? a : b;
     }
 
-    private double ComputeCorrelationScore(double[,] X, double[] y, List<int> features, int n)
+    private (Tensor<T>, Tensor<T>) Crossover(Tensor<T> parent1, Tensor<T> parent2, int p, Random rand)
     {
-        double yMean = y.Average();
-        double totalScore = 0;
-
-        foreach (int j in features)
-        {
-            double xMean = 0;
-            for (int i = 0; i < n; i++)
-                xMean += X[i, j];
-            xMean /= n;
-
-            double sxy = 0, sxx = 0, syy = 0;
-            for (int i = 0; i < n; i++)
-            {
-                double xDiff = X[i, j] - xMean;
-                double yDiff = y[i] - yMean;
-                sxy += xDiff * yDiff;
-                sxx += xDiff * xDiff;
-                syy += yDiff * yDiff;
-            }
-
-            double corr = (sxx > 1e-10 && syy > 1e-10) ? Math.Abs(sxy / Math.Sqrt(sxx * syy)) : 0;
-            totalScore += corr;
-        }
-
-        return totalScore / features.Count;
-    }
-
-    private List<List<int>> NonDominatedSort((double accuracy, double nFeatures)[] objectives)
-    {
-        int n = objectives.Length;
-        var dominated = new List<int>[n];
-        var dominationCount = new int[n];
-        var fronts = new List<List<int>> { new List<int>() };
-
-        for (int i = 0; i < n; i++)
-        {
-            dominated[i] = new List<int>();
-            for (int j = 0; j < n; j++)
-            {
-                if (i == j) continue;
-                if (Dominates(objectives[i], objectives[j]))
-                    dominated[i].Add(j);
-                else if (Dominates(objectives[j], objectives[i]))
-                    dominationCount[i]++;
-            }
-            if (dominationCount[i] == 0)
-                fronts[0].Add(i);
-        }
-
-        int frontIdx = 0;
-        while (fronts[frontIdx].Count > 0)
-        {
-            var nextFront = new List<int>();
-            foreach (int i in fronts[frontIdx])
-            {
-                foreach (int j in dominated[i])
-                {
-                    dominationCount[j]--;
-                    if (dominationCount[j] == 0)
-                        nextFront.Add(j);
-                }
-            }
-            fronts.Add(nextFront);
-            frontIdx++;
-        }
-
-        return fronts;
-    }
-
-    private bool Dominates((double accuracy, double nFeatures) a, (double accuracy, double nFeatures) b)
-    {
-        return a.accuracy >= b.accuracy && a.nFeatures <= b.nFeatures &&
-               (a.accuracy > b.accuracy || a.nFeatures < b.nFeatures);
-    }
-
-    private double[] CalculateCrowdingDistance((double accuracy, double nFeatures)[] objectives, List<List<int>> fronts)
-    {
-        var distances = new double[objectives.Length];
-        foreach (var front in fronts)
-        {
-            if (front.Count == 0) continue;
-
-            // Sort by accuracy
-            var sorted = front.OrderBy(i => objectives[i].accuracy).ToList();
-            distances[sorted[0]] = double.MaxValue;
-            distances[sorted[sorted.Count - 1]] = double.MaxValue;
-
-            double accRange = objectives[sorted[sorted.Count - 1]].accuracy - objectives[sorted[0]].accuracy;
-            for (int i = 1; i < sorted.Count - 1; i++)
-            {
-                if (accRange > 1e-10)
-                    distances[sorted[i]] += (objectives[sorted[i + 1]].accuracy - objectives[sorted[i - 1]].accuracy) / accRange;
-            }
-
-            // Sort by nFeatures
-            sorted = front.OrderBy(i => objectives[i].nFeatures).ToList();
-            double nFeatRange = objectives[sorted[sorted.Count - 1]].nFeatures - objectives[sorted[0]].nFeatures;
-            for (int i = 1; i < sorted.Count - 1; i++)
-            {
-                if (nFeatRange > 1e-10)
-                    distances[sorted[i]] += (objectives[sorted[i + 1]].nFeatures - objectives[sorted[i - 1]].nFeatures) / nFeatRange;
-            }
-        }
-        return distances;
-    }
-
-    private int TournamentSelect(List<List<int>> fronts, double[] crowdingDistances, Random rand)
-    {
-        int a = rand.Next(fronts.Sum(f => f.Count));
-        int b = rand.Next(fronts.Sum(f => f.Count));
-
-        int frontA = GetFrontIndex(a, fronts);
-        int frontB = GetFrontIndex(b, fronts);
-
-        if (frontA < frontB) return a;
-        if (frontB < frontA) return b;
-        return crowdingDistances[a] > crowdingDistances[b] ? a : b;
-    }
-
-    private int GetFrontIndex(int individual, List<List<int>> fronts)
-    {
-        for (int i = 0; i < fronts.Count; i++)
-            if (fronts[i].Contains(individual))
-                return i;
-        return fronts.Count;
-    }
-
-    private (bool[], bool[]) Crossover(bool[] parent1, bool[] parent2, int p, Random rand)
-    {
-        var child1 = new bool[p];
-        var child2 = new bool[p];
-
         if (rand.NextDouble() < _crossoverRate)
         {
             int point = rand.Next(1, p);
-            for (int i = 0; i < p; i++)
-            {
-                child1[i] = i < point ? parent1[i] : parent2[i];
-                child2[i] = i < point ? parent2[i] : parent1[i];
-            }
-        }
-        else
-        {
-            Array.Copy(parent1, child1, p);
-            Array.Copy(parent2, child2, p);
+            return (ParetoOps.OnePointCrossover(parent1, parent2, point), ParetoOps.OnePointCrossover(parent2, parent1, point));
         }
 
-        return (child1, child2);
+        return (parent1, parent2);
     }
 
-    private void Mutate(bool[] individual, int p, Random rand)
+    private Tensor<T> Mutate(Tensor<T> individual, int p, Random rand) =>
+        ParetoOps.EnsureNonEmpty(ParetoOps.BitFlip(individual, PopulationSearchOps.Uniform<T>(rand, p), _mutationRate), rand);
+
+    /// <summary>
+    /// NSGA-II environmental selection: whole fronts are taken in order while they fit in <paramref name="size"/>,
+    /// and the remaining places go to the solutions of the next front with the largest crowding distance.
+    /// </summary>
+    internal static int[] SelectSurvivors(IReadOnlyList<int[]> fronts, Tensor<T> crowding, int size)
     {
-        for (int i = 0; i < p; i++)
-            if (rand.NextDouble() < _mutationRate)
-                individual[i] = !individual[i];
-
-        // Ensure at least one feature
-        if (!individual.Any(x => x))
-            individual[rand.Next(p)] = true;
-    }
-
-    private bool[][] SelectNextGeneration(bool[][] combined, (double accuracy, double nFeatures)[] objectives, int size)
-    {
-        var fronts = NonDominatedSort(objectives);
-        var crowding = CalculateCrowdingDistance(objectives, fronts);
-
-        var selected = new List<bool[]>();
+        var selected = new List<int>(size);
         int frontIdx = 0;
-
-        while (selected.Count + fronts[frontIdx].Count <= size && frontIdx < fronts.Count)
+        while (frontIdx < fronts.Count && selected.Count + fronts[frontIdx].Length <= size)
         {
-            foreach (int i in fronts[frontIdx])
-                selected.Add(combined[i]);
+            selected.AddRange(fronts[frontIdx]);
             frontIdx++;
         }
 
         if (selected.Count < size && frontIdx < fronts.Count)
         {
-            var remaining = fronts[frontIdx]
-                .OrderByDescending(i => crowding[i])
-                .Take(size - selected.Count);
-            foreach (int i in remaining)
-                selected.Add(combined[i]);
+            var front = fronts[frontIdx];
+            var frontCrowding = AiDotNetEngine.Current.TensorIndexSelect(
+                crowding, new Tensor<int>((int[])front.Clone(), new[] { front.Length }), 0);
+            var order = FeatureSelectionTensorOps.StableOrder(frontCrowding, descending: true);
+            for (int r = 0; r < size - selected.Count && r < order.Length; r++)
+                selected.Add(front[order[r]]);
         }
 
         return selected.ToArray();
     }
 
-    private int FindKneePoint((double accuracy, double nFeatures)[] objectives)
+    /// <summary>
+    /// The knee point: the solution closest to the ideal (1, 1) of (accuracy / best accuracy,
+    /// fewest features / features), first on ties.
+    /// </summary>
+    private int FindKneePoint(Tensor<T> accuracy, Tensor<T> featureCount)
     {
-        // Find solution with best trade-off (closest to ideal)
-        double maxAcc = objectives.Max(o => o.accuracy);
-        double minFeat = objectives.Min(o => o.nFeatures);
+        var engine = Engine;
+        int m = accuracy.Length;
+        var zeros = new Tensor<T>(new[] { m });
+        var maxAcc = engine.TensorBroadcastTo(ParetoOps.Max(accuracy), new[] { m });
+        var minFeat = engine.TensorBroadcastTo(ParetoOps.Min(featureCount), new[] { m });
+        var ones = FeatureSelectionTensorOps.Filled(new[] { m }, NumOps.One);
 
-        int best = 0;
-        double bestDist = double.MaxValue;
-        for (int i = 0; i < objectives.Length; i++)
-        {
-            double normAcc = maxAcc > 0 ? objectives[i].accuracy / maxAcc : 0;
-            double normFeat = minFeat > 0 ? minFeat / objectives[i].nFeatures : 0;
-            double dist = Math.Sqrt((1 - normAcc) * (1 - normAcc) + (1 - normFeat) * (1 - normFeat));
-            if (dist < bestDist)
-            {
-                bestDist = dist;
-                best = i;
-            }
-        }
-        return best;
+        var accPositive = engine.TensorGreaterThan(maxAcc, NumOps.Zero);
+        var normAcc = engine.TensorWhere(accPositive, engine.TensorDivide(accuracy, engine.TensorWhere(accPositive, maxAcc, ones)), zeros);
+        var featPositive = engine.TensorGreaterThan(minFeat, NumOps.Zero);
+        var safeCount = engine.TensorWhere(engine.TensorGreaterThan(featureCount, NumOps.Zero), featureCount, ones);
+        var normFeat = engine.TensorWhere(featPositive, engine.TensorDivide(minFeat, safeCount), zeros);
+
+        var dist = engine.TensorSqrt(engine.TensorAdd(
+            engine.TensorSquare(FeatureSelectionTensorOps.OneMinus(normAcc)),
+            engine.TensorSquare(FeatureSelectionTensorOps.OneMinus(normFeat))));
+        return PopulationSearchOps.ArgMin(dist);
     }
 
     /// <inheritdoc />
@@ -415,15 +242,7 @@ public class NSGAIISelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupe
         if (_selectedIndices is null)
             throw new InvalidOperationException("NSGAIISelector has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return FeatureSelectionTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />
