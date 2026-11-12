@@ -258,8 +258,7 @@ public partial class GatedSlotAttentionLayer<T> : LayerBase<T>, IShapeContract
         InitializeTensor2D(_forgetGateWeights);
         InitializeTensor2D(_inputGateWeights);
         // Forget gate bias ~ 2 so sigmoid(2) ~ 0.88 -> strong initial memory retention
-        for (int i = 0; i < _forgetGateBias.Length; i++)
-            _forgetGateBias[i] = NumOps.FromDouble(2.0);
+        _forgetGateBias.Fill(NumOps.FromDouble(2.0));
         _inputGateBias.Fill(NumOps.FromDouble(0.1));
         InitializeSlots();
         InitializeTensor2D(_outputGateWeights);
@@ -347,11 +346,12 @@ public partial class GatedSlotAttentionLayer<T> : LayerBase<T>, IShapeContract
         // receive identical dynamic updates. Aggregate those slots into the
         // square per-head state consumed by the fused GLA scan, then add the
         // learned initial-state contribution decayed by cumulative forget.
-        var slotCounts = new T[_headDimension];
-        for (int slot = 0; slot < _numSlots; slot++)
-            slotCounts[slot % _headDimension] = NumOps.Add(
-                slotCounts[slot % _headDimension], NumOps.One);
-        var countTensor = new Tensor<T>(slotCounts, new[] { 1, 1, 1, _headDimension });
+        // Key index j receives floor(numSlots / D) slots, plus one more when j < numSlots mod D.
+        var countTensor = Engine.Reshape(
+            Engine.TensorAddScalar(
+                Engine.TensorLessThan(Engine.TensorArange<T>(0, _headDimension, 1), NumOps.FromDouble(_numSlots % _headDimension)),
+                NumOps.FromDouble(_numSlots / _headDimension)),
+            new[] { 1, 1, 1, _headDimension });
         var kHeads = Engine.Reshape(
             k,
             new[] { batchSize, seqLen, _numHeads, _headDimension });

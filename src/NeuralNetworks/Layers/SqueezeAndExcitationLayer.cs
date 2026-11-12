@@ -893,23 +893,13 @@ public partial class SqueezeAndExcitationLayer<T> : LayerBase<T>, IAuxiliaryLoss
 
         // Compute L2 regularization on excitation weights
         // This penalizes large excitation values and encourages sparse channel attention
-        T attentionLoss = NumOps.Zero;
         int batchSize = _lastExcitationWeights.Shape[0];
         int channels = _lastExcitationWeights.Shape[1];
 
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int c = 0; c < channels; c++)
-            {
-                T weight = _lastExcitationWeights[b, c];
-                // L2 regularization: sum of squared weights
-                attentionLoss = NumOps.Add(attentionLoss, NumOps.Multiply(weight, weight));
-            }
-        }
-
-        // Average across batch and channels
-        int totalElements = batchSize * channels;
-        attentionLoss = NumOps.Divide(attentionLoss, NumOps.FromDouble(totalElements));
+        // L2 regularization: mean of the squared [batch, channel] excitation weights
+        var weights = _lastExcitationWeights;
+        T attentionLoss = NumOps.Divide(
+            Engine.TensorSum(Engine.TensorMultiply(weights, weights)), NumOps.FromDouble(batchSize * channels));
 
         // Store unweighted loss for diagnostics
         _lastChannelAttentionLoss = attentionLoss;

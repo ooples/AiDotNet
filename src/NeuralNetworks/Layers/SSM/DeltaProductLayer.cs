@@ -349,6 +349,7 @@ public partial class DeltaProductLayer<T> : LayerBase<T>, IShapeContract
             new[] { headBatch, _headDimension, _headDimension }, NumOps.Zero);
         var outputs = new List<Tensor<T>>(seqLen);
         var two = NumOps.FromDouble(2.0);
+        var normEpsilon = NumOps.FromDouble(1e-8);
 
         for (int t = 0; t < seqLen; t++)
         {
@@ -371,7 +372,7 @@ public partial class DeltaProductLayer<T> : LayerBase<T>, IShapeContract
                 var uCol = Engine.Reshape(u, new[] { headBatch, _headDimension, 1 });
                 var uRow = Engine.TensorPermute(uCol, new[] { 0, 2, 1 });
                 var normSq = Engine.BatchMatMul(uRow, uCol);
-                var denominator = Engine.TensorAddScalar(normSq, NumOps.FromDouble(1e-8));
+                var denominator = Engine.TensorAddScalar(normSq, normEpsilon);
                 var reflection = Engine.TensorMultiply(
                     Engine.BatchMatMul(uCol, uRow),
                     Engine.TensorDivide(Tensor<T>.CreateDefault(

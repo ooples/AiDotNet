@@ -294,13 +294,11 @@ public partial class BASEDLayer<T> : LayerBase<T>, IShapeContract
         InitializeTensor2D(_windowValueWeights);
 
         // Feature map scale initialized to 1.0 (identity scaling)
-        for (int i = 0; i < _featureMapScale.Length; i++)
-            _featureMapScale[i] = NumOps.One;
+        _featureMapScale.Fill(NumOps.One);
 
         InitializeTensor2D(_mixingGateWeights);
         // Bias initialized to 0.5 so sigmoid(0.5) ~ 0.62, slightly favoring linear attention initially
-        for (int i = 0; i < _mixingGateBias.Length; i++)
-            _mixingGateBias[i] = NumOps.FromDouble(0.5);
+        _mixingGateBias.Fill(NumOps.FromDouble(0.5));
 
         InitializeTensor2D(_outputProjectionWeights);
         _outputProjectionBias.Fill(NumOps.Zero);
@@ -425,38 +423,6 @@ public partial class BASEDLayer<T> : LayerBase<T>, IShapeContract
         for (int expansion = 2; expansion < _featureExpansion; expansion++)
             parts[expansion] = new Tensor<T>(scaled._shape);
         return Engine.TensorConcatenate(parts, axis: 3);
-    }
-
-    /// <summary>
-    /// Applies the Taylor expansion feature map: phi(x) = [x, x * x / sqrt(2)] (scaled by learned parameters).
-    /// The constant term is handled implicitly in the state accumulation.
-    /// </summary>
-    private void ApplyFeatureMap(
-        T[] headVector, int headIndex, T[] featureOutput)
-    {
-        // The Taylor expansion of exp(q*k) around 0 gives: 1 + q*k + (q*k)^2/2 + ...
-        // For the feature map: phi(x) = [1, x, x (tensor) x / sqrt(2)]
-        // We use a simplified version: phi(x) = [x * scale, x * x * scale / sqrt(2)]
-        // where scale is learned per-head
-
-        T sqrtTwo = NumOps.Sqrt(NumOps.FromDouble(2.0));
-        int halfExpanded = _headDimension;
-
-        for (int d = 0; d < _headDimension; d++)
-        {
-            T scaleVal = _featureMapScale[new[] { headIndex, d }];
-            T scaled = NumOps.Multiply(headVector[d], scaleVal);
-
-            // First-order term: x * scale
-            featureOutput[d] = scaled;
-
-            // Second-order term: (x * scale)^2 / sqrt(2)
-            if (_featureExpansion >= 2 && d < halfExpanded)
-            {
-                featureOutput[_headDimension + d] = NumOps.Divide(
-                    NumOps.Multiply(scaled, scaled), sqrtTwo);
-            }
-        }
     }
 
     private Tensor<T> CreateOnesLike(Tensor<T> template)

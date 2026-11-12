@@ -299,8 +299,7 @@ public partial class MegalodonLayer<T> : LayerBase<T>, IShapeContract
         _emaOutputBias.Fill(NumOps.Zero);
 
         // Timestep norm: gamma=1, beta=0 (identity initialization)
-        for (int i = 0; i < _emaDimension; i++)
-            _tsNormGamma[i] = NumOps.One;
+        _tsNormGamma.Fill(NumOps.One);
         _tsNormBeta.Fill(NumOps.Zero);
 
         InitializeTensor2D(_queryWeights);
@@ -456,7 +455,7 @@ public partial class MegalodonLayer<T> : LayerBase<T>, IShapeContract
     private Tensor<T> CreateOnesLike(Tensor<T> template)
     {
         var result = TensorAllocator.Rent<T>(template._shape);
-        for (int i = 0; i < result.Length; i++) result[i] = NumOps.One;
+        result.Fill(NumOps.One);
         return result;
     }
 

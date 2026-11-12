@@ -280,11 +280,12 @@ public partial class MEGALayer<T> : LayerBase<T>, IShapeContract
         // Initialize alpha logits so sigmoid gives a range of decay rates
         // Logit ~ 1.0 -> sigmoid ~ 0.73 (moderate decay)
         // Spread logits so different dimensions have different decay speeds
-        for (int i = 0; i < _emaDimension; i++)
-        {
-            double logit = 0.5 + 2.0 * i / _emaDimension;
-            _emaAlphaLogit[i] = NumOps.FromDouble(logit);
-        }
+        // logit_i = 0.5 + 2 i / emaDimension
+        Engine.TensorCopy(
+            Engine.TensorAddScalar(
+                Engine.TensorMultiplyScalar(Engine.TensorArange<T>(0, _emaDimension, 1), NumOps.FromDouble(2.0 / _emaDimension)),
+                NumOps.FromDouble(0.5)),
+            _emaAlphaLogit);
 
         InitializeTensor2D(_emaProjectInWeights);
         _emaProjectInBias.Fill(NumOps.Zero);

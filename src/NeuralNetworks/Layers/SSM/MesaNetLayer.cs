@@ -285,11 +285,8 @@ public partial class MesaNetLayer<T> : LayerBase<T>, IShapeContract
         InitializeTensor2D(_outputProjectionWeights);
         _outputProjectionBias.Fill(NumOps.Zero);
 
-        for (int i = 0; i < _modelDimension; i++)
-        {
-            _lnGamma[i] = NumOps.One;
-            _lnBeta[i] = NumOps.Zero;
-        }
+        _lnGamma.Fill(NumOps.One);
+        _lnBeta.Fill(NumOps.Zero);
     }
 
     private void InitializeTensor2D(Tensor<T> tensor)

@@ -210,8 +210,7 @@ public partial class KimiLinearAttentionLayer<T> : LayerBase<T>, IShapeContract
         InitializeTensor2D(_keyWeights);
         InitializeTensor2D(_valueWeights);
         // Initialize gate bias to ~2.0 so sigmoid(2)~0.88 -> strong initial retention
-        for (int i = 0; i < _gateKVBias.Length; i++)
-            _gateKVBias[i] = NumOps.FromDouble(2.0);
+        _gateKVBias.Fill(NumOps.FromDouble(2.0));
         InitializeTensor2D(_outputGateWeights);
         _outputGateBias.Fill(NumOps.Zero);
         InitializeTensor2D(_outputProjectionWeights);

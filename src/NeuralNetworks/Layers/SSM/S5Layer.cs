@@ -264,11 +264,11 @@ public partial class S5Layer<T> : LayerBase<T>, IShapeContract
         // HiPPO-LegS diagonal initialization: Lambda_n = -1/2 + n*pi*i
         // Real part: -0.5 (controls decay rate, placing eigenvalues in the stable left half-plane)
         // Imaginary part: n*pi (logarithmically spaced frequencies for multi-scale pattern capture)
-        for (int n = 0; n < _stateDimension; n++)
-        {
-            _aReal[n] = NumOps.FromDouble(-0.5);
-            _aImag[n] = NumOps.FromDouble(Math.PI * (n + 1));
-        }
+        // S4D-Lin initialization: A_n = -1/2 + i * pi * (n + 1).
+        _aReal.Fill(NumOps.FromDouble(-0.5));
+        Engine.TensorCopy(
+            Engine.TensorMultiplyScalar(Engine.TensorArange<T>(1, _stateDimension + 1, 1), NumOps.FromDouble(Math.PI)),
+            _aImag);
 
         // B initialized with Xavier/Glorot for both real and imaginary parts
         // This ensures proper signal scaling through the MIMO input mapping

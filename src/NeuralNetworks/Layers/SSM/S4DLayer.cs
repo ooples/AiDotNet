@@ -301,14 +301,15 @@ public partial class S4DLayer<T> : LayerBase<T>, IShapeContract
     {
         // S4D-Lin initialization: A_n = -1/2 + n*i
         // Real part: -0.5 for all, Imaginary part: n for each state dim
-        for (int d = 0; d < _innerDimension; d++)
-        {
-            for (int n = 0; n < _stateDimension; n++)
-            {
-                _aReal[new[] { d, n }] = NumOps.FromDouble(-0.5);
-                _aImag[new[] { d, n }] = NumOps.FromDouble(Math.PI * (n + 1));
-            }
-        }
+        // S4D-Lin: A_n = -1/2 + i * pi * (n + 1), the same row for every channel.
+        _aReal.Fill(NumOps.FromDouble(-0.5));
+        Engine.TensorCopy(
+            Engine.TensorBroadcastTo(
+                Engine.Reshape(
+                    Engine.TensorMultiplyScalar(Engine.TensorArange<T>(1, _stateDimension + 1, 1), NumOps.FromDouble(Math.PI)),
+                    new[] { 1, _stateDimension }),
+                new[] { _innerDimension, _stateDimension }),
+            _aImag);
 
         // B initialized to ones (real part), zeros (imaginary part) per S4D paper
         _bReal.Fill(NumOps.One);

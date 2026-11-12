@@ -249,11 +249,9 @@ public partial class LonghornLayer<T> : LayerBase<T>, IShapeContract
         InitializeTensor2D(_alphaWeights);
         // Alpha bias ~ -2 so sigmoid(-2) ~ 0.12 -> slow initial learning rate (strong retention)
         // This is the "online learning rate" -- starting conservative is better for stability
-        for (int i = 0; i < _alphaBias.Length; i++)
-            _alphaBias[i] = NumOps.FromDouble(-2.0);
+        _alphaBias.Fill(NumOps.FromDouble(-2.0));
         // Group norm: gamma = 1, beta = 0 (identity initialization)
-        for (int i = 0; i < _groupNormGamma.Length; i++)
-            _groupNormGamma[i] = NumOps.One;
+        _groupNormGamma.Fill(NumOps.One);
         _groupNormBeta.Fill(NumOps.Zero);
         RegisterTrainableParameter(_groupNormGamma, PersistentTensorRole.Weights);
         RegisterTrainableParameter(_groupNormBeta, PersistentTensorRole.Biases);

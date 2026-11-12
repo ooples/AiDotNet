@@ -256,9 +256,7 @@ public partial class MixtureOfMambaLayer<T> : LayerBase<T>, IShapeContract
         InitializeTensor3D(_expertC, _modelDimension, _stateDimension);
 
         // Initialize D to 1 (identity skip connection)
-        for (int e = 0; e < _numExperts; e++)
-            for (int d = 0; d < _modelDimension; d++)
-                _expertD[new[] { e, d }] = NumOps.One;
+        _expertD.Fill(NumOps.One);
 
         InitializeTensor2D(_outputGateWeights);
         _outputGateBias.Fill(NumOps.Zero);
@@ -305,15 +303,9 @@ public partial class MixtureOfMambaLayer<T> : LayerBase<T>, IShapeContract
         int totalTokens = batchSize * seqLen;
         var routerProbabilities = Engine.Softmax(routerLogits, axis: 1);
         _ = Engine.TensorTopK(routerProbabilities, _topK, axis: 1, out Tensor<int> topKTensor);
-        var activeMaskFlat = new Tensor<T>(new[] { totalTokens, _numExperts });
-        var topKIndices = new int[totalTokens, _topK];
-        for (int token = 0; token < totalTokens; token++)
-            for (int selected = 0; selected < _topK; selected++)
-            {
-                int expert = topKTensor[token, selected];
-                topKIndices[token, selected] = expert;
-                activeMaskFlat[token, expert] = NumOps.One;
-            }
+        // 0/1 mask of each token's top-K experts: the K (distinct) one-hot rows summed.
+        var activeMaskFlat = Engine.ReduceSum(
+            Engine.TensorOneHot<T>(topKTensor, _numExperts), new[] { 1 }, keepDims: false);
         var maskedWeights = Engine.TensorMultiply(routerProbabilities, activeMaskFlat);
         var weightSums = Engine.ReduceSum(maskedWeights, new[] { 1 }, keepDims: true);
         var routerWeightsResult = Engine.TensorDivide(

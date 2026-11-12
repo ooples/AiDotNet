@@ -447,13 +447,12 @@ public partial class MambaBlock<T> : LayerBase<T>, IShapeContract
         // Initialize A_log: log of the S4D-Lin initialization
         // A = -exp(A_log) where A_log[d, n] = log(n + 1)
         // This gives the structured spacing from the S4D paper (Gu et al., 2022)
-        for (int d = 0; d < _innerDimension; d++)
-        {
-            for (int n = 0; n < _stateDimension; n++)
-            {
-                _aLog[new[] { d, n }] = NumOps.FromDouble(Math.Log(n + 1));
-            }
-        }
+        // A_log[d, n] = log(n + 1), the same S4D-Real row for every channel.
+        Engine.TensorCopy(
+            Engine.TensorBroadcastTo(
+                Engine.Reshape(Engine.TensorLog(Engine.TensorArange<T>(1, _stateDimension + 1, 1)), new[] { 1, _stateDimension }),
+                new[] { _innerDimension, _stateDimension }),
+            _aLog);
 
         // D initialized to ones (skip connection)
         _dParam.Fill(NumOps.One);
@@ -794,10 +793,7 @@ public partial class MambaBlock<T> : LayerBase<T>, IShapeContract
                 $"D has {_dParam.Length} values but {values.Length} were supplied.", nameof(values));
         }
 
-        for (int i = 0; i < _dParam.Length; i++)
-        {
-            _dParam[i] = values[i];
-        }
+        Engine.TensorCopy(values.Reshape(_dParam._shape), _dParam);
     }
 
     /// <summary>

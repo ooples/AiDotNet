@@ -340,14 +340,11 @@ public partial class Mamba2Block<T> : LayerBase<T>, IShapeContract
 
         // A_log: initialized to log(1) = 0 for each head (gives A = -1)
         // Using small negative values so A = -exp(A_log) is a mild decay
-        for (int h = 0; h < _numHeads; h++)
-        {
-            _aLog[h] = NumOps.FromDouble(Math.Log(1.0 + h));
-        }
+        // A_log[h] = log(1 + h)
+        Engine.TensorCopy(Engine.TensorLog(Engine.TensorArange<T>(1, _numHeads + 1, 1)), _aLog);
 
         InitializeTensor(_dtProjectionWeights);
-        for (int i = 0; i < _dtProjectionBias.Length; i++)
-            _dtProjectionBias[i] = NumOps.FromDouble(0.01);
+        _dtProjectionBias.Fill(NumOps.FromDouble(0.01));
 
         _dParam.Fill(NumOps.One);
 
