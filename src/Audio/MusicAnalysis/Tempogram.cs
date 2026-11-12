@@ -191,7 +191,6 @@ public partial class Tempogram<T> : AudioNeuralNetworkBase<T>, IBeatTracker<T>
 
         // Find top peaks: interior bins at least as high as both neighbours
         int numBins = Math.Min(_options.NumTempoBins, output.Length);
-        var peaks = new List<(int bin, double value)>();
         var hypotheses = new List<TempoHypothesis<T>>();
         if (numBins < 3)
             return hypotheses;
@@ -204,19 +203,17 @@ public partial class Tempogram<T> : AudioNeuralNetworkBase<T>, IBeatTracker<T>
         int[] candidates = Engine.TensorNonzero(isPeak).ToArray();
         if (candidates.Length == 0)
             return hypotheses;
-        double[] peakValues = Engine.TensorIndexSelect(center, new Tensor<int>(candidates, [candidates.Length]), 0)
-            .Cast<double>().ToArray();
-        for (int k = 0; k < candidates.Length; k++)
-            peaks.Add((candidates[k] + 1, peakValues[k]));
-        peaks.Sort((a, b) => b.value.CompareTo(a.value));
+        // Peaks by descending value (stable: the lower bin first on ties)
+        var peakValues = Engine.TensorIndexSelect(center, new Tensor<int>(candidates, [candidates.Length]), 0);
+        int[] order = AudioEngineOps.StableDescendingOrder(Engine, peakValues);
 
-        int count = Math.Min(numHypotheses, peaks.Count);
+        int count = Math.Min(numHypotheses, order.Length);
         if (count <= 0)
             return hypotheses;
 
         // Tempo (BinToBPM) and confidence (value / top value when the top value is positive) of the chosen peaks
         var chosen = new int[count];
-        for (int i = 0; i < count; i++) chosen[i] = peaks[i].bin;
+        for (int i = 0; i < count; i++) chosen[i] = candidates[order[i]] + 1;
         var chosenBins = new Tensor<int>(chosen, [count]);
         var values = Engine.TensorIndexSelect(bins, chosenBins, 0);
         T[] tempos = Engine.TensorAddScalar(

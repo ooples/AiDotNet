@@ -192,19 +192,22 @@ public partial class PyAnnote<T> : SpeakerRecognitionBase<T>, ISpeakerDiarizer<T
         // Match detected speakers to known profiles
         var labelMap = new Dictionary<string, string>();
         int unknownCount = 0;
+        var threshold = Tensor<T>.CreateDefault([1], NumOps.FromDouble(_options.ClusteringThreshold));
         foreach (var kvp in speakerEmbeddings)
         {
             string bestMatch = allowUnknownSpeakers ? $"Unknown_{unknownCount++}" : "Unknown";
-            double bestSim = _options.ClusteringThreshold;
 
-            // Cosine similarity to every known profile, compared as doubles
+            // The first known profile whose cosine similarity beats the clustering threshold and every
+            // earlier profile (NaN never wins)
             var sims = new T[knownSpeakers.Count];
             for (int k = 0; k < sims.Length; k++)
                 sims[k] = ComputeCosineSimilarity(kvp.Value, knownSpeakers[k].Embedding);
-            double[] simValues = sims.Length == 0 ? new double[0] : new Tensor<T>(sims, [sims.Length]).Cast<double>().ToArray();
-            for (int k = 0; k < simValues.Length; k++)
+            if (sims.Length > 0)
             {
-                if (simValues[k] > bestSim) { bestSim = simValues[k]; bestMatch = knownSpeakers[k].SpeakerId; }
+                int best = AudioEngineOps.FirstArgMaxSequential(
+                    Engine, Engine.Concat(new[] { threshold, new Tensor<T>(sims, [sims.Length]) }, 0));
+                if (best > 0)
+                    bestMatch = knownSpeakers[best - 1].SpeakerId;
             }
             labelMap[kvp.Key] = bestMatch;
         }
