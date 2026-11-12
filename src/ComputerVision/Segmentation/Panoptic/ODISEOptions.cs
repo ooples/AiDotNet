@@ -78,20 +78,22 @@ public class ODISEOptions : SegmentationModelOptions
     public string[]? InVocabularyClassNames { get; set; }
 
     /// <summary>
-    /// Gets or sets the temperature <c>tau</c> of the text classifier: logits are cosine similarities divided by
-    /// it. Default: 0.07 (ODISE's initial temperature).
+    /// Gets or sets the initial temperature <c>tau</c> of the diffusion classifier: its logits are cosine
+    /// similarities times a learned scale initialized to <c>1 / tau</c> and clamped at 100 (ODISE's learnable
+    /// <c>logit_scale</c>). Default: 0.07 (ODISE's initial temperature).
     /// </summary>
     public double Temperature { get; set; } = 0.07;
 
     /// <summary>
-    /// Gets or sets the weight <c>alpha</c> of the mask-pooled (CLIP) prediction for in-vocabulary classes:
+    /// Gets or sets the weight <c>alpha</c> of the frozen CLIP image encoder's prediction for in-vocabulary classes:
     /// <c>p = p_diffusion^(1 - alpha) * p_clip^alpha</c>. Default: 0.35 (Xu et al. 2023; lambda = 0.65 on the
     /// diffusion prediction).
     /// </summary>
     public double InVocabularyClipWeight { get; set; } = 0.35;
 
     /// <summary>
-    /// Gets or sets the weight <c>beta</c> of the mask-pooled (CLIP) prediction for classes not seen in training.
+    /// Gets or sets the weight <c>beta</c> of the frozen CLIP image encoder's prediction for classes not seen in
+    /// training.
     /// Default: 0.65.
     /// </summary>
     public double OutOfVocabularyClipWeight { get; set; } = 0.65;
