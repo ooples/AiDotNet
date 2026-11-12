@@ -26,14 +26,14 @@ public class TrimmedMeanSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, 
     private readonly int _nFeaturesToSelect;
     private readonly double _trimProportion;
 
-    private double[]? _trimmedVariances;
+    private Vector<T>? _trimmedVariances;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public double TrimProportion => _trimProportion;
-    public double[]? TrimmedVariances => _trimmedVariances;
+    public Vector<T>? TrimmedVariances => _trimmedVariances;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -61,40 +61,24 @@ public class TrimmedMeanSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, 
         int n = data.Rows;
         int p = data.Columns;
 
-        var X = new double[n, p];
-        for (int i = 0; i < n; i++)
-            for (int j = 0; j < p; j++)
-                X[i, j] = NumOps.ToDouble(data[i, j]);
-
         int trimCount = (int)(n * _trimProportion);
         int trimmedN = n - 2 * trimCount;
 
-        _trimmedVariances = new double[p];
-
-        for (int j = 0; j < p; j++)
+        var engine = Engine;
+        var variances = PreprocessingTensorOps.Filled(new[] { p }, NumOps.Zero);
+        if (trimmedN > 1)
         {
-            var values = new double[n];
-            for (int i = 0; i < n; i++)
-                values[i] = X[i, j];
-
-            var sorted = values.OrderBy(v => v).Skip(trimCount).Take(trimmedN).ToArray();
-
-            if (sorted.Length > 1)
-            {
-                double mean = sorted.Average();
-                double variance = 0;
-                foreach (double v in sorted)
-                    variance += (v - mean) * (v - mean);
-                _trimmedVariances[j] = variance / (sorted.Length - 1);
-            }
+            // Sample variance (n - 1) of the values left after trimming trimCount from each end of every column.
+            var sorted = engine.TensorSort(Tensor<T>.FromMatrix(data), 0, false).Values;
+            var kept = engine.TensorSlice(sorted, new[] { trimCount, 0 }, new[] { trimmedN, p });
+            var centered = engine.TensorSubtract(kept, engine.ReduceMean(kept, new[] { 0 }, true));
+            variances = engine.TensorDivideScalar(
+                engine.ReduceSum(engine.TensorMultiply(centered, centered), new[] { 0 }, false),
+                NumOps.FromDouble(trimmedN - 1));
         }
 
-        int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = Enumerable.Range(0, p)
-            .OrderByDescending(j => _trimmedVariances[j])
-            .Take(numToSelect)
-            .OrderBy(x => x)
-            .ToArray();
+        _trimmedVariances = variances.ToVector();
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(variances, Math.Min(_nFeaturesToSelect, p));
 
         IsFitted = true;
     }
