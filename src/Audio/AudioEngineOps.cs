@@ -440,4 +440,45 @@ internal static class AudioEngineOps
 
         return cosine.Cast<double>().ToArray();
     }
+
+    /// <summary>
+    /// The value of the running pairwise average <c>c = v[0]; c = (c + v[i]) / 2</c> over
+    /// <paramref name="values"/>, i.e. <c>v[0] / 2^m + sum_{i&gt;=1} v[i] / 2^(m - i + 1)</c> for
+    /// <c>m = |v| - 1</c>.
+    /// </summary>
+    internal static T RunningPairAverage<T>(IEngine engine, T[] values)
+    {
+        if (values.Length == 0) throw new ArgumentException("At least one value is required.", nameof(values));
+        if (values.Length == 1) return values[0];
+        int m = values.Length - 1;
+        var exponents = new int[values.Length];
+        exponents[0] = m;
+        for (int i = 1; i < values.Length; i++) exponents[i] = m - i + 1;
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var weights = engine.TensorPower(
+            Tensor<T>.CreateDefault(new[] { values.Length }, numOps.FromDouble(0.5)),
+            new Tensor<int>(exponents, new[] { values.Length }).Cast<T>());
+        return engine.TensorSum(engine.TensorMultiply(new Tensor<T>(values, new[] { values.Length }), weights));
+    }
+
+    /// <summary><c>exp(x - max) / sum(exp(x - max))</c> over <paramref name="logits"/>.</summary>
+    internal static T[] Softmax<T>(IEngine engine, T[] logits)
+    {
+        if (logits.Length == 0) throw new InvalidOperationException("Sequence contains no elements");
+        var x = new Tensor<T>(logits, new[] { logits.Length });
+        var shifted = engine.TensorExp(engine.TensorSubtractScalar(x, engine.TensorMaxValue(x)));
+        return engine.TensorDivideScalar(shifted, engine.TensorSum(shifted)).ToArray();
+    }
+
+    /// <summary>
+    /// The entries of <paramref name="scores"/> ordered by descending value (stable: equal values keep
+    /// their order, NaN last), as a stable <c>OrderByDescending</c> over the converted values gives.
+    /// </summary>
+    internal static List<KeyValuePair<TKey, T>> OrderByDescendingValue<TKey, T>(IEngine engine, IEnumerable<KeyValuePair<TKey, T>> scores)
+    {
+        var entries = scores.ToList();
+        if (entries.Count == 0) return entries;
+        var values = new Tensor<T>(entries.Select(e => e.Value).ToArray(), new[] { entries.Count });
+        return StableDescendingOrder(engine, values).Select(i => entries[i]).ToList();
+    }
 }
