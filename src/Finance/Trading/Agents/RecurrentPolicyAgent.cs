@@ -39,8 +39,8 @@ public sealed partial class RecurrentPolicyAgent<T> : IPortfolioAgent<T>, IDispo
     private readonly int _stateDim;
     private readonly int _actionDim;
     private readonly int _hidden;
-    private readonly double _sigma;
-    private readonly double _gamma;
+    private readonly T _sigma;
+    private readonly T _gamma;
     private readonly Random _rng;
 
     private readonly DeepARLstmCellTape<T> _cell;   // recurrent core (tape-trainable)
@@ -67,9 +67,9 @@ public sealed partial class RecurrentPolicyAgent<T> : IPortfolioAgent<T>, IDispo
     private Tensor<T> _c;
 
     // Current-episode rollout.
-    private readonly List<T[]> _states = new();
-    private readonly List<T[]> _actions = new();
-    private readonly List<double> _rewards = new();
+    private readonly List<Tensor<T>> _states = new();
+    private readonly List<Tensor<T>> _actions = new();
+    private readonly List<T> _rewards = new();
     private bool _episodeDone;
     private bool _disposed;
 
@@ -84,8 +84,8 @@ public sealed partial class RecurrentPolicyAgent<T> : IPortfolioAgent<T>, IDispo
         _stateDim = stateDim;
         _actionDim = actionDim;
         _hidden = hidden;
-        _sigma = explorationSigma > 1e-6 ? explorationSigma : 1e-6;
-        _gamma = gamma;
+        _sigma = NumOps.FromDouble(explorationSigma > 1e-6 ? explorationSigma : 1e-6);
+        _gamma = NumOps.FromDouble(gamma);
         _rng = RandomHelper.CreateSeededRandom(seed);
 
         _cell = new DeepARLstmCellTape<T>(stateDim, hidden, seed);
@@ -108,11 +108,13 @@ public sealed partial class RecurrentPolicyAgent<T> : IPortfolioAgent<T>, IDispo
 
     private static Tensor<T> CreateRandom(int[] shape, double stddev, int seed)
     {
+        // The uniform draws in master's order; U(-stddev, stddev) = (2u - 1) * stddev on the whole tensor.
         var rng = RandomHelper.CreateSeededRandom(seed);
         var t = new Tensor<T>(shape);
         for (int i = 0; i < t.Length; i++)
-            t[i] = NumOps.FromDouble((rng.NextDouble() * 2 - 1) * stddev);
-        return t;
+            t[i] = NumOps.FromDouble(rng.NextDouble());
+        var centred = Engine.TensorSubtractScalar(Engine.TensorMultiplyScalar(t, NumOps.FromDouble(2.0)), NumOps.One);
+        return Engine.TensorMultiplyScalar(centred, NumOps.FromDouble(stddev));
     }
 
     [System.Diagnostics.CodeAnalysis.MemberNotNull(nameof(_h), nameof(_c))]
@@ -122,43 +124,35 @@ public sealed partial class RecurrentPolicyAgent<T> : IPortfolioAgent<T>, IDispo
         _c = new Tensor<T>(new[] { _hidden, 1 });
     }
 
-    private static double ToD(T v) => Convert.ToDouble(v);
-
     /// <summary>Eager mean action for one observation, advancing the recurrent state. tanh-bounded to [-1, 1].</summary>
-    private T[] Forward(T[] state)
+    private Tensor<T> Forward(Tensor<T> xt)
     {
-        var xt = new Tensor<T>(new[] { _stateDim, 1 });
-        for (int i = 0; i < _stateDim; i++) xt[i, 0] = state[i];
-
         var (h, c) = _cell.Step(xt, _h, _c);
         _h = h;
         _c = c;
 
         var proj = Engine.TensorAdd(Engine.TensorMatMul(_meanW, h), _meanB); // [A,1]
-        var mean = Engine.Tanh(proj);
-        var result = new T[_actionDim];
-        for (int a = 0; a < _actionDim; a++) result[a] = mean[a, 0];
-        return result;
+        return Engine.Tanh(proj);
     }
 
     /// <inheritdoc />
     public Vector<T> SelectAction(Vector<T> state, bool explore)
     {
-        var s = new T[_stateDim];
-        for (int i = 0; i < _stateDim && i < state.Length; i++) s[i] = state[i];
+        var xt = Engine.Reshape(PolicyGradientRollout<T>.Column(state, _stateDim), new[] { _stateDim, 1 });
+        var mean = Forward(xt); // advances the recurrent state (must happen on every act, incl. inference) -> [A,1]
 
-        var mean = Forward(s); // advances the recurrent state (must happen on every act, incl. inference)
-        var action = new T[_actionDim];
-        for (int a = 0; a < _actionDim; a++)
+        // The Gaussian draws in master's order (one per action, only when exploring); the action is then
+        // clip(mean + sigma * z, -1, 1) on the whole tensor.
+        Tensor<T>? draws = null;
+        if (explore)
         {
-            double m = ToD(mean[a]);
-            double v = explore ? m + _sigma * _rng.NextGaussian() : m;
-            action[a] = NumOps.FromDouble(MathPolyfill.Clamp(v, -1.0, 1.0));
+            draws = new Tensor<T>(new[] { _actionDim, 1 });
+            for (int a = 0; a < _actionDim; a++) draws[a, 0] = NumOps.FromDouble(_rng.NextGaussian());
         }
 
         // The hidden state advances above (a recurrent policy must), but the rollout is NOT recorded here — so a
         // greedy backtest that never calls StoreExperience cannot grow or contaminate the training buffers.
-        return new Vector<T>(action);
+        return PolicyGradientRollout<T>.Act(mean, draws, _sigma);
     }
 
     /// <inheritdoc />
@@ -166,14 +160,9 @@ public sealed partial class RecurrentPolicyAgent<T> : IPortfolioAgent<T>, IDispo
     {
         // Record the rollout HERE (owning a copy of the supplied state/action) — the transition the trainer
         // actually stored — so only true training steps feed the BPTT replay.
-        var s = new T[_stateDim];
-        for (int i = 0; i < _stateDim && i < state.Length; i++) s[i] = state[i];
-        var a = new T[_actionDim];
-        for (int i = 0; i < _actionDim && i < action.Length; i++) a[i] = action[i];
-
-        _states.Add(s);
-        _actions.Add(a);
-        _rewards.Add(ToD(reward));
+        _states.Add(PolicyGradientRollout<T>.Column(state, _stateDim));
+        _actions.Add(PolicyGradientRollout<T>.Column(action, _actionDim));
+        _rewards.Add(reward);
         _episodeDone = done;
     }
 
@@ -191,8 +180,8 @@ public sealed partial class RecurrentPolicyAgent<T> : IPortfolioAgent<T>, IDispo
         T reported = _stepper.Step(new Training.FusedTrainingStepRequest<T>
         {
             Layers = Array.Empty<ITrainableLayer<T>>(),
-            Input = PolicyGradientRollout<T>.States(_states, _stateDim),
-            Target = PolicyGradientRollout<T>.Target(_actions, weights, _actionDim),
+            Input = PolicyGradientRollout<T>.States(_states),
+            Target = PolicyGradientRollout<T>.Target(_actions, weights),
             Forward = ReplayMeans,
             ComputeLoss = (means, target) => PolicyGradientRollout<T>.Loss(means, target, _actionDim),
             Optimizer = _optimizer,

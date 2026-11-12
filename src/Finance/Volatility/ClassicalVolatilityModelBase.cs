@@ -48,9 +48,6 @@ public abstract class ClassicalVolatilityModelBase<T> :
     /// <summary>Decay of arch's backcast weights.</summary>
     private const double BackcastDecay = 0.94;
 
-    /// <summary>Block length of the blocked linear-recurrence evaluation.</summary>
-    private const int RecurrenceBlock = 256;
-
     /// <summary>Numeric operations for <typeparamref name="T"/>.</summary>
     protected INumericOperations<T> NumOps { get; } = MathHelper.GetNumericOperations<T>();
 
@@ -124,42 +121,7 @@ public abstract class ClassicalVolatilityModelBase<T> :
     /// <c>s_(-1) = initial</c>, as blocked lower-triangular Toeplitz products.
     /// </summary>
     protected Tensor<T> LinearRecurrence(Tensor<T> drive, T decay, T initial)
-    {
-        var engine = AiDotNetEngine.Current;
-        int n = drive.Length;
-        int block = Math.Min(RecurrenceBlock, Math.Max(1, n));
-
-        // q = (1, decay, decay^2, ...); toeplitz[i, j] = q[i - j] for i >= j; carry[i] = decay^(i + 1).
-        var decays = new Tensor<T>(new[] { block });
-        engine.TensorFill(decays, decay);
-        var carryPowers = engine.TensorCumProd(decays, 0);
-        var powers = engine.TensorConcatenate(new[]
-        {
-            new Tensor<T>(new[] { NumOps.One }, new[] { 1 }),
-            engine.TensorSlice(carryPowers, new[] { 0 }, new[] { block - 1 })
-        }, 0);
-        var lag = Enumerable.Range(0, block * block).Select(k => Math.Max(0, (k / block) - (k % block))).ToArray();
-        var toeplitz = engine.TensorTril(engine.Reshape(
-            engine.TensorTake(powers, new Tensor<int>(lag, new[] { block * block })), new[] { block, block }));
-
-        var carry = new Tensor<T>(new[] { initial }, new[] { 1 });
-        var pieces = new List<Tensor<T>>();
-        for (int start = 0; start < n; start += block)
-        {
-            int len = Math.Min(block, n - start);
-            var segment = engine.Reshape(engine.TensorSlice(drive, new[] { start }, new[] { len }), new[] { len, 1 });
-            var operatorBlock = len == block ? toeplitz : engine.TensorSlice(toeplitz, new[] { 0, 0 }, new[] { len, len });
-            var homogeneous = engine.TensorMultiply(
-                engine.TensorSlice(carryPowers, new[] { 0 }, new[] { len }),
-                engine.TensorBroadcastTo(carry, new[] { len }));
-            var piece = engine.TensorAdd(
-                engine.Reshape(engine.TensorMatMul(operatorBlock, segment), new[] { len }), homogeneous);
-            pieces.Add(piece);
-            carry = engine.TensorSlice(piece, new[] { len - 1 }, new[] { 1 });
-        }
-
-        return pieces.Count == 1 ? pieces[0] : engine.TensorConcatenate(pieces.ToArray(), 0);
-    }
+        => AiDotNet.Helpers.LinearRecurrence<T>.Solve(drive, decay, initial);
 
     /// <summary>
     /// The series delayed by one step, <c>[presample, values_0, ..., values_(n-2)]</c>: the "previous"
