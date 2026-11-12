@@ -43,6 +43,16 @@ internal static class AudioEventDetectionOps
         return scores;
     }
 
+    /// <summary>
+    /// Returns <paramref name="count"/> scores: the first <c>min(output.Length, count)</c> elements of
+    /// <paramref name="output"/> (row-major), zero after (a fresh array).
+    /// </summary>
+    internal static T[] HeadScores<T>(IEngine engine, Tensor<T> output, int count)
+    {
+        if (count == 0) return new T[0];
+        return AudioEngineOps.FitLength(engine, output, count).ToArray();
+    }
+
     /// <summary>Row-major flatten to a rank-1 tensor.</summary>
     internal static Tensor<T> Flatten<T>(IEngine engine, Tensor<T> x)
         => x.Shape.Length == 1 ? x : engine.Reshape(x, new[] { x.Length });
