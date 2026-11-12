@@ -42604,27 +42604,6 @@
   </Suppression>
   <Suppression>
     <DiagnosticId>CP0002</DiagnosticId>
-    <Target>M:AiDotNet.Preprocessing.FeatureSelection.Filter.Correlation.PearsonCorrelation`1.get_CorrelationScores</Target>
-    <Left>lib/net10.0/AiDotNet.dll</Left>
-    <Right>lib/net10.0/AiDotNet.dll</Right>
-    <IsBaselineSuppression>true</IsBaselineSuppression>
-  </Suppression>
-  <Suppression>
-    <DiagnosticId>CP0002</DiagnosticId>
-    <Target>M:AiDotNet.Preprocessing.FeatureSelection.Filter.Correlation.PearsonCorrelation`1.get_CorrelationScores</Target>
-    <Left>lib/net471/AiDotNet.dll</Left>
-    <Right>lib/net471/AiDotNet.dll</Right>
-    <IsBaselineSuppression>true</IsBaselineSuppression>
-  </Suppression>
-  <Suppression>
-    <DiagnosticId>CP0002</DiagnosticId>
-    <Target>M:AiDotNet.Preprocessing.FeatureSelection.Filter.Correlation.PearsonCorrelation`1.get_CorrelationScores</Target>
-    <Left>lib/net8.0/AiDotNet.dll</Left>
-    <Right>lib/net8.0/AiDotNet.dll</Right>
-    <IsBaselineSuppression>true</IsBaselineSuppression>
-  </Suppression>
-  <Suppression>
-    <DiagnosticId>CP0002</DiagnosticId>
     <Target>M:AiDotNet.Preprocessing.FeatureSelection.Filter.Correlation.PointBiserial`1.get_Correlations</Target>
     <Left>lib/net10.0/AiDotNet.dll</Left>
     <Right>lib/net10.0/AiDotNet.dll</Right>
@@ -42814,27 +42793,6 @@
   </Suppression>
   <Suppression>
     <DiagnosticId>CP0002</DiagnosticId>
-    <Target>M:AiDotNet.Preprocessing.FeatureSelection.Filter.EntropyBasedSelection`1.get_EntropyScores</Target>
-    <Left>lib/net10.0/AiDotNet.dll</Left>
-    <Right>lib/net10.0/AiDotNet.dll</Right>
-    <IsBaselineSuppression>true</IsBaselineSuppression>
-  </Suppression>
-  <Suppression>
-    <DiagnosticId>CP0002</DiagnosticId>
-    <Target>M:AiDotNet.Preprocessing.FeatureSelection.Filter.EntropyBasedSelection`1.get_EntropyScores</Target>
-    <Left>lib/net471/AiDotNet.dll</Left>
-    <Right>lib/net471/AiDotNet.dll</Right>
-    <IsBaselineSuppression>true</IsBaselineSuppression>
-  </Suppression>
-  <Suppression>
-    <DiagnosticId>CP0002</DiagnosticId>
-    <Target>M:AiDotNet.Preprocessing.FeatureSelection.Filter.EntropyBasedSelection`1.get_EntropyScores</Target>
-    <Left>lib/net8.0/AiDotNet.dll</Left>
-    <Right>lib/net8.0/AiDotNet.dll</Right>
-    <IsBaselineSuppression>true</IsBaselineSuppression>
-  </Suppression>
-  <Suppression>
-    <DiagnosticId>CP0002</DiagnosticId>
     <Target>M:AiDotNet.Preprocessing.FeatureSelection.Filter.FisherScore`1.get_FisherScores</Target>
     <Left>lib/net10.0/AiDotNet.dll</Left>
     <Right>lib/net10.0/AiDotNet.dll</Right>
@@ -42982,27 +42940,6 @@
   </Suppression>
   <Suppression>
     <DiagnosticId>CP0002</DiagnosticId>
-    <Target>M:AiDotNet.Preprocessing.FeatureSelection.Filter.GiniIndex`1.get_GiniReductions</Target>
-    <Left>lib/net10.0/AiDotNet.dll</Left>
-    <Right>lib/net10.0/AiDotNet.dll</Right>
-    <IsBaselineSuppression>true</IsBaselineSuppression>
-  </Suppression>
-  <Suppression>
-    <DiagnosticId>CP0002</DiagnosticId>
-    <Target>M:AiDotNet.Preprocessing.FeatureSelection.Filter.GiniIndex`1.get_GiniReductions</Target>
-    <Left>lib/net471/AiDotNet.dll</Left>
-    <Right>lib/net471/AiDotNet.dll</Right>
-    <IsBaselineSuppression>true</IsBaselineSuppression>
-  </Suppression>
-  <Suppression>
-    <DiagnosticId>CP0002</DiagnosticId>
-    <Target>M:AiDotNet.Preprocessing.FeatureSelection.Filter.GiniIndex`1.get_GiniReductions</Target>
-    <Left>lib/net8.0/AiDotNet.dll</Left>
-    <Right>lib/net8.0/AiDotNet.dll</Right>
-    <IsBaselineSuppression>true</IsBaselineSuppression>
-  </Suppression>
-  <Suppression>
-    <DiagnosticId>CP0002</DiagnosticId>
     <Target>M:AiDotNet.Preprocessing.FeatureSelection.Filter.HighDimensional.KnockoffFilter`1.#ctor(System.Double,System.Func{AiDotNet.Tensors.LinearAlgebra.Matrix{`0},AiDotNet.Tensors.LinearAlgebra.Vector{`0},System.Double[]},System.Nullable{System.Int32},System.Int32[])</Target>
     <Left>lib/net10.0/AiDotNet.dll</Left>
     <Right>lib/net10.0/AiDotNet.dll</Right>
@@ -43081,27 +43018,6 @@
   <Suppression>
     <DiagnosticId>CP0002</DiagnosticId>
     <Target>M:AiDotNet.Preprocessing.FeatureSelection.Filter.IQRThreshold`1.get_IQRValues</Target>
-    <Left>lib/net8.0/AiDotNet.dll</Left>
-    <Right>lib/net8.0/AiDotNet.dll</Right>
-    <IsBaselineSuppression>true</IsBaselineSuppression>
-  </Suppression>
-  <Suppression>
-    <DiagnosticId>CP0002</DiagnosticId>
-    <Target>M:AiDotNet.Preprocessing.FeatureSelection.Filter.InformationGain`1.get_InformationGains</Target>
-    <Left>lib/net10.0/AiDotNet.dll</Left>
-    <Right>lib/net10.0/AiDotNet.dll</Right>
-    <IsBaselineSuppression>true</IsBaselineSuppression>
-  </Suppression>
-  <Suppression>
-    <DiagnosticId>CP0002</DiagnosticId>
-    <Target>M:AiDotNet.Preprocessing.FeatureSelection.Filter.InformationGain`1.get_InformationGains</Target>
-    <Left>lib/net471/AiDotNet.dll</Left>
-    <Right>lib/net471/AiDotNet.dll</Right>
-    <IsBaselineSuppression>true</IsBaselineSuppression>
-  </Suppression>
-  <Suppression>
-    <DiagnosticId>CP0002</DiagnosticId>
-    <Target>M:AiDotNet.Preprocessing.FeatureSelection.Filter.InformationGain`1.get_InformationGains</Target>
     <Left>lib/net8.0/AiDotNet.dll</Left>
     <Right>lib/net8.0/AiDotNet.dll</Right>
     <IsBaselineSuppression>true</IsBaselineSuppression>

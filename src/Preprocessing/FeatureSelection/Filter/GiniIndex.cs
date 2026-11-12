@@ -28,13 +28,13 @@ public class GiniIndex<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervise
     private readonly int _nFeaturesToSelect;
     private readonly int _nBins;
 
-    private Vector<T>? _giniReductions;
+    private double[]? _giniReductions;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
-    public Vector<T>? GiniReductions => _giniReductions;
+    public double[]? GiniReductions => _giniReductions;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -70,29 +70,89 @@ public class GiniIndex<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervise
         int n = data.Rows;
         int p = data.Columns;
 
-        var engine = Engine;
+        // Compute overall Gini impurity
+        var classCounts = new Dictionary<int, int>();
+        for (int i = 0; i < n; i++)
+        {
+            int label = (int)Math.Round(NumOps.ToDouble(target[i]));
+            if (!classCounts.ContainsKey(label))
+                classCounts[label] = 0;
+            classCounts[label]++;
+        }
 
-        // Overall Gini impurity over the rounded class labels
-        PreprocessingTensorOps.ClassLabels(target, out var classes, out var classIndex);
-        var classOneHot = PreprocessingTensorOps.ClassOneHot<T>(classIndex, classes.Length);
-        T overallGini = FeatureSelectionTensorOps.GiniImpurity(classOneHot);
+        double overallGini = 1.0;
+        foreach (var count in classCounts.Values)
+        {
+            double prob = (double)count / n;
+            overallGini -= prob * prob;
+        }
 
-        // Bin features: min(trunc((x - min) / range * bins), bins - 1), one bin for a constant feature
-        var featureBins = FeatureSelectionTensorOps.RangeBinOneHot(Tensor<T>.FromMatrix(data), _nBins, _nBins);
-        var weightedGini = FeatureSelectionTensorOps.WeightedBinGini(
-            FeatureSelectionTensorOps.JointBinCounts(featureBins, classOneHot, _nBins), n);
+        int nClasses = classCounts.Count;
+        var classes = classCounts.Keys.OrderBy(x => x).ToArray();
+        var classIndex = classes.Select((c, i) => (c, i)).ToDictionary(x => x.c, x => x.i);
 
-        // Gini reduction max(0, G - weighted G) (higher is better)
-        var giniReductions = engine.TensorMax(
-            engine.TensorNegate(engine.TensorAddScalar(weightedGini, NumOps.Negate(overallGini))), NumOps.Zero);
-        _giniReductions = giniReductions.ToVector();
+        _giniReductions = new double[p];
+
+        for (int j = 0; j < p; j++)
+        {
+            // Bin the feature
+            double minVal = double.MaxValue, maxVal = double.MinValue;
+            for (int i = 0; i < n; i++)
+            {
+                double val = NumOps.ToDouble(data[i, j]);
+                minVal = Math.Min(minVal, val);
+                maxVal = Math.Max(maxVal, val);
+            }
+
+            double range = maxVal - minVal;
+            if (range < 1e-10) range = 1;
+
+            var binCounts = new int[_nBins];
+            var binClassCounts = new int[_nBins, nClasses];
+
+            for (int i = 0; i < n; i++)
+            {
+                double val = NumOps.ToDouble(data[i, j]);
+                int bin = Math.Min((int)(((val - minVal) / range) * _nBins), _nBins - 1);
+                int classIdx = classIndex[(int)Math.Round(NumOps.ToDouble(target[i]))];
+
+                binCounts[bin]++;
+                binClassCounts[bin, classIdx]++;
+            }
+
+            // Weighted Gini impurity after split
+            double weightedGini = 0;
+            for (int b = 0; b < _nBins; b++)
+            {
+                if (binCounts[b] == 0) continue;
+
+                double binGini = 1.0;
+                for (int c = 0; c < nClasses; c++)
+                {
+                    double prob = (double)binClassCounts[b, c] / binCounts[b];
+                    binGini -= prob * prob;
+                }
+
+                weightedGini += ((double)binCounts[b] / n) * binGini;
+            }
+
+            // Gini reduction (higher is better)
+            _giniReductions[j] = Math.Max(0, overallGini - weightedGini);
+        }
 
         // Select top features by Gini reduction
         int nToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(giniReductions, nToSelect);
+        _selectedIndices = _giniReductions
+            .Select((gr, idx) => (GR: gr, Index: idx))
+            .OrderByDescending(x => x.GR)
+            .Take(nToSelect)
+            .Select(x => x.Index)
+            .OrderBy(x => x)
+            .ToArray();
 
         IsFitted = true;
     }
+
     /// <inheritdoc />
     public Matrix<T> FitTransform(Matrix<T> data, Vector<T> target)
     {
@@ -106,7 +166,15 @@ public class GiniIndex<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervise
         if (_selectedIndices is null)
             throw new InvalidOperationException("GiniIndex has not been fitted.");
 
-        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
+        int numRows = data.Rows;
+        int numCols = _selectedIndices.Length;
+        var result = new T[numRows, numCols];
+
+        for (int i = 0; i < numRows; i++)
+            for (int j = 0; j < numCols; j++)
+                result[i, j] = data[i, _selectedIndices[j]];
+
+        return new Matrix<T>(result);
     }
 
     /// <inheritdoc />

@@ -68,54 +68,47 @@ public class VotingFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         int n = data.Rows;
         int p = data.Columns;
 
-        var engine = Engine;
-        var X = Tensor<T>.FromMatrix(data);
-        var y = Tensor<T>.FromVector(target);
-
-        // Membership of every row in its (exact) target class
-        var classes = PreprocessingTensorOps.SortedUnique(y);
-        var classIndex = PreprocessingTensorOps.LookupSorted(classes, y, out _);
-        var membership = engine.TensorOneHot<T>(classIndex, classes.Length);
+        var X = new double[n, p];
+        var y = new double[n];
+        for (int i = 0; i < n; i++)
+        {
+            y[i] = NumOps.ToDouble(target[i]);
+            for (int j = 0; j < p; j++)
+                X[i, j] = NumOps.ToDouble(data[i, j]);
+        }
 
         _voteCounts = new int[p];
         int votesPerMethod = Math.Min(_votesPerMethod, p);
 
         // Method 1: Correlation
-        var corrScores = engine.TensorAbs(PreprocessingTensorOps.TargetCorrelations(X, y));
-        var corrOrder = PreprocessingTensorOps.StableOrder(corrScores, descending: true);
-        foreach (int j in corrOrder.Take(votesPerMethod))
+        var corrScores = ComputeCorrelation(X, y, n, p);
+        foreach (int j in TopK(corrScores, votesPerMethod))
             _voteCounts[j]++;
 
-        // Method 2: Variance (sample variance)
-        var varScores = engine.TensorDivideScalar(FeatureSelectionTensorOps.ColumnSumSquaredDeviations(X), NumOps.FromDouble(n - 1));
+        // Method 2: Variance
+        var varScores = ComputeVariance(X, n, p);
         foreach (int j in TopK(varScores, votesPerMethod))
             _voteCounts[j]++;
 
         // Method 3: Fisher score
-        var fisherScores = ComputeFisherScore(X, membership, classIndex, n, p);
+        var fisherScores = ComputeFisherScore(X, y, n, p);
         foreach (int j in TopK(fisherScores, votesPerMethod))
             _voteCounts[j]++;
 
         // Method 4: Chi-squared approximation
-        var chiScores = ComputeChiSquared(X, membership, n, p);
+        var chiScores = ComputeChiSquared(X, y, n, p);
         foreach (int j in TopK(chiScores, votesPerMethod))
             _voteCounts[j]++;
 
         // Method 5: Gini importance
-        var giniScores = ComputeGiniImportance(X, membership, n, p);
+        var giniScores = ComputeGiniImportance(X, y, n, p);
         foreach (int j in TopK(giniScores, votesPerMethod))
             _voteCounts[j]++;
 
-        // Most votes first, ties broken by the larger correlation (then by index)
-        var corrRank = new int[p];
-        for (int rank = 0; rank < p; rank++)
-            corrRank[corrOrder[rank]] = rank;
-        var votes = _voteCounts;
-
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
         _selectedIndices = Enumerable.Range(0, p)
-            .OrderByDescending(j => votes[j])
-            .ThenBy(j => corrRank[j]) // Tiebreaker
+            .OrderByDescending(j => _voteCounts[j])
+            .ThenByDescending(j => corrScores[j]) // Tiebreaker
             .Take(numToSelect)
             .OrderBy(x => x)
             .ToArray();
@@ -123,77 +116,171 @@ public class VotingFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         IsFitted = true;
     }
 
-    private static int[] TopK(Tensor<T> scores, int k) =>
-        PreprocessingTensorOps.StableOrder(scores, descending: true).Take(k).ToArray();
-
-    private Tensor<T> ComputeFisherScore(Tensor<T> X, Tensor<T> membership, Tensor<int> classIndex, int n, int p)
+    private int[] TopK(double[] scores, int k)
     {
-        // Between-class over within-class sum of squares, 0 when the within-class sum is not above 1e-10
-        var engine = Engine;
-        int k = membership.Shape[1];
-        var counts = engine.ReduceSum(membership, new[] { 0 }, false);
-        var countColumn = engine.TensorBroadcastTo(engine.Reshape(counts, new[] { k, 1 }), new[] { k, p });
-        var classMeans = engine.TensorDivide(engine.TensorMatMul(engine.TensorTranspose(membership), X), countColumn);
-        var overallMean = engine.TensorBroadcastTo(engine.ReduceMean(X, new[] { 0 }, true), new[] { k, p });
-        var betweenVar = engine.ReduceSum(engine.TensorMultiply(
-            engine.TensorSquare(engine.TensorSubtract(classMeans, overallMean)), countColumn), new[] { 0 }, false);
-        var withinVar = engine.ReduceSum(engine.TensorSquare(engine.TensorSubtract(X,
-            engine.TensorIndexSelect(classMeans, classIndex, 0))), new[] { 0 }, false);
-
-        var usable = engine.TensorGreaterThan(withinVar, NumOps.FromDouble(1e-10));
-        var safe = engine.TensorWhere(usable, withinVar, PreprocessingTensorOps.Filled(new[] { p }, NumOps.One));
-        return engine.TensorWhere(usable, engine.TensorDivide(betweenVar, safe), new Tensor<T>(new[] { p }));
+        return Enumerable.Range(0, scores.Length)
+            .OrderByDescending(j => scores[j])
+            .Take(k)
+            .ToArray();
     }
 
-    private Tensor<T> ComputeChiSquared(Tensor<T> X, Tensor<T> membership, int n, int p)
+    private double[] ComputeCorrelation(double[,] X, double[] y, int n, int p)
     {
-        // Chi-squared of the equal-width bins (width (max - min) / bins + 1e-10) against the classes
-        var engine = Engine;
-        int nBins = Math.Min(10, (int)Math.Sqrt(n) + 1);
-        int k = membership.Shape[1];
-        var bins = PreprocessingTensorOps.EqualWidthBinOneHot(X, nBins, out _);
-        var observed = engine.Reshape(engine.TensorMatMul(engine.TensorTranspose(bins), membership), new[] { p, nBins, k });
-        var cellShape = new[] { p, nBins, k };
-        var rowSums = engine.TensorBroadcastTo(engine.ReduceSum(observed, new[] { 2 }, true), cellShape);
-        var colSums = engine.TensorBroadcastTo(
-            engine.Reshape(engine.ReduceSum(membership, new[] { 0 }, false), new[] { 1, 1, k }), cellShape);
-        var expected = engine.TensorDivideScalar(engine.TensorMultiply(rowSums, colSums), NumOps.FromDouble(n));
-        var positive = engine.TensorGreaterThan(expected, NumOps.Zero);
-        var safe = engine.TensorWhere(positive, expected, PreprocessingTensorOps.Filled(cellShape, NumOps.One));
-        var terms = engine.TensorWhere(positive,
-            engine.TensorDivide(engine.TensorSquare(engine.TensorSubtract(observed, expected)), safe), new Tensor<T>(cellShape));
-        return engine.ReduceSum(terms, new[] { 1, 2 }, false);
-    }
+        var scores = new double[p];
+        double yMean = y.Average();
 
-    private Tensor<T> ComputeGiniImportance(Tensor<T> X, Tensor<T> membership, int n, int p)
-    {
-        // Gini decrease of splitting every feature at its mean (x <= mean goes left); 0 when a side is empty
-        var engine = Engine;
-        int k = membership.Shape[1];
-        T giniParent = FeatureSelectionTensorOps.GiniImpurity(membership);
-        var right = engine.TensorGreaterThan(X, engine.TensorBroadcastTo(engine.ReduceMean(X, new[] { 0 }, true), new[] { n, p }));
-        var left = PreprocessingTensorOps.Not(right);
-        var ones = PreprocessingTensorOps.Filled(new[] { p }, NumOps.One);
-        T zero = NumOps.Zero;
-
-        Tensor<T> SideGini(Tensor<T> side, out Tensor<T> size)
+        for (int j = 0; j < p; j++)
         {
-            var classCounts = engine.TensorMatMul(engine.TensorTranspose(side), membership);
-            size = engine.ReduceSum(side, new[] { 0 }, false);
-            var safeSize = engine.TensorWhere(engine.TensorGreaterThan(size, zero), size, ones);
-            var proportions = engine.TensorDivide(classCounts,
-                engine.TensorBroadcastTo(engine.Reshape(safeSize, new[] { p, 1 }), new[] { p, k }));
-            return PreprocessingTensorOps.OneMinus(engine.ReduceSum(engine.TensorSquare(proportions), new[] { 1 }, false));
-        }
+            double xMean = 0;
+            for (int i = 0; i < n; i++) xMean += X[i, j];
+            xMean /= n;
 
-        var giniLeft = SideGini(left, out var leftSize);
-        var giniRight = SideGini(right, out var rightSize);
-        var weighted = engine.TensorDivideScalar(engine.TensorAdd(
-            engine.TensorMultiply(leftSize, giniLeft), engine.TensorMultiply(rightSize, giniRight)), NumOps.FromDouble(n));
-        var bothSides = engine.TensorMultiply(engine.TensorGreaterThan(leftSize, zero),
-            engine.TensorGreaterThan(rightSize, zero));
-        return engine.TensorWhere(bothSides,
-            engine.TensorAddScalar(engine.TensorNegate(weighted), giniParent), new Tensor<T>(new[] { p }));
+            double sxy = 0, sxx = 0, syy = 0;
+            for (int i = 0; i < n; i++)
+            {
+                double xd = X[i, j] - xMean;
+                double yd = y[i] - yMean;
+                sxy += xd * yd;
+                sxx += xd * xd;
+                syy += yd * yd;
+            }
+            scores[j] = (sxx > 1e-10 && syy > 1e-10) ? Math.Abs(sxy / Math.Sqrt(sxx * syy)) : 0;
+        }
+        return scores;
+    }
+
+    private double[] ComputeVariance(double[,] X, int n, int p)
+    {
+        var scores = new double[p];
+        for (int j = 0; j < p; j++)
+        {
+            double mean = 0;
+            for (int i = 0; i < n; i++) mean += X[i, j];
+            mean /= n;
+            for (int i = 0; i < n; i++)
+                scores[j] += (X[i, j] - mean) * (X[i, j] - mean);
+            scores[j] /= (n - 1);
+        }
+        return scores;
+    }
+
+    private double[] ComputeFisherScore(double[,] X, double[] y, int n, int p)
+    {
+        var scores = new double[p];
+        var classes = y.Distinct().ToList();
+        int k = classes.Count;
+
+        for (int j = 0; j < p; j++)
+        {
+            double overallMean = 0;
+            for (int i = 0; i < n; i++) overallMean += X[i, j];
+            overallMean /= n;
+
+            double betweenVar = 0, withinVar = 0;
+            foreach (var c in classes)
+            {
+                var indices = Enumerable.Range(0, n).Where(i => Math.Abs(y[i] - c) < 1e-10).ToList();
+                if (indices.Count == 0) continue;
+
+                double classMean = indices.Sum(i => X[i, j]) / indices.Count;
+                betweenVar += indices.Count * (classMean - overallMean) * (classMean - overallMean);
+
+                foreach (int i in indices)
+                    withinVar += (X[i, j] - classMean) * (X[i, j] - classMean);
+            }
+
+            scores[j] = withinVar > 1e-10 ? betweenVar / withinVar : 0;
+        }
+        return scores;
+    }
+
+    private double[] ComputeChiSquared(double[,] X, double[] y, int n, int p)
+    {
+        var scores = new double[p];
+        int nBins = Math.Min(10, (int)Math.Sqrt(n) + 1);
+        var classes = y.Distinct().ToList();
+
+        for (int j = 0; j < p; j++)
+        {
+            double xMin = double.MaxValue, xMax = double.MinValue;
+            for (int i = 0; i < n; i++)
+            {
+                xMin = Math.Min(xMin, X[i, j]);
+                xMax = Math.Max(xMax, X[i, j]);
+            }
+            double binWidth = (xMax - xMin) / nBins + 1e-10;
+
+            var observed = new int[nBins, classes.Count];
+            var rowSums = new int[nBins];
+            var colSums = new int[classes.Count];
+
+            for (int i = 0; i < n; i++)
+            {
+                int bin = Math.Min((int)((X[i, j] - xMin) / binWidth), nBins - 1);
+                int classIdx = classes.IndexOf(y[i]);
+                observed[bin, classIdx]++;
+                rowSums[bin]++;
+                colSums[classIdx]++;
+            }
+
+            double chi2 = 0;
+            for (int b = 0; b < nBins; b++)
+            {
+                for (int c = 0; c < classes.Count; c++)
+                {
+                    double expected = (double)rowSums[b] * colSums[c] / n;
+                    if (expected > 0)
+                        chi2 += (observed[b, c] - expected) * (observed[b, c] - expected) / expected;
+                }
+            }
+            scores[j] = chi2;
+        }
+        return scores;
+    }
+
+    private double[] ComputeGiniImportance(double[,] X, double[] y, int n, int p)
+    {
+        var scores = new double[p];
+        var classes = y.Distinct().ToList();
+
+        double giniParent = ComputeGini(y, classes, n);
+
+        for (int j = 0; j < p; j++)
+        {
+            double threshold = 0;
+            for (int i = 0; i < n; i++) threshold += X[i, j];
+            threshold /= n;
+
+            var leftY = new List<double>();
+            var rightY = new List<double>();
+            for (int i = 0; i < n; i++)
+            {
+                if (X[i, j] <= threshold)
+                    leftY.Add(y[i]);
+                else
+                    rightY.Add(y[i]);
+            }
+
+            if (leftY.Count > 0 && rightY.Count > 0)
+            {
+                double giniLeft = ComputeGini(leftY.ToArray(), classes, leftY.Count);
+                double giniRight = ComputeGini(rightY.ToArray(), classes, rightY.Count);
+                double weightedGini = (double)leftY.Count / n * giniLeft + (double)rightY.Count / n * giniRight;
+                scores[j] = giniParent - weightedGini;
+            }
+        }
+        return scores;
+    }
+
+    private double ComputeGini(double[] y, List<double> classes, int n)
+    {
+        double gini = 1.0;
+        foreach (var c in classes)
+        {
+            double p = (double)y.Count(yi => Math.Abs(yi - c) < 1e-10) / n;
+            gini -= p * p;
+        }
+        return gini;
     }
 
     /// <inheritdoc />
@@ -209,7 +296,15 @@ public class VotingFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         if (_selectedIndices is null)
             throw new InvalidOperationException("VotingFeatureSelector has not been fitted.");
 
-        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
+        int numRows = data.Rows;
+        int numCols = _selectedIndices.Length;
+        var result = new T[numRows, numCols];
+
+        for (int i = 0; i < numRows; i++)
+            for (int j = 0; j < numCols; j++)
+                result[i, j] = data[i, _selectedIndices[j]];
+
+        return new Matrix<T>(result);
     }
 
     /// <inheritdoc />

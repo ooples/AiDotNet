@@ -28,13 +28,13 @@ public class InformationGain<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISup
     private readonly int _nFeaturesToSelect;
     private readonly int _nBins;
 
-    private Vector<T>? _informationGains;
+    private double[]? _informationGains;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
-    public Vector<T>? InformationGains => _informationGains;
+    public double[]? InformationGains => _informationGains;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -70,28 +70,102 @@ public class InformationGain<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISup
         int n = data.Rows;
         int p = data.Columns;
 
-        var engine = Engine;
+        // Compute target entropy
+        var targetCounts = new Dictionary<int, int>();
+        for (int i = 0; i < n; i++)
+        {
+            int label = (int)Math.Round(NumOps.ToDouble(target[i]));
+            if (!targetCounts.ContainsKey(label))
+                targetCounts[label] = 0;
+            targetCounts[label]++;
+        }
 
-        // Target entropy (nats) over the rounded class labels
-        PreprocessingTensorOps.ClassLabels(target, out var classes, out var classIndex);
-        var classOneHot = PreprocessingTensorOps.ClassOneHot<T>(classIndex, classes.Length);
-        T targetEntropy = FeatureSelectionTensorOps.ClassEntropyNats(classOneHot);
+        double targetEntropy = 0;
+        foreach (int count in targetCounts.Values)
+        {
+            double p_y = (double)count / n;
+            if (p_y > 0)
+                targetEntropy -= p_y * Math.Log(p_y);
+        }
 
-        // Discretize features: min(trunc((x - min) / range * bins), bins - 1), one bin for a constant feature
-        var featureBins = FeatureSelectionTensorOps.RangeBinOneHot(Tensor<T>.FromMatrix(data), _nBins, _nBins);
-        FeatureSelectionTensorOps.BinEntropyNats(
-            FeatureSelectionTensorOps.JointBinCounts(featureBins, classOneHot, _nBins), n, out var conditionalEntropy);
+        _informationGains = new double[p];
 
-        // Information Gain = H(Y) - H(Y|X)
-        var informationGains = engine.TensorNegate(engine.TensorAddScalar(conditionalEntropy, NumOps.Negate(targetEntropy)));
-        _informationGains = informationGains.ToVector();
+        for (int j = 0; j < p; j++)
+        {
+            // Discretize feature
+            double minVal = double.MaxValue, maxVal = double.MinValue;
+            for (int i = 0; i < n; i++)
+            {
+                double val = NumOps.ToDouble(data[i, j]);
+                minVal = Math.Min(minVal, val);
+                maxVal = Math.Max(maxVal, val);
+            }
+
+            double range = maxVal - minVal;
+            if (range < 1e-10) range = 1;
+
+            var bins = new int[n];
+            for (int i = 0; i < n; i++)
+            {
+                double val = NumOps.ToDouble(data[i, j]);
+                bins[i] = Math.Min((int)(((val - minVal) / range) * _nBins), _nBins - 1);
+            }
+
+            // Compute conditional entropy H(Y|X)
+            var binCounts = new int[_nBins];
+            var jointCounts = new Dictionary<(int, int), int>();
+
+            for (int i = 0; i < n; i++)
+            {
+                int bin = bins[i];
+                int label = (int)Math.Round(NumOps.ToDouble(target[i]));
+
+                binCounts[bin]++;
+
+                var key = (bin, label);
+                if (!jointCounts.ContainsKey(key))
+                    jointCounts[key] = 0;
+                jointCounts[key]++;
+            }
+
+            double conditionalEntropy = 0;
+            for (int b = 0; b < _nBins; b++)
+            {
+                if (binCounts[b] == 0) continue;
+
+                double p_x = (double)binCounts[b] / n;
+                double h_y_given_x = 0;
+
+                foreach (int label in targetCounts.Keys)
+                {
+                    var key = (b, label);
+                    if (jointCounts.TryGetValue(key, out int jointCount) && jointCount > 0)
+                    {
+                        double p_y_given_x = (double)jointCount / binCounts[b];
+                        h_y_given_x -= p_y_given_x * Math.Log(p_y_given_x);
+                    }
+                }
+
+                conditionalEntropy += p_x * h_y_given_x;
+            }
+
+            // Information Gain = H(Y) - H(Y|X)
+            _informationGains[j] = targetEntropy - conditionalEntropy;
+        }
 
         // Select top features by Information Gain
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(informationGains, numToSelect);
+        _selectedIndices = _informationGains
+            .Select((ig, idx) => (IG: ig, Index: idx))
+            .OrderByDescending(x => x.IG)
+            .Take(numToSelect)
+            .Select(x => x.Index)
+            .OrderBy(x => x)
+            .ToArray();
 
         IsFitted = true;
     }
+
     /// <inheritdoc />
     public Matrix<T> FitTransform(Matrix<T> data, Vector<T> target)
     {
@@ -105,7 +179,15 @@ public class InformationGain<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISup
         if (_selectedIndices is null)
             throw new InvalidOperationException("InformationGain has not been fitted.");
 
-        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
+        int numRows = data.Rows;
+        int numCols = _selectedIndices.Length;
+        var result = new T[numRows, numCols];
+
+        for (int i = 0; i < numRows; i++)
+            for (int j = 0; j < numCols; j++)
+                result[i, j] = data[i, _selectedIndices[j]];
+
+        return new Matrix<T>(result);
     }
 
     /// <inheritdoc />

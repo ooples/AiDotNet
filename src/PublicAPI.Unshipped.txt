@@ -22654,7 +22654,6 @@ AiDotNet.Document.Options.DocBankOptions.LearningRate.get -> double?
 *REMOVED*AiDotNet.Preprocessing.FeatureSelection.Filter.DistanceCorrelation<T>.DistanceCorrelations.get -> double[]?
 *REMOVED*AiDotNet.Preprocessing.FeatureSelection.Filter.Correlation.KendallCorrelation<T>.TauScores.get -> double[]?
 *REMOVED*AiDotNet.Preprocessing.FeatureSelection.Filter.Correlation.KendallTau<T>.TauScores.get -> double[]?
-*REMOVED*AiDotNet.Preprocessing.FeatureSelection.Filter.Correlation.PearsonCorrelation<T>.CorrelationScores.get -> double[]?
 *REMOVED*AiDotNet.Preprocessing.FeatureSelection.Filter.Correlation.PointBiserial<T>.Correlations.get -> double[]?
 *REMOVED*AiDotNet.Preprocessing.FeatureSelection.Filter.Correlation.SpearmanCorrelation<T>.CorrelationScores.get -> double[]?
 *REMOVED*AiDotNet.Preprocessing.FeatureSelection.Filter.Correlation.PartialCorrelation<T>.PartialCorrelations.get -> double[]?
@@ -22665,14 +22664,11 @@ AiDotNet.Document.Options.DocBankOptions.LearningRate.get -> double?
 *REMOVED*AiDotNet.Preprocessing.FeatureSelection.Filter.FisherScore<T>.FisherScores.get -> double[]?
 *REMOVED*AiDotNet.Preprocessing.FeatureSelection.Filter.Distance.FisherScore<T>.Scores.get -> double[]?
 *REMOVED*AiDotNet.Preprocessing.FeatureSelection.Filter.Distance.ReliefF<T>.FeatureWeights.get -> double[]?
-*REMOVED*AiDotNet.Preprocessing.FeatureSelection.Filter.EntropyBasedSelection<T>.EntropyScores.get -> double[]?
 *REMOVED*AiDotNet.Preprocessing.FeatureSelection.Filter.GainRatio<T>.GainRatios.get -> double[]?
 *REMOVED*AiDotNet.Preprocessing.FeatureSelection.Filter.GainRatio<T>.InformationGains.get -> double[]?
 *REMOVED*AiDotNet.Preprocessing.FeatureSelection.Filter.GainRatioSelection<T>.GainRatioScores.get -> double[]?
 *REMOVED*AiDotNet.Preprocessing.FeatureSelection.Filter.GainRatioSelection<T>.InformationGain.get -> double[]?
 *REMOVED*AiDotNet.Preprocessing.FeatureSelection.Filter.GainRatioSelection<T>.SplitInfo.get -> double[]?
-*REMOVED*AiDotNet.Preprocessing.FeatureSelection.Filter.InformationGain<T>.InformationGains.get -> double[]?
-*REMOVED*AiDotNet.Preprocessing.FeatureSelection.Filter.GiniIndex<T>.GiniReductions.get -> double[]?
 *REMOVED*AiDotNet.Preprocessing.FeatureSelection.Filter.GiniImpuritySelection<T>.GiniReductionScores.get -> double[]?
 *REMOVED*AiDotNet.Preprocessing.FeatureSelection.Filter.HighDimensional.KnockoffFilter<T>.WStatistics.get -> double[]?
 *REMOVED*AiDotNet.Preprocessing.FeatureSelection.Filter.InformationTheory.AdjustedMutualInformation<T>.AMIScores.get -> double[]?
@@ -22790,7 +22786,6 @@ AiDotNet.Preprocessing.FeatureSelection.Filter.Correlation.DistanceCorrelation<T
 AiDotNet.Preprocessing.FeatureSelection.Filter.DistanceCorrelation<T>.DistanceCorrelations.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
 AiDotNet.Preprocessing.FeatureSelection.Filter.Correlation.KendallCorrelation<T>.TauScores.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
 AiDotNet.Preprocessing.FeatureSelection.Filter.Correlation.KendallTau<T>.TauScores.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
-AiDotNet.Preprocessing.FeatureSelection.Filter.Correlation.PearsonCorrelation<T>.CorrelationScores.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
 AiDotNet.Preprocessing.FeatureSelection.Filter.Correlation.PointBiserial<T>.Correlations.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
 AiDotNet.Preprocessing.FeatureSelection.Filter.Correlation.SpearmanCorrelation<T>.CorrelationScores.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
 AiDotNet.Preprocessing.FeatureSelection.Filter.Correlation.PartialCorrelation<T>.PartialCorrelations.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
@@ -22801,14 +22796,11 @@ AiDotNet.Preprocessing.FeatureSelection.Filter.DispersionRatio<T>.WithinClassVar
 AiDotNet.Preprocessing.FeatureSelection.Filter.FisherScore<T>.FisherScores.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
 AiDotNet.Preprocessing.FeatureSelection.Filter.Distance.FisherScore<T>.Scores.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
 AiDotNet.Preprocessing.FeatureSelection.Filter.Distance.ReliefF<T>.FeatureWeights.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
-AiDotNet.Preprocessing.FeatureSelection.Filter.EntropyBasedSelection<T>.EntropyScores.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
 AiDotNet.Preprocessing.FeatureSelection.Filter.GainRatio<T>.GainRatios.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
 AiDotNet.Preprocessing.FeatureSelection.Filter.GainRatio<T>.InformationGains.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
 AiDotNet.Preprocessing.FeatureSelection.Filter.GainRatioSelection<T>.GainRatioScores.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
 AiDotNet.Preprocessing.FeatureSelection.Filter.GainRatioSelection<T>.InformationGain.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
 AiDotNet.Preprocessing.FeatureSelection.Filter.GainRatioSelection<T>.SplitInfo.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
-AiDotNet.Preprocessing.FeatureSelection.Filter.InformationGain<T>.InformationGains.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
-AiDotNet.Preprocessing.FeatureSelection.Filter.GiniIndex<T>.GiniReductions.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
 AiDotNet.Preprocessing.FeatureSelection.Filter.GiniImpuritySelection<T>.GiniReductionScores.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
 AiDotNet.Preprocessing.FeatureSelection.Filter.HighDimensional.KnockoffFilter<T>.WStatistics.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
 AiDotNet.Preprocessing.FeatureSelection.Filter.InformationTheory.AdjustedMutualInformation<T>.AMIScores.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?

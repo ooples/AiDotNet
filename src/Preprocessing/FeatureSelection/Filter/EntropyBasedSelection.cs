@@ -29,14 +29,14 @@ public class EntropyBasedSelection<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     private readonly int _nBins;
     private readonly double _minEntropyRatio;
 
-    private Vector<T>? _entropyScores;
+    private double[]? _entropyScores;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public int NBins => _nBins;
-    public Vector<T>? EntropyScores => _entropyScores;
+    public double[]? EntropyScores => _entropyScores;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -66,36 +66,85 @@ public class EntropyBasedSelection<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         int n = data.Rows;
         int p = data.Columns;
 
-        var engine = Engine;
+        _entropyScores = new double[p];
         double maxPossibleEntropy = Math.Log(_nBins);
 
-        // Entropy (nats) of every feature's range-scaled bins; a constant feature falls in one bin (entropy 0)
-        var binCounts = FeatureSelectionTensorOps.BinCounts(
-            PreprocessingTensorOps.RangeScaledBinOneHot(Tensor<T>.FromMatrix(data), _nBins), _nBins);
-        var entropyScores = engine.TensorMultiplyScalar(
-            FeatureSelectionTensorOps.EntropyBits(binCounts, n), NumOps.FromDouble(Math.Log(2)));
-        _entropyScores = entropyScores.ToVector();
+        for (int j = 0; j < p; j++)
+        {
+            // Get feature values
+            var values = new double[n];
+            double minVal = double.MaxValue;
+            double maxVal = double.MinValue;
+
+            for (int i = 0; i < n; i++)
+            {
+                values[i] = NumOps.ToDouble(data[i, j]);
+                minVal = Math.Min(minVal, values[i]);
+                maxVal = Math.Max(maxVal, values[i]);
+            }
+
+            // Discretize into bins
+            var binCounts = new int[_nBins];
+            double range = maxVal - minVal;
+
+            if (range < 1e-10)
+            {
+                // Constant feature
+                _entropyScores[j] = 0;
+                continue;
+            }
+
+            for (int i = 0; i < n; i++)
+            {
+                int bin = (int)((values[i] - minVal) / range * (_nBins - 1));
+                bin = Math.Min(bin, _nBins - 1);
+                binCounts[bin]++;
+            }
+
+            // Compute entropy
+            double entropy = 0;
+            for (int b = 0; b < _nBins; b++)
+            {
+                if (binCounts[b] > 0)
+                {
+                    double prob = (double)binCounts[b] / n;
+                    entropy -= prob * Math.Log(prob);
+                }
+            }
+
+            _entropyScores[j] = entropy;
+        }
 
         // Filter by minimum entropy ratio
-        var candidates = new HashSet<int>(PreprocessingTensorOps.MaskPositions(
-            PreprocessingTensorOps.AtLeast(entropyScores, NumOps.FromDouble(_minEntropyRatio * maxPossibleEntropy))));
+        var candidates = Enumerable.Range(0, p)
+            .Where(j => _entropyScores[j] >= _minEntropyRatio * maxPossibleEntropy)
+            .ToList();
 
         int numToSelect = Math.Min(_nFeaturesToSelect, candidates.Count);
-        _selectedIndices = PreprocessingTensorOps.StableOrder(entropyScores, descending: true)
-            .Where(j => candidates.Contains(j))
+        _selectedIndices = candidates
+            .OrderByDescending(j => _entropyScores[j])
             .Take(numToSelect)
             .OrderBy(x => x)
             .ToArray();
 
         IsFitted = true;
     }
+
     /// <inheritdoc />
     protected override Matrix<T> TransformCore(Matrix<T> data)
     {
         if (_selectedIndices is null)
             throw new InvalidOperationException("EntropyBasedSelection has not been fitted.");
 
-        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
+        int numRows = data.Rows;
+        int numCols = _selectedIndices.Length;
+        var result = new T[numRows, numCols];
+
+        for (int i = 0; i < numRows; i++)
+            for (int j = 0; j < numCols; j++)
+                result[i, j] = data[i, _selectedIndices[j]];
+
+        return new Matrix<T>(result);
     }
 
     /// <inheritdoc />
