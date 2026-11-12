@@ -1,4 +1,5 @@
 using AiDotNet.Helpers;
+using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Enums;
 using AiDotNet.Attributes;
@@ -205,6 +206,10 @@ public class FunctionTransformer<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
 
     private static Matrix<T> CopyMatrix(Matrix<T> data) => data.Clone();
 
+    // Lifts a whole-tensor engine operation to the matrix-level function the transformer applies.
+    private static Func<Matrix<T>, Matrix<T>> MapMatrix(Func<Tensor<T>, Tensor<T>> operation) =>
+        matrix => operation(Tensor<T>.FromMatrix(matrix)).ToMatrix();
+
     /// <summary>
     /// Gets the output feature names after transformation.
     /// </summary>
@@ -218,9 +223,9 @@ public class FunctionTransformer<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     /// </summary>
     public static FunctionTransformer<T> Log()
     {
-        return FromElementFunction(
-            x => Math.Log(x),
-            x => Math.Exp(x));
+        return new FunctionTransformer<T>(
+            MapMatrix(t => AiDotNetEngine.Current.TensorLog(t)),
+            MapMatrix(t => AiDotNetEngine.Current.TensorExp(t)));
     }
 
     /// <summary>
@@ -228,9 +233,9 @@ public class FunctionTransformer<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     /// </summary>
     public static FunctionTransformer<T> Log1p()
     {
-        return FromElementFunction(
-            x => Math.Log(1 + x),
-            x => Math.Exp(x) - 1);
+        return new FunctionTransformer<T>(
+            MapMatrix(t => AiDotNetEngine.Current.TensorLog1p(t)),
+            MapMatrix(t => AiDotNetEngine.Current.TensorExpm1(t)));
     }
 
     /// <summary>
@@ -238,9 +243,9 @@ public class FunctionTransformer<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     /// </summary>
     public static FunctionTransformer<T> Sqrt()
     {
-        return FromElementFunction(
-            x => Math.Sqrt(x),
-            x => x * x);
+        return new FunctionTransformer<T>(
+            MapMatrix(t => AiDotNetEngine.Current.TensorSqrt(t)),
+            MapMatrix(t => AiDotNetEngine.Current.TensorSquare(t)));
     }
 
     /// <summary>
@@ -248,9 +253,9 @@ public class FunctionTransformer<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     /// </summary>
     public static FunctionTransformer<T> Exp()
     {
-        return FromElementFunction(
-            x => Math.Exp(x),
-            x => Math.Log(x));
+        return new FunctionTransformer<T>(
+            MapMatrix(t => AiDotNetEngine.Current.TensorExp(t)),
+            MapMatrix(t => AiDotNetEngine.Current.TensorLog(t)));
     }
 
     /// <summary>
@@ -259,9 +264,12 @@ public class FunctionTransformer<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     /// <param name="power">The power to raise values to.</param>
     public static FunctionTransformer<T> Power(double power)
     {
-        return FromElementFunction(
-            x => Math.Pow(x, power),
-            x => Math.Pow(x, 1.0 / power));
+        var numOps = MathHelper.GetNumericOperations<T>();
+        T exponent = numOps.FromDouble(power);
+        T inverseExponent = numOps.FromDouble(1.0 / power);
+        return new FunctionTransformer<T>(
+            MapMatrix(t => AiDotNetEngine.Current.TensorPower(t, exponent)),
+            MapMatrix(t => AiDotNetEngine.Current.TensorPower(t, inverseExponent)));
     }
 
     /// <summary>
@@ -269,8 +277,8 @@ public class FunctionTransformer<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     /// </summary>
     public static FunctionTransformer<T> Abs()
     {
-        return FromElementFunction(
-            x => Math.Abs(x),
+        return new FunctionTransformer<T>(
+            MapMatrix(t => AiDotNetEngine.Current.TensorAbs(t)),
             null); // No unique inverse for absolute value
     }
 
@@ -279,8 +287,8 @@ public class FunctionTransformer<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     /// </summary>
     public static FunctionTransformer<T> Sign()
     {
-        return FromElementFunction(
-            x => Math.Sign(x),
+        return new FunctionTransformer<T>(
+            MapMatrix(t => AiDotNetEngine.Current.TensorSign(t)),
             null); // No inverse for sign function
     }
 
@@ -291,8 +299,11 @@ public class FunctionTransformer<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     /// <param name="max">Maximum value.</param>
     public static FunctionTransformer<T> Clip(double min, double max)
     {
-        return FromElementFunction(
-            x => Math.Max(min, Math.Min(max, x)),
+        var numOps = MathHelper.GetNumericOperations<T>();
+        T lower = numOps.FromDouble(min);
+        T upper = numOps.FromDouble(max);
+        return new FunctionTransformer<T>(
+            MapMatrix(t => AiDotNetEngine.Current.TensorClampMin(AiDotNetEngine.Current.TensorClampMax(t, upper), lower)),
             null); // No inverse for clipping
     }
 }

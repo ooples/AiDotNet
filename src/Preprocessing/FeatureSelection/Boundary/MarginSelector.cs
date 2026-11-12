@@ -103,9 +103,9 @@ public class MarginSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupe
 
                 // Margin = gap between closest edges; overlapping ranges give the negative overlap
                 var gap = engine.TensorMax(
-                    engine.TensorMax(engine.TensorSubtract(min2, max1), engine.TensorSubtract(min1, max2)), zero);
+                    engine.TensorMax(engine.TensorSubtract(min2, max1), engine.TensorSubtract(min1, max2)), zeros);
                 var overlap = engine.TensorSubtract(engine.TensorMin(max1, max2), engine.TensorMax(min1, min2));
-                var margin = engine.TensorWhere(engine.TensorEquals(gap, zero), engine.TensorNegate(overlap), gap);
+                var margin = engine.TensorWhere(engine.TensorEquals(gap, zeros), engine.TensorNegate(overlap), gap);
 
                 // Normalize by average spread
                 var avgSpread = engine.TensorMultiplyScalar(
