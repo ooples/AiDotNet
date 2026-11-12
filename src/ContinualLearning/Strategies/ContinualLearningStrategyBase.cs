@@ -270,6 +270,21 @@ public abstract class ContinualLearningStrategyBase<T, TInput, TOutput> : IConti
     }
 
     /// <summary>
+    /// Returns a zero-copy rank-1 tensor view over the first <paramref name="count"/> elements of a vector,
+    /// so engine operations can work on the same prefix an index loop bounded by <paramref name="count"/> would.
+    /// Writes through the view change the vector.
+    /// </summary>
+    /// <param name="vector">The source vector.</param>
+    /// <param name="count">The number of leading elements to view.</param>
+    /// <returns>A tensor of shape [count] sharing the vector's memory.</returns>
+    private protected static Tensor<T> Head(Vector<T> vector, int count)
+    {
+        return count == vector.Length
+            ? vector.AsTensor()
+            : Tensor<T>.FromMemory(vector.AsWritableMemory().Slice(0, count), new[] { count });
+    }
+
+    /// <summary>
     /// Records a metric value.
     /// </summary>
     /// <param name="name">The metric name.</param>
