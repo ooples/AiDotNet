@@ -213,11 +213,12 @@ public partial class InformerModel<T> : TimeSeriesModelBase<T>, ISupportsLossFun
         }
 
         // Learnable decoder start token
-        _decoderStartToken = new Tensor<T>(new[] { _options.EmbeddingDim });
-        for (int i = 0; i < _options.EmbeddingDim; i++)
-        {
-            _decoderStartToken[i] = _numOps.FromDouble((random.NextDouble() * 2 - 1) * stddev);
-        }
+        // (u · 2 - 1) · stddev with u uniform in [0, 1), drawn in order
+        _decoderStartToken = Engine.TensorMultiplyScalar(
+            Engine.TensorSubtractScalar(
+                Engine.TensorMultiplyScalar(Tensor<T>.CreateRandom(random, _options.EmbeddingDim), _numOps.FromDouble(2.0)),
+                _numOps.One),
+            _numOps.FromDouble(stddev));
 
         // Output projection
         _outputProjection = InitTensor(new[] { _options.ForecastHorizon, _options.EmbeddingDim }, stddev, random);
@@ -399,21 +400,11 @@ public partial class InformerModel<T> : TimeSeriesModelBase<T>, ISupportsLossFun
         // forecast from real history, NOT the removed shortcut that returned the
         // memorized target value.
         bool inSample = _trainingSeries.Length == n && n > 0;
-        var windows = new Vector<T>[n];
-        for (int i = 0; i < n; i++)
-        {
-            int w = inSample ? Math.Min(lookback, i) : 0;
-            if (w > 0)
-            {
-                var window = new Vector<T>(w);
-                for (int t = 0; t < w; t++) window[t] = _trainingSeries[i - w + t];
-                windows[i] = window;
-            }
-            else
-            {
-                windows[i] = input.GetRow(i);
-            }
-        }
+        var windows = Enumerable.Range(0, n)
+            .Select(i => inSample && Math.Min(lookback, i) > 0
+                ? _trainingSeries.GetSubVector(i - Math.Min(lookback, i), Math.Min(lookback, i))
+                : input.GetRow(i))
+            .ToArray();
 
         // One batched forward per (effective window length, chunk) instead of one ForwardEngine call per row:
         // AiModelBuilder predicts the whole dataset after fitting, which made per-row inference a large share of a
@@ -432,23 +423,21 @@ public partial class InformerModel<T> : TimeSeriesModelBase<T>, ISupportsLossFun
                 // A nested arena per chunk: its scratch is recycled when the chunk ends without touching any arena
                 // the caller has open (whose tensors may still be live).
                 using var chunkArena = AiDotNet.Tensors.Helpers.TensorArena.Create();
-                var data = new T[rows * len];
-                for (int r = 0; r < rows; r++)
-                {
-                    var window = windows[all[c0 + r]];
-                    for (int t = 0; t < len; t++)
-                        data[r * len + t] = _numOps.Divide(_numOps.Subtract(window[t], _normMean), _normStd);
-                }
-                var outBH = ForwardBatch(new Tensor<T>(new[] { rows, len }, new Vector<T>(data)), rows, len); // [rows, H]
-                var outSpan = outBH.IsContiguous ? outBH.AsSpan() : outBH.Contiguous().AsSpan();
+                int[] chunkRows = all.Skip(c0).Take(rows).ToArray();
+                var data = TimeSeriesEngineOps<T>.Standardize(
+                    Vector<T>.Concatenate(chunkRows.Select(r => windows[r].GetSubVector(0, len)).ToArray()), _normMean, _normStd);
+                var outBH = ForwardBatch(new Tensor<T>(new[] { rows, len }, data), rows, len); // [rows, H]
                 int horizon = _options.ForecastHorizon;
-                for (int r = 0; r < rows; r++)
-                    predictions[all[c0 + r]] = _numOps.Add(_numOps.Multiply(outSpan[r * horizon], _normStd), _normMean);
+                var firstStep = Engine.StridedGather(outBH.Contiguous().ToVector(), 0, horizon, rows);
+                predictions = TimeSeriesEngineOps<T>.Scatter(
+                    predictions, chunkRows, TimeSeriesEngineOps<T>.Destandardize(firstStep, _normStd, _normMean));
             }
         }
-        for (int i = 0; i < n; i++)
-            if (windows[i].Length == 0) predictions[i] = PredictSingle(windows[i]);
-        return predictions;
+
+        // Empty windows keep the per-row path (ascending row order)
+        int[] emptyRows = Enumerable.Range(0, n).Where(i => windows[i].Length == 0).ToArray();
+        var emptyPredictions = new Vector<T>(emptyRows.Select(i => PredictSingle(windows[i])).ToArray());
+        return TimeSeriesEngineOps<T>.Scatter(predictions, emptyRows, emptyPredictions);
     }
 
     // Rows per batched predict forward; bounds activation memory (rows x length x 4·EmbeddingDim in the FFN).
@@ -597,10 +586,11 @@ public partial class InformerModel<T> : TimeSeriesModelBase<T>, ISupportsLossFun
         var proj = Engine.TensorMatMul(flatIn, Engine.Reshape(_inputProjection, new[] { 1, d })); // [B*L, d]
         var posEnc = new Vector<T>(batch * encLen0 * d);
         var peHost = _positionalEncodingHost ??= _positionalEncoding.GetCpuData();
+        // The first encLen0 positional rows, repeated for every batch row (bulk copies of a constant)
+        var peRows = peHost.AsSpan(0, encLen0 * d);
+        var posSpan = posEnc.AsWritableSpan();
         for (int bi = 0; bi < batch; bi++)
-            for (int t = 0; t < encLen0; t++)
-                for (int j = 0; j < d; j++)
-                    posEnc[(bi * encLen0 + t) * d + j] = peHost[t * d + j];
+            peRows.CopyTo(posSpan.Slice(bi * encLen0 * d, encLen0 * d));
         var embFlat = Engine.TensorAdd(proj, new Tensor<T>(new[] { batch * encLen0, d }, posEnc));
 
         // Encoder stack with distilling.
@@ -619,9 +609,7 @@ public partial class InformerModel<T> : TimeSeriesModelBase<T>, ISupportsLossFun
         var emb3 = Engine.Reshape(embFlat, new[] { batch, encLen0, d });
         var embMean = Engine.ReduceMean(emb3, new[] { 1 }, keepDims: true); // [batch, 1, d]
         var decPosData = new Vector<T>(horizon * d);
-        for (int t = 0; t < horizon; t++)
-            for (int j = 0; j < d; j++)
-                decPosData[t * d + j] = peHost[(_options.LookbackWindow + t) * d + j];
+        peHost.AsSpan(_options.LookbackWindow * d, horizon * d).CopyTo(decPosData.AsWritableSpan());
         var decPos = new Tensor<T>(new[] { 1, horizon, d }, decPosData);
         var start3 = Engine.Reshape(_decoderStartToken, new[] { 1, 1, d });
         var dec3 = Engine.TensorAdd(
@@ -645,16 +633,12 @@ public partial class InformerModel<T> : TimeSeriesModelBase<T>, ISupportsLossFun
     private Tensor<T> ForwardEngine(Vector<T> input)
     {
         int seqLen = Math.Min(input.Length, _options.LookbackWindow);
-        var inData = new T[seqLen];
-        for (int t = 0; t < seqLen; t++)
-            inData[t] = _numOps.Divide(_numOps.Subtract(input[t], _normMean), _normStd);
-        var batchInput = new Tensor<T>(new[] { 1, seqLen }, new Vector<T>(inData));
+        var inData = TimeSeriesEngineOps<T>.Standardize(input.GetSubVector(0, seqLen), _normMean, _normStd);
+        var batchInput = new Tensor<T>(new[] { 1, seqLen }, inData);
         var outBH = ForwardBatch(batchInput, 1, seqLen); // [1, horizon]
         int horizon = _options.ForecastHorizon;
-        var result = new Tensor<T>(new[] { horizon });
-        for (int h = 0; h < horizon; h++)
-            result[h] = _numOps.Add(_numOps.Multiply(outBH[h], _normStd), _normMean);
-        return result;
+        return Tensor<T>.FromVector(
+            TimeSeriesEngineOps<T>.Destandardize(outBH.Contiguous().ToVector().GetSubVector(0, horizon), _normStd, _normMean));
     }
 
     private List<Tensor<T>> CollectTrainableParameters()
@@ -712,10 +696,7 @@ public partial class InformerModel<T> : TimeSeriesModelBase<T>, ISupportsLossFun
             throw new InvalidOperationException(
                 $"ForwardEngine returned {output.Length} values, expected at least {forecastHorizon}.");
         }
-        for (int h = 0; h < forecastHorizon; h++)
-        {
-            result[h] = output[h];
-        }
+        output.ToVector().GetSubVector(0, forecastHorizon).AsSpan().CopyTo(result.AsWritableSpan());
 
         return result;
     }
@@ -894,10 +875,10 @@ public partial class InformerModel<T> : TimeSeriesModelBase<T>, ISupportsLossFun
         if (reader.BaseStream.Position < reader.BaseStream.Length)
         {
             int tsLen = reader.ReadInt32();
-            _trainingSeries = new Vector<T>(tsLen);
             var numOps = MathHelper.GetNumericOperations<T>();
-            for (int i = 0; i < tsLen; i++)
-                _trainingSeries[i] = numOps.FromDouble(reader.ReadDouble());
+            double[] storedSeries = Enumerable.Range(0, Math.Max(tsLen, 0)).Select(_ => reader.ReadDouble()).ToArray();
+            _trainingSeries = new Vector<T>(tsLen);
+            Array.ConvertAll(storedSeries, numOps.FromDouble).AsSpan().CopyTo(_trainingSeries.AsWritableSpan());
         }
 
         // Normalization statistics (present in models serialized after the tape rewrite).
@@ -926,8 +907,8 @@ public partial class InformerModel<T> : TimeSeriesModelBase<T>, ISupportsLossFun
             shape[i] = reader.ReadInt32();
         int length = reader.ReadInt32();
         var tensor = new Tensor<T>(shape);
-        for (int i = 0; i < length; i++)
-            tensor[i] = _numOps.FromDouble(reader.ReadDouble());
+        double[] storedValues = Enumerable.Range(0, Math.Max(length, 0)).Select(_ => reader.ReadDouble()).ToArray();
+        Array.ConvertAll(storedValues, _numOps.FromDouble).AsSpan().CopyTo(tensor.Data.Span);
         return tensor;
     }
 }
@@ -1220,11 +1201,12 @@ internal partial class DistillingConvTensor<T> : NeuralNetworks.Layers.LayerBase
         var random = RandomHelper.CreateSeededRandom(seed);
         double stddev = Math.Sqrt(2.0 / ((double)embeddingDim * 3));
 
-        _convWeights = new Tensor<T>(new[] { embeddingDim, 3 });
-        for (int i = 0; i < _convWeights.Length; i++)
-        {
-            _convWeights[i] = NumOps.FromDouble((random.NextDouble() * 2 - 1) * stddev);
-        }
+        // (u · 2 - 1) · stddev with u uniform in [0, 1), drawn in row-major order
+        _convWeights = Engine.TensorMultiplyScalar(
+            Engine.TensorSubtractScalar(
+                Engine.TensorMultiplyScalar(Tensor<T>.CreateRandom(random, embeddingDim, 3), NumOps.FromDouble(2.0)),
+                NumOps.One),
+            NumOps.FromDouble(stddev));
         _convBias = new Tensor<T>(new[] { embeddingDim });
     }
 
