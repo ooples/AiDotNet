@@ -1,6 +1,7 @@
 ﻿using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
+using AiDotNet.Tensors.Engines.Autodiff;
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
@@ -98,30 +99,28 @@ public partial class RotaryPositionalEncodingLayer<T> : LayerBase<T>, IShapeCont
         _headDimension = headDimension;
         _theta = theta;
 
-        int halfDim = headDimension / 2;
-        _cosCache = new Tensor<T>([maxSequenceLength, halfDim]);
-        _sinCache = new Tensor<T>([maxSequenceLength, halfDim]);
-
-        InitializeCache(0, maxSequenceLength);
+        (_cosCache, _sinCache) = BuildCacheRows(0, maxSequenceLength);
     }
 
     /// <summary>
-    /// Initializes or extends the cos/sin cache for positions [startPos, endPos).
+    /// Builds the cos/sin cache rows for positions [startPos, endPos):
+    /// angle[pos, i] = pos * freq_i with freq_i = 1 / theta^(2i / headDim).
     /// </summary>
-    private void InitializeCache(int startPos, int endPos)
+    private (Tensor<T> Cos, Tensor<T> Sin) BuildCacheRows(int startPos, int endPos)
     {
         int halfDim = _headDimension / 2;
-
-        for (int pos = startPos; pos < endPos; pos++)
+        int count = endPos - startPos;
+        if (count <= 0 || halfDim <= 0)
         {
-            for (int i = 0; i < halfDim; i++)
-            {
-                double freq = 1.0 / Math.Pow(_theta, (2.0 * i) / _headDimension);
-                double angle = pos * freq;
-                _cosCache[pos, i] = NumOps.FromDouble(Math.Cos(angle));
-                _sinCache[pos, i] = NumOps.FromDouble(Math.Sin(angle));
-            }
+            return (new Tensor<T>([Math.Max(0, count), halfDim]), new Tensor<T>([Math.Max(0, count), halfDim]));
         }
+
+        // The caches are constants built from fresh tensors, so they stay off the tape.
+        using var noGrad = new NoGradScope<T>();
+        var positions = Engine.TensorArange<T>(startPos, endPos, 1.0);                                // [count]
+        var frequencies = Engine.TensorLogspace<T>(0.0, -(2.0 * (halfDim - 1)) / _headDimension, halfDim, _theta);
+        var angles = Engine.TensorOuter(positions, frequencies);                                      // [count, halfDim]
+        return (Engine.TensorCos(angles), Engine.TensorSin(angles));
     }
 
     /// <summary>
@@ -151,28 +150,20 @@ public partial class RotaryPositionalEncodingLayer<T> : LayerBase<T>, IShapeCont
 
             int oldLength = _maxSequenceLength;
 
-            int halfDim = _headDimension / 2;
-            var newCos = new Tensor<T>([requiredLength, halfDim]);
-            var newSin = new Tensor<T>([requiredLength, halfDim]);
-
-            // Copy existing cache
-            for (int pos = 0; pos < oldLength; pos++)
+            // Keep the existing rows and append the new positions; build both tables before
+            // swapping so other threads checking _maxSequenceLength never see positions beyond
+            // what the current cache tensors actually contain.
+            var (extraCos, extraSin) = BuildCacheRows(oldLength, requiredLength);
+            Tensor<T> newCos;
+            Tensor<T> newSin;
+            using (new NoGradScope<T>())
             {
-                for (int i = 0; i < halfDim; i++)
-                {
-                    newCos[pos, i] = _cosCache[pos, i];
-                    newSin[pos, i] = _sinCache[pos, i];
-                }
+                newCos = Engine.TensorConcatenate(new[] { _cosCache, extraCos }, 0);
+                newSin = Engine.TensorConcatenate(new[] { _sinCache, extraSin }, 0);
             }
 
-            // Swap cache references before updating length for thread safety:
-            // other threads checking _maxSequenceLength will not see positions
-            // beyond what the current cache tensors actually contain.
             _cosCache = newCos;
             _sinCache = newSin;
-
-            // Compute new entries
-            InitializeCache(oldLength, requiredLength);
 
             // Update length last so concurrent readers never index beyond cache bounds
             _maxSequenceLength = requiredLength;
@@ -257,50 +248,13 @@ public partial class RotaryPositionalEncodingLayer<T> : LayerBase<T>, IShapeCont
     /// </summary>
     private Tensor<T> InverseRotateTensor(Tensor<T> input, int startPosition)
     {
-        var output = TensorAllocator.Rent<T>(input._shape);
-        int rank = input.Shape.Length;
-        int seqLen = input.Shape[rank - 2];
-        int headDim = input.Shape[rank - 1];
-        int halfDim = headDim / 2;
-
-        int leadingSize = 1;
-        for (int d = 0; d < rank - 2; d++)
-        {
-            leadingSize *= input.Shape[d];
-        }
-
-        int seqStride = headDim;
-        int batchStride = seqLen * headDim;
-
-        for (int b = 0; b < leadingSize; b++)
-        {
-            for (int s = 0; s < seqLen; s++)
-            {
-                int pos = startPosition + s;
-                int baseIdx = b * batchStride + s * seqStride;
-
-                for (int i = 0; i < halfDim; i++)
-                {
-                    T cos_val = _cosCache[pos, i];
-                    T sin_val = _sinCache[pos, i];
-
-                    T x_even = input[baseIdx + 2 * i];
-                    T x_odd = input[baseIdx + 2 * i + 1];
-
-                    // Inverse rotation: use -sin (transpose of rotation matrix)
-                    // x'[2i]   = x[2i] * cos + x[2i+1] * sin
-                    // x'[2i+1] = -x[2i] * sin + x[2i+1] * cos
-                    output[baseIdx + 2 * i] = NumOps.Add(
-                        NumOps.Multiply(x_even, cos_val),
-                        NumOps.Multiply(x_odd, sin_val));
-                    output[baseIdx + 2 * i + 1] = NumOps.Add(
-                        NumOps.Negate(NumOps.Multiply(x_even, sin_val)),
-                        NumOps.Multiply(x_odd, cos_val));
-                }
-            }
-        }
-
-        return output;
+        // Inverse rotation: use -sin (transpose of rotation matrix)
+        // x'[2i]   = x[2i] * cos + x[2i+1] * sin
+        // x'[2i+1] = -x[2i] * sin + x[2i+1] * cos
+        // i.e. the forward interleaved rotation with the sine table negated. Manual backward
+        // into a fresh tensor, as master: not recorded on the tape.
+        using var noGrad = new NoGradScope<T>();
+        return Engine.ApplyRoPEInterleaved(input, _cosCache, Engine.TensorNegate(_sinCache), startPosition);
     }
 
     /// <summary>
