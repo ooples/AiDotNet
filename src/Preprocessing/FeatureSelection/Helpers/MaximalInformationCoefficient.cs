@@ -52,14 +52,14 @@ internal static class MaximalInformationCoefficient
             return new Tensor<T>(new[] { 0 });
 
         var yColumn = engine.Reshape(y, new[] { n });
-        var yOrder = FeatureSelectionTensorOps.StableOrder(yColumn, descending: false);
+        var yOrder = PreprocessingTensorOps.StableOrder(yColumn, descending: false);
         var yGroups = TieGroups(yColumn, yOrder);
 
         var columns = new Tensor<T>[p];
         for (int j = 0; j < p; j++)
         {
             var xColumn = engine.Reshape(engine.TensorSlice(x, new[] { 0, j }, new[] { n, 1 }), new[] { n });
-            var xOrder = FeatureSelectionTensorOps.StableOrder(xColumn, descending: false);
+            var xOrder = PreprocessingTensorOps.StableOrder(xColumn, descending: false);
             columns[j] = Mic<T>(n, xOrder, TieGroups(xColumn, xOrder), yOrder, yGroups, alpha, c);
         }
 
@@ -242,22 +242,30 @@ internal static class MaximalInformationCoefficient
         // Pairs (s, t) are indexed [s - 1, t - 1]
         var cS = engine.TensorBroadcastTo(engine.Reshape(cumulative, new[] { p, 1 }), new[] { p, p });
         var cT = engine.TensorBroadcastTo(engine.Reshape(cumulative, new[] { 1, p }), new[] { p, p });
-        var cS3 = engine.TensorBroadcastTo(engine.Reshape(cumulative, new[] { 1, p, 1 }), new[] { q, p, p });
-        var cT3 = engine.TensorBroadcastTo(engine.Reshape(cumulative, new[] { 1, 1, p }), new[] { q, p, p });
-        var aS = engine.TensorBroadcastTo(engine.Reshape(cumhist, new[] { q, p, 1 }), new[] { q, p, p });
-        var aT = engine.TensorBroadcastTo(engine.Reshape(cumhist, new[] { q, 1, p }), new[] { q, p, p });
-        var between = engine.TensorSubtract(aT, aS);
+        var cTMinusS = engine.TensorSubtract(cT, cS);
 
         // H(Q), and the partition entropies of SOM Algorithm 2 (libmine hp3, hp3q and hp2q)
         var rowTotals = engine.TensorSlice(cumhist, new[] { 0, p - 1 }, new[] { q, 1 });
-        T hq = engine.TensorSum(EntropyTerms(rowTotals, FeatureSelectionTensorOps.Filled(new[] { q, 1 }, ops.FromDouble(n))));
-        var hp3 = engine.TensorAdd(EntropyTerms(cS, cT), EntropyTerms(engine.TensorSubtract(cT, cS), cT));
-        var hp3q = engine.ReduceSum(engine.TensorAdd(EntropyTerms(aS, cT3), EntropyTerms(between, cT3)), new[] { 0 }, false);
-        var hp2q = engine.ReduceSum(EntropyTerms(between, engine.TensorSubtract(cT3, cS3)), new[] { 0 }, false);
+        T hq = engine.TensorSum(EntropyTerms(rowTotals, PreprocessingTensorOps.Filled(new[] { q, 1 }, ops.FromDouble(n))));
+        var hp3 = engine.TensorAdd(EntropyTerms(cS, cT), EntropyTerms(cTMinusS, cT));
+
+        // hp3q and hp2q sum over the q rows; like libmine, accumulate one row's [p, p] table at a time instead of
+        // materializing [q, p, p] tables (about 112 B^2 elements per feature at the first row partition)
+        var hp3q = new Tensor<T>(new[] { p, p });
+        var hp2q = new Tensor<T>(new[] { p, p });
+        for (int r = 0; r < q; r++)
+        {
+            var row = engine.TensorSlice(cumhist, new[] { r, 0 }, new[] { 1, p });
+            var aS = engine.TensorBroadcastTo(engine.Reshape(row, new[] { p, 1 }), new[] { p, p });
+            var aT = engine.TensorBroadcastTo(engine.Reshape(row, new[] { 1, p }), new[] { p, p });
+            var between = engine.TensorSubtract(aT, aS);
+            hp3q = engine.TensorAdd(hp3q, engine.TensorAdd(EntropyTerms(aS, cT), EntropyTerms(between, cT)));
+            hp2q = engine.TensorAdd(hp2q, EntropyTerms(between, cTMinusS));
+        }
 
         // Every partition score lies within [-2 log n, log n]; invalid (s, t) pairs drop below that range
         T exclusion = ops.FromDouble(4 * Math.Log(Math.Max(n, 2)) + 4);
-        var ones = FeatureSelectionTensorOps.Filled(new[] { p, p }, one);
+        var ones = PreprocessingTensorOps.Filled(new[] { p, p }, one);
 
         // Partitions into two columns: I[t][2] = H(Q) + max_{1 <= s <= t} (hp3(s, t) - hp3q(s, t))
         var level = MaskedColumnMax(engine.TensorSubtract(hp3, hp3q), engine.TensorTriu(ones, 0), minusOne, exclusion);
@@ -291,7 +299,7 @@ internal static class MaximalInformationCoefficient
             atLastClump.Add(best);
 
         // score[l - 2] = I[p][l] / min(log l, log q)
-        var sizes = engine.TensorAddScalar(engine.TensorCumSum(FeatureSelectionTensorOps.Filled(new[] { width }, one), 0), one);
+        var sizes = engine.TensorAddScalar(engine.TensorCumSum(PreprocessingTensorOps.Filled(new[] { width }, one), 0), one);
         var normalizer = engine.TensorMin(engine.TensorLog(sizes), ops.FromDouble(Math.Log(q)));
         return engine.TensorDivide(engine.TensorConcatenate(atLastClump.ToArray(), 0), normalizer);
     }
