@@ -25,6 +25,26 @@ internal static class FeatureSelectionInformationOps
         return engine.TensorMin(engine.TensorFloor(scaled), ops.FromDouble(bins - 1)).Cast<int>();
     }
 
+    /// <summary>
+    /// Equal-width bin index of every entry of a 2-D tensor ([n, p]), per column, over the exact range:
+    /// <c>min(floor((x - min) / (max - min) * bins), bins - 1)</c>, and bin 0 for a column whose range is not above 1e-10.
+    /// </summary>
+    public static Tensor<int> EqualWidthBinsExactRange<T>(Tensor<T> x, int bins)
+    {
+        var engine = AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<T>();
+        int n = x.Shape[0];
+        int p = x.Shape[1];
+        var min = engine.Reshape(FeatureSelectionTensorOps.ColumnMin(x), new[] { 1, p });
+        var max = engine.Reshape(FeatureSelectionTensorOps.ColumnMax(x), new[] { 1, p });
+        var range = engine.TensorSubtract(max, min);
+        var spread = engine.TensorBroadcastTo(engine.TensorGreaterThan(range, ops.FromDouble(1e-10)), new[] { n, p });
+        var safeRange = engine.TensorWhere(engine.TensorGreaterThan(range, ops.FromDouble(1e-10)), range, FeatureSelectionTensorOps.Filled(new[] { 1, p }, ops.One));
+        var scaled = engine.TensorMultiplyScalar(engine.TensorDivide(engine.TensorSubtract(x, min), safeRange), ops.FromDouble(bins));
+        var binned = engine.TensorMin(engine.TensorFloor(scaled), ops.FromDouble(bins - 1));
+        return engine.TensorMultiply(binned, spread).Cast<int>();
+    }
+
     /// <summary>Equal-width bin index of every entry of a 1-D tensor ([n] to [n, 1]), see <see cref="EqualWidthBins{T}(Tensor{T}, int)"/>.</summary>
     public static Tensor<int> EqualWidthBins<T>(Vector<T> values, int bins) =>
         EqualWidthBins(AiDotNetEngine.Current.Reshape(Tensor<T>.FromVector(values), new[] { values.Length, 1 }), bins);
