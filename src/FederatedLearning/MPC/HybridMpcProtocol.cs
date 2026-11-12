@@ -166,13 +166,12 @@ public class HybridMpcProtocol<T> : FederatedLearningComponentBase<T>, ISecureCo
         }
 
         // Weighted sum: sum(w_i * g_i) — all done on shares
-        T firstWeight = NumOps.FromDouble(weights[0]);
-        var result = ScalarMultiply(clientGradientShares[0], firstWeight);
+        var weightValues = new Tensor<double>(weights.ToArray(), new[] { weights.Count }).Cast<T>().ToArray();
+        var result = ScalarMultiply(clientGradientShares[0], weightValues[0]);
 
         for (int c = 1; c < clientGradientShares.Count; c++)
         {
-            T w = NumOps.FromDouble(weights[c]);
-            var weighted = ScalarMultiply(clientGradientShares[c], w);
+            var weighted = ScalarMultiply(clientGradientShares[c], weightValues[c]);
             result = SecureAdd(result, weighted);
         }
 
