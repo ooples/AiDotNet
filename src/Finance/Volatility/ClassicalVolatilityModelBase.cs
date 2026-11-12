@@ -117,6 +117,17 @@ public abstract class ClassicalVolatilityModelBase<T> :
     }
 
     /// <summary>
+    /// The backcast arch uses for a whole fit: computed ONCE from the residuals at the mean model's starting
+    /// values (the sample mean for a constant mean), not from the residuals at the candidate mean, so it stays
+    /// fixed while the likelihood is optimised and when parameters are fixed.
+    /// </summary>
+    private T StartingBackcast(Tensor<T> returns)
+    {
+        var engine = AiDotNetEngine.Current;
+        return Backcast(engine.TensorSubtractScalar(returns, engine.TensorMean(returns)));
+    }
+
+    /// <summary>
     /// Evaluates the first-order linear recurrence <c>s_t = drive_t + decay * s_(t-1)</c> with
     /// <c>s_(-1) = initial</c>, as blocked lower-triangular Toeplitz products.
     /// </summary>
@@ -189,7 +200,7 @@ public abstract class ClassicalVolatilityModelBase<T> :
         T invalid = NumOps.FromDouble(1e12);
         var residuals = AiDotNetEngine.Current.TensorSubtractScalar(returns, natural[0]);
         var volatility = VolatilityParameters(natural);
-        var sigma2 = VariancePath(residuals, Backcast(residuals), volatility);
+        var sigma2 = VariancePath(residuals, StartingBackcast(returns), volatility);
 
         var engine = AiDotNetEngine.Current;
         T smallest = engine.TensorMinValue(sigma2);
@@ -217,6 +228,8 @@ public abstract class ClassicalVolatilityModelBase<T> :
         var p = Parameters ?? throw new InvalidOperationException("The model has no fitted parameters.");
         var volatility = VolatilityParameters(p);
         var residuals = AiDotNetEngine.Current.TensorSubtractScalar(Tensor<T>.FromVector(returns), p[0]);
+        // arch's forecast() backcasts from the residuals at the fitted mean (its fit and fix use the
+        // starting-value backcast instead; the two differ only in the first few steps of the path).
         var sigma2 = VariancePath(residuals, Backcast(residuals), volatility);
 
         // step from the last observed residual to t+1
