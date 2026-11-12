@@ -2,6 +2,7 @@ using AiDotNet.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Enums;
 using AiDotNet.Attributes;
+using AiDotNet.Preprocessing.FeatureSelection.Helpers;
 
 namespace AiDotNet.Preprocessing.FeatureSelection.Nonparametric;
 
@@ -25,13 +26,13 @@ public class KendallTauSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, I
 {
     private readonly int _nFeaturesToSelect;
 
-    private double[]? _tauScores;
+    private Vector<T>? _tauScores;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
-    public double[]? TauScores => _tauScores;
+    public Vector<T>? TauScores => _tauScores;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -65,59 +66,43 @@ public class KendallTauSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, I
         int n = data.Rows;
         int p = data.Columns;
 
-        var X = new double[n, p];
-        var y = new double[n];
-        for (int i = 0; i < n; i++)
-        {
-            y[i] = NumOps.ToDouble(target[i]);
-            for (int j = 0; j < p; j++)
-                X[i, j] = NumOps.ToDouble(data[i, j]);
-        }
+        var engine = Engine;
+        var x = Tensor<T>.FromMatrix(data);
 
-        _tauScores = new double[p];
-
-        for (int j = 0; j < p; j++)
-        {
-            var col = new double[n];
-            for (int i = 0; i < n; i++)
-                col[i] = X[i, j];
-
-            _tauScores[j] = Math.Abs(ComputeKendallTau(col, y, n));
-        }
+        // Kendall's tau-b (scipy.stats.kendalltau's default): with s_x = sign(x_i - x_j) and s_y likewise,
+        // tau_b = sum s_x s_y / sqrt(sum s_x^2 * sum s_y^2); the sums over all ordered pairs are twice the
+        // sums over i < j, so the factors cancel. Ties count in neither concordant nor discordant pairs and
+        // shrink the denominator.
+        var y = engine.Reshape(Tensor<T>.FromVector(target), new[] { n, 1 });
+        var targetSigns = SignDifferences(y);
+        T targetUntied = engine.TensorSum(engine.TensorSquare(targetSigns));
+        var sums = FeatureSelectionTensorOps.KernelWeightedSums(
+            x,
+            SignDifferences,
+            new[] { targetSigns },
+            new[] { FeatureSelectionTensorOps.Filled(new[] { n, n }, NumOps.One) });
+        var concordance = engine.Reshape(engine.TensorSlice(sums, new[] { 0, 0 }, new[] { p, 1 }), new[] { p });
+        var featureUntied = engine.Reshape(engine.TensorSlice(sums, new[] { 0, 1 }, new[] { p, 1 }), new[] { p });
+        var denominator = engine.TensorMultiplyScalar(featureUntied, targetUntied);
+        var defined = engine.TensorGreaterThan(denominator, NumOps.Zero);
+        var safeDenominator = engine.TensorWhere(defined, denominator, FeatureSelectionTensorOps.Filled(new[] { p }, NumOps.One));
+        var tau = engine.TensorWhere(
+            defined, engine.TensorDivide(concordance, engine.TensorSqrt(safeDenominator)), new Tensor<T>(new[] { p }));
+        var scores = engine.TensorAbs(tau);
+        _tauScores = scores.ToVector();
 
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = Enumerable.Range(0, p)
-            .OrderByDescending(j => _tauScores[j])
-            .Take(numToSelect)
-            .OrderBy(x => x)
-            .ToArray();
+        _selectedIndices = FeatureSelectionTensorOps.TopKIndicesSorted(scores, numToSelect);
 
         IsFitted = true;
     }
 
-    private double ComputeKendallTau(double[] x, double[] y, int n)
+    private static Tensor<T> SignDifferences(Tensor<T> column)
     {
-        int concordant = 0;
-        int discordant = 0;
-
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = i + 1; j < n; j++)
-            {
-                double xDiff = x[i] - x[j];
-                double yDiff = y[i] - y[j];
-                double product = xDiff * yDiff;
-
-                if (product > 0)
-                    concordant++;
-                else if (product < 0)
-                    discordant++;
-                // Ties are not counted
-            }
-        }
-
-        int totalPairs = n * (n - 1) / 2;
-        return totalPairs > 0 ? (double)(concordant - discordant) / totalPairs : 0;
+        var engine = AiDotNetEngine.Current;
+        int n = column.Shape[0];
+        return engine.TensorSign(engine.TensorSubtract(
+            engine.TensorBroadcastTo(column, new[] { n, n }), engine.TensorBroadcastTo(engine.TensorTranspose(column), new[] { n, n })));
     }
 
     /// <inheritdoc />
@@ -133,15 +118,7 @@ public class KendallTauSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, I
         if (_selectedIndices is null)
             throw new InvalidOperationException("KendallTauSelector has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return FeatureSelectionTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

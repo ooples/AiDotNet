@@ -2,6 +2,7 @@ using AiDotNet.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Enums;
 using AiDotNet.Attributes;
+using AiDotNet.Preprocessing.FeatureSelection.Helpers;
 
 namespace AiDotNet.Preprocessing.FeatureSelection.Nonlinear;
 
@@ -25,13 +26,13 @@ public class DistanceCorrelationSelector<T> : TransformerBase<T, Matrix<T>, Matr
 {
     private readonly int _nFeaturesToSelect;
 
-    private double[]? _dcorValues;
+    private Vector<T>? _dcorValues;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
-    public double[]? DCorValues => _dcorValues;
+    public Vector<T>? DCorValues => _dcorValues;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -65,107 +66,39 @@ public class DistanceCorrelationSelector<T> : TransformerBase<T, Matrix<T>, Matr
         int n = data.Rows;
         int p = data.Columns;
 
-        var X = new double[n, p];
-        var y = new double[n];
-        for (int i = 0; i < n; i++)
+        var engine = Engine;
+        T pairCount = NumOps.FromDouble((double)n * n);
+
+        // Double-centred distance matrix of the target and its distance variance
+        var yCentered = FeatureSelectionTensorOps.DoubleCenteredDistances(engine.Reshape(Tensor<T>.FromVector(target), new[] { n, 1 }));
+        T yVar = NumOps.Divide(engine.TensorSum(engine.TensorSquare(yCentered)), pairCount);
+
+        // Per feature: sum A .* B (distance covariance) and sum A .* A (distance variance)
+        var sums = FeatureSelectionTensorOps.KernelWeightedSums(
+            Tensor<T>.FromMatrix(data),
+            column => FeatureSelectionTensorOps.DoubleCenteredDistances(column),
+            new[] { yCentered },
+            new[] { FeatureSelectionTensorOps.Filled(new[] { n, n }, NumOps.One) });
+        var dcovSquared = engine.TensorDivideScalar(engine.Reshape(engine.TensorSlice(sums, new[] { 0, 0 }, new[] { p, 1 }), new[] { p }), pairCount);
+        var xVar = engine.TensorDivideScalar(engine.Reshape(engine.TensorSlice(sums, new[] { 0, 1 }, new[] { p, 1 }), new[] { p }), pairCount);
+
+        // dCor = dCov / sqrt(sqrt(dVar(X) dVar(Y))); 0 when either distance variance is below 1e-10
+        var scores = new Tensor<T>(new[] { p });
+        if (!NumOps.LessThan(yVar, NumOps.FromDouble(1e-10)))
         {
-            y[i] = NumOps.ToDouble(target[i]);
-            for (int j = 0; j < p; j++)
-                X[i, j] = NumOps.ToDouble(data[i, j]);
+            var defined = FeatureSelectionTensorOps.OneMinus(engine.TensorLessThan(xVar, NumOps.FromDouble(1e-10)));
+            var safeXVar = engine.TensorWhere(defined, xVar, FeatureSelectionTensorOps.Filled(new[] { p }, NumOps.One));
+            var dcor = engine.TensorDivide(
+                engine.TensorSqrt(dcovSquared), engine.TensorSqrt(engine.TensorSqrt(engine.TensorMultiplyScalar(safeXVar, yVar))));
+            scores = engine.TensorWhere(defined, dcor, scores);
         }
 
-        _dcorValues = new double[p];
-
-        // Precompute distance matrix for target
-        var yDist = ComputeDistanceMatrix(y);
-        var yCentered = DoubleCenterMatrix(yDist);
-        double yVar = ComputeDVariance(yCentered);
-
-        for (int j = 0; j < p; j++)
-        {
-            var col = new double[n];
-            for (int i = 0; i < n; i++)
-                col[i] = X[i, j];
-
-            var xDist = ComputeDistanceMatrix(col);
-            var xCentered = DoubleCenterMatrix(xDist);
-            double xVar = ComputeDVariance(xCentered);
-
-            if (xVar < 1e-10 || yVar < 1e-10)
-            {
-                _dcorValues[j] = 0;
-                continue;
-            }
-
-            // Distance covariance
-            double dcov = 0;
-            for (int i1 = 0; i1 < n; i1++)
-                for (int i2 = 0; i2 < n; i2++)
-                    dcov += xCentered[i1, i2] * yCentered[i1, i2];
-            dcov = Math.Sqrt(dcov / ((double)n * n));
-
-            // Distance correlation
-            _dcorValues[j] = dcov / Math.Sqrt(Math.Sqrt(xVar * yVar));
-        }
+        _dcorValues = scores.ToVector();
 
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = Enumerable.Range(0, p)
-            .OrderByDescending(j => _dcorValues[j])
-            .Take(numToSelect)
-            .OrderBy(x => x)
-            .ToArray();
+        _selectedIndices = FeatureSelectionTensorOps.TopKIndicesSorted(scores, numToSelect);
 
         IsFitted = true;
-    }
-
-    private double[,] ComputeDistanceMatrix(double[] data)
-    {
-        int n = data.Length;
-        var dist = new double[n, n];
-        for (int i = 0; i < n; i++)
-            for (int j = 0; j < n; j++)
-                dist[i, j] = Math.Abs(data[i] - data[j]);
-        return dist;
-    }
-
-    private double[,] DoubleCenterMatrix(double[,] dist)
-    {
-        int n = dist.GetLength(0);
-        var centered = new double[n, n];
-
-        var rowMeans = new double[n];
-        var colMeans = new double[n];
-        double grandMean = 0;
-
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < n; j++)
-            {
-                rowMeans[i] += dist[i, j];
-                colMeans[j] += dist[i, j];
-                grandMean += dist[i, j];
-            }
-            rowMeans[i] /= n;
-        }
-        for (int j = 0; j < n; j++)
-            colMeans[j] /= n;
-        grandMean /= ((double)n * n);
-
-        for (int i = 0; i < n; i++)
-            for (int j = 0; j < n; j++)
-                centered[i, j] = dist[i, j] - rowMeans[i] - colMeans[j] + grandMean;
-
-        return centered;
-    }
-
-    private double ComputeDVariance(double[,] centered)
-    {
-        int n = centered.GetLength(0);
-        double sum = 0;
-        for (int i = 0; i < n; i++)
-            for (int j = 0; j < n; j++)
-                sum += centered[i, j] * centered[i, j];
-        return sum / ((double)n * n);
     }
 
     /// <inheritdoc />
@@ -181,15 +114,7 @@ public class DistanceCorrelationSelector<T> : TransformerBase<T, Matrix<T>, Matr
         if (_selectedIndices is null)
             throw new InvalidOperationException("DistanceCorrelationSelector has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return FeatureSelectionTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

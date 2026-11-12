@@ -2,6 +2,7 @@ using AiDotNet.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Enums;
 using AiDotNet.Attributes;
+using AiDotNet.Preprocessing.FeatureSelection.Helpers;
 
 namespace AiDotNet.Preprocessing.FeatureSelection.Morphological;
 
@@ -25,14 +26,14 @@ public class ErosionDilationSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T
     private readonly int _nFeaturesToSelect;
     private readonly int _windowSize;
 
-    private double[]? _morphologicalScores;
+    private Vector<T>? _morphologicalScores;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public int WindowSize => _windowSize;
-    public double[]? MorphologicalScores => _morphologicalScores;
+    public Vector<T>? MorphologicalScores => _morphologicalScores;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -55,59 +56,21 @@ public class ErosionDilationSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T
     protected override void FitCore(Matrix<T> data)
     {
         _nInputFeatures = data.Columns;
-        int n = data.Rows;
         int p = data.Columns;
-
-        var X = new double[n, p];
-        for (int i = 0; i < n; i++)
-            for (int j = 0; j < p; j++)
-                X[i, j] = NumOps.ToDouble(data[i, j]);
-
-        _morphologicalScores = new double[p];
         int halfWindow = _windowSize / 2;
 
-        for (int j = 0; j < p; j++)
-        {
-            var col = new double[n];
-            for (int i = 0; i < n; i++)
-                col[i] = X[i, j];
+        // Columns as rows ([p, n]) so the windows slide along the samples
+        var engine = Engine;
+        var columns = engine.TensorTranspose(Tensor<T>.FromMatrix(data));
 
-            // Apply erosion (local minimum)
-            var eroded = new double[n];
-            for (int i = 0; i < n; i++)
-            {
-                double minVal = col[i];
-                for (int k = Math.Max(0, i - halfWindow); k <= Math.Min(n - 1, i + halfWindow); k++)
-                    minVal = Math.Min(minVal, col[k]);
-                eroded[i] = minVal;
-            }
-
-            // Apply dilation (local maximum)
-            var dilated = new double[n];
-            for (int i = 0; i < n; i++)
-            {
-                double maxVal = col[i];
-                for (int k = Math.Max(0, i - halfWindow); k <= Math.Min(n - 1, i + halfWindow); k++)
-                    maxVal = Math.Max(maxVal, col[k]);
-                dilated[i] = maxVal;
-            }
-
-            // Morphological gradient (dilation - erosion)
-            double gradientMean = 0;
-            for (int i = 0; i < n; i++)
-                gradientMean += dilated[i] - eroded[i];
-            gradientMean /= n;
-
-            // Features with larger morphological gradients have more local variation
-            _morphologicalScores[j] = gradientMean;
-        }
+        // Morphological gradient (dilation - erosion): features with larger gradients have more local variation
+        var dilated = FeatureSelectionTensorOps.SlidingMax(columns, halfWindow);
+        var eroded = FeatureSelectionTensorOps.SlidingMin(columns, halfWindow);
+        var scores = engine.ReduceMean(engine.TensorSubtract(dilated, eroded), new[] { 1 }, false);
+        _morphologicalScores = scores.ToVector();
 
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = Enumerable.Range(0, p)
-            .OrderByDescending(j => _morphologicalScores[j])
-            .Take(numToSelect)
-            .OrderBy(x => x)
-            .ToArray();
+        _selectedIndices = FeatureSelectionTensorOps.TopKIndicesSorted(scores, numToSelect);
 
         IsFitted = true;
     }
@@ -124,15 +87,7 @@ public class ErosionDilationSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T
         if (_selectedIndices is null)
             throw new InvalidOperationException("ErosionDilationSelector has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return FeatureSelectionTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

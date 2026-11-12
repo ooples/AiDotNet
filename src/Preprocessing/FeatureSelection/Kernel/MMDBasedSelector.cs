@@ -2,6 +2,7 @@ using AiDotNet.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Enums;
 using AiDotNet.Attributes;
+using AiDotNet.Preprocessing.FeatureSelection.Helpers;
 
 namespace AiDotNet.Preprocessing.FeatureSelection.Kernel;
 
@@ -26,14 +27,14 @@ public class MMDBasedSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISu
     private readonly int _nFeaturesToSelect;
     private readonly double _gamma;
 
-    private double[]? _mmdScores;
+    private Vector<T>? _mmdScores;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public double Gamma => _gamma;
-    public double[]? MMDScores => _mmdScores;
+    public Vector<T>? MMDScores => _mmdScores;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -69,104 +70,52 @@ public class MMDBasedSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISu
         int n = data.Rows;
         int p = data.Columns;
 
-        var X = new double[n, p];
-        var y = new int[n];
+        var engine = Engine;
+        var x = Tensor<T>.FromMatrix(data);
+
+        // Class labels (rounded to the nearest integer) and the class-mean weights 1{y_i = c} / n_c
+        var labels = engine.TensorRound(Tensor<T>.FromVector(target)).Cast<int>().AsSpan().ToArray();
+        var classes = labels.Distinct().OrderBy(c => c).ToArray();
+        var classIndex = new int[n];
         for (int i = 0; i < n; i++)
+            classIndex[i] = Array.BinarySearch(classes, labels[i]);
+
+        var scores = new Tensor<T>(new[] { p });
+        if (classes.Length >= 2)
         {
-            y[i] = (int)Math.Round(NumOps.ToDouble(target[i]));
-            for (int j = 0; j < p; j++)
-                X[i, j] = NumOps.ToDouble(data[i, j]);
-        }
+            var membership = engine.TensorOneHot<T>(new Tensor<int>(classIndex, new[] { n }), classes.Length); // [n, c]
+            var classMeans = engine.TensorDivide(membership, engine.ReduceSum(membership, new[] { 0 }, true));
 
-        var classes = y.Distinct().OrderBy(c => c).ToList();
-
-        _mmdScores = new double[p];
-
-        for (int j = 0; j < p; j++)
-        {
-            var featureVals = new double[n];
-            for (int i = 0; i < n; i++)
-                featureVals[i] = X[i, j];
-
-            // Compute MMD between each pair of classes and average
-            double totalMMD = 0;
-            int pairCount = 0;
-
-            for (int c1Idx = 0; c1Idx < classes.Count; c1Idx++)
+            // MMD^2(a, b) = E[k(A, A')] + E[k(B, B')] - 2 E[k(A, B)] = sum K .* (d d') with d = w_a - w_b
+            var pairWeights = new List<Tensor<T>>();
+            for (int a = 0; a < classes.Length; a++)
             {
-                for (int c2Idx = c1Idx + 1; c2Idx < classes.Count; c2Idx++)
+                for (int b = a + 1; b < classes.Length; b++)
                 {
-                    int c1 = classes[c1Idx];
-                    int c2 = classes[c2Idx];
-
-                    var idx1 = Enumerable.Range(0, n).Where(i => y[i] == c1).ToList();
-                    var idx2 = Enumerable.Range(0, n).Where(i => y[i] == c2).ToList();
-
-                    if (idx1.Count == 0 || idx2.Count == 0) continue;
-
-                    double mmd = ComputeMMD(featureVals, idx1, idx2);
-                    totalMMD += mmd;
-                    pairCount++;
+                    var difference = engine.TensorSubtract(
+                        engine.TensorSlice(classMeans, new[] { 0, a }, new[] { n, 1 }),
+                        engine.TensorSlice(classMeans, new[] { 0, b }, new[] { n, 1 }));
+                    pairWeights.Add(engine.TensorMatMul(difference, engine.TensorTranspose(difference)));
                 }
             }
 
-            _mmdScores[j] = pairCount > 0 ? totalMMD / pairCount : 0;
+            T negativeGamma = NumOps.FromDouble(-_gamma);
+            var mmd = FeatureSelectionTensorOps.KernelWeightedSums(
+                x,
+                column => FeatureSelectionTensorOps.RbfColumnKernel(column, negativeGamma),
+                pairWeights.ToArray(),
+                Array.Empty<Tensor<T>>());
+
+            // Average of the (non-negative) MMD^2 over the class pairs
+            scores = engine.ReduceMean(engine.TensorMax(mmd, NumOps.Zero), new[] { 1 }, false);
         }
+
+        _mmdScores = scores.ToVector();
 
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = Enumerable.Range(0, p)
-            .OrderByDescending(j => _mmdScores[j])
-            .Take(numToSelect)
-            .OrderBy(x => x)
-            .ToArray();
+        _selectedIndices = FeatureSelectionTensorOps.TopKIndicesSorted(scores, numToSelect);
 
         IsFitted = true;
-    }
-
-    private double ComputeMMD(double[] values, List<int> idx1, List<int> idx2)
-    {
-        int n1 = idx1.Count;
-        int n2 = idx2.Count;
-
-        // E[k(X, X')]
-        double kXX = 0;
-        for (int i = 0; i < n1; i++)
-        {
-            for (int i2 = 0; i2 < n1; i2++)
-            {
-                double diff = values[idx1[i]] - values[idx1[i2]];
-                kXX += Math.Exp(-_gamma * diff * diff);
-            }
-        }
-        kXX /= ((double)n1 * n1);
-
-        // E[k(Y, Y')]
-        double kYY = 0;
-        for (int i = 0; i < n2; i++)
-        {
-            for (int i2 = 0; i2 < n2; i2++)
-            {
-                double diff = values[idx2[i]] - values[idx2[i2]];
-                kYY += Math.Exp(-_gamma * diff * diff);
-            }
-        }
-        kYY /= ((double)n2 * n2);
-
-        // E[k(X, Y)]
-        double kXY = 0;
-        for (int i = 0; i < n1; i++)
-        {
-            for (int i2 = 0; i2 < n2; i2++)
-            {
-                double diff = values[idx1[i]] - values[idx2[i2]];
-                kXY += Math.Exp(-_gamma * diff * diff);
-            }
-        }
-        kXY /= ((double)n1 * n2);
-
-        // MMD^2 = E[k(X,X')] + E[k(Y,Y')] - 2*E[k(X,Y)]
-        double mmdSquared = kXX + kYY - 2 * kXY;
-        return Math.Max(0, mmdSquared);
     }
 
     /// <inheritdoc />
@@ -182,15 +131,7 @@ public class MMDBasedSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISu
         if (_selectedIndices is null)
             throw new InvalidOperationException("MMDBasedSelector has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return FeatureSelectionTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

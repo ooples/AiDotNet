@@ -2,6 +2,7 @@ using AiDotNet.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Enums;
 using AiDotNet.Attributes;
+using AiDotNet.Preprocessing.FeatureSelection.Helpers;
 
 namespace AiDotNet.Preprocessing.FeatureSelection.Projection;
 
@@ -27,13 +28,13 @@ public class RandomProjectionSelector<T> : TransformerBase<T, Matrix<T>, Matrix<
     private readonly int _nProjections;
     private readonly int _projectionDim;
 
-    private double[]? _featureScores;
+    private Vector<T>? _featureScores;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
-    public double[]? FeatureScores => _featureScores;
+    public Vector<T>? FeatureScores => _featureScores;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -62,69 +63,48 @@ public class RandomProjectionSelector<T> : TransformerBase<T, Matrix<T>, Matrix<
         int p = data.Columns;
 
         var rand = RandomHelper.CreateSecureRandom();
-        var X = new double[n, p];
-        for (int i = 0; i < n; i++)
-            for (int j = 0; j < p; j++)
-                X[i, j] = NumOps.ToDouble(data[i, j]);
+        var engine = Engine;
+        var x = Tensor<T>.FromMatrix(data);
 
         int k = Math.Min(_projectionDim, p);
-        _featureScores = new double[p];
+        T oneSixth = NumOps.FromDouble(1.0 / 6);
+        T oneThird = NumOps.FromDouble(2.0 / 6);
+        T sqrtP = NumOps.FromDouble(Math.Sqrt(p));
+        T sampleDivisor = NumOps.FromDouble(n - 1);
+        var scores = new Tensor<T>(new[] { p });
 
         for (int proj = 0; proj < _nProjections; proj++)
         {
-            // Generate sparse random projection matrix
-            var R = new double[p, k];
-            double sqrtP = Math.Sqrt(p);
-            for (int i = 0; i < p; i++)
-            {
-                for (int j = 0; j < k; j++)
-                {
-                    double u = rand.NextDouble();
-                    if (u < 1.0 / 6)
-                        R[i, j] = sqrtP;
-                    else if (u < 2.0 / 6)
-                        R[i, j] = -sqrtP;
-                    // else 0 (4/6 probability)
-                }
-            }
+            // Sparse (Achlioptas) random projection matrix: +sqrt(p) and -sqrt(p) with probability 1/6 each,
+            // 0 with probability 4/6
+            var u = engine.TensorRandomUniformRange(new[] { p, k }, NumOps.Zero, NumOps.One, rand.Next());
+            var positive = engine.TensorLessThan(u, oneSixth);
+            var nonZero = engine.TensorLessThan(u, oneThird);
+            var negative = engine.TensorSubtract(nonZero, positive);
+            var r = engine.TensorMultiplyScalar(engine.TensorSubtract(positive, negative), sqrtP);
 
-            // Project data
-            var projected = new double[n, k];
-            for (int i = 0; i < n; i++)
-                for (int j = 0; j < k; j++)
-                    for (int l = 0; l < p; l++)
-                        projected[i, j] += X[i, l] * R[l, j];
+            // Sample variance of each projected dimension
+            var projected = engine.TensorMatMul(x, r);
+            var deviations = engine.TensorSubtract(projected, engine.ReduceMean(projected, new[] { 0 }, true));
+            var variance = engine.TensorDivideScalar(engine.ReduceSum(engine.TensorSquare(deviations), new[] { 0 }, false), sampleDivisor);
 
-            // Compute variance in each projected dimension
-            for (int j = 0; j < k; j++)
-            {
-                double mean = 0;
-                for (int i = 0; i < n; i++) mean += projected[i, j];
-                mean /= n;
-
-                double variance = 0;
-                for (int i = 0; i < n; i++)
-                    variance += (projected[i, j] - mean) * (projected[i, j] - mean);
-                variance /= (n - 1);
-
-                // Weight features by their contribution to high-variance projections
-                for (int l = 0; l < p; l++)
-                    _featureScores[l] += Math.Abs(R[l, j]) * variance;
-            }
+            // Weight features by their contribution to high-variance projections
+            var absR = engine.TensorMultiplyScalar(nonZero, sqrtP);
+            scores = engine.TensorAdd(scores, engine.Reshape(engine.TensorMatMul(absR, engine.Reshape(variance, new[] { k, 1 })), new[] { p }));
         }
 
         // Normalize
-        double maxScore = _featureScores.Max();
-        if (maxScore > 0)
-            for (int j = 0; j < p; j++)
-                _featureScores[j] /= maxScore;
+        if (p > 0)
+        {
+            T maxScore = engine.TensorMaxValue(scores);
+            if (NumOps.GreaterThan(maxScore, NumOps.Zero))
+                scores = engine.TensorDivideScalar(scores, maxScore);
+        }
+
+        _featureScores = scores.ToVector();
 
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = Enumerable.Range(0, p)
-            .OrderByDescending(j => _featureScores[j])
-            .Take(numToSelect)
-            .OrderBy(x => x)
-            .ToArray();
+        _selectedIndices = FeatureSelectionTensorOps.TopKIndicesSorted(scores, numToSelect);
 
         IsFitted = true;
     }
@@ -135,15 +115,7 @@ public class RandomProjectionSelector<T> : TransformerBase<T, Matrix<T>, Matrix<
         if (_selectedIndices is null)
             throw new InvalidOperationException("RandomProjectionSelector has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return FeatureSelectionTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />
