@@ -188,8 +188,7 @@ public abstract partial class TabPFNBase<T> : IParameterSource<T>
 
         if (_positionalEncoding != null)
         {
-            for (int i = 0; i < _positionalEncoding.Length; i++)
-                result[offset++] = _positionalEncoding[i];
+            _positionalEncoding.AsSpan().CopyTo(result.AsWritableSpan().Slice(offset, _positionalEncoding.Length));
         }
 
         return result;
@@ -222,8 +221,7 @@ public abstract partial class TabPFNBase<T> : IParameterSource<T>
 
         if (_positionalEncoding != null)
         {
-            for (int i = 0; i < _positionalEncoding.Length; i++)
-                _positionalEncoding[i] = parameters[offset++];
+            parameters.AsSpan().Slice(offset, _positionalEncoding.Length).CopyTo(_positionalEncoding.AsWritableSpan());
         }
     }
 
@@ -412,19 +410,13 @@ public abstract partial class TabPFNBase<T> : IParameterSource<T>
             var contextEncoded = _featureEncoder.Forward(_contextFeatures);
 
             // Combine context and query
-            combinedInput = new Tensor<T>([contextSize + querySize, embDim]);
-
-            // Copy context
-            for (int i = 0; i < contextSize * embDim; i++)
-            {
-                combinedInput[i] = contextEncoded[i];
-            }
-
-            // Copy query
-            for (int i = 0; i < querySize * embDim; i++)
-            {
-                combinedInput[contextSize * embDim + i] = queryEncoded[i];
-            }
+            combinedInput = Engine.TensorConcatenate(
+                new[]
+                {
+                    TabularMetrics.Flat(contextEncoded, contextSize * embDim).Reshape(contextSize, embDim),
+                    TabularMetrics.Flat(queryEncoded, querySize * embDim).Reshape(querySize, embDim),
+                },
+                0);
         }
         else
         {
@@ -434,17 +426,15 @@ public abstract partial class TabPFNBase<T> : IParameterSource<T>
         // Add positional encoding if enabled
         if (_positionalEncoding != null)
         {
+            // Position p reads encoding row p mod maxLen (the flat index wrapped over the whole table)
             int totalSize = combinedInput.Shape[0];
-            for (int pos = 0; pos < totalSize; pos++)
-            {
-                for (int d = 0; d < embDim; d++)
-                {
-                    int idx = pos * embDim + d;
-                    combinedInput[idx] = NumOps.Add(
-                        combinedInput[idx],
-                        _positionalEncoding[idx % _positionalEncoding.Length]);
-                }
-            }
+            int maxLen = _positionalEncoding.Length / embDim;
+            int repeats = (totalSize + maxLen - 1) / maxLen;
+            var table = _positionalEncoding.Reshape(maxLen, embDim);
+            var encoding = Engine.TensorNarrow(
+                repeats > 1 ? Engine.TensorTile(table, new[] { repeats, 1 }) : table, 0, 0, totalSize);
+            combinedInput = Engine.TensorAdd(
+                TabularMetrics.Flat(combinedInput, totalSize * embDim).Reshape(totalSize, embDim), encoding);
         }
 
         // Apply transformer blocks
@@ -455,12 +445,9 @@ public abstract partial class TabPFNBase<T> : IParameterSource<T>
         }
 
         // Extract only query outputs (last querySize elements)
-        var queryOutput = new Tensor<T>([querySize, embDim]);
-        int startIdx = contextSize * embDim;
-        for (int i = 0; i < querySize * embDim; i++)
-        {
-            queryOutput[i] = transformerOutput[startIdx + i];
-        }
+        var queryOutput = Engine.TensorNarrow(
+            TabularMetrics.Flat(transformerOutput, (contextSize + querySize) * embDim).Reshape(contextSize + querySize, embDim),
+            0, contextSize, querySize);
 
         // Apply output MLP
         var mlpOutput = queryOutput;
@@ -481,16 +468,10 @@ public abstract partial class TabPFNBase<T> : IParameterSource<T>
     private Tensor<T> CreateOneHotEncoding(Matrix<int> categoricalIndices, int featureIndex, int cardinality)
     {
         int batchSize = categoricalIndices.Rows;
-        var oneHot = new Tensor<T>([batchSize, cardinality]);
 
-        for (int b = 0; b < batchSize; b++)
-        {
-            int categoryIndex = categoricalIndices[b, featureIndex];
-            if (categoryIndex >= 0 && categoryIndex < cardinality)
-            {
-                oneHot[b * cardinality + categoryIndex] = NumOps.One;
-            }
-        }
+        // Indices outside [0, cardinality) leave an all-zero row
+        var indices = Tensor<int>.FromVector(categoricalIndices.GetColumn(featureIndex));
+        var oneHot = Engine.TensorOneHot<T>(indices, cardinality).Reshape(batchSize, cardinality);
 
         return oneHot;
     }
@@ -802,68 +783,20 @@ public abstract partial class TabPFNBase<T> : IParameterSource<T>
         {
             var scale = NumOps.FromDouble(1.0 / Math.Sqrt(_headDim));
 
-            // Compute attention scores: Q * K^T / sqrt(d_k)
-            var scores = new Tensor<TBlock>([seqLen, seqLen]);
+            var eng = AiDotNetEngine.Current;
+            int count = seqLen * _embeddingDim;
+            var q = TabularMetrics.Flat(query, count).Reshape(seqLen, _embeddingDim);
+            var k = TabularMetrics.Flat(key, count).Reshape(seqLen, _embeddingDim);
+            var v = TabularMetrics.Flat(value, count).Reshape(seqLen, _embeddingDim);
 
-            for (int i = 0; i < seqLen; i++)
-            {
-                for (int j = 0; j < seqLen; j++)
-                {
-                    var dot = NumOps.Zero;
-                    for (int k = 0; k < _embeddingDim; k++)
-                    {
-                        dot = NumOps.Add(dot, NumOps.Multiply(
-                            query[i * _embeddingDim + k],
-                            key[j * _embeddingDim + k]));
-                    }
-                    scores[i * seqLen + j] = NumOps.Multiply(dot, scale);
-                }
-            }
+            // Compute attention scores: Q * K^T / sqrt(d_k)
+            var scores = TensorTapeOps.TapeMultiplyScalar(eng, eng.TensorMatMul(q, eng.TensorTranspose(k)), scale);
 
             // Apply softmax row-wise (for TabPFN, full attention within context)
-            for (int i = 0; i < seqLen; i++)
-            {
-                var maxVal = scores[i * seqLen];
-                for (int j = 1; j < seqLen; j++)
-                {
-                    var val = scores[i * seqLen + j];
-                    if (NumOps.Compare(val, maxVal) > 0)
-                        maxVal = val;
-                }
-
-                var sumExp = NumOps.Zero;
-                for (int j = 0; j < seqLen; j++)
-                {
-                    var expVal = NumOps.Exp(NumOps.Subtract(scores[i * seqLen + j], maxVal));
-                    scores[i * seqLen + j] = expVal;
-                    sumExp = NumOps.Add(sumExp, expVal);
-                }
-
-                for (int j = 0; j < seqLen; j++)
-                {
-                    scores[i * seqLen + j] = NumOps.Divide(scores[i * seqLen + j], sumExp);
-                }
-            }
+            scores = eng.Softmax(scores, -1);
 
             // Compute output: softmax(scores) * V
-            var output = new Tensor<TBlock>([seqLen, _embeddingDim]);
-
-            for (int i = 0; i < seqLen; i++)
-            {
-                for (int k = 0; k < _embeddingDim; k++)
-                {
-                    var sum = NumOps.Zero;
-                    for (int j = 0; j < seqLen; j++)
-                    {
-                        sum = NumOps.Add(sum, NumOps.Multiply(
-                            scores[i * seqLen + j],
-                            value[j * _embeddingDim + k]));
-                    }
-                    output[i * _embeddingDim + k] = sum;
-                }
-            }
-
-            return output;
+            return eng.TensorMatMul(scores, v);
         }
 
         private static Tensor<TBlock> MatMul(Tensor<TBlock> input, Tensor<TBlock> weights)
