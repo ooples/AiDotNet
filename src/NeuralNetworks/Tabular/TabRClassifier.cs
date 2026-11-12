@@ -1,3 +1,4 @@
+using System;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Models.Options;
@@ -78,7 +79,7 @@ public class TabRClassifier<T> : TabRBase<T>
         int numFeatures,
         int numClasses,
         TabROptions<T>? options = null)
-        : base(numFeatures, options)
+        : base(numFeatures, options, Math.Max(numClasses, 0))
     {
         if (numClasses < 2)
         {
@@ -92,6 +93,23 @@ public class TabRClassifier<T> : TabRBase<T>
             EmbeddingDimension,
             numClasses,
             (IActivationFunction<T>?)null);
+    }
+
+    /// <summary>
+    /// Builds the retrieval index from training features and their class labels, so every retrieved
+    /// neighbour contributes its label embedding (Gorishniy et al. 2024, eq. 5).
+    /// </summary>
+    /// <param name="features">Training features [num_samples, num_features].</param>
+    /// <param name="labels">Class label of every training sample.</param>
+    public void BuildIndex(Tensor<T> features, int[] labels)
+    {
+        if (features is null) throw new ArgumentNullException(nameof(features));
+        if (labels is null) throw new ArgumentNullException(nameof(labels));
+        int samples = features.Shape[0];
+        if (labels.Length != samples)
+            throw new ArgumentException("There must be one label per indexed sample.", nameof(labels));
+
+        BuildIndexWithLabels(features, TabularTraining.OneHotTargets<T>(Vector<int>.Wrap(labels), samples, _numClasses));
     }
 
     /// <summary>
@@ -153,15 +171,12 @@ public class TabRClassifier<T> : TabRBase<T>
     /// <returns>The training loss.</returns>
     public T TrainStep(Tensor<T> features, int[] targets, T learningRate, Vector<int>? sampleIndices = null)
     {
-        // Forward with leave-one-out (exclude each sample from its own retrieval)
-        var logits = Forward(features, sampleIndices);
-        var probabilities = ApplySoftmax(logits);
-
-        var loss = ComputeCrossEntropyLoss(probabilities, targets);
-        UpdateParameters(learningRate);
-        ResetState();
-
-        return loss;
+        int batchSize = features.Shape[0];
+        var labels = TabularTraining.OneHotTargets<T>(Vector<int>.Wrap(targets), batchSize, _numClasses);
+        var epsilon = NumOps.FromDouble(1e-15);
+        return TrainWithTape(
+            () => TabularTraining.CrossEntropyObjective(ApplySoftmax(Forward(features, sampleIndices)), labels, epsilon),
+            learningRate);
     }
 
     /// <summary>

@@ -1,3 +1,5 @@
+using System;
+using AiDotNet.Distributions;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Models.Options;
@@ -73,7 +75,7 @@ public class TabRRegression<T> : TabRBase<T>
         int numFeatures,
         int outputDimension = 1,
         TabROptions<T>? options = null)
-        : base(numFeatures, options)
+        : base(numFeatures, options, Math.Max(outputDimension, 0))
     {
         if (outputDimension < 1)
         {
@@ -87,6 +89,18 @@ public class TabRRegression<T> : TabRBase<T>
             EmbeddingDimension,
             outputDimension,
             (IActivationFunction<T>?)null);
+    }
+
+    /// <summary>
+    /// Builds the retrieval index from training features and their targets, so every retrieved neighbour
+    /// contributes its target embedding (Gorishniy et al. 2024, eq. 5) and
+    /// <see cref="PredictWithConfidence"/> can measure the neighbours' spread.
+    /// </summary>
+    /// <param name="features">Training features [num_samples, num_features].</param>
+    /// <param name="targets">Training targets [num_samples, output_dim].</param>
+    public void BuildIndex(Tensor<T> features, Tensor<T> targets)
+    {
+        BuildIndexWithLabels(features, targets);
     }
 
     /// <summary>
@@ -148,12 +162,9 @@ public class TabRRegression<T> : TabRBase<T>
     /// <returns>The training loss.</returns>
     public T TrainStep(Tensor<T> features, Tensor<T> targets, T learningRate, Vector<int>? sampleIndices = null)
     {
-        var predictions = Forward(features, sampleIndices);
-        var loss = ComputeMSELoss(predictions, targets);
-        UpdateParameters(learningRate);
-        ResetState();
-
-        return loss;
+        return TrainWithTape(
+            () => TabularTraining.MeanSquaredErrorObjective(Forward(features, sampleIndices), targets),
+            learningRate);
     }
 
     /// <summary>
@@ -252,22 +263,38 @@ public class TabRRegression<T> : TabRBase<T>
         Tensor<T> features,
         double confidenceLevel = 0.95)
     {
+        if (confidenceLevel <= 0.0 || confidenceLevel >= 1.0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(confidenceLevel), "Confidence level must lie in (0, 1).");
+        }
+
         // Run forward pass
         var predictions = Predict(features);
         int batchSize = predictions.Shape[0];
         int outputDim = _outputDimension;
 
-        // Get neighbor information
-        var neighborIndices = GetRetrievedNeighborIndices();
+        var weights = GetAttentionWeights();
+        var neighborTargets = GetNeighborLabels();
+        if (weights == null || neighborTargets == null)
+        {
+            throw new InvalidOperationException(
+                "Confidence intervals need the neighbours' targets. Build the index with BuildIndex(features, targets).");
+        }
 
-        // For now, use a simple heuristic based on attention weight concentration
-        // A proper implementation would use neighbor target variance
-        // Simple placeholder: ±10% of prediction value
-        var margin = NumOps.FromDouble(0.1);
+        // Retrieval-weighted spread of the neighbour targets: var = sum_i w_i (y_i - sum_j w_j y_j)^2, and the
+        // interval prediction +/- z * sqrt(var) with z the two-sided standard normal quantile
+        int k = weights.Shape[1];
+        var w = weights.Reshape(batchSize, k, 1);
+        var neighborMean = Engine.ReduceSum(Engine.TensorMultiply(w, neighborTargets), new[] { 1 }, true);
+        var centered = Engine.TensorSubtract(neighborTargets, neighborMean);
+        var variance = Engine.ReduceSum(
+            Engine.TensorMultiply(w, Engine.TensorMultiply(centered, centered)), new[] { 1 }, false);
+        var z = new NormalDistribution<T>().InverseCdf(NumOps.FromDouble(0.5 + confidenceLevel / 2.0));
+        var halfWidth = Engine.TensorMultiplyScalar(Engine.TensorSqrt(variance), z);
 
-        var delta = Engine.TensorMultiplyScalar(Engine.TensorAbs(predictions), margin);
-        var lower = Engine.TensorSubtract(predictions, delta).Reshape(batchSize, outputDim);
-        var upper = Engine.TensorAdd(predictions, delta).Reshape(batchSize, outputDim);
+        var centre = predictions.Reshape(batchSize, outputDim);
+        var lower = Engine.TensorSubtract(centre, halfWidth);
+        var upper = Engine.TensorAdd(centre, halfWidth);
 
         return (predictions, lower, upper);
     }
