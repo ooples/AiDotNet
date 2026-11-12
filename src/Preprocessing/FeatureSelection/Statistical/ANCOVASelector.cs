@@ -98,8 +98,10 @@ public class ANCOVASelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupe
         }
 
         // The covariate itself scores 0 and is never selected
-        var notCovariate = PreprocessingTensorOps.Not(Engine.TensorEquals(
-            PreprocessingTensorOps.Range<T>(p), NumOps.FromDouble(_covariateIndex)));
+        // (a one-hot position mask: compared as T, the column indices past 2048 are not exact in Half and
+        // would match the covariate index too)
+        var notCovariate = PreprocessingTensorOps.Not(Engine.Reshape(Engine.TensorOneHot<T>(
+            new Tensor<int>(new[] { _covariateIndex }, new[] { 1 }), p), new[] { p }));
         scores = SelectorTensorOps.ZeroUnless(notCovariate, scores);
         _adjustedFStatistics = scores.ToVector();
 
