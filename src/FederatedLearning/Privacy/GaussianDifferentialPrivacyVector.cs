@@ -63,10 +63,7 @@ public sealed class GaussianDifferentialPrivacyVector<T> : PrivacyMechanismBase<
         if (NumOps.GreaterThan(l2Norm, clipNormT))
         {
             var scale = NumOps.Divide(clipNormT, l2Norm);
-            for (int i = 0; i < noisy.Length; i++)
-            {
-                noisy[i] = NumOps.Multiply(noisy[i], scale);
-            }
+            noisy = Engine.Multiply(noisy, scale);
         }
 
         // Gaussian noise sigma: (clipNorm/epsilon)*sqrt(2*ln(1.25/delta)).

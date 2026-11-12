@@ -103,10 +103,7 @@ public sealed class ThresholdSecureAggregation<T> : FederatedLearningComponentBa
         var totalWeightT = NumOps.FromDouble(totalWeight);
         foreach (var aggregatedParams in sum.Values)
         {
-            for (int i = 0; i < aggregatedParams.Length; i++)
-            {
-                aggregatedParams[i] = NumOps.Divide(aggregatedParams[i], totalWeightT);
-            }
+            Engine.Divide(Vector<T>.Wrap(aggregatedParams), totalWeightT).AsSpan().CopyTo(aggregatedParams);
         }
 
         return sum;
@@ -267,10 +264,8 @@ public sealed class ThresholdSecureAggregation<T> : FederatedLearningComponentBa
         {
             var layerTemplate = template[layerName];
             var layer = new T[layerTemplate.Length];
-            for (int i = 0; i < layer.Length; i++, idx++)
-            {
-                layer[i] = flat[idx];
-            }
+            flat.AsSpan().Slice(idx, layer.Length).CopyTo(layer);
+            idx += layer.Length;
 
             output[layerName] = layer;
         }

@@ -182,12 +182,7 @@ public sealed class ThresholdSecureAggregationVector<T> : FederatedLearningCompo
         }
 
         var invTotal = NumOps.FromDouble(1.0 / totalWeight);
-        for (int i = 0; i < sum.Length; i++)
-        {
-            sum[i] = NumOps.Multiply(sum[i], invTotal);
-        }
-
-        return sum;
+        return Engine.Multiply(sum, invTotal);
     }
 
     public Vector<T> AggregateSumSecurely(Dictionary<int, Vector<T>> maskedUpdates)
@@ -212,21 +207,14 @@ public sealed class ThresholdSecureAggregationVector<T> : FederatedLearningCompo
         var first = maskedUpdates.First().Value;
         EnsureParameterCountMatches(first.Length, nameof(maskedUpdates));
 
-        var sum = new T[_parameterCount];
-        for (int i = 0; i < sum.Length; i++)
-        {
-            sum[i] = NumOps.Zero;
-        }
-
+        var total = new Vector<T>(_parameterCount);
         foreach (var update in maskedUpdates.Values)
         {
             EnsureParameterCountMatches(update.Length, nameof(maskedUpdates));
-            for (int i = 0; i < sum.Length; i++)
-            {
-                sum[i] = NumOps.Add(sum[i], update[i]);
-            }
+            total = Engine.Add(total, update);
         }
 
+        var sum = total.ToArray();
         UnmaskInPlace(sum, maskedUpdates.Keys, unmaskers);
 
         return new Vector<T>(sum);
@@ -290,18 +278,12 @@ public sealed class ThresholdSecureAggregationVector<T> : FederatedLearningCompo
         EnsureClientIsKnown(clientId);
 
         var masked = new T[_parameterCount];
-        for (int i = 0; i < _parameterCount; i++)
-        {
-            masked[i] = clientUpdate[i];
-        }
+        clientUpdate.AsSpan().Slice(0, _parameterCount).CopyTo(masked);
 
         if (clientWeight.HasValue)
         {
             var weightT = NumOps.FromDouble(clientWeight.Value);
-            for (int i = 0; i < _parameterCount; i++)
-            {
-                masked[i] = NumOps.Multiply(masked[i], weightT);
-            }
+            Engine.Multiply(Vector<T>.Wrap(masked), weightT).AsSpan().CopyTo(masked);
         }
 
         ApplyMaskSeed(GetSelfMaskSeed(clientId), addMask: true, masked);

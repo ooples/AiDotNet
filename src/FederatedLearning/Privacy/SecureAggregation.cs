@@ -268,10 +268,7 @@ public class SecureAggregation<T> : FederatedLearningComponentBase<T>, IDisposab
         if (clientWeight.HasValue)
         {
             var weightT = NumOps.FromDouble(clientWeight.Value);
-            for (int i = 0; i < maskedFlatParams.Length; i++)
-            {
-                maskedFlatParams[i] = NumOps.Multiply(maskedFlatParams[i], weightT);
-            }
+            Engine.Multiply(Vector<T>.Wrap(maskedFlatParams), weightT).AsSpan().CopyTo(maskedFlatParams);
         }
 
         foreach (var otherClientId in _clientIds)
@@ -375,10 +372,7 @@ public class SecureAggregation<T> : FederatedLearningComponentBase<T>, IDisposab
         var totalWeightT = NumOps.FromDouble(totalWeight);
         foreach (var aggregatedParams in aggregatedUpdate.Values)
         {
-            for (int i = 0; i < aggregatedParams.Length; i++)
-            {
-                aggregatedParams[i] = NumOps.Divide(aggregatedParams[i], totalWeightT);
-            }
+            Engine.Divide(Vector<T>.Wrap(aggregatedParams), totalWeightT).AsSpan().CopyTo(aggregatedParams);
         }
 
         return aggregatedUpdate;
@@ -462,10 +456,8 @@ public class SecureAggregation<T> : FederatedLearningComponentBase<T>, IDisposab
                 var maskedParams = maskedUpdate[layerName];
                 var aggregatedParams = aggregatedUpdate[layerName];
 
-                for (int i = 0; i < maskedParams.Length; i++)
-                {
-                    aggregatedParams[i] = NumOps.Add(aggregatedParams[i], maskedParams[i]);
-                }
+                Engine.Add(Vector<T>.Wrap(aggregatedParams), Vector<T>.Wrap(maskedParams, 0, aggregatedParams.Length))
+                    .AsSpan().CopyTo(aggregatedParams);
             }
         }
 

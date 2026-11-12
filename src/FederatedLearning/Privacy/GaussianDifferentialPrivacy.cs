@@ -187,10 +187,7 @@ public class GaussianDifferentialPrivacy<T> : PrivacyMechanismBase<Dictionary<st
 
             foreach (var parameters in noisyModel.Values)
             {
-                for (int i = 0; i < parameters.Length; i++)
-                {
-                    parameters[i] = NumOps.Multiply(parameters[i], scaleFactor);
-                }
+                Engine.Multiply(Vector<T>.Wrap(parameters), scaleFactor).AsSpan().CopyTo(parameters);
             }
         }
 
@@ -235,14 +232,9 @@ public class GaussianDifferentialPrivacy<T> : PrivacyMechanismBase<Dictionary<st
     /// <returns>The L2 norm of all parameters.</returns>
     private T CalculateL2Norm(Dictionary<string, T[]> model)
     {
-        var sumOfSquares = NumOps.Zero;
-
-        foreach (var param in model.Values.SelectMany(layer => layer))
-        {
-            sumOfSquares = NumOps.Add(sumOfSquares, NumOps.Square(param));
-        }
-
-        return NumOps.Sqrt(sumOfSquares);
+        var flat = model.Values.SelectMany(layer => layer).ToArray();
+        var all = Vector<T>.Wrap(flat);
+        return NumOps.Sqrt(Engine.DotProduct(all, all));
     }
 
     /// <summary>

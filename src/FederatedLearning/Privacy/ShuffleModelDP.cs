@@ -41,6 +41,7 @@ namespace AiDotNet.FederatedLearning.Privacy;
 public class ShuffleModelDP<T> : PrivacyMechanismBase<Dictionary<string, T[]>, T>
 {
     private readonly double _localEpsilon;
+    private readonly double _clipNorm;
     private readonly int _seed;
     private int _roundCounter;
     private double _totalBudgetConsumed;
@@ -50,12 +51,21 @@ public class ShuffleModelDP<T> : PrivacyMechanismBase<Dictionary<string, T[]>, T
     /// </summary>
     /// <param name="localEpsilon">Per-client local DP epsilon. Default: 8.0 (high local, amplified by shuffle).</param>
     /// <param name="seed">Random seed. Default: 42.</param>
-    public ShuffleModelDP(double localEpsilon = 8.0, int seed = 42)
+    /// <param name="clipNorm">Fixed sensitivity bound C: each update is clipped to L2 norm C (Gaussian) or
+    /// L1 norm C (Laplace) before noise calibrated to C is added. Default: 1.0.</param>
+    public ShuffleModelDP(double localEpsilon = 8.0, int seed = 42, double clipNorm = 1.0)
     {
         if (localEpsilon <= 0)
         {
             throw new ArgumentOutOfRangeException(nameof(localEpsilon), "Epsilon must be positive.");
         }
+
+        if (double.IsNaN(clipNorm) || double.IsInfinity(clipNorm) || clipNorm <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(clipNorm), "Clip norm must be a positive finite value.");
+        }
+
+        _clipNorm = clipNorm;
 
         _localEpsilon = localEpsilon;
         _seed = seed;
@@ -93,25 +103,13 @@ public class ShuffleModelDP<T> : PrivacyMechanismBase<Dictionary<string, T[]>, T
         }
         double sigma = Math.Sqrt(2.0 * Math.Log(1.25 / delta)) / effectiveEpsilon;
 
-        // Compute L2 norm and clip to a fixed sensitivity bound.
-        // Using data-dependent sensitivity would leak information; we clip to a
-        // fixed bound (max of actual norm and 1.0) for proper DP guarantees.
-        double l2Norm = 0;
-        foreach (var kvp in model)
-        {
-            for (int i = 0; i < kvp.Value.Length; i++)
-            {
-                double v = NumOps.ToDouble(kvp.Value[i]);
-                l2Norm += v * v;
-            }
-        }
-
-        l2Norm = Math.Sqrt(l2Norm);
-        double clipNorm = Math.Max(l2Norm, 1.0);
-        double noiseScale = sigma * clipNorm;
+        // Clip the update to the fixed sensitivity bound C in L2 norm; the Gaussian noise is calibrated to C.
+        // (A data-dependent bound such as max(||x||, 1) would make the noise scale itself leak the update.)
+        var clipped = ClipToNorm(model, squaredNorm: true);
+        double noiseScale = sigma * _clipNorm;
 
         var privatized = new Dictionary<string, T[]>(model.Count);
-        foreach (var kvp in model)
+        foreach (var kvp in clipped)
         {
             var noisy = new T[kvp.Value.Length];
             for (int i = 0; i < noisy.Length; i++)
@@ -231,10 +229,7 @@ public class ShuffleModelDP<T> : PrivacyMechanismBase<Dictionary<string, T[]>, T
             int layerLen = reference[layerName].Length;
             var aggregated = new T[layerLen];
 
-            for (int i = 0; i < layerLen; i++)
-            {
-                aggregated[i] = NumOps.Zero;
-            }
+            Vector<T>.Wrap(aggregated).Fill(NumOps.Zero);
 
             foreach (var update in shuffledUpdates)
             {
@@ -251,10 +246,8 @@ public class ShuffleModelDP<T> : PrivacyMechanismBase<Dictionary<string, T[]>, T
                         nameof(shuffledUpdates));
                 }
 
-                for (int i = 0; i < layerLen; i++)
-                {
-                    aggregated[i] = NumOps.Add(aggregated[i], NumOps.Multiply(layerData[i], weight));
-                }
+                Engine.Add(Vector<T>.Wrap(aggregated), Engine.Multiply(Vector<T>.Wrap(layerData), weight))
+                    .AsSpan().CopyTo(aggregated);
             }
 
             result[layerName] = aggregated;
@@ -350,19 +343,12 @@ public class ShuffleModelDP<T> : PrivacyMechanismBase<Dictionary<string, T[]>, T
 
     private Dictionary<string, T[]> ApplyLaplaceNoise(Dictionary<string, T[]> model, double epsilon, Random rng)
     {
-        // Laplace mechanism for pure epsilon-DP (delta = 0)
-        double l1Norm = 0;
-        foreach (var kvp in model)
-        {
-            for (int i = 0; i < kvp.Value.Length; i++)
-            {
-                l1Norm += Math.Abs(NumOps.ToDouble(kvp.Value[i]));
-            }
-        }
-        double scale = Math.Max(l1Norm, 1e-10) / epsilon;
+        // Laplace mechanism for pure epsilon-DP (delta = 0): clip to L1 norm C, noise scale b = C / epsilon.
+        var clipped = ClipToNorm(model, squaredNorm: false);
+        double scale = _clipNorm / epsilon;
 
         var privatized = new Dictionary<string, T[]>(model.Count);
-        foreach (var kvp in model)
+        foreach (var kvp in clipped)
         {
             var noisy = new T[kvp.Value.Length];
             for (int i = 0; i < noisy.Length; i++)
@@ -378,4 +364,27 @@ public class ShuffleModelDP<T> : PrivacyMechanismBase<Dictionary<string, T[]>, T
         _totalBudgetConsumed += epsilon;
         return privatized;
     }
+
+    /// <summary>
+    /// Scales every layer by min(1, C / ||model||), using the L2 norm (<paramref name="squaredNorm"/>) or the L1 norm.
+    /// </summary>
+    private Dictionary<string, T[]> ClipToNorm(Dictionary<string, T[]> model, bool squaredNorm)
+    {
+        var flat = Vector<T>.Wrap(model.Values.SelectMany(layer => layer).ToArray());
+        double norm = squaredNorm
+            ? Math.Sqrt(NumOps.ToDouble(Engine.DotProduct(flat, flat)))
+            : NumOps.ToDouble(Engine.Sum(Engine.Abs(flat)));
+        var factor = NumOps.FromDouble(norm > _clipNorm ? _clipNorm / norm : 1.0);
+
+        var clipped = new Dictionary<string, T[]>(model.Count);
+        foreach (var kvp in model)
+        {
+            clipped[kvp.Key] = Engine.Multiply(Vector<T>.Wrap(kvp.Value), factor).ToArray();
+        }
+
+        return clipped;
+    }
+
+    /// <summary>Gets the fixed sensitivity bound C each update is clipped to.</summary>
+    public double ClipNorm => _clipNorm;
 }

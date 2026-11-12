@@ -113,6 +113,22 @@ public class FederatedElementwiseSweepReferenceTests
         Assert.Equal(0.1 / 1.001, updated[0], 12);
     }
 
+    [Fact(Timeout = 60000)]
+    public async Task ShuffleModelDp_ClipsToFixedSensitivityBound()
+    {
+        await Task.Yield();
+
+        // Gaussian mechanism (Dwork & Roth 2014, Thm A.1) needs a data-independent sensitivity: the update
+        // [30, 40] (norm 50) is clipped to C = 1 -> [0.6, 0.8]; with epsilon = 1e9 the noise sigma*C is ~5e-9.
+        var dp = new AiDotNet.FederatedLearning.Privacy.ShuffleModelDP<double>(localEpsilon: 1e9, clipNorm: 1.0);
+        var model = new Dictionary<string, double[]> { ["w"] = new[] { 30.0, 40.0 } };
+
+        var privatized = dp.ApplyPrivacy(model, 1e9, 1e-5);
+
+        Assert.Equal(0.6, privatized["w"][0], 6);
+        Assert.Equal(0.8, privatized["w"][1], 6);
+    }
+
     private static Vector<double> Parameters(IFullModel<double, Matrix<double>, Vector<double>> model)
         => ((IParameterizable<double, Matrix<double>, Vector<double>>)model).GetParameters();
 
