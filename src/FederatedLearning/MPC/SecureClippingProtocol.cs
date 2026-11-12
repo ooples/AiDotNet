@@ -153,17 +153,8 @@ public class SecureClippingProtocol<T> : FederatedLearningComponentBase<T>
 
     private Tensor<T>[] CreateConstantShares(double value, int[] shape, int numberOfParties)
     {
-        int totalElements = 1;
-        for (int d = 0; d < shape.Length; d++)
-        {
-            totalElements *= shape[d];
-        }
-
         var plaintext = new Tensor<T>(shape);
-        for (int i = 0; i < totalElements; i++)
-        {
-            plaintext[i] = NumOps.FromDouble(value);
-        }
+        Engine.TensorFill(plaintext, NumOps.FromDouble(value));
 
         return _protocol.Share(plaintext, numberOfParties);
     }

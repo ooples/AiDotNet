@@ -206,15 +206,12 @@ public class GroupFairnessConstraint<T> : FederatedLearningComponentBase<T>, IFa
         // Use negative L2 distance as a proxy for model quality
         // Lower distance from global = client's model is more aligned
         int size = Math.Min(clientModel.Shape[0], globalModel.Shape[0]);
-        double sumSq = 0;
-
-        for (int i = 0; i < size; i++)
-        {
-            double diff = NumOps.ToDouble(clientModel[i]) - NumOps.ToDouble(globalModel[i]);
-            sumSq += diff * diff;
-        }
-
-        return -Math.Sqrt(sumSq); // Higher is better
+        var start = new[] { 0 };
+        var length = new[] { size };
+        var diff = Engine.TensorSubtract(
+            Engine.TensorSlice(clientModel.Reshape(clientModel.Length), start, length),
+            Engine.TensorSlice(globalModel.Reshape(globalModel.Length), start, length));
+        return -Math.Sqrt(NumOps.ToDouble(Engine.TensorSumOfSquares(diff))); // Higher is better
     }
 
     private static double ComputeDemographicParityViolation(Dictionary<int, double> groupPerformances)
