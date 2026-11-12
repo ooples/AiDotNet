@@ -55,7 +55,7 @@ public class VarianceThreshold<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IF
 
         // Population variance of every column
         var variances = Engine.TensorDivideScalar(
-            SelectorTensorOps.ColumnSumOfSquares(SelectorTensorOps.CenterColumns(Tensor<T>.FromMatrix(data))),
+            SelectorTensorOps.ColumnSumOfSquares(FilterStatisticTensorOps.CenterColumns(Tensor<T>.FromMatrix(data))),
             NumOps.FromDouble(n));
         _variances = variances.ToVector();
 

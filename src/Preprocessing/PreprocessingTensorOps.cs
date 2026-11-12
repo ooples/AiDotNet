@@ -85,6 +85,11 @@ internal static class PreprocessingTensorOps
     /// the tied values come in reverse index order instead. The engine argsort is not documented as stable, so
     /// it sorts a distinct composite key (rank of the value, then the index) whose order is unique.
     /// </summary>
+    /// <remarks>
+    /// NaN orders as the worst value in both directions: after every number (infinities included) when
+    /// ascending, so a NaN p-value is never the most significant, and after every number when descending, so
+    /// a NaN score is never the best. This matches scikit-learn, whose univariate selectors never pick a NaN.
+    /// </remarks>
     public static int[] StableOrder<T>(Tensor<T> values, bool descending, bool lastAmongTies = false)
     {
         int count = values.Length;
@@ -92,16 +97,28 @@ internal static class PreprocessingTensorOps
             return Array.Empty<int>();
 
         var engine = AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<T>();
         var flat = values.Rank == 1 ? values : engine.Reshape(values, new[] { count });
-        var sorted = engine.TensorSort(flat, 0, false).Item1;
+
+        // NaN takes a placeholder 0 for the rank search (ranks stay monotone in the real values) and is then
+        // given rank `count`, past every real value's rank, whichever way the order runs.
+        var isNaN = engine.TensorIsNan(flat);
+        var zeros = Filled(new[] { count }, ops.Zero);
+        var nanPositions = MaskPositions(engine.TensorWhere(isNaN, Filled(new[] { count }, ops.One), zeros));
+        var ranked = nanPositions.Length == 0 ? flat : engine.TensorWhere(isNaN, zeros, flat);
+        var sorted = engine.TensorSort(ranked, 0, false).Item1;
 
         // ascending rank: #{m : v[m] < v[j]}; descending rank: #{m : v[m] > v[j]} = count - #{m : v[m] <= v[j]}
-        var less = engine.TensorSearchSorted(sorted, flat, false).AsSpan().ToArray();
-        var atMost = engine.TensorSearchSorted(sorted, flat, true).AsSpan().ToArray();
+        var less = engine.TensorSearchSorted(sorted, ranked, false).AsSpan().ToArray();
+        var atMost = engine.TensorSearchSorted(sorted, ranked, true).AsSpan().ToArray();
+        var notANumber = new bool[count];
+        foreach (int position in nanPositions)
+            notANumber[position] = true;
+
         var keys = new long[count];
         for (int j = 0; j < count; j++)
         {
-            long rank = descending ? count - atMost[j] : less[j];
+            long rank = notANumber[j] ? count : descending ? count - atMost[j] : less[j];
             keys[j] = rank * count + (lastAmongTies ? count - 1 - j : j);
         }
 

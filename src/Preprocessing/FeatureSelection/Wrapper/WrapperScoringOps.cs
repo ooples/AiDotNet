@@ -69,7 +69,7 @@ internal static class WrapperScoringOps
             return ops.Zero;
 
         var engine = AiDotNetEngine.Current;
-        var centered = SelectorTensorOps.CenterColumns(Columns(data, features));
+        var centered = FilterStatisticTensorOps.CenterColumns(Columns(data, features));
         var sumOfSquares = SelectorTensorOps.ColumnSumOfSquares(centered);
         var varying = engine.TensorGreaterThan(sumOfSquares, ops.FromDouble(Epsilon));
         var safe = engine.TensorWhere(varying, sumOfSquares, PreprocessingTensorOps.Filled(new[] { k }, ops.One));
@@ -248,7 +248,7 @@ internal static class WrapperScoringOps
             return ops.Zero;
 
         var engine = AiDotNetEngine.Current;
-        var centered = SelectorTensorOps.CenterColumns(Columns(data, features));
+        var centered = FilterStatisticTensorOps.CenterColumns(Columns(data, features));
         var sumOfSquares = SelectorTensorOps.ColumnSumOfSquares(centered);
         var denominator = engine.TensorSqrt(engine.TensorOuter(sumOfSquares, sumOfSquares));
         var valid = engine.TensorGreaterThan(denominator, ops.FromDouble(Epsilon));

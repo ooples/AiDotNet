@@ -65,7 +65,7 @@ public class MaximalVariance<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IFix
         T count = NumOps.FromDouble(n);
         var mean = Engine.TensorDivideScalar(Engine.ReduceSum(x, new[] { 0 }, false), count);
         var variance = Engine.TensorDivideScalar(
-            SelectorTensorOps.ColumnSumOfSquares(SelectorTensorOps.CenterColumns(x)), count);
+            SelectorTensorOps.ColumnSumOfSquares(FilterStatisticTensorOps.CenterColumns(x)), count);
 
         var scores = variance;
         if (_normalize)

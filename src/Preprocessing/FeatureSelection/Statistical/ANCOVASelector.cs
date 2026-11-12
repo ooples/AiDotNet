@@ -87,7 +87,7 @@ public class ANCOVASelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupe
             var membership = PreprocessingTensorOps.ClassOneHot<T>(classIndex, k);
             var classMeans = SelectorTensorOps.GroupMeans(membership, x, out _);
             var within = Engine.TensorSubtract(x, Engine.TensorIndexSelect(classMeans, new Tensor<int>(classIndex, new[] { n }), 0));
-            var total = SelectorTensorOps.CenterColumns(x);
+            var total = FilterStatisticTensorOps.CenterColumns(x);
 
             var rssFull = ResidualAfterCovariate(within);
             var rssCovariate = ResidualAfterCovariate(total);

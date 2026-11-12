@@ -61,7 +61,7 @@ public class MinimalRedundancy<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IF
         int p = data.Columns;
 
         // Population variances; the correlation divides by the standard deviation (1 for a constant column)
-        var centered = SelectorTensorOps.CenterColumns(Tensor<T>.FromMatrix(data));
+        var centered = FilterStatisticTensorOps.CenterColumns(Tensor<T>.FromMatrix(data));
         T count = NumOps.FromDouble(n);
         var variances = Engine.TensorDivideScalar(SelectorTensorOps.ColumnSumOfSquares(centered), count);
         var stds = Engine.TensorSqrt(variances);

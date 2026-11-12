@@ -93,7 +93,6 @@ public class TTestSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISuper
             Engine.TensorSquare(Engine.TensorSubtract(x, Engine.TensorIndexSelect(means, index, 0))));
 
         T eps = NumOps.FromDouble(1e-10);
-        var halves = PreprocessingTensorOps.Filled(new[] { p }, NumOps.FromDouble(0.5));
         var best = zeros;
         var bestP = ones;
 
@@ -125,9 +124,7 @@ public class TTestSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISuper
                     Engine.TensorDivideScalar(Engine.TensorMultiply(a, a), PreprocessingTensorOps.CountAsScalar<T>(n1 - 1)),
                     Engine.TensorDivideScalar(Engine.TensorMultiply(b, b), PreprocessingTensorOps.CountAsScalar<T>(n2 - 1))));
                 df = Engine.TensorWhere(usable, df, ones);
-                var ratio = Engine.TensorDivide(df, Engine.TensorAdd(df, Engine.TensorMultiply(t, t)));
-                var pValue = Engine.TensorWhere(usable, SelectorTensorOps.RegularizedIncompleteBeta(
-                    Engine.TensorMultiply(df, halves), halves, ratio), ones);
+                var pValue = Engine.TensorWhere(usable, FilterStatisticTensorOps.StudentTTwoSided(t, df), ones);
 
                 var better = Engine.TensorGreaterThan(Engine.TensorAbs(t), Engine.TensorAbs(best));
                 best = Engine.TensorWhere(better, t, best);

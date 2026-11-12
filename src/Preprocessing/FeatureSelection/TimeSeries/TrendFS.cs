@@ -75,7 +75,7 @@ public class TrendFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IFixedCountF
         T tVar = Engine.TensorSumOfSquares(time);
 
         // Compute linear regression slope (trend) of every feature on time
-        var centered = SelectorTensorOps.CenterColumns(Tensor<T>.FromMatrix(data));
+        var centered = FilterStatisticTensorOps.CenterColumns(Tensor<T>.FromMatrix(data));
         var covariance = Engine.ReduceSum(Engine.TensorMultiply(centered, Engine.TensorBroadcastTo(time, new[] { n, p })), new[] { 0 }, false);
         var slope = NumOps.GreaterThan(tVar, NumOps.FromDouble(1e-10))
             ? Engine.TensorDivideScalar(covariance, tVar)

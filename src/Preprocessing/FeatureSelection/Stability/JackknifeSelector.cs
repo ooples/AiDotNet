@@ -91,7 +91,7 @@ public class JackknifeSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IS
         var stacked = Engine.TensorStack(allImportance, 0);
         var mean = Engine.ReduceMean(stacked, new[] { 0 }, false);
         var variance = Engine.TensorMultiplyScalar(
-            SelectorTensorOps.ColumnSumOfSquares(SelectorTensorOps.CenterColumns(stacked)),
+            SelectorTensorOps.ColumnSumOfSquares(FilterStatisticTensorOps.CenterColumns(stacked)),
             NumOps.FromDouble((nIterations - 1) / (double)nIterations));
         _meanImportance = mean.ToVector();
         _importanceVariance = variance.ToVector();

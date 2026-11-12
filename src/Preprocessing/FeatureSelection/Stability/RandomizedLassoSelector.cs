@@ -87,7 +87,7 @@ public class RandomizedLassoSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T
             : RandomHelper.CreateSecureRandom();
 
         // Normalize features: centre and divide by the sample standard deviation plus 1e-10; centre the target
-        var centered = SelectorTensorOps.CenterColumns(Tensor<T>.FromMatrix(data));
+        var centered = FilterStatisticTensorOps.CenterColumns(Tensor<T>.FromMatrix(data));
         var std = Engine.TensorAddScalar(Engine.TensorSqrt(Engine.TensorDivideScalar(
             SelectorTensorOps.ColumnSumOfSquares(centered), NumOps.FromDouble(n - 1))), NumOps.FromDouble(1e-10));
         var x = Engine.TensorDivide(centered, Engine.Reshape(std, new[] { 1, p }));

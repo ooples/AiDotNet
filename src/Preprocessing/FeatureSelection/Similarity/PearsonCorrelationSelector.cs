@@ -65,7 +65,7 @@ public class PearsonCorrelationSelector<T> : TransformerBase<T, Matrix<T>, Matri
         int p = data.Columns;
 
         // |Pearson r| from population moments; 0 where either standard deviation is below 1e-10
-        var xc = SelectorTensorOps.CenterColumns(Tensor<T>.FromMatrix(data));
+        var xc = FilterStatisticTensorOps.CenterColumns(Tensor<T>.FromMatrix(data));
         var yc = SelectorTensorOps.CenteredColumn(target);
         T count = NumOps.FromDouble(n);
         T eps = NumOps.FromDouble(1e-10);
