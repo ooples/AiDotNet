@@ -51,6 +51,25 @@ internal static class SolverTensorOps<T>
         return First(winners)?[0] ?? -1;
     }
 
+    /// <summary>
+    /// The index the scan "take the first eligible entry, then move on a strictly smaller one" ends on: the
+    /// first index of the smallest non-NaN entry where <paramref name="eligible"/> is non-zero, or -1.
+    /// </summary>
+    internal static int FirstMinIndex(Tensor<T> values, Tensor<T> eligible)
+    {
+        var valid = Engine.TensorMultiply(eligible, Engine.ScalarMinusTensor(NumOps.One, NaN(values)));
+        var firstValid = First(valid);
+        if (firstValid is null) return -1;
+        var candidates = Engine.TensorWhere(
+            valid, values, Tensor<T>.CreateDefault(values.Shape.ToArray(), values.GetFlat(firstValid[0])));
+        T smallest = Engine.TensorMinValue(candidates);
+        return First(Engine.TensorMultiply(valid, Engine.TensorEquals(candidates, smallest)))?[0] ?? -1;
+    }
+
+    /// <summary>1 where <c>x &lt;= limit</c>, 0 elsewhere (NaN gives 0).</summary>
+    internal static Tensor<T> AtMost(Tensor<T> x, T limit)
+        => Engine.TensorMax(Engine.TensorLessThan(x, limit), Engine.TensorEquals(x, limit));
+
     /// <summary>0/1 values of <typeparamref name="T"/> for <paramref name="flags"/>.</summary>
     internal static Tensor<T> Mask(IReadOnlyList<bool> flags)
     {
