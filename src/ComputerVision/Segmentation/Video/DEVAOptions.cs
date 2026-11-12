@@ -37,6 +37,11 @@ public class DEVAOptions : SegmentationModelOptions
         StageDepths = other.StageDepths?.ToArray();
         DecoderDimension = other.DecoderDimension;
         UseGroupNormalization = other.UseGroupNormalization;
+        MemoryTopK = other.MemoryTopK;
+        MergeEvery = other.MergeEvery;
+        MaxMemoryFrames = other.MaxMemoryFrames;
+        AssociationIoUThreshold = other.AssociationIoUThreshold;
+        MaxMissedMerges = other.MaxMissedMerges;
     }
 
     /// <summary>
@@ -82,6 +87,35 @@ public class DEVAOptions : SegmentationModelOptions
     /// </para>
     /// </remarks>
     public DEVAModelSize ModelSize { get; set; }
+
+    /// <summary>
+    /// Gets or sets how many memory pixels each query pixel reads from (XMem's top-k filtering). Default: 30
+    /// (Cheng et al. 2023).
+    /// </summary>
+    public int MemoryTopK { get; set; } = 30;
+
+    /// <summary>
+    /// Gets or sets how often, in frames, the image-level segmentation is integrated with the propagated
+    /// segments and the frame is added to memory. Default: 5 (Cheng et al. 2023).
+    /// </summary>
+    public int MergeEvery { get; set; } = 5;
+
+    /// <summary>
+    /// Gets or sets the most frames the working memory holds; the first frame is always kept. Default: 10
+    /// (<c>T_max</c>, Cheng et al. 2023).
+    /// </summary>
+    public int MaxMemoryFrames { get; set; } = 10;
+
+    /// <summary>
+    /// Gets or sets the IoU a propagated segment and a new segment must exceed to be associated. Default: 0.5.
+    /// </summary>
+    public double AssociationIoUThreshold { get; set; } = 0.5;
+
+    /// <summary>
+    /// Gets or sets after how many consecutive unmatched integrations a propagated segment is deleted. Default:
+    /// 5 (<c>L</c>, Cheng et al. 2023).
+    /// </summary>
+    public int MaxMissedMerges { get; set; } = 5;
 
     /// <summary>
     /// Throws when a value on this instance cannot produce a working model.
