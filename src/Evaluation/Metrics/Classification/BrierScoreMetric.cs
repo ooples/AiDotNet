@@ -67,8 +67,8 @@ public class BrierScoreMetric<T> : IProbabilisticClassificationMetric<T>
     {
         var engine = AiDotNetEngine.Current;
         using var noGrad = new NoGradScope<T>();
-        var diff = engine.TensorSubtract(EvaluationTensorOps<T>.ToTensor(probs), EvaluationTensorOps<T>.ToTensor(actuals));
-        return engine.TensorMean(engine.TensorSquare(diff));
+        var diff = engine.TensorSubtract(EvaluationTensorOps<T>.ToTensor(probs).Cast<double>(), EvaluationTensorOps<T>.ToTensor(actuals).Cast<double>());
+        return NumOps.FromDouble(engine.TensorMean(engine.TensorSquare(diff)));
     }
 
     private T ComputeMultiClassBrier(ReadOnlySpan<T> probs, ReadOnlySpan<T> actuals, int numClasses)
@@ -77,9 +77,9 @@ public class BrierScoreMetric<T> : IProbabilisticClassificationMetric<T>
         var engine = AiDotNetEngine.Current;
         using var noGrad = new NoGradScope<T>();
         int n = actuals.Length;
-        var probMatrix = engine.Reshape(EvaluationTensorOps<T>.ToTensor(probs), new[] { n, numClasses });
-        var oneHot = EvaluationTensorOps<T>.RoundedOneHot(EvaluationTensorOps<T>.ToTensor(actuals), numClasses);
-        return engine.TensorMean(engine.TensorSquare(engine.TensorSubtract(probMatrix, oneHot)));
+        var probMatrix = engine.Reshape(EvaluationTensorOps<T>.ToTensor(probs).Cast<double>(), new[] { n, numClasses });
+        var oneHot = EvaluationTensorOps<T>.RoundedOneHot(EvaluationTensorOps<T>.ToTensor(actuals), numClasses).Cast<double>();
+        return NumOps.FromDouble(engine.TensorMean(engine.TensorSquare(engine.TensorSubtract(probMatrix, oneHot))));
     }
 
     /// <inheritdoc />

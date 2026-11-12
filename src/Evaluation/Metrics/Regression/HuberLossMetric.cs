@@ -64,17 +64,17 @@ public class HuberLossMetric<T> : IRegressionMetric<T>
 
         var engine = AiDotNetEngine.Current;
         using var noGrad = new NoGradScope<T>();
-        var pred = EvaluationTensorOps<T>.ToTensor(predictions);
-        var actual = EvaluationTensorOps<T>.ToTensor(actuals);
-        var delta = NumOps.FromDouble(_delta);
+        var pred = EvaluationTensorOps<T>.ToTensor(predictions).Cast<double>();
+        var actual = EvaluationTensorOps<T>.ToTensor(actuals).Cast<double>();
+        double delta = _delta;
         var error = engine.TensorAbs(engine.TensorSubtract(actual, pred));
 
         // Quadratic region 0.5 * e^2 where e <= delta, linear region delta * (e - 0.5 * delta) elsewhere (NaN included)
-        var quadratic = engine.TensorMultiplyScalar(engine.TensorSquare(error), NumOps.FromDouble(0.5));
-        var linear = engine.TensorMultiplyScalar(engine.TensorSubtractScalar(error, NumOps.FromDouble(0.5 * _delta)), delta);
+        var quadratic = engine.TensorMultiplyScalar(engine.TensorSquare(error), 0.5);
+        var linear = engine.TensorMultiplyScalar(engine.TensorSubtractScalar(error, 0.5 * _delta), delta);
         var inQuadratic = engine.TensorLessEqual(error, engine.TensorFullLike(error, delta));
 
-        return engine.TensorMean(engine.TensorWhere(inQuadratic, quadratic, linear));
+        return NumOps.FromDouble(engine.TensorMean(engine.TensorWhere(inQuadratic, quadratic, linear)));
     }
 
     /// <inheritdoc />

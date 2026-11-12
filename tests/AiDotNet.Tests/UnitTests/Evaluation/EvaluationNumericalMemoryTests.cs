@@ -11,6 +11,50 @@ namespace AiDotNet.Tests.UnitTests.Evaluation;
 public class EvaluationNumericalMemoryTests
 {
     [Fact]
+    public void HalfLossMeans_KeepLargeSampleCountsWide()
+    {
+        var predicted = Enumerable.Repeat((Half)1, 70000).ToArray();
+        var actual = new Half[predicted.Length];
+        Assert.Equal((Half)1, new MSEMetric<Half>().Compute(predicted, actual));
+        Assert.Equal((Half)1, new RMSEMetric<Half>().Compute(predicted, actual));
+        Assert.Equal((Half)1, new MAEMetric<Half>().Compute(predicted, actual));
+        Assert.Equal((Half)0.5, new HuberLossMetric<Half>().Compute(predicted, actual));
+        Assert.Equal((Half)Math.Log(Math.Cosh(1)), new LogCoshLossMetric<Half>().Compute(predicted, actual));
+        Assert.Equal((Half)1, new BrierScoreMetric<Half>().Compute(predicted, actual));
+    }
+
+    [Fact]
+    public void WideLossArithmetic_RoundsOnlyTheFinalRepresentableResult()
+    {
+        Assert.Equal(1e20f, new RMSEMetric<float>().Compute(new[] { 1e20f }, new[] { 0f }));
+        Assert.Equal((Half)30000, new MAEMetric<Half>().Compute(
+            new[] { (Half)60000, (Half)0, (Half)0, (Half)0 },
+            new[] { (Half)(-60000), (Half)0, (Half)0, (Half)0 }));
+        Assert.Equal((Half)60, new HuberLossMetric<Half>(1e-9).Compute(new[] { (Half)60000 }, new[] { (Half)0 }));
+    }
+
+    [Fact]
+    public void HalfR2_PreservesConstantAndHighVarianceCases()
+    {
+        var metric = new R2ScoreMetric<Half>();
+        Assert.Equal((Half)1, metric.Compute(new[] { (Half)1, (Half)1 }, new[] { (Half)1, (Half)1 }));
+        Assert.Equal((Half)0, metric.Compute(new[] { (Half)0, (Half)0 }, new[] { (Half)1, (Half)1 }));
+        Assert.Equal((Half)0, metric.Compute(new[] { (Half)0, (Half)0 }, new[] { (Half)(-60000), (Half)60000 }));
+    }
+
+    [Fact]
+    public void HalfLogLoss_KeepsPositiveProbabilityFloorInBinaryAndMulticlassPaths()
+    {
+        var metric = new LogLossMetric<Half>(1e-6);
+        Half expected = (Half)(-Math.Log(1e-6));
+        Assert.Equal(expected, metric.Compute(new[] { (Half)1 }, new[] { (Half)0 }));
+        Assert.Equal(expected, metric.Compute(new[] { (Half)0, (Half)0.5, (Half)0.5 }, new[] { (Half)0 }, 3));
+        var probabilities = new Half[2053];
+        probabilities[2052] = (Half)1;
+        Assert.Equal((Half)0, new BrierScoreMetric<Half>().Compute(probabilities, new[] { (Half)2052 }, 2053));
+    }
+
+    [Fact]
     public void DatasetRanks_PreserveIndependentTiesAndDatasetOrder()
     {
         double[][] samples = { new[] { 3.0, 1, 2 }, new[] { 2.0, 3, 2 }, new[] { 1.0, 2, 3 } };

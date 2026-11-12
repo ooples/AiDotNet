@@ -44,9 +44,9 @@ public class RMSEMetric<T> : IRegressionMetric<T>
 
         var engine = AiDotNetEngine.Current;
         using var noGrad = new NoGradScope<T>();
-        var pred = EvaluationTensorOps<T>.ToTensor(predictions);
-        var actual = EvaluationTensorOps<T>.ToTensor(actuals);
-        return NumOps.Sqrt(engine.TensorMean(engine.TensorSquare(engine.TensorSubtract(pred, actual))));
+        var pred = EvaluationTensorOps<T>.ToTensor(predictions).Cast<double>();
+        var actual = EvaluationTensorOps<T>.ToTensor(actuals).Cast<double>();
+        return NumOps.FromDouble(Math.Sqrt(engine.TensorMean(engine.TensorSquare(engine.TensorSubtract(pred, actual)))));
     }
 
     /// <inheritdoc />
