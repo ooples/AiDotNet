@@ -50,5 +50,26 @@ namespace AiDotNet.Tests.Audio
                 Assert.True(Math.Abs(actual - expected) <= 2e-2, $"sample {i}: expected {expected}, got {actual}");
             }
         }
+
+        /// <summary>
+        /// Full-scale Half samples: subtracting the mean (about 21,835) from -65,504 would overflow Half
+        /// to -inf, so the samples must be scaled before the mean is removed. Double reference
+        /// (population std): [65504, -65504, 65504] standardizes to [1/sqrt(2), -sqrt(2), 1/sqrt(2)].
+        /// </summary>
+        [Fact(Timeout = 60000)]
+        public async Task Standardize_FullScaleHalf_DoesNotOverflow()
+        {
+            await Task.Yield();
+            var half = MathHelper.GetNumericOperations<Half>();
+            var samples = new[] { half.FromDouble(65504), half.FromDouble(-65504), half.FromDouble(65504) };
+            var result = AudioEngineOps.Standardize(
+                AiDotNetEngine.Current, new Tensor<Half>(samples, [3]), 1e-7).ToArray();
+            double[] expected = { 1 / Math.Sqrt(2), -Math.Sqrt(2), 1 / Math.Sqrt(2) };
+            for (int i = 0; i < expected.Length; i++)
+            {
+                double actual = half.ToDouble(result[i]);
+                Assert.True(Math.Abs(actual - expected[i]) <= 1e-2, $"sample {i}: expected {expected[i]}, got {actual}");
+            }
+        }
     }
 }

@@ -169,6 +169,8 @@ public class MfccExtractor<T> : AudioFeatureExtractorBase<T>
     private static double[,] CreateDctMatrix(int numMels, int numCoefficients)
     {
         var dct = new double[numCoefficients, numMels];
+        if (numCoefficients == 0 || numMels == 0)
+            return dct; // nothing to fill; the coefficient-0 scaling below needs a row
 
         for (int c = 0; c < numCoefficients; c++)
         {

@@ -498,10 +498,10 @@ internal static class AudioEngineOps
             var normQ = engine.ReduceSum(Gather(qNorm, qIdx), new[] { 1 }, keepDims: false);
             var normR = engine.ReduceSum(Gather(rNorm, rIdx), new[] { 1 }, keepDims: false);
             var denom = engine.TensorMultiply(engine.TensorSqrt(normQ), engine.TensorSqrt(normR));
-            var cosine = engine.TensorWhere(
-                engine.TensorGreaterThan(denom, cosineFloor),
-                engine.TensorDivide(sim, denom),
-                new Tensor<T>(new[] { count }));
+            // Invalid denominators divide by one (then score 0), so decimal never divides by zero
+            var validDenom = engine.TensorGreaterThan(denom, cosineFloor);
+            var safeDenom = engine.TensorWhere(validDenom, denom, Tensor<T>.CreateDefault(new[] { count }, numOps.One));
+            var cosine = engine.TensorWhere(validDenom, engine.TensorDivide(sim, safeDenom), new Tensor<T>(new[] { count }));
             Array.Copy(cosine.Cast<double>().ToArray(), 0, result, blockStart, count);
         }
 
@@ -539,31 +539,41 @@ internal static class AudioEngineOps
 
     /// <summary>
     /// <c>(x - mean) / max(std, floor)</c> with the population standard deviation, as a fresh tensor.
-    /// The mean and the variance go through <see cref="Mean"/>, and the deviations are scaled by their
-    /// largest magnitude before squaring, so neither the sample count nor a sum of squares has to fit
-    /// in <typeparamref name="T"/>. An empty input gives an empty result.
     /// </summary>
+    /// <remarks>
+    /// The samples are first divided by their largest magnitude <c>s</c>, so every intermediate (the
+    /// unit samples, their mean through <see cref="Mean"/>, the deviations, at most 2 in magnitude,
+    /// and their squares) stays small; neither the sample count, a sum, nor a deviation of the raw
+    /// samples has to fit in <typeparamref name="T"/>. Since the standardized value is scale-free,
+    /// <c>(x - mean) / std = (u - mean_u) / std_u</c>; the floor is applied as <c>std = s * std_u</c>.
+    /// Any NaN sample makes every result NaN, as the direct formula does; an empty input gives an
+    /// empty result.
+    /// </remarks>
     internal static Tensor<T> Standardize<T>(IEngine engine, Tensor<T> x, double floor)
     {
         if (x.Length == 0) return new Tensor<T>(x.Shape.ToArray());
         var numOps = MathHelper.GetNumericOperations<T>();
-        T mean = Mean(engine, x);
-        var deviation = engine.TensorSubtractScalar(x, mean);
-        T std = numOps.Zero;
-        // A NaN sample makes the mean NaN; the std is then NaN too, as in the direct formula
-        T scale = numOps.IsNaN(mean) ? mean : engine.TensorMaxValue(engine.TensorAbs(deviation));
-        if (numOps.IsNaN(scale))
-        {
-            std = numOps.FromDouble(double.NaN);
-        }
-        else if (numOps.GreaterThan(scale, numOps.Zero))
-        {
-            var unit = engine.TensorDivideScalar(deviation, scale);
-            std = numOps.Multiply(scale, numOps.Sqrt(Mean(engine, engine.TensorSquare(unit))));
-        }
-        T minimum = numOps.FromDouble(floor);
-        if (numOps.LessThan(std, minimum)) std = minimum;
-        return engine.TensorDivideScalar(deviation, std);
+        var shape = x.Shape.ToArray();
+        if (engine.TensorCountNonzero(engine.TensorIsNan(x)) > 0)
+            return Tensor<T>.CreateDefault(shape, NaNOrZero<T>());
+
+        T scale = engine.TensorMaxValue(engine.TensorAbs(x));
+        if (!numOps.GreaterThan(scale, numOps.Zero))
+            return new Tensor<T>(shape); // all zero: every deviation is 0
+
+        var unit = engine.TensorDivideScalar(x, scale);
+        var deviation = engine.TensorSubtractScalar(unit, Mean(engine, unit));
+        T unitStd = numOps.Sqrt(Mean(engine, engine.TensorSquare(deviation)));
+
+        // std = scale * unitStd; below the floor the divisor is the floor itself, i.e. the unit
+        // deviations are multiplied by scale / floor. Zero deviations stay 0 even if that factor
+        // is not representable in T.
+        double std = numOps.ToDouble(scale) * numOps.ToDouble(unitStd);
+        if (!(std < floor))
+            return engine.TensorDivideScalar(deviation, unitStd);
+        var scaled = engine.TensorMultiplyScalar(deviation, numOps.FromDouble(numOps.ToDouble(scale) / floor));
+        return engine.TensorWhere(
+            engine.TensorEquals(deviation, numOps.Zero), new Tensor<T>(shape), scaled);
     }
 
     /// <summary>
