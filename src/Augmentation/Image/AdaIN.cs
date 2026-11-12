@@ -24,53 +24,22 @@ public class AdaIN<T> : ImageAugmenterBase<T>
         double maxVal = content.IsNormalized ? 1.0 : 255.0;
         int numPixels = content.Height * content.Width;
 
-        for (int c = 0; c < Math.Min(content.Channels, style.Channels); c++)
-        {
-            // Content statistics
-            double cMean = 0;
-            for (int y = 0; y < content.Height; y++)
-                for (int x = 0; x < content.Width; x++)
-                    cMean += NumOps.ToDouble(content.GetPixel(y, x, c));
-            cMean /= numPixels;
+        // Content and style statistics per channel (channels present in both images)
+        var engine = Engine;
+        int channels = Math.Min(content.Channels, style.Channels);
+        var contentPlanar = content.ToPlanarTensor();
+        var contentRgb = ImageTensor<T>.LeadingChannels(contentPlanar, channels);
+        var (cMean, cStd) = ImageTensor<T>.ChannelMeanStd(contentRgb);
+        var (sMean, sStd) = ImageTensor<T>.ChannelMeanStd(ImageTensor<T>.LeadingChannels(style.ToPlanarTensor(), channels));
 
-            double cVar = 0;
-            for (int y = 0; y < content.Height; y++)
-                for (int x = 0; x < content.Width; x++)
-                {
-                    double d = NumOps.ToDouble(content.GetPixel(y, x, c)) - cMean;
-                    cVar += d * d;
-                }
-            double cStd = Math.Sqrt(cVar / numPixels + 1e-8);
-
-            // Style statistics
-            int sPixels = style.Height * style.Width;
-            double sMean = 0;
-            for (int y = 0; y < style.Height; y++)
-                for (int x = 0; x < style.Width; x++)
-                    sMean += NumOps.ToDouble(style.GetPixel(y, x, c));
-            sMean /= sPixels;
-
-            double sVar = 0;
-            for (int y = 0; y < style.Height; y++)
-                for (int x = 0; x < style.Width; x++)
-                {
-                    double d = NumOps.ToDouble(style.GetPixel(y, x, c)) - sMean;
-                    sVar += d * d;
-                }
-            double sStd = Math.Sqrt(sVar / sPixels + 1e-8);
-
-            // AdaIN: normalize content, apply style stats
-            for (int y = 0; y < content.Height; y++)
-                for (int x = 0; x < content.Width; x++)
-                {
-                    double val = NumOps.ToDouble(content.GetPixel(y, x, c));
-                    double normalized = (val - cMean) / cStd;
-                    double styled = normalized * sStd + sMean;
-                    double blended = val * (1 - Alpha) + styled * Alpha;
-                    result.SetPixel(y, x, c,
-                        NumOps.FromDouble(Math.Max(0, Math.Min(maxVal, blended))));
-                }
-        }
+        // AdaIN: normalize content, apply style stats
+        var normalized = engine.TensorDivide(engine.TensorSubtract(contentRgb, cMean), cStd);
+        var styled = engine.TensorAdd(engine.TensorMultiply(normalized, sStd), sMean);
+        var blended = engine.TensorAdd(
+            engine.TensorMultiplyScalar(contentRgb, NumOps.FromDouble(1 - Alpha)),
+            engine.TensorMultiplyScalar(styled, NumOps.FromDouble(Alpha)));
+        var clamped = engine.TensorClamp(blended, NumOps.Zero, NumOps.FromDouble(maxVal));
+        result.SetFromPlanarTensor(ImageTensor<T>.ReplaceLeadingBlock(contentPlanar, clamped));
 
         return result;
     }

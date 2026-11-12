@@ -19,8 +19,15 @@ namespace AiDotNet.Audio.Classification;
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
 /// <para>
-/// Classifies audio recordings by their acoustic environment or scene context.
-/// Based on DCASE (Detection and Classification of Acoustic Scenes and Events) challenge.
+/// Classifies audio recordings by their acoustic environment or scene context with the DCASE 2017 Task 1 baseline
+/// system (Mesaros et al. 2017, sections 2.2 and 3): log mel-band energies in 40 ms frames with 50% overlap over
+/// 40 bands from 0 to 22050 Hz, a 5-frame context (a 200-value vector), and a multilayer perceptron of two dense
+/// layers of 50 units with 20% dropout under a softmax over the 15 TUT Acoustic Scenes 2017 classes, trained with
+/// Adam at a learning rate of 0.001. A recording's label is the majority vote of its frame decisions.
+/// </para>
+/// <para>
+/// The baseline also standardizes features with training-set statistics; feed standardized context vectors to
+/// <c>Train</c> and <c>Predict</c> when your recordings' levels vary widely.
 /// </para>
 /// <para><b>For Beginners:</b> Scene classification answers "Where was this recorded?":
 /// <list type="bullet">
@@ -38,7 +45,7 @@ namespace AiDotNet.Audio.Classification;
 ///
 /// Usage for training:
 /// <code>
-/// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(inputFeatures: 60, outputSize: 30);
+/// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(inputFeatures: 200, outputSize: 15);
 /// var classifier = new SceneClassifier&lt;float&gt;(architecture);
 /// classifier.Train(features, labels);
 /// var result = classifier.Classify(newAudio);
@@ -51,7 +58,7 @@ namespace AiDotNet.Audio.Classification;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ResearchPaper("A Large-Scale Evaluation of Acoustic and Subjective Music-Similarity Measures", "https://doi.org/10.1016/j.csl.2017.01.007", Year = 2017, Authors = "Annamaria Mesaros, Toni Heittola, Tuomas Virtanen")]
+[ResearchPaper("DCASE 2017 Challenge Setup: Tasks, Datasets and Baseline System", "https://dcase.community/documents/workshop2017/proceedings/DCASE2017Workshop_Mesaros_100.pdf", Year = 2017, Authors = "Annamaria Mesaros, Toni Heittola, Aleksandr Diment, Benjamin Elizalde, Ankit Shah, Emmanuel Vincent, Bhiksha Raj, Tuomas Virtanen")]
 public partial class SceneClassifier<T> : AudioClassifierBase<T>, ISceneClassifier<T>
 {
     #region Fields
@@ -67,20 +74,9 @@ public partial class SceneClassifier<T> : AudioClassifierBase<T>, ISceneClassifi
     /// <summary>Standard acoustic scene labels (DCASE-style).</summary>
     public static readonly string[] StandardScenes =
     [
-        // Indoor scenes
-        "airport", "shopping_mall", "metro_station", "street_pedestrian",
-        "public_square", "street_traffic", "tram", "bus", "metro", "park",
-
-        // Extended scenes
-        "office", "home", "restaurant", "cafe", "library", "classroom",
-        "hospital", "gym", "church", "theater",
-
-        // Outdoor scenes
-        "beach", "forest", "mountain", "countryside", "city_center",
-        "residential_area", "construction_site", "industrial_area",
-
-        // Transportation
-        "car", "train", "airplane", "boat"
+        // The 15 classes of TUT Acoustic Scenes 2017 (section 3).
+        "bus", "cafe_restaurant", "car", "city_center", "forest_path", "grocery_store", "home", "beach",
+        "library", "metro_station", "office", "residential_area", "train", "tram", "park"
     ];
 
     /// <summary>Scene category mapping.</summary>
@@ -90,7 +86,8 @@ public partial class SceneClassifier<T> : AudioClassifierBase<T>, ISceneClassifi
         { "office", "indoor" }, { "home", "indoor" }, { "restaurant", "indoor" },
         { "cafe", "indoor" }, { "library", "indoor" }, { "classroom", "indoor" },
         { "hospital", "indoor" }, { "gym", "indoor" }, { "church", "indoor" },
-        { "theater", "indoor" }, { "shopping_mall", "indoor" },
+        { "theater", "indoor" }, { "shopping_mall", "indoor" }, { "cafe_restaurant", "indoor" },
+        { "grocery_store", "indoor" },
 
         // Outdoor urban
         { "street_pedestrian", "outdoor_urban" }, { "street_traffic", "outdoor_urban" },
@@ -101,7 +98,7 @@ public partial class SceneClassifier<T> : AudioClassifierBase<T>, ISceneClassifi
         // Outdoor nature
         { "park", "outdoor_nature" }, { "beach", "outdoor_nature" },
         { "forest", "outdoor_nature" }, { "mountain", "outdoor_nature" },
-        { "countryside", "outdoor_nature" },
+        { "countryside", "outdoor_nature" }, { "forest_path", "outdoor_nature" },
 
         // Transportation
         { "airport", "transportation" }, { "metro_station", "transportation" },
@@ -155,7 +152,8 @@ public partial class SceneClassifier<T> : AudioClassifierBase<T>, ISceneClassifi
         _options = options ?? new SceneClassifierOptions();
         Options = _options;
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        // The baseline trains with Adam at a learning rate of 0.001, the optimizer's default.
+        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
 
         // Set base class properties
         base.SampleRate = _options.SampleRate;
@@ -200,7 +198,7 @@ public partial class SceneClassifier<T> : AudioClassifierBase<T>, ISceneClassifi
             // ONNX inference mode" and the model could neither train nor infer. Build the trainable stack
             // (matching the native architecture ctor) so a from-options SceneClassifier can be trained.
             _useNativeMode = true;
-            _optimizer = new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+            _optimizer = new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
             InitializeLayers();
         }
     }
@@ -209,10 +207,8 @@ public partial class SceneClassifier<T> : AudioClassifierBase<T>, ISceneClassifi
     {
         var opts = options ?? new SceneClassifierOptions();
         var scenes = opts.CustomScenes ?? StandardScenes;
-        int numMfccs = opts.NumMfccs;
-        // Features: MFCC mean + std + delta + spectral features + band energies
-        int inputFeatures = numMfccs * 3 + 7 + 6;
-        return new NeuralNetworkArchitecture<T>(inputFeatures: inputFeatures, outputSize: scenes.Length);
+        // One context vector: ContextFrames frames of NumMels log mel-band energies.
+        return new NeuralNetworkArchitecture<T>(inputFeatures: opts.NumMels * opts.ContextFrames, outputSize: scenes.Length);
     }
 
     private MelSpectrogram<T> CreateMelSpectrogram()
@@ -224,7 +220,9 @@ public partial class SceneClassifier<T> : AudioClassifierBase<T>, ISceneClassifi
             hopLength: _options.HopLength,
             fMin: 0,
             fMax: _options.SampleRate / 2,
-            logMel: true);
+            logMel: true,
+            // Log mel-band ENERGIES, log(mel + eps), as the baseline computes them, rather than decibels.
+            logOffset: 2.220446049250313e-16);
     }
 
     private MfccExtractor<T> CreateMfccExtractor()
@@ -320,12 +318,13 @@ public partial class SceneClassifier<T> : AudioClassifierBase<T>, ISceneClassifi
             return;
         }
 
-        // Create default scene classification layers
-        var layers = LayerHelper<T>.CreateDefaultLayers(Architecture);
-        foreach (var layer in layers)
+        // The baseline MLP: dense layers of 50 ReLU units, each followed by 20% dropout, then the class layer.
+        for (int i = 0; i < _options.NumHiddenLayers; i++)
         {
-            Layers.Add(layer);
+            Layers.Add(new DenseLayer<T>(_options.HiddenUnits, (IActivationFunction<T>)new ReLUActivation<T>()));
+            Layers.Add(new DropoutLayer<T>(_options.DropoutRate));
         }
+        Layers.Add(new DenseLayer<T>(ClassLabels.Count, (IActivationFunction<T>)new IdentityActivation<T>()));
 
         // NOTE: no in-graph softmax layer is appended. The classification head emits LINEAR logits and
         // every probability path (Classify / GetSceneProbabilities / PostprocessOutput) applies softmax
@@ -347,15 +346,9 @@ public partial class SceneClassifier<T> : AudioClassifierBase<T>, ISceneClassifi
     {
         ThrowIfDisposed();
 
-        // Extract features
+        // Descriptive features for the result; the decision is the frame majority vote.
         var featureStruct = ExtractFeaturesInternal(audio);
-        var featureTensor = CreateFeatureTensor(featureStruct);
-
-        // Get predictions
-        // Feed LOGITS (not the softmaxed Predict output) to ApplySoftmax so scene probabilities are
-        // softmaxed exactly once (PredictCore now returns probabilities for the inference contract).
-        var output = ForwardLogits(featureTensor);
-        var probabilities = ApplySoftmax(output);
+        var probabilities = VoteShares(audio);
 
         // Find best prediction
         var (predictedScene, confidence) = GetPrediction(probabilities);
@@ -411,14 +404,50 @@ public partial class SceneClassifier<T> : AudioClassifierBase<T>, ISceneClassifi
     {
         ThrowIfDisposed();
 
-        var featureStruct = ExtractFeaturesInternal(audio);
-        var featureTensor = CreateFeatureTensor(featureStruct);
-        // Feed LOGITS (not the softmaxed Predict output) to ApplySoftmax so scene probabilities are
-        // softmaxed exactly once (PredictCore now returns probabilities for the inference contract).
-        var output = ForwardLogits(featureTensor);
-        var probabilities = ApplySoftmax(output);
+        return VoteShares(audio);
+    }
 
-        return probabilities;
+    /// <summary>
+    /// Each scene's share of the frame decisions: every context frame is classified and the recording takes the
+    /// majority label (section 3: "Frame-based decisions were combined using majority voting").
+    /// </summary>
+    private Dictionary<string, T> VoteShares(Tensor<T> audio)
+    {
+        var logits = ForwardLogits(ContextFeatures(audio));
+        int classes = ClassLabels.Count, frames = Math.Max(1, logits.Length / classes);
+        var votes = new int[classes];
+        var span = logits.Data.Span;
+        for (int f = 0; f < frames; f++)
+        {
+            int best = 0;
+            for (int c = 1; c < classes; c++) if (NumOps.ToDouble(span[f * classes + c]) > NumOps.ToDouble(span[f * classes + best])) best = c;
+            votes[best]++;
+        }
+        var shares = new Dictionary<string, T>();
+        for (int c = 0; c < classes; c++) shares[ClassLabels[c]] = NumOps.FromDouble(votes[c] / (double)frames);
+        return shares;
+    }
+
+    /// <summary>
+    /// The classifier input of a recording, <c>[frames, ContextFrames * NumMels]</c>: per frame, the log mel-band
+    /// energies of the <see cref="SceneClassifierOptions.ContextFrames"/> frames centred on it (edges repeat the first
+    /// and last frame).
+    /// </summary>
+    public Tensor<T> ContextFeatures(Tensor<T> audio)
+    {
+        var waveform = audio.Length < _options.FftSize
+            ? Engine.TensorConcatenate(new[] { Engine.Reshape(audio, new[] { audio.Length }), new Tensor<T>(new[] { _options.FftSize - audio.Length }) }, 0)
+            : Engine.Reshape(audio, new[] { audio.Length });
+        var mel = _melSpectrogram.Forward(waveform);
+        int frames = mel.Shape[0], bands = mel.Shape[1], context = Math.Max(1, _options.ContextFrames), half = context / 2;
+        var features = new Tensor<T>(new[] { frames, context * bands });
+        for (int f = 0; f < frames; f++)
+            for (int k = 0; k < context; k++)
+            {
+                int source = Math.Min(frames - 1, Math.Max(0, f - half + k));
+                for (int b = 0; b < bands; b++) features[f, k * bands + b] = mel[source, b];
+            }
+        return features;
     }
 
     /// <summary>
@@ -535,11 +564,7 @@ public partial class SceneClassifier<T> : AudioClassifierBase<T>, ISceneClassifi
     /// <summary>
     /// Extracts acoustic features used for scene classification.
     /// </summary>
-    public Tensor<T> ExtractAcousticFeatures(Tensor<T> audio)
-    {
-        var features = ExtractFeaturesInternal(audio);
-        return CreateFeatureTensor(features);
-    }
+    public Tensor<T> ExtractAcousticFeatures(Tensor<T> audio) => ContextFeatures(audio);
 
     #endregion
 
@@ -555,9 +580,9 @@ public partial class SceneClassifier<T> : AudioClassifierBase<T>, ISceneClassifi
         // PyTorch convention (the forward/loss path uses raw logits; inference applies softmax). Training
         // is unaffected — the tape forward (base ForwardForTraining) walks the layers directly and never
         // calls PredictCore, so softmaxing here does NOT double-softmax the CrossEntropyWithLogits loss.
-        // The internal probability paths (Classify / GetSceneProbabilities) call ForwardLogits + a single
-        // ApplySoftmax, so they still softmax exactly once. softmax of the uniform rule-based fallback is
-        // a no-op, and the ONNX logits become probabilities too, keeping all three paths consistent.
+        // The recording-level paths (Classify / GetSceneProbabilities) take the argmax of each frame's
+        // logits and vote, so they never softmax at all. softmax of the uniform rule-based fallback is a
+        // no-op, and the ONNX logits become probabilities too, keeping all three paths consistent.
         return PostprocessOutput(ForwardLogits(input));
     }
 
@@ -599,9 +624,7 @@ public partial class SceneClassifier<T> : AudioClassifierBase<T>, ISceneClassifi
     /// </summary>
     protected override Tensor<T> PreprocessAudio(Tensor<T> rawAudio)
     {
-        // Extract features from raw audio
-        var features = ExtractFeaturesInternal(rawAudio);
-        return CreateFeatureTensor(features);
+        return ContextFeatures(rawAudio);
     }
 
     /// <summary>
@@ -609,31 +632,16 @@ public partial class SceneClassifier<T> : AudioClassifierBase<T>, ISceneClassifi
     /// </summary>
     protected override Tensor<T> PostprocessOutput(Tensor<T> modelOutput)
     {
-        // Apply softmax for scene classification (single-label)
+        // Softmax over the scenes of each frame (single-label).
         var result = new Tensor<T>(modelOutput._shape);
-
-        // Find max for numerical stability
-        double maxVal = double.MinValue;
-        for (int i = 0; i < modelOutput.Length; i++)
+        int classes = modelOutput.Rank == 0 ? 1 : modelOutput.Shape[^1], rows = modelOutput.Length / Math.Max(1, classes);
+        for (int r = 0; r < rows; r++)
         {
-            double val = NumOps.ToDouble(modelOutput[i]);
-            if (val > maxVal) maxVal = val;
+            double maxVal = double.MinValue, sum = 0;
+            for (int c = 0; c < classes; c++) maxVal = Math.Max(maxVal, NumOps.ToDouble(modelOutput[r * classes + c]));
+            for (int c = 0; c < classes; c++) sum += Math.Exp(NumOps.ToDouble(modelOutput[r * classes + c]) - maxVal);
+            for (int c = 0; c < classes; c++) result[r * classes + c] = NumOps.FromDouble(Math.Exp(NumOps.ToDouble(modelOutput[r * classes + c]) - maxVal) / sum);
         }
-
-        // Compute softmax
-        double sum = 0;
-        var expValues = new double[modelOutput.Length];
-        for (int i = 0; i < modelOutput.Length; i++)
-        {
-            expValues[i] = Math.Exp(NumOps.ToDouble(modelOutput[i]) - maxVal);
-            sum += expValues[i];
-        }
-
-        for (int i = 0; i < modelOutput.Length; i++)
-        {
-            result[i] = NumOps.FromDouble(expValues[i] / sum);
-        }
-
         return result;
     }
 
@@ -645,8 +653,8 @@ public partial class SceneClassifier<T> : AudioClassifierBase<T>, ISceneClassifi
         var metadata = new ModelMetadata<T>
         {
             Name = _useNativeMode ? "SceneClassifier-Native" : "SceneClassifier-ONNX",
-            Description = "Acoustic scene classification model (DCASE-style)",
-            FeatureCount = _options.NumMfccs,  // Input feature count, not output class count
+            Description = "Acoustic scene classification: the DCASE 2017 baseline MLP over log mel-band energies",
+            FeatureCount = _options.NumMels * _options.ContextFrames,  // Input feature count, not output class count
             Complexity = 1
         };
         metadata.AdditionalInfo["SampleRate"] = _options.SampleRate.ToString();
@@ -770,27 +778,6 @@ public partial class SceneClassifier<T> : AudioClassifierBase<T>, ISceneClassifi
             EnergyVariance = energyVariance,
             BandEnergies = bandEnergies
         };
-    }
-
-    private Tensor<T> CreateFeatureTensor(SceneFeatures features)
-    {
-        int numFeatures = features.MfccMean.Length * 3 + 7 + features.BandEnergies.Length;
-        var input = new Tensor<T>([1, numFeatures]);
-
-        int idx = 0;
-        foreach (var val in features.MfccMean) input[0, idx++] = NumOps.FromDouble(val);
-        foreach (var val in features.MfccStd) input[0, idx++] = NumOps.FromDouble(val);
-        foreach (var val in features.MfccDelta) input[0, idx++] = NumOps.FromDouble(val);
-        input[0, idx++] = NumOps.FromDouble(features.SpectralCentroid / 100);
-        input[0, idx++] = NumOps.FromDouble(features.SpectralBandwidth / 100);
-        input[0, idx++] = NumOps.FromDouble(features.SpectralFlatness);
-        input[0, idx++] = NumOps.FromDouble(features.SpectralContrast);
-        input[0, idx++] = NumOps.FromDouble(features.RmsEnergy * 10);
-        input[0, idx++] = NumOps.FromDouble(features.ZeroCrossingRate * 100);
-        input[0, idx++] = NumOps.FromDouble(features.EnergyVariance);
-        foreach (var val in features.BandEnergies) input[0, idx++] = NumOps.FromDouble(val);
-
-        return input;
     }
 
     private AcousticCharacteristics<T> ExtractAcousticCharacteristics(SceneFeatures features)

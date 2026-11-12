@@ -36,41 +36,35 @@ namespace AiDotNet.Tests.ModelFamilyTests.NeuralNetworks;
 /// </remarks>
 public class WhisperTimestampedTests : AudioNNModelTestBase<float>
 {
-    // Whisper consumes frame-major log-mel features: [batch, frames, mels].
-    protected override int[] InputShape => [1, 8, 80];
+    // Whisper reads waveforms: 0.2 s, padded to its 30-second window.
+    protected override int[] InputShape => [3200];
 
-    // Per-frame vocabulary logits: [batch, frames, vocab].
-    protected override int[] OutputShape => [1, 8, 4];
+    // The decoder's logits over the four start tokens.
+    protected override int[] OutputShape => [4, 51865];
 
-    // The encoder/decoder stack is tiny at this scale, so a training step is sub-10ms;
-    // the heavier MoreData invariant (default 50/200 steps) still runs comfortably, but
-    // matching the FasterWhisper smoke counts keeps the whole class well under budget.
     protected override int MoreDataShortIterations => 3;
     protected override int MoreDataLongIterations => 10;
 
     protected override INeuralNetworkModel<float> CreateNetwork()
     {
         var architecture = new NeuralNetworkArchitecture<float>(
-            inputType: InputType.TwoDimensional,
+            inputType: InputType.OneDimensional,
             taskType: NeuralNetworkTaskType.SequenceToSequence,
-            inputHeight: 8,
-            inputWidth: 80,
-            inputDepth: 1,
-            outputSize: 4);
+            inputSize: 3200,
+            outputSize: 51865);
 
-        // Reduced-scale config (see <remarks>): same architecture shape as the paper
-        // model, smoke-test width/depth/vocab so all invariants fit the CI budget.
+        // openai-whisper's network at width 16 with one encoder and one decoder block; the 80-bin, 30-second window and
+        // the multilingual vocabulary the tokenizer needs are kept.
         var options = new WhisperTimestampedOptions
         {
-            SampleRate = 16000,
             NumMels = 80,
-            EncoderDim = 64,
-            DecoderDim = 64,
+            EncoderDim = 16,
+            DecoderDim = 16,
             NumEncoderLayers = 1,
             NumDecoderLayers = 1,
-            NumAttentionHeads = 4,
-            VocabSize = 4,
-            DropoutRate = 0.0,
+            NumAttentionHeads = 2,
+            VocabSize = 51865,
+            Language = "en",
         };
         return new WhisperTimestamped<float>(architecture, options);
     }

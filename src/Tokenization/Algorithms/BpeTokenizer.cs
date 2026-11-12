@@ -138,7 +138,7 @@ namespace AiDotNet.Tokenization.Algorithms
         /// non-whitespace Unicode code points, matching <c>bytes_to_unicode()</c> in the GPT-2 encoder and
         /// Hugging Face's ByteLevel pre-tokenizer exactly.
         /// </summary>
-        private static Dictionary<byte, char> BuildByteToUnicode()
+        internal static Dictionary<byte, char> BuildByteToUnicode()
         {
             // The three "printable" byte ranges GPT-2's bytes_to_unicode keeps as-is:
             // '!'..'~' (0x21..0x7E), U+00A1..U+00AC, and U+00AE..U+00FF. Code points are written numerically

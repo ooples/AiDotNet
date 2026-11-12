@@ -455,32 +455,12 @@ public partial class RainbowDQNAgent<T> : DeepReinforcementLearningAgentBase<T>,
     /// <inheritdoc />
     public override T Train()
     {
-        // Rainbow paper (Hessel et al. 2018) does mini-batch SGD on
-        // BatchSize prioritized samples after a WarmupSteps random-action
-        // phase. With an empty buffer there's nothing to train on; with
-        // fewer than BatchSize but more than zero we adapt and sample
-        // whatever is available so per-experience training proceeds even
-        // before the buffer fills (standard practical adaptation used in
-        // most reference implementations — Stable Baselines3, RLLib).
-        // The WarmupSteps gate is intentionally honored only when the
-        // buffer is below WarmupSteps AND below BatchSize, so a short
-        // smoke-test sequence ("StoreExperience; Train; …" five times)
-        // still applies updates while a real Atari training run that
-        // fills WarmupSteps random transitions before the first Train
-        // call sees the paper's pure-exploration warmup phase.
-        if (_replayBuffer.Count == 0)
-        {
-            return NumOps.Zero;
-        }
-
-        // Honor the documented warmup gate: the agent should be in pure-
-        // exploration mode (no Q-network updates) until the buffer has
-        // accumulated at least min(WarmupSteps, BatchSize) transitions.
-        // Without this gate, early-training updates run against a near-
-        // empty buffer with high-variance gradients and can destabilise
-        // the network before the warmup phase even finishes.
-        if (_replayBuffer.Count < _options.WarmupSteps &&
-            _replayBuffer.Count < _options.BatchSize)
+        // Rainbow (Hessel et al. 2018) learns only once the replay memory holds WarmupSteps transitions
+        // (Dopamine's min_replay_history, 80k frames in the paper). Below that the agent explores without
+        // updates. Above it a buffer smaller than BatchSize samples what it has, the usual practical
+        // adaptation (Stable Baselines3, RLlib). The gate used to require the buffer to be below BatchSize
+        // as well, so any WarmupSteps above BatchSize was silently capped at BatchSize.
+        if (_replayBuffer.Count == 0 || _replayBuffer.Count < _options.WarmupSteps)
         {
             return NumOps.Zero;
         }
