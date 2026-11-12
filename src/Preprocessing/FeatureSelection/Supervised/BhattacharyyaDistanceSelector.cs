@@ -25,13 +25,13 @@ public class BhattacharyyaDistanceSelector<T> : TransformerBase<T, Matrix<T>, Ma
 {
     private readonly int _nFeaturesToSelect;
 
-    private double[]? _distanceScores;
+    private Vector<T>? _distanceScores;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
-    public double[]? DistanceScores => _distanceScores;
+    public Vector<T>? DistanceScores => _distanceScores;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -65,74 +65,54 @@ public class BhattacharyyaDistanceSelector<T> : TransformerBase<T, Matrix<T>, Ma
         int n = data.Rows;
         int p = data.Columns;
 
-        var X = new double[n, p];
-        var y = new int[n];
-        for (int i = 0; i < n; i++)
+        PreprocessingTensorOps.ClassLabels(target, out var classes, out var classIndex);
+        int nClasses = classes.Length;
+        var sizes = new int[nClasses];
+        foreach (int c in classIndex)
+            sizes[c]++;
+
+        // Class means and sample variances (n_c - 1 + 1e-10 divisor, floored at 1e-10), [k, p]
+        var x = Tensor<T>.FromMatrix(data);
+        var index = new Tensor<int>(classIndex, new[] { n });
+        var membership = Engine.TensorOneHot<T>(index, nClasses);
+        var means = SelectorTensorOps.GroupMeans(membership, x, out var counts);
+        var squares = Engine.TensorMatMul(Engine.TensorTranspose(membership),
+            Engine.TensorSquare(Engine.TensorSubtract(x, Engine.TensorIndexSelect(means, index, 0))));
+        var divisor = Engine.TensorAddScalar(Engine.TensorSubtractScalar(counts, NumOps.One), NumOps.FromDouble(1e-10));
+        var variances = Engine.TensorMax(Engine.TensorDivide(squares,
+            Engine.TensorBroadcastTo(Engine.Reshape(divisor, new[] { nClasses, 1 }), new[] { nClasses, p })), NumOps.FromDouble(1e-10));
+
+        // Average pairwise Bhattacharyya distance between the class Gaussians:
+        // D_B = 1/4 ln(1/4 (v1 / v2 + v2 / v1 + 2)) + 1/4 (m1 - m2)^2 / (v1 + v2)
+        T quarter = NumOps.FromDouble(0.25);
+        T two = NumOps.FromDouble(2);
+        var totalDist = PreprocessingTensorOps.Filled(new[] { p }, NumOps.Zero);
+        int pairCount = 0;
+        for (int c1 = 0; c1 < nClasses; c1++)
         {
-            y[i] = (int)Math.Round(NumOps.ToDouble(target[i]));
-            for (int j = 0; j < p; j++)
-                X[i, j] = NumOps.ToDouble(data[i, j]);
-        }
-
-        var classes = y.Distinct().OrderBy(c => c).ToList();
-        int nClasses = classes.Count;
-
-        _distanceScores = new double[p];
-
-        for (int j = 0; j < p; j++)
-        {
-            double totalDist = 0;
-            int pairCount = 0;
-
-            // Compute pairwise Bhattacharyya distances
-            for (int c1 = 0; c1 < nClasses; c1++)
+            for (int c2 = c1 + 1; c2 < nClasses; c2++)
             {
-                for (int c2 = c1 + 1; c2 < nClasses; c2++)
-                {
-                    // Get feature values for each class
-                    var vals1 = new List<double>();
-                    var vals2 = new List<double>();
+                if (sizes[c1] == 0 || sizes[c2] == 0) continue;
 
-                    for (int i = 0; i < n; i++)
-                    {
-                        if (y[i] == classes[c1])
-                            vals1.Add(X[i, j]);
-                        else if (y[i] == classes[c2])
-                            vals2.Add(X[i, j]);
-                    }
-
-                    if (vals1.Count == 0 || vals2.Count == 0) continue;
-
-                    // Compute mean and variance for each class
-                    double mean1 = vals1.Average();
-                    double mean2 = vals2.Average();
-                    double var1 = vals1.Sum(v => (v - mean1) * (v - mean1)) / (vals1.Count - 1 + 1e-10);
-                    double var2 = vals2.Sum(v => (v - mean2) * (v - mean2)) / (vals2.Count - 1 + 1e-10);
-
-                    var1 = Math.Max(var1, 1e-10);
-                    var2 = Math.Max(var2, 1e-10);
-
-                    // Bhattacharyya distance for Gaussian distributions
-                    double varMean = (var1 + var2) / 2;
-                    double term1 = 0.25 * Math.Log(0.25 * (var1 / var2 + var2 / var1 + 2));
-                    double term2 = 0.25 * (mean1 - mean2) * (mean1 - mean2) / varMean;
-
-                    double dist = term1 + term2;
-                    totalDist += dist;
-                    pairCount++;
-                }
+                var var1 = PreprocessingTensorOps.RowVector(variances, c1);
+                var var2 = PreprocessingTensorOps.RowVector(variances, c2);
+                var meanDifference = Engine.TensorSubtract(
+                    PreprocessingTensorOps.RowVector(means, c1), PreprocessingTensorOps.RowVector(means, c2));
+                var ratioSum = Engine.TensorAdd(Engine.TensorDivide(var1, var2), Engine.TensorDivide(var2, var1));
+                var term1 = Engine.TensorMultiplyScalar(
+                    Engine.TensorLog(Engine.TensorMultiplyScalar(Engine.TensorAddScalar(ratioSum, two), quarter)), quarter);
+                var term2 = Engine.TensorMultiplyScalar(Engine.TensorDivide(
+                    Engine.TensorMultiply(meanDifference, meanDifference), Engine.TensorAdd(var1, var2)), quarter);
+                totalDist = Engine.TensorAdd(totalDist, Engine.TensorAdd(term1, term2));
+                pairCount++;
             }
-
-            _distanceScores[j] = pairCount > 0 ? totalDist / pairCount : 0;
         }
 
-        int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = Enumerable.Range(0, p)
-            .OrderByDescending(j => _distanceScores[j])
-            .Take(numToSelect)
-            .OrderBy(x => x)
-            .ToArray();
-
+        var scores = pairCount > 0
+            ? Engine.TensorDivideScalar(totalDist, NumOps.FromDouble(pairCount))
+            : totalDist;
+        _distanceScores = scores.ToVector();
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(scores, Math.Min(_nFeaturesToSelect, p));
         IsFitted = true;
     }
 
@@ -149,15 +129,7 @@ public class BhattacharyyaDistanceSelector<T> : TransformerBase<T, Matrix<T>, Ma
         if (_selectedIndices is null)
             throw new InvalidOperationException("BhattacharyyaDistanceSelector has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

@@ -26,13 +26,13 @@ public class WilcoxonSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISu
 {
     private readonly int _nFeaturesToSelect;
 
-    private double[]? _testStatistics;
+    private Vector<T>? _testStatistics;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
-    public double[]? TestStatistics => _testStatistics;
+    public Vector<T>? TestStatistics => _testStatistics;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -66,73 +66,33 @@ public class WilcoxonSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISu
         int n = data.Rows;
         int p = data.Columns;
 
-        var X = new double[n, p];
-        var y = new int[n];
-        for (int i = 0; i < n; i++)
-        {
-            double yVal = NumOps.ToDouble(target[i]);
-            y[i] = yVal > 0.5 ? 1 : 0; // Binarize
-            for (int j = 0; j < p; j++)
-                X[i, j] = NumOps.ToDouble(data[i, j]);
-        }
-
-        int n1 = y.Count(yi => yi == 1);
+        var positive = Engine.TensorGreaterThan(Tensor<T>.FromVector(target), NumOps.FromDouble(0.5)); // Binarize
+        int n1 = PreprocessingTensorOps.CountNonZero(positive);
         int n0 = n - n1;
 
         if (n0 == 0 || n1 == 0)
             throw new InvalidOperationException("Target must have both classes present.");
 
-        _testStatistics = new double[p];
+        // Rank sum of class 1 over the average ranks of every feature
+        var ranks = RankTestOps.AverageRanksWithTies(Tensor<T>.FromMatrix(data), out var tieTerm);
+        var r1 = Engine.Reshape(Engine.TensorMatMul(Engine.Reshape(positive, new[] { 1, n }), ranks), new[] { p });
 
-        for (int j = 0; j < p; j++)
-        {
-            // Get values and indices for ranking
-            var values = Enumerable.Range(0, n)
-                .Select(i => (X[i, j], y[i], i))
-                .OrderBy(t => t.Item1)
-                .ToList();
+        // Mann-Whitney U statistic
+        var u1 = Engine.TensorSubtractScalar(r1, NumOps.FromDouble(n1 * (n1 + 1.0) / 2));
+        var u0 = Engine.TensorAddScalar(Engine.TensorNegate(u1), NumOps.FromDouble((double)n0 * n1));
+        var u = Engine.TensorMin(u1, u0);
 
-            // Assign ranks (handling ties)
-            var ranks = new double[n];
-            int i_rank = 0;
-            while (i_rank < n)
-            {
-                int j_rank = i_rank;
-                while (j_rank < n - 1 && Math.Abs(values[j_rank + 1].Item1 - values[j_rank].Item1) < 1e-10)
-                    j_rank++;
-
-                double avgRank = (i_rank + j_rank) / 2.0 + 1;
-                for (int k = i_rank; k <= j_rank; k++)
-                    ranks[values[k].i] = avgRank;
-
-                i_rank = j_rank + 1;
-            }
-
-            // Compute rank sum for class 1
-            double R1 = 0;
-            for (int i = 0; i < n; i++)
-                if (y[i] == 1)
-                    R1 += ranks[i];
-
-            // Mann-Whitney U statistic
-            double U1 = R1 - n1 * (n1 + 1.0) / 2;
-            double U0 = (double)n0 * n1 - U1;
-            double U = Math.Min(U1, U0);
-
-            // Standardized statistic (approximate normal for large samples)
-            double meanU = (double)n0 * n1 / 2.0;
-            double stdU = Math.Sqrt((double)n0 * n1 * (n0 + n1 + 1.0) / 12);
-
-            _testStatistics[j] = Math.Abs(U - meanU) / (stdU + 1e-10);
-        }
-
-        int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = Enumerable.Range(0, p)
-            .OrderByDescending(j => _testStatistics[j])
-            .Take(numToSelect)
-            .OrderBy(x => x)
-            .ToArray();
-
+        // Standardized statistic (normal approximation) with the tie-corrected variance of scipy.stats.mannwhitneyu:
+        // sigma^2 = n0 n1 / 12 ((n + 1) - sum (t^3 - t) / (n (n - 1)))
+        double meanU = (double)n0 * n1 / 2.0;
+        var variance = Engine.TensorMultiplyScalar(
+            Engine.TensorAddScalar(Engine.TensorNegate(
+                Engine.TensorDivideScalar(tieTerm, NumOps.FromDouble((double)n * (n - 1)))), NumOps.FromDouble(n + 1)),
+            NumOps.FromDouble((double)n0 * n1 / 12));
+        var stdU = Engine.TensorAddScalar(Engine.TensorSqrt(Engine.TensorMax(variance, NumOps.Zero)), NumOps.FromDouble(1e-10));
+        var scores = Engine.TensorDivide(Engine.TensorAbs(Engine.TensorSubtractScalar(u, NumOps.FromDouble(meanU))), stdU);
+        _testStatistics = scores.ToVector();
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(scores, Math.Min(_nFeaturesToSelect, p));
         IsFitted = true;
     }
 
@@ -149,15 +109,7 @@ public class WilcoxonSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISu
         if (_selectedIndices is null)
             throw new InvalidOperationException("WilcoxonSelector has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />
