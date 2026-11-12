@@ -5619,15 +5619,16 @@ public static class StatisticsHelper<T>
         T sum = _numOps.Zero;
         int count = 0;
 
-        for (int i = 0; i < actual.Length; i++)
+        if (actual.Length > 0)
         {
-            T denominator = _numOps.Add(_numOps.Abs(actual[i]), _numOps.Abs(predicted[i]));
-            if (!_numOps.Equals(denominator, _numOps.Zero))
-            {
-                T diff = _numOps.Abs(_numOps.Subtract(actual[i], predicted[i]));
-                sum = _numOps.Add(sum, _numOps.Divide(diff, denominator));
-                count++;
-            }
+            // Pairs whose |actual| + |predicted| is exactly zero are skipped (NaN is not zero, so it is kept).
+            var a = AsTensor(actual);
+            var p = AsTensor(predicted);
+            var denominator = Engine.TensorAdd(Engine.TensorAbs(a), Engine.TensorAbs(p));
+            var included = Engine.TensorNotEquals(denominator, _numOps.Zero);
+            var terms = Engine.TensorDivide(Engine.TensorAbs(Engine.TensorSubtract(a, p)), denominator);
+            sum = Engine.TensorSum(Engine.TensorWhere(included, terms, new Tensor<T>(a._shape)));
+            count = Engine.TensorCountNonzero(included);
         }
 
         return _numOps.Multiply(_numOps.Divide(sum, _numOps.FromDouble(count)), _numOps.FromDouble(200));
@@ -6153,30 +6154,20 @@ public static class StatisticsHelper<T>
     /// </remarks>
     private static T CalculateEntropy(Vector<T> x)
     {
-        var prob = new Dictionary<string, T>();
         int n = x.Length;
         T nInverse = _numOps.Divide(_numOps.One, _numOps.FromDouble(n));
 
-        foreach (var xi in x)
+        // Probability of each distinct value (grouped by its string form, first-occurrence order).
+        var counts = x.GroupBy(xi => xi?.ToString() ?? string.Empty)
+                      .Select(group => (T)_numOps.FromDouble(group.Count()))
+                      .ToList();
+        if (counts.Count == 0)
         {
-            string key = xi?.ToString() ?? string.Empty;
-            if (prob.TryGetValue(key, out T? value))
-            {
-                prob[key] = _numOps.Add(value, nInverse);
-            }
-            else
-            {
-                prob[key] = nInverse;
-            }
+            return _numOps.Zero;
         }
 
-        var entropy = _numOps.Zero;
-        foreach (var p in prob.Values)
-        {
-            entropy = _numOps.Subtract(entropy, _numOps.Multiply(p, _numOps.Log(p)));
-        }
-
-        return entropy;
+        var prob = Engine.TensorMultiplyScalar(AsTensor(counts), nInverse);
+        return _numOps.Negate(Engine.TensorSum(Engine.TensorMultiply(prob, Engine.TensorLog(prob))));
     }
 
     /// <summary>
@@ -6883,12 +6874,11 @@ public static class StatisticsHelper<T>
         var sum = _numOps.Zero;
         var n = actual.Length;
 
-        for (int i = 0; i < n; i++)
+        if (n > 0)
         {
-            var logActual = _numOps.Log(_numOps.Add(actual[i], _numOps.One));
-            var logPredicted = _numOps.Log(_numOps.Add(predicted[i], _numOps.One));
-            var diff = _numOps.Subtract(logActual, logPredicted);
-            sum = _numOps.Add(sum, _numOps.Multiply(diff, diff));
+            var logActual = Engine.TensorLog(Engine.TensorAddScalar(AsTensor(actual), _numOps.One));
+            var logPredicted = Engine.TensorLog(Engine.TensorAddScalar(Prefix(predicted, n), _numOps.One));
+            sum = SumOfSquaredDifferences(logActual, logPredicted);
         }
 
         return _numOps.Divide(sum, _numOps.FromDouble(n));
