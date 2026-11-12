@@ -3,6 +3,7 @@ using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Enums;
 using AiDotNet.Attributes;
+using AiDotNet.Preprocessing.FeatureSelection.Helpers;
 
 namespace AiDotNet.Preprocessing.FeatureSelection.Metaheuristic;
 
@@ -32,7 +33,7 @@ public class CuckooSearch<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISuperv
     private readonly double _discoveryRate;
     private readonly int? _randomState;
 
-    private double[]? _featureScores;
+    private Vector<T>? _featureScores;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
@@ -41,7 +42,7 @@ public class CuckooSearch<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISuperv
     public int PopulationSize => _populationSize;
     public int MaxIterations => _maxIterations;
     public double DiscoveryRate => _discoveryRate;
-    public double[]? FeatureScores => _featureScores;
+    public Vector<T>? FeatureScores => _featureScores;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -86,134 +87,114 @@ public class CuckooSearch<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISuperv
             throw new ArgumentException("Target length must match rows in data.");
 
         _nInputFeatures = data.Columns;
-        int n = data.Rows;
         int p = data.Columns;
+        int targetCount = Math.Min(_nFeaturesToSelect, p);
+        var engine = Engine;
 
         var random = _randomState.HasValue
             ? RandomHelper.CreateSeededRandom(_randomState.Value)
             : RandomHelper.CreateSecureRandom();
 
-        // Initialize nests
-        var nests = new double[_populationSize, p];
-        for (int i = 0; i < _populationSize; i++)
-            for (int j = 0; j < p; j++)
-                nests[i, j] = random.NextDouble();
+        var correlations = PopulationSearchOps.AbsTargetCorrelations(data, target, NumOps.Zero);
 
-        var fitness = new double[_populationSize];
-        for (int i = 0; i < _populationSize; i++)
-            fitness[i] = EvaluateSolution(data, target, nests, i, p, n);
+        // Initialize nests
+        var nests = PopulationSearchOps.Uniform<T>(random, _populationSize, p);
+        var fitness = PopulationSearchOps.ThresholdFitness(nests, correlations, targetCount, 0.1);
 
         // Find best nest
-        int bestIdx = 0;
-        double bestFitness = fitness[0];
-        for (int i = 1; i < _populationSize; i++)
-        {
-            if (fitness[i] > bestFitness)
-            {
-                bestFitness = fitness[i];
-                bestIdx = i;
-            }
-        }
+        int bestIdx = PopulationSearchOps.ArgMax(fitness);
+        var bestFitness = PopulationSearchOps.At(fitness, bestIdx);
+        var bestNest = PopulationSearchOps.Row(nests, bestIdx);
 
-        var bestNest = new double[p];
-        for (int j = 0; j < p; j++)
-            bestNest[j] = nests[bestIdx, j];
+        // Mantegna's sigma for the Levy exponent beta = 1.5
+        T sigma = NumOps.FromDouble(Math.Pow(
+            Math.Exp(LogGamma(1 + LevyBeta)) * Math.Sin(Math.PI * LevyBeta / 2) /
+            (Math.Exp(LogGamma((1 + LevyBeta) / 2)) * LevyBeta * Math.Pow(2, (LevyBeta - 1) / 2)),
+            1 / LevyBeta));
+        T inverseBeta = NumOps.FromDouble(1 / LevyBeta);
+        T stepSize = NumOps.FromDouble(0.01);
+        int nAbandon = (int)(_populationSize * _discoveryRate);
 
         // Main loop
         for (int iter = 0; iter < _maxIterations; iter++)
         {
-            // Get cuckoo by Lévy flights
+            // Get a cuckoo by Levy flights: per dimension two Box-Muller normals u, v from four uniforms, drawn in
+            // the order of the scalar draws, and the step u * sigma / |v|^(1/beta)
             int cuckooIdx = random.Next(_populationSize);
-            var newSolution = new double[p];
+            var draws = PopulationSearchOps.Uniform<T>(random, p, 4);
+            var u = engine.TensorMultiplyScalar(GaussianFromUniforms(draws, 0), sigma);
+            var v = GaussianFromUniforms(draws, 2);
+            var levy = engine.TensorDivide(u, engine.TensorPower(engine.TensorAbs(v), inverseBeta));
 
-            for (int j = 0; j < p; j++)
-            {
-                double levy = LevyFlight(random);
-                newSolution[j] = nests[cuckooIdx, j] + 0.01 * levy * (nests[cuckooIdx, j] - bestNest[j]);
-                newSolution[j] = Math.Max(0, Math.Min(1, newSolution[j]));
-            }
-
-            // Evaluate new solution
-            var tempNests = (double[,])nests.Clone();
-            for (int j = 0; j < p; j++)
-                tempNests[cuckooIdx, j] = newSolution[j];
-
-            double newFitness = EvaluateSolution(data, target, tempNests, cuckooIdx, p, n);
+            var cuckoo = PopulationSearchOps.Row(nests, cuckooIdx);
+            var step = engine.TensorMultiply(
+                engine.TensorMultiplyScalar(levy, stepSize), engine.TensorSubtract(cuckoo, bestNest));
+            var newSolution = PopulationSearchOps.Clamp01(engine.TensorAdd(cuckoo, step));
+            var newFitness = PopulationSearchOps.ThresholdFitness(
+                engine.Reshape(newSolution, new[] { 1, p }), correlations, targetCount, 0.1);
 
             // Replace a random nest if better
             int randomNest = random.Next(_populationSize);
-            if (newFitness > fitness[randomNest])
+            if (PopulationSearchOps.Greater(newFitness, PopulationSearchOps.At(fitness, randomNest)))
             {
-                for (int j = 0; j < p; j++)
-                    nests[randomNest, j] = newSolution[j];
-                fitness[randomNest] = newFitness;
+                nests = PopulationSearchOps.ReplaceRow(nests, randomNest, newSolution);
+                fitness = PopulationSearchOps.ReplaceAt(fitness, randomNest, newFitness);
 
-                if (newFitness > bestFitness)
+                if (PopulationSearchOps.Greater(newFitness, bestFitness))
                 {
                     bestFitness = newFitness;
-                    for (int j = 0; j < p; j++)
-                        bestNest[j] = newSolution[j];
+                    bestNest = newSolution;
                 }
             }
 
-            // Abandon worst nests (discovery)
-            int nAbandon = (int)(_populationSize * _discoveryRate);
-            var worstIndices = Enumerable.Range(0, _populationSize)
-                .OrderBy(i => fitness[i])
-                .Take(nAbandon)
-                .ToList();
-
-            foreach (int idx in worstIndices)
+            // Abandon the worst nests (discovery) and build new ones at random
+            if (nAbandon > 0)
             {
-                for (int j = 0; j < p; j++)
-                    nests[idx, j] = random.NextDouble();
-                fitness[idx] = EvaluateSolution(data, target, nests, idx, p, n);
+                var worstIndices = FeatureSelectionTensorOps.StableOrder(fitness, descending: false)
+                    .Take(nAbandon)
+                    .ToArray();
+                var freshNests = PopulationSearchOps.Uniform<T>(random, nAbandon, p);
+                var freshFitness = PopulationSearchOps.ThresholdFitness(freshNests, correlations, targetCount, 0.1);
+                nests = PopulationSearchOps.ScatterRows(nests, worstIndices, freshNests);
+                fitness = PopulationSearchOps.ScatterAt(fitness, worstIndices, freshFitness);
 
-                if (fitness[idx] > bestFitness)
+                // The first fresh nest that beats the best becomes the best, as with one comparison per nest
+                int freshBest = PopulationSearchOps.ArgMax(freshFitness);
+                var freshBestFitness = PopulationSearchOps.At(freshFitness, freshBest);
+                if (PopulationSearchOps.Greater(freshBestFitness, bestFitness))
                 {
-                    bestFitness = fitness[idx];
-                    for (int j = 0; j < p; j++)
-                        bestNest[j] = nests[idx, j];
+                    bestFitness = freshBestFitness;
+                    bestNest = PopulationSearchOps.Row(freshNests, freshBest);
                 }
             }
         }
 
-        _featureScores = new double[p];
-        for (int j = 0; j < p; j++)
-            _featureScores[j] = bestNest[j];
+        _featureScores = bestNest.ToVector();
 
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = Enumerable.Range(0, p)
-            .OrderByDescending(j => _featureScores[j])
-            .Take(numToSelect)
-            .OrderBy(x => x)
-            .ToArray();
+        _selectedIndices = FeatureSelectionTensorOps.TopKIndicesSorted(bestNest, numToSelect);
 
         IsFitted = true;
     }
 
-    private double LevyFlight(Random random)
+    private const double LevyBeta = 1.5;
+
+    /// <summary>
+    /// Box-Muller normals sqrt(-2 ln(u1 + 1e-10)) cos(2 pi u2) from columns <paramref name="column"/> and
+    /// <paramref name="column"/> + 1 of a [p, k] uniform tensor.
+    /// </summary>
+    private Tensor<T> GaussianFromUniforms(Tensor<T> draws, int column)
     {
-        double beta = 1.5;
-        double sigma = Math.Pow(
-            Math.Exp(LogGamma(1 + beta)) * Math.Sin(Math.PI * beta / 2) /
-            (Math.Exp(LogGamma((1 + beta) / 2)) * beta * Math.Pow(2, (beta - 1) / 2)),
-            1 / beta);
-
-        double u = GaussianRandom(random) * sigma;
-        double v = GaussianRandom(random);
-
-        return u / Math.Pow(Math.Abs(v), 1 / beta);
+        var engine = Engine;
+        int p = draws.Shape[0];
+        var u1 = engine.Reshape(engine.TensorSlice(draws, new[] { 0, column }, new[] { p, 1 }), new[] { p });
+        var u2 = engine.Reshape(engine.TensorSlice(draws, new[] { 0, column + 1 }, new[] { p, 1 }), new[] { p });
+        var radius = engine.TensorSqrt(engine.TensorMultiplyScalar(
+            engine.TensorLog(engine.TensorAddScalar(u1, NumOps.FromDouble(1e-10))), NumOps.FromDouble(-2)));
+        return engine.TensorMultiply(radius, engine.TensorCos(engine.TensorMultiplyScalar(u2, NumOps.FromDouble(2 * Math.PI))));
     }
 
-    private double GaussianRandom(Random random)
-    {
-        double u1 = random.NextDouble();
-        double u2 = random.NextDouble();
-        return Math.Sqrt(-2 * Math.Log(u1 + 1e-10)) * Math.Cos(2 * Math.PI * u2);
-    }
-
-    private double LogGamma(double x)
+    private static double LogGamma(double x)
     {
         double[] coef = { 76.18009172947146, -86.50532032941677,
                           24.01409824083091, -1.231739572450155,
@@ -225,49 +206,6 @@ public class CuckooSearch<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISuperv
         for (int j = 0; j < 6; j++)
             ser += coef[j] / ++y;
         return -tmp + Math.Log(2.5066282746310005 * ser / x);
-    }
-
-    private double EvaluateSolution(Matrix<T> data, Vector<T> target, double[,] positions, int idx, int p, int n)
-    {
-        var selectedFeatures = Enumerable.Range(0, p)
-            .Where(j => positions[idx, j] > 0.5)
-            .ToArray();
-
-        if (selectedFeatures.Length == 0)
-            return 0;
-
-        double totalScore = 0;
-        foreach (int f in selectedFeatures)
-            totalScore += ComputeCorrelation(data, target, f, n);
-
-        int targetCount = Math.Min(_nFeaturesToSelect, p);
-        double countPenalty = Math.Abs(selectedFeatures.Length - targetCount);
-
-        return totalScore / selectedFeatures.Length - 0.1 * countPenalty;
-    }
-
-    private double ComputeCorrelation(Matrix<T> data, Vector<T> target, int j, int n)
-    {
-        double xMean = 0, yMean = 0;
-        for (int i = 0; i < n; i++)
-        {
-            xMean += NumOps.ToDouble(data[i, j]);
-            yMean += NumOps.ToDouble(target[i]);
-        }
-        xMean /= n;
-        yMean /= n;
-
-        double sxy = 0, sxx = 0, syy = 0;
-        for (int i = 0; i < n; i++)
-        {
-            double xDiff = NumOps.ToDouble(data[i, j]) - xMean;
-            double yDiff = NumOps.ToDouble(target[i]) - yMean;
-            sxy += xDiff * yDiff;
-            sxx += xDiff * xDiff;
-            syy += yDiff * yDiff;
-        }
-
-        return (sxx > 1e-10 && syy > 1e-10) ? Math.Abs(sxy / Math.Sqrt(sxx * syy)) : 0;
     }
 
     /// <inheritdoc />
@@ -283,15 +221,7 @@ public class CuckooSearch<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISuperv
         if (_selectedIndices is null)
             throw new InvalidOperationException("CuckooSearch has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return FeatureSelectionTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />
