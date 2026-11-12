@@ -33,6 +33,9 @@ public class Denormalize<T> : ImageAugmenterBase<T>
     /// </summary>
     public double[] Std { get; }
 
+    private readonly T[] _meanValues;
+    private readonly T[] _stdValues;
+
     /// <summary>
     /// Gets whether to clamp output values to [0, 1].
     /// </summary>
@@ -57,6 +60,8 @@ public class Denormalize<T> : ImageAugmenterBase<T>
 
         Mean = (double[])mean.Clone();
         Std = (double[])std.Clone();
+        _meanValues = Array.ConvertAll(Mean, m => NumOps.FromDouble(m));
+        _stdValues = Array.ConvertAll(Std, s => NumOps.FromDouble(s));
         ClampOutput = clampOutput;
     }
 
@@ -86,31 +91,35 @@ public class Denormalize<T> : ImageAugmenterBase<T>
         int width = data.Width;
         int channels = data.Channels;
 
-        for (int y = 0; y < height; y++)
+        // Channel c uses Mean/Std[c % length]: tile the parameters across the channels
+        var engine = Engine;
+        var mean = ChannelParameters(engine, _meanValues, channels);
+        var std = ChannelParameters(engine, _stdValues, channels);
+        var denormalized = engine.TensorAdd(engine.TensorMultiply(data.ToPlanarTensor(), std), mean);
+
+        if (ClampOutput)
         {
-            for (int x = 0; x < width; x++)
-            {
-                for (int c = 0; c < channels; c++)
-                {
-                    double value = NumOps.ToDouble(data.GetPixel(y, x, c));
-                    int idx = c % Mean.Length;
-                    double denormalized = value * Std[idx] + Mean[idx];
-
-                    if (ClampOutput)
-                    {
-                        denormalized = Math.Max(0.0, Math.Min(1.0, denormalized));
-                    }
-
-                    result.SetPixel(y, x, c, NumOps.FromDouble(denormalized));
-                }
-            }
+            denormalized = engine.TensorClamp(denormalized, NumOps.Zero, NumOps.One);
         }
+
+        result.SetFromPlanarTensor(denormalized);
 
         result.IsNormalized = false;
         result.NormalizationMean = null;
         result.NormalizationStd = null;
 
         return result;
+    }
+
+    /// <summary>
+    /// Repeats per-channel parameters cyclically to a [channels, 1, 1] tensor.
+    /// </summary>
+    private static Tensor<T> ChannelParameters(IEngine engine, T[] values, int channels)
+    {
+        var source = new Tensor<T>((T[])values.Clone(), [values.Length]);
+        int repeats = (channels + values.Length - 1) / values.Length;
+        var tiled = engine.TensorSlice(engine.TensorTile(source, [repeats]), [0], [channels]);
+        return engine.Reshape(tiled, [channels, 1, 1]);
     }
 
     /// <inheritdoc />

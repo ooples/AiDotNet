@@ -93,6 +93,11 @@ public partial class ConformerBlockLayer<T> : LayerBase<T>, IShapeContract
     private readonly int _ffnExpansionFactor;
     private readonly int _convKernelSize;
     private readonly int _attentionGroupSize;
+    private readonly int _attentionChunkSize;
+    private readonly bool _causal;
+    private readonly int _attentionLeftChunks;
+    private readonly bool _causalConvolution;
+    private readonly int _feedForwardUnits;
 
     // Macaron feed-forward #1 (half-step residual).
     private readonly LayerNormalizationLayer<T> _ffn1Norm;
@@ -131,12 +136,28 @@ public partial class ConformerBlockLayer<T> : LayerBase<T>, IShapeContract
     /// Depthwise convolution kernel size. The Conformer paper uses 31/32; USM reports a 5-frame
     /// kernel for its Conformer encoders (arXiv:2303.01037 §2.1).
     /// </param>
-    /// <param name="ropeTheta">Rotary base frequency for the relative positional encoding.</param>
+    /// <param name="ropeTheta">Rotary base frequency for the relative positional encoding; zero or less builds the
+    /// attention without one.</param>
     /// <param name="maxSequenceLength">Maximum sequence length the positional encoding supports.</param>
     /// <param name="attentionGroupSize">
     /// Number of adjacent projected frames combined into one attention position. EfficientConformer
     /// uses three in its first stage; ordinary Conformer keeps the default value of one.
     /// </param>
+    /// <param name="attentionChunkSize">
+    /// Chunk-wise attention (Google USM, Zhang et al. 2023, section 2.4): when positive, the time axis is cut into
+    /// consecutive chunks of this many frames and self-attention runs within each chunk only, while the convolution
+    /// and feed-forward modules still see the whole sequence. Zero (the default) attends over the whole sequence.
+    /// </param>
+    /// <param name="causal">Causal attention (each frame sees only earlier ones) and a causal depthwise convolution.</param>
+    /// <param name="attentionLeftChunks">
+    /// Cache-aware streaming's chunked-limited attention (Noroozi et al. 2023; NeMo's <c>att_context_style:
+    /// chunked_limited</c>): with chunks, each chunk's frames also attend to this many preceding chunks. Zero (the
+    /// default) keeps the chunks independent.
+    /// </param>
+    /// <param name="causalConvolution">A causal depthwise convolution (left padding of kernel − 1) without causal
+    /// attention, as cache-aware streaming pairs with chunked attention.</param>
+    /// <param name="feedForwardUnits">Hidden units of each macaron feed-forward module when positive, for widths that are
+    /// not a whole multiple of <paramref name="modelDim"/>; zero uses <paramref name="ffnExpansionFactor"/>.</param>
     public ConformerBlockLayer(
         [LayerState] int modelDim,
         [LayerState] int numHeads,
@@ -144,7 +165,12 @@ public partial class ConformerBlockLayer<T> : LayerBase<T>, IShapeContract
         [LayerState] int convKernelSize = 5,
         [LayerState] double ropeTheta = 10000.0,
         [LayerState] int maxSequenceLength = 2048,
-        [LayerState] int attentionGroupSize = 1)
+        [LayerState] int attentionGroupSize = 1,
+        [LayerState] int attentionChunkSize = 0,
+        [LayerState] bool causal = false,
+        [LayerState] int attentionLeftChunks = 0,
+        [LayerState] bool causalConvolution = false,
+        [LayerState] int feedForwardUnits = 0)
         : base(new[] { -1, modelDim }, new[] { -1, modelDim })
     {
         _maxSequenceLength = maxSequenceLength;
@@ -156,17 +182,25 @@ public partial class ConformerBlockLayer<T> : LayerBase<T>, IShapeContract
         if (ffnExpansionFactor <= 0) throw new ArgumentOutOfRangeException(nameof(ffnExpansionFactor), "ffnExpansionFactor must be positive.");
         if (convKernelSize <= 0) throw new ArgumentOutOfRangeException(nameof(convKernelSize), "convKernelSize must be positive.");
         if (attentionGroupSize <= 0) throw new ArgumentOutOfRangeException(nameof(attentionGroupSize), "attentionGroupSize must be positive.");
+        if (attentionChunkSize < 0) throw new ArgumentOutOfRangeException(nameof(attentionChunkSize), "attentionChunkSize must not be negative.");
+        if (attentionLeftChunks < 0) throw new ArgumentOutOfRangeException(nameof(attentionLeftChunks), "attentionLeftChunks must not be negative.");
+        if (feedForwardUnits < 0) throw new ArgumentOutOfRangeException(nameof(feedForwardUnits), "feedForwardUnits must not be negative.");
 
         _modelDim = modelDim;
         _numHeads = numHeads;
         _ffnExpansionFactor = ffnExpansionFactor;
         _convKernelSize = convKernelSize;
         _attentionGroupSize = attentionGroupSize;
+        _attentionChunkSize = attentionChunkSize;
+        _causal = causal;
+        _attentionLeftChunks = attentionLeftChunks;
+        _causalConvolution = causalConvolution;
+        _feedForwardUnits = feedForwardUnits;
         _half = NumOps.FromDouble(0.5);
 
         var swish = (Interfaces.IActivationFunction<T>)new SwishActivation<T>();
         var identity = (Interfaces.IActivationFunction<T>)new IdentityActivation<T>();
-        int ffnDim = modelDim * ffnExpansionFactor;
+        int ffnDim = feedForwardUnits > 0 ? feedForwardUnits : modelDim * ffnExpansionFactor;
 
         // Every sub-layer below is constructed with EXPLICIT input dimensions rather than relying on
         // lazy first-forward resolution. That is required for Clone/deserialize: SetParameters slices
@@ -184,14 +218,20 @@ public partial class ConformerBlockLayer<T> : LayerBase<T>, IShapeContract
         _attnNorm = new LayerNormalizationLayer<T>(modelDim);
         _attention = new MultiHeadAttentionLayer<T>(numHeads, modelDim / numHeads)
             .ConfigureAttentionGrouping(attentionGroupSize);
-        _attention.ConfigurePositionalEncoding(PositionalEncodingType.Rotary, ropeTheta, maxSequenceLength);
+        // ropeTheta ≤ 0 builds the block without a positional encoding: w2v-BERT (Chung et al. 2021, Table 1,
+        // "Relative Attention: N") leaves position to the convolution module.
+        if (ropeTheta > 0)
+            _attention.ConfigurePositionalEncoding(PositionalEncodingType.Rotary, ropeTheta, maxSequenceLength);
+        // A streaming block sees no future frames: attention is masked to the left context and the depthwise convolution
+        // is padded on the left only (causal convolution).
+        _attention.UseCausalMask = causal;
 
         // --- Convolution module (paper §2.2) ---
         // Pointwise conv to 2*dim so the GLU can gate one half with the other, then a depthwise
         // conv over time, normalization, Swish, and a pointwise conv back to dim.
         _convNorm = new LayerNormalizationLayer<T>(modelDim);
         _convPointwiseExpand = new Conv1DLayer<T>(inputChannels: modelDim, outputChannels: modelDim * 2, kernelSize: 1, dilation: 1, stride: 1, padding: 0, activation: identity);
-        _convDepthwise = new DepthwiseConv1DLayer<T>(modelDim, convKernelSize, multiplier: 1, stride: 1, padding: convKernelSize / 2, activation: identity);
+        _convDepthwise = new DepthwiseConv1DLayer<T>(modelDim, convKernelSize, multiplier: 1, stride: 1, padding: causal || causalConvolution || convKernelSize % 2 == 0 ? 0 : convKernelSize / 2, activation: identity);
         // BatchNorm, exactly as the paper specifies (§2.2). This is NOT interchangeable with LayerNorm
         // here: LayerNorm normalizes per time position, and its 1/std backward blows up when the
         // convolution output at a position is near-degenerate — substituting it made the first Adam
@@ -231,7 +271,7 @@ public partial class ConformerBlockLayer<T> : LayerBase<T>, IShapeContract
         var x1 = Engine.TensorAdd(input, Engine.TensorMultiplyScalar(ffn1, _half));
 
         // x' = x̃ + MHSA(LN(x̃))
-        var attn = _attention.Forward(_attnNorm.Forward(x1));
+        var attn = Attention(_attnNorm.Forward(x1));
         var x2 = Engine.TensorAdd(x1, attn);
 
         // x'' = x' + Conv(LN(x'))
@@ -242,6 +282,32 @@ public partial class ConformerBlockLayer<T> : LayerBase<T>, IShapeContract
         var ffn2 = _ffn2Project.Forward(_ffn2Expand.Forward(_ffn2Norm.Forward(x3)));
         var x4 = Engine.TensorAdd(x3, Engine.TensorMultiplyScalar(ffn2, _half));
         return _outputNorm.Forward(x4);
+    }
+
+    // Self-attention over the whole sequence, or within each chunk of _attentionChunkSize frames (the last may be shorter).
+    // With left chunks, a chunk's frames attend over the window from _attentionLeftChunks chunks back to the chunk's end:
+    // self-attention over that window, keeping the chunk's rows, gives each of them exactly those keys.
+    private Tensor<T> Attention(Tensor<T> input)
+    {
+        int rank = input.Shape.Length, timeAxis = rank - 2, time = input.Shape[timeAxis];
+        if (_attentionChunkSize <= 0 || time <= _attentionChunkSize) return _attention.Forward(input);
+        var chunks = new List<Tensor<T>>();
+        for (int start = 0; start < time; start += _attentionChunkSize)
+        {
+            int chunk = Math.Min(_attentionChunkSize, time - start), from = Math.Max(0, start - _attentionLeftChunks * _attentionChunkSize);
+            var offset = new int[rank];
+            var length = input.Shape.ToArray();
+            offset[timeAxis] = from;
+            length[timeAxis] = start + chunk - from;
+            var attended = _attention.Forward(Engine.TensorSlice(input, offset, length));
+            if (from == start) { chunks.Add(attended); continue; }
+            var keep = new int[rank];
+            var kept = attended.Shape.ToArray();
+            keep[timeAxis] = start - from;
+            kept[timeAxis] = chunk;
+            chunks.Add(Engine.TensorSlice(attended, keep, kept));
+        }
+        return Engine.TensorConcatenate(chunks.ToArray(), timeAxis);
     }
 
     /// <summary>
@@ -272,7 +338,13 @@ public partial class ConformerBlockLayer<T> : LayerBase<T>, IShapeContract
         var gated = Engine.TensorMultiply(gateA, Engine.Sigmoid(gateB));   // GLU: a ⊙ σ(b)
 
         // Depthwise conv over time, then normalization + Swish (paper order), then pointwise back.
-        var depthwise = _convDepthwise.Forward(gated);             // [B, D, T]
+        // Even kernels need asymmetric padding totaling K-1; symmetric K/2 adds a time step.
+        var convolutionInput = _causal || _causalConvolution
+            ? Engine.TensorConstantPad(gated, new[] { _convKernelSize - 1, 0 }, NumOps.Zero)
+            : _convKernelSize % 2 == 0
+                ? Engine.TensorConstantPad(gated, new[] { (_convKernelSize - 1) / 2, _convKernelSize / 2 }, NumOps.Zero)
+                : gated;
+        var depthwise = _convDepthwise.Forward(convolutionInput);   // [B, D, T]
 
         // Normalize per time position: transpose to [B, T, D] so LayerNorm acts on the feature axis.
         var normedTd = _convInnerNorm.Forward(Engine.TensorPermute(depthwise, new[] { 0, 2, 1 }));
@@ -331,7 +403,16 @@ public partial class ConformerBlockLayer<T> : LayerBase<T>, IShapeContract
         metadata["FfnExpansionFactor"] = _ffnExpansionFactor.ToString(ci);
         metadata["ConvKernelSize"] = _convKernelSize.ToString(ci);
         metadata["AttentionGroupSize"] = _attentionGroupSize.ToString(ci);
-        metadata["RopeTheta"] = _attention.RopeTheta.ToString(ci);
+        metadata["AttentionChunkSize"] = _attentionChunkSize.ToString(ci);
+        metadata["Causal"] = _causal.ToString(ci);
+        metadata["AttentionLeftChunks"] = _attentionLeftChunks.ToString(ci);
+        metadata["CausalConvolution"] = _causalConvolution.ToString(ci);
+        metadata["FeedForwardUnits"] = _feedForwardUnits.ToString(ci);
+        // A block built without a positional encoding (ropeTheta <= 0, w2v-BERT) leaves the attention at its default
+        // theta; persisting that rebuilt the block WITH rotary encoding, so its construction state no longer matched,
+        // the clone could not restore it in place, and the model kept running its untrained constructor block.
+        metadata["RopeTheta"] = (_attention.PositionalEncoding == PositionalEncodingType.None
+            ? _ropeTheta : _attention.RopeTheta).ToString(ci);
         metadata["PositionalMaxSequenceLength"] = _attention.PositionalMaxSequenceLength.ToString(ci);
         return metadata;
     }

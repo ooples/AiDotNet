@@ -27,9 +27,9 @@ public class TimeSeriesSeedTests
         "TFT" => new TemporalFusionTransformer<double>(new TemporalFusionTransformerOptions<double>
             { LookbackWindow = 8, ForecastHorizon = 2, HiddenSize = 8, NumAttentionHeads = 2, Seed = seed }).GetParameters(),
         "Informer" => new InformerModel<double>(new InformerOptions<double>
-            { LookbackWindow = 8, ForecastHorizon = 2, EmbeddingDim = 8, NumAttentionHeads = 2, Seed = seed }).GetParameters(),
+            { LookbackWindow = 8, LabelLength = 4, ForecastHorizon = 2, EmbeddingDim = 8, FeedForwardDim = 16, NumAttentionHeads = 2, Seed = seed }).GetParameters(),
         "Autoformer" => new AutoformerModel<double>(new AutoformerOptions<double>
-            { LookbackWindow = 8, ForecastHorizon = 2, EmbeddingDim = 8, NumAttentionHeads = 2, Seed = seed }).GetParameters(),
+            { LookbackWindow = 8, LabelLength = 4, ForecastHorizon = 2, EmbeddingDim = 8, NumAttentionHeads = 2, Seed = seed }).GetParameters(),
         "TiDE" => new TiDEModel<double>(new TiDEOptions<double>
             { LookbackWindow = 8, ForecastHorizon = 2, HiddenSize = 8, Seed = seed }).GetParameters(),
         _ => throw new ArgumentOutOfRangeException(nameof(model)),
