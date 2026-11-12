@@ -28,13 +28,13 @@ public class PointBiserial<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISuper
     private readonly int _nFeaturesToSelect;
     private readonly double _minCorrelation;
 
-    private double[]? _correlations;
+    private Vector<T>? _correlations;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
-    public double[]? Correlations => _correlations;
+    public Vector<T>? Correlations => _correlations;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -68,90 +68,35 @@ public class PointBiserial<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISuper
 
         _nInputFeatures = data.Columns;
         int n = data.Rows;
-        int p = data.Columns;
+        var engine = Engine;
 
         // Separate samples by class (binary)
-        var class0 = new List<int>();
-        var class1 = new List<int>();
+        var class0 = FilterStatisticTensorOps.BelowMask(target, 0.5, out int n0);
+        var class1 = FilterStatisticTensorOps.OneMinus(class0);
+        int n1 = n - n0;
 
-        for (int i = 0; i < n; i++)
-        {
-            if (NumOps.LessThan(target[i], NumOps.FromDouble(0.5)))
-                class0.Add(i);
-            else
-                class1.Add(i);
-        }
-
-        if (class0.Count == 0 || class1.Count == 0)
+        if (n0 == 0 || n1 == 0)
             throw new ArgumentException("Both classes must have at least one sample.");
 
-        int n0 = class0.Count;
-        int n1 = class1.Count;
         double pProp = (double)n1 / n;
         double qProp = (double)n0 / n;
 
-        _correlations = new double[p];
+        // Overall (population) standard deviation and class means of every feature
+        var x = FilterStatisticTensorOps.AsTensor(data);
+        var overallStd = engine.TensorSqrt(engine.TensorDivideScalar(
+            FilterStatisticTensorOps.ColumnSumOfSquaredDeviations(x), NumOps.FromDouble(n)));
+        var (mean0, _) = FilterStatisticTensorOps.MaskedColumnMoments(x, class0, n0);
+        var (mean1, _) = FilterStatisticTensorOps.MaskedColumnMoments(x, class1, n1);
 
-        for (int j = 0; j < p; j++)
-        {
-            // Compute overall mean and standard deviation
-            double overallMean = 0;
-            for (int i = 0; i < n; i++)
-                overallMean += NumOps.ToDouble(data[i, j]);
-            overallMean /= n;
-
-            double overallVar = 0;
-            for (int i = 0; i < n; i++)
-            {
-                double diff = NumOps.ToDouble(data[i, j]) - overallMean;
-                overallVar += diff * diff;
-            }
-            double overallStd = Math.Sqrt(overallVar / n);
-
-            if (overallStd < 1e-10)
-            {
-                _correlations[j] = 0;
-                continue;
-            }
-
-            // Compute means for each class
-            double mean0 = 0, mean1 = 0;
-            foreach (int i in class0)
-                mean0 += NumOps.ToDouble(data[i, j]);
-            mean0 /= n0;
-
-            foreach (int i in class1)
-                mean1 += NumOps.ToDouble(data[i, j]);
-            mean1 /= n1;
-
-            // Point-biserial correlation
-            _correlations[j] = ((mean1 - mean0) / overallStd) * Math.Sqrt(pProp * qProp);
-        }
+        // Point-biserial correlation ((mean1 - mean0) / std) sqrt(p q); 0 for a constant feature
+        var correlations = engine.TensorMultiplyScalar(
+            FilterStatisticTensorOps.GuardedDivide(engine.TensorSubtract(mean1, mean0), overallStd, 1e-10, NumOps.Zero),
+            NumOps.FromDouble(Math.Sqrt(pProp * qProp)));
+        _correlations = correlations.ToVector();
 
         // Select features above threshold or top by absolute correlation
-        var candidates = new List<int>();
-        for (int j = 0; j < p; j++)
-            if (Math.Abs(_correlations[j]) >= _minCorrelation)
-                candidates.Add(j);
-
-        if (candidates.Count >= _nFeaturesToSelect)
-        {
-            _selectedIndices = candidates
-                .OrderByDescending(j => Math.Abs(_correlations[j]))
-                .Take(_nFeaturesToSelect)
-                .OrderBy(x => x)
-                .ToArray();
-        }
-        else
-        {
-            _selectedIndices = _correlations
-                .Select((c, idx) => (Corr: Math.Abs(c), Index: idx))
-                .OrderByDescending(x => x.Corr)
-                .Take(_nFeaturesToSelect)
-                .Select(x => x.Index)
-                .OrderBy(x => x)
-                .ToArray();
-        }
+        _selectedIndices = FilterStatisticTensorOps.CandidatesOrTopK(
+            engine.TensorAbs(correlations), NumOps.FromDouble(_minCorrelation), _nFeaturesToSelect);
 
         IsFitted = true;
     }
@@ -169,15 +114,7 @@ public class PointBiserial<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISuper
         if (_selectedIndices is null)
             throw new InvalidOperationException("PointBiserial has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return FilterStatisticTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

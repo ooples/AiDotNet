@@ -26,7 +26,7 @@ public class PowerSpectralDensitySelector<T> : TransformerBase<T, Matrix<T>, Mat
     private readonly double _lowFreqCutoff;
     private readonly double _highFreqCutoff;
 
-    private double[]? _psdScores;
+    private Vector<T>? _psdScores;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
@@ -34,7 +34,7 @@ public class PowerSpectralDensitySelector<T> : TransformerBase<T, Matrix<T>, Mat
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public double LowFreqCutoff => _lowFreqCutoff;
     public double HighFreqCutoff => _highFreqCutoff;
-    public double[]? PSDScores => _psdScores;
+    public Vector<T>? PSDScores => _psdScores;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -61,56 +61,50 @@ public class PowerSpectralDensitySelector<T> : TransformerBase<T, Matrix<T>, Mat
         _nInputFeatures = data.Columns;
         int n = data.Rows;
         int p = data.Columns;
+        var engine = Engine;
 
-        var X = new double[n, p];
-        for (int i = 0; i < n; i++)
-            for (int j = 0; j < p; j++)
-                X[i, j] = NumOps.ToDouble(data[i, j]);
-
-        _psdScores = new double[p];
-
-        for (int j = 0; j < p; j++)
+        // Periodogram over every positive frequency below Nyquist (k = 1 .. ceil(n/2) - 1, the non-DC bins of
+        // numpy.fft.rfft without an even length's Nyquist bin)
+        int frequencies = FilterStatisticTensorOps.PositiveFrequencyCount(n);
+        Tensor<T> scores;
+        if (frequencies == 0)
         {
-            var col = new double[n];
-            for (int i = 0; i < n; i++)
-                col[i] = X[i, j];
+            scores = FilterStatisticTensorOps.Filled(new[] { p }, NumOps.Zero);
+        }
+        else
+        {
+            // Apply Hann window w[i] = 0.5 (1 - cos(2 pi i / (n - 1)))
+            var window = engine.TensorMultiplyScalar(
+                FilterStatisticTensorOps.OneMinus(engine.TensorCos(engine.TensorMultiplyScalar(
+                    engine.TensorArange<T>(0, n, 1), NumOps.FromDouble(2 * Math.PI / (n - 1))))),
+                NumOps.FromDouble(0.5));
+            var windowed = engine.TensorMultiply(
+                FilterStatisticTensorOps.AsTensor(data), FilterStatisticTensorOps.ColumnBroadcast(window, p));
 
-            // Apply Hann window
-            for (int i = 0; i < n; i++)
-                col[i] *= 0.5 * (1 - Math.Cos(2 * Math.PI * i / (n - 1)));
+            // Power |X_k|^2 / n of every frequency ([frequencies, p])
+            var power = engine.TensorDivideScalar(
+                FilterStatisticTensorOps.ColumnDftPower(windowed, frequencies), NumOps.FromDouble(n));
+            var totalPower = engine.ReduceSum(power, new[] { 0 }, false);
 
-            // Compute periodogram (PSD estimate)
-            double totalPower = 0;
-            double bandPower = 0;
+            // Power inside the [lowFreqCutoff n, highFreqCutoff n] frequency band
             int lowIdx = (int)(_lowFreqCutoff * n);
             int highIdx = (int)(_highFreqCutoff * n);
-
-            for (int k = 1; k < n / 2; k++)
-            {
-                double real = 0, imag = 0;
-                for (int i = 0; i < n; i++)
-                {
-                    double angle = 2 * Math.PI * k * i / n;
-                    real += col[i] * Math.Cos(angle);
-                    imag -= col[i] * Math.Sin(angle);
-                }
-                double power = (real * real + imag * imag) / n;
-                totalPower += power;
-
-                if (k >= lowIdx && k <= highIdx)
-                    bandPower += power;
-            }
+            int first = Math.Max(1, lowIdx);
+            int last = Math.Min(frequencies, highIdx);
+            var bandPower = last >= first
+                ? engine.ReduceSum(
+                    engine.TensorIndexSelect(
+                        power, new Tensor<int>(Enumerable.Range(first - 1, last - first + 1).ToArray(), new[] { last - first + 1 }), 0),
+                    new[] { 0 }, false)
+                : FilterStatisticTensorOps.Filled(new[] { p }, NumOps.Zero);
 
             // Score is ratio of band power to total power
-            _psdScores[j] = totalPower > 1e-10 ? bandPower / totalPower : 0;
+            scores = FilterStatisticTensorOps.GuardedDivide(bandPower, totalPower, 1e-10, NumOps.Zero);
         }
 
-        int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = Enumerable.Range(0, p)
-            .OrderByDescending(j => _psdScores[j])
-            .Take(numToSelect)
-            .OrderBy(x => x)
-            .ToArray();
+        _psdScores = scores.ToVector();
+
+        _selectedIndices = FilterStatisticTensorOps.TopKIndicesSorted(scores, Math.Min(_nFeaturesToSelect, p));
 
         IsFitted = true;
     }
@@ -127,15 +121,7 @@ public class PowerSpectralDensitySelector<T> : TransformerBase<T, Matrix<T>, Mat
         if (_selectedIndices is null)
             throw new InvalidOperationException("PowerSpectralDensitySelector has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return FilterStatisticTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />
