@@ -269,6 +269,20 @@ internal static class FeatureSelectionTensorOps
             engine.TensorDivide(hits, FilterStatisticTensorOps.ColumnBroadcast(hitCount, n))), scale);
     }
 
+    /// <summary>
+    /// <paramref name="count"/> power-iteration starts of shape [n, 1], each entry <c>random.NextDouble() - 0.5</c>,
+    /// drawn start by start and row by row (the order of a scalar loop, so a seeded fit draws what it always did).
+    /// </summary>
+    public static List<Tensor<T>> CenteredUniformStarts<T>(Random random, int count, int n)
+    {
+        var engine = AiDotNetEngine.Current;
+        T shift = MathHelper.GetNumericOperations<T>().FromDouble(-0.5);
+        var starts = new List<Tensor<T>>(Math.Max(count, 0));
+        for (int s = 0; s < count; s++)
+            starts.Add(engine.TensorAddScalar(Tensor<T>.CreateRandom(random, n, 1), shift));
+        return starts;
+    }
+
     /// <summary>Squared Euclidean distances from every row of an [m, d] tensor to every row of a [k, d] one ([m, k]).</summary>
     public static Tensor<T> SquaredDistancesBetween<T>(Tensor<T> a, Tensor<T> b)
     {
