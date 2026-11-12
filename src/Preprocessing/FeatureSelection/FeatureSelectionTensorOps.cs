@@ -194,4 +194,153 @@ internal static class FeatureSelectionTensorOps
         return (engine.TensorDivideScalar(engine.TensorAdd(even, odd), scale),
             engine.TensorDivideScalar(engine.TensorSubtract(even, odd), scale));
     }
+
+    /// <summary>
+    /// Columns of an [n, m] tensor centred and divided by their standard deviation (population, or sample when
+    /// <paramref name="sample"/> is set); a deviation below <paramref name="minStd"/> is replaced by 1.
+    /// </summary>
+    public static Tensor<T> StandardizeColumns<T>(Tensor<T> x, bool sample = false, double minStd = 1e-10)
+    {
+        var engine = AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<T>();
+        int n = x.Shape[0];
+        int m = x.Shape[1];
+        var centered = CenterColumns(x);
+        var std = engine.TensorSqrt(engine.TensorDivideScalar(
+            ColumnSumOfSquares(centered), ops.FromDouble(sample ? n - 1 : n)));
+        std = engine.TensorWhere(engine.TensorLessThan(std, ops.FromDouble(minStd)),
+            PreprocessingTensorOps.Filled(new[] { m }, ops.One), std);
+        return engine.TensorDivide(centered, engine.Reshape(std, new[] { 1, m }));
+    }
+
+    /// <summary>A vector centred on its mean, as an [n, 1] column.</summary>
+    public static Tensor<T> CenteredColumn<T>(Vector<T> y)
+    {
+        var engine = AiDotNetEngine.Current;
+        var yt = Tensor<T>.FromVector(y);
+        return engine.Reshape(engine.TensorSubtractScalar(yt, engine.TensorMean(yt)), new[] { y.Length, 1 });
+    }
+
+    /// <summary>Ridge coefficients <c>(X'X + alpha I)^-1 X'y</c> for an [n, p] X and an [n, 1] y, as [p].</summary>
+    public static Tensor<T> RidgeCoefficients<T>(Tensor<T> x, Tensor<T> y, T alpha)
+    {
+        var engine = AiDotNetEngine.Current;
+        int p = x.Shape[1];
+        var xt = engine.TensorTranspose(x);
+        var gram = engine.TensorAdd(engine.TensorMatMul(xt, x), engine.TensorMultiplyScalar(engine.TensorEye<T>(p), alpha));
+        return engine.Reshape(LinalgDispatch<T>.Solve(gram, engine.TensorMatMul(xt, y)), new[] { p });
+    }
+
+    /// <summary>
+    /// Average ranks (1-based; tied values share the mean of their positions, scipy <c>rankdata(method="average")</c>)
+    /// of every column of an [n, m] tensor, as [n, m].
+    /// </summary>
+    public static Tensor<T> AverageRanks<T>(Tensor<T> x)
+    {
+        var engine = AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<T>();
+        int n = x.Shape[0];
+        int m = x.Shape[1];
+        var columns = new Tensor<T>[m];
+        for (int j = 0; j < m; j++)
+        {
+            var column = engine.Reshape(engine.TensorSliceAxis(x, 1, j), new[] { n });
+            var sorted = engine.TensorSort(column, 0, false).Values;
+            var below = engine.TensorSearchSorted(sorted, column, false);
+            var atMost = engine.TensorSearchSorted(sorted, column, true);
+            columns[j] = engine.Reshape(engine.TensorAdd(below, atMost).Cast<T>(), new[] { n, 1 });
+        }
+
+        // (below + atMost + 1) / 2 = mean of the 1-based positions below + 1 .. atMost
+        var sum = m == 0 ? new Tensor<T>(new[] { n, 0 }) : engine.TensorConcatenate(columns, 1);
+        return engine.TensorDivideScalar(engine.TensorAddScalar(sum, ops.One), ops.FromDouble(2));
+    }
+
+    /// <summary>Pearson correlation of every column of an [n, m] tensor with an [n, 1] column, 0 where either
+    /// sum of squares is not above <paramref name="epsilon"/>. Returns [m].</summary>
+    public static Tensor<T> PearsonWithColumn<T>(Tensor<T> x, Tensor<T> y, double epsilon = 1e-10)
+    {
+        var engine = AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<T>();
+        int m = x.Shape[1];
+        var xc = CenterColumns(x);
+        var yc = CenterColumns(y);
+        var sxy = engine.ReduceSum(engine.TensorMultiply(xc, yc), new[] { 0 }, false);
+        var sxx = ColumnSumOfSquares(xc);
+        T syy = engine.TensorSum(engine.TensorMultiply(yc, yc));
+        var r = engine.TensorDivide(sxy, engine.TensorSqrt(engine.TensorMultiplyScalar(sxx, syy)));
+        var valid = engine.TensorMultiply(
+            engine.TensorGreaterThan(sxx, ops.FromDouble(epsilon)),
+            PreprocessingTensorOps.Filled(new[] { m }, ops.GreaterThan(syy, ops.FromDouble(epsilon)) ? ops.One : ops.Zero));
+        return ZeroUnless(valid, r);
+    }
+
+    /// <summary>
+    /// Robust z-scores of every column of an [n, m] tensor: <c>(x - median) / (1.4826 * MAD + epsilon)</c>.
+    /// </summary>
+    public static Tensor<T> RobustZScores<T>(Tensor<T> x, double epsilon = 1e-10)
+    {
+        var engine = AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<T>();
+        var deviation = engine.TensorSubtract(x, ColumnMedian(x, keepDims: true));
+        var scale = engine.TensorAddScalar(
+            engine.TensorMultiplyScalar(ColumnMedian(engine.TensorAbs(deviation), keepDims: true), ops.FromDouble(1.4826)),
+            ops.FromDouble(epsilon));
+        return engine.TensorDivide(deviation, scale);
+    }
+
+    /// <summary>Huber weights <c>min(1, delta / |z|)</c> of every element.</summary>
+    public static Tensor<T> HuberWeights<T>(Tensor<T> z, T delta)
+    {
+        var engine = AiDotNetEngine.Current;
+        return engine.TensorDivide(PreprocessingTensorOps.Filled(z.Shape.ToArray(), delta), engine.TensorMax(engine.TensorAbs(z), delta));
+    }
+
+    /// <summary>
+    /// Every column of an [n, m] tensor clipped to its order statistics at <c>(int)(n * lower)</c> and
+    /// <c>min((int)(n * upper), n - 1)</c> (0-based positions in the sorted column).
+    /// </summary>
+    public static Tensor<T> WinsorizeColumns<T>(Tensor<T> x, double lower, double upper)
+    {
+        var engine = AiDotNetEngine.Current;
+        int n = x.Shape[0];
+        int m = x.Shape[1];
+        int lowerIndex = (int)(n * lower);
+        int upperIndex = Math.Min((int)(n * upper), n - 1);
+        var shape = new[] { n, m };
+        var low = engine.TensorBroadcastTo(
+            engine.Reshape(PreprocessingTensorOps.ColumnOrderStatistic(x, lowerIndex), new[] { 1, m }), shape);
+        var high = engine.TensorBroadcastTo(
+            engine.Reshape(PreprocessingTensorOps.ColumnOrderStatistic(x, upperIndex), new[] { 1, m }), shape);
+        return engine.TensorMin(engine.TensorMax(x, low), high);
+    }
+
+    /// <summary>
+    /// Pearson correlation of every column of an [n, m] tensor with an [n, 1] column over the rows where the [n, m]
+    /// 0/1 <paramref name="mask"/> is set (each column its own rows), 0 where <c>sqrt(sxx * syy)</c> is not above
+    /// <paramref name="epsilon"/> or fewer than <paramref name="minRows"/> rows are kept. Returns [m].
+    /// </summary>
+    public static Tensor<T> MaskedPearson<T>(Tensor<T> x, Tensor<T> y, Tensor<T> mask, int minRows, double epsilon = 1e-10)
+    {
+        var engine = AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<T>();
+        int n = x.Shape[0];
+        int m = x.Shape[1];
+        var yFull = engine.TensorBroadcastTo(y, new[] { n, m });
+        var count = engine.ReduceSum(mask, new[] { 0 }, true);
+        var xMean = engine.TensorDivide(engine.ReduceSum(engine.TensorMultiply(mask, x), new[] { 0 }, true), count);
+        var yMean = engine.TensorDivide(engine.ReduceSum(engine.TensorMultiply(mask, yFull), new[] { 0 }, true), count);
+        var xd = engine.TensorMultiply(mask, engine.TensorSubtract(x, xMean));
+        var yd = engine.TensorMultiply(mask, engine.TensorSubtract(yFull, yMean));
+        var sxy = engine.ReduceSum(engine.TensorMultiply(xd, yd), new[] { 0 }, false);
+        var denominator = engine.TensorSqrt(engine.TensorMultiply(ColumnSumOfSquares(xd), ColumnSumOfSquares(yd)));
+        var valid = engine.TensorMultiply(
+            engine.TensorGreaterThan(denominator, ops.FromDouble(epsilon)),
+            AtLeastCount(engine.Reshape(count, new[] { m }), minRows));
+        return ZeroUnless(valid, engine.TensorDivide(sxy, denominator));
+    }
+
+    /// <summary>0/1 mask of the entries that are at least <paramref name="minimum"/>.</summary>
+    public static Tensor<T> AtLeastCount<T>(Tensor<T> counts, int minimum) =>
+        PreprocessingTensorOps.AtLeast(counts, MathHelper.GetNumericOperations<T>().FromDouble(minimum));
 }
