@@ -2,6 +2,7 @@ using AiDotNet.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Enums;
 using AiDotNet.Attributes;
+using AiDotNet.Preprocessing.FeatureSelection.Helpers;
 
 namespace AiDotNet.Preprocessing.FeatureSelection.Imbalanced;
 
@@ -26,18 +27,23 @@ namespace AiDotNet.Preprocessing.FeatureSelection.Imbalanced;
 public class ClassWeightedFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFeatureSelector<T>, IFixedCountFeatureSelector<T>
 {
     private readonly int _nFeaturesToSelect;
-    private readonly string _weightingStrategy;
+    private readonly ClassWeightingStrategy _weightingStrategy;
 
-    private double[]? _featureScores;
-    private double[]? _classWeights;
+    private Vector<T>? _featureScores;
+    private Vector<T>? _classWeights;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
-    public string WeightingStrategy => _weightingStrategy;
-    public double[]? FeatureScores => _featureScores;
-    public double[]? ClassWeights => _classWeights;
+    public ClassWeightingStrategy WeightingStrategy => _weightingStrategy;
+    public Vector<T>? FeatureScores => _featureScores;
+
+    /// <summary>
+    /// The weight of each class, in ascending order of the (rounded) class labels, like scikit-learn's
+    /// <c>compute_class_weight</c> over <c>np.unique(y)</c>.
+    /// </summary>
+    public Vector<T>? ClassWeights => _classWeights;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -45,19 +51,18 @@ public class ClassWeightedFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISup
 
     public ClassWeightedFS(
         int nFeaturesToSelect = 10,
-        string weightingStrategy = "balanced",
+        ClassWeightingStrategy weightingStrategy = ClassWeightingStrategy.Balanced,
         int[]? columnIndices = null)
         : base(columnIndices)
     {
         if (nFeaturesToSelect < 1)
             throw new ArgumentException("Number of features must be at least 1.", nameof(nFeaturesToSelect));
 
-        var validStrategies = new[] { "balanced", "sqrt", "log" };
-        if (!validStrategies.Contains(weightingStrategy.ToLower()))
-            throw new ArgumentException("Weighting strategy must be 'balanced', 'sqrt', or 'log'.", nameof(weightingStrategy));
+        if (!Enum.IsDefined(typeof(ClassWeightingStrategy), weightingStrategy))
+            throw new ArgumentException("Weighting strategy must be Balanced, Sqrt or Log.", nameof(weightingStrategy));
 
         _nFeaturesToSelect = nFeaturesToSelect;
-        _weightingStrategy = weightingStrategy.ToLower();
+        _weightingStrategy = weightingStrategy;
     }
 
     /// <inheritdoc />
@@ -76,144 +81,78 @@ public class ClassWeightedFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISup
         _nInputFeatures = data.Columns;
         int n = data.Rows;
         int p = data.Columns;
+        if (n == 0)
+            throw new InvalidOperationException("Sequence contains no elements");
 
-        // Count class frequencies
-        var classCounts = new Dictionary<int, int>();
-        for (int i = 0; i < n; i++)
-        {
-            int label = (int)Math.Round(NumOps.ToDouble(target[i]));
-            classCounts[label] = classCounts.GetValueOrDefault(label, 0) + 1;
-        }
+        var engine = Engine;
 
-        int nClasses = classCounts.Count;
+        // Classes are the rounded target values, in ascending order
+        var classIds = FeatureSelectionInformationOps.ClassIndices(engine.TensorRound(Tensor<T>.FromVector(target)), out int nClasses);
+        var membership = engine.TensorOneHot<T>(classIds, nClasses); // [n, C]
+        var classCounts = engine.ReduceSum(membership, new[] { 0 }, false); // [C]
 
         // Compute class weights
-        _classWeights = ComputeClassWeights(classCounts, n, nClasses);
+        var classWeights = ComputeClassWeights(classCounts, n, nClasses);
+        _classWeights = classWeights.ToVector();
 
         // Compute weighted feature scores
-        _featureScores = ComputeWeightedScores(data, target, classCounts, n, p);
+        var scores = ComputeWeightedScores(Tensor<T>.FromMatrix(data), membership, classCounts, classWeights, p);
+        _featureScores = scores.ToVector();
 
         // Select top features
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = Enumerable.Range(0, p)
-            .OrderByDescending(j => _featureScores[j])
-            .Take(numToSelect)
-            .OrderBy(x => x)
-            .ToArray();
+        _selectedIndices = FeatureSelectionTensorOps.TopKIndicesSorted(scores, numToSelect);
 
         IsFitted = true;
     }
 
-    private double[] ComputeClassWeights(Dictionary<int, int> classCounts, int n, int nClasses)
+    /// <summary>Class weights from the balanced ratio n / (classes * count) of every class ([C]).</summary>
+    private Tensor<T> ComputeClassWeights(Tensor<T> classCounts, int n, int nClasses)
     {
-        int maxClass = classCounts.Keys.Max();
-        var weights = new double[maxClass + 1];
+        var engine = Engine;
+        var ratio = engine.TensorDivide(
+            FeatureSelectionTensorOps.Filled(new[] { nClasses }, FeatureSelectionTensorOps.Count<T>(n)),
+            engine.TensorMultiplyScalar(classCounts, FeatureSelectionTensorOps.Count<T>(nClasses)));
 
-        foreach (var kvp in classCounts)
+        return _weightingStrategy switch
         {
-            double weight;
-            switch (_weightingStrategy)
-            {
-                case "balanced":
-                    weight = (double)n / ((double)nClasses * kvp.Value);
-                    break;
-                case "sqrt":
-                    weight = Math.Sqrt((double)n / ((double)nClasses * kvp.Value));
-                    break;
-                case "log":
-                    weight = Math.Log(1 + (double)n / ((double)nClasses * kvp.Value));
-                    break;
-                default:
-                    weight = 1.0;
-                    break;
-            }
-            weights[kvp.Key] = weight;
-        }
-
-        return weights;
+            ClassWeightingStrategy.Sqrt => engine.TensorSqrt(ratio),
+            ClassWeightingStrategy.Log => engine.TensorLog(engine.TensorAddScalar(ratio, NumOps.One)),
+            _ => ratio
+        };
     }
 
-    private double[] ComputeWeightedScores(
-        Matrix<T> data, Vector<T> target,
-        Dictionary<int, int> classCounts,
-        int n, int p)
+    /// <summary>
+    /// Class-weighted Fisher score per feature: the weighted between-class scatter over the weighted within-class
+    /// scatter (population class variances), each class weighted by weight * count; 0 when the within-class
+    /// scatter is not above 1e-10.
+    /// </summary>
+    private Tensor<T> ComputeWeightedScores(Tensor<T> X, Tensor<T> membership, Tensor<T> classCounts, Tensor<T> classWeights, int p)
     {
-        var scores = new double[p];
+        var engine = Engine;
+        int nClasses = classCounts.Length;
+        var counts = engine.Reshape(classCounts, new[] { nClasses, 1 });
+        var membershipT = engine.TensorTranspose(membership); // [C, n]
 
-        // Compute weighted means per class
-        var classMeans = new Dictionary<int, double[]>();
-        var classVars = new Dictionary<int, double[]>();
-
-        foreach (int label in classCounts.Keys)
-        {
-            classMeans[label] = new double[p];
-            classVars[label] = new double[p];
-        }
-
-        // Compute class means
-        for (int i = 0; i < n; i++)
-        {
-            int label = (int)Math.Round(NumOps.ToDouble(target[i]));
-            for (int j = 0; j < p; j++)
-                classMeans[label][j] += NumOps.ToDouble(data[i, j]);
-        }
-
-        foreach (int label in classCounts.Keys)
-        {
-            for (int j = 0; j < p; j++)
-                classMeans[label][j] /= classCounts[label];
-        }
-
-        // Compute class variances
-        for (int i = 0; i < n; i++)
-        {
-            int label = (int)Math.Round(NumOps.ToDouble(target[i]));
-            for (int j = 0; j < p; j++)
-            {
-                double diff = NumOps.ToDouble(data[i, j]) - classMeans[label][j];
-                classVars[label][j] += diff * diff;
-            }
-        }
-
-        foreach (int label in classCounts.Keys)
-        {
-            for (int j = 0; j < p; j++)
-                classVars[label][j] /= classCounts[label];
-        }
-
-        var classWeights = _classWeights ?? throw new InvalidOperationException("Class weights have not been computed.");
+        // Compute class means and (population) class variances
+        var classMeans = engine.TensorDivide(engine.TensorMatMul(membershipT, X), counts); // [C, p]
+        var residual = engine.TensorSubtract(X, engine.TensorMatMul(membership, classMeans));
+        var classVars = engine.TensorDivide(engine.TensorMatMul(membershipT, engine.TensorSquare(residual)), counts); // [C, p]
 
         // Compute weighted Fisher score for each feature
-        for (int j = 0; j < p; j++)
-        {
-            double overallMean = 0;
-            double totalWeight = 0;
+        var classMass = engine.Reshape(engine.TensorMultiply(classWeights, classCounts), new[] { 1, nClasses }); // weight * count
+        T totalWeight = engine.TensorSum(classMass);
+        var overallMean = engine.TensorDivideScalar(engine.TensorMatMul(classMass, classMeans), totalWeight); // [1, p]
+        var betweenVar = engine.Reshape(engine.TensorMatMul(classMass, engine.TensorSquare(engine.TensorSubtract(classMeans, overallMean))), new[] { p });
+        var withinVar = engine.Reshape(engine.TensorMatMul(classMass, classVars), new[] { p });
 
-            foreach (int label in classCounts.Keys)
-            {
-                double weight = classWeights[label];
-                overallMean += weight * classCounts[label] * classMeans[label][j];
-                totalWeight += weight * classCounts[label];
-            }
-            overallMean /= totalWeight;
-
-            double betweenVar = 0, withinVar = 0;
-
-            foreach (int label in classCounts.Keys)
-            {
-                double weight = classWeights[label];
-                double meanDiff = classMeans[label][j] - overallMean;
-                betweenVar += weight * classCounts[label] * meanDiff * meanDiff;
-                withinVar += weight * classCounts[label] * classVars[label][j];
-            }
-
-            scores[j] = withinVar > 1e-10 ? betweenVar / withinVar : 0;
-        }
-
-        return scores;
+        var defined = engine.TensorGreaterThan(withinVar, NumOps.FromDouble(1e-10));
+        var safeWithin = engine.TensorWhere(defined, withinVar, FeatureSelectionTensorOps.Filled(new[] { p }, NumOps.One));
+        return engine.TensorWhere(defined, engine.TensorDivide(betweenVar, safeWithin), new Tensor<T>(new[] { p }));
     }
 
     /// <inheritdoc />
+
     public Matrix<T> FitTransform(Matrix<T> data, Vector<T> target)
     {
         Fit(data, target);
@@ -226,15 +165,7 @@ public class ClassWeightedFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISup
         if (_selectedIndices is null)
             throw new InvalidOperationException("ClassWeightedFS has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return FeatureSelectionTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

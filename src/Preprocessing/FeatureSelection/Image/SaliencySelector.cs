@@ -2,6 +2,7 @@ using AiDotNet.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Enums;
 using AiDotNet.Attributes;
+using AiDotNet.Preprocessing.FeatureSelection.Helpers;
 
 namespace AiDotNet.Preprocessing.FeatureSelection.Image;
 
@@ -27,13 +28,13 @@ public class SaliencySelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISu
     private readonly int _nFeaturesToSelect;
     private readonly double _epsilon;
 
-    private double[]? _saliencyScores;
+    private Vector<T>? _saliencyScores;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
-    public double[]? SaliencyScores => _saliencyScores;
+    public Vector<T>? SaliencyScores => _saliencyScores;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -69,65 +70,33 @@ public class SaliencySelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISu
         int n = data.Rows;
         int p = data.Columns;
 
-        // Compute saliency using numerical gradients
-        _saliencyScores = new double[p];
+        var engine = Engine;
+        var X = Tensor<T>.FromMatrix(data);
+        var y = engine.Reshape(Tensor<T>.FromVector(target), new[] { n, 1 });
 
-        // First, fit a simple linear model
-        double yMean = 0;
-        for (int i = 0; i < n; i++)
-            yMean += NumOps.ToDouble(target[i]);
-        yMean /= n;
+        // First, fit a simple linear model per feature: slope = Sxy / Sxx (0 when Sxx is not above 1e-10)
+        var dx = engine.TensorSubtract(X, engine.ReduceMean(X, new[] { 0 }, true));
+        var dy = engine.TensorSubtract(y, engine.ReduceMean(y, new[] { 0 }, true));
+        var ssXY = engine.Reshape(engine.TensorMatMul(engine.TensorTranspose(dx), dy), new[] { p });
+        var ssXX = engine.ReduceSum(engine.TensorSquare(dx), new[] { 0 }, false);
+        var defined = engine.TensorGreaterThan(ssXX, NumOps.FromDouble(1e-10));
+        var safeSsXX = engine.TensorWhere(defined, ssXX, FeatureSelectionTensorOps.Filled(new[] { p }, NumOps.One));
+        var coefficients = engine.TensorWhere(defined, engine.TensorDivide(ssXY, safeSsXX), new Tensor<T>(new[] { p }));
 
-        var coefficients = new double[p];
-        for (int j = 0; j < p; j++)
-        {
-            double xMean = 0;
-            for (int i = 0; i < n; i++)
-                xMean += NumOps.ToDouble(data[i, j]);
-            xMean /= n;
-
-            double ssXY = 0, ssXX = 0;
-            for (int i = 0; i < n; i++)
-            {
-                double dx = NumOps.ToDouble(data[i, j]) - xMean;
-                double dy = NumOps.ToDouble(target[i]) - yMean;
-                ssXY += dx * dy;
-                ssXX += dx * dx;
-            }
-
-            if (ssXX > 1e-10)
-                coefficients[j] = ssXY / ssXX;
-        }
-
-        // Compute saliency as average absolute gradient
-        for (int j = 0; j < p; j++)
-        {
-            double totalSaliency = 0;
-            for (int i = 0; i < n; i++)
-            {
-                double x = NumOps.ToDouble(data[i, j]);
-                // Saliency = |dLoss/dInput| ≈ |coefficient * x * sign(residual)|
-                double pred = coefficients[j] * x;
-                double residual = NumOps.ToDouble(target[i]) - pred;
-                totalSaliency += Math.Abs(coefficients[j]) * Math.Abs(x);
-            }
-            _saliencyScores[j] = totalSaliency / n;
-        }
+        // Saliency as the average absolute gradient x input, |coefficient| * mean |x|
+        var meanAbs = engine.ReduceMean(engine.TensorAbs(X), new[] { 0 }, false);
+        var saliency = engine.TensorMultiply(engine.TensorAbs(coefficients), meanAbs);
+        _saliencyScores = saliency.ToVector();
 
         // Select top features by saliency
         int nToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = _saliencyScores
-            .Select((s, idx) => (Score: s, Index: idx))
-            .OrderByDescending(x => x.Score)
-            .Take(nToSelect)
-            .Select(x => x.Index)
-            .OrderBy(x => x)
-            .ToArray();
+        _selectedIndices = FeatureSelectionTensorOps.TopKIndicesSorted(saliency, nToSelect);
 
         IsFitted = true;
     }
 
     /// <inheritdoc />
+
     public Matrix<T> FitTransform(Matrix<T> data, Vector<T> target)
     {
         Fit(data, target);
@@ -140,15 +109,7 @@ public class SaliencySelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISu
         if (_selectedIndices is null)
             throw new InvalidOperationException("SaliencySelector has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return FeatureSelectionTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

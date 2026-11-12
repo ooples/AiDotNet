@@ -2,6 +2,7 @@ using AiDotNet.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Enums;
 using AiDotNet.Attributes;
+using AiDotNet.Preprocessing.FeatureSelection.Helpers;
 
 namespace AiDotNet.Preprocessing.FeatureSelection.MultiLabel;
 
@@ -30,13 +31,13 @@ public class MultiLabelMutualInformation<T> : TransformerBase<T, Matrix<T>, Matr
 
     public enum AggregationMethod { Sum, Average, Max, Min }
 
-    private double[]? _miScores;
+    private Vector<T>? _miScores;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
-    public double[]? MIScores => _miScores;
+    public Vector<T>? MIScores => _miScores;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -75,117 +76,47 @@ public class MultiLabelMutualInformation<T> : TransformerBase<T, Matrix<T>, Matr
         int n = data.Rows;
         int p = data.Columns;
         int nLabels = targets.Columns;
+        if (n == 0 && p > 0)
+            throw new InvalidOperationException("Sequence contains no elements");
+        if (nLabels == 0 && p > 0 && _aggregation != AggregationMethod.Sum)
+            throw new InvalidOperationException("Sequence contains no elements");
 
-        // Compute MI for each feature-label pair
-        var miMatrix = new double[p, nLabels];
+        var engine = Engine;
 
-        for (int j = 0; j < p; j++)
+        // Discretize features into nBins equal-width bins (numpy.histogram bins; a constant feature is one bin)
+        // and the labels into binary values (> 0.5)
+        var xDiscrete = FeatureSelectionInformationOps.EqualWidthBinsExactRange(Tensor<T>.FromMatrix(data), _nBins);
+        var yDiscrete = engine.TensorGreaterThan(Tensor<T>.FromMatrix(targets), NumOps.FromDouble(0.5)).Cast<int>();
+
+        // Compute MI (nats) for each feature-label pair, as [p, nLabels]
+        var miScores = new Tensor<T>(new[] { p });
+        if (nLabels > 0 && p > 0)
         {
-            var xDiscrete = DiscretizeFeature(data, j, n);
-
+            var columns = new Tensor<T>[nLabels];
             for (int l = 0; l < nLabels; l++)
             {
-                var yDiscrete = DiscretizeLabel(targets, l, n);
-                miMatrix[j, l] = ComputeMI(xDiscrete, yDiscrete, n);
+                var label = engine.TensorSlice(yDiscrete, new[] { 0, l }, new[] { n, 1 });
+                columns[l] = engine.Reshape(FeatureSelectionInformationOps.MutualInformation(
+                    FeatureSelectionInformationOps.JointCounts<T>(xDiscrete, _nBins, label, 2), n), new[] { p, 1 });
             }
-        }
 
-        // Aggregate across labels
-        _miScores = new double[p];
-        for (int j = 0; j < p; j++)
-        {
-            var labelScores = new double[nLabels];
-            for (int l = 0; l < nLabels; l++)
-                labelScores[l] = miMatrix[j, l];
-
-            _miScores[j] = _aggregation switch
+            // Aggregate across labels
+            var miMatrix = engine.TensorConcatenate(columns, 1);
+            miScores = _aggregation switch
             {
-                AggregationMethod.Sum => labelScores.Sum(),
-                AggregationMethod.Average => labelScores.Average(),
-                AggregationMethod.Max => labelScores.Max(),
-                AggregationMethod.Min => labelScores.Min(),
-                _ => labelScores.Sum()
+                AggregationMethod.Average => engine.ReduceMean(miMatrix, new[] { 1 }, false),
+                AggregationMethod.Max => FeatureSelectionTensorOps.ColumnMax(engine.TensorTranspose(miMatrix)),
+                AggregationMethod.Min => FeatureSelectionTensorOps.ColumnMin(engine.TensorTranspose(miMatrix)),
+                _ => engine.ReduceSum(miMatrix, new[] { 1 }, false)
             };
         }
 
+        _miScores = miScores.ToVector();
+
         int nToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = _miScores
-            .Select((mi, idx) => (MI: mi, Index: idx))
-            .OrderByDescending(x => x.MI)
-            .Take(nToSelect)
-            .Select(x => x.Index)
-            .OrderBy(x => x)
-            .ToArray();
+        _selectedIndices = FeatureSelectionTensorOps.TopKIndicesSorted(miScores, nToSelect);
 
         IsFitted = true;
-    }
-
-    private int[] DiscretizeFeature(Matrix<T> data, int j, int n)
-    {
-        var values = new double[n];
-        for (int i = 0; i < n; i++)
-            values[i] = NumOps.ToDouble(data[i, j]);
-
-        double min = values.Min();
-        double max = values.Max();
-        double range = max - min;
-        if (range < 1e-10) range = 1;
-
-        var result = new int[n];
-        for (int i = 0; i < n; i++)
-        {
-            int bin = (int)((values[i] - min) / range * (_nBins - 1));
-            result[i] = Math.Max(0, Math.Min(bin, _nBins - 1));
-        }
-
-        return result;
-    }
-
-    private int[] DiscretizeLabel(Matrix<T> targets, int l, int n)
-    {
-        var values = new double[n];
-        for (int i = 0; i < n; i++)
-            values[i] = NumOps.ToDouble(targets[i, l]);
-
-        // Binary labels
-        var result = new int[n];
-        for (int i = 0; i < n; i++)
-            result[i] = values[i] > 0.5 ? 1 : 0;
-
-        return result;
-    }
-
-    private double ComputeMI(int[] x, int[] y, int n)
-    {
-        var jointCounts = new Dictionary<(int, int), int>();
-        var xCounts = new Dictionary<int, int>();
-        var yCounts = new Dictionary<int, int>();
-
-        for (int i = 0; i < n; i++)
-        {
-            var key = (x[i], y[i]);
-            if (!jointCounts.ContainsKey(key)) jointCounts[key] = 0;
-            jointCounts[key]++;
-
-            if (!xCounts.ContainsKey(x[i])) xCounts[x[i]] = 0;
-            xCounts[x[i]]++;
-
-            if (!yCounts.ContainsKey(y[i])) yCounts[y[i]] = 0;
-            yCounts[y[i]]++;
-        }
-
-        double mi = 0;
-        foreach (var kvp in jointCounts)
-        {
-            double pxy = (double)kvp.Value / n;
-            double px = (double)xCounts[kvp.Key.Item1] / n;
-            double py = (double)yCounts[kvp.Key.Item2] / n;
-
-            if (pxy > 0 && px > 0 && py > 0)
-                mi += pxy * Math.Log(pxy / (px * py));
-        }
-
-        return mi;
     }
 
     public Matrix<T> FitTransform(Matrix<T> data, Matrix<T> targets)
@@ -200,15 +131,7 @@ public class MultiLabelMutualInformation<T> : TransformerBase<T, Matrix<T>, Matr
         if (_selectedIndices is null)
             throw new InvalidOperationException("MultiLabelMutualInformation has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return FeatureSelectionTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

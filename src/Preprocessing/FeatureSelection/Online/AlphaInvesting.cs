@@ -2,6 +2,7 @@ using AiDotNet.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Enums;
 using AiDotNet.Attributes;
+using AiDotNet.Preprocessing.FeatureSelection.Helpers;
 
 namespace AiDotNet.Preprocessing.FeatureSelection.Online;
 
@@ -30,8 +31,8 @@ public class AlphaInvesting<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupe
     private readonly double _omega; // Wealth earned when rejecting null
     private readonly double _eta; // Fraction of wealth to invest per test
 
-    private double[]? _pValues;
-    private double[]? _testAlphas;
+    private Vector<T>? _pValues;
+    private Vector<T>? _testAlphas;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
@@ -40,8 +41,8 @@ public class AlphaInvesting<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupe
     public double InitialWealth => _initialWealth;
     public double Omega => _omega;
     public double Eta => _eta;
-    public double[]? PValues => _pValues;
-    public double[]? TestAlphas => _testAlphas;
+    public Vector<T>? PValues => _pValues;
+    public Vector<T>? TestAlphas => _testAlphas;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -87,107 +88,85 @@ public class AlphaInvesting<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupe
         int n = data.Rows;
         int p = data.Columns;
 
-        _pValues = new double[p];
-        _testAlphas = new double[p];
-
+        var engine = Engine;
         var selected = new List<int>();
-        double wealth = _initialWealth;
 
         // Compute p-values for all features
-        for (int j = 0; j < p; j++)
-            _pValues[j] = ComputePValue(data, target, j, n);
+        var pValues = ComputePValue(data, target, n);
+        _pValues = pValues.ToVector();
 
-        // Order features by p-value for more efficient testing
-        var orderedFeatures = _pValues
-            .Select((pval, idx) => (PValue: pval, Index: idx))
-            .OrderBy(x => x.PValue)
-            .ToList();
+        // Order features by p-value for more efficient testing (ties by index)
+        var orderedFeatures = FeatureSelectionTensorOps.StableOrder(pValues, descending: false);
 
-        // Alpha-investing procedure
-        for (int t = 0; t < orderedFeatures.Count; t++)
+        // Alpha-investing procedure (Foster & Stine 2008): each test spends alpha / (1 - alpha) of the wealth
+        // when it fails and earns omega when it rejects; alpha = eta * w / (1 + eta * w) invests a fraction eta
+        // of the current wealth w.
+        var wealth = FeatureSelectionTensorOps.Filled(new[] { 1 }, NumOps.FromDouble(_initialWealth));
+        T eta = NumOps.FromDouble(_eta);
+        T omega = NumOps.FromDouble(_omega);
+        var one = FeatureSelectionTensorOps.Filled(new[] { 1 }, NumOps.One);
+        var testAlphas = new Tensor<T>(new[] { p });
+
+        foreach (int featureIdx in orderedFeatures)
         {
             if (selected.Count >= _nFeaturesToSelect)
                 break;
 
-            if (wealth <= 0)
+            if (FeatureSelectionTensorOps.CountNonZero(engine.TensorGreaterThan(wealth, NumOps.Zero)) == 0)
                 break;
 
-            var (pValue, featureIdx) = orderedFeatures[t];
-
             // Compute alpha for this test
-            double alpha = _eta * wealth / (1 + _eta * wealth);
-            _testAlphas[featureIdx] = alpha;
+            var investment = engine.TensorMultiplyScalar(wealth, eta);
+            var alpha = engine.TensorDivide(investment, engine.TensorAdd(one, investment));
+            testAlphas = engine.TensorAdd(testAlphas, engine.TensorMultiply(
+                FeatureSelectionTensorOps.OneHot<T>(featureIdx, p), engine.TensorBroadcastTo(alpha, new[] { p })));
 
-            // Invest
-            wealth -= alpha / (1 - alpha);
-
-            // Test
-            if (pValue <= alpha)
+            // Test: reject the null hypothesis (the feature is significant) when p <= alpha
+            var pValue = engine.TensorSlice(pValues, new[] { featureIdx }, new[] { 1 });
+            bool rejected = FeatureSelectionTensorOps.CountNonZero(engine.TensorLessThan(pValue, alpha))
+                + FeatureSelectionTensorOps.CountNonZero(engine.TensorEquals(pValue, alpha)) > 0;
+            if (rejected)
             {
-                // Reject null hypothesis - feature is significant
                 selected.Add(featureIdx);
 
                 // Gain wealth from discovery
-                wealth += _omega;
+                wealth = engine.TensorAddScalar(wealth, omega);
+            }
+            else
+            {
+                // Pay for the failed test
+                wealth = engine.TensorSubtract(wealth, engine.TensorDivide(alpha, engine.TensorSubtract(one, alpha)));
             }
         }
 
+        _testAlphas = testAlphas.ToVector();
         _selectedIndices = selected.OrderBy(x => x).ToArray();
 
         // If not enough selected, add top features by p-value
         if (_selectedIndices.Length < _nFeaturesToSelect)
         {
             var additional = orderedFeatures
-                .Where(x => !selected.Contains(x.Index))
-                .Take(_nFeaturesToSelect - _selectedIndices.Length)
-                .Select(x => x.Index);
-
+                .Where(x => !selected.Contains(x))
+                .Take(_nFeaturesToSelect - _selectedIndices.Length);
             _selectedIndices = selected.Concat(additional).OrderBy(x => x).ToArray();
         }
 
         IsFitted = true;
     }
 
-    private double ComputePValue(Matrix<T> data, Vector<T> target, int featureIdx, int n)
+    /// <summary>
+    /// Two-sided p-value of every feature's Pearson correlation with the target (the t-test on n - 2 degrees of
+    /// freedom, as scipy.stats.pearsonr); a feature or target without variance has r = 0 and p = 1.
+    /// </summary>
+    private Tensor<T> ComputePValue(Matrix<T> data, Vector<T> target, int n)
     {
-        // Compute correlation and convert to t-statistic
-        double xMean = 0, yMean = 0;
-        for (int i = 0; i < n; i++)
-        {
-            xMean += NumOps.ToDouble(data[i, featureIdx]);
-            yMean += NumOps.ToDouble(target[i]);
-        }
-        xMean /= n;
-        yMean /= n;
-
-        double sxy = 0, sxx = 0, syy = 0;
-        for (int i = 0; i < n; i++)
-        {
-            double xDiff = NumOps.ToDouble(data[i, featureIdx]) - xMean;
-            double yDiff = NumOps.ToDouble(target[i]) - yMean;
-            sxy += xDiff * yDiff;
-            sxx += xDiff * xDiff;
-            syy += yDiff * yDiff;
-        }
-
-        double r = (sxx > 1e-10 && syy > 1e-10) ? sxy / Math.Sqrt(sxx * syy) : 0;
-
-        // Convert to t-statistic
-        double t = r * Math.Sqrt((n - 2) / (1 - r * r + 1e-10));
-
-        // Two-tailed p-value using normal approximation
-        return 2 * (1 - NormalCDF(Math.Abs(t)));
-    }
-
-    private double NormalCDF(double x)
-    {
-        double t = 1.0 / (1.0 + 0.2316419 * Math.Abs(x));
-        double d = 0.3989423 * Math.Exp(-x * x / 2);
-        double p = d * t * (0.3193815 + t * (-0.3565638 + t * (1.781478 + t * (-1.821256 + t * 1.330274))));
-        return x > 0 ? 1 - p : p;
+        var r = FeatureSelectionInformationOps.AbsCorrelationWithTarget(
+            Tensor<T>.FromMatrix(data), Engine.Reshape(Tensor<T>.FromVector(target), new[] { n, 1 }), NumOps.Zero);
+        return FeatureSelectionInformationOps.CorrelationPValue(r, n - 2);
     }
 
     /// <inheritdoc />
+
     public Matrix<T> FitTransform(Matrix<T> data, Vector<T> target)
     {
         Fit(data, target);
@@ -200,15 +179,7 @@ public class AlphaInvesting<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupe
         if (_selectedIndices is null)
             throw new InvalidOperationException("AlphaInvesting has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return FeatureSelectionTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

@@ -2,6 +2,7 @@ using AiDotNet.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Enums;
 using AiDotNet.Attributes;
+using AiDotNet.Preprocessing.FeatureSelection.Helpers;
 
 namespace AiDotNet.Preprocessing.FeatureSelection.Hybrid;
 
@@ -29,8 +30,8 @@ public class FilterWrapper<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISuper
     private readonly int _filterRatio;
     private readonly bool _useForwardSelection;
 
-    private double[]? _filterScores;
-    private double[]? _wrapperScores;
+    private Vector<T>? _filterScores;
+    private Vector<T>? _wrapperScores;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
@@ -38,8 +39,8 @@ public class FilterWrapper<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISuper
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public int FilterRatio => _filterRatio;
     public bool UseForwardSelection => _useForwardSelection;
-    public double[]? FilterScores => _filterScores;
-    public double[]? WrapperScores => _wrapperScores;
+    public Vector<T>? FilterScores => _filterScores;
+    public Vector<T>? WrapperScores => _wrapperScores;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -79,179 +80,113 @@ public class FilterWrapper<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISuper
         int n = data.Rows;
         int p = data.Columns;
 
-        // Stage 1: Filter - use correlation to select top candidates
-        _filterScores = ComputeCorrelationScores(data, target);
+        var engine = Engine;
+        var y = engine.Reshape(Tensor<T>.FromVector(target), new[] { n, 1 });
 
+        // Stage 1: Filter - use correlation to select top candidates (highest first, ties by index)
+        var filterScores = FeatureSelectionInformationOps.AbsCorrelationWithTarget(Tensor<T>.FromMatrix(data), y, NumOps.Zero);
+        _filterScores = filterScores.ToVector();
         int numFilterSelect = Math.Min(_nFeaturesToSelect * _filterRatio, p);
-        var filterCandidates = _filterScores
-            .Select((s, idx) => (Score: s, Index: idx))
-            .OrderByDescending(x => x.Score)
-            .Take(numFilterSelect)
-            .Select(x => x.Index)
-            .ToList();
+        var filterCandidates = FeatureSelectionTensorOps.StableOrder(filterScores, descending: true)
+            .Take(Math.Max(numFilterSelect, 0))
+            .ToArray();
+
+        // The subset score is the mean filter score of its features (a proxy for R²), or 0 for a constant target
+        var centeredY = engine.TensorSubtract(y, engine.ReduceMean(y, new[] { 0 }, true));
+        T ssTot = engine.TensorSum(engine.TensorSquare(centeredY));
+        int c = filterCandidates.Length;
+        var candidateIndex = new Tensor<int>((int[])filterCandidates.Clone(), new[] { c });
+        var contribution = NumOps.LessThan(ssTot, NumOps.FromDouble(1e-10))
+            ? new Tensor<T>(new[] { c })
+            : engine.TensorIndexSelect(filterScores, candidateIndex, 0);
 
         // Stage 2: Wrapper - apply sequential selection on filtered candidates
-        _wrapperScores = new double[p];
-        HashSet<int> selectedSet;
+        Tensor<T> positionScores;
+        List<int> selectedPositions = _useForwardSelection
+            ? ForwardSelection(contribution, out positionScores)
+            : BackwardElimination(contribution, engine.TensorIndexSelect(filterScores, candidateIndex, 0), out positionScores);
 
-        if (_useForwardSelection)
-        {
-            selectedSet = ForwardSelection(data, target, filterCandidates);
-        }
-        else
-        {
-            selectedSet = BackwardElimination(data, target, filterCandidates);
-        }
-
-        _selectedIndices = selectedSet.OrderBy(x => x).ToArray();
+        var placement = engine.TensorOneHot<T>(candidateIndex, p); // [c, p]
+        _wrapperScores = c == 0
+            ? new Vector<T>(p)
+            : engine.Reshape(engine.TensorMatMul(engine.Reshape(positionScores, new[] { 1, c }), placement), new[] { p }).ToVector();
+        _selectedIndices = selectedPositions.Select(position => filterCandidates[position]).OrderBy(x => x).ToArray();
 
         IsFitted = true;
     }
 
-    private double[] ComputeCorrelationScores(Matrix<T> data, Vector<T> target)
+    /// <summary>
+    /// Forward selection over the candidate positions: each step adds the candidate that most raises the mean
+    /// contribution of the subset and stops when none raises it; ties go to the earlier candidate.
+    /// </summary>
+    private List<int> ForwardSelection(Tensor<T> contribution, out Tensor<T> positionScores)
     {
-        int n = data.Rows;
-        int p = data.Columns;
-        var scores = new double[p];
+        var engine = Engine;
+        int c = contribution.Length;
+        var selected = new List<int>();
+        positionScores = new Tensor<T>(new[] { c });
+        if (c == 0)
+            return selected;
 
-        double yMean = 0;
-        for (int i = 0; i < n; i++)
-            yMean += NumOps.ToDouble(target[i]);
-        yMean /= n;
+        var available = FeatureSelectionTensorOps.Filled(new[] { c }, NumOps.One);
+        var selectedSum = new Tensor<T>(new[] { c });
+        var currentScore = new Tensor<T>(new[] { c });
 
-        for (int j = 0; j < p; j++)
+        while (selected.Count < _nFeaturesToSelect && selected.Count < c)
         {
-            double xMean = 0;
-            for (int i = 0; i < n; i++)
-                xMean += NumOps.ToDouble(data[i, j]);
-            xMean /= n;
-
-            double sxy = 0, sxx = 0, syy = 0;
-            for (int i = 0; i < n; i++)
-            {
-                double xDiff = NumOps.ToDouble(data[i, j]) - xMean;
-                double yDiff = NumOps.ToDouble(target[i]) - yMean;
-                sxy += xDiff * yDiff;
-                sxx += xDiff * xDiff;
-                syy += yDiff * yDiff;
-            }
-
-            scores[j] = (sxx > 1e-10 && syy > 1e-10) ? Math.Abs(sxy / Math.Sqrt(sxx * syy)) : 0;
-        }
-
-        return scores;
-    }
-
-    private HashSet<int> ForwardSelection(Matrix<T> data, Vector<T> target, List<int> candidates)
-    {
-        var selected = new HashSet<int>();
-        var available = new HashSet<int>(candidates);
-        double currentScore = 0;
-
-        while (selected.Count < _nFeaturesToSelect && available.Count > 0)
-        {
-            int bestFeature = -1;
-            double bestScore = currentScore;
-
-            foreach (int j in available)
-            {
-                selected.Add(j);
-                double score = EvaluateSubset(data, target, selected);
-                selected.Remove(j);
-
-                if (score > bestScore)
-                {
-                    bestScore = score;
-                    bestFeature = j;
-                }
-            }
-
-            if (bestFeature >= 0)
-            {
-                selected.Add(bestFeature);
-                available.Remove(bestFeature);
-                currentScore = bestScore;
-                (_wrapperScores ?? throw new InvalidOperationException("Wrapper scores not computed."))[bestFeature] = bestScore;
-            }
-            else
-            {
+            var scores = engine.TensorDivideScalar(
+                engine.TensorAdd(selectedSum, contribution), FeatureSelectionTensorOps.Count<T>(selected.Count + 1));
+            var improves = engine.TensorMultiply(available, engine.TensorGreaterThan(scores, currentScore));
+            var best = FeatureSelectionTensorOps.TopKWhere(scores, improves, 1);
+            if (best.Length == 0)
                 break;
-            }
+
+            int position = best[0];
+            var chosen = FeatureSelectionTensorOps.OneHot<T>(position, c);
+            selected.Add(position);
+            available = engine.TensorMultiply(available, FeatureSelectionTensorOps.OneMinus(chosen));
+            var bestScore = engine.TensorBroadcastTo(engine.TensorSlice(scores, new[] { position }, new[] { 1 }), new[] { c });
+            positionScores = engine.TensorAdd(positionScores, engine.TensorMultiply(chosen, bestScore));
+            currentScore = bestScore;
+            selectedSum = engine.TensorBroadcastTo(engine.TensorSlice(
+                engine.TensorAdd(selectedSum, contribution), new[] { position }, new[] { 1 }), new[] { c });
         }
 
         return selected;
     }
 
-    private HashSet<int> BackwardElimination(Matrix<T> data, Vector<T> target, List<int> candidates)
+    /// <summary>
+    /// Backward elimination over the candidate positions: while more than the target count remain, drop the
+    /// candidate whose removal leaves the highest mean contribution (ties drop the earlier candidate). The kept
+    /// candidates are scored with their filter scores.
+    /// </summary>
+    private List<int> BackwardElimination(Tensor<T> contribution, Tensor<T> candidateFilterScores, out Tensor<T> positionScores)
     {
-        var selected = new HashSet<int>(candidates);
-        double currentScore = EvaluateSubset(data, target, selected);
+        var engine = Engine;
+        int c = contribution.Length;
+        var kept = FeatureSelectionTensorOps.Filled(new[] { c }, NumOps.One);
+        int count = c;
 
-        while (selected.Count > _nFeaturesToSelect)
+        while (count > _nFeaturesToSelect)
         {
-            int worstFeature = -1;
-            double bestScoreAfterRemoval = double.MinValue;
-
-            foreach (int j in selected)
-            {
-                selected.Remove(j);
-                double score = EvaluateSubset(data, target, selected);
-                selected.Add(j);
-
-                if (score > bestScoreAfterRemoval)
-                {
-                    bestScoreAfterRemoval = score;
-                    worstFeature = j;
-                }
-            }
-
-            if (worstFeature >= 0)
-            {
-                selected.Remove(worstFeature);
-                currentScore = bestScoreAfterRemoval;
-            }
-            else
-            {
+            // Mean contribution of the subset without each candidate: (sum - contribution) / (count - 1)
+            var total = engine.TensorBroadcastTo(
+                engine.Reshape(engine.ReduceSum(engine.TensorMultiply(kept, contribution), new[] { 0 }, true), new[] { 1 }), new[] { c });
+            var scores = engine.TensorDivideScalar(engine.TensorSubtract(total, contribution), FeatureSelectionTensorOps.Count<T>(count - 1));
+            var worst = FeatureSelectionTensorOps.TopKWhere(scores, kept, 1);
+            if (worst.Length == 0)
                 break;
-            }
+
+            kept = engine.TensorMultiply(kept, FeatureSelectionTensorOps.OneMinus(FeatureSelectionTensorOps.OneHot<T>(worst[0], c)));
+            count--;
         }
 
-        foreach (int j in selected)
-            (_wrapperScores ?? throw new InvalidOperationException("Wrapper scores not computed."))[j] = (_filterScores ?? throw new InvalidOperationException("Filter scores not computed."))[j];
-
-        return selected;
-    }
-
-    private double EvaluateSubset(Matrix<T> data, Vector<T> target, HashSet<int> subset)
-    {
-        if (subset.Count == 0) return 0;
-
-        // Simple R² approximation using selected features
-        int n = data.Rows;
-
-        double yMean = 0;
-        for (int i = 0; i < n; i++)
-            yMean += NumOps.ToDouble(target[i]);
-        yMean /= n;
-
-        double ssTot = 0;
-        for (int i = 0; i < n; i++)
-        {
-            double diff = NumOps.ToDouble(target[i]) - yMean;
-            ssTot += diff * diff;
-        }
-
-        if (ssTot < 1e-10) return 0;
-
-        // Use sum of correlations as proxy for R²
-        double score = 0;
-        foreach (int j in subset)
-            score += (_filterScores ?? throw new InvalidOperationException("Filter scores not computed."))[j];
-
-        return score / subset.Count;
+        positionScores = engine.TensorMultiply(kept, candidateFilterScores);
+        return FeatureSelectionTensorOps.MaskPositions(kept).ToList();
     }
 
     /// <inheritdoc />
+
     public Matrix<T> FitTransform(Matrix<T> data, Vector<T> target)
     {
         Fit(data, target);
@@ -264,15 +199,7 @@ public class FilterWrapper<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISuper
         if (_selectedIndices is null)
             throw new InvalidOperationException("FilterWrapper has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return FeatureSelectionTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />
