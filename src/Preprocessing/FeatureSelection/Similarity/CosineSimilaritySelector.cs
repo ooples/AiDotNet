@@ -24,13 +24,13 @@ public class CosineSimilaritySelector<T> : TransformerBase<T, Matrix<T>, Matrix<
 {
     private readonly int _nFeaturesToSelect;
 
-    private double[]? _cosineSimilarities;
+    private Vector<T>? _cosineSimilarities;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
-    public double[]? CosineSimilarities => _cosineSimilarities;
+    public Vector<T>? CosineSimilarities => _cosineSimilarities;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -64,46 +64,23 @@ public class CosineSimilaritySelector<T> : TransformerBase<T, Matrix<T>, Matrix<
         int n = data.Rows;
         int p = data.Columns;
 
-        var X = new double[n, p];
-        var y = new double[n];
-        for (int i = 0; i < n; i++)
-        {
-            y[i] = NumOps.ToDouble(target[i]);
-            for (int j = 0; j < p; j++)
-                X[i, j] = NumOps.ToDouble(data[i, j]);
-        }
+        var engine = Engine;
+        var x = Tensor<T>.FromMatrix(data);
+        var y = engine.Reshape(Tensor<T>.FromVector(target), new[] { n, 1 });
+        T epsilon = NumOps.FromDouble(1e-10);
 
-        // Compute norm of y
-        double yNorm = 0;
-        for (int i = 0; i < n; i++)
-            yNorm += y[i] * y[i];
-        yNorm = Math.Sqrt(yNorm);
+        // |x . y| / (||x|| ||y||), 0 where either norm is not above 1e-10
+        T yNorm = NumOps.Sqrt(engine.TensorSum(engine.TensorMultiply(y, y)));
+        var xNorm = engine.TensorSqrt(SelectorTensorOps.ColumnSumOfSquares(x));
+        var dot = engine.ReduceSum(engine.TensorMultiply(x, engine.TensorBroadcastTo(y, new[] { n, p })), new[] { 0 }, false);
+        var cosine = engine.TensorAbs(engine.TensorDivide(dot, engine.TensorMultiplyScalar(xNorm, yNorm)));
+        var valid = NumOps.GreaterThan(yNorm, epsilon)
+            ? engine.TensorGreaterThan(xNorm, epsilon)
+            : PreprocessingTensorOps.Filled(new[] { p }, NumOps.Zero);
+        var scores = SelectorTensorOps.ZeroUnless(valid, cosine);
+        _cosineSimilarities = scores.ToVector();
 
-        _cosineSimilarities = new double[p];
-
-        for (int j = 0; j < p; j++)
-        {
-            double dotProduct = 0;
-            double xNorm = 0;
-
-            for (int i = 0; i < n; i++)
-            {
-                dotProduct += X[i, j] * y[i];
-                xNorm += X[i, j] * X[i, j];
-            }
-
-            xNorm = Math.Sqrt(xNorm);
-            _cosineSimilarities[j] = (xNorm > 1e-10 && yNorm > 1e-10)
-                ? Math.Abs(dotProduct / (xNorm * yNorm))
-                : 0;
-        }
-
-        int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = Enumerable.Range(0, p)
-            .OrderByDescending(j => _cosineSimilarities[j])
-            .Take(numToSelect)
-            .OrderBy(x => x)
-            .ToArray();
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(scores, Math.Min(_nFeaturesToSelect, p));
 
         IsFitted = true;
     }
@@ -121,15 +98,7 @@ public class CosineSimilaritySelector<T> : TransformerBase<T, Matrix<T>, Matrix<
         if (_selectedIndices is null)
             throw new InvalidOperationException("CosineSimilaritySelector has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />
