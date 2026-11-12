@@ -180,10 +180,8 @@ public class OrderMCMCAlgorithm<T> : BayesianCausalBase<T>
                 continue;
 
             var weights = ComputeMultivariateOLSWeights(cov, parents, target);
-            // BIC already decided these parents improve the model — preserve
-            // the edge even when OLS gives a near-zero weight by using a
-            // minimum weight, preventing coefficient estimation from erasing
-            // structurally selected parents.
+            // BIC selected these parents; an edge is kept only when its OLS weight magnitude
+            // exceeds MinEdgeWeight.
             // NaN/Infinity coefficients are skipped (no meaningful causal effect), and
             // coefficients at or below MinEdgeWeight leave the edge as zero.
             var finiteWeights = Engine.TensorWhere(Engine.TensorIsFinite(weights), weights, Engine.TensorZerosLike(weights));
@@ -222,14 +220,13 @@ public class OrderMCMCAlgorithm<T> : BayesianCausalBase<T>
         // Add small regularization to diagonal for numerical stability
         covPP = Engine.TensorAdd(covPP, Engine.TensorMultiplyScalar(Engine.TensorEye<T>(k), eps));
 
-        // Gaussian elimination with partial pivoting: singular or near-singular (a pivot below
-        // PivotTolerance) returns zeros.
-        var (_, _, u) = LinalgDispatch<T>.LU(covPP);
-        var smallPivots = Engine.TensorLessThan(Engine.TensorAbs(Engine.TensorDiagonal(u)), NumOps.FromDouble(PivotTolerance));
+        // Gaussian elimination with partial pivoting, factorized once: singular or near-singular (a pivot
+        // below PivotTolerance) returns zeros, otherwise the same factors solve the system.
+        var (lu, pivots) = LinalgDispatch<T>.LuFactor(covPP);
+        var smallPivots = Engine.TensorLessThan(Engine.TensorAbs(Engine.TensorDiagonal(lu)), NumOps.FromDouble(PivotTolerance));
         if (Engine.TensorCountNonzero(smallPivots) > 0)
             return new Tensor<T>(new[] { k });
 
-        var (solution, _) = LinalgDispatch<T>.SolveEx(covPP, covPT);
-        return solution.Reshape(new[] { k });
+        return LinalgDispatch<T>.LuSolve(lu, pivots, covPT).Reshape(new[] { k });
     }
 }
