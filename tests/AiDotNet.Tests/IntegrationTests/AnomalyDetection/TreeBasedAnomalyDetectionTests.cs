@@ -140,6 +140,41 @@ public class TreeBasedAnomalyDetectionTests
         AssertPredictClassifiesCorrectly(predictions, OutlierIndex);
     }
 
+    [Fact(Timeout = 120000)]
+    public async Task SCiForest_SdGainSplitSeparatesTheTightestGroups()
+    {
+        // Liu et al. (2010) Eq. 3 on 0, .1, .2, 10: sigma(Y) = sqrt(73.5275 / 4); the split after .2 leaves
+        // sigma(Y_l) = sqrt(.02 / 3), sigma(Y_r) = 0 and beats every other split; p is midway, 5.1.
+        var values = new AiDotNet.Tensors.LinearAlgebra.Tensor<double>(new[] { 10.0, 0.1, 0.0, 0.2 }, new[] { 4 });
+        var (gain, split) = SCiForest<double>.BestSdGainSplit(values);
+
+        double sigma = Math.Sqrt(73.5275 / 4);
+        Assert.Equal((sigma - Math.Sqrt(0.02 / 3) / 2) / sigma, gain, 1e-12);
+        Assert.Equal(5.1, split, 1e-12);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task SCiForest_PathLengthsFollowAlgorithmsOneAndTwo()
+    {
+        // Data 0, 1, 10 with psi = 3: every tree uses all three rows, and whatever the random coefficient the
+        // root's best Sdgain split is {0, 1} | {10} (avg sigma .25 against 2.25 for {0} | {1, 10}). {0, 1} is a
+        // leaf of size 2 (c = 1) and {10} a leaf of size 1 (c = 0), so h = 2, 2, 1 and s = 2^(-h / c(3)) with
+        // c(3) = 2 (ln 2 + 0.5772156649) - 4 / 3. A query at 1000 leaves the root's acceptable range [-v, v]
+        // (v = 10 |w|), so its edge is not counted and it lands in the size-1 leaf: h = 0, s = 1.
+        var data = new Matrix<double>(new double[,] { { 0 }, { 1 }, { 10 } });
+        var detector = new SCiForest<double>(numTrees: 5);
+        detector.Fit(data);
+        var scores = detector.ScoreAnomalies(data);
+
+        double c3 = 2 * (Math.Log(2) + 0.5772156649) - 4.0 / 3.0;
+        Assert.Equal(Math.Pow(2, -2 / c3), scores[0], 1e-12);
+        Assert.Equal(Math.Pow(2, -2 / c3), scores[1], 1e-12);
+        Assert.Equal(Math.Pow(2, -1 / c3), scores[2], 1e-12);
+
+        var far = detector.ScoreAnomalies(new Matrix<double>(new double[,] { { 1000 } }));
+        Assert.Equal(1.0, far[0], 1e-12);
+    }
+
     #endregion
 
     #region FairCutForest Tests
