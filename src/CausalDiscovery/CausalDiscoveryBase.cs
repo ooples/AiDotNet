@@ -199,9 +199,7 @@ public abstract class CausalDiscoveryBase<T> : ICausalDiscoveryAlgorithm<T>
         var gram = Engine.TensorMatMul(Engine.TensorTranspose(centered), centered);
 
         // Mirror the upper triangle so the result is exactly symmetric.
-        var upper = Engine.TensorTriu(gram, 0);
-        var symmetric = Engine.TensorAdd(upper, Engine.TensorTranspose(Engine.TensorTriu(gram, 1)));
-        return Engine.TensorMultiplyScalar(symmetric, nInv).ToMatrix();
+        return Engine.TensorMultiplyScalar(CausalTensorHelpers.Symmetrize(gram), nInv).ToMatrix();
     }
 
     /// <summary>
@@ -315,26 +313,9 @@ public abstract class CausalDiscoveryBase<T> : ICausalDiscoveryAlgorithm<T>
     protected double ComputeResidualVariance(Matrix<T> data, int target, int[] predictors)
     {
         int n = data.Rows;
-        int dim = predictors.Length + 1; // +1 for intercept
 
-        // Design matrix [1 | data[:, predictors]] and target column.
-        var source = Tensor<T>.FromMatrix(data);
-        var y = SelectColumns(source, new[] { target });
-        var predictorColumns = SelectColumns(source, predictors);
-        var X = Engine.TensorConcatenate(
-            new[] { Engine.TensorOnesLike(y), predictorColumns }, 1);
-        var Xt = Engine.TensorTranspose(X);
-
-        // Normal equations with ridge regularization: (XtX + ridge*I) * beta = Xty
-        var XtX = Engine.TensorAdd(Engine.TensorMatMul(Xt, X),
-            Engine.TensorMultiplyScalar(Engine.TensorEye<T>(dim), NumOps.FromDouble(1e-4)));
-        var Xty = Engine.TensorMatMul(Xt, y).Reshape(new[] { dim }).ToVector();
-
-        var beta = MatrixSolutionHelper.SolveLinearSystem<T>(XtX.ToMatrix(), Xty, MatrixDecompositionType.Lu);
-
-        // Residual variance
-        var prediction = Engine.TensorMatMul(X, Tensor<T>.FromVector(beta).Reshape(new[] { dim, 1 }));
-        var residual = Engine.TensorSubtract(y, prediction);
+        // Least squares on [1 | data[:, predictors]] with ridge 1e-4; residual variance rss / n.
+        var residual = CausalTensorHelpers.InterceptOlsResidual(Tensor<T>.FromMatrix(data), target, predictors, 1e-4);
         T rss = Engine.TensorSum(Engine.TensorSquare(residual));
         return NumOps.ToDouble(rss) / n;
     }
@@ -348,13 +329,13 @@ public abstract class CausalDiscoveryBase<T> : ICausalDiscoveryAlgorithm<T>
     private protected Matrix<T> ComputeAbsoluteCorrelationMatrix(Matrix<T> data)
     {
         var centered = CenterColumns(Tensor<T>.FromMatrix(data));
-        var gram = Engine.TensorMatMul(Engine.TensorTranspose(centered), centered);
-        gram = Engine.TensorAdd(Engine.TensorTriu(gram, 0), Engine.TensorTranspose(Engine.TensorTriu(gram, 1)));
+        var gram = CausalTensorHelpers.Symmetrize(Engine.TensorMatMul(Engine.TensorTranspose(centered), centered));
 
         var sumSquares = Engine.TensorDiagonal(gram);
         var valid = Engine.TensorGreaterThan(sumSquares, NumOps.FromDouble(1e-10));
         var validPair = Engine.TensorOuter(valid, valid);
-        var denom = Engine.TensorSqrt(Engine.TensorOuter(sumSquares, sumSquares));
+        var rootSumSquares = Engine.TensorSqrt(sumSquares);
+        var denom = Engine.TensorOuter(rootSumSquares, rootSumSquares);
         var safeDenom = Engine.TensorWhere(validPair, denom, Engine.TensorOnesLike(denom));
         var correlation = Engine.TensorAbs(Engine.TensorDivide(gram, safeDenom));
         return Engine.TensorWhere(validPair, correlation, Engine.TensorZerosLike(correlation)).ToMatrix();
@@ -364,7 +345,7 @@ public abstract class CausalDiscoveryBase<T> : ICausalDiscoveryAlgorithm<T>
     /// Gathers the given columns of an [n x d] tensor into an [n x k] tensor.
     /// </summary>
     private protected Tensor<T> SelectColumns(Tensor<T> source, int[] columns)
-        => Engine.TensorIndexSelect(source, new Tensor<int>((int[])columns.Clone(), new[] { columns.Length }), 1);
+        => CausalTensorHelpers.SelectColumns(source, columns);
 
     /// <summary>
     /// Gathers the rows and columns <paramref name="indices"/> of a matrix into a square submatrix.
@@ -657,7 +638,7 @@ public abstract class CausalDiscoveryBase<T> : ICausalDiscoveryAlgorithm<T>
 
         // Normal equations X'X β = X'y, symmetric with ridge on the diagonal.
         var gram = Engine.TensorMatMul(Engine.TensorTranspose(centeredX), centeredX);
-        gram = Engine.TensorAdd(Engine.TensorTriu(gram, 0), Engine.TensorTranspose(Engine.TensorTriu(gram, 1)));
+        gram = CausalTensorHelpers.Symmetrize(gram);
         gram = Engine.TensorAdd(gram, Engine.TensorMultiplyScalar(Engine.TensorEye<T>(p), NumOps.FromDouble(1e-10)));
         var xty = Engine.TensorMatMul(Engine.TensorTranspose(centeredX), centeredY).Reshape(new[] { p });
 
