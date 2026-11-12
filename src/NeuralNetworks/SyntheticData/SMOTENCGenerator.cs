@@ -52,7 +52,16 @@ public class SMOTENCGenerator<T> : SyntheticTabularGeneratorBase<T>
     private IReadOnlyList<ColumnMetadata>? _columns;
 
     // Median standard deviation of continuous features (used for SMOTE-NC distance metric)
-    private double _medianStdContinuous = 1.0;
+    private T _medianStdContinuous = NumOps.One;
+
+    // The minority samples as a tensor, and 1/0 masks of the continuous and categorical columns ([1, features]),
+    // for the distance computation.
+    private Tensor<T>? _minorityTensor;
+    private Tensor<T>? _continuousMask;
+    private Tensor<T>? _categoricalMask;
+
+    /// <summary>The median standard deviation of the continuous features fitted for the SMOTE-NC metric.</summary>
+    internal T MedianStdContinuous => _medianStdContinuous;
 
     private int _numFeatures;
 
@@ -75,29 +84,34 @@ public class SMOTENCGenerator<T> : SyntheticTabularGeneratorBase<T>
         int labelCol = _options.LabelColumnIndex;
         if (labelCol < 0 || labelCol >= _numFeatures) labelCol = _numFeatures - 1;
 
+        var engine = AiDotNetEngine.Current;
+        var rows = Tensor<T>.FromMatrix(data);
+        // Rows whose label rounds (half to even) to the minority class value.
+        var isMinority = engine.TensorEquals(
+            engine.TensorRound(engine.TensorSlice(rows, [0, labelCol], [data.Rows, 1])),
+            NumOps.FromDouble(_options.MinorityClassValue)).Cast<int>().ToArray();
         var minorityRows = new List<int>();
-        for (int i = 0; i < data.Rows; i++)
+        for (int i = 0; i < isMinority.Length; i++)
         {
-            int label = (int)Math.Round(NumOps.ToDouble(data[i, labelCol]));
-            if (label == _options.MinorityClassValue)
+            if (isMinority[i] != 0)
                 minorityRows.Add(i);
         }
 
         // If no minority samples found, use all data
-        if (minorityRows.Count == 0)
+        _minorityTensor = minorityRows.Count == 0
+            ? rows
+            : engine.TensorIndexSelect(rows, new Tensor<int>(minorityRows.ToArray(), [minorityRows.Count]), 0);
+        _minoritySamples = _minorityTensor.ToMatrix();
+
+        var continuous = new int[_numFeatures];
+        var categorical = new int[_numFeatures];
+        for (int j = 0; j < _numFeatures; j++)
         {
-            _minoritySamples = new Matrix<T>(data.Rows, _numFeatures);
-            for (int i = 0; i < data.Rows; i++)
-                for (int j = 0; j < _numFeatures; j++)
-                    _minoritySamples[i, j] = data[i, j];
+            if (_columns[j].IsCategorical) categorical[j] = 1;
+            else continuous[j] = 1;
         }
-        else
-        {
-            _minoritySamples = new Matrix<T>(minorityRows.Count, _numFeatures);
-            for (int i = 0; i < minorityRows.Count; i++)
-                for (int j = 0; j < _numFeatures; j++)
-                    _minoritySamples[i, j] = data[minorityRows[i], j];
-        }
+        _continuousMask = new Tensor<int>(continuous, [1, _numFeatures]).Cast<T>();
+        _categoricalMask = new Tensor<int>(categorical, [1, _numFeatures]).Cast<T>();
 
         // Compute median standard deviation of continuous features for SMOTE-NC distance metric.
         // Per Chawla et al., the categorical mismatch cost should be (medianStd)^2 per mismatch.
@@ -157,24 +171,28 @@ public class SMOTENCGenerator<T> : SyntheticTabularGeneratorBase<T>
         if (_minoritySamples is null || _columns is null) return Array.Empty<int>();
 
         int n = _minoritySamples.Rows;
-        var distances = new (double dist, int idx)[n - 1];
-        int count = 0;
+        var distances = DistancesFrom(sampleIndex);
 
+        // Order the other samples by distance, ties by index (a NaN distance sorts first, as double.CompareTo
+        // orders it). A sample's rank is the number of samples strictly closer.
+        var engine = AiDotNetEngine.Current;
+        var keys = engine.TensorNanToNum(distances, -1.0, double.PositiveInfinity, double.NegativeInfinity);
+        var sorted = engine.TensorSort(keys, 0, false).Values;
+        var ranks = engine.TensorSearchSorted(sorted, keys, right: false).ToArray();
+        var order = new long[n - 1];
+        var others = new int[n - 1];
+        int count = 0;
         for (int i = 0; i < n; i++)
         {
             if (i == sampleIndex) continue;
-            double dist = ComputeDistance(sampleIndex, i);
-            distances[count++] = (dist, i);
+            order[count] = (long)ranks[i] * n + i;
+            others[count++] = i;
         }
-
-        // Partial sort to find k smallest
-        Array.Sort(distances, 0, count, Comparer<(double dist, int idx)>.Create((a, b) => a.dist.CompareTo(b.dist)));
+        Array.Sort(order, others);
 
         int numNeighbors = Math.Min(k, count);
         var result = new int[numNeighbors];
-        for (int i = 0; i < numNeighbors; i++)
-            result[i] = distances[i].idx;
-
+        Array.Copy(others, result, numNeighbors);
         return result;
     }
 
@@ -184,73 +202,66 @@ public class SMOTENCGenerator<T> : SyntheticTabularGeneratorBase<T>
     /// </summary>
     private void ComputeMedianStdOfContinuousFeatures()
     {
-        if (_minoritySamples is null || _columns is null) return;
+        if (_minorityTensor is null || _columns is null) return;
 
-        int n = _minoritySamples.Rows;
-        var stds = new List<double>();
-
+        var continuousColumns = new List<int>();
         for (int j = 0; j < _numFeatures; j++)
         {
-            if (_columns[j].IsCategorical) continue;
-
-            double sum = 0;
-            for (int i = 0; i < n; i++)
-                sum += NumOps.ToDouble(_minoritySamples[i, j]);
-            double mean = sum / Math.Max(n, 1);
-
-            double sumSqDiff = 0;
-            for (int i = 0; i < n; i++)
-            {
-                double diff = NumOps.ToDouble(_minoritySamples[i, j]) - mean;
-                sumSqDiff += diff * diff;
-            }
-
-            double std = n > 1 ? Math.Sqrt(sumSqDiff / (n - 1)) : 1.0;
-            if (std < 1e-10) std = 1e-10;
-            stds.Add(std);
+            if (!_columns[j].IsCategorical) continuousColumns.Add(j);
         }
+        if (continuousColumns.Count == 0) return;
 
-        if (stds.Count > 0)
+        // Sample standard deviation (n - 1; 1 for a single row) of each continuous feature, floored at 1e-10.
+        var engine = AiDotNetEngine.Current;
+        int n = _minorityTensor.Shape[0];
+        int c = continuousColumns.Count;
+        var x = engine.TensorIndexSelect(_minorityTensor, new Tensor<int>(continuousColumns.ToArray(), [c]), 1);
+        Tensor<T> stds;
+        if (n > 1)
         {
-            stds.Sort();
-            _medianStdContinuous = stds[stds.Count / 2];
+            var mean = engine.ReduceMean(x, [0], keepDims: true);
+            var centered = engine.TensorSubtract(x, engine.TensorTile(mean, [n, 1]));
+            stds = engine.TensorSqrt(engine.TensorDivideScalar(
+                engine.ReduceSum(engine.TensorMultiply(centered, centered), [0], keepDims: false), NumOps.FromDouble(n - 1)));
         }
+        else
+        {
+            stds = new Tensor<T>([c]);
+            stds.Fill(NumOps.One);
+        }
+        var floor = new Tensor<T>([c]);
+        floor.Fill(NumOps.FromDouble(1e-10));
+        stds = engine.TensorWhere(engine.TensorGreaterThan(floor, stds), floor, stds);
+
+        // The median (Chawla et al. 2002, section 6.1): the middle value, or the mean of the two middle values
+        // when the count is even.
+        var sortedStds = engine.TensorSort(stds, 0, false).Values;
+        var middle = engine.TensorSlice(sortedStds, [(c - 1) / 2], [2 - c % 2]);
+        _medianStdContinuous = engine.TensorMean(middle);
     }
 
     /// <summary>
-    /// Computes the mixed-type distance between two samples using the SMOTE-NC formula.
-    /// For continuous features: squared difference (Euclidean component).
-    /// For categorical features: each mismatch contributes (medianStd)^2 to the squared distance.
+    /// SMOTE-NC distances (Chawla et al. 2002, section 6.1) from sample <paramref name="sampleIndex"/> to every
+    /// minority sample: squared differences over the continuous features plus (median std)^2 for each categorical
+    /// feature whose values differ by more than 0.5, square-rooted.
     /// </summary>
-    private double ComputeDistance(int idx1, int idx2)
+    private Tensor<T> DistancesFrom(int sampleIndex)
     {
-        if (_minoritySamples is null || _columns is null) return double.MaxValue;
+        if (_minorityTensor is null || _continuousMask is null || _categoricalMask is null)
+            throw new InvalidOperationException("Generator is not fitted.");
 
-        double sumSq = 0;
-        double catPenaltySq = _medianStdContinuous * _medianStdContinuous;
-
-        for (int j = 0; j < _numFeatures; j++)
-        {
-            if (_columns[j].IsCategorical)
-            {
-                double v1 = NumOps.ToDouble(_minoritySamples[idx1, j]);
-                double v2 = NumOps.ToDouble(_minoritySamples[idx2, j]);
-                if (Math.Abs(v1 - v2) > 0.5)
-                {
-                    // Per SMOTE-NC: categorical mismatch contributes (medianStd)^2
-                    sumSq += catPenaltySq;
-                }
-            }
-            else
-            {
-                double v1 = NumOps.ToDouble(_minoritySamples[idx1, j]);
-                double v2 = NumOps.ToDouble(_minoritySamples[idx2, j]);
-                double diff = v1 - v2;
-                sumSq += diff * diff;
-            }
-        }
-
-        return Math.Sqrt(sumSq);
+        var engine = AiDotNetEngine.Current;
+        int n = _minorityTensor.Shape[0];
+        var sample = engine.TensorSlice(_minorityTensor, [sampleIndex, 0], [1, _numFeatures]);
+        var diff = engine.TensorSubtract(_minorityTensor, engine.TensorTile(sample, [n, 1]));
+        var continuousTerm = engine.TensorMultiply(engine.TensorMultiply(diff, diff),
+            engine.TensorTile(_continuousMask, [n, 1]));
+        var mismatch = engine.TensorMultiply(engine.TensorGreaterThan(engine.TensorAbs(diff), NumOps.FromDouble(0.5)),
+            engine.TensorTile(_categoricalMask, [n, 1]));
+        var penalty = NumOps.Multiply(_medianStdContinuous, _medianStdContinuous);
+        var sumSq = engine.ReduceSum(engine.TensorAdd(continuousTerm, engine.TensorMultiplyScalar(mismatch, penalty)),
+            [1], keepDims: false);
+        return engine.TensorSqrt(sumSq);
     }
 
     /// <summary>
@@ -258,31 +269,18 @@ public class SMOTENCGenerator<T> : SyntheticTabularGeneratorBase<T>
     /// </summary>
     private T MajorityVoteAmongNeighbors(int featureIndex, int[] neighbors)
     {
-        if (_minoritySamples is null) return NumOps.Zero;
+        if (_minorityTensor is null || neighbors.Length == 0) return NumOps.Zero;
 
-        var counts = new Dictionary<double, int>();
-        foreach (int idx in neighbors)
-        {
-            double val = NumOps.ToDouble(_minoritySamples[idx, featureIndex]);
-            double key = Math.Round(val);
-            if (counts.ContainsKey(key))
-                counts[key]++;
-            else
-                counts[key] = 1;
-        }
-
-        // Find the most common value
-        double bestVal = 0;
-        int bestCount = -1;
-        foreach (var kvp in counts)
-        {
-            if (kvp.Value > bestCount)
-            {
-                bestCount = kvp.Value;
-                bestVal = kvp.Key;
-            }
-        }
-
-        return NumOps.FromDouble(bestVal);
+        // The most common rounded value; on a tie, the one met first in neighbor order.
+        var engine = AiDotNetEngine.Current;
+        int k = neighbors.Length;
+        var values = engine.TensorRound(engine.TensorGather(
+            engine.TensorSlice(_minorityTensor, [0, featureIndex], [_minorityTensor.Shape[0], 1]).Reshape([_minorityTensor.Shape[0]]),
+            new Tensor<int>(neighbors, [k]), 0));
+        var same = engine.TensorEquals(
+            engine.TensorTile(values.Reshape([k, 1]), [1, k]), engine.TensorTile(values.Reshape([1, k]), [k, 1]));
+        var counts = engine.ReduceSum(same, [1], keepDims: false);
+        var best = engine.TensorArgMax(counts.Reshape([1, k]), 1);
+        return engine.TensorGather(values, best, 0).ToArray()[0];
     }
 }
