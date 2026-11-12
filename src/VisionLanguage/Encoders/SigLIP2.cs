@@ -461,7 +461,6 @@ public partial class SigLIP2<T> : VisionLanguageModelBase<T>, IContrastiveVision
     public Tensor<T> PredictMaskedPatches(Tensor<T> image, int[]? maskIndices = null)
     {
         ThrowIfDisposed();
-        var maskEmbedding = _maskTokenEmbedding ?? throw new InvalidOperationException("The masked-prediction head is not initialized.");
         if (Layers.Count == 0)
             throw new InvalidOperationException("The vision encoder has no layers.");
         var preprocessed = PreprocessImage(image);
@@ -496,7 +495,7 @@ public partial class SigLIP2<T> : VisionLanguageModelBase<T>, IContrastiveVision
                     $"Patch index {patch} is outside the {totalPatches} patches of the image.");
         }
 
-        var masked = MaskTokens(embedded.Reshape([totalPatches, width]), maskIndices, maskEmbedding).Reshape(embedded.Shape.ToArray());
+        var masked = MaskTokens(embedded.Reshape([totalPatches, width]), maskIndices).Reshape(embedded.Shape.ToArray());
         var encoded = masked;
         for (int i = 1; i < _visionEncoderEnd && i < Layers.Count; i++)
             encoded = Layers[i].Forward(encoded);
@@ -511,8 +510,9 @@ public partial class SigLIP2<T> : VisionLanguageModelBase<T>, IContrastiveVision
     /// <summary>
     /// Replaces the listed rows of the patch tokens <c>[patches, width]</c> with the learned mask token.
     /// </summary>
-    internal Tensor<T> MaskTokens(Tensor<T> tokens, int[] maskIndices, DenseLayer<T> maskEmbedding)
+    internal Tensor<T> MaskTokens(Tensor<T> tokens, int[] maskIndices)
     {
+        var maskEmbedding = _maskTokenEmbedding ?? throw new InvalidOperationException("The masked-prediction head is not initialized.");
         int patches = tokens.Shape[0], width = tokens.Shape[1];
         var maskToken = maskEmbedding.Forward(Tensor<T>.CreateDefault([1, 1], NumOps.One));
         if (maskIndices.Length == 0)

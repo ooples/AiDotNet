@@ -204,11 +204,12 @@ internal sealed class GroundingQueryDecoder<T> : GroundingHeadModule<T>
         // Frequencies 10000^(2i/half) for i < half/2, as a [1, quarter] row.
         var exponents = Engine.TensorMultiplyScalar(Engine.TensorArange<T>(0, quarter, 1), NumOps.FromDouble(2.0 / half));
         var frequencies = Engine.TensorPower(Tensor<T>.CreateDefault(new[] { quarter }, NumOps.FromDouble(10000)), exponents).Reshape(new[] { 1, quarter });
+        var twoPi = NumOps.FromDouble(2 * Math.PI);
         var parts = new List<Tensor<T>>(8);
         for (int coordinate = 0; coordinate < 4; coordinate++)
         {
             var angle = Engine.TensorDivide(
-                Engine.TensorBroadcastTo(Engine.TensorMultiplyScalar(Engine.TensorSlice(boxes, new[] { 0, coordinate }, new[] { k, 1 }), NumOps.FromDouble(2 * Math.PI)), new[] { k, quarter }),
+                Engine.TensorBroadcastTo(Engine.TensorMultiplyScalar(Engine.TensorSlice(boxes, new[] { 0, coordinate }, new[] { k, 1 }), twoPi), new[] { k, quarter }),
                 Engine.TensorBroadcastTo(frequencies, new[] { k, quarter }));
             parts.Add(Engine.TensorSin(angle));
             parts.Add(Engine.TensorCos(angle));

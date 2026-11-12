@@ -113,17 +113,23 @@ internal abstract class GroundingHeadModule<T>
     /// <summary>The one-hot rows <c>[ids.Count, depth]</c> of integer ids.</summary>
     protected Tensor<T> OneHot(IReadOnlyList<int> ids, int depth)
     {
+        if (ids.Any(id => id < 0 || id >= depth))
+            throw new ArgumentOutOfRangeException(nameof(ids), $"Every token id must lie in [0, {depth}).");
         var values = new Tensor<int>(new[] { ids.Count }, Vector<int>.FromList(ids.ToList()));
         return Engine.TensorOneHot<T>(values, depth);
     }
 
     /// <summary>
     /// <c>torch.special.logit</c> with the reference's clamp: <c>log(p / (1 - p))</c> of <paramref name="p"/> clamped
-    /// to <c>[eps, 1 - eps]</c> (DETR's <c>inverse_sigmoid</c>, eps 1e-5 as Grounding DINO's).
+    /// to <c>[eps, 1 - eps]</c> (DETR's <c>inverse_sigmoid</c>, eps 1e-5 as Grounding DINO's, or the type's precision if
+    /// coarser).
     /// </summary>
     internal static Tensor<T> InverseSigmoid(IEngine engine, Tensor<T> p, double eps = 1e-5)
     {
-        var clamped = engine.TensorClamp(p, NumOps.FromDouble(eps), NumOps.FromDouble(1 - eps));
+        // A type too narrow to hold 1 - eps (Half) clamps one unit in the last place below 1 instead, so the logit
+        // stays finite.
+        double guard = Math.Max(eps, Math.Pow(2, -(NumOps.PrecisionBits - 1)));
+        var clamped = engine.TensorClamp(p, NumOps.FromDouble(guard), NumOps.FromDouble(1 - guard));
         return engine.TensorLog(engine.TensorDivide(clamped, engine.ScalarMinusTensor(NumOps.One, clamped)));
     }
 
@@ -169,6 +175,7 @@ internal abstract class GroundingHeadModule<T>
         var tokens = new List<int>();
         var probabilities = new List<Tensor<T>>();
         var sequence = prefix;
+        var blockedValue = NumOps.MinValue;
         for (int step = 0; step < maxSteps; step++)
         {
             int width = sequence.Shape[1];
@@ -176,7 +183,7 @@ internal abstract class GroundingHeadModule<T>
             var last = Engine.TensorSlice(hidden, new[] { hidden.Shape[0] - 1, 0 }, new[] { 1, hidden.Shape[1] });
             var logits = Rows(head, last);
             var permitted = allowed(tokens);
-            var blocked = Tensor<T>.CreateDefault(logits.Shape.ToArray(), NumOps.MinValue);
+            var blocked = Tensor<T>.CreateDefault(logits.Shape.ToArray(), blockedValue);
             var constrained = Engine.TensorWhere(permitted, logits, blocked);
             int token = ArgExtremumSearch<T>.FirstIndex(Engine, constrained, true, out _);
             if (token < 0) break;
