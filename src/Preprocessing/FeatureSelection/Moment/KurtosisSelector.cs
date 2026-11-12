@@ -2,6 +2,7 @@ using AiDotNet.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Enums;
 using AiDotNet.Attributes;
+using AiDotNet.Preprocessing.FeatureSelection.Helpers;
 
 namespace AiDotNet.Preprocessing.FeatureSelection.Moment;
 
@@ -25,14 +26,14 @@ public class KurtosisSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IFi
     private readonly int _nFeaturesToSelect;
     private readonly bool _preferHighKurtosis;
 
-    private double[]? _kurtosisValues;
+    private Vector<T>? _kurtosisValues;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public bool PreferHighKurtosis => _preferHighKurtosis;
-    public double[]? KurtosisValues => _kurtosisValues;
+    public Vector<T>? KurtosisValues => _kurtosisValues;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -58,55 +59,28 @@ public class KurtosisSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IFi
         int n = data.Rows;
         int p = data.Columns;
 
-        var X = new double[n, p];
-        for (int i = 0; i < n; i++)
-            for (int j = 0; j < p; j++)
-                X[i, j] = NumOps.ToDouble(data[i, j]);
+        if (n == 0)
+            throw new InvalidOperationException("At least one sample is required to compute kurtosis.");
 
-        _kurtosisValues = new double[p];
+        var engine = Engine;
+        var centered = FeatureSelectionTensorOps.CenterColumns(Tensor<T>.FromMatrix(data), out _, out var std);
 
-        for (int j = 0; j < p; j++)
-        {
-            var col = new double[n];
-            for (int i = 0; i < n; i++)
-                col[i] = X[i, j];
+        // Constant columns (std < 1e-10) get 0; the others get the excess kurtosis E[(X-μ)⁴] / σ⁴ - 3
+        // (Fisher's definition, scipy.stats.kurtosis(fisher=True, bias=True)).
+        var constant = engine.TensorLessThan(std, NumOps.FromDouble(1e-10));
+        var safeStd = engine.TensorWhere(constant, FeatureSelectionTensorOps.Filled(new[] { p }, NumOps.One), std);
+        var z = engine.TensorDivide(centered, engine.Reshape(safeStd, new[] { 1, p }));
+        var moment4 = engine.ReduceMean(engine.TensorSquare(engine.TensorSquare(z)), new[] { 0 }, false);
+        var excess = engine.TensorSubtractScalar(moment4, NumOps.FromDouble(3));
+        var kurtosis = engine.TensorWhere(constant, new Tensor<T>(new[] { p }), excess);
+        _kurtosisValues = kurtosis.ToVector();
 
-            double mean = col.Average();
-            double variance = col.Select(v => (v - mean) * (v - mean)).Average();
-            double std = Math.Sqrt(variance);
-
-            if (std < 1e-10)
-            {
-                _kurtosisValues[j] = 0;
-                continue;
-            }
-
-            // Compute excess kurtosis: E[(X-μ)⁴] / σ⁴ - 3
-            double moment4 = col.Select(v => Math.Pow((v - mean) / std, 4)).Average();
-            _kurtosisValues[j] = moment4 - 3; // Excess kurtosis (normal = 0)
-        }
-
-        // Select features based on preference
+        // Select features based on preference: high absolute excess kurtosis, or kurtosis close to normal
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
-
-        if (_preferHighKurtosis)
-        {
-            // Prefer features with high absolute excess kurtosis
-            _selectedIndices = Enumerable.Range(0, p)
-                .OrderByDescending(j => Math.Abs(_kurtosisValues[j]))
-                .Take(numToSelect)
-                .OrderBy(x => x)
-                .ToArray();
-        }
-        else
-        {
-            // Prefer features with kurtosis close to normal
-            _selectedIndices = Enumerable.Range(0, p)
-                .OrderBy(j => Math.Abs(_kurtosisValues[j]))
-                .Take(numToSelect)
-                .OrderBy(x => x)
-                .ToArray();
-        }
+        var magnitude = engine.TensorAbs(kurtosis);
+        _selectedIndices = _preferHighKurtosis
+            ? FeatureSelectionTensorOps.TopKIndicesSorted(magnitude, numToSelect)
+            : FeatureSelectionTensorOps.BottomKIndicesSorted(magnitude, numToSelect);
 
         IsFitted = true;
     }
@@ -123,15 +97,7 @@ public class KurtosisSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IFi
         if (_selectedIndices is null)
             throw new InvalidOperationException("KurtosisSelector has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return FeatureSelectionTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

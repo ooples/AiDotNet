@@ -2,6 +2,7 @@ using AiDotNet.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Enums;
 using AiDotNet.Attributes;
+using AiDotNet.Preprocessing.FeatureSelection.Helpers;
 
 namespace AiDotNet.Preprocessing.FeatureSelection.Moment;
 
@@ -25,14 +26,14 @@ public class SkewnessSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IFi
     private readonly int _nFeaturesToSelect;
     private readonly bool _preferHighSkewness;
 
-    private double[]? _skewnessValues;
+    private Vector<T>? _skewnessValues;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public bool PreferHighSkewness => _preferHighSkewness;
-    public double[]? SkewnessValues => _skewnessValues;
+    public Vector<T>? SkewnessValues => _skewnessValues;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -58,55 +59,27 @@ public class SkewnessSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IFi
         int n = data.Rows;
         int p = data.Columns;
 
-        var X = new double[n, p];
-        for (int i = 0; i < n; i++)
-            for (int j = 0; j < p; j++)
-                X[i, j] = NumOps.ToDouble(data[i, j]);
+        if (n == 0)
+            throw new InvalidOperationException("At least one sample is required to compute skewness.");
 
-        _skewnessValues = new double[p];
+        var engine = Engine;
+        var centered = FeatureSelectionTensorOps.CenterColumns(Tensor<T>.FromMatrix(data), out _, out var std);
 
-        for (int j = 0; j < p; j++)
-        {
-            var col = new double[n];
-            for (int i = 0; i < n; i++)
-                col[i] = X[i, j];
+        // Constant columns (std < 1e-10) get 0; the others get the skewness E[(X-μ)³] / σ³
+        // (scipy.stats.skew(bias=True)).
+        var constant = engine.TensorLessThan(std, NumOps.FromDouble(1e-10));
+        var safeStd = engine.TensorWhere(constant, FeatureSelectionTensorOps.Filled(new[] { p }, NumOps.One), std);
+        var z = engine.TensorDivide(centered, engine.Reshape(safeStd, new[] { 1, p }));
+        var moment3 = engine.ReduceMean(engine.TensorMultiply(engine.TensorSquare(z), z), new[] { 0 }, false);
+        var skewness = engine.TensorWhere(constant, new Tensor<T>(new[] { p }), moment3);
+        _skewnessValues = skewness.ToVector();
 
-            double mean = col.Average();
-            double variance = col.Select(v => (v - mean) * (v - mean)).Average();
-            double std = Math.Sqrt(variance);
-
-            if (std < 1e-10)
-            {
-                _skewnessValues[j] = 0;
-                continue;
-            }
-
-            // Compute skewness: E[(X-μ)³] / σ³
-            double moment3 = col.Select(v => Math.Pow((v - mean) / std, 3)).Average();
-            _skewnessValues[j] = moment3;
-        }
-
-        // Select features based on preference
+        // Select features based on preference: high absolute skewness, or low skewness (more symmetric)
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
-
-        if (_preferHighSkewness)
-        {
-            // Prefer features with high absolute skewness
-            _selectedIndices = Enumerable.Range(0, p)
-                .OrderByDescending(j => Math.Abs(_skewnessValues[j]))
-                .Take(numToSelect)
-                .OrderBy(x => x)
-                .ToArray();
-        }
-        else
-        {
-            // Prefer features with low skewness (more symmetric)
-            _selectedIndices = Enumerable.Range(0, p)
-                .OrderBy(j => Math.Abs(_skewnessValues[j]))
-                .Take(numToSelect)
-                .OrderBy(x => x)
-                .ToArray();
-        }
+        var magnitude = engine.TensorAbs(skewness);
+        _selectedIndices = _preferHighSkewness
+            ? FeatureSelectionTensorOps.TopKIndicesSorted(magnitude, numToSelect)
+            : FeatureSelectionTensorOps.BottomKIndicesSorted(magnitude, numToSelect);
 
         IsFitted = true;
     }
@@ -123,15 +96,7 @@ public class SkewnessSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IFi
         if (_selectedIndices is null)
             throw new InvalidOperationException("SkewnessSelector has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return FeatureSelectionTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

@@ -2,6 +2,7 @@ using AiDotNet.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Enums;
 using AiDotNet.Attributes;
+using AiDotNet.Preprocessing.FeatureSelection.Helpers;
 
 namespace AiDotNet.Preprocessing.FeatureSelection.Projection;
 
@@ -25,14 +26,14 @@ public class FactorAnalysisSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>
     private readonly int _nFeaturesToSelect;
     private readonly int _nFactors;
 
-    private double[]? _communalities;
+    private Vector<T>? _communalities;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public int NFactors => _nFactors;
-    public double[]? Communalities => _communalities;
+    public Vector<T>? Communalities => _communalities;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -58,120 +59,43 @@ public class FactorAnalysisSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>
         int n = data.Rows;
         int p = data.Columns;
 
-        var X = new double[n, p];
-        for (int i = 0; i < n; i++)
-            for (int j = 0; j < p; j++)
-                X[i, j] = NumOps.ToDouble(data[i, j]);
+        var engine = Engine;
+        var x = Tensor<T>.FromMatrix(data);
 
-        // Standardize the data
-        var means = new double[p];
-        var stds = new double[p];
-        for (int j = 0; j < p; j++)
-        {
-            for (int i = 0; i < n; i++)
-                means[j] += X[i, j];
-            means[j] /= n;
+        // Standardize (sample std, 1 for constant columns) and form the correlation matrix
+        var centered = engine.TensorSubtract(x, engine.ReduceMean(x, new[] { 0 }, true));
+        var std = engine.TensorSqrt(engine.TensorDivideScalar(
+            engine.ReduceSum(engine.TensorSquare(centered), new[] { 0 }, true), NumOps.FromDouble(n - 1)));
+        var safeStd = engine.TensorWhere(
+            engine.TensorLessThan(std, NumOps.FromDouble(1e-10)), FeatureSelectionTensorOps.Filled(new[] { 1, p }, NumOps.One), std);
+        var standardized = engine.TensorDivide(centered, safeStd);
+        var correlation = engine.TensorDivideScalar(
+            engine.TensorMatMul(engine.TensorTranspose(standardized), standardized), NumOps.FromDouble(n - 1));
 
-            for (int i = 0; i < n; i++)
-                stds[j] += (X[i, j] - means[j]) * (X[i, j] - means[j]);
-            stds[j] = Math.Sqrt(stds[j] / (n - 1));
-            if (stds[j] < 1e-10) stds[j] = 1;
-        }
+        // Principal axis factoring: initial communality estimates (the squared largest absolute correlation
+        // with another feature) replace the diagonal, and the factors are the top eigenpairs of that
+        // reduced correlation matrix, with loadings sqrt(max(0, eigenvalue)) * eigenvector
+        var eye = engine.TensorEye<T>(p);
+        var offDiagonal = engine.TensorMultiply(correlation, FeatureSelectionTensorOps.OneMinus(eye));
+        var maxCorrelation = engine.ReduceMax(engine.TensorAbs(offDiagonal), new[] { 1 }, true); // [p, 1]
+        var initialCommunalities = engine.Reshape(engine.TensorSquare(maxCorrelation), new[] { 1, p });
+        var reduced = engine.TensorAdd(offDiagonal, engine.TensorMultiply(eye, initialCommunalities));
 
-        for (int i = 0; i < n; i++)
-            for (int j = 0; j < p; j++)
-                X[i, j] = (X[i, j] - means[j]) / stds[j];
-
-        // Compute correlation matrix
-        var correlation = new double[p, p];
-        for (int j1 = 0; j1 < p; j1++)
-        {
-            correlation[j1, j1] = 1;
-            for (int j2 = j1 + 1; j2 < p; j2++)
-            {
-                double sum = 0;
-                for (int i = 0; i < n; i++)
-                    sum += X[i, j1] * X[i, j2];
-                correlation[j1, j2] = sum / (n - 1);
-                correlation[j2, j1] = correlation[j1, j2];
-            }
-        }
-
-        // Principal axis factoring (simplified)
         int numFactors = Math.Min(_nFactors, p);
-        var loadings = new double[p, numFactors];
+        var factors = FeatureSelectionTensorOps.TopEigenpairs(reduced, numFactors, out var eigenvalues); // [p, f]
 
-        // Initial communality estimates (use squared multiple correlations approx)
-        var communalities = new double[p];
-        for (int j = 0; j < p; j++)
+        // Communalities: sum of squared loadings
+        var communalities = new Tensor<T>(new[] { p });
+        if (numFactors > 0)
         {
-            double maxCorr = 0;
-            for (int k = 0; k < p; k++)
-                if (k != j)
-                    maxCorr = Math.Max(maxCorr, Math.Abs(correlation[j, k]));
-            communalities[j] = maxCorr * maxCorr;
+            var factorVariance = engine.Reshape(engine.TensorMax(eigenvalues, NumOps.Zero), new[] { numFactors, 1 });
+            communalities = engine.Reshape(engine.TensorMatMul(engine.TensorSquare(factors), factorVariance), new[] { p });
         }
 
-        // Iterative factor extraction
-        var reducedCorr = (double[,])correlation.Clone();
-        for (int f = 0; f < numFactors; f++)
-        {
-            // Set diagonal to communalities
-            for (int j = 0; j < p; j++)
-                reducedCorr[j, j] = communalities[j];
-
-            // Extract factor via power iteration
-            var factor = new double[p];
-            for (int j = 0; j < p; j++)
-                factor[j] = 1.0 / Math.Sqrt(p);
-
-            for (int iter = 0; iter < 50; iter++)
-            {
-                var newFactor = new double[p];
-                for (int j = 0; j < p; j++)
-                    for (int k = 0; k < p; k++)
-                        newFactor[j] += reducedCorr[j, k] * factor[k];
-
-                double norm = Math.Sqrt(newFactor.Sum(x => x * x));
-                if (norm > 1e-10)
-                    for (int j = 0; j < p; j++)
-                        newFactor[j] /= norm;
-
-                factor = newFactor;
-            }
-
-            // Compute eigenvalue
-            double eigenvalue = 0;
-            for (int j = 0; j < p; j++)
-            {
-                double mv = 0;
-                for (int k = 0; k < p; k++)
-                    mv += reducedCorr[j, k] * factor[k];
-                eigenvalue += mv * factor[j];
-            }
-
-            // Store loadings
-            for (int j = 0; j < p; j++)
-                loadings[j, f] = Math.Sqrt(Math.Max(0, eigenvalue)) * factor[j];
-
-            // Deflate
-            for (int j1 = 0; j1 < p; j1++)
-                for (int j2 = 0; j2 < p; j2++)
-                    reducedCorr[j1, j2] -= loadings[j1, f] * loadings[j2, f];
-        }
-
-        // Compute communalities (sum of squared loadings)
-        _communalities = new double[p];
-        for (int j = 0; j < p; j++)
-            for (int f = 0; f < numFactors; f++)
-                _communalities[j] += loadings[j, f] * loadings[j, f];
+        _communalities = communalities.ToVector();
 
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = Enumerable.Range(0, p)
-            .OrderByDescending(j => _communalities[j])
-            .Take(numToSelect)
-            .OrderBy(x => x)
-            .ToArray();
+        _selectedIndices = FeatureSelectionTensorOps.TopKIndicesSorted(communalities, numToSelect);
 
         IsFitted = true;
     }
@@ -188,15 +112,7 @@ public class FactorAnalysisSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>
         if (_selectedIndices is null)
             throw new InvalidOperationException("FactorAnalysisSelector has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return FeatureSelectionTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

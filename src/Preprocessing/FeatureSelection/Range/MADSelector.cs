@@ -2,6 +2,7 @@ using AiDotNet.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Enums;
 using AiDotNet.Attributes;
+using AiDotNet.Preprocessing.FeatureSelection.Helpers;
 
 namespace AiDotNet.Preprocessing.FeatureSelection.Range;
 
@@ -24,13 +25,13 @@ public class MADSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IFixedCo
 {
     private readonly int _nFeaturesToSelect;
 
-    private double[]? _madValues;
+    private Vector<T>? _madValues;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
-    public double[]? MADValues => _madValues;
+    public Vector<T>? MADValues => _madValues;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -51,50 +52,20 @@ public class MADSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IFixedCo
     protected override void FitCore(Matrix<T> data)
     {
         _nInputFeatures = data.Columns;
-        int n = data.Rows;
         int p = data.Columns;
 
-        var X = new double[n, p];
-        for (int i = 0; i < n; i++)
-            for (int j = 0; j < p; j++)
-                X[i, j] = NumOps.ToDouble(data[i, j]);
-
-        _madValues = new double[p];
-
-        for (int j = 0; j < p; j++)
-        {
-            var col = new double[n];
-            for (int i = 0; i < n; i++)
-                col[i] = X[i, j];
-
-            // Calculate median
-            var sorted = col.OrderBy(v => v).ToArray();
-            double median = GetMedian(sorted);
-
-            // Calculate absolute deviations from median
-            var absDeviations = col.Select(v => Math.Abs(v - median)).ToArray();
-
-            // MAD is the median of absolute deviations
-            var sortedDeviations = absDeviations.OrderBy(v => v).ToArray();
-            _madValues[j] = GetMedian(sortedDeviations);
-        }
+        // MAD = median(|x - median(x)|) per column (scipy.stats.median_abs_deviation with scale 1)
+        var engine = Engine;
+        var x = Tensor<T>.FromMatrix(data);
+        var median = engine.Reshape(FeatureSelectionTensorOps.ColumnQuantile(x, 0.5), new[] { 1, p });
+        var absDeviations = engine.TensorAbs(engine.TensorSubtract(x, median));
+        var mad = FeatureSelectionTensorOps.ColumnQuantile(absDeviations, 0.5);
+        _madValues = mad.ToVector();
 
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = Enumerable.Range(0, p)
-            .OrderByDescending(j => _madValues[j])
-            .Take(numToSelect)
-            .OrderBy(x => x)
-            .ToArray();
+        _selectedIndices = FeatureSelectionTensorOps.TopKIndicesSorted(mad, numToSelect);
 
         IsFitted = true;
-    }
-
-    private double GetMedian(double[] sortedData)
-    {
-        int n = sortedData.Length;
-        if (n % 2 == 0)
-            return (sortedData[n / 2 - 1] + sortedData[n / 2]) / 2;
-        return sortedData[n / 2];
     }
 
     public new Matrix<T> FitTransform(Matrix<T> data)
@@ -109,15 +80,7 @@ public class MADSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IFixedCo
         if (_selectedIndices is null)
             throw new InvalidOperationException("MADSelector has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return FeatureSelectionTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

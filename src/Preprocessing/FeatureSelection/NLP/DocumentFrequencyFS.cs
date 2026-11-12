@@ -2,6 +2,7 @@ using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
+using AiDotNet.Preprocessing.FeatureSelection.Helpers;
 
 namespace AiDotNet.Preprocessing.FeatureSelection.NLP;
 
@@ -74,52 +75,30 @@ public class DocumentFrequencyFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, 
     protected override void FitCore(Matrix<T> data)
     {
         _nInputFeatures = data.Columns;
-        int n = data.Rows;
         int p = data.Columns;
 
-        // Compute document frequency for each term
-        _documentFrequencies = new int[p];
-        for (int j = 0; j < p; j++)
-        {
-            for (int i = 0; i < n; i++)
-            {
-                if (NumOps.GreaterThan(data[i, j], NumOps.Zero))
-                    _documentFrequencies[j]++;
-            }
-        }
+        // Document frequency of each term: the number of documents (rows) where it occurs (value > 0)
+        var engine = Engine;
+        var occurs = engine.TensorGreaterThan(Tensor<T>.FromMatrix(data), NumOps.Zero);
+        var df = engine.ReduceSum(occurs, new[] { 0 }, false);
+        _documentFrequencies = df.Cast<int>().AsSpan().ToArray();
 
-        // Filter by document frequency and select top features
-        var candidates = Enumerable.Range(0, p)
-            .Where(j => _documentFrequencies[j] >= _minDf && _documentFrequencies[j] <= _maxDf)
-            .OrderByDescending(j => _documentFrequencies[j])
-            .ToList();
+        // Filter by document frequency and select the most frequent terms
+        var atLeastMin = FeatureSelectionTensorOps.OneMinus(engine.TensorLessThan(df, NumOps.FromDouble(_minDf)));
+        var atMostMax = FeatureSelectionTensorOps.OneMinus(engine.TensorGreaterThan(df, NumOps.FromDouble(_maxDf)));
+        var inRange = engine.TensorMultiply(atLeastMin, atMostMax);
 
-        int numToSelect = Math.Min(_nFeaturesToSelect, candidates.Count);
-        if (numToSelect == 0 && p > 0)
+        if (FeatureSelectionTensorOps.CountNonZero(inRange) == 0 && p > 0)
         {
             // No features pass filter, select features closest to criteria
-            _selectedIndices = Enumerable.Range(0, p)
-                .Where(j => _documentFrequencies[j] >= _minDf)
-                .OrderByDescending(j => _documentFrequencies[j])
-                .Take(Math.Min(_nFeaturesToSelect, p))
-                .OrderBy(x => x)
-                .ToArray();
+            _selectedIndices = FeatureSelectionTensorOps.TopKWhere(df, atLeastMin, Math.Min(_nFeaturesToSelect, p));
 
             if (_selectedIndices.Length == 0)
-            {
-                _selectedIndices = Enumerable.Range(0, p)
-                    .OrderByDescending(j => _documentFrequencies[j])
-                    .Take(Math.Min(_nFeaturesToSelect, p))
-                    .OrderBy(x => x)
-                    .ToArray();
-            }
+                _selectedIndices = FeatureSelectionTensorOps.TopKIndicesSorted(df, Math.Min(_nFeaturesToSelect, p));
         }
         else
         {
-            _selectedIndices = candidates
-                .Take(numToSelect)
-                .OrderBy(x => x)
-                .ToArray();
+            _selectedIndices = FeatureSelectionTensorOps.TopKWhere(df, inRange, _nFeaturesToSelect);
         }
 
         IsFitted = true;
@@ -131,15 +110,7 @@ public class DocumentFrequencyFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, 
         if (_selectedIndices is null)
             throw new InvalidOperationException("DocumentFrequencyFS has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return FeatureSelectionTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

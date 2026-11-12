@@ -2,6 +2,7 @@ using AiDotNet.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Enums;
 using AiDotNet.Attributes;
+using AiDotNet.Preprocessing.FeatureSelection.Helpers;
 
 namespace AiDotNet.Preprocessing.FeatureSelection.Kernel;
 
@@ -27,14 +28,14 @@ public class KernelPCASelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IF
     private readonly double _gamma;
     private readonly int _nComponents;
 
-    private double[]? _featureImportances;
+    private Vector<T>? _featureImportances;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public double Gamma => _gamma;
-    public double[]? FeatureImportances => _featureImportances;
+    public Vector<T>? FeatureImportances => _featureImportances;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -62,118 +63,43 @@ public class KernelPCASelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IF
         int n = data.Rows;
         int p = data.Columns;
 
-        var X = new double[n, p];
-        for (int i = 0; i < n; i++)
-            for (int j = 0; j < p; j++)
-                X[i, j] = NumOps.ToDouble(data[i, j]);
+        var engine = Engine;
+        var x = Tensor<T>.FromMatrix(data);
 
-        // Compute kernel matrix (RBF kernel)
-        var K = new double[n, n];
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = i; j < n; j++)
-            {
-                double dist = 0;
-                for (int k = 0; k < p; k++)
-                {
-                    double diff = X[i, k] - X[j, k];
-                    dist += diff * diff;
-                }
-                double kval = Math.Exp(-_gamma * dist);
-                K[i, j] = kval;
-                K[j, i] = kval;
-            }
-        }
+        // RBF kernel matrix, double-centred: Kc = K - rowMean - colMean + totalMean
+        var kernel = engine.TensorExp(engine.TensorMultiplyScalar(
+            FeatureSelectionTensorOps.PairwiseSquaredDistances(x), NumOps.FromDouble(-_gamma)));
+        var centered = engine.TensorAddScalar(
+            engine.TensorSubtract(
+                engine.TensorSubtract(kernel, engine.ReduceMean(kernel, new[] { 1 }, true)),
+                engine.ReduceMean(kernel, new[] { 0 }, true)),
+            engine.TensorMean(kernel));
 
-        // Center kernel matrix
-        var rowMeans = new double[n];
-        var colMeans = new double[n];
-        double totalMean = 0;
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < n; j++)
-            {
-                rowMeans[i] += K[i, j];
-                colMeans[j] += K[i, j];
-                totalMean += K[i, j];
-            }
-            rowMeans[i] /= n;
-        }
-        for (int j = 0; j < n; j++) colMeans[j] /= n;
-        totalMean /= ((double)n * n);
-
-        var Kc = new double[n, n];
-        for (int i = 0; i < n; i++)
-            for (int j = 0; j < n; j++)
-                Kc[i, j] = K[i, j] - rowMeans[i] - colMeans[j] + totalMean;
-
-        // Get top eigenvectors (power iteration)
+        // Top eigenvectors of the centred kernel (exact symmetric eigendecomposition)
         int nComp = Math.Min(_nComponents, Math.Min(n, p));
-        var eigenvectors = PowerIterationTopK(Kc, n, nComp, 50);
+        var eigenvectors = FeatureSelectionTensorOps.TopEigenpairs(centered, nComp, out _); // [n, c]
 
-        // Compute feature importance by reconstructing feature sensitivity
-        _featureImportances = new double[p];
-        for (int j = 0; j < p; j++)
+        // Sensitivity of feature j: sum_k sum_ii' |v_ik v_i'k| (x_ij - x_i'j)^2 / n^2. With W = |V||V|' and
+        // degrees D = W 1 that is 2 (sum_i D_i x_ij^2 - x_j' W x_j) / n^2.
+        var importances = new Tensor<T>(new[] { p });
+        if (nComp > 0)
         {
-            for (int k = 0; k < nComp; k++)
-            {
-                // Sensitivity: how much does changing feature j affect kernel PCA projection
-                double sensitivity = 0;
-                for (int i = 0; i < n; i++)
-                {
-                    for (int i2 = 0; i2 < n; i2++)
-                    {
-                        double diff = X[i, j] - X[i2, j];
-                        sensitivity += Math.Abs(eigenvectors[i, k] * eigenvectors[i2, k] * diff * diff);
-                    }
-                }
-                _featureImportances[j] += sensitivity / ((double)n * n);
-            }
+            var magnitude = engine.TensorAbs(eigenvectors);
+            var weights = engine.TensorMatMul(magnitude, engine.TensorTranspose(magnitude));
+            var degree = engine.ReduceSum(weights, new[] { 1 }, true);
+            var spread = engine.TensorSubtract(
+                engine.ReduceSum(engine.TensorMultiply(engine.TensorSquare(x), degree), new[] { 0 }, false),
+                engine.ReduceSum(engine.TensorMultiply(x, engine.TensorMatMul(weights, x)), new[] { 0 }, false));
+            importances = engine.TensorMax(
+                engine.TensorMultiplyScalar(spread, NumOps.FromDouble(2.0 / ((double)n * n))), NumOps.Zero);
         }
+
+        _featureImportances = importances.ToVector();
 
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = Enumerable.Range(0, p)
-            .OrderByDescending(j => _featureImportances[j])
-            .Take(numToSelect)
-            .OrderBy(x => x)
-            .ToArray();
+        _selectedIndices = FeatureSelectionTensorOps.TopKIndicesSorted(importances, numToSelect);
 
         IsFitted = true;
-    }
-
-    private double[,] PowerIterationTopK(double[,] A, int n, int k, int maxIter)
-    {
-        var result = new double[n, k];
-        var rand = RandomHelper.CreateSecureRandom();
-
-        for (int ki = 0; ki < k; ki++)
-        {
-            var v = new double[n];
-            for (int i = 0; i < n; i++) v[i] = rand.NextDouble();
-
-            for (int iter = 0; iter < maxIter; iter++)
-            {
-                // Orthogonalize against previous
-                for (int prev = 0; prev < ki; prev++)
-                {
-                    double dot = 0;
-                    for (int i = 0; i < n; i++) dot += v[i] * result[i, prev];
-                    for (int i = 0; i < n; i++) v[i] -= dot * result[i, prev];
-                }
-
-                var newV = new double[n];
-                for (int i = 0; i < n; i++)
-                    for (int j = 0; j < n; j++)
-                        newV[i] += A[i, j] * v[j];
-
-                double norm = Math.Sqrt(newV.Sum(x => x * x)) + 1e-10;
-                for (int i = 0; i < n; i++) v[i] = newV[i] / norm;
-            }
-
-            for (int i = 0; i < n; i++) result[i, ki] = v[i];
-        }
-
-        return result;
     }
 
     /// <inheritdoc />
@@ -182,15 +108,7 @@ public class KernelPCASelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IF
         if (_selectedIndices is null)
             throw new InvalidOperationException("KernelPCASelector has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return FeatureSelectionTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />
