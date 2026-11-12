@@ -183,32 +183,7 @@ public partial class KMeansDetector<T> : AnomalyDetectorBase<T>
             if (!changed) break;
 
             // Update step: recalculate centroids, re-initializing empty clusters from a random point
-            var counts = new int[k];
-            foreach (int cluster in assignments)
-            {
-                counts[cluster]++;
-            }
-
-            var replacement = new int[k];
-            var empty = new int[k];
-            for (int c = 0; c < k; c++)
-            {
-                if (counts[c] == 0)
-                {
-                    replacement[c] = random.Next(n);
-                    empty[c] = 1;
-                }
-            }
-
-            var labels = Tensor<int>.FromVector(Vector<int>.Wrap(assignments), new[] { n }).Cast<T>();
-            var membership = engine.TensorEquals(
-                AnomalyTensorOps.BroadcastColumn(engine.TensorArange<T>(0, k, 1), n),
-                AnomalyTensorOps.BroadcastRow(labels, k));
-            var means = AnomalyTensorOps.DivideColumn(engine.TensorMatMul(membership, points),
-                engine.TensorMax(engine.ReduceSum(membership, new[] { 1 }, false), NumOps.One));
-            var emptyMask = AnomalyTensorOps.BroadcastColumn(
-                Tensor<int>.FromVector(Vector<int>.Wrap(empty), new[] { k }).Cast<T>(), X.Columns);
-            centroids = engine.TensorWhere(emptyMask, AnomalyTensorOps.SelectRows(points, replacement), means);
+            centroids = AnomalyTensorOps.KMeansUpdate(points, assignments, k, random);
         }
 
         // Compute final cluster sizes for anomaly scoring

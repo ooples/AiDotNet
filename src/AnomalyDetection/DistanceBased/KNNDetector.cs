@@ -124,28 +124,20 @@ public partial class KNNDetector<T> : AnomalyDetectorBase<T>
         var engine = Engine;
         int nTrain = trainingData.Rows;
 
-        // Distances from every query row to every training row.
-        var distances = AnomalyTensorOps.PairwiseDistances(
-            AnomalyTensorOps.ToTensor(X), AnomalyTensorOps.ToTensor(trainingData));
-
         // Self-exclusion: push each row's own entry past every real distance so it sorts last.
-        int available = nTrain;
-        if (isSameAsTraining && X.Rows == nTrain)
-        {
-            var self = engine.TensorEqScalar(engine.TensorEye<T>(nTrain), NumOps.One);
-            distances = engine.TensorMaskedFill(distances, self, NumOps.MaxValue);
-            available = nTrain - 1;
-        }
+        bool excludeOwnRow = isSameAsTraining && X.Rows == nTrain;
+        int available = excludeOwnRow ? nTrain - 1 : nTrain;
 
-        // Average of the k smallest remaining distances (the sum does not depend on how ties order).
+        // Average of the k smallest remaining distances (the sum does not depend on how ties order),
+        // reduced per bounded block of query rows so the [X.Rows, nTrain] matrix is never built.
         int count = Math.Min(_k, available);
         if (count <= 0)
         {
             return new Vector<T>(X.Rows);
         }
 
-        var (sorted, _) = engine.TensorSort(distances, 1, false);
-        var nearest = engine.TensorSlice(sorted, new[] { 0, 0 }, new[] { X.Rows, count });
+        var nearest = AnomalyTensorOps.NearestNeighbors(AnomalyTensorOps.ToTensor(X), AnomalyTensorOps.ToTensor(trainingData),
+            count, excludeOwnRow, out _);
         return engine.TensorDivideScalar(engine.ReduceSum(nearest, new[] { 1 }, false), NumOps.FromDouble(count)).ToVector();
     }
 }

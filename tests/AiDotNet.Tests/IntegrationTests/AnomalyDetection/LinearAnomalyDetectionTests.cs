@@ -144,6 +144,7 @@ public class LinearAnomalyDetectionTests
     [Fact(Timeout = 120000)]
     public async Task OneClassSVM_SolvesTheDualToItsMinimum()
     {
+        await Task.Yield();
         // Scholkopf et al. (2001): minimize 1/2 a'Ka subject to sum(a) = 1, 0 <= a_i <= 1/(nu n).
         // Points 0, 0, 10 with gamma = 1: K = [[1, 1, e], [1, 1, e], [e, e, 1]] with e = exp(-100) ~ 0,
         // so 1/2 a'Ka ~ 1/2 ((a0 + a1)^2 + a2^2), minimized at a0 + a1 = a2 = 1/2 (inside the bound

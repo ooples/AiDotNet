@@ -105,12 +105,24 @@ public partial class ABODDetector<T> : AnomalyDetectorBase<T>
         var ones = Tensor<T>.CreateOnes(new[] { n, n });
         var pairs = engine.TensorTranspose(engine.TensorTril(ones, -1));
 
+        // Constant tensors shared by every query
+        var constants = new AbofConstants
+        {
+            Pairs = pairs,
+            PairOnes = ones,
+            PairZeros = Tensor<T>.CreateZeros(new[] { n, n }),
+            PointOnes = Tensor<T>.CreateOnes(new[] { n }),
+            MaxValue = engine.Fill(1, NumOps.MaxValue).AsTensor(),
+            Epsilon = NumOps.FromDouble(1e-10),
+            MinusOne = NumOps.FromDouble(-1.0)
+        };
+
         // ABOF (Angle-Based Outlier Factor) of every query point
         var abofs = new Tensor<T>[X.Rows];
         for (int p = 0; p < X.Rows; p++)
         {
             abofs[p] = ComputeABOF(
-                AnomalyTensorOps.SubtractRow(training, engine.TensorSliceAxis(queries, 0, p)), pairs);
+                AnomalyTensorOps.SubtractRow(training, engine.TensorSliceAxis(queries, 0, p)), constants);
         }
 
         // ABOF is inversely related to outlierness — invert for consistent scoring
@@ -124,20 +136,21 @@ public partial class ABODDetector<T> : AnomalyDetectorBase<T>
     // ABOF of a point from the difference vectors PA = A - P to every training point A ([n, d]), over the
     // pairs (A, B) marked in pairs ([n, n] 0/1): the variance of cos(PA, PB) weighted by 1 / (|PA|^2 |PB|^2),
     // skipping training points closer than 1e-10. Returns a [1] tensor; MaxValue without (weighted) pairs.
-    private Tensor<T> ComputeABOF(Tensor<T> differences, Tensor<T> pairs)
+    private Tensor<T> ComputeABOF(Tensor<T> differences, AbofConstants constants)
     {
         var engine = Engine;
         int n = differences.Shape[0];
-        T epsilon = NumOps.FromDouble(1e-10);
-        var zeros = Tensor<T>.CreateZeros(new[] { n, n });
-        var maxValue = engine.Fill(1, NumOps.MaxValue).AsTensor();
+        var pairs = constants.Pairs;
+        T epsilon = constants.Epsilon;
+        var zeros = constants.PairZeros;
+        var maxValue = constants.MaxValue;
 
         // |PA|^2 and |PA| via dot products; points at distance < epsilon do not take part
         var normSq = engine.ReduceSum(engine.TensorSquare(differences), new[] { 1 }, false);
         var norm = engine.TensorSqrt(normSq);
         var valid = engine.ScalarMinusTensor(NumOps.One, engine.TensorLessThan(norm, epsilon));
-        var safeNorm = engine.TensorWhere(valid, norm, Tensor<T>.CreateOnes(new[] { n }));
-        var safeNormSq = engine.TensorWhere(valid, normSq, Tensor<T>.CreateOnes(new[] { n }));
+        var safeNorm = engine.TensorWhere(valid, norm, constants.PointOnes);
+        var safeNormSq = engine.TensorWhere(valid, normSq, constants.PointOnes);
         var mask = engine.TensorMultiply(pairs, engine.TensorMultiply(
             AnomalyTensorOps.BroadcastColumn(valid, n), AnomalyTensorOps.BroadcastRow(valid, n)));
 
@@ -145,7 +158,7 @@ public partial class ABODDetector<T> : AnomalyDetectorBase<T>
         var dots = engine.TensorMatMul(differences, engine.TensorTranspose(differences));
         var cosAngle = engine.TensorClamp(
             engine.TensorDivide(dots, AnomalyTensorOps.MultiplyRow(AnomalyTensorOps.BroadcastColumn(safeNorm, n), safeNorm)),
-            NumOps.FromDouble(-1.0), NumOps.One);
+            constants.MinusOne, NumOps.One);
         var weight = engine.TensorWhere(mask, engine.TensorReciprocal(
             AnomalyTensorOps.MultiplyRow(AnomalyTensorOps.BroadcastColumn(safeNormSq, n), safeNormSq)), zeros);
         var weightedAngles = engine.TensorWhere(mask, engine.TensorMultiply(cosAngle, weight), zeros);
@@ -154,13 +167,25 @@ public partial class ABODDetector<T> : AnomalyDetectorBase<T>
         var pairCount = SumAll(mask);
         var sumWeights = SumAll(weight);
         var mean = engine.TensorDivide(SumAll(weightedAngles), sumWeights);
-        var angle = engine.TensorDivide(weightedAngles, engine.TensorWhere(mask, weight, Tensor<T>.CreateOnes(new[] { n, n })));
+        var angle = engine.TensorDivide(weightedAngles, engine.TensorWhere(mask, weight, constants.PairOnes));
         var diff = engine.TensorSubtract(angle, engine.TensorBroadcastTo(engine.Reshape(mean, new[] { 1, 1 }), new[] { n, n }));
         var variance = SumAll(engine.TensorWhere(mask, engine.TensorMultiply(weight, engine.TensorSquare(diff)), zeros));
 
         var abof = engine.TensorWhere(engine.TensorLessThan(sumWeights, epsilon), maxValue,
             engine.TensorDivide(variance, sumWeights));
         return engine.TensorWhere(engine.TensorGreaterThan(pairCount, NumOps.Zero), abof, maxValue);
+    }
+
+    // Tensors and scalars that do not change between the queries of one scoring call.
+    private sealed class AbofConstants
+    {
+        public required Tensor<T> Pairs { get; init; }
+        public required Tensor<T> PairOnes { get; init; }
+        public required Tensor<T> PairZeros { get; init; }
+        public required Tensor<T> PointOnes { get; init; }
+        public required Tensor<T> MaxValue { get; init; }
+        public required T Epsilon { get; init; }
+        public required T MinusOne { get; init; }
     }
 
     // Sum of all entries of a [n, n] tensor as a [1] tensor.

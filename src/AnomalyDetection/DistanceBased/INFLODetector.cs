@@ -139,14 +139,27 @@ public partial class INFLODetector<T> : AnomalyDetectorBase<T>
             throw new InvalidOperationException("Model not properly fitted.");
         }
 
-        var engine = Engine;
-        int m = X.Rows;
+        // Query rows are scored in bounded blocks (only [block, nTraining] and [block, k, nTraining] tensors
+        // are live)
+        var training = AnomalyTensorOps.ToTensor(trainingData);
         int nTraining = trainingData.Rows;
+        int slots = Math.Min(_k, nTraining);
+        return AnomalyTensorOps.MapRowBlocks(AnomalyTensorOps.ToTensor(X), (long)nTraining * Math.Max(1, slots),
+            query => ScoreBlock(query, training, localDensities.AsTensor(), influenceMatrix, slots)).ToVector();
+    }
+
+    // INFLO scores of one block of query rows.
+    private Tensor<T> ScoreBlock(Tensor<T> query, Tensor<T> training, Tensor<T> localDensities, Tensor<T> influenceMatrix,
+        int slots)
+    {
+        var engine = Engine;
+        int m = query.Shape[0];
+        int nTraining = training.Shape[0];
 
         // k nearest training points at a positive distance (nearest first, by index on ties). Distances
         // sort ascending, so after the zero distances the next (at most) k entries are the neighbours.
         var (sorted, order) = AnomalyTensorOps.StableSortRows(
-            AnomalyTensorOps.PairwiseDistances(AnomalyTensorOps.ToTensor(X), AnomalyTensorOps.ToTensor(trainingData)), descending: false);
+            AnomalyTensorOps.PairwiseDistances(query, training), descending: false);
         var positive = engine.TensorGreaterThan(sorted, NumOps.Zero);
         var neighborMask = engine.TensorMultiply(positive,
             engine.TensorLessThan(engine.TensorCumSum(positive, 1), NumOps.FromDouble(_k + 0.5)));
@@ -159,13 +172,24 @@ public partial class INFLODetector<T> : AnomalyDetectorBase<T>
             Tensor<T>.CreateZeros(new[] { m }));
 
         // For new data the influence space is the kNN plus the union of the precomputed influence spaces
-        // of those training neighbours; its average local density
+        // of those training neighbours. The (at most k) neighbours are moved to the first slots by a stable
+        // descending sort of the mask; their influence rows are gathered and combined with a max, which is
+        // O(m k n) instead of the dense [m, n] x [n, n] product.
         var knnMatrix = engine.TensorTakeAlongDim(neighborMask, engine.TensorArgsort(order, 1, false), 1);
-        var membership = engine.TensorClamp(
-            engine.TensorAdd(knnMatrix, engine.TensorMatMul(knnMatrix, influenceMatrix)), NumOps.Zero, NumOps.One);
+        var (slotMask, slotPositions) = AnomalyTensorOps.StableSortRows(neighborMask, descending: true);
+        var firstSlots = engine.TensorSlice(slotPositions, new[] { 0, 0 }, new[] { m, slots });
+        var neighborIndices = engine.TensorTakeAlongDim(order, firstSlots, 1);
+        var valid = engine.TensorSlice(slotMask, new[] { 0, 0 }, new[] { m, slots });
+        var influenceRows = engine.Reshape(
+            engine.TensorGather(influenceMatrix, engine.Reshape(neighborIndices, new[] { m * slots }), 0),
+            new[] { m, slots, nTraining });
+        var union = engine.ReduceMax(engine.TensorMultiply(influenceRows,
+            engine.TensorBroadcastTo(engine.Reshape(valid, new[] { m, slots, 1 }), new[] { m, slots, nTraining })),
+            new[] { 1 }, false);
+        var membership = engine.TensorClamp(engine.TensorAdd(knnMatrix, union), NumOps.Zero, NumOps.One);
         var influenceCount = engine.ReduceSum(membership, new[] { 1 }, false);
         var influenceSum = engine.Reshape(
-            engine.TensorMatMul(membership, engine.Reshape(localDensities.AsTensor(), new[] { nTraining, 1 })), new[] { m });
+            engine.TensorMatMul(membership, engine.Reshape(localDensities, new[] { nTraining, 1 })), new[] { m });
         var hasInfluence = engine.TensorGreaterThan(influenceCount, NumOps.Zero);
         var avgInfluenceDensity = engine.TensorWhere(hasInfluence,
             engine.TensorDivide(influenceSum, engine.TensorWhere(hasInfluence, influenceCount, Tensor<T>.CreateOnes(new[] { m }))),
@@ -175,7 +199,7 @@ public partial class INFLODetector<T> : AnomalyDetectorBase<T>
         return engine.TensorWhere(
             engine.TensorGreaterThan(localDensity, NumOps.Zero),
             engine.TensorDivide(avgInfluenceDensity, localDensity),
-            Tensor<T>.CreateOnes(new[] { m })).ToVector();
+            Tensor<T>.CreateOnes(new[] { m }));
     }
 
     // Local density 1 / (average neighbour distance) from the distance sums and neighbour counts,

@@ -40,6 +40,43 @@ internal static class AnomalyTensorOps
         return Engine.TensorConcatenate(blocks.ToArray(), 0);
     }
 
+    /// <summary>
+    /// The k-means update step shared by the k-means based detectors: the mean of every cluster's points
+    /// (rows of <paramref name="points"/> [n, d] grouped by <paramref name="assignments"/>), with every empty
+    /// cluster re-initialized from the point at <c>random.Next(n)</c>, drawn in cluster order.
+    /// </summary>
+    internal static Tensor<T> KMeansUpdate<T>(Tensor<T> points, int[] assignments, int k, Random random)
+    {
+        var engine = Engine;
+        var numOps = MathHelper.GetNumericOperations<T>();
+        int n = points.Shape[0];
+        int d = points.Shape[1];
+        var counts = new int[k];
+        foreach (int cluster in assignments)
+        {
+            counts[cluster]++;
+        }
+
+        var replacement = new int[k];
+        var empty = new int[k];
+        for (int c = 0; c < k; c++)
+        {
+            if (counts[c] == 0)
+            {
+                replacement[c] = random.Next(n);
+                empty[c] = 1;
+            }
+        }
+
+        var labels = Tensor<int>.FromVector(Vector<int>.Wrap(assignments), new[] { n }).Cast<T>();
+        var membership = engine.TensorEquals(
+            BroadcastColumn(engine.TensorArange<T>(0, k, 1), n), BroadcastRow(labels, k));
+        var means = DivideColumn(engine.TensorMatMul(membership, points),
+            engine.TensorMax(engine.ReduceSum(membership, new[] { 1 }, false), numOps.One));
+        var emptyMask = BroadcastColumn(Tensor<int>.FromVector(Vector<int>.Wrap(empty), new[] { k }).Cast<T>(), d);
+        return engine.TensorWhere(emptyMask, SelectRows(points, replacement), means);
+    }
+
     /// <summary>Copies a matrix into a [rows, columns] tensor.</summary>
     internal static Tensor<T> ToTensor<T>(Matrix<T> matrix) => Tensor<T>.FromMatrix(matrix);
 
@@ -595,19 +632,43 @@ internal static class AnomalyTensorOps
     internal static Tensor<T> NearestNeighbors<T>(Tensor<T> query, Tensor<T> reference, int k, bool excludeSelf,
         bool squared, out Tensor<int> indices)
     {
+        // Query rows are processed in bounded blocks and each block is reduced to its k nearest before the
+        // next one, so only a [block, n] distance matrix is live, never [m, n]. Row r of the block starting
+        // at first is query row first + r, so its self entry is the diagonal j - r = first.
         var engine = Engine;
         var numOps = MathHelper.GetNumericOperations<T>();
         int m = query.Shape[0];
-        var distances = squared ? PairwiseSquaredDistances(query, reference) : PairwiseDistances(query, reference);
-        if (excludeSelf)
+        int n = reference.Shape[0];
+        int d = query.Shape[1];
+        if (m == 0)
         {
-            var self = engine.TensorEqScalar(engine.TensorEye<T>(m), numOps.One);
-            distances = engine.TensorMaskedFill(distances, self, numOps.MaxValue);
+            indices = Tensor<int>.FromVector(Vector<int>.Wrap(new int[0]), new[] { 0, k });
+            return Tensor<T>.CreateZeros(new[] { 0, k });
         }
 
-        var (sorted, order) = StableSortRows(distances, descending: false);
-        indices = engine.TensorSlice(order, new[] { 0, 0 }, new[] { m, k });
-        return engine.TensorSlice(sorted, new[] { 0, 0 }, new[] { m, k });
+        int rowsPerBlock = (int)Math.Max(1, Math.Min(m, PairBlockElements / Math.Max(1L, n)));
+        var valueParts = new List<Tensor<T>>();
+        var indexParts = new List<Tensor<int>>();
+        for (int first = 0; first < m; first += rowsPerBlock)
+        {
+            int count = Math.Min(rowsPerBlock, m - first);
+            var block = engine.TensorSlice(query, new[] { first, 0 }, new[] { count, d });
+            var distances = squared ? PairwiseSquaredDistances(block, reference) : PairwiseDistances(block, reference);
+            if (excludeSelf)
+            {
+                var ones = Tensor<T>.CreateOnes(new[] { count, n });
+                var self = engine.TensorEqScalar(
+                    engine.TensorSubtract(engine.TensorTril(ones, first), engine.TensorTril(ones, first - 1)), numOps.One);
+                distances = engine.TensorMaskedFill(distances, self, numOps.MaxValue);
+            }
+
+            var (sorted, order) = StableSortRows(distances, descending: false);
+            indexParts.Add(engine.TensorSlice(order, new[] { 0, 0 }, new[] { count, k }));
+            valueParts.Add(engine.TensorSlice(sorted, new[] { 0, 0 }, new[] { count, k }));
+        }
+
+        indices = indexParts.Count == 1 ? indexParts[0] : engine.TensorConcatenate(indexParts.ToArray(), 0);
+        return valueParts.Count == 1 ? valueParts[0] : engine.TensorConcatenate(valueParts.ToArray(), 0);
     }
 
     /// <summary>values[indices[i, j]] for every entry of a [m, k] index tensor, as a [m, k] tensor.</summary>

@@ -128,10 +128,13 @@ public partial class DBSCANDetector<T> : AnomalyDetectorBase<T>
         var trainingData = _trainingData ?? throw new InvalidOperationException("Model not properly fitted.");
         var engine = Engine;
 
-        // Neighbour counts within epsilon (a NaN distance is never "greater", so it counts, as before).
-        var distances = AnomalyTensorOps.PairwiseDistances(
-            AnomalyTensorOps.ToTensor(X), AnomalyTensorOps.ToTensor(trainingData));
-        var outside = engine.ReduceSum(engine.TensorGreaterThan(distances, _fittedEpsilon), new[] { 1 }, false);
+        // Neighbour counts within epsilon (a NaN distance is never "greater", so it counts, as before),
+        // over bounded blocks of query rows so only a [block, nTrain] distance matrix is live
+        var training = AnomalyTensorOps.ToTensor(trainingData);
+        T epsilon = _fittedEpsilon;
+        var outside = AnomalyTensorOps.MapRowBlocks(AnomalyTensorOps.ToTensor(X), trainingData.Rows,
+            block => engine.ReduceSum(engine.TensorGreaterThan(AnomalyTensorOps.PairwiseDistances(block, training), epsilon),
+                new[] { 1 }, false));
         var neighborCount = engine.ScalarMinusTensor(NumOps.FromDouble(trainingData.Rows), outside);
 
         // Core point (count >= minPts): 1 / (count + 1). Border point: 1 - count / minPts, which is 1 for
@@ -145,6 +148,9 @@ public partial class DBSCANDetector<T> : AnomalyDetectorBase<T>
     private int[] RunDBSCAN(Matrix<T> X)
     {
         int n = X.Rows;
+        var trainingData = _trainingData ?? throw new InvalidOperationException("Model not properly fitted.");
+        var points = AnomalyTensorOps.ToTensor(X);
+        var training = ReferenceEquals(X, trainingData) ? points : AnomalyTensorOps.ToTensor(trainingData);
         var labels = new int[n];
         for (int i = 0; i < n; i++)
         {
@@ -157,7 +163,7 @@ public partial class DBSCANDetector<T> : AnomalyDetectorBase<T>
         {
             if (labels[i] != -1) continue;
 
-            var neighbors = GetNeighborsInRadius(X, i);
+            var neighbors = GetNeighborsInRadius(points, training, i);
 
             if (neighbors.Count < _fittedMinPts)
             {
@@ -166,14 +172,15 @@ public partial class DBSCANDetector<T> : AnomalyDetectorBase<T>
             else
             {
                 clusterId++;
-                ExpandCluster(X, i, neighbors, labels, clusterId);
+                ExpandCluster(points, training, i, neighbors, labels, clusterId);
             }
         }
 
         return labels;
     }
 
-    private void ExpandCluster(Matrix<T> X, int pointIdx, List<int> neighbors, int[] labels, int clusterId)
+    private void ExpandCluster(Tensor<T> points, Tensor<T> training, int pointIdx, List<int> neighbors, int[] labels,
+        int clusterId)
     {
         labels[pointIdx] = clusterId;
 
@@ -192,7 +199,7 @@ public partial class DBSCANDetector<T> : AnomalyDetectorBase<T>
 
             labels[current] = clusterId;
 
-            var currentNeighbors = GetNeighborsInRadius(X, current);
+            var currentNeighbors = GetNeighborsInRadius(points, training, current);
 
             if (currentNeighbors.Count >= _fittedMinPts)
             {
@@ -221,11 +228,26 @@ public partial class DBSCANDetector<T> : AnomalyDetectorBase<T>
 
         var engine = Engine;
 
-        // Distance of every point to its k-th nearest other point (self pushed to the end of each row).
-        var distances = AnomalyTensorOps.PairwiseDistances(X);
-        var self = engine.TensorEqScalar(engine.TensorEye<T>(n), NumOps.One);
-        var (sortedRows, _) = engine.TensorSort(engine.TensorMaskedFill(distances, self, NumOps.MaxValue), 1, false);
-        var kDistances = engine.TensorSliceAxis(sortedRows, 1, k - 1);
+        // Distance of every point to its k-th nearest other point (self pushed to the end of each row), in
+        // bounded row blocks so only a [block, n] distance matrix is live; row r of the block starting at
+        // first is point first + r, so its self entry is the diagonal j - r = first.
+        var points = AnomalyTensorOps.ToTensor(X);
+        int d = X.Columns;
+        int rowsPerBlock = Math.Max(1, Math.Min(n, EpsilonBlockElements / n));
+        var kParts = new List<Tensor<T>>();
+        for (int first = 0; first < n; first += rowsPerBlock)
+        {
+            int count = Math.Min(rowsPerBlock, n - first);
+            var distances = AnomalyTensorOps.PairwiseDistances(
+                engine.TensorSlice(points, new[] { first, 0 }, new[] { count, d }), points);
+            var ones = Tensor<T>.CreateOnes(new[] { count, n });
+            var self = engine.TensorEqScalar(
+                engine.TensorSubtract(engine.TensorTril(ones, first), engine.TensorTril(ones, first - 1)), NumOps.One);
+            var (sortedRows, _) = engine.TensorSort(engine.TensorMaskedFill(distances, self, NumOps.MaxValue), 1, false);
+            kParts.Add(engine.TensorSliceAxis(sortedRows, 1, k - 1));
+        }
+
+        var kDistances = kParts.Count == 1 ? kParts[0] : engine.TensorConcatenate(kParts.ToArray(), 0);
 
         // Use the 90th percentile k-distance as epsilon estimate
         var (sortedKDistances, _) = engine.TensorSort(kDistances, 0, false);
@@ -233,18 +255,15 @@ public partial class DBSCANDetector<T> : AnomalyDetectorBase<T>
         return sortedKDistances[Math.Min(elbowIdx, n - 1)];
     }
 
-    private List<int> GetNeighborsInRadius(Matrix<T> X, int pointIdx)
-    {
-        var trainingData = _trainingData;
-        if (trainingData == null)
-        {
-            throw new InvalidOperationException("Model not properly fitted.");
-        }
+    // Upper bound on the elements of one [rows, n] block of the k-distance computation.
+    private const int EpsilonBlockElements = 1 << 22;
 
+    private List<int> GetNeighborsInRadius(Tensor<T> points, Tensor<T> training, int pointIdx)
+    {
         // Training points whose distance is not greater than epsilon, in index order.
         var engine = Engine;
-        var point = X.GetRow(pointIdx).AsTensor();
-        var dist = engine.TensorSqrt(AnomalyTensorOps.SquaredDistancesToPoint(AnomalyTensorOps.ToTensor(trainingData), point));
+        var point = engine.TensorSliceAxis(points, 0, pointIdx);
+        var dist = engine.TensorSqrt(AnomalyTensorOps.SquaredDistancesToPoint(training, point));
         var within = engine.ScalarMinusTensor(NumOps.One, engine.TensorGreaterThan(dist, _fittedEpsilon));
         return new List<int>(AnomalyTensorOps.NonzeroIndices(within));
     }

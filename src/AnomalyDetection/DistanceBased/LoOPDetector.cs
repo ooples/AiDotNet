@@ -132,7 +132,6 @@ public partial class LoOPDetector<T> : AnomalyDetectorBase<T>
         var trainingData = _trainingData ?? throw new InvalidOperationException("Model not properly fitted.");
 
         var engine = Engine;
-        int m = X.Rows;
         T k = NumOps.FromDouble(_k);
         var training = AnomalyTensorOps.ToTensor(trainingData);
         var pdTraining = probDists.AsTensor();
@@ -143,10 +142,19 @@ public partial class LoOPDetector<T> : AnomalyDetectorBase<T>
             engine.ReduceSum(AnomalyTensorOps.GatherByIndex(pdTraining, trainingNeighbors), new[] { 1 }, false), k);
         var trainingPlof = Plof(pdTraining, trainingExpected);
 
+        // Query rows are scored in bounded blocks: only a [block, nTrain] distance matrix is live
+        return AnomalyTensorOps.MapRowBlocks(AnomalyTensorOps.ToTensor(X), trainingData.Rows,
+            query => ScoreBlock(query, training, pdTraining, trainingPlof)).ToVector();
+    }
+
+    // LoOP scores of one block of query rows against the training data.
+    private Tensor<T> ScoreBlock(Tensor<T> query, Tensor<T> training, Tensor<T> pdTraining, Tensor<T> trainingPlof)
+    {
+        var engine = Engine;
         // Neighbourhood of every point: the k nearest training points at a positive distance. Distances
         // sort ascending, so after the zero distances the next (at most) k entries are the neighbours.
         var (sortedSq, order) = AnomalyTensorOps.StableSortRows(
-            AnomalyTensorOps.PairwiseSquaredDistances(AnomalyTensorOps.ToTensor(X), training), descending: false);
+            AnomalyTensorOps.PairwiseSquaredDistances(query, training), descending: false);
         var positive = engine.TensorGreaterThan(sortedSq, NumOps.Zero);
         var neighborMask = engine.TensorMultiply(positive,
             engine.TensorLessThan(engine.TensorCumSum(positive, 1), NumOps.FromDouble(_k + 0.5)));
@@ -170,7 +178,7 @@ public partial class LoOPDetector<T> : AnomalyDetectorBase<T>
         var z = engine.TensorDivide(plof, engine.TensorMultiplyScalar(nplof, NumOps.FromDouble(Math.Sqrt(2))));
         var loop = engine.TensorMax(engine.TensorErf(z), NumOps.Zero);
         var degenerate = engine.TensorGreaterThan(plof, NumOps.Zero);
-        return engine.TensorWhere(engine.TensorGreaterThan(nplof, NumOps.Zero), loop, degenerate).ToVector();
+        return engine.TensorWhere(engine.TensorGreaterThan(nplof, NumOps.Zero), loop, degenerate);
     }
 
     // sum_j values[i, j] over the entries where mask[i, j] is 1 (masked-out entries never contribute,
