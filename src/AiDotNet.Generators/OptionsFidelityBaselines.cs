@@ -1533,7 +1533,6 @@ internal static class OptionsFidelityBaselines
             "AiDotNet.NeuralNetworks.Options.MemoryNetworkOptions",
             "AiDotNet.NeuralNetworks.Options.MobileNetV2Options",
             "AiDotNet.NeuralNetworks.Options.MobileNetV3Options",
-            "AiDotNet.NeuralNetworks.Options.NEATOptions",
             "AiDotNet.NeuralNetworks.Options.NeuralNetworkDefaultOptions",
             "AiDotNet.NeuralNetworks.Options.NeuralTuringMachineOptions",
             "AiDotNet.NeuralNetworks.Options.OccupancyNeuralNetworkOptions",
