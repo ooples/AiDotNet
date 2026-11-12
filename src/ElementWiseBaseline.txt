@@ -2854,6 +2854,7 @@
 1	ADNELEM001|AiDotNet.Deployment.Optimization.Quantization.Training.QATTrainingHook<T>.InitializeLayerState(AiDotNet.Tensors.LinearAlgebra.Vector<T>, string, int?)
 1	ADNELEM001|AiDotNet.Deployment.Optimization.Quantization.Training.QATTrainingHook<T>.UpdateActivationStatistics(AiDotNet.Tensors.LinearAlgebra.Vector<T>, AiDotNet.Deployment.Optimization.Quantization.Training.QuantizationState)
 3	ADNELEM001|AiDotNet.Diffusion.Acceleration.FreeNoiseModule<T>.GenerateRescheduledNoise(int, int[])
+2	ADNELEM001|AiDotNet.Diffusion.Attention.MotionModule<T>.SetSubParams(AiDotNet.NeuralNetworks.Layers.LayerBase<T>, AiDotNet.Tensors.LinearAlgebra.Vector<T>, ref int)
 2	ADNELEM001|AiDotNet.Diffusion.Audio.ProjectionLayer<T>.ProjectionLayer(int, int, int?)
 1	ADNELEM001|AiDotNet.Diffusion.Control.IPAdapterFaceIDPlusModel<T>.AddParams(System.Collections.Generic.List<T>, AiDotNet.Tensors.LinearAlgebra.Vector<T>)
 1	ADNELEM001|AiDotNet.Diffusion.DDPMModel<T>.PredictTrainingNoise(AiDotNet.Tensors.LinearAlgebra.Tensor<T>, AiDotNet.Tensors.LinearAlgebra.Tensor<T>, AiDotNet.Tensors.LinearAlgebra.Tensor<T>, AiDotNet.Tensors.LinearAlgebra.Tensor<T>)
