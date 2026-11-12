@@ -86,14 +86,12 @@ public class BattleLemarieWavelet<T> : WaveletFunctionBase<T>
     /// </remarks>
     public override T Calculate(T x)
     {
-        T result = NumOps.Zero;
-        for (int k = -_order; k <= _order; k++)
-        {
-            T term = BSpline(NumOps.Add(x, NumOps.FromDouble(k)));
-            result = NumOps.Add(result, NumOps.Multiply(NumOps.FromDouble(Math.Pow(-1, k)), term));
-        }
+        var engine = AiDotNetEngine.Current;
 
-        return result;
+        // sum_k (-1)^k * B(x + k) for k = -order .. order
+        var shifted = engine.TensorAddScalar(engine.TensorArange<T>(-_order, _order + 1, 1), x);
+        var signs = engine.Multiply(WaveletEngineOps<T>.AlternatingSigns(2 * _order + 1), NumOps.FromDouble(Math.Pow(-1, _order)));
+        return engine.TensorSum(engine.TensorMultiply(Tensor<T>.FromVector(signs), BSpline(shifted)));
     }
 
     /// <summary>
@@ -129,28 +127,12 @@ public class BattleLemarieWavelet<T> : WaveletFunctionBase<T>
             throw new ArgumentException("Input length must be even for Battle-Lemarie wavelet decomposition.");
 
         int halfLength = input.Length / 2;
-        var approximation = new Vector<T>(halfLength);
-        var detail = new Vector<T>(halfLength);
-
         var scalingCoeffs = GetScalingCoefficients();
         var waveletCoeffs = GetWaveletCoefficients();
 
-        for (int i = 0; i < halfLength; i++)
-        {
-            T approx = NumOps.Zero;
-            T det = NumOps.Zero;
-
-            for (int j = 0; j < scalingCoeffs.Length; j++)
-            {
-                int index = (2 * i + j) % input.Length;
-                approx = NumOps.Add(approx, NumOps.Multiply(scalingCoeffs[j], input[index]));
-                det = NumOps.Add(det, NumOps.Multiply(waveletCoeffs[j], input[index]));
-            }
-
-            approximation[i] = approx;
-            detail[i] = det;
-        }
-
+        // a[i] = sum_j h[j] * x[(2i + j) mod n], d[i] = sum_j g[j] * x[(2i + j) mod n]
+        var approximation = WaveletEngineOps<T>.PeriodicCorrelate(input, scalingCoeffs, 2, halfLength);
+        var detail = WaveletEngineOps<T>.PeriodicCorrelate(input, waveletCoeffs, 2, halfLength);
         return (approximation, detail);
     }
 
@@ -182,38 +164,34 @@ public class BattleLemarieWavelet<T> : WaveletFunctionBase<T>
     {
         int order = _order;
         int numCoeffs = 4 * order + 1; // Increased support for better accuracy
-        Vector<T> coeffs = new Vector<T>(numCoeffs);
+        var engine = AiDotNetEngine.Current;
 
-        // Calculate Battle-Lemarie coefficients using Fourier transform
+        // Fourier transform of the scaling function: B(omega) / sqrt(sum_k |B(omega + 2 pi k)|^2)
         int numSamples = 1024; // Number of samples for FFT, adjust as needed
-        Vector<Complex<T>> fftInput = new Vector<Complex<T>>(numSamples);
+        var omega = engine.TensorMultiplyScalar(
+            engine.TensorMultiplyScalar(engine.TensorArange<T>(0, numSamples, 1), NumOps.FromDouble(2 * Math.PI)),
+            NumOps.FromDouble(1.0 / numSamples));
+        var denominator = engine.TensorSqrt(SumSquaredBSplineFourier(omega, order));
+        var real = engine.TensorDivide(BSplineFourier(omega, order), denominator);
+        var imag = engine.TensorDivide(engine.TensorZerosLike(real), denominator);
 
-        for (int i = 0; i < numSamples; i++)
-        {
-            T omega = NumOps.Multiply(NumOps.FromDouble(2 * Math.PI * i), NumOps.FromDouble(1.0 / numSamples));
-            Complex<T> bSplineFourier = BSplineFourier(omega, order);
-            T denominator = NumOps.Sqrt(SumSquaredBSplineFourier(omega, order));
-            fftInput[i] = new Complex<T>(NumOps.Divide(bSplineFourier.Real, denominator), NumOps.Divide(bSplineFourier.Imaginary, denominator));
-        }
+        // Compute the inverse FFT to get the scaling function coefficients
+        Vector<Complex<T>> fftOutput = InverseFFT(engine.TensorComplex(real, imag).ToVector());
 
-        // Perform inverse FFT
-        Vector<Complex<T>> fftOutput = InverseFFT(fftInput);
-
-        // Extract and normalize coefficients
+        // Extract the central part of the scaling function: output[(center - numCoeffs / 2 + i) mod n]
         int center = numSamples / 2;
-        for (int i = 0; i < numCoeffs; i++)
+        int start = ((center - numCoeffs / 2) % numSamples + numSamples) % numSamples;
+        var timeDomain = engine.TensorReal(Tensor<Complex<T>>.FromVector(fftOutput));
+        if (start != 0)
         {
-            coeffs[i] = fftOutput[(center - numCoeffs / 2 + i + numSamples) % numSamples].Real;
+            timeDomain = engine.TensorRoll(timeDomain, new[] { -start }, new[] { 0 });
         }
+
+        var coeffs = engine.TensorSlice(timeDomain, new[] { 0 }, new[] { numCoeffs }).ToVector();
 
         // Normalize the coefficients
-        T sum = coeffs.Sum();
-        for (int i = 0; i < coeffs.Length; i++)
-        {
-            coeffs[i] = NumOps.Divide(coeffs[i], sum);
-        }
-
-        return coeffs;
+        T sum = engine.Sum(coeffs);
+        return engine.Divide(coeffs, sum);
     }
 
     /// <summary>
@@ -238,21 +216,16 @@ public class BattleLemarieWavelet<T> : WaveletFunctionBase<T>
     /// properties like orthogonality, which makes it useful for signal analysis.
     /// </para>
     /// </remarks>
-    private Complex<T> BSplineFourier(T omega, int order)
+    private static Tensor<T> BSplineFourier(Tensor<T> omega, int order)
     {
-        var complexOps = MathHelper.GetNumericOperations<Complex<T>>();
-        Complex<T> result = new Complex<T>(NumOps.One, NumOps.Zero);
-        for (int i = 0; i < order; i++)
-        {
-            T halfOmega = NumOps.Divide(omega, NumOps.FromDouble(2));
-            // Handle the sinc function at omega=0 where sin(x)/x = 1
-            T sinc = Math.Abs(NumOps.ToDouble(halfOmega)) < 1e-10
-                ? NumOps.One
-                : NumOps.Divide(MathHelper.Sin(halfOmega), halfOmega);
-            result = complexOps.Multiply(result, new Complex<T>(sinc, NumOps.Zero));
-        }
+        var engine = AiDotNetEngine.Current;
 
-        return result;
+        // sinc(omega / 2)^order with sinc(0) = 1; the transform is real.
+        var halfOmega = engine.TensorDivideScalar(omega, NumOps.FromDouble(2));
+        var nearZero = engine.TensorLessThan(engine.TensorAbs(halfOmega), NumOps.FromDouble(1e-10));
+        var sinc = engine.TensorWhere(nearZero, engine.TensorOnesLike(halfOmega),
+            engine.TensorDivide(engine.TensorSin(halfOmega), halfOmega));
+        return engine.TensorPower(sinc, NumOps.FromDouble(order));
     }
 
     /// <summary>
@@ -281,17 +254,21 @@ public class BattleLemarieWavelet<T> : WaveletFunctionBase<T>
     /// independent components.
     /// </para>
     /// </remarks>
-    private T SumSquaredBSplineFourier(T omega, int order)
+    private static Tensor<T> SumSquaredBSplineFourier(Tensor<T> omega, int order)
     {
-        T sum = NumOps.Zero;
-        for (int k = -order; k <= order; k++)
-        {
-            T shiftedOmega = NumOps.Add(omega, NumOps.Multiply(NumOps.FromDouble(2 * Math.PI), NumOps.FromDouble(k)));
-            Complex<T> bSpline = BSplineFourier(shiftedOmega, order);
-            sum = NumOps.Add(sum, NumOps.Add(NumOps.Multiply(bSpline.Real, bSpline.Real), NumOps.Multiply(bSpline.Imaginary, bSpline.Imaginary)));
-        }
+        var engine = AiDotNetEngine.Current;
+        int samples = omega.Length;
+        int shifts = 2 * order + 1;
 
-        return sum;
+        // omega + 2 pi k for k = -order .. order, as a [samples, shifts] grid
+        var offsets = engine.TensorMultiplyScalar(engine.TensorArange<T>(-order, order + 1, 1), NumOps.FromDouble(2 * Math.PI));
+        var shifted = engine.TensorAdd(
+            engine.TensorBroadcastTo(omega.Reshape(samples, 1), new[] { samples, shifts }),
+            engine.TensorBroadcastTo(offsets.Reshape(1, shifts), new[] { samples, shifts }));
+
+        // |B(omega + 2 pi k)|^2 summed over k (the transform is real)
+        var bSpline = BSplineFourier(shifted, order);
+        return engine.ReduceSum(engine.TensorMultiply(bSpline, bSpline), new[] { 1 }, false);
     }
 
     /// <summary>
@@ -320,26 +297,14 @@ public class BattleLemarieWavelet<T> : WaveletFunctionBase<T>
     /// which is used to extract the approximation coefficients during decomposition.
     /// </para>
     /// </remarks>
-    private Vector<Complex<T>> InverseFFT(Vector<Complex<T>> input)
+    private static Vector<Complex<T>> InverseFFT(Vector<Complex<T>> input)
     {
-        int n = input.Length;
-        Vector<Complex<T>> output = new Vector<Complex<T>>(n);
+        var engine = AiDotNetEngine.Current;
+        var spectrum = Tensor<Complex<T>>.FromVector(input);
 
-        for (int k = 0; k < n; k++)
-        {
-            var complexOps = MathHelper.GetNumericOperations<Complex<T>>();
-            Complex<T> sum = new Complex<T>(NumOps.Zero, NumOps.Zero);
-            for (int t = 0; t < n; t++)
-            {
-                T angle = NumOps.Multiply(NumOps.FromDouble(2 * Math.PI * t * k), NumOps.FromDouble(1.0 / n));
-                Complex<T> exp = new Complex<T>(MathHelper.Cos(angle), MathHelper.Sin(angle));
-                sum = complexOps.Add(sum, complexOps.Multiply(input[t], exp));
-            }
-
-            output[k] = new Complex<T>(NumOps.Divide(sum.Real, NumOps.FromDouble(n)), NumOps.Divide(sum.Imaginary, NumOps.FromDouble(n)));
-        }
-
-        return output;
+        // output[k] = (1/n) * sum_t input[t] * exp(2 pi i t k / n)
+        engine.IFFT(engine.TensorReal(spectrum), engine.TensorImag(spectrum), out var real, out var imag);
+        return engine.TensorComplex(real, imag).ToVector();
     }
 
     /// <summary>
@@ -373,16 +338,8 @@ public class BattleLemarieWavelet<T> : WaveletFunctionBase<T>
     /// </remarks>
     public override Vector<T> GetWaveletCoefficients()
     {
-        var scalingCoeffs = GetScalingCoefficients();
-        int L = scalingCoeffs.Length;
-        var waveletCoeffs = new T[L];
-
-        for (int i = 0; i < L; i++)
-        {
-            waveletCoeffs[i] = NumOps.Multiply(NumOps.FromDouble(Math.Pow(-1, i)), scalingCoeffs[L - 1 - i]);
-        }
-
-        return new Vector<T>(waveletCoeffs);
+        // g[i] = (-1)^i * h[L - 1 - i]
+        return WaveletEngineOps<T>.QuadratureMirror(GetScalingCoefficients());
     }
 
     /// <summary>
@@ -409,20 +366,18 @@ public class BattleLemarieWavelet<T> : WaveletFunctionBase<T>
     /// The B-spline function is used in the Calculate method to construct the actual wavelet function.
     /// </para>
     /// </remarks>
-    private T BSpline(T x)
+    private static Tensor<T> BSpline(Tensor<T> x)
     {
-        T absX = NumOps.Abs(x);
-        if (NumOps.LessThan(absX, NumOps.FromDouble(0.5)))
-        {
-            return NumOps.One;
-        }
-        else if (NumOps.LessThanOrEquals(absX, NumOps.FromDouble(1.5)))
-        {
-            T temp = NumOps.Subtract(NumOps.FromDouble(1.5), absX);
-            return NumOps.Multiply(NumOps.FromDouble(0.5), NumOps.Multiply(temp, temp));
-        }
+        var engine = AiDotNetEngine.Current;
+        var absX = engine.TensorAbs(x);
 
-        return NumOps.Zero;
+        // 1 for |x| < 0.5, 0.5 * (1.5 - |x|)^2 for |x| <= 1.5, else 0
+        var inner = engine.TensorLessThan(absX, NumOps.FromDouble(0.5));
+        var support = engine.TensorLessEqual(absX, engine.TensorFullLike(absX, NumOps.FromDouble(1.5)));
+        var temp = engine.ScalarMinusTensor(NumOps.FromDouble(1.5), absX);
+        var outer = engine.TensorMultiplyScalar(engine.TensorMultiply(temp, temp), NumOps.FromDouble(0.5));
+        return engine.TensorWhere(inner, engine.TensorOnesLike(absX),
+            engine.TensorWhere(support, outer, engine.TensorZerosLike(absX)));
     }
 
     /// <summary>
@@ -447,31 +402,11 @@ public class BattleLemarieWavelet<T> : WaveletFunctionBase<T>
     /// </remarks>
     public Vector<T> Reconstruct(Vector<T> approximation, Vector<T> detail)
     {
-        int outputLength = approximation.Length * 2;
-        var reconstructed = new Vector<T>(outputLength);
-
         var scalingCoeffs = GetScalingCoefficients();
         var waveletCoeffs = GetWaveletCoefficients();
 
-        // Upsample and convolve with time-reversed filters
-        for (int i = 0; i < outputLength; i++)
-        {
-            T sum = NumOps.Zero;
-
-            for (int j = 0; j < scalingCoeffs.Length; j++)
-            {
-                int approxIndex = (i - j + scalingCoeffs.Length * outputLength) / 2;
-                if (approxIndex >= 0 && approxIndex < approximation.Length && (i - j + scalingCoeffs.Length * outputLength) % 2 == 0)
-                {
-                    int revJ = scalingCoeffs.Length - 1 - j;
-                    sum = NumOps.Add(sum, NumOps.Multiply(scalingCoeffs[revJ], approximation[approxIndex]));
-                    sum = NumOps.Add(sum, NumOps.Multiply(waveletCoeffs[revJ], detail[approxIndex]));
-                }
-            }
-
-            reconstructed[i] = sum;
-        }
-
-        return reconstructed;
+        // Adjoint of the periodic analysis in Decompose:
+        // x[m] = sum_j h[j] * up(a)[(m - j) mod n] + g[j] * up(d)[(m - j) mod n].
+        return WaveletEngineOps<T>.PeriodicSynthesis(approximation, detail, scalingCoeffs, waveletCoeffs);
     }
 }
