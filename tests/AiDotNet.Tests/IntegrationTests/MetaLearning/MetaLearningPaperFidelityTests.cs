@@ -1,5 +1,6 @@
 using System;
 using AiDotNet.Data.Structures;
+using AiDotNet.Enums;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.LossFunctions;
 using AiDotNet.MetaLearning.Algorithms;
@@ -269,6 +270,19 @@ public class MetaLearningPaperFidelityTests
 
         // Grand mean 5.05: total variance 100.01, between-class variance 2 * 25 + 2 * 25 = 100.
         Assert.Equal(1.0 - 100.0 / 100.01, TaskDifficultyEstimator<double>.EstimateFisherDifficulty(x, y, 2), 1e-12);
+    }
+
+    [Fact]
+    public void RelationNetwork_Defaults_MatchSungEtAl2018()
+    {
+        // Sung et al. (2018): one episode per optimisation step, the class feature map is the sum of its shots'
+        // embeddings, a hidden relation layer of 8 units, and no gradient clipping.
+        var options = new RelationNetworkOptions<double, Matrix<double>, Vector<double>>(new LinearVectorModel(3));
+
+        Assert.Equal(1, options.MetaBatchSize);
+        Assert.Null(options.GradientClipThreshold);
+        Assert.Equal(RelationAggregationMethod.EmbeddingSum, options.AggregationMethod);
+        Assert.Equal(8, options.RelationHiddenDimension);
     }
 
     [Fact]
