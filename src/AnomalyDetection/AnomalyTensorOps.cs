@@ -570,11 +570,19 @@ internal static class AnomalyTensorOps
     /// </summary>
     internal static Tensor<T> NearestNeighbors<T>(Tensor<T> query, Tensor<T> reference, int k, bool excludeSelf,
         out Tensor<int> indices)
+        => NearestNeighbors(query, reference, k, excludeSelf, false, out indices);
+
+    /// <summary>
+    /// As <see cref="NearestNeighbors{T}(Tensor{T}, Tensor{T}, int, bool, out Tensor{int})"/>, returning
+    /// squared distances when <paramref name="squared"/> is set (the neighbour order is the same).
+    /// </summary>
+    internal static Tensor<T> NearestNeighbors<T>(Tensor<T> query, Tensor<T> reference, int k, bool excludeSelf,
+        bool squared, out Tensor<int> indices)
     {
         var engine = Engine;
         var numOps = MathHelper.GetNumericOperations<T>();
         int m = query.Shape[0];
-        var distances = PairwiseDistances(query, reference);
+        var distances = squared ? PairwiseSquaredDistances(query, reference) : PairwiseDistances(query, reference);
         if (excludeSelf)
         {
             var self = engine.TensorEqScalar(engine.TensorEye<T>(m), numOps.One);

@@ -221,6 +221,32 @@ public class DistanceBasedAnomalyDetectionTests
         AssertPredictClassifiesCorrectly(predictions, OutlierIndex);
     }
 
+    [Fact(Timeout = 120000)]
+    public async Task LoOP_MatchesKriegelReferenceValues()
+    {
+        // Kriegel et al. (2009), "LoOP: Local Outlier Probabilities": with S(o) the k nearest neighbours,
+        // pdist(o) = sqrt(sum d^2 / |S|), PLOF(o) = pdist(o) / E_S[pdist] - 1,
+        // nPLOF = lambda * sqrt(E_S[PLOF^2]) and LoOP(o) = max(0, erf(PLOF(o) / (nPLOF * sqrt(2)))).
+        // Points 0, 1, 2, 3, 10 with k = 2, lambda = 3, worked by hand:
+        //   neighbours 0:{1,2} 1:{0,2} 2:{1,3} 3:{2,1} 10:{3,2}
+        //   pdist = sqrt(2.5), 1, 1, sqrt(2.5), sqrt(56.5)
+        //   PLOF  = sqrt(2.5) - 1, 1/c - 1, 1/c - 1, sqrt(2.5) - 1, sqrt(56.5)/c - 1 with c = (sqrt(2.5) + 1) / 2
+        //   LoOP(0) = LoOP(3) = erf((sqrt(2.5) - 1) / (sqrt(2) * 3 * |1/c - 1|)) = 0.61042017823898...
+        //   LoOP(1) = LoOP(2) = 0 (negative PLOF)
+        //   LoOP(10) = erf((sqrt(56.5)/c - 1) / (sqrt(2) * 3 * sqrt(((sqrt(2.5) - 1)^2 + (1/c - 1)^2) / 2)))
+        //            = 0.99973678552674...
+        var data = new Matrix<double>(new double[,] { { 0 }, { 1 }, { 2 }, { 3 }, { 10 } });
+        var detector = new LoOPDetector<double>(k: 2, lambda: 3);
+        detector.Fit(data);
+        var scores = detector.ScoreAnomalies(data);
+
+        Assert.Equal(0.6104201782389873, scores[0], 1e-6);
+        Assert.Equal(0.0, scores[1], 1e-12);
+        Assert.Equal(0.0, scores[2], 1e-12);
+        Assert.Equal(0.6104201782389873, scores[3], 1e-6);
+        Assert.Equal(0.9997367855267474, scores[4], 1e-6);
+    }
+
     #endregion
 
     #region LOCIDetector Tests
