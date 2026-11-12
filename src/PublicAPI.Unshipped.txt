@@ -22921,3 +22921,57 @@ AiDotNet.Enums.MixtureOfExpertsGatingNoise.SoftplusOfRouterLogits = 1 -> AiDotNe
 AiDotNet.Enums.ObliviousTreeChoiceFunction
 AiDotNet.Enums.ObliviousTreeChoiceFunction.Entmax15 = 0 -> AiDotNet.Enums.ObliviousTreeChoiceFunction
 AiDotNet.Enums.ObliviousTreeChoiceFunction.SoftmaxSigmoid = 1 -> AiDotNet.Enums.ObliviousTreeChoiceFunction
+*REMOVED*AiDotNet.FederatedLearning.Compression.FetchSGDCompressor<T>.FetchSGDCompressor(int sketchRows = 5, int sketchCols = 10000, int topK = 1000, int seed = 42) -> void
+*REMOVED*AiDotNet.FederatedLearning.Compression.FetchSGDCompressor<T>.MergeSketches(System.Collections.Generic.IReadOnlyList<double[,]!>! sketches) -> double[,]!
+*REMOVED*AiDotNet.FederatedLearning.Compression.FetchSGDCompressor<T>.RecoverTopK(double[,]! mergedSketch, int gradientLength) -> T[]!
+*REMOVED*AiDotNet.FederatedLearning.Compression.FetchSGDCompressor<T>.Sketch(T[]! gradient, bool useErrorFeedback = true) -> double[,]!
+*REMOVED*AiDotNet.FederatedLearning.Compression.FedKDCompressor<T>.AggregateLogits(System.Collections.Generic.Dictionary<int, T[]![]!>! clientLogits, System.Collections.Generic.Dictionary<int, double>! clientWeights) -> T[]![]!
+*REMOVED*AiDotNet.FederatedLearning.Compression.FedKDCompressor<T>.ComputeKDLoss(T[]! studentLogits, T[]! teacherLogits) -> T
+*REMOVED*AiDotNet.FederatedLearning.Compression.FedKDCompressor<T>.FedKDCompressor(double temperature = 3, double kdWeight = 0.7) -> void
+*REMOVED*AiDotNet.FederatedLearning.Compression.FedKDCompressor<T>.KDWeight.get -> double
+*REMOVED*AiDotNet.FederatedLearning.Compression.FedKDCompressor<T>.NormalizeHeterogeneousLogits(System.Collections.Generic.Dictionary<int, T[]![]!>! clientLogits, int targetClasses) -> System.Collections.Generic.Dictionary<int, T[]![]!>!
+*REMOVED*AiDotNet.FederatedLearning.Compression.FedKDCompressor<T>.ServerDistillationStep(T[]! studentParams, T[]![]! aggregatedSoftLabels, System.Func<T[]!, int, T[]!>! studentLogitsFn, double learningRate = 0.01, int steps = 10) -> (T[]! UpdatedParams, double FinalLoss)
+*REMOVED*AiDotNet.FederatedLearning.Compression.FedDTCompressor<T>.CompressedTree.CompressedTree(System.Collections.Generic.Dictionary<string!, double[]!>! splitPoints, System.Collections.Generic.Dictionary<string!, double[]!>! leafValues, System.Collections.Generic.Dictionary<string!, int[]!>! leafCounts) -> void
+*REMOVED*AiDotNet.FederatedLearning.Compression.FedDTCompressor<T>.CompressedTree.LeafValues.get -> System.Collections.Generic.Dictionary<string!, double[]!>!
+*REMOVED*AiDotNet.FederatedLearning.Compression.FedDTCompressor<T>.CompressedTree.SplitPoints.get -> System.Collections.Generic.Dictionary<string!, double[]!>!
+*REMOVED*AiDotNet.FederatedLearning.ContinualLearning.DataFreeFCL<T>.ComputeDistillationLoss(double[]! teacherLogits, double[]! studentLogits) -> double
+AiDotNet.FederatedLearning.Adapters.DPFedLoRA<T>.LoraScaling.get -> double
+AiDotNet.FederatedLearning.Adapters.FederatedLoRA<T>.ComputeExactAggregationResidual(System.Collections.Generic.Dictionary<int, AiDotNet.Tensors.LinearAlgebra.Vector<T>!>! clientAdapters, System.Collections.Generic.Dictionary<int, double>? clientWeights) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+AiDotNet.FederatedLearning.Adapters.HeterogeneousLoRA<T>.AggregateAdaptersForRank(System.Collections.Generic.Dictionary<int, AiDotNet.Tensors.LinearAlgebra.Vector<T>!>! clientAdapters, System.Collections.Generic.Dictionary<int, double>? clientWeights, int rank) -> AiDotNet.Tensors.LinearAlgebra.Vector<T>!
+AiDotNet.FederatedLearning.Aggregators.FlameAggregationStrategy<T>.SetGlobalModel(System.Collections.Generic.Dictionary<string!, T[]!>! globalModel) -> void
+AiDotNet.FederatedLearning.Compression.FetchSGDCompressor<T>.FetchSGDCompressor(int sketchRows = 5, int sketchCols = 10000, int topK = 1000, int seed = 42, double momentum = 0.9, double learningRate = 1) -> void
+AiDotNet.FederatedLearning.Compression.FetchSGDCompressor<T>.MergeSketches(System.Collections.Generic.IReadOnlyList<AiDotNet.Tensors.LinearAlgebra.Matrix<T>!>! sketches) -> AiDotNet.Tensors.LinearAlgebra.Matrix<T>!
+AiDotNet.FederatedLearning.Compression.FetchSGDCompressor<T>.RecoverTopK(AiDotNet.Tensors.LinearAlgebra.Matrix<T>! mergedSketch, int gradientLength) -> T[]!
+AiDotNet.FederatedLearning.Compression.FetchSGDCompressor<T>.Sketch(T[]! gradient) -> AiDotNet.Tensors.LinearAlgebra.Matrix<T>!
+AiDotNet.FederatedLearning.Compression.FetchSGDCompressor<T>.ServerStep(AiDotNet.Tensors.LinearAlgebra.Matrix<T>! aggregatedSketch, int gradientLength) -> T[]!
+AiDotNet.FederatedLearning.Compression.FetchSGDCompressor<T>.ResetServerState() -> void
+AiDotNet.FederatedLearning.Compression.FetchSGDCompressor<T>.Momentum.get -> double
+AiDotNet.FederatedLearning.Compression.FetchSGDCompressor<T>.LearningRate.get -> double
+AiDotNet.FederatedLearning.Compression.FedKDCompressor<T>.FedKDCompressor(double temperature = 1, double startEnergyThreshold = 0.95, double endEnergyThreshold = 0.98) -> void
+AiDotNet.FederatedLearning.Compression.FedKDCompressor<T>.ComputeMutualDistillationLosses(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! teacherLogits, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! studentLogits, int[]! labels, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! teacherHidden, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! studentHidden, AiDotNet.Tensors.LinearAlgebra.Tensor<T>? hiddenProjection = null, AiDotNet.Tensors.LinearAlgebra.Tensor<T>? teacherAttention = null, AiDotNet.Tensors.LinearAlgebra.Tensor<T>? studentAttention = null) -> AiDotNet.FederatedLearning.Compression.FedKDLosses<T>!
+AiDotNet.FederatedLearning.Compression.FedKDCompressor<T>.GetEnergyThreshold(int round, int totalRounds) -> double
+AiDotNet.FederatedLearning.Compression.FedKDCompressor<T>.CompressGradient(AiDotNet.Tensors.LinearAlgebra.Matrix<T>! gradient, double energyThreshold) -> AiDotNet.FederatedLearning.Compression.FedKDCompressedGradient<T>!
+AiDotNet.FederatedLearning.Compression.FedKDCompressor<T>.DecompressGradient(AiDotNet.FederatedLearning.Compression.FedKDCompressedGradient<T>! compressed) -> AiDotNet.Tensors.LinearAlgebra.Matrix<T>!
+AiDotNet.FederatedLearning.Compression.FedKDCompressor<T>.AggregateCompressedGradients(System.Collections.Generic.Dictionary<int, AiDotNet.FederatedLearning.Compression.FedKDCompressedGradient<T>!>! clientGradients, System.Collections.Generic.Dictionary<int, double>? clientWeights = null) -> AiDotNet.Tensors.LinearAlgebra.Matrix<T>!
+AiDotNet.FederatedLearning.Compression.FedKDCompressor<T>.StartEnergyThreshold.get -> double
+AiDotNet.FederatedLearning.Compression.FedKDCompressor<T>.EndEnergyThreshold.get -> double
+AiDotNet.FederatedLearning.Compression.FedKDLosses<T>
+AiDotNet.FederatedLearning.Compression.FedKDLosses<T>.FedKDLosses(T teacherTaskLoss, T studentTaskLoss, T teacherDistillationLoss, T studentDistillationLoss, T hiddenLoss) -> void
+AiDotNet.FederatedLearning.Compression.FedKDLosses<T>.TeacherTaskLoss.get -> T
+AiDotNet.FederatedLearning.Compression.FedKDLosses<T>.StudentTaskLoss.get -> T
+AiDotNet.FederatedLearning.Compression.FedKDLosses<T>.TeacherDistillationLoss.get -> T
+AiDotNet.FederatedLearning.Compression.FedKDLosses<T>.StudentDistillationLoss.get -> T
+AiDotNet.FederatedLearning.Compression.FedKDLosses<T>.HiddenLoss.get -> T
+AiDotNet.FederatedLearning.Compression.FedKDLosses<T>.TeacherTotalLoss.get -> T
+AiDotNet.FederatedLearning.Compression.FedKDLosses<T>.StudentTotalLoss.get -> T
+AiDotNet.FederatedLearning.Compression.FedKDCompressedGradient<T>
+AiDotNet.FederatedLearning.Compression.FedKDCompressedGradient<T>.FedKDCompressedGradient(AiDotNet.Tensors.LinearAlgebra.Matrix<T>! u, AiDotNet.Tensors.LinearAlgebra.Vector<T>! singularValues, AiDotNet.Tensors.LinearAlgebra.Matrix<T>! v) -> void
+AiDotNet.FederatedLearning.Compression.FedKDCompressedGradient<T>.U.get -> AiDotNet.Tensors.LinearAlgebra.Matrix<T>!
+AiDotNet.FederatedLearning.Compression.FedKDCompressedGradient<T>.SingularValues.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>!
+AiDotNet.FederatedLearning.Compression.FedKDCompressedGradient<T>.V.get -> AiDotNet.Tensors.LinearAlgebra.Matrix<T>!
+AiDotNet.FederatedLearning.Compression.FedKDCompressedGradient<T>.Rank.get -> int
+AiDotNet.FederatedLearning.Compression.FedKDCompressedGradient<T>.TransmittedValues.get -> int
+AiDotNet.FederatedLearning.Compression.FedDTCompressor<T>.CompressedTree.CompressedTree(System.Collections.Generic.Dictionary<string!, int[]!>! splitPoints, System.Collections.Generic.Dictionary<string!, T[]!>! leafValues, System.Collections.Generic.Dictionary<string!, int[]!>! leafCounts) -> void
+AiDotNet.FederatedLearning.Compression.FedDTCompressor<T>.CompressedTree.LeafValues.get -> System.Collections.Generic.Dictionary<string!, T[]!>!
+AiDotNet.FederatedLearning.Compression.FedDTCompressor<T>.CompressedTree.SplitPoints.get -> System.Collections.Generic.Dictionary<string!, int[]!>!
+AiDotNet.FederatedLearning.ContinualLearning.DataFreeFCL<T>.ComputeDistillationLoss(AiDotNet.Tensors.LinearAlgebra.Vector<T>! teacherLogits, AiDotNet.Tensors.LinearAlgebra.Vector<T>! studentLogits) -> T
