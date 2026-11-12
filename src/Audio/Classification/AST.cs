@@ -660,71 +660,10 @@ public partial class AST<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
     #region Event Processing Helpers
 
     private List<AudioEvent<T>> MergeEvents(List<AudioEvent<T>> events)
-    {
-        if (events.Count == 0) return events;
-
-        var grouped = events.GroupBy(e => e.EventType);
-        var merged = new List<AudioEvent<T>>();
-
-        foreach (var group in grouped)
-        {
-            var sortedEvents = group.OrderBy(e => e.StartTime).ToList();
-            var currentEvent = sortedEvents[0];
-
-            for (int i = 1; i < sortedEvents.Count; i++)
-            {
-                var next = sortedEvents[i];
-
-                if (next.StartTime <= currentEvent.EndTime + 0.1)
-                {
-                    double currentConf = NumOps.ToDouble(currentEvent.Confidence);
-                    double nextConf = NumOps.ToDouble(next.Confidence);
-
-                    currentEvent = new AudioEvent<T>
-                    {
-                        EventType = currentEvent.EventType,
-                        StartTime = currentEvent.StartTime,
-                        EndTime = Math.Max(currentEvent.EndTime, next.EndTime),
-                        Confidence = currentConf > nextConf ? currentEvent.Confidence : next.Confidence,
-                        PeakTime = currentConf > nextConf ? currentEvent.PeakTime : next.PeakTime
-                    };
-                }
-                else
-                {
-                    merged.Add(currentEvent);
-                    currentEvent = next;
-                }
-            }
-
-            merged.Add(currentEvent);
-        }
-
-        return merged.OrderBy(e => e.StartTime).ToList();
-    }
+        => AudioEventDetectionOps.MergeEvents(Engine, events, 0.1);
 
     private Dictionary<string, EventStatistics<T>> ComputeEventStatistics(IReadOnlyList<AudioEvent<T>> events)
-    {
-        var stats = new Dictionary<string, EventStatistics<T>>();
-
-        var grouped = events.GroupBy(e => e.EventType);
-        foreach (var group in grouped)
-        {
-            var eventList = group.ToList();
-            double totalDuration = eventList.Sum(e => e.Duration);
-            double avgConfidence = eventList.Average(e => NumOps.ToDouble(e.Confidence));
-            double maxConfidence = eventList.Max(e => NumOps.ToDouble(e.Confidence));
-
-            stats[group.Key] = new EventStatistics<T>
-            {
-                Count = eventList.Count,
-                TotalDuration = totalDuration,
-                AverageConfidence = NumOps.FromDouble(avgConfidence),
-                MaxConfidence = NumOps.FromDouble(maxConfidence)
-            };
-        }
-
-        return stats;
-    }
+        => AudioEventDetectionOps.ComputeEventStatistics(Engine, events);
 
     #endregion
 
