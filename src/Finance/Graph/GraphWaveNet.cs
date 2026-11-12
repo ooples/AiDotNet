@@ -108,9 +108,12 @@ public partial class GraphWaveNet<T> : ForecastingModelBase<T>
     #endregion
 
     #region Graph Fields
+    /// <summary>Node embedding E1, trained through the adaptive adjacency.</summary>
+    [TrainableParameter]
     private Tensor<T>? _nodeEmbedding1;
+    /// <summary>Node embedding E2, trained through the adaptive adjacency.</summary>
+    [TrainableParameter]
     private Tensor<T>? _nodeEmbedding2;
-    private Tensor<T>? _adaptiveAdjacency;
     private readonly Tensor<T>? _predefinedAdjacency;
     private readonly Tensor<T>? _predefinedAdjacencyTranspose;
     private readonly Random _random;
@@ -223,7 +226,7 @@ public partial class GraphWaveNet<T> : ForecastingModelBase<T>
     /// strongly each node influences others.
     /// </para>
     /// </remarks>
-    public Tensor<T>? LearnedAdjacency => _adaptiveAdjacency is not null ? _adaptiveAdjacency.Clone() : null;
+    public Tensor<T>? LearnedAdjacency => CurrentAdaptiveAdjacency();
 
     #endregion
 
@@ -237,6 +240,7 @@ public partial class GraphWaveNet<T> : ForecastingModelBase<T>
     /// <b>For Beginners:</b> In the GraphWaveNet model, GraphWaveNet sets up the architecture and options. This prepares the model for training or inference.
     /// </para>
     /// </remarks>
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("ApiDesign", "RS0026:Do not add multiple public overloads with optional parameters", Justification = "Both constructors replace removed overloads whose adjacency parameter changed type; no old overload remains for a call to become ambiguous with.")]
     public GraphWaveNet(
         NeuralNetworkArchitecture<T> architecture,
         string onnxModelPath,
@@ -294,6 +298,7 @@ public partial class GraphWaveNet<T> : ForecastingModelBase<T>
     /// <b>For Beginners:</b> In the GraphWaveNet model, GraphWaveNet sets up the architecture and options. This prepares the model for training or inference.
     /// </para>
     /// </remarks>
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("ApiDesign", "RS0026:Do not add multiple public overloads with optional parameters", Justification = "Both constructors replace removed overloads whose adjacency parameter changed type; no old overload remains for a call to become ambiguous with.")]
     public GraphWaveNet(
         NeuralNetworkArchitecture<T> architecture,
         GraphWaveNetOptions<T>? options = null,
@@ -354,35 +359,32 @@ public partial class GraphWaveNet<T> : ForecastingModelBase<T>
         // (u - 0.5) * 2 * scale, drawn E1 then E2 for each entry.
         double scale = Math.Sqrt(2.0 / (_numNodes + _nodeEmbeddingDim));
         int entries = _numNodes * _nodeEmbeddingDim;
-        var draws = Enumerable.Range(0, 2 * entries)
-            .Select(_ => NumOps.FromDouble((_random.NextDouble() - 0.5) * 2 * scale))
-            .ToArray();
+        var uniforms = new double[2 * entries];
+        for (int i = 0; i < uniforms.Length; i++)
+            uniforms[i] = _random.NextDouble();
 
         // Draws alternate E1, E2 per entry: column 0 of the [entries, 2] view is E1, column 1 is E2.
         var shape = new[] { _numNodes, _nodeEmbeddingDim };
-        var pairs = new Tensor<T>(new[] { entries, 2 }, new Vector<T>(draws));
+        var pairs = Engine.TensorMultiplyScalar(
+            Engine.TensorAddScalar(
+                new Tensor<double>(new[] { entries, 2 }, new Vector<double>(uniforms)).Cast<T>(), NumOps.FromDouble(-0.5)),
+            NumOps.FromDouble(2 * scale));
         _nodeEmbedding1 = Engine.Reshape(Engine.TensorNarrow(pairs, 1, 0, 1).Contiguous(), shape);
         _nodeEmbedding2 = Engine.Reshape(Engine.TensorNarrow(pairs, 1, 1, 1).Contiguous(), shape);
-
-        UpdateAdaptiveAdjacency();
     }
 
     /// <summary>
-    /// Updates the adaptive adjacency matrix from current node embeddings.
+    /// The learned graph built from the current node embeddings, as a detached constant, or null when the model
+    /// has no embeddings. Computed on demand so it always reflects the embeddings, including after the
+    /// parameters are restored or copied into a clone.
     /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the GraphWaveNet model, UpdateAdaptiveAdjacency updates internal parameters or state. This keeps the GraphWaveNet architecture aligned with the latest values.
-    /// </para>
-    /// </remarks>
-    private void UpdateAdaptiveAdjacency()
+    private Tensor<T>? CurrentAdaptiveAdjacency()
     {
         if (_nodeEmbedding1 is null || _nodeEmbedding2 is null)
-            return;
+            return null;
 
-        // The inference copy is a detached constant; training recomputes it on the tape.
         using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
-        _adaptiveAdjacency = ComputeAdaptiveAdjacency(_nodeEmbedding1, _nodeEmbedding2);
+        return ComputeAdaptiveAdjacency(_nodeEmbedding1, _nodeEmbedding2);
     }
 
     /// <summary>
@@ -392,17 +394,6 @@ public partial class GraphWaveNet<T> : ForecastingModelBase<T>
     private Tensor<T> ComputeAdaptiveAdjacency(Tensor<T> embedding1, Tensor<T> embedding2)
         => Engine.TensorSoftmax(Engine.TensorReLU(Engine.TensorMatMul(embedding1, Engine.TensorTranspose(embedding2))), 1);
 
-    /// <summary>
-    /// The node embeddings E1 and E2 are trainable when the adaptive graph is used: the optimizer updates them
-    /// from the gradients that reach them through the adaptive support in the diffusion convolution.
-    /// </summary>
-    protected override IEnumerable<Tensor<T>> GetExtraTrainableTensors()
-    {
-        if (_nodeEmbedding1 is not null)
-            yield return _nodeEmbedding1;
-        if (_nodeEmbedding2 is not null)
-            yield return _nodeEmbedding2;
-    }
     /// <summary>
     /// Initializes all layers for the GraphWaveNet model.
     /// </summary>
@@ -490,16 +481,6 @@ public partial class GraphWaveNet<T> : ForecastingModelBase<T>
         return _useNativeMode ? ForecastNative(input) : ForecastOnnx(input);
     }
 
-    /// <inheritdoc/>
-    /// <remarks>
-    /// After a step the optimizer has updated the node embeddings, so the inference copy of the adaptive
-    /// graph (<see cref="LearnedAdjacency"/>) is rebuilt from them.
-    /// </remarks>
-    protected override void OnTrainingStepEnded(bool succeeded)
-    {
-        if (!succeeded || !_useAdaptiveGraph) return;
-        UpdateAdaptiveAdjacency();
-    }
     /// <summary>
     /// Training-mode forward: calls <see cref="Forward"/> directly so
     /// dropout and the adaptive-graph conv stay in training mode under

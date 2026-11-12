@@ -957,13 +957,14 @@ public partial class MQCNN<T> : ForecastingModelBase<T>
         // rebuild whenever the levels differ from the ones it was built from.
         if (_quantileCoefficients is null || !_quantileCoefficientLevels.SequenceEqual(_quantiles))
         {
-            // The configured levels are converted once, as master did per use: FromDouble(q), FromDouble(q - 1), ...
-            var table = _quantiles.Select(q => NumOps.FromDouble(q))
-                .Concat(_quantiles.Select(q => NumOps.FromDouble(q - 1)))
-                .Concat(_quantiles.Select(q => NumOps.FromDouble(-q)))
-                .Concat(_quantiles.Select(q => NumOps.FromDouble(1 - q)))
+            // The configured levels are converted once, with the same double arithmetic master used per use
+            // (q, q - 1, -q, 1 - q), and cast to T in one whole-table conversion.
+            var table = _quantiles
+                .Concat(_quantiles.Select(q => q - 1))
+                .Concat(_quantiles.Select(q => -q))
+                .Concat(_quantiles.Select(q => 1 - q))
                 .ToArray();
-            _quantileCoefficients = new Tensor<T>(new[] { 4, levels }, new Vector<T>(table));
+            _quantileCoefficients = new Tensor<double>(new[] { 4, levels }, new Vector<double>(table)).Cast<T>();
             _quantileCoefficientLevels = (double[])_quantiles.Clone();
         }
 

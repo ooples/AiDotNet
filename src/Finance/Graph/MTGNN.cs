@@ -110,9 +110,12 @@ public partial class MTGNN<T> : ForecastingModelBase<T>
     #endregion
 
     #region Graph Learning Fields
+    /// <summary>Node embedding E1, trained through the adaptive adjacency.</summary>
+    [TrainableParameter]
     private Tensor<T>? _nodeEmbedding1;
+    /// <summary>Node embedding E2, trained through the adaptive adjacency.</summary>
+    [TrainableParameter]
     private Tensor<T>? _nodeEmbedding2;
-    private Tensor<T>? _adaptiveAdjacency;
     private readonly Tensor<T>? _predefinedAdjacency;
     private readonly Random _random;
     #endregion
@@ -226,7 +229,7 @@ public partial class MTGNN<T> : ForecastingModelBase<T>
     /// Entry (i,j) indicates how strongly node j influences node i.
     /// </para>
     /// </remarks>
-    public Tensor<T>? LearnedAdjacency => _adaptiveAdjacency is not null ? _adaptiveAdjacency.Clone() : null;
+    public Tensor<T>? LearnedAdjacency => CurrentAdaptiveAdjacency();
 
     #endregion
 
@@ -246,6 +249,7 @@ public partial class MTGNN<T> : ForecastingModelBase<T>
     /// The ONNX model includes both the learned graph structure and the forecasting layers.
     /// </para>
     /// </remarks>
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("ApiDesign", "RS0026:Do not add multiple public overloads with optional parameters", Justification = "Both constructors replace removed overloads whose adjacency parameter changed type; no old overload remains for a call to become ambiguous with.")]
     public MTGNN(
         NeuralNetworkArchitecture<T> architecture,
         string onnxModelPath,
@@ -306,6 +310,7 @@ public partial class MTGNN<T> : ForecastingModelBase<T>
     /// Optionally provide a predefined adjacency to combine with the learned graph.
     /// </para>
     /// </remarks>
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("ApiDesign", "RS0026:Do not add multiple public overloads with optional parameters", Justification = "Both constructors replace removed overloads whose adjacency parameter changed type; no old overload remains for a call to become ambiguous with.")]
     public MTGNN(
         NeuralNetworkArchitecture<T> architecture,
         MTGNNOptions<T>? options = null,
@@ -363,39 +368,32 @@ public partial class MTGNN<T> : ForecastingModelBase<T>
         // Initialize with small random values: (u - 0.5) * 2 * scale, drawn E1 then E2 for each entry.
         double scale = Math.Sqrt(2.0 / (_numNodes + _nodeEmbeddingDim));
         int entries = _numNodes * _nodeEmbeddingDim;
-        var draws = Enumerable.Range(0, 2 * entries)
-            .Select(_ => NumOps.FromDouble((_random.NextDouble() - 0.5) * 2 * scale))
-            .ToArray();
+        var uniforms = new double[2 * entries];
+        for (int i = 0; i < uniforms.Length; i++)
+            uniforms[i] = _random.NextDouble();
 
         // Draws alternate E1, E2 per entry: column 0 of the [entries, 2] view is E1, column 1 is E2.
         var shape = new[] { _numNodes, _nodeEmbeddingDim };
-        var pairs = new Tensor<T>(new[] { entries, 2 }, new Vector<T>(draws));
+        var pairs = Engine.TensorMultiplyScalar(
+            Engine.TensorAddScalar(
+                new Tensor<double>(new[] { entries, 2 }, new Vector<double>(uniforms)).Cast<T>(), NumOps.FromDouble(-0.5)),
+            NumOps.FromDouble(2 * scale));
         _nodeEmbedding1 = Engine.Reshape(Engine.TensorNarrow(pairs, 1, 0, 1).Contiguous(), shape);
         _nodeEmbedding2 = Engine.Reshape(Engine.TensorNarrow(pairs, 1, 1, 1).Contiguous(), shape);
-
-        // Compute initial adaptive adjacency
-        UpdateAdaptiveAdjacency();
     }
 
     /// <summary>
-    /// Updates the adaptive adjacency matrix from current node embeddings.
+    /// The learned graph built from the current node embeddings, as a detached constant, or null when the model
+    /// has no embeddings. Computed on demand so it always reflects the embeddings, including after the
+    /// parameters are restored or copied into a clone.
     /// </summary>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Computes the graph structure from learned embeddings:
-    /// A = softmax(ReLU(E1 * E2^T - E2 * E1^T))
-    ///
-    /// The subtraction (E1*E2^T - E2*E1^T) creates an asymmetric adjacency,
-    /// capturing directed relationships where A[i,j] != A[j,i].
-    /// </para>
-    /// </remarks>
-    private void UpdateAdaptiveAdjacency()
+    private Tensor<T>? CurrentAdaptiveAdjacency()
     {
         if (_nodeEmbedding1 is null || _nodeEmbedding2 is null)
-            return;
+            return null;
 
-        // The inference copy is a detached constant; training recomputes it on the tape.
         using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
-        _adaptiveAdjacency = ComputeAdaptiveAdjacency(_nodeEmbedding1, _nodeEmbedding2);
+        return ComputeAdaptiveAdjacency(_nodeEmbedding1, _nodeEmbedding2);
     }
 
     /// <summary>
@@ -418,18 +416,6 @@ public partial class MTGNN<T> : ForecastingModelBase<T>
         }
 
         return adjacency;
-    }
-
-    /// <summary>
-    /// The node embeddings E1 and E2 are trainable: the optimizer updates them from the gradients that
-    /// reach them through the adaptive adjacency in <see cref="ForwardNativeForTraining"/>.
-    /// </summary>
-    protected override IEnumerable<Tensor<T>> GetExtraTrainableTensors()
-    {
-        if (_nodeEmbedding1 is not null)
-            yield return _nodeEmbedding1;
-        if (_nodeEmbedding2 is not null)
-            yield return _nodeEmbedding2;
     }
 
     /// <summary>
@@ -534,16 +520,6 @@ public partial class MTGNN<T> : ForecastingModelBase<T>
         return _useNativeMode ? ForecastNative(input) : ForecastOnnx(input);
     }
 
-    /// <inheritdoc/>
-    /// <remarks>
-    /// After a step the optimizer has updated the node embeddings, so the inference copy of the learned
-    /// graph is rebuilt from them.
-    /// </remarks>
-    protected override void OnTrainingStepEnded(bool succeeded)
-    {
-        if (!succeeded) return;
-        UpdateAdaptiveAdjacency();
-    }
     /// <summary>
     /// Training-mode forward: mirrors <see cref="Forward"/>, but rebuilds the adaptive adjacency from the
     /// node embeddings on the tape and propagates through <see cref="ApplyMixHopPropagationTape"/>, so
@@ -834,9 +810,10 @@ public partial class MTGNN<T> : ForecastingModelBase<T>
 
         // Mix-hop graph propagation (spatial aggregation). Use the tape-aware variant
         // so inference matches the training forward (determinism / Clone parity).
-        if (_adaptiveAdjacency is not null && _useNativeMode)
+        var adaptiveAdjacency = _useNativeMode ? CurrentAdaptiveAdjacency() : null;
+        if (adaptiveAdjacency is not null)
         {
-            current = ApplyMixHopPropagationTape(current, _adaptiveAdjacency);
+            current = ApplyMixHopPropagationTape(current, adaptiveAdjacency);
         }
 
         return current;
