@@ -131,13 +131,18 @@ public class SecureGradientExchange<T> : FederatedLearningComponentBase<T>
         }
 
         // Generate keystream from session key and a random nonce
-        var nonceTensor = new Tensor<T>(new[] { 1 });
         double nonceValue = _maskRandom.NextDouble() * 1e9;
-        nonceTensor[0] = NumOps.FromDouble(nonceValue);
+        int keySeed = (int)(nonceValue % int.MaxValue);
+
+        // The seed travels as its four bytes (0..255 each), which every numeric type holds exactly;
+        // a single T entry of ~1e9 is rounded by float/Half and decrypts with the wrong keystream.
+        var nonceTensor = new Tensor<int>(
+            new[] { keySeed & 0xFF, (keySeed >> 8) & 0xFF, (keySeed >> 16) & 0xFF, (keySeed >> 24) & 0xFF },
+            new[] { 4 }).Cast<T>();
 
         // Use keystream to mask values (simulated encryption)
         var encrypted = new Tensor<T>(gradients._shape);
-        var keyRandom = Tensors.Helpers.RandomHelper.CreateSeededRandom((int)(nonceValue % int.MaxValue));
+        var keyRandom = Tensors.Helpers.RandomHelper.CreateSeededRandom(keySeed);
 
         for (int i = 0; i < totalElements; i++)
         {
@@ -160,8 +165,14 @@ public class SecureGradientExchange<T> : FederatedLearningComponentBase<T>
             totalElements *= encrypted.Shape[d];
         }
 
-        double nonceValue = NumOps.ToDouble(nonceTensor[0]);
-        var keyRandom = Tensors.Helpers.RandomHelper.CreateSeededRandom((int)(nonceValue % int.MaxValue));
+        if (nonceTensor.Length != 4)
+        {
+            throw new ArgumentException("The nonce must be the 4-entry tensor returned by ProtectGradients.", nameof(nonceTensor));
+        }
+
+        int[] seedBytes = Engine.TensorRound(nonceTensor).Cast<int>().ToArray();
+        int keySeed = seedBytes[0] | (seedBytes[1] << 8) | (seedBytes[2] << 16) | (seedBytes[3] << 24);
+        var keyRandom = Tensors.Helpers.RandomHelper.CreateSeededRandom(keySeed);
 
         var decrypted = new Tensor<T>(encrypted._shape);
         for (int i = 0; i < totalElements; i++)
@@ -210,14 +221,7 @@ public class SecureGradientExchange<T> : FederatedLearningComponentBase<T>
             totalElements *= masked.Shape[d];
         }
 
-        var unmasked = new Tensor<T>(masked._shape);
-        for (int i = 0; i < totalElements; i++)
-        {
-            double val = NumOps.ToDouble(masked[i]);
-            double maskVal = NumOps.ToDouble(mask[i]);
-            unmasked[i] = NumOps.FromDouble(val - maskVal);
-        }
-
-        return unmasked;
+        var flatMask = Engine.TensorSlice(mask.Reshape(new[] { mask.Length }), new[] { 0 }, new[] { totalElements });
+        return Engine.TensorSubtract(masked, flatMask.Reshape(masked._shape));
     }
 }

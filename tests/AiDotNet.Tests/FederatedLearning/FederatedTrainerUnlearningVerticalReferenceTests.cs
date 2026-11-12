@@ -85,4 +85,51 @@ public class FederatedTrainerUnlearningVerticalReferenceTests
         Assert.Equal(new[] { 1, 2 }, combined.Shape.ToArray());
         Assert.Equal(new[] { 4.0, 6.0 }, combined.ToArray());
     }
+
+    [Fact]
+    public void SecureGradientExchange_EncryptedRoundTrip_RecoversFloatGradients()
+    {
+        // Decryption regenerates the keystream from the nonce, so recovery must be exact up to the
+        // float rounding of value + key (|key| < 1). The nonce used to be one float near 1e9, which
+        // float rounds to a multiple of 64, so the keystream (and the recovered values) were wrong.
+        var exchange = new SecureGradientExchange<float>(useEncryption: true, seed: 3);
+        var gradients = new Tensor<float>(new[] { 0.5f, -1.25f, 2.0f, 0.0f, 3.75f, -0.125f }, new[] { 2, 3 });
+
+        var (protectedGradients, nonce) = exchange.ProtectGradients(gradients);
+        var recovered = exchange.RecoverGradients(protectedGradients, nonce);
+
+        var expected = gradients.ToArray();
+        var actual = recovered.ToArray();
+        for (int i = 0; i < expected.Length; i++)
+        {
+            Assert.Equal(expected[i], actual[i], 1e-5f);
+        }
+    }
+
+    [Fact]
+    public void MissingFeatureHandler_UpdateStatistics_IsAnEmaOfColumnMeans()
+    {
+        // mean = 0.9 * 0 + 0.1 * columnMean([[1, 2], [3, 6]]) = 0.1 * [2, 4] = [0.2, 0.4];
+        // a second identical batch gives 0.9 * [0.2, 0.4] + 0.1 * [2, 4] = [0.38, 0.76].
+        var handler = new MissingFeatureHandler<double>(new MissingFeatureOptions { Strategy = MissingFeatureStrategy.Mean });
+        var batch = new Tensor<double>(new[] { 1.0, 2.0, 3.0, 6.0 }, new[] { 2, 2 });
+
+        handler.UpdateStatistics("p", batch);
+        handler.UpdateStatistics("p", batch);
+
+        var filled = handler.ImputeEmbeddings("p", 2, 3);
+        Assert.Equal(new[] { 3, 2 }, filled.Shape.ToArray());
+        Assert.Equal(new[] { 0.38, 0.76, 0.38, 0.76, 0.38, 0.76 }, filled.ToArray(), new ToleranceComparer(Tolerance));
+    }
+
+    private sealed class ToleranceComparer : IEqualityComparer<double>
+    {
+        private readonly double _tolerance;
+
+        public ToleranceComparer(double tolerance) => _tolerance = tolerance;
+
+        public bool Equals(double x, double y) => Math.Abs(x - y) <= _tolerance;
+
+        public int GetHashCode(double obj) => 0;
+    }
 }

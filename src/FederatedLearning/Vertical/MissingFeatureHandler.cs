@@ -121,19 +121,17 @@ public class MissingFeatureHandler<T> : FederatedLearningComponentBase<T>
         var currentMean = _columnMeans[partyId];
         double alpha = 0.1;
 
-        for (int d = 0; d < embDim; d++)
-        {
-            double batchMean = 0.0;
-            for (int b = 0; b < batchSize; b++)
-            {
-                int idx = embeddings.Rank > 1 ? b * embDim + d : d;
-                batchMean += NumOps.ToDouble(embeddings[idx]);
-            }
+        // Column means of a [batch, dim] embedding; a 1-D embedding is its own mean
+        // (every sample re-reads the same row).
+        var batchMean = embeddings.Rank > 1
+            ? Engine.TensorDivideScalar(
+                Engine.ReduceSum(VerticalEngineOps.Rows(embeddings, batchSize, embDim), new[] { 0 }, false),
+                NumOps.FromDouble(batchSize))
+            : embeddings;
 
-            batchMean /= batchSize;
-            double existing = NumOps.ToDouble(currentMean[d]);
-            currentMean[d] = NumOps.FromDouble(existing * (1.0 - alpha) + batchMean * alpha);
-        }
+        _columnMeans[partyId] = Engine.TensorAdd(
+            Engine.TensorMultiplyScalar(VerticalEngineOps.Rows(currentMean, 1, embDim).Reshape(new[] { embDim }), NumOps.FromDouble(1.0 - alpha)),
+            Engine.TensorMultiplyScalar(batchMean, NumOps.FromDouble(alpha)));
 
         _meansComputed = true;
     }
@@ -152,16 +150,21 @@ public class MissingFeatureHandler<T> : FederatedLearningComponentBase<T>
             return new Tensor<T>(new[] { batchSize, 0 });
         }
 
-        var indicator = new Tensor<T>(new[] { batchSize, partyCount });
+        var missing = new bool[partyCount];
         foreach (int missingIdx in missingPartyIndices)
         {
-            for (int b = 0; b < batchSize; b++)
+            if (missingIdx < 0 || missingIdx >= partyCount)
             {
-                indicator[b * partyCount + missingIdx] = NumOps.FromDouble(1.0);
+                throw new ArgumentOutOfRangeException(nameof(missingPartyIndices), $"Party index {missingIdx} is outside [0, {partyCount}).");
             }
+
+            missing[missingIdx] = true;
         }
 
-        return indicator;
+        var ones = new Tensor<T>(new[] { 1, partyCount });
+        ones.Fill(NumOps.One);
+        var row = Engine.TensorWhere(missing, ones.Reshape(new[] { partyCount }), new Tensor<T>(new[] { partyCount }));
+        return Engine.TensorTile(row.Reshape(new[] { 1, partyCount }), new[] { batchSize, 1 });
     }
 
     private static Tensor<T> CreateZeroEmbeddings(int embeddingDimension, int batchSize)
@@ -171,20 +174,12 @@ public class MissingFeatureHandler<T> : FederatedLearningComponentBase<T>
 
     private Tensor<T> CreateMeanEmbeddings(string partyId, int embeddingDimension, int batchSize)
     {
-        var result = new Tensor<T>(new[] { batchSize, embeddingDimension });
-
         if (_meansComputed && _columnMeans.ContainsKey(partyId))
         {
-            var mean = _columnMeans[partyId];
-            for (int b = 0; b < batchSize; b++)
-            {
-                for (int d = 0; d < embeddingDimension; d++)
-                {
-                    result[b * embeddingDimension + d] = mean[d];
-                }
-            }
+            var mean = VerticalEngineOps.Rows(_columnMeans[partyId], 1, embeddingDimension);
+            return Engine.TensorTile(mean, new[] { batchSize, 1 });
         }
 
-        return result;
+        return new Tensor<T>(new[] { batchSize, embeddingDimension });
     }
 }

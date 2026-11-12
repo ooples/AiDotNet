@@ -120,18 +120,7 @@ public class LabelDifferentialPrivacy<T> : FederatedLearningComponentBase<T>, IL
     /// </summary>
     private Tensor<T> ClipGradientNorm(Tensor<T> gradients, double maxNorm)
     {
-        double normSquared = 0.0;
-        int totalElements = 1;
-        for (int d = 0; d < gradients.Rank; d++)
-        {
-            totalElements *= gradients.Shape[d];
-        }
-
-        for (int i = 0; i < totalElements; i++)
-        {
-            double val = NumOps.ToDouble(gradients[i]);
-            normSquared += val * val;
-        }
+        double normSquared = NumOps.ToDouble(Engine.TensorSum(Engine.TensorSquare(gradients)));
 
         double norm = Math.Sqrt(normSquared);
         if (norm <= maxNorm)
@@ -140,14 +129,7 @@ public class LabelDifferentialPrivacy<T> : FederatedLearningComponentBase<T>, IL
         }
 
         double scale = maxNorm / norm;
-        var clipped = new Tensor<T>(gradients._shape);
-        for (int i = 0; i < totalElements; i++)
-        {
-            double val = NumOps.ToDouble(gradients[i]);
-            clipped[i] = NumOps.FromDouble(val * scale);
-        }
-
-        return clipped;
+        return Engine.TensorMultiplyScalar(gradients, NumOps.FromDouble(scale));
     }
 
     /// <summary>
