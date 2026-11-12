@@ -541,6 +541,22 @@ public abstract partial class VisionLanguageModelBase<T> : NeuralNetworkBase<T>,
     }
 
     /// <summary>
+    /// Attention-weighted average per row: result[r] = sum_t weights[r, t] * values[t] / max(sum_t weights[r, t], 1e-8).
+    /// </summary>
+    /// <param name="weights">Non-negative weights, shape [rows, n].</param>
+    /// <param name="values">Values, shape [n] (read flattened).</param>
+    /// <returns>A [rows] tensor (zeros when n is 0).</returns>
+    protected Tensor<T> WeightedAverage(Tensor<T> weights, Tensor<T> values)
+    {
+        int rows = weights.Shape[0], n = weights.Shape[1];
+        if (n == 0)
+            return new Tensor<T>([rows]);
+        var numerator = Engine.TensorMatMul(weights, values.Reshape([n, 1])).Reshape([rows]);
+        var denominator = Engine.TensorMax(Engine.ReduceSum(weights, [1], false), NumOps.FromDouble(1e-8));
+        return Engine.TensorDivide(numerator, denominator);
+    }
+
+    /// <summary>
     /// Returns element <paramref name="index"/> of a sequence as a [1] tensor, so a per-step coefficient
     /// computed for all steps up front can scale a tensor through a broadcast multiply.
     /// </summary>
