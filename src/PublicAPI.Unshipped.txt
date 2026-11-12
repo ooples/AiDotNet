@@ -22637,3 +22637,7 @@ AiDotNet.Preprocessing.FeatureSelection.Filter.MeanAbsoluteDeviation<T>.MADValue
 AiDotNet.Preprocessing.FeatureSelection.Filter.VarianceThreshold<T>.Variances.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
 *REMOVED*AiDotNet.Preprocessing.FeatureSelection.Filter.Univariate.VarianceThreshold<T>.Variances.get -> double[]?
 AiDotNet.Preprocessing.FeatureSelection.Filter.Univariate.VarianceThreshold<T>.Variances.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
+*REMOVED*AiDotNet.Preprocessing.FeatureSelection.Frequency.FourierMagnitudeSelector<T>.SpectralEnergies.get -> double[]?
+AiDotNet.Preprocessing.FeatureSelection.Frequency.FourierMagnitudeSelector<T>.SpectralEnergies.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
+*REMOVED*AiDotNet.Preprocessing.FeatureSelection.Frequency.PowerSpectralDensitySelector<T>.PSDScores.get -> double[]?
+AiDotNet.Preprocessing.FeatureSelection.Frequency.PowerSpectralDensitySelector<T>.PSDScores.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?

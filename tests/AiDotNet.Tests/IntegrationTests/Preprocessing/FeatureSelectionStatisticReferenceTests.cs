@@ -393,6 +393,53 @@ public class FeatureSelectionStatisticReferenceTests
         Assert.Empty(selector.SelectedIndices);
     }
 
+    // ---------------------------------------------------------------- frequency
+
+    // Seven samples of cos(2 pi 3 i / 7) (feature 0) and cos(2 pi i / 7) (feature 1). For an odd length every
+    // k = 1 .. (n - 1) / 2 is a positive frequency below Nyquist; master looped k < n / 2 = 3 and so never saw the
+    // k = 3 tone of feature 0.
+    private static Matrix<double> HighestToneData()
+    {
+        const int n = 7;
+        var data = new Matrix<double>(n, 2);
+        for (int i = 0; i < n; i++)
+        {
+            data[i, 0] = Math.Cos(2 * Math.PI * 3 * i / n);
+            data[i, 1] = Math.Cos(2 * Math.PI * i / n);
+        }
+
+        return data;
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task FourierMagnitude_OddLength_IncludesHighestFrequency()
+    {
+        // sum(|numpy.fft.rfft(x - x.mean())[1:]|^2) / n = 1.75 for both tones
+        var selector = new AiDotNet.Preprocessing.FeatureSelection.Frequency.FourierMagnitudeSelector<double>(nFeaturesToSelect: 1);
+        selector.Fit(HighestToneData());
+
+        Assert.NotNull(selector.SpectralEnergies);
+        Assert.Equal(1.75, selector.SpectralEnergies[0], 1e-9);
+        Assert.Equal(1.75, selector.SpectralEnergies[1], 1e-9);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task PowerSpectralDensity_OddLength_IncludesHighestFrequencyInTotal()
+    {
+        // Hann-windowed periodogram P = |numpy.fft.rfft(x * w)|^2 / n over k = 1..3, band k = 1..2
+        // (highFreqCutoff 0.3 -> (int)(0.3 * 7) = 2): score = P[1:3].sum() / P[1:4].sum(). Without k = 3 in the
+        // total, master scored both features 1.
+        var selector = new AiDotNet.Preprocessing.FeatureSelection.Frequency.PowerSpectralDensitySelector<double>(
+            nFeaturesToSelect: 1, lowFreqCutoff: 0.0, highFreqCutoff: 0.3);
+        selector.Fit(HighestToneData());
+
+        Assert.NotNull(selector.PSDScores);
+        Assert.Equal(0.5251319925832002, selector.PSDScores[0], 1e-9);
+        Assert.Equal(0.9971486551928364, selector.PSDScores[1], 1e-9);
+        Assert.NotNull(selector.SelectedIndices);
+        Assert.Equal(new[] { 1 }, selector.SelectedIndices);
+    }
+
     // ---------------------------------------------------------------- FDR
 
     [Fact(Timeout = 120000)]

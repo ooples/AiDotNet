@@ -24,13 +24,13 @@ public class FourierMagnitudeSelector<T> : TransformerBase<T, Matrix<T>, Matrix<
 {
     private readonly int _nFeaturesToSelect;
 
-    private double[]? _spectralEnergies;
+    private Vector<T>? _spectralEnergies;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
-    public double[]? SpectralEnergies => _spectralEnergies;
+    public Vector<T>? SpectralEnergies => _spectralEnergies;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -53,48 +53,26 @@ public class FourierMagnitudeSelector<T> : TransformerBase<T, Matrix<T>, Matrix<
         _nInputFeatures = data.Columns;
         int n = data.Rows;
         int p = data.Columns;
+        var engine = Engine;
 
-        var X = new double[n, p];
-        for (int i = 0; i < n; i++)
-            for (int j = 0; j < p; j++)
-                X[i, j] = NumOps.ToDouble(data[i, j]);
+        // master averaged each column with LINQ, which throws on an empty sequence
+        if (n == 0 && p > 0)
+            throw new InvalidOperationException("Sequence contains no elements");
 
-        _spectralEnergies = new double[p];
+        // Remove the mean (DC component) of every feature
+        var centered = FilterStatisticTensorOps.CenterColumns(FilterStatisticTensorOps.AsTensor(data));
 
-        for (int j = 0; j < p; j++)
-        {
-            var col = new double[n];
-            for (int i = 0; i < n; i++)
-                col[i] = X[i, j];
+        // DFT energy over every positive frequency below Nyquist (k = 1 .. ceil(n/2) - 1, the non-DC bins of
+        // numpy.fft.rfft without an even length's Nyquist bin), divided by n
+        int frequencies = FilterStatisticTensorOps.PositiveFrequencyCount(n);
+        var energies = frequencies > 0
+            ? engine.TensorDivideScalar(
+                engine.ReduceSum(FilterStatisticTensorOps.ColumnDftPower(centered, frequencies), new[] { 0 }, false),
+                NumOps.FromDouble(n))
+            : FilterStatisticTensorOps.Filled(new[] { p }, NumOps.Zero);
+        _spectralEnergies = energies.ToVector();
 
-            // Remove mean (DC component)
-            double mean = col.Average();
-            for (int i = 0; i < n; i++)
-                col[i] -= mean;
-
-            // Compute DFT magnitude squared (excluding DC)
-            double totalEnergy = 0;
-            for (int k = 1; k < n / 2; k++) // Skip DC (k=0)
-            {
-                double real = 0, imag = 0;
-                for (int i = 0; i < n; i++)
-                {
-                    double angle = 2 * Math.PI * k * i / n;
-                    real += col[i] * Math.Cos(angle);
-                    imag -= col[i] * Math.Sin(angle);
-                }
-                totalEnergy += real * real + imag * imag;
-            }
-
-            _spectralEnergies[j] = totalEnergy / n;
-        }
-
-        int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = Enumerable.Range(0, p)
-            .OrderByDescending(j => _spectralEnergies[j])
-            .Take(numToSelect)
-            .OrderBy(x => x)
-            .ToArray();
+        _selectedIndices = FilterStatisticTensorOps.TopKIndicesSorted(energies, Math.Min(_nFeaturesToSelect, p));
 
         IsFitted = true;
     }
@@ -111,15 +89,7 @@ public class FourierMagnitudeSelector<T> : TransformerBase<T, Matrix<T>, Matrix<
         if (_selectedIndices is null)
             throw new InvalidOperationException("FourierMagnitudeSelector has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return FilterStatisticTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />
