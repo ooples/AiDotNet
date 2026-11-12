@@ -141,8 +141,8 @@ public class FedAGHNPersonalization<T> : Infrastructure.FederatedLearningCompone
     /// </summary>
     /// <param name="gradA">Client A's projected gradient in shared space.</param>
     /// <param name="gradB">Client B's projected gradient in shared space.</param>
-    /// <returns>Cosine similarity in [-1, 1].</returns>
-    public double ComputeGradientSimilarity(T[] gradA, T[] gradB)
+    /// <returns>Cosine similarity in [-1, 1]; zero when either gradient has (near-)zero norm.</returns>
+    public T ComputeGradientSimilarity(T[] gradA, T[] gradB)
     {
         Guard.NotNull(gradA);
         Guard.NotNull(gradB);
@@ -154,9 +154,9 @@ public class FedAGHNPersonalization<T> : Infrastructure.FederatedLearningCompone
 
         var a = Vector<T>.Wrap(gradA);
         var b = Vector<T>.Wrap(gradB);
-        double dot = NumOps.ToDouble(Engine.DotProduct(a, b));
-        double denom = NumOps.ToDouble(Engine.Norm(a)) * NumOps.ToDouble(Engine.Norm(b));
-        return denom > 1e-10 ? dot / denom : 0;
+        T dot = Engine.DotProduct(a, b);
+        T denom = NumOps.Multiply(Engine.Norm(a), Engine.Norm(b));
+        return NumOps.GreaterThan(denom, NumOps.FromDouble(1e-10)) ? NumOps.Divide(dot, denom) : NumOps.Zero;
     }
 
     /// <summary>
@@ -172,64 +172,57 @@ public class FedAGHNPersonalization<T> : Infrastructure.FederatedLearningCompone
     /// <param name="clientGradients">All clients' projected gradients (clientId → gradient).</param>
     /// <param name="previousWeights">Previous round's weights for momentum smoothing. Can be null.</param>
     /// <returns>Adaptive aggregation weights per client (non-negative, sum to 1).</returns>
-    public Dictionary<int, double> ComputeAdaptiveWeights(
+    public Dictionary<int, T> ComputeAdaptiveWeights(
         T[] targetGradient,
         Dictionary<int, T[]> clientGradients,
-        Dictionary<int, double>? previousWeights = null)
+        Dictionary<int, T>? previousWeights = null)
     {
         Guard.NotNull(targetGradient);
         Guard.NotNull(clientGradients);
-        var weights = new Dictionary<int, double>();
-        double totalWeight = 0;
-
-        foreach (var (clientId, grad) in clientGradients)
+        int[] clientIds = clientGradients.Keys.ToArray();
+        int n = clientIds.Length;
+        if (n == 0)
         {
-            double sim = ComputeGradientSimilarity(targetGradient, grad);
-            // ReLU: only positive similarity contributes.
-            double w = Math.Max(0, sim);
-            weights[clientId] = w;
-            totalWeight += w;
+            return new Dictionary<int, T>();
         }
 
-        // Normalize.
-        if (totalWeight > 0)
-        {
-            foreach (var key in weights.Keys.ToArray())
-            {
-                weights[key] /= totalWeight;
-            }
-        }
-        else
-        {
-            // Fallback to uniform weights if no positive similarity.
-            double uniform = 1.0 / Math.Max(1, clientGradients.Count);
-            foreach (var key in clientGradients.Keys)
-            {
-                weights[key] = uniform;
-            }
-        }
+        var similarities = new Tensor<T>(
+            clientIds.Select(id => ComputeGradientSimilarity(targetGradient, clientGradients[id])).ToArray(),
+            new[] { n });
 
-        // Apply momentum smoothing with previous weights if available.
+        // ReLU: only positive similarity contributes.
+        var weights = Engine.TensorMax(similarities, NumOps.Zero);
+        T totalWeight = Engine.TensorSum(weights);
+        weights = NumOps.GreaterThan(totalWeight, NumOps.Zero)
+            ? Engine.TensorDivideScalar(weights, totalWeight)
+            : new Tensor<T>(Enumerable.Repeat(NumOps.FromDouble(1.0 / n), n).ToArray(), new[] { n });
+
+        // Apply momentum smoothing with previous weights if available; a client without a previous
+        // weight keeps its current one.
         if (previousWeights != null)
         {
-            foreach (var key in weights.Keys.ToArray())
-            {
-                double prev = previousWeights.GetValueOrDefault(key, weights[key]);
-                weights[key] = _adaptiveWeightMomentum * prev + (1 - _adaptiveWeightMomentum) * weights[key];
-            }
+            T[] current = weights.ToArray();
+            var previous = new Tensor<T>(
+                clientIds.Select((id, i) => previousWeights.TryGetValue(id, out var prev) ? prev : current[i]).ToArray(),
+                new[] { n });
+            weights = Engine.TensorAddScaled(
+                previous,
+                weights,
+                NumOps.FromDouble(_adaptiveWeightMomentum),
+                NumOps.FromDouble(1 - _adaptiveWeightMomentum));
 
             // Renormalize after momentum blending to ensure weights sum to 1.
-            double blendedTotal = weights.Values.Sum();
-            if (blendedTotal > 0)
+            T blendedTotal = Engine.TensorSum(weights);
+            if (NumOps.GreaterThan(blendedTotal, NumOps.Zero))
             {
-                foreach (var key in weights.Keys.ToArray())
-                {
-                    weights[key] /= blendedTotal;
-                }
+                weights = Engine.TensorDivideScalar(weights, blendedTotal);
             }
         }
 
-        return weights;
+        T[] result = weights.ToArray();
+        return clientIds
+            .Select((id, i) => (Id: id, Weight: result[i]))
+            .ToDictionary(entry => entry.Id, entry => entry.Weight);
     }
 
     /// <summary>Gets the shared knowledge space dimension.</summary>
