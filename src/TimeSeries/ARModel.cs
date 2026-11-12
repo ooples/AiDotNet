@@ -83,6 +83,10 @@ public partial class ARModel<T> : TimeSeriesModelBase<T>
     /// </remarks>
     [AiDotNet.Attributes.FittedParameter]
     private Vector<T> _arCoefficients;
+
+    // Mean of the training series. The AR coefficients are fitted on the de-meaned series, so every
+    // prediction is mean + Σ φ_i (y[t-i] - mean) (statsmodels AutoReg / ARIMA with trend 'c').
+    [Buffer]
     private T _seriesMean;
 
     /// <summary>
@@ -358,19 +362,21 @@ public partial class ARModel<T> : TimeSeriesModelBase<T>
     private T PredictAtIndex(Vector<T> y, int t)
     {
         // VECTORIZED: Use dot product for AR prediction
+        // ŷ[t] = μ + Σ φ_i (y[t-i] - μ): the coefficients were fitted on the de-meaned series
         int availableHistory = Math.Min(_arOrder, t);
         if (availableHistory == 0)
         {
-            return NumOps.Zero;
+            return _seriesMean;
         }
 
-        // Past values y[t-1], ..., y[t-availableHistory] (most recent first)
+        // Past deviations y[t-1] - μ, ..., y[t-availableHistory] - μ (most recent first)
         Vector<T> pastVector = TimeSeriesEngineOps<T>.Reverse(y.GetSubVector(t - availableHistory, availableHistory));
+        Vector<T> pastDeviations = Engine.Subtract(pastVector, Engine.Fill(availableHistory, _seriesMean));
         Vector<T> coeffSlice = availableHistory < _arOrder
             ? _arCoefficients.Slice(0, availableHistory)
             : _arCoefficients;
 
-        return Engine.DotProduct(coeffSlice, pastVector);
+        return NumOps.Add(_seriesMean, Engine.DotProduct(coeffSlice, pastDeviations));
     }
 
     /// <summary>
@@ -650,6 +656,7 @@ public partial class ARModel<T> : TimeSeriesModelBase<T>
     {
         _arCoefficients = Vector<T>.Empty();
         _trainedSeries = Vector<T>.Empty();
+        _seriesMean = NumOps.Zero;
     }
 
     /// <summary>
