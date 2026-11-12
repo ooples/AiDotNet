@@ -28,9 +28,10 @@ namespace AiDotNet.ComputerVision.Segmentation.Medical;
 /// </para>
 /// <para>
 /// <b>Technical Details:</b>
-/// - CrossBlock mechanism for support-query feature interaction
-/// - No fine-tuning needed for new segmentation tasks
-/// - Uses a small labeled support set at inference time
+/// - CrossBlock: each (query, support example) pair is convolved jointly and the query stream takes the
+///   interaction averaged over the support set
+/// - A U-Net of CrossBlocks (64 features at four encoder and three decoder levels, LeakyReLU)
+/// - No fine-tuning needed for new segmentation tasks; set the support set with SetSupportSet
 /// - Trained on diverse medical segmentation datasets
 /// </para>
 /// <para>
@@ -69,10 +70,17 @@ public partial class UniverSeg<T> : Common.MedicalSegmentationBase<T>
     // come from MedicalSegmentationBase -> SegmentationModelBase.
     private static readonly string[] ModalitiesSupported =
         ["CT", "MRI_T1", "Xray", "Ultrasound", "Dermoscopy", "Microscopy"];
-    private readonly int[] _channelDims;
-    private readonly int _decoderDim;
-    private readonly int[] _depths;
-    private readonly double _dropRate;
+
+    // Each CrossBlock owns three layers in Layers: the cross convolution over (target, support_i) pairs, then
+    // the target and the support convolutions. The final 1x1 convolution follows the last decoder block.
+    private const int LayersPerCrossBlock = 3;
+    private readonly int[] _encoderFeatures;
+    private readonly int[] _decoderFeatures;
+    private bool _lazyShapesResolved;
+
+    // The support set the network conditions on: images [S, C, H, W] and binary labels [S, 1, H, W].
+    private Tensor<T>? _supportImages;
+    private Tensor<T>? _supportLabels;
     #endregion
 
     #region Properties
@@ -85,6 +93,13 @@ public partial class UniverSeg<T> : Common.MedicalSegmentationBase<T>
 
     /// <summary>UniverSeg is a few-shot model: its whole point is segmenting from a support set.</summary>
     public override bool SupportsFewShot => true;
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// The CrossBlock U-Net decodes back to the input resolution, so the output keeps the input's spatial size.
+    /// </remarks>
+    public override IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+        => SpatialStrideContract(inputRank, 1);
     #endregion
 
     #region Constructors
@@ -93,13 +108,8 @@ public partial class UniverSeg<T> : Common.MedicalSegmentationBase<T>
     /// </summary>
     /// <param name="architecture">Neural network architecture defining input dimensions.</param>
     /// <param name="optimizer">Gradient-based optimizer (default: AdamW).</param>
-    /// <param name="lossFunction">Loss function (default: CrossEntropyWithLogitsLoss).</param>
+    /// <param name="lossFunction">Loss function (default: segmentation loss for the class count).</param>
     /// <param name="options">Optional model options.</param>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Creates a trainable UniverSeg model.
-    /// </para>
-    /// </remarks>
     public UniverSeg(NeuralNetworkArchitecture<T> architecture,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
@@ -112,10 +122,7 @@ public partial class UniverSeg<T> : Common.MedicalSegmentationBase<T>
         // UniverSeg defaults to 128x128, not the base's 512x512, so the geometry fallback stays here.
         _height = architecture.InputHeight > 0 ? architecture.InputHeight : 128;
         _width = architecture.InputWidth > 0 ? architecture.InputWidth : 128;
-        _dropRate = _options.DropRate;
-        _channelDims = [64, 128, 256, 512];
-        _depths = [2, 2, 2, 2];
-        _decoderDim = 256;
+        (_encoderFeatures, _decoderFeatures) = ValidateFeatures(_options);
         InitializeLayers();
     }
 
@@ -123,16 +130,10 @@ public partial class UniverSeg<T> : Common.MedicalSegmentationBase<T>
     /// Initializes UniverSeg in ONNX (inference-only) mode.
     /// </summary>
     /// <param name="architecture">Neural network architecture defining input dimensions.</param>
-    /// <param name="onnxModelPath">Path to the pre-trained ONNX model file.</param>
+    /// <param name="onnxModelPath">Path to the ONNX model. A graph with three inputs receives the target
+    /// <c>[B, C, H, W]</c>, the support images <c>[B, S, C, H, W]</c> and the support labels
+    /// <c>[B, S, 1, H, W]</c>, in that order (the official UniverSeg signature).</param>
     /// <param name="options">Optional model options.</param>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Loads a pre-trained UniverSeg from ONNX for inference.
-    /// </para>
-    /// </remarks>
-    /// <exception cref="ArgumentException">Thrown if the ONNX model path is null or empty.</exception>
-    /// <exception cref="FileNotFoundException">Thrown if the ONNX model file is not found.</exception>
-    /// <exception cref="InvalidOperationException">Thrown if the ONNX runtime fails to load the model.</exception>
     public UniverSeg(NeuralNetworkArchitecture<T> architecture,
         string onnxModelPath,
         UniverSegOptions? options = null)
@@ -143,38 +144,195 @@ public partial class UniverSeg<T> : Common.MedicalSegmentationBase<T>
         _options = options; Options = _options;
         _height = architecture.InputHeight > 0 ? architecture.InputHeight : 128;
         _width = architecture.InputWidth > 0 ? architecture.InputWidth : 128;
-        _dropRate = _options.DropRate;
-        _channelDims = [64, 128, 256, 512];
-        _depths = [2, 2, 2, 2];
-        _decoderDim = 256;
+        (_encoderFeatures, _decoderFeatures) = ValidateFeatures(_options);
         InitializeLayers();
     }
     #endregion
 
     #region Public Methods
     /// <summary>
-    /// Runs a forward pass to produce segmentation logits.
+    /// Sets the support set every prediction is conditioned on.
     /// </summary>
-    /// <param name="input">The input tensor [C, H, W] or [B, C, H, W].</param>
-    /// <returns>Segmentation logits tensor.</returns>
+    /// <param name="images">Support images <c>[S, C, H, W]</c> (or one image <c>[C, H, W]</c>), with the
+    /// query's channel count.</param>
+    /// <param name="labels">Binary support labels <c>[S, H, W]</c>, <c>[S, 1, H, W]</c> or <c>[H, W]</c>.</param>
     /// <remarks>
     /// <para>
-    /// <b>For Beginners:</b> Pass an image to get a per-pixel class prediction map.
+    /// UniverSeg segments a query by comparing it with labelled examples of the task (Butoi et al. 2023).
+    /// Supports are resampled to the query's size when the two differ. Until a support set is given, the
+    /// network sees one all-zero support pair.
     /// </para>
     /// </remarks>
+    public void SetSupportSet(Tensor<T> images, Tensor<T> labels)
+    {
+        var (supportImages, supportLabels) = NormalizeSupport(images, labels);
+        _supportImages = supportImages;
+        _supportLabels = supportLabels;
+    }
+
+    /// <summary>Removes the support set (predictions then see one all-zero support pair).</summary>
+    public void ClearSupportSet()
+    {
+        _supportImages = null;
+        _supportLabels = null;
+    }
+
+    /// <summary>
+    /// Runs the CrossBlock network on a query image conditioned on the current support set.
+    /// </summary>
+    /// <param name="input">The query <c>[C, H, W]</c> or <c>[B, C, H, W]</c>.</param>
+    /// <returns>Logits <c>[NumClasses, H, W]</c> (or batched); a sigmoid gives the mask probability.</returns>
     protected override Tensor<T> PredictCore(Tensor<T> input) => _useNativeMode ? Forward(input) : PredictOnnx(input);
 
     #endregion
 
     #region Private Methods
-    /// <inheritdoc />
+    private static (int[] Encoder, int[] Decoder) ValidateFeatures(UniverSegOptions options)
+    {
+        var encoder = options.EncoderFeatures?.ToArray() ?? Array.Empty<int>();
+        var decoder = options.DecoderFeatures?.ToArray() ?? Array.Empty<int>();
+        if (encoder.Length < 1 || encoder.Any(f => f <= 0))
+            throw new ArgumentException("UniverSeg needs at least one positive encoder CrossBlock width.", nameof(options));
+        if (decoder.Length != encoder.Length - 1 || decoder.Any(f => f <= 0))
+            throw new ArgumentException(
+                $"UniverSeg needs {encoder.Length - 1} positive decoder CrossBlock widths, one per encoder skip.", nameof(options));
+        return (encoder, decoder);
+    }
+
+    /// <summary>Normalizes a support set to images <c>[S, C, H, W]</c> and labels <c>[S, 1, H, W]</c>.</summary>
+    private (Tensor<T> Images, Tensor<T> Labels) NormalizeSupport(Tensor<T> images, Tensor<T> labels)
+    {
+        if (images is null) throw new ArgumentNullException(nameof(images));
+        if (labels is null) throw new ArgumentNullException(nameof(labels));
+        var supportImages = images.Rank == 3 ? AddBatchDimension(images) : images;
+        if (supportImages.Rank != 4)
+            throw new ArgumentException("Support images must be [S, C, H, W] or [C, H, W].", nameof(images));
+        int s = supportImages.Shape[0], h = supportImages.Shape[2], w = supportImages.Shape[3];
+        Tensor<T> supportLabels = labels.Rank switch
+        {
+            2 => Engine.Reshape(labels, new[] { 1, 1, labels.Shape[0], labels.Shape[1] }),
+            3 => Engine.Reshape(labels, new[] { labels.Shape[0], 1, labels.Shape[1], labels.Shape[2] }),
+            4 => labels,
+            _ => throw new ArgumentException("Support labels must be [S, H, W], [S, 1, H, W] or [H, W].", nameof(labels)),
+        };
+        if (supportLabels.Shape[0] != s || supportLabels.Shape[1] != 1 || supportLabels.Shape[2] != h || supportLabels.Shape[3] != w)
+            throw new ArgumentException($"Give one {h}x{w} label per support image ({s}).", nameof(labels));
+        return (supportImages, supportLabels);
+    }
+
+    /// <summary>
+    /// The support pairs for a query of size <paramref name="height"/> x <paramref name="width"/>: the current
+    /// support set resampled to that size, or one all-zero pair when none is set.
+    /// </summary>
+    private (Tensor<T> Images, Tensor<T> Labels) SupportFor(int channels, int height, int width)
+    {
+        if (_supportImages is null || _supportLabels is null)
+            return (new Tensor<T>(new[] { 1, channels, height, width }), new Tensor<T>(new[] { 1, 1, height, width }));
+        if (_supportImages.Shape[1] != channels)
+            throw new InvalidOperationException(
+                $"The support images have {_supportImages.Shape[1]} channels but the query has {channels}.");
+        if (_supportImages.Shape[2] == height && _supportImages.Shape[3] == width)
+            return (_supportImages, _supportLabels);
+        var size = new[] { height, width };
+        return (Engine.Interpolate(_supportImages, size, InterpolateMode.Bilinear, false),
+            Engine.Interpolate(_supportLabels, size, InterpolateMode.Bilinear, false));
+    }
+
+    /// <summary>
+    /// UniverSeg's CrossBlock (Butoi et al. 2023, Sec. 3): every (target, support_i) pair is concatenated and
+    /// convolved, <c>z_i = LReLU(Conv([u, v_i]))</c>; the target becomes <c>LReLU(Conv(mean_i z_i))</c>, the pairwise
+    /// interaction averaged over the support set, and each support entry <c>LReLU(Conv(z_i))</c>.
+    /// </summary>
+    /// <param name="layer">Index of the block's cross convolution in <c>Layers</c>.</param>
+    /// <param name="target">Target features <c>[B, Ct, H, W]</c>.</param>
+    /// <param name="support">Support features <c>[B*S, Cs, H, W]</c> (support-major within each batch item).</param>
+    /// <param name="batch">B.</param>
+    /// <param name="supportSize">S.</param>
+    private (Tensor<T> Target, Tensor<T> Support) CrossBlock(int layer, Tensor<T> target, Tensor<T> support, int batch, int supportSize)
+    {
+        int ct = target.Shape[1], h = target.Shape[2], w = target.Shape[3];
+        var paired = Engine.Reshape(
+            Engine.TensorTile(Engine.Reshape(target, new[] { batch, 1, ct, h, w }), new[] { 1, supportSize, 1, 1, 1 }),
+            new[] { batch * supportSize, ct, h, w });
+        var interaction = Layers[layer].Forward(Engine.TensorConcatenate(new[] { paired, support }, 1));        // [B*S, F, H, W]
+        int f = interaction.Shape[1];
+        var averaged = Engine.ReduceMean(Engine.Reshape(interaction, new[] { batch, supportSize, f, h, w }), new[] { 1 }, false);
+        return (Layers[layer + 1].Forward(averaged), Layers[layer + 2].Forward(interaction));
+    }
+
+    /// <summary>
+    /// The UniverSeg network: an encoder of CrossBlocks with 2x2 max pooling between levels, a decoder that
+    /// upsamples (bilinear), concatenates the matching encoder outputs on both streams and applies a CrossBlock,
+    /// and a 1x1 convolution on the target stream.
+    /// </summary>
     protected override Tensor<T> Forward(Tensor<T> input)
     {
         bool hasBatch = input.Rank == 4; if (!hasBatch) input = AddBatchDimension(input);
-        var features = input;
-        for (int i = 0; i < _encoderLayerEnd; i++) features = Layers[i].Forward(features);
-        for (int i = _encoderLayerEnd; i < Layers.Count; i++) features = Layers[i].Forward(features);
-        if (!hasBatch) features = RemoveBatchDimension(features); return features;
+        if (Architecture.Layers != null && Architecture.Layers.Count > 0)
+        {
+            var sequential = input;
+            for (int i = 0; i < Layers.Count; i++) sequential = Layers[i].Forward(sequential);
+            if (!hasBatch) sequential = RemoveBatchDimension(sequential); return sequential;
+        }
+
+        int b = input.Shape[0], c = input.Shape[1], h = input.Shape[2], w = input.Shape[3];
+        var (images, labels) = SupportFor(c, h, w);
+        int s = images.Shape[0];
+        var pairs = Engine.TensorConcatenate(new[] { images, labels }, 1);                                     // [S, C+1, H, W]
+        int cs = pairs.Shape[1];
+        var support = Engine.Reshape(
+            Engine.TensorTile(Engine.Reshape(pairs, new[] { 1, s, cs, h, w }), new[] { b, 1, 1, 1, 1 }),
+            new[] { b * s, cs, h, w });
+        var target = input;
+
+        var skips = new List<(Tensor<T> Target, Tensor<T> Support)>();
+        int layer = 0;
+        for (int level = 0; level < _encoderFeatures.Length; level++)
+        {
+            (target, support) = CrossBlock(layer, target, support, b, s);
+            layer += LayersPerCrossBlock;
+            if (level < _encoderFeatures.Length - 1)
+            {
+                skips.Add((target, support));
+                target = Engine.MaxPool2D(target, 2, 2, 0);
+                support = Engine.MaxPool2D(support, 2, 2, 0);
+            }
+        }
+
+        for (int level = 0; level < _decoderFeatures.Length; level++)
+        {
+            var skip = skips[skips.Count - 1 - level];
+            var size = new[] { skip.Target.Shape[2], skip.Target.Shape[3] };
+            target = Engine.TensorConcatenate(new[] { Engine.Interpolate(target, size, InterpolateMode.Bilinear, false), skip.Target }, 1);
+            support = Engine.TensorConcatenate(new[] { Engine.Interpolate(support, size, InterpolateMode.Bilinear, false), skip.Support }, 1);
+            (target, support) = CrossBlock(layer, target, support, b, s);
+            layer += LayersPerCrossBlock;
+        }
+
+        var output = Layers[layer].Forward(target);
+        if (!hasBatch) output = RemoveBatchDimension(output); return output;
+    }
+
+    /// <summary>
+    /// Resolves the lazy convolutions' input channels with one real forward: the cross convolutions see the
+    /// concatenated (target, support) channels, which a sequential shape walk cannot model.
+    /// </summary>
+    protected override void ResolveLazyLayerShapes()
+    {
+        if (_lazyShapesResolved) return;
+        if (Layers is null || Layers.Count == 0) return;
+        if (!_useNativeMode || (Architecture.Layers != null && Architecture.Layers.Count > 0))
+        {
+            _lazyShapesResolved = true;
+            return;
+        }
+
+        using (InferenceMode.Enter())
+        {
+            Forward(new Tensor<T>(new[] { 1, _channels, _height, _width }));
+        }
+
+        _lazyShapesResolved = true;
     }
 
     /// <inheritdoc />
@@ -182,17 +340,33 @@ public partial class UniverSeg<T> : Common.MedicalSegmentationBase<T>
     {
         if (_onnxSession is null) throw new InvalidOperationException("ONNX session is not initialized.");
         bool hasBatch = input.Rank == 4; if (!hasBatch) input = AddBatchDimension(input);
-        var inputData = new float[input.Length];
-        for (int i = 0; i < input.Length; i++) inputData[i] = Convert.ToSingle(input.Data.Span[i]);
-        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input._shape);
-        string inputName = _onnxSession.InputMetadata.Keys.FirstOrDefault() ?? "images";
-        var inputs = new List<NamedOnnxValue> { NamedOnnxValue.CreateFromTensor(inputName, onnxInput) };
+        var inputs = new List<NamedOnnxValue> { NamedOnnxValue.CreateFromTensor(
+            _onnxSession.InputMetadata.Keys.FirstOrDefault() ?? "images", ToOnnx(input, input._shape)) };
+        if (_onnxSession.InputMetadata.Count >= 3)
+        {
+            int b = input.Shape[0], c = input.Shape[1], h = input.Shape[2], w = input.Shape[3];
+            var (images, labels) = SupportFor(c, h, w);
+            int s = images.Shape[0];
+            var names = _onnxSession.InputMetadata.Keys.ToArray();
+            var tiledImages = Engine.TensorTile(Engine.Reshape(images, new[] { 1, s, c, h, w }), new[] { b, 1, 1, 1, 1 });
+            var tiledLabels = Engine.TensorTile(Engine.Reshape(labels, new[] { 1, s, 1, h, w }), new[] { b, 1, 1, 1, 1 });
+            inputs.Add(NamedOnnxValue.CreateFromTensor(names[1], ToOnnx(tiledImages, tiledImages._shape)));
+            inputs.Add(NamedOnnxValue.CreateFromTensor(names[2], ToOnnx(tiledLabels, tiledLabels._shape)));
+        }
+
         using var results = _onnxSession.Run(inputs);
         var outputTensor = results.First().AsTensor<float>();
         var outputData = new T[outputTensor.Length];
-        for (int i = 0; i < outputTensor.Length; i++) outputData[i] = NumOps.FromDouble(outputTensor.GetValue(i));
+        NumOps.FromFloatSpan(outputTensor.ToDenseTensor().Buffer.Span, outputData);
         var result = new Tensor<T>(outputTensor.Dimensions.ToArray(), new Vector<T>(outputData));
         if (!hasBatch) result = RemoveBatchDimension(result); return result;
+    }
+
+    private OnnxTensors.DenseTensor<float> ToOnnx(Tensor<T> tensor, int[] shape)
+    {
+        var data = new float[tensor.Length];
+        NumOps.ToFloatSpan(tensor.Data.Span.Slice(0, tensor.Length), data);
+        return new OnnxTensors.DenseTensor<float>(data, shape);
     }
 
     // AddBatchDimension / RemoveBatchDimension are inherited from SegmentationModelBase; the copies
@@ -201,14 +375,8 @@ public partial class UniverSeg<T> : Common.MedicalSegmentationBase<T>
 
     #region Abstract Implementation
     /// <summary>
-    /// Initializes the encoder and decoder layers.
+    /// Builds the CrossBlock layers (three per block, encoder then decoder) and the output convolution.
     /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In native mode, builds the neural network layers.
-    /// In ONNX mode, no layers are created.
-    /// </para>
-    /// </remarks>
     protected override void InitializeLayers()
     {
         if (!_useNativeMode) { ClearLayers(); return; }
@@ -216,11 +384,18 @@ public partial class UniverSeg<T> : Common.MedicalSegmentationBase<T>
         { Layers.AddRange(Architecture.Layers); _encoderLayerEnd = Architecture.Layers.Count / 2; }
         else
         {
-            var encoderLayers = LayerHelper<T>.CreateUniverSegEncoderLayers(_channels, _height, _width, _channelDims, _depths, _dropRate).ToList();
-            _encoderLayerEnd = encoderLayers.Count; Layers.AddRange(encoderLayers);
-            int fH = _height / 32, fW = _width / 32;
-            var decoderLayers = LayerHelper<T>.CreateUniverSegDecoderLayers(_channelDims[^1], _decoderDim, _numClasses, fH, fW);
-            Layers.AddRange(decoderLayers);
+            // Every convolution is 3x3 with LeakyReLU, as in the official CrossConv/ConvOp blocks.
+            IActivationFunction<T> leaky = new LeakyReLUActivation<T>();
+            IActivationFunction<T> identity = new IdentityActivation<T>();
+            foreach (int features in _encoderFeatures.Concat(_decoderFeatures))
+            {
+                Layers.Add(new ConvolutionalLayer<T>(features, 3, 1, 1, leaky));
+                Layers.Add(new ConvolutionalLayer<T>(features, 3, 1, 1, leaky));
+                Layers.Add(new ConvolutionalLayer<T>(features, 3, 1, 1, leaky));
+            }
+
+            _encoderLayerEnd = _encoderFeatures.Length * LayersPerCrossBlock;
+            Layers.Add(new ConvolutionalLayer<T>(_numClasses, 1, 1, 0, identity));
         }
     }
 
@@ -230,11 +405,6 @@ public partial class UniverSeg<T> : Common.MedicalSegmentationBase<T>
     /// Collects metadata describing this model's configuration.
     /// </summary>
     /// <returns>Model metadata.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Returns a summary for saving or display.
-    /// </para>
-    /// </remarks>
     public override ModelMetadata<T> GetModelMetadata() => new()
     {
         AdditionalInfo = new Dictionary<string, object> { { "ModelName", "UniverSeg" }, { "InputHeight", _height }, { "InputWidth", _width }, { "NumClasses", _numClasses }, { "UseNativeMode", _useNativeMode }, { "NumLayers", Layers.Count } },
@@ -246,90 +416,62 @@ public partial class UniverSeg<T> : Common.MedicalSegmentationBase<T>
     #endregion
 
     #region IMedicalSegmentation Implementation
-    /// <summary>Segments a single 2D medical slice.</summary>
+    /// <summary>Segments a single 2D medical slice against the current support set.</summary>
     public override MedicalSegmentationResult<T> SegmentSlice(Tensor<T> slice)
     {
-        var output = Predict(slice);
-        var labels = Common.SegmentationTensorOps.ArgmaxAlongClassDim(output);
-        var probs = Common.SegmentationTensorOps.SoftmaxAlongClassDim(output);
-        int h = labels.Shape[0], w = labels.Shape[1];
-        int numC = probs.Shape[0];
-        var structures = new List<SegmentedStructure>();
-        for (int c = 0; c < numC; c++)
-        {
-            int area = 0; double confSum = 0;
-            for (int y = 0; y < h; y++)
-                for (int x = 0; x < w; x++)
-                    if ((int)NumOps.ToDouble(labels[y, x]) == c) { area++; confSum += NumOps.ToDouble(probs[c, y, x]); }
-            if (area > 0)
-                structures.Add(new SegmentedStructure { ClassId = c, Name = $"Class_{c}", VolumeOrArea = area, MeanConfidence = confSum / area });
-        }
+        var output = Common.SegmentationTensorOps.EnsureUnbatched(Predict(slice));
+        var probs = Engine.TensorSoftmax(output, 0);
+        var labels = Engine.TensorArgMax(output, 0).Cast<T>();
+        var structures = Common.SegmentationStructureStatistics.Summarize(labels, probs);
         return new MedicalSegmentationResult<T> { Labels = labels, Probabilities = probs, Structures = structures };
     }
+
     /// <summary>Segments a volume by treating it as a single slice (UniverSeg is a 2D model).</summary>
     public override MedicalSegmentationResult<T> SegmentVolume(Tensor<T> volume) => SegmentSlice(volume);
 
     /// <summary>
-    /// Prototype-based few-shot segmentation. Reached through the base's <c>SegmentFewShot</c>,
-    /// which null-checks the arguments and verifies <see cref="SupportsFewShot"/> first.
+    /// Few-shot segmentation: the network is run on <paramref name="queryImage"/> conditioned on the given
+    /// support set (Butoi et al. 2023). The first output channel's sigmoid is the foreground probability.
     /// </summary>
+    /// <returns>Labels <c>[H, W]</c> (1 where the probability is at least 0.5), probabilities
+    /// <c>[2, H, W]</c> (background, foreground) and the foreground structure.</returns>
     protected override MedicalSegmentationResult<T> SegmentFewShotInternal(
         Tensor<T> queryImage, Tensor<T> supportImages, Tensor<T> supportMasks)
     {
-        var queryFeatures = Predict(queryImage);
-        int numC = queryFeatures.Shape[0], h = queryFeatures.Shape[1], w = queryFeatures.Shape[2];
-        int numSupport = supportImages.Rank == 4 ? supportImages.Shape[0] : 1;
-        int sC = supportImages.Shape[supportImages.Rank - 3];
-        int sH = supportImages.Shape[supportImages.Rank - 2];
-        int sW = supportImages.Shape[supportImages.Rank - 1];
-        var prototype = new double[numC];
-        for (int s = 0; s < numSupport; s++)
+        var (images, labels) = NormalizeSupport(supportImages, supportMasks);
+        var previousImages = _supportImages;
+        var previousLabels = _supportLabels;
+        Tensor<T> logits;
+        try
         {
-            var sSlice = supportImages.Rank == 4 ? new Tensor<T>([sC, sH, sW]) : supportImages;
-            if (supportImages.Rank == 4)
-                for (int c = 0; c < sC; c++)
-                    for (int y = 0; y < sH; y++)
-                        for (int x = 0; x < sW; x++)
-                            sSlice[c, y, x] = supportImages[s, c, y, x];
-            var sFeatures = Predict(sSlice);
-            int fC = sFeatures.Shape[0], fH = sFeatures.Shape[1], fW = sFeatures.Shape[2];
-            var sMean = new double[numC];
-            int maskCount = 0;
-            for (int y = 0; y < fH; y++)
-                for (int x = 0; x < fW; x++)
-                {
-                    double m = supportMasks.Rank >= 3 ? NumOps.ToDouble(supportMasks[s, y, x]) : NumOps.ToDouble(supportMasks[y, x]);
-                    if (m >= 0.5)
-                    {
-                        maskCount++;
-                        for (int c = 0; c < fC && c < numC; c++)
-                            sMean[c] += NumOps.ToDouble(sFeatures[c, y, x]);
-                    }
-                }
-            if (maskCount > 0)
-                for (int c = 0; c < numC; c++)
-                    prototype[c] += sMean[c] / maskCount;
+            _supportImages = images;
+            _supportLabels = labels;
+            logits = Common.SegmentationTensorOps.EnsureUnbatched(Predict(queryImage));
         }
-        if (numSupport > 1)
-            for (int c = 0; c < numC; c++)
-                prototype[c] /= numSupport;
-        var scoreMap = Common.SegmentationTensorOps.WeightedChannelSum(queryFeatures, prototype);
-        var probMap = Common.SegmentationTensorOps.Sigmoid(scoreMap);
-        var labels = new Tensor<T>([h, w]);
-        var probs = new Tensor<T>([2, h, w]);
+        finally
+        {
+            _supportImages = previousImages;
+            _supportLabels = previousLabels;
+        }
+
+        int h = logits.Shape[1], w = logits.Shape[2];
+        var foreground = Engine.TensorSigmoid(Engine.TensorSlice(logits, new[] { 0, 0, 0 }, new[] { 1, h, w }));
+        var mask = Engine.TensorGreaterEqual(foreground, Tensor<T>.CreateDefault(new[] { 1, h, w }, NumOps.FromDouble(0.5)));
+        var probs = Engine.TensorConcatenate(new[] { Engine.ScalarMinusTensor(NumOps.One, foreground), foreground }, 0);
         var structures = new List<SegmentedStructure>();
-        int fgArea = 0; double confTotal = 0;
-        for (int y = 0; y < h; y++)
-            for (int x = 0; x < w; x++)
-            {
-                double p = NumOps.ToDouble(probMap[y, x]);
-                if (p >= 0.5) { labels[y, x] = NumOps.FromDouble(1); fgArea++; confTotal += p; }
-                probs[0, y, x] = NumOps.FromDouble(1.0 - p);
-                probs[1, y, x] = NumOps.FromDouble(p);
-            }
-        if (fgArea > 0)
-            structures.Add(new SegmentedStructure { ClassId = 1, Name = "FewShot_Target", VolumeOrArea = fgArea, MeanConfidence = confTotal / fgArea });
-        return new MedicalSegmentationResult<T> { Labels = labels, Probabilities = probs, Structures = structures };
+        int area = Engine.TensorSum(mask.Cast<int>());
+        if (area > 0)
+        {
+            double confidence = Engine.TensorDivide(
+                Engine.ReduceSum(Engine.Reshape(Engine.TensorMultiply(foreground, mask), new[] { h * w }), new[] { 0 }, true),
+                Tensor<T>.CreateDefault(new[] { 1 }, NumOps.FromDouble(area))).Cast<double>().ToArray()[0];
+            structures.Add(new SegmentedStructure { ClassId = 1, Name = "FewShot_Target", VolumeOrArea = area, MeanConfidence = confidence });
+        }
+
+        return new MedicalSegmentationResult<T>
+        {
+            Labels = Engine.Reshape(mask, new[] { h, w }), Probabilities = probs, Structures = structures,
+        };
     }
     #endregion
 }
