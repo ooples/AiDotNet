@@ -47,8 +47,9 @@ namespace AiDotNet.MetaLearning.Algorithms;
 /// </para>
 /// <para>
 /// The implicit function theorem allows computing gradients through the adaptation
-/// process by solving: (I + lambda * H)^(-1) * g, where H is the Hessian of the
-/// inner loss and g is the gradient of the query loss. This is solved efficiently
+/// process by solving: (I + H / lambda)^(-1) * g, where H is the Hessian of the
+/// inner support loss, lambda the strength of the proximal regularizer each inner problem carries,
+/// and g is the gradient of the query loss. This is solved efficiently
 /// using Conjugate Gradient iteration.
 /// </para>
 /// <para>
@@ -160,7 +161,7 @@ public partial class iMAMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
 
         // Accumulate meta-gradients across all tasks
         Vector<T>? accumulatedMetaGradients = null;
-        T totalMetaLoss = NumOps.Zero;
+        var metaLosses = new List<T>(taskBatch.Tasks.Length);
 
         foreach (var task in taskBatch.Tasks)
         {
@@ -174,8 +175,7 @@ public partial class iMAMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
 
             // Compute meta-loss on query set
             var queryPredictions = taskModel.Predict(task.QueryInput);
-            T metaLoss = ComputeLossFromOutput(queryPredictions, task.QueryOutput);
-            totalMetaLoss = NumOps.Add(totalMetaLoss, metaLoss);
+            metaLosses.Add(ComputeLossFromOutput(queryPredictions, task.QueryOutput));
 
             // Compute implicit meta-gradients (the key difference from MAML)
             var taskMetaGradients = ComputeImplicitMetaGradients(taskModel, initialParams, adaptedParams, task);
@@ -198,10 +198,7 @@ public partial class iMAMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
 
         // Average the meta-gradients
         T batchSizeT = NumOps.FromDouble(taskBatch.BatchSize);
-        for (int i = 0; i < accumulatedMetaGradients.Length; i++)
-        {
-            accumulatedMetaGradients[i] = NumOps.Divide(accumulatedMetaGradients[i], batchSizeT);
-        }
+        accumulatedMetaGradients = Engine.Divide(accumulatedMetaGradients, batchSizeT);
 
         // Apply gradient clipping if configured
         if (_imamlOptions.GradientClipThreshold.HasValue && _imamlOptions.GradientClipThreshold.Value > 0)
@@ -215,7 +212,7 @@ public partial class iMAMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
         InterfaceGuard.Parameterizable(MetaModel).SetParameters(updatedMetaParams);
 
         // Return average meta-loss
-        return NumOps.Divide(totalMetaLoss, batchSizeT);
+        return NumOps.Divide(Engine.Sum(new Vector<T>(metaLosses)), batchSizeT);
     }
 
     /// <summary>
@@ -266,20 +263,25 @@ public partial class iMAMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
     /// <returns>The adapted parameters after K gradient steps.</returns>
     /// <remarks>
     /// <para>
-    /// The inner loop is identical to MAML: perform K gradient descent steps
-    /// on the support set. iMAML's innovation is in how meta-gradients are
-    /// computed, not in the adaptation process itself.
+    /// K gradient descent steps on iMAML's regularized inner objective (Rajeswaran et al. 2019, Eq. 4):
+    /// L_train(phi) + (lambda / 2) ||phi - theta||^2, whose gradient is the support gradient plus
+    /// lambda * (phi - theta). The proximal term is what makes the implicit meta-gradient
+    /// (I + H / lambda)^(-1) g exact at the inner solution.
     /// </para>
     /// </remarks>
     private Vector<T> InnerLoopAdaptation(IFullModel<T, TInput, TOutput> model, IMetaLearningTask<T, TInput, TOutput> task)
     {
         var parameters = InterfaceGuard.Parameterizable(model).GetParameters();
+        var theta = parameters;
+        T lambda = NumOps.FromDouble(_imamlOptions.LambdaRegularization);
 
         // Perform K gradient steps on the support set
         for (int step = 0; step < _imamlOptions.AdaptationSteps; step++)
         {
-            // Compute gradients on support set
-            var gradients = ComputeGradients(model, task.SupportInput, task.SupportOutput);
+            // Gradient of the regularized support loss: grad L_train(phi) + lambda * (phi - theta)
+            var gradients = Engine.Add(
+                ComputeGradients(model, task.SupportInput, task.SupportOutput),
+                Engine.Multiply(Engine.Subtract(parameters, theta), lambda));
 
             // Apply gradients with inner learning rate
             parameters = ApplyInnerGradients(parameters, gradients, _imamlOptions.InnerLearningRate, step == 0);
@@ -334,15 +336,14 @@ public partial class iMAMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
             return queryGradients;
         }
 
-        // Solve the implicit equation using Conjugate Gradient
-        // (I + lambda * H) * v = g_query
-        var implicitGradients = SolveImplicitEquation(model, task, queryGradients);
-
-        return implicitGradients;
+        // Solve the implicit equation (I + H / lambda) * v = g_query, by Conjugate Gradient or a Neumann series
+        return _imamlOptions.UseNeumannApproximation
+            ? NeumannImplicitSolve(model, task, queryGradients)
+            : SolveImplicitEquation(model, task, queryGradients);
     }
 
     /// <summary>
-    /// Solves the implicit equation (I + lambda * H) * v = b using Conjugate Gradient.
+    /// Solves the implicit equation (I + H / lambda) * v = b using Conjugate Gradient.
     /// </summary>
     /// <param name="model">The model at adapted parameters.</param>
     /// <param name="task">The task for computing Hessian-vector products.</param>
@@ -354,73 +355,119 @@ public partial class iMAMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
         Vector<T> b)
     {
         int n = b.Length;
-        var x = new Vector<T>(n); // Initial guess: zero vector
-        var r = new Vector<T>(n);
-        var p = new Vector<T>(n);
-
-        // r = b - Ax (with x = 0, r = b)
-        for (int i = 0; i < n; i++)
-        {
-            r[i] = b[i];
-            p[i] = r[i];
-        }
-
-        T rsOld = VectorHelper.DotProduct(r, r);
-        T tolerance = NumOps.FromDouble(_imamlOptions.ConjugateGradientTolerance);
+        var state = new ConjugateGradientState(
+            new Vector<T>(n), // Initial guess: zero vector
+            b.Clone(),        // r = b - Ax (with x = 0, r = b)
+            b.Clone(),
+            Engine.DotProduct(b, b));
 
         for (int iter = 0; iter < _imamlOptions.ConjugateGradientIterations; iter++)
         {
             // Check convergence
-            if (NumOps.ToDouble(rsOld) < _imamlOptions.ConjugateGradientTolerance)
+            if (state.Converged(_imamlOptions.ConjugateGradientTolerance))
             {
                 break;
             }
 
-            // Compute A * p = (I + lambda * H) * p
-            var Ap = ComputeImplicitMatrixVectorProduct(model, task, p);
-
-            T pAp = VectorHelper.DotProduct(p, Ap);
-
-            // Avoid division by zero
-            if (NumOps.LessThan(pAp, NumOps.FromDouble(1e-12)))
+            // Compute A * p = (I + H / lambda) * p
+            var Ap = ComputeImplicitMatrixVectorProduct(model, task, state.P);
+            if (!state.Step(Ap))
             {
                 break;
             }
-
-            T alpha = NumOps.Divide(rsOld, pAp);
-
-            // Vectorized CG updates
-            // x = x + alpha * p
-            x = (Vector<T>)Engine.Add(x, Engine.Multiply(p, alpha));
-
-            // r = r - alpha * Ap
-            r = (Vector<T>)Engine.Subtract(r, Engine.Multiply(Ap, alpha));
-
-            T rsNew = VectorHelper.DotProduct(r, r);
-
-            if (NumOps.LessThan(rsOld, NumOps.FromDouble(1e-12)))
-            {
-                break;
-            }
-
-            T beta = NumOps.Divide(rsNew, rsOld);
-
-            // p = r + beta * p
-            p = (Vector<T>)Engine.Add(r, Engine.Multiply(p, beta));
-
-            rsOld = rsNew;
         }
 
-        return x;
+        return state.X;
     }
 
     /// <summary>
-    /// Computes the implicit matrix-vector product (I + lambda * H) * v.
+    /// The iterate, residual, search direction and squared residual norm of one Conjugate Gradient solve.
+    /// </summary>
+    private sealed class ConjugateGradientState
+    {
+        private static readonly INumericOperations<T> Ops = MathHelper.GetNumericOperations<T>();
+
+        public ConjugateGradientState(Vector<T> x, Vector<T> r, Vector<T> p, T rsOld)
+        {
+            X = x;
+            R = r;
+            P = p;
+            RsOld = rsOld;
+        }
+
+        public Vector<T> X { get; private set; }
+
+        public Vector<T> R { get; private set; }
+
+        public Vector<T> P { get; private set; }
+
+        public T RsOld { get; private set; }
+
+        /// <summary>Whether the squared residual norm is below <paramref name="tolerance"/>.</summary>
+        public bool Converged(double tolerance) => Ops.ToDouble(RsOld) < tolerance;
+
+        /// <summary>
+        /// One CG step given A * p; false (and no change) when p'Ap is below 1e-12, or after a step taken from a
+        /// squared residual below 1e-12.
+        /// </summary>
+        public bool Step(Vector<T> ap)
+        {
+            var engine = AiDotNetEngine.Current;
+            T pAp = engine.DotProduct(P, ap);
+
+            // Avoid division by zero
+            if (Ops.LessThan(pAp, Ops.FromDouble(1e-12)))
+            {
+                return false;
+            }
+
+            T alpha = Ops.Divide(RsOld, pAp);
+
+            // x = x + alpha * p; r = r - alpha * Ap
+            X = engine.Add(X, engine.Multiply(P, alpha));
+            R = engine.Subtract(R, engine.Multiply(ap, alpha));
+
+            T rsNew = engine.DotProduct(R, R);
+            if (Ops.LessThan(RsOld, Ops.FromDouble(1e-12)))
+            {
+                return false;
+            }
+
+            // p = r + beta * p
+            P = engine.Add(R, engine.Multiply(P, Ops.Divide(rsNew, RsOld)));
+            RsOld = rsNew;
+            return true;
+        }
+    }
+
+    /// <summary>
+    /// Approximates (I + H / lambda)^(-1) * b by the truncated Neumann series sum_{j &lt; K} (-H / lambda)^j b,
+    /// K = NeumannSeriesTerms.
+    /// </summary>
+    private Vector<T> NeumannImplicitSolve(
+        IFullModel<T, TInput, TOutput> model,
+        IMetaLearningTask<T, TInput, TOutput> task,
+        Vector<T> b)
+    {
+        var term = b;
+        var sum = b;
+        for (int j = 1; j < _imamlOptions.NeumannSeriesTerms; j++)
+        {
+            // (-H / lambda) * term = term - (I + H / lambda) * term
+            term = Engine.Subtract(term, ComputeImplicitMatrixVectorProduct(model, task, term));
+            sum = Engine.Add(sum, term);
+        }
+
+        return sum;
+    }
+
+    /// <summary>
+    /// Computes the implicit matrix-vector product (I + H / lambda) * v.
     /// </summary>
     /// <param name="model">The model at adapted parameters.</param>
     /// <param name="task">The task for computing Hessian-vector products.</param>
     /// <param name="v">The vector to multiply.</param>
-    /// <returns>The result of (I + lambda * H) * v.</returns>
+    /// <returns>The result of (I + H / lambda) * v.</returns>
     /// <remarks>
     /// <para>
     /// The Hessian-vector product H * v is computed efficiently using finite differences:
@@ -456,8 +503,8 @@ public partial class iMAMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
         T twoEps = NumOps.Multiply(NumOps.FromDouble(2.0), eps);
         var Hv = (Vector<T>)Engine.Divide(Engine.Subtract(gradPlus, gradMinus), twoEps);
 
-        // Vectorized: result = v + lambda * Hv
-        return (Vector<T>)Engine.Add(v, Engine.Multiply(Hv, lambda));
+        // Vectorized: result = v + Hv / lambda (Rajeswaran et al. 2019, Lemma 1)
+        return Engine.Add(v, Engine.Divide(Hv, lambda));
     }
 
 }
