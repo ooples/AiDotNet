@@ -760,4 +760,55 @@ internal static class SelectorTensorOps
 
         return engine.TensorMax(engine.TensorConcatenate(results, 0), ops.Zero);
     }
+
+    /// <summary>
+    /// R^2 (against the centred total sum of squares; 0 when that is not positive) of the no-intercept ridge
+    /// regression of the [n, 1] <paramref name="y"/> on the <paramref name="columns"/> of the [n, p]
+    /// <paramref name="x"/>, with <paramref name="ridge"/> added to the Gram diagonal. An empty subset scores 0.
+    /// </summary>
+    public static T RidgeRSquared<T>(Tensor<T> x, Tensor<T> y, IReadOnlyCollection<int> columns, double ridge)
+    {
+        var engine = AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<T>();
+        if (columns.Count == 0)
+            return ops.Zero;
+
+        var indices = columns.ToArray();
+        var xs = engine.TensorIndexSelect(x, new Tensor<int>(indices, new[] { indices.Length }), 1);
+        var coefficients = RidgeCoefficients(xs, y, ops.FromDouble(ridge));
+        var predictions = engine.TensorMatMul(xs, engine.Reshape(coefficients, new[] { indices.Length, 1 }));
+        var residual = engine.TensorSubtract(y, predictions);
+        T ssRes = engine.TensorSum(engine.TensorMultiply(residual, residual));
+        var centered = CenterColumns(y);
+        T ssTot = engine.TensorSum(engine.TensorMultiply(centered, centered));
+        return ops.GreaterThan(ssTot, ops.Zero) ? ops.Subtract(ops.One, ops.Divide(ssRes, ssTot)) : ops.Zero;
+    }
+
+    /// <summary>A [length] tensor holding <paramref name="values"/> at their keys and 0 elsewhere.</summary>
+    public static Tensor<T> FromSparse<T>(IReadOnlyDictionary<int, T> values, int length)
+    {
+        var ops = MathHelper.GetNumericOperations<T>();
+        var result = PreprocessingTensorOps.Filled(new[] { length }, ops.Zero);
+        if (values.Count == 0)
+            return result;
+
+        var keys = values.Keys.ToArray();
+        var entries = new Tensor<T>(keys.Select(key => values[key]).ToArray(), new[] { keys.Length });
+        return AiDotNetEngine.Current.TensorIndexCopy(result, 0, new Tensor<int>(keys, new[] { keys.Length }), entries);
+    }
+
+    /// <summary>The values divided by their maximum when that maximum is positive, unchanged otherwise.</summary>
+    public static Tensor<T> NormalizeByPositiveMax<T>(Tensor<T> values)
+    {
+        var engine = AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<T>();
+        if (values.Length == 0)
+            return values;
+
+        T max = engine.TensorMaxValue(values);
+        return ops.GreaterThan(max, ops.Zero) ? engine.TensorDivideScalar(values, max) : values;
+    }
+
+    /// <summary>The scalar difference <c>a - b</c> (for once-per-iteration bookkeeping in wrapper searches).</summary>
+    public static T Difference<T>(T a, T b) => MathHelper.GetNumericOperations<T>().Subtract(a, b);
 }

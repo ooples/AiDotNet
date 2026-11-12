@@ -29,13 +29,13 @@ public class SemiSupervisedLaplacian<T> : TransformerBase<T, Matrix<T>, Matrix<T
     private readonly int _nNeighbors;
     private readonly double _alpha;
 
-    private double[]? _featureScores;
+    private Vector<T>? _featureScores;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
-    public double[]? FeatureScores => _featureScores;
+    public Vector<T>? FeatureScores => _featureScores;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -77,158 +77,96 @@ public class SemiSupervisedLaplacian<T> : TransformerBase<T, Matrix<T>, Matrix<T
         int p = data.Columns;
         int nLabeled = isLabeled.Count(l => l);
 
-        // Build k-NN graph
-        var W = BuildKNNGraph(data, n, p);
+        var engine = Engine;
+        var x = Tensor<T>.FromMatrix(data);
 
-        // Compute graph Laplacian
-        var D = new double[n];
-        for (int i = 0; i < n; i++)
-            for (int j = 0; j < n; j++)
-                D[i] += W[i, j];
+        // Build k-NN graph and its degrees
+        var w = BuildKNNGraph(x, n);
+        var degrees = engine.ReduceSum(w, new[] { 1 }, false);
 
-        // Compute feature scores combining supervised and unsupervised
-        _featureScores = new double[p];
+        // Unsupervised: Laplacian score f'Lf / f'Df of the degree-centred feature (0 when f'Df < 1e-10)
+        var degreeColumn = engine.Reshape(degrees, new[] { n, 1 });
+        T totalDegree = engine.TensorSum(degrees);
+        var fBar = engine.TensorDivideScalar(
+            engine.ReduceSum(engine.TensorMultiply(x, degreeColumn), new[] { 0 }, true),
+            NumOps.Add(totalDegree, NumOps.FromDouble(1e-10)));
+        var centered = engine.TensorSubtract(x, fBar);
+        var fDf = engine.ReduceSum(engine.TensorMultiply(engine.TensorMultiply(centered, centered), degreeColumn), new[] { 0 }, false);
+        var fWf = engine.ReduceSum(engine.TensorMultiply(centered, engine.TensorMatMul(w, centered)), new[] { 0 }, false);
+        var fLf = engine.TensorSubtract(fDf, fWf);
+        var laplacianScores = SelectorTensorOps.ZeroUnless(
+            PreprocessingTensorOps.AtLeast(fDf, NumOps.FromDouble(1e-10)), engine.TensorDivide(fLf, fDf));
 
-        for (int j = 0; j < p; j++)
+        // Supervised: |correlation| with the labeled targets
+        var supervisedScores = PreprocessingTensorOps.Filled(new[] { p }, NumOps.Zero);
+        if (nLabeled > 0)
         {
-            // Extract feature values
-            var fValues = new double[n];
-            for (int i = 0; i < n; i++)
-                fValues[i] = NumOps.ToDouble(data[i, j]);
-
-            // Unsupervised: Laplacian score
-            double laplacianScore = ComputeLaplacianScore(fValues, W, D, n);
-
-            // Supervised: correlation with labeled targets
-            double supervisedScore = 0;
-            if (nLabeled > 0)
-            {
-                var labeledFeatures = new List<double>();
-                var labeledTargets = new List<double>();
-                for (int i = 0; i < n; i++)
-                {
-                    if (isLabeled[i])
-                    {
-                        labeledFeatures.Add(fValues[i]);
-                        labeledTargets.Add(NumOps.ToDouble(target[i]));
-                    }
-                }
-
-                supervisedScore = Math.Abs(ComputeCorrelation(
-                    labeledFeatures.ToArray(),
-                    labeledTargets.ToArray(),
-                    nLabeled));
-            }
-
-            // Combine scores
-            _featureScores[j] = _alpha * supervisedScore + (1 - _alpha) * (1 - laplacianScore);
+            var labeled = Enumerable.Range(0, n).Where(i => isLabeled[i]).ToArray();
+            var rows = new Tensor<int>(labeled, new[] { labeled.Length });
+            var labeledTargets = engine.Reshape(
+                engine.TensorIndexSelect(Tensor<T>.FromVector(target), rows, 0), new[] { labeled.Length, 1 });
+            supervisedScores = engine.TensorAbs(SelectorTensorOps.PearsonWithColumn(
+                engine.TensorIndexSelect(x, rows, 0), labeledTargets));
         }
 
-        int nToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = _featureScores
-            .Select((s, idx) => (Score: s, Index: idx))
-            .OrderByDescending(x => x.Score)
-            .Take(nToSelect)
-            .Select(x => x.Index)
-            .OrderBy(x => x)
-            .ToArray();
-
+        // Combine scores
+        var scores = engine.TensorAdd(
+            engine.TensorMultiplyScalar(supervisedScores, NumOps.FromDouble(_alpha)),
+            engine.TensorMultiplyScalar(PreprocessingTensorOps.OneMinus(laplacianScores), NumOps.FromDouble(1 - _alpha)));
+        _featureScores = scores.ToVector();
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(scores, Math.Min(_nFeaturesToSelect, p));
         IsFitted = true;
     }
 
-    private double[,] BuildKNNGraph(Matrix<T> data, int n, int p)
+    /// <summary>
+    /// Heat-kernel k-NN graph: each sample links to its k nearest others (ties by index), weighted
+    /// exp(-d^2 / (2 sigma^2)) with sigma its k-th neighbour distance + 1e-10. A pair linked from both ends keeps
+    /// the weight from the higher-indexed sample, as the symmetric writes in row order leave it.
+    /// </summary>
+    private Tensor<T> BuildKNNGraph(Tensor<T> x, int n)
     {
-        var W = new double[n, n];
+        var engine = Engine;
+        var shape = new[] { n, n };
+        int k = Math.Min(_nNeighbors, n - 1);
+        if (k <= 0)
+            return new Tensor<T>(shape);
 
-        // Compute pairwise distances
-        var distances = new double[n, n];
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = i + 1; j < n; j++)
-            {
-                double dist = 0;
-                for (int k = 0; k < p; k++)
-                {
-                    double diff = NumOps.ToDouble(data[i, k]) - NumOps.ToDouble(data[j, k]);
-                    dist += diff * diff;
-                }
-                dist = Math.Sqrt(dist);
-                distances[i, j] = dist;
-                distances[j, i] = dist;
-            }
-        }
+        // Pairwise Euclidean distances, self excluded
+        var squaredNorms = engine.ReduceSum(engine.TensorMultiply(x, x), new[] { 1 }, false);
+        var squared = engine.TensorSubtract(
+            engine.TensorAdd(
+                engine.TensorBroadcastTo(engine.Reshape(squaredNorms, new[] { n, 1 }), shape),
+                engine.TensorBroadcastTo(engine.Reshape(squaredNorms, new[] { 1, n }), shape)),
+            engine.TensorMultiplyScalar(engine.TensorMatMul(x, engine.TensorTranspose(x)), NumOps.FromDouble(2)));
+        var distances = engine.TensorSqrt(engine.TensorMax(squared, NumOps.Zero));
+        var eye = engine.TensorEye<T>(n);
+        var others = engine.TensorWhere(eye, PreprocessingTensorOps.Filled(shape, NumOps.FromDouble(double.PositiveInfinity)), distances);
 
-        // Build k-NN adjacency
-        for (int i = 0; i < n; i++)
-        {
-            var neighbors = Enumerable.Range(0, n)
-                .Where(j => j != i)
-                .OrderBy(j => distances[i, j])
-                .Take(_nNeighbors)
-                .ToList();
+        // k nearest per row: everything below the k-th distance plus the lowest-indexed ties at it
+        var kth = engine.TensorSliceAxis(engine.TensorSort(others, 1, false).Values, 1, k - 1);
+        var kthColumn = engine.TensorBroadcastTo(engine.Reshape(kth, new[] { n, 1 }), shape);
+        var below = engine.TensorLessThan(others, kthColumn);
+        var ties = engine.TensorEquals(others, kthColumn);
+        var room = engine.TensorSubtract(PreprocessingTensorOps.Filled(new[] { n, 1 }, NumOps.FromDouble(k)),
+            engine.ReduceSum(below, new[] { 1 }, true));
+        var tieRank = engine.TensorCumSum(ties, 1);
+        var keptTies = engine.TensorMultiply(ties,
+            engine.TensorLessEqual(tieRank, engine.TensorBroadcastTo(room, shape)));
+        var adjacency = engine.TensorAdd(below, keptTies);
 
-            foreach (int j in neighbors)
-            {
-                double sigma = distances[i, neighbors.Last()] + 1e-10;
-                W[i, j] = Math.Exp(-distances[i, j] * distances[i, j] / (2 * sigma * sigma));
-                W[j, i] = W[i, j];  // Symmetric
-            }
-        }
+        // Row-wise heat kernel with sigma_i = k-th neighbour distance + 1e-10
+        var sigma = engine.TensorAddScalar(kthColumn, NumOps.FromDouble(1e-10));
+        var rowWeights = engine.TensorMultiply(adjacency, engine.TensorExp(engine.TensorNegate(engine.TensorDivide(
+            engine.TensorMultiply(distances, distances),
+            engine.TensorMultiplyScalar(engine.TensorMultiply(sigma, sigma), NumOps.FromDouble(2))))));
 
-        return W;
-    }
-
-    private double ComputeLaplacianScore(double[] f, double[,] W, double[] D, int n)
-    {
-        // Center feature
-        double sum = 0;
-        for (int i = 0; i < n; i++)
-            sum += D[i] * f[i];
-        double totalD = D.Sum();
-        double fBar = sum / (totalD + 1e-10);
-
-        var fCentered = new double[n];
-        for (int i = 0; i < n; i++)
-            fCentered[i] = f[i] - fBar;
-
-        // Compute f^T * L * f / f^T * D * f
-        double fDf = 0;
-        for (int i = 0; i < n; i++)
-            fDf += fCentered[i] * D[i] * fCentered[i];
-
-        if (fDf < 1e-10) return 0;
-
-        double fLf = 0;
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < n; j++)
-            {
-                if (W[i, j] > 0)
-                    fLf += W[i, j] * (fCentered[i] - fCentered[j]) * (fCentered[i] - fCentered[j]);
-            }
-        }
-        fLf /= 2;  // Each pair counted twice
-
-        return fLf / fDf;
-    }
-
-    private double ComputeCorrelation(double[] x, double[] y, int n)
-    {
-        double xMean = x.Average();
-        double yMean = y.Average();
-
-        double ssXY = 0, ssXX = 0, ssYY = 0;
-        for (int i = 0; i < n; i++)
-        {
-            double dx = x[i] - xMean;
-            double dy = y[i] - yMean;
-            ssXY += dx * dy;
-            ssXX += dx * dx;
-            ssYY += dy * dy;
-        }
-
-        if (ssXX < 1e-10 || ssYY < 1e-10) return 0;
-        return ssXY / Math.Sqrt(ssXX * ssYY);
+        // Symmetrize: entry (i, j) takes row max(i, j)'s weight when that row links the pair, else row min(i, j)'s
+        var rowWeightsT = engine.TensorTranspose(rowWeights);
+        var adjacencyT = engine.TensorTranspose(adjacency);
+        var upper = SelectorTensorOps.StrictUpperMask<T>(n);
+        return engine.TensorWhere(upper,
+            engine.TensorWhere(adjacencyT, rowWeightsT, rowWeights),
+            engine.TensorWhere(adjacency, rowWeights, rowWeightsT));
     }
 
     public Matrix<T> FitTransform(Matrix<T> data, Vector<T> target, bool[] isLabeled)
