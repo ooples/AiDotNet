@@ -67,7 +67,7 @@ public class HaralickSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IFi
             var levels = PreprocessingTensorOps.EqualWidthBinOneHot(x, _nLevels, out var varying);
             var counts = engine.TensorTranspose(
                 engine.Reshape(engine.ReduceSum(levels, new[] { 0 }, false), new[] { p, _nLevels }));
-            var entropy = engine.TensorMultiply(FeatureSelectionTensorOps.ColumnEntropyBits(counts, 0, 0), varying);
+            var entropy = engine.TensorMultiply(SelectorTensorOps.ColumnEntropyBits(counts, 0, 0), varying);
             scores = entropy;
 
             if (n >= 2)
@@ -75,7 +75,7 @@ public class HaralickSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IFi
                 // Contrast (mean squared step) and homogeneity (mean 1 / (1 + |step|)) between consecutive rows
                 var steps = engine.TensorDiff(x, 1, 0);
                 var contrast = engine.TensorDivideScalar(
-                    FeatureSelectionTensorOps.ColumnSumOfSquares(steps), NumOps.FromDouble(n - 1));
+                    SelectorTensorOps.ColumnSumOfSquares(steps), NumOps.FromDouble(n - 1));
                 var similarity = engine.TensorDivide(
                     PreprocessingTensorOps.Filled(new[] { n - 1, p }, NumOps.One),
                     engine.TensorAddScalar(engine.TensorAbs(steps), NumOps.One));

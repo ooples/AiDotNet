@@ -71,8 +71,8 @@ public class SpectralEntropySelector<T> : TransformerBase<T, Matrix<T>, Matrix<T
                 new[] { window, numWindows * p });
 
             // Spectral entropy (bits) of each window's power spectrum, averaged over the windows.
-            var entropy = FeatureSelectionTensorOps.ColumnEntropyBits(
-                FeatureSelectionTensorOps.DftPower(windows), 1e-10, 1e-10);
+            var entropy = SelectorTensorOps.ColumnEntropyBits(
+                SelectorTensorOps.DftPower(windows), 1e-10, 1e-10);
             scores = engine.ReduceMean(engine.Reshape(entropy, new[] { numWindows, p }), new[] { 0 }, false);
         }
 

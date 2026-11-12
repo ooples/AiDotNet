@@ -28,12 +28,12 @@ public class RoughSetSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISu
     private readonly int _maxFeatures;
     private readonly int _nBins;
 
-    private double[]? _dependencyDegrees;
+    private Vector<T>? _dependencyDegrees;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     public int MaxFeatures => _maxFeatures;
-    public double[]? DependencyDegrees => _dependencyDegrees;
+    public Vector<T>? DependencyDegrees => _dependencyDegrees;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -69,102 +69,98 @@ public class RoughSetSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISu
         int n = data.Rows;
         int p = data.Columns;
 
-        // Discretize data
-        var X = DiscretizeData(data, n, p);
-        var y = new int[n];
-        for (int i = 0; i < n; i++)
-            y[i] = (int)Math.Round(NumOps.ToDouble(target[i]));
+        // Discretize data and round the decisions to integer classes
+        var engine = Engine;
+        var codes = DiscretizeData(data, n, p);
+        var labels = engine.TensorRound(Tensor<T>.FromVector(target));
 
-        // Compute dependency degree for each feature individually
-        _dependencyDegrees = new double[p];
+        // Dependency degree of each feature individually
+        var singleCounts = new int[p];
         for (int j = 0; j < p; j++)
-            _dependencyDegrees[j] = ComputeDependencyDegree(X, y, new[] { j }, n, p);
+            singleCounts[j] = PositiveRegionSize(codes, labels, new[] { j });
+        var degrees = engine.TensorDivideScalar(
+            new Tensor<int>(singleCounts, new[] { p }).Cast<T>(), NumOps.FromDouble(n));
+        _dependencyDegrees = degrees.ToVector();
+        var byDependency = PreprocessingTensorOps.StableOrder(degrees, descending: true);
 
         // Find reduct using greedy algorithm
-        var reduct = FindReduct(X, y, n, p);
+        var reduct = FindReduct(codes, labels, n, p);
 
         // If reduct is smaller than maxFeatures, add more by dependency
         if (reduct.Count < _maxFeatures)
         {
-            var remaining = Enumerable.Range(0, p)
-                .Except(reduct)
-                .OrderByDescending(j => _dependencyDegrees[j])
-                .Take(_maxFeatures - reduct.Count);
+            var remaining = byDependency
+                .Where(j => !reduct.Contains(j))
+                .Take(_maxFeatures - reduct.Count)
+                .ToList();
             reduct.UnionWith(remaining);
         }
 
         // If reduct is larger than maxFeatures, keep top by dependency
         if (reduct.Count > _maxFeatures)
         {
-            _selectedIndices = reduct
-                .OrderByDescending(j => _dependencyDegrees[j])
+            _selectedIndices = byDependency
+                .Where(j => reduct.Contains(j))
                 .Take(_maxFeatures)
-                .OrderBy(x => x)
+                .OrderBy(index => index)
                 .ToArray();
         }
         else
         {
-            _selectedIndices = reduct.OrderBy(x => x).ToArray();
+            _selectedIndices = reduct.OrderBy(index => index).ToArray();
         }
 
         IsFitted = true;
     }
 
-    private int[,] DiscretizeData(Matrix<T> data, int n, int p)
+    /// <summary>Equal-range bin of every value: min(floor((x - min) / range * (nBins - 1)), nBins - 1), 0 for a
+    /// column whose range is not above 1e-10.</summary>
+    private Tensor<T> DiscretizeData(Matrix<T> data, int n, int p)
     {
-        var result = new int[n, p];
-        for (int j = 0; j < p; j++)
-        {
-            double min = double.MaxValue, max = double.MinValue;
-            for (int i = 0; i < n; i++)
-            {
-                double val = NumOps.ToDouble(data[i, j]);
-                min = Math.Min(min, val);
-                max = Math.Max(max, val);
-            }
-
-            double range = max - min;
-            for (int i = 0; i < n; i++)
-            {
-                double val = NumOps.ToDouble(data[i, j]);
-                result[i, j] = range > 1e-10
-                    ? Math.Min((int)((val - min) / range * (_nBins - 1)), _nBins - 1)
-                    : 0;
-            }
-        }
-        return result;
+        var engine = Engine;
+        var x = Tensor<T>.FromMatrix(data);
+        var min = engine.Reshape(PreprocessingTensorOps.ColumnMin(x), new[] { 1, p });
+        var range = engine.TensorSubtract(engine.Reshape(PreprocessingTensorOps.ColumnMax(x), new[] { 1, p }), min);
+        var scaled = engine.TensorMultiplyScalar(engine.TensorDivide(engine.TensorSubtract(x, min), range), NumOps.FromDouble(_nBins - 1));
+        var bins = engine.TensorMin(engine.TensorFloor(scaled), NumOps.FromDouble(_nBins - 1));
+        var varying = engine.TensorBroadcastTo(engine.TensorGreaterThan(range, NumOps.FromDouble(1e-10)), new[] { n, p });
+        return SelectorTensorOps.ZeroUnless(varying, bins);
     }
 
-    private double ComputeDependencyDegree(int[,] X, int[] y, int[] features, int n, int p)
+    /// <summary>
+    /// Size of the positive region: the rows whose indiscernibility class (equal bins on every feature in
+    /// <paramref name="features"/>) holds a single decision.
+    /// </summary>
+    private int PositiveRegionSize(Tensor<T> codes, Tensor<T> labels, int[] features)
     {
-        // Compute indiscernibility relation based on selected features
-        var equivalenceClasses = new Dictionary<string, List<int>>();
-        for (int i = 0; i < n; i++)
+        var engine = Engine;
+        int n = codes.Shape[0];
+
+        // Dense class id of each row, refined one feature at a time (ids stay below n * nBins)
+        var group = PreprocessingTensorOps.Filled(new[] { n }, NumOps.Zero);
+        T radix = NumOps.FromDouble(_nBins);
+        int groups = 1;
+        foreach (int j in features)
         {
-            var key = string.Join(",", features.Select(j => X[i, j]));
-            if (!equivalenceClasses.ContainsKey(key))
-                equivalenceClasses[key] = new List<int>();
-            equivalenceClasses[key].Add(i);
+            var key = engine.TensorAdd(engine.TensorMultiplyScalar(group, radix), engine.TensorSliceAxis(codes, 1, j));
+            var unique = engine.TensorUniqueWithInfo(key, true, true, false);
+            groups = unique.Values.Length;
+            group = unique.Inverse is null ? key : unique.Inverse.Cast<T>();
         }
 
-        // Compute positive region
-        int positiveRegionSize = 0;
-        foreach (var eqClass in equivalenceClasses.Values)
-        {
-            // Check if all objects in equivalence class have same decision
-            var decisions = eqClass.Select(i => y[i]).Distinct().ToList();
-            if (decisions.Count == 1)
-                positiveRegionSize += eqClass.Count;
-        }
-
-        return (double)positiveRegionSize / n;
+        // A class is consistent when its largest and smallest decisions agree
+        var groupIndex = group.Cast<int>();
+        var largest = engine.ScatterMax(labels, groupIndex, out _, 0, groups);
+        var smallest = engine.TensorNegate(engine.ScatterMax(engine.TensorNegate(labels), groupIndex, out _, 0, groups));
+        var consistent = engine.TensorEquals(largest, smallest);
+        return engine.TensorCountNonzero(engine.TensorIndexSelect(consistent, groupIndex, 0));
     }
 
-    private HashSet<int> FindReduct(int[,] X, int[] y, int n, int p)
+    private HashSet<int> FindReduct(Tensor<T> codes, Tensor<T> labels, int n, int p)
     {
         // Compute full dependency
         var allFeatures = Enumerable.Range(0, p).ToArray();
-        double fullDependency = ComputeDependencyDegree(X, y, allFeatures, n, p);
+        double fullDependency = (double)PositiveRegionSize(codes, labels, allFeatures) / n;
 
         // Greedy forward selection
         var reduct = new HashSet<int>();
@@ -180,7 +176,7 @@ public class RoughSetSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISu
                 if (reduct.Contains(j)) continue;
 
                 var testSet = reduct.Union(new[] { j }).ToArray();
-                double testDependency = ComputeDependencyDegree(X, y, testSet, n, p);
+                double testDependency = (double)PositiveRegionSize(codes, labels, testSet) / n;
                 double increase = testDependency - currentDependency;
 
                 if (increase > bestIncrease)
@@ -204,7 +200,7 @@ public class RoughSetSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISu
             var testSet = reduct.Except(new[] { reductList[i] }).ToArray();
             if (testSet.Length > 0)
             {
-                double testDependency = ComputeDependencyDegree(X, y, testSet, n, p);
+                double testDependency = (double)PositiveRegionSize(codes, labels, testSet) / n;
                 if (Math.Abs(testDependency - currentDependency) < 1e-6)
                     reduct.Remove(reductList[i]);
             }

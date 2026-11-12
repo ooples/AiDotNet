@@ -65,9 +65,9 @@ public class AutocorrelationSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T
         int maxLag = Math.Min(_maxLag, n / 3);
 
         var engine = Engine;
-        var centered = FeatureSelectionTensorOps.CenterColumns(Tensor<T>.FromMatrix(data));
+        var centered = SelectorTensorOps.CenterColumns(Tensor<T>.FromMatrix(data));
         var variance = engine.TensorDivideScalar(
-            FeatureSelectionTensorOps.ColumnSumOfSquares(centered), NumOps.FromDouble(n));
+            SelectorTensorOps.ColumnSumOfSquares(centered), NumOps.FromDouble(n));
 
         // Largest |ACF| over the lags, and how many lags pass the approximate 95% significance bound
         T criticalValue = NumOps.FromDouble(1.96 / Math.Sqrt(n));
@@ -78,7 +78,7 @@ public class AutocorrelationSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T
             // |ACF(lag)| = |sum_{i<n-lag} c_i c_{i+lag}| / ((n - lag) * variance), all lags as rows of [maxLag, p]
             var products = new List<Tensor<T>>();
             for (int lag = 1; lag <= maxLag; lag++)
-                products.Add(engine.Reshape(FeatureSelectionTensorOps.LagProducts(centered, lag), new[] { 1, p }));
+                products.Add(engine.Reshape(SelectorTensorOps.LagProducts(centered, lag), new[] { 1, p }));
             var counts = engine.Reshape(
                 engine.TensorAddScalar(engine.TensorNegate(engine.TensorArange<T>(1, maxLag + 1, 1)), NumOps.FromDouble(n)),
                 new[] { maxLag, 1 });
@@ -89,7 +89,7 @@ public class AutocorrelationSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T
         }
 
         // Score based on max ACF and number of significant lags (near-constant columns score 0)
-        var scores = FeatureSelectionTensorOps.ZeroUnless(
+        var scores = SelectorTensorOps.ZeroUnless(
             PreprocessingTensorOps.AtLeast(variance, NumOps.FromDouble(1e-10)),
             engine.TensorMultiply(maxAcf,
                 engine.TensorAddScalar(engine.TensorMultiplyScalar(significantLags, NumOps.FromDouble(0.1)), NumOps.One)));

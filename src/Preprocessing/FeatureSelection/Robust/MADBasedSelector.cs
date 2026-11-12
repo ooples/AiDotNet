@@ -57,7 +57,7 @@ public class MADBasedSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IFi
 
         var scores = n == 0
             ? PreprocessingTensorOps.Filled(new[] { p }, NumOps.Zero)
-            : FeatureSelectionTensorOps.ColumnMedianAbsoluteDeviation(Tensor<T>.FromMatrix(data));
+            : SelectorTensorOps.ColumnMedianAbsoluteDeviation(Tensor<T>.FromMatrix(data));
         _madScores = scores.ToVector();
 
         _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(scores, Math.Min(_nFeaturesToSelect, p));

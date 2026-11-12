@@ -58,10 +58,10 @@ public class VarianceInflationSelector<T> : TransformerBase<T, Matrix<T>, Matrix
 
         // Standardize features (sample std + 1e-10)
         var x = Tensor<T>.FromMatrix(data);
-        var centered = FeatureSelectionTensorOps.CenterColumns(x);
+        var centered = SelectorTensorOps.CenterColumns(x);
         var stds = engine.TensorAddScalar(
             engine.TensorSqrt(engine.TensorDivideScalar(
-                FeatureSelectionTensorOps.ColumnSumOfSquares(centered), NumOps.FromDouble(n - 1))),
+                SelectorTensorOps.ColumnSumOfSquares(centered), NumOps.FromDouble(n - 1))),
             NumOps.FromDouble(1e-10));
         var z = engine.TensorDivide(centered, engine.Reshape(stds, new[] { 1, p }));
 
@@ -120,9 +120,9 @@ public class VarianceInflationSelector<T> : TransformerBase<T, Matrix<T>, Matrix
         var ssRes = engine.TensorSubtract(
             engine.TensorSubtractScalar(engine.TensorDivide(PreprocessingTensorOps.Filled(new[] { k }, NumOps.One), diagonal), ridge),
             engine.TensorMultiplyScalar(betaNormSquared, ridge));
-        var ssTot = FeatureSelectionTensorOps.ColumnSumOfSquares(FeatureSelectionTensorOps.CenterColumns(z));
+        var ssTot = SelectorTensorOps.ColumnSumOfSquares(SelectorTensorOps.CenterColumns(z));
 
-        var rSquared = FeatureSelectionTensorOps.ZeroUnless(
+        var rSquared = SelectorTensorOps.ZeroUnless(
             engine.TensorGreaterThan(ssTot, NumOps.FromDouble(1e-10)),
             engine.TensorSubtract(PreprocessingTensorOps.Filled(new[] { k }, NumOps.One), engine.TensorDivide(ssRes, ssTot)));
         rSquared = engine.TensorClamp(rSquared, NumOps.Zero, NumOps.FromDouble(0.9999));

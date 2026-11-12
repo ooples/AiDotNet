@@ -77,8 +77,8 @@ public class HuberRobustSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, 
         var engine = Engine;
 
         // Standardize features and target (population std; near-constant ones keep scale 1)
-        var x = FeatureSelectionTensorOps.StandardizeColumns(Tensor<T>.FromMatrix(data));
-        var y = FeatureSelectionTensorOps.StandardizeColumns(engine.Reshape(Tensor<T>.FromVector(target), new[] { n, 1 }));
+        var x = SelectorTensorOps.StandardizeColumns(Tensor<T>.FromMatrix(data));
+        var y = SelectorTensorOps.StandardizeColumns(engine.Reshape(Tensor<T>.FromVector(target), new[] { n, 1 }));
         var xt = engine.TensorTranspose(x);
 
         // Fit Huber regression via gradient descent

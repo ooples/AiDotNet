@@ -78,10 +78,10 @@ public class WinsorizedSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, I
         var engine = Engine;
 
         // Winsorize target and features, then correlate
-        var yWinsorized = FeatureSelectionTensorOps.WinsorizeColumns(
+        var yWinsorized = SelectorTensorOps.WinsorizeColumns(
             engine.Reshape(Tensor<T>.FromVector(target), new[] { n, 1 }), _lowerPercentile, _upperPercentile);
-        var xWinsorized = FeatureSelectionTensorOps.WinsorizeColumns(Tensor<T>.FromMatrix(data), _lowerPercentile, _upperPercentile);
-        var scores = engine.TensorAbs(FeatureSelectionTensorOps.PearsonWithColumn(xWinsorized, yWinsorized));
+        var xWinsorized = SelectorTensorOps.WinsorizeColumns(Tensor<T>.FromMatrix(data), _lowerPercentile, _upperPercentile);
+        var scores = engine.TensorAbs(SelectorTensorOps.PearsonWithColumn(xWinsorized, yWinsorized));
 
         _winsorizedScores = scores.ToVector();
         _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(scores, Math.Min(_nFeaturesToSelect, p));
