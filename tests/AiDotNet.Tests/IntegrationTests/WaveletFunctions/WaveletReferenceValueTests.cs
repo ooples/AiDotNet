@@ -120,4 +120,71 @@ public class WaveletReferenceValueTests
         Assert.Equal(0.0, h[48] / h[32], Tolerance);
         Assert.Equal(-2.0 / (3.0 * Math.PI), h[56] / h[32], Tolerance);
     }
+
+    // ================================================================
+    // ORTHOGONAL FILTER BANKS: periodic analysis followed by its adjoint reconstructs the signal exactly
+    // ================================================================
+
+    private static readonly double[] RoundTripSignal = { 1, 5, 2, 8, 3, 7, 4, 6, 9, 2, 5, 1, 7, 3, 8, 4 };
+
+    private static void AssertRoundTrip(Vector<double> reconstructed, double tolerance)
+    {
+        Assert.Equal(RoundTripSignal.Length, reconstructed.Length);
+        for (int i = 0; i < RoundTripSignal.Length; i++)
+        {
+            Assert.Equal(RoundTripSignal[i], reconstructed[i], tolerance);
+        }
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task Daubechies_ReconstructInvertsDecompose()
+    {
+        var wavelet = new DaubechiesWavelet<double>();
+        var (approximation, detail) = wavelet.Decompose(new Vector<double>(RoundTripSignal));
+        AssertRoundTrip(wavelet.Reconstruct(approximation, detail), 1e-12);
+    }
+
+    [Theory(Timeout = 120000)]
+    [InlineData(2)]
+    [InlineData(4)]
+    [InlineData(6)]
+    [InlineData(8)]
+    public async Task Symlet_ReconstructInvertsDecompose(int order)
+    {
+        // The filters are the PyWavelets symN taps, which are orthonormal to double precision.
+        var wavelet = new SymletWavelet<double>(order);
+        var (approximation, detail) = wavelet.Decompose(new Vector<double>(RoundTripSignal));
+        AssertRoundTrip(wavelet.Reconstruct(approximation, detail), 1e-10);
+    }
+
+    [Theory(Timeout = 120000)]
+    [InlineData(1)]
+    [InlineData(2)]
+    [InlineData(3)]
+    [InlineData(4)]
+    [InlineData(5)]
+    public async Task Coiflet_ScalingFilterIsOrthonormal(int order)
+    {
+        // An orthonormal scaling filter sums to sqrt(2) and is orthogonal to its even shifts.
+        var h = new CoifletWavelet<double>(order).GetScalingCoefficients();
+        Assert.Equal(6 * order, h.Length);
+
+        double sum = 0;
+        for (int i = 0; i < h.Length; i++)
+        {
+            sum += h[i];
+        }
+
+        Assert.Equal(Math.Sqrt(2.0), sum, 1e-8);
+        for (int shift = 2; shift < h.Length; shift += 2)
+        {
+            double dot = 0;
+            for (int i = 0; i + shift < h.Length; i++)
+            {
+                dot += h[i] * h[i + shift];
+            }
+
+            Assert.Equal(0.0, dot, 1e-8);
+        }
+    }
 }

@@ -258,24 +258,9 @@ public partial class DaubechiesWavelet<T> : WaveletFunctionBase<T>
     /// </remarks>
     public Vector<T> Reconstruct(Vector<T> approximation, Vector<T> detail)
     {
-        int outputLength = approximation.Length * 2;
-        if (outputLength == 0)
-        {
-            return new Vector<T>(0);
-        }
-
-        var engine = AiDotNetEngine.Current;
-        int filterLength = _scalingCoefficients.Length;
-
-        // For orthogonal wavelets, reconstruction filters are time-reversed analysis filters:
-        // x[i] = sum_j h[L-1-j] * up(a)[(i - j) mod n] + g[L-1-j] * up(d)[(i - j) mod n], where up() inserts a
-        // zero after every coefficient. Substituting k = L-1-j turns it into a periodic correlation with h and g
-        // whose window starts L-1 samples before i.
-        var lowBranch = WaveletEngineOps<T>.PeriodicCorrelate(
-            WaveletEngineOps<T>.Upsample(approximation, 2), _scalingCoefficients, 1, outputLength, -(filterLength - 1));
-        var highBranch = WaveletEngineOps<T>.PeriodicCorrelate(
-            WaveletEngineOps<T>.Upsample(detail, 2), _waveletCoefficients, 1, outputLength, -(filterLength - 1));
-        return engine.Add(lowBranch, highBranch);
+        // The orthogonal inverse is the adjoint of the periodic analysis in Decompose:
+        // x[m] = sum_j h[j] * up(a)[(m - j) mod n] + g[j] * up(d)[(m - j) mod n].
+        return WaveletEngineOps<T>.PeriodicSynthesis(approximation, detail, _scalingCoefficients, _waveletCoefficients);
     }
 
     /// <summary>
