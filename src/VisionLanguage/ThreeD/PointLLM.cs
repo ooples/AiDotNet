@@ -213,55 +213,29 @@ public partial class PointLLM<T> : VisionLanguageModelBase<T>, IThreeDVisionLang
         int patchSize = 64;
         int numPatches = Math.Max(1, numPoints / patchSize);
 
-        var patchFeatures = new double[numPatches][];
-        for (int p = 0; p < numPatches; p++)
-        {
-            patchFeatures[p] = new double[encoderDim];
-            int patchStart = p * patchSize * channels;
-
-            // Mini-PointNet per patch: aggregate point features within patch
-            for (int pt = 0; pt < patchSize && patchStart + pt * channels < totalValues; pt++)
-            {
-                for (int c = 0; c < channels && patchStart + pt * channels + c < totalValues; c++)
-                {
-                    double val = NumOps.ToDouble(pointCloud[patchStart + pt * channels + c]);
-                    int featureIdx = (pt * channels + c) % encoderDim;
-                    // Max-pooling aggregation (PointNet-style)
-                    if (val > patchFeatures[p][featureIdx])
-                        patchFeatures[p][featureIdx] = val;
-                }
-            }
-        }
+        var engine = Engine;
+        // Mini-PointNet per patch: patch p max-pools the values from p * patchSize * channels on
+        // (PointNet-style), value (pt, c) into feature (pt * channels + c) % encoderDim.
+        int patchValues = patchSize * Math.Max(0, channels);
+        var patchFeatures = PatchMaxPool(pointCloud, numPatches, patchValues, patchValues, totalValues, encoderDim);
 
         // Step 2: Transformer-based global context over patch tokens
-        // Self-attention across patches for spatial relationships
-        for (int iter = 0; iter < 2; iter++) // 2 rounds of self-attention
+        // Self-attention across patches for spatial relationships:
+        // new[p] = sum_q exp(f_p . f_q / sqrt(dim)) f_q, divided by the attention mass when it is above 1e-8.
+        if (encoderDim > 0)
         {
-            var newFeatures = new double[numPatches][];
-            for (int p = 0; p < numPatches; p++)
+            T sqrtDim = NumOps.FromDouble(Math.Sqrt(encoderDim));
+            T epsilon = NumOps.FromDouble(1e-8);
+            for (int iter = 0; iter < 2; iter++) // 2 rounds of self-attention
             {
-                newFeatures[p] = new double[encoderDim];
-                double attnSum = 0;
-
-                for (int q = 0; q < numPatches; q++)
-                {
-                    // Compute attention score between patches
-                    double score = 0;
-                    for (int d = 0; d < encoderDim; d++)
-                        score += patchFeatures[p][d] * patchFeatures[q][d];
-                    score /= Math.Sqrt(encoderDim);
-                    double attn = Math.Exp(score);
-                    attnSum += attn;
-
-                    for (int d = 0; d < encoderDim; d++)
-                        newFeatures[p][d] += attn * patchFeatures[q][d];
-                }
-
-                if (attnSum > 1e-8)
-                    for (int d = 0; d < encoderDim; d++)
-                        newFeatures[p][d] /= attnSum;
+                var attn = engine.TensorExp(engine.TensorDivideScalar(
+                    engine.TensorMatMul(patchFeatures, engine.Reshape(engine.TensorPermute(patchFeatures, [1, 0]), [encoderDim, numPatches])),
+                    sqrtDim));
+                var attnSum = engine.TensorBroadcastTo(engine.ReduceSum(attn, [1], true), [numPatches, encoderDim]);
+                var newFeatures = engine.TensorMatMul(attn, patchFeatures);
+                patchFeatures = engine.TensorWhere(
+                    engine.TensorGreaterThan(attnSum, epsilon), engine.TensorDivide(newFeatures, attnSum), newFeatures);
             }
-            patchFeatures = newFeatures;
         }
 
         // Step 3: Project patch tokens to the encoder's vision-token space. The tokens must match the
@@ -269,31 +243,22 @@ public partial class PointLLM<T> : VisionLanguageModelBase<T>, IThreeDVisionLang
         // encoder-to-decoder projection inside CreateDefaultPointCloudVLMLayers then maps them to the
         // decoder/LLM width. (Building at DecoderDim threw at the first encoder attention layer whenever
         // DecoderDim != VisionDim.)
+        // pointTokens[d] = sum_p patch[p][d % encoderDim] / numPatches.
         int visionDim = _options.VisionDim;
-        var pointTokens = new Tensor<T>([visionDim]);
-        for (int d = 0; d < visionDim; d++)
-        {
-            double sum = 0;
-            for (int p = 0; p < numPatches; p++)
-            {
-                int featureIdx = d % encoderDim;
-                sum += patchFeatures[p][featureIdx] / numPatches;
-            }
-            pointTokens[d] = NumOps.FromDouble(sum);
-        }
+        var patchMean = engine.ReduceSum(
+            engine.TensorDivideScalar(patchFeatures, NumOps.FromDouble(numPatches)), [0], false);
+        var pointTokens = CyclicTake(patchMean, visionDim);
 
-        // Step 4: Fuse with text prompt tokens
+        // Step 4: Fuse with text prompt tokens: gate 0.5 + sigmoid(prompt[d % promptLen] / 100).
         var promptTokens = TokenizeText(prompt);
         int promptLen = promptTokens.Length;
-        for (int d = 0; d < visionDim; d++)
+        if (promptLen > 0)
         {
-            if (promptLen > 0)
-            {
-                double promptVal = NumOps.ToDouble(promptTokens[d % promptLen]);
-                double pointVal = NumOps.ToDouble(pointTokens[d]);
-                double gate = 1.0 / (1.0 + Math.Exp(-promptVal / 100.0));
-                pointTokens[d] = NumOps.FromDouble(pointVal * (0.5 + gate));
-            }
+            pointTokens = engine.TensorMultiply(
+                pointTokens,
+                engine.TensorAddScalar(
+                    engine.TensorSigmoid(engine.TensorDivideScalar(CyclicTake(promptTokens, visionDim), NumOps.FromDouble(100.0))),
+                    NumOps.FromDouble(0.5)));
         }
 
         // Step 5: LLM decoding

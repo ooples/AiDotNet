@@ -208,118 +208,97 @@ public partial class GPT4Point<T> : VisionLanguageModelBase<T>, IThreeDVisionLan
         if (numPatches < 1)
             numPatches = 1;
 
-        var patchFeatures = new double[numPatches][];
+        var engine = Engine;
         int pointsPerPatch = Math.Max(1, numPoints / numPatches);
-
-        for (int p = 0; p < numPatches; p++)
-        {
-            patchFeatures[p] = new double[encoderDim];
-            int startPt = p * pointsPerPatch;
-
-            for (int pt = 0; pt < pointsPerPatch; pt++)
-            {
-                int idx = startPt + pt;
-                if (idx >= numPoints)
-                    break;
-                int baseIdx = idx * channels;
-
-                for (int c = 0; c < channels && baseIdx + c < totalValues; c++)
-                {
-                    double val = NumOps.ToDouble(pointCloud[baseIdx + c]);
-                    int fIdx = (pt * channels + c) % encoderDim;
-                    if (val > patchFeatures[p][fIdx])
-                        patchFeatures[p][fIdx] = val; // Max-pooling
-                }
-            }
-        }
+        int pointChannels = Math.Max(0, channels);
+        int patchValues = pointsPerPatch * pointChannels;
+        // Patch p max-pools points [p * pointsPerPatch, (p + 1) * pointsPerPatch) below numPoints,
+        // value (pt, c) into feature (pt * channels + c) % encoderDim.
+        var patchFeatures = PatchMaxPool(
+            pointCloud, numPatches, patchValues, patchValues, Math.Min(numPoints * pointChannels, totalValues), encoderDim);
 
         // Step 2: Point-QFormer with learned queries
         int numQueries = 32; // Fixed number of query tokens
-        var queryOutputs = new double[numQueries][];
-        for (int q = 0; q < numQueries; q++)
-            queryOutputs[q] = new double[encoderDim];
-
-        // Cross-attention: each query attends to all patch features
-        for (int q = 0; q < numQueries; q++)
+        Tensor<T> pointTokens;
+        if (encoderDim == 0)
         {
-            // Query-specific attention over patches
-            double attnSum = 0;
-            var attnWeights = new double[numPatches];
-
-            for (int p = 0; p < numPatches; p++)
-            {
-                // Compute query-key score
-                double score = 0;
-                int stride = Math.Max(1, encoderDim / numQueries);
-                int qStart = q * stride;
-                int qEnd = Math.Min(qStart + stride, encoderDim);
-
-                for (int d = qStart; d < qEnd; d++)
-                    score += patchFeatures[p][d];
-                score /= Math.Max(1, qEnd - qStart);
-                score /= Math.Sqrt(encoderDim);
-
-                attnWeights[p] = Math.Exp(score);
-                attnSum += attnWeights[p];
-            }
-
-            // Aggregate values weighted by attention
-            for (int p = 0; p < numPatches; p++)
-            {
-                double w = attnSum > 1e-8 ? attnWeights[p] / attnSum : 1.0 / numPatches;
-                for (int d = 0; d < encoderDim; d++)
-                    queryOutputs[q][d] += patchFeatures[p][d] * w;
-            }
+            pointTokens = new Tensor<T>([0]);
         }
-
-        // Step 3: Self-attention among query tokens for inter-query reasoning
-        for (int q = 0; q < numQueries; q++)
+        else
         {
-            double selfAttnSum = 0;
-            var updated = new double[encoderDim];
+            // Cross-attention: each query attends to all patch features. The query-key score of query q
+            // and patch p is the mean of the patch's features [q * stride, min(q * stride + stride, dim))
+            // (0 for an empty block) divided by sqrt(dim).
+            int stride = Math.Max(1, encoderDim / numQueries);
+            var blockPositions = engine.TensorAdd(
+                engine.TensorBroadcastTo(
+                    engine.TensorMultiplyScalar(engine.TensorArange<int>(0, numQueries, 1), stride).Reshape([numQueries, 1]),
+                    [numQueries, stride]),
+                engine.TensorBroadcastTo(engine.TensorArange<int>(0, stride, 1).Reshape([1, stride]), [numQueries, stride]));
+            var inBlock = engine.TensorLessThan(blockPositions, encoderDim).Cast<T>();
+            var blockValues = engine.TensorIndexSelect(
+                patchFeatures, engine.TensorMin(blockPositions, encoderDim - 1).Reshape([numQueries * stride]), 1)
+                .Reshape([numPatches, numQueries, stride]);
+            blockValues = engine.TensorWhere(
+                engine.TensorBroadcastTo(inBlock.Reshape([1, numQueries, stride]), [numPatches, numQueries, stride]),
+                blockValues,
+                new Tensor<T>([numPatches, numQueries, stride]));
+            var blockCount = engine.TensorMax(engine.ReduceSum(inBlock, [1], false), NumOps.One);
+            var score = engine.TensorDivideScalar(
+                engine.TensorDivide(
+                    engine.ReduceSum(blockValues, [2], false),
+                    engine.TensorBroadcastTo(blockCount.Reshape([1, numQueries]), [numPatches, numQueries])),
+                NumOps.FromDouble(Math.Sqrt(encoderDim)));
+            var attnWeights = engine.Reshape(engine.TensorPermute(engine.TensorExp(score), [1, 0]), [numQueries, numPatches]);
+            var attnSum = engine.TensorBroadcastTo(engine.ReduceSum(attnWeights, [1], true), [numQueries, numPatches]);
 
-            for (int k = 0; k < numQueries; k++)
+            // Aggregate values weighted by attention (uniform weights when the attention mass is not above 1e-8)
+            var weights = engine.TensorWhere(
+                engine.TensorGreaterThan(attnSum, NumOps.FromDouble(1e-8)),
+                engine.TensorDivide(attnWeights, attnSum),
+                Tensor<T>.CreateDefault([numQueries, numPatches], NumOps.FromDouble(1.0 / numPatches)));
+            var queryOutputs = engine.TensorMatMul(weights, patchFeatures);
+
+            // Step 3: Self-attention among query tokens for inter-query reasoning. Queries update in
+            // order, each attending over the already-updated earlier queries.
+            var queryRows = new List<Tensor<T>>(numQueries);
+            for (int q = 0; q < numQueries; q++)
+                queryRows.Add(engine.TensorSlice(queryOutputs, [q, 0], [1, encoderDim]).Reshape([encoderDim]));
+            T sqrtDim = NumOps.FromDouble(Math.Sqrt(encoderDim));
+            T epsilon = NumOps.FromDouble(1e-8);
+            for (int q = 0; q < numQueries; q++)
             {
-                double score = 0;
-                for (int d = 0; d < encoderDim; d++)
-                    score += queryOutputs[q][d] * queryOutputs[k][d];
-                score /= Math.Sqrt(encoderDim);
-                double attn = Math.Exp(score);
-                selfAttnSum += attn;
-
-                for (int d = 0; d < encoderDim; d++)
-                    updated[d] += attn * queryOutputs[k][d];
+                var queryMatrix = StackLeading(queryRows, numQueries, encoderDim);
+                var selfAttn = engine.TensorExp(engine.TensorDivideScalar(
+                    engine.TensorMatMul(queryMatrix, queryRows[q].Reshape([encoderDim, 1])), sqrtDim));
+                var selfAttnSum = engine.TensorBroadcastTo(engine.ReduceSum(selfAttn, [0], false), [encoderDim]);
+                var updated = engine.TensorMatMul(selfAttn.Reshape([1, numQueries]), queryMatrix).Reshape([encoderDim]);
+                queryRows[q] = engine.TensorWhere(
+                    engine.TensorGreaterThan(selfAttnSum, epsilon),
+                    engine.TensorDivide(updated, selfAttnSum),
+                    queryRows[q]);
             }
 
-            if (selfAttnSum > 1e-8)
-                for (int d = 0; d < encoderDim; d++)
-                    queryOutputs[q][d] = updated[d] / selfAttnSum;
+            // Step 4: Pool queries into LLM-aligned point tokens
+            pointTokens = engine.ReduceSum(
+                engine.TensorDivideScalar(StackLeading(queryRows, numQueries, encoderDim), NumOps.FromDouble(numQueries)),
+                [0], false);
         }
-
-        // Step 4: Pool queries into LLM-aligned point tokens
-        var pointTokens = new Tensor<T>([encoderDim]);
-        for (int q = 0; q < numQueries; q++)
-        for (int d = 0; d < encoderDim; d++)
-            pointTokens[d] = NumOps.FromDouble(
-                NumOps.ToDouble(pointTokens[d]) + queryOutputs[q][d] / numQueries
-            );
 
         // Step 5: Encode and fuse with prompt
         var encoded = pointTokens;
         for (int i = 0; i < _encoderLayerEnd && i < Layers.Count; i++)
             encoded = Layers[i].Forward(encoded);
 
+        // Prompt gate 0.5 + sigmoid(prompt[d % promptLen] / 100) on every encoded value.
         var promptTokens = TokenizeText(prompt);
         int promptLen = promptTokens.Length;
-        for (int d = 0; d < encoded.Length; d++)
+        if (promptLen > 0)
         {
-            if (promptLen > 0)
-            {
-                double pVal = NumOps.ToDouble(promptTokens[d % promptLen]);
-                double eVal = NumOps.ToDouble(encoded[d]);
-                double gate = 1.0 / (1.0 + Math.Exp(-pVal / 100.0));
-                encoded[d] = NumOps.FromDouble(eVal * (0.5 + gate));
-            }
+            var gate = engine.TensorAddScalar(
+                engine.TensorSigmoid(engine.TensorDivideScalar(CyclicTake(promptTokens, encoded.Length), NumOps.FromDouble(100.0))),
+                NumOps.FromDouble(0.5));
+            encoded = engine.TensorMultiply(encoded, gate.Reshape(encoded.Shape.ToArray()));
         }
 
         var output = encoded;

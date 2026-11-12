@@ -405,6 +405,45 @@ public abstract partial class VisionLanguageModelBase<T> : NeuralNetworkBase<T>,
     }
 
     /// <summary>
+    /// PointNet-style max pooling of point-cloud values into per-patch features: patch p reads the
+    /// values at p * patchStride + i for i &lt; patchValues (only those below validLimit) and keeps, per
+    /// feature f, the largest value with i % featureDim == f, floored at 0 (NaN values never win).
+    /// </summary>
+    /// <param name="values">The point-cloud values (read flattened).</param>
+    /// <param name="patches">Number of patches.</param>
+    /// <param name="patchStride">Flat offset between consecutive patch starts.</param>
+    /// <param name="patchValues">Number of values each patch reads.</param>
+    /// <param name="validLimit">Flat indices at or above this limit are skipped (at most the value count).</param>
+    /// <param name="featureDim">Feature width.</param>
+    /// <returns>A [patches, featureDim] tensor.</returns>
+    /// <exception cref="DivideByZeroException">featureDim is 0 while some value is read.</exception>
+    private protected Tensor<T> PatchMaxPool(Tensor<T> values, int patches, int patchStride, int patchValues, int validLimit, int featureDim)
+    {
+        var engine = Engine;
+        if (patches == 0 || patchValues <= 0 || validLimit <= 0)
+            return new Tensor<T>([patches, featureDim]);
+        if (featureDim == 0)
+            throw new DivideByZeroException("Point features cannot be pooled into a zero-width feature vector.");
+
+        int n = values.Length;
+        int folds = (patchValues + featureDim - 1) / featureDim;
+        int width = folds * featureDim;
+        var local = engine.TensorBroadcastTo(engine.TensorArange<int>(0, width, 1).Reshape([1, width]), [patches, width]);
+        var flat = engine.TensorAdd(
+            engine.TensorBroadcastTo(
+                engine.TensorMultiplyScalar(engine.TensorArange<int>(0, patches, 1), patchStride).Reshape([patches, 1]),
+                [patches, width]),
+            local);
+        var valid = engine.TensorMultiply(
+            engine.TensorLessThan(local, patchValues), engine.TensorLessThan(flat, validLimit)).Cast<T>();
+        var gathered = engine.TensorTake(values.Reshape([n]), engine.TensorMin(flat, n - 1));
+        // max(0, v) per value; values that are invalid, not positive or NaN contribute the initial 0.
+        var keep = engine.TensorMultiply(valid, engine.TensorGreaterThan(gathered, NumOps.Zero));
+        var floored = engine.TensorWhere(keep, gathered, new Tensor<T>([patches, width]));
+        return engine.ReduceMax(floored.Reshape([patches, folds, featureDim]), [1], false);
+    }
+
+    /// <summary>
     /// Stacks the leading <paramref name="width"/> values of the first <paramref name="count"/> feature
     /// tensors (each read flattened) into a [count, width] matrix.
     /// </summary>
