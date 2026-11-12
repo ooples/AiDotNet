@@ -14,6 +14,41 @@ namespace AiDotNet.Tests.UnitTests.MetaLearning;
 public class Elementwise11MemoryOptimizerTests
 {
     [Fact]
+    public void Feat_HalfAttentionAndLayerNormalizationKeepIntermediatesWide()
+    {
+        var algorithm = Uninitialized<FEATAlgorithm<Half, Matrix<Half>, Vector<Half>>>();
+        var options = Uninitialized<FEATOptions<Half, Matrix<Half>, Vector<Half>>>();
+        options.NumTransformerLayers = 1;
+        Field(algorithm, "_featOptions", options);
+        Field(algorithm, "_transformerParams", new Vector<Half>(Enumerable.Repeat((Half)1, 16).ToArray()));
+        var input = new Vector<Half>(new[] { (Half)100, (Half)200, (Half)300, (Half)400 });
+        var result = Assert.IsType<Vector<Half>>(Call(algorithm, "AdaptPrototypes", input));
+        // All scores cap at 10, so attention is uniform and the residual is input + 250.
+        double standardDeviation = Math.Sqrt(12500 + 1e-5);
+        for (int i = 0; i < input.Length; i++)
+            Assert.Equal((Half)(((double)input[i] - 250) / standardDeviation), result[i]);
+        var extremes = Assert.IsType<Vector<Half>>(Call(algorithm, "AdaptPrototypes",
+            new Vector<Half>(new[] { (Half)(-60000), (Half)60000 })));
+        Assert.Equal(new[] { (Half)(-1), (Half)1 }, extremes.ToArray());
+    }
+
+    [Fact]
+    public void Epnet_HalfPreservesPositiveBandwidthAndFinitePropagation()
+    {
+        var algorithm = Uninitialized<EPNetAlgorithm<Half, Matrix<Half>, Vector<Half>>>();
+        var options = Uninitialized<EPNetOptions<Half, Matrix<Half>, Vector<Half>>>();
+        options.NumNeighbors = 1;
+        options.PropagationAlpha = 0.5;
+        options.PropagationIterations = 1;
+        Field(algorithm, "_epnetOptions", options);
+        var constant = Assert.IsType<Vector<Half>>(Call(algorithm, "PropagateEmbeddings", new Vector<Half>(new[] { (Half)1, (Half)1 })));
+        Assert.Equal(new[] { (Half)1, (Half)1 }, constant.ToArray());
+        var extremes = Assert.IsType<Vector<Half>>(Call(algorithm, "PropagateEmbeddings",
+            new Vector<Half>(new[] { (Half)(-60000), (Half)60000 })));
+        Assert.Equal(new[] { (Half)0, (Half)0 }, extremes.ToArray());
+    }
+
+    [Fact]
     public void DeepEmd_BlockedCostsMatchScalarDistancesAcrossAllBlockBoundaries()
     {
         var algorithm = Uninitialized<DeepEMDAlgorithm<double, Matrix<double>, Vector<double>>>();

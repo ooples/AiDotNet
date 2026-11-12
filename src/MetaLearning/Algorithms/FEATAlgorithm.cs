@@ -356,17 +356,17 @@ public partial class FEATAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
         // run out, every remaining pair uses the constant weight 0.01.
         int paramIdx = 0;
         int pairCount = n * n;
-        T invSqrtN = NumOps.FromDouble(1.0 / Math.Sqrt(n));
-        T maxScore = NumOps.FromDouble(10.0);
-        T normCount = NumOps.FromDouble(n);
-        T layerNormEps = NumOps.FromDouble(1e-5);
+        double invSqrtN = 1.0 / Math.Sqrt(n);
+        const double maxScore = 10.0;
+        double normCount = n;
+        const double layerNormEps = 1e-5;
         T fallbackWeight = NumOps.FromDouble(0.01);
-        T minTotalWeight = NumOps.FromDouble(1e-10);
+        const double minTotalWeight = 1e-10;
 
         for (int layer = 0; layer < _featOptions.NumTransformerLayers; layer++)
         {
             // Frozen layer input (avoid in-place mutation)
-            var x = Tensor<T>.FromVector(prototypes);
+            var x = Tensor<T>.FromVector(prototypes).Cast<double>();
 
             int available = Math.Max(0, Math.Min(pairCount, _transformerParams.Length - paramIdx));
             var layerWeights = available == pairCount
@@ -377,7 +377,7 @@ public partial class FEATAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
             paramIdx += available;
 
             // score[i, j] = x_i * x_j * w_ij / sqrt(n); weight = exp(min(score, 10))
-            var pairWeights = Engine.Reshape(Tensor<T>.FromVector(layerWeights), new[] { n, n });
+            var pairWeights = Engine.Reshape(Tensor<T>.FromVector(layerWeights).Cast<double>(), new[] { n, n });
             var scores = Engine.TensorMultiplyScalar(
                 Engine.TensorMultiply(Engine.TensorOuter(x, x), pairWeights), invSqrtN);
             var weights = Engine.TensorExp(Engine.TensorMin(scores, maxScore));
@@ -394,11 +394,11 @@ public partial class FEATAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
             var residual = Engine.TensorAdd(attended, x).ToVector();
 
             // Layer normalization (population variance, eps = 1e-5)
-            T mean = NumOps.Divide(Engine.Sum(residual), normCount);
+            double mean = Engine.Sum(residual) / normCount;
             var centered = Engine.Subtract(residual, Engine.Fill(n, mean));
-            T variance = NumOps.Divide(Engine.DotProduct(centered, centered), normCount);
-            T std = NumOps.Sqrt(NumOps.Add(variance, layerNormEps));
-            adapted = Engine.Divide(centered, std);
+            double variance = Engine.DotProduct(centered, centered) / normCount;
+            double std = Math.Sqrt(variance + layerNormEps);
+            adapted = Tensor<double>.FromVector(Engine.Divide(centered, std)).Cast<T>().ToVector();
 
             prototypes = adapted;
         }

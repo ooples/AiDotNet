@@ -125,11 +125,11 @@ public partial class EPNetAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
         if (n < 2) return features;
 
         int k = Math.Min(_epnetOptions.NumNeighbors, n - 1);
-        T alpha = NumOps.FromDouble(_epnetOptions.PropagationAlpha);
+        double alpha = _epnetOptions.PropagationAlpha;
         var square = new[] { n, n };
 
         // Step 1: Compute pairwise squared distances between all feature elements
-        var column = Engine.Reshape(Tensor<T>.FromVector(features), new[] { n, 1 });
+        var column = Engine.Reshape(Tensor<T>.FromVector(features).Cast<double>(), new[] { n, 1 });
         var distances = Engine.TensorSquare(Engine.TensorSubtract(
             Engine.TensorBroadcastTo(column, square),
             Engine.TensorBroadcastTo(Engine.Reshape(column, new[] { 1, n }), square)));
@@ -142,17 +142,17 @@ public partial class EPNetAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
                 upper.Add(i * n + j);
         var pairDistances = Engine.TensorIndexSelect(
             Engine.Reshape(distances, new[] { n * n }), new Tensor<int>(upper.ToArray(), new[] { upper.Count }), 0);
-        T medianDist = Engine.TensorSort(pairDistances, 0, false).Values[upper.Count / 2];
-        T sigma2 = NumOps.GreaterThan(medianDist, NumOps.FromDouble(1e-10)) ? medianDist : NumOps.FromDouble(1e-10);
+        double medianDist = Engine.TensorSort(pairDistances, 0, false).Values[upper.Count / 2];
+        double sigma2 = Math.Max(medianDist, 1e-10);
 
         // Each node links to its k nearest other nodes (distance, then index), symmetrized, with RBF weights
         var rbf = Engine.TensorExp(Engine.TensorMultiplyScalar(
-            distances, NumOps.Negate(NumOps.Divide(NumOps.One, NumOps.Multiply(NumOps.FromDouble(2.0), sigma2)))));
+            distances, -1.0 / (2.0 * sigma2)));
         var W = Engine.TensorMultiply(NearestNeighborGraph.SymmetricNearestMask(Engine, distances, k), rbf);
 
         // Step 3: Compute degree matrix D and normalized adjacency S = D^(-1/2) W D^(-1/2)
         var degree = Engine.ReduceSum(W, new[] { 1 }, true);
-        var connected = Engine.TensorGreaterThan(degree, NumOps.FromDouble(1e-10));
+        var connected = Engine.TensorGreaterThan(degree, 1e-10);
         var invSqrtDegree = Engine.TensorWhere(connected,
             Engine.TensorDivide(Engine.TensorOnesLike(degree),
                 Engine.TensorSqrt(Engine.TensorWhere(connected, degree, Engine.TensorOnesLike(degree)))),
@@ -162,16 +162,17 @@ public partial class EPNetAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
             Engine.TensorBroadcastTo(Engine.Reshape(invSqrtDegree, new[] { 1, n }), square));
 
         // Step 4: Iterative feature propagation: z_prop = alpha * S @ z_prop + (1-alpha) * z_original
-        var anchor = Engine.Multiply(features, NumOps.Subtract(NumOps.One, alpha));
-        var propagated = features.Clone();
+        var wideFeatures = Tensor<T>.FromVector(features).Cast<double>().ToVector();
+        var anchor = Engine.Multiply(wideFeatures, 1.0 - alpha);
+        var propagated = wideFeatures.Clone();
         for (int iter = 0; iter < _epnetOptions.PropagationIterations; iter++)
         {
             var aggregated = Engine.Reshape(
-                Engine.TensorMatMul(S, Engine.Reshape(Tensor<T>.FromVector(propagated), new[] { n, 1 })), new[] { n });
+                Engine.TensorMatMul(S, Engine.Reshape(Tensor<double>.FromVector(propagated), new[] { n, 1 })), new[] { n });
             propagated = Engine.Add(Engine.Multiply(aggregated.ToVector(), alpha), anchor);
         }
 
-        return propagated;
+        return Tensor<double>.FromVector(propagated).Cast<T>().ToVector();
     }
 
     /// <inheritdoc/>
