@@ -1496,7 +1496,9 @@ public partial class HistGradientBoostingRegression<T> : ModelBase<T, Matrix<T>,
     /// - Count: number of samples
     /// </para>
     /// </remarks>
-    private class HistogramBin
+    // A struct, so a histogram is one array rather than an object per bin: the student builds one per feature
+    // per node, and the per-bin objects were the largest allocation in its fit.
+    private struct HistogramBin
     {
         public T GradientSum { get; set; }
         public T HessianSum { get; set; }

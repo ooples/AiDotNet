@@ -181,6 +181,150 @@ public class TreeBasedRegressionIntegrationTests
         Assert.Equal("y", error.ParamName);
     }
 
+    [Fact]
+    public void DecisionTreeRegression_TrainOnColumns_GrowsTheTreeOfTheBootstrapMatrix()
+    {
+        // A forest hands each tree its bootstrap rows as indices into one shared column copy instead of a
+        // copied bootstrap matrix. Same seed, same rows: every prediction must be the same double, which
+        // holds only if the split search drew the same features and summed in the same order.
+        const int rows = 400, features = 40;
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(11);
+        var x = new Matrix<double>(rows, features);
+        var y = new Vector<double>(rows);
+        for (int i = 0; i < rows; i++)
+        {
+            for (int j = 0; j < features; j++)
+            {
+                // Rounded, so ties exercise the distinct-value boundaries and the stable partition.
+                x[i, j] = Math.Round(random.NextDouble() * 20) / 20;
+            }
+
+            y[i] = x[i, 0] - (2 * x[i, 5]) + (x[i, 9] * x[i, 33]) + (0.1 * random.NextDouble());
+        }
+
+        var bootstrap = new int[rows];
+        for (int i = 0; i < rows; i++) bootstrap[i] = random.Next(rows);
+
+        var options = new DecisionTreeOptions { MaxDepth = 7, MinSamplesSplit = 2, MaxFeatures = 0.4, Seed = 5 };
+        var fromMatrix = new DecisionTreeRegression<double>(options);
+        fromMatrix.Train(x.GetRows(bootstrap), y.GetElements(bootstrap));
+        var fromColumns = new DecisionTreeRegression<double>(options);
+        fromColumns.TrainOnColumns(
+            DecisionTreeRegression<double>.ToColumns(x), DecisionTreeRegression<double>.ToDoubles(y), bootstrap);
+
+        var expected = fromMatrix.Predict(x);
+        var actual = fromColumns.Predict(x);
+        for (int i = 0; i < rows; i++)
+        {
+            Assert.Equal(expected[i], actual[i]);
+        }
+
+        for (int j = 0; j < features; j++)
+        {
+            Assert.Equal(fromMatrix.GetFeatureImportance(j), fromColumns.GetFeatureImportance(j));
+        }
+
+        // And both are the tree the original builder grew (a LINQ feature draw, list partitions, and fresh sort
+        // arrays per node), reproduced independently below: the rewrite changed allocation, not the model.
+        var reference = ReferenceTree.Grow(x, y, bootstrap, options);
+        for (int i = 0; i < rows; i++)
+        {
+            Assert.Equal(reference.Predict(x, i), actual[i]);
+        }
+    }
+
+    /// <summary>The variance-reduction tree builder as it was before it reused buffers, kept as a reference.</summary>
+    private sealed class ReferenceTree
+    {
+        private int _feature = -1;
+        private double _threshold;
+        private double _value;
+        private ReferenceTree? _left;
+        private ReferenceTree? _right;
+
+        public static ReferenceTree Grow(Matrix<double> x, Vector<double> y, int[] rows, DecisionTreeOptions options)
+        {
+            int n = rows.Length, features = x.Columns;
+            var columns = new double[features][];
+            for (int f = 0; f < features; f++)
+            {
+                columns[f] = new double[n];
+                for (int i = 0; i < n; i++) columns[f][i] = x[rows[i], f];
+            }
+
+            var target = new double[n];
+            for (int i = 0; i < n; i++) target[i] = y[rows[i]];
+            var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(options.Seed ?? 0);
+            return Build(columns, target, [.. Enumerable.Range(0, n)], 0, options, random);
+        }
+
+        public double Predict(Matrix<double> x, int row)
+        {
+            var node = this;
+            while (node._feature >= 0) node = x[row, node._feature] < node._threshold ? node._left! : node._right!;
+            return node._value;
+        }
+
+        private static ReferenceTree Build(double[][] columns, double[] y, int[] indices, int depth, DecisionTreeOptions options, Random random)
+        {
+            if (depth >= options.MaxDepth || indices.Length < options.MinSamplesSplit) return Leaf(y, indices);
+            int features = columns.Length;
+            int take = (int)Math.Min(features, Math.Max(1, options.MaxFeatures * features));
+            var candidates = Enumerable.Range(0, features).OrderBy(_ => random.Next()).Take(take).ToList();
+
+            int count = indices.Length;
+            double totalSum = 0, totalSum2 = 0;
+            foreach (int i in indices) { totalSum += y[i]; totalSum2 += y[i] * y[i]; }
+            double totalMean = totalSum / count, totalVar = (totalSum2 / count) - (totalMean * totalMean);
+            int best = -1;
+            double bestThreshold = 0, bestReduction = double.NegativeInfinity;
+            foreach (int f in candidates)
+            {
+                var keys = new double[count];
+                var order = new int[count];
+                for (int i = 0; i < count; i++) { keys[i] = columns[f][indices[i]]; order[i] = indices[i]; }
+                Array.Sort(keys, order);
+                double leftSum = 0, leftSum2 = 0;
+                int leftCount = 0;
+                for (int k = 0; k < count; k++)
+                {
+                    if (k > 0 && leftCount > 0 && keys[k] != keys[k - 1])
+                    {
+                        int rightCount = count - leftCount;
+                        double leftMean = leftSum / leftCount, rightMean = (totalSum - leftSum) / rightCount;
+                        double leftVar = (leftSum2 / leftCount) - (leftMean * leftMean);
+                        double rightVar = ((totalSum2 - leftSum2) / rightCount) - (rightMean * rightMean);
+                        double reduction = totalVar - (((double)leftCount / count * leftVar) + ((double)rightCount / count * rightVar));
+                        if (reduction > bestReduction) { bestReduction = reduction; best = f; bestThreshold = keys[k]; }
+                    }
+
+                    leftSum += y[order[k]];
+                    leftSum2 += y[order[k]] * y[order[k]];
+                    leftCount++;
+                }
+            }
+
+            if (best == -1) return Leaf(y, indices);
+            var left = indices.Where(i => columns[best][i] < bestThreshold).ToArray();
+            var right = indices.Where(i => !(columns[best][i] < bestThreshold)).ToArray();
+            if (left.Length == 0 || right.Length == 0) return Leaf(y, indices);
+            return new ReferenceTree
+            {
+                _feature = best,
+                _threshold = bestThreshold,
+                _left = Build(columns, y, left, depth + 1, options, random),
+                _right = Build(columns, y, right, depth + 1, options, random),
+            };
+        }
+
+        private static ReferenceTree Leaf(double[] y, int[] indices)
+        {
+            double sum = 0;
+            foreach (int i in indices) sum += y[i];
+            return new ReferenceTree { _value = indices.Length > 0 ? sum / indices.Length : 0.0 };
+        }
+    }
+
     #endregion
 
     #region RandomForestRegression Tests

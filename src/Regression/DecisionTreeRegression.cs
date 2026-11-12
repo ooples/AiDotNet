@@ -724,19 +724,29 @@ public partial class DecisionTreeRegression<T> : DecisionTreeRegressionBase<T>
     private DecisionTreeNode<T> BuildTreeFast(Matrix<T> x, Vector<T> y)
     {
         int n = x.Rows;
-        int numFeatures = x.Columns;
         if (n == 0)
         {
             return new DecisionTreeNode<T> { IsLeaf = true, Prediction = NumOps.Zero };
         }
 
-        // One row-major pass over the matrix's rows. The previous copy called Convert.ToDouble on a generic
-        // T, which binds to the object overload and boxes every element, and GetColumn allocated a vector
-        // per feature: in a 100-tree forest over 300 features that copy cost twice the split search.
+        var indices = new int[n];
+        for (int i = 0; i < n; i++) indices[i] = i;
+
+        return BuildFromColumns(ToColumns(x), ToDoubles(y), indices);
+    }
+
+    /// <summary>
+    /// The matrix as feature-major doubles, <c>columns[f][row]</c>, in one pass over its rows. The previous copy
+    /// called Convert.ToDouble on a generic T, which binds to the object overload and boxes every element, and
+    /// GetColumn allocated a vector per feature: in a 100-tree forest over 300 features that copy cost twice
+    /// the split search.
+    /// </summary>
+    internal static double[][] ToColumns(Matrix<T> x)
+    {
+        int n = x.Rows;
+        int numFeatures = x.Columns;
         var columns = new double[numFeatures][];
-        for (int f = 0; f < numFeatures; f++) columns[f] = new double[n];
-        var yArr = new double[n];
-        CopyToDouble(y.AsTensor().Data.Span, yArr);
+        for (int f = 0; f < numFeatures; f++) columns[f] = NewDoubles(n);
         var row = new double[numFeatures];
         for (int i = 0; i < n; i++)
         {
@@ -744,10 +754,79 @@ public partial class DecisionTreeRegression<T> : DecisionTreeRegressionBase<T>
             for (int f = 0; f < numFeatures; f++) columns[f][i] = row[f];
         }
 
-        var indices = new int[n];
-        for (int i = 0; i < n; i++) indices[i] = i;
+        return columns;
+    }
 
-        return BuildTreeFastIndexed(columns, yArr, indices, 0);
+    /// <summary>A double array the caller fills completely, so it need not be zeroed where the runtime allows that.</summary>
+    private static double[] NewDoubles(int length)
+    {
+#if NET5_0_OR_GREATER
+        return GC.AllocateUninitializedArray<double>(length);
+#else
+        return new double[length];
+#endif
+    }
+
+    /// <summary>The vector as doubles.</summary>
+    internal static double[] ToDoubles(Vector<T> y)
+    {
+        var values = NewDoubles(y.Length);
+        CopyToDouble(y.AsTensor().Data.Span, values);
+        return values;
+    }
+
+    /// <summary>
+    /// Trains on feature columns that are already doubles, over the rows <paramref name="rows"/>, which may
+    /// repeat (a bootstrap sample). A forest converts its matrix once and hands every tree its own row
+    /// indices, rather than copying a bootstrap matrix per tree and converting that again. The tree is the
+    /// one <see cref="Train"/> grows on the matrix of those rows: the split search sees the same keys in the
+    /// same order, so it makes the same comparisons and sums in the same order.
+    /// </summary>
+    /// <param name="columns">Feature-major values, <c>columns[f][row]</c>.</param>
+    /// <param name="target">The target of every row.</param>
+    /// <param name="rows">The training rows; not modified.</param>
+    internal void TrainOnColumns(double[][] columns, double[] target, int[] rows)
+    {
+        if (_options.SplitCriterion != SplitCriterion.VarianceReduction)
+            throw new InvalidOperationException("Column training implements the variance-reduction criterion only.");
+        foreach (var column in columns)
+        {
+            if (column.Length != target.Length)
+                throw new ArgumentException(
+                    $"Target count ({target.Length}) must match every column's row count ({column.Length}).", nameof(target));
+        }
+
+        foreach (int row in rows)
+        {
+            if ((uint)row >= (uint)target.Length)
+                throw new ArgumentOutOfRangeException(nameof(rows), $"Row {row} is outside the {target.Length} training rows.");
+        }
+
+        Root = rows.Length == 0
+            ? new DecisionTreeNode<T> { IsLeaf = true, Prediction = NumOps.Zero }
+            : BuildFromColumns(columns, target, (int[])rows.Clone());
+        ImportancesFromTree(columns.Length);
+    }
+
+    /// <summary>
+    /// Grows the tree over <paramref name="indices"/>, which it reorders in place: each node's rows are one
+    /// contiguous segment, split by a stable partition into its children's segments. Every buffer the split
+    /// search needs is allocated once per tree.
+    /// </summary>
+    private DecisionTreeNode<T> BuildFromColumns(double[][] columns, double[] yArr, int[] indices)
+    {
+        var scratch = new SplitScratch(indices.Length, columns.Length);
+        return BuildNode(columns, yArr, indices, 0, indices.Length, 0, scratch);
+    }
+
+    /// <summary>The per-tree buffers of <see cref="BuildNode"/>.</summary>
+    private sealed class SplitScratch(int rows, int features)
+    {
+        public readonly double[] Keys = new double[rows];
+        public readonly int[] Order = new int[rows];
+        public readonly int[] Right = new int[rows];
+        public readonly long[] FeatureKeys = new long[features];
+        public readonly int[] Features = new int[features];
     }
 
     /// <summary>Copies <paramref name="source"/> into <paramref name="destination"/> as doubles; a block copy for double.</summary>
@@ -767,37 +846,42 @@ public partial class DecisionTreeRegression<T> : DecisionTreeRegressionBase<T>
         for (int i = 0; i < source.Length; i++) destination[i] = numOps.ToDouble(source[i]);
     }
 
-    private DecisionTreeNode<T> BuildTreeFastIndexed(double[][] columns, double[] yArr, int[] indices, int depth)
+    private DecisionTreeNode<T> BuildNode(
+        double[][] columns, double[] yArr, int[] indices, int start, int count, int depth, SplitScratch scratch)
     {
-        int count = indices.Length;
+        var rows = new ReadOnlySpan<int>(indices, start, count);
         if (depth >= _options.MaxDepth || count < _options.MinSamplesSplit)
         {
-            return MakeLeaf(yArr, indices);
+            return MakeLeaf(yArr, rows);
         }
 
         int numFeatures = columns.Length;
         int featuresToConsider = (int)Math.Min(numFeatures, Math.Max(1, _options.MaxFeatures * numFeatures));
-        var featureIndices = Enumerable.Range(0, numFeatures).OrderBy(_ => _random.Next()).Take(featuresToConsider).ToList();
+        var features = DrawFeatures(numFeatures, featuresToConsider, scratch);
 
-        var (bestFeature, bestThreshold, reduction, nodeVar) = FindBestSplitFast(columns, yArr, indices, featureIndices);
+        var (bestFeature, bestThreshold, reduction, nodeVar) = FindBestSplitFast(columns, yArr, rows, features, scratch);
         if (bestFeature == -1)
         {
-            return MakeLeaf(yArr, indices);
+            return MakeLeaf(yArr, rows);
         }
 
+        // Stable partition of the segment: rows below the threshold first, each side in its original order.
         var col = columns[bestFeature];
-        var left = new List<int>(count);
-        var right = new List<int>(count);
-        foreach (int idx in indices)
+        var segment = new Span<int>(indices, start, count);
+        int leftCount = 0, rightCount = 0;
+        for (int i = 0; i < count; i++)
         {
-            if (col[idx] < bestThreshold) left.Add(idx); else right.Add(idx);
+            int idx = segment[i];
+            if (col[idx] < bestThreshold) segment[leftCount++] = idx; else scratch.Right[rightCount++] = idx;
         }
 
-        if (left.Count == 0 || right.Count == 0)
+        // A side is empty only when nothing moved, so the leaf reads the rows in their original order.
+        if (leftCount == 0 || rightCount == 0)
         {
-            return MakeLeaf(yArr, indices);
+            return MakeLeaf(yArr, rows);
         }
 
+        new ReadOnlySpan<int>(scratch.Right, 0, rightCount).CopyTo(segment.Slice(leftCount));
         return new DecisionTreeNode<T>
         {
             FeatureIndex = bestFeature,
@@ -805,14 +889,28 @@ public partial class DecisionTreeRegression<T> : DecisionTreeRegressionBase<T>
             IsLeaf = false,
             NodeImportance = NumOps.FromDouble(reduction * count),
             NodeImpurity = NumOps.FromDouble(nodeVar),
-            LeftSampleCount = left.Count,
-            RightSampleCount = right.Count,
-            Left = BuildTreeFastIndexed(columns, yArr, [.. left], depth + 1),
-            Right = BuildTreeFastIndexed(columns, yArr, [.. right], depth + 1),
+            LeftSampleCount = leftCount,
+            RightSampleCount = rightCount,
+            Left = BuildNode(columns, yArr, indices, start, leftCount, depth + 1, scratch),
+            Right = BuildNode(columns, yArr, indices, start + leftCount, rightCount, depth + 1, scratch),
         };
     }
 
-    private DecisionTreeNode<T> MakeLeaf(double[] yArr, int[] indices)
+    /// <summary>
+    /// The first <paramref name="take"/> features of a random order, drawn exactly as
+    /// <c>Enumerable.Range(0, n).OrderBy(_ =&gt; random.Next()).Take(take)</c> draws them: one key per feature,
+    /// in feature order, then a stable sort by key, which sorting (key, feature) packed into one long reproduces.
+    /// </summary>
+    private ReadOnlySpan<int> DrawFeatures(int numFeatures, int take, SplitScratch scratch)
+    {
+        var keys = scratch.FeatureKeys;
+        for (int f = 0; f < numFeatures; f++) keys[f] = ((long)_random.Next() << 32) | (uint)f;
+        Array.Sort(keys, 0, numFeatures);
+        for (int k = 0; k < take; k++) scratch.Features[k] = (int)(keys[k] & 0xFFFFFFFFL);
+        return new ReadOnlySpan<int>(scratch.Features, 0, take);
+    }
+
+    private DecisionTreeNode<T> MakeLeaf(double[] yArr, ReadOnlySpan<int> indices)
     {
         int count = indices.Length;
         double sum = 0.0;
@@ -831,12 +929,12 @@ public partial class DecisionTreeRegression<T> : DecisionTreeRegressionBase<T>
 
     /// <summary>
     /// Index-subset variance-reduction split search in native double: each candidate feature is
-    /// sorted once, then a single sweep with running left-partition sums (count, Σy, Σy²) scores
+    /// sorted once, then a single sweep with running left-partition sums (count, sum y, sum y^2) scores
     /// every threshold in O(1). Returns the best (feature, threshold), its variance reduction, and
-    /// the node's population variance.
+    /// the node's population variance. The sort buffers are the tree's, reused at every node.
     /// </summary>
-    private (int featureIndex, double threshold, double reduction, double nodeVariance) FindBestSplitFast(
-        double[][] columns, double[] yArr, int[] indices, List<int> featureIndices)
+    private static (int featureIndex, double threshold, double reduction, double nodeVariance) FindBestSplitFast(
+        double[][] columns, double[] yArr, ReadOnlySpan<int> indices, ReadOnlySpan<int> featureIndices, SplitScratch scratch)
     {
         int count = indices.Length;
         double totalSumY = 0.0, totalSumY2 = 0.0;
@@ -853,14 +951,14 @@ public partial class DecisionTreeRegression<T> : DecisionTreeRegressionBase<T>
         double bestThreshold = 0.0;
         double bestReduction = double.NegativeInfinity;
 
-        var keys = new double[count];
-        var ord = new int[count];
+        var keys = scratch.Keys;
+        var ord = scratch.Order;
 
         foreach (int f in featureIndices)
         {
             var col = columns[f];
             for (int i = 0; i < count; i++) { keys[i] = col[indices[i]]; ord[i] = indices[i]; }
-            Array.Sort(keys, ord);
+            Array.Sort(keys, ord, 0, count);
 
             double leftSumY = 0.0, leftSumY2 = 0.0;
             int leftCount = 0;
@@ -894,6 +992,9 @@ public partial class DecisionTreeRegression<T> : DecisionTreeRegressionBase<T>
         return (bestFeature, bestThreshold, bestReduction, totalVar);
     }
 
+    /// <summary>The prediction for row <paramref name="row"/> of <paramref name="input"/>, as <see cref="Predict"/> makes it.</summary>
+    internal T PredictRowOf(Matrix<T> input, int row) => PredictRow(input, row);
+
     /// <summary>
     /// Predicts the target value for one row of <paramref name="input"/> by traversing the decision tree,
     /// reading only the features on the row's root-to-leaf path.
@@ -918,10 +1019,12 @@ public partial class DecisionTreeRegression<T> : DecisionTreeRegressionBase<T>
     /// Calculates the importance scores for all features based on their contribution to the tree.
     /// </summary>
     /// <param name="x">The feature matrix used for training.</param>
-    private void CalculateFeatureImportances(Matrix<T> x)
+    private void CalculateFeatureImportances(Matrix<T> x) => ImportancesFromTree(x.Columns);
+
+    private void ImportancesFromTree(int numFeatures)
     {
-        _featureImportances = new Vector<T>([.. Enumerable.Repeat(NumOps.Zero, x.Columns)]);
-        CalculateFeatureImportancesRecursive(Root, x.Columns);
+        _featureImportances = new Vector<T>([.. Enumerable.Repeat(NumOps.Zero, numFeatures)]);
+        CalculateFeatureImportancesRecursive(Root, numFeatures);
         NormalizeFeatureImportances();
         // Copy to the public property from base class so ensemble methods can access it
         FeatureImportances = _featureImportances;
