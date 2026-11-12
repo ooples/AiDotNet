@@ -628,13 +628,8 @@ public partial class Autoencoder<T> : VectorModelLayoutBase<T>, IAuxiliaryLossLa
         }
 
         // Compute average activation across the batch
-        T sumActivation = NumOps.Zero;
         int totalElements = _lastEncoderActivations.Length;
-
-        for (int i = 0; i < totalElements; i++)
-        {
-            sumActivation = NumOps.Add(sumActivation, _lastEncoderActivations[i]);
-        }
+        T sumActivation = Engine.TensorSum(_lastEncoderActivations);
 
         _averageActivation = NumOps.Divide(sumActivation, NumOps.FromDouble(totalElements));
 
@@ -716,10 +711,7 @@ public partial class Autoencoder<T> : VectorModelLayoutBase<T>, IAuxiliaryLossLa
 
         // Create gradient tensor with the same shape as encoder activations
         var gradient = new Tensor<T>(_lastEncoderActivations._shape);
-        for (int i = 0; i < gradient.Length; i++)
-        {
-            gradient[i] = scalingFactor;
-        }
+        gradient.Fill(scalingFactor);
 
         return gradient;
     }
@@ -819,22 +811,10 @@ public partial class Autoencoder<T> : VectorModelLayoutBase<T>, IAuxiliaryLossLa
     public Tensor<T> GenerateSamples(int count, double mean = 0, double stdDev = 1)
     {
         // Create a random normal distribution in the latent space
+        // Draw N(mean, stdDev) points in the latent space in one bulk draw, seeded from a secure source.
         var random = RandomHelper.CreateSecureRandom();
-        var latentSamples = new Matrix<T>(count, EncodedSize);
-
-        // Generate random points in the latent space
-        for (int i = 0; i < count; i++)
-        {
-            for (int j = 0; j < EncodedSize; j++)
-            {
-                // Apply mean and standard deviation
-                double value = mean + random.NextGaussian() * stdDev;
-                latentSamples[i, j] = NumOps.FromDouble(value);
-            }
-        }
-
-        // Convert to tensor
-        var latentTensor = new Tensor<T>([count, EncodedSize], latentSamples);
+        var latentTensor = new Tensor<T>([count, EncodedSize]);
+        Engine.TensorNormalInPlace(latentTensor, mean, stdDev, random.Next());
 
         // Decode the latent samples
         return Decode(latentTensor);

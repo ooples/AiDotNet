@@ -380,13 +380,15 @@ public partial class CapsuleNetwork<T> : ImageClassifierModelLayoutBase<T>, IAux
         // For now, compute a simple L2 loss between capsule outputs and a projection of the input
 
         // Calculate mean squared error as a proxy for reconstruction quality
-        T sumSquaredError = NumOps.Zero;
         int minLength = Math.Min(capsuleOutputs.Length, originalInput.Length);
-
-        for (int i = 0; i < minLength; i++)
+        T sumSquaredError = NumOps.Zero;
+        if (minLength > 0)
         {
-            T diff = NumOps.Subtract(capsuleOutputs[i], originalInput[i]);
-            sumSquaredError = NumOps.Add(sumSquaredError, NumOps.Multiply(diff, diff));
+            var outputHead = Engine.TensorSlice(
+                Engine.Reshape(capsuleOutputs, new[] { capsuleOutputs.Length }), new[] { 0 }, new[] { minLength });
+            var inputHead = Engine.TensorSlice(
+                Engine.Reshape(originalInput, new[] { originalInput.Length }), new[] { 0 }, new[] { minLength });
+            sumSquaredError = Engine.TensorSumOfSquares(Engine.TensorSubtract(outputHead, inputHead));
         }
 
         // Average over all elements
@@ -639,24 +641,24 @@ public partial class CapsuleNetwork<T> : ImageClassifierModelLayoutBase<T>, IAux
             int batchSize = capsuleOutputs.Shape[0];
             int numCapsules = capsuleOutputs.Shape[1];
             int capsuleDim = capsuleOutputs.Shape.Length > 2 ? capsuleOutputs.Shape[2] : 1;
+            int covered = batchSize * numCapsules * capsuleDim;
+            int[] zeroedCapsules = Enumerable.Range(0, numCapsules).Where(c => c != targetCapsuleIndex).ToArray();
 
-            for (int b = 0; b < batchSize; b++)
+            if (covered > 0 && covered <= masked.Length && zeroedCapsules.Length > 0)
             {
-                for (int c = 0; c < numCapsules; c++)
-                {
-                    if (c != targetCapsuleIndex)
-                    {
-                        // Zero out this capsule
-                        for (int d = 0; d < capsuleDim; d++)
-                        {
-                            int index = b * numCapsules * capsuleDim + c * capsuleDim + d;
-                            if (index < masked.Length)
-                            {
-                                masked[index] = NumOps.Zero;
-                            }
-                        }
-                    }
-                }
+                // The [batch, numCapsules, capsuleDim] view covers the leading elements; any trailing
+                // elements of a higher-rank input stay as they were.
+                var flat = Engine.Reshape(masked, new[] { masked.Length });
+                var head = Engine.Reshape(
+                    Engine.TensorSlice(flat, new[] { 0 }, new[] { covered }),
+                    new[] { batchSize, numCapsules, capsuleDim });
+                var zeroedIndex = new Tensor<int>(zeroedCapsules, new[] { zeroedCapsules.Length });
+                var filled = Engine.Reshape(Engine.TensorIndexFill(head, 1, zeroedIndex, NumOps.Zero), new[] { covered });
+                var result = covered == masked.Length
+                    ? filled
+                    : Engine.TensorConcatenate(
+                        new[] { filled, Engine.TensorSlice(flat, new[] { covered }, new[] { masked.Length - covered }) }, 0);
+                masked = Engine.Reshape(result, capsuleOutputs._shape);
             }
         }
 
@@ -682,29 +684,30 @@ public partial class CapsuleNetwork<T> : ImageClassifierModelLayoutBase<T>, IAux
         int numCapsules = capsuleOutputs.Shape.Length > 1 ? capsuleOutputs.Shape[1] : 1;
         int capsuleDim = capsuleOutputs.Shape.Length > 2 ? capsuleOutputs.Shape[2] : 1;
 
-        T maxNorm = NumOps.Zero;
-        int maxIndex = 0;
-
-        for (int c = 0; c < numCapsules; c++)
+        if (numCapsules <= 0 || capsuleDim <= 0)
         {
-            T normSquared = NumOps.Zero;
-            for (int d = 0; d < capsuleDim; d++)
-            {
-                int index = batchOffset + c * capsuleDim + d;
-                if (index < capsuleOutputs.Length)
-                {
-                    T val = capsuleOutputs[index];
-                    normSquared = NumOps.Add(normSquared, NumOps.Multiply(val, val));
-                }
-            }
-
-            if (NumOps.GreaterThan(normSquared, maxNorm))
-            {
-                maxNorm = normSquared;
-                maxIndex = c;
-            }
+            return 0;
         }
 
-        return maxIndex;
+        // Entries past the end of a short input counted as zero, so pad with zeros.
+        int width = numCapsules * capsuleDim;
+        int available = Math.Max(0, Math.Min(width, capsuleOutputs.Length - batchOffset));
+        var firstSample = available > 0
+            ? Engine.TensorSlice(Engine.Reshape(capsuleOutputs, new[] { capsuleOutputs.Length }),
+                new[] { batchOffset }, new[] { available })
+            : new Tensor<T>(new[] { 0 });
+        if (available < width)
+        {
+            firstSample = Engine.TensorConcatenate(new[] { firstSample, new Tensor<T>(new[] { width - available }) }, 0);
+        }
+
+        var normsSquared = Engine.ReduceSum(
+            Engine.TensorSquare(Engine.Reshape(firstSample, new[] { numCapsules, capsuleDim })), new[] { 1 }, false);
+
+        // The scan started from a zero norm and moved only on a strictly larger one (never onto NaN).
+        // Prepending that zero lets ArgMax (first of ties, never moving onto NaN) pick the same capsule.
+        var withFloor = Engine.TensorConcatenate(new[] { new Tensor<T>(new[] { 1 }), normsSquared }, 0);
+        int best = Engine.TensorArgMax(withFloor, 0)[0];
+        return best == 0 ? 0 : best - 1;
     }
 }

@@ -466,23 +466,24 @@ public partial class AttentionNetwork<T> : SequenceModelLayoutBase<T>, IAuxiliar
         }
 
         // Aggregate entropy losses from all attention layers
-        T totalEntropyLoss = NumOps.Zero;
-        int attentionLayerCount = 0;
+        T totalEntropyLoss;
+        var layerLosses = new List<T>();
 
         foreach (var layer in Layers)
         {
             if (layer is IAuxiliaryLossLayer<T> auxLayer && auxLayer.UseAuxiliaryLoss)
             {
-                T layerAuxLoss = auxLayer.ComputeAuxiliaryLoss();
-                totalEntropyLoss = NumOps.Add(totalEntropyLoss, layerAuxLoss);
-                attentionLayerCount++;
+                layerLosses.Add(auxLayer.ComputeAuxiliaryLoss());
             }
         }
+
+        int attentionLayerCount = layerLosses.Count;
 
         // Average over all attention layers if any exist
         if (attentionLayerCount > 0)
         {
-            totalEntropyLoss = NumOps.Divide(totalEntropyLoss, NumOps.FromDouble(attentionLayerCount));
+            T lossSum = Engine.TensorSum(new Tensor<T>(layerLosses.ToArray(), new[] { attentionLayerCount }));
+            totalEntropyLoss = NumOps.Divide(lossSum, NumOps.FromDouble(attentionLayerCount));
         }
         else
         {
