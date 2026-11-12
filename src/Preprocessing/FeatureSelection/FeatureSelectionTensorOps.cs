@@ -205,4 +205,79 @@ internal static class FeatureSelectionTensorOps
             ops.FromDouble(count - 1));
         return engine.TensorAdd(engine.TensorBroadcastTo(engine.Reshape(low, new[] { 1, p }), shape), scaled);
     }
+
+    /// <summary>
+    /// Top eigenpairs of a symmetric [p, p] matrix by power iteration with deflation: each component starts from
+    /// the uniform vector 1/p, runs <paramref name="iterations"/> matrix-vector products (normalizing whenever the
+    /// norm is above 1e-10), takes the Rayleigh quotient as its eigenvalue (0 when the vector's squared norm is not
+    /// above 1e-10; floored at 0 with <paramref name="clampNegative"/>) and deflates the matrix by
+    /// <c>lambda v v^T</c>. Returns the eigenvectors as rows ([components, p]).
+    /// </summary>
+    public static Tensor<T> PowerIterationComponents<T>(
+        Tensor<T> matrix, int components, int iterations, bool clampNegative, out Tensor<T> eigenvalues)
+    {
+        var engine = AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<T>();
+        int p = matrix.Shape[0];
+        T floor = ops.FromDouble(1e-10);
+        T zero = ops.Zero;
+        var one = PreprocessingTensorOps.Filled(new[] { 1, 1 }, ops.One);
+        var noValue = new Tensor<T>(new[] { 1, 1 });
+        var start = PreprocessingTensorOps.Filled(new[] { p, 1 }, ops.Divide(ops.One, ops.FromDouble(p)));
+        var deflated = matrix;
+        var vectors = new Tensor<T>[components];
+        var values = new Tensor<T>[components];
+
+        for (int k = 0; k < components; k++)
+        {
+            var v = start;
+            for (int iter = 0; iter < iterations; iter++)
+            {
+                var next = engine.TensorMatMul(deflated, v);
+                var norm = engine.TensorSqrt(engine.ReduceSum(engine.TensorSquare(next), new[] { 0 }, true));
+                var divisor = engine.TensorWhere(engine.TensorGreaterThan(norm, floor), norm, one);
+                v = engine.TensorDivide(next, engine.TensorBroadcastTo(divisor, new[] { p, 1 }));
+            }
+
+            var mv = engine.TensorMatMul(deflated, v);
+            var numerator = engine.ReduceSum(engine.TensorMultiply(v, mv), new[] { 0 }, true);
+            var denominator = engine.ReduceSum(engine.TensorSquare(v), new[] { 0 }, true);
+            var eigenvalue = engine.TensorWhere(engine.TensorGreaterThan(denominator, floor),
+                engine.TensorDivide(numerator, denominator), noValue);
+            if (clampNegative)
+                eigenvalue = engine.TensorMax(eigenvalue, zero);
+
+            var vector = engine.Reshape(v, new[] { p });
+            vectors[k] = engine.Reshape(v, new[] { 1, p });
+            values[k] = engine.Reshape(eigenvalue, new[] { 1 });
+
+            // Deflate
+            deflated = engine.TensorSubtract(deflated, engine.TensorMultiply(
+                engine.TensorOuter(vector, vector), engine.TensorBroadcastTo(eigenvalue, new[] { p, p })));
+        }
+
+        if (components == 0)
+        {
+            eigenvalues = new Tensor<T>(new[] { 0 });
+            return new Tensor<T>(new[] { 0, p });
+        }
+
+        eigenvalues = engine.TensorConcatenate(values, 0);
+        return engine.TensorConcatenate(vectors, 0);
+    }
+
+    /// <summary>
+    /// Feature importances from component loadings ([components, p]) and component weights ([components]):
+    /// <c>sum_k weights[k] * loadings[k, j]^2</c> for every feature j.
+    /// </summary>
+    public static Tensor<T> WeightedSquaredLoadings<T>(Tensor<T> loadings, Tensor<T> weights)
+    {
+        var engine = AiDotNetEngine.Current;
+        int components = loadings.Shape[0];
+        int p = loadings.Shape[1];
+        if (components == 0)
+            return new Tensor<T>(new[] { p });
+        return engine.Reshape(engine.TensorMatMul(
+            engine.Reshape(weights, new[] { 1, components }), engine.TensorSquare(loadings)), new[] { p });
+    }
 }

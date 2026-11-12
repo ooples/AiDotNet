@@ -28,14 +28,14 @@ public class TruncatedSVDSelection<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     private readonly int _nFeaturesToSelect;
     private readonly int _nComponents;
 
-    private double[]? _featureImportances;
+    private Vector<T>? _featureImportances;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public int NComponents => _nComponents;
-    public double[]? FeatureImportances => _featureImportances;
+    public Vector<T>? FeatureImportances => _featureImportances;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -63,125 +63,35 @@ public class TruncatedSVDSelection<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         int n = data.Rows;
         int p = data.Columns;
 
+        var engine = Engine;
+        var X = Tensor<T>.FromMatrix(data);
+
         // Compute X^T X for right singular vectors
-        var xTx = new double[p, p];
-        for (int j1 = 0; j1 < p; j1++)
-        {
-            for (int j2 = j1; j2 < p; j2++)
-            {
-                double sum = 0;
-                for (int i = 0; i < n; i++)
-                    sum += NumOps.ToDouble(data[i, j1]) * NumOps.ToDouble(data[i, j2]);
-                xTx[j1, j2] = sum;
-                xTx[j2, j1] = sum;
-            }
-        }
+        var xTx = engine.TensorMatMul(engine.TensorTranspose(X), X);
 
-        // Power iteration for top eigenvectors of X^T X
+        // Power iteration for top eigenvectors of X^T X (negative eigenvalues floored at 0 as a numerical guard)
         int nComp = Math.Min(_nComponents, p);
-        var loadings = new double[nComp, p];
-        var singularValues = new double[nComp];
-        var deflatedXtX = (double[,])xTx.Clone();
-
-        for (int k = 0; k < nComp; k++)
-        {
-            var eigenvector = PowerIteration(deflatedXtX, p, 100);
-            var eigenvalue = ComputeEigenvalue(deflatedXtX, eigenvector, p);
-            if (eigenvalue < 0) eigenvalue = 0; // numerical guard
-            singularValues[k] = Math.Sqrt(eigenvalue);
-
-            for (int j = 0; j < p; j++)
-                loadings[k, j] = eigenvector[j];
-
-            // Deflate
-            for (int j1 = 0; j1 < p; j1++)
-                for (int j2 = 0; j2 < p; j2++)
-                    deflatedXtX[j1, j2] -= eigenvalue * eigenvector[j1] * eigenvector[j2];
-        }
+        var loadings = FeatureSelectionTensorOps.PowerIterationComponents(xTx, nComp, 100, true, out var eigenvalues);
+        var singularValues = engine.TensorSqrt(eigenvalues);
 
         // Compute feature importance as weighted sum of squared loadings
-        _featureImportances = new double[p];
-        double totalVariance = singularValues.Sum(s => s * s);
-
-        for (int j = 0; j < p; j++)
-        {
-            for (int k = 0; k < nComp; k++)
-            {
-                double weight = (singularValues[k] * singularValues[k]) / (totalVariance + 1e-10);
-                _featureImportances[j] += weight * loadings[k, j] * loadings[k, j];
-            }
-        }
+        var squared = engine.TensorSquare(singularValues);
+        var weights = engine.TensorDivideScalar(squared, NumOps.Add(engine.TensorSum(squared), NumOps.FromDouble(1e-10)));
+        var importances = FeatureSelectionTensorOps.WeightedSquaredLoadings(loadings, weights);
+        _featureImportances = importances.ToVector();
 
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = Enumerable.Range(0, p)
-            .OrderByDescending(j => _featureImportances[j])
-            .Take(numToSelect)
-            .OrderBy(x => x)
-            .ToArray();
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(importances, numToSelect);
 
         IsFitted = true;
     }
-
-    private double[] PowerIteration(double[,] matrix, int size, int maxIter)
-    {
-        var v = new double[size];
-        for (int i = 0; i < size; i++)
-            v[i] = 1.0 / size;
-
-        for (int iter = 0; iter < maxIter; iter++)
-        {
-            var newV = new double[size];
-            for (int i = 0; i < size; i++)
-            {
-                for (int j = 0; j < size; j++)
-                    newV[i] += matrix[i, j] * v[j];
-            }
-
-            double norm = Math.Sqrt(newV.Sum(x => x * x));
-            if (norm > 1e-10)
-            {
-                for (int i = 0; i < size; i++)
-                    newV[i] /= norm;
-            }
-
-            v = newV;
-        }
-
-        return v;
-    }
-
-    private double ComputeEigenvalue(double[,] matrix, double[] eigenvector, int size)
-    {
-        var mv = new double[size];
-        for (int i = 0; i < size; i++)
-            for (int j = 0; j < size; j++)
-                mv[i] += matrix[i, j] * eigenvector[j];
-
-        double numerator = 0, denominator = 0;
-        for (int i = 0; i < size; i++)
-        {
-            numerator += eigenvector[i] * mv[i];
-            denominator += eigenvector[i] * eigenvector[i];
-        }
-
-        return denominator > 1e-10 ? numerator / denominator : 0;
-    }
-
     /// <inheritdoc />
     protected override Matrix<T> TransformCore(Matrix<T> data)
     {
         if (_selectedIndices is null)
             throw new InvalidOperationException("TruncatedSVDSelection has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />
