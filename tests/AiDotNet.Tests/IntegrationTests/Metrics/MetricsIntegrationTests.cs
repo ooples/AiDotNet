@@ -820,12 +820,12 @@ public class MetricsIntegrationTests
 
     #endregion
 
-    #region PerceptualSpeechQuality Tests
+    #region ApproximatePerceptualSpeechQuality Tests
 
     [Fact(Timeout = 120000)]
-    public async Task PESQ_IdenticalSignals_ReturnsHighScore()
+    public async Task ApproximatePesq_IdenticalSignals_ReturnsHighScore()
     {
-        var pesq = new PerceptualSpeechQuality<double>(sampleRate: 16000);
+        var pesq = new ApproximatePerceptualSpeechQuality<double>(sampleRate: 16000);
 
         // 1 s at 16 kHz: P.862 rejects signals under 0.25 s, and the STOI term of this approximation
         // needs 384 ms segments (pystoi returns 1e-5 for the 100 ms signal used before).
@@ -841,17 +841,17 @@ public class MetricsIntegrationTests
     }
 
     [Fact(Timeout = 120000)]
-    public async Task PESQ_InvalidSampleRate_ThrowsArgumentException()
+    public async Task ApproximatePesq_InvalidSampleRate_ThrowsArgumentException()
     {
         Assert.Throws<ArgumentException>(() =>
-            new PerceptualSpeechQuality<double>(sampleRate: 44100));
+            new ApproximatePerceptualSpeechQuality<double>(sampleRate: 44100));
     }
 
     [Fact(Timeout = 120000)]
-    public async Task PESQ_ValidSampleRates_DoNotThrow()
+    public async Task ApproximatePesq_ValidSampleRates_DoNotThrow()
     {
-        var pesq8k = new PerceptualSpeechQuality<double>(sampleRate: 8000);
-        var pesq16k = new PerceptualSpeechQuality<double>(sampleRate: 16000);
+        var pesq8k = new ApproximatePerceptualSpeechQuality<double>(sampleRate: 8000);
+        var pesq16k = new ApproximatePerceptualSpeechQuality<double>(sampleRate: 16000);
 
         Assert.NotNull(pesq8k);
         Assert.NotNull(pesq16k);
