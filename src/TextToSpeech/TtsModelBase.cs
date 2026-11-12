@@ -653,7 +653,52 @@ public abstract partial class TtsModelBase<T> : NeuralNetworkBase<T>, IShapeCont
             : Engine.TensorDivideScalar(scaled, scaledNorm);
     }
 
-    /// <summary>A <c>[flags.Count, columns]</c> tensor that is 1 on the rows whose flag is set and 0 elsewhere.</summary>
+    /// <summary>
+    /// The index of the first largest element of a tensor read flat (a scan that keeps the earlier index on ties).
+    /// The ties are broken explicitly: each maximal element is keyed by <c>n âˆ’ index</c>, so the arg-max is unique.
+    /// </summary>
+    protected int FirstArgMax(Tensor<T> values)
+    {
+        Guard.NotNull(values);
+        int n = values.Length;
+        var flat = Engine.Reshape(values, new[] { n });
+        var isMax = Engine.TensorEquals(flat, Engine.TensorMaxValue(flat));
+        var reverseIndex = Engine.ScalarMinusTensor(NumOps.FromDouble(n), Engine.TensorArange<T>(0, n));
+
+        return Engine.TensorArgMax(Engine.TensorMultiply(isMax, reverseIndex), 0).ToArray()[0];
+    }
+
+    /// <summary>Row <paramref name="index"/> of a <c>[batch, n]</c> tensor
+, as a <c>[n]</c> tensor.</summary>
+    protected Tensor<T> BatchRow(Tensor<T> batch, int index)
+    {
+        Guard.NotNull(batch);
+        int n = batch.Shape[1];
+        return Engine.Reshape(Engine.TensorSlice(batch, new[] { index, 0 }, new[] { 1, n }), new[] { n });
+    }
+
+    /// <summary>
+    /// Per-utterance outputs <c>[frames_b, â‰¥ columns]</c> as one <c>[batch, longest, columns]</c> tensor: the first
+    /// <paramref name="columns"/> channels of each, zero-padded after its last frame.
+    /// </summary>
+    protected Tensor<T> PadAndStack(IReadOnlyList<Tensor<T>> outputs, int columns)
+    {
+        Guard.NotNull(outputs);
+        int longest = outputs.Max(o => o.Shape[0]);
+        var padded = new Tensor<T>[outputs.Count];
+        for (int b = 0; b < padded.Length; b++)
+        {
+            int length = outputs[b].Shape[0];
+            var rows = Engine.TensorSlice(outputs[b], new[] { 0, 0 }, new[] { length, columns });
+            padded[b] = length < longest
+                ? Engine.TensorConcatenate(new[] { rows, new Tensor<T>(new[] { longest - length, columns }) }, 0)
+                : rows;
+        }
+        return Engine.TensorStack(padded, 0);
+    }
+
+    /// <summary>A <c>[flags.Count, columns]</c> tensor
+ that is 1 on the rows whose flag is set and 0 elsewhere.</summary>
     protected Tensor<T> RowMask(IReadOnlyList<bool> flags, int columns)
     {
         Guard.NotNull(flags);

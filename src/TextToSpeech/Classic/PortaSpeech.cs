@@ -390,20 +390,9 @@ public partial class PortaSpeech<T> : TtsModelBase<T>, IAcousticModel<T>
         int batch = input.Shape[0], count = input.Shape[1];
         var outputs = new List<Tensor<T>>(batch);
         for (int b = 0; b < batch; b++)
-            outputs.Add(SynthesizeOne(Engine.Reshape(Engine.TensorSlice(input, new[] { b, 0 }, new[] { 1, count }), new[] { count })));
-        int longest = outputs.Max(o => o.Shape[0]);
-        int mels = _options.MelChannels;
-        // Each utterance's mel, zero-padded at the end to the longest.
-        var padded = new Tensor<T>[batch];
-        for (int b = 0; b < batch; b++)
-        {
-            int length = outputs[b].Shape[0];
-            var mel = Engine.TensorSlice(outputs[b], new[] { 0, 0 }, new[] { length, mels });
-            if (length < longest)
-                mel = Engine.TensorConcatenate(new[] { mel, new Tensor<T>(new[] { longest - length, mels }) }, 0);
-            padded[b] = mel;
-        }
-        return Engine.TensorStack(padded, 0);
+            outputs.Add(SynthesizeOne(BatchRow(input, b)));
+        return PadAndStack(outputs, _options.MelChannels);
+
     }
 
     private Tensor<T> SynthesizeOne(Tensor<T> tokens)
