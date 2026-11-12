@@ -81,15 +81,18 @@ public class VerticalFederatedUnlearner<T> : FederatedLearningComponentBase<T>
             totalElements *= predictions.Shape[d];
         }
 
-        // Approximate influence as the gradient norm of the loss on these entities
-        double gradientNormSquared = 0.0;
-        for (int i = 0; i < totalElements; i++)
+        if (totalElements == 0)
         {
-            double pred = NumOps.ToDouble(predictions[i]);
-            double label = NumOps.ToDouble(entityLabels[i]);
-            double grad = 2.0 * (pred - label);
-            gradientNormSquared += grad * grad;
+            return 0.0;
         }
+
+        // Approximate influence as the gradient norm of the loss on these entities: grad = 2 (pred - label)
+        var grad = Engine.TensorMultiplyScalar(
+            Engine.TensorSubtract(
+                VerticalEngineOps.Rows(predictions, 1, totalElements),
+                VerticalEngineOps.Rows(entityLabels, 1, totalElements)),
+            NumOps.FromDouble(2.0));
+        double gradientNormSquared = NumOps.ToDouble(Engine.TensorSum(Engine.TensorSquare(grad)));
 
         return Math.Sqrt(gradientNormSquared);
     }
@@ -127,12 +130,12 @@ public class VerticalFederatedUnlearner<T> : FederatedLearningComponentBase<T>
 
         // Compute prediction divergence (how much predictions changed)
         double divergenceSum = 0.0;
-        for (int i = 0; i < totalElements; i++)
+        if (totalElements > 0)
         {
-            double before = NumOps.ToDouble(predictionsBeforeUnlearning[i]);
-            double after = NumOps.ToDouble(predictionsAfterUnlearning[i]);
-            double diff = before - after;
-            divergenceSum += diff * diff;
+            var diff = Engine.TensorSubtract(
+                VerticalEngineOps.Rows(predictionsBeforeUnlearning, 1, totalElements),
+                VerticalEngineOps.Rows(predictionsAfterUnlearning, 1, totalElements));
+            divergenceSum = NumOps.ToDouble(Engine.TensorSum(Engine.TensorSquare(diff)));
         }
 
         double divergenceScore = totalElements > 0 ? Math.Sqrt(divergenceSum / totalElements) : 0.0;
