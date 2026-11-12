@@ -124,15 +124,11 @@ public class MomentumEncoder<T> : IMomentumEncoder<T>
         var m = NumOps.FromDouble(_momentum);
         var oneMinusM = NumOps.FromDouble(1.0 - _momentum);
 
-        var newParams = new T[momentumParams.Length];
-        for (int i = 0; i < momentumParams.Length; i++)
-        {
-            newParams[i] = NumOps.Add(
-                NumOps.Multiply(m, momentumParams[i]),
-                NumOps.Multiply(oneMinusM, mainEncoderParams[i]));
-        }
+        var newParams = AiDotNetEngine.Current.TensorAdd(
+            AiDotNetEngine.Current.TensorMultiplyScalar(momentumParams.AsTensor(), m),
+            AiDotNetEngine.Current.TensorMultiplyScalar(mainEncoderParams.AsTensor(), oneMinusM));
 
-        _encoder.UpdateParameters(new Vector<T>(newParams));
+        _encoder.UpdateParameters(newParams.AsVector());
     }
 
     /// <inheritdoc />
@@ -177,9 +173,8 @@ public class MomentumEncoder<T> : IMomentumEncoder<T>
         if (from.Length != to.Length) return false;
         for (int i = 0; i < to.Length; i++)
         {
-            if (from[i].Rank != to[i].Rank) return false;
-            for (int d = 0; d < to[i].Rank; d++)
-                if (from[i].Shape[d] != to[i].Shape[d]) return false;
+            // Same rank and the same extent on every axis
+            if (from[i].Shape != to[i].Shape) return false;
         }
         using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
         using var noArena = AiDotNet.Tensors.Helpers.TensorArena.Suspend();
