@@ -432,7 +432,7 @@ public class FeatureSelectionDeepMathIntegrationTests
         var target = new Vector<double>(new double[] { 0, 0, 0, 1, 1, 1 });
 
         var genericSelector = new GenericUnivariateSelect<double>(
-            mode: SelectionMode.KBest, param: 2, defaultScoreFunc: "f_classif");
+            mode: SelectionMode.KBest, param: 2, defaultScoreFunc: UnivariateScoreFunction.FClassif);
         genericSelector.Fit(matrix, target);
 
         var kbestSelector = new SelectKBest<double>(k: 2, defaultScoreFunc: UnivariateScoreFunction.FClassif);
@@ -464,7 +464,7 @@ public class FeatureSelectionDeepMathIntegrationTests
 
         // 50% of 8 features = ceil(4) = 4
         var selector = new GenericUnivariateSelect<double>(
-            mode: SelectionMode.Percentile, param: 50.0, defaultScoreFunc: "f_classif");
+            mode: SelectionMode.Percentile, param: 50.0, defaultScoreFunc: UnivariateScoreFunction.FClassif);
         var result = selector.FitTransform(matrix, target);
 
         Assert.Equal(4, result.Columns);
@@ -487,7 +487,7 @@ public class FeatureSelectionDeepMathIntegrationTests
         var target = new Vector<double>(new double[] { 0, 0, 0, 1, 1, 1 });
 
         var selector = new GenericUnivariateSelect<double>(
-            mode: SelectionMode.FWE, param: 0.05, defaultScoreFunc: "f_classif");
+            mode: SelectionMode.FWE, param: 0.05, defaultScoreFunc: UnivariateScoreFunction.FClassif);
         selector.Fit(matrix, target);
 
         Assert.NotNull(selector.SelectedIndices);
@@ -512,7 +512,7 @@ public class FeatureSelectionDeepMathIntegrationTests
         var target = new Vector<double>(new double[] { 0, 0, 0, 1, 1, 1 });
 
         var selector = new GenericUnivariateSelect<double>(
-            mode: SelectionMode.FDR, param: 0.05, defaultScoreFunc: "f_classif");
+            mode: SelectionMode.FDR, param: 0.05, defaultScoreFunc: UnivariateScoreFunction.FClassif);
         selector.Fit(matrix, target);
 
         Assert.NotNull(selector.SelectedIndices);
@@ -535,7 +535,7 @@ public class FeatureSelectionDeepMathIntegrationTests
         var target = new Vector<double>(new double[] { 0, 0, 0, 1, 1, 1 });
 
         var selector = new GenericUnivariateSelect<double>(
-            mode: SelectionMode.FPR, param: 0.5, defaultScoreFunc: "f_classif");
+            mode: SelectionMode.FPR, param: 0.5, defaultScoreFunc: UnivariateScoreFunction.FClassif);
         selector.Fit(matrix, target);
 
         Assert.NotNull(selector.SelectedIndices);
@@ -570,7 +570,7 @@ public class FeatureSelectionDeepMathIntegrationTests
         var target = new Vector<double>(new double[] { 0, 0, 0, 1, 1, 1, 2, 2, 2 });
 
         var selector = new GenericUnivariateSelect<double>(
-            mode: SelectionMode.KBest, param: 1, defaultScoreFunc: "f_classif");
+            mode: SelectionMode.KBest, param: 1, defaultScoreFunc: UnivariateScoreFunction.FClassif);
         selector.Fit(matrix, target);
 
         Assert.NotNull(selector.Scores);
@@ -599,7 +599,7 @@ public class FeatureSelectionDeepMathIntegrationTests
         var target = new Vector<double>(new double[] { 3, 6, 9, 12, 15 });
 
         var selector = new GenericUnivariateSelect<double>(
-            mode: SelectionMode.KBest, param: 1, defaultScoreFunc: "f_regression");
+            mode: SelectionMode.KBest, param: 1, defaultScoreFunc: UnivariateScoreFunction.FRegression);
         selector.Fit(matrix, target);
 
         Assert.NotNull(selector.Scores);
@@ -634,7 +634,7 @@ public class FeatureSelectionDeepMathIntegrationTests
         var target = new Vector<double>(new double[] { 0, 0, 1, 1 });
 
         var selector = new GenericUnivariateSelect<double>(
-            mode: SelectionMode.KBest, param: 2, defaultScoreFunc: "f_classif");
+            mode: SelectionMode.KBest, param: 2, defaultScoreFunc: UnivariateScoreFunction.FClassif);
         selector.Fit(matrix, target);
 
         var mask = selector.GetSupportMask();

@@ -1,8 +1,8 @@
 namespace AiDotNet.Enums;
 
 /// <summary>
-/// Built-in univariate scoring functions used by <c>SelectKBest</c> and <c>SelectPercentile</c>
-/// (the scikit-learn name of each is given in its summary).
+/// Built-in univariate scoring functions used by <c>SelectKBest</c>, <c>SelectPercentile</c>
+/// and <c>GenericUnivariateSelect</c> (the scikit-learn name of each is given in its summary).
 /// </summary>
 public enum UnivariateScoreFunction
 {
