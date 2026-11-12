@@ -340,14 +340,9 @@ public partial class LoftQAdapter<T> : LoRAAdapterBase<T>
         int weightCount = inputSize * outputSize;
 
         // Extract weights (shape: [outputSize, inputSize])
-        Matrix<T> weights = new Matrix<T>(outputSize, inputSize);
-        for (int i = 0; i < outputSize; i++)
-        {
-            for (int j = 0; j < inputSize; j++)
-            {
-                weights[i, j] = baseParams[i * inputSize + j];
-            }
-        }
+        Matrix<T> weights = Engine.Reshape(
+            Tensor<T>.FromVector(baseParams.GetSubVector(0, weightCount)), [outputSize, inputSize]).ToMatrix();
+
 
         // Store original weights for alternating optimization
         Matrix<T> currentWeights = weights.Clone();
@@ -362,27 +357,17 @@ public partial class LoftQAdapter<T> : LoRAAdapterBase<T>
             Matrix<T> quantizedWeights = DequantizeWeights();
 
             // Step 3: Compute residual R = W - Q
-            Matrix<T> residual = new Matrix<T>(outputSize, inputSize);
-            for (int i = 0; i < outputSize; i++)
-            {
-                for (int j = 0; j < inputSize; j++)
-                {
-                    residual[i, j] = NumOps.Subtract(weights[i, j], quantizedWeights[i, j]);
-                }
-            }
+            Matrix<T> residual = Engine.MatrixSubtract(weights, quantizedWeights);
+
 
             // Step 4: Decompose residual via SVD and update LoRA matrices
             UpdateLoRAFromResidual(residual);
 
             // Step 5: Update current weights = Q + LoRA (for next iteration)
+            // MergeWeights() is [inputSize, outputSize]; its transpose lines up with Q.
             Matrix<T> loraWeights = _loraLayer.MergeWeights();
-            for (int i = 0; i < outputSize; i++)
-            {
-                for (int j = 0; j < inputSize; j++)
-                {
-                    currentWeights[i, j] = NumOps.Add(quantizedWeights[i, j], loraWeights[i, j]);
-                }
-            }
+            currentWeights = Engine.MatrixAdd(quantizedWeights, Engine.MatrixTranspose(loraWeights));
+
         }
 
         // Final quantization (already done in last iteration)
@@ -429,68 +414,31 @@ public partial class LoftQAdapter<T> : LoRAAdapterBase<T>
         int inputSize = residual.Columns;
         int rank = _loraLayer.Rank;
 
-        // Compute SVD of residual matrix
-        // For efficiency, we'll use a simplified approach:
-        // 1. Compute R * R^T (smaller if outputSize < inputSize)
-        // 2. Get eigenvalues/eigenvectors
-        // 3. Construct low-rank approximation
+        // Compute SVD of the residual: R = U * S * V^T ([outputSize, inputSize]).
+        var svd = new AiDotNet.DecompositionMethods.MatrixDecomposition.SvdDecomposition<T>(residual);
 
-        // Compute R * R^T
-        Matrix<T> rrt = residual.Multiply(residual.Transpose());
+        // The LoRA layer applies input * A * B * scaling with A: [inputSize, rank] and
+        // B: [rank, outputSize], i.e. the weight (A * B * scaling)^T. Matching R with the top-r
+        // components needs A * B * scaling = V_r * S_r * U_r^T, so with d = sqrt(S_r / scaling):
+        //   A = V_r * diag(d),  B = diag(d) * U_r^T
+        T scaling = _loraLayer.Scaling;
+        Tensor<T> sqrtScaled = Engine.TensorSqrt(Engine.TensorDivideScalar(
+            Tensor<T>.FromVector(svd.S.GetSubVector(0, rank)), scaling));
+        Tensor<T> matrixA = Engine.TensorMultiply(
+            Tensor<T>.FromMatrix(Engine.MatrixTranspose(svd.Vt.GetSubMatrix(0, 0, rank, inputSize))),
+            Engine.Reshape(sqrtScaled, [1, rank]));
+        Tensor<T> matrixB = Engine.TensorMultiply(
+            Tensor<T>.FromMatrix(Engine.MatrixTranspose(svd.U.GetSubMatrix(0, 0, outputSize, rank))),
+            Engine.Reshape(sqrtScaled, [rank, 1]));
 
-        // Get eigenvalues and eigenvectors (we'll use power iteration for top-k)
-        // For a production implementation, use a proper SVD library
-        // Here we'll use a simplified approach with the full matrices
-
-        // Simplified: Just use the residual directly with truncation
-        // Extract top-rank components
-
-        Vector<T> loraParams = _loraLayer.GetParameters();
-        int aRows = rank;
-        int aCols = inputSize;
-        int bRows = outputSize;
-        int bCols = rank;
-
-        // Initialize A and B from truncated residual
-        // A: [rank, inputSize] - initialized from top rank rows of residual
-        // B: [outputSize, rank] - initialized to produce low-rank approximation
-
-        // Simple initialization: Use first 'rank' singular vectors
-        // For proper SVD, we'd compute U, S, V and use:
-        // B = U[:, :rank] * sqrt(S[:rank, :rank])
-        // A = sqrt(S[:rank, :rank]) * V^T[:rank, :]
-
-        // Simplified approach: Initialize A from residual rows, B to scale appropriately
-        int idx = 0;
-
-        // Set A matrix in LoRA parameters (first part)
-        double scaleFactor = 1.0 / Math.Sqrt(rank); // Simple scaling
-        for (int i = 0; i < aRows; i++)
-        {
-            for (int j = 0; j < aCols; j++)
-            {
-                // Take patterns from residual with scaling
-                int resRow = i % outputSize;
-                loraParams[idx++] = NumOps.Multiply(residual[resRow, j], NumOps.FromDouble(scaleFactor));
-            }
-        }
-
-        // Set B matrix in LoRA parameters (second part)
-        for (int i = 0; i < bRows; i++)
-        {
-            for (int j = 0; j < bCols; j++)
-            {
-                // Initialize B to create rank-r approximation
-                T value = NumOps.Zero;
-                for (int k = 0; k < inputSize; k++)
-                {
-                    int aRow = j;
-                    T aVal = loraParams[aRow * aCols + k];
-                    value = NumOps.Add(value, NumOps.Multiply(residual[i, k], aVal));
-                }
-                loraParams[idx++] = NumOps.Multiply(value, NumOps.FromDouble(scaleFactor));
-            }
-        }
+        // Parameter layout: [A row-major, B row-major, unchanged tail parameters]
+        Vector<T> currentParams = _loraLayer.GetParameters();
+        int factorCount = inputSize * rank + rank * outputSize;
+        Vector<T> loraParams = currentParams.Length > factorCount
+            ? Vector<T>.Concatenate(
+                matrixA.ToVector(), matrixB.ToVector(),
+                currentParams.GetSubVector(factorCount, currentParams.Length - factorCount))
+            : Vector<T>.Concatenate(matrixA.ToVector(), matrixB.ToVector());
 
         // Update LoRA layer with new parameters
         _loraLayer.SetParameters(loraParams);
@@ -772,42 +720,17 @@ public partial class LoftQAdapter<T> : LoRAAdapterBase<T>
         int inputSize = input.Shape.Length > 1 ? input.Shape[1] : input.Length;
         int outputSize = GetOutputLayerShape().RequireConcrete("Sizing a LoRA adapter's low-rank factors")[0];
 
-        // Convert input to matrix
-        Matrix<T> inputMatrix = new Matrix<T>(batchSize, inputSize);
-        for (int i = 0; i < batchSize; i++)
-        {
-            for (int j = 0; j < inputSize; j++)
-            {
-                inputMatrix[i, j] = input[i * inputSize + j];
-            }
-        }
-
         // Compute: input * weights^T
-        Matrix<T> baseOutputMatrix = inputMatrix.Multiply(_dequantizedWeights.Transpose());
+        Tensor<T> baseOutputMatrix = Engine.TensorMatMul(
+            Engine.Reshape(input, [batchSize, inputSize]),
+            Tensor<T>.FromMatrix(Engine.MatrixTranspose(_dequantizedWeights)));
 
-        // Add biases
+        // Add biases, broadcast over the batch
         Vector<T> baseParams = _baseLayer.GetParameters();
         int weightCount = inputSize * outputSize;
-        for (int i = 0; i < batchSize; i++)
-        {
-            for (int j = 0; j < outputSize; j++)
-            {
-                T bias = baseParams[weightCount + j];
-                baseOutputMatrix[i, j] = NumOps.Add(baseOutputMatrix[i, j], bias);
-            }
-        }
-
-        // Convert to tensor
-        Vector<T> baseOutputData = new Vector<T>(batchSize * outputSize);
-        int idx = 0;
-        for (int i = 0; i < batchSize; i++)
-        {
-            for (int j = 0; j < outputSize; j++)
-            {
-                baseOutputData[idx++] = baseOutputMatrix[i, j];
-            }
-        }
-        Tensor<T> baseOutput = new Tensor<T>(new[] { batchSize, outputSize }, baseOutputData);
+        Tensor<T> bias = Engine.Reshape(Tensor<T>.FromVector(baseParams.GetSubVector(weightCount, outputSize)), [1, outputSize]);
+        Tensor<T> baseOutput = Engine.TensorAdd(
+            baseOutputMatrix, Engine.TensorBroadcastTo(bias, [batchSize, outputSize]));
 
         // Forward through LoRA layer
         Tensor<T> loraOutput = _loraLayer.Forward(input);
@@ -861,25 +784,13 @@ public partial class LoftQAdapter<T> : LoRAAdapterBase<T>
         int inputSize = GetInputShape()[0];
         int outputSize = GetOutputLayerShape().RequireConcrete("Sizing a LoRA adapter's low-rank factors")[0];
 
-        Vector<T> mergedParams = new Vector<T>((inputSize * outputSize) + outputSize);
-
-        // Merge weights
-        for (int i = 0; i < outputSize; i++)
-        {
-            for (int j = 0; j < inputSize; j++)
-            {
-                int idx = i * inputSize + j;
-                mergedParams[idx] = NumOps.Add(dequantizedBaseWeights[i, j], loraWeights[i, j]);
-            }
-        }
-
-        // Copy biases
+        // Merge weights. dequantizedBaseWeights is [outputSize, inputSize] and MergeWeights() is
+        // [inputSize, outputSize], so the LoRA delta is transposed. Biases are copied unchanged.
         Vector<T> baseParams = _baseLayer.GetParameters();
         int weightCount = inputSize * outputSize;
-        for (int i = 0; i < outputSize; i++)
-        {
-            mergedParams[weightCount + i] = baseParams[weightCount + i];
-        }
+        Vector<T> mergedWeights = Engine.Add(
+            dequantizedBaseWeights.ToRowVector(), Engine.MatrixTranspose(loraWeights).ToRowVector());
+        Vector<T> mergedParams = Vector<T>.Concatenate(mergedWeights, baseParams.GetSubVector(weightCount, outputSize));
 
         // Use helper method to clone base layer and preserve activation function
         return CreateMergedLayerWithClone(mergedParams);
