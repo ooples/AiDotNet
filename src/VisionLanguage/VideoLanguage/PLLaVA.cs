@@ -191,29 +191,7 @@ public partial class PLLaVA<T> : VisionLanguageModelBase<T>, IVideoLanguageModel
         // Step 3: Parameter-free visual-text fusion
         // PLLaVA is parameter-free for the pooling, so visual features pass directly
         // 2-layer MLP cross-modal connector (Linear -> GELU -> Linear)
-        var projected = new double[visLen];
-        for (int v = 0; v < visLen; v++)
-        {
-            double x = NumOps.ToDouble(encoderOut[v]);
-            double h = x * 0.8;
-            double gelu =
-                h * 0.5 * (1.0 + Math.Tanh(Math.Sqrt(2.0 / Math.PI) * (h + 0.044715 * h * h * h)));
-            projected[v] = gelu * 0.7 + x * 0.15;
-        }
-        var decoderInput = new Tensor<T>([dim]);
-        for (int d = 0; d < dim; d++)
-        {
-            double visVal = projected[d % visLen];
-            double textEmb = 0;
-            if (promptTokens is not null && promptLen > 0)
-            {
-                double tokVal = NumOps.ToDouble(promptTokens[d % promptLen]) / _options.VocabSize;
-                double gate = 1.0 / (1.0 + Math.Exp(-tokVal * 5.0));
-                visVal *= (0.5 + gate);
-                textEmb = tokVal * 0.3;
-            }
-            decoderInput[d] = NumOps.FromDouble(visVal + textEmb);
-        }
+        var decoderInput = GatedConnectorInput(encoderOut, promptTokens, dim, _options.VocabSize);
 
         // Step 4: LLM decoder
         var output = decoderInput;
@@ -259,44 +237,25 @@ public partial class PLLaVA<T> : VisionLanguageModelBase<T>, IVideoLanguageModel
 
         // Step 3: Spatial pooling per frame - reduce each frame to tokensPerFrame features
         // Uses adaptive average pooling (parameter-free) to compress spatial dimensions
-        var pooledFrames = new double[count][];
-        for (int f = 0; f < count; f++)
+        var engine = Engine;
+        int poolSize = Math.Max(1, dim / tokensPerFrame);
+        Tensor<T> temporalPooled;
+        if (dim == 0)
         {
-            pooledFrames[f] = new double[tokensPerFrame];
-            int poolSize = Math.Max(1, dim / tokensPerFrame);
-            for (int t = 0; t < tokensPerFrame; t++)
-            {
-                double sum = 0;
-                int poolCount = 0;
-                int startIdx = t * poolSize;
-                for (int p = 0; p < poolSize && (startIdx + p) < dim; p++)
-                {
-                    sum += NumOps.ToDouble(frameFeatures[f][startIdx + p]);
-                    poolCount++;
-                }
-                pooledFrames[f][t] = poolCount > 0 ? sum / poolCount : 0;
-            }
+            temporalPooled = new Tensor<T>([0]);
         }
-
-        // Step 4: Temporal pooling - adaptive average pool across the temporal dimension
-        // for each spatial position
-        var temporalPooled = new Tensor<T>([dim]);
-        int temporalPoolSize = Math.Max(1, count);
-        for (int d = 0; d < dim; d++)
+        else
         {
-            double sum = 0;
-            int sumCount = 0;
-            // Map this output position back to pooled frame features
-            int pooledIdx = d % tokensPerFrame;
-            for (int f = 0; f < count; f++)
-            {
-                if (pooledIdx < pooledFrames[f].Length)
-                {
-                    sum += pooledFrames[f][pooledIdx];
-                    sumCount++;
-                }
-            }
-            temporalPooled[d] = NumOps.FromDouble(sumCount > 0 ? sum / sumCount : 0);
+            // tokensPerFrame * poolSize <= dim, so every pooling window lies inside the frame.
+            var stacked = StackLeading(frameFeatures, count, tokensPerFrame * poolSize);
+            var pooledFrames = engine.TensorDivideScalar(
+                engine.ReduceSum(stacked.Reshape([count, tokensPerFrame, poolSize]), [2], false),
+                NumOps.FromDouble(poolSize));
+
+            // Step 4: Temporal pooling - adaptive average pool across the temporal dimension
+            // for each spatial position; output position d reads pooled token d % tokensPerFrame.
+            var temporalMean = engine.TensorDivideScalar(engine.ReduceSum(pooledFrames, [0], false), NumOps.FromDouble(count));
+            temporalPooled = CyclicTake(temporalMean, dim);
         }
 
         // Step 5: Project through LLM decoder

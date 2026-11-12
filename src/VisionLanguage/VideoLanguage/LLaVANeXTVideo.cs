@@ -209,23 +209,21 @@ public partial class LLaVANeXTVideo<T> : VisionLanguageModelBase<T>, IVideoLangu
             gridSize = (int)Math.Floor(Math.Sqrt(dim));
         int spatialTokens = gridSize * gridSize;
 
-        var pooled = new Tensor<T>([dim]);
-        for (int d = 0; d < dim; d++)
-        {
-            double sum = 0;
-            for (int f = 0; f < count; f++)
-                sum += NumOps.ToDouble(frameFeatures[f][d]);
-            pooled[d] = NumOps.FromDouble(sum / count);
-        }
+        var engine = Engine;
+        var stacked = StackLeading(frameFeatures, count, dim);
+        var pooled = engine.TensorDivideScalar(engine.ReduceSum(stacked, [0], false), NumOps.FromDouble(count));
 
         // Step 3: Add frame-order bias so the model knows temporal position even after pooling
         // This is implicit in AnyRes via the image-level position encoding but we add
-        // a small temporal bias to preserve frame ordering information
-        for (int d = 0; d < dim; d++)
+        // a small temporal bias to preserve frame ordering information:
+        // bias[d] = sin(pi * (d % spatialTokens) / max(1, spatialTokens - 1)) * 0.01
+        if (dim > 0)
         {
-            double spatialPos = (d % spatialTokens) / (double)Math.Max(1, spatialTokens - 1);
-            double bias = Math.Sin(spatialPos * Math.PI) * 0.01;
-            pooled[d] = NumOps.FromDouble(NumOps.ToDouble(pooled[d]) + bias);
+            var spatialPos = engine.TensorMultiplyScalar(
+                engine.TensorRemainder(
+                    engine.TensorArange<T>(0, dim, 1), Tensor<T>.CreateDefault([dim], NumOps.FromDouble(spatialTokens))),
+                NumOps.FromDouble(Math.PI / Math.Max(1, spatialTokens - 1)));
+            pooled = engine.TensorAdd(pooled, engine.TensorMultiplyScalar(engine.TensorSin(spatialPos), NumOps.FromDouble(0.01)));
         }
 
         // Step 4: Decode through LLM layers
