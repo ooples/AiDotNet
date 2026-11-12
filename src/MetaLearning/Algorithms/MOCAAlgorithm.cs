@@ -85,8 +85,7 @@ public partial class MOCAAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
         if (options.NumAugmentedTasks < 0)
             throw new ArgumentOutOfRangeException(nameof(options), "NumAugmentedTasks must be non-negative.");
         _gradMean = new Vector<T>(_paramDim);
-        _gradVar = new Vector<T>(_paramDim);
-        for (int d = 0; d < _paramDim; d++) _gradVar[d] = NumOps.One;
+        _gradVar = Engine.Fill(_paramDim, NumOps.One);
     }
 
     /// <inheritdoc/>
@@ -103,8 +102,7 @@ public partial class MOCAAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
         foreach (var task in taskBatch.Tasks)
         {
             // === Original task adaptation ===
-            var adaptedOriginal = new Vector<T>(_paramDim);
-            for (int d = 0; d < _paramDim; d++) adaptedOriginal[d] = initParams[d];
+            var adaptedOriginal = initParams.Clone();
 
             Vector<T>? lastGrad = null;
             for (int step = 0; step < _algoOptions.AdaptationSteps; step++)
@@ -117,16 +115,13 @@ public partial class MOCAAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
             // Update gradient history
             if (lastGrad != null)
             {
-                double momentum = _algoOptions.HistoryMomentum;
-                for (int d = 0; d < _paramDim; d++)
-                {
-                    double gVal = NumOps.ToDouble(lastGrad[d]);
-                    double meanD = NumOps.ToDouble(_gradMean[d]);
-                    double varD = NumOps.ToDouble(_gradVar[d]);
-                    double diff = gVal - meanD;
-                    _gradMean[d] = NumOps.FromDouble(momentum * meanD + (1.0 - momentum) * gVal);
-                    _gradVar[d] = NumOps.FromDouble(momentum * varD + (1.0 - momentum) * diff * diff);
-                }
+                // EMA of the gradient and of its squared deviation from the previous mean
+                T momentum = NumOps.FromDouble(_algoOptions.HistoryMomentum);
+                T keep = NumOps.FromDouble(1.0 - _algoOptions.HistoryMomentum);
+                var g = lastGrad.Length == _paramDim ? lastGrad : lastGrad.GetSubVector(0, _paramDim);
+                var diff = Engine.Subtract(g, _gradMean);
+                _gradMean = Engine.Add(Engine.Multiply(_gradMean, momentum), Engine.Multiply(g, keep));
+                _gradVar = Engine.Add(Engine.Multiply(_gradVar, momentum), Engine.Multiply(Engine.Multiply(diff, diff), keep));
             }
 
             ParamModel.SetParameters(adaptedOriginal);
@@ -136,8 +131,7 @@ public partial class MOCAAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
             var augLosses = new List<T>();
             for (int aug = 0; aug < _algoOptions.NumAugmentedTasks; aug++)
             {
-                var adaptedAug = new Vector<T>(_paramDim);
-                for (int d = 0; d < _paramDim; d++) adaptedAug[d] = initParams[d];
+                var adaptedAug = initParams.Clone();
 
                 for (int step = 0; step < _algoOptions.AdaptationSteps; step++)
                 {
@@ -177,8 +171,7 @@ public partial class MOCAAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
     {
         if (task == null) throw new ArgumentNullException(nameof(task));
         var initParams = ParamModel.GetParameters();
-        var adaptedParams = new Vector<T>(_paramDim);
-        for (int d = 0; d < _paramDim; d++) adaptedParams[d] = initParams[d];
+        var adaptedParams = initParams.Clone();
 
         for (int step = 0; step < _algoOptions.AdaptationSteps; step++)
         {
