@@ -36,6 +36,12 @@ public enum TrainingObjectiveKind
     MultiTask,
 
     /// <summary>
+    /// A self-supervised objective defined on the input alone (for example masked prediction of quantized
+    /// targets among distractors); a supplied target is not used.
+    /// </summary>
+    SelfSupervised,
+
+    /// <summary>
     /// A symmetric contrastive (InfoNCE) objective aligns paired inputs from two modalities, as CLIP and CLAP
     /// train: the target is the second modality's batch, paired row by row with the input.
     /// </summary>

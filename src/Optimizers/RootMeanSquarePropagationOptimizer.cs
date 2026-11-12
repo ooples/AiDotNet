@@ -42,14 +42,14 @@ public partial class RootMeanSquarePropagationOptimizer<T, TInput, TOutput> : Gr
 {
     /// <summary>
     /// Describes the momentum-free, uncentered RMSProp update supported by the
-    /// fused kernel. The opt-in centered Graves variant remains on the eager
-    /// path because the fused kernel cannot represent its mean-gradient or velocity state.
+    /// fused kernel. The centered Graves variant, momentum, a nonzero InitialMeanSquare and the TensorFlow
+    /// epsilon stay on the eager path because the fused kernel cannot represent them.
     /// </summary>
     bool Fused.IFusedOptimizerSpec.TryGetFusedOptimizerConfig(out Fused.FusedOptimizerConfig config)
     {
         config = default;
         // The fused kernel's mean-square state starts at zero.
-        if (_options.UseAdaptiveLearningRate || _options.Centered || _options.InitialMeanSquare > 0.0)
+        if (_options.UseAdaptiveLearningRate || RequiresExtendedState || _options.InitialMeanSquare > 0.0)
         {
             return false;
         }
@@ -336,13 +336,13 @@ public partial class RootMeanSquarePropagationOptimizer<T, TInput, TOutput> : Gr
         {
             _squaredGradient = NewMeanSquare(parameters.Length);
             _meanGradient = _options.Centered ? new Vector<T>(parameters.Length) : Vector<T>.Empty();
-            _velocity = _options.Centered ? new Vector<T>(parameters.Length) : Vector<T>.Empty();
+            _velocity = RequiresExtendedState ? new Vector<T>(parameters.Length) : Vector<T>.Empty();
         }
 
         T decay = NumOps.FromDouble(_options.Decay);
         T oneMinusDecay = NumOps.FromDouble(1 - _options.Decay);
         T epsilon = NumOps.FromDouble(_options.Epsilon);
-        T momentum = CurrentMomentum;
+        T momentum = ActiveMomentum;
         T learningRate = CurrentLearningRate;
 
         var updatedParams = new Vector<T>(parameters.Length, skipZeroInit: true);
@@ -361,15 +361,23 @@ public partial class RootMeanSquarePropagationOptimizer<T, TInput, TOutput> : Gr
                 NumOps.Multiply(NumOps.Multiply(g, g), oneMinusDecay));
             sqGradSpan[i] = squaredGradient;
 
-            if (_options.Centered)
+            if (RequiresExtendedState)
             {
-                T meanGradient = NumOps.Add(
-                    NumOps.Multiply(meanGradSpan[i], decay),
-                    NumOps.Multiply(g, oneMinusDecay));
-                meanGradSpan[i] = meanGradient;
-                T variance = NumOps.Subtract(squaredGradient, NumOps.Multiply(meanGradient, meanGradient));
-                variance = MathHelper.Max(variance, NumOps.Zero);
-                T denominator = NumOps.Sqrt(NumOps.Add(variance, epsilon));
+                T denominator;
+                if (_options.Centered)
+                {
+                    T meanGradient = NumOps.Add(
+                        NumOps.Multiply(meanGradSpan[i], decay),
+                        NumOps.Multiply(g, oneMinusDecay));
+                    meanGradSpan[i] = meanGradient;
+                    T variance = NumOps.Subtract(squaredGradient, NumOps.Multiply(meanGradient, meanGradient));
+                    variance = MathHelper.Max(variance, NumOps.Zero);
+                    denominator = NumOps.Sqrt(NumOps.Add(variance, epsilon));
+                }
+                else
+                {
+                    denominator = Denominator(squaredGradient, epsilon);
+                }
                 T normalizedStep = NumOps.Divide(NumOps.Multiply(g, learningRate), denominator);
                 T velocity = NumOps.Add(NumOps.Multiply(velocitySpan[i], momentum), normalizedStep);
                 velocitySpan[i] = velocity;
@@ -386,6 +394,19 @@ public partial class RootMeanSquarePropagationOptimizer<T, TInput, TOutput> : Gr
         return updatedParams;
     }
 
+    /// <summary>Centering, momentum or the TensorFlow epsilon need the explicit per-parameter update; the GPU and
+    /// sparse kernels implement only the plain uncentered one. A non-zero InitialMeanSquare does not: every kernel
+    /// starts its state there.</summary>
+    private bool RequiresExtendedState => _options.Centered || _options.Momentum != 0 || _options.EpsilonInsideRoot;
+
+    /// <summary>The centered update's momentum is the optimizer's InitialMomentum (its historical behaviour); the
+    /// uncentered update's is <see cref="RootMeanSquarePropagationOptimizerOptions{T, TInput, TOutput}.Momentum"/>.</summary>
+    private T ActiveMomentum => _options.Centered ? CurrentMomentum : NumOps.FromDouble(_options.Momentum);
+
+    private T Denominator(T squaredGradient, T epsilon) => _options.EpsilonInsideRoot
+        ? NumOps.Sqrt(NumOps.Add(squaredGradient, epsilon))
+        : NumOps.Add(NumOps.Sqrt(squaredGradient), epsilon);
+
     // Per-parameter state for tape-based training. These dictionaries are also
     // captured by the optimizer's tape-state serializer.
     private readonly ConcurrentDictionary<Tensor<T>, Tensor<T>> _tapeSqGrad = new(TensorReferenceComparer<Tensor<T>>.Instance);
@@ -400,11 +421,11 @@ public partial class RootMeanSquarePropagationOptimizer<T, TInput, TOutput> : Gr
         T decay = NumOps.FromDouble(_options.Decay);
         T oneMinusDecay = NumOps.FromDouble(1 - _options.Decay);
         T epsilon = NumOps.FromDouble(_options.Epsilon);
-        T momentum = CurrentMomentum;
-        bool requiresExtendedState = _options.Centered;
+        T momentum = ActiveMomentum;
+        bool requiresExtendedState = RequiresExtendedState;
 
         // Existing GPU and sparse kernels implement only uncentered, momentum-free RMSProp.
-        bool gpuRmsProp = SupportsGpuUpdate
+        bool gpuRmsProp = !requiresExtendedState && SupportsGpuUpdate
             && typeof(T) == typeof(float)
             && AiDotNet.Tensors.Engines.AiDotNetEngine.Current is AiDotNet.Tensors.Engines.DirectGpuTensorEngine;
 
@@ -492,7 +513,7 @@ public partial class RootMeanSquarePropagationOptimizer<T, TInput, TOutput> : Gr
                     }
                     else
                     {
-                        denominator = NumOps.Add(NumOps.Sqrt(squaredGradient), epsilon);
+                        denominator = Denominator(squaredGradient, epsilon);
                     }
 
                     T normalizedStep = NumOps.Divide(NumOps.Multiply(g, CurrentLearningRate), denominator);

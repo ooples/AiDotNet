@@ -132,9 +132,9 @@ public class ElasticWeightConsolidation<T, TInput, TOutput> : ContinualLearningS
     [AiDotNet.Attributes.Buffer]
     private Vector<T>? _consolidatedParameters;
 
-    // Cached gradients for Fisher computation
+    // The current task's data; the Fisher is evaluated on it at the task's final parameters.
     [Scratch]
-    private readonly List<Vector<T>> _gradientCache;
+    private IDataset<T, TInput, TOutput>? _taskData;
 
     /// <summary>
     /// Initializes a new EWC strategy with default options.
@@ -168,12 +168,11 @@ public class ElasticWeightConsolidation<T, TInput, TOutput> : ContinualLearningS
         _numFisherSamples = opts.NumFisherSamples ?? 200;
         _useOnlineEWC = opts.UseOnlineEWC ?? false;
         _onlineDecayFactor = NumOps.FromDouble(opts.OnlineDecayFactor ?? 0.9);
-        _normalizeFisher = opts.NormalizeFisher ?? true;
+        _normalizeFisher = opts.NormalizeFisher ?? false;
         _minFisherValue = NumOps.FromDouble(opts.MinFisherValue ?? 1e-8);
 
         _taskParameters = new List<Vector<T>>();
         _taskFisherInfo = new List<Vector<T>>();
-        _gradientCache = new List<Vector<T>>();
     }
 
     /// <inheritdoc/>
@@ -202,10 +201,6 @@ public class ElasticWeightConsolidation<T, TInput, TOutput> : ContinualLearningS
             bytes += EstimateVectorMemory(_accumulatedFisher);
             bytes += EstimateVectorMemory(_consolidatedParameters);
 
-            // Gradient cache
-            foreach (var g in _gradientCache)
-                bytes += EstimateVectorMemory(g);
-
             return bytes;
         }
     }
@@ -213,8 +208,7 @@ public class ElasticWeightConsolidation<T, TInput, TOutput> : ContinualLearningS
     /// <inheritdoc/>
     public override void PrepareForTask(IFullModel<T, TInput, TOutput> model, IDataset<T, TInput, TOutput> taskData)
     {
-        // Clear gradient cache for the new task
-        _gradientCache.Clear();
+        _taskData = taskData;
 
         RecordMetric($"Task{TaskCount}_PrepareTime", DateTime.UtcNow);
     }
@@ -287,7 +281,7 @@ public class ElasticWeightConsolidation<T, TInput, TOutput> : ContinualLearningS
         {
             var diff = NumOps.Subtract(currentParams[i], _consolidatedParameters[i]);
             var squaredDiff = NumOps.Multiply(diff, diff);
-            var weightedDiff = NumOps.Multiply(_accumulatedFisher[i], squaredDiff);
+            var weightedDiff = NumOps.Multiply(NumOps.Multiply(_onlineDecayFactor, _accumulatedFisher[i]), squaredDiff);
             loss = NumOps.Add(loss, weightedDiff);
         }
 
@@ -296,21 +290,30 @@ public class ElasticWeightConsolidation<T, TInput, TOutput> : ContinualLearningS
     }
 
     /// <inheritdoc/>
-    public override Vector<T> AdjustGradients(Vector<T> gradients)
+    /// <remarks>Adds the gradient of the penalty (λ/2) Σ F_i (θ_i − θ*_i)², which is λ F_i (θ_i − θ*_i), summed over
+    /// previous tasks (Kirkpatrick et al. 2017, Eq. 3). Online EWC penalizes ½‖θ − θ*_(i−1)‖² weighted by γ F*_(i−1)
+    /// (Schwarz et al. 2018, Eq. 8), so its gradient is λ γ F* (θ − θ*).</remarks>
+    public override Vector<T> AdjustGradients(IFullModel<T, TInput, TOutput> model, Vector<T> gradients)
     {
-        // EWC doesn't adjust gradients directly - regularization loss adds gradient contribution
-        // through automatic differentiation/backpropagation
-
-        // Cache gradient for Fisher computation
-        _gradientCache.Add(CloneVector(gradients));
-
-        // Limit cache size
-        while (_gradientCache.Count > _numFisherSamples)
+        var anchors = _useOnlineEWC
+            ? (_accumulatedFisher is null || _consolidatedParameters is null
+                ? new List<(Vector<T> Fisher, Vector<T> Anchor)>()
+                : new List<(Vector<T> Fisher, Vector<T> Anchor)> { ((Vector<T>)Engine.Multiply(_accumulatedFisher, _onlineDecayFactor), _consolidatedParameters) })
+            : _taskFisherInfo.Zip(_taskParameters, (f, p) => (f, p)).ToList();
+        if (anchors.Count == 0)
+            return gradients;
+        var current = InterfaceGuard.Parameterizable(model).GetParameters();
+        if (current.Length != gradients.Length)
+            throw new ArgumentException($"Expected {current.Length} gradients (one per parameter), got {gradients.Length}.", nameof(gradients));
+        var adjusted = CloneVector(gradients);
+        foreach (var (fisher, anchor) in anchors)
         {
-            _gradientCache.RemoveAt(0);
+            if (anchor.Length != current.Length)
+                throw new InvalidOperationException($"Parameter dimension mismatch: current={current.Length}, anchor={anchor.Length}");
+            for (int i = 0; i < current.Length; i++)
+                adjusted[i] = NumOps.Add(adjusted[i], NumOps.Multiply(_lambda, NumOps.Multiply(fisher[i], NumOps.Subtract(current[i], anchor[i]))));
         }
-
-        return gradients;
+        return adjusted;
     }
 
     /// <inheritdoc/>
@@ -337,7 +340,7 @@ public class ElasticWeightConsolidation<T, TInput, TOutput> : ContinualLearningS
         }
 
         TaskCount++;
-        _gradientCache.Clear();
+        _taskData = null;
 
         // Record metrics
         RecordMetric($"Task{TaskCount}_FisherMean", ComputeMean(fisherInfo));
@@ -357,71 +360,40 @@ public class ElasticWeightConsolidation<T, TInput, TOutput> : ContinualLearningS
         }
         else
         {
-            // Update consolidated parameters: θ* = (γ·F_old·θ*_old + F_new·θ_new) / (γ·F_old + F_new)
-            // Update accumulated Fisher: F = γ·F_old + F_new
-
+            // Online EWC (Schwarz et al. 2018, "Progress & Compress", §4, Eq. 9): F*_i = γ F*_(i−1) + F_i, anchored at the
+            // parameters reached on the latest task.
             for (int i = 0; i < _accumulatedFisher.Length; i++)
-            {
-                var decayedOldFisher = NumOps.Multiply(_onlineDecayFactor, _accumulatedFisher[i]);
-                var newTotalFisher = NumOps.Add(decayedOldFisher, newFisher[i]);
-
-                // Weighted average of parameters
-                var weightedOld = NumOps.Multiply(decayedOldFisher, (_consolidatedParameters ?? throw new InvalidOperationException("_consolidatedParameters has not been initialized."))[i]);
-                var weightedNew = NumOps.Multiply(newFisher[i], currentParams[i]);
-                var numerator = NumOps.Add(weightedOld, weightedNew);
-
-                // Avoid division by zero
-                var safeDenom = NumOps.Add(newTotalFisher, _minFisherValue);
-                _consolidatedParameters[i] = NumOps.Divide(numerator, safeDenom);
-
-                // Update accumulated Fisher
-                _accumulatedFisher[i] = newTotalFisher;
-            }
+                _accumulatedFisher[i] = NumOps.Add(NumOps.Multiply(_onlineDecayFactor, _accumulatedFisher[i]), newFisher[i]);
+            _consolidatedParameters = CloneVector(currentParams);
         }
     }
 
     /// <summary>
-    /// Computes the diagonal Fisher Information Matrix from cached gradients.
+    /// The diagonal empirical Fisher at the current parameters: F_i = (1/N) Σ_n (∂L(x_n, y_n)/∂θ_i)² over up to
+    /// NumFisherSamples examples of the task, each gradient taken for one example (Kirkpatrick et al. 2017, §2.1).
     /// </summary>
     private Vector<T> ComputeFisherInformation(IFullModel<T, TInput, TOutput> model)
     {
+        var data = _taskData ?? throw new InvalidOperationException(
+            "EWC computes the Fisher on the task's data; call PrepareForTask with it before FinalizeTask.");
+        if (data.Count == 0)
+            throw new InvalidOperationException("EWC needs at least one example of the task to compute the Fisher.");
+        var gradientModel = InterfaceGuard.GradientComputable(model);
         int numParams = (int)InterfaceGuard.Parameterizable(model).ParameterCount;
+        int samples = Math.Min(Math.Max(1, _numFisherSamples), data.Count);
         var fisher = new Vector<T>(numParams);
-
-        // Initialize with minimum value
-        for (int i = 0; i < numParams; i++)
+        for (int n = 0; n < samples; n++)
         {
-            fisher[i] = _minFisherValue;
-        }
-
-        if (_gradientCache.Count == 0)
-        {
-            // No gradients cached - use uniform importance
+            int index = (int)((long)n * data.Count / samples);                       // evenly spread over the task
+            var g = gradientModel.ComputeGradients(data.GetInput(index), data.GetOutput(index), LossFunction);
+            if (g.Length != numParams)
+                throw new InvalidOperationException($"Expected {numParams} gradients, got {g.Length}.");
             for (int i = 0; i < numParams; i++)
-            {
-                fisher[i] = NumOps.FromDouble(1.0);
-            }
-            return fisher;
+                fisher[i] = NumOps.Add(fisher[i], NumOps.Multiply(g[i], g[i]));
         }
-
-        // Fisher Information = E[(gradient)^2]
-        // Empirical estimate using cached gradients
-        foreach (var gradient in _gradientCache)
-        {
-            for (int i = 0; i < Math.Min(numParams, gradient.Length); i++)
-            {
-                var squaredGrad = NumOps.Multiply(gradient[i], gradient[i]);
-                fisher[i] = NumOps.Add(fisher[i], squaredGrad);
-            }
-        }
-
-        // Average over samples
-        var sampleCount = NumOps.FromDouble(_gradientCache.Count);
+        var count = NumOps.FromDouble(samples);
         for (int i = 0; i < numParams; i++)
-        {
-            fisher[i] = NumOps.Divide(fisher[i], sampleCount);
-        }
-
+            fisher[i] = NumOps.Divide(fisher[i], count);
         return fisher;
     }
 
@@ -445,7 +417,7 @@ public class ElasticWeightConsolidation<T, TInput, TOutput> : ContinualLearningS
         _taskFisherInfo.Clear();
         _accumulatedFisher = null;
         _consolidatedParameters = null;
-        _gradientCache.Clear();
+        _taskData = null;
     }
 
     /// <inheritdoc/>

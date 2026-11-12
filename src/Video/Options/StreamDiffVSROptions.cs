@@ -1,214 +1,185 @@
-using AiDotNet.Enums;
 using AiDotNet.Models.Options;
 using AiDotNet.Onnx;
 
 namespace AiDotNet.Video.Options;
 
 /// <summary>
-/// Configuration options for the Stream-DiffVSR low-latency streaming video super-resolution model.
+/// Options for <see cref="Enhancement.StreamDiffVSR{T}"/>: the authors' released Stream-DiffVSR (jamichss/Stream-DiffVSR,
+/// Jamichsu/Stream-DiffVSR on the Hugging Face Hub).
 /// </summary>
 /// <remarks>
 /// <para>
-/// Stream-DiffVSR (Shiu et al., 2025, arXiv 2512.23709) achieves low-latency online video
-/// super-resolution through:
-/// - Auto-regressive temporal guidance (ARTG): warped previous HR output conditions current denoising
-/// - 4-step distilled denoiser: rollout-distilled from a 50-step SD x4 Upscaler
-/// - A Temporal Processor Module (TPM) after each spatial convolution in the decoder
-/// - Causal temporal conditioning: only looks at past frames, enabling streaming applications
+/// The defaults are the release's configuration: the four-step distilled UNet in the Stable Diffusion x4 upscaler's layout
+/// (widths 256, 512, 512, 1024, eight heads, 1024-wide text, <c>only_cross_attention</c> at the first three levels), the
+/// Auto-regressive Temporal Guidance ControlNet copied from it (conditioning widths 64, 128, 256), the temporal tiny
+/// autoencoder (TAESD-x4 with the Temporal Processor Module in its decoder), DDIM with v-prediction on the scaled-linear
+/// schedule at trailing timesteps, RAFT-large flows with twelve updates, and the ARTG stage's training recipe
+/// (<c>train/train_artg.sh</c>).
 /// </para>
-/// <para>
-/// Defaults below are the paper's own training settings (appendix C), so a caller who configures
-/// nothing reproduces the paper rather than an invented configuration. Every value remains settable.
-/// </para>
-/// <para>
-/// <b>For Beginners:</b> Stream-DiffVSR is designed for live video upscaling where you can't
-/// look at future frames. It uses a trick called "distillation" to reduce the number of
-/// processing steps from ~50 to just 4, making it fast enough for real-time streaming.
-/// </para>
+/// <para><b>For Beginners:</b> the defaults build the released model. Shrink the widths for experiments on modest
+/// hardware; every value stays settable.</para>
 /// </remarks>
 public class StreamDiffVSROptions : NeuralNetworkOptions
 {
-    /// <summary>
-    /// Initializes a new instance with default values.
-    /// </summary>
+    /// <summary>Creates the released configuration.</summary>
     public StreamDiffVSROptions()
     {
     }
 
-    /// <summary>
-    /// Initializes a new instance by copying from another instance.
-    /// </summary>
-    /// <param name="other">The options instance to copy from.</param>
-    /// <exception cref="ArgumentNullException">Thrown when other is null.</exception>
-    public StreamDiffVSROptions(StreamDiffVSROptions other)
+    /// <summary>Copies <paramref name="other"/>.</summary>
+    public StreamDiffVSROptions(StreamDiffVSROptions other) : base(other)
     {
         if (other == null)
             throw new ArgumentNullException(nameof(other));
 
-        Variant = other.Variant;
-        NumFeatures = other.NumFeatures;
-        NumDenoisingSteps = other.NumDenoisingSteps;
-        NumResBlocks = other.NumResBlocks;
-        TemporalRadius = other.TemporalRadius;
-        ScaleFactor = other.ScaleFactor;
-        LatentDim = other.LatentDim;
+        Seed = other.Seed;
+        BlockChannels = (int[])other.BlockChannels.Clone();
+        LayersPerBlock = other.LayersPerBlock;
+        AttentionHeads = other.AttentionHeads;
+        OnlyCrossAttention = (bool[])other.OnlyCrossAttention.Clone();
+        CrossAttentionDim = other.CrossAttentionDim;
+        PromptLength = other.PromptLength;
+        ConditioningChannels = (int[])other.ConditioningChannels.Clone();
+        ConditioningScale = other.ConditioningScale;
+        VaeChannels = other.VaeChannels;
+        EncoderBlocks = (int[])other.EncoderBlocks.Clone();
+        DecoderBlocks = (int[])other.DecoderBlocks.Clone();
+        SamplingSteps = other.SamplingSteps;
+        NumTrainTimesteps = other.NumTrainTimesteps;
+        BetaStart = other.BetaStart;
+        BetaEnd = other.BetaEnd;
+        FlowIterations = other.FlowIterations;
         ModelPath = other.ModelPath;
         OnnxOptions = other.OnnxOptions;
         LearningRate = other.LearningRate;
-        DropoutRate = other.DropoutRate;
-        WarmupSteps = other.WarmupSteps;
         AdamBeta1 = other.AdamBeta1;
         AdamBeta2 = other.AdamBeta2;
+        AdamEpsilon = other.AdamEpsilon;
         WeightDecay = other.WeightDecay;
-        LatentL2Weight = other.LatentL2Weight;
-        DistillLpipsWeight = other.DistillLpipsWeight;
-        DistillGanWeight = other.DistillGanWeight;
-        ReconstructionWeight = other.ReconstructionWeight;
-        DecoderLpipsWeight = other.DecoderLpipsWeight;
-        FlowWeight = other.FlowWeight;
-        DecoderGanWeight = other.DecoderGanWeight;
-        AdversarialWarmupIterations = other.AdversarialWarmupIterations;
-        DiscriminatorReceptiveField = other.DiscriminatorReceptiveField;
-        DiscriminatorFilters = other.DiscriminatorFilters;
+        MaxGradientNorm = other.MaxGradientNorm;
+        WarmupSteps = other.WarmupSteps;
+        LatentMseWeight = other.LatentMseWeight;
+        LpipsWeight = other.LpipsWeight;
+        GanWeight = other.GanWeight;
+        GanStartIteration = other.GanStartIteration;
+        DiscriminatorInterval = other.DiscriminatorInterval;
     }
 
-    #region Architecture
+    #region UNet and ARTG
 
-    /// <summary>Gets or sets the model variant.</summary>
-    public VideoModelVariant Variant { get; set; } = VideoModelVariant.Base;
+    /// <summary>The UNet's level widths (released: 256, 512, 512, 1024); each splits into 32 groups.</summary>
+    public int[] BlockChannels { get; set; } = { 256, 512, 512, 1024 };
 
-    /// <summary>Gets or sets the number of feature channels.</summary>
-    public int NumFeatures { get; set; } = 64;
+    /// <summary>The residual blocks per encoder level; the decoder has one more (released: 2).</summary>
+    public int LayersPerBlock { get; set; } = 2;
 
-    /// <summary>Gets or sets the number of denoising steps (distilled).</summary>
-    /// <remarks>Original diffusion uses ~50 steps; distillation reduces to 4.</remarks>
-    public int NumDenoisingSteps { get; set; } = 4;
+    /// <summary>The attention heads of every transformer (released <c>attention_head_dim</c>: 8).</summary>
+    public int AttentionHeads { get; set; } = 8;
 
-    /// <summary>Gets or sets the number of residual blocks in the denoiser.</summary>
-    public int NumResBlocks { get; set; } = 16;
+    /// <summary>Per level, whether both attentions read the text (released: true, true, true, false).</summary>
+    public bool[] OnlyCrossAttention { get; set; } = { true, true, true, false };
 
-    /// <summary>Gets or sets the temporal radius for causal conditioning (past frames only).</summary>
-    public int TemporalRadius { get; set; } = 3;
+    /// <summary>The text embedding's width (released: 1024, OpenCLIP ViT-H).</summary>
+    public int CrossAttentionDim { get; set; } = 1024;
 
-    /// <summary>Gets or sets the spatial upscaling factor.</summary>
-    public int ScaleFactor { get; set; } = 4;
+    /// <summary>The empty prompt's tokens (77).</summary>
+    public int PromptLength { get; set; } = 77;
 
-    /// <summary>Gets or sets the latent space dimension for the diffusion process.</summary>
-    public int LatentDim { get; set; } = 64;
+    /// <summary>The ARTG condition embedding's widths (released: 64, 128, 256).</summary>
+    public int[] ConditioningChannels { get; set; } = { 64, 128, 256 };
+
+    /// <summary>The scale on the ARTG residuals (released: 1).</summary>
+    public double ConditioningScale { get; set; } = 1.0;
+
+    #endregion
+
+    #region Temporal autoencoder
+
+    /// <summary>The tiny autoencoder's width (released: 64).</summary>
+    public int VaeChannels { get; set; } = 64;
+
+    /// <summary>The encoder's blocks per level (released: 1, 3, 3).</summary>
+    public int[] EncoderBlocks { get; set; } = { 1, 3, 3 };
+
+    /// <summary>The decoder's temporal blocks per level (released: 3, 3, 1).</summary>
+    public int[] DecoderBlocks { get; set; } = { 3, 3, 1 };
+
+    #endregion
+
+    #region Sampling
+
+    /// <summary>
+    /// The upscaling factor: the tiny autoencoder's compression, 2^(levels - 1) of <see cref="EncoderBlocks"/> (released: 4).
+    /// The condition embedding and the decoder must compress by the same factor.
+    /// </summary>
+    public int ScaleFactor => EncoderBlocks is { Length: > 0 } ? 1 << (EncoderBlocks.Length - 1) : 0;
+
+    /// <summary>The DDIM steps at trailing timesteps (released: 4).</summary>
+    public int SamplingSteps { get; set; } = 4;
+
+    /// <summary>The training schedule's timesteps (1000).</summary>
+    public int NumTrainTimesteps { get; set; } = 1000;
+
+    /// <summary>β at the first timestep of the scaled-linear schedule (1e-4).</summary>
+    public double BetaStart { get; set; } = 1e-4;
+
+    /// <summary>β at the last timestep (0.02).</summary>
+    public double BetaEnd { get; set; } = 0.02;
+
+    /// <summary>RAFT's flow updates (torchvision's <c>raft_large</c>: 12).</summary>
+    public int FlowIterations { get; set; } = 12;
 
     #endregion
 
     #region Model Loading
 
-    /// <summary>Gets or sets the path to the ONNX model file.</summary>
+    /// <summary>The ONNX model's path in inference mode.</summary>
     public string? ModelPath { get; set; }
 
-    /// <summary>Gets or sets the ONNX runtime options.</summary>
+    /// <summary>The ONNX runtime options.</summary>
     public OnnxModelOptions OnnxOptions { get; set; } = new();
 
     #endregion
 
     #region Training
 
-    /// <summary>
-    /// Gets or sets the learning rate. Default 5e-5 with a constant schedule, the value used for every
-    /// training stage in appendix C.
-    /// </summary>
+    /// <summary>AdamW's learning rate (released ARTG stage: 5e-5).</summary>
     public double LearningRate { get; set; } = 5e-5;
 
-    /// <summary>Gets or sets the dropout rate.</summary>
-    public double DropoutRate { get; set; } = 0.0;
-
-    /// <summary>Gets or sets the warmup steps for the learning rate schedule.</summary>
-    public int WarmupSteps { get; set; } = 5000;
-
-    /// <summary>Gets or sets AdamW's first moment decay. Default 0.9 (appendix C).</summary>
+    /// <summary>AdamW's β1 (0.9).</summary>
     public double AdamBeta1 { get; set; } = 0.9;
 
-    /// <summary>Gets or sets AdamW's second moment decay. Default 0.999 (appendix C).</summary>
+    /// <summary>AdamW's β2 (0.999).</summary>
     public double AdamBeta2 { get; set; } = 0.999;
 
-    /// <summary>Gets or sets AdamW's decoupled weight decay. Default 0.01 (appendix C).</summary>
-    public double WeightDecay { get; set; } = 0.01;
+    /// <summary>AdamW's ε (1e-8).</summary>
+    public double AdamEpsilon { get; set; } = 1e-8;
 
-    #endregion
+    /// <summary>AdamW's weight decay (1e-2).</summary>
+    public double WeightDecay { get; set; } = 1e-2;
 
-    #region Objective Weights
+    /// <summary>The gradient-norm clip (1); zero disables it.</summary>
+    public double MaxGradientNorm { get; set; } = 1.0;
 
-    /// <summary>
-    /// Gets or sets the weight on the latent MSE term of the rollout-distillation objective
-    /// (<c>||z_den - z_gt||^2</c>). Default 1.0 (appendix C.1).
-    /// </summary>
-    /// <remarks>
-    /// Rollout distillation applies its loss ONLY to the final denoised latent, not to random
-    /// intermediate timesteps, so that the training trajectory mirrors inference (section 3.2).
-    /// </remarks>
-    public double LatentL2Weight { get; set; } = 1.0;
+    /// <summary>The linear warmup before the constant rate (<c>constant_with_warmup</c>, 1000 steps).</summary>
+    public int WarmupSteps { get; set; } = 1000;
 
-    /// <summary>
-    /// Gets or sets the perceptual (LPIPS) weight for the distillation objective. Default 0.5
-    /// (appendix C.1).
-    /// </summary>
-    public double DistillLpipsWeight { get; set; } = 0.5;
+    /// <summary>The weight of the latent v-prediction MSE (1).</summary>
+    public double LatentMseWeight { get; set; } = 1.0;
+
+    /// <summary>The weight of LPIPS on the decoded frame (0.1); zero leaves AlexNet out.</summary>
+    public double LpipsWeight { get; set; } = 0.1;
+
+    /// <summary>The adversarial weight (0.025); zero leaves the discriminator out.</summary>
+    public double GanWeight { get; set; } = 0.025;
 
     /// <summary>
-    /// Gets or sets the adversarial weight for the distillation objective. Default 0.025
-    /// (appendix C.1).
+    /// The step from which the adversarial term counts (the paper's 20k; the release's ARTG script passes 2000).
     /// </summary>
-    public double DistillGanWeight { get; set; } = 0.025;
+    public int GanStartIteration { get; set; } = 20_000;
 
-    /// <summary>
-    /// Gets or sets the SmoothL1 reconstruction weight for the temporal-decoder objective.
-    /// Default 1.0 (appendix C.2).
-    /// </summary>
-    public double ReconstructionWeight { get; set; } = 1.0;
-
-    /// <summary>
-    /// Gets or sets the perceptual (LPIPS) weight for the temporal-decoder objective. Default 0.3
-    /// (appendix C.2).
-    /// </summary>
-    public double DecoderLpipsWeight { get; set; } = 0.3;
-
-    /// <summary>
-    /// Gets or sets the optical-flow consistency weight for the temporal-decoder objective.
-    /// Default 0.1 (appendix C.2). The paper computes this term with RAFT.
-    /// </summary>
-    public double FlowWeight { get; set; } = 0.1;
-
-    /// <summary>
-    /// Gets or sets the adversarial weight for the temporal-decoder objective. Default 0.025
-    /// (appendix C.2).
-    /// </summary>
-    public double DecoderGanWeight { get; set; } = 0.025;
-
-    /// <summary>
-    /// Gets or sets the iteration after which the adversarial and flow terms are enabled.
-    /// Default 20,000: "Flow loss and adversarial loss are envolved after 20k iteration for training
-    /// stabilization" (appendix C.1/C.2).
-    /// </summary>
-    /// <remarks>
-    /// Enabling a discriminator against an untrained generator destabilizes both, so the paper trains
-    /// on reconstruction and perceptual terms alone first. Set to 0 to enable them immediately.
-    /// </remarks>
-    public int AdversarialWarmupIterations { get; set; } = 20_000;
-
-    #endregion
-
-    #region Discriminator
-
-    /// <summary>
-    /// Gets or sets the receptive field of the PatchGAN discriminator used for the adversarial terms.
-    /// Default 70x70, the size pix2pix (Isola et al., 2017) reports as its best setting and the one
-    /// Stream-DiffVSR cites.
-    /// </summary>
-    public PatchGANReceptiveField DiscriminatorReceptiveField { get; set; }
-        = PatchGANReceptiveField.Patch70x70;
-
-    /// <summary>
-    /// Gets or sets the PatchGAN's first-block filter count. Default 64 (the "C64" of pix2pix
-    /// section 6.1.2).
-    /// </summary>
-    public int DiscriminatorFilters { get; set; } = 64;
+    /// <summary>The discriminator trains, and the adversarial term applies, on every this many steps (5).</summary>
+    public int DiscriminatorInterval { get; set; } = 5;
 
     #endregion
 }

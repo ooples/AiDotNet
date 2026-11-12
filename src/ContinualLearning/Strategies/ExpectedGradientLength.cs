@@ -214,7 +214,7 @@ public class ExpectedGradientLength<T, TInput, TOutput> : ContinualLearningStrat
     }
 
     /// <inheritdoc/>
-    public override Vector<T> AdjustGradients(Vector<T> gradients)
+    public override Vector<T> AdjustGradients(IFullModel<T, TInput, TOutput> model, Vector<T> gradients)
     {
         // Accumulate gradient lengths
         if (_gradientLengthSum != null && _gradientCount < _numSamples)

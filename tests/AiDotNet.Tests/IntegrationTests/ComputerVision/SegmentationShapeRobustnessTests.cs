@@ -382,7 +382,13 @@ public class SegmentationShapeRobustnessTests : IDisposable
     [InlineData(new[] { 1, 3, 32, 32 })]
     public void EfficientTAM_Predict_DifferentRanks_ReturnsOutput(int[] shape)
     {
-        var model = new EfficientTAM<float>(Arch(), options: new EfficientTAMOptions { NumClasses = 5, ModelSize = EfficientTAMModelSize.Small });
+        var model = new EfficientTAM<float>(Arch(), options: new EfficientTAMOptions
+        {
+            ModelSize = EfficientTAMModelSize.Small, ImageSize = 32, VitEmbeddingDimension = 16, VitDepth = 2, VitHeadCount = 2, VitWindowSize = 2,
+            VitGlobalAttentionBlockIndexes = new[] { 1 }, ModelDimension = 32, MemoryDimension = 16, DecoderHeadCount = 2,
+            MaskDecoderMlpDimension = 32, MemoryAttentionLayerCount = 1, MemoryAttentionFeedForwardDimension = 32, MemoryFuserDimension = 32,
+            CorrectionPoints = 1,
+        });
         var output = model.Predict(Rand(shape));
         Assert.NotNull(output);
         Assert.True(output.Length > 0);
