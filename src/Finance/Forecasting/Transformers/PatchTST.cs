@@ -1361,13 +1361,25 @@ public partial class PatchTST<T> : ForecastingModelBase<T>
             _instanceMean = CalculateInstanceMean(input);
             _instanceStd = CalculateInstanceStd(input, _instanceMean);
 
-            for (int i = 0; i < input.Length; i++)
+            // (x - mean[i % F]) / (std[i % F] + eps) over the full feature rows and the partial tail row.
+            using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+            var (rows, tail) = FeatureRows(input);
+            var denominator = Engine.TensorAddScalar(_instanceStd, epsilon);
+            var rowShape = rows._shape;
+            var normalizedRows = Engine.TensorDivide(
+                Engine.TensorSubtract(rows, Engine.TensorBroadcastTo(Engine.Reshape(_instanceMean, new[] { 1, NumFeatures }), rowShape)),
+                Engine.TensorBroadcastTo(Engine.Reshape(denominator, new[] { 1, NumFeatures }), rowShape));
+            var flatResult = Engine.Reshape(normalizedRows, new[] { normalizedRows.Length });
+            if (tail is not null)
             {
-                int statIdx = i % NumFeatures;
-                T centered = NumOps.Subtract(input.Data.Span[i], _instanceMean.Data.Span[statIdx]);
-                T stdVal = NumOps.Add(_instanceStd.Data.Span[statIdx], epsilon);
-                result.Data.Span[i] = NumOps.Divide(centered, stdVal);
+                int tailLength = tail.Length;
+                var normalizedTail = Engine.TensorDivide(
+                    Engine.TensorSubtract(tail, Engine.TensorNarrow(_instanceMean, 0, 0, tailLength).Contiguous()),
+                    Engine.TensorNarrow(denominator, 0, 0, tailLength).Contiguous());
+                flatResult = Engine.TensorConcatenate(new[] { flatResult, normalizedTail }, 0);
             }
+
+            result = Engine.Reshape(flatResult, input._shape);
         }
         else
         {
@@ -1403,20 +1415,13 @@ public partial class PatchTST<T> : ForecastingModelBase<T>
     /// </remarks>
     private Tensor<T> CalculateInstanceMean(Tensor<T> input)
     {
-        var mean = new T[NumFeatures];
         int samplesPerFeature = input.Length / NumFeatures;
 
-        for (int f = 0; f < NumFeatures; f++)
-        {
-            T sum = NumOps.Zero;
-            for (int i = f; i < input.Length; i += NumFeatures)
-            {
-                sum = NumOps.Add(sum, input.Data.Span[i]);
-            }
-            mean[f] = NumOps.Divide(sum, NumOps.FromDouble(samplesPerFeature));
-        }
-
-        return new Tensor<T>(new[] { NumFeatures }, new Vector<T>(mean));
+        // Element i belongs to feature i % F: sum the full rows, then the partial tail row.
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        var (rows, tail) = FeatureRows(input);
+        var sum = AddFeatureTail(Engine.ReduceSum(rows, new[] { 0 }, false), tail);
+        return Engine.TensorDivideScalar(sum, NumOps.FromDouble(samplesPerFeature));
     }
 
     /// <summary>
@@ -1442,22 +1447,41 @@ public partial class PatchTST<T> : ForecastingModelBase<T>
     /// </remarks>
     private Tensor<T> CalculateInstanceStd(Tensor<T> input, Tensor<T> mean)
     {
-        var std = new T[NumFeatures];
         int samplesPerFeature = input.Length / NumFeatures;
 
-        for (int f = 0; f < NumFeatures; f++)
-        {
-            T sumSq = NumOps.Zero;
-            for (int i = f; i < input.Length; i += NumFeatures)
-            {
-                T diff = NumOps.Subtract(input.Data.Span[i], mean.Data.Span[f]);
-                sumSq = NumOps.Add(sumSq, NumOps.Multiply(diff, diff));
-            }
-            T variance = NumOps.Divide(sumSq, NumOps.FromDouble(samplesPerFeature));
-            std[f] = NumOps.Sqrt(variance);
-        }
+        // Population std per feature (element i belongs to feature i % F), full rows then the tail row.
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        var (rows, tail) = FeatureRows(input);
+        var centered = Engine.TensorSubtract(rows, Engine.TensorBroadcastTo(Engine.Reshape(mean, new[] { 1, NumFeatures }), rows._shape));
+        Tensor<T>? centeredTail = tail is null
+            ? null
+            : Engine.TensorSubtract(tail, Engine.TensorNarrow(mean, 0, 0, tail.Length).Contiguous());
+        var sumSq = AddFeatureTail(
+            Engine.ReduceSum(Engine.TensorMultiply(centered, centered), new[] { 0 }, false),
+            centeredTail is null ? null : Engine.TensorMultiply(centeredTail, centeredTail));
+        return Engine.TensorSqrt(Engine.TensorDivideScalar(sumSq, NumOps.FromDouble(samplesPerFeature)));
+    }
 
-        return new Tensor<T>(new[] { NumFeatures }, new Vector<T>(std));
+    /// <summary>The flat input as full [rows, F] feature rows plus the trailing partial row, if any.</summary>
+    private (Tensor<T> Rows, Tensor<T>? Tail) FeatureRows(Tensor<T> input)
+    {
+        int rowCount = input.Length / NumFeatures;
+        int tailLength = input.Length - rowCount * NumFeatures;
+        var flat = Engine.Reshape(input.Contiguous(), new[] { input.Length });
+        var rows = rowCount > 0
+            ? Engine.Reshape(Engine.TensorNarrow(flat, 0, 0, rowCount * NumFeatures), new[] { rowCount, NumFeatures })
+            : new Tensor<T>(new[] { 0, NumFeatures });
+        return (rows, tailLength > 0 ? Engine.TensorNarrow(flat, 0, rowCount * NumFeatures, tailLength).Contiguous() : null);
+    }
+
+    /// <summary>Adds a partial tail row (features 0..tail-1) to per-feature totals.</summary>
+    private Tensor<T> AddFeatureTail(Tensor<T> totals, Tensor<T>? tail)
+    {
+        if (tail is null) return totals;
+        var padded = tail.Length == NumFeatures
+            ? tail
+            : Engine.TensorConcatenate(new[] { tail, new Tensor<T>(new[] { NumFeatures - tail.Length }) }, 0);
+        return Engine.TensorAdd(totals, padded);
     }
 
     /// <summary>

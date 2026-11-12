@@ -966,24 +966,18 @@ public partial class TimesNet<T> : ForecastingModelBase<T>
             if (_instanceMean is null || _instanceStd is null)
                 return input;
 
-            var denormalized = new Tensor<T>(input._shape);
             int batchSize = input.Shape[0];
             int horizonLen = input.Shape[1];
             int features = input.Shape[2];
 
-            for (int b = 0; b < batchSize; b++)
-            {
-                for (int t = 0; t < horizonLen; t++)
-                {
-                    for (int f = 0; f < features; f++)
-                    {
-                        var scaled = NumOps.Multiply(input[b, t, f], _instanceStd[b, 0, f]);
-                        denormalized[b, t, f] = NumOps.Add(scaled, _instanceMean[b, 0, f]);
-                    }
-                }
-            }
-
-            return denormalized;
+            // x * std + mean with the (batch, feature) statistics broadcast over time (detached, as before).
+            using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+            var shape = new[] { batchSize, horizonLen, features };
+            var statShape = new[] { batchSize, 1, features };
+            var std = Engine.TensorBroadcastTo(Engine.TensorSlice(_instanceStd, new[] { 0, 0, 0 }, statShape), shape);
+            var mean = Engine.TensorBroadcastTo(Engine.TensorSlice(_instanceMean, new[] { 0, 0, 0 }, statShape), shape);
+            var x = Engine.Reshape(input.Contiguous(), shape);
+            return Engine.Reshape(Engine.TensorAdd(Engine.TensorMultiply(x, std), mean), input._shape);
         }
     }
 
