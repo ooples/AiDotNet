@@ -42236,4 +42236,25 @@
     <Right>lib/net8.0/AiDotNet.dll</Right>
     <IsBaselineSuppression>true</IsBaselineSuppression>
   </Suppression>
+  <Suppression>
+    <DiagnosticId>CP0002</DiagnosticId>
+    <Target>M:AiDotNet.NeuralNetworks.Layers.MixtureOfExpertsLayer`1.#ctor(System.Collections.Generic.List{AiDotNet.Interfaces.ILayer{`0}},AiDotNet.Interfaces.ILayer{`0},System.Int32[],System.Int32[],System.Int32,AiDotNet.Interfaces.IActivationFunction{`0},System.Boolean,`0)</Target>
+    <Left>lib/net10.0/AiDotNet.dll</Left>
+    <Right>lib/net10.0/AiDotNet.dll</Right>
+    <IsBaselineSuppression>true</IsBaselineSuppression>
+  </Suppression>
+  <Suppression>
+    <DiagnosticId>CP0002</DiagnosticId>
+    <Target>M:AiDotNet.NeuralNetworks.Layers.MixtureOfExpertsLayer`1.#ctor(System.Collections.Generic.List{AiDotNet.Interfaces.ILayer{`0}},AiDotNet.Interfaces.ILayer{`0},System.Int32[],System.Int32[],System.Int32,AiDotNet.Interfaces.IActivationFunction{`0},System.Boolean,`0)</Target>
+    <Left>lib/net471/AiDotNet.dll</Left>
+    <Right>lib/net471/AiDotNet.dll</Right>
+    <IsBaselineSuppression>true</IsBaselineSuppression>
+  </Suppression>
+  <Suppression>
+    <DiagnosticId>CP0002</DiagnosticId>
+    <Target>M:AiDotNet.NeuralNetworks.Layers.MixtureOfExpertsLayer`1.#ctor(System.Collections.Generic.List{AiDotNet.Interfaces.ILayer{`0}},AiDotNet.Interfaces.ILayer{`0},System.Int32[],System.Int32[],System.Int32,AiDotNet.Interfaces.IActivationFunction{`0},System.Boolean,`0)</Target>
+    <Left>lib/net8.0/AiDotNet.dll</Left>
+    <Right>lib/net8.0/AiDotNet.dll</Right>
+    <IsBaselineSuppression>true</IsBaselineSuppression>
+  </Suppression>
 </Suppressions>
