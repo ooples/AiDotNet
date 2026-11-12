@@ -181,24 +181,32 @@ public partial class SImPaAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
     /// </remarks>
     private IReadOnlyList<Vector<T>> SamplePrior(int count)
     {
+        // Box-Muller; a uniform prior would make the log-term in the bound meaningless. Two NextDouble per
+        // entry (u1 then u2), sample by sample, in order; the loop only stores the draws.
+        var draws = new Vector<T>(2 * count * _paramDim);
+        for (int i = 0; i < draws.Length; i++)
+            draws[i] = NumOps.FromDouble(_rng.NextDouble());
+        var normals = Engine.Multiply(BoxMuller(draws), NumOps.FromDouble(_algoOptions.PriorStdDev));
+
         var samples = new List<Vector<T>>(count);
-        double sigma = _algoOptions.PriorStdDev;
-
         for (int s = 0; s < count; s++)
-        {
-            var v = new Vector<T>(_paramDim);
-            for (int d = 0; d < _paramDim; d++)
-            {
-                // Box-Muller; a uniform prior would make the log-term in the bound meaningless.
-                double u1 = Math.Max(1e-12, _rng.NextDouble());
-                double u2 = _rng.NextDouble();
-                double g = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2);
-                v[d] = NumOps.FromDouble(g * sigma);
-            }
-            samples.Add(v);
-        }
-
+            samples.Add(normals.GetSubVector(s * _paramDim, _paramDim));
         return samples;
+    }
+
+    /// <summary>
+    /// Box-Muller over interleaved uniform pairs (u1, u2): <c>sqrt(-2 ln max(u1, 1e-12)) cos(2 pi u2)</c>,
+    /// one standard normal per pair.
+    /// </summary>
+    private Vector<T> BoxMuller(Vector<T> interleavedUniforms)
+    {
+        int n = interleavedUniforms.Length / 2;
+        var pairs = Tensor<T>.FromVector(interleavedUniforms, new[] { n, 2 });
+        var u1 = Engine.TensorMax(Engine.TensorSlice(pairs, new[] { 0, 0 }, new[] { n, 1 }), NumOps.FromDouble(1e-12));
+        var u2 = Engine.TensorSlice(pairs, new[] { 0, 1 }, new[] { n, 1 });
+        var radius = Engine.TensorSqrt(Engine.TensorMultiplyScalar(Engine.TensorLog(u1), NumOps.FromDouble(-2.0)));
+        var angle = Engine.TensorCos(Engine.TensorMultiplyScalar(u2, NumOps.FromDouble(2.0 * Math.PI)));
+        return Engine.TensorMultiply(radius, angle).Reshape(new[] { n }).ToVector();
     }
 
     /// <inheritdoc/>
@@ -263,14 +271,7 @@ public partial class SImPaAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
 
                 // Step 9's empirical term: the QUERY loss under samples from the adapted posterior.
                 var posteriorSamples = Posterior.SampleMany(_algoOptions.TrainingPosteriorSamples, _rng);
-                double taskLoss = 0.0;
-                foreach (var w in posteriorSamples)
-                {
-                    ParamModel.SetParameters(w);
-                    taskLoss += NumOps.ToDouble(
-                        ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput));
-                }
-                queryLosses.Add(taskLoss / posteriorSamples.Count);
+                queryLosses.Add(MeanLoss(posteriorSamples, task.QueryInput, task.QueryOutput));
 
                 if (validationSampleCount == 0) validationSampleCount = CountSamples(task.QueryOutput);
             }
@@ -312,27 +313,15 @@ public partial class SImPaAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
     /// <summary>Draws <c>theta ~ N(psi, sigma_0 I)</c> — eq. 9, Algorithm 1 line 5.</summary>
     private Vector<T> SampleMetaParameter()
     {
-        double sigma = _algoOptions.MetaPosteriorStdDev;
-        var theta = new Vector<T>(_psi.Length);
-
-        for (int i = 0; i < _psi.Length; i++)
-        {
-            double u1 = Math.Max(1e-12, _rng.NextDouble());
-            double u2 = _rng.NextDouble();
-            double g = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2);
-            theta[i] = NumOps.FromDouble(NumOps.ToDouble(_psi[i]) + (g * sigma));
-        }
-
-        return theta;
+        // Box-Muller: two NextDouble per entry (u1 then u2), in order; the loop only stores the draws.
+        var draws = new Vector<T>(2 * _psi.Length);
+        for (int i = 0; i < draws.Length; i++)
+            draws[i] = NumOps.FromDouble(_rng.NextDouble());
+        return Engine.Add(_psi, Engine.Multiply(BoxMuller(draws), NumOps.FromDouble(_algoOptions.MetaPosteriorStdDev)));
     }
 
     /// <summary>Elementwise <c>from - baseline</c>.</summary>
-    private Vector<T> Difference(Vector<T> from, Vector<T> baseline)
-    {
-        var difference = new Vector<T>(from.Length);
-        for (int i = 0; i < from.Length; i++) difference[i] = NumOps.Subtract(from[i], baseline[i]);
-        return difference;
-    }
+    private Vector<T> Difference(Vector<T> from, Vector<T> baseline) => Engine.Subtract(from, baseline);
 
     /// <summary>
     /// Algorithm 1 lines 12 and 13: <c>psi</c> by descent on the average Theorem 2 bound, <c>phi_0</c> by
@@ -374,32 +363,19 @@ public partial class SImPaAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
                 }
             }
 
+            // psi + rate (direction - pull psi) = (1 - rate pull) psi + rate direction.
             double rate = _algoOptions.OuterLearningRate;
-            var next = new Vector<T>(_psi.Length);
-            for (int i = 0; i < _psi.Length; i++)
-            {
-                double psi = NumOps.ToDouble(_psi[i]);
-                next[i] = NumOps.FromDouble(psi + (rate * (NumOps.ToDouble(direction[i]) - (pull * psi))));
-            }
-
-            _psi = next;
+            _psi = Engine.Add(
+                Engine.Multiply(_psi, NumOps.FromDouble(1.0 - (rate * pull))),
+                Engine.Multiply(direction, NumOps.FromDouble(rate)));
             Posterior.SetParameters(_psi);
         }
 
         if (phiDirections.Count > 0)
         {
             var direction = AverageVectors(phiDirections);
-            double rate = _algoOptions.PhiMetaLearningRate;
-            var next = new Vector<T>(_phiZero.Length);
-
-            for (int i = 0; i < _phiZero.Length; i++)
-            {
-                // ASCENT: line 13 is SGA, because phi_0 initialises a MAXIMISATION.
-                next[i] = NumOps.FromDouble(
-                    NumOps.ToDouble(_phiZero[i]) + (rate * NumOps.ToDouble(direction[i])));
-            }
-
-            _phiZero = next;
+            // ASCENT: line 13 is SGA, because phi_0 initialises a MAXIMISATION.
+            _phiZero = Engine.Add(_phiZero, Engine.Multiply(direction, NumOps.FromDouble(_algoOptions.PhiMetaLearningRate)));
             KLEstimator.SetParameters(_phiZero);
         }
     }
@@ -418,38 +394,27 @@ public partial class SImPaAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
     private Vector<T> AdaptGeneratorToTask(
         Vector<T> lambda, IMetaLearningTask<T, TInput, TOutput> task, int steps)
     {
-        var current = new Vector<T>(lambda.Length);
-        for (int i = 0; i < lambda.Length; i++) current[i] = lambda[i];
-
+        var current = lambda.Clone();
         double best = SupportLossFor(current, task);
+        T plusOne = NumOps.One;
+        T minusOne = NumOps.Negate(NumOps.One);
 
         for (int step = 0; step < steps; step++)
         {
             double c = Math.Max(1e-4, _algoOptions.InnerLearningRate);
-            var delta = new double[current.Length];
-            var plus = new Vector<T>(current.Length);
-            var minus = new Vector<T>(current.Length);
 
+            // Rademacher directions: one NextDouble per weight, in order; the loop only stores them.
+            var delta = new Vector<T>(current.Length);
             for (int i = 0; i < current.Length; i++)
-            {
-                delta[i] = _rng.NextDouble() < 0.5 ? -1.0 : 1.0;
-                double w = NumOps.ToDouble(current[i]);
-                plus[i] = NumOps.FromDouble(w + (c * delta[i]));
-                minus[i] = NumOps.FromDouble(w - (c * delta[i]));
-            }
+                delta[i] = _rng.NextDouble() < 0.5 ? minusOne : plusOne;
 
-            double fPlus = SupportLossFor(plus, task);
-            double fMinus = SupportLossFor(minus, task);
+            double fPlus = SupportLossFor(Along(current, delta, c), task);
+            double fMinus = SupportLossFor(Along(current, delta, -c), task);
             if (double.IsNaN(fPlus) || double.IsNaN(fMinus)) continue;
 
+            // DESCENT on the support loss. With delta_i = +/-1, the SPSA gradient scale / delta_i is scale * delta_i.
             double scale = (fPlus - fMinus) / (2.0 * c);
-            var candidate = new Vector<T>(current.Length);
-            for (int i = 0; i < current.Length; i++)
-            {
-                // DESCENT on the support loss.
-                double g = scale / delta[i];
-                candidate[i] = NumOps.FromDouble(NumOps.ToDouble(current[i]) - (_algoOptions.InnerLearningRate * g));
-            }
+            var candidate = Along(current, delta, -_algoOptions.InnerLearningRate * scale);
 
             double value = SupportLossFor(candidate, task);
             if (double.IsNaN(value) || value >= best) continue;
@@ -461,18 +426,28 @@ public partial class SImPaAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
         return current;
     }
 
+    /// <summary><c>origin + coefficient * direction</c>.</summary>
+    private Vector<T> Along(Vector<T> origin, Vector<T> direction, double coefficient)
+        => Engine.Add(origin, Engine.Multiply(direction, NumOps.FromDouble(coefficient)));
+
     private double SupportLossFor(Vector<T> lambda, IMetaLearningTask<T, TInput, TOutput> task)
     {
         Posterior.SetParameters(lambda);
         var samples = Posterior.SampleMany(_algoOptions.TrainingPosteriorSamples, _rng);
+        return MeanLoss(samples, task.SupportInput, task.SupportOutput);
+    }
 
-        double total = 0.0;
-        foreach (var w in samples)
+    /// <summary>The base model's loss on (x, y), averaged over the given parameter samples.</summary>
+    private double MeanLoss(IReadOnlyList<Vector<T>> parameterSamples, TInput x, TOutput y)
+    {
+        var losses = new List<T>(parameterSamples.Count);
+        foreach (var w in parameterSamples)
         {
             ParamModel.SetParameters(w);
-            total += NumOps.ToDouble(ComputeLossFromOutput(MetaModel.Predict(task.SupportInput), task.SupportOutput));
+            losses.Add(ComputeLossFromOutput(MetaModel.Predict(x), y));
         }
-        return total / samples.Count;
+
+        return NumOps.ToDouble(Engine.Mean(new Vector<T>(losses.ToArray())));
     }
 
     /// <inheritdoc/>
@@ -497,13 +472,9 @@ public partial class SImPaAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
         Posterior.SetParameters(taskLambda);
         var samples = Posterior.SampleMany(_algoOptions.AdaptationPosteriorSamples, _rng);
 
-        var mean = new Vector<T>(_paramDim);
-        for (int d = 0; d < _paramDim; d++)
-        {
-            double sum = 0.0;
-            for (int s = 0; s < samples.Count; s++) sum += NumOps.ToDouble(samples[s][d]);
-            mean[d] = NumOps.FromDouble(sum / samples.Count);
-        }
+        var stacked = Tensor<T>.FromVector(
+            Vector<T>.Concatenate(new List<Vector<T>>(samples)), new[] { samples.Count, _paramDim });
+        var mean = Engine.ReduceMean(stacked, new[] { 0 }, keepDims: false).ToVector();
 
         Posterior.SetParameters(_psi);
         ParamModel.SetParameters(metaParams);
@@ -563,12 +534,7 @@ public partial class SImPaAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
         double vq = sigmaQ * sigmaQ;
         double vp = sigmaP * sigmaP;
 
-        double squaredNorm = 0.0;
-        for (int d = 0; d < mean.Length; d++)
-        {
-            double m = NumOps.ToDouble(mean[d]);
-            squaredNorm += m * m;
-        }
+        double squaredNorm = NumOps.ToDouble(Engine.DotProduct(mean, mean));
 
         // Per-dimension: 0.5 * (vq/vp + mu^2/vp - 1 + ln(vp/vq)).
         int k = mean.Length;
