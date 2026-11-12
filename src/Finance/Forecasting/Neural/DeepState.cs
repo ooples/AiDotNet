@@ -783,10 +783,7 @@ public partial class DeepState<T> : ForecastingModelBase<T>
             throw new InvalidOperationException("ONNX session is not initialized.");
 
         var inputData = new float[input.Length];
-        for (int i = 0; i < input.Length; i++)
-        {
-            inputData[i] = Convert.ToSingle(NumOps.ToDouble(input.Data.Span[i]));
-        }
+        NumOps.ToFloatSpan(input.Data.Span.Slice(0, input.Length), inputData.AsSpan(0, input.Length));
 
         var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input._shape);
 
@@ -840,10 +837,7 @@ public partial class DeepState<T> : ForecastingModelBase<T>
 
         var outputShape = outputTensor.Dimensions.ToArray();
         var outputData = new T[outputTensor.Length];
-        for (int i = 0; i < outputTensor.Length; i++)
-        {
-            outputData[i] = NumOps.FromDouble(outputTensor.GetValue(i));
-        }
+        NumOps.FromFloatSpan(outputTensor.ToDenseTensor().Buffer.Span.Slice(0, outputTensor.Length), outputData.AsSpan(0, outputTensor.Length));
 
         return new Tensor<T>(outputShape, new Vector<T>(outputData));
     }

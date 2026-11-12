@@ -552,8 +552,7 @@ public partial class TimeMoE<T> : TimeSeriesFoundationModelBase<T>
         int features = input.Rank > 2 ? input.Shape[2] : 1;
 
         var inputData = new float[batchSize * seqLen * features];
-        for (int i = 0; i < input.Length && i < inputData.Length; i++)
-            inputData[i] = (float)NumOps.ToDouble(input[i]);
+        NumOps.ToFloatSpan(input.AsSpan().Slice(0, Math.Min(input.Length, inputData.Length)), inputData.AsSpan(0, Math.Min(input.Length, inputData.Length)));
 
         var inputTensor = new OnnxTensors.DenseTensor<float>(
             inputData, new[] { batchSize, seqLen, features });
@@ -570,8 +569,7 @@ public partial class TimeMoE<T> : TimeSeriesFoundationModelBase<T>
         var output = new Tensor<T>(outputShape);
         int totalElements = 1;
         foreach (var dim in outputShape) totalElements *= dim;
-        for (int i = 0; i < totalElements && i < output.Length; i++)
-            output.Data.Span[i] = NumOps.FromDouble(outputTensor.GetValue(i));
+        NumOps.FromFloatSpan(outputTensor.ToDenseTensor().Buffer.Span.Slice(0, Math.Min(totalElements, output.Length)), output.Data.Span.Slice(0, Math.Min(totalElements, output.Length)));
         return output;
     }
 

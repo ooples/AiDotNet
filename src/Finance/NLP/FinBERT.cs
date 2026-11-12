@@ -784,10 +784,7 @@ public partial class FinBERT<T> : FinancialNLPModelBase<T>
         var outputTensor = results.First().AsTensor<float>();
 
         var outputData = new T[outputTensor.Length];
-        for (int i = 0; i < outputTensor.Length; i++)
-        {
-            outputData[i] = NumOps.FromDouble(outputTensor.GetValue(i));
-        }
+        NumOps.FromFloatSpan(outputTensor.ToDenseTensor().Buffer.Span.Slice(0, outputTensor.Length), outputData.AsSpan(0, outputTensor.Length));
 
         return new Tensor<T>(new[] { _numSentimentClasses }, new Vector<T>(outputData));
     }

@@ -1111,10 +1111,7 @@ public partial class DCRNN<T> : ForecastingModelBase<T>
         var inputName = inputMeta.Keys.First();
 
         float[] inputData = new float[input.Data.Length];
-        for (int i = 0; i < input.Data.Length; i++)
-        {
-            inputData[i] = NumOps.ToFloat(input.Data.Span[i]);
-        }
+        NumOps.ToFloatSpan(input.Data.Span.Slice(0, input.Data.Length), inputData.AsSpan(0, input.Data.Length));
 
         var inputTensor = new OnnxTensors.DenseTensor<float>(inputData, input._shape.Select(d => (int)d).ToArray());
         var inputs = new List<NamedOnnxValue> { NamedOnnxValue.CreateFromTensor(inputName, inputTensor) };
@@ -1124,10 +1121,7 @@ public partial class DCRNN<T> : ForecastingModelBase<T>
 
         var outputShape = outputTensor.Dimensions.ToArray();
         var output = new Tensor<T>(outputShape);
-        for (int i = 0; i < outputTensor.Length; i++)
-        {
-            output.Data.Span[i] = NumOps.FromDouble(outputTensor.GetValue(i));
-        }
+        NumOps.FromFloatSpan(outputTensor.ToDenseTensor().Buffer.Span.Slice(0, outputTensor.Length), output.Data.Span.Slice(0, outputTensor.Length));
 
         return output;
     }
