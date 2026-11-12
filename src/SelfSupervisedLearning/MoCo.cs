@@ -197,6 +197,7 @@ public partial class MoCo<T> : SelfSupervisedLearningMethodBase<T>
             double m = _momentumEncoder.Momentum;
             var online = _projector.GetParameters();
             var target = _momentumProjector.GetParameters();
+            using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
             var updated = Engine.TensorAdd(
                 Engine.TensorMultiplyScalar(target.AsTensor(), NumOps.FromDouble(m)),
                 Engine.TensorMultiplyScalar(online.AsTensor(), NumOps.FromDouble(1.0 - m)));

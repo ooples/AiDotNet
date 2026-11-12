@@ -310,6 +310,7 @@ public class SymmetricProjector<T> : IProjectorHead<T>, AiDotNet.Models.Paramete
 
     private static Tensor<T> InitializeOnes(int size)
     {
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
         return Engine.TensorAddScalar(new Tensor<T>(new[] { size }), NumOps.One);
     }
 
@@ -329,6 +330,8 @@ public class SymmetricProjector<T> : IProjectorHead<T>, AiDotNet.Models.Paramete
         {
             var output = Engine.BatchNorm(input, gamma, beta, BatchNormEpsilon, out var mean, out var variance);
             double unbias = batch > 1 ? batch / (batch - 1.0) : 1.0;
+            // Running statistics are detached state, as master's element writes were
+            using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
             var keep = NumOps.FromDouble(1 - BatchNormMomentum);
             Engine.TensorAdd(
                     Engine.TensorMultiplyScalar(runningMean, keep),
@@ -342,11 +345,17 @@ public class SymmetricProjector<T> : IProjectorHead<T>, AiDotNet.Models.Paramete
         }
 
         // y = x * scale + shift, scale = gamma / sqrt(var + eps), shift = beta - mean * scale.
-        var scale = Engine.TensorDivide(gamma,
-                Engine.TensorSqrt(Engine.TensorAddScalar(runningVar, NumOps.FromDouble(BatchNormEpsilon))))
-            .Reshape(1, dim);
-        var shift = Engine.TensorSubtract(beta.Reshape(1, dim),
-            Engine.TensorMultiply(runningMean.Reshape(1, dim), scale));
+        // scale and shift are detached, as master built them as fresh tensors; the input path still records.
+        Tensor<T> scale;
+        Tensor<T> shift;
+        using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
+        {
+            scale = Engine.TensorDivide(gamma,
+                    Engine.TensorSqrt(Engine.TensorAddScalar(runningVar, NumOps.FromDouble(BatchNormEpsilon))))
+                .Reshape(1, dim);
+            shift = Engine.TensorSubtract(beta.Reshape(1, dim),
+                Engine.TensorMultiply(runningMean.Reshape(1, dim), scale));
+        }
         var shape = new[] { batch, dim };
         return Engine.TensorAdd(Engine.TensorMultiply(input, Engine.TensorBroadcastTo(scale, shape)), Engine.TensorBroadcastTo(shift, shape));
     }

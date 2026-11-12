@@ -444,6 +444,7 @@ public abstract partial class SelfSupervisedLearningMethodBase<T> : ModelBase<T,
     /// <returns>The normalized tensor.</returns>
     protected virtual Tensor<T> L2Normalize(Tensor<T> tensor)
     {
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
         // x / sqrt(sum(x^2) + 1e-8) per row
         var normSquared = Engine.ReduceSum(Engine.TensorSquare(tensor), new[] { 1 }, keepDims: true);
         var norm = Engine.TensorSqrt(Engine.TensorAddScalar(normSquared, NumOps.FromDouble(1e-8)));
@@ -458,6 +459,7 @@ public abstract partial class SelfSupervisedLearningMethodBase<T> : ModelBase<T,
     /// <returns>Result matrix [M, N].</returns>
     protected virtual Tensor<T> MatMul(Tensor<T> a, Tensor<T> b)
     {
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
         return Engine.TensorMatMul(a, b);
     }
 
@@ -473,6 +475,7 @@ public abstract partial class SelfSupervisedLearningMethodBase<T> : ModelBase<T,
         Tensor<T> embeddings2,
         bool normalize = true)
     {
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
         var e1 = normalize ? L2Normalize(embeddings1) : embeddings1;
         var e2 = normalize ? L2Normalize(embeddings2) : embeddings2;
 
@@ -487,6 +490,7 @@ public abstract partial class SelfSupervisedLearningMethodBase<T> : ModelBase<T,
     /// <returns>Distance matrix [N, N].</returns>
     protected virtual Tensor<T> ComputePairwiseDistances(Tensor<T> embeddings)
     {
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
         var n = embeddings.Shape[0];
 
         // ||a - b||^2 = ||a||^2 + ||b||^2 - 2 * a.b

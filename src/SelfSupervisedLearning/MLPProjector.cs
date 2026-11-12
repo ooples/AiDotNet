@@ -317,6 +317,8 @@ public partial class MLPProjector<T> : IProjectorHead<T>, AiDotNet.Models.Parame
             // torch.nn.BatchNorm1d keeps the unbiased variance, batch / (batch - 1) times the batch's, as
             // SymmetricProjector does.
             double unbias = batchSize > 1 ? batchSize / (batchSize - 1.0) : 1.0;
+            // Running statistics are detached state, as master's element writes were
+            using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
             var keep = NumOps.FromDouble(1 - _batchNormMomentum);
             Engine.TensorAdd(
                     Engine.TensorMultiplyScalar(runningMean, keep),
@@ -330,7 +332,8 @@ public partial class MLPProjector<T> : IProjectorHead<T>, AiDotNet.Models.Parame
             return output;
         }
 
-        // Use running statistics: gamma * (x - mean) / sqrt(var + eps) + beta
+        // Use running statistics: gamma * (x - mean) / sqrt(var + eps) + beta, detached as master's fresh array was
+        using var evalNoGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
         var std = Engine.TensorSqrt(Engine.TensorAddScalar(runningVar, NumOps.FromDouble(_batchNormEpsilon)));
         var normalized = Engine.TensorDivide(
             Engine.TensorSubtract(input, runningMean.Reshape(1, dim)), std.Reshape(1, dim));

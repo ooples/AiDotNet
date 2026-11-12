@@ -36,6 +36,7 @@ public class SelfSupervisedLearningMetrics<T>
     /// </remarks>
     public T ComputeRepresentationStd(Tensor<T> representations)
     {
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
         // Population std per dimension, averaged over dimensions
         var centered = Engine.TensorSubtract(representations,
             Engine.ReduceMean(representations, new[] { 0 }, keepDims: true));
@@ -55,6 +56,7 @@ public class SelfSupervisedLearningMetrics<T>
     /// </remarks>
     public T ComputeAlignment(Tensor<T> z1, Tensor<T> z2)
     {
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
         var batchSize = z1.Shape[0];
 
         // Mean over the batch of the squared distance between normalized pairs
@@ -75,6 +77,7 @@ public class SelfSupervisedLearningMetrics<T>
     /// </remarks>
     public T ComputeUniformity(Tensor<T> representations, double t = 2.0)
     {
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
         var batchSize = representations.Shape[0];
         var dim = representations.Shape[1];
 
@@ -107,6 +110,7 @@ public class SelfSupervisedLearningMetrics<T>
     /// </remarks>
     public T ComputeEffectiveRank(Tensor<T> representations)
     {
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
         // Compute covariance matrix
         var cov = ComputeCovarianceMatrix(representations);
 
@@ -175,6 +179,7 @@ public class SelfSupervisedLearningMetrics<T>
     /// </summary>
     public T ComputeCosineSimilarity(Tensor<T> z1, Tensor<T> z2)
     {
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
         var batchSize = z1.Shape[0];
 
         // Mean over the batch of the dot product of normalized pairs
@@ -184,6 +189,7 @@ public class SelfSupervisedLearningMetrics<T>
 
     private Tensor<T> L2Normalize(Tensor<T> tensor)
     {
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
         // x / sqrt(sum(x^2) + 1e-8) per row
         var sumSquared = Engine.ReduceSum(Engine.TensorSquare(tensor), new[] { 1 }, keepDims: true);
         var norm = Engine.TensorSqrt(Engine.TensorAddScalar(sumSquared, NumOps.FromDouble(1e-8)));
@@ -192,6 +198,7 @@ public class SelfSupervisedLearningMetrics<T>
 
     private Tensor<T> ComputeCovarianceMatrix(Tensor<T> representations)
     {
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
         var batchSize = representations.Shape[0];
 
         // (X - mean)^T (X - mean) / (batchSize - 1)

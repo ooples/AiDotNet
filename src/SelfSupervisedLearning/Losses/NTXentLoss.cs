@@ -142,6 +142,7 @@ public class NTXentLoss<T> : ContrastiveLossBase<T>
     /// </summary>
     private Tensor<T> PartnerMask(int n)
     {
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
         var eye = Engine.TensorEye<T>(n);
         var zeros = new Tensor<T>(new[] { n, n });
         var top = Engine.TensorConcatenate(new[] { zeros, eye }, 1);
@@ -151,6 +152,7 @@ public class NTXentLoss<T> : ContrastiveLossBase<T>
 
     private Tensor<T> L2Normalize(Tensor<T> tensor)
     {
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
         // x / sqrt(sum(x^2) + 1e-8) per row
         var sumSquared = Engine.ReduceSum(Engine.TensorSquare(tensor), new[] { 1 }, keepDims: true);
         var norm = Engine.TensorSqrt(Engine.TensorAddScalar(sumSquared, NumOps.FromDouble(1e-8)));
@@ -171,12 +173,14 @@ public class NTXentLoss<T> : ContrastiveLossBase<T>
 
     private Tensor<T> ComputeSimilarityMatrix(Tensor<T> embeddings)
     {
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
         // sim[i, j] = e_i . e_j
         return Engine.TensorMatMul(embeddings, Engine.TensorTranspose(embeddings));
     }
 
     private Tensor<T> ScaleByTemperature(Tensor<T> similarity)
     {
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
         var invTemp = NumOps.FromDouble(1.0 / _temperature);
         return Engine.TensorMultiplyScalar(similarity, invTemp);
     }
@@ -184,6 +188,7 @@ public class NTXentLoss<T> : ContrastiveLossBase<T>
     private (T loss, Tensor<T> grad) ComputeContrastiveLossWithGrad(
         Tensor<T> similarity, int batchSize, Tensor<T> embeddings)
     {
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
         var n = similarity.Shape[0];
         var zeros = new Tensor<T>(new[] { n, n });
 

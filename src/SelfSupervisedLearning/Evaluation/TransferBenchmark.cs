@@ -199,6 +199,7 @@ public class TransferBenchmark<T>
 
     private Tensor<T> SubsetData(Tensor<T> data, int[] indices)
     {
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
         return Engine.TensorIndexSelect(data, new Tensor<int>(indices, new[] { indices.Length }), 0);
     }
 }

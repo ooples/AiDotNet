@@ -262,6 +262,7 @@ public partial class KNNEvaluator<T> : ModelBase<T, Tensor<T>, Tensor<T>>
 
     private int VotePrediction((int index, T distance)[] neighbors)
     {
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
         var trainLabels = _trainLabels ?? throw new InvalidOperationException("Training labels have not been initialized. Call Fit() first.");
 
         // Weighted voting based on distance
@@ -288,6 +289,7 @@ public partial class KNNEvaluator<T> : ModelBase<T, Tensor<T>, Tensor<T>>
     /// </summary>
     private Vector<T> ComputeDistanceRow(Tensor<T> a, int aIdx, Tensor<T> b, int dim)
     {
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
         int numB = b.Shape[0];
         var aRow = Engine.TensorSlice(a, new[] { aIdx, 0 }, new[] { 1, dim });
         var bRows = b.Shape[1] == dim ? b : Engine.TensorSlice(b, new[] { 0, 0 }, new[] { numB, dim });
@@ -311,6 +313,7 @@ public partial class KNNEvaluator<T> : ModelBase<T, Tensor<T>, Tensor<T>>
 
     private Tensor<T> L2Normalize(Tensor<T> tensor)
     {
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
         // x / sqrt(sum(x^2) + 1e-8) per row
         var sumSquared = Engine.ReduceSum(Engine.TensorMultiply(tensor, tensor), new[] { 1 }, keepDims: true);
         var norm = Engine.TensorSqrt(Engine.TensorAddScalar(sumSquared, NumOps.FromDouble(1e-8)));

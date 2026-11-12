@@ -65,6 +65,7 @@ public class MAEReconstructionLoss<T> : ContrastiveLossBase<T>
     /// <returns>The computed loss value.</returns>
     public T ComputeLoss(Tensor<T> reconstructed, Tensor<T> original, Tensor<T> mask)
     {
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
         if (reconstructed is null) throw new ArgumentNullException(nameof(reconstructed));
         if (original is null) throw new ArgumentNullException(nameof(original));
         if (mask is null) throw new ArgumentNullException(nameof(mask));
@@ -88,6 +89,7 @@ public class MAEReconstructionLoss<T> : ContrastiveLossBase<T>
     /// </summary>
     private Tensor<T> PatchDifferences(Tensor<T> reconstructed, Tensor<T> original)
     {
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
         var target = _perPatchNormalization ? NormalizePatches(original) : original;
         return Engine.TensorSubtract(reconstructed, target);
     }
@@ -98,6 +100,7 @@ public class MAEReconstructionLoss<T> : ContrastiveLossBase<T>
     /// </summary>
     private Tensor<T> MaskedPatchLosses(Tensor<T> diff, Tensor<T> masked)
     {
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
         var patchDim = diff.Shape[2];
         var patchLosses = Engine.ReduceSum(Engine.TensorSquare(diff), new[] { 2 }, keepDims: false);
         if (_normalize)
@@ -114,6 +117,7 @@ public class MAEReconstructionLoss<T> : ContrastiveLossBase<T>
     public (T loss, Tensor<T> gradReconstructed) ComputeLossWithGradients(
         Tensor<T> reconstructed, Tensor<T> original, Tensor<T> mask)
     {
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
         var batchSize = reconstructed.Shape[0];
         var numPatches = reconstructed.Shape[1];
         var patchDim = reconstructed.Shape[2];
@@ -148,6 +152,7 @@ public class MAEReconstructionLoss<T> : ContrastiveLossBase<T>
     /// </summary>
     public T[] ComputePerSampleLoss(Tensor<T> reconstructed, Tensor<T> original, Tensor<T> mask)
     {
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
         var batchSize = reconstructed.Shape[0];
 
         var masked = Engine.TensorGreaterThan(mask, NumOps.Zero);
@@ -196,6 +201,7 @@ public class MAEReconstructionLoss<T> : ContrastiveLossBase<T>
 
     private Tensor<T> NormalizePatches(Tensor<T> patches)
     {
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
         // Per-patch zero mean, unit std (population variance + 1e-6) over the last axis
         var patchDim = NumOps.FromDouble(patches.Shape[2]);
         var mean = Engine.TensorDivideScalar(Engine.ReduceSum(patches, new[] { 2 }, keepDims: true), patchDim);
