@@ -12,7 +12,7 @@ using AiDotNet.Data.Structures;
 
 namespace AiDotNet.MetaLearning.Algorithms;
 
-//// <summary>
+/// <summary>
 /// Implementation of MetaMix (Chen et al., ICPR 2020): MAML whose outer loss is computed on virtual
 /// examples mixed from pairs of query examples.
 /// </summary>

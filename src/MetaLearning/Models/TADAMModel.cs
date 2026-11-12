@@ -126,8 +126,6 @@ public partial class TADAMModel<T, TInput, TOutput> : IModel<TInput, TOutput, Mo
 
     /// <inheritdoc/>
     public void Train(TInput inputs, TOutput targets)
-    /// <inheritdoc/>
-    public void Train(TInput inputs, TOutput targets)
     {
         throw new NotSupportedException("Use the training algorithm to train TADAM.");
     }
