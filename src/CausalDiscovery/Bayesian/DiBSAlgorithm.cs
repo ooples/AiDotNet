@@ -146,9 +146,9 @@ public class DiBSAlgorithm<T> : BayesianCausalBase<T>
     }
 
     /// <summary>
-    /// One Stein variational gradient descent step on all particles [K, d*d]:
-    /// Z_k += lr * (1/K) * sum_l k(Z_l, Z_k) * (grad_l + (Z_l - Z_k) / (2h^2 + 1e-10)) off the diagonal,
-    /// with the RBF kernel k = exp(-||Z_l - Z_k||^2 / max(2h^2, 1e-10)) and the median bandwidth h.
+    /// One Stein variational gradient descent step on all particles [K, d*d] (Liu &amp; Wang 2016, eq. 8):
+    /// Z_k += lr * (1/K) * sum_l [k(Z_l, Z_k) * grad_l + grad_{Z_l} k(Z_l, Z_k)] off the diagonal,
+    /// with the RBF kernel k = exp(-||Z_l - Z_k||^2 / c), c = max(2h^2, 1e-10), and the median bandwidth h.
     /// </summary>
     private Tensor<T> SvgdStep(Tensor<T> particles, Tensor<T> dataGrad, Tensor<T> updatable, Tensor<T> offDiagonal,
         double tau, int d)
@@ -166,15 +166,12 @@ public class DiBSAlgorithm<T> : BayesianCausalBase<T>
         T twoBandwidthSq = NumOps.Multiply(NumOps.FromDouble(2), NumOps.Multiply(bandwidthT, bandwidthT));
 
         // Kernel: k(Z_l, Z_k) = exp(-||Z_l - Z_k||^2 / (2*h^2)), kernel[k, l]
-        var kernel = Engine.TensorExp(Engine.TensorDivideScalar(Engine.TensorNegate(sqDistances),
-            NumOps.FromDouble(Math.Max(NumOps.ToDouble(twoBandwidthSq), 1e-10))));
+        T kernelScale = NumOps.FromDouble(Math.Max(NumOps.ToDouble(twoBandwidthSq), 1e-10));
+        var kernel = Engine.TensorExp(Engine.TensorDivideScalar(Engine.TensorNegate(sqDistances), kernelScale));
 
         // SVGD: kernel * gradient + kernel_gradient, averaged over l
         var driving = Engine.TensorMatMul(kernel, gradients);
-        var kernelRowSums = Engine.TensorBroadcastTo(Engine.ReduceSum(kernel, new[] { 1 }, true), new[] { K, D });
-        var repulsive = Engine.TensorDivideScalar(
-            Engine.TensorSubtract(Engine.TensorMatMul(kernel, particles), Engine.TensorMultiply(kernelRowSums, particles)),
-            NumOps.Add(twoBandwidthSq, NumOps.FromDouble(1e-10)));
+        var repulsive = SvgdKernelGradient(kernel, particles, kernelScale);
         T invK = NumOps.Divide(NumOps.One, NumOps.FromDouble(K));
         var updates = Engine.TensorMultiplyScalar(Engine.TensorAdd(driving, repulsive), invK);
 
@@ -182,6 +179,25 @@ public class DiBSAlgorithm<T> : BayesianCausalBase<T>
         var particleMask = Engine.TensorBroadcastTo(offDiagonal.Reshape(new[] { 1, D }), new[] { K, D });
         var stepped = Engine.TensorAdd(particles, Engine.TensorMultiplyScalar(updates, NumOps.FromDouble(_learningRate)));
         return Engine.TensorWhere(particleMask, stepped, particles);
+    }
+
+    /// <summary>
+    /// The SVGD repulsive term sum_l grad_{Z_l} k(Z_l, Z_k) for every particle k, for the RBF kernel
+    /// k(Z_l, Z_k) = exp(-||Z_l - Z_k||^2 / c): sum_l k[k, l] * 2 (Z_k - Z_l) / c
+    /// = 2 (rowsum(k)[k] * Z_k - (k Z)[k]) / c. It points from the kernel-weighted neighbours to Z_k,
+    /// so it pushes particles apart (Liu &amp; Wang 2016, "Stein Variational Gradient Descent", eq. 8).
+    /// </summary>
+    /// <param name="kernel">The [K, K] kernel matrix k[k, l] = k(Z_l, Z_k).</param>
+    /// <param name="particles">The [K, D] particles, one per row.</param>
+    /// <param name="kernelScale">The kernel denominator c.</param>
+    internal static Tensor<T> SvgdKernelGradient(Tensor<T> kernel, Tensor<T> particles, T kernelScale)
+    {
+        var engine = AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<T>();
+        var rowSums = engine.TensorBroadcastTo(engine.ReduceSum(kernel, new[] { 1 }, true),
+            new[] { particles.Shape[0], particles.Shape[1] });
+        var towardSelf = engine.TensorSubtract(engine.TensorMultiply(rowSums, particles), engine.TensorMatMul(kernel, particles));
+        return engine.TensorMultiplyScalar(towardSelf, ops.Divide(ops.FromDouble(2), kernelScale));
     }
 
     /// <summary>
