@@ -25,18 +25,12 @@ public class MorphologicalGradient<T> : ImageAugmenterBase<T>
 
         var result = data.Clone();
 
-        for (int y = 0; y < data.Height; y++)
-            for (int x = 0; x < data.Width; x++)
-                for (int c = 0; c < data.Channels; c++)
-                {
-                    double d = NumOps.ToDouble(dilated.GetPixel(y, x, c));
-                    double e = NumOps.ToDouble(eroded.GetPixel(y, x, c));
-                    double gradient = d - e;
-                    double original = NumOps.ToDouble(data.GetPixel(y, x, c));
-                    double blended = original * (1 - BlendAlpha) + gradient * BlendAlpha;
-                    result.SetPixel(y, x, c,
-                        NumOps.FromDouble(Math.Max(0, Math.Min(maxVal, blended))));
-                }
+        var engine = Engine;
+        var gradient = engine.TensorSubtract(dilated.ToPlanarTensor(), eroded.ToPlanarTensor());
+        var blended = engine.TensorAdd(
+            engine.TensorMultiplyScalar(data.ToPlanarTensor(), NumOps.FromDouble(1 - BlendAlpha)),
+            engine.TensorMultiplyScalar(gradient, NumOps.FromDouble(BlendAlpha)));
+        result.SetFromPlanarTensor(engine.TensorClamp(blended, NumOps.Zero, NumOps.FromDouble(maxVal)));
 
         return result;
     }
