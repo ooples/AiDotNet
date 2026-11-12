@@ -180,15 +180,20 @@ public partial class MGIE<T>
     {
         var resized = ResizeImage(image, _editOptions.ImageSize);
         var unitRange = Engine.TensorAddScalar(Engine.TensorMultiplyScalar(resized, NumOps.FromDouble(0.5)), NumOps.FromDouble(0.5));
-        var mean = new Tensor<T>(new[] { 1, 3, 1, 1 });
-        var inverseStd = new Tensor<T>(new[] { 1, 3, 1, 1 });
-        for (int channel = 0; channel < 3; channel++)
-        {
-            mean[channel] = NumOps.FromDouble(_editOptions.ImageMean[channel]);
-            inverseStd[channel] = NumOps.FromDouble(1.0 / _editOptions.ImageStd[channel]);
-        }
+        var imageMean = _editOptions.ImageMean;
+        var imageStd = _editOptions.ImageStd;
+        var mean = PerChannel(imageMean[0], imageMean[1], imageMean[2]);
+        var inverseStd = PerChannel(1.0 / imageStd[0], 1.0 / imageStd[1], 1.0 / imageStd[2]);
         return Engine.TensorMultiply(Engine.TensorSubtract(unitRange, mean), inverseStd);
     }
+
+    /// <summary>A <c>[1, 3, 1, 1]</c> tensor holding one constant per RGB channel.</summary>
+    private Tensor<T> PerChannel(double red, double green, double blue) => Engine.TensorConcatenate(
+        [
+            Tensor<T>.CreateDefault([1, 1, 1, 1], NumOps.FromDouble(red)),
+            Tensor<T>.CreateDefault([1, 1, 1, 1], NumOps.FromDouble(green)),
+            Tensor<T>.CreateDefault([1, 1, 1, 1], NumOps.FromDouble(blue))
+        ], 1);
 
     private Tensor<T> ResizeImage(Tensor<T> image, int size) => image.Shape[2] == size && image.Shape[3] == size
         ? image

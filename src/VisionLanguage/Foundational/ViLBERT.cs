@@ -303,7 +303,8 @@ public partial class ViLBERT<T> : VisionLanguageModelBase<T>, IVisionLanguageFus
     /// </summary>
     /// <summary>
     /// Mean-pools token embeddings for the task head: [tokens, dim] -> [dim], or
-    /// [batch, tokens, dim] -> [batch, dim].
+    /// [batch, tokens, dim] -> [batch, dim]; a higher rank averages every axis between the batch and
+    /// feature axes.
     /// </summary>
     /// <remarks>
     /// These must be RECORDED reductions. Accumulating the mean element by element produces a tensor
@@ -313,46 +314,19 @@ public partial class ViLBERT<T> : VisionLanguageModelBase<T>, IVisionLanguageFus
     /// The identical helper in VinVL made that model's training loss RISE in proportion to the
     /// learning rate until it was switched to Engine.ReduceMean.
     /// </remarks>
-    private Tensor<T> MeanPoolOverTokens(Tensor<T> input)
+    internal static Tensor<T> MeanPoolOverTokens(IEngine engine, Tensor<T> input)
     {
         int rank = input.Shape.Length;
         if (rank < 2)
             return input;
         if (rank == 2)
-        {
-            return Engine.ReduceMean(input, new[] { 0 }, keepDims: false);
-        }
-        if (rank == 3)
-        {
-            return Engine.ReduceMean(input, new[] { 1 }, keepDims: false);
-        }
+            return engine.ReduceMean(input, new[] { 0 }, keepDims: false);
 
-        // rank > 3 keeps the original element-wise collapse of axis 1 against the LAST axis, which
-        // is not what a plain ReduceMean over axis 1 would produce for those shapes.
-        int batch = input.Shape[0];
-        int nTokens = input.Shape[1];
-        int dim = input.Shape[rank - 1];
-        var pooled = new Tensor<T>([batch, dim]);
-        T invN = AiDotNet
-            .Tensors.Helpers.MathHelper.GetNumericOperations<T>()
-            .FromDouble(1.0 / nTokens);
-        for (int b = 0; b < batch; b++)
-        {
-            for (int k = 0; k < dim; k++)
-            {
-                T sum = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>().Zero;
-                for (int j = 0; j < nTokens; j++)
-                {
-                    sum = AiDotNet
-                        .Tensors.Helpers.MathHelper.GetNumericOperations<T>()
-                        .Add(sum, input[b, j, k]);
-                }
-                pooled[b, k] = AiDotNet
-                    .Tensors.Helpers.MathHelper.GetNumericOperations<T>()
-                    .Multiply(sum, invN);
-            }
-        }
-        return pooled;
+        // [batch, tokens..., dim]: average every axis between the batch and feature axes, giving [batch, dim].
+        var tokenAxes = new int[rank - 2];
+        for (int axis = 1; axis < rank - 1; axis++)
+            tokenAxes[axis - 1] = axis;
+        return engine.ReduceMean(input, tokenAxes, keepDims: false);
     }
 
     private void ComputeDualStreamBoundaries()
@@ -448,7 +422,7 @@ public partial class ViLBERT<T> : VisionLanguageModelBase<T>, IVisionLanguageFus
         // read stream embeddings directly still work.
         if (_visionHeadStart < Layers.Count)
         {
-            c = MeanPoolOverTokens(c);
+            c = MeanPoolOverTokens(Engine, c);
             int headIdx = ranVisionStream ? _visionHeadStart : _textHeadStart;
             c = Layers[headIdx].Forward(c);
         }
@@ -514,7 +488,7 @@ public partial class ViLBERT<T> : VisionLanguageModelBase<T>, IVisionLanguageFus
         }
         if (_visionHeadStart < Layers.Count)
         {
-            current = MeanPoolOverTokens(current);
+            current = MeanPoolOverTokens(Engine, current);
             activations[$"Layer_{headIdx}_Pool"] = current.Clone();
             current = Layers[headIdx].Forward(current);
             activations[$"Layer_{headIdx}_{Layers[headIdx].GetType().Name}"] = current.Clone();
