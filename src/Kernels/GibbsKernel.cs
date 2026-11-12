@@ -370,14 +370,17 @@ public class GibbsKernel<T> : IKernelFunction<T>
         {
             T xVal = x[0];
 
-            // Clamp to grid range
-            xVal = MathHelper.Max(gridMinT, MathHelper.Min(gridMaxT, xVal));
+            // Outside the grid (or on its ends) the length scale is the end value. Returning here keeps
+            // a T-rounded endpoint from landing one step past the last grid index.
+            if (!numOps.GreaterThan(xVal, gridMinT))
+                return numOps.FromDouble(values[0]);
+            if (!numOps.LessThan(xVal, gridMaxT))
+                return numOps.FromDouble(values[numPoints - 1]);
 
             // Find interpolation position
             T pos = numOps.Divide(numOps.Subtract(xVal, gridMinT), numOps.FromDouble(gridStep));
-            int i0 = numOps.ToInt32(numOps.Floor(pos));
+            int i0 = Math.Max(0, Math.Min(numOps.ToInt32(numOps.Floor(pos)), numPoints - 1));
             int i1 = Math.Min(i0 + 1, numPoints - 1);
-            i0 = Math.Max(0, i0);
 
             // Linear interpolation
             T t = numOps.Subtract(pos, numOps.FromDouble(i0));

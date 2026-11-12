@@ -166,11 +166,6 @@ public class MaternKernel<T> : IKernelFunction<T>
     }
 
     /// <summary>
-    /// Computes the Matérn function value for a given distance.
-    /// </summary>
-    /// <param name="r">The Euclidean distance.</param>
-    /// <returns>The kernel value.</returns>
-    /// <summary>
     /// Matérn closed forms for nu = 1/2, 3/2 and 5/2 (Rasmussen &amp; Williams 2006, eq. 4.16-4.17).
     /// </summary>
     private T ComputeClosedFormMatern(T r)
@@ -201,6 +196,12 @@ public class MaternKernel<T> : IKernelFunction<T>
         return _numOps.Multiply(_numOps.Multiply(variance, polynomial), _numOps.Exp(_numOps.Negate(sqrt5R)));
     }
 
+    /// <summary>
+    /// Computes the Matérn function value for a given distance when ν has no closed form
+    /// (Calculate handles ν = 1/2, 3/2 and 5/2 through ComputeClosedFormMatern).
+    /// </summary>
+    /// <param name="r">The Euclidean distance.</param>
+    /// <returns>The kernel value.</returns>
     private double ComputeMatern(double r)
     {
         if (r < 1e-10)
@@ -208,32 +209,8 @@ public class MaternKernel<T> : IKernelFunction<T>
             return _variance;
         }
 
-        // Use closed-form expressions for common values of nu
-        double scaledR = r / _lengthScale;
-
-        // Check for special cases (within tolerance)
-        if (Math.Abs(_nu - 0.5) < 0.01)
-        {
-            // Matérn 1/2 (exponential)
-            return _variance * Math.Exp(-scaledR);
-        }
-        else if (Math.Abs(_nu - 1.5) < 0.01)
-        {
-            // Matérn 3/2
-            double sqrt3R = Math.Sqrt(3.0) * scaledR;
-            return _variance * (1.0 + sqrt3R) * Math.Exp(-sqrt3R);
-        }
-        else if (Math.Abs(_nu - 2.5) < 0.01)
-        {
-            // Matérn 5/2
-            double sqrt5R = Math.Sqrt(5.0) * scaledR;
-            return _variance * (1.0 + sqrt5R + sqrt5R * sqrt5R / 3.0) * Math.Exp(-sqrt5R);
-        }
-        else
-        {
-            // General case using Bessel function approximation
-            return ComputeGeneralMatern(scaledR);
-        }
+        // General case using Bessel function approximation
+        return ComputeGeneralMatern(r / _lengthScale);
     }
 
     /// <summary>

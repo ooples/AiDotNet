@@ -530,12 +530,14 @@ public class StringKernel<T>
 
         T zero = _numOps.Zero;
 
-        // Each pair is evaluated once (strict upper triangle); K = U + U^T + I because the
-        // normalized kernel has k(x, x) = 1.
+        // Each pair is evaluated once (strict upper triangle); K = U + U^T + diag(k(s, s)). The diagonal
+        // is computed rather than assumed to be 1: k(s, s) is 0 for a string with no substrings of the
+        // configured length (for example one shorter than it).
         var upper = new Matrix<T>(Enumerable.Range(0, n)
             .Select(i => Enumerable.Range(0, n).Select(j => j > i ? Calculate(strings[i], strings[j]) : zero)));
+        var diagonal = new Vector<T>(strings.Select(text => Calculate(text, text)));
 
         var engine = AiDotNetEngine.Current;
-        return engine.MatrixAdd(engine.MatrixAdd(upper, engine.MatrixTranspose(upper)), Matrix<T>.CreateIdentity(n));
+        return engine.MatrixAdd(engine.MatrixAdd(upper, engine.MatrixTranspose(upper)), Matrix<T>.CreateDiagonal(diagonal));
     }
 }
