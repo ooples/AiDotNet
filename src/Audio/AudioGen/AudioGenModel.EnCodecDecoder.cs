@@ -110,7 +110,7 @@ public partial class AudioGenModel<T>
         }
 
         for (int q = 0; q < _numCodebooks; q++)
-            Add($"quantizer.vq.layers.{q}._codebook.embed", new[] { _codebookSize, CodecLatentDim }, CodecLatentDim);
+            Add($"{CodebookPrefix}{q}{CodebookSuffix}", new[] { _codebookSize, CodecLatentDim }, CodecLatentDim);
 
         // SEANetDecoder.model: [0] conv, [1] LSTM, then per ratio ELU / ConvTranspose / residual block,
         // then ELU and the output conv.
@@ -190,6 +190,29 @@ public partial class AudioGenModel<T>
                     $"this model needs [{string.Join(", ", expected)}].");
             _codecWeights[i] = value;
         }
+
+        // A checkpoint with more codebooks than NumCodebooks would load, and the decoder would silently use only the
+        // first ones, changing every decoded sample: require the configured count to match the checkpoint's.
+        var extraCodebooks = checkpoint.Keys.Select(CodebookIndex).Where(q => q >= _numCodebooks).ToList();
+        if (extraCodebooks.Count > 0)
+            throw new InvalidOperationException(
+                $"EnCodec checkpoint '{path}' has codebook {extraCodebooks.Min()} ('{CodebookPrefix}{extraCodebooks.Min()}" +
+                $"{CodebookSuffix}'), but this model is configured with {_numCodebooks} codebooks; set NumCodebooks to " +
+                "the checkpoint's codebook count.");
+    }
+
+    private const string CodebookPrefix = "quantizer.vq.layers.";
+    private const string CodebookSuffix = "._codebook.embed";
+
+    /// <summary>The codebook index of a <c>quantizer.vq.layers.{q}._codebook.embed</c> name, or -1 for any other name.</summary>
+    private static int CodebookIndex(string name)
+    {
+        if (!name.StartsWith(CodebookPrefix, StringComparison.Ordinal) || !name.EndsWith(CodebookSuffix, StringComparison.Ordinal)
+            || name.Length <= CodebookPrefix.Length + CodebookSuffix.Length)
+            return -1;
+        string index = name.Substring(CodebookPrefix.Length, name.Length - CodebookPrefix.Length - CodebookSuffix.Length);
+        return int.TryParse(index, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture,
+            out int q) ? q : -1;
     }
 
     /// <summary><c>g * v / ||v||</c>, the norm taken over every axis but the first (weight_norm, dim 0).</summary>

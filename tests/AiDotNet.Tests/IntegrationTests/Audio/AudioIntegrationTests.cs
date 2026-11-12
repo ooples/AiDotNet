@@ -1007,6 +1007,76 @@ public class AudioIntegrationTests
     public async Task AudioGenModel_EncodecWeightsPath_LoadsAudiocraftCheckpointNames()
     {
         await Task.Yield();
+        var (entries, fileTensors, expected) = EncodecCheckpointLayout();
+        string path = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"encodec-{Guid.NewGuid():N}.safetensors");
+        var previousFallback = AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.AmbientFallbackSeed;
+        try
+        {
+            WriteSafetensors(path, fileTensors);
+            AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.AmbientFallbackSeed = 1337;
+            AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.ResetForModelConstruction(1337);
+            using var model = NewEncodecTestModel(path);
+
+            var weights = model.CodecDecoderWeights;
+            Assert.Equal(entries.Length, weights.Count);
+            for (int k = 0; k < entries.Length; k++)
+            {
+                Assert.Equal(entries[k].Shape, weights[k].Shape.ToArray());
+                foreach (float actual in weights[k].ToArray())
+                    Assert.True(Math.Abs(actual - expected[k]) <= 1e-6 * Math.Max(1.0, Math.Abs(expected[k])),
+                        $"{entries[k].Name}: expected {expected[k]}, got {actual}");
+            }
+
+            var audio = model.DecodeCodecTokens(
+                new AiDotNet.Tensors.LinearAlgebra.Tensor<float>(new float[] { 0, 3, 1, 2, 3 }, [1, 1, 5]), 0.1);
+            Assert.Equal(10, audio.Length);
+        }
+        finally
+        {
+            AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.AmbientFallbackSeed = previousFallback;
+            AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.ResetForModelConstruction(null);
+            if (System.IO.File.Exists(path)) System.IO.File.Delete(path);
+        }
+    }
+
+    /// <summary>
+    /// A checkpoint with more codebooks than the model's NumCodebooks is rejected, naming the extra codebook: loading it
+    /// would decode with only the first codebooks and silently change every sample.
+    /// </summary>
+    [Fact(Timeout = 300000)]
+    public async Task AudioGenModel_EncodecWeightsPath_RejectsCodebooksBeyondNumCodebooks()
+    {
+        await Task.Yield();
+        var (_, fileTensors, _) = EncodecCheckpointLayout();
+        fileTensors.Add(("quantizer.vq.layers.1._codebook.embed", new[] { 4, 128 }, 0.5f));
+
+        string path = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"encodec-{Guid.NewGuid():N}.safetensors");
+        var previousFallback = AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.AmbientFallbackSeed;
+        try
+        {
+            WriteSafetensors(path, fileTensors);
+            AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.AmbientFallbackSeed = 1337;
+            AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.ResetForModelConstruction(1337);
+            var error = Assert.Throws<InvalidOperationException>(() => NewEncodecTestModel(path).Dispose());
+            Assert.Contains(path, error.Message);
+            Assert.Contains("quantizer.vq.layers.1._codebook.embed", error.Message);
+        }
+        finally
+        {
+            AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.AmbientFallbackSeed = previousFallback;
+            AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.ResetForModelConstruction(null);
+            if (System.IO.File.Exists(path)) System.IO.File.Delete(path);
+        }
+    }
+
+    /// <summary>
+    /// The audiocraft EnCodec checkpoint layout of the one-block test model (one codebook): the decoder's tensors, the
+    /// tensors written to the file (weight-normalized ones as _g / _v pairs, plus quantizer state the decoder ignores),
+    /// and each decoder tensor's expected loaded value.
+    /// </summary>
+    private static ((string Name, int[] Shape, int Kind)[] Entries, List<(string Name, int[] Shape, float Value)> FileTensors,
+        double[] Expected) EncodecCheckpointLayout()
+    {
         // (name, shape, kind): kind 0 = plain tensor, 1 = weight-normalized weight (_g / _v pair)
         var entries = new (string Name, int[] Shape, int Kind)[]
         {
@@ -1056,56 +1126,32 @@ public class AudioIntegrationTests
         fileTensors.Add(("quantizer.vq.layers.0._codebook.embed_avg", new[] { 4, 128 }, 9f));
         fileTensors.Add(("quantizer.vq.layers.0._codebook.cluster_size", new[] { 4 }, 9f));
 
-        string path = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"encodec-{Guid.NewGuid():N}.safetensors");
-        var previousFallback = AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.AmbientFallbackSeed;
-        try
-        {
-            WriteSafetensors(path, fileTensors);
-            AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.AmbientFallbackSeed = 1337;
-            AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.ResetForModelConstruction(1337);
-            using var model = new AudioGenModel<float>(
-                new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<float>(
-                    inputType: AiDotNet.Enums.InputType.TwoDimensional,
-                    taskType: AiDotNet.Enums.NeuralNetworkTaskType.Generative,
-                    inputHeight: 64, inputWidth: 32, inputDepth: 1, outputSize: 4),
-                options: new AudioGenOptions
-                {
-                    ModelSize = AudioGenModelSize.Medium,
-                    SampleRate = 100,
-                    DurationSeconds = 0.1,
-                    MaxDurationSeconds = 10,
-                    TextHiddenDim = 32,
-                    LmHiddenDim = 32,
-                    NumLmLayers = 2,
-                    NumHeads = 2,
-                    NumCodebooks = 1,
-                    CodebookSize = 4,
-                    MaxTextLength = 8,
-                    Seed = 7,
-                    EncodecWeightsPath = path,
-                });
-
-            var weights = model.CodecDecoderWeights;
-            Assert.Equal(entries.Length, weights.Count);
-            for (int k = 0; k < entries.Length; k++)
-            {
-                Assert.Equal(entries[k].Shape, weights[k].Shape.ToArray());
-                foreach (float actual in weights[k].ToArray())
-                    Assert.True(Math.Abs(actual - expected[k]) <= 1e-6 * Math.Max(1.0, Math.Abs(expected[k])),
-                        $"{entries[k].Name}: expected {expected[k]}, got {actual}");
-            }
-
-            var audio = model.DecodeCodecTokens(
-                new AiDotNet.Tensors.LinearAlgebra.Tensor<float>(new float[] { 0, 3, 1, 2, 3 }, [1, 1, 5]), 0.1);
-            Assert.Equal(10, audio.Length);
-        }
-        finally
-        {
-            AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.AmbientFallbackSeed = previousFallback;
-            AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.ResetForModelConstruction(null);
-            if (System.IO.File.Exists(path)) System.IO.File.Delete(path);
-        }
+        return (entries, fileTensors, expected);
     }
+
+    /// <summary>The one-block AudioGen test model (100 Hz, hop 2, one codebook of 4) loading its codec from <paramref name="path"/>.</summary>
+    private static AudioGenModel<float> NewEncodecTestModel(string path) =>
+        new AudioGenModel<float>(
+            new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<float>(
+                inputType: AiDotNet.Enums.InputType.TwoDimensional,
+                taskType: AiDotNet.Enums.NeuralNetworkTaskType.Generative,
+                inputHeight: 64, inputWidth: 32, inputDepth: 1, outputSize: 4),
+            options: new AudioGenOptions
+            {
+                ModelSize = AudioGenModelSize.Medium,
+                SampleRate = 100,
+                DurationSeconds = 0.1,
+                MaxDurationSeconds = 10,
+                TextHiddenDim = 32,
+                LmHiddenDim = 32,
+                NumLmLayers = 2,
+                NumHeads = 2,
+                NumCodebooks = 1,
+                CodebookSize = 4,
+                MaxTextLength = 8,
+                Seed = 7,
+                EncodecWeightsPath = path,
+            });
 
     /// <summary>Writes constant-valued F32 tensors in the safetensors layout (u64 header length, JSON, data).</summary>
     private static void WriteSafetensors(string path, List<(string Name, int[] Shape, float Value)> tensors)
