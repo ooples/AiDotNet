@@ -58,77 +58,37 @@ public abstract class ScoreBasedBase<T> : CausalDiscoveryBase<T>
     protected double ComputeBIC(Matrix<T> data, int target, HashSet<int> parents)
     {
         int n = data.Rows;
-        if (parents.Count == 0)
-        {
-            double mean = 0;
-            for (int i = 0; i < n; i++) mean += NumOps.ToDouble(data[i, target]);
-            mean /= n;
-            double rss = 0;
-            for (int i = 0; i < n; i++)
-            {
-                double v = NumOps.ToDouble(data[i, target]) - mean;
-                rss += v * v;
-            }
-            return -n * Math.Log(rss / n + 1e-10) - PenaltyDiscount * Math.Log(n);
-        }
+        int k = parents.Count;
 
-        var parentList = parents.ToList();
-        int k = parentList.Count;
+        // No parents: the RSS about the mean, one parameter; otherwise k slopes + 1 intercept.
+        T rss = k == 0
+            ? CausalTensorHelpers.CenteredSumOfSquares(data, target)
+            : CausalTensorHelpers.CenteredOlsRss(data, target, parents.ToList(), 1e-6);
+        T fit = NumOps.Multiply(NumOps.FromDouble(-n),
+            NumOps.Log(NumOps.Add(NumOps.Divide(rss, NumOps.FromDouble(n)), NumOps.FromDouble(1e-10))));
+        return NumOps.ToDouble(NumOps.Subtract(fit, NumOps.FromDouble(PenaltyDiscount * (k + 1) * Math.Log(n))));
+    }
 
-        // Compute means for centering (implicit intercept)
-        double targetMean = 0;
-        var parentMeans = new double[k];
-        for (int r = 0; r < n; r++)
-        {
-            targetMean += NumOps.ToDouble(data[r, target]);
-            for (int i = 0; i < k; i++)
-                parentMeans[i] += NumOps.ToDouble(data[r, parentList[i]]);
-        }
-        targetMean /= n;
-        for (int i = 0; i < k; i++) parentMeans[i] /= n;
+    /// <summary>
+    /// The [d x d] adjacency with weight max(|corr(from, to)|, <paramref name="minimumWeight"/>) on every
+    /// edge from -> to with from in <paramref name="parentSets"/>[to], and 0 elsewhere, computed in T.
+    /// </summary>
+    private protected Matrix<T> CorrelationWeightedAdjacency(Matrix<T> data, HashSet<int>[] parentSets,
+        double minimumWeight)
+    {
+        int d = data.Columns;
+        var correlations = new Dictionary<int, T>();
+        for (int to = 0; to < d; to++)
+            foreach (int from in parentSets[to])
+                correlations[from * d + to] = CausalTensorHelpers.PearsonCorrelation(data, from, to);
 
-        // Build XtX and Xty on centered data
-        var XtX = new Matrix<T>(k, k);
-        var Xty = new Vector<T>(k);
-        for (int i = 0; i < k; i++)
-        {
-            int fi = parentList[i];
-            for (int j = 0; j < k; j++)
-            {
-                int fj = parentList[j];
-                double sum = 0;
-                for (int r = 0; r < n; r++)
-                    sum += (NumOps.ToDouble(data[r, fi]) - parentMeans[i]) *
-                           (NumOps.ToDouble(data[r, fj]) - parentMeans[j]);
-                XtX[i, j] = NumOps.FromDouble(sum);
-            }
-            double sumY = 0;
-            for (int r = 0; r < n; r++)
-                sumY += (NumOps.ToDouble(data[r, fi]) - parentMeans[i]) *
-                        (NumOps.ToDouble(data[r, target]) - targetMean);
-            Xty[i] = NumOps.FromDouble(sumY);
-        }
+        if (correlations.Count == 0)
+            return new Matrix<T>(d, d);
 
-        // Ridge regularization
-        T ridge = NumOps.FromDouble(1e-6);
-        for (int i = 0; i < k; i++)
-            XtX[i, i] = NumOps.Add(XtX[i, i], ridge);
-
-        var beta = MatrixSolutionHelper.SolveLinearSystem<T>(XtX, Xty, MatrixDecompositionType.Lu);
-
-        // Compute RSS with intercept: pred = mean(y) + sum(beta_i * (x_i - mean(x_i)))
-        double totalRss = 0;
-        for (int r = 0; r < n; r++)
-        {
-            double pred = targetMean;
-            for (int i = 0; i < k; i++)
-                pred += NumOps.ToDouble(beta[i]) * (NumOps.ToDouble(data[r, parentList[i]]) - parentMeans[i]);
-            double err = NumOps.ToDouble(data[r, target]) - pred;
-            totalRss += err * err;
-        }
-
-        // k+1 parameters: k slopes + 1 intercept
-        return -n * Math.Log(totalRss / n + 1e-10) - PenaltyDiscount * (k + 1) * Math.Log(n);
+        var raw = Tensor<T>.FromMatrix(CausalTensorHelpers.FromValues(d, d, correlations));
+        var selected = Tensor<T>.FromMatrix(CausalTensorHelpers.KeepPositions(Engine.TensorOnesLike(raw), correlations.Keys));
+        var weighted = Engine.TensorMax(Engine.TensorAbs(raw), NumOps.FromDouble(minimumWeight));
+        return Engine.TensorWhere(selected, weighted, Engine.TensorZerosLike(raw)).ToMatrix();
     }
 
     /// <summary>
@@ -136,24 +96,7 @@ public abstract class ScoreBasedBase<T> : CausalDiscoveryBase<T>
     /// </summary>
     protected double ComputeAbsCorrelation(Matrix<T> data, int col1, int col2)
     {
-        int n = data.Rows;
-        double m1 = 0, m2 = 0;
-        for (int k = 0; k < n; k++)
-        {
-            m1 += NumOps.ToDouble(data[k, col1]);
-            m2 += NumOps.ToDouble(data[k, col2]);
-        }
-        m1 /= n; m2 /= n;
-
-        double sij = 0, sii = 0, sjj = 0;
-        for (int k = 0; k < n; k++)
-        {
-            double d1 = NumOps.ToDouble(data[k, col1]) - m1;
-            double d2 = NumOps.ToDouble(data[k, col2]) - m2;
-            sij += d1 * d2; sii += d1 * d1; sjj += d2 * d2;
-        }
-
-        return (sii > 1e-10 && sjj > 1e-10) ? Math.Abs(sij / Math.Sqrt(sii * sjj)) : 0;
+        return Math.Abs(NumOps.ToDouble(CausalTensorHelpers.PearsonCorrelation(data, col1, col2)));
     }
 
     /// <summary>
