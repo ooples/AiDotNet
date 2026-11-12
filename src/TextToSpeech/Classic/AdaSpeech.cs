@@ -170,9 +170,7 @@ public partial class AdaSpeech<T> : VarianceAdaptorTtsModelBase<T>, IAcousticMod
     protected override Tensor<T> PreprocessText(string text)
     {
         var ids = FrontEnd.ClassicTtsText.Phonemes(text, true, _options.TextSymbols, _options.VocabSize, _options.MaxTextLength);
-        var tokens = new Tensor<T>(new[] { ids.Length });
-        for (int i = 0; i < ids.Length; i++) tokens[i] = NumOps.FromDouble(ids[i]);
-        return tokens;
+        return IdTensor(ids);
     }
 
     /// <inheritdoc />
@@ -358,15 +356,16 @@ public partial class AdaSpeech<T> : VarianceAdaptorTtsModelBase<T>, IAcousticMod
     /// </summary>
     private Tensor<T> PhonemeLevelMel(Tensor<T> mel, int[] durations)
     {
-        int frames = mel.Shape[0];
-        var average = new Tensor<T>(new[] { durations.Length, frames });
-        int start = 0;
-        for (int p = 0; p < durations.Length; p++)
-        {
-            for (int f = start; f < start + durations[p]; f++)
-                average[p, f] = NumOps.FromDouble(1.0 / durations[p]);
-            start += durations[p];
-        }
+        int frames = mel.Shape[0], total = durations.Sum();
+        if (total > frames)
+            throw new ArgumentOutOfRangeException(nameof(durations), $"The durations cover {total} frames but the mel spectrogram has {frames}.");
+        var alignment = DurationAlignment(durations);                                                    // [L, total]
+        if (total < frames)
+            alignment = Engine.TensorConcatenate(new[] { alignment, new Tensor<T>(new[] { durations.Length, frames - total }) }, 1);
+        // Each row scaled by 1 / d_p; a phoneme with no frames keeps its zero row (no 0 · ∞).
+        var counts = new Tensor<int>((int[])durations.Clone(), new[] { durations.Length, 1 }).Cast<T>();
+        var inverse = Engine.TensorWhere(Engine.TensorEquals(counts, NumOps.Zero), counts, Engine.TensorReciprocal(counts));
+        var average = Engine.TensorMultiply(alignment, Engine.TensorTile(inverse, new[] { 1, frames }));
         return Engine.TensorMatMul(average, Engine.Reshape(mel, new[] { frames, mel.Length / frames }));
     }
 
