@@ -277,6 +277,62 @@ public class DiffusionScheduleAndMedianTests
         Assert.Equal(2.0, results["NumSeries"]);
     }
 
+    [Fact]
+    public void Gift_eval_benchmark_leaves_out_a_nonfinite_forecast_instead_of_poisoning_the_dataset()
+    {
+        // Series 1 gets a complete grid that holds a NaN. Scoring it would make the dataset CRPS NaN; GIFT-Eval's
+        // finite filter leaves it out, so the result is series 0's loss alone.
+        var first = new[] { 1.0, 2.0, 3.0, 2.0, 1.0, 2.0, 5.0, -2.0, 7.5, 3.0 };
+        var second = new[] { 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 9.0, 9.0, 9.0, 9.0 };
+        var flatFull = new double[12];
+        for (int t = 0; t < 4; t++)
+        {
+            for (int q = 0; q < 3; q++)
+                flatFull[t * 3 + q] = FullGrid[t, q];
+        }
+
+        var poisoned = (double[])flatFull.Clone();
+        poisoned[4] = double.NaN;
+
+        var model = new Mock<ITimeSeriesFoundationModel<double>>();
+        model.Setup(m => m.Forecast(It.IsAny<Tensor<double>>(), It.IsAny<double[]?>()))
+            .Returns((Tensor<double> context, double[]? quantiles) =>
+                quantiles is null
+                    ? new Tensor<double>(new[] { 4 }, new Vector<double>(new[] { 1.0, 1.0, 1.0, 1.0 }))
+                    : new Tensor<double>(new[] { 12 }, new Vector<double>(context.Length == 6 ? flatFull : poisoned)));
+
+        var results = new GIFTEvalBenchmark<double>().RunBenchmark(
+            model.Object,
+            new[]
+            {
+                new Tensor<double>(new[] { first.Length }, new Vector<double>(first)),
+                new Tensor<double>(new[] { second.Length }, new Vector<double>(second)),
+            },
+            new[] { 6, 8 },
+            new[] { 1, 1 },
+            Levels);
+
+        var expected = ReferenceMeanWeightedQuantileLoss(
+            new[] { new[] { 5.0, -2.0, 7.5, 3.0 } }, new[] { FullGrid }, Levels);
+        Assert.Equal(expected, results["CRPS"], 12);
+        Assert.Equal(1.0, results["NumCRPSEvaluated"]);
+    }
+
+    [Fact]
+    public void Gift_eval_crps_of_huge_float_targets_does_not_overflow_the_denominator()
+    {
+        // Nine levels, y = 1e38 and every quantile at 9e37: each error is 1e37, so the loss is
+        // 2 * (sum_q q * 1e37) / (9 * 1e38) = 2 * 4.5e37 / 9e38 = 0.1. Forming 9 * 1e38 first overflows float.
+        var levels = Enumerable.Range(1, 9).Select(i => i / 10.0).ToArray();
+        var forecasts = levels.ToDictionary(
+            level => level, _ => new Tensor<float>(new[] { 1 }, new Vector<float>(new[] { 9e37f })));
+
+        float crps = new GIFTEvalBenchmark<float>().ComputeCRPS(
+            forecasts, new Tensor<float>(new[] { 1 }, new Vector<float>(new[] { 1e38f })));
+
+        Assert.Equal(0.1, crps, 5);
+    }
+
     public static TheoryData<Type> RevinModels() => new TheoryData<Type>
     {
         typeof(PatchTST<double>),
