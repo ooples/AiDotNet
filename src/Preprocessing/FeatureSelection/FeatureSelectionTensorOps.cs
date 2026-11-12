@@ -966,6 +966,27 @@ internal static class FeatureSelectionTensorOps
             PreprocessingTensorOps.Filled(shape, ops.FromDouble(df1 / 2)), x);
         return engine.TensorWhere(positive, tail, one);
     }
+
+    /// <summary>
+    /// Pearson correlation matrix of the columns of <paramref name="x"/> ([n, p] to [p, p]): unit diagonal,
+    /// 0 for any off-diagonal pair involving a column whose centred sum of squares is not above
+    /// <paramref name="epsilon"/> (the undefined constant-column case).
+    /// </summary>
+    public static Tensor<T> CorrelationMatrix<T>(Tensor<T> x, double epsilon = 1e-10)
+    {
+        var engine = AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<T>();
+        int p = x.Shape[1];
+        var xc = engine.TensorSubtract(x, engine.ReduceMean(x, new[] { 0 }, true));
+        var cross = engine.TensorMatMul(engine.TensorTranspose(xc), xc);
+        var ss = engine.ReduceSum(engine.TensorSquare(xc), new[] { 0 }, false);
+        var varying = engine.TensorGreaterThan(ss, ops.FromDouble(epsilon));
+        var scale = engine.TensorSqrt(engine.TensorWhere(varying, ss, PreprocessingTensorOps.Filled(new[] { p }, ops.One)));
+        var r = engine.TensorDivide(cross, engine.TensorOuter(scale, scale));
+        var defined = engine.TensorOuter(varying, varying);
+        var eye = engine.TensorEye<T>(p);
+        return engine.TensorWhere(eye, eye, engine.TensorWhere(defined, r, new Tensor<T>(new[] { p, p })));
+    }
 }
 
 /// <summary>Impurity used by <see cref="FeatureSelectionTensorOps.TryBestSplit{T}"/>.</summary>

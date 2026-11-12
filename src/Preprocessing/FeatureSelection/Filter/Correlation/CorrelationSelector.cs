@@ -45,7 +45,7 @@ public class CorrelationSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     // Fitted parameters
     private int[]? _selectedFeatures;
     private int _nInputFeatures;
-    private double[,]? _correlationMatrix;
+    private Matrix<T>? _correlationMatrix;
 
     /// <summary>
     /// Gets the correlation threshold above which features are considered highly correlated.
@@ -95,7 +95,7 @@ public class CorrelationSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     /// - -1: Perfect negative correlation
     /// </para>
     /// </remarks>
-    public double[,]? CorrelationMatrix => _correlationMatrix;
+    public Matrix<T>? CorrelationMatrix => _correlationMatrix;
 
     /// <summary>
     /// Gets whether this transformer supports inverse transformation.
@@ -163,7 +163,12 @@ public class CorrelationSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         var processSet = new HashSet<int>(columnsToProcess);
 
         // Compute full correlation matrix for analysis
-        _correlationMatrix = ComputeCorrelationMatrix(data);
+        var correlations = FeatureSelectionTensorOps.CorrelationMatrix(Tensor<T>.FromMatrix(data));
+        _correlationMatrix = correlations.ToMatrix();
+
+        // Flattened (i * p + j) positions of the pairs whose absolute correlation exceeds the threshold
+        var highlyCorrelated = new HashSet<int>(PreprocessingTensorOps.MaskPositions(
+            Engine.TensorGreaterThan(Engine.TensorAbs(correlations), NumOps.FromDouble(_threshold))));
 
         // Select features using greedy forward selection
         var selectedList = new List<int>();
@@ -187,8 +192,7 @@ public class CorrelationSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
                     continue; // Skip pass-through columns in correlation check
                 }
 
-                double correlation = Math.Abs(_correlationMatrix[i, j]);
-                if (correlation > _threshold)
+                if (highlyCorrelated.Contains(i * _nInputFeatures + j))
                 {
                     isIndependent = false;
                     break;
@@ -211,54 +215,6 @@ public class CorrelationSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     }
 
     /// <summary>
-    /// Computes the Pearson correlation matrix for all features.
-    /// </summary>
-    /// <param name="data">The data matrix.</param>
-    /// <returns>A square matrix of correlations.</returns>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> This method calculates how related each pair of features is.
-    /// The result is a symmetric matrix where:
-    /// - Diagonal values are always 1.0 (each feature is perfectly correlated with itself)
-    /// - Off-diagonal values range from -1 to +1
-    /// </para>
-    /// </remarks>
-    private double[,] ComputeCorrelationMatrix(Matrix<T> data)
-    {
-        int n = data.Columns;
-        var correlations = new double[n, n];
-
-        // Pre-compute column vectors for efficiency
-        var columns = new Vector<T>[n];
-        for (int i = 0; i < n; i++)
-        {
-            columns[i] = data.GetColumn(i);
-        }
-
-        // Compute correlations
-        for (int i = 0; i < n; i++)
-        {
-            correlations[i, i] = 1.0; // Self-correlation is always 1
-
-            for (int j = i + 1; j < n; j++)
-            {
-                double corr = NumOps.ToDouble(
-                    StatisticsHelper<T>.CalculatePearsonCorrelation(columns[i], columns[j]));
-
-                // Handle NaN (constant features have undefined correlation)
-                if (double.IsNaN(corr))
-                {
-                    corr = 0.0;
-                }
-
-                correlations[i, j] = corr;
-                correlations[j, i] = corr; // Symmetric
-            }
-        }
-
-        return correlations;
-    }
-
-    /// <summary>
     /// Removes features that are highly correlated with other selected features.
     /// </summary>
     /// <param name="data">The data to transform.</param>
@@ -278,20 +234,7 @@ public class CorrelationSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             throw new InvalidOperationException("Selector has not been fitted.");
         }
 
-        int numRows = data.Rows;
-        int numOutputCols = _selectedFeatures.Length;
-        var result = new T[numRows, numOutputCols];
-
-        for (int i = 0; i < numRows; i++)
-        {
-            for (int j = 0; j < numOutputCols; j++)
-            {
-                int sourceCol = _selectedFeatures[j];
-                result[i, j] = data[i, sourceCol];
-            }
-        }
-
-        return new Matrix<T>(result);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedFeatures);
     }
 
     /// <summary>
