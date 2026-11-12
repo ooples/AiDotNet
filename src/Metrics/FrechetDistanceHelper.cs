@@ -53,14 +53,20 @@ internal static class FrechetDistanceHelper<T>
 
         var sigma1 = Tensor<T>.FromMatrix(cov1);
         var sigma2 = Tensor<T>.FromMatrix(cov2);
+        // A common covariance scale prevents the sandwich product from underflowing or overflowing.
+        T scale = MathHelper.Max(engine.TensorMaxValue(engine.TensorAbs(sigma1)),
+            engine.TensorMaxValue(engine.TensorAbs(sigma2)));
+        if (!NumOps.GreaterThan(scale, NumOps.Zero)) return meanDiffSq;
+        var divisor = Tensor<T>.CreateDefault(sigma1.Shape.ToArray(), scale);
+        sigma1 = engine.TensorDivide(sigma1, divisor);
+        sigma2 = engine.TensorDivide(sigma2, divisor);
         T traceCov = NumOps.Add(engine.TensorTrace(sigma1), engine.TensorTrace(sigma2));
-
         var sqrtSigma1 = SymmetricSquareRoot(sigma1);
         var inner = engine.TensorMatMul(engine.TensorMatMul(sqrtSigma1, sigma2), sqrtSigma1);
         var (innerEigenvalues, _) = ScaledEigh(inner);
         T traceSqrtProduct = engine.TensorSum(engine.TensorSqrt(engine.TensorClampMin(innerEigenvalues, NumOps.Zero)));
-
-        return NumOps.Subtract(NumOps.Add(meanDiffSq, traceCov), NumOps.Multiply(NumOps.FromDouble(2.0), traceSqrtProduct));
+        T covarianceDistance = NumOps.Subtract(traceCov, NumOps.Multiply(NumOps.FromDouble(2.0), traceSqrtProduct));
+        return NumOps.Add(meanDiffSq, NumOps.Multiply(scale, MathHelper.Max(NumOps.Zero, covarianceDistance)));
     }
 
     /// <summary>
@@ -98,7 +104,7 @@ internal static class FrechetDistanceHelper<T>
             return (new Tensor<T>(new[] { n }), Tensor<T>.FromMatrix(Matrix<T>.CreateIdentity(n)));
         }
 
-        var normalized = engine.TensorDivideScalar(matrix, scale);
+        var normalized = engine.TensorDivide(matrix, Tensor<T>.CreateDefault(matrix.Shape.ToArray(), scale));
         Tensor<T> values;
         Tensor<T> vectors;
         if (typeof(T) == typeof(double) || typeof(T) == typeof(float))

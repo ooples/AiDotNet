@@ -47,6 +47,9 @@ public class RFFKernel<T> : IKernelFunction<T>
     /// The random phase shifts (b).
     /// </summary>
     private readonly Tensor<T> _phases;
+    // Frequencies and phase geometry retain the original double precision for narrow storage types.
+    private readonly RFFKernel<double>? _wideKernel;
+
 
     /// <summary>
     /// Number of random features.
@@ -147,6 +150,15 @@ public class RFFKernel<T> : IKernelFunction<T>
         _lengthScale = lengthScale;
         _outputScale = outputScale;
         _numOps = MathHelper.GetNumericOperations<T>();
+
+        if (typeof(T) != typeof(double))
+        {
+            _wideKernel = new RFFKernel<double>(inputDim, numFeatures,
+                (RFFKernel<double>.RFFKernelType)(int)kernelType, lengthScale, outputScale, seed);
+            _frequencies = new Tensor<T>(new[] { 0, 0 });
+            _phases = new Tensor<T>(new[] { 0 });
+            return;
+        }
 
         var rand = seed.HasValue
             ? RandomHelper.CreateSeededRandom(seed.Value)
@@ -312,6 +324,7 @@ public class RFFKernel<T> : IKernelFunction<T>
     /// </summary>
     private Tensor<T> FeatureMap(Tensor<T> inputs)
     {
+        if (_wideKernel is not null) return _wideKernel.FeatureMap(inputs.Cast<double>()).Cast<T>();
         var engine = AiDotNetEngine.Current;
         int n = inputs.Shape[0];
         var projections = engine.TensorMatMul(inputs, engine.TensorTranspose(_frequencies));
@@ -340,6 +353,9 @@ public class RFFKernel<T> : IKernelFunction<T>
     /// </remarks>
     public T Calculate(Vector<T> x1, Vector<T> x2)
     {
+        if (_wideKernel is not null)
+            return _numOps.FromDouble(_wideKernel.Calculate(
+                x1.AsTensor().Cast<double>().ToVector(), x2.AsTensor().Cast<double>().ToVector()));
         return AiDotNetEngine.Current.DotProduct(GetFeatures(x1), GetFeatures(x2));
     }
 
@@ -406,7 +422,7 @@ public class RFFKernel<T> : IKernelFunction<T>
             return _numOps.Zero;
 
         var errors = new Vector<T>(pairs.Select(pair => PairError(X.GetRow(pair.I), X.GetRow(pair.J), exactKernel)));
-        return _numOps.Divide(AiDotNetEngine.Current.Sum(errors), _numOps.FromDouble(numPairs));
+        return _numOps.FromDouble(AiDotNetEngine.Current.TensorMean(errors.AsTensor().Cast<double>()));
     }
 
     /// <summary>

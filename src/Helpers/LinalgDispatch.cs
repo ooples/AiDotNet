@@ -31,8 +31,15 @@ internal static class LinalgDispatch<T>
 
     /// <summary>Cholesky factor with per-matrix failure info (<c>Linalg.CholeskyEx</c>).</summary>
     internal static (Tensor<T> L, Tensor<int> Info) CholeskyEx(Tensor<T> input, bool upper = false)
-        => (_choleskyEx ??= Bind<Func<Tensor<T>, bool, (Tensor<T>, Tensor<int>)>>(
+    {
+        if (typeof(T) != typeof(float) && typeof(T) != typeof(double))
+        {
+            var (factor, info) = LinalgDispatch<double>.CholeskyEx(input.Cast<double>(), upper);
+            return (factor.Cast<T>(), info);
+        }
+        return (_choleskyEx ??= Bind<Func<Tensor<T>, bool, (Tensor<T>, Tensor<int>)>>(
             nameof(Linalg.CholeskyEx), 2))(input, upper);
+    }
 
     /// <summary>Determinant (<c>Linalg.Det</c>).</summary>
     internal static Tensor<T> Det(Tensor<T> input)
@@ -44,8 +51,15 @@ internal static class LinalgDispatch<T>
 
     /// <summary>Symmetric eigendecomposition (<c>Linalg.Eigh</c>).</summary>
     internal static (Tensor<T> Values, Tensor<T> Vectors) Eigh(Tensor<T> input, bool upper = false)
-        => (_eigh ??= Bind<Func<Tensor<T>, bool, (Tensor<T>, Tensor<T>)>>(
+    {
+        if (typeof(T) != typeof(float) && typeof(T) != typeof(double))
+        {
+            var (values, vectors) = LinalgDispatch<double>.Eigh(input.Cast<double>(), upper);
+            return (values.Cast<T>(), vectors.Cast<T>());
+        }
+        return (_eigh ??= Bind<Func<Tensor<T>, bool, (Tensor<T>, Tensor<T>)>>(
             nameof(Linalg.Eigh), 2))(input, upper);
+    }
 
     /// <summary>General eigendecomposition (<c>Linalg.Eig</c>).</summary>
     internal static (Tensor<T> Values, Tensor<T> Vectors) Eig(Tensor<T> input)
@@ -66,8 +80,12 @@ internal static class LinalgDispatch<T>
 
     /// <summary>Triangular solve (<c>Linalg.SolveTriangular</c>).</summary>
     internal static Tensor<T> SolveTriangular(Tensor<T> a, Tensor<T> b, bool upper, bool unitDiagonal = false)
-        => (_solveTriangular ??= Bind<Func<Tensor<T>, Tensor<T>, bool, bool, Tensor<T>>>(
+    {
+        if (typeof(T) != typeof(float) && typeof(T) != typeof(double))
+            return LinalgDispatch<double>.SolveTriangular(a.Cast<double>(), b.Cast<double>(), upper, unitDiagonal).Cast<T>();
+        return (_solveTriangular ??= Bind<Func<Tensor<T>, Tensor<T>, bool, bool, Tensor<T>>>(
             nameof(Linalg.SolveTriangular), 4))(a, b, upper, unitDiagonal);
+    }
 
     /// <summary>Singular value decomposition (<c>Linalg.Svd</c>).</summary>
     internal static (Tensor<T> U, Tensor<T> S, Tensor<T> Vh) Svd(Tensor<T> input, bool fullMatrices = true)

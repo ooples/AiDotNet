@@ -10,6 +10,64 @@ namespace AiDotNetTests.UnitTests.Metrics;
 public class MetricReferenceValueTests
 {
     [Fact]
+    public void PolygonIoU_HalfImageScale_AccumulatesAreaInDouble()
+    {
+        (Half X, Half Y)[] square = { ((Half)0, (Half)0), ((Half)512, (Half)0),
+            ((Half)512, (Half)512), ((Half)0, (Half)512) };
+        Assert.Equal((Half)1, TextDetectionMetrics<Half>.PolygonIoU(square, square));
+    }
+
+    [Fact]
+    public void InceptionScore_FloatOneHotPredictions_KeepZeroProbabilityTermsFinite()
+    {
+        var predictions = new Matrix<float>(new float[,] { { 1, 0 }, { 0, 1 } });
+        Assert.InRange(InceptionScore<float>.ScorePredictions(predictions), 1.99999, 2.00001);
+    }
+
+    [Fact]
+    public void LanguageMetrics_Half_KeepZeroProbabilityFloorAndExactVocabularyCounts()
+    {
+        var zero = new AiDotNet.Tensors.LinearAlgebra.Tensor<Half>(new Half[] { (Half)0, (Half)1 }, new[] { 1, 2 });
+        Assert.InRange((double)LanguageModelMetrics<Half>.CrossEntropy(zero, new[] { 0 }, false), 27.62, 27.64);
+        var scores = AiDotNet.Tensors.LinearAlgebra.Tensor<Half>.CreateDefault(new[] { 1, 70000 }, (Half)1);
+        scores.SetFlat(0, (Half)0);
+        Assert.Equal((Half)1, LanguageModelMetrics<Half>.TopKAccuracy(scores, new[] { 0 }, 70000));
+        Assert.Equal((Half)0, LanguageModelMetrics<Half>.TopKAccuracy(scores, new[] { 0 }, 69999));
+    }
+
+    [Fact]
+    public void Ndcg_HalfLargeTieGroup_KeepsUnitScore()
+    {
+        var scores = Vector<Half>.CreateDefault(70000, (Half)1);
+        Assert.Equal((Half)1, RankingMetrics<Half>.NdcgAtK(scores, scores, 0, false));
+    }
+
+    [Fact]
+    public void TextDetection_HalfLargeCounts_PreserveRatios()
+    {
+        var summarize = typeof(TextDetectionMetrics<Half>).GetMethod("Summarize",
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)!;
+        var result = ((Half Precision, Half Recall, Half HMean))summarize.Invoke(null, new object[] { 70000, 140000, 70000 })!;
+        Assert.Equal((Half)0.5, result.Precision);
+        Assert.Equal((Half)1, result.Recall);
+        Assert.InRange((double)result.HMean, 0.666, 0.667);
+    }
+
+    [Theory]
+    [InlineData(1e-320)]
+    [InlineData(1e200)]
+    public void FrechetDistance_ExtremeCovarianceScales_PreserveClosedForm(double scale)
+    {
+        var mean = new Vector<double>(new[] { 0.0 });
+        var first = new Matrix<double>(new double[,] { { scale } });
+        var second = new Matrix<double>(new double[,] { { 4 * scale } });
+        double identical = FrechetDistanceHelper<double>.FrechetDistance(mean, first, mean, first);
+        double different = FrechetDistanceHelper<double>.FrechetDistance(mean, first, mean, second);
+        Assert.Equal(0, identical);
+        Assert.InRange(different / scale, 0.999, 1.001);
+    }
+
+    [Fact]
     public void NdcgAtK_TiedScores_MatchesScikitLearnTieAveraging()
     {
         // sklearn.metrics.ndcg_score([[1, 0, 2]], [[1, 1, 0]]) = 0.6900468833579672

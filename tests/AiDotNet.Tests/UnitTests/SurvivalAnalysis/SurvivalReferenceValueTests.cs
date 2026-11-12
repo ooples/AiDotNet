@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using AiDotNet.SurvivalAnalysis;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
@@ -10,6 +11,70 @@ namespace AiDotNet.Tests.UnitTests.SurvivalAnalysis;
 /// </summary>
 public class SurvivalReferenceValueTests
 {
+    [Fact]
+    public void NonparametricSurvival_HalfLargeCohort_UsesWideCounts()
+    {
+        const int count = 70000;
+        var x = new Matrix<Half>(count, 1);
+        var times = Vector<Half>.CreateDefault(count, (Half)1);
+        var events = Vector<int>.CreateDefault(count, 1);
+        var km = new KaplanMeierEstimator<Half>();
+        km.FitSurvival(x, times, events);
+        Assert.Equal((Half)0, km.GetBaselineSurvival(new Vector<Half>(new[] { (Half)1 }))[0]);
+        var na = new NelsonAalenEstimator<Half>();
+        na.FitSurvival(x, times, events);
+        Assert.Equal((Half)1, na.CumulativeHazard![0]);
+        Assert.InRange((double)na.Variance![0], 1.4e-5, 1.5e-5);
+    }
+
+    [Fact]
+    public void Concordance_HalfPairCountAboveRange_PreservesTieHalfCredit()
+    {
+        const int count = 400;
+        var x = new Matrix<Half>(count, 1);
+        var times = new Vector<Half>(System.Linq.Enumerable.Range(1, count).Select(value => (Half)value));
+        var events = Vector<int>.CreateDefault(count, 1);
+        var model = new KaplanMeierEstimator<Half>();
+        model.FitSurvival(x, times, events);
+        Assert.Equal((Half)0.5, model.CalculateConcordanceIndex(x, times, events));
+    }
+
+    [Theory]
+    [InlineData(1000f)]
+    [InlineData(4000f)]
+    [InlineData(-1000f)]
+    public void Cox_FloatExtremePredictors_PreserveFiniteFitAndConditionalSurvival(float magnitude)
+    {
+        var model = new CoxProportionalHazards<float>(learningRate: 0.001, maxIterations: 3, tolerance: 0);
+        var x = new Matrix<float>(new float[,] { { magnitude }, { 0 } });
+        var times = new Vector<float>(new[] { 1f, 2f });
+        model.FitSurvival(x, times, new Vector<int>(new[] { 1, 1 }));
+        Assert.Single(model.GetParameters().ToArray());
+        Assert.Equal(magnitude * 0.0005f, model.GetCoefficients()![0], 5);
+        var queries = new Vector<float>(new[] { 0.5f, 1f, 2f });
+        var survival = model.PredictSurvivalProbability(x, queries);
+        Assert.Equal(1f, survival[0, 0]);
+        Assert.Equal((float)Math.Exp(-1), survival[0, 1], 5);
+        Assert.Equal(0f, survival[0, 2]);
+        Assert.Equal((float)Math.Exp(-1), survival[1, 2], 5);
+        Assert.All(model.PredictHazardRatio(x).ToArray(), value => Assert.True(float.IsFinite(value)));
+        var copy = (CoxProportionalHazards<float>)model.DeepCopy();
+        var copied = copy.PredictSurvivalProbability(x, queries);
+        for (int i = 0; i < x.Rows; i++)
+            for (int j = 0; j < queries.Length; j++)
+                Assert.Equal(survival[i, j], copied[i, j]);
+    }
+
+    [Fact]
+    public void Cox_AllCensored_SurvivalRemainsOne()
+    {
+        var model = new CoxProportionalHazards<double>(maxIterations: 2);
+        var x = new Matrix<double>(new double[,] { { 1 }, { 2 } });
+        model.FitSurvival(x, new Vector<double>(new[] { 1.0, 2.0 }), new Vector<int>(new[] { 0, 0 }));
+        Assert.All(model.PredictSurvivalProbability(x, new Vector<double>(new[] { 0.5, 3.0 })).ToArray(),
+            value => Assert.Equal(1.0, value));
+    }
+
     private static KaplanMeierEstimator<double> FitKaplanMeier(double[] times, int[] events)
     {
         var km = new KaplanMeierEstimator<double>();
