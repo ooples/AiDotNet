@@ -53,6 +53,20 @@ internal static class EmbeddingScores<T>
     }
 
     /// <summary>
+    /// SigLIP's per-pair match probability <c>sigmoid(cos(query, candidate) / temperature + bias)</c>
+    /// (Zhai et al., 2023), for each candidate on its own: the scores are not normalized across candidates.
+    /// </summary>
+    /// <param name="engine">Engine to run on.</param>
+    /// <param name="query">The embedding scored against every candidate.</param>
+    /// <param name="candidates">The embeddings to score.</param>
+    /// <param name="temperature">The temperature (1 / the paper's logit scale t).</param>
+    /// <param name="bias">The logit bias b.</param>
+    /// <returns>A <c>[candidates.Length]</c> tensor of probabilities.</returns>
+    internal static Tensor<T> SigmoidPairScores(IEngine engine, Tensor<T> query, Tensor<T>[] candidates, T temperature,
+        T bias) => engine.TensorSigmoid(engine.TensorAddScalar(
+            engine.TensorDivideScalar(CosineToEach(engine, query, candidates), temperature), bias));
+
+    /// <summary>
     /// Divides each row of a <c>[n, d]</c> tensor by its L2 norm. Each row is first scaled by its largest
     /// magnitude, so the squares summed stay within [0, d] and cannot overflow a narrow type such as Half.
     /// A zero row stays zero.

@@ -290,11 +290,8 @@ public partial class SigLIP2<T> : VisionLanguageModelBase<T>, IContrastiveVision
 
         // SigLIP 2 scores every image-text pair on its own: sigmoid(sim / t + b) is the probability that the
         // pair matches (Zhai et al., 2023), so the scores are not renormalized across the labels.
-        var logits = Engine.TensorAddScalar(
-            Engine.TensorDivideScalar(
-                EmbeddingScores<T>.CosineToEach(Engine, imageEmb, textEmbs), NumOps.FromDouble(_options.Temperature)),
-            NumOps.FromDouble(_options.SigmoidBias));
-        T[] probs = Engine.TensorSigmoid(logits).ToArray();
+        T[] probs = EmbeddingScores<T>.SigmoidPairScores(Engine, imageEmb, textEmbs,
+            NumOps.FromDouble(_options.Temperature), NumOps.FromDouble(_options.SigmoidBias)).ToArray();
         var result = new Dictionary<string, T>();
         for (int i = 0; i < labels.Length; i++)
             result[labels[i]] = probs[i];
