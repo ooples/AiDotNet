@@ -567,8 +567,10 @@ internal sealed class PypinyinReader
     private static readonly Lazy<PypinyinReader> EmotiVoiceInstance =
         new(() => new PypinyinReader("emotivoice_pinyin_chars.tsv.gz", "emotivoice_pinyin_phrases.tsv.gz"), isThreadSafe: true);
     private static readonly Lazy<PypinyinReader> XttsInstance =
-        new(() => new PypinyinReader("xtts_pypinyin_chars.tsv.gz", "xtts_pypinyin_phrases.tsv.gz"), isThreadSafe: true);
+        new(() => new PypinyinReader("xtts_pypinyin_chars.tsv.gz", "xtts_pypinyin_phrases.tsv.gz",
+            PypinyinSegmentation.Release050), isThreadSafe: true);
 
+    private readonly PypinyinSegmentation _segmentation;
     private readonly Dictionary<string, string[]> _phrases = new(StringComparer.Ordinal);
     private readonly HashSet<string> _phrasePrefixes = new(StringComparer.Ordinal);
     private readonly Dictionary<string, string> _characters = new(StringComparer.Ordinal);
@@ -579,11 +581,14 @@ internal sealed class PypinyinReader
     /// <summary>pypinyin's TONE3 style with the neutral tone as 5, with pypinyin-dict's CC-CEDICT phrases loaded
     /// (EmotiVoice's front end; <c>tools/reference-data/emotivoice_frontend_reference.py</c>).</summary>
     public static PypinyinReader EmotiVoiceTone3 => EmotiVoiceInstance.Value;
-    /// <summary>XTTS's complete TONE3 syllables, with the neutral tone written as five.</summary>
+    /// <summary>XTTS's complete TONE3 syllables, with the neutral tone written as five, segmented as the pypinyin
+    /// 0.50.0 that Coqui's reference was generated with.</summary>
     public static PypinyinReader XttsTone3 => XttsInstance.Value;
 
-    private PypinyinReader(string characters, string phrases)
+    private PypinyinReader(string characters, string phrases,
+        PypinyinSegmentation segmentation = PypinyinSegmentation.Release055)
     {
+        _segmentation = segmentation;
         foreach (var line in ChineseText.ReadLines(characters))
         {
             int tab = line.IndexOf('\t');
@@ -646,7 +651,7 @@ internal sealed class PypinyinReader
         }
     }
 
-    // pypinyin 0.55.0's pypinyin.seg.mmseg.Seg(no_non_phrases=True).cut: grow a prefix one character at a time,
+    // pypinyin's mmseg.Seg(no_non_phrases=True).cut (0.55.0 below; 0.50.0 differs as marked): grow a prefix one character at a time,
     // remembering the longest prefix that is itself a phrase. When the prefix stops matching, emit that phrase (or,
     // with none, the first character) and continue after it; when the whole remainder matches as a prefix, emit the
     // longest phrase and continue, or, with none, the remainder as one phrase or character by character.
@@ -663,9 +668,14 @@ internal sealed class PypinyinReader
                 string word = string.Concat(text.GetRange(start, length));
                 if (_phrasePrefixes.Contains(word))
                 {
-                    if (_phrases.ContainsKey(word)) validLength = length;
+                    if (_segmentation == PypinyinSegmentation.Release055 && _phrases.ContainsKey(word)) validLength = length;
+                    else if (_segmentation == PypinyinSegmentation.Release050) validLength = length;
                     continue;
                 }
+                // 0.50 keeps only the longest prefix, and emits it only if that prefix is itself a phrase.
+                if (_segmentation == PypinyinSegmentation.Release050
+                    && validLength > 0 && !_phrases.ContainsKey(string.Concat(text.GetRange(start, validLength))))
+                    validLength = 0;
                 int count = validLength > 0 ? validLength : 1;
                 yield return text.GetRange(start, count);
                 start += count;
@@ -673,7 +683,7 @@ internal sealed class PypinyinReader
                 break;
             }
             if (broke) continue;
-            if (validLength > 0)
+            if (validLength > 0 && _segmentation == PypinyinSegmentation.Release055)
             {
                 yield return text.GetRange(start, validLength);
                 start += validLength;
@@ -695,4 +705,14 @@ internal sealed class PypinyinReader
             return readings;
         return piece.Select(c => _characters.TryGetValue(c, out var reading) ? reading : c);
     }
+}
+
+/// <summary>The pypinyin release whose <c>mmseg.Seg(no_non_phrases=True).cut</c> a reader reproduces.</summary>
+internal enum PypinyinSegmentation
+{
+    /// <summary>0.50.0: emits the longest matched prefix only when it is itself a phrase, otherwise one character.</summary>
+    Release050,
+
+    /// <summary>0.55.0: emits the longest prefix that is itself a phrase, otherwise one character.</summary>
+    Release055,
 }
