@@ -352,7 +352,7 @@ jobs:
     # another 37 minutes by the 85-minute job limit. Keep the full build and query suite,
     # with enough time for analysis and upload on the expanded native model source.
     timeout-minutes: 120
-    if: "${{ always() && !cancelled() && !inputs.sonar_only && fromJSON(needs.validation-source.outputs.execute_quality) && !(github.event_name == 'push' && startsWith(github.event.head_commit.message, 'chore(master): release')) }}"
+    if: "${{ always() && !cancelled() && !inputs.sonar_only && fromJSON(needs.validation-source.outputs.execute_quality) && (github.event.pull_request.draft != true) && !(github.event_name == 'push' && startsWith(github.event.head_commit.message, 'chore(master): release')) }}"
     permissions:
       contents: read
       security-events: write
@@ -435,6 +435,47 @@ jobs:
 
 
   # Build once on ubuntu (net10.0 + net471), then run tests in parallel shards.
+  # A DRAFT runs this compile check and nothing else: every other job gates on
+  # `github.event.pull_request.draft != true`, so drafts no longer queue CodeQL, the shards or the
+  # paper-fidelity slices behind the PRs that are ready to merge. Marking the PR ready
+  # (ready_for_review) starts the full run. Superseded draft builds cancel each other.
+  draft-build:
+    name: Draft build check
+    runs-on: ubuntu-latest
+    if: ${{ github.event_name == 'pull_request' && github.event.pull_request.draft == true }}
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    concurrency:
+      group: draft-build-${{ github.event.pull_request.number }}
+      cancel-in-progress: true
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
+
+      - name: Free up disk space
+        run: |
+          sudo rm -rf /usr/local/lib/android /opt/ghc /usr/local/.ghcup /opt/hostedtoolcache/CodeQL || true
+          sudo rm -rf /usr/share/swift /usr/local/share/boost /usr/local/share/chromium || true
+
+      - name: Setup .NET 10.0
+        uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Cache NuGet packages
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj', '**/Directory.Build.props') }}
+          restore-keys: |
+            nuget-${{ runner.os }}-
+
+      - name: Build (Release, net10.0)
+        run: |
+          dotnet build src/AiDotNet.Generators/AiDotNet.Generators.csproj -c Release
+          dotnet build tests/AiDotNet.Tests/AiDotNetTests.csproj -c Release -f net10.0 -m:4
+
   build:
     name: Build
     runs-on: ubuntu-latest
