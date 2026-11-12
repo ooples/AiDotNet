@@ -152,20 +152,28 @@ namespace AiDotNet.AutoML.NAS
         }
 
         /// <summary>
-        /// Computes the total loss with latency regularization
-        /// Loss = Cross-Entropy + λ * log(Latency)
-        /// Using log(latency) makes the loss more sensitive to changes when latency is small
+        /// Computes the FBNet loss CE * alpha * log(LAT)^beta (Wu et al. 2019, Sec. 3.2), with alpha the latency
+        /// weight and beta <see cref="LatencyExponent"/>. LAT is in milliseconds; log(1 + LAT) keeps the base
+        /// positive for sub-millisecond latencies, where log(LAT)^beta is undefined, and equals log(LAT) to within
+        /// 1/LAT otherwise.
         /// </summary>
         public T ComputeTotalLoss(T taskLoss)
         {
             T latency = ComputeExpectedLatency();
 
-            // Avoid log(0) by adding small epsilon
-            T logLatency = _ops.Log(_ops.Add(latency, _ops.FromDouble(1e-8)));
+            T logLatency = _ops.Log(_ops.Add(latency, _ops.One));
 
-            T latencyLoss = _ops.Multiply(_latencyWeight, logLatency);
-            return _ops.Add(taskLoss, latencyLoss);
+            // FBNet (Wu et al. 2019, Sec. 3.2): L(a, w_a) = CE(a, w_a) * alpha * log(LAT(a))^beta. The latency term
+            // scales the task loss multiplicatively; alpha is the latency weight and beta the latency exponent.
+            T latencyFactor = _ops.Multiply(_latencyWeight, _ops.Power(logLatency, _ops.FromDouble(LatencyExponent)));
+            return _ops.Multiply(taskLoss, latencyFactor);
         }
+
+        /// <summary>
+        /// Gets or sets the exponent beta of the latency term in the FBNet loss CE * alpha * log(LAT)^beta
+        /// (default 0.6, the paper's value).
+        /// </summary>
+        public double LatencyExponent { get; set; } = 0.6;
 
         /// <summary>
         /// Derives the discrete architecture by selecting the operation with highest probability
