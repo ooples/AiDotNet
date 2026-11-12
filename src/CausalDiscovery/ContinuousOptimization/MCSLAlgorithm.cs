@@ -191,8 +191,9 @@ public class MCSLAlgorithm<T> : ContinuousOptimizationBase<T>
         // contributing no L1 subgradient matches the sklearn/scipy convention and is
         // the guard NOTEARSLowRank already applies for the same failure.
         var zeros = Engine.TensorZerosLike(W);
-        var isNaN = Engine.TensorNotEquals(Weff, Weff);
-        var signEdge = Engine.TensorWhere(isNaN, zeros, Engine.TensorSign(Weff));
+        // NaN entries are replaced before the sign is taken, so the sign kernel never sees a NaN.
+        var isNaN = Engine.TensorIsNan(Weff);
+        var signEdge = Engine.TensorSign(Engine.TensorWhere(isNaN, zeros, Weff));
 
         var gEff = Engine.TensorAdd(
             Engine.TensorAdd(Tensor<T>.FromMatrix(lossGrad),
