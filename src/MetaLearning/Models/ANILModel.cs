@@ -135,27 +135,9 @@ public partial class ANILModel<T, TInput, TOutput> : IModel<TInput, TOutput, Mod
     {
         // Return combined body + head parameters
         var bodyParams = InterfaceGuard.Parameterizable(_featureExtractor).GetParameters();
-        int totalSize = bodyParams.Length + _headWeights.Length + (_headBias?.Length ?? 0);
-        var combined = new Vector<T>(totalSize);
-
-        int idx = 0;
-        for (int i = 0; i < bodyParams.Length; i++)
-        {
-            combined[idx++] = bodyParams[i];
-        }
-        for (int i = 0; i < _headWeights.Length; i++)
-        {
-            combined[idx++] = _headWeights[i];
-        }
-        if (_headBias != null)
-        {
-            for (int i = 0; i < _headBias.Length; i++)
-            {
-                combined[idx++] = _headBias[i];
-            }
-        }
-
-        return combined;
+        return _headBias is null
+            ? Vector<T>.Concatenate(bodyParams, _headWeights)
+            : Vector<T>.Concatenate(bodyParams, _headWeights, _headBias);
     }
 
     /// <inheritdoc/>
