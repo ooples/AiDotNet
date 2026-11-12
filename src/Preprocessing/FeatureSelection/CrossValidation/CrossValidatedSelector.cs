@@ -27,14 +27,14 @@ public class CrossValidatedSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>
     private readonly int _nFolds;
     private readonly int? _randomState;
 
-    private double[]? _cvScores;
+    private Vector<T>? _cvScores;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public int NFolds => _nFolds;
-    public double[]? CVScores => _cvScores;
+    public Vector<T>? CVScores => _cvScores;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -76,15 +76,9 @@ public class CrossValidatedSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>
             ? RandomHelper.CreateSeededRandom(_randomState.Value)
             : RandomHelper.CreateSecureRandom();
 
-        var X = new double[n, p];
-        var y = new double[n];
-        for (int i = 0; i < n; i++)
-        {
-            y[i] = NumOps.ToDouble(target[i]);
-            for (int j = 0; j < p; j++)
-                X[i, j] = NumOps.ToDouble(data[i, j]);
-        }
-
+        var engine = Engine;
+        var X = Tensor<T>.FromMatrix(data);
+        var y = engine.Reshape(Tensor<T>.FromVector(target), new[] { n, 1 });
         // Create random fold assignments
         var indices = Enumerable.Range(0, n).ToArray();
         for (int i = n - 1; i > 0; i--)
@@ -97,76 +91,64 @@ public class CrossValidatedSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>
         for (int i = 0; i < n; i++)
             folds[indices[i]] = i % _nFolds;
 
-        _cvScores = new double[p];
+    }
+@@NEW
+        // Evaluate each feature individually: a simple linear regression per feature and fold, all features at once
+        var shape = new[] { n, p };
+        var yWide = engine.TensorBroadcastTo(y, shape);
+        T floor = NumOps.FromDouble(1e-10);
+        T zero = NumOps.Zero;
+        var zeros = new Tensor<T>(new[] { p });
+        var totalR2 = new Tensor<T>(new[] { p });
 
-        // Evaluate each feature individually
-        for (int j = 0; j < p; j++)
+        for (int fold = 0; fold < _nFolds; fold++)
         {
-            double totalR2 = 0;
+            // Split data
+            int foldIndex = fold;
+            var testFlags = Array.ConvertAll(folds, f => f == foldIndex ? 1 : 0);
+            int testCount = testFlags.Sum();
+            int trainCount = n - testCount;
+            if (trainCount < 2 || testCount == 0) continue;
 
-            for (int fold = 0; fold < _nFolds; fold++)
-            {
-                // Split data
-                var trainX = new List<double>();
-                var trainY = new List<double>();
-                var testX = new List<double>();
-                var testY = new List<double>();
+            var testRows = engine.TensorBroadcastTo(
+                new Tensor<int>(testFlags, new[] { n, 1 }).Cast<T>(), shape);
+            var trainRows = PreprocessingTensorOps.OneMinus(testRows);
+            T trainSize = PreprocessingTensorOps.CountAsScalar<T>(trainCount);
+            T testSize = PreprocessingTensorOps.CountAsScalar<T>(testCount);
 
-                for (int i = 0; i < n; i++)
-                {
-                    if (folds[i] == fold)
-                    {
-                        testX.Add(X[i, j]);
-                        testY.Add(y[i]);
-                    }
-                    else
-                    {
-                        trainX.Add(X[i, j]);
-                        trainY.Add(y[i]);
-                    }
-                }
+            // Simple linear regression on the training rows
+            var xMean = engine.TensorDivideScalar(engine.ReduceSum(engine.TensorMultiply(X, trainRows), new[] { 0 }, true), trainSize);
+            var yMean = engine.TensorDivideScalar(engine.ReduceSum(engine.TensorMultiply(yWide, trainRows), new[] { 0 }, true), trainSize);
+            var dx = engine.TensorMultiply(engine.TensorSubtract(X, engine.TensorBroadcastTo(xMean, shape)), trainRows);
+            var dy = engine.TensorSubtract(yWide, engine.TensorBroadcastTo(yMean, shape));
+            var numerator = engine.ReduceSum(engine.TensorMultiply(dx, dy), new[] { 0 }, true);
+            var denominator = engine.ReduceSum(engine.TensorMultiply(dx, dx), new[] { 0 }, true);
+            var slope = engine.TensorWhere(engine.TensorGreaterThan(denominator, floor),
+                engine.TensorDivide(numerator, denominator), new Tensor<T>(new[] { 1, p }));
+            var intercept = engine.TensorSubtract(yMean, engine.TensorMultiply(slope, xMean));
 
-                if (trainX.Count < 2 || testX.Count == 0) continue;
+            // Predict on test set
+            var prediction = engine.TensorAdd(
+                engine.TensorMultiply(X, engine.TensorBroadcastTo(slope, shape)), engine.TensorBroadcastTo(intercept, shape));
+            var residual = engine.TensorMultiply(engine.TensorSubtract(yWide, prediction), testRows);
+            var ssRes = engine.ReduceSum(engine.TensorSquare(residual), new[] { 0 }, false);
+            var testYMean = engine.TensorDivideScalar(engine.ReduceSum(engine.TensorMultiply(yWide, testRows), new[] { 0 }, true), testSize);
+            var testDeviation = engine.TensorMultiply(engine.TensorSubtract(yWide, engine.TensorBroadcastTo(testYMean, shape)), testRows);
+            var ssTot = engine.ReduceSum(engine.TensorSquare(testDeviation), new[] { 0 }, false);
 
-                // Simple linear regression
-                double xMean = trainX.Average();
-                double yMean = trainY.Average();
-
-                double numerator = 0, denominator = 0;
-                for (int i = 0; i < trainX.Count; i++)
-                {
-                    numerator += (trainX[i] - xMean) * (trainY[i] - yMean);
-                    denominator += (trainX[i] - xMean) * (trainX[i] - xMean);
-                }
-
-                double slope = denominator > 1e-10 ? numerator / denominator : 0;
-                double intercept = yMean - slope * xMean;
-
-                // Predict on test set
-                double ssRes = 0, ssTot = 0;
-                double testYMean = testY.Average();
-                for (int i = 0; i < testX.Count; i++)
-                {
-                    double pred = slope * testX[i] + intercept;
-                    ssRes += (testY[i] - pred) * (testY[i] - pred);
-                    ssTot += (testY[i] - testYMean) * (testY[i] - testYMean);
-                }
-
-                double r2 = ssTot > 1e-10 ? 1 - ssRes / ssTot : 0;
-                totalR2 += Math.Max(0, r2); // Avoid negative R2
-            }
-
-            _cvScores[j] = totalR2 / _nFolds;
+            var r2 = engine.TensorWhere(engine.TensorGreaterThan(ssTot, floor),
+                PreprocessingTensorOps.OneMinus(engine.TensorDivide(ssRes, ssTot)), zeros);
+            totalR2 = engine.TensorAdd(totalR2, engine.TensorMax(r2, zero)); // Avoid negative R2
         }
 
+        var cvScores = engine.TensorDivideScalar(totalR2, NumOps.FromDouble(_nFolds));
+        _cvScores = cvScores.ToVector();
+
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = Enumerable.Range(0, p)
-            .OrderByDescending(j => _cvScores[j])
-            .Take(numToSelect)
-            .OrderBy(x => x)
-            .ToArray();
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(cvScores, numToSelect);
 
         IsFitted = true;
+    }
     }
 
     /// <inheritdoc />
@@ -182,15 +164,7 @@ public class CrossValidatedSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>
         if (_selectedIndices is null)
             throw new InvalidOperationException("CrossValidatedSelector has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />
