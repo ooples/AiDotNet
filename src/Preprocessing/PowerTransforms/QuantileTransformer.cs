@@ -106,7 +106,7 @@ public class QuantileTransformer<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         // quantiles_ = nanpercentile(X, references_ * 100) (linear) made non-decreasing (maximum.accumulate).
         // All samples are used (subsample=None).
         int nQuantiles = Math.Max(1, Math.Min(_nQuantiles, data.Rows));
-        var references = References(nQuantiles);
+        var references = ReferencePositions(nQuantiles);
         var x = data.Rows == 0 ? null : Tensor<T>.FromMatrix(data);
         T nan = NumOps.FromDouble(double.NaN);
 
@@ -127,22 +127,30 @@ public class QuantileTransformer<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     }
 
     /// <summary>numpy's <c>linspace(0, 1, count)</c> as a [count] tensor.</summary>
-    private Tensor<T> References(int count)
+    private Tensor<T> References(int count) => ReferencePositions(count).Cast<T>();
+
+    /// <summary>
+    /// numpy's <c>linspace(0, 1, count)</c> in float64, as numpy computes it. These are positions (they become
+    /// the virtual indices <c>q (n - 1)</c> of the percentiles), so they are not computed in T: for Half the
+    /// integers past 2048 are not exact and <c>q (n - 1)</c> overflows past 65504, giving wrong or invalid
+    /// indices.
+    /// </summary>
+    private Tensor<double> ReferencePositions(int count)
     {
         if (count == 1)
         {
-            return new Tensor<T>(new[] { 1 });
+            return new Tensor<double>(new[] { 1 });
         }
 
-        var references = Engine.TensorMultiplyScalar(PreprocessingTensorOps.Range<T>(count), NumOps.FromDouble(1.0 / (count - 1)));
-        return Engine.TensorSetSlice(references, PreprocessingTensorOps.Filled(new[] { 1 }, NumOps.One), new[] { count - 1 });
+        var references = Engine.TensorMultiplyScalar(PreprocessingTensorOps.Range<double>(count), 1.0 / (count - 1));
+        return Engine.TensorSetSlice(references, PreprocessingTensorOps.Filled(new[] { 1 }, 1.0), new[] { count - 1 });
     }
 
     /// <summary>
     /// numpy's <c>nanpercentile</c> (method "linear") of a column at the given references, made non-decreasing:
     /// virtual index <c>h = q (n - 1)</c> over the sorted non-NaN values, interpolated as numpy's <c>_lerp</c>.
     /// </summary>
-    private Tensor<T> ColumnQuantiles(Tensor<T> column, Tensor<T> references)
+    private Tensor<T> ColumnQuantiles(Tensor<T> column, Tensor<double> references)
     {
         var valid = PreprocessingTensorOps.MaskPositions(PreprocessingTensorOps.Not(ScalerTensorOps.NanMask(column)));
         int count = valid.Length;
@@ -153,9 +161,9 @@ public class QuantileTransformer<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
 
         var sorted = Engine.TensorSort(
             Engine.TensorIndexSelect(column, new Tensor<int>(valid, new[] { count }), 0), 0, false).Item1;
-        var position = Engine.TensorMultiplyScalar(references, NumOps.FromDouble(count - 1));
+        var position = Engine.TensorMultiplyScalar(references, (double)(count - 1));
         var below = Engine.TensorFloor(position);
-        var fraction = Engine.TensorSubtract(position, below);
+        var fraction = Engine.TensorSubtract(position, below).Cast<T>();
         var belowIndex = below.Cast<int>().AsSpan().ToArray();
         var aboveIndex = belowIndex.Select(index => Math.Min(index + 1, count - 1)).ToArray();
         var lower = Engine.TensorIndexSelect(sorted, new Tensor<int>(belowIndex, new[] { belowIndex.Length }), 0);
