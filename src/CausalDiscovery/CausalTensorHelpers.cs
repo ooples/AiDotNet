@@ -281,6 +281,24 @@ internal static class CausalTensorHelpers
     }
 
     /// <summary>
+    /// A zero [rows x cols] matrix holding the concatenated <paramref name="chunks"/> at the row-major
+    /// <paramref name="positions"/> (one position per chunk element, in order).
+    /// </summary>
+    internal static Matrix<T> FromTensorValues<T>(int rows, int cols, List<int> positions, List<Tensor<T>> chunks)
+    {
+        var engine = AiDotNetEngine.Current;
+        var flat = new Tensor<T>(new[] { rows * cols });
+        if (positions.Count > 0)
+        {
+            var values = chunks.Count == 1 ? chunks[0].Reshape(new[] { positions.Count })
+                : engine.TensorConcatenate(chunks.Select(c => c.Reshape(new[] { c.Length })).ToArray(), 0);
+            flat = engine.TensorScatter(flat, new Tensor<int>(positions.ToArray(), new[] { positions.Count }), values, 0);
+        }
+
+        return flat.Reshape(new[] { rows, cols }).ToMatrix();
+    }
+
+    /// <summary>
     /// Keeps <paramref name="source"/> ([rows x cols]) at the given row-major positions and zeroes the rest.
     /// </summary>
     internal static Matrix<T> KeepPositions<T>(Tensor<T> source, IEnumerable<int> positions)
