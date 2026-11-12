@@ -202,9 +202,7 @@ public partial class MatchaTTS<T> : TtsModelBase<T>, IEndToEndTts<T>, IAcousticM
 
     private Tensor<T> FrameMask(int frames, int padded)
     {
-        var mask = new Tensor<T>(new[] { padded });
-        for (int i = 0; i < frames; i++) mask[i] = NumOps.One;
-        return mask;
+        return Engine.Reshape(PaddedFrameMask(frames, padded), new[] { padded });
     }
 
     private Tensor<T> MaskRows(Tensor<T> mask)
@@ -250,17 +248,8 @@ public partial class MatchaTTS<T> : TtsModelBase<T>, IEndToEndTts<T>, IAcousticM
         int batch = input.Shape[0], tokens = input.Shape[1];
         var outputs = new List<Tensor<T>>(batch);
         for (int b = 0; b < batch; b++)
-        {
-            var row = new Tensor<T>(new[] { tokens });
-            for (int i = 0; i < tokens; i++) row[i] = input[b, i];
-            outputs.Add(SynthesizeOne(row));
-        }
-        int longest = outputs.Max(o => o.Shape[0]);
-        var result = new Tensor<T>(new[] { batch, longest, _options.MelChannels });
-        for (int b = 0; b < batch; b++)
-            for (int f = 0; f < outputs[b].Shape[0]; f++)
-                for (int m = 0; m < _options.MelChannels; m++) result[b, f, m] = outputs[b][f, m];
-        return result;
+            outputs.Add(SynthesizeOne(BatchRow(input, b)));
+        return PadAndStack(outputs, _options.MelChannels);
     }
 
     private Tensor<T> SynthesizeOne(Tensor<T> tokens)
@@ -268,9 +257,7 @@ public partial class MatchaTTS<T> : TtsModelBase<T>, IEndToEndTts<T>, IAcousticM
         using var _ = new NoGradScope<T>();
         var (hidden, means) = Encode(tokens);
         var logDurations = LogDurations(hidden);
-        var durations = new int[logDurations.Length];
-        for (int i = 0; i < durations.Length; i++)
-            durations[i] = (int)(Math.Ceiling(Math.Exp(NumOps.ToDouble(logDurations[i]))) * _options.LengthScale);
+        var durations = CeilScaledDurations(logDurations, _options.LengthScale);
         if (durations.Sum() == 0) durations[durations.Length - 1] = 1;
         int frames = durations.Sum();
         int padded = CompatibleLength(frames);
@@ -281,8 +268,9 @@ public partial class MatchaTTS<T> : TtsModelBase<T>, IEndToEndTts<T>, IAcousticM
         var x = Gaussian(mu._shape, random, _options.Temperature);
         int steps = _options.NumFlowSteps;
         double dt = 1.0 / steps;
+        T step = NumOps.FromDouble(dt);
         for (int i = 0; i < steps; i++)
-            x = Engine.TensorAdd(x, Engine.TensorMultiplyScalar(_decoder!.Estimate(x, mu, i * dt, mask), NumOps.FromDouble(dt)));
+            x = Engine.TensorAdd(x, Engine.TensorMultiplyScalar(_decoder!.Estimate(x, mu, i * dt, mask), step));
         var mel = Engine.TensorSlice(x, new[] { 0, 0 }, new[] { frames, _options.MelChannels });
         return Engine.TensorAddScalar(Engine.TensorMultiplyScalar(mel, NumOps.FromDouble(_options.MelStd)), NumOps.FromDouble(_options.MelMean));
     }
@@ -392,8 +380,8 @@ public partial class MatchaTTS<T> : TtsModelBase<T>, IEndToEndTts<T>, IAcousticM
             }
         int[] durations = MonotonicAlignment.MaximumPath(scores);
 
-        var target = new Tensor<T>(new[] { tokenCount });
-        for (int i = 0; i < tokenCount; i++) target[i] = NumOps.FromDouble(Math.Log(1e-8 + durations[i]));
+        var target = LogDurationTarget(durations, 1e-8);
+
         var durationError = Engine.TensorSubtract(LogDurations(hidden), target);
         var durationLoss = Engine.TensorMultiplyScalar(
             Engine.ReduceSum(Engine.TensorMultiply(durationError, durationError), new[] { 0 }, keepDims: false),
