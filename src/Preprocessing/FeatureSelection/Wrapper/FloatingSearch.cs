@@ -142,42 +142,16 @@ public class FloatingSearch<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupe
     {
         if (features.Length == 0) return 0;
 
-        double totalScore = 0;
-        double[,] correlationMatrix = new double[features.Length, features.Length];
-
-        for (int i = 0; i < features.Length; i++)
-        {
-            double score = EvaluateFeature(data, target, features[i], n);
-            totalScore += score;
-
-            for (int j = i + 1; j < features.Length; j++)
-            {
-                double corr = ComputeCorrelation(data, features[i], features[j], n);
-                correlationMatrix[i, j] = corr;
-                correlationMatrix[j, i] = corr;
-            }
-        }
-
-        double redundancy = 0;
-        for (int i = 0; i < features.Length; i++)
-            for (int j = i + 1; j < features.Length; j++)
-                redundancy += Math.Abs(correlationMatrix[i, j]);
-
-        if (features.Length > 1)
-            redundancy /= ((double)features.Length * (features.Length - 1) / 2.0);
-
-        return totalScore - 0.5 * redundancy;
+        // Total |Pearson r| with the target, penalized by the mean |r| over the feature pairs (redundancy)
+        double totalScore = WrapperScoringOps.ToDouble(
+            Engine.TensorSum(WrapperScoringOps.AbsTargetCorrelations(data, target, features)));
+        return totalScore - 0.5 * WrapperScoringOps.MeanAbsPairCorrelation(data, features);
     }
 
     private double EvaluateFeature(Matrix<T> data, Vector<T> target, int j, int n)
     {
         // |Pearson r| with the target
         return WrapperScoringOps.AbsTargetCorrelation(data, target, j);
-    }
-
-    private double ComputeCorrelation(Matrix<T> data, int j1, int j2, int n)
-    {
-        return WrapperScoringOps.ColumnCorrelation(data, j1, j2);
     }
 
     /// <inheritdoc />
