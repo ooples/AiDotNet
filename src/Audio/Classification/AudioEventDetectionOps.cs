@@ -218,6 +218,26 @@ internal static class AudioEventDetectionOps
     }
 
     /// <summary>
+    /// Number of adjacent sample pairs (row-major) whose signs differ: one is <c>&gt;= 0</c> and the
+    /// other <c>&lt; 0</c>. A NaN sample is neither, so pairs containing NaN never count.
+    /// </summary>
+    internal static int ZeroCrossingCount<T>(IEngine engine, Tensor<T> audio)
+    {
+        int n = audio.Length;
+        if (n < 2) return 0;
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var flat = Flatten(engine, audio);
+        var nonNegative = engine.TensorGreaterEqual(flat, Tensor<T>.CreateDefault(new[] { n }, numOps.Zero));
+        var negative = engine.TensorLessThan(flat, numOps.Zero);
+        var prevNonNeg = engine.TensorSlice(nonNegative, new[] { 0 }, new[] { n - 1 });
+        var prevNeg = engine.TensorSlice(negative, new[] { 0 }, new[] { n - 1 });
+        var nextNonNeg = engine.TensorSlice(nonNegative, new[] { 1 }, new[] { n - 1 });
+        var nextNeg = engine.TensorSlice(negative, new[] { 1 }, new[] { n - 1 });
+        var crossings = engine.TensorAdd(engine.TensorMultiply(prevNonNeg, nextNeg), engine.TensorMultiply(prevNeg, nextNonNeg));
+        return engine.TensorCountNonzero(crossings);
+    }
+
+    /// <summary>
     /// Per-class statistics: count, total duration, mean and maximum confidence.
     /// </summary>
     internal static Dictionary<string, EventStatistics<T>> ComputeEventStatistics<T>(IEngine engine, IReadOnlyList<AudioEvent<T>> events)
