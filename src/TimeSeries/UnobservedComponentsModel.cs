@@ -374,11 +374,7 @@ public partial class UnobservedComponentsModel<T, TInput, TOutput> : TimeSeriesM
         }
 
         // Initialize irregular component
-        _irregular = new Vector<T>(n);
-        for (int i = 0; i < n; i++)
-        {
-            _irregular[i] = NumOps.Subtract(y[i], NumOps.Add(_trend[i], NumOps.Add(_seasonal[i], _cycle[i])));
-        }
+        _irregular = Irregular(y);
     }
 
     /// <summary>
@@ -402,21 +398,31 @@ public partial class UnobservedComponentsModel<T, TInput, TOutput> : TimeSeriesM
     /// </remarks>
     private Vector<T> MovingAverage(Vector<T> data, int windowSize)
     {
+        var engine = AiDotNetEngine.Current;
         int n = data.Length;
-        Vector<T> result = new Vector<T>(n);
-
-        for (int i = 0; i < n; i++)
+        if (n == 0)
         {
-            int start = Math.Max(0, i - windowSize + 1);
-            int end = i + 1;
-            // VECTORIZED: Use Engine.Sum() on slice instead of NumOps loop
-            var window = data.Slice(start, end - start);
-            T sum = Engine.Sum(window);
-
-            result[i] = NumOps.Divide(sum, NumOps.FromDouble(end - start));
+            return new Vector<T>(0);
         }
 
-        return result;
+        // Trailing window sums: the series plus its copies delayed by 1 .. windowSize - 1 steps (zeros shifted in);
+        // the first windowSize - 1 points average over the i + 1 points they have.
+        int width = Math.Min(windowSize, n);
+        var values = data.AsTensor();
+        var sum = values;
+        for (int lag = 1; lag < width; lag++)
+        {
+            var delayed = engine.TensorConcatenate(new[]
+            {
+                new Tensor<T>(new[] { lag }),
+                engine.TensorSlice(values, new[] { 0 }, new[] { n - lag })
+            }, 0);
+            sum = engine.TensorAdd(sum, delayed);
+        }
+
+        var counts = engine.TensorClamp(
+            engine.TensorArange<T>(1, n + 1, 1), NumOps.One, NumOps.FromDouble(width));
+        return HeapVector(engine.TensorDivide(sum, counts));
     }
 
     /// <summary>
@@ -442,39 +448,28 @@ public partial class UnobservedComponentsModel<T, TInput, TOutput> : TimeSeriesM
     /// </remarks>
     private Vector<T> InitializeSeasonal(Vector<T> y, Vector<T> trend)
     {
+        var engine = AiDotNetEngine.Current;
         int n = y.Length;
         int period = _ucOptions.SeasonalPeriod;
-        Vector<T> seasonal = new Vector<T>(n);
+        int cycles = (n + period - 1) / period;
+        int padded = cycles * period;
+        var shape = new[] { cycles, period };
 
-        // Calculate initial seasonal indices
-        Vector<T> seasonalIndices = new Vector<T>(period);
-        for (int i = 0; i < period; i++)
-        {
-            T sum = NumOps.Zero;
-            int count = 0;
-            for (int j = i; j < n; j += period)
-            {
-                sum = NumOps.Add(sum, NumOps.Subtract(y[j], trend[j]));
-                count++;
-            }
+        // Seasonal index i: the mean detrended value over positions i, i + period, ...; laid out as [cycle, position]
+        // with the incomplete last cycle zero-padded and the counts taken from a padded mask of ones.
+        var detrended = engine.TensorSubtract(y.AsTensor(), trend.AsTensor());
+        var pad = new Tensor<T>(new[] { padded - n });
+        var sums = engine.ReduceSum(engine.Reshape(PadEnd(detrended, pad), shape), new[] { 0 }, false);
+        var counts = engine.ReduceSum(engine.Reshape(PadEnd(engine.TensorOnesLike(detrended), pad), shape), new[] { 0 }, false);
+        var seasonalIndices = engine.TensorDivide(sums, counts);
 
-            seasonalIndices[i] = NumOps.Divide(sum, NumOps.FromDouble(count));
-        }
-
-        // VECTORIZED: Normalize seasonal indices using Engine operations
-        T seasonalSum = Engine.Sum(seasonalIndices);
-        T seasonalAdjustment = NumOps.Divide(seasonalSum, NumOps.FromDouble(period));
-        var adjustment = new Vector<T>(period);
-        for (int i = 0; i < period; i++) adjustment[i] = seasonalAdjustment;
-        seasonalIndices = (Vector<T>)Engine.Subtract(seasonalIndices, adjustment);
+        // Normalize seasonal indices to sum to zero
+        seasonalIndices = engine.TensorSubtractScalar(seasonalIndices, engine.TensorMean(seasonalIndices));
 
         // Apply seasonal indices to the full series
-        for (int i = 0; i < n; i++)
-        {
-            seasonal[i] = seasonalIndices[i % period];
-        }
-
-        return seasonal;
+        var tiled = engine.Reshape(
+            engine.TensorBroadcastTo(engine.Reshape(seasonalIndices, new[] { 1, period }), shape), new[] { padded });
+        return HeapVector(engine.TensorSlice(tiled, new[] { 0 }, new[] { n }));
     }
 
     /// <summary>
@@ -501,14 +496,11 @@ public partial class UnobservedComponentsModel<T, TInput, TOutput> : TimeSeriesM
     /// </remarks>
     private Vector<T> InitializeCycle(Vector<T> y, Vector<T> trend, Vector<T> seasonal)
     {
-        int n = y.Length;
-        Vector<T> cycle = new Vector<T>(n);
+        var engine = AiDotNetEngine.Current;
 
         // Step 1: Calculate residuals after removing trend and seasonal components
-        for (int i = 0; i < n; i++)
-        {
-            cycle[i] = NumOps.Subtract(y[i], NumOps.Add(trend[i], seasonal[i]));
-        }
+        var residual = engine.TensorSubtract(y.AsTensor(), engine.TensorAdd(trend.AsTensor(), seasonal.AsTensor()));
+        Vector<T> cycle = HeapVector(residual);
 
         // Step 2: Apply Hodrick-Prescott filter to separate cycle from noise
         cycle = HodrickPrescottFilter(cycle, _ucOptions.CycleLambda);
@@ -519,12 +511,7 @@ public partial class UnobservedComponentsModel<T, TInput, TOutput> : TimeSeriesM
         // Step 4: Normalize the cycle component
         T cycleMean = cycle.Average();
         T cycleStd = cycle.StandardDeviation();
-        for (int i = 0; i < n; i++)
-        {
-            cycle[i] = NumOps.Divide(NumOps.Subtract(cycle[i], cycleMean), cycleStd);
-        }
-
-        return cycle;
+        return HeapVector(engine.TensorDivideScalar(engine.TensorSubtractScalar(cycle.AsTensor(), cycleMean), cycleStd));
     }
 
     /// <summary>
@@ -549,31 +536,33 @@ public partial class UnobservedComponentsModel<T, TInput, TOutput> : TimeSeriesM
     /// This filter is often used in economics to separate business cycles from long-term trends,
     /// but it's useful for many types of time series data.
     /// </remarks>
-    private Vector<T> HodrickPrescottFilter(Vector<T> data, double lambda)
+    internal Vector<T> HodrickPrescottFilter(Vector<T> data, double lambda)
     {
+        var engine = AiDotNetEngine.Current;
         int n = data.Length;
-        Matrix<T> A = new Matrix<T>(n, n);
-        Vector<T> B = new Vector<T>(n);
 
-        // Set up the matrix A
-        for (int i = 0; i < n; i++)
+        // Hodrick & Prescott (1997), statsmodels hpfilter: the trend solves (I + lambda D'D) trend = data, with D the
+        // (n - 2) x n second-difference operator (rows [1, -2, 1]). Its rows near the ends differ from the interior
+        // [lambda, -4 lambda, 1 + 6 lambda, -4 lambda, lambda].
+        var identity = Tensor<T>.FromMatrix(Matrix<T>.CreateIdentity(n));
+        Tensor<T> system = identity;
+        if (n > 2)
         {
-            A[i, i] = NumOps.FromDouble(1 + 2 * lambda);
-            if (i > 0) A[i, i - 1] = NumOps.FromDouble(-lambda);
-            if (i < n - 1) A[i, i + 1] = NumOps.FromDouble(-lambda);
-            if (i > 1) A[i, i - 2] = NumOps.FromDouble(lambda);
-            if (i < n - 2) A[i, i + 2] = NumOps.FromDouble(lambda);
+            int rows = n - 2;
+            var secondDifference = engine.TensorAdd(
+                engine.TensorSubtract(
+                    engine.TensorSlice(identity, new[] { 0, 0 }, new[] { rows, n }),
+                    engine.TensorMultiplyScalar(engine.TensorSlice(identity, new[] { 1, 0 }, new[] { rows, n }), NumOps.FromDouble(2.0))),
+                engine.TensorSlice(identity, new[] { 2, 0 }, new[] { rows, n }));
+            system = engine.TensorAdd(identity, engine.TensorMultiplyScalar(
+                engine.TensorMatMul(engine.TensorTranspose(secondDifference), secondDifference), NumOps.FromDouble(lambda)));
         }
 
-        // Set up the vector B
-        for (int i = 0; i < n; i++)
-        {
-            B[i] = data[i];
-        }
+        Matrix<T> A = HeapMatrix(system);
 
-        // Solve the system A * trend = B
+        // Solve the system A * trend = data
         var decomposition = _ucOptions.Decomposition ?? new LuDecomposition<T>(A);
-        Vector<T> trend = MatrixSolutionHelper.SolveLinearSystem(B, decomposition);
+        Vector<T> trend = MatrixSolutionHelper.SolveLinearSystem(data, decomposition);
 
         return trend;
     }
@@ -600,36 +589,28 @@ public partial class UnobservedComponentsModel<T, TInput, TOutput> : TimeSeriesM
     /// For example, you might use this to focus on economic cycles that last between 2 and 8 years,
     /// while removing shorter fluctuations and longer trends.
     /// </remarks>
-    private Vector<T> BandPassFilter(Vector<T> data, int minPeriod, int maxPeriod)
+    internal Vector<T> BandPassFilter(Vector<T> data, int minPeriod, int maxPeriod)
     {
         int n = data.Length;
-        Vector<T> filtered = new Vector<T>(n);
 
         // Apply FFT
         Vector<Complex<T>> spectrum = _fft.Forward(data);
 
-        // Apply band-pass filter in frequency domain
-        T minFreq = NumOps.FromDouble(1.0 / maxPeriod);
-        T maxFreq = NumOps.FromDouble(1.0 / minPeriod);
-        for (int i = 0; i < n; i++)
-        {
-            T freq = NumOps.Divide(NumOps.FromDouble(i), NumOps.FromDouble(n));
-            if (NumOps.GreaterThanOrEquals(freq, minFreq) && NumOps.LessThanOrEquals(freq, maxFreq))
-            {
-                // Pass this frequency
-                continue;
-            }
-            else
-            {
-                // Filter out this frequency
-                spectrum[i] = new Complex<T>(NumOps.Zero, NumOps.Zero);
-            }
-        }
+        // Keep the bins whose frequency lies in [1 / maxPeriod, 1 / minPeriod]. Bin i of a length-n transform is
+        // frequency i / n for i <= n / 2 and the negative frequency -(n - i) / n above it; a real series needs both
+        // halves kept or dropped together, so the test is on min(i, n - i) / n.
+        double minFreq = 1.0 / maxPeriod;
+        double maxFreq = 1.0 / minPeriod;
+        var keep = Enumerable.Range(0, n)
+            .Select(i => Math.Min(i, n - i) / (double)n)
+            .Select(freq => freq >= minFreq && freq <= maxFreq)
+            .ToArray();
+        var passed = AiDotNetEngine.Current.TensorWhere(
+            keep, spectrum.AsTensor(),
+            new Tensor<Complex<T>>(Enumerable.Repeat(new Complex<T>(NumOps.Zero, NumOps.Zero), n).ToArray(), new[] { n })).ToVector();
 
         // Apply inverse FFT
-        filtered = _fft.Inverse(spectrum);
-
-        return filtered;
+        return _fft.Inverse(passed);
     }
 
     /// <summary>
@@ -657,9 +638,7 @@ public partial class UnobservedComponentsModel<T, TInput, TOutput> : TimeSeriesM
         if (_ucOptions.SeasonalPeriod <= 1) stateSize--;
 
         _stateTransition = Matrix<T>.CreateIdentity(stateSize);
-        _observationModel = new Matrix<T>(1, stateSize);
-        for (int i = 0; i < stateSize; i++)
-            _observationModel[0, i] = NumOps.One;
+        _observationModel = HeapMatrix(Filled(new[] { 1, stateSize }, NumOps.One));
 
         _processNoise = Matrix<T>.CreateIdentity(stateSize);
         _observationNoise = NumOps.FromDouble(0.1);
@@ -804,37 +783,60 @@ public partial class UnobservedComponentsModel<T, TInput, TOutput> : TimeSeriesM
     /// </remarks>
     private void UpdateComponentsFromSmoothedState(List<Vector<T>> smoothedState)
     {
+        var engine = AiDotNetEngine.Current;
         int n = smoothedState.Count;
-        _trend = new Vector<T>(n);
-        _seasonal = new Vector<T>(n);
-        _cycle = new Vector<T>(n);
 
+        // The state at each step is [trend, seasonal (if seasonal), cycle (if cycle)]: [steps, state].
+        var states = engine.TensorStack(smoothedState.Select(s => s.AsTensor()).ToArray(), 0);
         int stateIndex = 0;
-        for (int t = 0; t < n; t++)
-        {
-            _trend[t] = smoothedState[t][stateIndex];
-            stateIndex++;
-
-            if (_ucOptions.SeasonalPeriod > 1)
-            {
-                _seasonal[t] = smoothedState[t][stateIndex];
-                stateIndex++;
-            }
-
-            if (_ucOptions.IncludeCycle)
-            {
-                _cycle[t] = smoothedState[t][stateIndex];
-                stateIndex++;
-            }
-
-            stateIndex = 0; // Reset for next time step
-        }
+        _trend = StateColumn(states, stateIndex++);
+        _seasonal = _ucOptions.SeasonalPeriod > 1 ? StateColumn(states, stateIndex++) : new Vector<T>(n);
+        _cycle = _ucOptions.IncludeCycle ? StateColumn(states, stateIndex) : new Vector<T>(n);
 
         // Update irregular component
-        for (int t = 0; t < n; t++)
-        {
-            _irregular[t] = NumOps.Subtract(_y[t], NumOps.Add(_trend[t], NumOps.Add(_seasonal[t], _cycle[t])));
-        }
+        _irregular = Irregular(_y);
+    }
+
+    /// <summary>Column <paramref name="index"/> of the stacked states [steps, state].</summary>
+    private Vector<T> StateColumn(Tensor<T> states, int index)
+    {
+        var engine = AiDotNetEngine.Current;
+        int steps = states.Shape[0];
+        return HeapVector(engine.Reshape(engine.TensorSlice(states, new[] { 0, index }, new[] { steps, 1 }), new[] { steps }));
+    }
+
+    /// <summary>The series less the trend, seasonal and cycle components.</summary>
+    private Vector<T> Irregular(Vector<T> y)
+    {
+        var engine = AiDotNetEngine.Current;
+        return HeapVector(engine.TensorSubtract(
+            y.AsTensor(), engine.TensorAdd(_trend.AsTensor(), engine.TensorAdd(_seasonal.AsTensor(), _cycle.AsTensor()))));
+    }
+
+    private static Tensor<T> PadEnd(Tensor<T> values, Tensor<T> padding)
+        => padding.Length == 0 ? values : AiDotNetEngine.Current.TensorConcatenate(new[] { values, padding }, 0);
+
+    private static Tensor<T> Filled(int[] shape, T value)
+    {
+        var tensor = new Tensor<T>(shape);
+        AiDotNetEngine.Current.TensorFill(tensor, value);
+        return tensor;
+    }
+
+    /// <summary>A plain-heap copy of a 1-D engine result (training-arena buffers are recycled when training ends).</summary>
+    private static Vector<T> HeapVector(Tensor<T> values)
+    {
+        var vector = new Vector<T>(values.Length);
+        values.CopyTo(vector.AsWritableSpan());
+        return vector;
+    }
+
+    /// <summary>A plain-heap copy of a [rows, columns] engine result.</summary>
+    private static Matrix<T> HeapMatrix(Tensor<T> values)
+    {
+        var matrix = new Matrix<T>(values.Shape[0], values.Shape[1]);
+        values.CopyTo(matrix.AsWritableSpan());
+        return matrix;
     }
 
     /// <summary>
@@ -860,18 +862,10 @@ public partial class UnobservedComponentsModel<T, TInput, TOutput> : TimeSeriesM
     /// </remarks>
     private bool HasConverged()
     {
-        T maxDifference = NumOps.Zero;
-        int n = _trend.Length;
-
-        for (int i = 0; i < n; i++)
-        {
-            T difference = NumOps.Abs(NumOps.Subtract(_trend[i], _previousTrend[i]));
-
-            if (NumOps.GreaterThan(difference, maxDifference))
-            {
-                maxDifference = difference;
-            }
-        }
+        var engine = AiDotNetEngine.Current;
+        T maxDifference = _trend.Length == 0
+            ? NumOps.Zero
+            : engine.TensorMaxValue(engine.TensorAbs(engine.TensorSubtract(_trend.AsTensor(), _previousTrend.AsTensor())));
 
         _previousTrend = new Vector<T>(_trend);
         return NumOps.LessThan(maxDifference, _convergenceThreshold);
@@ -974,14 +968,8 @@ public partial class UnobservedComponentsModel<T, TInput, TOutput> : TimeSeriesM
         if (_ucOptions.SeasonalPeriod > 1)
         {
             // Update seasonal component
-            for (int i = 0; i < _ucOptions.SeasonalPeriod - 1; i++)
-            {
-                _stateTransition[stateSize + i, stateSize + i] = NumOps.FromDouble(-1);
-                for (int j = 0; j < _ucOptions.SeasonalPeriod - 1; j++)
-                {
-                    _stateTransition[stateSize + i, stateSize + j] = NumOps.FromDouble(-1);
-                }
-            }
+            int block = _ucOptions.SeasonalPeriod - 1;
+            _stateTransition = WithBlock(_stateTransition, stateSize, block, NumOps.FromDouble(-1));
             _processNoise[stateSize, stateSize] = seasonalVariance;
             stateSize += _ucOptions.SeasonalPeriod - 1;
         }
@@ -1039,14 +1027,72 @@ public partial class UnobservedComponentsModel<T, TInput, TOutput> : TimeSeriesM
     public override Vector<T> Predict(Matrix<T> input)
     {
         int n = input.Rows;
-        Vector<T> predictions = new Vector<T>(n);
-
-        for (int i = 0; i < n; i++)
+        if (n == 0)
         {
-            predictions[i] = PredictSingle(input.GetRow(i));
+            return new Vector<T>(0);
         }
 
-        return predictions;
+        if (_trend.Length == 0 || _seasonal.Length == 0 || _cycle.Length == 0 || _irregular.Length == 0)
+        {
+            throw new InvalidOperationException("Model must be trained before making predictions.");
+        }
+
+        if (input.Columns == 0)
+        {
+            throw new ArgumentException("Input vector must contain at least one element (time index).", nameof(input));
+        }
+
+        // Each row's first column is its time index (as PredictSingle).
+        var engine = AiDotNetEngine.Current;
+        var timeColumn = engine.Reshape(
+            engine.TensorSlice(Tensor<T>.FromMatrix(input), new[] { 0, 0 }, new[] { n, 1 }), new[] { n });
+        var indices = engine.TensorRound(timeColumn).Cast<int>();
+        int first = indices.ToArray().Min();
+        int last = indices.ToArray().Max();
+        if (first < 0)
+        {
+            throw new ArgumentException($"Time index {first} must be non-negative.", nameof(input));
+        }
+
+        // In-sample: trend + seasonal (if enabled) + cycle (if enabled) + 0.2 x irregular. Beyond the fitted
+        // horizon the series continues with the damped-slope forecast from the last fitted point.
+        int fitted = _trend.Length;
+        var series = engine.TensorAdd(_trend.AsTensor(), engine.TensorMultiplyScalar(_irregular.AsTensor(), NumOps.FromDouble(0.2)));
+        if (_ucOptions.SeasonalPeriod > 1) series = engine.TensorAdd(series, _seasonal.AsTensor());
+        if (_ucOptions.IncludeCycle) series = engine.TensorAdd(series, _cycle.AsTensor());
+        if (last >= fitted)
+        {
+            series = engine.TensorConcatenate(new[] { series, Forecast(last - (fitted - 1), fitted - 1).AsTensor() }, 0);
+        }
+
+        return engine.TensorTake(series, indices).ToVector();
+    }
+
+    /// <summary>
+    /// <paramref name="matrix"/> with the square block of side <paramref name="size"/> at (<paramref name="offset"/>,
+    /// <paramref name="offset"/>) set to <paramref name="value"/>.
+    /// </summary>
+    private Matrix<T> WithBlock(Matrix<T> matrix, int offset, int size, T value)
+    {
+        var engine = AiDotNetEngine.Current;
+        int rows = matrix.Rows, columns = matrix.Columns;
+        if (offset + size > rows || offset + size > columns)
+        {
+            throw new ArgumentOutOfRangeException(nameof(offset), $"A {size} x {size} block at {offset} does not fit a {rows} x {columns} matrix.");
+        }
+
+        // A mask of ones over the block, zero-padded to the matrix's shape.
+        var mask = new Tensor<T>(new[] { size, size });
+        engine.TensorFill(mask, NumOps.One);
+        var withColumns = engine.TensorConcatenate(new[]
+        {
+            new Tensor<T>(new[] { size, offset }), mask, new Tensor<T>(new[] { size, columns - offset - size })
+        }, 1);
+        var full = engine.TensorConcatenate(new[]
+        {
+            new Tensor<T>(new[] { offset, columns }), withColumns, new Tensor<T>(new[] { rows - offset - size, columns })
+        }, 0);
+        return HeapMatrix(engine.TensorWhere(full, Filled(new[] { rows, columns }, value), Tensor<T>.FromMatrix(matrix)));
     }
 
     /// <summary>
@@ -1457,7 +1503,7 @@ public partial class UnobservedComponentsModel<T, TInput, TOutput> : TimeSeriesM
     /// </remarks>
     private Vector<T> ForecastTrend(int horizon, int startIndex)
     {
-        Vector<T> trendForecast = new Vector<T>(horizon);
+        var engine = AiDotNetEngine.Current;
 
         // Calculate recent slope in the trend
         T slope = NumOps.Zero;
@@ -1471,24 +1517,12 @@ public partial class UnobservedComponentsModel<T, TInput, TOutput> : TimeSeriesM
             );
         }
 
-        // Apply damping factor to avoid explosive forecasts
-        T dampingFactor = NumOps.FromDouble(0.95); // Gradually reduce the impact of the slope
-
-        // Generate trend forecasts using damped growth model
-        T currentTrend = _trend[startIndex];
-        T currentSlope = slope;
-
-        for (int i = 0; i < horizon; i++)
-        {
-            // Add damped slope to current trend
-            currentTrend = NumOps.Add(currentTrend, currentSlope);
-            trendForecast[i] = currentTrend;
-
-            // Dampen the slope for next iteration
-            currentSlope = NumOps.Multiply(currentSlope, dampingFactor);
-        }
-
-        return trendForecast;
+        // Damped growth: step i adds slope * 0.95^i, so the forecast i steps ahead (1-based) is
+        // trend + slope * (0.95^0 + ... + 0.95^(i-1)).
+        T dampingFactor = NumOps.FromDouble(0.95);
+        var dampedSlopes = engine.TensorMultiplyScalar(
+            engine.TensorPower(Filled(new[] { horizon }, dampingFactor), engine.TensorArange<T>(0, horizon, 1)), slope);
+        return engine.TensorAddScalar(engine.TensorCumSum(dampedSlopes, 0), _trend[startIndex]).ToVector();
     }
 
     /// <summary>
@@ -1511,35 +1545,25 @@ public partial class UnobservedComponentsModel<T, TInput, TOutput> : TimeSeriesM
     /// </remarks>
     private Vector<T> ForecastSeasonal(int horizon, int startIndex)
     {
-        Vector<T> seasonalForecast = new Vector<T>(horizon);
-
         // If no seasonality is included in the model, return zeros
         if (_ucOptions.SeasonalPeriod <= 1)
         {
-            return seasonalForecast; // All zeros
+            return new Vector<T>(horizon); // All zeros
         }
 
         int period = _ucOptions.SeasonalPeriod;
 
-        // Use the last complete seasonal cycle as the pattern for forecasting
+        // Use the last complete seasonal cycle as the pattern for forecasting: step i takes the most recent fitted
+        // point j <= startIndex with j % period == (seasonStart + i) % period (zero if there is none).
         int seasonStart = Math.Max(0, startIndex - period + 1);
-
-        for (int i = 0; i < horizon; i++)
-        {
-            int patternIndex = (seasonStart + i) % period;
-
-            // Find the most recent occurrence of this seasonal position
-            for (int j = startIndex; j >= 0; j--)
-            {
-                if (j % period == patternIndex)
-                {
-                    seasonalForecast[i] = _seasonal[j];
-                    break;
-                }
-            }
-        }
-
-        return seasonalForecast;
+        var source = Enumerable.Range(0, horizon)
+            .Select(i => (seasonStart + i) % period)
+            .Select(position => startIndex - ((((startIndex - position) % period) + period) % period))
+            .ToArray();
+        var engine = AiDotNetEngine.Current;
+        var found = source.Select(j => j >= 0).ToArray();
+        var indices = new Tensor<int>(source.Select(j => Math.Max(0, j)).ToArray(), new[] { horizon });
+        return engine.TensorWhere(found, engine.TensorTake(_seasonal.AsTensor(), indices), new Tensor<T>(new[] { horizon })).ToVector();
     }
 
     /// <summary>
@@ -1563,12 +1587,10 @@ public partial class UnobservedComponentsModel<T, TInput, TOutput> : TimeSeriesM
     /// </remarks>
     private Vector<T> ForecastCycle(int horizon, int startIndex)
     {
-        Vector<T> cycleForecast = new Vector<T>(horizon);
-
         // If no cycle is included in the model, return zeros
         if (!_ucOptions.IncludeCycle)
         {
-            return cycleForecast; // All zeros
+            return new Vector<T>(horizon); // All zeros
         }
 
         // Estimate cycle properties from the most recent data
@@ -1617,18 +1639,14 @@ public partial class UnobservedComponentsModel<T, TInput, TOutput> : TimeSeriesM
         // Damping factor to reduce cycle amplitude over time
         T dampingFactor = NumOps.FromDouble(0.98);
 
-        // Generate cycle forecasts
-        for (int i = 0; i < horizon; i++)
-        {
-            // Calculate cycle position using phase and frequency
-            T position = NumOps.Add(cyclePhase, NumOps.Divide(NumOps.Multiply(NumOps.FromDouble(2 * Math.PI), NumOps.FromDouble(i)), cyclePeriod));
-
-            // Apply cycle equation: amplitude * damping^i * cos(position)
-            T dampedAmplitude = NumOps.Multiply(cycleAmplitude, NumOps.Power(dampingFactor, NumOps.FromDouble(i)));
-            cycleForecast[i] = NumOps.Multiply(dampedAmplitude, MathHelper.Cos(position));
-        }
-
-        return cycleForecast;
+        // Generate cycle forecasts: amplitude * damping^i * cos(phase + 2 pi i / period)
+        var engine = AiDotNetEngine.Current;
+        var steps = engine.TensorArange<T>(0, horizon, 1);
+        var positions = engine.TensorAddScalar(
+            engine.TensorDivideScalar(engine.TensorMultiplyScalar(steps, NumOps.FromDouble(2 * Math.PI)), cyclePeriod), cyclePhase);
+        var dampedAmplitudes = engine.TensorMultiplyScalar(
+            engine.TensorPower(Filled(new[] { horizon }, dampingFactor), steps), cycleAmplitude);
+        return engine.TensorMultiply(dampedAmplitudes, engine.TensorCos(positions)).ToVector();
     }
 
     /// <summary>
