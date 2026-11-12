@@ -334,10 +334,7 @@ public partial class DirectionalGraphLayer<T> : LayerBase<T>, IGraphConvolutionL
         var scaled = Engine.TensorMultiplyScalar(shifted, scale);
 
         // Copy to tensor
-        for (int i = 0; i < tensor.Length; i++)
-        {
-            tensor[i] = scaled.GetFlat(i);
-        }
+        scaled.CopyTo(tensor.AsWritableSpan());
     }
 
     /// <inheritdoc/>
@@ -459,16 +456,12 @@ public partial class DirectionalGraphLayer<T> : LayerBase<T>, IGraphConvolutionL
             else
             {
                 // Broadcast: repeat adjacency matrix for each batch item
-                adjForBatch = TensorAllocator.Rent<T>([batchSize, numNodes, numNodes]);
-                for (int b = 0; b < batchSize; b++)
+                // A plain copy per sample (off the tape), as the element-wise copy was.
+                using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
                 {
-                    for (int i = 0; i < numNodes; i++)
-                    {
-                        for (int j = 0; j < numNodes; j++)
-                        {
-                            adjForBatch[new int[] { b, i, j }] = _adjacencyMatrix[new int[] { i, j }];
-                        }
-                    }
+                    var single = Engine.Reshape(
+                        Engine.TensorSlice(_adjacencyMatrix, [0, 0], [numNodes, numNodes]), [1, numNodes, numNodes]);
+                    adjForBatch = Engine.TensorTile(single, [batchSize, 1, 1]);
                 }
             }
         }
@@ -552,22 +545,18 @@ public partial class DirectionalGraphLayer<T> : LayerBase<T>, IGraphConvolutionL
     private Tensor<T> ConcatenateFeatures(Tensor<T> incoming, Tensor<T> outgoing, Tensor<T> self, int batchSize, int numNodes)
     {
         int outputFeatures = incoming.Shape[2];
-        var combined = TensorAllocator.Rent<T>([batchSize, numNodes, 3 * outputFeatures]);
+        if (batchSize == 0 || numNodes == 0 || outputFeatures == 0)
+            return new Tensor<T>([batchSize, numNodes, 3 * outputFeatures]);
 
-        for (int b = 0; b < batchSize; b++)
+        // [incoming | outgoing | self] along the features, a plain copy (off the tape), as before.
+        int[] start = [0, 0, 0];
+        int[] size = [batchSize, numNodes, outputFeatures];
+        using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
         {
-            for (int n = 0; n < numNodes; n++)
-            {
-                for (int f = 0; f < outputFeatures; f++)
-                {
-                    combined[b, n, f] = incoming[b, n, f];
-                    combined[b, n, outputFeatures + f] = outgoing[b, n, f];
-                    combined[b, n, 2 * outputFeatures + f] = self[b, n, f];
-                }
-            }
+            return Engine.TensorConcatenate(
+                new[] { Engine.TensorSlice(incoming, start, size), Engine.TensorSlice(outgoing, start, size), Engine.TensorSlice(self, start, size) },
+                2);
         }
-
-        return combined;
     }
 
     /// <summary>
@@ -584,26 +573,24 @@ public partial class DirectionalGraphLayer<T> : LayerBase<T>, IGraphConvolutionL
     /// </summary>
     private Tensor<T> ApplyGatesToFeatures(Tensor<T> combined, Tensor<T> gates, int batchSize, int numNodes, int outputFeatures)
     {
-        var gated = new Tensor<T>(combined._shape);
+        if (batchSize == 0 || numNodes == 0 || outputFeatures == 0)
+            return new Tensor<T>(combined._shape);
 
-        for (int b = 0; b < batchSize; b++)
+        // Group k of the features (incoming, outgoing, self) is scaled by gate k; a plain value (off the
+        // tape), as the element-wise products were.
+        using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
         {
-            for (int n = 0; n < numNodes; n++)
-            {
-                T gate0 = gates[b, n, 0];
-                T gate1 = gates[b, n, 1];
-                T gate2 = gates[b, n, 2];
-
-                for (int f = 0; f < outputFeatures; f++)
-                {
-                    gated[b, n, f] = NumOps.Multiply(combined[b, n, f], gate0);
-                    gated[b, n, outputFeatures + f] = NumOps.Multiply(combined[b, n, outputFeatures + f], gate1);
-                    gated[b, n, 2 * outputFeatures + f] = NumOps.Multiply(combined[b, n, 2 * outputFeatures + f], gate2);
-                }
-            }
+            return Engine.TensorMultiply(
+                Engine.TensorSlice(combined, [0, 0, 0], [batchSize, numNodes, 3 * outputFeatures]),
+                ExpandGates(gates, batchSize, numNodes, outputFeatures));
         }
+    }
 
-        return gated;
+    /// <summary>Repeats each of the three gates per node outputFeatures times: [B, N, 3] to [B, N, 3 * F].</summary>
+    private Tensor<T> ExpandGates(Tensor<T> gates, int batchSize, int numNodes, int outputFeatures)
+    {
+        return Engine.TensorRepeatInterleave(
+            Engine.TensorSlice(gates, [0, 0, 0], [batchSize, numNodes, 3]), outputFeatures, 2);
     }
 
     /// <summary>
@@ -621,49 +608,41 @@ public partial class DirectionalGraphLayer<T> : LayerBase<T>, IGraphConvolutionL
         _gateBiasGradient = new Tensor<T>([3]);
         _gateBiasGradient.Fill(NumOps.Zero);
 
-        var combinedGradient = new Tensor<T>(_lastCombined._shape);
-        var gatesGradient = TensorAllocator.Rent<T>([batchSize, numNodes, 3]);
-
-        // Gradient through element-wise multiplication: gated = combined * gates
-        for (int b = 0; b < batchSize; b++)
+        Tensor<T> combinedGradient;
+        Tensor<T> gatesGradient;
+        int groupWidth = 3 * _outputFeatures;
+        if (batchSize == 0 || numNodes == 0 || _outputFeatures == 0)
         {
-            for (int n = 0; n < numNodes; n++)
-            {
-                T gate0 = _lastGates[b, n, 0];
-                T gate1 = _lastGates[b, n, 1];
-                T gate2 = _lastGates[b, n, 2];
+            combinedGradient = new Tensor<T>(_lastCombined._shape);
+            gatesGradient = new Tensor<T>([batchSize, numNodes, 3]);
+        }
+        else
+        {
+            // Gradient through element-wise multiplication: gated = combined * gates
+            int[] start = [0, 0, 0];
+            int[] size = [batchSize, numNodes, groupWidth];
+            var upstream = Engine.TensorSlice(gatedCombinedGradient, start, size);
+            var gates = Engine.TensorSlice(_lastGates, start, [batchSize, numNodes, 3]);
 
-                T gateGrad0 = NumOps.Zero;
-                T gateGrad1 = NumOps.Zero;
-                T gateGrad2 = NumOps.Zero;
+            // dL/dcombined = dL/dgated * gate
+            combinedGradient = Engine.TensorMultiply(upstream, ExpandGates(_lastGates, batchSize, numNodes, _outputFeatures));
 
-                for (int f = 0; f < _outputFeatures; f++)
-                {
-                    // dL/dcombined = dL/dgated * gate
-                    combinedGradient[b, n, f] = NumOps.Multiply(gatedCombinedGradient[b, n, f], gate0);
-                    combinedGradient[b, n, _outputFeatures + f] = NumOps.Multiply(gatedCombinedGradient[b, n, _outputFeatures + f], gate1);
-                    combinedGradient[b, n, 2 * _outputFeatures + f] = NumOps.Multiply(gatedCombinedGradient[b, n, 2 * _outputFeatures + f], gate2);
+            // dL/dgate = sum_f (dL/dgated * combined), per group
+            var gateGrad = Engine.ReduceSum(
+                Engine.Reshape(
+                    Engine.TensorMultiply(upstream, Engine.TensorSlice(_lastCombined, start, size)),
+                    [batchSize, numNodes, 3, _outputFeatures]),
+                new[] { 3 }, keepDims: false);
 
-                    // dL/dgate = sum_f (dL/dgated * combined)
-                    gateGrad0 = NumOps.Add(gateGrad0, NumOps.Multiply(gatedCombinedGradient[b, n, f], _lastCombined[b, n, f]));
-                    gateGrad1 = NumOps.Add(gateGrad1, NumOps.Multiply(gatedCombinedGradient[b, n, _outputFeatures + f], _lastCombined[b, n, _outputFeatures + f]));
-                    gateGrad2 = NumOps.Add(gateGrad2, NumOps.Multiply(gatedCombinedGradient[b, n, 2 * _outputFeatures + f], _lastCombined[b, n, 2 * _outputFeatures + f]));
-                }
+            // Gradient through sigmoid: dL/dlogit = dL/dgate * gate * (1 - gate)
+            var ones = new Tensor<T>([batchSize, numNodes, 3]);
+            ones.Fill(NumOps.FromDouble(1.0));
+            gatesGradient = Engine.TensorMultiply(
+                gateGrad, Engine.TensorMultiply(gates, Engine.TensorSubtract(ones, gates)));
 
-                // Gradient through sigmoid: dL/dlogit = dL/dgate * gate * (1 - gate)
-                T sigmoidGrad0 = NumOps.Multiply(gateGrad0, NumOps.Multiply(gate0, NumOps.Subtract(NumOps.FromDouble(1.0), gate0)));
-                T sigmoidGrad1 = NumOps.Multiply(gateGrad1, NumOps.Multiply(gate1, NumOps.Subtract(NumOps.FromDouble(1.0), gate1)));
-                T sigmoidGrad2 = NumOps.Multiply(gateGrad2, NumOps.Multiply(gate2, NumOps.Subtract(NumOps.FromDouble(1.0), gate2)));
-
-                gatesGradient[b, n, 0] = sigmoidGrad0;
-                gatesGradient[b, n, 1] = sigmoidGrad1;
-                gatesGradient[b, n, 2] = sigmoidGrad2;
-
-                // Accumulate bias gradient
-                _gateBiasGradient[0] = NumOps.Add(_gateBiasGradient.GetFlat(0), sigmoidGrad0);
-                _gateBiasGradient[1] = NumOps.Add(_gateBiasGradient.GetFlat(1), sigmoidGrad1);
-                _gateBiasGradient[2] = NumOps.Add(_gateBiasGradient.GetFlat(2), sigmoidGrad2);
-            }
+            // Accumulate bias gradient
+            _gateBiasGradient = Engine.TensorAdd(
+                _gateBiasGradient, Engine.ReduceSum(gatesGradient, new[] { 0, 1 }, keepDims: false));
         }
 
         // Gradient w.r.t. gate weights
