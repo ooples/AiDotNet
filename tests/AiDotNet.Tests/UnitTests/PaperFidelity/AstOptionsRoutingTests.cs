@@ -1,4 +1,5 @@
 using AiDotNet.Audio.Fingerprinting;
+using AiDotNet.Audio.Classification;
 using AiDotNet.Enums;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
@@ -9,12 +10,12 @@ namespace AiDotNet.Tests.UnitTests.PaperFidelity;
 public sealed class AstOptionsRoutingTests
 {
     [Fact]
-    public void CopyPreservesInheritedTrainingAndTranscriptionOptions()
+    public void CopyPreservesTrainingAndFrontendOptions()
     {
-        var original = new ASTModelOptions { MaxGradNorm = 0.03, ReturnTimestamps = true };
-        var copy = new ASTModelOptions(original);
+        var original = new ASTOptions { MaxGradNorm = 0.03, NumMels = 4 };
+        var copy = new ASTOptions(original);
         Assert.Equal(original.MaxGradNorm, copy.MaxGradNorm);
-        Assert.Equal(original.ReturnTimestamps, copy.ReturnTimestamps);
+        Assert.Equal(original.NumMels, copy.NumMels);
     }
 
     [Fact]
@@ -23,12 +24,16 @@ public sealed class AstOptionsRoutingTests
         var architecture = new NeuralNetworkArchitecture<double>(
             inputType: InputType.ThreeDimensional, taskType: NeuralNetworkTaskType.MultiLabelClassification,
             inputHeight: 8, inputWidth: 4, inputDepth: 1, outputSize: 3);
-        using var model = new ASTModel<double>(architecture, new ASTModelOptions
+        var options = new ASTOptions
         {
-            EmbeddingDim = 8, NumLayers = 1, NumHeads = 2, FeedForwardDim = 16,
-            NumClasses = 3, PatchSize = 2, TargetLength = 8, NumMelBands = 4,
+            EmbeddingDim = 8, NumEncoderLayers = 1, NumAttentionHeads = 2, FeedForwardDim = 16,
+            CustomLabels = new[] { "a", "b", "c" }, PatchSize = 2, TargetLength = 8, NumMels = 4,
+            FrequencyStride = 2, TimeStride = 2,
             MaxGradNorm = 0.03,
-        });
+        };
+        using var model = new ASTModel<double>(architecture, options, optimizer: null);
+        using var classifier = new AST<double>(architecture, options);
         Assert.Equal(0.03, model.MaxGradNormValue);
+        Assert.Equal(0.03, classifier.MaxGradNormValue);
     }
 }

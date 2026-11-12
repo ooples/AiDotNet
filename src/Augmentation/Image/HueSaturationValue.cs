@@ -34,45 +34,31 @@ public class HueSaturationValue<T> : ImageAugmenterBase<T>
 
         var result = data.Clone();
 
-        for (int y = 0; y < data.Height; y++)
-            for (int x = 0; x < data.Width; x++)
-            {
-                double r = NumOps.ToDouble(data.GetPixel(y, x, 0));
-                double g = NumOps.ToDouble(data.GetPixel(y, x, 1));
-                double b = NumOps.ToDouble(data.GetPixel(y, x, 2));
-                double maxVal = data.IsNormalized ? 1.0 : 255.0;
+        var engine = Engine;
+        var image = data.ToPlanarTensor();
+        double maxVal = data.IsNormalized ? 1.0 : 255.0;
+        T maxT = NumOps.FromDouble(maxVal);
+        var r = engine.TensorDivideScalar(engine.TensorSliceAxis(image, 0, 0), maxT);
+        var g = engine.TensorDivideScalar(engine.TensorSliceAxis(image, 0, 1), maxT);
+        var b = engine.TensorDivideScalar(engine.TensorSliceAxis(image, 0, 2), maxT);
 
-                r /= maxVal; g /= maxVal; b /= maxVal;
+        // RGB to HSV
+        var max = engine.TensorMax(r, engine.TensorMax(g, b));
+        var min = engine.TensorMin(r, engine.TensorMin(g, b));
+        var delta = engine.TensorSubtract(max, min);
+        var h = ImageTensor<T>.HexconeHue(r, g, b, max, delta);
+        var black = engine.TensorLessThan(max, NumOps.FromDouble(1e-10));
+        var s = engine.TensorWhere(black, ImageTensor<T>.Constant(max, 0.0), engine.TensorDivide(delta, max));
 
-                // RGB to HSV
-                double max = Math.Max(r, Math.Max(g, b));
-                double min = Math.Min(r, Math.Min(g, b));
-                double delta = max - min;
+        // Apply shifts
+        h = ImageTensor<T>.WrapUnitInterval(engine.TensorAddScalar(h, NumOps.FromDouble(hShift)));
+        s = engine.TensorClamp(engine.TensorAddScalar(s, NumOps.FromDouble(sShift)), NumOps.Zero, NumOps.One);
+        var v = engine.TensorClamp(engine.TensorAddScalar(max, NumOps.FromDouble(vShift)), NumOps.Zero, NumOps.One);
 
-                double h = 0;
-                if (delta > 1e-10)
-                {
-                    if (Math.Abs(max - r) < 1e-10) h = ((g - b) / delta) % 6.0;
-                    else if (Math.Abs(max - g) < 1e-10) h = (b - r) / delta + 2.0;
-                    else h = (r - g) / delta + 4.0;
-                    h /= 6.0;
-                    if (h < 0) h += 1.0;
-                }
-                double s = max < 1e-10 ? 0 : delta / max;
-                double v = max;
-
-                // Apply shifts
-                h = (h + hShift) % 1.0;
-                if (h < 0) h += 1.0;
-                s = Math.Max(0, Math.Min(1, s + sShift));
-                v = Math.Max(0, Math.Min(1, v + vShift));
-
-                // HSV to RGB
-                var (rr, gg, bb) = RgbToHsv<T>.HsvToRgb(h, s, v);
-                result.SetPixel(y, x, 0, NumOps.FromDouble(rr * maxVal));
-                result.SetPixel(y, x, 1, NumOps.FromDouble(gg * maxVal));
-                result.SetPixel(y, x, 2, NumOps.FromDouble(bb * maxVal));
-            }
+        // HSV to RGB
+        var (rr, gg, bb) = ImageTensor<T>.HsvToRgbPlanes(h, s, v);
+        result.SetFromPlanarTensor(ImageTensor<T>.ReplaceLeadingChannels(image,
+            engine.TensorMultiplyScalar(rr, maxT), engine.TensorMultiplyScalar(gg, maxT), engine.TensorMultiplyScalar(bb, maxT)));
 
         return result;
     }

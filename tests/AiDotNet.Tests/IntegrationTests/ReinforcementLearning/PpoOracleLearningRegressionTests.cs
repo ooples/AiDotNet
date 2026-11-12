@@ -1,3 +1,4 @@
+using System.Threading.Tasks;
 using AiDotNet.Finance.Trading.Agents;
 using AiDotNet.Finance.Trading.Environments;
 using AiDotNet.Models.Options;
@@ -8,142 +9,115 @@ using Xunit;
 namespace AiDotNet.Tests.IntegrationTests.ReinforcementLearning;
 
 /// <summary>
-/// PPO training must improve reward on a deterministic eight-bar trading cycle.
-/// Fixed seeds control both network initialization and exploration, so CI exercises repeatable learning
-/// trajectories in float and double rather than randomly passing or failing on each run.
+/// PPO's per-episode training reward must RISE on a trivially learnable oracle environment: a deterministic 8-bar
+/// zig-zag whose phase the 4-bar price window identifies exactly. Downstream evidence first: this rose on the 0.208.117
+/// package and declined on 0.208.119.
 /// </summary>
+/// <remarks>
+/// <para>
+/// Judged per seed, each one fixed so a run is a repeatable trajectory rather than one draw of exploration and minibatch
+/// order: every seed must rise AND end above 0.05, since random drift alone can rise. Seeds 0, 1 and 42 are master's;
+/// 2 to 5 widen the sample.
+/// </para>
+/// <para>
+/// The rollout is one 200-step episode (RolloutLength = 200), a setting chosen for this environment: the paper's 2048
+/// steps would give 60 episodes only five updates. Measured on seeds 1-8: every seed rises, the late average 0.085 to
+/// 0.82 against an early 0.017 to 0.073 (at 2048 steps every seed also rises, but by as little as 0.004 to 0.005).
+/// </para>
+/// </remarks>
 public class PpoOracleLearningRegressionTests
 {
-    [Theory]
+    private const int Episodes = 60;
+    private const int StepsPerEpisode = 200;
+
+    [Theory(Timeout = 600000)]
     [InlineData(0)]
     [InlineData(1)]
+    [InlineData(2)]
+    [InlineData(3)]
+    [InlineData(4)]
+    [InlineData(5)]
     [InlineData(42)]
-    public void Ppo_training_reward_rises_on_a_perfect_oracle(int seed)
+    public async Task Ppo_training_reward_rises_on_a_perfect_oracle(int seed)
     {
-        const int n = 600;
-        const int windowSize = 4;
-        // Single-asset env (shape [time, 1]); the deterministic 8-bar zig-zag is fully learnable from the
-        // 4-bar price window alone (the window identifies the cycle phase exactly).
-        var data = new Tensor<double>(new[] { n, 1 });
-        double p = 100.0;
-        for (var i = 0; i < n; i++)
-        {
-            double nextRet = ((i / 4) % 2 == 0) ? 0.01 : -0.01; // 8-bar zig-zag cycle
-            data[i, 0] = p;
-            p *= 1.0 + nextRet;
-        }
-
-        var env = new StockTradingEnvironment<double>(
-            data, windowSize, initialCapital: 100_000.0, tradeSize: 100.0,
-            transactionCost: 0.0, allowShortSelling: true, randomStart: false);
-
-        var options = new FinancialPPOAgentOptions<double> { ContinuousActions = false, Seed = seed };
-        var agent = new FinancialPPOAgent<double>(
-            Arch(options.StateSize, options.ActionSize),
-            Arch(options.StateSize, 1),
-            options);
-
-        const int episodes = 60;
-        const int stepsPerEpisode = 200;
-        var episodeRewards = new double[episodes];
-        for (var e = 0; e < episodes; e++)
-        {
-            var state = env.Reset();
-            double total = 0;
-            for (var s = 0; s < stepsPerEpisode; s++)
-            {
-                var action = agent.SelectAction(state, training: true);
-                var (next, reward, done, _) = env.Step(action);
-                total += reward;
-                agent.StoreExperience(state, action, reward, next, done);
-                if (s % 4 == 3 || done)
-                {
-                    agent.Train();
-                }
-
-                state = next;
-                if (done)
-                {
-                    break;
-                }
-            }
-
-            episodeRewards[e] = total;
-        }
-
-        var early = episodeRewards.Take(20).Average();
-        var late = episodeRewards.Skip(40).Average();
-        // Require a meaningful positive reward as well as improvement; random drift alone can rise.
-        Assert.True(late > early && late > 0.05,
-            $"PPO is not learning a PERFECT oracle: early-episodes avg {early:F3} vs late {late:F3} " +
-            $"(full curve: {string.Join(",", episodeRewards.Select(r => r.ToString("F2")))})");
+        await Task.Yield();
+        AssertRises("PPO<double>", seed, Curve(seed, (data, options) => new FinancialPPOAgent<double>(
+            new NeuralNetworkArchitecture<double>(inputFeatures: options.StateSize, outputSize: options.ActionSize),
+            new NeuralNetworkArchitecture<double>(inputFeatures: options.StateSize, outputSize: 1), options), Prices<double>(),
+            v => v));
     }
 
-    [Theory]
+    [Theory(Timeout = 600000)]
     [InlineData(0)]
     [InlineData(1)]
+    [InlineData(2)]
+    [InlineData(3)]
+    [InlineData(4)]
+    [InlineData(5)]
     [InlineData(42)]
-    public void Ppo_training_reward_rises_on_a_perfect_oracle_float(int seed)
+    public async Task Ppo_training_reward_rises_on_a_perfect_oracle_float(int seed)
     {
-        // FLOAT variant — the downstream platform trains agents in float; the float kernel path (incl.
-        // native oneDNN/OpenBLAS adoption) differs from double and is where the observed decline lives.
+        // The downstream platform trains agents in float, whose kernels differ from double's.
+        await Task.Yield();
+        AssertRises("PPO<float>", seed, Curve(seed, (data, options) => new FinancialPPOAgent<float>(
+            new NeuralNetworkArchitecture<float>(inputFeatures: options.StateSize, outputSize: options.ActionSize),
+            new NeuralNetworkArchitecture<float>(inputFeatures: options.StateSize, outputSize: 1), options), Prices<float>(),
+            v => (double)v));
+    }
+
+    private static void AssertRises(string name, int seed, double[] curve)
+    {
+        double early = curve.Take(20).Average();
+        double late = curve.Skip(40).Average();
+        // Require a meaningful positive reward as well as improvement; random drift alone can rise.
+        Assert.True(late > early && late > 0.05,
+            $"{name} (seed {seed}) is not learning a PERFECT oracle: early-episodes avg {early:F3} vs late {late:F3} " +
+            $"(full curve: {string.Join(",", curve.Select(r => r.ToString("F2")))})");
+    }
+
+    // An 8-bar zig-zag of +-1% returns, one asset.
+    private static Tensor<T> Prices<T>()
+    {
         const int n = 600;
-        const int windowSize = 4;
-        var data = new Tensor<float>(new[] { n, 1 });
+        var data = new Tensor<T>(new[] { n, 1 });
+        var ops = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>();
         double p = 100.0;
         for (var i = 0; i < n; i++)
         {
             double nextRet = ((i / 4) % 2 == 0) ? 0.01 : -0.01;
-            data[i, 0] = (float)p;
+            data[i, 0] = ops.FromDouble(p);
             p *= 1.0 + nextRet;
         }
+        return data;
+    }
 
-        var env = new StockTradingEnvironment<float>(
-            data, windowSize, initialCapital: 100_000f, tradeSize: 100f,
+    private static double[] Curve<T>(int seed, Func<Tensor<T>, FinancialPPOAgentOptions<T>, FinancialPPOAgent<T>> create,
+        Tensor<T> data, Func<T, double> toDouble)
+    {
+        var ops = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>();
+        var env = new StockTradingEnvironment<T>(
+            data, windowSize: 4, initialCapital: ops.FromDouble(100_000.0), tradeSize: ops.FromDouble(100.0),
             transactionCost: 0.0, allowShortSelling: true, randomStart: false);
+        var options = new FinancialPPOAgentOptions<T> { ContinuousActions = false, Seed = seed, RolloutLength = StepsPerEpisode };
+        using var agent = create(data, options);
 
-        var options = new FinancialPPOAgentOptions<float> { ContinuousActions = false, Seed = seed };
-        var agent = new FinancialPPOAgent<float>(
-            new NeuralNetworkArchitecture<float>(inputFeatures: options.StateSize, outputSize: options.ActionSize),
-            new NeuralNetworkArchitecture<float>(inputFeatures: options.StateSize, outputSize: 1),
-            options);
-
-        const int episodes = 60;
-        const int stepsPerEpisode = 200;
-        var episodeRewards = new double[episodes];
-        for (var e = 0; e < episodes; e++)
+        var rewards = new double[Episodes];
+        for (var e = 0; e < Episodes; e++)
         {
             var state = env.Reset();
             double total = 0;
-            for (var s = 0; s < stepsPerEpisode; s++)
+            for (var s = 0; s < StepsPerEpisode; s++)
             {
                 var action = agent.SelectAction(state, training: true);
                 var (next, reward, done, _) = env.Step(action);
-                total += reward;
+                total += toDouble(reward);
                 agent.StoreExperience(state, action, reward, next, done);
-                if (s % 4 == 3 || done)
-                {
-                    agent.Train();
-                }
-
+                agent.Train();
                 state = next;
-                if (done)
-                {
-                    break;
-                }
+                if (done) break;
             }
-
-            episodeRewards[e] = total;
+            rewards[e] = total;
         }
-
-        var early = episodeRewards.Take(20).Average();
-        var late = episodeRewards.Skip(40).Average();
-        // Require a meaningful positive reward as well as improvement; random drift alone can rise.
-        Assert.True(late > early && late > 0.05,
-            $"PPO<float> is not learning a PERFECT oracle: early {early:F3} vs late {late:F3} " +
-            $"(curve: {string.Join(",", episodeRewards.Select(r => r.ToString("F2")))})");
+        return rewards;
     }
-
-    private static NeuralNetworkArchitecture<double> Arch(int inputs, int outputs)
-        => new(inputFeatures: inputs, outputSize: outputs);
 }

@@ -15,10 +15,10 @@ namespace AiDotNet.Tests.IntegrationTests.TimeSeries;
 /// </summary>
 public class OoplesForecasterParameterRoundTripTests
 {
-    private static IFullModel<double, Matrix<double>, Vector<double>> Make(string name, int seed) => name switch
+    private static IFullModel<double, Matrix<double>, Vector<double>> Make(string name, int seed, int epochs = 2) => name switch
     {
         "deepar" => new DeepARModel<double>(new DeepAROptions<double>
-            { LookbackWindow = 10, ForecastHorizon = 1, HiddenSize = 8, NumLayers = 2, Epochs = 2, Seed = seed }),
+            { LookbackWindow = 10, ForecastHorizon = 1, HiddenSize = 8, NumLayers = 2, Epochs = epochs, Seed = seed }),
         "nbeats" => new NBEATSModel<double>(new NBEATSModelOptions<double>
         {
             LookbackWindow = 10, LagOrder = 10, ForecastHorizon = 1, NumStacks = 2, NumBlocksPerStack = 1,
@@ -26,11 +26,14 @@ public class OoplesForecasterParameterRoundTripTests
         }),
         "informer" => new InformerModel<double>(new InformerOptions<double>
         {
-            LookbackWindow = 10, ForecastHorizon = 1, EmbeddingDim = 8, NumAttentionHeads = 2, NumEncoderLayers = 2,
-            NumDecoderLayers = 1, Epochs = 2, Seed = seed,
+            LookbackWindow = 10, LabelLength = 5, ForecastHorizon = 1, EmbeddingDim = 8, NumAttentionHeads = 2,
+            NumEncoderLayers = 2, NumDecoderLayers = 1, Epochs = 2, Seed = seed,
         }),
         "chronos" => new ChronosFoundationModel<double>(new ChronosOptions<double>
-            { ContextLength = 10, ForecastHorizon = 1, EmbeddingDim = 8, NumLayers = 1, NumHeads = 2, Epochs = 1, Seed = seed }),
+        {
+            ContextLength = 10, PredictionLength = 1, NumTokens = 64, ModelDim = 8, FeedForwardDim = 16, KeyValueDim = 4,
+            NumHeads = 2, NumLayers = 1, TrainingSteps = epochs, BatchSize = 4, MinPast = 5, NumSamples = 4, Seed = seed,
+        }),
         "tft" => new TemporalFusionTransformer<double>(new TemporalFusionTransformerOptions<double>
             { LookbackWindow = 10, ForecastHorizon = 1, HiddenSize = 8, NumAttentionHeads = 2, Epochs = 2, Seed = seed }),
         "nhits" => new NHiTSModel<double>(new NHiTSOptions<double>
@@ -40,8 +43,8 @@ public class OoplesForecasterParameterRoundTripTests
         }),
         "autoformer" => new AutoformerModel<double>(new AutoformerOptions<double>
         {
-            LookbackWindow = 10, ForecastHorizon = 1, EmbeddingDim = 8, NumEncoderLayers = 1, NumDecoderLayers = 1,
-            Epochs = 2, Seed = seed,
+            LookbackWindow = 10, LabelLength = 5, ForecastHorizon = 1, EmbeddingDim = 8, NumEncoderLayers = 1,
+            NumDecoderLayers = 1, Epochs = 2, Seed = seed,
         }),
         "dlinear" => new DLinearModel<double>(new DLinearOptions<double>
             { LookbackWindow = 10, ForecastHorizon = 1, Epochs = 2, Seed = seed }),
@@ -69,13 +72,18 @@ public class OoplesForecasterParameterRoundTripTests
         }
         var trained = Make(name, 6);
         trained.Train(x, y);
-        var copy = Make(name, 99);
+        // DeepAR and Chronos forecasts are medians of sample paths drawn from a generator seeded by Options.Seed, so
+        // their copy shares the seed and differs in its weights by training one epoch (step) fewer.
+        bool sampled = name is "deepar" or "chronos";
+        var copy = sampled ? Make(name, 6, epochs: 1) : Make(name, 99);
         copy.Train(x, y);                        // same data statistics; weights are then overwritten
-        copy.SetParameters(trained.GetParameters());
 
         var probe = new Matrix<double>(5, 10);
         for (int i = 0; i < 5; i++) for (int j = 0; j < 10; j++) probe[i, j] = x[40 + i, j];
         var expected = trained.Predict(probe);
+        if (sampled)
+            Assert.NotEqual(expected[0], copy.Predict(probe)[0]);   // the copy's own weights forecast differently
+        copy.SetParameters(trained.GetParameters());
         var actual = copy.Predict(probe);
         for (int i = 0; i < 5; i++)
             Assert.True(Math.Abs(expected[i] - actual[i]) <= 1e-9 * Math.Max(1, Math.Abs(expected[i])),

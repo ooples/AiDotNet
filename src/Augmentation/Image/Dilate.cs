@@ -27,21 +27,9 @@ public class Dilate<T> : ImageAugmenterBase<T>
             var input = result.Clone();
             result = input.Clone();
 
-            for (int c = 0; c < data.Channels; c++)
-                for (int y = 0; y < data.Height; y++)
-                    for (int x = 0; x < data.Width; x++)
-                    {
-                        double maxVal = double.MinValue;
-                        for (int ky = -half; ky <= half; ky++)
-                            for (int kx = -half; kx <= half; kx++)
-                            {
-                                int ny = Math.Max(0, Math.Min(data.Height - 1, y + ky));
-                                int nx = Math.Max(0, Math.Min(data.Width - 1, x + kx));
-                                double val = NumOps.ToDouble(input.GetPixel(ny, nx, c));
-                                if (val > maxVal) maxVal = val;
-                            }
-                        result.SetPixel(y, x, c, NumOps.FromDouble(maxVal));
-                    }
+            // Maximum over the edge-replicated neighbourhood
+            var dilated = Engine.ReduceMax(ImageTensor<T>.Neighbourhoods(input.ToPlanarTensor(), 2 * half + 1), [3], false);
+            result.SetFromPlanarTensor(dilated);
         }
 
         return result;
