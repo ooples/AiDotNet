@@ -214,28 +214,20 @@ public class CopyOnWriteCloneTests
     [Fact]
     public void NestedTransformerGraph_IsIdenticalAndIndependentAfterCopyOnWriteShare()
     {
-        var architecture = new NeuralNetworkArchitecture<float>(
-            inputType: InputType.OneDimensional,
-            taskType: NeuralNetworkTaskType.Regression,
-            inputSize: 4,
-            outputSize: 16);
-        var options = new XTTSv2CloneOptions
-        {
-            VocabSize = 32,
-            TextEncoderDim = 8,
-            LLMDim = 8,
-            NumEncoderLayers = 0,
-            NumLLMLayers = 1,
-            NumHeads = 2,
-            NumCodebooks = 1,
-            CodebookSize = 16,
-            SpeakerEmbeddingDim = 8,
-            DropoutRate = 0,
-        };
-        using var source = new XTTSv2Clone<float>(architecture, options);
-        using var destination = new XTTSv2Clone<float>(architecture, new XTTSv2CloneOptions(options));
+        // XTTS-v2 conditions every synthesis on a reference recording, so both models get the same one; the bounded
+        // fixture is the released component set at test widths, and both instances start from its pinned seed.
+        using var source = AiDotNet.Tests.TextToSpeech.XTTSv2Fixture.CreateClone<float>();
+        using var destination = AiDotNet.Tests.TextToSpeech.XTTSv2Fixture.CreateClone<float>();
+        var reference = AiDotNet.Tensors.Engines.AiDotNetEngine.Current.TensorMultiplyScalar(
+            AiDotNet.Tensors.Engines.AiDotNetEngine.Current.TensorSin(AiDotNet.Tensors.Engines.AiDotNetEngine.Current.TensorMultiplyScalar(
+                AiDotNet.Tensors.Engines.AiDotNetEngine.Current.TensorArange<float>(0, (int)(0.34 * source.SampleRate), 1),
+                (float)(2 * Math.PI * 180.0 / source.SampleRate))),
+            0.4f);
+        source.Voice = new AiDotNet.TextToSpeech.TtsVoice<float> { ReferenceAudio = reference };
+        destination.Voice = new AiDotNet.TextToSpeech.TtsVoice<float> { ReferenceAudio = reference };
+        // Text token ids of "ehlo" in the fixture's tokenizer (ids 0-3 are its special tokens).
         var input = new Tensor<float>(
-            new Vector<float>(new[] { 1f, 2f, 3f, 4f }),
+            new Vector<float>(new[] { 8f, 11f, 15f, 18f }),
             new[] { 4 });
 
         _ = source.Predict(input);
@@ -252,9 +244,12 @@ public class CopyOnWriteCloneTests
         for (int i = 0; i < sourcePrediction.Length; i++)
             Assert.Equal(sourcePrediction[i], sharedPrediction[i], 5);
 
-        var mutated = destination.GetParameters().Clone();
-        for (int i = 0; i < mutated.Length; i++)
-            mutated[i] += 0.25f;
+        // The reference voice runs the H/ASP speaker encoder: about sixty convolutions behind frozen batch norms, which
+        // renormalize nothing. A 0.25 offset on every weight grows its activations geometrically (measured 3.3e24 before
+        // the attentive pooling), whose second moment then overflows float to NaN, as torch's does; 0.01 keeps the
+        // perturbed model finite (a 0.2 prediction change) so the probe measures sharing, not float range.
+        var current = destination.GetParameters();
+        var mutated = current.Add(new Vector<float>(Enumerable.Repeat(0.01f, current.Length).ToArray()));
         destination.SetParameters(mutated);
 
         var sourceParamsAfter = source.GetParameters();

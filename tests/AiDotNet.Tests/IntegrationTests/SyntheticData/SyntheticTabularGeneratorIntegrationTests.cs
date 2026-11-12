@@ -360,7 +360,6 @@ public class SyntheticTabularGeneratorIntegrationTests
             TeacherDimensions = [64, 64],
             StudentDimensions = [64, 64],
             BatchSize = 50,
-            VGMModes = 3,
             NumTeachers = 3,
             LaplaceScale = 0.5
         };
@@ -388,7 +387,6 @@ public class SyntheticTabularGeneratorIntegrationTests
             TeacherDimensions = [64, 64],
             StudentDimensions = [64, 64],
             BatchSize = 50,
-            VGMModes = 3,
             NumTeachers = 3,
             LaplaceScale = 0.5
         };
@@ -400,16 +398,13 @@ public class SyntheticTabularGeneratorIntegrationTests
         var restored = new PATEGANGenerator<double>(arch, options);
         restored.Deserialize(bytes);
 
-        // The generator batch-norm layers live outside the base Layers collection; verify they
-        // and the teacher ensemble retains its per-teacher partitions. The VGM transformer driving
-        // output activations must survive as fitted state as well.
-        AssertAuxLayerListPreserved<BatchNormalizationLayer<double>>(generator, restored, "_genBNLayers");
+        // The student and the teacher ensemble live outside the base Layers collection; verify they
+        // survive, and that the fitted [0, 1] encoding (Jordon et al. 2019, section 4.2.2) does too.
+        AssertAuxLayerListPreserved<FullyConnectedLayer<double>>(generator, restored, "_studentLayers");
         AssertNestedAuxLayerListsPreserved<FullyConnectedLayer<double>>(
             generator, restored, "_teacherLayers");
-        var originalTransformer = GetPrivateField<TabularDataTransformer<double>>(generator, "_transformer");
-        var restoredTransformer = GetPrivateField<TabularDataTransformer<double>>(restored, "_transformer");
-        Assert.NotNull(restoredTransformer);
-        Assert.Equal(originalTransformer.Serialize(), restoredTransformer.Serialize());
+        Assert.Equal(GetPrivateField<double[]>(generator, "_columnMin"), GetPrivateField<double[]>(restored, "_columnMin"));
+        Assert.Equal(GetPrivateField<double[]>(generator, "_columnMax"), GetPrivateField<double[]>(restored, "_columnMax"));
         var originalParameters = generator.GetParameters();
         var restoredParameters = restored.GetParameters();
         Assert.Equal(originalParameters.Length, restoredParameters.Length);
@@ -418,7 +413,7 @@ public class SyntheticTabularGeneratorIntegrationTests
 
         generator.SetTrainingMode(false);
         restored.SetTrainingMode(false);
-        var probe = new Tensor<double>([options.EmbeddingDimension]);
+        var probe = new Tensor<double>([options.EmbeddingDimension.GetValueOrDefault()]);
         for (int i = 0; i < probe.Length; i++) probe[i] = 0.1 * i;
         var expected = generator.Predict(probe);
         var actual = restored.Predict(probe);

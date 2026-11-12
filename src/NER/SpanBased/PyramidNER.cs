@@ -1,6 +1,7 @@
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
+using AiDotNet.ActivationFunctions;
 using AiDotNet.Interfaces;
 using AiDotNet.NER.Options;
 using AiDotNet.NeuralNetworks;
@@ -112,13 +113,14 @@ public class PyramidNER<T> : SpanBasedNERBase<T>
     /// <inheritdoc />
     protected override IEnumerable<ILayer<T>> CreateDefaultLayers()
     {
-        return LayerHelper<T>.CreateDefaultSpanBasedNERLayers(
-            hiddenDimension: NEROptions.HiddenDimension,
-            numAttentionHeads: NEROptions.NumAttentionHeads,
-            numTransformerLayers: NEROptions.NumTransformerLayers,
-            intermediateDimension: NEROptions.IntermediateDimension,
-            spanEmbeddingDimension: NEROptions.SpanEmbeddingDimension,
-            numLabels: NEROptions.NumLabels,
-            dropoutRate: NEROptions.DropoutRate);
+        // The encoder, a linear layer to the decoder width SpanEmbeddingDimension (Table 2 uses 200; section 3.2's
+        // Linear_enc), and the pyramid with its inverse
+        // (sections 3.3 and 3.4) over spans up to MaxSpanLength tokens (the paper's L, 16 by default).
+        foreach (var layer in CreateTokenEncoderLayers()) yield return layer;
+        yield return new DenseLayer<T>(NEROptions.SpanEmbeddingDimension, (IActivationFunction<T>)new IdentityActivation<T>());
+        yield return new PyramidSpanLayer<T>(NEROptions.SpanEmbeddingDimension, NEROptions.MaxSpanLength > 0 ? NEROptions.MaxSpanLength : 16, NEROptions.NumLabels);
     }
+
+    /// <inheritdoc />
+    protected override Tensor<T> BuildTrainingTargets(Tensor<T> labels, int seqLen) => BuildSpanGridTargets(labels, seqLen);
 }

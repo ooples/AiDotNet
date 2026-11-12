@@ -83,15 +83,11 @@ public class AdafactorOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase
     /// </remarks>
     private double StepSize(int step, double parameterRms)
     {
-        if (!_options.UseRelativeStepSize)
-        {
-            return _options.InitialLearningRate > 0
-                ? _options.InitialLearningRate
-                : NumOps.ToDouble(CurrentLearningRate);
-        }
-
-        double relative = Math.Min(1e-2, 1.0 / Math.Sqrt(step));
-        return relative * Math.Max(_options.ParameterScaleFloor, parameterRms);
+        double rate = _options.UseRelativeStepSize
+            ? Math.Min(1e-2, 1.0 / Math.Sqrt(step))
+            : _options.InitialLearningRate > 0 ? _options.InitialLearningRate : NumOps.ToDouble(CurrentLearningRate);
+        bool scaleByParameters = _options.MultiplyByParameterScale is bool explicitScale ? explicitScale : _options.UseRelativeStepSize;
+        return scaleByParameters ? rate * Math.Max(_options.ParameterScaleFloor, parameterRms) : rate;
     }
 
     /// <summary>Root mean square of every element, as one engine sum-of-squares reduction.</summary>
@@ -166,7 +162,7 @@ public class AdafactorOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase
         var g = gradient._shape.SequenceEqual(parameter._shape) ? gradient : engine.Reshape(gradient, parameter._shape);
 
         // The reconstructed second moment for each element, however it was estimated.
-        var estimate = IsFactorable(parameter._shape)
+        var estimate = _options.Factored && IsFactorable(parameter._shape)
             ? UpdateFactoredSecondMoment(parameter, g, beta2, epsilon)
             : UpdateFullSecondMoment(parameter, g, beta2, epsilon);
 
@@ -176,6 +172,10 @@ public class AdafactorOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase
             g, engine.TensorSqrt(engine.TensorMax(estimate, NumOps.FromDouble(epsilon))));
         double updateRms = Math.Sqrt(NumOps.ToDouble(engine.TensorSumOfSquares(update)) / length);
         double scale = updateRms > clip && clip > 0 ? clip / updateRms : 1.0;
+        // The first moment averages the clipped update already multiplied by this step's size, as the reference
+        // implementations do (transformers' Adafactor: clip, multiply by lr, then average).
+        double alpha = StepSize(_step, Rms(parameter));
+        update = engine.TensorMultiplyScalar(update, NumOps.FromDouble(scale * alpha));
 
         if (keepMomentum)
         {
@@ -185,9 +185,7 @@ public class AdafactorOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase
             update = m;
         }
 
-        double alpha = StepSize(_step, Rms(parameter));
-
-        var next = engine.TensorSubtract(parameter, engine.TensorMultiplyScalar(update, NumOps.FromDouble(alpha * scale)));
+        var next = engine.TensorSubtract(parameter, update);
 
         // Decoupled: applied to the weight, not folded into the gradient, so it does not
         // enter the second-moment estimate.
@@ -281,8 +279,18 @@ public class AdafactorOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase
 
         var p = parameters.AsTensor();
         double alpha = StepSize(_step, Rms(p));
+        update = engine.TensorMultiplyScalar(update, NumOps.FromDouble(scale * alpha));
+        if (!double.IsNaN(_options.Beta1))
+        {
+            if (_flatMomentum.Length != parameters.Length) _flatMomentum = new Vector<T>(parameters.Length);
+            var mState = _flatMomentum.AsTensor();
+            var m = engine.TensorAddScaled(
+                mState, update, NumOps.FromDouble(_options.Beta1), NumOps.FromDouble(1 - _options.Beta1));
+            engine.TensorCopy(m, mState);
+            update = m;
+        }
 
-        var next = engine.TensorSubtract(p, engine.TensorMultiplyScalar(update, NumOps.FromDouble(alpha * scale)));
+        var next = engine.TensorSubtract(p, update);
         if (applyWeightDecay)
             next = engine.TensorSubtract(next, engine.TensorMultiplyScalar(p, NumOps.FromDouble(alpha * decay)));
 
@@ -290,6 +298,7 @@ public class AdafactorOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase
     }
 
     private Vector<T> _flatState = new Vector<T>(0);
+    private Vector<T> _flatMomentum = new Vector<T>(0);
 
     /// <inheritdoc />
     public override OptimizationResult<T, TInput, TOutput> Optimize(
@@ -307,6 +316,7 @@ public class AdafactorOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase
         _full.Clear();
         _momentum.Clear();
         _flatState = new Vector<T>(0);
+        _flatMomentum = new Vector<T>(0);
         _step = 0;
         InitializeAdaptiveParameters();
 
