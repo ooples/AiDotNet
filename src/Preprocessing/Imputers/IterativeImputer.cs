@@ -114,7 +114,9 @@ public class IterativeImputer<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         public ImputationStep(int feature, Tensor<T> coefficients, T intercept)
         {
             Feature = feature;
-            Coefficients = coefficients;
+            // The step is fitted state replayed by every later Transform, so it owns a garbage-collected copy:
+            // the engine result (a reshaped view) may live in an arena buffer that is reused after the fit.
+            Coefficients = Tensor<T>.FromVector(coefficients.ToVector());
             Intercept = intercept;
         }
 
@@ -191,8 +193,18 @@ public class IterativeImputer<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     private int[] ImputationOrder(Tensor<T> missing)
     {
         var processed = new HashSet<int>(GetColumnsToProcess(_nFeatures));
-        var counts = Engine.ReduceSum(missing, new[] { 0 }, false);
-        return PreprocessingTensorOps.StableOrder(counts, descending: false).Where(processed.Contains).ToArray();
+        return AscendingMissingOrder(missing).Where(processed.Contains).ToArray();
+    }
+
+    /// <summary>
+    /// Every column of a 0/1 missing mask ([n, features]) in ascending order of its missing count, ties in
+    /// column order. The mask is counted as int: a sum in T stops counting at 2048 for Half, which would tie
+    /// unequal counts and change the imputation order.
+    /// </summary>
+    internal static int[] AscendingMissingOrder(Tensor<T> missing)
+    {
+        var counts = AiDotNetEngine.Current.ReduceSum(missing.Cast<int>(), new[] { 0 }, false).AsSpan().ToArray();
+        return Enumerable.Range(0, counts.Length).OrderBy(j => counts[j]).ToArray();
     }
 
     /// <summary>
