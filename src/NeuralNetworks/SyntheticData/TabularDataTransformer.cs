@@ -148,25 +148,36 @@ public class TabularDataTransformer<T> : IModelSerializer
             throw new InvalidOperationException("Transformer must be fitted before transforming data.");
         }
 
-        var result = new Matrix<T>(data.Rows, _transformedWidth);
-
-        for (int row = 0; row < data.Rows; row++)
+        int rows = data.Rows;
+        if (rows == 0)
         {
-            for (int col = 0; col < _columns.Count; col++)
-            {
-                var transform = _columnTransforms[col];
-                if (transform.IsContinuous)
-                {
-                    TransformContinuousValue(data, row, col, transform, result);
-                }
-                else
-                {
-                    TransformCategoricalValue(data, row, col, transform, result);
-                }
-            }
+            return new Matrix<T>(0, _transformedWidth);
         }
 
-        return result;
+        // Each column becomes one [rows, width] block, laid side by side in column order. Continuous
+        // columns are encoded whole-column by the engine; categorical cells keep their per-cell
+        // index-or-name lookup (a name match needs the cell's text form).
+        var blocks = new List<Tensor<T>>(_columns.Count);
+        for (int col = 0; col < _columns.Count; col++)
+        {
+            var transform = _columnTransforms[col];
+            if (transform.Width == 0)
+            {
+                continue;
+            }
+
+            blocks.Add(transform.IsContinuous
+                ? TransformContinuousColumn(data, col, transform)
+                : TransformCategoricalColumn(data, col, transform));
+        }
+
+        if (blocks.Count == 0)
+        {
+            return new Matrix<T>(rows, _transformedWidth);
+        }
+
+        var engine = AiDotNetEngine.Current;
+        return (blocks.Count == 1 ? blocks[0] : engine.TensorConcatenate(blocks.ToArray(), 1)).ToMatrix();
     }
 
     /// <summary>
@@ -181,25 +192,24 @@ public class TabularDataTransformer<T> : IModelSerializer
             throw new InvalidOperationException("Transformer must be fitted before inverse transforming.");
         }
 
-        var result = new Matrix<T>(transformed.Rows, _columns.Count);
-
-        for (int row = 0; row < transformed.Rows; row++)
+        int rows = transformed.Rows;
+        if (rows == 0 || _columns.Count == 0)
         {
-            for (int col = 0; col < _columns.Count; col++)
-            {
-                var transform = _columnTransforms[col];
-                if (transform.IsContinuous)
-                {
-                    result[row, col] = InverseTransformContinuousValue(transformed, row, transform);
-                }
-                else
-                {
-                    result[row, col] = InverseTransformCategoricalValue(transformed, row, transform);
-                }
-            }
+            return new Matrix<T>(rows, _columns.Count);
         }
 
-        return result;
+        var source = Tensor<T>.FromMatrix(transformed);
+        var columns = new Tensor<T>[_columns.Count];
+        for (int col = 0; col < _columns.Count; col++)
+        {
+            var transform = _columnTransforms[col];
+            columns[col] = transform.IsContinuous
+                ? InverseTransformContinuousColumn(source, transform)
+                : InverseTransformCategoricalColumn(source, transform);
+        }
+
+        var engine = AiDotNetEngine.Current;
+        return (columns.Length == 1 ? columns[0] : engine.TensorConcatenate(columns, 1)).ToMatrix();
     }
 
     /// <summary>
@@ -253,9 +263,10 @@ public class TabularDataTransformer<T> : IModelSerializer
         writer.Write(_continuousColumnInfos.Count);
         foreach (var info in _continuousColumnInfos)
         {
-            WriteDoubleArray(writer, info.Means);
-            WriteDoubleArray(writer, info.Stds);
-            WriteDoubleArray(writer, info.Weights);
+            // Raw T elements (count, element size, bytes): the fitted parameters round-trip exactly.
+            AuxLayerSerialization.WriteElements(writer, info.Means.ToVector());
+            AuxLayerSerialization.WriteElements(writer, info.Stds.ToVector());
+            AuxLayerSerialization.WriteElements(writer, info.Weights.ToVector());
         }
 
         writer.Write(_categoricalColumnInfos.Count);
@@ -310,9 +321,9 @@ public class TabularDataTransformer<T> : IModelSerializer
         int continuousCount = reader.ReadInt32();
         for (int i = 0; i < continuousCount; i++)
         {
-            double[] means = ReadDoubleArray(reader);
-            double[] stds = ReadDoubleArray(reader);
-            double[] weights = ReadDoubleArray(reader);
+            var means = Tensor<T>.FromVector(AuxLayerSerialization.ReadElements<T>(reader));
+            var stds = Tensor<T>.FromVector(AuxLayerSerialization.ReadElements<T>(reader));
+            var weights = Tensor<T>.FromVector(AuxLayerSerialization.ReadElements<T>(reader));
             _continuousColumnInfos.Add(new VGMColumnInfo(means, stds, weights));
         }
 
@@ -367,37 +378,13 @@ public class TabularDataTransformer<T> : IModelSerializer
         Deserialize(System.IO.File.ReadAllBytes(filePath));
     }
 
-    private static void WriteDoubleArray(System.IO.BinaryWriter writer, double[] values)
-    {
-        writer.Write(values.Length);
-        foreach (double value in values)
-        {
-            writer.Write(value);
-        }
-    }
-
-    private static double[] ReadDoubleArray(System.IO.BinaryReader reader)
-    {
-        int length = reader.ReadInt32();
-        var values = new double[length];
-        for (int i = 0; i < length; i++)
-        {
-            values[i] = reader.ReadDouble();
-        }
-
-        return values;
-    }
-
     #region VGM Fitting
 
     private VGMColumnInfo FitContinuousColumn(Matrix<T> data, int colIndex)
     {
+        var engine = AiDotNetEngine.Current;
         int n = data.Rows;
-        var values = new double[n];
-        for (int i = 0; i < n; i++)
-        {
-            values[i] = NumOps.ToDouble(data[i, colIndex]);
-        }
+        var x = Tensor<T>.FromVector(data.GetColumn(colIndex));
 
         // Variational Bayesian Gaussian Mixture (Bishop PRML §10.2) — this is the
         // "V" in VGM. The CTGAN paper (Xu et al. 2019 §4.2) and the official
@@ -409,147 +396,133 @@ public class TabularDataTransformer<T> : IModelSerializer
         // columns. Here we run mean-field VB with a symmetric Dirichlet prior on the
         // weights and a Normal-Gamma conjugate prior on each component's
         // (mean, precision), then keep the components whose posterior weight is
-        // non-negligible.
+        // non-negligible. Every step runs on whole [n, k] tensors in T.
         int k = Math.Min(_vgmModes, Math.Max(1, n / 5));
+        int[] grid = { n, k };
 
-        Array.Sort(values);
-        double valMin = values[0];
-        double valMax = values[n - 1];
-        double range = valMax - valMin;
-        if (range < 1e-10) range = 1.0;
+        T valMin = engine.TensorMinValue(x);
+        T valMax = engine.TensorMaxValue(x);
+        T range = NumOps.Subtract(valMax, valMin);
+        if (NumOps.LessThan(range, NumOps.FromDouble(1e-10))) range = NumOps.One;
 
-        double dataMean = 0;
-        for (int i = 0; i < n; i++) dataMean += values[i];
-        dataMean /= n;
-        double dataVar = 0;
-        for (int i = 0; i < n; i++) { double d = values[i] - dataMean; dataVar += d * d; }
-        dataVar = Math.Max(dataVar / Math.Max(1, n), 1e-6);
+        T dataMean = engine.TensorMean(x);
+        var centered = engine.TensorSubtractScalar(x, dataMean);
+        T dataVar = MathHelper.Max(
+            engine.TensorMean(engine.TensorMultiply(centered, centered)), NumOps.FromDouble(1e-6));
 
         // Prior hyperparameters. A small Dirichlet concentration (alpha0 << 1) gives
         // the sparse, automatic-pruning behaviour of a Dirichlet-process mixture —
         // the regime the official CTGAN BayesianGaussianMixture runs in.
-        double alpha0 = 1e-3;                 // symmetric Dirichlet weight prior
-        double beta0 = 1.0;                   // mean prior strength
-        double m0 = dataMean;                 // mean prior location
-        double a0 = 1.0;                      // Gamma (precision) prior shape
-        double b0 = dataVar;                  // Gamma (precision) prior rate
+        T alpha0 = NumOps.FromDouble(1e-3);   // symmetric Dirichlet weight prior
+        T beta0 = NumOps.One;                 // mean prior strength
+        T m0 = dataMean;                      // mean prior location
+        T a0 = NumOps.One;                    // Gamma (precision) prior shape
+        T b0 = dataVar;                       // Gamma (precision) prior rate
+        T beta0M0 = NumOps.Multiply(beta0, m0);
+        T half = NumOps.FromDouble(0.5);
+        T negHalf = NumOps.FromDouble(-0.5);
+        T halfLogTwoPi = NumOps.FromDouble(0.5 * Math.Log(2 * Math.PI));
+        T massFloor = NumOps.FromDouble(1e-12);
+        T rateFloor = NumOps.FromDouble(1e-10);
+        T perMode = NumOps.FromDouble((double)n / k);
 
         // Posterior parameters, initialized by spreading component means across the
         // data range (k-means-style seeding) with broad precision.
-        var alpha = new double[k];
-        var betap = new double[k];
-        var mp = new double[k];
-        var ap = new double[k];
-        var bp = new double[k];
-        for (int m = 0; m < k; m++)
-        {
-            alpha[m] = alpha0 + (double)n / k;
-            betap[m] = beta0 + (double)n / k;
-            mp[m] = valMin + range * (m + 0.5) / k;
-            ap[m] = a0 + 0.5 * n / k;
-            bp[m] = b0 + 0.5 * dataVar * n / k;
-        }
+        var alpha = Tensor<T>.CreateDefault(new[] { k }, NumOps.Add(alpha0, perMode));
+        var betap = Tensor<T>.CreateDefault(new[] { k }, NumOps.Add(beta0, perMode));
+        var mp = engine.TensorAddScalar(
+            engine.TensorMultiplyScalar(engine.TensorArange<T>(0.5, k, 1.0), NumOps.Divide(range, NumOps.FromDouble(k))),
+            valMin);
+        var ap = Tensor<T>.CreateDefault(new[] { k }, NumOps.Add(a0, NumOps.Multiply(half, perMode)));
+        var bp = Tensor<T>.CreateDefault(new[] { k }, NumOps.Add(b0, NumOps.Multiply(NumOps.Multiply(half, dataVar), perMode)));
 
-        var r = new double[n, k];
+        var xGrid = Expand(x.Reshape(new[] { n, 1 }), grid);
         const int maxIter = 100;
         for (int iter = 0; iter < maxIter; iter++)
         {
             // --- Variational E-step: responsibilities from expected log-likelihoods.
-            double alphaSum = 0;
-            for (int m = 0; m < k; m++) alphaSum += alpha[m];
-            double psiAlphaSum = Digamma(alphaSum);
-
-            for (int i = 0; i < n; i++)
-            {
-                double maxLog = double.NegativeInfinity;
-                for (int m = 0; m < k; m++)
-                {
-                    double eLnPi = Digamma(alpha[m]) - psiAlphaSum;           // E[ln π_k]
-                    double eLnTau = Digamma(ap[m]) - Math.Log(bp[m]);          // E[ln τ_k]
-                    double eTau = ap[m] / bp[m];                              // E[τ_k]
-                    double diff = values[i] - mp[m];
-                    // E[τ_k (x-μ_k)^2] = 1/β_k + E[τ_k](x-m_k)^2
-                    double eTauSq = 1.0 / betap[m] + eTau * diff * diff;
-                    double logRho = eLnPi + 0.5 * eLnTau - 0.5 * eTauSq - 0.5 * Math.Log(2 * Math.PI);
-                    r[i, m] = logRho;
-                    if (logRho > maxLog) maxLog = logRho;
-                }
-                // log-sum-exp normalize
-                double sum = 0;
-                for (int m = 0; m < k; m++) { r[i, m] = Math.Exp(r[i, m] - maxLog); sum += r[i, m]; }
-                if (sum <= 1e-300) { for (int m = 0; m < k; m++) r[i, m] = 1.0 / k; }
-                else { for (int m = 0; m < k; m++) r[i, m] /= sum; }
-            }
+            var psiAlphaSum = engine.TensorDigamma(engine.ReduceSum(alpha, new[] { 0 }, true));
+            var eLnPi = engine.TensorSubtract(engine.TensorDigamma(alpha), Expand(psiAlphaSum, new[] { k }));   // E[ln π_k]
+            var eLnTau = engine.TensorSubtract(engine.TensorDigamma(ap), engine.TensorLog(bp));                // E[ln τ_k]
+            var eTau = engine.TensorDivide(ap, bp);                                                              // E[τ_k]
+            var diff = engine.TensorSubtract(xGrid, Row(mp, grid));
+            // E[τ_k (x-μ_k)^2] = 1/β_k + E[τ_k](x-m_k)^2
+            var eTauSq = engine.TensorAdd(
+                Row(engine.TensorReciprocal(betap), grid),
+                engine.TensorMultiply(Row(eTau, grid), engine.TensorMultiply(diff, diff)));
+            var componentTerm = engine.TensorSubtractScalar(
+                engine.TensorAdd(eLnPi, engine.TensorMultiplyScalar(eLnTau, half)), halfLogTwoPi);
+            var logRho = engine.TensorAdd(Row(componentTerm, grid), engine.TensorMultiplyScalar(eTauSq, negHalf));
+            // log-sum-exp normalize
+            var r = engine.Softmax(logRho, 1);
 
             // --- Variational M-step: update posteriors from sufficient statistics.
-            for (int m = 0; m < k; m++)
-            {
-                double Nk = 0, xbar = 0;
-                for (int i = 0; i < n; i++) { Nk += r[i, m]; xbar += r[i, m] * values[i]; }
-                if (Nk > 1e-12) xbar /= Nk;
-                double sk = 0;
-                for (int i = 0; i < n; i++) { double d = values[i] - xbar; sk += r[i, m] * d * d; }
-                if (Nk > 1e-12) sk /= Nk;
+            var nk = engine.ReduceSum(r, new[] { 0 }, false);
+            var hasMass = engine.TensorGreaterThan(nk, massFloor);
+            var weightedSum = engine.ReduceSum(engine.TensorMultiply(r, xGrid), new[] { 0 }, false);
+            var xbar = engine.TensorWhere(hasMass, engine.TensorDivide(weightedSum, nk), weightedSum);
+            var dev = engine.TensorSubtract(xGrid, Row(xbar, grid));
+            var weightedSq = engine.ReduceSum(engine.TensorMultiply(r, engine.TensorMultiply(dev, dev)), new[] { 0 }, false);
+            var sk = engine.TensorWhere(hasMass, engine.TensorDivide(weightedSq, nk), weightedSq);
 
-                alpha[m] = alpha0 + Nk;
-                betap[m] = beta0 + Nk;
-                mp[m] = (beta0 * m0 + Nk * xbar) / betap[m];
-                ap[m] = a0 + 0.5 * Nk;
-                bp[m] = b0 + 0.5 * (Nk * sk + beta0 * Nk * (xbar - m0) * (xbar - m0) / betap[m]);
-                if (bp[m] < 1e-10) bp[m] = 1e-10;
-            }
+            alpha = engine.TensorAddScalar(nk, alpha0);
+            betap = engine.TensorAddScalar(nk, beta0);
+            mp = engine.TensorDivide(engine.TensorAddScalar(engine.TensorMultiply(nk, xbar), beta0M0), betap);
+            ap = engine.TensorAddScalar(engine.TensorMultiplyScalar(nk, half), a0);
+            var shift = engine.TensorSubtractScalar(xbar, m0);
+            var spread = engine.TensorAdd(
+                engine.TensorMultiply(nk, sk),
+                engine.TensorDivide(
+                    engine.TensorMultiplyScalar(engine.TensorMultiply(nk, engine.TensorMultiply(shift, shift)), beta0),
+                    betap));
+            bp = engine.TensorMax(engine.TensorAddScalar(engine.TensorMultiplyScalar(spread, half), b0), rateFloor);
         }
 
         // Posterior point estimates. Component weight = E[π_k] = α_k / Σα; mode is
         // kept when its effective count clears a small floor (the Dirichlet prior has
-        // already shrunk genuinely-empty components to ≈ alpha0/Σα).
-        double totalAlpha = 0;
-        for (int m = 0; m < k; m++) totalAlpha += alpha[m];
+        // already shrunk genuinely-empty components to ≈ alpha0/Σα). A mode is pruned when
+        // its effective count (≈ N_k) is below 1 or its weight below 1e-3.
+        var weight = engine.TensorDivideScalar(alpha, engine.TensorSum(alpha));
+        var effectiveCount = engine.TensorSubtractScalar(alpha, alpha0);
+        var pruned = engine.TensorAdd(
+            engine.TensorLessThan(effectiveCount, NumOps.One).Cast<int>(),
+            engine.TensorLessThan(weight, NumOps.FromDouble(1e-3)).Cast<int>());
+        var keptCoordinates = engine.TensorNonzero(engine.TensorEquals(pruned, 0).Cast<int>());
+        var kept = keptCoordinates.Reshape(new[] { keptCoordinates.Length });
 
-        var activeMeans = new List<double>();
-        var activeStds = new List<double>();
-        var activeWeights = new List<double>();
-        for (int m = 0; m < k; m++)
-        {
-            double w = alpha[m] / totalAlpha;
-            double effectiveCount = alpha[m] - alpha0;     // ≈ N_k assigned to this mode
-            if (effectiveCount < 1.0 || w < 1e-3) continue; // pruned by the variational prior
-            activeMeans.Add(mp[m]);
-            activeStds.Add(Math.Sqrt(Math.Max(bp[m] / ap[m], 1e-10))); // E[1/τ] ≈ b_k/a_k
-            activeWeights.Add(w);
-        }
-
-        if (activeWeights.Count == 0)
+        Tensor<T> means;
+        Tensor<T> stds;
+        Tensor<T> weights;
+        if (kept.Length == 0)
         {
             // Degenerate column (e.g. constant): one mode at the data mean.
-            activeMeans.Add(dataMean);
-            activeStds.Add(Math.Sqrt(dataVar));
-            activeWeights.Add(1.0);
+            means = Tensor<T>.CreateDefault(new[] { 1 }, dataMean);
+            stds = Tensor<T>.CreateDefault(new[] { 1 }, NumOps.Sqrt(dataVar));
+            weights = Tensor<T>.CreateDefault(new[] { 1 }, NumOps.One);
+        }
+        else
+        {
+            means = engine.TensorIndexSelect(mp, kept, 0);
+            // E[1/τ] ≈ b_k/a_k
+            stds = engine.TensorSqrt(engine.TensorMax(
+                engine.TensorDivide(engine.TensorIndexSelect(bp, kept, 0), engine.TensorIndexSelect(ap, kept, 0)),
+                rateFloor));
+            weights = engine.TensorIndexSelect(weight, kept, 0);
         }
 
         // Renormalize the kept weights so they sum to 1.
-        double wsum = 0;
-        for (int i = 0; i < activeWeights.Count; i++) wsum += activeWeights[i];
-        for (int i = 0; i < activeWeights.Count; i++) activeWeights[i] /= wsum;
+        weights = engine.TensorDivideScalar(weights, engine.TensorSum(weights));
 
-        return new VGMColumnInfo(activeMeans.ToArray(), activeStds.ToArray(), activeWeights.ToArray());
+        return new VGMColumnInfo(means, stds, weights);
     }
 
-    /// <summary>
-    /// Digamma function ψ(x) = d/dx ln Γ(x), used by the variational GMM E-step.
-    /// Uses the asymptotic series with a recurrence to push the argument above 6.
-    /// </summary>
-    private static double Digamma(double x)
-    {
-        double result = 0;
-        while (x < 6.0) { result -= 1.0 / x; x += 1.0; }
-        double inv = 1.0 / x;
-        double inv2 = inv * inv;
-        // ln(x) - 1/(2x) - series in 1/x^2 (Bernoulli)
-        result += Math.Log(x) - 0.5 * inv
-                  - inv2 * (1.0 / 12.0 - inv2 * (1.0 / 120.0 - inv2 * (1.0 / 252.0)));
-        return result;
-    }
+    /// <summary>Broadcasts <paramref name="tensor"/> to <paramref name="shape"/> as a dense tensor.</summary>
+    private static Tensor<TElement> Expand<TElement>(Tensor<TElement> tensor, int[] shape)
+        => AiDotNetEngine.Current.TensorBroadcastTo(tensor, shape).Contiguous();
+
+    /// <summary>Repeats the length-k vector <paramref name="values"/> down every row of an [n, k] grid.</summary>
+    private static Tensor<T> Row(Tensor<T> values, int[] grid)
+        => Expand(values.Reshape(new[] { 1, grid[1] }), grid);
 
     private static CategoricalColumnInfo FitCategoricalColumn(ColumnMetadata meta)
     {
@@ -566,65 +539,71 @@ public class TabularDataTransformer<T> : IModelSerializer
 
     #region Forward Transform
 
-    private void TransformContinuousValue(Matrix<T> data, int row, int col,
-        ColumnTransformInfo transform, Matrix<T> result)
+    /// <summary>
+    /// Encodes one continuous column as [normalized value, one-hot mode] rows, [rows, 1 + modes].
+    /// </summary>
+    /// <remarks>
+    /// Mode assignment is by SAMPLING from the posterior responsibilities, per
+    /// Xu et al. 2019 §4.2 and the official CTGAN DataTransformer
+    /// (np.random.choice with p = predict_proba). Argmax collapses every value onto its
+    /// single most-likely mode, erasing the multimodal structure the one-hot β is meant to
+    /// expose to the generator. The responsibilities ρ_m ∝ w_m · N(value; μ_m, σ_m) are formed
+    /// in log space for the whole column and one categorical draw per row is taken by the
+    /// engine, seeded from the transformer's RNG (one seed per column, so a seeded transformer
+    /// stays reproducible). A single-mode column draws nothing.
+    /// </remarks>
+    private Tensor<T> TransformContinuousColumn(Matrix<T> data, int col, ColumnTransformInfo transform)
     {
+        var engine = AiDotNetEngine.Current;
         var info = _continuousColumnInfos[transform.Index];
-        double value = NumOps.ToDouble(data[row, col]);
+        int rows = data.Rows;
+        int k = info.NumActiveModes;
+        int[] grid = { rows, k };
+        var x = Tensor<T>.FromVector(data.GetColumn(col)).Reshape(new[] { rows, 1 });
 
-        // Mode assignment by SAMPLING from the posterior responsibilities, per
-        // Xu et al. 2019 §4.2 and the official CTGAN DataTransformer
-        // (np.random.choice with p = predict_proba). Argmax (the previous code)
-        // collapses every value onto its single most-likely mode, erasing the
-        // multimodal structure the one-hot β is meant to expose to the generator.
-        int selMode = SampleMode(info, value);
+        Tensor<T> modeOneHot;
+        if (k == 1)
+        {
+            modeOneHot = Tensor<T>.CreateDefault(grid, NumOps.One);
+        }
+        else
+        {
+            var s = engine.TensorMax(info.Stds, NumOps.FromDouble(1e-10));
+            var z = engine.TensorDivide(engine.TensorSubtract(Expand(x, grid), Row(info.Means, grid)), Row(s, grid));
+            var logPrior = engine.TensorSubtract(
+                engine.TensorLog(engine.TensorMax(info.Weights, NumOps.FromDouble(1e-12))), engine.TensorLog(s));
+            var logp = engine.TensorAdd(
+                engine.TensorMultiplyScalar(engine.TensorMultiply(z, z), NumOps.FromDouble(-0.5)), Row(logPrior, grid));
+            modeOneHot = engine.TensorCategoricalSample(engine.Softmax(logp, 1), 1, _random.Next());
+        }
 
         // Normalize value relative to selected mode: (value - mean) / (4 * std),
         // clipped to (-1, 1) as in the paper (4σ covers ~99.99% of a Gaussian).
-        double normalized = (value - info.Means[selMode]) / (4.0 * info.Stds[selMode]);
-        normalized = Math.Max(-0.99, Math.Min(0.99, normalized));
+        var selectedMean = engine.ReduceSum(engine.TensorMultiply(modeOneHot, Row(info.Means, grid)), new[] { 1 }, true);
+        var selectedStd = engine.ReduceSum(engine.TensorMultiply(modeOneHot, Row(info.Stds, grid)), new[] { 1 }, true);
+        var normalized = engine.TensorClamp(
+            engine.TensorDivide(engine.TensorSubtract(x, selectedMean), engine.TensorMultiplyScalar(selectedStd, NumOps.FromDouble(4.0))),
+            NumOps.FromDouble(-0.99),
+            NumOps.FromDouble(0.99));
 
-        int offset = transform.StartOffset;
-        result[row, offset] = NumOps.FromDouble(normalized);
-
-        // One-hot mode indicator (β).
-        for (int m = 0; m < info.NumActiveModes; m++)
-        {
-            result[row, offset + 1 + m] = m == selMode ? NumOps.One : NumOps.Zero;
-        }
+        // [normalized, one-hot mode indicator (β)]
+        return engine.TensorConcatenate(new[] { normalized, modeOneHot }, 1);
     }
 
     /// <summary>
-    /// Samples a mode index for <paramref name="value"/> proportional to the
-    /// component responsibilities ρ_m ∝ w_m · N(value; μ_m, σ_m), matching the
-    /// paper's probabilistic mode assignment. Uses the transformer's seeded RNG.
+    /// Encodes one categorical column as one-hot rows [rows, categories], one cell at a time
+    /// through <see cref="TransformCategoricalValue"/>.
     /// </summary>
-    private int SampleMode(VGMColumnInfo info, double value)
+    private Tensor<T> TransformCategoricalColumn(Matrix<T> data, int col, ColumnTransformInfo transform)
     {
-        int k = info.NumActiveModes;
-        if (k == 1) return 0;
-
-        Span<double> probs = k <= 64 ? stackalloc double[k] : new double[k];
-        double maxLog = double.NegativeInfinity;
-        for (int m = 0; m < k; m++)
+        var columnLayout = new ColumnTransformInfo(isContinuous: false, index: transform.Index, startOffset: 0, width: transform.Width);
+        var block = new Matrix<T>(data.Rows, transform.Width);
+        for (int row = 0; row < data.Rows; row++)
         {
-            double diff = value - info.Means[m];
-            double s = Math.Max(info.Stds[m], 1e-10);
-            double logp = -0.5 * (diff * diff) / (s * s) - Math.Log(s) + Math.Log(Math.Max(info.Weights[m], 1e-12));
-            probs[m] = logp;
-            if (logp > maxLog) maxLog = logp;
+            TransformCategoricalValue(data, row, col, columnLayout, block);
         }
-        double sum = 0;
-        for (int m = 0; m < k; m++) { probs[m] = Math.Exp(probs[m] - maxLog); sum += probs[m]; }
 
-        double u = _random.NextDouble() * sum;
-        double acc = 0;
-        for (int m = 0; m < k; m++)
-        {
-            acc += probs[m];
-            if (u <= acc) return m;
-        }
-        return k - 1;
+        return Tensor<T>.FromMatrix(block);
     }
 
     private void TransformCategoricalValue(Matrix<T> data, int row, int col,
@@ -673,52 +652,72 @@ public class TabularDataTransformer<T> : IModelSerializer
 
     #region Inverse Transform
 
-    private T InverseTransformContinuousValue(Matrix<T> transformed, int row, ColumnTransformInfo transform)
+    /// <summary>
+    /// Reconstructs one continuous column, [rows, 1]: value = normalized * 4 * std + mean of the
+    /// mode whose one-hot indicator is largest (first on ties).
+    /// </summary>
+    private Tensor<T> InverseTransformContinuousColumn(Tensor<T> transformed, ColumnTransformInfo transform)
     {
+        var engine = AiDotNetEngine.Current;
         var info = _continuousColumnInfos[transform.Index];
+        int rows = transformed.Shape[0];
         int offset = transform.StartOffset;
+        int k = info.NumActiveModes;
 
-        double normalizedValue = NumOps.ToDouble(transformed[row, offset]);
-
-        // Find the selected mode from the one-hot indicator (argmax)
-        int selectedMode = 0;
-        double maxModeVal = double.MinValue;
-        for (int m = 0; m < info.NumActiveModes; m++)
-        {
-            double modeVal = NumOps.ToDouble(transformed[row, offset + 1 + m]);
-            if (modeVal > maxModeVal)
-            {
-                maxModeVal = modeVal;
-                selectedMode = m;
-            }
-        }
+        var normalizedValue = engine.TensorSlice(transformed, new[] { 0, offset }, new[] { rows, 1 });
+        var selectedMode = FirstArgMaxPerRow(engine.TensorSlice(transformed, new[] { 0, offset + 1 }, new[] { rows, k }));
+        var mean = engine.TensorIndexSelect(info.Means, selectedMode, 0).Reshape(new[] { rows, 1 });
+        var std = engine.TensorIndexSelect(info.Stds, selectedMode, 0).Reshape(new[] { rows, 1 });
 
         // Inverse: value = normalized * 4 * std + mean
-        double reconstructed = normalizedValue * 4.0 * info.Stds[selectedMode] + info.Means[selectedMode];
-
-        return NumOps.FromDouble(reconstructed);
+        return engine.TensorAdd(
+            engine.TensorMultiply(engine.TensorMultiplyScalar(normalizedValue, NumOps.FromDouble(4.0)), std), mean);
     }
 
-    private T InverseTransformCategoricalValue(Matrix<T> transformed, int row, ColumnTransformInfo transform)
+    /// <summary>
+    /// Reconstructs one categorical column, [rows, 1]: the index of the largest one-hot entry
+    /// (first on ties), as the category value.
+    /// </summary>
+    private Tensor<T> InverseTransformCategoricalColumn(Tensor<T> transformed, ColumnTransformInfo transform)
     {
+        var engine = AiDotNetEngine.Current;
         var info = _categoricalColumnInfos[transform.Index];
-        int offset = transform.StartOffset;
-
-        // Find argmax of the one-hot vector
-        int selectedCat = 0;
-        double maxVal = double.MinValue;
-        for (int c = 0; c < info.NumCategories; c++)
+        int rows = transformed.Shape[0];
+        if (info.NumCategories == 0)
         {
-            double val = NumOps.ToDouble(transformed[row, offset + c]);
-            if (val > maxVal)
-            {
-                maxVal = val;
-                selectedCat = c;
-            }
+            return Tensor<T>.CreateDefault(new[] { rows, 1 }, NumOps.Zero);
         }
 
+        var block = engine.TensorSlice(transformed, new[] { 0, transform.StartOffset }, new[] { rows, info.NumCategories });
+
         // Return the category index as the value
-        return NumOps.FromDouble(selectedCat);
+        return FirstArgMaxPerRow(block).Cast<T>().Reshape(new[] { rows, 1 });
+    }
+
+    /// <summary>
+    /// Per-row index of the largest entry of a [rows, width] block, choosing the first on ties.
+    /// </summary>
+    /// <remarks>
+    /// Matches a left-to-right scan that keeps an entry only when it is strictly greater than the
+    /// best so far, starting from the lowest double: NaN never wins (it is ranked as −∞) and a row
+    /// with no winner selects index 0.
+    /// </remarks>
+    private static Tensor<int> FirstArgMaxPerRow(Tensor<T> block)
+    {
+        var engine = AiDotNetEngine.Current;
+        int rows = block.Shape[0];
+        int width = block.Shape[1];
+        int[] grid = { rows, width };
+
+        var cleaned = engine.TensorNanToNum(block, double.NegativeInfinity, double.PositiveInfinity, double.NegativeInfinity);
+        var rowMax = engine.ReduceMax(cleaned, new[] { 1 }, true);
+        var isMax = engine.TensorEquals(cleaned, Expand(rowMax, grid)).Cast<int>();
+
+        // candidate = position where the row maximum sits, width elsewhere; the row minimum is the
+        // first maximum.
+        var position = Expand(engine.TensorArange<int>(0, width, 1).Reshape(new[] { 1, width }), grid);
+        var candidate = engine.TensorAddScalar(engine.TensorSubtract(position, engine.TensorMultiplyScalar(isMax, width)), width);
+        return engine.TensorNegate(engine.ReduceMax(engine.TensorNegate(candidate), new[] { 1 }, false));
     }
 
     #endregion
@@ -730,12 +729,12 @@ public class TabularDataTransformer<T> : IModelSerializer
     /// </summary>
     internal sealed class VGMColumnInfo
     {
-        public double[] Means { get; }
-        public double[] Stds { get; }
-        public double[] Weights { get; }
+        public Tensor<T> Means { get; }
+        public Tensor<T> Stds { get; }
+        public Tensor<T> Weights { get; }
         public int NumActiveModes => Means.Length;
 
-        public VGMColumnInfo(double[] means, double[] stds, double[] weights)
+        public VGMColumnInfo(Tensor<T> means, Tensor<T> stds, Tensor<T> weights)
         {
             Means = means;
             Stds = stds;
