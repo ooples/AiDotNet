@@ -204,4 +204,85 @@ public class PrivBayesPaperFidelityTests
         });
         Assert.Throws<ArgumentException>(() => generator.Fit(data, columns, 1));
     }
+
+    /// <summary>
+    /// A categorical domain is the declared category list: a declared category absent from the data is
+    /// still in the domain, and two datasets with different observed categories get the same domain.
+    /// Cells are matched by index first and by name otherwise, as TabularDataTransformer does.
+    /// </summary>
+    [Fact]
+    public void CategoricalDomain_ComesFromDeclaredCategoriesNotTheData()
+    {
+        var columns = new List<ColumnMetadata>
+        {
+            new ColumnMetadata("c", ColumnDataType.Categorical, new[] { "3", "7", "11" })
+        };
+        var onlyLow = new Matrix<double>(new[,] { { 0.0 }, { 1.0 }, { 0.0 } });
+        var onlyHigh = new Matrix<double>(new[,] { { 2.0 }, { 2.0 } });
+        var byName = new Matrix<double>(new[,] { { 7.0 }, { 11.0 }, { 1.0 } });
+
+        var first = DomainDiscretizer<double>.Fit(onlyLow, columns, 4, null, null, out var lowCodes);
+        var second = DomainDiscretizer<double>.Fit(onlyHigh, columns, 4, null, null, out var highCodes);
+        var third = DomainDiscretizer<double>.Fit(byName, columns, 4, null, null, out var nameCodes);
+
+        Assert.Equal(new[] { 3 }, first.Cardinality);
+        Assert.Equal(first.Cardinality, second.Cardinality);
+        Assert.Equal(first.Cardinality, third.Cardinality);
+        Assert.Equal(new[] { 0, 1, 0 }, lowCodes[0].ToArray());
+        Assert.Equal(new[] { 2, 2 }, highCodes[0].ToArray());
+        Assert.Equal(new[] { 1, 2, 1 }, nameCodes[0].ToArray());
+
+        // Category 2 never occurs in the first dataset yet decodes to its index there too.
+        var sampled = new[] { new Tensor<int>(new[] { 2, 0, 1 }, new[] { 3 }) };
+        var fromFirst = first.Decode(sampled, 3, AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(1));
+        var fromSecond = second.Decode(sampled, 3, AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(1));
+        Assert.Equal(new[] { 2.0, 0.0, 1.0 }, fromFirst.GetColumn(0).ToArray());
+        Assert.Equal(fromFirst.GetColumn(0).ToArray(), fromSecond.GetColumn(0).ToArray());
+    }
+
+    [Fact]
+    public void CategoricalDomain_ValueOutsideDeclaredCategoriesThrows()
+    {
+        var columns = new List<ColumnMetadata>
+        {
+            new ColumnMetadata("c", ColumnDataType.Categorical, new[] { "A", "B" })
+        };
+        var data = new Matrix<double>(new[,] { { 0.0 }, { 5.0 } });
+        Assert.Throws<ArgumentException>(() => DomainDiscretizer<double>.Fit(data, columns, 4, null, null, out _));
+    }
+
+    [Fact]
+    public void DomainBounds_OnlyUpperSupplied_Throws()
+    {
+        var (data, columns) = NumericData();
+        Assert.Throws<ArgumentException>(() => DomainDiscretizer<double>.Fit(data, columns, 4,
+            null, new Vector<double>(new[] { 10.0, 10.0 }), out _));
+    }
+
+    [Fact]
+    public void DomainBounds_OnlyLowerSupplied_Throws()
+    {
+        var (data, columns) = NumericData();
+        Assert.Throws<ArgumentException>(() => DomainDiscretizer<double>.Fit(data, columns, 4,
+            new Vector<double>(new[] { 0.0, 0.0 }), null, out _));
+    }
+
+    [Fact]
+    public void DomainBounds_UpperBelowLower_Throws()
+    {
+        var (data, columns) = NumericData();
+        Assert.Throws<ArgumentException>(() => DomainDiscretizer<double>.Fit(data, columns, 4,
+            new Vector<double>(new[] { 0.0, 5.0 }), new Vector<double>(new[] { 10.0, 1.0 }), out _));
+    }
+
+    private static (Matrix<double> Data, List<ColumnMetadata> Columns) NumericData()
+    {
+        var data = new Matrix<double>(new[,] { { 1.0, 2.0 }, { 3.0, 4.0 } });
+        var columns = new List<ColumnMetadata>
+        {
+            new ColumnMetadata("a", ColumnDataType.Continuous),
+            new ColumnMetadata("b", ColumnDataType.Continuous)
+        };
+        return (data, columns);
+    }
 }

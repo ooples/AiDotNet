@@ -1,3 +1,4 @@
+using System.Globalization;
 using AiDotNet.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 
@@ -12,6 +13,13 @@ namespace AiDotNet.NeuralNetworks.SyntheticData;
 /// Both papers assume each attribute's domain is public. When public bounds are supplied the bin edges do
 /// not depend on the private data and values outside them fall into the end bins. Without bounds the
 /// observed minimum and maximum are used, and those two numbers per column are released without noise.
+/// </para>
+/// <para>
+/// A categorical column's domain is its declared <see cref="ColumnMetadata.Categories"/>, so it does not
+/// depend on the data. As in <see cref="TabularDataTransformer{T}"/>, a cell holding an integer in
+/// [0, categories) is that category's index and any other cell is matched by name; decoding returns the
+/// index. Only a column that declares no categories falls back to the distinct values observed in the
+/// data, and those values are released without noise.
 /// </para>
 /// <para>
 /// Everything runs as whole-tensor engine ops generic in T; codes are integer tensors.
@@ -53,10 +61,12 @@ internal sealed class DomainDiscretizer<T>
         int d = data.Columns;
         numBins = Math.Max(1, numBins);
 
+        ValidateBounds(lowerBounds, upperBounds, columns, d);
+
         var x = Tensor<T>.FromMatrix(data);
-        var lower = ResolveBound(lowerBounds, "DomainLowerBounds", d,
+        var lower = ResolveBound(lowerBounds,
             () => engine.TensorNegate(engine.ReduceMax(engine.TensorNegate(x), new[] { 0 }, false)));
-        var upper = ResolveBound(upperBounds, "DomainUpperBounds", d,
+        var upper = ResolveBound(upperBounds,
             () => engine.ReduceMax(x, new[] { 0 }, false));
 
         // Width = (hi - lo) / bins; a constant column (width below 1e-10) uses width 1.
@@ -78,11 +88,23 @@ internal sealed class DomainDiscretizer<T>
             if (columns[j].IsCategorical)
             {
                 var column = Tensor<T>.FromVector(data.GetColumn(j));
-                var values = engine.TensorUnique(column, true);
                 isCategorical[j] = true;
-                categoryValues[j] = values;
-                cardinality[j] = values.Length;
-                codes[j] = engine.TensorSearchSorted(values, column, false);
+                var declared = columns[j].Categories;
+                if (declared is not null && declared.Count > 0)
+                {
+                    // Public domain: the declared categories, decoded as their indices.
+                    categoryValues[j] = engine.TensorArange<T>(0, declared.Count, 1);
+                    cardinality[j] = declared.Count;
+                    codes[j] = EncodeDeclared(column, declared, columns[j].Name);
+                }
+                else
+                {
+                    // No declared categories: the observed values, outside the privacy guarantee.
+                    var values = engine.TensorUnique(column, true);
+                    categoryValues[j] = values;
+                    cardinality[j] = values.Length;
+                    codes[j] = engine.TensorSearchSorted(values, column, false);
+                }
             }
             else
             {
@@ -156,17 +178,112 @@ internal sealed class DomainDiscretizer<T>
         return index;
     }
 
-    private static Tensor<T> ResolveBound(Vector<T>? bound, string name, int d, Func<Tensor<T>> fromData)
+    /// <summary>
+    /// Codes of a column against its declared categories: an integer cell in [0, categories) is the index,
+    /// any other cell is matched against the category names (invariant-culture numbers), as
+    /// <see cref="TabularDataTransformer{T}"/> encodes it. A cell matching neither is rejected.
+    /// </summary>
+    private static Tensor<int> EncodeDeclared(Tensor<T> column, IReadOnlyList<string> categories, string name)
     {
-        if (bound is null) return fromData();
-        if (bound.Length != d)
+        var engine = AiDotNetEngine.Current;
+        int n = column.Length;
+        int k = categories.Count;
+
+        var isIndex = engine.TensorMultiply(
+            engine.TensorMultiply(
+                engine.TensorEquals(column, engine.TensorFloor(column)),
+                engine.TensorSubtract(Filled(new[] { n }, NumOps.One), engine.TensorLessThan(column, NumOps.Zero))),
+            engine.TensorLessThan(column, NumOps.FromDouble(k)));
+        var safeIndex = engine.TensorWhere(isIndex, column, new Tensor<T>(new[] { n })).Cast<int>();
+        var known = isIndex;
+        var code = safeIndex;
+
+        // Category names that are numbers, sorted by value (the first category wins on a repeated value).
+        var named = new List<KeyValuePair<double, int>>();
+        for (int c = 0; c < k; c++)
+        {
+            if (double.TryParse(categories[c], NumberStyles.Float, CultureInfo.InvariantCulture, out double parsed)
+                && parsed.ToString(CultureInfo.InvariantCulture) == categories[c]
+                && !named.Any(pair => pair.Key == parsed))
+            {
+                named.Add(new KeyValuePair<double, int>(parsed, c));
+            }
+        }
+
+        if (named.Count > 0)
+        {
+            named.Sort((a, b) => a.Key.CompareTo(b.Key));
+            var nameValues = new Tensor<T>(new[] { named.Count });
+            var nameIndices = new Tensor<int>(new[] { named.Count });
+            for (int m = 0; m < named.Count; m++)
+            {
+                nameValues.SetFlat(m, NumOps.FromDouble(named[m].Key));
+                nameIndices.SetFlat(m, named[m].Value);
+            }
+
+            var position = engine.TensorClamp(engine.TensorSearchSorted(nameValues, column, false), 0, named.Count - 1);
+            var nameMatch = engine.TensorEquals(engine.TensorIndexSelect(nameValues, position, 0), column);
+            var byName = engine.TensorWhere(nameMatch.Cast<int>(), engine.TensorIndexSelect(nameIndices, position, 0),
+                new Tensor<int>(new[] { n }));
+            code = engine.TensorWhere(isIndex.Cast<int>(), safeIndex, byName);
+            known = engine.TensorWhere(isIndex, isIndex, nameMatch);
+        }
+
+        if (engine.TensorCountNonzero(known) != n)
+        {
+            throw new ArgumentException(
+                $"Column '{name}' has values that are neither an index of nor a name in its declared categories.",
+                "data");
+        }
+
+        return code;
+    }
+
+    /// <summary>
+    /// Rejects a half-specified domain (only one of the bounds) and, for numeric columns, an upper bound
+    /// below its lower bound. Either would leave part of the domain to the private data or make it empty.
+    /// </summary>
+    private static void ValidateBounds(Vector<T>? lowerBounds, Vector<T>? upperBounds,
+        IReadOnlyList<ColumnMetadata> columns, int d)
+    {
+        CheckLength(lowerBounds, "DomainLowerBounds", d);
+        CheckLength(upperBounds, "DomainUpperBounds", d);
+        if (lowerBounds is null && upperBounds is null) return;
+        if (lowerBounds is null || upperBounds is null)
+        {
+            throw new ArgumentException(
+                "DomainLowerBounds and DomainUpperBounds must be supplied together; a missing side would be " +
+                "taken from the private data.",
+                lowerBounds is null ? "DomainLowerBounds" : "DomainUpperBounds");
+        }
+
+        var engine = AiDotNetEngine.Current;
+        var numeric = new Tensor<T>(new[] { d });
+        for (int j = 0; j < d; j++)
+        {
+            numeric.SetFlat(j, columns[j].IsCategorical ? NumOps.Zero : NumOps.One);
+        }
+
+        var inverted = engine.TensorMultiply(
+            engine.TensorLessThan(Tensor<T>.FromVector(upperBounds), Tensor<T>.FromVector(lowerBounds)), numeric);
+        if (engine.TensorCountNonzero(inverted) > 0)
+        {
+            throw new ArgumentException(
+                "DomainUpperBounds has an entry below the matching DomainLowerBounds entry.", "DomainUpperBounds");
+        }
+    }
+
+    private static void CheckLength(Vector<T>? bound, string name, int d)
+    {
+        if (bound is not null && bound.Length != d)
         {
             throw new ArgumentException(
                 $"{name} has {bound.Length} entries but the data has {d} columns.", name);
         }
-
-        return Tensor<T>.FromVector(bound);
     }
+
+    private static Tensor<T> ResolveBound(Vector<T>? bound, Func<Tensor<T>> fromData)
+        => bound is null ? fromData() : Tensor<T>.FromVector(bound);
 
     private static Tensor<T> Broadcast(Tensor<T> row, int[] shape)
         => AiDotNetEngine.Current.TensorBroadcastTo(row.Reshape(new[] { 1, row.Length }), shape).Contiguous();

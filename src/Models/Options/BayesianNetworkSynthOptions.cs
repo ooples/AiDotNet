@@ -76,6 +76,16 @@ public class BayesianNetworkSynthOptions<T> : RiskModelOptions<T>
     /// each numeric column define the bins, and those values are released without noise, outside the
     /// differential-privacy guarantee. Supply both bounds (one entry per column) for the full guarantee;
     /// values outside them fall into the end bins. Entries for categorical columns are ignored.
+    /// Supplying only one of the two bounds, or an upper bound below its lower bound for a numeric column,
+    /// throws <see cref="System.ArgumentException"/>.
+    /// <para>
+    /// A categorical column's domain is its <see cref="AiDotNet.NeuralNetworks.SyntheticData.ColumnMetadata.Categories"/>
+    /// list, which is public: cells hold a category index (or a category name that is a number), and a
+    /// declared category that never occurs in the data is still part of the domain. A categorical column
+    /// that declares no categories falls back to the distinct values observed in the data. That fallback
+    /// releases which values occur without noise and is outside the differential-privacy guarantee of
+    /// PrivBayes; declare the categories for the full guarantee.
+    /// </para>
     /// </remarks>
     public Vector<T>? DomainLowerBounds { get; set; }
 
