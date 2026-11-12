@@ -131,7 +131,7 @@ public partial class ConformerTransducer<T> : AudioNeuralNetworkBase<T>, ISpeech
     /// internal to the ONNX graph, so the output is already joint logits. For native mode,
     /// the layer stack includes prediction and joint layers.
     /// </summary>
-    private (List<int> tokens, double confidence) GreedyDecodeWithConfidence(Tensor<T> logits) => CtcGreedyDecoding.Decode(logits, int.MaxValue);
+    private (List<int> tokens, double confidence) GreedyDecodeWithConfidence(Tensor<T> logits) { var tokens = new List<int>(); double totalConf = 0; int confCount = 0; int prevToken = -1; int numFrames = logits.Rank >= 2 ? logits.Shape[0] : 1; int vocabSize = logits.Rank >= 2 ? logits.Shape[^1] : logits.Shape[0]; for (int t = 0; t < numFrames; t++) { int maxIdx = 0; double maxVal = double.NegativeInfinity; for (int v = 0; v < vocabSize; v++) { double val = logits.Rank >= 2 ? NumOps.ToDouble(logits[t, v]) : NumOps.ToDouble(logits[v]); if (val > maxVal) { maxVal = val; maxIdx = v; } } double sumExp = 0; for (int v = 0; v < vocabSize; v++) { double val = logits.Rank >= 2 ? NumOps.ToDouble(logits[t, v]) : NumOps.ToDouble(logits[v]); sumExp += Math.Exp(val - maxVal); } double frameConf = 1.0 / sumExp; if (maxIdx != prevToken && maxIdx > 0) { tokens.Add(maxIdx); totalConf += frameConf; confCount++; } prevToken = maxIdx; } return (tokens, confCount > 0 ? totalConf / confCount : 0.0); }
     /// <summary>Renders CTC token ids as text through the configured vocabulary.</summary>
     /// <remarks>
     /// Each id indexes <c>ConformerTransducerOptions.Vocabulary</c>; casting ids to characters instead turned

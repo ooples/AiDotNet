@@ -240,7 +240,50 @@ public partial class FireRedASR<T> : AudioNeuralNetworkBase<T>, ISpeechRecognize
     /// CTC greedy decode with per-frame softmax confidence tracking.
     /// Returns decoded token IDs and average confidence across non-blank frames.
     /// </summary>
-    private (List<int> tokens, double confidence) CTCGreedyDecodeWithConfidence(Tensor<T> logits) => CtcGreedyDecoding.Decode(logits, _options.MaxTextLength);
+    private (List<int> tokens, double confidence) CTCGreedyDecodeWithConfidence(Tensor<T> logits)
+    {
+        var tokens = new List<int>();
+        double totalConf = 0;
+        int confCount = 0;
+        int prevToken = -1;
+        int numFrames = logits.Rank >= 2 ? logits.Shape[0] : 1;
+        int vocabSize = logits.Rank >= 2 ? logits.Shape[^1] : logits.Shape[0];
+
+        for (int t = 0; t < numFrames && tokens.Count < _options.MaxTextLength; t++)
+        {
+            int maxIdx = 0;
+            double maxVal = double.NegativeInfinity;
+
+            for (int v = 0; v < vocabSize; v++)
+            {
+                double val = logits.Rank >= 2
+                    ? NumOps.ToDouble(logits[t, v])
+                    : NumOps.ToDouble(logits[v]);
+                if (val > maxVal) { maxVal = val; maxIdx = v; }
+            }
+
+            // Compute softmax probability for the best token
+            double sumExp = 0;
+            for (int v = 0; v < vocabSize; v++)
+            {
+                double val = logits.Rank >= 2
+                    ? NumOps.ToDouble(logits[t, v])
+                    : NumOps.ToDouble(logits[v]);
+                sumExp += Math.Exp(val - maxVal);
+            }
+            double frameConf = 1.0 / sumExp;
+
+            if (maxIdx != prevToken && maxIdx > 0)
+            {
+                tokens.Add(maxIdx);
+                totalConf += frameConf;
+                confCount++;
+            }
+            prevToken = maxIdx;
+        }
+
+        return (tokens, confCount > 0 ? totalConf / confCount : 0.0);
+    }
 
     /// <summary>
     /// Converts token IDs to text with full Unicode support.
