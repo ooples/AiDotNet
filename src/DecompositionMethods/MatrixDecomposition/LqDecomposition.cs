@@ -96,8 +96,34 @@ public class LqDecomposition<T> : MatrixDecompositionBase<T>
     /// </remarks>
     public override Vector<T> Solve(Vector<T> b)
     {
-        var y = ForwardSubstitution(L, b);
-        return Q.Transpose().Multiply(y);
+        int m = L.Rows;
+        int n = Q.Rows;
+        if (b.Length != m)
+        {
+            throw new ArgumentException(
+                $"Vector b must have length {m} (the number of rows of A); got {b.Length}.", nameof(b));
+        }
+
+        if (m == 0 || n == 0)
+        {
+            return new Vector<T>(n);
+        }
+
+        if (m <= n)
+        {
+            // A = L[:, :m] Q[:m, :]: solve the leading m x m lower-triangular block, then
+            // x = Q[:m, :]^T y is the minimum-norm solution of the (under)determined system.
+            var y = ForwardSubstitution(L, b);
+            var leadingQ = Q.Rows == m ? Q : Q.GetSubMatrix(0, 0, m, n);
+            return leadingQ.Transpose().Multiply(y);
+        }
+
+        // Tall A (m > n): A = L Q with Q orthogonal, so the least-squares x is Q^T z where z
+        // minimises ||L z - b||; z comes from the reduced QR of the m x n trapezoidal L.
+        var (qL, rL) = LinalgDispatch<T>.QR(Tensor<T>.FromMatrix(L), "reduced");
+        var projected = Engine.TensorMatMul(Engine.TensorTranspose(qL), Tensor<T>.FromVector(b, new[] { m, 1 }));
+        var z = SolveTriangularSystem(rL.ToMatrix(), projected.Reshape(new[] { n }).ToVector(), upper: true);
+        return Q.Transpose().Multiply(z);
     }
 
     /// <summary>
@@ -237,14 +263,16 @@ public class LqDecomposition<T> : MatrixDecompositionBase<T>
     /// </remarks>
     private Vector<T> ForwardSubstitution(Matrix<T> L, Vector<T> b)
     {
-        int n = L.Rows;
+        int n = Math.Min(L.Rows, L.Columns);
         if (n == 0)
         {
             return new Vector<T>(0);
         }
 
-        // Only the leading n x n lower-triangular block takes part in the substitution.
-        var square = L.Columns == n ? L : L.GetSubMatrix(0, 0, n, n);
-        return SolveTriangularSystem(square, b, upper: false);
+        // Only the leading min(m, n) square lower-triangular block and the matching entries of b
+        // take part in the substitution.
+        var square = (L.Rows == n && L.Columns == n) ? L : L.GetSubMatrix(0, 0, n, n);
+        var rhs = b.Length == n ? b : b.GetSubVector(0, n);
+        return SolveTriangularSystem(square, rhs, upper: false);
     }
 }
