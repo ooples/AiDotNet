@@ -31,15 +31,15 @@ namespace AiDotNet.Preprocessing.FeatureSelection.Embedded;
 [PipelineStage(PipelineStage.Preprocessing)]
 public class SelectFromModel<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFeatureSelector<T>
 {
-    private readonly Func<Matrix<T>, Vector<T>, double[]>? _importanceFunc;
-    private readonly double[]? _precomputedImportances;
+    private readonly Func<Matrix<T>, Vector<T>, Vector<T>>? _importanceFunc;
+    private readonly Vector<T>? _precomputedImportances;
     private readonly SelectFromModelThreshold _thresholdType;
     private readonly double _thresholdValue;
     private readonly int? _maxFeatures;
 
     // Fitted parameters
-    private double[]? _featureImportances;
-    private double _threshold;
+    private Vector<T>? _featureImportances;
+    private T _threshold = MathHelper.GetNumericOperations<T>().Zero;
     private bool[]? _supportMask;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
@@ -47,12 +47,12 @@ public class SelectFromModel<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISup
     /// <summary>
     /// Gets the feature importances used for selection.
     /// </summary>
-    public double[]? FeatureImportances => _featureImportances;
+    public Vector<T>? FeatureImportances => _featureImportances;
 
     /// <summary>
     /// Gets the computed threshold value.
     /// </summary>
-    public double Threshold => _threshold;
+    public T Threshold => _threshold;
 
     /// <summary>
     /// Gets the indices of selected features.
@@ -73,7 +73,7 @@ public class SelectFromModel<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISup
     /// <param name="maxFeatures">Maximum number of features to select. Null for no limit.</param>
     /// <param name="columnIndices">The column indices to evaluate, or null for all columns.</param>
     public SelectFromModel(
-        Func<Matrix<T>, Vector<T>, double[]> importanceFunc,
+        Func<Matrix<T>, Vector<T>, Vector<T>> importanceFunc,
         SelectFromModelThreshold thresholdType = SelectFromModelThreshold.Mean,
         double thresholdValue = 0.0,
         int? maxFeatures = null,
@@ -97,7 +97,7 @@ public class SelectFromModel<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISup
     /// <param name="maxFeatures">Maximum number of features to select. Null for no limit.</param>
     /// <param name="columnIndices">The column indices to evaluate, or null for all columns.</param>
     public SelectFromModel(
-        double[] featureImportances,
+        Vector<T> featureImportances,
         SelectFromModelThreshold thresholdType = SelectFromModelThreshold.Mean,
         double thresholdValue = 0.0,
         int? maxFeatures = null,
@@ -132,7 +132,7 @@ public class SelectFromModel<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISup
                 $"Precomputed importances length ({_precomputedImportances.Length}) must match number of features ({_nInputFeatures}).");
         }
 
-        _featureImportances = (double[])_precomputedImportances.Clone();
+        _featureImportances = new Vector<T>(_precomputedImportances.ToArray());
         ComputeThresholdAndSelect();
         IsFitted = true;
     }
@@ -153,7 +153,7 @@ public class SelectFromModel<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISup
 
         if (_precomputedImportances is not null)
         {
-            _featureImportances = (double[])_precomputedImportances.Clone();
+            _featureImportances = new Vector<T>(_precomputedImportances.ToArray());
         }
         else if (_importanceFunc is not null)
         {
@@ -182,32 +182,29 @@ public class SelectFromModel<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISup
         }
 
         // Use absolute values for threshold computation
-        var absImportances = _featureImportances.Select(Math.Abs).ToArray();
+        var engine = Engine;
+        var absImportances = engine.TensorAbs(Tensor<T>.FromVector(_featureImportances));
 
         // Compute threshold
         _threshold = _thresholdType switch
         {
-            SelectFromModelThreshold.Mean => absImportances.Average(),
+            SelectFromModelThreshold.Mean => engine.TensorMean(absImportances),
             SelectFromModelThreshold.Median => ComputeMedian(absImportances),
-            SelectFromModelThreshold.Value => _thresholdValue,
-            _ => absImportances.Average()
+            SelectFromModelThreshold.Value => NumOps.FromDouble(_thresholdValue),
+            _ => engine.TensorMean(absImportances)
         };
 
-        // Select features above threshold
-        var selectedList = new List<int>();
-        for (int j = 0; j < _nInputFeatures; j++)
-        {
-            if (absImportances[j] >= _threshold)
-            {
-                selectedList.Add(j);
-            }
-        }
+        // Select features at or above threshold
+        var atOrAbove = engine.TensorAdd(
+            engine.TensorGreaterThan(absImportances, _threshold), engine.TensorEquals(absImportances, _threshold));
+        var selectedList = PreprocessingTensorOps.MaskPositions(atOrAbove).ToList();
 
-        // Apply max features limit
+        // Apply max features limit (largest first, ties by index)
         if (_maxFeatures.HasValue && selectedList.Count > _maxFeatures.Value)
         {
-            selectedList = selectedList
-                .OrderByDescending(i => absImportances[i])
+            var selectedSet = new HashSet<int>(selectedList);
+            selectedList = PreprocessingTensorOps.StableOrder(absImportances, descending: true)
+                .Where(i => selectedSet.Contains(i))
                 .Take(_maxFeatures.Value)
                 .OrderBy(i => i)
                 .ToList();
@@ -216,8 +213,7 @@ public class SelectFromModel<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISup
         // Ensure at least one feature is selected
         if (selectedList.Count == 0)
         {
-            int bestIdx = Array.IndexOf(absImportances, absImportances.Max());
-            selectedList.Add(bestIdx);
+            selectedList.Add(PreprocessingTensorOps.FirstArgMax(absImportances));
         }
 
         _selectedIndices = selectedList.ToArray();
@@ -230,19 +226,13 @@ public class SelectFromModel<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISup
         }
     }
 
-    private double ComputeMedian(double[] values)
+    private T ComputeMedian(Tensor<T> values)
     {
-        var sorted = values.OrderBy(v => v).ToArray();
-        int n = sorted.Length;
+        int n = values.Length;
 
-        if (n == 0) return 0;
-        if (n % 2 == 0)
-        {
-            return (sorted[n / 2 - 1] + sorted[n / 2]) / 2.0;
-        }
-        return sorted[n / 2];
+        if (n == 0) return NumOps.Zero;
+        return Engine.TensorSum(FeatureSelectionTensorOps.ColumnMedian(Engine.Reshape(values, new[] { n, 1 })));
     }
-
     /// <summary>
     /// Fits and transforms the data.
     /// </summary>
@@ -262,19 +252,8 @@ public class SelectFromModel<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISup
             throw new InvalidOperationException("SelectFromModel has not been fitted.");
         }
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
 
-        for (int i = 0; i < numRows; i++)
-        {
-            for (int j = 0; j < numCols; j++)
-            {
-                result[i, j] = data[i, _selectedIndices[j]];
-            }
-        }
-
-        return new Matrix<T>(result);
     }
 
     /// <summary>
