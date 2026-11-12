@@ -30,14 +30,14 @@ public class LassoFeatureSelection<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     private readonly int _maxIterations;
     private readonly double _tolerance;
 
-    private double[]? _coefficients;
+    private Vector<T>? _coefficients;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public double Alpha => _alpha;
-    public double[]? Coefficients => _coefficients;
+    public Vector<T>? Coefficients => _coefficients;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -79,107 +79,29 @@ public class LassoFeatureSelection<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         int n = data.Rows;
         int p = data.Columns;
 
-        // Standardize features
-        var means = new double[p];
-        var stds = new double[p];
-        var X = new double[n, p];
+        var engine = Engine;
 
-        for (int j = 0; j < p; j++)
+        // Standardize features (population std; a near-zero std is replaced by 1) and center the target
+        var X = FeatureSelectionTensorOps.Standardize(Tensor<T>.FromMatrix(data), out _);
+        var y = FeatureSelectionTensorOps.Center(Tensor<T>.FromVector(target));
+
+        // Coordinate descent for Lasso: soft-threshold rho at alpha * n and divide by ||x_j||^2
+        // (a column with ||x_j||^2 below 1e-10 gets 0)
+        var squaredNorms = engine.ReduceSum(engine.TensorSquare(X), new[] { 0 }, false);
+        T threshold = NumOps.FromDouble(_alpha * n);
+        T floor = NumOps.FromDouble(1e-10);
+        var none = new Tensor<T>(new[] { 1 });
+        var coefficients = FeatureSelectionTensorOps.CoordinateDescent(X, y, _maxIterations, _tolerance, (rho, j) =>
         {
-            double mean = 0;
-            for (int i = 0; i < n; i++)
-                mean += NumOps.ToDouble(data[i, j]);
-            mean /= n;
-            means[j] = mean;
-
-            double variance = 0;
-            for (int i = 0; i < n; i++)
-            {
-                double diff = NumOps.ToDouble(data[i, j]) - mean;
-                variance += diff * diff;
-            }
-            double std = Math.Sqrt(variance / n);
-            stds[j] = std > 1e-10 ? std : 1.0;
-
-            for (int i = 0; i < n; i++)
-                X[i, j] = (NumOps.ToDouble(data[i, j]) - mean) / stds[j];
-        }
-
-        // Standardize target
-        double yMean = 0;
-        for (int i = 0; i < n; i++)
-            yMean += NumOps.ToDouble(target[i]);
-        yMean /= n;
-
-        var y = new double[n];
-        for (int i = 0; i < n; i++)
-            y[i] = NumOps.ToDouble(target[i]) - yMean;
-
-        // Coordinate descent for Lasso
-        _coefficients = new double[p];
-        var residuals = (double[])y.Clone();
-
-        for (int iter = 0; iter < _maxIterations; iter++)
-        {
-            double maxChange = 0;
-
-            for (int j = 0; j < p; j++)
-            {
-                double oldCoef = _coefficients[j];
-
-                // Add back contribution of current feature to residuals
-                for (int i = 0; i < n; i++)
-                    residuals[i] += X[i, j] * oldCoef;
-
-                // Compute raw update
-                double rho = 0;
-                double sumXjSq = 0;
-                for (int i = 0; i < n; i++)
-                {
-                    rho += X[i, j] * residuals[i];
-                    sumXjSq += X[i, j] * X[i, j];
-                }
-
-                // Soft thresholding
-                double newCoef;
-                if (sumXjSq < 1e-10)
-                {
-                    newCoef = 0;
-                }
-                else
-                {
-                    double threshold = _alpha * n;
-                    if (rho > threshold)
-                        newCoef = (rho - threshold) / sumXjSq;
-                    else if (rho < -threshold)
-                        newCoef = (rho + threshold) / sumXjSq;
-                    else
-                        newCoef = 0;
-                }
-
-                _coefficients[j] = newCoef;
-
-                // Update residuals
-                for (int i = 0; i < n; i++)
-                    residuals[i] -= X[i, j] * newCoef;
-
-                maxChange = Math.Max(maxChange, Math.Abs(newCoef - oldCoef));
-            }
-
-            if (maxChange < _tolerance)
-                break;
-        }
+            var sumXjSq = engine.TensorSlice(squaredNorms, new[] { j }, new[] { 1 });
+            return engine.TensorWhere(engine.TensorLessThan(sumXjSq, floor), none,
+                engine.TensorDivide(FeatureSelectionTensorOps.SoftThreshold(rho, threshold), sumXjSq));
+        }, out _);
+        _coefficients = coefficients.ToVector();
 
         // Select features by absolute coefficient magnitude
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = _coefficients
-            .Select((c, idx) => (Coef: Math.Abs(c), Index: idx))
-            .OrderByDescending(x => x.Coef)
-            .Take(numToSelect)
-            .Select(x => x.Index)
-            .OrderBy(x => x)
-            .ToArray();
-
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(engine.TensorAbs(coefficients), numToSelect);
         IsFitted = true;
     }
 
