@@ -4,6 +4,7 @@ using System.Linq;
 using AiDotNet.AutoML;
 using AiDotNet.AutoML.NAS;
 using AiDotNet.AutoML.SearchSpace;
+using AiDotNet.NeuralNetworks;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
 
@@ -316,6 +317,72 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.Equal(latency, total.Latency, 1e-9);
             Assert.Equal(energy, total.Energy, 1e-9);
             Assert.Equal(memory, total.Memory, 1e-9);
+        }
+
+        /// <summary>
+        /// Random search with weight sharing (Li &amp; Talwalkar 2019, Sec. 3) scores each sampled architecture by
+        /// applying it to the shared-weight supernet. Before the fix every trial scored a fresh, untouched supernet,
+        /// so the loss was independent of the architecture it was attributed to.
+        /// </summary>
+        [Fact]
+        public void RandomSearch_ScoresEachCandidateWithItsOwnArchitectureOnTheSharedSupernet()
+        {
+            var searchSpace = new SearchSpaceBase<double> { Operations = new List<string> { "identity", "conv3x3", "avgpool3x3" } };
+            var ops = searchSpace.Operations;
+            var supernet = new SuperNet<double>(searchSpace, numNodes: 3);
+            var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(7);
+            var x = new Tensor<double>(new[] { 8, 6 });
+            var y = new Tensor<double>(new[] { 8, 6 });
+            for (int i = 0; i < x.Length; i++)
+            {
+                x.SetFlat(i, random.NextDouble() * 2.0 - 1.0);
+                y.SetFlat(i, random.NextDouble());
+            }
+
+            supernet.Predict(x);
+
+            var candidates = new List<Architecture<double>>
+            {
+                AllEdges(3, "identity"),
+                AllEdges(3, "conv3x3"),
+            };
+            candidates.AddRange(Enumerable.Range(0, 4).Select(_ => NeuralArchitectureSearch<double>.SampleEdgeArchitecture(random, 3, ops)));
+
+            // Each sampled architecture covers every edge with one search-space operation.
+            Assert.All(candidates, c => Assert.Equal(1 + 2 + 3, c.Operations.Count));
+
+            // Reference: apply each candidate by hand and take its validation loss.
+            var alphas = supernet.GetArchitectureParameters();
+            var expected = candidates.Select(c =>
+            {
+                NeuralArchitectureSearch<double>.ApplyEdgeArchitecture(alphas, ops, c);
+
+                // The applied alphas encode exactly this architecture.
+                var derived = supernet.DeriveArchitecture().Operations.OrderBy(o => o.ToNode).ThenBy(o => o.FromNode);
+                Assert.Equal(c.Operations.OrderBy(o => o.ToNode).ThenBy(o => o.FromNode), derived);
+                return supernet.ComputeValidationLoss(x, y);
+            }).ToList();
+            Assert.NotEqual(expected[0], expected[1], 6);
+
+            var best = NeuralArchitectureSearch<double>.SelectByValidationLoss(supernet, ops, candidates, x, y, out double bestLoss);
+
+            int bestIndex = expected.IndexOf(expected.Min());
+            Assert.Same(candidates[bestIndex], best);
+            Assert.Equal(expected[bestIndex], bestLoss, 12);
+        }
+
+        private static Architecture<double> AllEdges(int nodes, string op)
+        {
+            var arch = new Architecture<double>();
+            for (int node = 0; node < nodes; node++)
+            {
+                for (int from = 0; from <= node; from++)
+                {
+                    arch.AddOperation(node, from, op);
+                }
+            }
+
+            return arch;
         }
     }
 }

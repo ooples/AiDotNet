@@ -1,3 +1,4 @@
+using AiDotNet.AutoML.NAS;
 using AiDotNet.AutoML.SearchSpace;
 
 namespace AiDotNet.AutoML;
@@ -295,7 +296,10 @@ public class NeuralArchitectureSearch<T>
     }
 
     /// <summary>
-    /// Runs random search as a baseline
+    /// Random search with weight sharing (Li &amp; Talwalkar 2019, "Random Search and Reproducibility for Neural
+    /// Architecture Search", Sec. 3): the shared weights of one supernet are trained with a uniformly sampled
+    /// architecture per step, then random architectures are each applied to the supernet and scored by their
+    /// validation loss with the shared weights; the lowest-loss architecture is returned.
     /// </summary>
     private Architecture<T> RunRandomSearch(
         Tensor<T> trainData,
@@ -303,50 +307,165 @@ public class NeuralArchitectureSearch<T>
         Tensor<T> valData,
         Tensor<T> valLabels)
     {
-        Console.WriteLine("Starting random architecture search...");
+        Console.WriteLine("Starting random architecture search (weight sharing)...");
 
-        var bestArch = new Architecture<T>();
-        T bestLoss = _ops.FromDouble(double.MaxValue);
+        var operations = _searchSpace.Operations;
+        var supernet = new SuperNet<T>(_searchSpace, numNodes: RandomSearchNodes);
 
-        for (int trial = 0; trial < 20; trial++)
+        // One sample materialises lazy weight shapes (see RunGradientBasedSearch).
+        var warmupSample = trainData.Rank >= 1 && trainData.Shape[0] > 1
+            ? trainData.Slice(axis: 0, start: 0, end: 1).Contiguous()
+            : trainData;
+        supernet.Predict(warmupSample);
+
+        // Shared-weight training: the DARTS weight optimizer (SGD, momentum 0.9, weight decay 3e-4, clipping at
+        // 5, cosine learning rate), with a fresh uniformly sampled architecture each step.
+        T momentum = _ops.FromDouble(DartsWeightMomentum);
+        T weightDecay = _ops.FromDouble(DartsWeightDecay);
+        T gradientClipNorm = _ops.FromDouble(DartsGradientClipNorm);
+        T[] weightLearningRates = CosineAnnealedLearningRates(_maxEpochs,
+            _ops.FromDouble(DartsWeightMaxLearningRate), _ops.FromDouble(DartsWeightMinLearningRate));
+        var weightMomentum = new Dictionary<string, Vector<T>>();
+
+        for (int epoch = 0; epoch < _maxEpochs; epoch++)
         {
-            var arch = GenerateRandomArchitecture();
-            var supernet = new SuperNet<T>(_searchSpace);
+            ApplyEdgeArchitecture(supernet.GetArchitectureParameters(), operations,
+                SampleEdgeArchitecture(_random, RandomSearchNodes, operations));
 
-            // Quick evaluation
-            var loss = supernet.ComputeValidationLoss(valData, valLabels);
+            supernet.BackwardWeights(trainData, trainLabels, supernet.DefaultLossFunction);
+            var weightParams = supernet.GetWeightParameters();
+            var weightGrads = supernet.GetWeightGradients();
+            var weightKeys = weightParams.Keys.ToList();
+            T clipScale = GradientClipScale(weightKeys.Select(key => weightGrads[key]), gradientClipNorm);
 
-            if (_ops.LessThan(loss, bestLoss))
+            foreach (var key in weightKeys)
             {
-                bestLoss = loss;
-                bestArch = arch;
-                BestScore = _ops.Divide(_ops.One, _ops.Add(_ops.One, loss));
-            }
+                if (!weightMomentum.ContainsKey(key))
+                {
+                    weightMomentum[key] = new Vector<T>(weightParams[key].Length);
+                }
 
-            Console.WriteLine($"Trial {trial + 1}/20 - Loss: {Convert.ToDouble(loss):F4}");
+                SgdMomentumStep(weightParams[key], weightGrads[key], weightMomentum[key],
+                    weightLearningRates[epoch], momentum, weightDecay, clipScale);
+            }
         }
 
+        // Shared-weight evaluation of random candidates.
+        var candidates = Enumerable.Range(0, RandomSearchCandidates)
+            .Select(_ => SampleEdgeArchitecture(_random, RandomSearchNodes, operations))
+            .ToList();
+        var bestArch = SelectByValidationLoss(supernet, operations, candidates, valData, valLabels, out T bestLoss);
+        if (bestArch is null)
+        {
+            Console.WriteLine("\nNo architecture produced a finite validation loss.");
+            return new Architecture<T>();
+        }
+
+        BestScore = _ops.Divide(_ops.One, _ops.Add(_ops.One, bestLoss));
         Console.WriteLine($"\nBest architecture found with loss: {Convert.ToDouble(bestLoss):F4}");
         return bestArch;
     }
 
-    private Architecture<T> GenerateRandomArchitecture()
-    {
-        var arch = new Architecture<T>();
-        int numNodes = _random.Next(2, 6);
+    private const int RandomSearchNodes = 4;
+    private const int RandomSearchCandidates = 20;
+    private const double OneHotLogit = 10.0;
 
-        for (int i = 1; i < numNodes; i++)
+    /// <summary>
+    /// A uniformly random architecture over the supernet's edges: every edge (node j, input i &lt;= j), with node
+    /// indices as in <see cref="SuperNet{T}.DeriveArchitecture"/>, gets one operation drawn uniformly.
+    /// </summary>
+    internal static Architecture<T> SampleEdgeArchitecture(Random random, int numNodes, IReadOnlyList<string> operations)
+    {
+        var architecture = new Architecture<T>();
+        foreach (int node in Enumerable.Range(0, numNodes))
         {
-            for (int j = 0; j < i; j++)
+            foreach (int from in Enumerable.Range(0, node + 1))
             {
-                if (_random.NextDouble() > 0.5)
-                {
-                    var opIdx = _random.Next(_searchSpace.Operations.Count);
-                    arch.AddOperation(i, j, _searchSpace.Operations[opIdx]);
-                }
+                architecture.AddOperation(node, from, operations[random.Next(operations.Count)]);
             }
         }
 
-        return arch;
+        return architecture;
+    }
+
+    /// <summary>
+    /// Writes an architecture into the supernet's alphas: each listed edge becomes a one-hot logit row (+10 at
+    /// its operation, -10 elsewhere, so softmax puts all but ~e^-20 of the mass on it); unlisted edges are reset
+    /// to zero logits (the uniform mixture).
+    /// </summary>
+    internal static void ApplyEdgeArchitecture(List<Matrix<T>> alphas, IReadOnlyList<string> operations, Architecture<T> architecture)
+    {
+        var ops = MathHelper.GetNumericOperations<T>();
+        var engine = AiDotNetEngine.Current;
+        T low = ops.FromDouble(-OneHotLogit);
+        T span = ops.FromDouble(2.0 * OneHotLogit);
+        foreach (var alpha in alphas)
+        {
+            alpha.AsWritableSpan().Fill(ops.Zero);
+        }
+
+        foreach (var (toNode, fromNode, operation) in architecture.Operations)
+        {
+            int opIdx = IndexOfOperation(operations, operation);
+            if (toNode < 0 || toNode >= alphas.Count || opIdx < 0 || opIdx >= alphas[toNode].Columns
+                || fromNode < 0 || fromNode >= alphas[toNode].Rows)
+            {
+                continue;
+            }
+
+            int columns = alphas[toNode].Columns;
+            var hot = new Tensor<int>(new[] { 1 });
+            hot.Fill(opIdx);
+            var mask = engine.TensorOneHot<T>(hot, columns).Reshape(new[] { columns });
+            var row = engine.TensorAddScalar(engine.TensorMultiplyScalar(mask, span), low);
+            alphas[toNode].SetRow(fromNode, row.ToVector());
+        }
+    }
+
+    private static int IndexOfOperation(IReadOnlyList<string> operations, string operation)
+    {
+        return Enumerable.Range(0, operations.Count)
+            .Where(i => string.Equals(operations[i], operation, StringComparison.Ordinal))
+            .DefaultIfEmpty(-1)
+            .First();
+    }
+
+    /// <summary>
+    /// Applies each candidate to the supernet and scores it by validation loss with the shared weights. Returns
+    /// the first candidate with the lowest loss (a strict less-than scan), or null when no loss is finite; the
+    /// supernet is left holding the returned architecture.
+    /// </summary>
+    internal static Architecture<T>? SelectByValidationLoss(SuperNet<T> supernet, IReadOnlyList<string> operations,
+        IList<Architecture<T>> candidates, Tensor<T> valData, Tensor<T> valLabels, out T bestLoss)
+    {
+        var ops = MathHelper.GetNumericOperations<T>();
+        bestLoss = ops.FromDouble(double.MaxValue);
+        if (candidates.Count == 0)
+        {
+            return null;
+        }
+
+        var alphas = supernet.GetArchitectureParameters();
+        var losses = new Vector<T>(candidates
+            .Select(candidate =>
+            {
+                ApplyEdgeArchitecture(alphas, operations, candidate);
+                return supernet.ComputeValidationLoss(valData, valLabels);
+            })
+            .ToArray());
+
+        // Lowest loss = highest negated loss. NaN and infinite losses map to -inf so a finite loss always wins.
+        var engine = AiDotNetEngine.Current;
+        var negated = engine.TensorNanToNum(engine.TensorNegate(losses.AsTensor()),
+            double.NegativeInfinity, double.NegativeInfinity, double.NegativeInfinity);
+        int best = NasSamplingHelper.ArgMaxRows(negated.Reshape(new[] { 1, candidates.Count }), out T[] bestNegated)[0];
+        if (!ops.GreaterThan(bestNegated[0], ops.FromDouble(double.NegativeInfinity)))
+        {
+            return null;
+        }
+
+        bestLoss = losses[best];
+        ApplyEdgeArchitecture(alphas, operations, candidates[best]);
+        return candidates[best];
     }
 }
