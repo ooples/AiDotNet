@@ -32,17 +32,18 @@ public class RgbShift<T> : ImageAugmenterBase<T>
         double rShift = context.GetRandomDouble(-RedShiftLimit, RedShiftLimit) * maxVal;
         double gShift = context.GetRandomDouble(-GreenShiftLimit, GreenShiftLimit) * maxVal;
         double bShift = context.GetRandomDouble(-BlueShiftLimit, BlueShiftLimit) * maxVal;
-        double[] shifts = [rShift, gShift, bShift];
+        var shifts = new Tensor<T>([NumOps.FromDouble(rShift), NumOps.FromDouble(gShift), NumOps.FromDouble(bShift)], [3, 1, 1]);
 
         var result = data.Clone();
 
-        for (int y = 0; y < data.Height; y++)
-            for (int x = 0; x < data.Width; x++)
-                for (int c = 0; c < 3; c++)
-                {
-                    double val = NumOps.ToDouble(data.GetPixel(y, x, c)) + shifts[c];
-                    result.SetPixel(y, x, c, NumOps.FromDouble(Math.Max(0, Math.Min(maxVal, val))));
-                }
+        var engine = Engine;
+        var image = data.ToPlanarTensor();
+        var rgb = engine.TensorSlice(image, [0, 0, 0], [3, data.Height, data.Width]);
+        var shifted = engine.TensorClamp(
+            engine.TensorAdd(rgb, shifts),
+            NumOps.Zero, NumOps.FromDouble(maxVal));
+        result.SetFromPlanarTensor(ImageTensor<T>.ReplaceLeadingChannels(image,
+            engine.TensorSliceAxis(shifted, 0, 0), engine.TensorSliceAxis(shifted, 0, 1), engine.TensorSliceAxis(shifted, 0, 2)));
 
         return result;
     }

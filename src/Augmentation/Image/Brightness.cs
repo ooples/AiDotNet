@@ -104,22 +104,11 @@ public class Brightness<T> : AugmentationBase<T, ImageTensor<T>>
         double minValue = data.IsNormalized ? 0.0 : 0.0;
         double maxValue = data.IsNormalized ? 1.0 : 255.0;
 
-        for (int y = 0; y < height; y++)
-        {
-            for (int x = 0; x < width; x++)
-            {
-                for (int c = 0; c < channels; c++)
-                {
-                    double value = NumOps.ToDouble(data.GetPixel(y, x, c));
-                    double adjusted = value * factor;
-
-                    // Clamp to valid range
-                    adjusted = Math.Max(minValue, Math.Min(maxValue, adjusted));
-
-                    result.SetPixel(y, x, c, NumOps.FromDouble(adjusted));
-                }
-            }
-        }
+        var engine = Engine;
+        var adjusted = engine.TensorClamp(
+            engine.TensorMultiplyScalar(data.ToPlanarTensor(), NumOps.FromDouble(factor)),
+            NumOps.FromDouble(minValue), NumOps.FromDouble(maxValue));
+        result.SetFromPlanarTensor(adjusted);
 
         return result;
     }

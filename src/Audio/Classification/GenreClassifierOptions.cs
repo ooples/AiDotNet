@@ -4,10 +4,12 @@ using AiDotNet.Onnx;
 namespace AiDotNet.Audio.Classification;
 
 /// <summary>
-/// Options for genre classification.
+/// Options for genre classification after Tzanetakis and Cook 2002: 23 ms analysis windows, 1 s texture windows,
+/// 65536-sample beat histogram windows, and a three-component Gaussian mixture per genre.
 /// </summary>
 /// <remarks>
-/// <para><b>For Beginners:</b> These options configure the GenreClassifier model. Default values follow the original paper settings.</para>
+/// <para><b>For Beginners:</b> These options configure the GenreClassifier model. Default values follow the paper
+/// (sections III and IV).</para>
 /// </remarks>
 public class GenreClassifierOptions : ModelOptions
 {
@@ -26,7 +28,11 @@ public class GenreClassifierOptions : ModelOptions
         SampleRate = other.SampleRate;
         FftSize = other.FftSize;
         HopLength = other.HopLength;
-        NumMfccs = other.NumMfccs;
+        TextureWindowFrames = other.TextureWindowFrames;
+        BeatWindow = other.BeatWindow;
+        BeatHop = other.BeatHop;
+        MixtureComponents = other.MixtureComponents;
+        EmIterations = other.EmIterations;
         TopK = other.TopK;
         CustomGenres = other.CustomGenres;
         ModelPath = other.ModelPath;
@@ -36,14 +42,26 @@ public class GenreClassifierOptions : ModelOptions
     /// <summary>Audio sample rate. Default: 22050.</summary>
     public int SampleRate { get; set; } = 22050;
 
-    /// <summary>FFT size. Default: 2048.</summary>
-    public int FftSize { get; set; } = 2048;
+    /// <summary>Analysis window (and FFT size) in samples. Default: 512, the paper's 23 ms at 22050 Hz.</summary>
+    public int FftSize { get; set; } = 512;
 
-    /// <summary>Hop length. Default: 512.</summary>
+    /// <summary>Hop between analysis windows. Default: 512, non-overlapping windows.</summary>
     public int HopLength { get; set; } = 512;
 
-    /// <summary>Number of MFCCs to extract. Default: 20.</summary>
-    public int NumMfccs { get; set; } = 20;
+    /// <summary>Analysis windows per texture window. Default: 43, the paper's 1 s.</summary>
+    public int TextureWindowFrames { get; set; } = 43;
+
+    /// <summary>Samples per beat histogram window. Default: 65536 (about 3 s), as in the paper.</summary>
+    public int BeatWindow { get; set; } = 65536;
+
+    /// <summary>Hop between beat histogram windows. Default: 32768, half a window.</summary>
+    public int BeatHop { get; set; } = 32768;
+
+    /// <summary>Gaussians in each genre's mixture. Default: 3, the paper's GMM(3); 1 is its simple Gaussian classifier.</summary>
+    public int MixtureComponents { get; set; } = 3;
+
+    /// <summary>EM (and K-means initialization) iterations of a fit. Default: 100.</summary>
+    public int EmIterations { get; set; } = 100;
 
     /// <summary>Number of top predictions to return. Default: 3.</summary>
     public int TopK { get; set; } = 3;

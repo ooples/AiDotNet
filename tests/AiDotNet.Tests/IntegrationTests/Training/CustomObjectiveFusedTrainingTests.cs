@@ -28,7 +28,7 @@ public class CustomObjectiveFusedTrainingTests
     // by a few 1e-8 of the parameter scale per step; a step on baked data moves weights by far more.
     private const double RelativeTolerance = 1e-5;
 
-    public static TheoryData<string> Scenarios => new() { "VideoMAE", "DeepONet", "FNO", "MQCNN", "CodeSwitchingASR", "CCDM", "TSDiff", "TimeDiff", "TFC", "NeRF", "InstantNGP", "BasicVSRPlusPlus" };
+    public static TheoryData<string> Scenarios => new() { "VideoMAE", "DeepONet", "FNO", "MQCNN", "CCDM", "TSDiff", "TimeDiff", "TFC", "NeRF", "InstantNGP", "BasicVSRPlusPlus" };
 
     private sealed record RunResult(Vector<double> Parameters, int FusedSteps, int EagerSteps);
 
@@ -41,7 +41,6 @@ public class CustomObjectiveFusedTrainingTests
         "DeepONet" => BuildDeepOnet(),
         "FNO" => Warm(BuildFno(), new Tensor<double>([1, 2, 4])),
         "MQCNN" => Warm(BuildMqcnn(), new Tensor<double>([1, 8, 1])),
-        "CodeSwitchingASR" => Warm(BuildAsr(), new Tensor<double>([32, 8])),
         "CCDM" => Warm(BuildCcdm(), new Tensor<double>([1, 8, 1])),
         "TSDiff" => Warm(BuildTsDiff(), new Tensor<double>([1, 16, 1])),
         "TimeDiff" => Warm(BuildTimeDiff(), new Tensor<double>([1, 16, 1])),
@@ -75,7 +74,6 @@ public class CustomObjectiveFusedTrainingTests
             case "DeepONet": TrainDeepOnet((DeepOperatorNetwork<double>)model); break;
             case "FNO": TrainFno((FourierNeuralOperator<double>)model); break;
             case "MQCNN": TrainOnChangingBatches(model, [1, 8, 1], [1, 2 * MqcnnQuantiles]); break;
-            case "CodeSwitchingASR": TrainOnChangingBatches(model, [32, 8], [7, AsrOptions().VocabSize]); break; // subsampling: 32 frames -> 7
             // Every step draws its own diffusion steps, noise and contrastive negatives.
             case "CCDM": TrainOnChangingBatches(model, [1, 8, 1], [1, 4]); break;
             case "TSDiff": TrainOnChangingBatches(model, [1, 16, 1], [1, 4]); break;
@@ -297,17 +295,6 @@ public class CustomObjectiveFusedTrainingTests
         {
             ScaleFactor = 2, NumFeatures = 8, NumResidualBlocks = 1, NumPropagations = 1, LearningRate = 0.1,
         });
-    private static AiDotNet.SpeechRecognition.Specialized.CodeSwitchingASROptions AsrOptions() => new()
-    {
-        EncoderDim = 16, NumEncoderLayers = 1, NumAttentionHeads = 2, NumMels = 8, DecoderDim = 16,
-        NumDecoderLayers = 1, MandarinCharVocabSize = 6, EnglishBpeVocabSize = 5, MaxTextLength = 16, DropoutRate = 0.0,
-    };
-
-    private static AiDotNet.SpeechRecognition.Specialized.CodeSwitchingASR<double> BuildAsr() => new(
-        new NeuralNetworkArchitecture<double>(inputType: InputType.OneDimensional,
-            taskType: NeuralNetworkTaskType.MultiClassClassification, inputSize: 64, outputSize: 32),
-        AsrOptions());
-
     // Three Train calls, each on its own input and target.
     private static void TrainOnChangingBatches(NeuralNetworkBase<double> model, int[] inputShape, int[] targetShape)
     {

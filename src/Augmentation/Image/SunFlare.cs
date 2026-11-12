@@ -52,26 +52,22 @@ public class SunFlare<T> : ImageAugmenterBase<T>
     private static void DrawGlow(ImageTensor<T> image, int centerY, int centerX,
         double radius, double maxVal, double intensity)
     {
-        int r = (int)Math.Ceiling(radius);
-        int yMin = Math.Max(0, centerY - r);
-        int yMax = Math.Min(image.Height - 1, centerY + r);
-        int xMin = Math.Max(0, centerX - r);
-        int xMax = Math.Min(image.Width - 1, centerX + r);
+        // Pixels within the radius brighten by (1 - dist / radius) * intensity * maxVal
+        var engine = AiDotNetEngine.Current;
+        T r = NumOps.FromDouble(radius);
+        var dy = engine.Reshape(engine.TensorSubtractScalar(engine.TensorArange<T>(0, image.Height, 1), NumOps.FromDouble(centerY)), [image.Height, 1]);
+        var dx = engine.Reshape(engine.TensorSubtractScalar(engine.TensorArange<T>(0, image.Width, 1), NumOps.FromDouble(centerX)), [1, image.Width]);
+        var dist = engine.TensorSqrt(engine.TensorAdd(engine.TensorMultiply(dy, dy), engine.TensorMultiply(dx, dx)));
+        var inside = engine.ScalarMinusTensor(NumOps.One, engine.TensorGreaterThan(dist, r));
+        var alpha = engine.TensorMultiplyScalar(
+            engine.ScalarMinusTensor(NumOps.One, engine.TensorDivideScalar(dist, r)), NumOps.FromDouble(intensity));
 
-        for (int y = yMin; y <= yMax; y++)
-            for (int x = xMin; x <= xMax; x++)
-            {
-                double dist = Math.Sqrt((double)(y - centerY) * (y - centerY) + (double)(x - centerX) * (x - centerX));
-                if (dist > radius) continue;
-
-                double alpha = (1 - dist / radius) * intensity;
-                for (int c = 0; c < image.Channels; c++)
-                {
-                    double val = NumOps.ToDouble(image.GetPixel(y, x, c));
-                    double glowed = val + alpha * maxVal;
-                    image.SetPixel(y, x, c, NumOps.FromDouble(Math.Max(0, Math.Min(maxVal, glowed))));
-                }
-            }
+        var planar = image.ToPlanarTensor();
+        int[] shape = planar._shape;
+        var boost = engine.Reshape(engine.TensorMultiplyScalar(alpha, NumOps.FromDouble(maxVal)), [1, image.Height, image.Width]);
+        var glowed = engine.TensorClamp(engine.TensorAdd(planar, boost), NumOps.Zero, NumOps.FromDouble(maxVal));
+        var mask = engine.TensorBroadcastTo(engine.Reshape(inside, [1, image.Height, image.Width]), shape);
+        image.SetFromPlanarTensor(engine.TensorWhere(mask, glowed, planar));
     }
 
     /// <inheritdoc />

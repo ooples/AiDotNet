@@ -1,7 +1,5 @@
 using AiDotNet.Attributes;
-using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
-using AiDotNet.LinearAlgebra;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Onnx;
@@ -10,273 +8,158 @@ using AiDotNet.TextToSpeech.Interfaces;
 
 namespace AiDotNet.TextToSpeech.VoiceCloning;
 
-/// <summary>MetaVoice1B: MetaVoice-1B: 1.2B Parameter Voice Cloning Model.</summary>
-/// <typeparam name="T">The numeric type used for calculations.</typeparam>
-/// <remarks><para><b>References:</b><list type="bullet"><item>Paper: "MetaVoice-1B: 1.2B Parameter Voice Cloning Model" (MetaVoice Team, 2024)</item></list></para><para><b>For Beginners:</b> MetaVoice1B: MetaVoice-1B: 1.2B Parameter Voice Cloning Model.. This model converts text input into speech audio output.</para></remarks>
-/// <example>
-/// <code>
-/// // Create a MetaVoice-1B model for large-scale voice cloning
-/// // with 1.2B parameters for high-fidelity zero-shot synthesis
-/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
-///     inputType: InputType.OneDimensional,
-///     taskType: NeuralNetworkTaskType.Regression,
-///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
-///
-/// // ONNX inference mode with pre-trained model
-/// var model = new MetaVoice1B&lt;double&gt;(architecture, "metavoice1b.onnx");
-///
-/// // Training mode with native layers
-/// var trainModel = new MetaVoice1B&lt;double&gt;(architecture, new MetaVoice1BOptions());
-/// </code>
-/// </example>
+/// <summary>MetaVoice's learned-position causal GPT, noncausal codebook GPT, speaker LSTM
+/// and EnCodec-conditioned four-band diffusion waveform generator.</summary>
+/// <remarks>The released output includes loudness normalization and DeepFilterNet3 enhancement
+/// at 48 kHz. RawDecoderOutput selects the original 24 kHz neural decoder waveform.</remarks>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ResearchPaper(
-    "MetaVoice-1B: 1.2B Parameter Voice Cloning Model",
-    "https://github.com/metavoiceio/metavoice-src"
-)]
+[ResearchPaper("MetaVoice-1B: 1.2B Parameter Voice Cloning Model", "https://github.com/metavoiceio/metavoice-src")]
+[PaperOptimizer(OptimizerKind.AdamW, LearningRate = 3e-5, Beta1 = .9, Beta2 = .95, Epsilon = 1e-8,
+    WeightDecay = .1, Provenance = RecipeProvenance.ReleasedCode,
+    Source = "MetaVoice fam/llm/config/finetune_params.py and finetune.py: AdamW; final norm and last transformer blocks only.")]
 public partial class MetaVoice1B<T> : TtsModelBase<T>, IEndToEndTts<T>, IVoiceCloner<T>
 {
     private readonly MetaVoice1BOptions _options;
-
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
-    private bool _useNativeMode;
+    private readonly bool _useNativeMode;
+    private readonly bool _usesDefaultOptimizer;
+    private readonly Random _random;
     private bool _disposed;
 
-    public MetaVoice1B(
-        NeuralNetworkArchitecture<T> architecture,
-        string modelPath,
-        MetaVoice1BOptions? options = null
-    )
+    /// <summary>Loads an exported ONNX graph.</summary>
+    public MetaVoice1B(NeuralNetworkArchitecture<T> architecture, string modelPath, MetaVoice1BOptions? options = null)
         : base(architecture)
     {
-        _options = options ?? new MetaVoice1BOptions();
-        Options = _options;
-        _useNativeMode = false;
-        base.SampleRate = _options.SampleRate;
-        base.MelChannels = _options.MelChannels;
-        base.HopSize = _options.HopSize;
-        base.HiddenDim = _options.HiddenDim;
-        if (string.IsNullOrWhiteSpace(modelPath))
-            throw new ArgumentException("Model path required.", nameof(modelPath));
-        if (!File.Exists(modelPath))
-            throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath);
+        _options = options ?? new MetaVoice1BOptions(); Options = _options;
+        _random = new Random(InitializationSeed());
+        ConfigureProperties();
+        if (string.IsNullOrWhiteSpace(modelPath)) throw new ArgumentException("Model path required.", nameof(modelPath));
+        if (!File.Exists(modelPath)) throw new FileNotFoundException("ONNX model not found.", modelPath);
         _options.ModelPath = modelPath;
         OnnxModel = new OnnxModel<T>(modelPath, _options.OnnxOptions);
-        InitializeLayers();
     }
 
-    public MetaVoice1B(
-        NeuralNetworkArchitecture<T> architecture,
-        MetaVoice1BOptions? options = null,
-        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null
-    )
+    /// <summary>Constructs the actual native transformer and speaker graphs. Load the released
+    /// actor and decoder checkpoints before waveform synthesis.</summary>
+    public MetaVoice1B(NeuralNetworkArchitecture<T> architecture, MetaVoice1BOptions? options = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null)
         : base(architecture)
     {
-        _options = options ?? new MetaVoice1BOptions();
-        Options = _options;
-        _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
-        base.SampleRate = _options.SampleRate;
-        base.MelChannels = _options.MelChannels;
-        base.HopSize = _options.HopSize;
-        base.HiddenDim = _options.HiddenDim;
-        InitializeLayers();
+        _options = options ?? new MetaVoice1BOptions(); Options = _options;
+        _useNativeMode = true; _usesDefaultOptimizer = optimizer is null; _random = new Random(InitializationSeed());
+        _optimizer = optimizer ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+            ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        ConfigureProperties(); InitializeLayers();
     }
 
-    int ITtsModel<T>.SampleRate => _options.SampleRate;
-    /// <inheritdoc />
+    int ITtsModel<T>.SampleRate => SampleRate;
     public int MaxTextLength => _options.MaxTextLength;
-    /// <inheritdoc />
-    public new int HiddenDim => _options.HiddenDim;
-    /// <inheritdoc />
+    public new int HiddenDim => _options.FirstStageDim;
     public int NumFlowSteps => 0;
-
-    /// <summary>
-    /// Synthesizes speech from text by running the full MetaVoice-1B pipeline:
-    /// text+speaker conditioning embeddings → first-stage causal transformer → second-stage
-    /// non-causal transformer → HiFi-GAN vocoder → waveform (metavoiceio/metavoice-src).
-    /// </summary>
-    public Tensor<T> Synthesize(string text)
-    {
-        ThrowIfDisposed();
-        if (IsOnnxMode && OnnxModel is not null)
-            return OnnxModel.Run(PreprocessText(text));
-        var conditioning = BuildConditioningSequence(text, speakerEmbedding: null);
-        var audio = PredictCore(conditioning);
-        return FlattenWaveform(audio);
-    }
-
-    /// <inheritdoc />
-    public double MinReferenceDuration => 3.0;
-    /// <inheritdoc />
+    public double MinReferenceDuration => _options.MinReferenceDurationSec;
     public int SpeakerEmbeddingDim => _options.SpeakerEmbeddingDim;
+    /// <summary>Whether the actual native language and speaker graphs are present.</summary>
+    public bool HasPaperPipeline => _first is not null && _second is not null && _speaker is not null;
 
-    /// <summary>
-    /// Zero-shot voice cloning: extracts a speaker/tone embedding from the reference audio and
-    /// conditions the generation on it (additive speaker conditioning, per the reference's
-    /// <c>tok_emb + pos_emb + spk_emb</c>), then runs the full pipeline.
-    /// </summary>
-    public Tensor<T> SynthesizeWithVoice(string text, Tensor<T> referenceAudio)
+    public override Tensor<T> Synthesize(string text)
     {
         ThrowIfDisposed();
-        var embedding = ExtractSpeakerEmbedding(referenceAudio);
-        if (IsOnnxMode && OnnxModel is not null)
-            return OnnxModel.Run(PreprocessText(text));
-        var conditioning = BuildConditioningSequence(text, embedding);
-        var audio = PredictCore(conditioning);
-        return FlattenWaveform(audio);
+        if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(PreprocessText(text));
+        if (!HasPaperPipeline)
+        {
+            var waveform = PredictCore(PreprocessText(text));
+            return Engine.Reshape(waveform, new[] { waveform.Length });
+        }
+        return SynthesizeNative(text, ResolveVoice());
     }
 
-    /// <inheritdoc />
+    public Tensor<T> SynthesizeWithVoice(string text, Tensor<T> referenceAudio)
+        => SynthesizeWithVoice(text, referenceAudio, _options.ReferenceSampleRate);
+
+    /// <summary>Clones a mono recording at an explicitly specified sample rate.</summary>
+    public Tensor<T> SynthesizeWithVoice(string text, Tensor<T> referenceAudio, int sampleRate)
+    {
+        ThrowIfDisposed();
+        if (!HasPaperPipeline) throw new NotSupportedException("Voice cloning requires the native MetaVoice graphs.");
+        if (sampleRate <= 0 || referenceAudio.Length / (double)sampleRate < MinReferenceDuration)
+            throw new ArgumentException($"The released synthesis frontend requires at least {MinReferenceDuration} seconds of reference audio.", nameof(referenceAudio));
+        return SynthesizeNative(text, ExtractSpeakerEmbedding(referenceAudio, sampleRate));
+    }
+
     public Tensor<T> ExtractSpeakerEmbedding(Tensor<T> referenceAudio)
-    {
-        int embDim = _options.SpeakerEmbeddingDim;
-        var embedding = new Tensor<T>([embDim]);
-        int chunkSize = Math.Max(1, referenceAudio.Length / embDim);
-        for (int i = 0; i < embDim; i++)
-        {
-            double sum = 0;
-            for (int j = 0; j < chunkSize && i * chunkSize + j < referenceAudio.Length; j++)
-                sum += NumOps.ToDouble(referenceAudio[i * chunkSize + j]);
-            embedding[i] = NumOps.FromDouble(Math.Tanh(sum / chunkSize));
-        }
-        return L2Normalize(embedding);
-    }
-
-    /// <summary>
-    /// Builds the rank-3 <c>[1, seq, SpeakerEmbeddingDim]</c> conditioning-embedding sequence the
-    /// native pipeline consumes: a per-token text embedding, additively fused with the optional
-    /// speaker/tone embedding (broadcast across the sequence), matching the reference model's
-    /// additive <c>tok_emb + pos_emb + spk_emb</c> conditioning.
-    /// </summary>
-    private Tensor<T> BuildConditioningSequence(string text, Tensor<T>? speakerEmbedding)
-    {
-        int condDim = _options.SpeakerEmbeddingDim;
-        int seq = Math.Max(1, Math.Min(text?.Length ?? 0, _options.MaxTextLength));
-        var conditioning = new Tensor<T>([1, seq, condDim]);
-        for (int s = 0; s < seq; s++)
-        {
-            double token = (text is { Length: > 0 } && s < text.Length) ? text[s] / 128.0 : 0.0;
-            double posPhase = (s + 1.0) / (seq + 1.0);
-            for (int c = 0; c < condDim; c++)
-            {
-                double freq = 1.0 / Math.Pow(10000.0, (double)(c - c % 2) / condDim);   // 2*(c/2): the sin/cos pair index
-                double tokEmb = Math.Sin(token * (c + 1)) * 0.5;
-                double posEmb = ((c & 1) == 0 ? Math.Sin(posPhase / freq) : Math.Cos(posPhase / freq)) * 0.5;
-                double spkEmb = speakerEmbedding is not null
-                    ? NumOps.ToDouble(speakerEmbedding[c % speakerEmbedding.Length])
-                    : 0.0;
-                conditioning[0, s, c] = NumOps.FromDouble(tokEmb + posEmb + spkEmb);
-            }
-        }
-        return conditioning;
-    }
-
-    /// <summary>Flattens the vocoder's rank-3 <c>[1, 1, L]</c> waveform output to a rank-1 <c>[L]</c> signal.</summary>
-    private Tensor<T> FlattenWaveform(Tensor<T> audio)
-    {
-        var waveform = new Tensor<T>([audio.Length]);
-        for (int i = 0; i < audio.Length; i++)
-            waveform[i] = audio[i];
-        return waveform;
-    }
-
-    /// <inheritdoc />
-    protected override Tensor<T> PreprocessText(string text)
-    {
-        int len = Math.Min(text.Length, _options.MaxTextLength);
-        var t = new Tensor<T>([len]);
-        for (int i = 0; i < len; i++)
-            t[i] = NumOps.FromDouble(text[i] / 128.0);
-        return t;
-    }
+        => ExtractSpeakerEmbedding(referenceAudio, _options.ReferenceSampleRate);
 
     /// <inheritdoc />
     protected override Tensor<T> PostprocessAudio(Tensor<T> output) => output;
 
-    protected override void InitializeLayers()
-    {
-        if (!_useNativeMode)
-            return;
-        if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
-            Layers.AddRange(Architecture.Layers);
-        else
-            Layers.AddRange(
-                LayerHelper<T>.CreateDefaultMetaVoice1BLayers(
-                    firstStageDim: _options.FirstStageDim,
-                    numFirstStageLayers: _options.NumFirstStageLayers,
-                    secondStageDim: _options.SecondStageDim,
-                    numSecondStageLayers: _options.NumSecondStageLayers,
-                    numHeads: _options.NumHeads,
-                    numCodebooks: _options.NumCodebooks,
-                    firstStageCodebooks: _options.FirstStageCodebooks,
-                    codecLatentDim: _options.CodecLatentDim,
-                    vocoderChannels: _options.VocoderChannels,
-                    vocoderUpsampleFactor: _options.VocoderUpsampleFactor,
-                    swiGLUMultipleOf: _options.SwiGLUMultipleOf,
-                    ropeTheta: _options.RoPETheta,
-                    maxSeqLen: _options.MaxCodecFrames,
-                    dropoutRate: _options.DropoutRate
-                )
-            );
-    }
-
-    /// <inheritdoc />
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         ThrowIfDisposed();
-        if (IsOnnxMode && OnnxModel is not null)
-            return OnnxModel.Run(input);
-        SetTrainingMode(false);
-        var c = input;
-        foreach (var l in Layers)
-            c = l.Forward(c);
-        return c;
+        if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(input);
+        if (!HasPaperPipeline)
+        {
+            var output = input;
+            foreach (var layer in Layers) output = layer.Forward(output);
+            return output;
+        }
+        var tokenizer = _firstTokenizer ?? throw new InvalidOperationException("Load the first-stage tokenizer checkpoint.");
+        var ids = IntegerIds(input);
+        // The first EOT terminates the text; any remaining values are padding.
+        int end = Array.IndexOf(ids, tokenizer.EndToken);
+        if (end >= 0) ids = ids.Take(end).ToArray();
+        return SynthesizeNative(tokenizer.Decode(ids), ResolveVoice(), ids.Concat(new[] { tokenizer.EndToken }).ToArray());
     }
 
-    /// <inheritdoc />
-    /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the
-    /// write on every parameter surface, so the guard is stated once here instead of being
-    /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
     protected override bool SupportsParameterMutation => _useNativeMode;
-    /// <inheritdoc />
+
+    public override void SetTrainingMode(bool isTraining)
+    {
+        base.SetTrainingMode(isTraining);
+        foreach (var layer in ComponentLayers) layer.SetTrainingMode(false);
+    }
+
     public override ModelMetadata<T> GetModelMetadata()
     {
-        var m = new ModelMetadata<T>
+        var metadata = new ModelMetadata<T>
         {
             Name = _useNativeMode ? "MetaVoice1B-Native" : "MetaVoice1B-ONNX",
-            Description = "MetaVoice1B TTS",
-            FeatureCount = _options.HiddenDim,
+            Description = "MetaVoice causal/noncausal GPT and four-band diffusion",
+            FeatureCount = _options.FirstStageDim
         };
-        m.AdditionalInfo["Architecture"] = "MetaVoice1B";
-        m.AdditionalInfo["Mode"] = _useNativeMode ? "Native" : "ONNX";
-        m.AdditionalInfo["HiddenDim"] = base.HiddenDim;
-        m.AdditionalInfo["SampleRate"] = base.SampleRate;
-        m.AdditionalInfo["MelChannels"] = base.MelChannels;
-        m.AdditionalInfo["HopSize"] = base.HopSize;
-        return m;
+        metadata.AdditionalInfo["Architecture"] = "MetaVoice-1B";
+        metadata.AdditionalInfo["NativePaperGraph"] = HasPaperPipeline;
+        metadata.AdditionalInfo["PositionEncoding"] = "Learned absolute";
+        metadata.AdditionalInfo["Decoder"] = "Eight-codebook EnCodec, four-band diffusion, trained processors, 32-band re-equalization";
+        metadata.AdditionalInfo["SampleRate"] = SampleRate;
+        metadata.AdditionalInfo["NeuralDecoderSampleRate"] = _options.SampleRate;
+        metadata.AdditionalInfo["RawDecoderOutput"] = _options.RawDecoderOutput;
+        metadata.AdditionalInfo["ExternalEnhancementEnabled"] = !_options.RawDecoderOutput && _options.EnhanceOutput;
+        return metadata;
     }
 
-
-
-
+    private void ConfigureProperties()
+    {
+        base.SampleRate = _useNativeMode && Architecture.Layers is not { Count: > 0 } &&
+            !_options.RawDecoderOutput && _options.EnhanceOutput ? 48000 : _options.SampleRate;
+        base.MelChannels = _options.SpeakerMelChannels;
+        base.HopSize = _options.HopSize; base.HiddenDim = _options.FirstStageDim;
+    }
 
     private void ThrowIfDisposed()
     {
-        if (_disposed)
-            throw new ObjectDisposedException(GetType().FullName ?? nameof(MetaVoice1B<T>));
+        if (_disposed) throw new ObjectDisposedException(GetType().FullName ?? nameof(MetaVoice1B<T>));
     }
 
     /// <inheritdoc />
     protected override void Dispose(bool disposing)
     {
-        if (_disposed)
-            return;
+        if (_disposed) return;
         _disposed = true;
+        if (disposing) _codec?.Dispose();
         base.Dispose(disposing);
     }
 }

@@ -21,6 +21,28 @@ namespace AiDotNet.Tests.UnitTests.Helpers;
 public class NeuralNetworkHelperLogitsLossTests
 {
     [Fact]
+    public void ResNetGeneratedHeadReturnsLogitsForItsDefaultLoss()
+    {
+        var architecture = new NeuralNetworkArchitecture<double>(InputType.ThreeDimensional,
+            NeuralNetworkTaskType.ImageClassification, inputHeight: 32, inputWidth: 32, inputDepth: 3,
+            outputSize: 3);
+        var configuration = new ResNetConfiguration(ResNetVariant.ResNet18, numClasses: 3,
+            inputHeight: 32, inputWidth: 32);
+        using var network = new ResNetNetwork<double>(architecture, configuration);
+        Assert.IsType<CrossEntropyWithLogitsLoss<double>>(network.DefaultLossFunction);
+
+        var head = network.Classifier!;
+        var parameters = new Vector<double>(checked((int)head.ParameterCount));
+        double[] logits = [-2.0, 0.25, 1.5];
+        for (int i = 0; i < logits.Length; i++)
+            parameters[parameters.Length - logits.Length + i] = logits[i];
+        head.UpdateParameters(parameters);
+        var output = head.Forward(new Tensor<double>([1, configuration.Trunk.OutputChannels[3]]));
+        for (int i = 0; i < logits.Length; i++)
+            Assert.Equal(logits[i], output.GetFlat(i), 12);
+    }
+
+    [Fact]
     public void EveryTaskGetsTheWithLogitsFormOfItsProbabilityDefault()
     {
         foreach (NeuralNetworkTaskType task in Enum.GetValues(typeof(NeuralNetworkTaskType)))
