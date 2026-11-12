@@ -702,12 +702,7 @@ public partial class TSMixer<T> : ForecastingModelBase<T>
         var mse = _lossFunction.CalculateLoss(predictions.ToVector(), testLabels.ToVector());
 
         // Calculate MAE
-        T mae = NumOps.Zero;
-        for (int i = 0; i < predictions.Length && i < testLabels.Length; i++)
-        {
-            var diff = NumOps.Subtract(predictions.Data.Span[i], testLabels.Data.Span[i]);
-            mae = NumOps.Add(mae, NumOps.Abs(diff));
-        }
+        var (_, mae, _) = SumSquaredAndAbsoluteError(predictions, testLabels);
         mae = NumOps.Divide(mae, NumOps.FromDouble(predictions.Length));
 
         return new Dictionary<string, T>
@@ -943,27 +938,22 @@ public partial class TSMixer<T> : ForecastingModelBase<T>
         if (normalize)
         {
             // Compute mean and std for this instance (scalar reductions)
-            T sum = NumOps.Zero;
-            for (int i = 0; i < input.Length; i++)
+            T mean;
+            T varSum;
+            using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
             {
-                sum = NumOps.Add(sum, input.Data.Span[i]);
+                // Detached statistics, as before: the stats are constants for the affine map below.
+                var flat = Engine.Reshape(input.Contiguous(), new[] { input.Length });
+                mean = NumOps.Divide(input.Length > 0 ? Engine.TensorSum(flat) : NumOps.Zero, NumOps.FromDouble(input.Length));
+                varSum = input.Length > 0 ? Engine.TensorSumOfSquares(Engine.TensorSubtractScalar(flat, mean)) : NumOps.Zero;
             }
-            var mean = NumOps.Divide(sum, NumOps.FromDouble(input.Length));
 
-            T varSum = NumOps.Zero;
-            for (int i = 0; i < input.Length; i++)
-            {
-                var diff = NumOps.Subtract(input.Data.Span[i], mean);
-                varSum = NumOps.Add(varSum, NumOps.Multiply(diff, diff));
-            }
             var std = NumOps.Sqrt(NumOps.Divide(varSum, NumOps.FromDouble(input.Length)));
             std = NumOps.Add(std, eps);
 
             // Store for de-normalization
-            _instanceMean = new Tensor<T>(new[] { 1 });
-            _instanceMean.Data.Span[0] = mean;
-            _instanceStd = new Tensor<T>(new[] { 1 });
-            _instanceStd.Data.Span[0] = std;
+            _instanceMean = new Tensor<T>(new[] { 1 }, new Vector<T>(new[] { mean }));
+            _instanceStd = new Tensor<T>(new[] { 1 }, new Vector<T>(new[] { std }));
 
             // Normalize: (input - mean) / std
             var centered = Engine.TensorSubtractScalar(input, mean);

@@ -949,6 +949,25 @@ public partial class S4<T> : ForecastingModelBase<T>
         int lowerIdx = (int)(samples.Count * alpha / 2);
         int upperIdx = samples.Count - 1 - lowerIdx;
 
+        if (horizonLength > 0 && lowerIdx >= 0 && upperIdx >= 0 && lowerIdx < samples.Count && upperIdx < samples.Count)
+        {
+            // Stack the samples, average them, and read the sorted rows at the two interval indices.
+            using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+            var rows = new Tensor<T>[samples.Count];
+            for (int s = 0; s < samples.Count; s++)
+                rows[s] = Engine.TensorNarrow(Engine.Reshape(samples[s].Contiguous(), new[] { samples[s].Length }), 0, 0, horizonLength);
+            var grid = Engine.TensorStack(rows, 0);
+            if (Engine.TensorCountNonzero(Engine.TensorIsNan(grid)) == 0)
+            {
+                var sorted = Engine.TensorSort(grid, 0, false).Values;
+                return (
+                    Engine.TensorDivideScalar(Engine.ReduceSum(grid, new[] { 0 }, false), NumOps.FromDouble(samples.Count)),
+                    Engine.Reshape(Engine.TensorNarrow(sorted, 0, lowerIdx, 1).Contiguous(), new[] { horizonLength }),
+                    Engine.Reshape(Engine.TensorNarrow(sorted, 0, upperIdx, 1).Contiguous(), new[] { horizonLength }));
+            }
+        }
+
+        // NaN samples (sorted first by the double ordering) or out-of-range indices: the reference path.
         for (int t = 0; t < horizonLength; t++)
         {
             var values = new List<double>();
