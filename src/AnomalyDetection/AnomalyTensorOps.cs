@@ -47,6 +47,10 @@ internal static class AnomalyTensorOps
     internal static Tensor<T> DivideColumn<T>(Tensor<T> m, Tensor<T> values)
         => Engine.TensorDivide(m, BroadcastColumn(values, m.Shape[1]));
 
+    /// <summary>m[i, j] - values[i].</summary>
+    internal static Tensor<T> SubtractColumn<T>(Tensor<T> m, Tensor<T> values)
+        => Engine.TensorSubtract(m, BroadcastColumn(values, m.Shape[1]));
+
     /// <summary>Row i of m multiplied by values[i].</summary>
     internal static Tensor<T> MultiplyColumn<T>(Tensor<T> m, Tensor<T> values)
         => Engine.TensorMultiply(m, BroadcastColumn(values, m.Shape[1]));
