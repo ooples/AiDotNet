@@ -129,7 +129,19 @@ public class DINOLoss<T> : ContrastiveLossBase<T>
     /// </summary>
     private T CrossEntropySum(Tensor<T> teacherProbs, Tensor<T> studentProbs)
     {
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
         var batchSize = studentProbs.Shape[0];
+
+        // Master read studentProbs[b, d] and teacherProbs[b, d] for b < the student batch and d < outputDim, so a
+        // larger teacher batch used its leading rows and a short one threw on the first missing element. Probe the
+        // same elements in master's first-failure order to keep its exceptions.
+        if (batchSize > 0 && _outputDim > 0)
+        {
+            _ = studentProbs[0, _outputDim - 1];
+            _ = teacherProbs[0, _outputDim - 1];
+            _ = teacherProbs[batchSize - 1, 0];
+        }
+
         var shape = new[] { batchSize, _outputDim };
         var logPs = Engine.TensorLog(Engine.TensorAddScalar(
             Engine.TensorSlice(studentProbs, new[] { 0, 0 }, shape), NumOps.FromDouble(1e-8)));
@@ -147,6 +159,7 @@ public class DINOLoss<T> : ContrastiveLossBase<T>
         IList<Tensor<T>> studentOutputs,
         IList<Tensor<T>> teacherOutputs)
     {
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
         if (studentOutputs.Count == 0)
             throw new ArgumentException("Must provide at least one student output", nameof(studentOutputs));
         if (teacherOutputs.Count == 0)
@@ -193,6 +206,7 @@ public class DINOLoss<T> : ContrastiveLossBase<T>
     public (T loss, Tensor<T> gradStudent) ComputeLossWithGradients(
         Tensor<T> studentOutput, Tensor<T> teacherOutput)
     {
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
         var batchSize = studentOutput.Shape[0];
 
         var centeredTeacher = ApplyCenter(teacherOutput);
@@ -238,6 +252,7 @@ public class DINOLoss<T> : ContrastiveLossBase<T>
 
     private Tensor<T> ApplyCenter(Tensor<T> output)
     {
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
         // output[:, :outputDim] - center
         var batchSize = output.Shape[0];
         var rows = Engine.TensorSlice(output, new[] { 0, 0 }, new[] { batchSize, _outputDim });
@@ -250,6 +265,7 @@ public class DINOLoss<T> : ContrastiveLossBase<T>
     /// <summary>Column sums of the leading <c>outputDim</c> features of a [batch, features] tensor.</summary>
     private Tensor<T> ColumnSums(Tensor<T> batch)
     {
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
         var batchSize = batch.Shape[0];
         var columns = Engine.TensorSlice(batch, new[] { 0, 0 }, new[] { batchSize, _outputDim });
         return Engine.ReduceSum(columns, new[] { 0 }, keepDims: false);
@@ -258,6 +274,7 @@ public class DINOLoss<T> : ContrastiveLossBase<T>
     /// <summary>EMA update: center = momentum * center + (1 - momentum) * batchMean.</summary>
     private void BlendIntoCenter(Tensor<T> batchMean)
     {
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
         var momentum = NumOps.FromDouble(_centerMomentum);
         var oneMinusMomentum = NumOps.Subtract(NumOps.One, momentum);
         var blended = Engine.TensorAdd(
@@ -270,6 +287,7 @@ public class DINOLoss<T> : ContrastiveLossBase<T>
     // more than once.
     internal void UpdateCenter(Tensor<T> teacherOutput)
     {
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
         var batchSize = teacherOutput.Shape[0];
         var invBatch = NumOps.FromDouble(1.0 / batchSize);
 
@@ -279,6 +297,7 @@ public class DINOLoss<T> : ContrastiveLossBase<T>
 
     private void UpdateCenterFromMultiple(IList<Tensor<T>> teacherOutputs)
     {
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
         // Compute mean across all teacher outputs
         Tensor<T>? columnTotals = null;
         int totalSamples = 0;
@@ -298,6 +317,7 @@ public class DINOLoss<T> : ContrastiveLossBase<T>
 
     private Tensor<T> Softmax(Tensor<T> input, double temperature)
     {
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
         var invTemp = NumOps.FromDouble(1.0 / temperature);
 
         // exp((x - max) / tau), normalized per row
