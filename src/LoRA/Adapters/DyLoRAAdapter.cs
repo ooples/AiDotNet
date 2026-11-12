@@ -516,7 +516,9 @@ public partial class DyLoRAAdapter<T> : LoRAAdapterBase<T>
                     // Compute output gradient (simplified - assumes MSE loss)
                     Tensor<T> outputGrad = Engine.TensorSubtract(output, Engine.Reshape(targets[i], output.Shape.ToArray()));
 
-                    // Backward pass
+                    // Backward pass at the rank sampled by this step's forward: only the first
+                    // b columns of A and rows of B receive gradient (DyLoRA nested dropout)
+                    BackwardWithRank(outputGrad, inputs[i], _cachedActiveRank);
 
                     // Update parameters
                     UpdateParameters(learningRate);

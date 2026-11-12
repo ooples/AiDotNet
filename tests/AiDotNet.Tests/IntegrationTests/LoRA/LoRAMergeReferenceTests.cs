@@ -96,4 +96,80 @@ public class LoRAMergeReferenceTests
                 $"{name} output {i}: adapter {adapterOutput[i]:G12} vs merged {mergedOutput[i]:G12}");
         }
     }
+
+    [Fact(Timeout = 120000)]
+    public async Task DyLoRA_TrainingStep_UpdatesOnlySampledRankAlongFiniteDifferenceGradient()
+    {
+        await Task.Yield();
+        const int maxRank = 4;
+        const int rank = 2;
+        const double learningRate = 0.1;
+        const double step = 1e-6;
+
+        // A single active rank makes the sampled rank b deterministic
+        var adapter = new DyLoRAAdapter<double>(CreateBaseLayer(InputSize, OutputSize), maxRank, new[] { rank }, alpha: 8.0);
+        var lora = adapter.LoRALayer;
+        var start = new double[lora.GetParameters().Length];
+        for (int i = 0; i < start.Length; i++)
+        {
+            start[i] = 0.05 * Math.Cos(0.61 * i + 0.2);
+        }
+        lora.SetParameters(new Vector<double>(start));
+
+        var input = CreateInput(1, InputSize);
+        var targetData = new Vector<double>(OutputSize);
+        for (int i = 0; i < OutputSize; i++)
+        {
+            targetData[i] = Math.Sin(0.9 * i + 1.1);
+        }
+        var target = new Tensor<double>(new[] { 1, OutputSize }, targetData);
+
+        // 0.5 * squared error, whose output gradient (output - target) is what the training step backpropagates
+        double Loss(Tensor<double> output, Tensor<double> expected)
+        {
+            double sum = 0;
+            for (int i = 0; i < output.Length; i++)
+            {
+                double diff = output[i] - expected[i];
+                sum += 0.5 * diff * diff;
+            }
+            return sum;
+        }
+
+        var gradient = new double[start.Length];
+        for (int i = 0; i < start.Length; i++)
+        {
+            var plus = (double[])start.Clone();
+            var minus = (double[])start.Clone();
+            plus[i] += step;
+            minus[i] -= step;
+            lora.SetParameters(new Vector<double>(plus));
+            double lossPlus = Loss(adapter.Forward(input), target);
+            lora.SetParameters(new Vector<double>(minus));
+            double lossMinus = Loss(adapter.Forward(input), target);
+            gradient[i] = (lossPlus - lossMinus) / (2 * step);
+        }
+        lora.SetParameters(new Vector<double>(start));
+
+        adapter.TrainWithNestedDropout(new[] { input }, new[] { target }, 1, learningRate, Loss);
+        var after = lora.GetParameters();
+
+        // Parameters: A [InputSize, maxRank] row-major, then B [maxRank, OutputSize] row-major
+        int countA = InputSize * maxRank;
+        for (int i = 0; i < start.Length; i++)
+        {
+            bool inSampledRank = i < countA ? (i % maxRank) < rank : ((i - countA) / OutputSize) < rank;
+            if (inSampledRank)
+            {
+                double expected = start[i] - learningRate * gradient[i];
+                Assert.True(
+                    Math.Abs(expected - after[i]) <= 1e-8,
+                    $"parameter {i}: expected {expected:G12}, got {after[i]:G12}");
+            }
+            else
+            {
+                Assert.Equal(start[i], after[i]);
+            }
+        }
+    }
 }
