@@ -213,127 +213,184 @@ public partial class LEOVL<T> : VisionLanguageModelBase<T>, IThreeDVisionLanguag
 
         // Step 1: Object-centric segmentation via spatial clustering
         // Group nearby points into object clusters using grid-based voxelization
+        var engine = Engine;
         int maxObjects = 32;
         double voxelSize = 0.5;
-        var objectCentroids = new double[maxObjects, 3]; // XYZ centroids
-        var objectFeatures = new double[maxObjects][];
-        var objectCounts = new int[maxObjects];
-
-        for (int obj = 0; obj < maxObjects; obj++)
-            objectFeatures[obj] = new double[encoderDim];
-
-        for (int p = 0; p < numPoints; p++)
-        {
-            int baseIdx = p * channels;
-            if (baseIdx + 2 >= totalValues)
-                break;
-
-            double x = NumOps.ToDouble(pointCloud[baseIdx]);
-            double y = NumOps.ToDouble(pointCloud[baseIdx + 1]);
-            double z = NumOps.ToDouble(pointCloud[baseIdx + 2]);
-
-            // Hash-based voxel assignment → object cluster
-            int voxelHash =
-                Math.Abs(
-                    (int)(x / voxelSize) * 73856093
-                        ^ (int)(y / voxelSize) * 19349669
-                        ^ (int)(z / voxelSize) * 83492791
-                ) % maxObjects;
-
-            objectCentroids[voxelHash, 0] += x;
-            objectCentroids[voxelHash, 1] += y;
-            objectCentroids[voxelHash, 2] += z;
-            objectCounts[voxelHash]++;
-
-            // Accumulate point features (color + normals)
-            for (int c = 0; c < channels && baseIdx + c < totalValues; c++)
-            {
-                double val = NumOps.ToDouble(pointCloud[baseIdx + c]);
-                objectFeatures[voxelHash][c % encoderDim] += val;
-            }
-        }
-
-        // Normalize centroids and features
-        int activeObjects = 0;
-        for (int obj = 0; obj < maxObjects; obj++)
-        {
-            if (objectCounts[obj] > 0)
-            {
-                objectCentroids[obj, 0] /= objectCounts[obj];
-                objectCentroids[obj, 1] /= objectCounts[obj];
-                objectCentroids[obj, 2] /= objectCounts[obj];
-                for (int d = 0; d < encoderDim; d++)
-                    objectFeatures[obj][d] /= objectCounts[obj];
-                activeObjects++;
-            }
-        }
-
-        // Step 2: Spatial relationship encoding via relative 3D position embeddings
-        // Encode pairwise spatial relationships between objects
-        for (int i = 0; i < maxObjects; i++)
-        {
-            if (objectCounts[i] == 0)
-                continue;
-            for (int j = 0; j < maxObjects; j++)
-            {
-                if (i == j || objectCounts[j] == 0)
-                    continue;
-                // Relative position
-                double dx = objectCentroids[j, 0] - objectCentroids[i, 0];
-                double dy = objectCentroids[j, 1] - objectCentroids[i, 1];
-                double dz = objectCentroids[j, 2] - objectCentroids[i, 2];
-                double dist = Math.Sqrt(dx * dx + dy * dy + dz * dz) + 1e-8;
-
-                // Spatial attention: closer objects have stronger influence
-                double spatialAttn = Math.Exp(-dist);
-                // Modulate features with spatial relationships
-                for (int d = 0; d < encoderDim; d++)
-                {
-                    double relEmbed = Math.Sin(dx * (d + 1)) * Math.Cos(dy * (d + 1)) * 0.01;
-                    objectFeatures[i][d] += spatialAttn * objectFeatures[j][d] * 0.1 + relEmbed;
-                }
-            }
-        }
-
-        // Step 3: Aggregate object tokens into scene representation. The scene tokens must match the
-        // encoder input width (_options.VisionDim, wired in InitializeLayers), not the point-encoder
-        // width — so tile the aggregated PointEncoderDim object features into VisionDim (identity when
-        // the two dims match). Forwarding PointEncoderDim-wide tokens into the VisionDim encoder threw
-        // "embedding dimension does not match weight dimension" whenever the dims differed.
         int visionDim = _options.VisionDim;
-        var sceneTokens = new Tensor<T>([visionDim]);
-        double totalWeight = 0;
-        for (int obj = 0; obj < maxObjects; obj++)
+
+        // Points p < numPoints with p * channels + 2 < totalValues are read (the scan stops at the
+        // first point that is not).
+        int readPoints;
+        if (totalValues <= 2)
+            readPoints = 0;
+        else if (channels > 0)
+            readPoints = Math.Min(numPoints, (totalValues - 2 + channels - 1) / channels);
+        else
+            readPoints = numPoints;
+        if (channels < 0 && readPoints > 1)
+            throw new IndexOutOfRangeException("A negative point channel count addresses values before the start of the point cloud.");
+
+        Tensor<T> sceneTokens;
+        if (readPoints == 0)
         {
-            if (objectCounts[obj] == 0)
-                continue;
-            double weight = objectCounts[obj]; // Larger objects = more important
-            totalWeight += weight;
-            for (int d = 0; d < visionDim; d++)
-                sceneTokens[d] = NumOps.FromDouble(
-                    NumOps.ToDouble(sceneTokens[d]) + objectFeatures[obj][d % encoderDim] * weight
-                );
+            sceneTokens = new Tensor<T>([visionDim]);
         }
-        if (totalWeight > 1e-8)
-            for (int d = 0; d < visionDim; d++)
-                sceneTokens[d] = NumOps.FromDouble(NumOps.ToDouble(sceneTokens[d]) / totalWeight);
+        else if (encoderDim == 0)
+        {
+            if (channels > 0 || visionDim > 0)
+                throw new DivideByZeroException("Object features cannot be built with a zero point-encoder width.");
+            sceneTokens = new Tensor<T>([0]);
+        }
+        else
+        {
+            var flatCloud = pointCloud.Reshape([totalValues]);
+            var pointBase = engine.TensorMultiplyScalar(engine.TensorArange<int>(0, readPoints, 1), channels).Reshape([readPoints, 1]);
+            var coordIndex = engine.TensorAdd(
+                engine.TensorBroadcastTo(pointBase, [readPoints, 3]),
+                engine.TensorBroadcastTo(engine.TensorArange<int>(0, 3, 1).Reshape([1, 3]), [readPoints, 3]));
+            var coords = engine.TensorTake(flatCloud, coordIndex);
+
+            // Hash-based voxel assignment → object cluster (integer arithmetic, as master):
+            // |trunc(x / s) * 73856093 ^ trunc(y / s) * 19349669 ^ trunc(z / s) * 83492791| % maxObjects.
+            var cells = engine.TensorTrunc(engine.TensorDivideScalar(coords, NumOps.FromDouble(voxelSize))).Cast<int>();
+            var hashX = engine.TensorMultiplyScalar(engine.TensorSlice(cells, [0, 0], [readPoints, 1]), 73856093);
+            var hashY = engine.TensorMultiplyScalar(engine.TensorSlice(cells, [0, 1], [readPoints, 1]), 19349669);
+            var hashZ = engine.TensorMultiplyScalar(engine.TensorSlice(cells, [0, 2], [readPoints, 1]), 83492791);
+            var mixed = engine.TensorBitwiseXor(engine.TensorBitwiseXor(hashX, hashY), hashZ).Reshape([readPoints]);
+            if (engine.TensorSum(engine.TensorEquals(mixed, int.MinValue)) > 0)
+                throw new OverflowException("Negating the minimum value of a twos complement number is invalid.");
+            var objectIds = engine.TensorRemainder(
+                engine.TensorAbs(mixed), Tensor<int>.CreateDefault([readPoints], maxObjects));
+
+            // Accumulate point features (color + normals): value c of a point goes to feature c % encoderDim.
+            int pointChannels = Math.Max(0, channels);
+            Tensor<T> objectSums;
+            if (pointChannels == 0)
+            {
+                objectSums = new Tensor<T>([maxObjects, encoderDim]);
+            }
+            else
+            {
+                int folds = (pointChannels + encoderDim - 1) / encoderDim;
+                int width = folds * encoderDim;
+                var local = engine.TensorBroadcastTo(engine.TensorArange<int>(0, width, 1).Reshape([1, width]), [readPoints, width]);
+                var channelIndex = engine.TensorAdd(engine.TensorBroadcastTo(pointBase, [readPoints, width]), local);
+                var validChannel = engine.TensorMultiply(
+                    engine.TensorLessThan(local, pointChannels), engine.TensorLessThan(channelIndex, totalValues)).Cast<T>();
+                var channelValues = engine.TensorWhere(
+                    validChannel,
+                    engine.TensorTake(flatCloud, engine.TensorMin(channelIndex, totalValues - 1)),
+                    new Tensor<T>([readPoints, width]));
+                var pointFeatures = engine.ReduceSum(channelValues.Reshape([readPoints, folds, encoderDim]), [1], false);
+                objectSums = engine.ScatterAdd(
+                    pointFeatures,
+                    engine.TensorBroadcastTo(objectIds.Reshape([readPoints, 1]), [readPoints, encoderDim]),
+                    0,
+                    maxObjects);
+            }
+
+            // Normalize centroids and features by the object point counts.
+            var objectCounts = engine.TensorBinCount(objectIds, maxObjects).Cast<T>().Reshape([maxObjects, 1]);
+            var safeCounts = engine.TensorMax(objectCounts, NumOps.One);
+            var active = engine.TensorGreaterThan(objectCounts, NumOps.Zero);
+            var objectCentroids = engine.TensorDivide(
+                engine.ScatterAdd(
+                    coords, engine.TensorBroadcastTo(objectIds.Reshape([readPoints, 1]), [readPoints, 3]), 0, maxObjects),
+                engine.TensorBroadcastTo(safeCounts, [maxObjects, 3]));
+            var objectFeatures = engine.TensorDivide(objectSums, engine.TensorBroadcastTo(safeCounts, [maxObjects, encoderDim]));
+
+            // Step 2: Spatial relationship encoding via relative 3D position embeddings
+            // Encode pairwise spatial relationships between active objects i != j:
+            // feature_i += sum_j exp(-dist_ij) * 0.1 * feature_j + sin(dx (d + 1)) cos(dy (d + 1)) * 0.01,
+            // with dx = centroid_j - centroid_i. Objects update in order, each reading the already
+            // updated earlier objects.
+            var objectIndex = engine.TensorArange<T>(0, maxObjects, 1);
+            var isSelf = engine.TensorEquals(
+                engine.TensorBroadcastTo(objectIndex.Reshape([maxObjects, 1]), [maxObjects, maxObjects]),
+                engine.TensorBroadcastTo(objectIndex.Reshape([1, maxObjects]), [maxObjects, maxObjects]));
+            var pairMask = engine.TensorMultiply(
+                engine.TensorMultiply(active, active.Reshape([1, maxObjects])),
+                engine.ScalarMinusTensor(NumOps.One, isSelf));
+            Tensor<T> Delta(int axis)
+            {
+                var column = engine.TensorSlice(objectCentroids, [0, axis], [maxObjects, 1]);
+                return engine.TensorSubtract(
+                    engine.TensorBroadcastTo(column.Reshape([1, maxObjects]), [maxObjects, maxObjects]),
+                    engine.TensorBroadcastTo(column, [maxObjects, maxObjects]));
+            }
+            var dx = Delta(0);
+            var dy = Delta(1);
+            var dz = Delta(2);
+            var dist = engine.TensorAddScalar(
+                engine.TensorSqrt(engine.TensorAdd(
+                    engine.TensorAdd(engine.TensorMultiply(dx, dx), engine.TensorMultiply(dy, dy)),
+                    engine.TensorMultiply(dz, dz))),
+                NumOps.FromDouble(1e-8));
+            // Spatial attention: closer objects have stronger influence
+            var spatialAttn = engine.TensorMultiplyScalar(engine.TensorExp(engine.TensorNegate(dist)), NumOps.FromDouble(0.1));
+            var frequency = engine.TensorArange<T>(1, encoderDim + 1, 1).Reshape([1, 1, encoderDim]);
+            var pairShape = new[] { maxObjects, maxObjects, encoderDim };
+            var relEmbed = engine.TensorMultiplyScalar(
+                engine.TensorMultiply(
+                    engine.TensorSin(engine.TensorMultiply(dx.Reshape([maxObjects, maxObjects, 1]), frequency)),
+                    engine.TensorCos(engine.TensorMultiply(dy.Reshape([maxObjects, maxObjects, 1]), frequency))),
+                NumOps.FromDouble(0.01));
+            var relSum = engine.ReduceSum(
+                engine.TensorWhere(
+                    engine.TensorBroadcastTo(pairMask.Reshape([maxObjects, maxObjects, 1]), pairShape),
+                    relEmbed,
+                    new Tensor<T>(pairShape)),
+                [1], false);
+
+            var objectRows = new List<Tensor<T>>(maxObjects);
+            for (int obj = 0; obj < maxObjects; obj++)
+                objectRows.Add(engine.TensorSlice(objectFeatures, [obj, 0], [1, encoderDim]).Reshape([encoderDim]));
+            var noTerms = new Tensor<T>([maxObjects, encoderDim]);
+            for (int i = 0; i < maxObjects; i++)
+            {
+                // Modulate features with spatial relationships
+                var current = StackLeading(objectRows, maxObjects, encoderDim);
+                var rowMask = engine.TensorBroadcastTo(
+                    engine.TensorSlice(pairMask, [i, 0], [1, maxObjects]).Reshape([maxObjects, 1]), [maxObjects, encoderDim]);
+                var rowAttn = engine.TensorBroadcastTo(
+                    engine.TensorSlice(spatialAttn, [i, 0], [1, maxObjects]).Reshape([maxObjects, 1]), [maxObjects, encoderDim]);
+                var attended = engine.ReduceSum(
+                    engine.TensorWhere(rowMask, engine.TensorMultiply(current, rowAttn), noTerms), [0], false);
+                objectRows[i] = engine.TensorAdd(
+                    objectRows[i],
+                    engine.TensorAdd(attended, engine.TensorSlice(relSum, [i, 0], [1, encoderDim]).Reshape([encoderDim])));
+            }
+
+            // Step 3: Aggregate object tokens into scene representation. The scene tokens must match the
+            // encoder input width (_options.VisionDim, wired in InitializeLayers), not the point-encoder
+            // width — so tile the aggregated PointEncoderDim object features into VisionDim (identity when
+            // the two dims match). Forwarding PointEncoderDim-wide tokens into the VisionDim encoder threw
+            // "embedding dimension does not match weight dimension" whenever the dims differed.
+            // Larger objects = more important: the scene is the point-count weighted mean of the active objects
+            // (the total weight is the number of read points).
+            var weighted = engine.TensorWhere(
+                engine.TensorBroadcastTo(active, [maxObjects, encoderDim]),
+                engine.TensorMultiply(
+                    StackLeading(objectRows, maxObjects, encoderDim), engine.TensorBroadcastTo(objectCounts, [maxObjects, encoderDim])),
+                noTerms);
+            var sceneMean = engine.TensorDivideScalar(engine.ReduceSum(weighted, [0], false), NumOps.FromDouble(readPoints));
+            sceneTokens = CyclicTake(sceneMean, visionDim);
+        }
 
         // Step 4: Process through encoder and fuse with prompt
         var encoded = sceneTokens;
         for (int i = 0; i < _encoderLayerEnd && i < Layers.Count; i++)
             encoded = Layers[i].Forward(encoded);
 
+        // Prompt gate 0.5 + sigmoid(prompt[d % promptLen] / 100) on every encoded value.
         var promptTokens = TokenizeText(prompt);
         int promptLen = promptTokens.Length;
-        for (int d = 0; d < encoded.Length; d++)
+        if (promptLen > 0)
         {
-            if (promptLen > 0)
-            {
-                double promptVal = NumOps.ToDouble(promptTokens[d % promptLen]);
-                double encVal = NumOps.ToDouble(encoded[d]);
-                double gate = 1.0 / (1.0 + Math.Exp(-promptVal / 100.0));
-                encoded[d] = NumOps.FromDouble(encVal * (0.5 + gate));
-            }
+            var gate = engine.TensorAddScalar(
+                engine.TensorSigmoid(engine.TensorDivideScalar(CyclicTake(promptTokens, encoded.Length), NumOps.FromDouble(100.0))),
+                NumOps.FromDouble(0.5));
+            encoded = engine.TensorMultiply(encoded, gate.Reshape(encoded.Shape.ToArray()));
         }
 
         var output = encoded;
