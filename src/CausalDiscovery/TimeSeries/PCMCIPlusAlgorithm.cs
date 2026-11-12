@@ -82,6 +82,7 @@ public class PCMCIPlusAlgorithm<T> : TimeSeriesCausalBase<T>
         // Step 2: Contemporaneous discovery via conditional independence testing
         // Condition on the lagged parents of both variables (discovered from PCMCI)
         int offset = n - effectiveN;
+        var x = Tensor<T>.FromMatrix(data); // one tensor copy shared by every test
         for (int i = 0; i < d; i++)
         {
             for (int j = i + 1; j < d; j++)
@@ -93,13 +94,13 @@ public class PCMCIPlusAlgorithm<T> : TimeSeriesCausalBase<T>
                 if (condVarIndices.Count == 0)
                 {
                     // No lagged parents: use simple correlation over effective sample window
-                    partCorr = ComputeWindowCorrelation(data, effectiveN, offset, i, j);
+                    partCorr = ComputeWindowCorrelation(x, effectiveN, offset, i, j);
                 }
                 else
                 {
                     // Residualize both variables on their lagged parents
                     partCorr = ComputeContemporaneousPartialCorrelation(
-                        data, i, j, condVarIndices, effectiveN, offset);
+                        x, i, j, condVarIndices, effectiveN, offset);
                 }
 
                 double pValue = FisherZTestPValue(partCorr, effectiveN, condVarIndices.Count);
@@ -130,11 +131,9 @@ public class PCMCIPlusAlgorithm<T> : TimeSeriesCausalBase<T>
     /// conditioned on lagged parents via OLS residualization.
     /// </summary>
     private double ComputeContemporaneousPartialCorrelation(
-        Matrix<T> data, int i, int j,
+        Tensor<T> x, int i, int j,
         List<int> condVarIndices, int effectiveN, int offset)
     {
-        var x = Tensor<T>.FromMatrix(data);
-
         // Build conditioning matrix from lag-1 values of conditioning variables (rows outside the data are 0)
         var condMatrix = Engine.TensorConcatenate(condVarIndices
             .Select(cVar => LaggedSeries(x, cVar, 1, offset, effectiveN).Reshape(new[] { effectiveN, 1 }))
@@ -151,9 +150,8 @@ public class PCMCIPlusAlgorithm<T> : TimeSeriesCausalBase<T>
         return SeriesCorrelation(residI, residJ);
     }
 
-    private double ComputeWindowCorrelation(Matrix<T> data, int count, int offset, int i, int j)
+    private double ComputeWindowCorrelation(Tensor<T> x, int count, int offset, int i, int j)
     {
-        var x = Tensor<T>.FromMatrix(data);
         return SeriesCorrelation(LaggedSeries(x, i, 0, offset, count), LaggedSeries(x, j, 0, offset, count));
     }
 
