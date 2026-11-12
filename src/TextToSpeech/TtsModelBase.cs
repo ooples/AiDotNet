@@ -723,7 +723,29 @@ public abstract partial class TtsModelBase<T> : NeuralNetworkBase<T>, IShapeCont
             Engine.TensorLog(Engine.TensorAddScalar(counts, NumOps.FromDouble(eps))));
     }
 
+    /// <summary>An int matrix <c>[rows, columns]</c> as a tensor of T with the same layout.</summary>
+    protected static Tensor<T> IntMatrixTensor(int[,] values)
+    {
+        Guard.NotNull(values);
+        int rows = values.GetLength(0), columns = values.GetLength(1);
+        var flat = new int[rows * columns];
+        Buffer.BlockCopy(values, 0, flat, 0, flat.Length * sizeof(int));
+        return new Tensor<int>(flat, new[] { rows, columns }).Cast<T>();
+    }
+
+    /// <summary>A <c>[rows, columns]</c> tensor of ids carried in T, rounded half to even, as an int matrix.</summary>
+    protected int[,] RoundedIdMatrix(Tensor<T> tensor)
+    {
+        Guard.NotNull(tensor);
+        int rows = tensor.Shape[0], columns = tensor.Shape[1];
+        var flat = RoundedIds(tensor);
+        var values = new int[rows, columns];
+        Buffer.BlockCopy(flat, 0, values, 0, flat.Length * sizeof(int));
+        return values;
+    }
+
     /// <summary>Row <paramref name="index"/> of a <c>[batch, n]</c> tensor
+
 
 
 , as a <c>[n]</c> tensor.</summary>
