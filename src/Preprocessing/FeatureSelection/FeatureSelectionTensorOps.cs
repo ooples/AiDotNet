@@ -1098,6 +1098,66 @@ internal static class FeatureSelectionTensorOps
         return engine.ReduceSum(engine.TensorMultiply(engine.TensorSquare(engine.TensorSubtract(classMeans, overallMean)),
             engine.TensorBroadcastTo(engine.Reshape(counts, new[] { classCount, 1 }), shape)), new[] { 0 }, false);
     }
+
+    /// <summary>
+    /// Entropies in nats from joint bin/class counts ([p, bins, K]) over <paramref name="total"/> samples: returns
+    /// the bin entropy <c>H(B) = -sum_b (n_b / n) ln(n_b / n)</c> of every feature ([p]) and, in
+    /// <paramref name="conditional"/>, <c>H(Y | B) = -(1 / n) sum_{b,c} n_bc ln(n_bc / n_b)</c> ([p]); empty cells
+    /// contribute 0.
+    /// </summary>
+    public static Tensor<T> BinEntropyNats<T>(Tensor<T> joint, int total, out Tensor<T> conditional)
+    {
+        var engine = AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<T>();
+        int p = joint.Shape[0];
+        int bins = joint.Shape[1];
+        var cellShape = joint.Shape.ToArray();
+        T count = ops.FromDouble(total);
+
+        var binCounts = engine.ReduceSum(joint, new[] { 2 }, true);
+        var safeBins = engine.TensorBroadcastTo(engine.TensorMax(binCounts, ops.One), cellShape);
+        var cellTerms = engine.TensorWhere(engine.TensorGreaterThan(joint, ops.Zero),
+            engine.TensorMultiply(joint, engine.TensorLog(engine.TensorDivide(joint, safeBins))), new Tensor<T>(cellShape));
+        conditional = engine.TensorNegate(engine.TensorDivideScalar(engine.ReduceSum(cellTerms, new[] { 1, 2 }, false), count));
+
+        var binProbabilities = engine.TensorDivideScalar(engine.Reshape(binCounts, new[] { p, bins }), count);
+        var binTerms = engine.TensorWhere(engine.TensorGreaterThan(binProbabilities, ops.Zero),
+            engine.TensorMultiply(binProbabilities, engine.TensorLog(binProbabilities)), new Tensor<T>(new[] { p, bins }));
+        return engine.TensorNegate(engine.ReduceSum(binTerms, new[] { 1 }, false));
+    }
+
+    /// <summary>
+    /// Weighted Gini impurity after splitting by bin, from joint bin/class counts ([p, bins, K]) over
+    /// <paramref name="total"/> samples: <c>sum_b (n_b / n) (1 - sum_c (n_bc / n_b)^2)</c> over the non-empty bins.
+    /// Returns [p].
+    /// </summary>
+    public static Tensor<T> WeightedBinGini<T>(Tensor<T> joint, int total)
+    {
+        var engine = AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<T>();
+        int p = joint.Shape[0];
+        int bins = joint.Shape[1];
+        T count = ops.FromDouble(total);
+        var binCounts = engine.Reshape(engine.ReduceSum(joint, new[] { 2 }, true), new[] { p, bins });
+        var safeBins = engine.TensorMax(binCounts, ops.One);
+        var squares = engine.Reshape(engine.ReduceSum(engine.TensorSquare(joint), new[] { 2 }, true), new[] { p, bins });
+
+        // (n_b / n)(1 - sum_c n_bc^2 / n_b^2) = (n_b - sum_c n_bc^2 / n_b) / n; an empty bin gives 0
+        var binTerms = engine.TensorSubtract(binCounts, engine.TensorDivide(squares, safeBins));
+        return engine.TensorDivideScalar(engine.ReduceSum(binTerms, new[] { 1 }, false), count);
+    }
+
+    /// <summary>Shannon entropy in nats of the class distribution of a one-hot class membership ([n, K]).</summary>
+    public static T ClassEntropyNats<T>(Tensor<T> classOneHot)
+    {
+        var engine = AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<T>();
+        var probabilities = engine.TensorDivideScalar(
+            engine.ReduceSum(classOneHot, new[] { 0 }, false), ops.FromDouble(classOneHot.Shape[0]));
+        var terms = engine.TensorWhere(engine.TensorGreaterThan(probabilities, ops.Zero),
+            engine.TensorMultiply(probabilities, engine.TensorLog(probabilities)), new Tensor<T>(probabilities.Shape.ToArray()));
+        return ops.Negate(engine.TensorSum(terms));
+    }
 }
 
 /// <summary>Impurity used by <see cref="FeatureSelectionTensorOps.TryBestSplit{T}"/>.</summary>
