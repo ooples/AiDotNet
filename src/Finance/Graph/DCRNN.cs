@@ -1282,21 +1282,39 @@ public partial class DCRNN<T> : ForecastingModelBase<T>
             return new Tensor<T>(new[] { quantiles.Length });
 
         int size = samples[0].Data.Length;
-        var result = new Tensor<T>(new[] { quantiles.Length, size });
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
 
-        for (int i = 0; i < size; i++)
+        // One row per sample, sorted down each position; quantile q reads the clamped row (int)(q * (n - 1)).
+        var rows = new Tensor<T>[samples.Count];
+        for (int s = 0; s < samples.Count; s++)
+            rows[s] = Engine.TensorNarrow(Engine.Reshape(samples[s], new[] { samples[s].Length }), 0, 0, size);
+        var grid = Engine.TensorStack(rows, 0);
+
+        if (Engine.TensorCountNonzero(Engine.TensorIsNan(grid)) > 0)
         {
-            var values = samples.Select(s => NumOps.ToDouble(s.Data.Span[i])).OrderBy(v => v).ToList();
-
-            for (int q = 0; q < quantiles.Length; q++)
+            // NaN sorts first under the default double comparer; keep that exact ordering.
+            var result = new Tensor<T>(new[] { quantiles.Length, size });
+            for (int i = 0; i < size; i++)
             {
-                int idx = (int)(quantiles[q] * (values.Count - 1));
-                idx = Math.Max(0, Math.Min(values.Count - 1, idx));
-                result.Data.Span[q * size + i] = NumOps.FromDouble(values[idx]);
+                var values = samples.Select(s => NumOps.ToDouble(s.Data.Span[i])).OrderBy(v => v).ToList();
+
+                for (int q = 0; q < quantiles.Length; q++)
+                {
+                    int idx = (int)(quantiles[q] * (values.Count - 1));
+                    idx = Math.Max(0, Math.Min(values.Count - 1, idx));
+                    result.Data.Span[q * size + i] = NumOps.FromDouble(values[idx]);
+                }
             }
+
+            return result;
         }
 
-        return result;
+        var sorted = Engine.TensorSort(grid, 0, false).Values;
+        var picks = new int[quantiles.Length];
+        for (int q = 0; q < quantiles.Length; q++)
+            picks[q] = Math.Max(0, Math.Min(samples.Count - 1, (int)(quantiles[q] * (samples.Count - 1))));
+
+        return Engine.TensorIndexSelect(sorted, new Tensor<int>(new[] { picks.Length }, new Vector<int>(picks)), 0);
     }
 
     /// <summary>
@@ -1321,16 +1339,12 @@ public partial class DCRNN<T> : ForecastingModelBase<T>
         var quantileTensor = ComputeQuantiles(samples, quantiles);
 
         int size = samples[0].Data.Length;
-        var forecast = new Tensor<T>(new[] { size });
-        var lower = new Tensor<T>(new[] { size });
-        var upper = new Tensor<T>(new[] { size });
 
-        for (int i = 0; i < size; i++)
-        {
-            lower.Data.Span[i] = quantileTensor.Data.Span[0 * size + i];
-            forecast.Data.Span[i] = quantileTensor.Data.Span[1 * size + i];
-            upper.Data.Span[i] = quantileTensor.Data.Span[2 * size + i];
-        }
+        // Rows 0, 1 and 2 of the [quantiles, size] block are the lower, forecast and upper bounds.
+        var flat = Engine.Reshape(quantileTensor, new[] { quantileTensor.Length });
+        var forecast = Engine.TensorNarrow(flat, 0, size, size).Contiguous();
+        var lower = Engine.TensorNarrow(flat, 0, 0, size).Contiguous();
+        var upper = Engine.TensorNarrow(flat, 0, 2 * size, size).Contiguous();
 
         return (forecast, lower, upper);
     }
