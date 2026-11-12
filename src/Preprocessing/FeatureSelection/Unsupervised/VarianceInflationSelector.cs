@@ -58,7 +58,7 @@ public class VarianceInflationSelector<T> : TransformerBase<T, Matrix<T>, Matrix
 
         // Standardize features (sample std + 1e-10)
         var x = Tensor<T>.FromMatrix(data);
-        var centered = SelectorTensorOps.CenterColumns(x);
+        var centered = FilterStatisticTensorOps.CenterColumns(x);
         var stds = engine.TensorAddScalar(
             engine.TensorSqrt(engine.TensorDivideScalar(
                 SelectorTensorOps.ColumnSumOfSquares(centered), NumOps.FromDouble(n - 1))),
@@ -120,7 +120,7 @@ public class VarianceInflationSelector<T> : TransformerBase<T, Matrix<T>, Matrix
         var ssRes = engine.TensorSubtract(
             engine.TensorSubtractScalar(engine.TensorDivide(PreprocessingTensorOps.Filled(new[] { k }, NumOps.One), diagonal), ridge),
             engine.TensorMultiplyScalar(betaNormSquared, ridge));
-        var ssTot = SelectorTensorOps.ColumnSumOfSquares(SelectorTensorOps.CenterColumns(z));
+        var ssTot = SelectorTensorOps.ColumnSumOfSquares(FilterStatisticTensorOps.CenterColumns(z));
 
         var rSquared = SelectorTensorOps.ZeroUnless(
             engine.TensorGreaterThan(ssTot, NumOps.FromDouble(1e-10)),

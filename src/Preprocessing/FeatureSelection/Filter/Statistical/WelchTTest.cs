@@ -78,7 +78,7 @@ public class WelchTTest<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervis
 
         // Split samples by class
         var group0 = FilterStatisticTensorOps.BelowMask(target, 0.5, out int n0);
-        var group1 = FilterStatisticTensorOps.OneMinus(group0);
+        var group1 = PreprocessingTensorOps.OneMinus(group0);
         int n1 = n - n0;
 
         if (n0 < 2 || n1 < 2)
@@ -117,7 +117,7 @@ public class WelchTTest<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervis
         _pValues = pValues.ToVector();
 
         // Select features with smallest p-values
-        _selectedIndices = FilterStatisticTensorOps.BottomKIndicesSorted(pValues, Math.Min(_nFeaturesToSelect, p));
+        _selectedIndices = PreprocessingTensorOps.BottomKIndicesSorted(pValues, Math.Min(_nFeaturesToSelect, p));
 
         IsFitted = true;
     }

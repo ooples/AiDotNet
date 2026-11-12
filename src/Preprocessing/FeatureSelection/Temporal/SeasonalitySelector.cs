@@ -64,7 +64,7 @@ public class SeasonalitySelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, 
 
         var engine = Engine;
         int effectiveMaxPeriod = Math.Min(_maxPeriod, n / 2);
-        var centered = SelectorTensorOps.CenterColumns(Tensor<T>.FromMatrix(data));
+        var centered = FilterStatisticTensorOps.CenterColumns(Tensor<T>.FromMatrix(data));
         var totalVariance = SelectorTensorOps.ColumnSumOfSquares(centered);
 
         // Largest DFT power (|X(1/period)|^2 / n) over the candidate periods

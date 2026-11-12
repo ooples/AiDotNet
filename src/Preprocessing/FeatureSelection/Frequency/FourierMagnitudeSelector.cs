@@ -72,7 +72,7 @@ public class FourierMagnitudeSelector<T> : TransformerBase<T, Matrix<T>, Matrix<
             : FilterStatisticTensorOps.Filled(new[] { p }, NumOps.Zero);
         _spectralEnergies = energies.ToVector();
 
-        _selectedIndices = FilterStatisticTensorOps.TopKIndicesSorted(energies, Math.Min(_nFeaturesToSelect, p));
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(energies, Math.Min(_nFeaturesToSelect, p));
 
         IsFitted = true;
     }

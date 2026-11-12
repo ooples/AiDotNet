@@ -60,7 +60,7 @@ public class AutocorrelationSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T
 
         var engine = Engine;
         int effectiveMaxLag = Math.Min(_maxLag, n / 3);
-        var centered = SelectorTensorOps.CenterColumns(Tensor<T>.FromMatrix(data));
+        var centered = FilterStatisticTensorOps.CenterColumns(Tensor<T>.FromMatrix(data));
         var variance = SelectorTensorOps.ColumnSumOfSquares(centered);
 
         // Largest absolute autocorrelation over lags 1 .. effectiveMaxLag

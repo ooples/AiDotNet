@@ -75,13 +75,6 @@ internal static class SelectorTensorOps
         return engine.TensorAdd(engine.TensorMultiply(re, re), engine.TensorMultiply(im, im));
     }
 
-    /// <summary>Column means subtracted from an [n, m] tensor.</summary>
-    public static Tensor<T> CenterColumns<T>(Tensor<T> x)
-    {
-        var engine = AiDotNetEngine.Current;
-        return engine.TensorSubtract(x, engine.ReduceMean(x, new[] { 0 }, true));
-    }
-
     /// <summary>Column sums of squares of an [n, m] tensor, as [m].</summary>
     public static Tensor<T> ColumnSumOfSquares<T>(Tensor<T> x)
     {
@@ -94,7 +87,7 @@ internal static class SelectorTensorOps
     {
         var ops = MathHelper.GetNumericOperations<T>();
         return AiDotNetEngine.Current.TensorDivideScalar(
-            ColumnSumOfSquares(CenterColumns(x)), ops.FromDouble(x.Shape[0] - 1));
+            ColumnSumOfSquares(FilterStatisticTensorOps.CenterColumns(x)), ops.FromDouble(x.Shape[0] - 1));
     }
 
     /// <summary>Column population variances (divisor n) of an [n, m] tensor, as [m].</summary>
@@ -102,7 +95,7 @@ internal static class SelectorTensorOps
     {
         var ops = MathHelper.GetNumericOperations<T>();
         return AiDotNetEngine.Current.TensorDivideScalar(
-            ColumnSumOfSquares(CenterColumns(x)), ops.FromDouble(x.Shape[0]));
+            ColumnSumOfSquares(FilterStatisticTensorOps.CenterColumns(x)), ops.FromDouble(x.Shape[0]));
     }
 
     /// <summary>
@@ -146,7 +139,7 @@ internal static class SelectorTensorOps
         var ops = MathHelper.GetNumericOperations<T>();
         int n = x.Shape[0];
         int p = x.Shape[1];
-        var centered = CenterColumns(x);
+        var centered = FilterStatisticTensorOps.CenterColumns(x);
         var covariance = engine.TensorDivideScalar(
             engine.TensorMatMul(engine.TensorTranspose(centered), centered), ops.FromDouble(n - 1));
         var std = engine.TensorAddScalar(
@@ -205,7 +198,7 @@ internal static class SelectorTensorOps
         var ops = MathHelper.GetNumericOperations<T>();
         int n = x.Shape[0];
         int m = x.Shape[1];
-        var centered = CenterColumns(x);
+        var centered = FilterStatisticTensorOps.CenterColumns(x);
         var std = engine.TensorSqrt(engine.TensorDivideScalar(
             ColumnSumOfSquares(centered), ops.FromDouble(sample ? n - 1 : n)));
         std = engine.TensorWhere(engine.TensorLessThan(std, ops.FromDouble(minStd)),
@@ -263,8 +256,8 @@ internal static class SelectorTensorOps
         var engine = AiDotNetEngine.Current;
         var ops = MathHelper.GetNumericOperations<T>();
         int m = x.Shape[1];
-        var xc = CenterColumns(x);
-        var yc = CenterColumns(y);
+        var xc = FilterStatisticTensorOps.CenterColumns(x);
+        var yc = FilterStatisticTensorOps.CenterColumns(y);
         var sxy = engine.ReduceSum(engine.TensorMultiply(xc, yc), new[] { 0 }, false);
         var sxx = ColumnSumOfSquares(xc);
         T syy = engine.TensorSum(engine.TensorMultiply(yc, yc));
@@ -360,113 +353,6 @@ internal static class SelectorTensorOps
         var q = engine.TensorIgammac(engine.TensorMultiplyScalar(engine.TensorWhere(defined, df, one), half),
             engine.TensorMultiplyScalar(engine.TensorWhere(defined, statistic, one), half));
         return engine.TensorWhere(defined, q, one);
-    }
-
-    /// <summary>
-    /// Element-wise regularized incomplete beta function <c>I_x(a, b)</c> (scipy.special.betainc) by the continued
-    /// fraction of Numerical Recipes (modified Lentz, up to 300 terms), using the symmetry
-    /// <c>I_x(a, b) = 1 - I_{1-x}(b, a)</c> where the fraction converges faster. <c>x</c> is clamped to [0, 1].
-    /// </summary>
-    public static Tensor<T> RegularizedIncompleteBeta<T>(Tensor<T> a, Tensor<T> b, Tensor<T> x)
-    {
-        var engine = AiDotNetEngine.Current;
-        var ops = MathHelper.GetNumericOperations<T>();
-        var shape = x.Shape.ToArray();
-        var zero = new Tensor<T>(shape);
-        var one = PreprocessingTensorOps.Filled(shape, ops.One);
-        var clamped = engine.TensorClamp(x, ops.Zero, ops.One);
-        var interior = engine.TensorMultiply(engine.TensorGreaterThan(clamped, ops.Zero), engine.TensorLessThan(clamped, ops.One));
-        var safeX = engine.TensorWhere(interior, clamped, PreprocessingTensorOps.Filled(shape, ops.FromDouble(0.5)));
-        var complement = PreprocessingTensorOps.OneMinus(safeX);
-
-        // Front factor x^a (1 - x)^b / (a B(a, b))
-        var logFront = engine.TensorAdd(engine.TensorSubtract(engine.TensorSubtract(
-            engine.TensorLgamma(engine.TensorAdd(a, b)), engine.TensorLgamma(a)), engine.TensorLgamma(b)),
-            engine.TensorAdd(engine.TensorMultiply(a, engine.TensorLog(safeX)), engine.TensorMultiply(b, engine.TensorLog(complement))));
-        var front = engine.TensorExp(logFront);
-
-        // Direct fraction where x < (a + 1) / (a + b + 2), else the symmetric one
-        var direct = engine.TensorLessThan(safeX, engine.TensorDivide(engine.TensorAddScalar(a, ops.One),
-            engine.TensorAddScalar(engine.TensorAdd(a, b), ops.FromDouble(2))));
-        var fa = engine.TensorWhere(direct, a, b);
-        var fb = engine.TensorWhere(direct, b, a);
-        var fx = engine.TensorWhere(direct, safeX, complement);
-        var fraction = engine.TensorDivide(engine.TensorMultiply(front, BetaContinuedFraction(fa, fb, fx)), fa);
-        var value = engine.TensorWhere(direct, fraction, PreprocessingTensorOps.OneMinus(fraction));
-
-        // x = 0 gives 0 and x = 1 gives 1
-        return engine.TensorWhere(interior, value, engine.TensorWhere(engine.TensorGreaterThan(clamped, ops.Zero), one, zero));
-    }
-
-    private static Tensor<T> BetaContinuedFraction<T>(Tensor<T> a, Tensor<T> b, Tensor<T> x)
-    {
-        var engine = AiDotNetEngine.Current;
-        var ops = MathHelper.GetNumericOperations<T>();
-        var shape = x.Shape.ToArray();
-        T tiny = ops.FromDouble(1e-30);
-        T epsilon = ops.FromDouble(3e-16);
-        T one = ops.One;
-        var tinyTensor = PreprocessingTensorOps.Filled(shape, tiny);
-
-        Tensor<T> AwayFromZero(Tensor<T> t) =>
-            engine.TensorWhere(engine.TensorLessThan(engine.TensorAbs(t), tiny), tinyTensor, t);
-
-        var qab = engine.TensorAdd(a, b);
-        var qap = engine.TensorAddScalar(a, one);
-        var qam = engine.TensorSubtractScalar(a, one);
-        var c = PreprocessingTensorOps.Filled(shape, one);
-        var d = engine.TensorReciprocal(AwayFromZero(PreprocessingTensorOps.OneMinus(
-            engine.TensorDivide(engine.TensorMultiply(qab, x), qap))));
-        var h = d;
-
-        for (int m = 1; m <= 300; m++)
-        {
-            T mT = PreprocessingTensorOps.CountAsScalar<T>(m);
-            T m2 = PreprocessingTensorOps.CountAsScalar<T>(2 * m);
-
-            // Even step: m (b - m) x / ((a - 1 + 2m)(a + 2m))
-            var even = engine.TensorDivide(engine.TensorMultiplyScalar(engine.TensorMultiply(engine.TensorSubtractScalar(b, mT), x), mT),
-                engine.TensorMultiply(engine.TensorAddScalar(qam, m2), engine.TensorAddScalar(a, m2)));
-            d = engine.TensorReciprocal(AwayFromZero(engine.TensorAddScalar(engine.TensorMultiply(even, d), one)));
-            c = AwayFromZero(engine.TensorAddScalar(engine.TensorDivide(even, c), one));
-            h = engine.TensorMultiply(h, engine.TensorMultiply(d, c));
-
-            // Odd step: -(a + m)(a + b + m) x / ((a + 2m)(a + 1 + 2m))
-            var odd = engine.TensorNegate(engine.TensorDivide(
-                engine.TensorMultiply(engine.TensorMultiply(engine.TensorAddScalar(a, mT), engine.TensorAddScalar(qab, mT)), x),
-                engine.TensorMultiply(engine.TensorAddScalar(a, m2), engine.TensorAddScalar(qap, m2))));
-            d = engine.TensorReciprocal(AwayFromZero(engine.TensorAddScalar(engine.TensorMultiply(odd, d), one)));
-            c = AwayFromZero(engine.TensorAddScalar(engine.TensorDivide(odd, c), one));
-            var delta = engine.TensorMultiply(d, c);
-            h = engine.TensorMultiply(h, delta);
-
-            if (PreprocessingTensorOps.IsBelow(engine.TensorMaxValue(engine.TensorAbs(engine.TensorSubtractScalar(delta, one))), epsilon))
-                break;
-        }
-
-        return h;
-    }
-
-    /// <summary>
-    /// F-distribution survival function <c>P(F &gt;= f)</c> for F ~ F(df1, df2) (scipy.stats.f.sf):
-    /// <c>I_{df2 / (df2 + df1 f)}(df2 / 2, df1 / 2)</c>; 1 where <c>f &lt;= 0</c> or a degree of freedom is not positive.
-    /// </summary>
-    public static Tensor<T> FSurvival<T>(Tensor<T> f, double df1, double df2)
-    {
-        var engine = AiDotNetEngine.Current;
-        var ops = MathHelper.GetNumericOperations<T>();
-        var shape = f.Shape.ToArray();
-        var one = PreprocessingTensorOps.Filled(shape, ops.One);
-        if (df1 <= 0 || df2 <= 0)
-            return one;
-
-        var positive = engine.TensorGreaterThan(f, ops.Zero);
-        var safeF = engine.TensorWhere(positive, f, one);
-        var x = engine.TensorDivide(PreprocessingTensorOps.Filled(shape, ops.FromDouble(df2)),
-            engine.TensorAddScalar(engine.TensorMultiplyScalar(safeF, ops.FromDouble(df1)), ops.FromDouble(df2)));
-        var tail = RegularizedIncompleteBeta(PreprocessingTensorOps.Filled(shape, ops.FromDouble(df2 / 2)),
-            PreprocessingTensorOps.Filled(shape, ops.FromDouble(df1 / 2)), x);
-        return engine.TensorWhere(positive, tail, one);
     }
 
     /// <summary>
@@ -589,7 +475,7 @@ internal static class SelectorTensorOps
         var msb = engine.TensorDivideScalar(between, ops.FromDouble(dfBetween));
         var msw = engine.TensorDivideScalar(within, ops.FromDouble(dfWithin));
         var scores = SeparationRatio(msb, msw, 1e-10);
-        pValues = FSurvival(scores, dfBetween, dfWithin);
+        pValues = FilterStatisticTensorOps.FSurvival(scores, dfBetween, dfWithin);
         return scores;
     }
 
@@ -611,7 +497,7 @@ internal static class SelectorTensorOps
             return PreprocessingTensorOps.Filled(new[] { p }, ops.Zero);
         }
 
-        var xc = CenterColumns(x);
+        var xc = FilterStatisticTensorOps.CenterColumns(x);
         var yc = CenteredColumn(target);
         var sxy = engine.ReduceSum(engine.TensorMultiply(xc, yc), new[] { 0 }, false);
         var sxx = ColumnSumOfSquares(xc);
@@ -626,7 +512,7 @@ internal static class SelectorTensorOps
         var msResidual = engine.TensorDivideScalar(ssResidual, ops.FromDouble(dfResidual));
 
         var scores = SeparationRatio(ssRegression, msResidual, 1e-10);
-        pValues = FSurvival(scores, 1, dfResidual);
+        pValues = FilterStatisticTensorOps.FSurvival(scores, 1, dfResidual);
         return scores;
     }
 
@@ -779,7 +665,7 @@ internal static class SelectorTensorOps
         var predictions = engine.TensorMatMul(xs, engine.Reshape(coefficients, new[] { indices.Length, 1 }));
         var residual = engine.TensorSubtract(y, predictions);
         T ssRes = engine.TensorSum(engine.TensorMultiply(residual, residual));
-        var centered = CenterColumns(y);
+        var centered = FilterStatisticTensorOps.CenterColumns(y);
         T ssTot = engine.TensorSum(engine.TensorMultiply(centered, centered));
         return ops.GreaterThan(ssTot, ops.Zero) ? ops.Subtract(ops.One, ops.Divide(ssRes, ssTot)) : ops.Zero;
     }

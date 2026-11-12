@@ -75,7 +75,7 @@ public class PowerSpectralDensitySelector<T> : TransformerBase<T, Matrix<T>, Mat
         {
             // Apply Hann window w[i] = 0.5 (1 - cos(2 pi i / (n - 1)))
             var window = engine.TensorMultiplyScalar(
-                FilterStatisticTensorOps.OneMinus(engine.TensorCos(engine.TensorMultiplyScalar(
+                PreprocessingTensorOps.OneMinus(engine.TensorCos(engine.TensorMultiplyScalar(
                     engine.TensorArange<T>(0, n, 1), NumOps.FromDouble(2 * Math.PI / (n - 1))))),
                 NumOps.FromDouble(0.5));
             var windowed = engine.TensorMultiply(
@@ -104,7 +104,7 @@ public class PowerSpectralDensitySelector<T> : TransformerBase<T, Matrix<T>, Mat
 
         _psdScores = scores.ToVector();
 
-        _selectedIndices = FilterStatisticTensorOps.TopKIndicesSorted(scores, Math.Min(_nFeaturesToSelect, p));
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(scores, Math.Min(_nFeaturesToSelect, p));
 
         IsFitted = true;
     }

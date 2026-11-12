@@ -80,7 +80,7 @@ public class StudentTTest<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISuperv
 
         // Split samples by class (binary classification): target == 1 is group 1, everything else group 0
         var group1 = engine.TensorEquals(FilterStatisticTensorOps.AsTensor(target), NumOps.One);
-        var group0 = FilterStatisticTensorOps.OneMinus(group1);
+        var group0 = PreprocessingTensorOps.OneMinus(group1);
         int n1 = engine.TensorCountNonzero(group1);
         int n0 = n - n1;
 
@@ -134,7 +134,7 @@ public class StudentTTest<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISuperv
         _pValues = pValues.ToVector();
 
         // Select features with smallest p-values
-        _selectedIndices = FilterStatisticTensorOps.BottomKIndicesSorted(pValues, Math.Min(_nFeaturesToSelect, p));
+        _selectedIndices = PreprocessingTensorOps.BottomKIndicesSorted(pValues, Math.Min(_nFeaturesToSelect, p));
 
         IsFitted = true;
     }

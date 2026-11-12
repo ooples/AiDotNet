@@ -72,7 +72,7 @@ public class PointBiserial<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISuper
 
         // Separate samples by class (binary)
         var class0 = FilterStatisticTensorOps.BelowMask(target, 0.5, out int n0);
-        var class1 = FilterStatisticTensorOps.OneMinus(class0);
+        var class1 = PreprocessingTensorOps.OneMinus(class0);
         int n1 = n - n0;
 
         if (n0 == 0 || n1 == 0)

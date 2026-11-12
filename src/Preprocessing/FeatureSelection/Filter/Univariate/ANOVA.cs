@@ -91,7 +91,7 @@ public class ANOVA<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFea
             : FilterStatisticTensorOps.FilledLike(fStatistics, NumOps.One).ToVector();
 
         // Select top features by F-statistic
-        _selectedIndices = FilterStatisticTensorOps.TopKIndicesSorted(fStatistics, Math.Min(_nFeaturesToSelect, p));
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(fStatistics, Math.Min(_nFeaturesToSelect, p));
 
         IsFitted = true;
     }
