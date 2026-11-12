@@ -2,22 +2,36 @@ using AiDotNet.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Enums;
 using AiDotNet.Attributes;
+using AiDotNet.Preprocessing.FeatureSelection.Helpers;
 
 namespace AiDotNet.Preprocessing.FeatureSelection.Online;
 
 /// <summary>
-/// Online Streaming Feature Selection (OSFS) for feature selection.
+/// Online Streaming Feature Selection (OSFS) of Wu et al. 2013 ("Online Feature Selection with Streaming Features",
+/// IEEE TPAMI 35(5)).
 /// </summary>
 /// <remarks>
 /// <para>
-/// OSFS performs feature selection in an online/streaming fashion where features
-/// arrive one at a time. It maintains a set of selected features and uses
-/// conditional independence tests to decide whether to add new features.
+/// The features arrive one at a time, in column order. Each new feature X goes through the paper's two steps:
+/// <list type="number">
+/// <item><b>Online relevance analysis:</b> X is discarded when it is independent of the target C,
+/// <c>Ind(C, X | {})</c>.</item>
+/// <item><b>Online redundancy analysis:</b> otherwise X joins the best candidate features BCF, and every Y in BCF
+/// is removed when some subset S of the other BCF features (|S| up to <see cref="MaxConditioningSetSize"/>) makes
+/// it conditionally independent of the target, <c>Ind(C, Y | S)</c>.</item>
+/// </list>
+/// The independence tests are Fisher's z test on the partial correlation at level <see cref="Alpha"/>, as in the
+/// authors' LOFS toolbox (<c>osfs_z</c>): <c>W = sqrt(n - |S| - 3) atanh(r)</c>, independent when the two-sided
+/// p-value <c>2 Phi(-|W|)</c> exceeds alpha.
+/// </para>
+/// <para>
+/// OSFS decides the subset size itself. <see cref="NFeaturesToSelect"/> caps it: when BCF ends larger, the features
+/// with the strongest correlation with the target are kept.
 /// </para>
 /// <para><b>For Beginners:</b> Imagine features arriving one by one like a stream.
-/// For each new feature, OSFS asks: "Does this add useful information beyond what
-/// I already have?" If yes, it keeps the feature. It also checks if any existing
-/// features become redundant after adding the new one.
+/// For each new feature, OSFS asks: "Is this related to the target at all?" If yes, it keeps the feature and then
+/// re-checks every kept feature: one that tells nothing more about the target once some of the others are known is
+/// dropped.
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type for calculations.</typeparam>
@@ -27,35 +41,52 @@ public class OSFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFeat
 {
     private readonly int _nFeaturesToSelect;
     private readonly double _alpha;
-    private readonly double _epsilon;
+    private readonly int _maxConditioningSetSize;
 
-    private double[]? _featureScores;
+    private Vector<T>? _featureScores;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
+
+    /// <summary>The significance level of the conditional-independence tests.</summary>
     public double Alpha => _alpha;
-    public double Epsilon => _epsilon;
-    public double[]? FeatureScores => _featureScores;
+
+    /// <summary>The largest conditioning set the redundancy analysis tries.</summary>
+    public int MaxConditioningSetSize => _maxConditioningSetSize;
+
+    /// <summary>The absolute Pearson correlation of every feature with the target.</summary>
+    public Vector<T>? FeatureScores => _featureScores;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
     public override bool SupportsInverseTransform => false;
 
+    /// <summary>
+    /// Creates an OSFS selector.
+    /// </summary>
+    /// <param name="nFeaturesToSelect">The most features to keep.</param>
+    /// <param name="alpha">The significance level of the Fisher z tests (LOFS default 0.05).</param>
+    /// <param name="maxConditioningSetSize">The largest conditioning set of the redundancy analysis (LOFS default 3).</param>
+    /// <param name="columnIndices">The columns to operate on, or null for all columns.</param>
     public OSFS(
         int nFeaturesToSelect = 10,
         double alpha = 0.05,
-        double epsilon = 0.01,
+        int maxConditioningSetSize = 3,
         int[]? columnIndices = null)
         : base(columnIndices)
     {
         if (nFeaturesToSelect < 1)
             throw new ArgumentException("Number of features must be at least 1.", nameof(nFeaturesToSelect));
+        if (!(alpha > 0 && alpha < 1))
+            throw new ArgumentOutOfRangeException(nameof(alpha), "Alpha must be in (0, 1).");
+        if (maxConditioningSetSize < 1)
+            throw new ArgumentOutOfRangeException(nameof(maxConditioningSetSize), "The conditioning set size must be at least 1.");
 
         _nFeaturesToSelect = nFeaturesToSelect;
         _alpha = alpha;
-        _epsilon = epsilon;
+        _maxConditioningSetSize = maxConditioningSetSize;
     }
 
     /// <inheritdoc />
@@ -74,181 +105,179 @@ public class OSFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFeat
         _nInputFeatures = data.Columns;
         int n = data.Rows;
         int p = data.Columns;
+        var engine = Engine;
 
-        _featureScores = new double[p];
-        var selectedSet = new HashSet<int>();
+        // Correlation matrix of the features and the target (the target is variable p)
+        var variables = engine.TensorConcatenate(
+            new[] { Tensor<T>.FromMatrix(data), engine.Reshape(Tensor<T>.FromVector(target), new[] { n, 1 }) }, 1);
+        var correlations = CorrelationMatrix(variables);
+        var withTarget = engine.Reshape(engine.TensorSlice(correlations, new[] { 0, p }, new[] { p, 1 }), new[] { p });
+        var scores = engine.TensorAbs(withTarget);
+        _featureScores = scores.ToVector();
 
-        // Compute initial scores (correlation with target)
-        for (int j = 0; j < p; j++)
-            _featureScores[j] = ComputeCorrelation(data, target, j);
+        // Fisher z factors sqrt(n - k - 3) for conditioning sets of size k = 0 .. max (sizes holds k + 1)
+        int maxSize = _maxConditioningSetSize;
+        var sizes = engine.TensorCumSum(PreprocessingTensorOps.Filled(new[] { maxSize + 1 }, NumOps.One), 0);
+        var factors = engine.TensorSqrt(engine.TensorMax(
+            engine.TensorSubtract(PreprocessingTensorOps.Filled(new[] { maxSize + 1 }, NumOps.FromDouble(n - 2)), sizes),
+            NumOps.Zero));
+        T alpha = NumOps.FromDouble(_alpha);
 
-        // Process features in order of their initial score (descending)
-        var orderedFeatures = _featureScores
-            .Select((s, idx) => (Score: s, Index: idx))
-            .OrderByDescending(x => x.Score)
-            .ToList();
+        // Online relevance analysis needs no conditioning set, so it is one test per feature
+        var marginal = FisherPValues(withTarget, engine.TensorSlice(factors, new[] { 0 }, new[] { 1 }));
+        var relevant = PreprocessingTensorOps.MaskPositions(
+            PreprocessingTensorOps.OneMinus(engine.TensorGreaterThan(marginal, alpha)));
 
-        foreach (var (score, featureIdx) in orderedFeatures)
+        var bestCandidates = new List<int>();
+        foreach (int feature in relevant)
         {
-            if (selectedSet.Count >= _nFeaturesToSelect)
-                break;
+            bestCandidates.Add(feature);
 
-            // Test if feature is significantly correlated with target
-            if (!IsRelevant(score))
-                continue;
-
-            // Test conditional independence given selected features
-            bool isIndependent = true;
-            foreach (int selectedIdx in selectedSet)
+            // Online redundancy analysis over the current BCF, in the order the features arrived
+            foreach (int candidate in bestCandidates.ToArray())
             {
-                if (AreConditionallyDependent(data, target, featureIdx, selectedIdx))
-                {
-                    isIndependent = false;
-                    break;
-                }
+                var others = bestCandidates.Where(f => f != candidate).ToArray();
+                if (others.Length > 0 && IsRedundant(correlations, candidate, p, others, factors, alpha))
+                    bestCandidates.Remove(candidate);
             }
-
-            if (!isIndependent)
-                continue;
-
-            // Add feature to selected set
-            selectedSet.Add(featureIdx);
-
-            // Check if any existing features become redundant
-            var toRemove = new List<int>();
-            foreach (int selectedIdx in selectedSet)
-            {
-                if (selectedIdx == featureIdx)
-                    continue;
-
-                // Check if selectedIdx is now redundant given featureIdx
-                if (IsRedundant(data, target, selectedIdx, featureIdx, selectedSet))
-                    toRemove.Add(selectedIdx);
-            }
-
-            foreach (int idx in toRemove)
-                selectedSet.Remove(idx);
         }
 
-        _selectedIndices = selectedSet.OrderBy(x => x).ToArray();
-
-        // If not enough selected, add top features by score
-        if (_selectedIndices.Length < _nFeaturesToSelect)
+        var kept = bestCandidates.ToArray();
+        if (kept.Length > _nFeaturesToSelect)
         {
-            var additional = orderedFeatures
-                .Where(x => !selectedSet.Contains(x.Index))
-                .Take(_nFeaturesToSelect - _selectedIndices.Length)
-                .Select(x => x.Index);
-
-            _selectedIndices = selectedSet.Concat(additional).OrderBy(x => x).ToArray();
+            var keptScores = engine.TensorIndexSelect(scores, new Tensor<int>((int[])kept.Clone(), new[] { kept.Length }), 0);
+            var strongest = PreprocessingTensorOps.TopKIndicesSorted(keptScores, _nFeaturesToSelect);
+            kept = strongest.Select(i => kept[i]).ToArray();
         }
 
+        Array.Sort(kept);
+        _selectedIndices = kept;
         IsFitted = true;
     }
 
-    private double ComputeCorrelation(Matrix<T> data, Vector<T> target, int featureIdx)
+    /// <summary>
+    /// Whether some conditioning set S of the <paramref name="others"/> (1 &lt;= |S| &lt;= the maximum size) makes
+    /// <paramref name="candidate"/> independent of the target, <c>Ind(C, Y | S)</c> (LOFS <c>compter_dep_2</c>).
+    /// Every subset of one size is tested in one batch.
+    /// </summary>
+    private bool IsRedundant(Tensor<T> correlations, int candidate, int targetIndex, int[] others, Tensor<T> factors, T alpha)
     {
-        int n = data.Rows;
-
-        double xMean = 0, yMean = 0;
-        for (int i = 0; i < n; i++)
+        var engine = Engine;
+        int width = correlations.Shape[0];
+        var flat = engine.Reshape(correlations, new[] { width * width });
+        int largest = Math.Min(_maxConditioningSetSize, others.Length);
+        for (int size = 1; size <= largest; size++)
         {
-            xMean += NumOps.ToDouble(data[i, featureIdx]);
-            yMean += NumOps.ToDouble(target[i]);
-        }
-        xMean /= n;
-        yMean /= n;
+            var subsets = Combinations(others.Length, size);
+            int count = subsets.Count;
+            int order = size + 2;
 
-        double sxy = 0, sxx = 0, syy = 0;
-        for (int i = 0; i < n; i++)
-        {
-            double xDiff = NumOps.ToDouble(data[i, featureIdx]) - xMean;
-            double yDiff = NumOps.ToDouble(target[i]) - yMean;
-            sxy += xDiff * yDiff;
-            sxx += xDiff * xDiff;
-            syy += yDiff * yDiff;
-        }
+            // Correlation submatrices of (Y, C, S) for every subset S, gathered as [count, order, order]
+            var linear = new int[count * order * order];
+            var members = new int[order];
+            members[0] = candidate;
+            members[1] = targetIndex;
+            for (int s = 0; s < count; s++)
+            {
+                for (int k = 0; k < size; k++)
+                    members[k + 2] = others[subsets[s][k]];
+                for (int a = 0; a < order; a++)
+                    for (int b = 0; b < order; b++)
+                        linear[(s * order + a) * order + b] = members[a] * width + members[b];
+            }
 
-        return (sxx > 1e-10 && syy > 1e-10) ? Math.Abs(sxy / Math.Sqrt(sxx * syy)) : 0;
-    }
-
-    private bool IsRelevant(double score)
-    {
-        // A feature is relevant if its correlation exceeds a threshold
-        return score > _epsilon;
-    }
-
-    private bool AreConditionallyDependent(Matrix<T> data, Vector<T> target, int f1, int f2)
-    {
-        int n = data.Rows;
-
-        // Compute partial correlation between f1 and target given f2
-        double r_f1_y = ComputeCorrelation(data, target, f1);
-        double r_f2_y = ComputeCorrelationBetweenFeatures(data, target, f2);
-        double r_f1_f2 = ComputeCorrelationBetweenTwoFeatures(data, f1, f2);
-
-        // Partial correlation formula
-        double denominator = Math.Sqrt((1 - r_f1_f2 * r_f1_f2) * (1 - r_f2_y * r_f2_y));
-        if (denominator < 1e-10)
-            return true; // Assume dependent if can't compute
-
-        double partialCorr = (r_f1_y - r_f1_f2 * r_f2_y) / denominator;
-
-        // Test if partial correlation is significant
-        double t = partialCorr * Math.Sqrt((n - 3) / (1 - partialCorr * partialCorr + 1e-10));
-        double pValue = 2 * (1 - NormalCDF(Math.Abs(t)));
-
-        return pValue < _alpha;
-    }
-
-    private double ComputeCorrelationBetweenFeatures(Matrix<T> data, Vector<T> target, int featureIdx)
-    {
-        return ComputeCorrelation(data, target, featureIdx);
-    }
-
-    private double ComputeCorrelationBetweenTwoFeatures(Matrix<T> data, int f1, int f2)
-    {
-        int n = data.Rows;
-
-        double x1Mean = 0, x2Mean = 0;
-        for (int i = 0; i < n; i++)
-        {
-            x1Mean += NumOps.ToDouble(data[i, f1]);
-            x2Mean += NumOps.ToDouble(data[i, f2]);
-        }
-        x1Mean /= n;
-        x2Mean /= n;
-
-        double sxy = 0, sxx = 0, syy = 0;
-        for (int i = 0; i < n; i++)
-        {
-            double x1Diff = NumOps.ToDouble(data[i, f1]) - x1Mean;
-            double x2Diff = NumOps.ToDouble(data[i, f2]) - x2Mean;
-            sxy += x1Diff * x2Diff;
-            sxx += x1Diff * x1Diff;
-            syy += x2Diff * x2Diff;
+            var blocks = engine.Reshape(
+                engine.TensorIndexSelect(flat, new Tensor<int>(linear, new[] { linear.Length }), 0), new[] { count, order, order });
+            var partial = PartialCorrelations(blocks, out var defined);
+            var factor = engine.TensorSlice(factors, new[] { size }, new[] { 1 });
+            var independent = engine.TensorMultiply(engine.TensorGreaterThan(FisherPValues(partial, factor), alpha), defined);
+            if (PreprocessingTensorOps.CountNonZero(independent) > 0)
+                return true;
         }
 
-        return (sxx > 1e-10 && syy > 1e-10) ? sxy / Math.Sqrt(sxx * syy) : 0;
+        return false;
     }
 
-    private bool IsRedundant(Matrix<T> data, Vector<T> target, int candidate, int conditioning, HashSet<int> currentSet)
+    /// <summary>
+    /// The partial correlation of the first two variables given the rest, for every [order, order] correlation
+    /// block: <c>-P01 / sqrt(P00 P11)</c> with <c>P</c> the inverse of the block. <paramref name="defined"/> is 1
+    /// where the block could be inverted; a singular block counts as dependent.
+    /// </summary>
+    private Tensor<T> PartialCorrelations(Tensor<T> blocks, out Tensor<T> defined)
     {
-        // A feature is redundant if it becomes conditionally independent of target
-        // given the conditioning feature(s)
-        double corrWithTarget = ComputeCorrelation(data, target, candidate);
-        double corrWithConditioning = ComputeCorrelationBetweenTwoFeatures(data, candidate, conditioning);
+        var engine = Engine;
+        int count = blocks.Shape[0];
+        int order = blocks.Shape[1];
+        var unit = engine.TensorSlice(
+            engine.TensorBroadcastTo(engine.Reshape(engine.TensorEye<T>(order), new[] { 1, order, order }), new[] { count, order, order }),
+            new[] { 0, 0, 0 }, new[] { count, order, 2 });
+        var (inverse, info) = LinalgDispatch<T>.SolveEx(blocks, unit);
+        var solved = engine.TensorEquals(info, 0).Cast<T>();
 
-        // If highly correlated with conditioning feature and not much more correlated with target
-        return Math.Abs(corrWithConditioning) > 0.9 && corrWithTarget < _epsilon * 2;
+        var p00 = engine.Reshape(engine.TensorSlice(inverse, new[] { 0, 0, 0 }, new[] { count, 1, 1 }), new[] { count });
+        var p10 = engine.Reshape(engine.TensorSlice(inverse, new[] { 0, 1, 0 }, new[] { count, 1, 1 }), new[] { count });
+        var p11 = engine.Reshape(engine.TensorSlice(inverse, new[] { 0, 1, 1 }, new[] { count, 1, 1 }), new[] { count });
+        var product = engine.TensorWhere(solved, engine.TensorMultiply(p00, p11), new Tensor<T>(new[] { count }));
+        defined = engine.TensorGreaterThan(product, NumOps.Zero);
+        var safeScale = engine.TensorSqrt(engine.TensorWhere(defined, product, PreprocessingTensorOps.Filled(new[] { count }, NumOps.One)));
+        var safeOffDiagonal = engine.TensorWhere(defined, p10, new Tensor<T>(new[] { count }));
+        return engine.TensorNegate(engine.TensorDivide(safeOffDiagonal, safeScale));
     }
 
-    private double NormalCDF(double x)
+    /// <summary>
+    /// Two-sided p-values of Fisher's z test, <c>2 Phi(-|sqrt(n - |S| - 3) atanh(r)|)</c>, for the correlations
+    /// <paramref name="r"/> and the [1] factor <c>sqrt(n - |S| - 3)</c>.
+    /// </summary>
+    private Tensor<T> FisherPValues(Tensor<T> r, Tensor<T> factor)
     {
-        double t = 1.0 / (1.0 + 0.2316419 * Math.Abs(x));
-        double d = 0.3989423 * Math.Exp(-x * x / 2);
-        double p = d * t * (0.3193815 + t * (-0.3565638 + t * (1.781478 + t * (-1.821256 + t * 1.330274))));
-        return x > 0 ? 1 - p : p;
+        var engine = Engine;
+        var clipped = engine.TensorMax(engine.TensorMin(r, NumOps.One), NumOps.Negate(NumOps.One));
+        var w = engine.TensorMultiply(engine.TensorAtanh(clipped), engine.TensorBroadcastTo(factor, clipped.Shape.ToArray()));
+        return engine.TensorMultiplyScalar(engine.TensorNdtr(engine.TensorNegate(engine.TensorAbs(w))), NumOps.FromDouble(2));
+    }
+
+    /// <summary>
+    /// Pearson correlation matrix of the columns of an [n, v] tensor, with an exact unit diagonal; a constant column
+    /// is uncorrelated with every other.
+    /// </summary>
+    private Tensor<T> CorrelationMatrix(Tensor<T> x)
+    {
+        var engine = Engine;
+        int n = x.Shape[0];
+        int v = x.Shape[1];
+        var centered = FilterStatisticTensorOps.CenterColumns(x);
+        var std = FeatureSelectionTensorOps.CenteredColumnStd(centered);
+        var varying = engine.TensorGreaterThan(std, NumOps.Zero);
+        var safeStd = engine.Reshape(engine.TensorWhere(varying, std, PreprocessingTensorOps.Filled(new[] { v }, NumOps.One)), new[] { 1, v });
+        var standardized = engine.TensorMultiply(
+            engine.TensorDivide(centered, safeStd), engine.TensorBroadcastTo(engine.Reshape(varying, new[] { 1, v }), new[] { n, v }));
+        var correlations = engine.TensorDivideScalar(
+            engine.TensorMatMul(engine.TensorTranspose(standardized), standardized), NumOps.FromDouble(Math.Max(n, 1)));
+        var eye = engine.TensorEye<T>(v);
+        return engine.TensorAdd(engine.TensorMultiply(correlations, PreprocessingTensorOps.OneMinus(eye)), eye);
+    }
+
+    /// <summary>All k-subsets of 0 .. count-1 in lexicographic order (MATLAB <c>nchoosek</c> order).</summary>
+    private static List<int[]> Combinations(int count, int k)
+    {
+        var result = new List<int[]>();
+        var current = new int[k];
+        for (int i = 0; i < k; i++)
+            current[i] = i;
+
+        while (true)
+        {
+            result.Add((int[])current.Clone());
+            int position = k - 1;
+            while (position >= 0 && current[position] == count - k + position)
+                position--;
+            if (position < 0)
+                return result;
+
+            current[position]++;
+            for (int i = position + 1; i < k; i++)
+                current[i] = current[i - 1] + 1;
+        }
     }
 
     /// <inheritdoc />
@@ -264,15 +293,7 @@ public class OSFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFeat
         if (_selectedIndices is null)
             throw new InvalidOperationException("OSFS has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

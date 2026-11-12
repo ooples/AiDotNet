@@ -2,6 +2,7 @@ using AiDotNet.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Enums;
 using AiDotNet.Attributes;
+using AiDotNet.Preprocessing.FeatureSelection.Helpers;
 
 namespace AiDotNet.Preprocessing.FeatureSelection.Quantile;
 
@@ -25,13 +26,13 @@ public class QuantileDispersionSelector<T> : TransformerBase<T, Matrix<T>, Matri
 {
     private readonly int _nFeaturesToSelect;
 
-    private double[]? _qcdValues;
+    private Vector<T>? _qcdValues;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
-    public double[]? QCDValues => _qcdValues;
+    public Vector<T>? QCDValues => _qcdValues;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -52,61 +53,25 @@ public class QuantileDispersionSelector<T> : TransformerBase<T, Matrix<T>, Matri
     protected override void FitCore(Matrix<T> data)
     {
         _nInputFeatures = data.Columns;
-        int n = data.Rows;
         int p = data.Columns;
 
-        var X = new double[n, p];
-        for (int i = 0; i < n; i++)
-            for (int j = 0; j < p; j++)
-                X[i, j] = NumOps.ToDouble(data[i, j]);
+        var engine = Engine;
+        var x = Tensor<T>.FromMatrix(data);
+        var q1 = FilterStatisticTensorOps.ColumnQuantile(x, 0.25);
+        var q3 = FilterStatisticTensorOps.ColumnQuantile(x, 0.75);
 
-        _qcdValues = new double[p];
-
-        for (int j = 0; j < p; j++)
-        {
-            var col = new double[n];
-            for (int i = 0; i < n; i++)
-                col[i] = X[i, j];
-
-            var sorted = col.OrderBy(v => v).ToArray();
-            double q1 = GetQuantile(sorted, 0.25);
-            double q3 = GetQuantile(sorted, 0.75);
-
-            // QCD = (Q3 - Q1) / (Q3 + Q1)
-            double sum = q3 + q1;
-            if (Math.Abs(sum) < 1e-10)
-            {
-                // If Q1 and Q3 cancel out, use IQR directly
-                _qcdValues[j] = q3 - q1;
-            }
-            else
-            {
-                _qcdValues[j] = (q3 - q1) / Math.Abs(sum);
-            }
-        }
+        // QCD = (Q3 - Q1) / |Q3 + Q1|; where Q1 and Q3 cancel out (|Q3 + Q1| < 1e-10), the IQR itself
+        var iqr = engine.TensorSubtract(q3, q1);
+        var absSum = engine.TensorAbs(engine.TensorAdd(q3, q1));
+        var cancels = engine.TensorLessThan(absSum, NumOps.FromDouble(1e-10));
+        var safeSum = engine.TensorWhere(cancels, PreprocessingTensorOps.Filled(new[] { p }, NumOps.One), absSum);
+        var qcd = engine.TensorWhere(cancels, iqr, engine.TensorDivide(iqr, safeSum));
+        _qcdValues = qcd.ToVector();
 
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = Enumerable.Range(0, p)
-            .OrderByDescending(j => _qcdValues[j])
-            .Take(numToSelect)
-            .OrderBy(x => x)
-            .ToArray();
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(qcd, numToSelect);
 
         IsFitted = true;
-    }
-
-    private double GetQuantile(double[] sortedData, double quantile)
-    {
-        int n = sortedData.Length;
-        double index = quantile * (n - 1);
-        int lower = (int)Math.Floor(index);
-        int upper = (int)Math.Ceiling(index);
-
-        if (lower == upper)
-            return sortedData[lower];
-
-        double fraction = index - lower;
-        return sortedData[lower] * (1 - fraction) + sortedData[upper] * fraction;
     }
 
     public new Matrix<T> FitTransform(Matrix<T> data)
@@ -121,15 +86,7 @@ public class QuantileDispersionSelector<T> : TransformerBase<T, Matrix<T>, Matri
         if (_selectedIndices is null)
             throw new InvalidOperationException("QuantileDispersionSelector has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

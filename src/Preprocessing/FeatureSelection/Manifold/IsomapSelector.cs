@@ -2,6 +2,7 @@ using AiDotNet.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Enums;
 using AiDotNet.Attributes;
+using AiDotNet.Preprocessing.FeatureSelection.Helpers;
 
 namespace AiDotNet.Preprocessing.FeatureSelection.Manifold;
 
@@ -25,14 +26,14 @@ public class IsomapSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IFixe
     private readonly int _nFeaturesToSelect;
     private readonly int _nNeighbors;
 
-    private double[]? _manifoldScores;
+    private Vector<T>? _manifoldScores;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public int NNeighbors => _nNeighbors;
-    public double[]? ManifoldScores => _manifoldScores;
+    public Vector<T>? ManifoldScores => _manifoldScores;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -58,87 +59,59 @@ public class IsomapSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IFixe
         int n = data.Rows;
         int p = data.Columns;
 
-        var X = new double[n, p];
-        for (int i = 0; i < n; i++)
-            for (int j = 0; j < p; j++)
-                X[i, j] = NumOps.ToDouble(data[i, j]);
+        var engine = Engine;
+        var x = Tensor<T>.FromMatrix(data);
+        int k = Math.Min(_nNeighbors, n - 1);
 
-        // Compute full distance matrix
-        var fullDist = ComputeDistanceMatrix(X, n, Enumerable.Range(0, p).ToList());
+        // Geodesic distances along the manifold: shortest paths through the symmetrized k-NN graph whose
+        // edges are Euclidean lengths (the Isomap construction; scikit-learn's Isomap uses the same graph)
+        var euclidean = FeatureSelectionTensorOps.PairwiseDistances(x);
+        var neighbors = FeatureSelectionTensorOps.KNearestMask(euclidean, k);
+        var adjacency = engine.TensorMax(neighbors, engine.TensorTranspose(neighbors));
+        var geodesic = FeatureSelectionTensorOps.ShortestPaths(euclidean, adjacency, out var reachable);
 
-        _manifoldScores = new double[p];
-
-        // For each feature, measure how well it preserves manifold structure
-        for (int j = 0; j < p; j++)
+        // Each feature scores the Pearson correlation between its single-feature distances |x_i - x_j| and
+        // the geodesic distances, over the connected pairs i != j
+        var pairs = engine.TensorMultiply(reachable, PreprocessingTensorOps.OneMinus(engine.TensorEye<T>(n)));
+        T pairCount = engine.TensorSum(pairs);
+        var scores = new Tensor<T>(new[] { p });
+        if (NumOps.GreaterThan(pairCount, NumOps.Zero))
         {
-            // Compute distance matrix using only this feature
-            var singleDist = ComputeDistanceMatrix(X, n, new List<int> { j });
+            T meanGeodesic = NumOps.Divide(engine.TensorSum(engine.TensorMultiply(pairs, geodesic)), pairCount);
+            var centeredGeodesic = engine.TensorMultiply(pairs, engine.TensorSubtractScalar(geodesic, meanGeodesic));
+            T geodesicVariation = engine.TensorSum(engine.TensorSquare(centeredGeodesic));
 
-            // Correlation between full and single-feature distances
-            _manifoldScores[j] = ComputeDistanceCorrelation(fullDist, singleDist, n);
+            var sums = FeatureSelectionTensorOps.AbsDifferenceSums(x, pairs, centeredGeodesic); // [p, 2]
+            var distanceSum = engine.Reshape(engine.TensorSlice(sums, new[] { 0, 0 }, new[] { p, 1 }), new[] { p });
+            var covariation = engine.Reshape(engine.TensorSlice(sums, new[] { 0, 1 }, new[] { p, 1 }), new[] { p });
+
+            // sum_ij P_ij (x_i - x_j)^2 = 2 (sum_i deg_i x_i^2 - x' P x) for the symmetric pair mask P
+            var degree = engine.ReduceSum(pairs, new[] { 1 }, true);
+            var squaredSum = engine.TensorMultiplyScalar(
+                engine.TensorSubtract(
+                    engine.ReduceSum(engine.TensorMultiply(engine.TensorSquare(x), degree), new[] { 0 }, false),
+                    engine.ReduceSum(engine.TensorMultiply(x, engine.TensorMatMul(pairs, x)), new[] { 0 }, false)),
+                NumOps.FromDouble(2));
+            var distanceVariation = engine.TensorMax(
+                engine.TensorSubtract(squaredSum, engine.TensorDivideScalar(engine.TensorSquare(distanceSum), pairCount)),
+                NumOps.Zero);
+
+            if (NumOps.GreaterThan(geodesicVariation, NumOps.FromDouble(1e-10)))
+            {
+                var defined = engine.TensorGreaterThan(distanceVariation, NumOps.FromDouble(1e-10));
+                var safeVariation = engine.TensorWhere(defined, distanceVariation, PreprocessingTensorOps.Filled(new[] { p }, NumOps.One));
+                var correlation = engine.TensorDivide(
+                    covariation, engine.TensorSqrt(engine.TensorMultiplyScalar(safeVariation, geodesicVariation)));
+                scores = engine.TensorWhere(defined, correlation, scores);
+            }
         }
+
+        _manifoldScores = scores.ToVector();
 
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = Enumerable.Range(0, p)
-            .OrderByDescending(j => _manifoldScores[j])
-            .Take(numToSelect)
-            .OrderBy(x => x)
-            .ToArray();
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(scores, numToSelect);
 
         IsFitted = true;
-    }
-
-    private double[,] ComputeDistanceMatrix(double[,] X, int n, List<int> features)
-    {
-        var dist = new double[n, n];
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = i + 1; j < n; j++)
-            {
-                double d = 0;
-                foreach (int f in features)
-                {
-                    double diff = X[i, f] - X[j, f];
-                    d += diff * diff;
-                }
-                d = Math.Sqrt(d);
-                dist[i, j] = d;
-                dist[j, i] = d;
-            }
-        }
-        return dist;
-    }
-
-    private double ComputeDistanceCorrelation(double[,] dist1, double[,] dist2, int n)
-    {
-        var d1 = new List<double>();
-        var d2 = new List<double>();
-
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = i + 1; j < n; j++)
-            {
-                d1.Add(dist1[i, j]);
-                d2.Add(dist2[i, j]);
-            }
-        }
-
-        if (d1.Count == 0) return 0;
-
-        double mean1 = d1.Average();
-        double mean2 = d2.Average();
-
-        double cov = 0, var1 = 0, var2 = 0;
-        for (int i = 0; i < d1.Count; i++)
-        {
-            double x1 = d1[i] - mean1;
-            double x2 = d2[i] - mean2;
-            cov += x1 * x2;
-            var1 += x1 * x1;
-            var2 += x2 * x2;
-        }
-
-        return (var1 > 1e-10 && var2 > 1e-10) ? cov / Math.Sqrt(var1 * var2) : 0;
     }
 
     public new Matrix<T> FitTransform(Matrix<T> data)
@@ -153,15 +126,7 @@ public class IsomapSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IFixe
         if (_selectedIndices is null)
             throw new InvalidOperationException("IsomapSelector has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

@@ -2,6 +2,7 @@ using AiDotNet.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Enums;
 using AiDotNet.Attributes;
+using AiDotNet.Preprocessing.FeatureSelection.Helpers;
 
 namespace AiDotNet.Preprocessing.FeatureSelection.Neural;
 
@@ -25,13 +26,13 @@ public class ScoreCAMSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISu
 {
     private readonly int _nFeaturesToSelect;
 
-    private double[]? _scoreWeights;
+    private Vector<T>? _scoreWeights;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
-    public double[]? ScoreWeights => _scoreWeights;
+    public Vector<T>? ScoreWeights => _scoreWeights;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -64,114 +65,69 @@ public class ScoreCAMSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISu
         _nInputFeatures = data.Columns;
         int n = data.Rows;
         int p = data.Columns;
+        if (p == 0)
+            throw new InvalidOperationException("Sequence contains no elements");
 
-        var X = new double[n, p];
-        var y = new double[n];
-        for (int i = 0; i < n; i++)
-        {
-            y[i] = NumOps.ToDouble(target[i]);
-            for (int j = 0; j < p; j++)
-                X[i, j] = NumOps.ToDouble(data[i, j]);
-        }
+        var engine = Engine;
+        var X = Tensor<T>.FromMatrix(data);
+        var y = engine.Reshape(Tensor<T>.FromVector(target), new[] { n, 1 });
 
-        _scoreWeights = new double[p];
+        // Normalize every feature to [0, 1] as its activation map (all 0 for a constant feature)
+        var min = engine.Reshape(PreprocessingTensorOps.ColumnMin(X), new[] { 1, p });
+        var range = engine.TensorSubtract(engine.Reshape(PreprocessingTensorOps.ColumnMax(X), new[] { 1, p }), min);
+        var varying = engine.TensorGreaterThan(range, NumOps.FromDouble(1e-10));
+        var safeRange = engine.TensorWhere(varying, range, PreprocessingTensorOps.Filled(new[] { 1, p }, NumOps.One));
+        var activationMaps = engine.TensorMultiply(
+            engine.TensorDivide(engine.TensorSubtract(X, min), safeRange), engine.TensorBroadcastTo(varying, new[] { n, p }));
 
-        // Compute baseline prediction score (using correlation as proxy)
-        double baselineScore = ComputePredictionScore(X, y, Enumerable.Range(0, p).ToArray());
-
-        // For each feature, compute activation map score
+        // For each feature, the prediction score of the input masked (element-wise) by its activation map
+        var maskedScores = new Tensor<T>[p];
         for (int j = 0; j < p; j++)
         {
-            // Normalize feature to [0, 1] as activation map
-            var col = new double[n];
-            for (int i = 0; i < n; i++)
-                col[i] = X[i, j];
-
-            double min = col.Min();
-            double max = col.Max();
-            double range = max - min;
-
-            var activationMap = new double[n];
-            if (range > 1e-10)
-            {
-                for (int i = 0; i < n; i++)
-                    activationMap[i] = (col[i] - min) / range;
-            }
-
-            // Create masked input (element-wise multiplication with activation)
-            var maskedX = new double[n, p];
-            for (int i = 0; i < n; i++)
-            {
-                for (int k = 0; k < p; k++)
-                    maskedX[i, k] = X[i, k] * activationMap[i];
-            }
-
-            // Compute score with this activation map
-            double maskedScore = ComputePredictionScore(maskedX, y, Enumerable.Range(0, p).ToArray());
-
-            // Score-CAM weight: how much does this activation map contribute?
-            // Using softmax-normalized increase in confidence
-            _scoreWeights[j] = Math.Max(0, maskedScore);
+            var activationMap = engine.TensorBroadcastTo(engine.TensorSlice(activationMaps, new[] { 0, j }, new[] { n, 1 }), new[] { n, p });
+            maskedScores[j] = ComputePredictionScore(engine.TensorMultiply(X, activationMap), y);
         }
 
-        // Softmax normalization
-        double maxScore = _scoreWeights.Max();
-        double expSum = _scoreWeights.Sum(s => Math.Exp(s - maxScore));
-        for (int j = 0; j < p; j++)
-            _scoreWeights[j] = Math.Exp(_scoreWeights[j] - maxScore) / expSum;
+        // Score-CAM weight: softmax of the non-negative masked scores
+        var scores = engine.TensorMax(engine.TensorConcatenate(maskedScores, 0), NumOps.Zero);
+        var shifted = engine.TensorExp(engine.TensorSubtractScalar(scores, engine.TensorMaxValue(scores)));
+        var scoreWeights = engine.TensorDivideScalar(shifted, engine.TensorSum(shifted));
+        _scoreWeights = scoreWeights.ToVector();
 
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = Enumerable.Range(0, p)
-            .OrderByDescending(j => _scoreWeights[j])
-            .Take(numToSelect)
-            .OrderBy(x => x)
-            .ToArray();
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(scoreWeights, numToSelect);
 
         IsFitted = true;
     }
 
-    private double ComputePredictionScore(double[,] X, double[] y, int[] features)
+    /// <summary>
+    /// R² ([1]) of the sum of the per-feature simple regressions of y on the columns of <paramref name="X"/>
+    /// (slope Sxy / Sxx, 0 when Sxx is not above 1e-10); 0 when the target has no variance.
+    /// </summary>
+    private Tensor<T> ComputePredictionScore(Tensor<T> X, Tensor<T> y)
     {
-        int n = X.GetLength(0);
+        var engine = Engine;
+        int p = X.Shape[1];
+        var centeredY = engine.TensorSubtract(y, engine.ReduceMean(y, new[] { 0 }, true));
+        T ssTotal = engine.TensorSum(engine.TensorSquare(centeredY));
+        if (NumOps.LessThan(ssTotal, NumOps.FromDouble(1e-10)))
+            return new Tensor<T>(new[] { 1 });
 
-        // Use R² as prediction score proxy
-        double meanY = y.Average();
-        double ssTotal = y.Sum(v => (v - meanY) * (v - meanY));
+        var centeredX = engine.TensorSubtract(X, engine.ReduceMean(X, new[] { 0 }, true));
+        var cov = engine.TensorMatMul(engine.TensorTranspose(centeredX), centeredY); // [p, 1]
+        var varX = engine.Reshape(engine.ReduceSum(engine.TensorSquare(centeredX), new[] { 0 }, false), new[] { p, 1 });
+        var defined = engine.TensorGreaterThan(varX, NumOps.FromDouble(1e-10));
+        var safeVarX = engine.TensorWhere(defined, varX, PreprocessingTensorOps.Filled(new[] { p, 1 }, NumOps.One));
+        var beta = engine.TensorWhere(defined, engine.TensorDivide(cov, safeVarX), new Tensor<T>(new[] { p, 1 }));
 
-        if (ssTotal < 1e-10) return 0;
-
-        // Simple linear combination
-        var pred = new double[n];
-        foreach (int j in features)
-        {
-            var col = new double[n];
-            for (int i = 0; i < n; i++)
-                col[i] = X[i, j];
-
-            double meanX = col.Average();
-            double cov = 0, varX = 0;
-            for (int i = 0; i < n; i++)
-            {
-                cov += (col[i] - meanX) * (y[i] - meanY);
-                varX += (col[i] - meanX) * (col[i] - meanX);
-            }
-
-            double beta = varX > 1e-10 ? cov / varX : 0;
-            for (int i = 0; i < n; i++)
-                pred[i] += beta * (col[i] - meanX);
-        }
-
-        for (int i = 0; i < n; i++)
-            pred[i] += meanY;
-
-        double ssResid = 0;
-        for (int i = 0; i < n; i++)
-            ssResid += (y[i] - pred[i]) * (y[i] - pred[i]);
-
-        return 1 - ssResid / ssTotal;
+        // pred - mean(y) = sum_j beta_j (x_j - mean_j); residual = (y - mean(y)) - that
+        var residual = engine.TensorSubtract(centeredY, engine.TensorMatMul(centeredX, beta));
+        T ssResid = engine.TensorSum(engine.TensorSquare(residual));
+        return PreprocessingTensorOps.Filled(new[] { 1 }, NumOps.Subtract(NumOps.One, NumOps.Divide(ssResid, ssTotal)));
     }
 
     /// <inheritdoc />
+
     public Matrix<T> FitTransform(Matrix<T> data, Vector<T> target)
     {
         Fit(data, target);
@@ -184,15 +140,7 @@ public class ScoreCAMSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISu
         if (_selectedIndices is null)
             throw new InvalidOperationException("ScoreCAMSelector has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

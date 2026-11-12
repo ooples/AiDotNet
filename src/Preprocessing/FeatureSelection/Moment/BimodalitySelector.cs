@@ -2,6 +2,7 @@ using AiDotNet.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Enums;
 using AiDotNet.Attributes;
+using AiDotNet.Preprocessing.FeatureSelection.Helpers;
 
 namespace AiDotNet.Preprocessing.FeatureSelection.Moment;
 
@@ -16,7 +17,7 @@ namespace AiDotNet.Preprocessing.FeatureSelection.Moment;
 /// <para><b>For Beginners:</b> Bimodality measures if data has two separate groups.
 /// A high bimodality coefficient (>0.555 for uniform threshold) suggests the feature
 /// naturally separates data into two clusters, which can be useful for classification.
-/// The formula is: BC = (skewness² + 1) / (kurtosis + 3 × (n-1)²/((n-2)(n-3)))
+/// The formula is: BC = (skewness² + 1) / (kurtosis + 3 × (n-1)²/((n-2)(n-3))), with the bias-adjusted/n/// sample skewness and excess kurtosis (as in SAS and Pfister et al. 2013).
 /// </para>
 /// </remarks>
 [ComponentType(ComponentType.FeatureSelector)]
@@ -26,14 +27,14 @@ public class BimodalitySelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, I
     private readonly int _nFeaturesToSelect;
     private readonly bool _preferHighBimodality;
 
-    private double[]? _bimodalityValues;
+    private Vector<T>? _bimodalityValues;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public bool PreferHighBimodality => _preferHighBimodality;
-    public double[]? BimodalityValues => _bimodalityValues;
+    public Vector<T>? BimodalityValues => _bimodalityValues;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -62,68 +63,45 @@ public class BimodalitySelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, I
         if (n < 4)
             throw new ArgumentException("At least 4 samples are required for bimodality calculation.");
 
-        var X = new double[n, p];
-        for (int i = 0; i < n; i++)
-            for (int j = 0; j < p; j++)
-                X[i, j] = NumOps.ToDouble(data[i, j]);
+        var engine = Engine;
+        var centered = FilterStatisticTensorOps.CenterColumns(Tensor<T>.FromMatrix(data));
+        var std = FeatureSelectionTensorOps.CenteredColumnStd(centered);
 
-        _bimodalityValues = new double[p];
+        // Constant columns (std < 1e-10) get 0
+        var constant = engine.TensorLessThan(std, NumOps.FromDouble(1e-10));
+        var safeStd = engine.TensorWhere(constant, PreprocessingTensorOps.Filled(new[] { p }, NumOps.One), std);
+        var z = engine.TensorDivide(centered, engine.Reshape(safeStd, new[] { 1, p }));
+        var z2 = engine.TensorSquare(z);
 
-        for (int j = 0; j < p; j++)
-        {
-            var col = new double[n];
-            for (int i = 0; i < n; i++)
-                col[i] = X[i, j];
+        // Population (biased) skewness g1 and excess kurtosis g2
+        var g1 = engine.ReduceMean(engine.TensorMultiply(z2, z), new[] { 0 }, false);
+        var g2 = engine.TensorSubtractScalar(engine.ReduceMean(engine.TensorSquare(z2), new[] { 0 }, false), NumOps.FromDouble(3));
 
-            double mean = col.Average();
-            double variance = col.Select(v => (v - mean) * (v - mean)).Average();
-            double std = Math.Sqrt(variance);
+        // Sarle's bimodality coefficient uses the bias-adjusted sample skewness and excess kurtosis
+        // (SAS; Pfister et al. 2013; scipy.stats.skew/kurtosis with bias=False):
+        //   G1 = g1 * sqrt(n(n-1)) / (n-2),  G2 = (n-1) / ((n-2)(n-3)) * ((n+1) g2 + 6)
+        //   BC = (G1² + 1) / (G2 + 3(n-1)² / ((n-2)(n-3)))
+        double nd = n;
+        var skewness = engine.TensorMultiplyScalar(g1, NumOps.FromDouble(Math.Sqrt(nd * (nd - 1)) / (nd - 2)));
+        var kurtosis = engine.TensorMultiplyScalar(
+            engine.TensorAddScalar(engine.TensorMultiplyScalar(g2, NumOps.FromDouble(nd + 1)), NumOps.FromDouble(6)),
+            NumOps.FromDouble((nd - 1) / ((nd - 2) * (nd - 3))));
+        double sampleCorrection = 3.0 * (nd - 1) * (nd - 1) / ((nd - 2) * (nd - 3));
+        var denominator = engine.TensorAddScalar(kurtosis, NumOps.FromDouble(sampleCorrection));
 
-            if (std < 1e-10)
-            {
-                _bimodalityValues[j] = 0;
-                continue;
-            }
-
-            // Compute skewness
-            double skewness = col.Select(v => Math.Pow((v - mean) / std, 3)).Average();
-
-            // Compute excess kurtosis
-            double kurtosis = col.Select(v => Math.Pow((v - mean) / std, 4)).Average() - 3;
-
-            // Bimodality coefficient (Sarle's formula)
-            // BC = (skewness² + 1) / (kurtosis + 3 × (n-1)²/((n-2)(n-3)))
-            double skewSquared = skewness * skewness;
-            double sampleCorrection = 3.0 * (n - 1) * (n - 1) / ((double)(n - 2) * (n - 3));
-            double denominator = kurtosis + sampleCorrection;
-
-            // Avoid division by zero or negative
-            if (denominator <= 0)
-                denominator = 1e-10;
-
-            _bimodalityValues[j] = (skewSquared + 1) / denominator;
-        }
+        // Avoid division by zero or negative
+        var nonPositive = PreprocessingTensorOps.OneMinus(engine.TensorGreaterThan(denominator, NumOps.Zero));
+        denominator = engine.TensorWhere(nonPositive, PreprocessingTensorOps.Filled(new[] { p }, NumOps.FromDouble(1e-10)), denominator);
+        var coefficient = engine.TensorDivide(engine.TensorAddScalar(engine.TensorSquare(skewness), NumOps.One), denominator);
+        var bimodality = engine.TensorWhere(constant, new Tensor<T>(new[] { p }), coefficient);
+        _bimodalityValues = bimodality.ToVector();
 
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
 
-        if (_preferHighBimodality)
-        {
-            // Prefer features with high bimodality (likely two-group structure)
-            _selectedIndices = Enumerable.Range(0, p)
-                .OrderByDescending(j => _bimodalityValues[j])
-                .Take(numToSelect)
-                .OrderBy(x => x)
-                .ToArray();
-        }
-        else
-        {
-            // Prefer features with low bimodality (more unimodal)
-            _selectedIndices = Enumerable.Range(0, p)
-                .OrderBy(j => _bimodalityValues[j])
-                .Take(numToSelect)
-                .OrderBy(x => x)
-                .ToArray();
-        }
+        // High bimodality suggests two-group structure; low bimodality means more unimodal
+        _selectedIndices = _preferHighBimodality
+            ? PreprocessingTensorOps.TopKIndicesSorted(bimodality, numToSelect)
+            : PreprocessingTensorOps.BottomKIndicesSorted(bimodality, numToSelect);
 
         IsFitted = true;
     }
@@ -140,15 +118,7 @@ public class BimodalitySelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, I
         if (_selectedIndices is null)
             throw new InvalidOperationException("BimodalitySelector has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

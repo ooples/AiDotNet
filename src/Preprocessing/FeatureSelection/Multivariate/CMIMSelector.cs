@@ -2,6 +2,7 @@ using AiDotNet.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Enums;
 using AiDotNet.Attributes;
+using AiDotNet.Preprocessing.FeatureSelection.Helpers;
 
 namespace AiDotNet.Preprocessing.FeatureSelection.Multivariate;
 
@@ -26,14 +27,14 @@ public class CMIMSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISuperv
     private readonly int _nFeaturesToSelect;
     private readonly int _nBins;
 
-    private double[]? _cmimScores;
+    private Vector<T>? _cmimScores;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public int NBins => _nBins;
-    public double[]? CMIMScores => _cmimScores;
+    public Vector<T>? CMIMScores => _cmimScores;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -68,176 +69,56 @@ public class CMIMSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISuperv
         _nInputFeatures = data.Columns;
         int n = data.Rows;
         int p = data.Columns;
+        if (n == 0)
+            throw new InvalidOperationException("Sequence contains no elements");
 
-        var X = new double[n, p];
-        var y = new double[n];
-        for (int i = 0; i < n; i++)
-        {
-            y[i] = NumOps.ToDouble(target[i]);
-            for (int j = 0; j < p; j++)
-                X[i, j] = NumOps.ToDouble(data[i, j]);
-        }
+        var engine = Engine;
 
         // Discretize
-        var XBins = DiscretizeFeatures(X, n, p);
-        var yBins = DiscretizeTarget(y, n);
+        var XBins = FeatureSelectionInformationOps.EqualWidthBinsPaddedWidth(Tensor<T>.FromMatrix(data), _nBins);
+        var yBins = FeatureSelectionInformationOps.EqualWidthBinsPaddedWidth(engine.Reshape(Tensor<T>.FromVector(target), new[] { n, 1 }), _nBins);
 
         // Compute MI(X_j, Y) for all features
-        var miWithTarget = new double[p];
-        for (int j = 0; j < p; j++)
-            miWithTarget[j] = ComputeMI(XBins, yBins, j, n);
+        var miWithTarget = FeatureSelectionInformationOps.MutualInformationBits<T>(XBins, _nBins, yBins, _nBins);
 
-        // Greedy forward selection with CMIM criterion
+        // Greedy forward selection with the CMIM criterion (Fleuret 2004):
+        // score_j = min over selected s of I(X_j; Y | X_s), and I(X_j; Y) before anything is selected
         var selected = new List<int>();
-        var remaining = new HashSet<int>(Enumerable.Range(0, p));
-        var conditionalMI = new double[p];
-        for (int j = 0; j < p; j++)
-            conditionalMI[j] = miWithTarget[j];
-
-        _cmimScores = new double[p];
+        var remaining = PreprocessingTensorOps.Filled(new[] { p }, NumOps.One);
+        var conditionalMI = miWithTarget;
+        Tensor<T>? minConditionalMI = null;
+        var cmimScores = new Tensor<T>(new[] { p });
 
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        while (selected.Count < numToSelect && remaining.Count > 0)
+        while (selected.Count < numToSelect && selected.Count < p)
         {
-            int bestFeature = -1;
-            double bestScore = double.MinValue;
-
-            foreach (int j in remaining)
-            {
-                // CMIM: min over selected features of I(X_j; Y | X_s)
-                if (selected.Count > 0)
-                {
-                    double minConditionalMI = double.MaxValue;
-                    foreach (int s in selected)
-                    {
-                        double cmi = ComputeConditionalMI(XBins, yBins, j, s, n);
-                        minConditionalMI = Math.Min(minConditionalMI, cmi);
-                    }
-                    conditionalMI[j] = minConditionalMI;
-                }
-
-                if (conditionalMI[j] > bestScore)
-                {
-                    bestScore = conditionalMI[j];
-                    bestFeature = j;
-                }
-            }
-
-            if (bestFeature >= 0)
-            {
-                selected.Add(bestFeature);
-                remaining.Remove(bestFeature);
-                _cmimScores[bestFeature] = bestScore;
-            }
-            else
-            {
+            // Ties go to the lowest index
+            var best = FeatureSelectionTensorOps.TopKWhere(conditionalMI, remaining, 1);
+            if (best.Length == 0)
                 break;
-            }
+
+            int bestFeature = best[0];
+            var chosen = FeatureSelectionTensorOps.OneHot<T>(bestFeature, p);
+            selected.Add(bestFeature);
+            remaining = engine.TensorMultiply(remaining, PreprocessingTensorOps.OneMinus(chosen));
+            cmimScores = engine.TensorAdd(cmimScores, engine.TensorMultiply(chosen, conditionalMI));
+
+            // I(X_j; Y | X_s) = I(X_j, X_s; Y) - I(X_s; Y), with the joint variable X_s * nBins + X_j
+            var pairs = FeatureSelectionInformationOps.Combine(engine.TensorSlice(XBins, new[] { 0, bestFeature }, new[] { n, 1 }), XBins, _nBins);
+            var jointMI = FeatureSelectionInformationOps.MutualInformationBits<T>(pairs, _nBins * _nBins, yBins, _nBins);
+            var selectedMI = engine.TensorBroadcastTo(engine.TensorSlice(miWithTarget, new[] { bestFeature }, new[] { 1 }), new[] { p });
+            var cmi = engine.TensorMax(engine.TensorSubtract(jointMI, selectedMI), NumOps.Zero);
+            minConditionalMI = minConditionalMI is null ? cmi : engine.TensorMin(minConditionalMI, cmi);
+            conditionalMI = minConditionalMI;
         }
 
+        _cmimScores = cmimScores.ToVector();
         _selectedIndices = selected.OrderBy(x => x).ToArray();
         IsFitted = true;
     }
 
-    private int[,] DiscretizeFeatures(double[,] X, int n, int p)
-    {
-        var XBins = new int[n, p];
-        for (int j = 0; j < p; j++)
-        {
-            double minVal = double.MaxValue, maxVal = double.MinValue;
-            for (int i = 0; i < n; i++)
-            {
-                minVal = Math.Min(minVal, X[i, j]);
-                maxVal = Math.Max(maxVal, X[i, j]);
-            }
-            double binWidth = (maxVal - minVal) / _nBins + 1e-10;
-
-            for (int i = 0; i < n; i++)
-                XBins[i, j] = Math.Min((int)((X[i, j] - minVal) / binWidth), _nBins - 1);
-        }
-        return XBins;
-    }
-
-    private int[] DiscretizeTarget(double[] y, int n)
-    {
-        double minVal = y.Min(), maxVal = y.Max();
-        double binWidth = (maxVal - minVal) / _nBins + 1e-10;
-        var yBins = new int[n];
-        for (int i = 0; i < n; i++)
-            yBins[i] = Math.Min((int)((y[i] - minVal) / binWidth), _nBins - 1);
-        return yBins;
-    }
-
-    private double ComputeMI(int[,] XBins, int[] yBins, int j, int n)
-    {
-        var jointCounts = new int[_nBins, _nBins];
-        var xCounts = new int[_nBins];
-        var yCounts = new int[_nBins];
-
-        for (int i = 0; i < n; i++)
-        {
-            jointCounts[XBins[i, j], yBins[i]]++;
-            xCounts[XBins[i, j]]++;
-            yCounts[yBins[i]]++;
-        }
-
-        double mi = 0;
-        for (int xb = 0; xb < _nBins; xb++)
-        {
-            for (int yb = 0; yb < _nBins; yb++)
-            {
-                if (jointCounts[xb, yb] > 0 && xCounts[xb] > 0 && yCounts[yb] > 0)
-                {
-                    double pxy = (double)jointCounts[xb, yb] / n;
-                    double px = (double)xCounts[xb] / n;
-                    double py = (double)yCounts[yb] / n;
-                    mi += pxy * Math.Log(pxy / (px * py) + 1e-10) / Math.Log(2);
-                }
-            }
-        }
-        return Math.Max(0, mi);
-    }
-
-    private double ComputeConditionalMI(int[,] XBins, int[] yBins, int j, int s, int n)
-    {
-        // I(X_j; Y | X_s) = H(X_j | X_s) - H(X_j | Y, X_s)
-        // Approximated as I(X_j; Y) - I(X_j; X_s) (chain rule approximation)
-        double miJY = ComputeMI(XBins, yBins, j, n);
-        double miJS = ComputeMI_XX(XBins, j, s, n);
-        return Math.Max(0, miJY - miJS);
-    }
-
-    private double ComputeMI_XX(int[,] XBins, int j1, int j2, int n)
-    {
-        var jointCounts = new int[_nBins, _nBins];
-        var x1Counts = new int[_nBins];
-        var x2Counts = new int[_nBins];
-
-        for (int i = 0; i < n; i++)
-        {
-            jointCounts[XBins[i, j1], XBins[i, j2]]++;
-            x1Counts[XBins[i, j1]]++;
-            x2Counts[XBins[i, j2]]++;
-        }
-
-        double mi = 0;
-        for (int b1 = 0; b1 < _nBins; b1++)
-        {
-            for (int b2 = 0; b2 < _nBins; b2++)
-            {
-                if (jointCounts[b1, b2] > 0 && x1Counts[b1] > 0 && x2Counts[b2] > 0)
-                {
-                    double pxy = (double)jointCounts[b1, b2] / n;
-                    double px = (double)x1Counts[b1] / n;
-                    double py = (double)x2Counts[b2] / n;
-                    mi += pxy * Math.Log(pxy / (px * py) + 1e-10) / Math.Log(2);
-                }
-            }
-        }
-        return Math.Max(0, mi);
-    }
-
     /// <inheritdoc />
+
     public Matrix<T> FitTransform(Matrix<T> data, Vector<T> target)
     {
         Fit(data, target);
@@ -250,15 +131,7 @@ public class CMIMSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISuperv
         if (_selectedIndices is null)
             throw new InvalidOperationException("CMIMSelector has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

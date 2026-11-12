@@ -2,6 +2,7 @@ using AiDotNet.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Enums;
 using AiDotNet.Attributes;
+using AiDotNet.Preprocessing.FeatureSelection.Helpers;
 
 namespace AiDotNet.Preprocessing.FeatureSelection.Manifold;
 
@@ -26,13 +27,13 @@ public class IsomapBasedSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, 
     private readonly int _nFeaturesToSelect;
     private readonly int _nNeighbors;
 
-    private double[]? _featureScores;
+    private Vector<T>? _featureScores;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
-    public double[]? FeatureScores => _featureScores;
+    public Vector<T>? FeatureScores => _featureScores;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -58,94 +59,38 @@ public class IsomapBasedSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, 
         int n = data.Rows;
         int p = data.Columns;
 
-        var X = new double[n, p];
-        for (int i = 0; i < n; i++)
-            for (int j = 0; j < p; j++)
-                X[i, j] = NumOps.ToDouble(data[i, j]);
-
+        var engine = Engine;
+        var x = Tensor<T>.FromMatrix(data);
         int k = Math.Min(_nNeighbors, n - 1);
 
-        // Compute pairwise Euclidean distances
-        var euclideanDist = new double[n, n];
-        for (int i = 0; i < n; i++)
+        // Geodesic distances: Floyd-Warshall shortest paths through the symmetrized k-NN graph
+        var euclidean = FeatureSelectionTensorOps.PairwiseDistances(x);
+        var neighbors = FeatureSelectionTensorOps.KNearestMask(euclidean, k);
+        var adjacency = engine.TensorMax(neighbors, engine.TensorTranspose(neighbors));
+        var geodesic = FeatureSelectionTensorOps.ShortestPaths(euclidean, adjacency, out var reachable);
+
+        // Feature importance: mean over the connected pairs of (single-feature distance x geodesic distance)
+        var pairs = engine.TensorMultiply(reachable, PreprocessingTensorOps.OneMinus(engine.TensorEye<T>(n)));
+        T pairCount = engine.TensorSum(pairs);
+        var scores = new Tensor<T>(new[] { p });
+        if (NumOps.GreaterThan(pairCount, NumOps.Zero))
         {
-            for (int j = i + 1; j < n; j++)
-            {
-                double dist = 0;
-                for (int d = 0; d < p; d++)
-                    dist += (X[i, d] - X[j, d]) * (X[i, d] - X[j, d]);
-                euclideanDist[i, j] = Math.Sqrt(dist);
-                euclideanDist[j, i] = euclideanDist[i, j];
-            }
-        }
-
-        // Build k-NN graph with distances
-        var graphDist = new double[n, n];
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < n; j++)
-                graphDist[i, j] = double.PositiveInfinity;
-            graphDist[i, i] = 0;
-
-            // Find k nearest neighbors
-            var neighbors = Enumerable.Range(0, n)
-                .Where(j => j != i)
-                .OrderBy(j => euclideanDist[i, j])
-                .Take(k)
-                .ToList();
-
-            foreach (int j in neighbors)
-            {
-                graphDist[i, j] = euclideanDist[i, j];
-                graphDist[j, i] = euclideanDist[i, j];
-            }
-        }
-
-        // Floyd-Warshall for geodesic distances
-        for (int k_iter = 0; k_iter < n; k_iter++)
-            for (int i = 0; i < n; i++)
-                for (int j = 0; j < n; j++)
-                    if (graphDist[i, k_iter] + graphDist[k_iter, j] < graphDist[i, j])
-                        graphDist[i, j] = graphDist[i, k_iter] + graphDist[k_iter, j];
-
-        // Compute feature importance based on contribution to geodesic preservation
-        _featureScores = new double[p];
-        for (int d = 0; d < p; d++)
-        {
-            // Compute distances using only this feature
-            double correlation = 0;
-            int count = 0;
-
-            for (int i = 0; i < n; i++)
-            {
-                for (int j = i + 1; j < n; j++)
-                {
-                    if (double.IsInfinity(graphDist[i, j])) continue;
-
-                    double singleFeatDist = Math.Abs(X[i, d] - X[j, d]);
-                    double geodesic = graphDist[i, j];
-
-                    // Use rank correlation idea
-                    correlation += singleFeatDist * geodesic;
-                    count++;
-                }
-            }
-
-            _featureScores[d] = count > 0 ? correlation / count : 0;
+            var weighted = FeatureSelectionTensorOps.AbsDifferenceSums(x, engine.TensorMultiply(pairs, geodesic));
+            scores = engine.TensorDivideScalar(engine.Reshape(weighted, new[] { p }), pairCount);
         }
 
         // Normalize scores
-        double maxScore = _featureScores.Max();
-        if (maxScore > 0)
-            for (int d = 0; d < p; d++)
-                _featureScores[d] /= maxScore;
+        if (p > 0)
+        {
+            T maxScore = engine.TensorMaxValue(scores);
+            if (NumOps.GreaterThan(maxScore, NumOps.Zero))
+                scores = engine.TensorDivideScalar(scores, maxScore);
+        }
+
+        _featureScores = scores.ToVector();
 
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = Enumerable.Range(0, p)
-            .OrderByDescending(j => _featureScores[j])
-            .Take(numToSelect)
-            .OrderBy(x => x)
-            .ToArray();
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(scores, numToSelect);
 
         IsFitted = true;
     }
@@ -156,15 +101,7 @@ public class IsomapBasedSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, 
         if (_selectedIndices is null)
             throw new InvalidOperationException("IsomapBasedSelector has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />
