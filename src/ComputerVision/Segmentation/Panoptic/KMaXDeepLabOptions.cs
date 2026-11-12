@@ -33,6 +33,15 @@ public class KMaXDeepLabOptions : SegmentationModelOptions
         NumClasses = other.NumClasses;
         DropRate = other.DropRate;
         ModelSize = other.ModelSize;
+        NumClusterCenters = other.NumClusterCenters;
+        PixelEmbeddingDimension = other.PixelEmbeddingDimension;
+        NumKMeansIterations = other.NumKMeansIterations;
+        ClassThresholdThing = other.ClassThresholdThing;
+        ClassThresholdStuff = other.ClassThresholdStuff;
+        PixelConfidenceThreshold = other.PixelConfidenceThreshold;
+        OverlapThreshold = other.OverlapThreshold;
+        ReorderClassWeight = other.ReorderClassWeight;
+        ReorderMaskWeight = other.ReorderMaskWeight;
     }
 
     /// <summary>
@@ -53,6 +62,51 @@ public class KMaXDeepLabOptions : SegmentationModelOptions
     /// </para>
     /// </remarks>
     public KMaXDeepLabModelSize ModelSize { get; set; }
+
+    /// <summary>
+    /// Gets or sets the number of cluster centers (mask slots). Default: 128 (Yu et al. 2022,
+    /// <c>NUM_OBJECT_QUERIES = 128</c>).
+    /// </summary>
+    public int NumClusterCenters { get; set; } = 128;
+
+    /// <summary>
+    /// Gets or sets the width of the pixel embedding the cluster centers are compared with. Default: 128.
+    /// </summary>
+    public int PixelEmbeddingDimension { get; set; } = 128;
+
+    /// <summary>
+    /// Gets or sets the number of k-means cross-attention updates. Default: 6 (the kMaX decoder's
+    /// <c>DEC_LAYERS = [2, 2, 2]</c>).
+    /// </summary>
+    public int NumKMeansIterations { get; set; } = 6;
+
+    /// <summary>
+    /// Gets or sets the minimum class probability of a thing cluster in the panoptic merge. Default: 0.7.
+    /// </summary>
+    public double ClassThresholdThing { get; set; } = 0.7;
+
+    /// <summary>
+    /// Gets or sets the minimum class probability of a stuff cluster in the panoptic merge. Default: 0.5.
+    /// </summary>
+    public double ClassThresholdStuff { get; set; } = 0.5;
+
+    /// <summary>
+    /// Gets or sets the mask probability a pixel needs to belong to a cluster's mask. Default: 0.4
+    /// (<c>PIXEL_CONFIDENCE_THRESHOLD</c>).
+    /// </summary>
+    public double PixelConfidenceThreshold { get; set; } = 0.4;
+
+    /// <summary>
+    /// Gets or sets the share of a cluster's mask that must still be unclaimed for it to become a segment.
+    /// Default: 0.8.
+    /// </summary>
+    public double OverlapThreshold { get; set; } = 0.8;
+
+    /// <summary>Gets or sets the class-score exponent of the merge order. Default: 1.0.</summary>
+    public double ReorderClassWeight { get; set; } = 1.0;
+
+    /// <summary>Gets or sets the mask-score exponent of the merge order. Default: 1.0.</summary>
+    public double ReorderMaskWeight { get; set; } = 1.0;
 
     /// <summary>
     /// Throws when a value on this instance cannot produce a working model.

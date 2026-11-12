@@ -7,6 +7,7 @@ using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Optimizers;
+using AiDotNet.Tensors.Engines.Autodiff;
 using Microsoft.ML.OnnxRuntime;
 using OnnxTensors = Microsoft.ML.OnnxRuntime.Tensors;
 
@@ -78,6 +79,11 @@ public partial class KMaXDeepLab<T> : Common.PanopticSegmentationBase<T>
     private readonly int _decoderDim;
     private readonly int[] _depths;
     private readonly double _dropRate;
+    // Mask-classification head (Yu et al. 2022): N cluster centers compared with a D-wide pixel embedding,
+    // refined by NumKMeansIterations k-means cross-attention updates.
+    private readonly int _numClusters;
+    private readonly int _pixelDim;
+    private readonly int _kMeansIterations;
     #endregion
 
     #region Properties
@@ -115,6 +121,7 @@ public partial class KMaXDeepLab<T> : Common.PanopticSegmentationBase<T>
         if (architecture.InputHeight <= 0) _height = 640;
         if (architecture.InputWidth <= 0) _width = 640;
         _modelSize = _options.ModelSize; _dropRate = _options.DropRate;
+        (_numClusters, _pixelDim, _kMeansIterations) = ValidateHead(_options);
         (_channelDims, _depths, _decoderDim) = GetModelConfig(_options.ModelSize);
         InitializeLayers();
     }
@@ -146,6 +153,7 @@ public partial class KMaXDeepLab<T> : Common.PanopticSegmentationBase<T>
         if (architecture.InputHeight <= 0) _height = 640;
         if (architecture.InputWidth <= 0) _width = 640;
         _modelSize = _options.ModelSize; _dropRate = _options.DropRate;
+        (_numClusters, _pixelDim, _kMeansIterations) = ValidateHead(_options);
         (_channelDims, _depths, _decoderDim) = GetModelConfig(_options.ModelSize);
         InitializeLayers();
     }
@@ -161,12 +169,61 @@ public partial class KMaXDeepLab<T> : Common.PanopticSegmentationBase<T>
     /// <para>
     /// <b>For Beginners:</b> Pass an image to get a per-pixel class prediction map.
     /// </para>
+    /// <para>
+    /// The output is MaskFormer's semantic inference over the mask-classification head,
+    /// <c>log(sum_n p(class | cluster n) * p(pixel in cluster n) + 1e-8)</c>, shaped <c>[K, H, W]</c> (or
+    /// <c>[B, K, H, W]</c>); its argmax is the semantic map. In ONNX mode the graph must emit the head's raw
+    /// channels (pixel embedding, cluster logits, class projections).
+    /// </para>
     /// </remarks>
-    protected override Tensor<T> PredictCore(Tensor<T> input) => _useNativeMode ? Forward(input) : PredictOnnx(input);
+    protected override Tensor<T> PredictCore(Tensor<T> input)
+        => _useNativeMode ? Forward(input) : SemanticScores(PredictOnnx(input));
 
     #endregion
 
     #region Private Methods
+    private static (int NumClusters, int PixelDim, int Iterations) ValidateHead(KMaXDeepLabOptions options)
+    {
+        if (options.NumClusterCenters < 1)
+            throw new ArgumentException("NumClusterCenters must be positive.", nameof(options));
+        if (options.PixelEmbeddingDimension < 1)
+            throw new ArgumentException("PixelEmbeddingDimension must be positive.", nameof(options));
+        if (options.NumKMeansIterations < 1)
+            throw new ArgumentException("NumKMeansIterations must be positive.", nameof(options));
+        return (options.NumClusterCenters, options.PixelEmbeddingDimension, options.NumKMeansIterations);
+    }
+
+    /// <summary>Channels the decoder emits for the head: pixel embedding, cluster logits, classes plus void.</summary>
+    private int HeadChannels => _pixelDim + _numClusters + _numClasses + 1;
+
+    /// <summary>Runs the k-means head on the raw decoder output <c>[B, HeadChannels, H, W]</c>.</summary>
+    private (Tensor<T> MaskLogits, Tensor<T> ClassLogits) RunHead(Tensor<T> raw)
+        => Common.MaskClassificationOps.KMeansCrossAttention(raw, _pixelDim, _numClusters, _kMeansIterations);
+
+    /// <summary>
+    /// MaskFormer semantic inference over the head: class probabilities without void times the cluster
+    /// masks (softmax over the clusters, as kMaX-DeepLab assigns every pixel to one cluster).
+    /// </summary>
+    private Tensor<T> SemanticScores(Tensor<T> raw)
+    {
+        bool hasBatch = raw.Rank == 4; if (!hasBatch) raw = AddBatchDimension(raw);
+        int b = raw.Shape[0], h = raw.Shape[2], w = raw.Shape[3];
+        var (maskLogits, classLogits) = RunHead(raw);
+        var classProbabilities = Engine.TensorSlice(
+            Engine.TensorSoftmax(classLogits, 2), new[] { 0, 0, 0 }, new[] { b, _numClusters, _numClasses });
+        var maskProbabilities = Engine.TensorSoftmax(maskLogits, 1);
+        var scores = Common.MaskClassificationOps.SemanticLogScores(classProbabilities, maskProbabilities, h, w);
+        if (!hasBatch) scores = RemoveBatchDimension(scores); return scores;
+    }
+
+    private Tensor<T> RunLayers(Tensor<T> input)
+    {
+        var features = input;
+        for (int i = 0; i < _encoderLayerEnd; i++) features = Layers[i].Forward(features);
+        for (int i = _encoderLayerEnd; i < Layers.Count; i++) features = Layers[i].Forward(features);
+        return features;
+    }
+
     private static (int[] ChannelDims, int[] Depths, int DecoderDim) GetModelConfig(KMaXDeepLabModelSize modelSize) => modelSize switch
     {
         KMaXDeepLabModelSize.R50 => ([256, 512, 1024, 2048], [3, 4, 6, 3], 256),
@@ -178,10 +235,8 @@ public partial class KMaXDeepLab<T> : Common.PanopticSegmentationBase<T>
     protected override Tensor<T> Forward(Tensor<T> input)
     {
         bool hasBatch = input.Rank == 4; if (!hasBatch) input = AddBatchDimension(input);
-        var features = input;
-        for (int i = 0; i < _encoderLayerEnd; i++) features = Layers[i].Forward(features);
-        for (int i = _encoderLayerEnd; i < Layers.Count; i++) features = Layers[i].Forward(features);
-        if (!hasBatch) features = RemoveBatchDimension(features); return features;
+        var scores = SemanticScores(RunLayers(input));
+        if (!hasBatch) scores = RemoveBatchDimension(scores); return scores;
     }
 
     /// <inheritdoc />
@@ -190,14 +245,14 @@ public partial class KMaXDeepLab<T> : Common.PanopticSegmentationBase<T>
         if (_onnxSession is null) throw new InvalidOperationException("ONNX session is not initialized.");
         bool hasBatch = input.Rank == 4; if (!hasBatch) input = AddBatchDimension(input);
         var inputData = new float[input.Length];
-        for (int i = 0; i < input.Length; i++) inputData[i] = Convert.ToSingle(input.Data.Span[i]);
+        NumOps.ToFloatSpan(input.Data.Span.Slice(0, input.Length), inputData);
         var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input._shape);
         string inputName = _onnxSession.InputMetadata.Keys.FirstOrDefault() ?? "images";
         var inputs = new List<NamedOnnxValue> { NamedOnnxValue.CreateFromTensor(inputName, onnxInput) };
         using var results = _onnxSession.Run(inputs);
         var outputTensor = results.First().AsTensor<float>();
         var outputData = new T[outputTensor.Length];
-        for (int i = 0; i < outputTensor.Length; i++) outputData[i] = NumOps.FromDouble(outputTensor.GetValue(i));
+        NumOps.FromFloatSpan(outputTensor.ToDenseTensor().Buffer.Span, outputData);
         var result = new Tensor<T>(outputTensor.Dimensions.ToArray(), new Vector<T>(outputData));
         if (!hasBatch) result = RemoveBatchDimension(result); return result;
     }
@@ -223,7 +278,10 @@ public partial class KMaXDeepLab<T> : Common.PanopticSegmentationBase<T>
             var encoderLayers = LayerHelper<T>.CreateKMaXDeepLabEncoderLayers(_channels, _height, _width, _channelDims, _depths, _dropRate).ToList();
             _encoderLayerEnd = encoderLayers.Count; Layers.AddRange(encoderLayers);
             int fH = _height / 32, fW = _width / 32;
-            var decoderLayers = LayerHelper<T>.CreateKMaXDeepLabDecoderLayers(_channelDims[^1], _decoderDim, _numClasses, fH, fW);
+            // The decoder's last 1x1 convolution emits the head's channels: the pixel embedding, the initial
+            // cluster logits (its weight rows are the learnable initial cluster centers) and the per-pixel
+            // class projections.
+            var decoderLayers = LayerHelper<T>.CreateKMaXDeepLabDecoderLayers(_channelDims[^1], _decoderDim, HeadChannels, fH, fW);
             Layers.AddRange(decoderLayers);
         }
     }
@@ -251,41 +309,42 @@ public partial class KMaXDeepLab<T> : Common.PanopticSegmentationBase<T>
     // all come from the base; only the model-specific override remains.
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// <para>
+    /// kMaX-DeepLab's panoptic post-processing: a cluster's mask is the pixels whose softmax-over-clusters
+    /// probability exceeds <see cref="KMaXDeepLabOptions.PixelConfidenceThreshold"/> (0.4); clusters are
+    /// visited by <c>classScore^a * maskScore^b</c> and kept when their class score clears the thing (0.7) or
+    /// stuff (0.5) threshold and more than <see cref="KMaXDeepLabOptions.OverlapThreshold"/> (0.8) of their
+    /// mask is still unclaimed. Stuff clusters of one class merge into one segment. Classes below
+    /// <c>NumStuffClasses</c> are stuff. Void pixels are <c>-1</c> in the semantic and panoptic maps.
+    /// </para>
+    /// </remarks>
     public override PanopticSegmentationResult<T> SegmentPanoptic(Tensor<T> image)
     {
-        var logits = Common.SegmentationTensorOps.EnsureUnbatched(Predict(image));
-        var probMap = Common.SegmentationTensorOps.SoftmaxAlongClassDim(logits);
-        var semanticMap = Common.SegmentationTensorOps.ArgmaxAlongClassDim(logits);
-        int h = semanticMap.Shape[0], w = semanticMap.Shape[1];
-        int numStuff = Math.Max(1, _numClasses / 3);
-        var instanceMap = new Tensor<T>([h, w]);
-        var panopticMap = new Tensor<T>([h, w]);
-        var segments = new List<PanopticSegment<T>>();
-        int nextInstId = 1;
-        for (int cls = 0; cls < numStuff; cls++)
-        {
-            int area = 0; double sumConf = 0;
-            for (int row = 0; row < h; row++)
-                for (int col = 0; col < w; col++)
-                    if (NumOps.Compare(semanticMap[row, col], NumOps.FromDouble(cls)) == 0)
-                    { panopticMap[row, col] = NumOps.FromDouble(cls * 1000); area++; sumConf += NumOps.ToDouble(probMap[cls, row, col]); }
-            if (area > 0) segments.Add(new PanopticSegment<T> { SegmentId = cls, ClassId = cls, IsThing = false, Confidence = sumConf / area, Area = area });
-        }
-        for (int cls = numStuff; cls < _numClasses; cls++)
-        {
-            var (labelMap, count) = Common.SegmentationTensorOps.LabelConnectedComponents(semanticMap, cls);
-            for (int comp = 1; comp <= count; comp++)
-            {
-                int instId = nextInstId++;
-                int area = 0; double sumConf = 0; var compMask = new Tensor<T>([h, w]);
-                for (int row = 0; row < h; row++)
-                    for (int col = 0; col < w; col++)
-                        if (NumOps.Compare(labelMap[row, col], NumOps.FromDouble(comp)) == 0)
-                        { instanceMap[row, col] = NumOps.FromDouble(instId); panopticMap[row, col] = NumOps.FromDouble(cls * 1000 + instId); compMask[row, col] = NumOps.FromDouble(1.0); area++; sumConf += NumOps.ToDouble(probMap[cls, row, col]); }
-                if (area > 0) segments.Add(new PanopticSegment<T> { SegmentId = instId, ClassId = cls, IsThing = true, Confidence = sumConf / area, Area = area, Mask = compMask });
-            }
-        }
-        return new PanopticSegmentationResult<T> { SemanticMap = semanticMap, InstanceMap = instanceMap, PanopticMap = panopticMap, Segments = segments };
+        if (image is null) throw new ArgumentNullException(nameof(image));
+        var batched = image.Rank == 4 ? image : AddBatchDimension(image);
+        using var noGrad = new NoGradScope<T>();
+        var raw = _useNativeMode ? RunLayers(batched) : PredictOnnx(batched);
+        int h = raw.Shape[2], w = raw.Shape[3];
+        var (maskLogits, classLogits) = RunHead(raw);
+        var classProbabilities = Engine.Reshape(
+            Engine.TensorSlice(Engine.TensorSoftmax(classLogits, 2), new[] { 0, 0, 0 }, new[] { 1, _numClusters, _numClasses + 1 }),
+            new[] { _numClusters, _numClasses + 1 });
+        var maskProbabilities = Engine.Reshape(
+            Engine.TensorSlice(Engine.TensorSoftmax(maskLogits, 1), new[] { 0, 0, 0 }, new[] { 1, _numClusters, h * w }),
+            new[] { _numClusters, h, w });
+        var settings = new Common.KMaXPanopticSettings(
+            _options.ClassThresholdThing, _options.ClassThresholdStuff, _options.PixelConfidenceThreshold,
+            _options.OverlapThreshold, _options.ReorderClassWeight, _options.ReorderMaskWeight);
+        return Common.MaskClassificationOps.MergeKMaX(classProbabilities, maskProbabilities, ThingClassFlags(), settings);
+    }
+
+    /// <summary>Classes at or above <c>NumStuffClasses</c> are things.</summary>
+    private bool[] ThingClassFlags()
+    {
+        var flags = new bool[_numClasses];
+        for (int c = NumStuffClasses; c < _numClasses; c++) flags[c] = true;
+        return flags;
     }
     #endregion
 }
