@@ -3,6 +3,8 @@ using AiDotNet.Enums;
 using AiDotNet.Models;
 using AiDotNet.Safety;
 using AiDotNet.Tensors.LinearAlgebra;
+using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Engines.Autodiff;
 
 namespace AiDotNet.Safety.Audio;
 
@@ -47,7 +49,6 @@ public class VoiceprintDeepfakeDetector<T> : AudioSafetyModuleBase<T>
     private readonly T _threshold;
     private readonly int _frameSize;
     private readonly int _hopSize;
-    private readonly FastFourierTransform<T> _fft;
 
     /// <inheritdoc />
     public override string ModuleName => "VoiceprintDeepfakeDetector";
@@ -63,7 +64,6 @@ public class VoiceprintDeepfakeDetector<T> : AudioSafetyModuleBase<T>
         _threshold = NumOps.FromDouble(threshold);
         _frameSize = 512;
         _hopSize = 256;
-        _fft = new FastFourierTransform<T>();
     }
 
     /// <inheritdoc />
@@ -76,55 +76,59 @@ public class VoiceprintDeepfakeDetector<T> : AudioSafetyModuleBase<T>
             return findings; // Need enough frames for consistency analysis
         }
 
-        // Extract voiceprint features per frame
-        var frameFeatures = new List<VoiceprintFrame>();
+        using var noGrad = new NoGradScope<T>();
+
+        // Extract voiceprint features for every frame at once.
         int numFrames = (audioSamples.Length - _frameSize) / _hopSize + 1;
+        var frames = SafetyTensorOps<T>.Frames(SafetyTensorOps<T>.AsTensor(audioSamples), _frameSize, _hopSize, numFrames);
+        var features = ExtractVoiceprintFeatures(frames, sampleRate);
 
-        for (int i = 0; i < numFrames; i++)
+        // Skip silent frames
+        var voiced = SafetyTensorOps<T>.Gt(features.Energy, 1e-6);
+        var kept = new VoiceprintFrames
         {
-            int start = i * _hopSize;
-            if (start + _frameSize > audioSamples.Length) break;
+            Pitch = SafetyTensorOps<T>.Compact(features.Pitch, voiced),
+            Energy = SafetyTensorOps<T>.Compact(features.Energy, voiced),
+            SpectralCentroid = SafetyTensorOps<T>.Compact(features.SpectralCentroid, voiced),
+            Formant1 = SafetyTensorOps<T>.Compact(features.Formant1, voiced),
+            Formant2 = SafetyTensorOps<T>.Compact(features.Formant2, voiced)
+        };
 
-            var frame = ExtractVoiceprintFeatures(audioSamples, start, sampleRate);
-            if (frame.Energy > 1e-6) // Skip silent frames
-            {
-                frameFeatures.Add(frame);
-            }
-        }
-
-        if (frameFeatures.Count < 4) return findings;
+        if (kept.Energy.Length < 4) return findings;
 
         // 1. Pitch consistency: real voices have smooth pitch contour, clones may have jumps
-        double pitchJitter = ComputePitchJitter(frameFeatures);
+        T pitchJitter = ComputePitchJitter(kept);
 
         // 2. Spectral envelope consistency: should be stable for same speaker
-        double spectralConsistency = ComputeSpectralConsistency(frameFeatures);
+        T spectralConsistency = ComputeSpectralConsistency(kept);
 
         // 3. Formant stability: formants shift smoothly in real speech
-        double formantStability = ComputeFormantStability(frameFeatures);
+        T formantStability = ComputeFormantStability(kept);
 
         // 4. Micro-variation analysis: real speech has natural micro-variations;
         //    cloned speech is often either too smooth or has artificial jitter
-        double microVariation = ComputeMicroVariationAnomaly(frameFeatures);
+        T microVariation = ComputeMicroVariationAnomaly(kept);
 
         // Combined score
-        double finalScore = 0.25 * pitchJitter +
-                           0.30 * spectralConsistency +
-                           0.25 * formantStability +
-                           0.20 * microVariation;
+        T finalScoreT = NumOps.Add(
+            NumOps.Add(NumOps.Multiply(NumOps.FromDouble(0.25), pitchJitter),
+                NumOps.Multiply(NumOps.FromDouble(0.30), spectralConsistency)),
+            NumOps.Add(NumOps.Multiply(NumOps.FromDouble(0.25), formantStability),
+                NumOps.Multiply(NumOps.FromDouble(0.20), microVariation)));
 
         T thresholdVal = _threshold;
-        if (NumOps.GreaterThanOrEquals(NumOps.FromDouble(finalScore), thresholdVal))
+        if (NumOps.GreaterThanOrEquals(finalScoreT, thresholdVal))
         {
+            double finalScore = NumOps.ToDouble(finalScoreT);
             findings.Add(new SafetyFinding
             {
                 Category = SafetyCategory.Deepfake,
                 Severity = finalScore >= 0.8 ? SafetySeverity.High : SafetySeverity.Medium,
                 Confidence = Math.Min(1.0, finalScore),
                 Description = $"Voiceprint consistency analysis: potential voice deepfake " +
-                              $"(score: {finalScore:F3}). Pitch jitter: {pitchJitter:F3}, " +
-                              $"spectral: {spectralConsistency:F3}, formant: {formantStability:F3}, " +
-                              $"micro-variation: {microVariation:F3}.",
+                              $"(score: {finalScore:F3}). Pitch jitter: {NumOps.ToDouble(pitchJitter):F3}, " +
+                              $"spectral: {NumOps.ToDouble(spectralConsistency):F3}, formant: {NumOps.ToDouble(formantStability):F3}, " +
+                              $"micro-variation: {NumOps.ToDouble(microVariation):F3}.",
                 RecommendedAction = SafetyAction.Warn,
                 SourceModule = ModuleName
             });
@@ -133,249 +137,168 @@ public class VoiceprintDeepfakeDetector<T> : AudioSafetyModuleBase<T>
         return findings;
     }
 
-    private VoiceprintFrame ExtractVoiceprintFeatures(Vector<T> audio, int start, int sampleRate)
+    private VoiceprintFrames ExtractVoiceprintFeatures(Tensor<T> frames, int sampleRate)
     {
-        var frame = new VoiceprintFrame();
+        var engine = SafetyTensorOps<T>.Engine;
+        var axis1 = new[] { 1 };
 
-        // Extract windowed frame
-        var windowed = new Vector<T>(_frameSize);
-        T energySum = NumOps.Zero;
-        for (int i = 0; i < _frameSize; i++)
-        {
-            // Hann window
-            double w = 0.5 * (1.0 - Math.Cos(2.0 * Math.PI * i / (_frameSize - 1)));
-            T sample = audio[start + i];
-            windowed[i] = NumOps.Multiply(sample, NumOps.FromDouble(w));
-            energySum = NumOps.Add(energySum, NumOps.Multiply(sample, sample));
-        }
-        frame.Energy = NumOps.ToDouble(energySum) / _frameSize;
+        // Hann-windowed frames; energy from the raw samples.
+        var windowed = engine.TensorMultiply(frames, SafetyTensorOps<T>.SymmetricHann(_frameSize));
+        var energy = engine.TensorDivideScalar(
+            engine.ReduceSum(engine.TensorSquare(frames), axis1, false), NumOps.FromDouble(_frameSize));
 
-        // FFT for spectral features
-        var spectrum = _fft.Forward(windowed);
-        int halfLen = spectrum.Length / 2;
-
-        // Magnitude spectrum
-        var magnitudes = new double[halfLen];
-        for (int k = 0; k < halfLen; k++)
-        {
-            magnitudes[k] = NumOps.ToDouble(spectrum[k].Magnitude);
-        }
+        // Magnitude spectrum, bins 0 .. halfLen-1
+        int halfLen = _frameSize / 2;
+        var magnitudes = engine.TensorNarrow(SafetyTensorOps<T>.FftMagnitude(windowed), 1, 0, halfLen);
 
         // Pitch estimation via autocorrelation
-        frame.Pitch = EstimatePitch(audio, start, sampleRate);
+        var pitch = SafetyTensorOps<T>.AutocorrelationPitch(frames, sampleRate, Math.Min(sampleRate / 50, _frameSize / 2));
 
-        // Spectral centroid
-        double weightedSum = 0, magSum = 0;
-        for (int k = 1; k < halfLen; k++)
-        {
-            double freq = (double)k * sampleRate / _frameSize;
-            weightedSum += freq * magnitudes[k];
-            magSum += magnitudes[k];
-        }
-        frame.SpectralCentroid = magSum > 1e-10 ? weightedSum / magSum : 0;
-
-        // Spectral rolloff (85%)
-        double cumSum = 0;
-        double targetSum = magSum * 0.85;
-        frame.SpectralRolloff = 0;
-        for (int k = 1; k < halfLen; k++)
-        {
-            cumSum += magnitudes[k];
-            if (cumSum >= targetSum)
-            {
-                frame.SpectralRolloff = (double)k * sampleRate / _frameSize;
-                break;
-            }
-        }
+        // Spectral centroid over bins 1 .. halfLen-1
+        var band = engine.TensorNarrow(magnitudes, 1, 1, halfLen - 1);
+        var freqs = engine.TensorMultiplyScalar(
+            engine.TensorAddScalar(SafetyTensorOps<T>.Range(halfLen - 1), NumOps.One),
+            NumOps.FromDouble((double)sampleRate / _frameSize));
+        var weightedSum = engine.ReduceSum(engine.TensorMultiply(band, freqs), axis1, false);
+        var magSum = engine.ReduceSum(band, axis1, false);
+        var hasMagnitude = SafetyTensorOps<T>.Gt(magSum, 1e-10);
+        var centroid = SafetyTensorOps<T>.Where(hasMagnitude,
+            engine.TensorDivide(weightedSum, SafetyTensorOps<T>.Where(hasMagnitude, magSum, 1.0)), 0.0);
 
         // Simple formant estimation: find peaks in smoothed spectrum
-        frame.Formant1 = FindFormantPeak(magnitudes, sampleRate, 200, 1000);
-        frame.Formant2 = FindFormantPeak(magnitudes, sampleRate, 800, 3000);
-
-        return frame;
-    }
-
-    private double EstimatePitch(Vector<T> audio, int start, int sampleRate)
-    {
-        // Autocorrelation-based pitch detection
-        int minLag = sampleRate / 500; // Max pitch 500 Hz
-        int maxLag = sampleRate / 50;  // Min pitch 50 Hz
-        maxLag = Math.Min(maxLag, _frameSize / 2);
-
-        if (minLag >= maxLag) return 0;
-
-        double maxCorr = 0;
-        int bestLag = 0;
-
-        for (int lag = minLag; lag < maxLag; lag++)
+        return new VoiceprintFrames
         {
-            double corr = 0;
-            double norm1 = 0, norm2 = 0;
-            int len = _frameSize - lag;
-
-            for (int i = 0; i < len; i++)
-            {
-                double v1 = NumOps.ToDouble(audio[start + i]);
-                double v2 = NumOps.ToDouble(audio[start + i + lag]);
-                corr += v1 * v2;
-                norm1 += v1 * v1;
-                norm2 += v2 * v2;
-            }
-
-            double denom = Math.Sqrt(norm1 * norm2);
-            double normalized = denom > 1e-10 ? corr / denom : 0;
-
-            if (normalized > maxCorr)
-            {
-                maxCorr = normalized;
-                bestLag = lag;
-            }
-        }
-
-        return bestLag > 0 && maxCorr > 0.3 ? (double)sampleRate / bestLag : 0;
+            Pitch = pitch,
+            Energy = energy,
+            SpectralCentroid = centroid,
+            Formant1 = FindFormantPeak(magnitudes, sampleRate, 200, 1000),
+            Formant2 = FindFormantPeak(magnitudes, sampleRate, 800, 3000)
+        };
     }
 
-    private double FindFormantPeak(double[] magnitudes, int sampleRate, double minFreq, double maxFreq)
+    private Tensor<T> FindFormantPeak(Tensor<T> magnitudes, int sampleRate, double minFreq, double maxFreq)
     {
+        int frameCount = magnitudes.Shape[0];
         int minBin = (int)(minFreq * _frameSize / sampleRate);
         int maxBin = (int)(maxFreq * _frameSize / sampleRate);
-        maxBin = Math.Min(maxBin, magnitudes.Length - 1);
+        maxBin = Math.Min(maxBin, magnitudes.Shape[1] - 1);
 
-        double maxMag = 0;
-        int peakBin = minBin;
-
-        for (int k = minBin; k <= maxBin; k++)
+        T binToHz = NumOps.FromDouble((double)sampleRate / _frameSize);
+        if (minBin > maxBin)
         {
-            if (magnitudes[k] > maxMag)
-            {
-                maxMag = magnitudes[k];
-                peakBin = k;
-            }
+            // Empty search range: the peak stays at minBin.
+            return SafetyTensorOps<T>.Full(new[] { frameCount }, NumOps.Multiply(NumOps.FromDouble(minBin), binToHz));
         }
 
-        return (double)peakBin * sampleRate / _frameSize;
+        // First strictly larger magnitude above 0 wins; none -> minBin.
+        var range = SafetyTensorOps<T>.Engine.TensorNarrow(magnitudes, 1, minBin, maxBin - minBin + 1);
+        var (_, index) = SafetyTensorOps<T>.FirstStrictMax(range, 0.0);
+        var peakBin = SafetyTensorOps<T>.Engine.TensorAddScalar(SafetyTensorOps<T>.MaxZero(index), NumOps.FromDouble(minBin));
+        return SafetyTensorOps<T>.Engine.TensorMultiplyScalar(peakBin, binToHz);
     }
 
-    private static double ComputePitchJitter(List<VoiceprintFrame> frames)
+    private static T ComputePitchJitter(VoiceprintFrames frames)
     {
-        var pitches = new List<double>();
-        foreach (var f in frames)
-        {
-            if (f.Pitch > 50) pitches.Add(f.Pitch);
-        }
+        var engine = SafetyTensorOps<T>.Engine;
+        var pitches = SafetyTensorOps<T>.Compact(frames.Pitch, SafetyTensorOps<T>.Gt(frames.Pitch, 50.0));
 
-        if (pitches.Count < 3) return 0;
+        if (pitches.Length < 3) return NumOps.Zero;
 
         // Compute jitter: relative variation between consecutive pitch values
-        double jitterSum = 0;
-        double pitchMean = 0;
-        foreach (var p in pitches) pitchMean += p;
-        pitchMean /= pitches.Count;
-
-        for (int i = 1; i < pitches.Count; i++)
-        {
-            jitterSum += Math.Abs(pitches[i] - pitches[i - 1]);
-        }
-        double meanJitter = jitterSum / (pitches.Count - 1);
-        double relativeJitter = pitchMean > 1e-10 ? meanJitter / pitchMean : 0;
+        T pitchMean = engine.TensorMean(pitches);
+        T meanJitter = engine.TensorMean(engine.TensorAbs(engine.TensorDiff(pitches, 1, 0)));
+        T relativeJitter = NumOps.GreaterThan(pitchMean, NumOps.FromDouble(1e-10))
+            ? NumOps.Divide(meanJitter, pitchMean)
+            : NumOps.Zero;
 
         // Natural speech: jitter ~0.01-0.03; cloned: often < 0.005 or > 0.05
-        if (relativeJitter < 0.005)
-            return (0.005 - relativeJitter) * 200; // Too stable
-        if (relativeJitter > 0.05)
-            return Math.Min(1.0, (relativeJitter - 0.05) * 20); // Too jittery
+        if (NumOps.LessThan(relativeJitter, NumOps.FromDouble(0.005)))
+            return NumOps.Multiply(NumOps.Subtract(NumOps.FromDouble(0.005), relativeJitter), NumOps.FromDouble(200)); // Too stable
+        if (NumOps.GreaterThan(relativeJitter, NumOps.FromDouble(0.05)))
+            return SafetyTensorOps<T>.MinOne(NumOps.Multiply(NumOps.Subtract(relativeJitter, NumOps.FromDouble(0.05)), NumOps.FromDouble(20))); // Too jittery
 
-        return 0;
+        return NumOps.Zero;
     }
 
-    private static double ComputeSpectralConsistency(List<VoiceprintFrame> frames)
+    private static T ComputeSpectralConsistency(VoiceprintFrames frames)
     {
-        if (frames.Count < 3) return 0;
+        var engine = SafetyTensorOps<T>.Engine;
+        int count = frames.SpectralCentroid.Length;
+        if (count < 3) return NumOps.Zero;
 
         // Compute coefficient of variation of spectral centroid
-        double sum = 0, sumSq = 0;
-        foreach (var f in frames)
-        {
-            sum += f.SpectralCentroid;
-            sumSq += f.SpectralCentroid * f.SpectralCentroid;
-        }
-
-        double mean = sum / frames.Count;
-        double variance = sumSq / frames.Count - mean * mean;
-        double cv = mean > 1e-10 ? Math.Sqrt(Math.Max(0, variance)) / mean : 0;
+        T countT = NumOps.FromDouble(count);
+        T mean = NumOps.Divide(engine.TensorSum(frames.SpectralCentroid), countT);
+        T variance = NumOps.Subtract(
+            NumOps.Divide(engine.TensorSumOfSquares(frames.SpectralCentroid), countT),
+            NumOps.Multiply(mean, mean));
+        T cv = NumOps.GreaterThan(mean, NumOps.FromDouble(1e-10))
+            ? NumOps.Divide(NumOps.Sqrt(SafetyTensorOps<T>.MaxZero(variance)), mean)
+            : NumOps.Zero;
 
         // Too consistent (robotic) or too variable (spliced)
-        if (cv < 0.05) return (0.05 - cv) * 20;
-        if (cv > 0.4) return Math.Min(1.0, (cv - 0.4) * 2);
+        if (NumOps.LessThan(cv, NumOps.FromDouble(0.05)))
+            return NumOps.Multiply(NumOps.Subtract(NumOps.FromDouble(0.05), cv), NumOps.FromDouble(20));
+        if (NumOps.GreaterThan(cv, NumOps.FromDouble(0.4)))
+            return SafetyTensorOps<T>.MinOne(NumOps.Multiply(NumOps.Subtract(cv, NumOps.FromDouble(0.4)), NumOps.FromDouble(2)));
 
-        return 0;
+        return NumOps.Zero;
     }
 
-    private static double ComputeFormantStability(List<VoiceprintFrame> frames)
+    private static T ComputeFormantStability(VoiceprintFrames frames)
     {
-        if (frames.Count < 3) return 0;
+        var engine = SafetyTensorOps<T>.Engine;
+        int count = frames.Formant1.Length;
+        if (count < 3) return NumOps.Zero;
 
-        // Check for sudden formant jumps (splicing artifacts)
-        int jumpCount = 0;
-        for (int i = 1; i < frames.Count; i++)
-        {
-            double f1Diff = Math.Abs(frames[i].Formant1 - frames[i - 1].Formant1);
-            double f2Diff = Math.Abs(frames[i].Formant2 - frames[i - 1].Formant2);
+        // Check for sudden formant jumps (splicing artifacts):
+        // jumps > 200 Hz (F1) or > 400 Hz (F2) between consecutive frames are suspicious
+        var f1Jump = SafetyTensorOps<T>.Gt(engine.TensorAbs(engine.TensorDiff(frames.Formant1, 1, 0)), 200.0);
+        var f2Jump = SafetyTensorOps<T>.Gt(engine.TensorAbs(engine.TensorDiff(frames.Formant2, 1, 0)), 400.0);
+        T jumpCount = engine.TensorSum(SafetyTensorOps<T>.Or(f1Jump, f2Jump));
 
-            // Formant jumps > 200 Hz between consecutive frames are suspicious
-            if (f1Diff > 200 || f2Diff > 400)
-            {
-                jumpCount++;
-            }
-        }
-
-        double jumpRate = (double)jumpCount / (frames.Count - 1);
+        T jumpRate = NumOps.Divide(jumpCount, NumOps.FromDouble(count - 1));
 
         // Natural: jumpRate < 0.1; cloned/spliced: often > 0.2
-        return Math.Min(1.0, Math.Max(0, (jumpRate - 0.1) * 5));
+        return SafetyTensorOps<T>.ClampUnit(NumOps.Multiply(NumOps.Subtract(jumpRate, NumOps.FromDouble(0.1)), NumOps.FromDouble(5)));
     }
 
-    private static double ComputeMicroVariationAnomaly(List<VoiceprintFrame> frames)
+    private static T ComputeMicroVariationAnomaly(VoiceprintFrames frames)
     {
-        if (frames.Count < 5) return 0;
+        var engine = SafetyTensorOps<T>.Engine;
+        int count = frames.Energy.Length;
+        if (count < 5) return NumOps.Zero;
 
         // Compute frame-to-frame energy variation
-        var diffs = new List<double>();
-        for (int i = 1; i < frames.Count; i++)
-        {
-            double diff = Math.Abs(frames[i].Energy - frames[i - 1].Energy);
-            double avg = (frames[i].Energy + frames[i - 1].Energy) / 2;
-            diffs.Add(avg > 1e-10 ? diff / avg : 0);
-        }
+        var current = engine.TensorNarrow(frames.Energy, 0, 1, count - 1);
+        var previous = engine.TensorNarrow(frames.Energy, 0, 0, count - 1);
+        var diff = engine.TensorAbs(engine.TensorSubtract(current, previous));
+        var avg = engine.TensorDivideScalar(engine.TensorAdd(current, previous), NumOps.FromDouble(2));
+        var hasEnergy = SafetyTensorOps<T>.Gt(avg, 1e-10);
+        var diffs = SafetyTensorOps<T>.Where(hasEnergy, engine.TensorDivide(diff, SafetyTensorOps<T>.Where(hasEnergy, avg, 1.0)), 0.0);
 
-        double meanDiff = 0;
-        foreach (var d in diffs) meanDiff += d;
-        meanDiff /= diffs.Count;
+        var (meanDiff, varDiff) = SafetyTensorOps<T>.MeanVariance(diffs);
 
-        double varDiff = 0;
-        foreach (var d in diffs)
-        {
-            double dev = d - meanDiff;
-            varDiff += dev * dev;
-        }
-        varDiff /= diffs.Count;
-
-        double cvDiff = meanDiff > 1e-10 ? Math.Sqrt(varDiff) / meanDiff : 0;
+        T cvDiff = NumOps.GreaterThan(meanDiff, NumOps.FromDouble(1e-10))
+            ? NumOps.Divide(NumOps.Sqrt(varDiff), meanDiff)
+            : NumOps.Zero;
 
         // Too uniform energy changes (synthetic) or too erratic
-        if (cvDiff < 0.3) return (0.3 - cvDiff) * 3;
-        if (cvDiff > 2.0) return Math.Min(1.0, (cvDiff - 2.0) / 3);
+        if (NumOps.LessThan(cvDiff, NumOps.FromDouble(0.3)))
+            return NumOps.Multiply(NumOps.Subtract(NumOps.FromDouble(0.3), cvDiff), NumOps.FromDouble(3));
+        if (NumOps.GreaterThan(cvDiff, NumOps.FromDouble(2.0)))
+            return SafetyTensorOps<T>.MinOne(NumOps.Divide(NumOps.Subtract(cvDiff, NumOps.FromDouble(2.0)), NumOps.FromDouble(3)));
 
-        return 0;
+        return NumOps.Zero;
     }
 
-    private struct VoiceprintFrame
+    /// <summary>Per-frame voiceprint features, one element per frame.</summary>
+    private sealed class VoiceprintFrames
     {
-        public double Pitch;
-        public double Energy;
-        public double SpectralCentroid;
-        public double SpectralRolloff;
-        public double Formant1;
-        public double Formant2;
+        public Tensor<T> Pitch { get; set; } = new Tensor<T>(new[] { 0 });
+        public Tensor<T> Energy { get; set; } = new Tensor<T>(new[] { 0 });
+        public Tensor<T> SpectralCentroid { get; set; } = new Tensor<T>(new[] { 0 });
+        public Tensor<T> Formant1 { get; set; } = new Tensor<T>(new[] { 0 });
+        public Tensor<T> Formant2 { get; set; } = new Tensor<T>(new[] { 0 });
     }
 }

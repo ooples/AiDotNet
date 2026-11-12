@@ -4,6 +4,8 @@ using AiDotNet.Models;
 using AiDotNet.Safety;
 using AiDotNet.Safety.Image;
 using AiDotNet.Tensors.LinearAlgebra;
+using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Engines.Autodiff;
 
 namespace AiDotNet.Safety.Video;
 
@@ -452,59 +454,42 @@ public partial class MultimodalVideoModerator<T> : VideoSafetyModuleBase<T>
 
     private static double ComputeFrameDifference(Tensor<T> frame1, Tensor<T> frame2)
     {
-        var span1 = frame1.Data.Span;
-        var span2 = frame2.Data.Span;
-        int minLen = Math.Min(span1.Length, span2.Length);
+        int minLen = Math.Min(frame1.Length, frame2.Length);
         if (minLen == 0) return 0;
 
-        double sumAbsDiff = 0;
-        for (int i = 0; i < minLen; i++)
-        {
-            double d = NumOps.ToDouble(NumOps.Subtract(span1[i], span2[i]));
-            sumAbsDiff += Math.Abs(d);
-        }
-
-        return sumAbsDiff / minLen;
+        // Mean absolute difference over the overlapping prefix
+        using var noGrad = new NoGradScope<T>();
+        var absDiff = AbsoluteDifference(frame1, frame2, minLen);
+        return NumOps.ToDouble(NumOps.Divide(AiDotNetEngine.Current.TensorSum(absDiff), NumOps.FromDouble(minLen)));
     }
 
     private static double ComputeBlockMotionVariance(Tensor<T> frame1, Tensor<T> frame2, int blockSize)
     {
-        var span1 = frame1.Data.Span;
-        var span2 = frame2.Data.Span;
-        int minLen = Math.Min(span1.Length, span2.Length);
-        if (minLen < blockSize * blockSize) return 0;
+        int minLen = Math.Min(frame1.Length, frame2.Length);
+        int blockArea = blockSize * blockSize;
+        if (minLen < blockArea) return 0;
 
-        var blockDiffs = new List<double>();
-        int numBlocks = minLen / (blockSize * blockSize);
+        int numBlocks = minLen / blockArea;
         numBlocks = Math.Min(numBlocks, 64);
+        if (numBlocks < 2) return 0;
 
-        for (int b = 0; b < numBlocks; b++)
-        {
-            int offset = b * blockSize * blockSize;
-            double blockDiff = 0;
-            int count = 0;
-            for (int i = 0; i < blockSize * blockSize && offset + i < minLen; i++)
-            {
-                double d = NumOps.ToDouble(NumOps.Subtract(span1[offset + i], span2[offset + i]));
-                blockDiff += Math.Abs(d);
-                count++;
-            }
-            if (count > 0) blockDiffs.Add(blockDiff / count);
-        }
+        // Mean absolute difference of every (whole) block, then their population variance
+        using var noGrad = new NoGradScope<T>();
+        var engine = AiDotNetEngine.Current;
+        var absDiff = AbsoluteDifference(frame1, frame2, numBlocks * blockArea);
+        var blockDiffs = engine.TensorDivideScalar(
+            engine.ReduceSum(engine.Reshape(absDiff, new[] { numBlocks, blockArea }), new[] { 1 }, false),
+            NumOps.FromDouble(blockArea));
+        return NumOps.ToDouble(SafetyTensorOps<T>.MeanVariance(blockDiffs).Variance);
+    }
 
-        if (blockDiffs.Count < 2) return 0;
-
-        double mean = 0;
-        foreach (var d in blockDiffs) mean += d;
-        mean /= blockDiffs.Count;
-
-        double variance = 0;
-        foreach (var d in blockDiffs)
-        {
-            double diff = d - mean;
-            variance += diff * diff;
-        }
-        return variance / blockDiffs.Count;
+    /// <summary><c>|frame1 - frame2|</c> over the first <paramref name="length"/> flat elements.</summary>
+    private static Tensor<T> AbsoluteDifference(Tensor<T> frame1, Tensor<T> frame2, int length)
+    {
+        var engine = AiDotNetEngine.Current;
+        var a = engine.TensorNarrow(engine.Reshape(frame1.Contiguous(), new[] { frame1.Length }), 0, 0, length);
+        var b = engine.TensorNarrow(engine.Reshape(frame2.Contiguous(), new[] { frame2.Length }), 0, 0, length);
+        return engine.TensorAbs(engine.TensorSubtract(a, b));
     }
 
     private static double ComputePeriodicity(double[] frameDiffs, int count)

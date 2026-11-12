@@ -3,6 +3,8 @@ using AiDotNet.Enums;
 using AiDotNet.Models;
 using AiDotNet.Safety;
 using AiDotNet.Tensors.LinearAlgebra;
+using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Engines.Autodiff;
 
 namespace AiDotNet.Safety.Video;
 
@@ -120,18 +122,19 @@ public class TemporalConsistencyDetector<T> : VideoSafetyModuleBase<T>
 
     private TemporalFeatures ComputeTemporalFeatures(IReadOnlyList<Tensor<T>> frames)
     {
+        using var noGrad = new NoGradScope<T>();
+        var engine = Engine;
         int pairCount = frames.Count - 1;
-        var frameDiffs = new Vector<T>(pairCount);
-        T totalDiffSum = Zero;
-        T totalDiffSumSq = Zero;
+        var diffValues = new List<T>(Math.Max(0, pairCount));
 
         for (int f = 0; f < pairCount; f++)
         {
-            T diff = ComputeFrameDifference(frames[f], frames[f + 1]);
-            frameDiffs[f] = diff;
-            totalDiffSum = NumOps.Add(totalDiffSum, diff);
-            totalDiffSumSq = NumOps.Add(totalDiffSumSq, NumOps.Multiply(diff, diff));
+            diffValues.Add(ComputeFrameDifference(frames[f], frames[f + 1]));
         }
+
+        var frameDiffs = new Tensor<T>(new[] { diffValues.Count }, new Vector<T>(diffValues));
+        T totalDiffSum = pairCount > 0 ? engine.TensorSum(frameDiffs) : Zero;
+        T totalDiffSumSq = pairCount > 0 ? engine.TensorSumOfSquares(frameDiffs) : Zero;
 
         T pairCountT = NumOps.FromDouble(pairCount);
         T meanDiff = NumOps.Divide(totalDiffSum, pairCountT);
@@ -140,32 +143,19 @@ public class TemporalConsistencyDetector<T> : VideoSafetyModuleBase<T>
             NumOps.Multiply(meanDiff, meanDiff));
 
         // Compute jitter: variation in frame differences (should be smooth for real video)
-        T jitterSum = Zero;
-        for (int f = 1; f < pairCount; f++)
-        {
-            T delta = NumOps.Subtract(frameDiffs[f], frameDiffs[f - 1]);
-            jitterSum = NumOps.Add(jitterSum, NumOps.Multiply(delta, delta));
-        }
-
         T jitter = pairCount > 1
-            ? NumOps.Divide(jitterSum, NumOps.FromDouble(pairCount - 1))
+            ? NumOps.Divide(engine.TensorSumOfSquares(engine.TensorDiff(frameDiffs, 1, 0)), NumOps.FromDouble(pairCount - 1))
             : Zero;
 
         // Detect discontinuities: frames where difference is > 3x the mean
-        int discontinuities = 0;
         T threeX = NumOps.Multiply(NumOps.FromDouble(3.0), meanDiff);
         T epsilon = NumOps.FromDouble(1e-10);
         T effectiveThreshold = NumOps.GreaterThan(threeX, epsilon) ? threeX : epsilon;
+        T discontinuities = pairCount > 0
+            ? engine.TensorSum(engine.TensorGreaterThan(frameDiffs, effectiveThreshold))
+            : Zero;
 
-        for (int f = 0; f < pairCount; f++)
-        {
-            if (NumOps.GreaterThan(frameDiffs[f], effectiveThreshold))
-            {
-                discontinuities++;
-            }
-        }
-
-        T discontinuityRatio = NumOps.Divide(NumOps.FromDouble(discontinuities), pairCountT);
+        T discontinuityRatio = NumOps.Divide(discontinuities, pairCountT);
 
         // Detect periodicity in frame differences (deepfakes often have periodic patterns)
         T periodicity = ComputePeriodicity(frameDiffs, pairCount);
@@ -183,82 +173,55 @@ public class TemporalConsistencyDetector<T> : VideoSafetyModuleBase<T>
 
     private T ComputeFrameDifference(Tensor<T> frame1, Tensor<T> frame2)
     {
-        var span1 = frame1.Data.Span;
-        var span2 = frame2.Data.Span;
-
-        if (span1.Length == 0 || span2.Length == 0)
+        if (frame1.Length == 0 || frame2.Length == 0)
         {
             return Zero;
         }
 
-        if (span1.Length != span2.Length)
+        if (frame1.Length != frame2.Length)
         {
             throw new ArgumentException(
-                $"Frame tensors have different sizes ({span1.Length} vs {span2.Length}). " +
+                $"Frame tensors have different sizes ({frame1.Length} vs {frame2.Length}). " +
                 "All video frames must have the same dimensions.");
         }
 
-        T sumAbsDiff = Zero;
-        for (int i = 0; i < span1.Length; i++)
-        {
-            T diff = NumOps.Subtract(span1[i], span2[i]);
-            sumAbsDiff = NumOps.Add(sumAbsDiff, NumOps.Abs(diff));
-        }
+        var engine = Engine;
+        var a = engine.Reshape(frame1.Contiguous(), new[] { frame1.Length });
+        var b = engine.Reshape(frame2.Contiguous(), new[] { frame2.Length });
+        T sumAbsDiff = engine.TensorSum(engine.TensorAbs(engine.TensorSubtract(a, b)));
 
-        return NumOps.Divide(sumAbsDiff, NumOps.FromDouble(span1.Length));
+        return NumOps.Divide(sumAbsDiff, NumOps.FromDouble(frame1.Length));
     }
 
     /// <summary>
     /// Detects periodicity in frame difference signal via autocorrelation.
     /// Deepfakes often produce periodic frame-to-frame artifacts due to per-frame generation.
     /// </summary>
-    private static T ComputePeriodicity(Vector<T> frameDiffs, int count)
+    private static T ComputePeriodicity(Tensor<T> frameDiffs, int count)
     {
         if (count < 6) return Zero; // Need enough frames for meaningful autocorrelation
 
+        var engine = AiDotNetEngine.Current;
+
         // Compute mean
-        T sum = Zero;
-        for (int i = 0; i < count; i++)
-        {
-            sum = NumOps.Add(sum, frameDiffs[i]);
-        }
-        T mean = NumOps.Divide(sum, NumOps.FromDouble(count));
+        T mean = NumOps.Divide(engine.TensorSum(frameDiffs), NumOps.FromDouble(count));
 
         // Compute autocorrelation at lag 0 (variance)
-        T r0 = Zero;
-        for (int i = 0; i < count; i++)
-        {
-            T d = NumOps.Subtract(frameDiffs[i], mean);
-            r0 = NumOps.Add(r0, NumOps.Multiply(d, d));
-        }
+        var centered = engine.Reshape(engine.TensorSubtractScalar(frameDiffs, mean), new[] { 1, count });
+        T r0 = engine.TensorSumOfSquares(centered);
 
         T epsilon = NumOps.FromDouble(1e-10);
         if (NumOps.LessThan(r0, epsilon)) return Zero;
 
         // Find max autocorrelation for lags 2 to count/2 (skip lag 1 which is trivially high)
-        T maxNormAutocorr = Zero;
         int maxLag = count / 2;
-
-        for (int lag = 2; lag <= maxLag; lag++)
-        {
-            T rLag = Zero;
-            for (int i = 0; i < count - lag; i++)
-            {
-                T d1 = NumOps.Subtract(frameDiffs[i], mean);
-                T d2 = NumOps.Subtract(frameDiffs[i + lag], mean);
-                rLag = NumOps.Add(rLag, NumOps.Multiply(d1, d2));
-            }
-
-            T normAutocorr = NumOps.Divide(rLag, r0);
-            if (NumOps.GreaterThan(normAutocorr, maxNormAutocorr))
-            {
-                maxNormAutocorr = normAutocorr;
-            }
-        }
+        if (maxLag < 2) return Zero;
+        SafetyTensorOps<T>.LaggedProducts(centered, 2, maxLag + 1, out var rLag, out _, out _);
+        var normAutocorr = engine.TensorDivideScalar(rLag, r0);
 
         // Periodicity: strong autocorrelation at some lag indicates periodic pattern
         // Natural video rarely shows strong periodicity in frame differences
-        return maxNormAutocorr;
+        return SafetyTensorOps<T>.FirstStrictMax(normAutocorr, 0.0).Best.GetFlat(0);
     }
 
     /// <summary>

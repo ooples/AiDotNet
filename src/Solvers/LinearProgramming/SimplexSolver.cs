@@ -108,7 +108,7 @@ public sealed class SimplexSolver<T> : ILinearProgramSolver<T>
         private readonly T _tolerance;
 
         // Rows 0..constraintCount-1 hold the constraints; the final column is the right-hand side.
-        private readonly Matrix<T> _tableau;
+        private Tensor<T> _tableau;
         private readonly int _constraintCount;
         private readonly int _columnCount;
         private readonly int[] _basis;
@@ -124,12 +124,17 @@ public sealed class SimplexSolver<T> : ILinearProgramSolver<T>
 
         private readonly T _originalObjectiveOffset;
 
+        // 1 for artificial (respectively real) columns, and the tolerance in every column.
+        private readonly Tensor<T> _artificialColumnMask;
+        private readonly Tensor<T> _realColumnMask;
+        private readonly Tensor<T> _toleranceRow;
+
         private bool _phaseOneActive = true;
         private int _iterations;
 
         private StandardForm(
             SimplexSolverOptions options,
-            Matrix<T> tableau,
+            Tensor<T> tableau,
             int constraintCount,
             int columnCount,
             int[] basis,
@@ -154,6 +159,18 @@ public sealed class SimplexSolver<T> : ILinearProgramSolver<T>
             _equalityArtificialColumns = equalityArtificialColumns;
             _rowWasNegated = rowWasNegated;
             _originalObjectiveOffset = originalObjectiveOffset;
+
+            var isArtificial = new bool[columnCount];
+            var isReal = new bool[columnCount];
+            for (int c = 0; c < columnCount; c++)
+            {
+                isArtificial[c] = artificialColumns.Contains(c);
+                isReal[c] = !isArtificial[c];
+            }
+
+            _artificialColumnMask = SolverTensorOps<T>.Mask(isArtificial);
+            _realColumnMask = SolverTensorOps<T>.Mask(isReal);
+            _toleranceRow = Tensor<T>.CreateDefault(new[] { columnCount }, _tolerance);
         }
 
         public static StandardForm Build(LinearProgram<T> program, SimplexSolverOptions options)
@@ -186,21 +203,21 @@ public sealed class SimplexSolver<T> : ILinearProgramSolver<T>
             }
 
             int columnCount = structuralColumnCount + auxiliaryColumnCount;
-            var tableau = new Matrix<T>(constraintCount, columnCount + 1);
+            var engine = SolverTensorOps<T>.Engine;
             var basis = new int[constraintCount];
             var artificialColumns = new HashSet<int>();
             var slackColumnOfRow = new int[constraintCount];
             var artificialColumnOfRow = new int[constraintCount];
 
+            // Auxiliary-block entries as flat positions with a sign id (0 -> -1, 1 -> +1): slack +1, surplus -1,
+            // artificial +1.
+            var auxiliaryPositions = new List<int>();
+            var auxiliarySigns = new List<int>();
             int auxiliaryCursor = structuralColumnCount;
             for (int r = 0; r < constraintCount; r++)
             {
                 slackColumnOfRow[r] = -1;
                 artificialColumnOfRow[r] = -1;
-
-                var row = rows[r];
-                for (int c = 0; c < structuralColumnCount; c++) tableau[r, c] = row[c];
-                tableau[r, columnCount] = rightHandSides[r];
 
                 bool needsSlackOrSurplus = !isEquality[r];
                 bool needsArtificial = isEquality[r] || (needsSlackOrSurplus && rowWasNegated[r]);
@@ -209,7 +226,8 @@ public sealed class SimplexSolver<T> : ILinearProgramSolver<T>
                 {
                     int slackColumn = auxiliaryCursor++;
                     slackColumnOfRow[r] = slackColumn;
-                    tableau[r, slackColumn] = rowWasNegated[r] ? NumOps.Negate(NumOps.One) : NumOps.One;
+                    auxiliaryPositions.Add(r * auxiliaryColumnCount + slackColumn - structuralColumnCount);
+                    auxiliarySigns.Add(rowWasNegated[r] ? 0 : 1);
                 }
 
                 if (needsArtificial)
@@ -217,7 +235,8 @@ public sealed class SimplexSolver<T> : ILinearProgramSolver<T>
                     int artificialColumn = auxiliaryCursor++;
                     artificialColumnOfRow[r] = artificialColumn;
                     artificialColumns.Add(artificialColumn);
-                    tableau[r, artificialColumn] = NumOps.One;
+                    auxiliaryPositions.Add(r * auxiliaryColumnCount + artificialColumn - structuralColumnCount);
+                    auxiliarySigns.Add(1);
                     basis[r] = artificialColumn;
                 }
                 else
@@ -226,13 +245,35 @@ public sealed class SimplexSolver<T> : ILinearProgramSolver<T>
                 }
             }
 
+            // [structural rows | auxiliary columns | right-hand side].
+            Tensor<T> tableau;
+            if (constraintCount == 0)
+            {
+                tableau = new Tensor<T>(new[] { 0, columnCount + 1 });
+            }
+            else
+            {
+                var structural = engine.TensorStack(rows.Select(row => SolverTensorOps<T>.AsTensor(row)).ToArray(), 0);
+                var positions = auxiliaryPositions.ToArray();
+                var signs = auxiliarySigns.ToArray();
+                var auxiliary = engine.Reshape(
+                    engine.TensorIndexAdd(
+                        Tensor<T>.CreateDefault(new[] { constraintCount * auxiliaryColumnCount }, NumOps.Zero),
+                        0,
+                        new Tensor<int>(new[] { positions.Length }, new Vector<int>(positions)),
+                        engine.TensorTake(engine.TensorArange<T>(-1, 2, 2), new Tensor<int>(new[] { signs.Length }, new Vector<int>(signs)))),
+                    new[] { constraintCount, auxiliaryColumnCount });
+                var rightHandSideColumn = new Tensor<T>(new[] { constraintCount, 1 }, new Vector<T>(rightHandSides.ToArray()));
+                tableau = engine.TensorConcatenate(new[] { structural, auxiliary, rightHandSideColumn }, 1);
+            }
+
             // --- Step 5: widen the projected objective to cover the auxiliary columns ---
             // The auxiliary columns carry no objective cost, so they stay zero.
-            var phaseTwoObjective = new Vector<T>(columnCount);
-            for (int c = 0; c < structuralColumnCount; c++)
-            {
-                phaseTwoObjective[c] = nonNegativeForm.Objective[c];
-            }
+            var structuralObjective = engine.TensorNarrow(SolverTensorOps<T>.AsTensor(nonNegativeForm.Objective), 0, 0, structuralColumnCount);
+            var phaseTwoObjective = auxiliaryColumnCount == 0
+                ? structuralObjective.Contiguous().ToVector()
+                : engine.TensorConcatenate(
+                    new[] { structuralObjective, Tensor<T>.CreateDefault(new[] { auxiliaryColumnCount }, NumOps.Zero) }, 0).ToVector();
 
             T objectiveOffset = nonNegativeForm.ObjectiveOffset;
 
@@ -256,8 +297,7 @@ public sealed class SimplexSolver<T> : ILinearProgramSolver<T>
             // --- Phase one: minimize the sum of the artificial variables ---
             if (_artificialColumns.Count > 0)
             {
-                var phaseOneObjective = new Vector<T>(_columnCount);
-                foreach (int column in _artificialColumns) phaseOneObjective[column] = NumOps.One;
+                var phaseOneObjective = _artificialColumnMask.ToVector();
 
                 var phaseOneStatus = RunSimplex(phaseOneObjective, out T phaseOneOptimum);
                 if (phaseOneStatus == LinearProgramStatus.IterationLimit)
@@ -354,8 +394,9 @@ public sealed class SimplexSolver<T> : ILinearProgramSolver<T>
                 // Pivoting on a row whose right-hand side is already zero moves to a different basis
                 // describing the SAME vertex, leaving the objective unchanged. A long run of these
                 // is the signature of cycling.
-                bool isDegenerate = NumOps.LessThanOrEquals(
-                    NumOps.Abs(_tableau[leavingRow, _columnCount]), _tolerance);
+                var leavingRightHandSide = SolverTensorOps<T>.Engine.TensorNarrow(TableauColumn(_columnCount), 0, leavingRow, 1);
+                bool isDegenerate = SolverTensorOps<T>.First(SolverTensorOps<T>.AtMost(
+                    SolverTensorOps<T>.Engine.TensorAbs(leavingRightHandSide), _tolerance)) is not null;
                 degeneratePivots = isDegenerate ? degeneratePivots + 1 : 0;
 
                 Pivot(leavingRow, enteringColumn);
@@ -370,21 +411,28 @@ public sealed class SimplexSolver<T> : ILinearProgramSolver<T>
             }
         }
 
-        private Vector<T> ComputeReducedCosts(Vector<T> objective)
+        private int Width => _columnCount + 1;
+
+        private Tensor<int> BasisIds() => new Tensor<int>(new[] { _constraintCount }, new Vector<int>(_basis));
+
+        private Tensor<T> TableauRow(int row) => SolverTensorOps<T>.Engine.TensorSliceAxis(_tableau, 0, row);
+
+        private Tensor<T> TableauColumn(int column) => SolverTensorOps<T>.Engine.TensorSliceAxis(_tableau, 1, column);
+
+        private Tensor<T> ComputeReducedCosts(Vector<T> objective)
         {
-            var reducedCosts = new Vector<T>(_columnCount);
-            for (int c = 0; c < _columnCount; c++) reducedCosts[c] = objective[c];
+            var engine = SolverTensorOps<T>.Engine;
+            var reducedCosts = SolverTensorOps<T>.AsTensor(objective);
+            if (_constraintCount == 0) return reducedCosts;
 
-            for (int r = 0; r < _constraintCount; r++)
+            // Rows are folded in one at a time, in row order, exactly as the per-entry update
+            // r_c -= c_B[r] * A[r, c] did; rows whose basic cost is exactly zero are skipped.
+            var basicCosts = engine.TensorTake(reducedCosts, BasisIds());
+            var costs = basicCosts.ToArray();
+            foreach (int r in engine.TensorNonzero(engine.TensorNotEquals(basicCosts, NumOps.Zero)).ToArray())
             {
-                T basicCost = objective[_basis[r]];
-                if (NumOps.Equals(basicCost, NumOps.Zero)) continue;
-
-                for (int c = 0; c < _columnCount; c++)
-                {
-                    reducedCosts[c] = NumOps.Subtract(
-                        reducedCosts[c], NumOps.Multiply(basicCost, _tableau[r, c]));
-                }
+                var row = engine.TensorNarrow(TableauRow(r), 0, 0, _columnCount);
+                reducedCosts = engine.TensorSubtract(reducedCosts, engine.TensorMultiplyScalar(row, costs[r]));
             }
 
             return reducedCosts;
@@ -392,76 +440,74 @@ public sealed class SimplexSolver<T> : ILinearProgramSolver<T>
 
         private T ComputeObjectiveValue(Vector<T> objective)
         {
-            T value = NumOps.Zero;
-            for (int r = 0; r < _constraintCount; r++)
-            {
-                value = NumOps.Add(
-                    value, NumOps.Multiply(objective[_basis[r]], _tableau[r, _columnCount]));
-            }
-
-            return value;
+            if (_constraintCount == 0) return NumOps.Zero;
+            var engine = SolverTensorOps<T>.Engine;
+            var basicCosts = engine.TensorTake(SolverTensorOps<T>.AsTensor(objective), BasisIds());
+            return engine.TensorSum(engine.TensorMultiply(basicCosts, TableauColumn(_columnCount)));
         }
 
         /// <summary>
         /// Chooses the variable to bring into the basis: the most negative reduced cost (Dantzig),
         /// or the lowest-index negative one when Bland's rule is in force.
         /// </summary>
-        private int SelectEnteringColumn(Vector<T> reducedCosts, bool useBlandsRule)
+        private int SelectEnteringColumn(Tensor<T> reducedCosts, bool useBlandsRule)
         {
-            int best = -1;
-            T bestValue = NumOps.Negate(_tolerance);
-            T threshold = NumOps.Negate(_tolerance);
+            var engine = SolverTensorOps<T>.Engine;
 
-            for (int c = 0; c < _columnCount; c++)
+            // r_c < -tolerance is -r_c > tolerance. Artificial variables must never re-enter after phase one
+            // drove them out (doing so could leave the final point infeasible for the real problem), so in phase
+            // two they sit at the tolerance, which never qualifies.
+            var negated = engine.TensorNegate(reducedCosts);
+            var candidates = _phaseOneActive ? negated : engine.TensorWhere(_realColumnMask, negated, _toleranceRow);
+
+            if (useBlandsRule)
             {
-                // Artificial variables must never re-enter after phase one drove them out; doing so
-                // could leave the final point infeasible for the real problem.
-                if (!_phaseOneActive && _artificialColumns.Contains(c)) continue;
-
-                if (!NumOps.LessThan(reducedCosts[c], threshold)) continue;
-
-                if (useBlandsRule) return c;
-
-                if (NumOps.LessThan(reducedCosts[c], bestValue))
-                {
-                    bestValue = reducedCosts[c];
-                    best = c;
-                }
+                return SolverTensorOps<T>.First(engine.TensorGreaterThan(candidates, _tolerance))?[0] ?? -1;
             }
 
-            return best;
+            return SolverTensorOps<T>.FirstStrictMaxIndex(candidates, _tolerance);
         }
 
         /// <summary>
         /// Chooses the basic variable to leave by the minimum-ratio test, breaking ties by lowest
         /// basis index (Bland's rule) so the two rules together cannot cycle.
         /// </summary>
+        /// <remarks>
+        /// The scan keeps the first eligible row and moves on a strictly smaller ratio; under Bland's rule it
+        /// also moves to a later row within tolerance of the best ratio with a smaller basis index. The best
+        /// ratio only changes on a strict decrease, so after the first minimum (row k) it is fixed, and the
+        /// result is the smallest basis index among k and the later rows tied with it. A NaN first ratio is
+        /// never displaced.
+        /// </remarks>
         private int SelectLeavingRow(int enteringColumn, bool useBlandsRule)
         {
-            int best = -1;
-            T bestRatio = NumOps.Zero;
+            if (_constraintCount == 0) return -1;
+            var engine = SolverTensorOps<T>.Engine;
+            var pivotCandidates = TableauColumn(enteringColumn);
+            var eligible = engine.TensorGreaterThan(pivotCandidates, _tolerance);
+            var firstEligible = SolverTensorOps<T>.First(eligible);
+            if (firstEligible is null) return -1;
 
-            for (int r = 0; r < _constraintCount; r++)
+            var safePivots = engine.TensorWhere(
+                eligible, pivotCandidates, Tensor<T>.CreateDefault(new[] { _constraintCount }, NumOps.One));
+            var ratios = engine.TensorDivide(TableauColumn(_columnCount), safePivots);
+            int firstRow = firstEligible[0];
+            if (NumOps.IsNaN(ratios.GetFlat(firstRow))) return firstRow;
+
+            int best = SolverTensorOps<T>.FirstMinIndex(ratios, eligible);
+            if (!useBlandsRule) return best;
+
+            T bestRatio = ratios.GetFlat(best);
+            var tied = engine.TensorMultiply(
+                eligible,
+                SolverTensorOps<T>.AtMost(engine.TensorAbs(engine.TensorSubtractScalar(ratios, bestRatio)), _tolerance));
+            int chosen = best;
+            foreach (int r in engine.TensorNonzero(tied).ToArray())
             {
-                T pivotCandidate = _tableau[r, enteringColumn];
-                if (!NumOps.GreaterThan(pivotCandidate, _tolerance)) continue;
-
-                T ratio = NumOps.Divide(_tableau[r, _columnCount], pivotCandidate);
-
-                if (best < 0 || NumOps.LessThan(ratio, bestRatio))
-                {
-                    best = r;
-                    bestRatio = ratio;
-                }
-                else if (useBlandsRule
-                    && NumOps.LessThanOrEquals(NumOps.Abs(NumOps.Subtract(ratio, bestRatio)), _tolerance)
-                    && _basis[r] < _basis[best])
-                {
-                    best = r;
-                }
+                if (r > best && _basis[r] < _basis[chosen]) chosen = r;
             }
 
-            return best;
+            return chosen;
         }
 
         /// <summary>
@@ -470,28 +516,33 @@ public sealed class SimplexSolver<T> : ILinearProgramSolver<T>
         /// </summary>
         private void Pivot(int pivotRow, int enteringColumn)
         {
-            T pivotValue = _tableau[pivotRow, enteringColumn];
-            int width = _columnCount + 1;
+            var engine = SolverTensorOps<T>.Engine;
+            int width = Width;
+            var row = TableauRow(pivotRow);
+            T pivotValue = row.GetFlat(enteringColumn);
+            var scaledRow = engine.TensorDivideScalar(row, pivotValue);
 
-            for (int c = 0; c < width; c++)
-            {
-                _tableau[pivotRow, c] = NumOps.Divide(_tableau[pivotRow, c], pivotValue);
-            }
-
-            for (int r = 0; r < _constraintCount; r++)
-            {
-                if (r == pivotRow) continue;
-
-                T factor = _tableau[r, enteringColumn];
-                if (NumOps.Equals(factor, NumOps.Zero)) continue;
-
-                for (int c = 0; c < width; c++)
-                {
-                    _tableau[r, c] = NumOps.Subtract(
-                        _tableau[r, c], NumOps.Multiply(factor, _tableau[pivotRow, c]));
-                }
-            }
+            // Every other row with a non-zero factor loses factor * (scaled pivot row); rows with an exactly
+            // zero factor are left untouched, and the pivot row becomes the scaled row.
+            var factors = TableauColumn(enteringColumn);
+            var eliminated = engine.TensorSubtract(
+                _tableau,
+                engine.TensorMultiply(
+                    engine.Reshape(factors, new[] { _constraintCount, 1 }),
+                    engine.Reshape(scaledRow, new[] { 1, width })));
+            var isPivotRow = engine.TensorSliceAxis(engine.TensorEye<T>(_constraintCount), 0, pivotRow);
+            var changes = engine.TensorMultiply(
+                engine.TensorNotEquals(factors, NumOps.Zero), engine.ScalarMinusTensor(NumOps.One, isPivotRow));
+            var updated = engine.TensorWhere(RowMask(changes), eliminated, _tableau);
+            _tableau = engine.TensorWhere(
+                RowMask(isPivotRow),
+                engine.TensorBroadcastTo(engine.Reshape(scaledRow, new[] { 1, width }), new[] { _constraintCount, width }),
+                updated).Contiguous();
         }
+
+        private Tensor<T> RowMask(Tensor<T> perRow)
+            => SolverTensorOps<T>.Engine.TensorBroadcastTo(
+                SolverTensorOps<T>.Engine.Reshape(perRow, new[] { _constraintCount, 1 }), new[] { _constraintCount, Width });
 
         /// <summary>
         /// Pivots any artificial variable still sitting in the basis at value zero out of it, so
@@ -499,23 +550,15 @@ public sealed class SimplexSolver<T> : ILinearProgramSolver<T>
         /// </summary>
         private bool DriveArtificialsOutOfBasis()
         {
+            var engine = SolverTensorOps<T>.Engine;
             for (int r = 0; r < _constraintCount; r++)
             {
                 if (!_artificialColumns.Contains(_basis[r])) continue;
 
-                int replacement = -1;
-                T largestMagnitude = NumOps.Zero;
-                for (int c = 0; c < _columnCount; c++)
-                {
-                    if (_artificialColumns.Contains(c)) continue;
-                    T magnitude = NumOps.Abs(_tableau[r, c]);
-                    if (NumOps.GreaterThan(magnitude, _tolerance) &&
-                        (replacement < 0 || NumOps.GreaterThan(magnitude, largestMagnitude)))
-                    {
-                        replacement = c;
-                        largestMagnitude = magnitude;
-                    }
-                }
+                // The first real column of largest magnitude above the tolerance.
+                var magnitudes = engine.TensorAbs(engine.TensorNarrow(TableauRow(r), 0, 0, _columnCount));
+                int replacement = SolverTensorOps<T>.FirstStrictMaxIndex(
+                    engine.TensorWhere(_realColumnMask, magnitudes, _toleranceRow), _tolerance);
 
                 if (replacement < 0)
                 {
@@ -539,14 +582,15 @@ public sealed class SimplexSolver<T> : ILinearProgramSolver<T>
         private Vector<T> ExtractSolution()
         {
             // Basic variables take their row's right-hand side; every other variable is zero.
-            var standardValues = new Vector<T>(_columnCount);
-            for (int r = 0; r < _constraintCount; r++)
+            var standardValues = Tensor<T>.CreateDefault(new[] { _columnCount }, NumOps.Zero);
+            if (_constraintCount > 0)
             {
-                standardValues[_basis[r]] = _tableau[r, _columnCount];
+                standardValues = SolverTensorOps<T>.Engine.TensorIndexCopy(
+                    standardValues, 0, BasisIds(), TableauColumn(_columnCount));
             }
 
             // Undo the shift, reflection and splitting to recover the caller's variables.
-            return _nonNegativeForm.RecoverOriginalVariables(standardValues);
+            return _nonNegativeForm.RecoverOriginalVariables(standardValues.ToVector());
         }
 
         /// <summary>
@@ -554,53 +598,43 @@ public sealed class SimplexSolver<T> : ILinearProgramSolver<T>
         /// </summary>
         /// <remarks>
         /// At optimality the negated reduced cost of a constraint's auxiliary column is that
-        /// constraint's dual value — the tableau form of <c>y = c_Bᵀ B⁻¹</c>. Rows that were negated
+        /// constraint's dual value, the tableau form of <c>y = c_B^T B^-1</c>. Rows that were negated
         /// to make their right-hand side non-negative have their sign flipped back.
         /// </remarks>
         private (Vector<T>? Inequality, Vector<T>? Equality) ExtractDualValues(Vector<T> objective)
         {
             var reducedCosts = ComputeReducedCosts(objective);
 
-            Vector<T>? inequalityDuals = null;
-            if (_inequalitySlackColumns.Length > 0)
-            {
-                inequalityDuals = new Vector<T>(_inequalitySlackColumns.Length);
-                for (int r = 0; r < _inequalitySlackColumns.Length; r++)
-                {
-                    int column = _inequalitySlackColumns[r];
-                    if (column < 0)
-                    {
-                        inequalityDuals[r] = NumOps.Zero;
-                        continue;
-                    }
-
-                    T dual = NumOps.Negate(reducedCosts[column]);
-                    inequalityDuals[r] = _rowWasNegated[r] ? NumOps.Negate(dual) : dual;
-                }
-            }
-
-            Vector<T>? equalityDuals = null;
-            if (_equalityArtificialColumns.Length > 0)
-            {
-                int inequalityRowCount = _inequalitySlackColumns.Length;
-                equalityDuals = new Vector<T>(_equalityArtificialColumns.Length);
-                for (int r = 0; r < _equalityArtificialColumns.Length; r++)
-                {
-                    int column = _equalityArtificialColumns[r];
-                    if (column < 0)
-                    {
-                        equalityDuals[r] = NumOps.Zero;
-                        continue;
-                    }
-
-                    T dual = NumOps.Negate(reducedCosts[column]);
-                    equalityDuals[r] = _rowWasNegated[inequalityRowCount + r]
-                        ? NumOps.Negate(dual)
-                        : dual;
-                }
-            }
+            Vector<T>? inequalityDuals = _inequalitySlackColumns.Length > 0
+                ? DualsOf(reducedCosts, _inequalitySlackColumns, 0)
+                : null;
+            Vector<T>? equalityDuals = _equalityArtificialColumns.Length > 0
+                ? DualsOf(reducedCosts, _equalityArtificialColumns, _inequalitySlackColumns.Length)
+                : null;
 
             return (inequalityDuals, equalityDuals);
+        }
+
+        // -reducedCost[column] (sign restored for a negated row), or zero for a row without the column.
+        private Vector<T> DualsOf(Tensor<T> reducedCosts, int[] columns, int rowOffset)
+        {
+            var engine = SolverTensorOps<T>.Engine;
+            var safeColumns = new int[columns.Length];
+            var hasColumn = new bool[columns.Length];
+            var negated = new bool[columns.Length];
+            for (int r = 0; r < columns.Length; r++)
+            {
+                hasColumn[r] = columns[r] >= 0;
+                safeColumns[r] = hasColumn[r] ? columns[r] : 0;
+                negated[r] = _rowWasNegated[rowOffset + r];
+            }
+
+            var picked = engine.TensorTake(reducedCosts, new Tensor<int>(new[] { safeColumns.Length }, new Vector<int>(safeColumns)));
+            var duals = engine.TensorWhere(SolverTensorOps<T>.Mask(negated), picked, engine.TensorNegate(picked));
+            return engine.TensorWhere(
+                SolverTensorOps<T>.Mask(hasColumn),
+                duals,
+                Tensor<T>.CreateDefault(new[] { columns.Length }, NumOps.Zero)).ToVector();
         }
     }
 }

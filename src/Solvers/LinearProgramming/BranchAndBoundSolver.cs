@@ -260,23 +260,23 @@ public sealed class BranchAndBoundSolver<T>
     private static int SelectBranchVariable(
         Vector<T> solution, IReadOnlyList<bool> integralityMask, T tolerance)
     {
-        int mostFractional = -1;
-        double worstDistance = 0.0;
-
+        var integral = new List<int>(integralityMask.Count);
         for (int i = 0; i < solution.Length; i++)
         {
-            if (!integralityMask[i]) continue;
-
-            double value = NumOps.ToDouble(solution[i]);
-            double distance = Math.Abs(value - Math.Round(value));
-            if (distance <= NumOps.ToDouble(tolerance)) continue;
-
-            if (distance > worstDistance)
-            {
-                worstDistance = distance;
-                mostFractional = i;
-            }
+            if (integralityMask[i]) integral.Add(i);
         }
+
+        if (integral.Count == 0) return -1;
+
+        // distance = |v - round(v)| (round half to even, as Math.Round). A distance at or below the tolerance
+        // is skipped and the running worst starts at zero, so the floor is the larger of the two.
+        var engine = SolverTensorOps<T>.Engine;
+        var ids = integral.ToArray();
+        var values = engine.TensorTake(SolverTensorOps<T>.AsTensor(solution), new Tensor<int>(new[] { ids.Length }, new Vector<int>(ids)));
+        var distance = engine.TensorAbs(engine.TensorSubtract(values, engine.TensorRound(values)));
+        T floor = NumOps.GreaterThan(tolerance, NumOps.Zero) ? tolerance : NumOps.Zero;
+        int winner = SolverTensorOps<T>.FirstStrictMaxIndex(distance, floor);
+        int mostFractional = winner < 0 ? -1 : ids[winner];
 
         return mostFractional;
     }
@@ -288,12 +288,9 @@ public sealed class BranchAndBoundSolver<T>
     private static Vector<T> RoundIntegralComponents(
         Vector<T> solution, IReadOnlyList<bool> integralityMask)
     {
-        var rounded = solution.Clone();
-        for (int i = 0; i < rounded.Length; i++)
-        {
-            if (!integralityMask[i]) continue;
-            rounded[i] = NumOps.FromDouble(Math.Round(NumOps.ToDouble(rounded[i])));
-        }
+        var engine = SolverTensorOps<T>.Engine;
+        var values = SolverTensorOps<T>.AsTensor(solution);
+        var rounded = engine.TensorWhere(SolverTensorOps<T>.Mask(integralityMask), engine.TensorRound(values), values).ToVector();
 
         return rounded;
     }
@@ -348,32 +345,40 @@ public sealed class BranchAndBoundSolver<T>
         int branchRows = node.HasLower.Count(has => has) + node.HasUpper.Count(has => has);
         if (branchRows == 0) return program;
 
-        var matrix = new Matrix<T>(existingRows + branchRows, program.VariableCount);
-        var bounds = new Vector<T>(existingRows + branchRows);
+        var engine = SolverTensorOps<T>.Engine;
+        int variableCount = program.VariableCount;
 
-        for (int row = 0; row < existingRows; row++)
+        // Branch rows in variable order, the upper row (e_i, U_i) before the lower row (-e_i, -L_i), picked from
+        // the stacked tables [I; 0 - I] and [U; -L].
+        var picks = new int[branchRows];
+        int nextRow = 0;
+        for (int variable = 0; variable < variableCount; variable++)
         {
-            for (int column = 0; column < program.VariableCount; column++)
-            {
-                matrix[row, column] = (program.InequalityMatrix ?? throw new InvalidOperationException("program.InequalityMatrix is null where it is required."))[row, column];
-            }
-            bounds[row] = (program.InequalityBounds ?? throw new InvalidOperationException("program.InequalityBounds is null where it is required."))[row];
+            if (node.HasUpper[variable]) picks[nextRow++] = variable;
+            if (node.HasLower[variable]) picks[nextRow++] = variableCount + variable;
         }
 
-        int nextRow = existingRows;
-        for (int variable = 0; variable < program.VariableCount; variable++)
-        {
-            if (node.HasUpper[variable])
-            {
-                matrix[nextRow, variable] = NumOps.One;
-                bounds[nextRow++] = node.UpperValues[variable];
-            }
+        var identity = engine.TensorEye<T>(variableCount);
+        var rowTable = engine.TensorConcatenate(new[] { identity, engine.ScalarMinusTensor(NumOps.Zero, identity) }, 0);
+        var boundTable = engine.TensorConcatenate(
+            new[] { SolverTensorOps<T>.AsTensor(node.UpperValues), engine.TensorNegate(SolverTensorOps<T>.AsTensor(node.LowerValues)) }, 0);
+        var pickIds = new Tensor<int>(new[] { picks.Length }, new Vector<int>(picks));
+        var branchMatrix = engine.TensorIndexSelect(rowTable, pickIds, 0);
+        var branchBounds = engine.TensorTake(boundTable, pickIds);
 
-            if (node.HasLower[variable])
-            {
-                matrix[nextRow, variable] = NumOps.Negate(NumOps.One);
-                bounds[nextRow++] = NumOps.Negate(node.LowerValues[variable]);
-            }
+        Matrix<T> matrix;
+        Vector<T> bounds;
+        if (existingRows > 0)
+        {
+            var existingMatrix = SolverTensorOps<T>.AsTensor(program.InequalityMatrix ?? throw new InvalidOperationException("program.InequalityMatrix is null where it is required."));
+            var existingBounds = SolverTensorOps<T>.AsTensor(program.InequalityBounds ?? throw new InvalidOperationException("program.InequalityBounds is null where it is required."));
+            matrix = engine.TensorConcatenate(new[] { existingMatrix, branchMatrix }, 0).ToMatrix();
+            bounds = engine.TensorConcatenate(new[] { existingBounds, branchBounds }, 0).ToVector();
+        }
+        else
+        {
+            matrix = branchMatrix.ToMatrix();
+            bounds = branchBounds.ToVector();
         }
 
         return new LinearProgram<T>(

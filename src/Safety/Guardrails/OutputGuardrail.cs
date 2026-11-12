@@ -155,15 +155,7 @@ public class OutputGuardrail<T> : ITextSafetyModule<T>
         }
 
         // Convert vector to string (character codes) and delegate to text evaluation
-        var numOps = MathHelper.GetNumericOperations<T>();
-        var chars = new char[content.Length];
-        for (int i = 0; i < content.Length; i++)
-        {
-            int code = (int)Math.Round(numOps.ToDouble(content[i]));
-            chars[i] = code is >= 0 and <= 65535 ? (char)code : '?';
-        }
-
-        return EvaluateText(new string(chars));
+        return EvaluateText(SafetyTensorOps<T>.DecodeCharCodes(content));
     }
 
     private void CheckRepetition(string text, List<SafetyFinding> findings)
