@@ -239,22 +239,48 @@ public partial class DiTToTTS<T> : TtsModelBase<T>, IEndToEndTts<T>
         int total = checked(promptLength + remaining);
         if (total == 0) return new Tensor<T>(new[] { 0, _options.LatentDim });
         var latent = Gaussian(total, _options.LatentDim, random ?? AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(_options.SamplingSeed));
-        var mask = new Tensor<T>(new[] { total, 1 });
-        for (int i = promptLength; i < total; i++) mask[i, 0] = Ops.One;
+        // 0 on the prompt's frames, 1 on the frames to generate.
+        var generate = Tensor<T>.CreateDefault(new[] { remaining, 1 }, Ops.One);
+        var mask = promptLength == 0 ? generate
+            : remaining == 0 ? new Tensor<T>(new[] { total, 1 })
+            : Engine.TensorConcatenate(new[] { new Tensor<T>(new[] { promptLength, 1 }), generate }, 0);
         if (prompt is not null) latent = RestorePrompt(latent, prompt);
-        for (int step = _options.InferenceSteps; step > 0; step--)
+        int steps = _options.InferenceSteps;
+        var (signals, noises) = NoiseLevels(steps);
+        T guidance = Ops.FromDouble(_options.GuidanceScale);
+        for (int step = steps; step > 0; step--)
         {
-            double time = step / (double)_options.InferenceSteps, next = (step - 1) / (double)_options.InferenceSteps;
+            double time = step / (double)steps;
             var conditional = DiffusionTransformer!.Forward(latent, mask, text, time, false);
             var unconditional = DiffusionTransformer.Forward(latent, mask, text, time, true);
-            var velocity = Engine.TensorAdd(unconditional, Engine.TensorMultiplyScalar(Engine.TensorSubtract(conditional, unconditional), Ops.FromDouble(_options.GuidanceScale)));
-            var (signal, noise) = NoiseLevel(time); var (nextSignal, nextNoise) = NoiseLevel(next);
-            var x0 = Engine.TensorSubtract(Engine.TensorMultiplyScalar(latent, Ops.FromDouble(signal)), Engine.TensorMultiplyScalar(velocity, Ops.FromDouble(noise)));
-            var epsilon = Engine.TensorAdd(Engine.TensorMultiplyScalar(latent, Ops.FromDouble(noise)), Engine.TensorMultiplyScalar(velocity, Ops.FromDouble(signal)));
-            latent = Engine.TensorAdd(Engine.TensorMultiplyScalar(x0, Ops.FromDouble(nextSignal)), Engine.TensorMultiplyScalar(epsilon, Ops.FromDouble(nextNoise)));
+            var velocity = Engine.TensorAdd(unconditional, Engine.TensorMultiplyScalar(Engine.TensorSubtract(conditional, unconditional), guidance));
+            T signal = signals[step], noise = noises[step], nextSignal = signals[step - 1], nextNoise = noises[step - 1];
+            var x0 = Engine.TensorSubtract(Engine.TensorMultiplyScalar(latent, signal), Engine.TensorMultiplyScalar(velocity, noise));
+            var epsilon = Engine.TensorAdd(Engine.TensorMultiplyScalar(latent, noise), Engine.TensorMultiplyScalar(velocity, signal));
+            latent = Engine.TensorAdd(Engine.TensorMultiplyScalar(x0, nextSignal), Engine.TensorMultiplyScalar(epsilon, nextNoise));
             if (prompt is not null) latent = RestorePrompt(latent, prompt);
         }
         return latent;
+    }
+
+    /// <summary>
+    /// <see cref="NoiseLevel"/> at t_k = k / steps, k = 0 … steps, as T. With c = cos²(πt/2) and 1 − c = sin²(πt/2) (each
+    /// clamped to [1e-9, 1 − 1e-9]) and s the schedule scale, σ(log SNR) = c s² / (c s² + 1 − c): the signal level is its
+    /// square root and the noise level the square root of (1 − c) / (c s² + 1 − c). Taking sin² directly keeps 1 − c
+    /// accurate near t = 0 in a narrow T.
+    /// </summary>
+    private (T[] Signal, T[] Noise) NoiseLevels(int steps)
+    {
+        var angle = Engine.TensorMultiplyScalar(Engine.TensorArange<T>(0, steps + 1), Ops.FromDouble(Math.PI / (2.0 * steps)));
+        T low = Ops.FromDouble(1e-9), high = Ops.FromDouble(1 - 1e-9);
+        var cosinePower = Engine.TensorClamp(Engine.TensorSquare(Engine.TensorCos(angle)), low, high);
+        var sinePower = Engine.TensorClamp(Engine.TensorSquare(Engine.TensorSin(angle)), low, high);
+        double scale = _options.NoiseScheduleScale;
+        var weighted = Engine.TensorMultiplyScalar(cosinePower, Ops.FromDouble(scale * scale));
+        var total = Engine.TensorAdd(weighted, sinePower);
+        return (Engine.TensorSqrt(Engine.TensorDivide(weighted, total)).ToArray(),
+            Engine.TensorSqrt(Engine.TensorDivide(sinePower, total)).ToArray());
+
     }
 
     private Tensor<T> RestorePrompt(Tensor<T> latent, Tensor<T> prompt)
