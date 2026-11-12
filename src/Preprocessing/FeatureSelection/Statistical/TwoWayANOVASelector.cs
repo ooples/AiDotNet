@@ -25,13 +25,13 @@ public class TwoWayANOVASelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, 
 {
     private readonly int _nFeaturesToSelect;
 
-    private double[]? _fStatistics;
+    private Vector<T>? _fStatistics;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
-    public double[]? FStatistics => _fStatistics;
+    public Vector<T>? FStatistics => _fStatistics;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -64,128 +64,42 @@ public class TwoWayANOVASelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, 
         int n = data.Rows;
         int p = data.Columns;
 
-        var X = new double[n, p];
-        var f1 = new int[n];
-        var f2 = new int[n];
+        PreprocessingTensorOps.ClassLabels(factor1, out var levels1, out var index1);
+        PreprocessingTensorOps.ClassLabels(factor2, out var levels2, out var index2);
+        int l1 = levels1.Length;
+        int l2 = levels2.Length;
 
-        for (int i = 0; i < n; i++)
+        // Degrees of freedom
+        int df1 = l1 - 1;
+        int df2 = l2 - 1;
+        int dfWithin = n - l1 * l2;
+
+        var scores = PreprocessingTensorOps.Filled(new[] { p }, NumOps.Zero);
+        if (dfWithin > 0 && df1 > 0 && df2 > 0)
         {
-            f1[i] = (int)Math.Round(NumOps.ToDouble(factor1[i]));
-            f2[i] = (int)Math.Round(NumOps.ToDouble(factor2[i]));
-            for (int j = 0; j < p; j++)
-                X[i, j] = NumOps.ToDouble(data[i, j]);
-        }
-
-        var levels1 = f1.Distinct().OrderBy(x => x).ToList();
-        var levels2 = f2.Distinct().OrderBy(x => x).ToList();
-
-        _fStatistics = new double[p];
-
-        for (int j = 0; j < p; j++)
-        {
-            var col = new double[n];
+            var x = Tensor<T>.FromMatrix(data);
+            var cells = new int[n];
             for (int i = 0; i < n; i++)
-                col[i] = X[i, j];
+                cells[i] = index1[i] * l2 + index2[i];
 
-            double grandMean = col.Average();
-            double ssTotal = col.Sum(v => (v - grandMean) * (v - grandMean));
+            // Main-effect sums of squares from the marginal means and the error from the cell means
+            var ss1 = SelectorTensorOps.ClassScatter(x, new Tensor<int>(index1, new[] { n }), l1, out _);
+            var ss2 = SelectorTensorOps.ClassScatter(x, new Tensor<int>(index2, new[] { n }), l2, out _);
+            SelectorTensorOps.ClassScatter(x, new Tensor<int>(cells, new[] { n }), l1 * l2, out var ssWithin);
 
-            // Calculate cell means and marginal means
-            var cellMeans = new Dictionary<(int, int), double>();
-            var cellCounts = new Dictionary<(int, int), int>();
-
-            for (int i = 0; i < n; i++)
-            {
-                var key = (f1[i], f2[i]);
-                if (!cellMeans.ContainsKey(key))
-                {
-                    cellMeans[key] = 0;
-                    cellCounts[key] = 0;
-                }
-                cellMeans[key] += col[i];
-                cellCounts[key]++;
-            }
-
-            foreach (var key in cellMeans.Keys.ToList())
-                cellMeans[key] /= cellCounts[key];
-
-            // Marginal means for factor 1
-            var means1 = new Dictionary<int, double>();
-            var counts1 = new Dictionary<int, int>();
-            for (int i = 0; i < n; i++)
-            {
-                if (!means1.ContainsKey(f1[i]))
-                {
-                    means1[f1[i]] = 0;
-                    counts1[f1[i]] = 0;
-                }
-                means1[f1[i]] += col[i];
-                counts1[f1[i]]++;
-            }
-            foreach (var k in means1.Keys.ToList())
-                means1[k] /= counts1[k];
-
-            // Marginal means for factor 2
-            var means2 = new Dictionary<int, double>();
-            var counts2 = new Dictionary<int, int>();
-            for (int i = 0; i < n; i++)
-            {
-                if (!means2.ContainsKey(f2[i]))
-                {
-                    means2[f2[i]] = 0;
-                    counts2[f2[i]] = 0;
-                }
-                means2[f2[i]] += col[i];
-                counts2[f2[i]]++;
-            }
-            foreach (var k in means2.Keys.ToList())
-                means2[k] /= counts2[k];
-
-            // SS for factor 1
-            double ss1 = 0;
-            foreach (var lv in levels1)
-                ss1 += counts1[lv] * (means1[lv] - grandMean) * (means1[lv] - grandMean);
-
-            // SS for factor 2
-            double ss2 = 0;
-            foreach (var lv in levels2)
-                ss2 += counts2[lv] * (means2[lv] - grandMean) * (means2[lv] - grandMean);
-
-            // SS within (error)
-            double ssWithin = 0;
-            for (int i = 0; i < n; i++)
-            {
-                var key = (f1[i], f2[i]);
-                double diff = col[i] - cellMeans[key];
-                ssWithin += diff * diff;
-            }
-
-            // Degrees of freedom
-            int df1 = levels1.Count - 1;
-            int df2 = levels2.Count - 1;
-            int dfWithin = n - levels1.Count * levels2.Count;
-
-            if (dfWithin <= 0 || df1 <= 0 || df2 <= 0)
-            {
-                _fStatistics[j] = 0;
-                continue;
-            }
-
-            // F-statistics (combine main effects)
-            double msWithin = ssWithin / dfWithin;
-            double f1Stat = msWithin > 1e-10 ? (ss1 / df1) / msWithin : 0;
-            double f2Stat = msWithin > 1e-10 ? (ss2 / df2) / msWithin : 0;
+            // F-statistics (combine main effects), 0 where the error mean square is not above 1e-10
+            var msWithin = Engine.TensorDivideScalar(ssWithin, NumOps.FromDouble(dfWithin));
+            var usable = Engine.TensorGreaterThan(msWithin, NumOps.FromDouble(1e-10));
+            var safeMsWithin = Engine.TensorWhere(usable, msWithin, PreprocessingTensorOps.Filled(new[] { p }, NumOps.One));
+            var f1Stat = Engine.TensorDivide(Engine.TensorDivideScalar(ss1, NumOps.FromDouble(df1)), safeMsWithin);
+            var f2Stat = Engine.TensorDivide(Engine.TensorDivideScalar(ss2, NumOps.FromDouble(df2)), safeMsWithin);
 
             // Use maximum F-statistic
-            _fStatistics[j] = Math.Max(f1Stat, f2Stat);
+            scores = SelectorTensorOps.ZeroUnless(usable, Engine.TensorMax(f1Stat, f2Stat));
         }
 
-        int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = Enumerable.Range(0, p)
-            .OrderByDescending(j => _fStatistics[j])
-            .Take(numToSelect)
-            .OrderBy(x => x)
-            .ToArray();
+        _fStatistics = scores.ToVector();
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(scores, Math.Min(_nFeaturesToSelect, p));
 
         IsFitted = true;
     }
@@ -196,15 +110,7 @@ public class TwoWayANOVASelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, 
         if (_selectedIndices is null)
             throw new InvalidOperationException("TwoWayANOVASelector has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

@@ -25,13 +25,13 @@ public class MANOVASelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupe
 {
     private readonly int _nFeaturesToSelect;
 
-    private double[]? _wilksLambda;
+    private Vector<T>? _wilksLambda;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
-    public double[]? WilksLambda => _wilksLambda;
+    public Vector<T>? WilksLambda => _wilksLambda;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -65,61 +65,21 @@ public class MANOVASelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupe
         int n = data.Rows;
         int p = data.Columns;
 
-        var X = new double[n, p];
-        var y = new int[n];
-        for (int i = 0; i < n; i++)
-        {
-            y[i] = (int)Math.Round(NumOps.ToDouble(target[i]));
-            for (int j = 0; j < p; j++)
-                X[i, j] = NumOps.ToDouble(data[i, j]);
-        }
+        PreprocessingTensorOps.ClassLabels(target, out var classes, out var classIndex);
+        int k = classes.Length;
 
-        var classes = y.Distinct().OrderBy(c => c).ToList();
-        int k = classes.Count;
-
-        _wilksLambda = new double[p];
-
-        // For each feature, compute Wilks' Lambda approximation using
-        // pairwise feature combinations (simplified MANOVA)
-        for (int j = 0; j < p; j++)
-        {
-            // Use univariate F-statistic as base
-            var col = new double[n];
-            for (int i = 0; i < n; i++)
-                col[i] = X[i, j];
-
-            double grandMean = col.Average();
-
-            // Between-group SS
-            double ssBetween = 0;
-            foreach (var c in classes)
-            {
-                var classIndices = Enumerable.Range(0, n).Where(i => y[i] == c).ToList();
-                double classMean = classIndices.Select(i => col[i]).Average();
-                ssBetween += classIndices.Count * (classMean - grandMean) * (classMean - grandMean);
-            }
-
-            // Within-group SS
-            double ssWithin = 0;
-            foreach (var c in classes)
-            {
-                var classIndices = Enumerable.Range(0, n).Where(i => y[i] == c).ToList();
-                double classMean = classIndices.Select(i => col[i]).Average();
-                ssWithin += classIndices.Sum(i => (col[i] - classMean) * (col[i] - classMean));
-            }
-
-            // Wilks' Lambda = SS_within / SS_total
-            double ssTotal = ssBetween + ssWithin;
-            _wilksLambda[j] = ssTotal > 1e-10 ? ssWithin / ssTotal : 1.0;
-        }
+        // Univariate Wilks' Lambda = SS_within / SS_total per feature (1 for a constant feature)
+        var between = SelectorTensorOps.ClassScatter(
+            Tensor<T>.FromMatrix(data), new Tensor<int>(classIndex, new[] { n }), k, out var within);
+        var total = Engine.TensorAdd(between, within);
+        var usable = Engine.TensorGreaterThan(total, NumOps.FromDouble(1e-10));
+        var scores = Engine.TensorWhere(usable,
+            Engine.TensorDivide(within, Engine.TensorWhere(usable, total, PreprocessingTensorOps.Filled(new[] { p }, NumOps.One))),
+            PreprocessingTensorOps.Filled(new[] { p }, NumOps.One));
+        _wilksLambda = scores.ToVector();
 
         // Lower Wilks' Lambda = better discrimination
-        int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = Enumerable.Range(0, p)
-            .OrderBy(j => _wilksLambda[j])
-            .Take(numToSelect)
-            .OrderBy(x => x)
-            .ToArray();
+        _selectedIndices = PreprocessingTensorOps.BottomKIndicesSorted(scores, Math.Min(_nFeaturesToSelect, p));
 
         IsFitted = true;
     }
@@ -137,15 +97,7 @@ public class MANOVASelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupe
         if (_selectedIndices is null)
             throw new InvalidOperationException("MANOVASelector has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />
