@@ -22567,3 +22567,5 @@ virtual AiDotNet.Diffusion.DiffusionModelBase<T>.IsBatchedTrainingSample(AiDotNe
 AiDotNet.Document.Options.DocBankOptions.LearningRate.get -> double?
 *REMOVED*AiDotNet.Diffusion.Safety.SGRACEEraser<T>.MeasureStylePresence(AiDotNet.Tensors.LinearAlgebra.Vector<T>! currentParameters, AiDotNet.Tensors.LinearAlgebra.Vector<T>! baseParameters, int styleIndex) -> double
 AiDotNet.Diffusion.Safety.SGRACEEraser<T>.MeasureStylePresence(AiDotNet.Tensors.LinearAlgebra.Vector<T>! currentParameters, AiDotNet.Tensors.LinearAlgebra.Vector<T>! baseParameters, int styleIndex) -> T
+*REMOVED*AiDotNet.Diffusion.Audio.GriffinLim<T>.ComputeSpectralConvergence(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! targetMagnitude, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! signal) -> double
+AiDotNet.Diffusion.Audio.GriffinLim<T>.ComputeSpectralConvergence(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! targetMagnitude, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! signal) -> T

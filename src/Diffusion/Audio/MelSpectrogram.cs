@@ -227,11 +227,7 @@ public partial class MelSpectrogram<T>
         // Create window tensor for direct IEngine operations
         var window = windowFunction ?? new HanningWindow<T>();
         var windowVector = window.Create(_nFft);
-        var windowData = new T[_nFft];
-        for (int i = 0; i < _nFft; i++)
-        {
-            windowData[i] = windowVector[i];
-        }
+        var windowData = windowVector.AsSpan().Slice(0, _nFft).ToArray();
         _windowTensor = new Tensor<T>(windowData, new[] { _nFft });
     }
 
@@ -320,14 +316,7 @@ public partial class MelSpectrogram<T>
     private Tensor<T> ApplyLogOffset(Tensor<T> melSpec)
     {
         double offset = _logOffset ?? 0.01;
-        var result = new Tensor<T>(melSpec._shape);
-        for (int i = 0; i < melSpec.Data.Length; i++)
-        {
-            double v = NumOps.ToDouble(melSpec.Data.Span[i]) + offset;
-            result.Data.Span[i] = NumOps.FromDouble(Math.Log(v));
-        }
-
-        return result;
+        return Engine.TensorLog(Engine.TensorAddScalar(melSpec, NumOps.FromDouble(offset)));
     }
 
     /// <summary>
@@ -354,39 +343,15 @@ public partial class MelSpectrogram<T>
                 $"Power spectrogram has {numFreqs} frequency bins but filterbank expects {filterFreqs}.");
         }
 
-        int leadingSize = 1;
-        for (int axis = 0; axis < powerSpec.Rank - 2; axis++)
-            leadingSize *= powerSpec.Shape[axis];
-
         var outputShape = powerSpec.Shape.ToArray();
         outputShape[^1] = nMels;
-        var melSpec = new Tensor<T>(outputShape);
 
         // Batched matrix multiplication: melSpec = powerSpec @ melFilterbank.T.
-        // Treat every leading axis as an independent spectrogram and preserve it.
-        for (int leading = 0; leading < leadingSize; leading++)
-        {
-            for (int frame = 0; frame < numFrames; frame++)
-            {
-                int powerOffset = (leading * numFrames + frame) * numFreqs;
-                int melOffset = (leading * numFrames + frame) * nMels;
-                for (int mel = 0; mel < nMels; mel++)
-                {
-                    T sum = NumOps.Zero;
-                    int filterOffset = mel * filterFreqs;
-                    for (int f = 0; f < numFreqs; f++)
-                    {
-                        var power = powerSpec.Data.Span[powerOffset + f];
-                        var filter = _melFilterbank.Data.Span[filterOffset + f];
-                        sum = NumOps.Add(sum, NumOps.Multiply(power, filter));
-                    }
-
-                    melSpec.Data.Span[melOffset + mel] = sum;
-                }
-            }
-        }
-
-        return melSpec;
+        // Every leading axis is folded into the frame axis and restored afterwards.
+        var engine = Engine;
+        var rows = engine.Reshape(powerSpec, new[] { powerSpec.Length / numFreqs, numFreqs });
+        var melRows = engine.TensorMatMul(rows, engine.TensorTranspose(_melFilterbank));
+        return engine.Reshape(melRows, outputShape);
     }
 
     /// <summary>
@@ -396,29 +361,16 @@ public partial class MelSpectrogram<T>
     /// <returns>dB spectrogram.</returns>
     private Tensor<T> PowerToDb(Tensor<T> power)
     {
-        var db = new Tensor<T>(power._shape);
+        var engine = Engine;
         T refValue = NumOps.FromDouble(_refDb);
         T minDbT = NumOps.FromDouble(_minDb);
-        T epsilon = NumOps.FromDouble(1e-10);
-        T factor = NumOps.FromDouble(10.0);
 
-        for (int i = 0; i < power.Data.Length; i++)
-        {
-            // dB = 10 * log10(power / ref + epsilon)
-            var ratio = NumOps.Add(NumOps.Divide(power.Data.Span[i], refValue), epsilon);
-            var logVal = NumOps.FromDouble(Math.Log10(NumOps.ToDouble(ratio)));
-            var dbVal = NumOps.Multiply(factor, logVal);
+        // dB = 10 * log10(power / ref + epsilon)
+        var ratio = engine.TensorAddScalar(engine.TensorDivideScalar(power, refValue), NumOps.FromDouble(1e-10));
+        var db = engine.TensorMultiplyScalar(engine.TensorLog10(ratio), NumOps.FromDouble(10.0));
 
-            // Clamp to minimum dB
-            if (NumOps.LessThan(dbVal, minDbT))
-            {
-                dbVal = minDbT;
-            }
-
-            db.Data.Span[i] = dbVal;
-        }
-
-        return db;
+        // Clamp to minimum dB (NaN compares false and is kept)
+        return engine.TensorWhere(engine.TensorLessThan(db, minDbT), Tensor<T>.CreateDefault(db._shape, minDbT), db);
     }
 
     /// <summary>
@@ -428,19 +380,10 @@ public partial class MelSpectrogram<T>
     /// <returns>Power spectrogram.</returns>
     public Tensor<T> DbToPower(Tensor<T> db)
     {
-        var power = new Tensor<T>(db._shape);
-        T refValue = NumOps.FromDouble(_refDb);
-        T divisor = NumOps.FromDouble(10.0);
-
-        for (int i = 0; i < db.Data.Length; i++)
-        {
-            // power = ref * 10^(dB / 10)
-            var exponent = NumOps.Divide(db.Data.Span[i], divisor);
-            var factor = NumOps.FromDouble(Math.Pow(10.0, NumOps.ToDouble(exponent)));
-            power.Data.Span[i] = NumOps.Multiply(refValue, factor);
-        }
-
-        return power;
+        // power = ref * 10^(dB / 10) = ref * exp(dB * ln(10) / 10)
+        var engine = Engine;
+        var factor = engine.TensorExp(engine.TensorMultiplyScalar(db, NumOps.FromDouble(Math.Log(10.0) / 10.0)));
+        return engine.TensorMultiplyScalar(factor, NumOps.FromDouble(_refDb));
     }
 
     /// <summary>
@@ -465,47 +408,24 @@ public partial class MelSpectrogram<T>
             linearMel = DbToPower(melSpec);
         }
 
+        var engine = Engine;
         int numFrames = linearMel.Shape[0];
         int nMels = linearMel.Shape[1];
-        int numFreqs = _melFilterbank.Shape[1];
+        var mel = engine.Reshape(
+            engine.TensorNarrow(engine.Reshape(linearMel, new[] { linearMel.Length }), 0, 0, numFrames * nMels),
+            new[] { numFrames, nMels });
 
-        // Pseudo-inverse of filterbank (simple transpose with normalization)
-        var magnitude = new Tensor<T>(new[] { numFrames, numFreqs });
+        // Pseudo-inverse of filterbank (simple transpose with normalization):
+        // normalization per frequency bin is sum_mel filter^2 + 1e-8
+        var filterNorm = engine.TensorAddScalar(
+            engine.ReduceSum(engine.TensorSquare(_melFilterbank), new[] { 0 }, true), NumOps.FromDouble(1e-8));
+        var projected = engine.TensorMatMul(mel, _melFilterbank);
+        var normalized = engine.TensorDivide(projected, engine.TensorBroadcastTo(filterNorm, projected._shape));
 
-        // Compute normalization factors for each frequency bin
-        var filterNorm = new T[numFreqs];
-        for (int f = 0; f < numFreqs; f++)
-        {
-            T sum = NumOps.Zero;
-            for (int mel = 0; mel < nMels; mel++)
-            {
-                var filter = _melFilterbank.Data.Span[mel * numFreqs + f];
-                sum = NumOps.Add(sum, NumOps.Multiply(filter, filter));
-            }
-            filterNorm[f] = NumOps.Add(sum, NumOps.FromDouble(1e-8));
-        }
-
-        // Apply pseudo-inverse
-        for (int frame = 0; frame < numFrames; frame++)
-        {
-            for (int f = 0; f < numFreqs; f++)
-            {
-                T sum = NumOps.Zero;
-                for (int mel = 0; mel < nMels; mel++)
-                {
-                    var melVal = linearMel.Data.Span[frame * nMels + mel];
-                    var filter = _melFilterbank.Data.Span[mel * numFreqs + f];
-                    sum = NumOps.Add(sum, NumOps.Multiply(melVal, filter));
-                }
-                var normalized = NumOps.Divide(sum, filterNorm[f]);
-
-                // Take square root to go from power to magnitude
-                magnitude.Data.Span[frame * numFreqs + f] = NumOps.FromDouble(
-                    Math.Sqrt(Math.Max(0, NumOps.ToDouble(normalized))));
-            }
-        }
-
-        return magnitude;
+        // Take square root of max(0, x) to go from power to magnitude (NaN is kept)
+        var nonNegative = engine.TensorWhere(
+            engine.TensorLessThan(normalized, NumOps.Zero), new Tensor<T>(normalized._shape), normalized);
+        return engine.TensorSqrt(nonNegative);
     }
 
     /// <summary>
@@ -519,8 +439,9 @@ public partial class MelSpectrogram<T>
     /// <returns>Filterbank matrix [nMels, nFreqs].</returns>
     private static Tensor<T> CreateMelFilterbank(int nMels, int nFft, int sampleRate, double fMin, double fMax)
     {
+        var engine = AiDotNetEngine.Current;
         int numFreqs = nFft / 2 + 1;
-        var filterbank = new Tensor<T>(new[] { nMels, numFreqs });
+        var shape = new[] { nMels, numFreqs };
 
         // Compute Mel frequencies for filter centers
         double melMin = HzToMel(fMin);
@@ -539,54 +460,34 @@ public partial class MelSpectrogram<T>
         // Convert Hz to FFT bin indices
         var binPoints = hzPoints.Select(hz => (int)Math.Floor((nFft + 1) * hz / sampleRate)).ToArray();
 
-        // Create triangular filters
-        for (int mel = 0; mel < nMels; mel++)
-        {
-            int leftBin = binPoints[mel];
-            int centerBin = binPoints[mel + 1];
-            int rightBin = binPoints[mel + 2];
+        // Per-filter edges as [nMels, numFreqs] columns, frequency bins as rows
+        Tensor<T> Edges(int offset) => engine.TensorBroadcastTo(
+            new Tensor<int>(new[] { nMels, 1 }, new Vector<int>(binPoints.Skip(offset).Take(nMels).ToArray())).Cast<T>(), shape);
+        var left = Edges(0);
+        var center = Edges(1);
+        var right = Edges(2);
+        var freqs = engine.TensorBroadcastTo(
+            engine.Reshape(engine.TensorArange<T>(0, numFreqs, 1), new[] { 1, numFreqs }), shape);
 
-            // Rising edge: leftBin to centerBin
-            for (int f = leftBin; f < centerBin; f++)
-            {
-                if (f >= 0 && f < numFreqs && centerBin != leftBin)
-                {
-                    double weight = (double)(f - leftBin) / (centerBin - leftBin);
-                    filterbank.Data.Span[mel * numFreqs + f] = NumOps.FromDouble(weight);
-                }
-            }
+        // Triangular filters: rising edge (f - left) / (center - left) on [left, center),
+        // falling edge (right - f) / (right - center) on [center, right), zero elsewhere.
+        // A non-empty edge range implies a non-zero denominator; the masked-out quotients are discarded.
+        var rising = engine.TensorDivide(engine.TensorSubtract(freqs, left), engine.TensorSubtract(center, left));
+        var falling = engine.TensorDivide(engine.TensorSubtract(right, freqs), engine.TensorSubtract(right, center));
+        var onRising = engine.TensorMultiply(
+            engine.ScalarMinusTensor(NumOps.One, engine.TensorLessThan(freqs, left)), engine.TensorLessThan(freqs, center));
+        var onFalling = engine.TensorMultiply(
+            engine.ScalarMinusTensor(NumOps.One, engine.TensorLessThan(freqs, center)), engine.TensorLessThan(freqs, right));
+        var filterbank = engine.TensorWhere(onRising, rising,
+            engine.TensorWhere(onFalling, falling, new Tensor<T>(shape)));
 
-            // Falling edge: centerBin to rightBin
-            for (int f = centerBin; f < rightBin; f++)
-            {
-                if (f >= 0 && f < numFreqs && rightBin != centerBin)
-                {
-                    double weight = (double)(rightBin - f) / (rightBin - centerBin);
-                    filterbank.Data.Span[mel * numFreqs + f] = NumOps.FromDouble(weight);
-                }
-            }
-        }
-
-        // Normalize each filter to have unit area (Slaney-style normalization)
-        for (int mel = 0; mel < nMels; mel++)
-        {
-            T sum = NumOps.Zero;
-            for (int f = 0; f < numFreqs; f++)
-            {
-                sum = NumOps.Add(sum, filterbank.Data.Span[mel * numFreqs + f]);
-            }
-
-            if (NumOps.GreaterThan(sum, NumOps.FromDouble(1e-8)))
-            {
-                for (int f = 0; f < numFreqs; f++)
-                {
-                    filterbank.Data.Span[mel * numFreqs + f] = NumOps.Divide(
-                        filterbank.Data.Span[mel * numFreqs + f], sum);
-                }
-            }
-        }
-
-        return filterbank;
+        // Normalize each filter to have unit area (Slaney-style normalization); filters summing to at most
+        // 1e-8 are left unnormalized
+        var sums = engine.TensorBroadcastTo(engine.ReduceSum(filterbank, new[] { 1 }, true), shape);
+        return engine.TensorWhere(
+            engine.TensorGreaterThan(sums, NumOps.FromDouble(1e-8)),
+            engine.TensorDivide(filterbank, sums),
+            filterbank);
     }
 
     /// <summary>

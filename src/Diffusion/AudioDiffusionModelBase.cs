@@ -599,85 +599,68 @@ public abstract partial class AudioDiffusionModelBase<T> : LatentDiffusionModelB
 
         // Compute mel spectrogram using GPU-accelerated processor
         var melSpectrogram = (_melSpectrogramProcessor ?? throw new InvalidOperationException("Mel spectrogram processor not initialized.")).Forward(waveform);
-        var melSpan = melSpectrogram.AsSpan();
-
         // Compute statistical embedding from mel spectrogram
         // Using mel-frequency cepstral statistics as speaker embedding features
         var embeddingDim = 256;
-        var embedding = new Tensor<T>(new[] { 1, embeddingDim });
-        var embSpan = embedding.AsWritableSpan();
+        var engine = Engine;
 
         // The processor returns [time frames, mel bins].
         var melFrames = melSpectrogram.Shape[0];
         var melChannels = melSpectrogram.Shape[1];
+        var mel = engine.Reshape(
+            engine.TensorNarrow(engine.Reshape(melSpectrogram, new[] { melSpectrogram.Length }), 0, 0, melFrames * melChannels),
+            new[] { melFrames, melChannels });
 
         // Compute per-channel statistics (mean, variance, delta mean, delta variance)
         var statsPerChannel = Math.Min(4, embeddingDim / melChannels);
-        var featureIdx = 0;
+        var channelShape = new[] { 1, melChannels };
+        var frames = NumOps.FromDouble(melFrames);
+        var channelMean = engine.TensorDivideScalar(engine.ReduceSum(mel, new[] { 0 }, true), frames);
+        var centered = engine.TensorSubtract(mel, engine.TensorBroadcastTo(channelMean, mel._shape));
+        var channelVar = engine.TensorDivideScalar(engine.ReduceSum(engine.TensorSquare(centered), new[] { 0 }, true), frames);
 
-        for (int mel = 0; mel < melChannels && featureIdx < embeddingDim; mel++)
+        // Delta statistics (temporal dynamics): mean and mean square of frame-to-frame differences
+        Tensor<T> deltaMean;
+        Tensor<T> deltaVar;
+        if (melFrames > 1)
         {
-            // Compute mean for this mel channel
-            double channelSum = 0;
-            for (int frame = 0; frame < melFrames; frame++)
-            {
-                channelSum += NumOps.ToDouble(melSpan[frame * melChannels + mel]);
-            }
-            var channelMean = channelSum / melFrames;
-
-            // Compute variance for this mel channel
-            double channelVarSum = 0;
-            for (int frame = 0; frame < melFrames; frame++)
-            {
-                var diff = NumOps.ToDouble(melSpan[frame * melChannels + mel]) - channelMean;
-                channelVarSum += diff * diff;
-            }
-            var channelVar = channelVarSum / melFrames;
-
-            // Compute delta statistics (temporal dynamics)
-            double deltaSum = 0, deltaVarSum = 0;
-            for (int frame = 1; frame < melFrames; frame++)
-            {
-                var delta = NumOps.ToDouble(melSpan[frame * melChannels + mel]) -
-                            NumOps.ToDouble(melSpan[(frame - 1) * melChannels + mel]);
-                deltaSum += delta;
-                deltaVarSum += delta * delta;
-            }
-            var deltaMean = deltaSum / Math.Max(1, melFrames - 1);
-            var deltaVar = deltaVarSum / Math.Max(1, melFrames - 1);
-
-            // Store statistics as embedding features
-            if (featureIdx < embeddingDim)
-                embSpan[featureIdx++] = NumOps.FromDouble(channelMean);
-            if (featureIdx < embeddingDim)
-                embSpan[featureIdx++] = NumOps.FromDouble(Math.Sqrt(channelVar + 1e-6));
-            if (statsPerChannel > 2 && featureIdx < embeddingDim)
-                embSpan[featureIdx++] = NumOps.FromDouble(deltaMean);
-            if (statsPerChannel > 3 && featureIdx < embeddingDim)
-                embSpan[featureIdx++] = NumOps.FromDouble(Math.Sqrt(deltaVar + 1e-6));
+            var delta = engine.TensorSubtract(
+                engine.TensorNarrow(mel, 0, 1, melFrames - 1), engine.TensorNarrow(mel, 0, 0, melFrames - 1));
+            var deltaCount = NumOps.FromDouble(melFrames - 1);
+            deltaMean = engine.TensorDivideScalar(engine.ReduceSum(delta, new[] { 0 }, true), deltaCount);
+            deltaVar = engine.TensorDivideScalar(engine.ReduceSum(engine.TensorSquare(delta), new[] { 0 }, true), deltaCount);
+        }
+        else
+        {
+            deltaMean = new Tensor<T>(channelShape);
+            deltaVar = new Tensor<T>(channelShape);
         }
 
-        // Fill remaining dimensions with zero padding
-        while (featureIdx < embeddingDim)
+        // Store statistics as embedding features, channel by channel: mean, std, then delta mean and delta std
+        // when there is room for 3 and 4 statistics per channel
+        var epsilon = NumOps.FromDouble(1e-6);
+        var columns = new List<Tensor<T>>
         {
-            embSpan[featureIdx++] = NumOps.Zero;
-        }
+            channelMean,
+            engine.TensorSqrt(engine.TensorAddScalar(channelVar, epsilon))
+        };
+        if (statsPerChannel > 2)
+            columns.Add(deltaMean);
+        if (statsPerChannel > 3)
+            columns.Add(engine.TensorSqrt(engine.TensorAddScalar(deltaVar, epsilon)));
+        var features = engine.Reshape(
+            engine.TensorConcatenate(columns.Select(c => engine.Reshape(c, new[] { melChannels, 1 })).ToArray(), 1),
+            new[] { melChannels * columns.Count });
+
+        // Truncate to the embedding size, filling remaining dimensions with zero padding
+        int used = Math.Min(embeddingDim, features.Length);
+        var embedding = engine.TensorNarrow(features, 0, 0, used);
+        if (used < embeddingDim)
+            embedding = engine.TensorConcatenate(new[] { embedding, new Tensor<T>(new[] { embeddingDim - used }) }, 0);
 
         // L2 normalize the embedding
-        double norm = 0;
-        for (int i = 0; i < embeddingDim; i++)
-        {
-            var val = NumOps.ToDouble(embSpan[i]);
-            norm += val * val;
-        }
-        norm = Math.Sqrt(norm + 1e-8);
-
-        for (int i = 0; i < embeddingDim; i++)
-        {
-            embSpan[i] = NumOps.FromDouble(NumOps.ToDouble(embSpan[i]) / norm);
-        }
-
-        return embedding;
+        var norm = NumOps.Sqrt(NumOps.Add(engine.TensorSum(engine.TensorSquare(embedding)), NumOps.FromDouble(1e-8)));
+        return engine.Reshape(engine.TensorDivideScalar(embedding, norm), new[] { 1, embeddingDim }).Contiguous();
     }
 
     #endregion
