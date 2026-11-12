@@ -75,6 +75,56 @@ public abstract class TimeSeriesCausalBase<T> : CausalDiscoveryBase<T>
     }
 
     /// <summary>
+    /// The [effectiveN] series x[offset + t - lag, variable] for t = 0..effectiveN-1, with rows outside
+    /// the data read as zero.
+    /// </summary>
+    private protected Tensor<T> LaggedSeries(Tensor<T> x, int variable, int lag, int offset, int effectiveN)
+    {
+        int n = x.Shape[0];
+        int start = offset - lag;
+        int first = Math.Max(0, start);
+        int last = Math.Min(n, start + effectiveN);
+        var column = Engine.TensorSliceAxis(x, 1, variable);
+        if (first == start && last == start + effectiveN)
+            return Engine.TensorSlice(column, new[] { start }, new[] { effectiveN });
+
+        var parts = new List<Tensor<T>>();
+        if (first > start) parts.Add(new Tensor<T>(new[] { Math.Min(first - start, effectiveN) }));
+        if (last > first) parts.Add(Engine.TensorSlice(column, new[] { first }, new[] { last - first }));
+        int tail = effectiveN - parts.Sum(p => p.Length);
+        if (tail > 0) parts.Add(new Tensor<T>(new[] { tail }));
+        return parts.Count == 1 ? parts[0] : Engine.TensorConcatenate(parts.ToArray(), 0);
+    }
+
+    /// <summary>
+    /// Residuals y - Z beta of the least-squares fit (Z'Z + ridge I) beta = Z'y over Z [n x p] and y [n];
+    /// with <paramref name="center"/> both are centered first, which is the residual of a fit with an
+    /// intercept. Z'Z is mirrored from its upper triangle so it is exactly symmetric.
+    /// </summary>
+    private protected Tensor<T> OlsResidualSeries(Tensor<T> z, Tensor<T> y, bool center, double ridge,
+        MatrixDecompositionType solver)
+    {
+        int n = z.Shape[0];
+        int p = z.Shape[1];
+        var design = center ? CenterColumns(z) : z;
+        var response = (center ? Engine.TensorSubtractScalar(y, Engine.TensorMean(y)) : y).Reshape(new[] { n, 1 });
+        var designT = Engine.TensorTranspose(design);
+        var gram = CausalTensorHelpers.Symmetrize(Engine.TensorMatMul(designT, design));
+        gram = Engine.TensorAdd(gram, Engine.TensorMultiplyScalar(Engine.TensorEye<T>(p), NumOps.FromDouble(ridge)));
+        var zty = Engine.TensorMatMul(designT, response).Reshape(new[] { p }).ToVector();
+
+        var beta = MatrixSolutionHelper.SolveLinearSystem<T>(gram.ToMatrix(), zty, solver);
+        return Engine.TensorSubtract(response, Engine.TensorMatMul(design, beta.AsTensor().Reshape(new[] { p, 1 })))
+            .Reshape(new[] { n });
+    }
+
+    /// <summary>
+    /// Pearson correlation of two series (0 unless both centered sums of squares are above 1e-10).
+    /// </summary>
+    private protected double SeriesCorrelation(Tensor<T> x, Tensor<T> y)
+        => NumOps.ToDouble(CausalTensorHelpers.PearsonCorrelation(x, y));
+
+    /// <summary>
     /// Computes RSS (Residual Sum of Squares) for OLS regression using generic operations.
     /// </summary>
     protected double ComputeRSS(Matrix<T> X, Vector<T> y, int n, int p)
