@@ -33,4 +33,19 @@ public class PreprocessingHelperCountTests
         Assert.Equal((double)ClassZeroRows, (double)counts.ToArray()[0]);
         Assert.Equal((double)ClassOneRows, (double)counts.ToArray()[1]);
     }
+
+    // A = B = the class (3072 rows in bin 0, 1024 in bin 1): the joint cells are [3072, 0; 0, 1024] and the mutual
+    // information is the class entropy -(0.75 log2 0.75 + 0.25 log2 0.25) = 0.8112781244591328 bits. A joint cell
+    // stuck at 2048 in Half gave a different value, and the 3072 * 1024 marginal product overflowed Half.
+    [Fact(Timeout = 60000)]
+    public async Task HistogramMutualInformation_Half_CountsJointCellsPast2048()
+    {
+        await Task.CompletedTask;
+        var oneHot = PreprocessingTensorOps.ClassOneHot<Half>(ClassIndex(), 2);
+
+        var mi = PreprocessingTensorOps.HistogramMutualInformation(oneHot, oneHot, 2);
+
+        Assert.Equal(new[] { 1, 1 }, mi.Shape.ToArray());
+        Assert.Equal(0.8112781244591328, (double)mi.ToArray()[0], 1e-3);
+    }
 }
