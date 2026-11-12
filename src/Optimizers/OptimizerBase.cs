@@ -2762,22 +2762,42 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
     /// coordinate: (1 / (count * dimension)) * sum_k sum_i |x_k,i - mean_i|. The derivative-free searches stop when
     /// this falls below their tolerance.
     /// </summary>
+    /// <remarks>
+    /// The deviation is separable over coordinates, so it is computed over blocks of coordinates holding at most
+    /// <see cref="MaxPopulationBlockElements"/> population values; the temporaries stay bounded however many
+    /// coordinates the search has, instead of copying the whole population again.
+    /// </remarks>
     private protected double PopulationMeanAbsoluteDeviation(IReadOnlyList<Vector<T>> points, int dimension)
     {
         int count = points.Count;
-        var flat = new Vector<T>(count * dimension);
-        var flatSpan = flat.AsWritableSpan();
-        for (int k = 0; k < count; k++)
-        {
-            points[k].AsSpan().Slice(0, dimension).CopyTo(flatSpan.Slice(k * dimension, dimension));
-        }
+        if (count == 0 || dimension <= 0) return 0.0;
 
         var engine = Engine;
-        var members = engine.Reshape(flat.AsTensor(), new[] { count, dimension });
-        var mean = engine.TensorDivideScalar(engine.ReduceSum(members, new[] { 0 }), NumOps.FromDouble(count));
-        var centered = engine.TensorSubtract(members, engine.TensorOuter(FilledVector(count, NumOps.One).AsTensor(), mean));
-        return NumOps.ToDouble(engine.TensorSum(engine.TensorAbs(centered))) / (count * dimension);
+        T countValue = NumOps.FromDouble(count);
+        int blockWidth = Math.Max(1, Math.Min(dimension, MaxPopulationBlockElements / count));
+        var buffer = new Vector<T>(count * blockWidth);
+        double total = 0.0;
+        for (int start = 0; start < dimension; start += blockWidth)
+        {
+            int width = Math.Min(blockWidth, dimension - start);
+            var block = width == blockWidth ? buffer : new Vector<T>(count * width);
+            var blockSpan = block.AsWritableSpan();
+            for (int k = 0; k < count; k++)
+            {
+                points[k].AsSpan().Slice(start, width).CopyTo(blockSpan.Slice(k * width, width));
+            }
+
+            var members = engine.Reshape(block.AsTensor(), new[] { count, width });
+            var mean = engine.TensorDivideScalar(engine.ReduceSum(members, new[] { 0 }, keepDims: true), countValue);
+            var centered = engine.TensorSubtract(members, engine.TensorBroadcastTo(mean, new[] { count, width }));
+            total += NumOps.ToDouble(engine.TensorSum(engine.TensorAbs(centered)));
+        }
+
+        return total / ((double)count * dimension);
     }
+
+    /// <summary>Upper bound on the population values one convergence-check block copies (4 MB of doubles).</summary>
+    private const int MaxPopulationBlockElements = 1 << 19;
 
     /// <summary>A vector of <paramref name="length"/> copies of <paramref name="value"/>.</summary>
     private static Vector<T> FilledVector(int length, T value)
