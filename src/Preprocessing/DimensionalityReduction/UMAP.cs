@@ -53,8 +53,10 @@ public class UMAP<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     private readonly double _repulsionStrength;
 
     // Fitted parameters
-    private Matrix<T>? _embedding;
-    private Tensor<T>? _trainingData;
+    private double[,]? _embedding;
+    private double[,]? _trainingData;
+    private int[,]? _knnIndices;
+    private double[,]? _knnDistances;
     private int _nSamples;
     private int _nFeatures;
 
@@ -85,7 +87,7 @@ public class UMAP<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     /// <summary>
     /// Gets the embedding result.
     /// </summary>
-    public Matrix<T>? Embedding => _embedding;
+    public double[,]? Embedding => _embedding;
 
     /// <summary>
     /// Gets whether this transformer supports inverse transformation.
@@ -196,170 +198,277 @@ public class UMAP<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             ? RandomHelper.CreateSeededRandom(_randomState.Value)
             : RandomHelper.CreateSeededRandom(42);
 
-        // Store training data for transform
-        _trainingData = Tensor<T>.FromMatrix(data);
+        // Convert to double array and store for transform
+        _trainingData = new double[_nSamples, _nFeatures];
+        for (int i = 0; i < _nSamples; i++)
+        {
+            for (int j = 0; j < _nFeatures; j++)
+            {
+                _trainingData[i, j] = NumOps.ToDouble(data[i, j]);
+            }
+        }
 
         // Step 1: Compute k-nearest neighbors
-        var (knnIndices, knnDistances) = ComputeKNN(_trainingData);
+        ComputeKNN(_trainingData);
 
         // Step 2: Compute fuzzy simplicial set (graph weights)
-        var graph = ComputeFuzzySimplicialSet(knnIndices, knnDistances);
+        var graph = ComputeFuzzySimplicialSet();
 
         // Step 3: Initialize embedding
-        var embedding = InitializeEmbedding(_nSamples, random);
+        _embedding = InitializeEmbedding(_nSamples, random);
 
-        // Step 4: Optimize embedding (master's sequential edge SGD on double[,]; see missing-ops.txt)
-        var layout = DimensionalityReductionOps.ToArray2D(embedding);
-        OptimizeLayout(DimensionalityReductionOps.ToArray2D(graph), layout, random);
-        _embedding = DimensionalityReductionOps.FromArray2D<T>(layout).ToMatrix();
+        // Step 4: Optimize embedding
+        OptimizeLayout(graph, random);
+    }
+
+    private void ComputeKNN(double[,] data)
+    {
+        int n = data.GetLength(0);
+        int p = data.GetLength(1);
+
+        _knnIndices = new int[n, _nNeighbors];
+        _knnDistances = new double[n, _nNeighbors];
+
+        // Compute all pairwise distances and find k-nearest neighbors
+        for (int i = 0; i < n; i++)
+        {
+            var distances = new (double dist, int idx)[n];
+
+            for (int j = 0; j < n; j++)
+            {
+                if (i == j)
+                {
+                    distances[j] = (double.MaxValue, j);
+                    continue;
+                }
+
+                double dist = ComputeDistance(data, i, j, p);
+                distances[j] = (dist, j);
+            }
+
+            // Sort by distance
+            Array.Sort(distances, (a, b) => a.dist.CompareTo(b.dist));
+
+            // Store k nearest
+            for (int k = 0; k < _nNeighbors; k++)
+            {
+                _knnIndices[i, k] = distances[k].idx;
+                _knnDistances[i, k] = distances[k].dist;
+            }
+        }
+    }
+
+    private double ComputeDistance(double[,] data, int i, int j, int p)
+    {
+        // Extract points and delegate to array-based overload to avoid code duplication
+        var pointI = new double[p];
+        var pointJ = new double[p];
+        for (int k = 0; k < p; k++)
+        {
+            pointI[k] = data[i, k];
+            pointJ[k] = data[j, k];
+        }
+        return ComputeDistance(pointI, pointJ);
     }
 
     /// <summary>
-    /// The k nearest neighbours of every training point (excluding itself, nearest first, ties in index order)
-    /// and their distances.
+    /// Computes distance between two points using the configured metric.
     /// </summary>
-    private (Tensor<int> Indices, Tensor<T> Distances) ComputeKNN(Tensor<T> data)
+    private double ComputeDistance(double[] pointA, double[] pointB)
     {
-        var distances = ComputeDistances(data, data);
-        var indices = DimensionalityReductionOps.NearestNeighbors(distances, _nNeighbors);
-        return (indices, DimensionalityReductionOps.TakeRows(distances, indices));
-    }
-
-    /// <summary>
-    /// Pairwise distances between the rows of <paramref name="a"/> and <paramref name="b"/> using the configured metric.
-    /// </summary>
-    private Tensor<T> ComputeDistances(Tensor<T> a, Tensor<T> b)
-    {
-        var engine = Engine;
+        int len = pointA.Length;
         switch (_metric)
         {
             case UMAPMetric.Euclidean:
-                return engine.TensorCDist(a, b, 2.0);
+            {
+                double sum = 0;
+                for (int k = 0; k < len; k++)
+                {
+                    double d = pointA[k] - pointB[k];
+                    sum += d * d;
+                }
+                return Math.Sqrt(sum);
+            }
 
             case UMAPMetric.Manhattan:
-                return engine.TensorCDist(a, b, 1.0);
+            {
+                double sum = 0;
+                for (int k = 0; k < len; k++)
+                {
+                    sum += Math.Abs(pointA[k] - pointB[k]);
+                }
+                return sum;
+            }
 
             case UMAPMetric.Cosine:
-                return OneMinusCosine(a, b);
+            {
+                double dot = 0, nA = 0, nB = 0;
+                for (int k = 0; k < len; k++)
+                {
+                    dot += pointA[k] * pointB[k];
+                    nA += pointA[k] * pointA[k];
+                    nB += pointB[k] * pointB[k];
+                }
+                double denom = Math.Sqrt(nA) * Math.Sqrt(nB);
+                return denom > DistanceEpsilon ? 1.0 - dot / denom : 1.0;
+            }
 
             case UMAPMetric.Correlation:
-                // Cosine distance of the row-centered vectors
-                return OneMinusCosine(
-                    engine.TensorSubtract(a, engine.ReduceMean(a, new[] { 1 }, true)),
-                    engine.TensorSubtract(b, engine.ReduceMean(b, new[] { 1 }, true)));
+                int dim = pointA.Length;
+                double meanA = 0, meanB = 0;
+                for (int k = 0; k < dim; k++)
+                {
+                    meanA += pointA[k];
+                    meanB += pointB[k];
+                }
+                meanA /= dim;
+                meanB /= dim;
+
+                double cov = 0, varA = 0, varB = 0;
+                for (int k = 0; k < dim; k++)
+                {
+                    double diffA = pointA[k] - meanA;
+                    double diffB = pointB[k] - meanB;
+                    cov += diffA * diffB;
+                    varA += diffA * diffA;
+                    varB += diffB * diffB;
+                }
+                double denomCorr = Math.Sqrt(varA * varB);
+                return denomCorr > DistanceEpsilon ? 1 - cov / denomCorr : 1;
 
             default:
                 throw new NotSupportedException($"Metric {_metric} is not supported.");
         }
     }
 
-    /// <summary>1 - a_i . b_j / (|a_i| |b_j|), or 1 where the norm product is at most the distance epsilon.</summary>
-    private Tensor<T> OneMinusCosine(Tensor<T> a, Tensor<T> b)
+    private double[,] ComputeFuzzySimplicialSet()
     {
-        var engine = Engine;
-        var dot = DimensionalityReductionOps.MatMulTranspose(a, b);
-        var normA = engine.TensorSqrt(DimensionalityReductionOps.RowSums(engine.TensorSquare(a)));
-        var normB = engine.TensorSqrt(DimensionalityReductionOps.RowSums(engine.TensorSquare(b)));
-        var denom = engine.TensorMatMul(DimensionalityReductionOps.AsColumn(normA), DimensionalityReductionOps.AsRow(normB));
-        var valid = engine.TensorGreaterThan(denom, NumOps.FromDouble(DistanceEpsilon));
-        var ones = engine.TensorOnesLike(dot);
-        return engine.TensorWhere(
-            valid,
-            engine.TensorSubtract(ones, engine.TensorDivide(dot, engine.TensorWhere(valid, denom, ones))),
-            ones);
-    }
-
-    /// <summary>
-    /// Fuzzy simplicial set: rho_i from the local-connectivity neighbour distance, sigma_i by a 64-step bisection
-    /// (all rows advanced together; a row stops once |sum - log2 k| &lt; 1e-5), weights exp(-(d - rho) / sigma)
-    /// (1 where d &lt;= rho), then the fuzzy union a + b - a b.
-    /// </summary>
-    private Tensor<T> ComputeFuzzySimplicialSet(Tensor<int> knnIndices, Tensor<T> knnDistances)
-    {
-        var engine = Engine;
         int n = _nSamples;
-        int k = _nNeighbors;
-        var one = NumOps.One;
-        var zero = NumOps.Zero;
+        var sigmas = new double[n];
+        var rhos = new double[n];
 
-        // rho: distance to the local_connectivity-th neighbour (interpolated for fractional values)
-        int localConnIdx = (int)Math.Floor(_localConnectivity) - 1;
-        localConnIdx = Math.Max(0, Math.Min(localConnIdx, k - 1));
-        double localConnFrac = _localConnectivity - Math.Floor(_localConnectivity);
-        var rho = engine.TensorNarrow(knnDistances, 1, localConnIdx, 1);   // [n, 1]
-        if (!(localConnFrac < 1e-5 || localConnIdx >= k - 1))
+        // Compute rho (distance to local_connectivity-th nearest neighbor) and sigma for each point
+        for (int i = 0; i < n; i++)
         {
-            rho = engine.TensorAdd(
-                engine.TensorMultiplyScalar(rho, NumOps.FromDouble(1 - localConnFrac)),
-                engine.TensorMultiplyScalar(engine.TensorNarrow(knnDistances, 1, localConnIdx + 1, 1), NumOps.FromDouble(localConnFrac)));
-        }
+            // Use local_connectivity to determine rho
+            // local_connectivity=1.0 means rho is distance to 1st neighbor
+            // local_connectivity=2.5 means interpolate between 2nd and 3rd neighbors
+            int localConnIdx = (int)Math.Floor(_localConnectivity) - 1;
+            localConnIdx = Math.Max(0, Math.Min(localConnIdx, _nNeighbors - 1));
+            double localConnFrac = _localConnectivity - Math.Floor(_localConnectivity);
 
-        var shifted = engine.TensorSubtract(knnDistances, rho);
-        var beyond = engine.TensorGreaterThan(shifted, zero);
-        var neighborOnes = engine.TensorOnesLike(shifted);
-        var columnOnes = DimensionalityReductionOps.Full(new[] { n, 1 }, one);
-
-        // Binary search for sigma
-        var target = NumOps.FromDouble(Math.Log(k) / Math.Log(2));
-        var tolerance = NumOps.FromDouble(1e-5);
-        var half = NumOps.FromDouble(0.5);
-        var two = NumOps.FromDouble(2.0);
-        var unbounded = DimensionalityReductionOps.Full(new[] { n, 1 }, NumOps.FromDouble(999));
-        var lo = DimensionalityReductionOps.Full(new[] { n, 1 }, NumOps.FromDouble(1e-20));
-        var hi = DimensionalityReductionOps.Full(new[] { n, 1 }, NumOps.FromDouble(1000.0));
-        var mid = columnOnes;
-        var active = columnOnes;
-
-        for (int iter = 0; iter < 64; iter++)
-        {
-            var terms = engine.TensorWhere(beyond, engine.TensorExp(engine.TensorNegate(engine.TensorDivide(shifted, mid))), neighborOnes);
-            var sum = engine.ReduceSum(terms, new[] { 1 }, true);
-
-            var converged = engine.TensorLessThan(engine.TensorAbs(engine.TensorSubtractScalar(sum, target)), tolerance);
-            active = engine.TensorMultiply(active, engine.TensorSubtract(columnOnes, converged));
-            if (!DimensionalityReductionOps.Above(engine.TensorSum(active), zero))
+            if (localConnFrac < 1e-5 || localConnIdx >= _nNeighbors - 1)
             {
-                break;
+                rhos[i] = (_knnDistances ?? throw new InvalidOperationException("KNN distances not computed."))[i, localConnIdx];
+            }
+            else
+            {
+                // Interpolate between neighbors
+                rhos[i] = (1 - localConnFrac) * (_knnDistances ?? throw new InvalidOperationException("KNN distances not computed."))[i, localConnIdx]
+                        + localConnFrac * _knnDistances[i, localConnIdx + 1];
             }
 
-            var tooLarge = engine.TensorGreaterThan(sum, target);
-            var newHi = engine.TensorWhere(tooLarge, mid, hi);
-            var newLo = engine.TensorWhere(tooLarge, lo, mid);
-            var newMid = engine.TensorWhere(
-                tooLarge,
-                engine.TensorMultiplyScalar(engine.TensorAdd(lo, mid), half),
-                engine.TensorWhere(
-                    engine.TensorGreaterEqual(hi, unbounded),
-                    engine.TensorMultiplyScalar(mid, two),
-                    engine.TensorMultiplyScalar(engine.TensorAdd(mid, hi), half)));
-            hi = engine.TensorWhere(active, newHi, hi);
-            lo = engine.TensorWhere(active, newLo, lo);
-            mid = engine.TensorWhere(active, newMid, mid);
+            // Binary search for sigma
+            double target = Math.Log(_nNeighbors) / Math.Log(2);
+            double lo = 1e-20;
+            double hi = 1000.0;
+            double mid = 1.0;
+
+            for (int iter = 0; iter < 64; iter++)
+            {
+                double sum = 0;
+                for (int j = 0; j < _nNeighbors; j++)
+                {
+                    double d = _knnDistances[i, j] - rhos[i];
+                    if (d > 0)
+                    {
+                        sum += Math.Exp(-d / mid);
+                    }
+                    else
+                    {
+                        sum += 1;
+                    }
+                }
+
+                if (Math.Abs(sum - target) < 1e-5)
+                {
+                    break;
+                }
+
+                if (sum > target)
+                {
+                    hi = mid;
+                    mid = (lo + hi) / 2;
+                }
+                else
+                {
+                    lo = mid;
+                    if (hi >= 999)
+                    {
+                        mid *= 2;
+                    }
+                    else
+                    {
+                        mid = (lo + hi) / 2;
+                    }
+                }
+            }
+
+            sigmas[i] = mid;
         }
 
         // Compute graph weights
-        var weights = engine.TensorWhere(beyond, engine.TensorExp(engine.TensorNegate(engine.TensorDivide(shifted, mid))), neighborOnes);
-        var graph = DimensionalityReductionOps.ScatterRows(knnIndices, weights, n, zero);
+        var graph = new double[n, n];
 
-        // Symmetrize using fuzzy set union: a + b - a*b
-        var transposed = engine.TensorTranspose(graph);
-        return engine.TensorSubtract(engine.TensorAdd(graph, transposed), engine.TensorMultiply(graph, transposed));
+        for (int i = 0; i < n; i++)
+        {
+            for (int k = 0; k < _nNeighbors; k++)
+            {
+                int j = (_knnIndices ?? throw new InvalidOperationException("KNN indices not computed."))[i, k];
+                double d = (_knnDistances ?? throw new InvalidOperationException("KNN distances not computed."))[i, k] - rhos[i];
+                double weight = d > 0 ? Math.Exp(-d / sigmas[i]) : 1.0;
+                graph[i, j] = weight;
+            }
+        }
+
+        // Symmetrize using fuzzy set union
+        var symmetricGraph = new double[n, n];
+        for (int i = 0; i < n; i++)
+        {
+            for (int j = 0; j < n; j++)
+            {
+                double a = graph[i, j];
+                double b = graph[j, i];
+                // Fuzzy set union: a + b - a*b
+                symmetricGraph[i, j] = a + b - a * b;
+            }
+        }
+
+        return symmetricGraph;
     }
 
-    /// <summary>Random initialization 10 (u - 0.5), row-major.</summary>
-    private Tensor<T> InitializeEmbedding(int n, Random random) =>
-        Engine.TensorMultiplyScalar(
-            Engine.TensorSubtractScalar(DimensionalityReductionOps.Uniform<T>(random, n, _nComponents), NumOps.FromDouble(0.5)),
-            NumOps.FromDouble(10.0));
+    private double[,] InitializeEmbedding(int n, Random random)
+    {
+        var embedding = new double[n, _nComponents];
 
-    /// <summary>
-    /// Sequential edge-wise SGD with negative sampling. Every edge update reads the positions written by the
-    /// previous one, so this stays the original scalar loop (in double) until the engine has an edge-sequential
-    /// layout kernel; see missing-ops.txt.
-    /// </summary>
-    private void OptimizeLayout(double[,] graph, double[,] embedding, Random random)
+        // Random initialization scaled appropriately
+        // (Spectral initialization using graph Laplacian could be added for better convergence)
+        for (int i = 0; i < n; i++)
+        {
+            for (int j = 0; j < _nComponents; j++)
+            {
+                // Initialize with small random values centered at 0
+                embedding[i, j] = 10 * (random.NextDouble() - 0.5);
+            }
+        }
+
+        return embedding;
+    }
+
+    private void OptimizeLayout(double[,] graph, Random random)
     {
         int n = _nSamples;
+        var embedding = _embedding;
 
         // Build edge list for efficient sampling
         var edges = new List<(int i, int j, double weight)>();
@@ -468,6 +577,8 @@ public class UMAP<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
                 epochOfNextSample[e] += epochsPerSample[e];
             }
         }
+
+        _embedding = embedding;
     }
 
     /// <summary>
@@ -586,12 +697,24 @@ public class UMAP<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             throw new InvalidOperationException("UMAP has not been fitted.");
         }
 
-        return _embedding.Clone();
+        int n = _embedding.GetLength(0);
+        int d = _embedding.GetLength(1);
+        var result = new T[n, d];
+
+        for (int i = 0; i < n; i++)
+        {
+            for (int j = 0; j < d; j++)
+            {
+                result[i, j] = NumOps.FromDouble(_embedding[i, j]);
+            }
+        }
+
+        return new Matrix<T>(result);
     }
 
     private Matrix<T> TransformNewData(Matrix<T> data)
     {
-        var engine = Engine;
+        int nNew = data.Rows;
         int p = data.Columns;
 
         if (p != _nFeatures)
@@ -600,19 +723,68 @@ public class UMAP<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
                 $"New data has {p} features but model was fitted with {_nFeatures} features.");
         }
 
-        var trainingData = _trainingData ?? throw new InvalidOperationException("Training data not set.");
-        var embedding = _embedding ?? throw new InvalidOperationException("Embedding not computed.");
+        var newData = new double[nNew, p];
+        for (int i = 0; i < nNew; i++)
+        {
+            for (int j = 0; j < p; j++)
+            {
+                newData[i, j] = NumOps.ToDouble(data[i, j]);
+            }
+        }
 
-        // For each new point, find the k nearest training points (same metric, ties in index order)
-        // and compute the inverse-distance weighted average of their embeddings
-        var distances = ComputeDistances(Tensor<T>.FromMatrix(data), trainingData);
-        var order = engine.TensorNarrow(engine.TensorArgsort(distances, 1, false), 1, 0, _nNeighbors);
-        var weights = engine.TensorReciprocal(
-            engine.TensorAddScalar(DimensionalityReductionOps.TakeRows(distances, order), NumOps.FromDouble(DistanceEpsilon)));
+        var result = new T[nNew, _nComponents];
 
-        var weightMatrix = DimensionalityReductionOps.ScatterRows(order, weights, _nSamples, NumOps.Zero);
-        var weighted = engine.TensorMatMul(weightMatrix, Tensor<T>.FromMatrix(embedding));
-        return DimensionalityReductionOps.ScaleRows(weighted, engine.TensorReciprocal(DimensionalityReductionOps.RowSums(weights))).ToMatrix();
+        // For each new point, find k-nearest neighbors in training data
+        // and compute weighted average of their embeddings
+        for (int i = 0; i < nNew; i++)
+        {
+            // Extract the new point as an array
+            var newPoint = new double[p];
+            for (int k = 0; k < p; k++)
+            {
+                newPoint[k] = newData[i, k];
+            }
+
+            var distances = new (double dist, int idx)[_nSamples];
+
+            for (int j = 0; j < _nSamples; j++)
+            {
+                // Extract the training point as an array
+                var trainPoint = new double[p];
+                for (int k = 0; k < p; k++)
+                {
+                    trainPoint[k] = (_trainingData ?? throw new InvalidOperationException("Training data not set."))[j, k];
+                }
+                // Use the same distance metric as during training
+                double dist = ComputeDistance(newPoint, trainPoint);
+                distances[j] = (dist, j);
+            }
+
+            Array.Sort(distances, (a, b) => a.dist.CompareTo(b.dist));
+
+            // Compute weighted average of k-nearest embeddings
+            double totalWeight = 0;
+            var embeddingSum = new double[_nComponents];
+
+            for (int k = 0; k < _nNeighbors; k++)
+            {
+                double weight = 1.0 / (distances[k].dist + DistanceEpsilon);
+                totalWeight += weight;
+                int idx = distances[k].idx;
+
+                for (int d = 0; d < _nComponents; d++)
+                {
+                    embeddingSum[d] += weight * (_embedding ?? throw new InvalidOperationException("Embedding not computed."))[idx, d];
+                }
+            }
+
+            for (int d = 0; d < _nComponents; d++)
+            {
+                result[i, d] = NumOps.FromDouble(embeddingSum[d] / totalWeight);
+            }
+        }
+
+        return new Matrix<T>(result);
     }
 
     /// <summary>

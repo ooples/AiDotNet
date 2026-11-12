@@ -1168,8 +1168,6 @@ AiDotNet.Models.Options.DFPOptimizerOptions<T, TInput, TOutput>.UseLineSearch.se
 *REMOVED*AiDotNet.Preprocessing.DimensionalityReduction.PCA<T>.SingularValues.get -> double[]?
 *REMOVED*AiDotNet.Preprocessing.DimensionalityReduction.Isomap<T>.GeodesicDistances.get -> double[,]?
 *REMOVED*AiDotNet.Preprocessing.DimensionalityReduction.Isomap<T>.Embedding.get -> double[,]?
-*REMOVED*AiDotNet.Preprocessing.DimensionalityReduction.MDS<T>.Embedding.get -> double[,]?
-*REMOVED*AiDotNet.Preprocessing.DimensionalityReduction.MDS<T>.Stress.get -> double
 *REMOVED*AiDotNet.Preprocessing.DimensionalityReduction.TruncatedSVD<T>.Components.get -> double[,]?
 *REMOVED*AiDotNet.Preprocessing.DimensionalityReduction.TruncatedSVD<T>.SingularValues.get -> double[]?
 *REMOVED*AiDotNet.Preprocessing.DimensionalityReduction.TruncatedSVD<T>.ExplainedVariance.get -> double[]?
@@ -1212,8 +1210,6 @@ AiDotNet.Models.Options.DFPOptimizerOptions<T, TInput, TOutput>.UseLineSearch.se
 *REMOVED*AiDotNet.Preprocessing.DimensionalityReduction.LocallyLinearEmbedding<T>.Embedding.get -> double[,]?
 *REMOVED*AiDotNet.Preprocessing.DimensionalityReduction.NCA<T>.TransformationMatrix.get -> double[,]?
 *REMOVED*AiDotNet.Preprocessing.DimensionalityReduction.TSNE<T>.Embedding.get -> double[,]?
-*REMOVED*AiDotNet.Preprocessing.DimensionalityReduction.UMAP<T>.Embedding.get -> double[,]?
-*REMOVED*AiDotNet.Preprocessing.DimensionalityReduction.LargeVis<T>.Embedding.get -> double[,]?
 *REMOVED*AiDotNet.Preprocessing.DimensionalityReduction.PaCMAP<T>.Embedding.get -> double[,]?
 *REMOVED*AiDotNet.Preprocessing.DimensionalityReduction.TriMAP<T>.Embedding.get -> double[,]?
 *REMOVED*AiDotNet.Preprocessing.DimensionalityReduction.PHATE<T>.Embedding.get -> double[,]?
@@ -1225,8 +1221,6 @@ AiDotNet.Preprocessing.DimensionalityReduction.PCA<T>.ExplainedVarianceRatio.get
 AiDotNet.Preprocessing.DimensionalityReduction.PCA<T>.SingularValues.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
 AiDotNet.Preprocessing.DimensionalityReduction.Isomap<T>.GeodesicDistances.get -> AiDotNet.Tensors.LinearAlgebra.Matrix<T>?
 AiDotNet.Preprocessing.DimensionalityReduction.Isomap<T>.Embedding.get -> AiDotNet.Tensors.LinearAlgebra.Matrix<T>?
-AiDotNet.Preprocessing.DimensionalityReduction.MDS<T>.Embedding.get -> AiDotNet.Tensors.LinearAlgebra.Matrix<T>?
-AiDotNet.Preprocessing.DimensionalityReduction.MDS<T>.Stress.get -> T
 AiDotNet.Preprocessing.DimensionalityReduction.TruncatedSVD<T>.Components.get -> AiDotNet.Tensors.LinearAlgebra.Matrix<T>?
 AiDotNet.Preprocessing.DimensionalityReduction.TruncatedSVD<T>.SingularValues.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
 AiDotNet.Preprocessing.DimensionalityReduction.TruncatedSVD<T>.ExplainedVariance.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
@@ -1269,8 +1263,6 @@ AiDotNet.Preprocessing.DimensionalityReduction.LTSA<T>.Embedding.get -> AiDotNet
 AiDotNet.Preprocessing.DimensionalityReduction.LocallyLinearEmbedding<T>.Embedding.get -> AiDotNet.Tensors.LinearAlgebra.Matrix<T>?
 AiDotNet.Preprocessing.DimensionalityReduction.NCA<T>.TransformationMatrix.get -> AiDotNet.Tensors.LinearAlgebra.Matrix<T>?
 AiDotNet.Preprocessing.DimensionalityReduction.TSNE<T>.Embedding.get -> AiDotNet.Tensors.LinearAlgebra.Matrix<T>?
-AiDotNet.Preprocessing.DimensionalityReduction.UMAP<T>.Embedding.get -> AiDotNet.Tensors.LinearAlgebra.Matrix<T>?
-AiDotNet.Preprocessing.DimensionalityReduction.LargeVis<T>.Embedding.get -> AiDotNet.Tensors.LinearAlgebra.Matrix<T>?
 AiDotNet.Preprocessing.DimensionalityReduction.PaCMAP<T>.Embedding.get -> AiDotNet.Tensors.LinearAlgebra.Matrix<T>?
 AiDotNet.Preprocessing.DimensionalityReduction.TriMAP<T>.Embedding.get -> AiDotNet.Tensors.LinearAlgebra.Matrix<T>?
 AiDotNet.Preprocessing.DimensionalityReduction.PHATE<T>.Embedding.get -> AiDotNet.Tensors.LinearAlgebra.Matrix<T>?

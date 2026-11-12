@@ -2502,48 +2502,6 @@
   </Suppression>
   <Suppression>
     <DiagnosticId>CP0002</DiagnosticId>
-    <Target>M:AiDotNet.Preprocessing.DimensionalityReduction.MDS`1.get_Embedding</Target>
-    <Left>lib/net10.0/AiDotNet.dll</Left>
-    <Right>lib/net10.0/AiDotNet.dll</Right>
-    <IsBaselineSuppression>true</IsBaselineSuppression>
-  </Suppression>
-  <Suppression>
-    <DiagnosticId>CP0002</DiagnosticId>
-    <Target>M:AiDotNet.Preprocessing.DimensionalityReduction.MDS`1.get_Embedding</Target>
-    <Left>lib/net471/AiDotNet.dll</Left>
-    <Right>lib/net471/AiDotNet.dll</Right>
-    <IsBaselineSuppression>true</IsBaselineSuppression>
-  </Suppression>
-  <Suppression>
-    <DiagnosticId>CP0002</DiagnosticId>
-    <Target>M:AiDotNet.Preprocessing.DimensionalityReduction.MDS`1.get_Embedding</Target>
-    <Left>lib/net8.0/AiDotNet.dll</Left>
-    <Right>lib/net8.0/AiDotNet.dll</Right>
-    <IsBaselineSuppression>true</IsBaselineSuppression>
-  </Suppression>
-  <Suppression>
-    <DiagnosticId>CP0002</DiagnosticId>
-    <Target>M:AiDotNet.Preprocessing.DimensionalityReduction.MDS`1.get_Stress</Target>
-    <Left>lib/net10.0/AiDotNet.dll</Left>
-    <Right>lib/net10.0/AiDotNet.dll</Right>
-    <IsBaselineSuppression>true</IsBaselineSuppression>
-  </Suppression>
-  <Suppression>
-    <DiagnosticId>CP0002</DiagnosticId>
-    <Target>M:AiDotNet.Preprocessing.DimensionalityReduction.MDS`1.get_Stress</Target>
-    <Left>lib/net471/AiDotNet.dll</Left>
-    <Right>lib/net471/AiDotNet.dll</Right>
-    <IsBaselineSuppression>true</IsBaselineSuppression>
-  </Suppression>
-  <Suppression>
-    <DiagnosticId>CP0002</DiagnosticId>
-    <Target>M:AiDotNet.Preprocessing.DimensionalityReduction.MDS`1.get_Stress</Target>
-    <Left>lib/net8.0/AiDotNet.dll</Left>
-    <Right>lib/net8.0/AiDotNet.dll</Right>
-    <IsBaselineSuppression>true</IsBaselineSuppression>
-  </Suppression>
-  <Suppression>
-    <DiagnosticId>CP0002</DiagnosticId>
     <Target>M:AiDotNet.Preprocessing.DimensionalityReduction.TruncatedSVD`1.get_Components</Target>
     <Left>lib/net10.0/AiDotNet.dll</Left>
     <Right>lib/net10.0/AiDotNet.dll</Right>
@@ -3420,48 +3378,6 @@
   <Suppression>
     <DiagnosticId>CP0002</DiagnosticId>
     <Target>M:AiDotNet.Preprocessing.DimensionalityReduction.TSNE`1.get_Embedding</Target>
-    <Left>lib/net8.0/AiDotNet.dll</Left>
-    <Right>lib/net8.0/AiDotNet.dll</Right>
-    <IsBaselineSuppression>true</IsBaselineSuppression>
-  </Suppression>
-  <Suppression>
-    <DiagnosticId>CP0002</DiagnosticId>
-    <Target>M:AiDotNet.Preprocessing.DimensionalityReduction.UMAP`1.get_Embedding</Target>
-    <Left>lib/net10.0/AiDotNet.dll</Left>
-    <Right>lib/net10.0/AiDotNet.dll</Right>
-    <IsBaselineSuppression>true</IsBaselineSuppression>
-  </Suppression>
-  <Suppression>
-    <DiagnosticId>CP0002</DiagnosticId>
-    <Target>M:AiDotNet.Preprocessing.DimensionalityReduction.UMAP`1.get_Embedding</Target>
-    <Left>lib/net471/AiDotNet.dll</Left>
-    <Right>lib/net471/AiDotNet.dll</Right>
-    <IsBaselineSuppression>true</IsBaselineSuppression>
-  </Suppression>
-  <Suppression>
-    <DiagnosticId>CP0002</DiagnosticId>
-    <Target>M:AiDotNet.Preprocessing.DimensionalityReduction.UMAP`1.get_Embedding</Target>
-    <Left>lib/net8.0/AiDotNet.dll</Left>
-    <Right>lib/net8.0/AiDotNet.dll</Right>
-    <IsBaselineSuppression>true</IsBaselineSuppression>
-  </Suppression>
-  <Suppression>
-    <DiagnosticId>CP0002</DiagnosticId>
-    <Target>M:AiDotNet.Preprocessing.DimensionalityReduction.LargeVis`1.get_Embedding</Target>
-    <Left>lib/net10.0/AiDotNet.dll</Left>
-    <Right>lib/net10.0/AiDotNet.dll</Right>
-    <IsBaselineSuppression>true</IsBaselineSuppression>
-  </Suppression>
-  <Suppression>
-    <DiagnosticId>CP0002</DiagnosticId>
-    <Target>M:AiDotNet.Preprocessing.DimensionalityReduction.LargeVis`1.get_Embedding</Target>
-    <Left>lib/net471/AiDotNet.dll</Left>
-    <Right>lib/net471/AiDotNet.dll</Right>
-    <IsBaselineSuppression>true</IsBaselineSuppression>
-  </Suppression>
-  <Suppression>
-    <DiagnosticId>CP0002</DiagnosticId>
-    <Target>M:AiDotNet.Preprocessing.DimensionalityReduction.LargeVis`1.get_Embedding</Target>
     <Left>lib/net8.0/AiDotNet.dll</Left>
     <Right>lib/net8.0/AiDotNet.dll</Right>
     <IsBaselineSuppression>true</IsBaselineSuppression>
