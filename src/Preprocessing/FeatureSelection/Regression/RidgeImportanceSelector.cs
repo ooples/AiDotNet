@@ -26,14 +26,14 @@ public class RidgeImportanceSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T
     private readonly int _nFeaturesToSelect;
     private readonly double _alpha;
 
-    private double[]? _coefficients;
+    private Vector<T>? _coefficients;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public double Alpha => _alpha;
-    public double[]? Coefficients => _coefficients;
+    public Vector<T>? Coefficients => _coefficients;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -69,111 +69,17 @@ public class RidgeImportanceSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T
         int n = data.Rows;
         int p = data.Columns;
 
-        var X = new double[n, p];
-        var y = new double[n];
-        for (int i = 0; i < n; i++)
-        {
-            y[i] = NumOps.ToDouble(target[i]);
-            for (int j = 0; j < p; j++)
-                X[i, j] = NumOps.ToDouble(data[i, j]);
-        }
-
-        // Standardize
-        var means = new double[p];
-        var stds = new double[p];
-        double yMean = y.Average();
-
-        for (int j = 0; j < p; j++)
-        {
-            for (int i = 0; i < n; i++)
-                means[j] += X[i, j];
-            means[j] /= n;
-
-            for (int i = 0; i < n; i++)
-                stds[j] += (X[i, j] - means[j]) * (X[i, j] - means[j]);
-            stds[j] = Math.Sqrt(stds[j] / n);
-            if (stds[j] < 1e-10) stds[j] = 1;
-
-            for (int i = 0; i < n; i++)
-                X[i, j] = (X[i, j] - means[j]) / stds[j];
-        }
-
-        for (int i = 0; i < n; i++)
-            y[i] -= yMean;
-
-        // Compute X^T X + alpha * I
-        var XtX = new double[p, p];
-        var Xty = new double[p];
-
-        for (int i = 0; i < p; i++)
-        {
-            for (int j = 0; j < p; j++)
-            {
-                for (int k = 0; k < n; k++)
-                    XtX[i, j] += X[k, i] * X[k, j];
-            }
-            XtX[i, i] += _alpha; // Ridge penalty
-
-            for (int k = 0; k < n; k++)
-                Xty[i] += X[k, i] * y[k];
-        }
+        // Standardize X (population std; near-constant columns keep scale 1) and centre y
+        var x = FeatureSelectionTensorOps.StandardizeColumns(Tensor<T>.FromMatrix(data));
+        var y = FeatureSelectionTensorOps.CenteredColumn(target);
 
         // Solve (X^T X + alpha I) beta = X^T y
-        _coefficients = SolveSystem(XtX, Xty, p);
+        var coefficients = FeatureSelectionTensorOps.RidgeCoefficients(x, y, NumOps.FromDouble(_alpha));
+        _coefficients = coefficients.ToVector();
 
         // Select features with largest coefficients
-        int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = Enumerable.Range(0, p)
-            .OrderByDescending(j => Math.Abs(_coefficients[j]))
-            .Take(numToSelect)
-            .OrderBy(x => x)
-            .ToArray();
-
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(Engine.TensorAbs(coefficients), Math.Min(_nFeaturesToSelect, p));
         IsFitted = true;
-    }
-
-    private double[] SolveSystem(double[,] A, double[] b, int n)
-    {
-        var aug = new double[n, n + 1];
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < n; j++)
-                aug[i, j] = A[i, j];
-            aug[i, n] = b[i];
-        }
-
-        // Gaussian elimination with partial pivoting
-        for (int col = 0; col < n; col++)
-        {
-            int maxRow = col;
-            for (int row = col + 1; row < n; row++)
-                if (Math.Abs(aug[row, col]) > Math.Abs(aug[maxRow, col]))
-                    maxRow = row;
-
-            for (int j = 0; j <= n; j++)
-                (aug[col, j], aug[maxRow, j]) = (aug[maxRow, j], aug[col, j]);
-
-            if (Math.Abs(aug[col, col]) < 1e-10) continue;
-
-            for (int row = col + 1; row < n; row++)
-            {
-                double factor = aug[row, col] / aug[col, col];
-                for (int j = col; j <= n; j++)
-                    aug[row, j] -= factor * aug[col, j];
-            }
-        }
-
-        // Back substitution
-        var x = new double[n];
-        for (int i = n - 1; i >= 0; i--)
-        {
-            x[i] = aug[i, n];
-            for (int j = i + 1; j < n; j++)
-                x[i] -= aug[i, j] * x[j];
-            x[i] /= (Math.Abs(aug[i, i]) > 1e-10 ? aug[i, i] : 1);
-        }
-
-        return x;
     }
 
     /// <inheritdoc />

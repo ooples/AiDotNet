@@ -26,14 +26,14 @@ public class HuberCorrelationSelector<T> : TransformerBase<T, Matrix<T>, Matrix<
     private readonly int _nFeaturesToSelect;
     private readonly double _huberDelta;
 
-    private double[]? _robustCorrelations;
+    private Vector<T>? _robustCorrelations;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public double HuberDelta => _huberDelta;
-    public double[]? RobustCorrelations => _robustCorrelations;
+    public Vector<T>? RobustCorrelations => _robustCorrelations;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -69,75 +69,27 @@ public class HuberCorrelationSelector<T> : TransformerBase<T, Matrix<T>, Matrix<
         int n = data.Rows;
         int p = data.Columns;
 
-        var X = new double[n, p];
-        var y = new double[n];
-        for (int i = 0; i < n; i++)
-        {
-            y[i] = NumOps.ToDouble(target[i]);
-            for (int j = 0; j < p; j++)
-                X[i, j] = NumOps.ToDouble(data[i, j]);
-        }
+        var engine = Engine;
+        T delta = NumOps.FromDouble(_huberDelta);
 
-        _robustCorrelations = new double[p];
+        // Standardize x and y with median / (1.4826 * MAD) + 1e-10
+        var xStd = FeatureSelectionTensorOps.RobustZScores(Tensor<T>.FromMatrix(data));
+        var yStd = FeatureSelectionTensorOps.RobustZScores(engine.Reshape(Tensor<T>.FromVector(target), new[] { n, 1 }));
 
-        // Standardize y using robust estimators
-        double yMedian = ComputeMedian(y);
-        double yMAD = ComputeMAD(y, yMedian) + 1e-10;
-        var yStd = y.Select(yi => (yi - yMedian) / yMAD).ToArray();
+        // Huber-weighted correlation
+        var w = engine.TensorMultiply(
+            FeatureSelectionTensorOps.HuberWeights(xStd, delta), FeatureSelectionTensorOps.HuberWeights(yStd, delta));
+        var wx = engine.TensorMultiply(w, xStd);
+        var sumWxy = engine.ReduceSum(engine.TensorMultiply(wx, yStd), new[] { 0 }, false);
+        var sumWx2 = engine.ReduceSum(engine.TensorMultiply(wx, xStd), new[] { 0 }, false);
+        var sumWy2 = engine.ReduceSum(engine.TensorMultiply(w, engine.TensorMultiply(yStd, yStd)), new[] { 0 }, false);
+        var denom = engine.TensorSqrt(engine.TensorMultiply(sumWx2, sumWy2));
+        var correlations = FeatureSelectionTensorOps.ZeroUnless(
+            engine.TensorGreaterThan(denom, NumOps.FromDouble(1e-10)), engine.TensorAbs(engine.TensorDivide(sumWxy, denom)));
 
-        for (int j = 0; j < p; j++)
-        {
-            // Standardize x using robust estimators
-            var x = new double[n];
-            for (int i = 0; i < n; i++) x[i] = X[i, j];
-
-            double xMedian = ComputeMedian(x);
-            double xMAD = ComputeMAD(x, xMedian) + 1e-10;
-            var xStd = x.Select(xi => (xi - xMedian) / xMAD).ToArray();
-
-            // Compute Huber-weighted correlation
-            double sumWxy = 0, sumWx2 = 0, sumWy2 = 0, sumW = 0;
-            for (int i = 0; i < n; i++)
-            {
-                double w = HuberWeight(xStd[i]) * HuberWeight(yStd[i]);
-                sumWxy += w * xStd[i] * yStd[i];
-                sumWx2 += w * xStd[i] * xStd[i];
-                sumWy2 += w * yStd[i] * yStd[i];
-                sumW += w;
-            }
-
-            double denom = Math.Sqrt(sumWx2 * sumWy2);
-            _robustCorrelations[j] = denom > 1e-10 ? Math.Abs(sumWxy / denom) : 0;
-        }
-
-        int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = Enumerable.Range(0, p)
-            .OrderByDescending(j => _robustCorrelations[j])
-            .Take(numToSelect)
-            .OrderBy(x => x)
-            .ToArray();
-
+        _robustCorrelations = correlations.ToVector();
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(correlations, Math.Min(_nFeaturesToSelect, p));
         IsFitted = true;
-    }
-
-    private double HuberWeight(double z)
-    {
-        double absZ = Math.Abs(z);
-        return absZ <= _huberDelta ? 1.0 : _huberDelta / absZ;
-    }
-
-    private double ComputeMedian(double[] values)
-    {
-        var sorted = values.OrderBy(v => v).ToArray();
-        int n = sorted.Length;
-        if (n == 0) return 0;
-        return n % 2 == 1 ? sorted[n / 2] : (sorted[n / 2 - 1] + sorted[n / 2]) / 2.0;
-    }
-
-    private double ComputeMAD(double[] values, double median)
-    {
-        var absDeviations = values.Select(v => Math.Abs(v - median)).ToArray();
-        return ComputeMedian(absDeviations) * 1.4826; // Scale factor for consistency
     }
 
     /// <inheritdoc />
