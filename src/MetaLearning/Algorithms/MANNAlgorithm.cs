@@ -117,10 +117,24 @@ public partial class MANNAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
     private readonly MANNMemoryStatistics _memoryStats;
 
     // Santoro et al. 2016's learned parameters beside the controller: the output layer over
-    // [controller output; read vector], created once the controller's width is known, and the write gate logit alpha.
-    private Vector<T>? _outputWeights;
-    private Vector<T>? _outputBias;
-    private int _outputInputs;
+    // [controller output; read vector] and the write gate logit alpha. Both are trained by MetaTrain, so both are
+    // part of the parameter surface; leaving them out made GetParameters/SetParameters cover only the controller,
+    // and a restore silently kept the untrained classifier and gate.
+
+    /// <summary>
+    /// The output layer packed as its row-major weights <c>[inputs x NumClasses]</c> followed by its bias
+    /// <c>[NumClasses]</c>, where inputs = controller width + MemoryValueSize. Empty until the controller's width
+    /// is known (the first episode) or a restore supplies it.
+    /// </summary>
+    /// <remarks>
+    /// One field rather than two so the layer is a single variable-width slot: a fresh instance learns its width
+    /// from the restored slice (Availability = Fit gives a resizable source), and inputs follows from the length.
+    /// </remarks>
+    [AiDotNet.Attributes.TrainableParameter(Availability = AiDotNet.Models.Parameters.ParameterAvailability.Fit)]
+    private Vector<T> _outputLayer = new Vector<T>(0);
+
+    /// <summary>The write gate logit alpha, one element; eq. 7's gate is sigmoid(alpha).</summary>
+    [AiDotNet.Attributes.TrainableParameter]
     private Vector<T> _writeGateLogit;
 
     /// <summary>
@@ -259,8 +273,7 @@ public partial class MANNAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
             (layer.Bias, BatchMean(sums[2], layer.Bias.Length)),
             (_writeGateLogit, BatchMean(sums[3], _writeGateLogit.Length)));
         InterfaceGuard.Parameterizable(MetaModel).SetParameters(updated[0]);
-        _outputWeights = updated[1];
-        _outputBias = updated[2];
+        _outputLayer = Vector<T>.Concatenate(updated[1], updated[2]);
         _writeGateLogit = updated[3];
         SyncWriteGate();
 
@@ -330,7 +343,7 @@ public partial class MANNAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
             adaptedMemory,
             _mannOptions,
             NumOps,
-            MannRows<T>.Owned(layer.Weights, _outputInputs, _mannOptions.NumClasses),
+            MannRows<T>.Owned(layer.Weights, layer.Inputs, _mannOptions.NumClasses),
             MannRows<T>.Owned(layer.Bias, 1, _mannOptions.NumClasses));
     }
 
@@ -414,7 +427,7 @@ public partial class MANNAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
     {
         var layer = OutputLayer();
         return new MannWeights(
-            MannRows<T>.Owned(layer.Weights, _outputInputs, _mannOptions.NumClasses),
+            MannRows<T>.Owned(layer.Weights, layer.Inputs, _mannOptions.NumClasses),
             MannRows<T>.Owned(layer.Bias, 1, _mannOptions.NumClasses),
             MannRows<T>.Owned(_writeGateLogit, 1, 1));
     }
@@ -548,31 +561,43 @@ public partial class MANNAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
     private void EnsureOutputLayer(int controllerWidth)
     {
         int inputs = controllerWidth + _mannOptions.MemoryValueSize;
-        if (_outputWeights is not null)
+        if (_outputLayer.Length > 0)
         {
-            if (inputs != _outputInputs)
+            int existing = OutputLayer().Inputs;
+            if (inputs != existing)
             {
                 throw new InvalidOperationException(
-                    $"The controller's output width changed from {_outputInputs - _mannOptions.MemoryValueSize} to {controllerWidth}.");
+                    $"The controller's output width changed from {existing - _mannOptions.MemoryValueSize} to {controllerWidth}.");
             }
 
             return;
         }
 
         var (weights, bias) = MannRows<T>.GlorotLayer(inputs, _mannOptions.NumClasses, _mannOptions.RandomSeed);
-        _outputInputs = inputs;
-        _outputWeights = weights.ToVector();
-        _outputBias = bias.ToVector();
+        _outputLayer = Vector<T>.Concatenate(weights.ToVector(), bias.ToVector());
     }
 
-    private (Vector<T> Weights, Vector<T> Bias) OutputLayer()
+    /// <summary>
+    /// Unpacks <see cref="_outputLayer"/> into its weights <c>[inputs x NumClasses]</c> and bias <c>[NumClasses]</c>.
+    /// </summary>
+    private (Vector<T> Weights, Vector<T> Bias, int Inputs) OutputLayer()
     {
-        if (_outputWeights is null || _outputBias is null)
+        if (_outputLayer.Length == 0)
         {
             throw new InvalidOperationException("The output layer is created on the first episode.");
         }
 
-        return (_outputWeights, _outputBias);
+        int classes = _mannOptions.NumClasses;
+        int inputs = _outputLayer.Length / classes - 1;
+        if (_outputLayer.Length % classes != 0 || inputs <= _mannOptions.MemoryValueSize)
+        {
+            throw new InvalidOperationException(
+                $"The output layer holds {_outputLayer.Length} values, which is not (controller width + " +
+                $"{_mannOptions.MemoryValueSize}) x {classes} weights plus {classes} biases.");
+        }
+
+        int weightCount = inputs * classes;
+        return (_outputLayer.GetSubVector(0, weightCount), _outputLayer.GetSubVector(weightCount, classes), inputs);
     }
 
     /// <summary>Hands the memory the current gate <c>sigmoid(alpha)</c> for the writes outside training.</summary>
@@ -657,14 +682,14 @@ public partial class MANNAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
     internal Vector<T> OutputWeightsForTesting
     {
         get => OutputLayer().Weights;
-        set => _outputWeights = value;
+        set => _outputLayer = Vector<T>.Concatenate(value, OutputLayer().Bias);
     }
 
     /// <summary>The output layer's bias, for tests.</summary>
     internal Vector<T> OutputBiasForTesting
     {
         get => OutputLayer().Bias;
-        set => _outputBias = value;
+        set => _outputLayer = Vector<T>.Concatenate(OutputLayer().Weights, value);
     }
 
     /// <summary>The write gate logit alpha, for tests.</summary>
