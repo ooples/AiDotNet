@@ -1384,9 +1384,8 @@ public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializat
 
         float[] FlattenRank1(Tensor<T> t)
         {
-            var arr = new float[t.Shape[0]];
-            for (int i = 0; i < t.Shape[0]; i++) arr[i] = (float)NumOps.ToDouble(t[i]);
-            return arr;
+            // ONNX initializers are float: one bulk cast of the rank-1 parameter.
+            return t.Cast<float>().ToVector().GetSubVector(0, t.Shape[0]).ToArray();
         }
 
         var scaleName = builder.AddFloatInitializer("bn_scale", FlattenRank1(_gamma), new[] { n });

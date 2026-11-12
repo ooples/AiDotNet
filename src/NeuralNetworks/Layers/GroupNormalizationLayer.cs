@@ -253,8 +253,8 @@ public partial class GroupNormalizationLayer<T> : LayerBase<T>
         // Update in-place to preserve GPU-registered tensor references
         var updGamma = Engine.TensorSubtract(_gamma, Engine.TensorMultiplyScalar(_gammaGradient, learningRate));
         var updBeta = Engine.TensorSubtract(_beta, Engine.TensorMultiplyScalar(_betaGradient, learningRate));
-        for (int i = 0; i < _gamma.Length; i++) _gamma[i] = updGamma[i];
-        for (int i = 0; i < _beta.Length; i++) _beta[i] = updBeta[i];
+        updGamma.CopyTo(_gamma.AsWritableSpan());
+        updBeta.CopyTo(_beta.AsWritableSpan());
 
         // Notify GPU that tensor data has changed
         Engine.InvalidatePersistentTensor(_gamma);

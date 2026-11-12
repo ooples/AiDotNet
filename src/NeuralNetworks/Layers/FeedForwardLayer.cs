@@ -745,9 +745,12 @@ public partial class FeedForwardLayer<T> : LayerBase<T>, IShapeContract
     {
         int existingInputSize = _weights.Shape[0];
         int outputSize = _weights.Shape[1];
+        // A plain heap tensor, as before; the overlapping rows are copied in row-major order.
+        var resizedWeights = new Tensor<T>([actualInputSize, outputSize]);
+
         int sharedInputSize = Math.Min(existingInputSize, actualInputSize);
-        // A fresh copy of the overlapping rows.
-        var resizedWeights = Engine.TensorSlice(_weights, new[] { 0, 0 }, new[] { sharedInputSize, outputSize }).Clone();
+        Engine.TensorSlice(_weights, new[] { 0, 0 }, new[] { sharedInputSize, outputSize })
+            .CopyTo(resizedWeights.AsWritableSpan().Slice(0, sharedInputSize * outputSize));
 
         if (actualInputSize > sharedInputSize)
         {
@@ -769,7 +772,7 @@ public partial class FeedForwardLayer<T> : LayerBase<T>, IShapeContract
             var newRows = new Tensor<T>([newRowCount, outputSize]);
             InitializeLayerWeights(newRows, actualInputSize, outputSize);
 
-            resizedWeights = Engine.TensorConcatenate(new[] { resizedWeights, newRows }, 0);
+            newRows.CopyTo(resizedWeights.AsWritableSpan().Slice(sharedInputSize * outputSize, newRowCount * outputSize));
         }
 
         _weights = resizedWeights;

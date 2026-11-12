@@ -329,12 +329,23 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, IShap
             if (target.Shape[axis] != input.Shape[axis]) return null;
 
         int rows = target.Length;
-        var ids = new Tensor<int>(new[] { rows });
-        for (int r = 0; r < rows; r++)
+        Tensor<int> ids;
+        using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
         {
-            double id = NumOps.ToDouble(target.GetFlat(r));
-            if (!(id >= 0 && id < outputSize) || Math.Floor(id) < id) return null;
-            ids.SetFlat(r, (int)id);
+            // Every target must be an integer class id in [0, outputSize); NaN fails every test.
+            var flatTarget = Engine.Reshape(target, new[] { rows });
+            if (rows > 0)
+            {
+                var ones = new Tensor<T>(new[] { rows });
+                ones.Fill(NumOps.One);
+                var whole = Engine.TensorEquals(Engine.TensorFloor(flatTarget), flatTarget);
+                var nonNegative = Engine.TensorSubtract(ones, Engine.TensorLessThan(flatTarget, NumOps.Zero));
+                var belowCount = Engine.TensorLessThan(flatTarget, NumOps.FromDouble(outputSize));
+                var valid = Engine.TensorMultiply(Engine.TensorMultiply(whole, nonNegative), belowCount);
+                if (!NumOps.Equals(Engine.TensorMinValue(valid), NumOps.One)) return null;
+            }
+
+            ids = flatTarget.Cast<int>();
         }
 
         var hidden = input.Rank == 2 ? input : Engine.Reshape(input, new[] { rows, inputSize });
@@ -1490,13 +1501,9 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, IShap
         var resizedWeights = new Tensor<T>([actualInputSize, outputSize]);
 
         int sharedInputSize = Math.Min(existingInputSize, actualInputSize);
-        for (int i = 0; i < sharedInputSize; i++)
-        {
-            for (int o = 0; o < outputSize; o++)
-            {
-                resizedWeights[i, o] = _weights[i, o];
-            }
-        }
+        // The overlapping rows, copied in row-major order into the heap tensor.
+        Engine.TensorSlice(_weights, new[] { 0, 0 }, new[] { sharedInputSize, outputSize })
+            .CopyTo(resizedWeights.AsWritableSpan().Slice(0, sharedInputSize * outputSize));
 
         if (actualInputSize > sharedInputSize)
         {
@@ -1795,20 +1802,11 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, IShap
         // A = [batch, inputSize], B = [inputSize, outputSize], C = [outputSize] (broadcast).
         // AiDotNet stores weights as [inputSize, outputSize] — same layout as B,
         // so no transpose is needed.
-        var weightsFlat = new float[inputSize * outputSize];
-        for (int i = 0; i < inputSize; i++)
-        {
-            for (int j = 0; j < outputSize; j++)
-            {
-                weightsFlat[i * outputSize + j] = (float)NumOps.ToDouble(_weights[i, j]);
-            }
-        }
-
-        var biasFlat = new float[outputSize];
-        for (int j = 0; j < outputSize; j++)
-        {
-            biasFlat[j] = UseBias ? (float)NumOps.ToDouble(_biases[j]) : 0f;
-        }
+        // ONNX initializers are float: bulk casts of the [inputSize, outputSize] weights and the bias.
+        var weightsFlat = _weights.Cast<float>().ToVector().ToArray();
+        var biasFlat = UseBias
+            ? _biases.Cast<float>().ToVector().GetSubVector(0, outputSize).ToArray()
+            : new float[outputSize];
 
         var weightsName = builder.AddFloatInitializer(
             "dense_W", weightsFlat, new[] { inputSize, outputSize });
