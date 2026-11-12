@@ -32,16 +32,16 @@ public class TreeBasedImportance<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, 
     private readonly int _minSamplesPerLeaf;
     private readonly int? _randomState;
 
-    private double[]? _importances;
-    private double[]? _importanceStds;
+    private Vector<T>? _importances;
+    private Vector<T>? _importanceStds;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public int NTrees => _nTrees;
-    public double[]? Importances => _importances;
-    public double[]? ImportanceStds => _importanceStds;
+    public Vector<T>? Importances => _importances;
+    public Vector<T>? ImportanceStds => _importanceStds;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -87,10 +87,16 @@ public class TreeBasedImportance<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, 
             ? RandomHelper.CreateSeededRandom(_randomState.Value)
             : RandomHelper.CreateSecureRandom();
 
-        // Initialize importances
-        var treeImportances = new double[_nTrees, p];
+        var engine = Engine;
+        var X = Tensor<T>.FromMatrix(data);
+        T floor = NumOps.FromDouble(1e-10);
 
-        // Build forest and collect importances
+        // Class one-hot of the rounded target for the Gini splits
+        PreprocessingTensorOps.ClassLabels(target, out var classes, out var classIndex);
+        var classOneHot = PreprocessingTensorOps.ClassOneHot<T>(classIndex, classes.Length);
+
+        // Build forest and collect normalized importances per tree
+        var treeImportances = new Tensor<T>[_nTrees];
         for (int t = 0; t < _nTrees; t++)
         {
             // Bootstrap sample
@@ -99,52 +105,52 @@ public class TreeBasedImportance<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, 
                 sampleIndices[i] = random.Next(n);
 
             // Feature importance from this tree
-            var featureImportance = new double[p];
-            BuildTree(data, target, sampleIndices, featureImportance, 0, random);
+            var splitFeatures = new List<int>();
+            var splitGains = new List<Tensor<T>>();
+            BuildTree(X, classOneHot, sampleIndices, splitFeatures, splitGains, 0, random);
+            var featureImportance = FeatureSelectionTensorOps.ScatterAdd(splitFeatures, splitGains, p);
 
             // Normalize and store
-            double totalImportance = featureImportance.Sum();
-            for (int j = 0; j < p; j++)
-                treeImportances[t, j] = totalImportance > 1e-10 ? featureImportance[j] / totalImportance : 0;
+            T totalImportance = engine.TensorSum(featureImportance);
+            treeImportances[t] = engine.Reshape(PreprocessingTensorOps.IsAbove(totalImportance, floor)
+                ? engine.TensorDivideScalar(featureImportance, totalImportance)
+                : new Tensor<T>(new[] { p }), new[] { 1, p });
         }
 
-        // Compute mean and std of importances across trees
-        _importances = new double[p];
-        _importanceStds = new double[p];
-
-        for (int j = 0; j < p; j++)
+        // Compute mean and (population) std of importances across trees
+        // (no trees: 0 / 0, i.e. NaN, as the plain sums give)
+        Tensor<T> importances;
+        if (_nTrees > 0)
         {
-            double sum = 0, sumSq = 0;
-            for (int t = 0; t < _nTrees; t++)
-            {
-                sum += treeImportances[t, j];
-                sumSq += treeImportances[t, j] * treeImportances[t, j];
-            }
-            _importances[j] = sum / _nTrees;
-            _importanceStds[j] = Math.Sqrt(sumSq / _nTrees - _importances[j] * _importances[j]);
+            var stacked = engine.TensorConcatenate(treeImportances, 0);
+            importances = engine.ReduceMean(stacked, new[] { 0 }, false);
+            _importanceStds = engine.TensorSqrt(engine.TensorSubtract(
+                engine.ReduceMean(engine.TensorSquare(stacked), new[] { 0 }, false), engine.TensorSquare(importances))).ToVector();
         }
+        else
+        {
+            importances = PreprocessingTensorOps.Filled(new[] { p }, NumOps.FromDouble(double.NaN));
+            _importanceStds = importances.ToVector();
+        }
+
+        _importances = importances.ToVector();
 
         // Select top features
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = _importances
-            .Select((imp, idx) => (Importance: imp, Index: idx))
-            .OrderByDescending(x => x.Importance)
-            .Take(numToSelect)
-            .Select(x => x.Index)
-            .OrderBy(x => x)
-            .ToArray();
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(importances, numToSelect);
 
         IsFitted = true;
     }
 
-    private void BuildTree(Matrix<T> data, Vector<T> target, int[] sampleIndices,
-        double[] featureImportance, int depth, Random random)
+    private void BuildTree(Tensor<T> data, Tensor<T> classOneHot, int[] sampleIndices,
+        List<int> splitFeatures, List<Tensor<T>> splitGains, int depth, Random random)
     {
         if (depth >= _maxDepth || sampleIndices.Length < _minSamplesPerLeaf * 2)
             return;
 
+        var engine = Engine;
         int n = sampleIndices.Length;
-        int p = data.Columns;
+        int p = data.Shape[1];
 
         // Random feature subset (sqrt(p) features)
         int nFeaturesToTry = Math.Max(1, (int)Math.Sqrt(p));
@@ -153,83 +159,27 @@ public class TreeBasedImportance<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, 
             .Take(nFeaturesToTry)
             .ToArray();
 
-        // Find best split
-        double bestGain = 0;
-        int bestFeature = -1;
-        double bestThreshold = 0;
-
-        double parentGini = ComputeGini(target, sampleIndices);
-
-        foreach (int feature in featureSubset)
-        {
-            // Get unique values for split points
-            var values = sampleIndices.Select(i => NumOps.ToDouble(data[i, feature]))
-                .Distinct()
-                .OrderBy(v => v)
-                .ToArray();
-
-            for (int i = 0; i < values.Length - 1; i++)
-            {
-                double threshold = (values[i] + values[i + 1]) / 2;
-
-                var leftIndices = sampleIndices.Where(idx => NumOps.ToDouble(data[idx, feature]) <= threshold).ToArray();
-                var rightIndices = sampleIndices.Where(idx => NumOps.ToDouble(data[idx, feature]) > threshold).ToArray();
-
-                if (leftIndices.Length < _minSamplesPerLeaf || rightIndices.Length < _minSamplesPerLeaf)
-                    continue;
-
-                double leftGini = ComputeGini(target, leftIndices);
-                double rightGini = ComputeGini(target, rightIndices);
-
-                double weightedGini = (leftIndices.Length * leftGini + rightIndices.Length * rightGini) / n;
-                double gain = parentGini - weightedGini;
-
-                if (gain > bestGain)
-                {
-                    bestGain = gain;
-                    bestFeature = feature;
-                    bestThreshold = threshold;
-                }
-            }
-        }
-
-        if (bestFeature < 0)
+        // Find best split (Gini decrease)
+        var rows = new Tensor<int>(sampleIndices, new[] { n });
+        var nodeClasses = engine.TensorIndexSelect(classOneHot, rows, 0);
+        T parentGini = FeatureSelectionTensorOps.GiniImpurity(nodeClasses);
+        var nodeX = engine.TensorIndexSelect(engine.TensorIndexSelect(data, rows, 0),
+            new Tensor<int>(featureSubset, new[] { featureSubset.Length }), 1);
+        if (!FeatureSelectionTensorOps.TryBestSplit(nodeX, nodeClasses, SplitCriterion.Gini, parentGini, _minSamplesPerLeaf,
+            out int bestColumn, out T bestThreshold, out var bestGain))
             return;
 
         // Record importance as weighted impurity decrease
-        featureImportance[bestFeature] += bestGain * n;
+        splitFeatures.Add(featureSubset[bestColumn]);
+        splitGains.Add(engine.TensorMultiplyScalar(bestGain, NumOps.FromDouble(n)));
 
         // Recursively build subtrees
-        var leftSplit = sampleIndices.Where(idx => NumOps.ToDouble(data[idx, bestFeature]) <= bestThreshold).ToArray();
-        var rightSplit = sampleIndices.Where(idx => NumOps.ToDouble(data[idx, bestFeature]) > bestThreshold).ToArray();
+        FeatureSelectionTensorOps.PartitionRows(PreprocessingTensorOps.ColumnVector(nodeX, bestColumn), bestThreshold,
+            sampleIndices, out var leftSplit, out var rightSplit);
 
-        BuildTree(data, target, leftSplit, featureImportance, depth + 1, random);
-        BuildTree(data, target, rightSplit, featureImportance, depth + 1, random);
+        BuildTree(data, classOneHot, leftSplit, splitFeatures, splitGains, depth + 1, random);
+        BuildTree(data, classOneHot, rightSplit, splitFeatures, splitGains, depth + 1, random);
     }
-
-    private double ComputeGini(Vector<T> target, int[] indices)
-    {
-        if (indices.Length == 0) return 0;
-
-        var classCounts = new Dictionary<int, int>();
-        foreach (int i in indices)
-        {
-            int label = (int)Math.Round(NumOps.ToDouble(target[i]));
-            if (!classCounts.ContainsKey(label))
-                classCounts[label] = 0;
-            classCounts[label]++;
-        }
-
-        double gini = 1.0;
-        foreach (int count in classCounts.Values)
-        {
-            double prob = (double)count / indices.Length;
-            gini -= prob * prob;
-        }
-
-        return gini;
-    }
-
     /// <inheritdoc />
     public Matrix<T> FitTransform(Matrix<T> data, Vector<T> target)
     {
