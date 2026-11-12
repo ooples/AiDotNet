@@ -103,7 +103,7 @@ public class FTest<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFea
             : FilterStatisticTensorOps.FilledLike(fScores, NumOps.One).ToVector();
 
         // Select top features by F-score
-        _selectedIndices = FilterStatisticTensorOps.TopKIndicesSorted(fScores, Math.Min(_nFeaturesToSelect, p));
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(fScores, Math.Min(_nFeaturesToSelect, p));
 
         IsFitted = true;
     }

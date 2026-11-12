@@ -65,7 +65,7 @@ public class AutocorrelationSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T
         int maxLag = Math.Min(_maxLag, n / 3);
 
         var engine = Engine;
-        var centered = SelectorTensorOps.CenterColumns(Tensor<T>.FromMatrix(data));
+        var centered = FilterStatisticTensorOps.CenterColumns(Tensor<T>.FromMatrix(data));
         var variance = engine.TensorDivideScalar(
             SelectorTensorOps.ColumnSumOfSquares(centered), NumOps.FromDouble(n));
 

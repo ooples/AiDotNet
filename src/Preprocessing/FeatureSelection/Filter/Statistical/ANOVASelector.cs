@@ -85,7 +85,7 @@ public class ANOVASelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISuper
             : FilterStatisticTensorOps.FilledLike(ssb, NumOps.Zero);
         _fStatistics = fStatistics.ToVector();
 
-        _selectedIndices = FilterStatisticTensorOps.TopKIndicesSorted(fStatistics, Math.Min(_nFeaturesToSelect, p));
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(fStatistics, Math.Min(_nFeaturesToSelect, p));
 
         IsFitted = true;
     }

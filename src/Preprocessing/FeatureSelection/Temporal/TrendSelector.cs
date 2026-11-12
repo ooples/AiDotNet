@@ -63,7 +63,7 @@ public class TrendSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IFixed
         T tVar = engine.TensorSum(engine.TensorMultiply(tCentered, tCentered));
         if (n > 0 && !NumOps.LessThan(tVar, NumOps.FromDouble(1e-10)))
         {
-            var yCentered = SelectorTensorOps.CenterColumns(Tensor<T>.FromMatrix(data));
+            var yCentered = FilterStatisticTensorOps.CenterColumns(Tensor<T>.FromMatrix(data));
             var yVar = SelectorTensorOps.ColumnSumOfSquares(yCentered);
 
             // Linear regression slope and the R-squared of the fitted trend line

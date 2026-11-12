@@ -79,7 +79,7 @@ public class FRegression<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervi
         // A constant feature or target carries no signal: F = 0, p = 1
         var informative = NumOps.LessThan(sst, epsilon)
             ? zeros
-            : FilterStatisticTensorOps.OneMinus(engine.TensorLessThan(sxx, epsilon));
+            : PreprocessingTensorOps.OneMinus(engine.TensorLessThan(sxx, epsilon));
 
         // Regression sum of squares SSR = beta^2 Sxx = Sxy^2 / Sxx, error sum of squares SSE = SST - SSR
         var ssr = FilterStatisticTensorOps.GuardedDivide(engine.TensorSquare(sxy), sxx, 0.0, NumOps.Zero);
@@ -100,7 +100,7 @@ public class FRegression<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervi
             : FilterStatisticTensorOps.FilledLike(fScores, NumOps.One).ToVector();
 
         // Select top features by F-score
-        _selectedIndices = FilterStatisticTensorOps.TopKIndicesSorted(fScores, Math.Min(_nFeaturesToSelect, p));
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(fScores, Math.Min(_nFeaturesToSelect, p));
 
         IsFitted = true;
     }
