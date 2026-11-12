@@ -26,14 +26,14 @@ public class FractalDimensionSelector<T> : TransformerBase<T, Matrix<T>, Matrix<
     private readonly int _nFeaturesToSelect;
     private readonly int _kMax;
 
-    private double[]? _fractalDimensions;
+    private Vector<T>? _fractalDimensions;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public int KMax => _kMax;
-    public double[]? FractalDimensions => _fractalDimensions;
+    public Vector<T>? FractalDimensions => _fractalDimensions;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -64,96 +64,89 @@ public class FractalDimensionSelector<T> : TransformerBase<T, Matrix<T>, Matrix<
         if (n < _kMax + 1)
             throw new ArgumentException($"Need at least {_kMax + 1} samples for kMax = {_kMax}.");
 
-        var X = new double[n, p];
-        for (int i = 0; i < n; i++)
-            for (int j = 0; j < p; j++)
-                X[i, j] = NumOps.ToDouble(data[i, j]);
-
-        _fractalDimensions = new double[p];
-
-        for (int j = 0; j < p; j++)
-        {
-            var col = new double[n];
-            for (int i = 0; i < n; i++)
-                col[i] = X[i, j];
-
-            _fractalDimensions[j] = ComputeHiguchiFD(col);
-        }
+    }
+@@NEW
+        var X = Tensor<T>.FromMatrix(data);
+        var dimensions = ComputeHiguchiFD(X, n, p);
+        _fractalDimensions = dimensions.ToVector();
 
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = Enumerable.Range(0, p)
-            .OrderByDescending(j => _fractalDimensions[j])
-            .Take(numToSelect)
-            .OrderBy(x => x)
-            .ToArray();
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(dimensions, numToSelect);
 
         IsFitted = true;
     }
+    }
 
-    private double ComputeHiguchiFD(double[] data)
+    private Tensor<T> ComputeHiguchiFD(Tensor<T> X, int n, int p)
     {
-        int n = data.Length;
-        var logK = new List<double>();
-        var logL = new List<double>();
+        var engine = Engine;
+        T nMinusOne = NumOps.FromDouble(n - 1.0);
+        var curveLengths = new List<Tensor<T>>();
+        var scales = new List<int>();
 
         for (int k = 1; k <= _kMax; k++)
         {
-            var lmValues = new List<double>();
+            Tensor<T>? lmSum = null;
+            int lmCount = 0;
 
             for (int m = 1; m <= k; m++)
             {
-                // Compute L_m(k)
+                // Compute L_m(k) for every feature: the curve x[m-1], x[m-1+k], ... of numSegments steps
                 int numSegments = (n - m) / k;
                 if (numSegments < 1) continue;
 
-                double sumDiff = 0;
-                for (int i = 1; i <= numSegments; i++)
-                {
-                    int idx1 = m + i * k - 1;
-                    int idx0 = m + (i - 1) * k - 1;
-                    if (idx1 < n && idx0 >= 0)
-                        sumDiff += Math.Abs(data[idx1] - data[idx0]);
-                }
-
-                double normFactor = (n - 1.0) / ((double)k * k * numSegments);
-                double lm = sumDiff * normFactor;
-                lmValues.Add(lm);
+                int start = m - 1;
+                var rows = Enumerable.Range(0, numSegments + 1).Select(i => start + i * k).ToArray();
+                var points = engine.TensorIndexSelect(X, new Tensor<int>(rows, new[] { rows.Length }), 0);
+                var steps = engine.TensorAbs(engine.TensorSubtract(
+                    engine.TensorSlice(points, new[] { 1, 0 }, new[] { numSegments, p }),
+                    engine.TensorSlice(points, new[] { 0, 0 }, new[] { numSegments, p })));
+                var lm = engine.TensorDivideScalar(
+                    engine.TensorMultiplyScalar(engine.ReduceSum(steps, new[] { 0 }, false), nMinusOne),
+                    PreprocessingTensorOps.CountAsScalar<T>(k * k * numSegments));
+                lmSum = lmSum is null ? lm : engine.TensorAdd(lmSum, lm);
+                lmCount++;
             }
 
-            if (lmValues.Count > 0)
+            if (lmSum is not null)
             {
-                double avgL = lmValues.Average();
-                if (avgL > 0)
-                {
-                    logK.Add(Math.Log(k));
-                    logL.Add(Math.Log(avgL));
-                }
+                curveLengths.Add(engine.TensorDivideScalar(lmSum, PreprocessingTensorOps.CountAsScalar<T>(lmCount)));
+                scales.Add(k);
             }
         }
 
-        if (logK.Count < 2)
-            return 1.5; // Default dimension
+        var defaultDimension = PreprocessingTensorOps.Filled(new[] { p }, NumOps.FromDouble(1.5));
+        if (scales.Count == 0)
+            return defaultDimension;
 
-        // Linear regression: FD = -slope
-        double meanX = logK.Average();
-        double meanY = logL.Average();
+        // Per feature, only the scales whose average curve length is positive enter the fit
+        int count = scales.Count;
+        var shape = new[] { count, p };
+        var avgL = engine.TensorStack(curveLengths.ToArray(), 0);
+        var valid = engine.TensorGreaterThan(avgL, NumOps.Zero);
+        var zeros = new Tensor<T>(shape);
+        var logL = engine.TensorWhere(valid, engine.TensorLog(avgL), zeros);
+        var logK = engine.TensorBroadcastTo(engine.Reshape(
+            engine.TensorLog(new Tensor<int>(scales.ToArray(), new[] { count }).Cast<T>()), new[] { count, 1 }), shape);
+        var maskedLogK = engine.TensorMultiply(logK, valid);
 
-        double numerator = 0, denominator = 0;
-        for (int i = 0; i < logK.Count; i++)
-        {
-            numerator += (logK[i] - meanX) * (logL[i] - meanY);
-            denominator += (logK[i] - meanX) * (logK[i] - meanX);
-        }
+        // Linear regression of log L on log k: FD = -slope
+        var pointCount = engine.ReduceSum(valid, new[] { 0 }, true);
+        var meanX = engine.TensorDivide(engine.ReduceSum(maskedLogK, new[] { 0 }, true), pointCount);
+        var meanY = engine.TensorDivide(engine.ReduceSum(logL, new[] { 0 }, true), pointCount);
+        var dx = engine.TensorMultiply(engine.TensorSubtract(logK, engine.TensorBroadcastTo(meanX, shape)), valid);
+        var dy = engine.TensorMultiply(engine.TensorSubtract(logL, engine.TensorBroadcastTo(meanY, shape)), valid);
+        var numerator = engine.ReduceSum(engine.TensorMultiply(dx, dy), new[] { 0 }, false);
+        var denominator = engine.ReduceSum(engine.TensorMultiply(dx, dx), new[] { 0 }, false);
 
-        if (denominator < 1e-10)
-            return 1.5;
-
-        double fd = -numerator / denominator;
-
-        // Clamp to valid range [1, 2]
-        return Math.Max(1, Math.Min(2, fd));
+        // Clamp to valid range [1, 2]; fewer than 2 points or a flat log k gives the default dimension
+        var fd = engine.TensorClamp(
+            engine.TensorNegate(engine.TensorDivide(numerator, denominator)), NumOps.One, NumOps.FromDouble(2));
+        var fitted = engine.TensorMultiply(
+            PreprocessingTensorOps.AtLeast(engine.Reshape(pointCount, new[] { p }), NumOps.FromDouble(2)),
+            PreprocessingTensorOps.Not(engine.TensorLessThan(denominator, NumOps.FromDouble(1e-10))));
+        return engine.TensorWhere(fitted, fd, defaultDimension);
     }
-
     public new Matrix<T> FitTransform(Matrix<T> data)
     {
         Fit(data);
@@ -166,15 +159,7 @@ public class FractalDimensionSelector<T> : TransformerBase<T, Matrix<T>, Matrix<
         if (_selectedIndices is null)
             throw new InvalidOperationException("FractalDimensionSelector has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />
