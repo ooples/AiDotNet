@@ -111,30 +111,18 @@ public class VerticalPartyLabelHolder<T> : FederatedLearningComponentBase<T>, IV
 
         int batchSize = alignedIndices.Count;
 
+        var indices = new Tensor<int>(alignedIndices.ToArray(), new[] { batchSize });
+
         // Handle both 1D and 2D label tensors
         if (_labels.Rank == 1)
         {
-            var batchLabels = new Tensor<T>(new[] { batchSize });
-            for (int b = 0; b < batchSize; b++)
-            {
-                batchLabels[b] = _labels[alignedIndices[b]];
-            }
-
-            return batchLabels;
+            return Engine.TensorIndexSelect(_labels, indices, 0);
         }
         else
         {
             int numClasses = _labels.Shape[1];
-            var batchLabels = new Tensor<T>(new[] { batchSize, numClasses });
-            for (int b = 0; b < batchSize; b++)
-            {
-                for (int c = 0; c < numClasses; c++)
-                {
-                    batchLabels[b * numClasses + c] = _labels[alignedIndices[b] * numClasses + c];
-                }
-            }
-
-            return batchLabels;
+            var rows = VerticalEngineOps.Rows(_labels, _labels.Length / numClasses, numClasses);
+            return Engine.TensorIndexSelect(rows, indices, 0);
         }
     }
 
@@ -163,17 +151,16 @@ public class VerticalPartyLabelHolder<T> : FederatedLearningComponentBase<T>, IV
         }
 
         // MSE loss: L = (1/n) * sum((pred - label)^2)
-        double lossSum = 0.0;
-        var gradient = new Tensor<T>(predictions._shape);
-
-        for (int i = 0; i < totalElements; i++)
+        if (totalElements == 0)
         {
-            double pred = NumOps.ToDouble(predictions[i]);
-            double label = NumOps.ToDouble(batchLabels[i]);
-            double diff = pred - label;
-            lossSum += diff * diff;
-            gradient[i] = NumOps.FromDouble(2.0 * diff / totalElements);
+            return (double.NaN, new Tensor<T>(predictions._shape));
         }
+
+        var diff = Engine.TensorSubtract(
+            VerticalEngineOps.Rows(predictions, 1, totalElements),
+            VerticalEngineOps.Rows(batchLabels, 1, totalElements));
+        double lossSum = NumOps.ToDouble(Engine.TensorSum(Engine.TensorSquare(diff)));
+        var gradient = Engine.TensorMultiplyScalar(diff, NumOps.FromDouble(2.0 / totalElements)).Reshape(predictions._shape);
 
         double loss = lossSum / totalElements;
         return (loss, gradient);
@@ -188,31 +175,19 @@ public class VerticalPartyLabelHolder<T> : FederatedLearningComponentBase<T>, IV
         }
 
         int batchSize = alignedIndices.Count;
-        var input = new Tensor<T>(new[] { batchSize, FeatureCount });
-        for (int b = 0; b < batchSize; b++)
-        {
-            int rowIdx = alignedIndices[b];
-            for (int f = 0; f < FeatureCount; f++)
-            {
-                input[b * FeatureCount + f] = _localData[rowIdx * FeatureCount + f];
-            }
-        }
+        var rows = VerticalEngineOps.Rows(_localData, _localData.Length / FeatureCount, FeatureCount);
+        var input = Engine.TensorIndexSelect(rows, new Tensor<int>(alignedIndices.ToArray(), new[] { batchSize }), 0);
 
         _lastInput = input;
 
         int hiddenDim = _weightsHidden.Shape[1];
-        var hidden = new Tensor<T>(new[] { batchSize, hiddenDim });
-        MatMul(input, _weightsHidden, hidden, batchSize, FeatureCount, hiddenDim);
-        AddBias(hidden, _biasHidden, batchSize, hiddenDim);
-        ApplyRelu(hidden, batchSize * hiddenDim);
+        var hidden = VerticalEngineOps.MatMul(input, _weightsHidden, batchSize, FeatureCount, hiddenDim);
+        hidden = VerticalEngineOps.Relu(VerticalEngineOps.AddBias(hidden, _biasHidden, batchSize, hiddenDim));
 
         _lastHidden = hidden;
 
-        var embedding = new Tensor<T>(new[] { batchSize, _embeddingDim });
-        MatMul(hidden, _weightsEmbed, embedding, batchSize, hiddenDim, _embeddingDim);
-        AddBias(embedding, _biasEmbed, batchSize, _embeddingDim);
-
-        return embedding;
+        var embedding = VerticalEngineOps.MatMul(hidden, _weightsEmbed, batchSize, hiddenDim, _embeddingDim);
+        return VerticalEngineOps.AddBias(embedding, _biasEmbed, batchSize, _embeddingDim);
     }
 
     /// <inheritdoc/>
@@ -232,23 +207,20 @@ public class VerticalPartyLabelHolder<T> : FederatedLearningComponentBase<T>, IV
         int hiddenDim = _weightsHidden.Shape[1];
 
         // Same backward logic as VerticalPartyClient
-        var gradWeightsEmbed = new Tensor<T>(new[] { hiddenDim, _embeddingDim });
-        MatMulTransposeA(_lastHidden, gradients, gradWeightsEmbed, batchSize, hiddenDim, _embeddingDim);
-        var gradBiasEmbed = SumOverBatch(gradients, batchSize, _embeddingDim);
+        var gradWeightsEmbed = VerticalEngineOps.MatMulTransposeA(_lastHidden, gradients, batchSize, hiddenDim, _embeddingDim);
+        var gradBiasEmbed = VerticalEngineOps.SumOverBatch(gradients, batchSize, _embeddingDim);
 
-        var gradHidden = new Tensor<T>(new[] { batchSize, hiddenDim });
-        MatMulTransposeB(gradients, _weightsEmbed, gradHidden, batchSize, _embeddingDim, hiddenDim);
-        ApplyReluGradient(gradHidden, _lastHidden, batchSize * hiddenDim);
+        var gradHidden = VerticalEngineOps.MatMulTransposeB(gradients, _weightsEmbed, batchSize, _embeddingDim, hiddenDim);
+        gradHidden = VerticalEngineOps.ReluGradient(gradHidden, _lastHidden, zeroWhereActivationIsNaN: true);
 
-        var gradWeightsHidden = new Tensor<T>(new[] { FeatureCount, hiddenDim });
-        MatMulTransposeA(_lastInput, gradHidden, gradWeightsHidden, batchSize, FeatureCount, hiddenDim);
-        var gradBiasHidden = SumOverBatch(gradHidden, batchSize, hiddenDim);
+        var gradWeightsHidden = VerticalEngineOps.MatMulTransposeA(_lastInput, gradHidden, batchSize, FeatureCount, hiddenDim);
+        var gradBiasHidden = VerticalEngineOps.SumOverBatch(gradHidden, batchSize, hiddenDim);
 
         double lr = learningRate / batchSize;
-        UpdateTensor(_weightsEmbed, gradWeightsEmbed, lr);
-        UpdateTensor(_biasEmbed, gradBiasEmbed, lr);
-        UpdateTensor(_weightsHidden, gradWeightsHidden, lr);
-        UpdateTensor(_biasHidden, gradBiasHidden, lr);
+        VerticalEngineOps.UpdateInPlace(_weightsEmbed, gradWeightsEmbed, lr);
+        VerticalEngineOps.UpdateInPlace(_biasEmbed, gradBiasEmbed, lr);
+        VerticalEngineOps.UpdateInPlace(_weightsHidden, gradWeightsHidden, lr);
+        VerticalEngineOps.UpdateInPlace(_biasHidden, gradBiasHidden, lr);
     }
 
     /// <inheritdoc/>
@@ -294,120 +266,5 @@ public class VerticalPartyLabelHolder<T> : FederatedLearningComponentBase<T>, IV
         }
 
         return tensor;
-    }
-
-    private static void MatMul(Tensor<T> a, Tensor<T> b, Tensor<T> result, int m, int k, int n)
-    {
-        for (int i = 0; i < m; i++)
-        {
-            for (int j = 0; j < n; j++)
-            {
-                double sum = 0.0;
-                for (int p = 0; p < k; p++)
-                {
-                    sum += NumOps.ToDouble(a[i * k + p]) * NumOps.ToDouble(b[p * n + j]);
-                }
-
-                result[i * n + j] = NumOps.FromDouble(sum);
-            }
-        }
-    }
-
-    private static void MatMulTransposeA(Tensor<T> a, Tensor<T> b, Tensor<T> result, int m, int k, int n)
-    {
-        for (int i = 0; i < k; i++)
-        {
-            for (int j = 0; j < n; j++)
-            {
-                double sum = 0.0;
-                for (int p = 0; p < m; p++)
-                {
-                    sum += NumOps.ToDouble(a[p * k + i]) * NumOps.ToDouble(b[p * n + j]);
-                }
-
-                result[i * n + j] = NumOps.FromDouble(sum);
-            }
-        }
-    }
-
-    private static void MatMulTransposeB(Tensor<T> a, Tensor<T> b, Tensor<T> result, int m, int k, int n)
-    {
-        for (int i = 0; i < m; i++)
-        {
-            for (int j = 0; j < n; j++)
-            {
-                double sum = 0.0;
-                for (int p = 0; p < k; p++)
-                {
-                    sum += NumOps.ToDouble(a[i * k + p]) * NumOps.ToDouble(b[j * k + p]);
-                }
-
-                result[i * n + j] = NumOps.FromDouble(sum);
-            }
-        }
-    }
-
-    private static void AddBias(Tensor<T> tensor, Tensor<T> bias, int batchSize, int dim)
-    {
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int d = 0; d < dim; d++)
-            {
-                double val = NumOps.ToDouble(tensor[b * dim + d]) + NumOps.ToDouble(bias[d]);
-                tensor[b * dim + d] = NumOps.FromDouble(val);
-            }
-        }
-    }
-
-    private static void ApplyRelu(Tensor<T> tensor, int totalElements)
-    {
-        for (int i = 0; i < totalElements; i++)
-        {
-            if (NumOps.LessThan(tensor[i], NumOps.FromDouble(0.0)))
-            {
-                tensor[i] = NumOps.FromDouble(0.0);
-            }
-        }
-    }
-
-    private static void ApplyReluGradient(Tensor<T> grad, Tensor<T> activation, int totalElements)
-    {
-        for (int i = 0; i < totalElements; i++)
-        {
-            if (!NumOps.GreaterThan(activation[i], NumOps.FromDouble(0.0)))
-            {
-                grad[i] = NumOps.FromDouble(0.0);
-            }
-        }
-    }
-
-    private static Tensor<T> SumOverBatch(Tensor<T> tensor, int batchSize, int dim)
-    {
-        var result = new Tensor<T>(new[] { dim });
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int d = 0; d < dim; d++)
-            {
-                double val = NumOps.ToDouble(result[d]) + NumOps.ToDouble(tensor[b * dim + d]);
-                result[d] = NumOps.FromDouble(val);
-            }
-        }
-
-        return result;
-    }
-
-    private static void UpdateTensor(Tensor<T> param, Tensor<T> grad, double lr)
-    {
-        int total = 1;
-        for (int d = 0; d < param.Rank; d++)
-        {
-            total *= param.Shape[d];
-        }
-
-        for (int i = 0; i < total; i++)
-        {
-            double val = NumOps.ToDouble(param[i]) - lr * NumOps.ToDouble(grad[i]);
-            param[i] = NumOps.FromDouble(val);
-        }
     }
 }
