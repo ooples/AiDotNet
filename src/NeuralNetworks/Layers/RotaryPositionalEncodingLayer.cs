@@ -49,20 +49,33 @@ public partial class RotaryPositionalEncodingLayer<T> : LayerBase<T>, IShapeCont
     private readonly double _theta;
 
     /// <summary>
-    /// Pre-computed cosine values: cos_cache[pos, i] = cos(pos * freq_i).
-    /// Shape: [maxSequenceLength, headDimension / 2].
+    /// The cos and sin tables published together: cos[pos, i] = cos(pos * freq_i) and
+    /// sin[pos, i] = sin(pos * freq_i), both [Length, headDimension / 2].
     /// </summary>
-    // Memoised cos table for a deterministic function of position; recomputed on demand, never learned.
-    [Scratch]
-    private Tensor<T> _cosCache;
+    /// <remarks>
+    /// One immutable object swapped by a single reference write, so a reader that takes one snapshot
+    /// always gets a cos and sin table of the same length. Publishing the two tables through two
+    /// fields let a lock-free reader observe the grown cos table beside the old sin table.
+    /// </remarks>
+    private sealed class RopeCacheSnapshot
+    {
+        public RopeCacheSnapshot(Tensor<T> cos, Tensor<T> sin, int length)
+        {
+            Cos = cos;
+            Sin = sin;
+            Length = length;
+        }
 
-    /// <summary>
-    /// Pre-computed sine values: sin_cache[pos, i] = sin(pos * freq_i).
-    /// Shape: [maxSequenceLength, headDimension / 2].
-    /// </summary>
-    // Memoised sin table for a deterministic function of position; recomputed on demand, never learned.
+        public Tensor<T> Cos { get; }
+
+        public Tensor<T> Sin { get; }
+
+        public int Length { get; }
+    }
+
+    // Memoised tables for a deterministic function of position; recomputed on demand, never learned.
     [Scratch]
-    private Tensor<T> _sinCache;
+    private volatile RopeCacheSnapshot _caches;
 
     private readonly object _cacheLock = new();
 
@@ -99,7 +112,8 @@ public partial class RotaryPositionalEncodingLayer<T> : LayerBase<T>, IShapeCont
         _headDimension = headDimension;
         _theta = theta;
 
-        (_cosCache, _sinCache) = BuildCacheRows(0, maxSequenceLength);
+        var (cos, sin) = BuildCacheRows(0, maxSequenceLength);
+        _caches = new RopeCacheSnapshot(cos, sin, Math.Max(0, _maxSequenceLength));
     }
 
     /// <summary>
@@ -134,39 +148,41 @@ public partial class RotaryPositionalEncodingLayer<T> : LayerBase<T>, IShapeCont
     /// </summary>
     public (Tensor<T> Cos, Tensor<T> Sin) GetInterleavedCaches(int requiredLength)
     {
-        EnsureCacheLength(requiredLength);
-        return (_cosCache, _sinCache);
+        var caches = EnsureCacheLength(requiredLength);
+        return (caches.Cos, caches.Sin);
     }
 
-    private void EnsureCacheLength(int requiredLength)
+    /// <summary>
+    /// Returns a cache snapshot covering at least <paramref name="requiredLength"/> positions, growing and
+    /// publishing a new one under the lock when needed. Callers use both tables from the one snapshot.
+    /// </summary>
+    private RopeCacheSnapshot EnsureCacheLength(int requiredLength)
     {
-        if (requiredLength <= _maxSequenceLength)
-            return;
+        var caches = _caches;
+        if (requiredLength <= caches.Length)
+            return caches;
 
         lock (_cacheLock)
         {
-            if (requiredLength <= _maxSequenceLength)
-                return;
+            caches = _caches;
+            if (requiredLength <= caches.Length)
+                return caches;
 
-            int oldLength = _maxSequenceLength;
-
-            // Keep the existing rows and append the new positions; build both tables before
-            // swapping so other threads checking _maxSequenceLength never see positions beyond
-            // what the current cache tensors actually contain.
-            var (extraCos, extraSin) = BuildCacheRows(oldLength, requiredLength);
+            // Keep the existing rows and append the new positions; both tables are complete before
+            // the single reference write that publishes them.
+            var (extraCos, extraSin) = BuildCacheRows(caches.Length, requiredLength);
             Tensor<T> newCos;
             Tensor<T> newSin;
             using (new NoGradScope<T>())
             {
-                newCos = Engine.TensorConcatenate(new[] { _cosCache, extraCos }, 0);
-                newSin = Engine.TensorConcatenate(new[] { _sinCache, extraSin }, 0);
+                newCos = Engine.TensorConcatenate(new[] { caches.Cos, extraCos }, 0);
+                newSin = Engine.TensorConcatenate(new[] { caches.Sin, extraSin }, 0);
             }
 
-            _cosCache = newCos;
-            _sinCache = newSin;
-
-            // Update length last so concurrent readers never index beyond cache bounds
+            var grown = new RopeCacheSnapshot(newCos, newSin, requiredLength);
+            _caches = grown;
             _maxSequenceLength = requiredLength;
+            return grown;
         }
     }
 
@@ -207,16 +223,16 @@ public partial class RotaryPositionalEncodingLayer<T> : LayerBase<T>, IShapeCont
         }
 
         int endPosition = startPosition + seqLen;
-        EnsureCacheLength(endPosition);
+        var caches = EnsureCacheLength(endPosition);
 
         // Route the rotation through the engine primitive. Besides using the same optimized
         // CPU/GPU implementation as decoder inference, ApplyRoPEInterleaved records its inverse
         // rotation on an active gradient tape. The former scalar-copy implementation returned
         // detached tensors and silently discarded every Q/K contribution during tape training.
         var rotatedQ = Engine.ApplyRoPEInterleaved(
-            queries, _cosCache, _sinCache, startPosition);
+            queries, caches.Cos, caches.Sin, startPosition);
         var rotatedK = Engine.ApplyRoPEInterleaved(
-            keys, _cosCache, _sinCache, startPosition);
+            keys, caches.Cos, caches.Sin, startPosition);
 
         return (rotatedQ, rotatedK);
     }
@@ -234,10 +250,10 @@ public partial class RotaryPositionalEncodingLayer<T> : LayerBase<T>, IShapeCont
     {
         int seqLen = gradQuery.Shape[gradQuery.Shape.Length - 2];
         int endPosition = startPosition + seqLen;
-        EnsureCacheLength(endPosition);
+        var caches = EnsureCacheLength(endPosition);
 
-        var unrotatedGradQ = InverseRotateTensor(gradQuery, startPosition);
-        var unrotatedGradK = InverseRotateTensor(gradKey, startPosition);
+        var unrotatedGradQ = InverseRotateTensor(gradQuery, startPosition, caches);
+        var unrotatedGradK = InverseRotateTensor(gradKey, startPosition, caches);
 
         return (unrotatedGradQ, unrotatedGradK);
     }
@@ -246,7 +262,7 @@ public partial class RotaryPositionalEncodingLayer<T> : LayerBase<T>, IShapeCont
     /// Applies inverse RoPE rotation (for backward pass).
     /// Since rotation is orthogonal, the inverse is simply rotating by -angle.
     /// </summary>
-    private Tensor<T> InverseRotateTensor(Tensor<T> input, int startPosition)
+    private Tensor<T> InverseRotateTensor(Tensor<T> input, int startPosition, RopeCacheSnapshot caches)
     {
         // Inverse rotation: use -sin (transpose of rotation matrix)
         // x'[2i]   = x[2i] * cos + x[2i+1] * sin
@@ -254,7 +270,7 @@ public partial class RotaryPositionalEncodingLayer<T> : LayerBase<T>, IShapeCont
         // i.e. the forward interleaved rotation with the sine table negated. Manual backward
         // into a fresh tensor, as master: not recorded on the tape.
         using var noGrad = new NoGradScope<T>();
-        return Engine.ApplyRoPEInterleaved(input, _cosCache, Engine.TensorNegate(_sinCache), startPosition);
+        return Engine.ApplyRoPEInterleaved(input, caches.Cos, Engine.TensorNegate(caches.Sin), startPosition);
     }
 
     /// <summary>
@@ -281,9 +297,9 @@ public partial class RotaryPositionalEncodingLayer<T> : LayerBase<T>, IShapeCont
         }
 
         int seqLen = input.Shape[rank - 2];
-        EnsureCacheLength(seqLen);
+        var caches = EnsureCacheLength(seqLen);
 
-        return Engine.ApplyRoPEInterleaved(input, _cosCache, _sinCache, startPosition: 0);
+        return Engine.ApplyRoPEInterleaved(input, caches.Cos, caches.Sin, startPosition: 0);
     }
 
     /// <inheritdoc />
