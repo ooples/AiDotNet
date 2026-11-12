@@ -806,17 +806,14 @@ public partial class UpscaleAVideoModel<T> : VideoDiffusionModelBase<T>
         int height = latents.Shape[3];
         int width = latents.Shape[4];
         int stride = windowSize - overlap;
-        var predictions = new Tensor<T>?[frames];
-        int previousStart = -1;
-
-        for (int candidate = 0; candidate < frames; candidate += stride)
+        // Every window that covers a frame contributes equally to it (a uniform mean over the overlapping
+        // windows, as in MultiDiffusion-style fusion), rather than a running pairwise average that would
+        // weight the last window of a thrice-covered frame twice as much as the others.
+        var contributions = new List<Tensor<T>>[frames];
+        for (int frame = 0; frame < frames; frame++)
+            contributions[frame] = new List<Tensor<T>>();
+        foreach (int start in TemporalWindowStarts(frames, windowSize, stride))
         {
-            int end = System.Math.Min(frames, candidate + windowSize);
-            int start = end - candidate < windowSize ? end - windowSize : candidate;
-            if (start == previousStart)
-                continue;
-            previousStart = start;
-
             var latentWindow = Engine.TensorSlice(latents,
                 [0, 0, start, 0, 0], [batch, latentChannels, windowSize, height, width]);
             var conditionWindow = Engine.TensorSlice(condition,
@@ -829,20 +826,46 @@ public partial class UpscaleAVideoModel<T> : VideoDiffusionModelBase<T>
                 int frame = start + offset;
                 var framePrediction = Engine.TensorSlice(windowPrediction,
                     [0, 0, offset, 0, 0], [batch, latentChannels, 1, height, width]);
-                predictions[frame] = predictions[frame] is null
-                    ? framePrediction
-                    : Engine.TensorMultiplyScalar(
-                        Engine.TensorAdd((predictions[frame] ?? throw new InvalidOperationException("predictions[frame] is null where it is required.")), framePrediction),
-                        NumOps.FromDouble(0.5));
+                contributions[frame].Add(framePrediction);
             }
         }
 
-        if (predictions.Any(static p => p is null))
+        if (contributions.Any(static c => c.Count == 0))
             throw new InvalidOperationException("Temporal window schedule did not cover every frame.");
-        return Engine.TensorConcatenate(
-            predictions.Select(static p => p ?? throw new InvalidOperationException(
-                "Temporal window schedule did not cover every frame.")).ToArray(),
-            axis: 2);
+        var predictions = new Tensor<T>[frames];
+        for (int frame = 0; frame < frames; frame++)
+            predictions[frame] = FuseWindowPredictions(Engine, contributions[frame]);
+        return Engine.TensorConcatenate(predictions, axis: 2);
+    }
+
+    /// <summary>
+    /// Start frames of the temporal windows: every <paramref name="stride"/> frames, with the last window
+    /// shifted back so it ends on the final frame (a shifted window equal to the previous one is skipped).
+    /// </summary>
+    internal static List<int> TemporalWindowStarts(int frames, int windowSize, int stride)
+    {
+        var starts = new List<int>();
+        int previousStart = -1;
+        for (int candidate = 0; candidate < frames; candidate += stride)
+        {
+            int end = System.Math.Min(frames, candidate + windowSize);
+            int start = end - candidate < windowSize ? end - windowSize : candidate;
+            if (start == previousStart)
+                continue;
+            previousStart = start;
+            starts.Add(start);
+        }
+        return starts;
+    }
+
+    /// <summary>
+    /// The uniform mean of the predictions every covering window made for one frame.
+    /// </summary>
+    internal static Tensor<T> FuseWindowPredictions(IEngine engine, List<Tensor<T>> covering)
+    {
+        return covering.Count == 1
+            ? covering[0]
+            : engine.ReduceMean(engine.TensorStack(covering.ToArray(), 0), new[] { 0 }, false);
     }
 
     private Tensor<T> PredictOriginalSample(
@@ -926,6 +949,7 @@ public partial class UpscaleAVideoModel<T> : VideoDiffusionModelBase<T>
         int width = input.Shape[4];
         var output = new Tensor<T>?[frames];
         Tensor<T>? propagated = null;
+        T half = NumOps.FromDouble(0.5);
 
         for (int iteration = 0; iteration < frames; iteration++)
         {
@@ -944,12 +968,8 @@ public partial class UpscaleAVideoModel<T> : VideoDiffusionModelBase<T>
                 var reverseFlow = ExtractFlowFrame(consistencyFlows, flowIndex);
                 var warped = WarpNearest(propagated, flow);
                 var mask = CreateConsistencyMask(flow, reverseFlow, channels);
-                var fused = Engine.TensorMultiplyScalar(
-                    Engine.TensorAdd(warped, current), NumOps.FromDouble(0.5));
-                var inverseMask = Engine.TensorSubtract(
-                    Engine.TensorAddScalar(
-                        Engine.TensorMultiplyScalar(mask, NumOps.Zero), NumOps.One),
-                    mask);
+                var fused = Engine.TensorMultiplyScalar(Engine.TensorAdd(warped, current), half);
+                var inverseMask = Engine.ScalarMinusTensor(NumOps.One, mask);
                 propagated = Engine.TensorAdd(
                     Engine.TensorMultiply(mask, fused),
                     Engine.TensorMultiply(inverseMask, current));
@@ -978,12 +998,10 @@ public partial class UpscaleAVideoModel<T> : VideoDiffusionModelBase<T>
         int batch = input.Shape[0];
         int height = input.Shape[2];
         int width = input.Shape[3];
-        var identity = new Tensor<T>([batch, 2, 3]);
-        for (int b = 0; b < batch; b++)
-        {
-            identity[b, 0, 0] = NumOps.One;
-            identity[b, 1, 1] = NumOps.One;
-        }
+        var theta = new Tensor<T>([1, 2, 3]);
+        theta[0, 0, 0] = NumOps.One;
+        theta[0, 1, 1] = NumOps.One;
+        var identity = Engine.TensorBroadcastTo(theta, [batch, 2, 3]).Clone();
 
         var baseGrid = Engine.AffineGrid(identity, height, width);
         var scale = new Tensor<T>([1, 1, 1, 2]);
