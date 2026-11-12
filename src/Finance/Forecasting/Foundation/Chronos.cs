@@ -54,6 +54,8 @@ namespace AiDotNet.Finance.Forecasting.Foundation;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Chronos: Learning the Language of Time Series", "https://arxiv.org/abs/2403.07815", Year = 2024, Authors = "Abdul Fatir Ansari, Lorenzo Stella, Caner Turkmen, Xiyuan Zhang, Pedro Mercado, Huibin Shen, Oleksandr Shchur, Syama Sundar Rangapuram, Sebastian Pineda Arango, Shubham Kapoor, Jasper Zschiegner, Danielle C. Maddix, Michael W. Mahoney, Kari Torkkola, Andrew Gordon Wilson, Michael Bohlke-Schneider, Yuyang Wang")]
+[AiDotNet.Attributes.PreprocessesInput("Chronos's tokenizer mean-scales and quantizes the context into a sequence of token ids before the tied embedding, so Layers[0] never sees the real-valued series.")]
+[AiDotNet.Attributes.StackInputLayout(AiDotNet.Enums.TensorAxis.Time)]
 public partial class Chronos<T> : TimeSeriesFoundationModelBase<T>, ITrainingObjectiveProvider<T>
 {
     private readonly ChronosFinanceOptions<T>? _options;
