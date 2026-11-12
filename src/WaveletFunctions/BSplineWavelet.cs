@@ -163,7 +163,7 @@ public class BSplineWavelet<T> : WaveletFunctionBase<T>
         var lowPass = GetReconstructionLowPassFilter();
         var highPass = GetReconstructionHighPassFilter();
 
-        // Upsample by 2
+        // Upsample
         var upsampledApprox = Upsample(approximation, 2);
         var upsampledDetail = Upsample(detail, 2);
 
@@ -171,15 +171,8 @@ public class BSplineWavelet<T> : WaveletFunctionBase<T>
         var reconLow = Convolve(upsampledApprox, lowPass);
         var reconHigh = Convolve(upsampledDetail, highPass);
 
-        // Add the results - ensure same length
-        int outputLength = Math.Min(reconLow.Length, reconHigh.Length);
-        var reconstructed = new Vector<T>(outputLength);
-        for (int i = 0; i < outputLength; i++)
-        {
-            reconstructed[i] = NumOps.Add(reconLow[i], reconHigh[i]);
-        }
-
-        return reconstructed;
+        // Add the results
+        return WaveletEngineOps<T>.AddTruncated(reconLow, reconHigh);
     }
 
     /// <summary>
@@ -187,17 +180,7 @@ public class BSplineWavelet<T> : WaveletFunctionBase<T>
     /// </summary>
     private static Vector<T> Upsample(Vector<T> input, int factor)
     {
-        var numOps = MathHelper.GetNumericOperations<T>();
-        var result = new T[input.Length * factor];
-        for (int i = 0; i < result.Length; i++)
-        {
-            result[i] = numOps.Zero;
-        }
-        for (int i = 0; i < input.Length; i++)
-        {
-            result[i * factor] = input[i];
-        }
-        return new Vector<T>(result);
+        return WaveletEngineOps<T>.Upsample(input, factor);
     }
 
     /// <summary>
@@ -205,13 +188,7 @@ public class BSplineWavelet<T> : WaveletFunctionBase<T>
     /// </summary>
     private Vector<T> ConvolveReversed(Vector<T> input, Vector<T> filter)
     {
-        int filterLen = filter.Length;
-        var reversed = new T[filterLen];
-        for (int i = 0; i < filterLen; i++)
-        {
-            reversed[i] = filter[filterLen - 1 - i];
-        }
-        return Convolve(input, new Vector<T>(reversed));
+        return Convolve(input, WaveletEngineOps<T>.Reverse(filter));
     }
 
     /// <summary>
@@ -326,13 +303,9 @@ public class BSplineWavelet<T> : WaveletFunctionBase<T>
     /// </remarks>
     private Vector<T> GetDecompositionHighPassFilter()
     {
+        // Binomial coefficients of the next order with alternating signs.
         var coeffs = BSplineWavelet<T>.GetBSplineCoefficients(_order + 1);
-        for (int i = 1; i < coeffs.Length; i += 2)
-        {
-            coeffs[i] = -coeffs[i];
-        }
-
-        return NormalizeAndConvert(coeffs);
+        return NormalizeAndConvert(AiDotNetEngine.Current.Multiply(WaveletEngineOps<T>.AlternatingSigns(coeffs.Length), coeffs));
     }
 
     /// <summary>
@@ -353,18 +326,8 @@ public class BSplineWavelet<T> : WaveletFunctionBase<T>
     /// </remarks>
     private Vector<T> GetReconstructionLowPassFilter()
     {
-        var highPassCoeffs = GetDecompositionHighPassFilter();
-        var result = new T[highPassCoeffs.Length];
-
-        // Quadrature mirror relationship: time-reverse and apply alternating signs
-        for (int i = 0; i < highPassCoeffs.Length; i++)
-        {
-            int reversedIndex = highPassCoeffs.Length - 1 - i;
-            T sign = NumOps.FromDouble(i % 2 == 0 ? 1.0 : -1.0);
-            result[i] = NumOps.Multiply(sign, highPassCoeffs[reversedIndex]);
-        }
-
-        return new Vector<T>(result);
+        // h'[i] = (-1)^i * g[L - 1 - i]
+        return WaveletEngineOps<T>.QuadratureMirror(GetDecompositionHighPassFilter());
     }
 
     /// <summary>
@@ -385,18 +348,8 @@ public class BSplineWavelet<T> : WaveletFunctionBase<T>
     /// </remarks>
     private Vector<T> GetReconstructionHighPassFilter()
     {
-        var lowPassCoeffs = GetDecompositionLowPassFilter();
-        var result = new T[lowPassCoeffs.Length];
-
-        // Quadrature mirror relationship: time-reverse and apply alternating signs
-        for (int i = 0; i < lowPassCoeffs.Length; i++)
-        {
-            int reversedIndex = lowPassCoeffs.Length - 1 - i;
-            T sign = NumOps.FromDouble(i % 2 == 0 ? 1.0 : -1.0);
-            result[i] = NumOps.Multiply(sign, lowPassCoeffs[reversedIndex]);
-        }
-
-        return new Vector<T>(result);
+        // g'[i] = (-1)^i * h[L - 1 - i]
+        return WaveletEngineOps<T>.QuadratureMirror(GetDecompositionLowPassFilter());
     }
 
     /// <summary>
@@ -426,23 +379,20 @@ public class BSplineWavelet<T> : WaveletFunctionBase<T>
     /// which is a mathematical property of B-splines.
     /// </para>
     /// </remarks>
-    private static double[] GetBSplineCoefficients(int order)
+    private static Vector<T> GetBSplineCoefficients(int order)
     {
-        if (order == 1)
+        var engine = AiDotNetEngine.Current;
+        var coefficients = Tensor<T>.FromVector(new Vector<T>(new[] { NumOps.One, NumOps.One }));
+
+        // Pascal's rule C(n, k) = C(n - 1, k - 1) + C(n - 1, k): add the previous row to itself shifted by one.
+        for (int n = 2; n <= order; n++)
         {
-            return [1, 1];
+            coefficients = engine.TensorAdd(
+                engine.TensorConstantPad(coefficients, new[] { 1, 0 }, NumOps.Zero),
+                engine.TensorConstantPad(coefficients, new[] { 0, 1 }, NumOps.Zero));
         }
 
-        var prev = BSplineWavelet<T>.GetBSplineCoefficients(order - 1);
-        var result = new double[prev.Length + 1];
-
-        for (int i = 0; i < result.Length; i++)
-        {
-            double t = (double)i / (order - 1);
-            result[i] = (1 - t) * (i > 0 ? prev[i - 1] : 0) + t * (i < prev.Length ? prev[i] : 0);
-        }
-
-        return result;
+        return coefficients.ToVector();
     }
 
     /// <summary>
@@ -469,10 +419,11 @@ public class BSplineWavelet<T> : WaveletFunctionBase<T>
     /// while maintaining the same coefficient values.
     /// </para>
     /// </remarks>
-    private Vector<T> NormalizeAndConvert(double[] coeffs)
+    private static Vector<T> NormalizeAndConvert(Vector<T> coeffs)
     {
-        double normFactor = Math.Sqrt(coeffs.Sum(c => c * c));
-        return new Vector<T>(coeffs.Select(c => NumOps.FromDouble(c / normFactor)).ToArray());
+        var engine = AiDotNetEngine.Current;
+        T normFactor = NumOps.Sqrt(engine.DotProduct(coeffs, coeffs));
+        return engine.Divide(coeffs, normFactor);
     }
 
     /// <summary>
@@ -503,21 +454,8 @@ public class BSplineWavelet<T> : WaveletFunctionBase<T>
     /// </remarks>
     private Vector<T> Convolve(Vector<T> input, Vector<T> filter)
     {
-        var result = new T[input.Length];
-        for (int i = 0; i < input.Length; i++)
-        {
-            result[i] = NumOps.Zero;
-            for (int j = 0; j < filter.Length; j++)
-            {
-                int k = i - j + filter.Length / 2;
-                if (k >= 0 && k < input.Length)
-                {
-                    result[i] = NumOps.Add(result[i], NumOps.Multiply(input[k], filter[j]));
-                }
-            }
-        }
-
-        return new Vector<T>(result);
+        // result[i] = sum_j input[i - j + L / 2] * filter[j] with zero padding
+        return WaveletEngineOps<T>.CenteredConvolve(input, filter);
     }
 
     /// <summary>
@@ -548,7 +486,8 @@ public class BSplineWavelet<T> : WaveletFunctionBase<T>
     /// </remarks>
     private static Vector<T> Downsample(Vector<T> input, int factor)
     {
-        return new Vector<T>([.. input.Where((_, i) => i % factor == 0)]);
+        // Keeps indices 0, factor, 2 * factor, ... (ceil(n / factor) samples).
+        return WaveletEngineOps<T>.Decimate(input, factor, (input.Length + factor - 1) / factor);
     }
 
     /// <summary>
@@ -586,8 +525,10 @@ public class BSplineWavelet<T> : WaveletFunctionBase<T>
             return NumOps.GreaterThanOrEquals(x, NumOps.Zero) && NumOps.LessThan(x, NumOps.One) ? NumOps.One : NumOps.Zero;
         }
 
-        T term1 = NumOps.Multiply(NumOps.Divide(x, NumOps.FromDouble(n)), BSpline(NumOps.Subtract(x, NumOps.One), n - 1));
-        T term2 = NumOps.Multiply(NumOps.Divide(NumOps.Subtract(NumOps.FromDouble(n + 1), x), NumOps.FromDouble(n)), BSpline(x, n - 1));
+        // Cox-de Boor recursion for the cardinal B-spline on [0, n + 1]:
+        // N_n(x) = x / n * N_{n-1}(x) + (n + 1 - x) / n * N_{n-1}(x - 1)
+        T term1 = NumOps.Multiply(NumOps.Divide(x, NumOps.FromDouble(n)), BSpline(x, n - 1));
+        T term2 = NumOps.Multiply(NumOps.Divide(NumOps.Subtract(NumOps.FromDouble(n + 1), x), NumOps.FromDouble(n)), BSpline(NumOps.Subtract(x, NumOps.One), n - 1));
 
         return NumOps.Add(term1, term2);
     }
