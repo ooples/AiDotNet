@@ -76,6 +76,11 @@ public class MfccExtractor<T> : AudioFeatureExtractorBase<T>
         : base(options)
     {
         var mfccOptions = options ?? new MfccOptions();
+        if (mfccOptions.NumCoefficients < 0)
+            throw new ArgumentOutOfRangeException(nameof(options), "MfccOptions.NumCoefficients must be non-negative.");
+        if (mfccOptions.IncludeEnergy && mfccOptions.NumCoefficients == 0)
+            throw new ArgumentException(
+                "MfccOptions.IncludeEnergy replaces the first coefficient and requires NumCoefficients >= 1.", nameof(options));
 
         _numCoefficients = mfccOptions.NumCoefficients;
         _includeEnergy = mfccOptions.IncludeEnergy;
@@ -118,9 +123,6 @@ public class MfccExtractor<T> : AudioFeatureExtractorBase<T>
         // Optionally replace first coefficient with energy: log(max(sum_m exp(mel), 1e-10))
         if (_includeEnergy && numFrames > 0)
         {
-            if (_numCoefficients == 0)
-                throw new IndexOutOfRangeException("Energy replaces the first coefficient, but no coefficients are computed.");
-
             var energy = numMels > 0
                 ? Engine.ReduceSum(Engine.TensorExp(melSpec), [1], keepDims: true) // Undo log
                 : new Tensor<T>([numFrames, 1]);
