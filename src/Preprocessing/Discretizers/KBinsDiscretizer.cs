@@ -171,9 +171,13 @@ public class KBinsDiscretizer<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     private T[] ComputeUniformBinEdges(Vector<T> column)
     {
         // Find min and max
+        // As master's NumOps.Compare scan (double.CompareTo orders NaN below every number): any NaN is the
+        // minimum, so every edge is NaN, and the maximum is the largest number (NaN when there is none).
         var values = Tensor<T>.FromVector(column);
-        T min = Engine.TensorMinValue(values);
-        T max = Engine.TensorMaxValue(values);
+        var numbers = Numbers(values);
+        T nan = NumOps.FromDouble(double.NaN);
+        T min = numbers.Length < values.Length ? nan : Engine.TensorMinValue(values);
+        T max = numbers.Length == 0 ? nan : Engine.TensorMaxValue(numbers);
 
         // Create uniform edges: min + (i / nBins) * (max - min)
         T range = NumOps.Subtract(max, min);
@@ -184,7 +188,14 @@ public class KBinsDiscretizer<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     private T[] ComputeQuantileBinEdges(Vector<T> column)
     {
         // Sort the column
-        var sortedValues = Engine.TensorSort(Tensor<T>.FromVector(column)).Item1;
+        // NaNs first, as master's Array.Sort with NumOps.Compare (double.CompareTo) orders them
+        var values = Tensor<T>.FromVector(column);
+        var numbers = Numbers(values);
+        int nanCount = values.Length - numbers.Length;
+        var nans = PreprocessingTensorOps.Filled(new[] { nanCount }, NumOps.FromDouble(double.NaN));
+        var sortedValues = numbers.Length == 0 ? nans : nanCount == 0
+            ? Engine.TensorSort(numbers).Item1
+            : Engine.TensorConcatenate(new[] { nans, Engine.TensorSort(numbers).Item1 }, 0);
 
         // Compute quantile edges
         var index = new int[_nBins + 1];
@@ -249,12 +260,37 @@ public class KBinsDiscretizer<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         if (values.Length == 0)
             return new Tensor<int>(new[] { 0 });
 
+        // Master's scan compares with NumOps.Compare (double.CompareTo, NaN below every number): a NaN value is at
+        // most the first edge (bin 0), and no number is at most a NaN edge. The fitted NaN edges lead the edges.
         int upperEdges = edges.Length - 1;
         var upper = new Tensor<T>(edges.Skip(1).ToArray(), new[] { upperEdges });
-        var bins = Engine.TensorSearchSorted(upper, values, false).AsSpan().ToArray();
+        var numericEdges = Numbers(upper);
+        int nanEdges = upperEdges - numericEdges.Length;
+        var bins = numericEdges.Length == 0
+            ? new int[values.Length]
+            : Engine.TensorSearchSorted(numericEdges, values, false).AsSpan().ToArray();
+        var isNumber = IsNumber(values).Cast<int>().AsSpan().ToArray();
         for (int i = 0; i < bins.Length; i++)
-            bins[i] = Math.Min(bins[i], _nBins - 1);
+            bins[i] = isNumber[i] == 0 ? 0 : Math.Min(bins[i] + nanEdges, _nBins - 1);
         return new Tensor<int>(bins, new[] { bins.Length });
+    }
+
+    /// <summary>A 0/1 mask of the entries of <paramref name="values"/> that are numbers (not NaN).</summary>
+    private Tensor<T> IsNumber(Tensor<T> values)
+    {
+        var shape = values.Shape.ToArray();
+        return Engine.TensorWhere(Engine.TensorIsNan(values), new Tensor<T>(shape), PreprocessingTensorOps.Filled(shape, NumOps.One));
+    }
+
+    /// <summary>The entries of a 1-D <paramref name="values"/> that are numbers (not NaN), in order.</summary>
+    private Tensor<T> Numbers(Tensor<T> values)
+    {
+        var positions = PreprocessingTensorOps.MaskPositions(IsNumber(values));
+        if (positions.Length == 0)
+            return new Tensor<T>(new[] { 0 });
+        return positions.Length == values.Length
+            ? values
+            : Engine.TensorIndexSelect(values, new Tensor<int>(positions, new[] { positions.Length }), 0);
     }
 
     /// <summary>
@@ -286,6 +322,9 @@ public class KBinsDiscretizer<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
                 var binIndex = _encode == EncodeMode.Ordinal
                     ? engine.TensorTrunc(column)
                     : engine.TensorRound(engine.TensorMultiplyScalar(column, bins));
+
+                // (int)NaN clamps to bin 0 in master (int.MinValue on net8, 0 on net9+)
+                binIndex = engine.TensorWhere(engine.TensorIsNan(binIndex), new Tensor<T>(binIndex.Shape.ToArray()), binIndex);
 
                 // Clamp to valid range
                 var lower = engine.TensorClamp(binIndex, NumOps.Zero, bins);
