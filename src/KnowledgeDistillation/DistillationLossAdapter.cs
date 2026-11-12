@@ -79,7 +79,4 @@ public sealed class DistillationLossAdapter<T> : LossFunctionBase<T>
     {
         return Engine.Reshape(Tensor<T>.FromVector(v), [1, v.Length]).ToMatrix();
     }
-
-        return m;
-    }
 }

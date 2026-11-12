@@ -298,8 +298,6 @@ public abstract class AdaptiveDistillationStrategyBase<T>
         double max = Convert.ToDouble(Engine.TensorMaxValue(Tensor<T>.FromVector(probabilities)));
         return max > 0.0 ? max : 0.0;
     }
-        return max;
-    }
 
     /// <summary>
     /// Computes the entropy of a probability distribution.
