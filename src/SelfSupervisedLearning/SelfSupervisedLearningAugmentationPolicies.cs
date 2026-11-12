@@ -326,6 +326,7 @@ public class SelfSupervisedLearningAugmentationPolicies<T>
 
     private Tensor<T> RandomResizedCrop(Tensor<T> image, double scaleMin, double scaleMax)
     {
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
         // Random scale for the crop area
         var scale = scaleMin + _random.NextDouble() * (scaleMax - scaleMin);
         var aspectRatio = 0.75 + _random.NextDouble() * 0.5; // Random aspect ratio 0.75 to 1.25
@@ -347,6 +348,18 @@ public class SelfSupervisedLearningAugmentationPolicies<T>
             var top = _random.Next(0, Math.Max(1, height - cropHeight));
             var left = _random.Next(0, Math.Max(1, width - cropWidth));
 
+            // Master read image[b, c, h, w], which throws for rank > 4 as soon as a pixel is read; keep that,
+            // and master's zero result when nothing is read.
+            if (image.Shape.Length > 4 || image.Length == 0)
+            {
+                if (image.Shape.Length > 4 && image.Shape[0] > 0 && image.Shape[1] > 0 && height > 0 && width > 0)
+                {
+                    _ = image[0, 0, 0, 0];
+                }
+
+                return new Tensor<T>(image._shape);
+            }
+
             // Perform crop and resize via bilinear interpolation, which is separable: rows then columns
             return ApplySeparable(image,
                 BilinearCropMatrix(height, cropHeight, top),
@@ -363,6 +376,7 @@ public class SelfSupervisedLearningAugmentationPolicies<T>
     /// </summary>
     private static Tensor<T> BilinearCropMatrix(int size, int cropSize, int offset)
     {
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
         var positions = Arange(size);
         var source = Engine.TensorAddScalar(
             Engine.TensorMultiplyScalar(
@@ -384,6 +398,7 @@ public class SelfSupervisedLearningAugmentationPolicies<T>
     /// </summary>
     private static Tensor<T> IndexHits(Tensor<T> indices, Tensor<T> positions)
     {
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
         return Engine.TensorLessThan(
             Engine.TensorAbs(Engine.TensorSubtract(indices, positions)), NumOps.FromDouble(0.5));
     }
@@ -391,6 +406,7 @@ public class SelfSupervisedLearningAugmentationPolicies<T>
     /// <summary>[0, 1, ..., count - 1] as T, built from a cumulative sum of ones.</summary>
     private static Tensor<T> Arange(int count)
     {
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
         var ones = Engine.TensorAddScalar(new Tensor<T>(new[] { count }), NumOps.One);
         return Engine.TensorAddScalar(Engine.TensorCumSum(ones, 0), NumOps.Negate(NumOps.One));
     }
@@ -401,6 +417,7 @@ public class SelfSupervisedLearningAugmentationPolicies<T>
     /// </summary>
     private static Tensor<T> ApplySeparable(Tensor<T> image, Tensor<T> rows, Tensor<T> columns)
     {
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
         int batch = image.Shape[0], channels = image.Shape[1], height = image.Shape[2], width = image.Shape[3];
 
         var alongWidth = Engine.TensorMatMul(
@@ -456,6 +473,7 @@ public class SelfSupervisedLearningAugmentationPolicies<T>
     private Tensor<T> ColorJitter(Tensor<T> image,
         double brightnessRange, double contrastRange, double saturationRange, double hueRange)
     {
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
         // Apply random brightness/contrast adjustments
         var brightness = 1.0 + (_random.NextDouble() * 2 - 1) * brightnessRange;
         var contrast = 1.0 + (_random.NextDouble() * 2 - 1) * contrastRange;
@@ -470,6 +488,7 @@ public class SelfSupervisedLearningAugmentationPolicies<T>
 
     private Tensor<T> ToGrayscale(Tensor<T> image)
     {
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
         // For [batch, channels, height, width] tensors
         if (image.Shape.Length >= 4)
         {
@@ -477,6 +496,18 @@ public class SelfSupervisedLearningAugmentationPolicies<T>
             var channels = image.Shape[1];
             var height = image.Shape[2];
             var width = image.Shape[3];
+
+            // Master read image[b, c, h, w], which throws for rank > 4 as soon as a pixel is read; keep that,
+            // and master's zero result when nothing is read.
+            if (image.Shape.Length > 4 || image.Length == 0)
+            {
+                if (batch > 0 && height > 0 && width > 0)
+                {
+                    _ = image[0, 0, 0, 0];
+                }
+
+                return new Tensor<T>(image._shape);
+            }
 
             // Standard luminosity weights for RGB to grayscale conversion
             // ITU-R BT.601: Y = 0.299*R + 0.587*G + 0.114*B
@@ -508,6 +539,7 @@ public class SelfSupervisedLearningAugmentationPolicies<T>
 
     private Tensor<T> GaussianBlur(Tensor<T> image, double sigmaMin, double sigmaMax)
     {
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
         var sigma = sigmaMin + _random.NextDouble() * (sigmaMax - sigmaMin);
 
         // For [batch, channels, height, width] tensors
@@ -515,6 +547,18 @@ public class SelfSupervisedLearningAugmentationPolicies<T>
         {
             var height = image.Shape[2];
             var width = image.Shape[3];
+
+            // Master read image[b, c, h, w], which throws for rank > 4 as soon as a pixel is read; keep that,
+            // and master's zero result when nothing is read.
+            if (image.Shape.Length > 4 || image.Length == 0)
+            {
+                if (image.Shape.Length > 4 && image.Shape[0] > 0 && image.Shape[1] > 0 && height > 0 && width > 0)
+                {
+                    _ = image[0, 0, 0, 0];
+                }
+
+                return new Tensor<T>(image._shape);
+            }
 
             // Compute kernel size (must be odd, at least 3)
             // Standard practice: kernel_size = ceil(6*sigma) | 1 to make it odd
@@ -547,6 +591,7 @@ public class SelfSupervisedLearningAugmentationPolicies<T>
     /// </summary>
     private static Tensor<T> ClampedBlurMatrix(int size, Tensor<T> offsets, Tensor<T> kernel)
     {
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
         var kernelSize = offsets.Shape[0];
         var positions = Arange(size);
 
@@ -563,6 +608,7 @@ public class SelfSupervisedLearningAugmentationPolicies<T>
 
     private Tensor<T> Solarize(Tensor<T> image, double threshold)
     {
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
         // Invert values above threshold
         var above = Engine.TensorGreaterThan(image, NumOps.FromDouble(threshold));
         return Engine.TensorWhere(above, Engine.ScalarMinusTensor(NumOps.One, image), image);
