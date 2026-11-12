@@ -250,16 +250,7 @@ public partial class PointLLM<T> : VisionLanguageModelBase<T>, IThreeDVisionLang
         var pointTokens = CyclicTake(patchMean, visionDim);
 
         // Step 4: Fuse with text prompt tokens: gate 0.5 + sigmoid(prompt[d % promptLen] / 100).
-        var promptTokens = TokenizeText(prompt);
-        int promptLen = promptTokens.Length;
-        if (promptLen > 0)
-        {
-            pointTokens = engine.TensorMultiply(
-                pointTokens,
-                engine.TensorAddScalar(
-                    engine.TensorSigmoid(engine.TensorDivideScalar(CyclicTake(promptTokens, visionDim), NumOps.FromDouble(100.0))),
-                    NumOps.FromDouble(0.5)));
-        }
+        pointTokens = PromptGated(pointTokens, TokenizeText(prompt));
 
         // Step 5: LLM decoding
         // Process through encoder layers first (for point cloud)

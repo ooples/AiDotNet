@@ -220,15 +220,7 @@ public partial class LEOVL<T> : VisionLanguageModelBase<T>, IThreeDVisionLanguag
 
         // Points p < numPoints with p * channels + 2 < totalValues are read (the scan stops at the
         // first point that is not).
-        int readPoints;
-        if (totalValues <= 2)
-            readPoints = 0;
-        else if (channels > 0)
-            readPoints = Math.Min(numPoints, (totalValues - 2 + channels - 1) / channels);
-        else
-            readPoints = numPoints;
-        if (channels < 0 && readPoints > 1)
-            throw new IndexOutOfRangeException("A negative point channel count addresses values before the start of the point cloud.");
+        int readPoints = ReadablePointCount(numPoints, channels, totalValues);
 
         Tensor<T> sceneTokens;
         if (readPoints == 0)
@@ -243,12 +235,7 @@ public partial class LEOVL<T> : VisionLanguageModelBase<T>, IThreeDVisionLanguag
         }
         else
         {
-            var flatCloud = pointCloud.Reshape([totalValues]);
-            var pointBase = engine.TensorMultiplyScalar(engine.TensorArange<int>(0, readPoints, 1), channels).Reshape([readPoints, 1]);
-            var coordIndex = engine.TensorAdd(
-                engine.TensorBroadcastTo(pointBase, [readPoints, 3]),
-                engine.TensorBroadcastTo(engine.TensorArange<int>(0, 3, 1).Reshape([1, 3]), [readPoints, 3]));
-            var coords = engine.TensorTake(flatCloud, coordIndex);
+            var coords = PointCoordinates(pointCloud, readPoints, channels);
 
             // Hash-based voxel assignment → object cluster (integer arithmetic, as master):
             // |trunc(x / s) * 73856093 ^ trunc(y / s) * 19349669 ^ trunc(z / s) * 83492791| % maxObjects.
@@ -263,31 +250,11 @@ public partial class LEOVL<T> : VisionLanguageModelBase<T>, IThreeDVisionLanguag
                 engine.TensorAbs(mixed), Tensor<int>.CreateDefault([readPoints], maxObjects));
 
             // Accumulate point features (color + normals): value c of a point goes to feature c % encoderDim.
-            int pointChannels = Math.Max(0, channels);
-            Tensor<T> objectSums;
-            if (pointChannels == 0)
-            {
-                objectSums = new Tensor<T>([maxObjects, encoderDim]);
-            }
-            else
-            {
-                int folds = (pointChannels + encoderDim - 1) / encoderDim;
-                int width = folds * encoderDim;
-                var local = engine.TensorBroadcastTo(engine.TensorArange<int>(0, width, 1).Reshape([1, width]), [readPoints, width]);
-                var channelIndex = engine.TensorAdd(engine.TensorBroadcastTo(pointBase, [readPoints, width]), local);
-                var validChannel = engine.TensorMultiply(
-                    engine.TensorLessThan(local, pointChannels), engine.TensorLessThan(channelIndex, totalValues)).Cast<T>();
-                var channelValues = engine.TensorWhere(
-                    validChannel,
-                    engine.TensorTake(flatCloud, engine.TensorMin(channelIndex, totalValues - 1)),
-                    new Tensor<T>([readPoints, width]));
-                var pointFeatures = engine.ReduceSum(channelValues.Reshape([readPoints, folds, encoderDim]), [1], false);
-                objectSums = engine.ScatterAdd(
-                    pointFeatures,
-                    engine.TensorBroadcastTo(objectIds.Reshape([readPoints, 1]), [readPoints, encoderDim]),
-                    0,
-                    maxObjects);
-            }
+            var objectSums = engine.ScatterAdd(
+                FoldedPointChannels(pointCloud, readPoints, channels, encoderDim),
+                engine.TensorBroadcastTo(objectIds.Reshape([readPoints, 1]), [readPoints, encoderDim]),
+                0,
+                maxObjects);
 
             // Normalize centroids and features by the object point counts.
             var objectCounts = engine.TensorBinCount(objectIds, maxObjects).Cast<T>().Reshape([maxObjects, 1]);
@@ -382,16 +349,7 @@ public partial class LEOVL<T> : VisionLanguageModelBase<T>, IThreeDVisionLanguag
         for (int i = 0; i < _encoderLayerEnd && i < Layers.Count; i++)
             encoded = Layers[i].Forward(encoded);
 
-        // Prompt gate 0.5 + sigmoid(prompt[d % promptLen] / 100) on every encoded value.
-        var promptTokens = TokenizeText(prompt);
-        int promptLen = promptTokens.Length;
-        if (promptLen > 0)
-        {
-            var gate = engine.TensorAddScalar(
-                engine.TensorSigmoid(engine.TensorDivideScalar(CyclicTake(promptTokens, encoded.Length), NumOps.FromDouble(100.0))),
-                NumOps.FromDouble(0.5));
-            encoded = engine.TensorMultiply(encoded, gate.Reshape(encoded.Shape.ToArray()));
-        }
+        encoded = PromptGated(encoded, TokenizeText(prompt));
 
         var output = encoded;
         for (int i = _encoderLayerEnd; i < Layers.Count; i++)
