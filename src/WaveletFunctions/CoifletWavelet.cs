@@ -115,17 +115,12 @@ public class CoifletWavelet<T> : WaveletFunctionBase<T>
         if (t < 0 || t > 6 * _order - 1)
             return NumOps.Zero;
 
-        T result = NumOps.Zero;
-        for (int k = 0; k < 6 * _order; k++)
-        {
-            double shiftedT = t - k;
-            if (shiftedT >= 0 && shiftedT < 1)
-            {
-                result = NumOps.Add(result, NumOps.Multiply(_coefficients[k], NumOps.FromDouble(ScalingFunction(shiftedT))));
-            }
-        }
+        // Only the integer shift k = floor(t) puts t - k in [0, 1), so the sum over k has a single term.
+        int k = (int)Math.Floor(t);
+        if (k >= 6 * _order)
+            return NumOps.Zero;
 
-        return result;
+        return NumOps.Multiply(_coefficients[k], NumOps.FromDouble(ScalingFunction(t - k)));
     }
 
     /// <summary>
@@ -264,14 +259,7 @@ public class CoifletWavelet<T> : WaveletFunctionBase<T>
         var reconHigh = ConvolveReversed(upsampledDetail, highPass);
 
         // Add the results - ensure same length
-        int outputLength = Math.Min(reconLow.Length, reconHigh.Length);
-        var reconstructed = new Vector<T>(outputLength);
-        for (int i = 0; i < outputLength; i++)
-        {
-            reconstructed[i] = NumOps.Add(reconLow[i], reconHigh[i]);
-        }
-
-        return reconstructed;
+        return WaveletEngineOps<T>.AddTruncated(reconLow, reconHigh);
     }
 
     /// <summary>
@@ -279,17 +267,7 @@ public class CoifletWavelet<T> : WaveletFunctionBase<T>
     /// </summary>
     private static Vector<T> Upsample(Vector<T> input, int factor)
     {
-        var numOps = MathHelper.GetNumericOperations<T>();
-        var result = new T[input.Length * factor];
-        for (int i = 0; i < result.Length; i++)
-        {
-            result[i] = numOps.Zero;
-        }
-        for (int i = 0; i < input.Length; i++)
-        {
-            result[i * factor] = input[i];
-        }
-        return new Vector<T>(result);
+        return WaveletEngineOps<T>.Upsample(input, factor);
     }
 
     /// <summary>
@@ -297,13 +275,7 @@ public class CoifletWavelet<T> : WaveletFunctionBase<T>
     /// </summary>
     private Vector<T> ConvolveReversed(Vector<T> input, Vector<T> filter)
     {
-        int filterLen = filter.Length;
-        var reversed = new T[filterLen];
-        for (int i = 0; i < filterLen; i++)
-        {
-            reversed[i] = filter[filterLen - 1 - i];
-        }
-        return Convolve(input, new Vector<T>(reversed));
+        return Convolve(input, WaveletEngineOps<T>.Reverse(filter));
     }
 
     /// <summary>
@@ -504,21 +476,8 @@ public class CoifletWavelet<T> : WaveletFunctionBase<T>
     /// </remarks>
     private Vector<T> Convolve(Vector<T> input, Vector<T> filter)
     {
-        var result = new T[input.Length];
-        for (int i = 0; i < input.Length; i++)
-        {
-            result[i] = NumOps.Zero;
-            for (int j = 0; j < filter.Length; j++)
-            {
-                int k = i - j + filter.Length / 2;
-                if (k >= 0 && k < input.Length)
-                {
-                    result[i] = NumOps.Add(result[i], NumOps.Multiply(input[k], filter[j]));
-                }
-            }
-        }
-
-        return new Vector<T>(result);
+        // result[i] = sum_j input[i - j + L / 2] * filter[j] with zero padding
+        return WaveletEngineOps<T>.CenteredConvolve(input, filter);
     }
 
     /// <summary>
@@ -549,6 +508,7 @@ public class CoifletWavelet<T> : WaveletFunctionBase<T>
     /// </remarks>
     private static Vector<T> Downsample(Vector<T> input, int factor)
     {
-        return new Vector<T>([.. input.Where((_, i) => i % factor == 0)]);
+        // Keeps indices 0, factor, 2 * factor, ... (ceil(n / factor) samples).
+        return WaveletEngineOps<T>.Decimate(input, factor, (input.Length + factor - 1) / factor);
     }
 }
