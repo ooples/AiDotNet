@@ -79,7 +79,7 @@ public class CramerDecomposition<T> : MatrixDecompositionBase<T>
         }
 
         T detA = Determinant(A);
-        if (NumOps.Equals(detA, NumOps.Zero))
+        if (IsNumericallySingular(detA))
         {
             throw new InvalidOperationException("The matrix is singular and cannot be solved using Cramer's rule.");
         }
@@ -116,7 +116,7 @@ public class CramerDecomposition<T> : MatrixDecompositionBase<T>
     public override Matrix<T> Invert()
     {
         T detA = Determinant(A);
-        if (NumOps.Equals(detA, NumOps.Zero))
+        if (IsNumericallySingular(detA))
         {
             throw new InvalidOperationException("The matrix is singular and cannot be inverted.");
         }
@@ -148,6 +148,32 @@ public class CramerDecomposition<T> : MatrixDecompositionBase<T>
             return NumOps.One;
         }
 
-        return LinalgDispatch<T>.Det(Tensor<T>.FromMatrix(matrix))[0];
+        // Det of a single 2-D matrix holds one element; TensorSum reads it whatever rank the result has.
+        return Engine.TensorSum(LinalgDispatch<T>.Det(Tensor<T>.FromMatrix(matrix)));
+    }
+
+    /// <summary>
+    /// True when <paramref name="det"/> is zero to working precision, relative to the scale of A.
+    /// </summary>
+    /// <remarks>
+    /// The engine determinant is LU-based, so an exactly singular matrix gives a rounding residue
+    /// (about 6.7e-16 for [[1,2,3],[4,5,6],[7,8,9]]) rather than an exact zero. Hadamard's inequality
+    /// bounds |det A| by the product of the column norms; a determinant at or below
+    /// n * eps * that bound cannot be told apart from zero. eps = 2^(1 - p) for a p-bit significand,
+    /// which is 0 for integer types, so they keep the exact-zero test.
+    /// </remarks>
+    private bool IsNumericallySingular(T det)
+    {
+        int n = A.Rows;
+        if (n == 0)
+        {
+            return false;
+        }
+
+        var columnNorms = Engine.TensorNorm(Tensor<T>.FromMatrix(A), 0, false);
+        T hadamardBound = Engine.Product(columnNorms.ToVector());
+        T epsilon = NumOps.Power(NumOps.FromDouble(2), NumOps.FromDouble(1 - NumOps.PrecisionBits));
+        T threshold = NumOps.Multiply(NumOps.Multiply(NumOps.FromDouble(n), epsilon), hadamardBound);
+        return NumOps.LessThanOrEquals(NumOps.Abs(det), threshold);
     }
 }
