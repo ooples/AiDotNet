@@ -540,6 +540,28 @@ public class MetaLearningNewAlgorithmsIntegrationTests
     }
 
     [Fact(Timeout = 120000)]
+    public async Task FEAT_AdaptPrototypes_WithNoTransformerLayers_ReturnsPrototypesUnchanged()
+    {
+        // FEAT's set-to-set adaptation is a stack of transformer layers; with no layers it is the identity map.
+        var model = new LinearVectorModel(3);
+        var options = new FEATOptions<double, Matrix<double>, Vector<double>>(model)
+        {
+            OuterLearningRate = 0.01,
+            NumTransformerHeads = 1,
+            NumTransformerLayers = 1
+        };
+        var algorithm = new FEATAlgorithm<double, Matrix<double>, Vector<double>>(options);
+        options.NumTransformerLayers = 0;
+
+        var prototypes = new Vector<double>(new[] { 0.5, -1.25, 2.0 });
+        var adapted = algorithm.AdaptPrototypes(prototypes);
+
+        Assert.Equal(prototypes.Length, adapted.Length);
+        for (int i = 0; i < prototypes.Length; i++)
+            Assert.Equal(prototypes[i], adapted[i]);
+    }
+
+    [Fact(Timeout = 120000)]
     public async Task DeepEMD_MetaTrainAndAdapt_Run()
     {
         var model = new LinearVectorModel(3);

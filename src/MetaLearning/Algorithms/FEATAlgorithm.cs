@@ -342,11 +342,12 @@ public partial class FEATAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
     /// The result: prototypes that are spread apart for this specific task.
     /// </para>
     /// </remarks>
-    private Vector<T> AdaptPrototypes(Vector<T> prototypes)
+    internal Vector<T> AdaptPrototypes(Vector<T> prototypes)
     {
+        // A stack of zero set-to-set layers is the identity map: the prototypes come back unadapted.
         int n = prototypes.Length;
-        var adapted = new Vector<T>(n);
-        if (n == 0)
+        var adapted = prototypes;
+        if (n == 0 || _featOptions.NumTransformerLayers <= 0)
         {
             return adapted;
         }
