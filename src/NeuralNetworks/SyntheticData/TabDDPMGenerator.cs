@@ -147,10 +147,14 @@ public partial class TabDDPMGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
     private readonly List<int> _categoricalColumnWidths = new();
 
     // Preprocessing stats
+    [AiDotNet.Attributes.FittedParameter(InputSized = true)]
     private Tensor<T> _quantileMeans = new Tensor<T>(new[] { 1, 0 });
+    [AiDotNet.Attributes.FittedParameter(InputSized = true)]
     private Tensor<T> _quantileStds = new Tensor<T>(new[] { 1, 0 });
     // Per numerical column [1, J]: the fitted data's minimum and maximum (the clamp range of the reconstruction).
+    [AiDotNet.Attributes.FittedParameter(InputSized = true)]
     private Tensor<T> _numericalMins = new Tensor<T>(new[] { 1, 0 });
+    [AiDotNet.Attributes.FittedParameter(InputSized = true)]
     private Tensor<T> _numericalMaxs = new Tensor<T>(new[] { 1, 0 });
 
     // Whether custom layers are being used
@@ -526,7 +530,9 @@ public partial class TabDDPMGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
                 var variance = Engine.TensorDivideScalar(
                     Engine.ReduceSum(Engine.TensorMultiply(centered, centered), new[] { 0 }, true), NumOps.FromDouble(n - 1));
                 std = Engine.TensorSqrt(variance);
-                std = Engine.TensorWhere(Engine.TensorLessThan(std, NumOps.FromDouble(1e-10)), ones, std);
+                var nearZero = Engine.TensorAdd(Engine.TensorLessThan(std, NumOps.FromDouble(1e-10)),
+                    Engine.TensorEquals(std, NumOps.Zero));
+                std = Engine.TensorWhere(nearZero, ones, std);
             }
             else
             {
@@ -1229,7 +1235,8 @@ public partial class TabDDPMGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
 
     #region Helpers
 
-    private static Vector<T> GetMatrixRow(Matrix<T> data, int row) => data.GetRow(row);
+    private static Vector<T> GetMatrixRow(Matrix<T> data, int row)
+        => data.Columns == 0 ? new Vector<T>(0) : data.GetRow(row);
 
     /// <summary>Overwrites the leading min(columns, values.Length) entries of row <paramref name="row"/>.</summary>
     private static Matrix<T> SetMatrixRow(Matrix<T> data, int row, Vector<T> values)

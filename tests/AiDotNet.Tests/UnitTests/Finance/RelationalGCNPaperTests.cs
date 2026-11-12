@@ -42,7 +42,10 @@ public class RelationalGCNPaperTests
         bool useBlocks = false,
         int numBlocks = 1,
         int sequenceLength = 1,
-        double regularization = 0.0)
+        double regularization = 0.0,
+        bool useSelfLoop = true,
+        double dropout = 0.0,
+        int seed = 7)
     {
         var architecture = new NeuralNetworkArchitecture<double>(
             inputType: InputType.OneDimensional,
@@ -63,11 +66,11 @@ public class RelationalGCNPaperTests
             NumBlocks = numBlocks,
             UseBasisDecomposition = useBasis,
             UseBlockDecomposition = useBlocks,
-            UseSelfLoop = true,
+            UseSelfLoop = useSelfLoop,
             Aggregation = aggregation,
-            DropoutRate = 0.0,
+            DropoutRate = dropout,
             Regularization = regularization,
-            Seed = 7,
+            Seed = seed,
         };
         return new RelationalGCN<double>(architecture, options, adjacency);
     }
@@ -194,4 +197,72 @@ public class RelationalGCNPaperTests
         var wrong = new Tensor<double>(new[] { 2, 4, 4 });
         Assert.Throws<ArgumentException>(() => CreateModel(wrong, numNodes: 3, hiddenDimension: 2, numLayers: 1));
     }
+
+    [Theory]
+    [InlineData(RelationalAggregation.Sum, 6.0, 8.0)]
+    [InlineData(RelationalAggregation.Mean, 3.0, 4.0)]
+    public void Full_relation_weights_without_self_loops_handle_weighted_edges_and_isolated_nodes(
+        RelationalAggregation aggregation, double first, double second)
+    {
+        var adjacency = new Tensor<double>(new[] { 2, 2, 2 });
+        adjacency[0, 0, 1] = 2;
+        using var model = CreateModel(adjacency, 2, 2, 1, aggregation,
+            useBasis: false, useSelfLoop: false);
+        Assert.Single(model.RelationalWeightTensors);
+        Fill(model.RelationalWeightTensors[0], 1, 0, 0, 1, 9, 9, 9, 9);
+        var states = new Tensor<double>(new[] { 2, 2 }, new Vector<double>(new[] { 1.0, 2.0, 3.0, 4.0 }));
+        var output = model.ApplyRelationalLayer(states, 0);
+        Assert.Equal(new[] { first, second, 0.0, 0.0 }, output.ToArray());
+        // The model owns its graph: a caller's subsequent edits cannot change propagation.
+        adjacency.Fill(0);
+        Assert.Equal(output.ToArray(), model.ApplyRelationalLayer(states, 0).ToArray());
+    }
+
+    [Theory]
+    [InlineData(true, false)]
+    [InlineData(false, false)]
+    [InlineData(false, true)]
+    public void Save_load_restores_relation_parameters_graph_and_predictions(bool basis, bool blocks)
+    {
+        using var source = CreateModel(TinyGraph(), 3, 4, 2, useBasis: basis,
+            useBlocks: blocks, numBlocks: 2, sequenceLength: 2);
+        using var restored = CreateModel(new Tensor<double>(new[] { 2, 3, 3 }), 3, 4, 2,
+            useBasis: basis, useBlocks: blocks, numBlocks: 2, sequenceLength: 2, seed: 19);
+        var input = new Tensor<double>(new[] { 3, 2, 1 }, new Vector<double>(new[] { 1.0, 2.0, 3.0, 4.0, 5.0, 6.0 }));
+        source.SetTrainingMode(false);
+        restored.SetTrainingMode(false);
+        source.Forward(input);
+        restored.Forward(input);
+        foreach (var chunk in source.GetParameterStateChunks().Where(c => c.Role == ParameterSlotRole.Trainable))
+            chunk.Tensor.Fill(0.2);
+        foreach (var chunk in restored.GetParameterStateChunks().Where(c => c.Role == ParameterSlotRole.Trainable))
+            chunk.Tensor.Fill(0);
+        var expected = source.Forward(input).ToArray();
+        Assert.Contains(expected, value => value > 0);
+        Assert.All(restored.Forward(input).ToArray(), value => Assert.Equal(0, value));
+        restored.Deserialize(source.Serialize());
+        Assert.Equal(source.GetParameters().ToArray(), restored.GetParameters().ToArray());
+        Assert.Equal(expected, restored.Forward(input).ToArray());
+    }
+
+    [Theory]
+    [InlineData(-1.0)]
+    [InlineData(double.NaN)]
+    [InlineData(double.PositiveInfinity)]
+    public void Invalid_regularization_is_rejected(double strength) =>
+        Assert.Throws<ArgumentException>(() => CreateModel(TinyGraph(), 3, 2, 1, regularization: strength));
+
+    [Theory]
+    [InlineData(-0.1)]
+    [InlineData(1.0)]
+    [InlineData(double.NaN)]
+    [InlineData(double.PositiveInfinity)]
+    public void Invalid_dropout_is_rejected(double probability) =>
+        Assert.Throws<ArgumentException>(() => CreateModel(TinyGraph(), 3, 2, 1, dropout: probability));
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-1)]
+    public void Non_positive_history_length_is_rejected(int length) =>
+        Assert.Throws<ArgumentException>(() => CreateModel(TinyGraph(), 3, 2, 1, sequenceLength: length));
 }

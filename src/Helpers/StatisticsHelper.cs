@@ -2064,7 +2064,14 @@ public static class StatisticsHelper<T>
     /// </remarks>
     public static T Digamma(T x)
     {
-        // psi(x) = d/dx ln Gamma(x) (torch.special.digamma)
+        // Move small positive arguments into the accurate asymptotic region, using psi(x + 1) = psi(x) + 1/x.
+        if (_numOps.GreaterThan(x, _numOps.Zero) && _numOps.LessThan(x, _numOps.FromDouble(16)))
+        {
+            var denominators = Engine.TensorAddScalar(Engine.TensorArange<T>(0, 16, 1), x);
+            T correction = Engine.TensorSum(Engine.TensorReciprocal(denominators));
+            T shifted = Engine.TensorDigamma(Tensor<T>.FromScalar(_numOps.Add(x, _numOps.FromDouble(16)))).GetFlat(0);
+            return _numOps.Subtract(shifted, correction);
+        }
         return Engine.TensorDigamma(Tensor<T>.FromScalar(x)).GetFlat(0);
     }
 
@@ -3593,18 +3600,14 @@ public static class StatisticsHelper<T>
             return (predicted[0], predicted[0]);
         }
 
-        // Leave-one-out means theta_i = (sum - predicted_i) / (n - 1).
-        var p = AsTensor(predicted);
-        T total = Engine.TensorSum(p);
-        var jackknifeSamples = Engine.TensorDivideScalar(
-            Engine.TensorSubtract(Filled(p._shape, total), p), _numOps.FromDouble(n - 1));
-        T jackknifeEstimate = _numOps.Divide(Engine.TensorSum(jackknifeSamples), _numOps.FromDouble(n));
-
-        // Jackknife standard error sqrt((n - 1) / n * sum (theta_i - theta_bar)^2) (Efron & Tibshirani,
-        // astropy.stats.jackknife_stats). For the mean this is exactly s / sqrt(n).
-        T jackknifeStdError = _numOps.Sqrt(_numOps.Multiply(
-            _numOps.Divide(_numOps.FromDouble(n - 1), _numOps.FromDouble(n)),
-            SumOfSquaredDeviations(jackknifeSamples, jackknifeEstimate)));
+        // The scalar loop uses the first n predictions. For a sample mean the jackknife estimate is
+        // the mean and its standard error is s / sqrt(n). Avoid explicitly forming leave-one-out means:
+        // subtracting a large common offset from their total can erase the small differences between them.
+        var paired = Prefix(predicted, n);
+        T anchor = paired.GetFlat(0);
+        var moments = Engine.TensorStdMean(Engine.TensorSubtractScalar(paired, anchor), new[] { 0 }, 1, false);
+        T jackknifeEstimate = _numOps.Add(anchor, moments.Item2.GetFlat(0));
+        T jackknifeStdError = _numOps.Divide(moments.Item1.GetFlat(0), _numOps.Sqrt(_numOps.FromDouble(n)));
         T tValue = CalculateTValue(n - 1, _numOps.FromDouble(0.95));
         T margin = _numOps.Multiply(tValue, jackknifeStdError);
 

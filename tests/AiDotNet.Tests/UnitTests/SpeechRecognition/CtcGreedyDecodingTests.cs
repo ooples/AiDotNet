@@ -162,4 +162,37 @@ public class CtcGreedyDecodingTests
                 CtcGreedyDecoding.DecodeSkippingAfterEmission(logits, maxTokens, framesAfterEmission));
         }
     }
+    [Fact]
+    public void HalfWideVocabulary_ConfidenceDoesNotOverflowTheDenominator()
+    {
+        const int vocab = 70000;
+        var values = new Half[vocab];
+        values[1] = (Half)0.01;
+        var logits = new Tensor<Half>(values, new[] { 1, vocab });
+        var result = CtcGreedyDecoding.Decode(logits, 1);
+        Assert.Equal(new[] { 1 }, result.tokens);
+        double expected = 1.0 / (1.0 + (vocab - 1) * Math.Exp(-(double)values[1]));
+        Assert.InRange(result.confidence, expected - 1e-10, expected + 1e-10);
+        var flat = CtcGreedyDecoding.DecodeFlat(logits, 1);
+        var skipped = CtcGreedyDecoding.DecodeSkippingAfterEmission(logits, 1, 1);
+        Assert.Equal(result.tokens, flat.tokens);
+        Assert.Equal(result.tokens, skipped.tokens);
+        Assert.Equal(result.confidence, flat.confidence);
+        Assert.Equal(result.confidence, skipped.confidence);
+        var singlePrecision = CtcGreedyDecoding.Decode(logits.Cast<float>(), 1);
+        Assert.InRange(singlePrecision.confidence, expected - 1e-10, expected + 1e-10);
+    }
+
+    [Fact]
+    public void HalfLongUtterance_EmittedConfidenceSumDoesNotOverflow()
+    {
+        const int frames = 70000;
+        var values = new Half[frames * 3];
+        for (int frame = 0; frame < frames; frame++)
+            values[frame * 3 + 1 + frame % 2] = (Half)100;
+        var result = CtcGreedyDecoding.Decode(new Tensor<Half>(values, new[] { frames, 3 }), frames);
+        Assert.Equal(frames, result.tokens.Count);
+        Assert.Equal(1.0, result.confidence, 6);
+    }
+
 }

@@ -680,8 +680,10 @@ public static class MatrixHelper<T>
     {
         var size = matrix.Rows;
         int bandWidth = leftSide + rightSide + 1;
-        if (size == 0 || bandWidth <= 0)
+        if (size == 0) return;
+        if (bandWidth <= 0)
         {
+            solutionVector.AsWritableSpan().Slice(0, size).Fill(_numOps.Zero);
             return;
         }
 
@@ -693,7 +695,14 @@ public static class MatrixHelper<T>
         var band = matrix.GetSubMatrix(0, 0, size, bandWidth);
 
         using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
-        var products = engine.TensorMultiply(Tensor<T>.FromMatrix(band), Tensor<T>.FromMatrix(windows));
+        var shape = new[] { size, bandWidth };
+        var row = engine.TensorArange<int>(0, size, 1).Reshape(new[] { size, 1 });
+        var column = engine.TensorArange<int>(-leftSide, rightSide + 1, 1).Reshape(new[] { 1, bandWidth });
+        var indices = engine.TensorAdd(engine.TensorBroadcastTo(row, shape), engine.TensorBroadcastTo(column, shape));
+        var included = engine.TensorMultiply(engine.TensorGreaterThan(indices, -1), engine.TensorLessThan(indices, size)).Cast<T>();
+        var coefficients = Tensor<T>.FromMatrix(band);
+        coefficients = engine.TensorWhere(included, coefficients, engine.TensorZerosLike(coefficients));
+        var products = engine.TensorMultiply(coefficients, Tensor<T>.FromMatrix(windows));
         engine.ReduceSum(products, new[] { 1 }, false).AsSpan().CopyTo(solutionVector.AsWritableSpan());
     }
 

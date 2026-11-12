@@ -538,7 +538,9 @@ public partial class T5RelativeBiasAttentionLayer<T> : LayerBase<T>, IShapeContr
                 var offset = Engine.TensorSubtract(
                     Engine.Reshape(Engine.TensorArange<int>(0, sk, 1), new[] { 1, sk }),
                     Engine.Reshape(Engine.TensorArange<int>(0, sq, 1), new[] { sq, 1 }));
-                mask = Engine.TensorMultiplyScalar(Engine.TensorGreaterThan(offset, shift).Cast<T>(), blocked);
+                var future = Engine.TensorGreaterThan(offset, shift).Cast<T>();
+                // In Half, blocked is -infinity. Selection keeps allowed entries zero; 0 * -infinity is NaN.
+                mask = Engine.TensorWhere(future, Engine.TensorFullLike(future, blocked), Engine.TensorZerosLike(future));
             }
             scores = Engine.TensorAdd(scores, mask);
         }

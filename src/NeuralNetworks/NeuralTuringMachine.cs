@@ -518,10 +518,8 @@ public partial class NeuralTuringMachine<T> : SequenceModelLayoutBase<T>, IAuxil
         T epsilon = NumOps.FromDouble(1e-10);  // For numerical stability
         T oneMinusEpsilon = NumOps.Subtract(NumOps.One, epsilon);
 
-        // Entropy of each addressing vector: H = -sum(p * log p), with p clamped to [epsilon, 1 - epsilon]
-        // to avoid log(0) and log(>1). The loss is the sum of the negative entropies, -sum(H) =
-        // sum(p * log p) over every read and write weight together (we want to minimize this,
-        // encouraging sharp peaks).
+        // Minimize Shannon entropy, -sum(p * log p), to encourage focused read/write addressing.
+        // This preserves the scalar path's positive penalty and its preference for sharp distributions.
         var addressing = _readWeights.Concat(_writeWeights)
             .Where(w => w.Length > 0)
             .Select(w => Tensor<T>.FromVector(w))
@@ -529,7 +527,7 @@ public partial class NeuralTuringMachine<T> : SequenceModelLayoutBase<T>, IAuxil
         if (addressing.Length > 0)
         {
             var p = Engine.TensorClamp(Engine.TensorConcatenate(addressing, 0), epsilon, oneMinusEpsilon);
-            totalNegativeEntropy = Engine.TensorSum(Engine.TensorMultiply(p, Engine.TensorLog(p)));
+            totalNegativeEntropy = NumOps.Negate(Engine.TensorSum(Engine.TensorMultiply(p, Engine.TensorLog(p))));
         }
 
         _lastMemoryUsageLoss = totalNegativeEntropy;
@@ -1845,9 +1843,13 @@ public partial class NeuralTuringMachine<T> : SequenceModelLayoutBase<T>, IAuxil
             return new Vector<T>(_memoryVectorSize);
 
         // Weighted read r = sum_m w(m) * M(m); locations with w(m) < 1e-10 are skipped.
-        var weightRow = ActiveAddressing(readWeights);
-        var read = Engine.TensorMatMul(
-            Engine.Reshape(weightRow, new[] { 1, _memorySize }), Tensor<T>.FromMatrix(memory));
+        var (weightRow, skipped) = ActiveAddressing(readWeights);
+        var values = Tensor<T>.FromMatrix(memory);
+        // A skipped location is never read by the scalar loop. Mask its memory too: 0 * NaN is NaN.
+        values = Engine.TensorWhere(
+            Engine.TensorBroadcastTo(Engine.Reshape(skipped, new[] { _memorySize, 1 }), values._shape),
+            Engine.TensorZerosLike(values), values);
+        var read = Engine.TensorMatMul(Engine.Reshape(weightRow, new[] { 1, _memorySize }), values);
         return Engine.Reshape(read, new[] { _memoryVectorSize }).ToVector();
     }
 
@@ -1946,11 +1948,11 @@ public partial class NeuralTuringMachine<T> : SequenceModelLayoutBase<T>, IAuxil
     /// <summary>
     /// The addressing weights with every location below 1e-10 zeroed, as the read loop skipped them.
     /// </summary>
-    private Tensor<T> ActiveAddressing(Vector<T> weights)
+    private (Tensor<T> Weights, Tensor<T> Skipped) ActiveAddressing(Vector<T> weights)
     {
         var raw = Tensor<T>.FromVector(weights.Subvector(0, _memorySize));
-        return Engine.TensorWhere(
-            Engine.TensorLessThan(raw, NumOps.FromDouble(1e-10)), Engine.TensorZerosLike(raw), raw);
+        var skipped = Engine.TensorLessThan(raw, NumOps.FromDouble(1e-10));
+        return (Engine.TensorWhere(skipped, Engine.TensorZerosLike(raw), raw), skipped);
     }
 
     /// <summary>

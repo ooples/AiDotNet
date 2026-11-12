@@ -412,6 +412,12 @@ public partial class RelationalGCN<T> : ForecastingModelBase<T>
     /// </summary>
     private void ValidateRelationalOptions()
     {
+        if (_sequenceLength < 1 || _forecastHorizon < 1 || _numFeatures < 1)
+            throw new ArgumentException("SequenceLength, ForecastHorizon and NumFeatures must be positive.", "options");
+        if (double.IsNaN(_regularization) || double.IsInfinity(_regularization) || _regularization < 0)
+            throw new ArgumentException("Regularization must be finite and non-negative.", "options");
+        if (double.IsNaN(_dropoutRate) || double.IsInfinity(_dropoutRate) || _dropoutRate < 0 || _dropoutRate >= 1)
+            throw new ArgumentException("DropoutRate must be finite and in [0, 1).", "options");
         if (_numNodes < 1)
             throw new ArgumentException("RelationalGCN needs at least one node.", "options");
         if (_numRelations < 1)

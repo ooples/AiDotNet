@@ -21,6 +21,10 @@ namespace AiDotNet.SpeechRecognition;
 /// </remarks>
 internal static class CtcGreedyDecoding
 {
+    private static bool NeedsWideAccumulation<T>() =>
+        typeof(T) == typeof(float) || typeof(T) == typeof(Half) || typeof(T) == typeof(AiDotNet.Tensors.NumericOperations.BFloat16);
+
+
     /// <summary>
     /// Decodes <c>[frames, vocab]</c> logits, or a single <c>[vocab]</c> frame, read with the two-index
     /// element indexer (one index for a single frame).
@@ -41,6 +45,9 @@ internal static class CtcGreedyDecoding
             throw new ArgumentException("Number of indices must match the tensor's rank.");
         }
 
+        if (NeedsWideAccumulation<T>())
+            return Decode(logits.Cast<double>(), maxTokens);
+
         return DecodeFrames(logits.Reshape(numFrames, vocabSize), maxTokens);
     }
 
@@ -58,6 +65,9 @@ internal static class CtcGreedyDecoding
         }
 
         // frames * vocab never exceeds the element count: it is the product of a subset of the dimensions.
+        if (NeedsWideAccumulation<T>())
+            return DecodeFlat(logits.Cast<double>(), maxTokens);
+
         var flat = logits.Reshape(logits.Length);
         var frames = AiDotNetEngine.Current.TensorNarrow(flat, 0, 0, numFrames * vocabSize);
         return DecodeFrames(frames.Reshape(numFrames, vocabSize), maxTokens);
@@ -85,6 +95,9 @@ internal static class CtcGreedyDecoding
         {
             throw new ArgumentException("Number of indices must match the tensor's rank.");
         }
+
+        if (NeedsWideAccumulation<T>())
+            return DecodeSkippingAfterEmission(logits.Cast<double>(), maxTokens, framesAfterEmission);
 
         bool singleFrame = logits.Rank < 2;
         using (new NoGradScope<T>())

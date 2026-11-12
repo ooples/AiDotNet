@@ -28,49 +28,39 @@ public static class GradientClippingHelper
     /// </summary>
     public const double DefaultMaxValue = 1.0;
 
-    /// <summary>Sum of squares accumulated in <c>double</c>, whatever <typeparamref name="T"/> is.</summary>
-    /// <remarks>
-    /// ONE ACCUMULATOR FOR THE WHOLE FILE. Summing squares in T overflows for a large float gradient
-    /// vector: the norm becomes +Infinity, the threshold test passes, the scale becomes
-    /// maxNorm/Infinity = 0, and any non-finite element then yields Infinity * 0 = NaN -- so enabling
-    /// clipping POISONS the gradients it was turned on to protect. Measured on TableTransformer:
-    /// green without clipping, "L2 distance = NaN ... collapsed to a uniform-output state" with it.
-    ///
-    /// This existed as a fix in two of the six norm computations in this file, which left the same
-    /// failure reachable through the other four -- including ClipByGlobalNorm, the most exposed of all
-    /// because it sums across every layer. One helper is what stops them drifting apart again.
-    /// </remarks>
-    private static double SumSquares<T>(Vector<T> gradients, INumericOperations<T> ops)
-        => SumSquares(Tensor<T>.FromVector(gradients), ops);
+    /// <summary>Scaled L2 norm shared by every clipping path; avoids squaring the largest magnitude.</summary>
+    private static double L2Norm<T>(Vector<T> gradients, INumericOperations<T> ops)
+        => L2Norm(Tensor<T>.FromVector(gradients), ops);
 
-    /// <inheritdoc cref="SumSquares{T}(Vector{T}, INumericOperations{T})"/>
-    /// <remarks>
-    /// The squares are summed in T after dividing by the largest magnitude m (the LAPACK nrm2
-    /// scaling), so every scaled square is at most 1 and the T-typed sum is bounded by the length;
-    /// only m * m * sum is formed in <c>double</c>. That keeps the overflow protection without
-    /// staging the gradients outside T.
-    /// </remarks>
-    private static double SumSquares<T>(Tensor<T> gradients, INumericOperations<T> ops)
+    private static double L2Norm<T>(Tensor<T> gradients, INumericOperations<T> ops)
     {
         if (gradients.Length == 0) return 0.0;
+        // Reductions must not overflow merely because a Half vector has more than 65504 elements.
+        if (typeof(T) == typeof(Half) || typeof(T) == typeof(AiDotNet.Tensors.NumericOperations.BFloat16))
+            return L2Norm(gradients.Cast<float>(), MathHelper.GetNumericOperations<float>());
 
         using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
         var engine = AiDotNetEngine.Current;
         var magnitudes = engine.TensorAbs(gradients);
         T maxMagnitude = engine.TensorMaxValue(magnitudes);
         double m = ops.ToDouble(maxMagnitude);
-
-        // All zero, NaN or infinite: the plain sum of magnitudes is then 0, NaN or +Infinity, and its
-        // square is exactly what the sum of squares is in those cases.
         if (!(m > 0.0) || double.IsInfinity(m))
-        {
-            double magnitudeSum = ops.ToDouble(engine.TensorSum(magnitudes));
-            return magnitudeSum * magnitudeSum;
-        }
+            return ops.ToDouble(engine.TensorSum(magnitudes));
 
-        var scaled = engine.TensorDivideScalar(magnitudes, maxMagnitude);
+        // Use division, not multiplication by 1/m: the reciprocal of a finite subnormal can overflow.
+        var scaled = engine.TensorDivide(magnitudes, engine.TensorFullLike(magnitudes, maxMagnitude));
         double scaledSum = ops.ToDouble(engine.TensorSum(engine.TensorMultiply(scaled, scaled)));
-        return m * m * scaledSum;
+        return m * Math.Sqrt(scaledSum);
+    }
+
+    /// <summary>Combines norms without forming their squares at the original magnitude.</summary>
+    private static double CombineNorms(double first, double second)
+    {
+        if (double.IsNaN(first) || double.IsNaN(second)) return double.NaN;
+        double larger = Math.Max(first, second);
+        if (larger == 0 || double.IsInfinity(larger)) return larger;
+        double ratio = Math.Min(first, second) / larger;
+        return larger * Math.Sqrt(1 + ratio * ratio);
     }
 
     /// <summary>
@@ -96,7 +86,7 @@ public static class GradientClippingHelper
     internal static Vector<T> ClipByNormPyTorchCoefficient<T>(Vector<T> gradients, double maxNorm)
     {
         var numOps = MathHelper.GetNumericOperations<T>();
-        double norm = Math.Sqrt(SumSquares(gradients, numOps));
+        double norm = L2Norm(gradients, numOps);
         if (IsUnusableNorm(norm, nameof(ClipByNormPyTorchCoefficient)) || norm <= maxNorm || norm <= 0.0)
             return gradients;
         return gradients.Multiply(numOps.FromDouble(maxNorm / (norm + 1e-6)));
@@ -197,7 +187,7 @@ public static class GradientClippingHelper
         // to a uniform-output state" with it. The tape-path clipper in
         // GradientBasedOptimizerBase already accumulates in double and guards the
         // non-finite cases; this is the same computation and needs the same care.
-        double norm = Math.Sqrt(SumSquares(gradients, numOps));
+        double norm = L2Norm(gradients, numOps);
 
         // A norm that is zero or non-finite has no meaningful direction to
         // preserve, so scaling is skipped rather than applied with a degenerate
@@ -233,7 +223,7 @@ public static class GradientClippingHelper
         // Accumulated in double for the reason given in ClipByNorm above: a T-typed
         // sum of squares overflows on large float gradients, and the resulting
         // Infinity norm turns clipping into a NaN generator instead of a safeguard.
-        double norm = Math.Sqrt(SumSquares(gradients, numOps));
+        double norm = L2Norm(gradients, numOps);
 
         // No meaningful direction to preserve -- leave the gradients alone.
         // See ClipByNorm above for why this is `norm <= 0.0` and not `norm == 0.0`.
@@ -271,13 +261,12 @@ public static class GradientClippingHelper
         var numOps = MathHelper.GetNumericOperations<T>();
 
         // Compute global L2 norm
-        double globalSumSquares = 0.0;
+        double globalNorm = 0.0;
         foreach (var gradients in gradientsList)
         {
             if (gradients == null) continue;
-            globalSumSquares += SumSquares(gradients, numOps);
+            globalNorm = CombineNorms(globalNorm, L2Norm(gradients, numOps));
         }
-        double globalNorm = Math.Sqrt(globalSumSquares);
 
         // If global norm is below threshold, or is not a number that can scale anything, return clones.
         // Nulls are dropped here, exactly as the scaling path below drops them: the two paths used to
@@ -326,7 +315,7 @@ public static class GradientClippingHelper
         var numOps = MathHelper.GetNumericOperations<T>();
 
         // Compute L2 norm
-        double norm = Math.Sqrt(SumSquares(gradients, numOps));
+        double norm = L2Norm(gradients, numOps);
 
         // If norm is below threshold, or cannot scale anything, return clone
         if (IsUnusableNorm(norm, nameof(ClipByNorm)) || norm <= maxNorm)
@@ -356,10 +345,10 @@ public static class GradientClippingHelper
 
         var ops = MathHelper.GetNumericOperations<T>();
 
-        // Double accumulation for the reason given on SumSquares. AreGradientsExploding and
+        // Double accumulation for the reason given on L2Norm. AreGradientsExploding and
         // ClipAdaptive both build on this, so a T-typed sum that overflowed made the explosion
         // DETECTOR report on its own overflow rather than on the gradients.
-        return ops.FromDouble(Math.Sqrt(SumSquares(gradients, ops)));
+        return ops.FromDouble(L2Norm(gradients, ops));
     }
 
     /// <summary>
@@ -375,14 +364,14 @@ public static class GradientClippingHelper
         if (gradientsList == null || gradientsList.Count == 0)
             return numOps.Zero;
 
-        double globalSumSquares = 0.0;
+        double globalNorm = 0.0;
         foreach (var gradients in gradientsList)
         {
             if (gradients == null) continue;
-            globalSumSquares += SumSquares(gradients, numOps);
+            globalNorm = CombineNorms(globalNorm, L2Norm(gradients, numOps));
         }
 
-        return numOps.FromDouble(Math.Sqrt(globalSumSquares));
+        return numOps.FromDouble(globalNorm);
     }
 
     /// <summary>
