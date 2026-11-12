@@ -83,9 +83,7 @@ public partial class BayProNetAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T,
             throw new ArgumentException("MetaModel has zero parameters.", nameof(options));
 
         // Initialize per-parameter log-variance
-        _posteriorLogVar = new Vector<T>(_paramDim);
-        for (int d = 0; d < _paramDim; d++)
-            _posteriorLogVar[d] = NumOps.FromDouble(options.InitialPrototypeLogVar);
+        _posteriorLogVar = Engine.Fill(_paramDim, NumOps.FromDouble(options.InitialPrototypeLogVar));
     }
 
     /// <inheritdoc/>
@@ -97,12 +95,12 @@ public partial class BayProNetAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T,
         var losses = new List<T>();
         var metaGradients = new List<Vector<T>>();
         var initParams = ParamModel.GetParameters();
+        T klWeight = NumOps.FromDouble(_algoOptions.KLWeight);
 
         foreach (var task in taskBatch.Tasks)
         {
             // Inner loop: adapt backbone on support set
-            var adaptedParams = new Vector<T>(_paramDim);
-            for (int d = 0; d < _paramDim; d++) adaptedParams[d] = initParams[d];
+            var adaptedParams = initParams.Clone();
 
             for (int step = 0; step < _algoOptions.AdaptationSteps; step++)
             {
@@ -128,20 +126,15 @@ public partial class BayProNetAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T,
             var ensembleLoss = ComputeMean(sampleLosses);
 
             // KL regularization: KL(N(θ_adapted, σ²) || N(θ_0, I))
-            double klPenalty = ComputeAdaptedKL(adaptedParams, initParams);
-            var totalLoss = NumOps.Add(ensembleLoss, NumOps.FromDouble(_algoOptions.KLWeight * klPenalty));
+            T klPenalty = ComputeAdaptedKL(adaptedParams, initParams);
+            var totalLoss = NumOps.Add(ensembleLoss, NumOps.Multiply(klWeight, klPenalty));
 
             losses.Add(totalLoss);
 
-            // Include KL gradient so outer update matches totalLoss objective
+            // Include KL gradient so outer update matches totalLoss objective:
+            // dKL/dmu = (mu_adapted - mu_prior), scaled by the KL weight
             var avgGrad = AverageVectors(sampleGrads);
-            for (int d = 0; d < _paramDim; d++)
-            {
-                // ∂KL/∂μ = (μ_adapted - μ_prior) (from KL divergence)
-                double klGrad = _algoOptions.KLWeight *
-                    (NumOps.ToDouble(adaptedParams[d]) - NumOps.ToDouble(initParams[d]));
-                avgGrad[d] = NumOps.Add(avgGrad[d], NumOps.FromDouble(klGrad));
-            }
+            avgGrad = Engine.Add(avgGrad, Engine.Multiply(Engine.Subtract(adaptedParams, initParams), klWeight));
             metaGradients.Add(avgGrad);
         }
 
@@ -158,8 +151,7 @@ public partial class BayProNetAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T,
     public override IModel<TInput, TOutput, ModelMetadata<T>> Adapt(IMetaLearningTask<T, TInput, TOutput> task)
     {
         var initParams = ParamModel.GetParameters();
-        var adaptedParams = new Vector<T>(_paramDim);
-        for (int d = 0; d < _paramDim; d++) adaptedParams[d] = initParams[d];
+        var adaptedParams = initParams.Clone();
 
         for (int step = 0; step < _algoOptions.AdaptationSteps; step++)
         {
@@ -197,17 +189,19 @@ public partial class BayProNetAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T,
     /// <summary>
     /// KL(N(μ_post, σ²_post) || N(μ_prior, I)) = 0.5 * Σ_d [σ²_d + (μ_post_d - μ_prior_d)² - 1 - log(σ²_d)]
     /// </summary>
-    private double ComputeAdaptedKL(Vector<T> posterior, Vector<T> prior)
+    private T ComputeAdaptedKL(Vector<T> posterior, Vector<T> prior)
     {
-        double kl = 0;
-        for (int d = 0; d < _paramDim; d++)
-        {
-            double var_d = Math.Exp(NumOps.ToDouble(_posteriorLogVar[d]));
-            double diff = NumOps.ToDouble(posterior[d]) - NumOps.ToDouble(prior[d]);
-            kl += var_d + diff * diff - 1.0 - NumOps.ToDouble(_posteriorLogVar[d]);
-        }
-        return 0.5 * kl;
+        var logVar = _posteriorLogVar.Length == _paramDim ? _posteriorLogVar : _posteriorLogVar.GetSubVector(0, _paramDim);
+        var diff = Engine.Subtract(posterior.GetSubVector(0, _paramDim), prior.GetSubVector(0, _paramDim));
+        T kl = NumOps.Subtract(
+            NumOps.Add(Engine.Sum(Engine.Exp(logVar)), Engine.DotProduct(diff, diff)),
+            NumOps.Add(NumOps.FromDouble(_paramDim), Engine.Sum(logVar)));
+        return NumOps.Multiply(NumOps.FromDouble(0.5), kl);
     }
+
+    /// <summary>The KL penalty as the double the SPSA objective accumulates.</summary>
+    private double ComputeAdaptedKLValue(Vector<T> posterior, Vector<T> prior)
+        => NumOps.ToDouble(ComputeAdaptedKL(posterior, prior));
 
     private double ComputeBayProNetLoss(TaskBatch<T, TInput, TOutput> taskBatch)
     {
@@ -216,8 +210,7 @@ public partial class BayProNetAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T,
 
         foreach (var task in taskBatch.Tasks)
         {
-            var adaptedParams = new Vector<T>(_paramDim);
-            for (int d = 0; d < _paramDim; d++) adaptedParams[d] = initParams[d];
+            var adaptedParams = initParams.Clone();
 
             for (int step = 0; step < _algoOptions.AdaptationSteps; step++)
             {
@@ -235,7 +228,7 @@ public partial class BayProNetAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T,
                 sampleLossSum += NumOps.ToDouble(ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput));
             }
             double ensembleLoss = sampleLossSum / numSamples;
-            double klPenalty = ComputeAdaptedKL(adaptedParams, initParams);
+            double klPenalty = ComputeAdaptedKLValue(adaptedParams, initParams);
             totalLoss += ensembleLoss + _algoOptions.KLWeight * klPenalty;
         }
 
