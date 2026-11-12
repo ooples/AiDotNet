@@ -107,53 +107,27 @@ public partial class PCADetector<T> : AnomalyDetectorBase<T>
     {
         ValidateInput(X);
 
+        var engine = Engine;
         int n = X.Rows;
         int d = X.Columns;
 
-        // Compute mean
-        _mean = new Vector<T>(d);
-        for (int j = 0; j < d; j++)
-        {
-            T sum = NumOps.Zero;
-            for (int i = 0; i < n; i++)
-            {
-                sum = NumOps.Add(sum, X[i, j]);
-            }
-            _mean[j] = NumOps.Divide(sum, NumOps.FromDouble(n));
-        }
+        // Compute mean and center data
+        var data = AnomalyTensorOps.ToTensor(X);
+        var mean = engine.ReduceMean(data, new[] { 0 }, false);
+        _mean = mean.ToVector();
+        var centered = AnomalyTensorOps.SubtractRow(data, mean);
 
-        // Center data
-        var centered = new Matrix<T>(n, d);
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < d; j++)
-            {
-                centered[i, j] = NumOps.Subtract(X[i, j], _mean[j]);
-            }
-        }
-
-        // Compute covariance matrix
-        var covariance = ComputeCovariance(centered, n, d);
-
-        // Compute eigendecomposition (simplified power iteration)
-        var (eigenvalues, eigenvectors) = ComputeEigenDecomposition(covariance, d);
+        // Compute covariance matrix (sample, n - 1) and its eigendecomposition (largest eigenvalues first)
+        var covariance = AnomalyTensorOps.Covariance(centered, NumOps.FromDouble(n - 1));
+        var (eigenvalues, eigenvectors) = AnomalyTensorOps.SymmetricEigenDescending(covariance);
 
         // Determine number of components
         _fittedComponents = _nComponents ?? DetermineComponents(eigenvalues);
         _fittedComponents = Math.Min(_fittedComponents, d);
 
         // Store components (top eigenvectors)
-        _components = new Matrix<T>(_fittedComponents, d);
-        _explainedVariance = new Vector<T>(_fittedComponents);
-
-        for (int c = 0; c < _fittedComponents; c++)
-        {
-            _explainedVariance[c] = eigenvalues[c];
-            for (int j = 0; j < d; j++)
-            {
-                _components[c, j] = eigenvectors[c, j];
-            }
-        }
+        _components = engine.TensorSlice(eigenvectors, new[] { 0, 0 }, new[] { _fittedComponents, d }).ToMatrix();
+        _explainedVariance = engine.TensorSlice(eigenvalues, new[] { 0 }, new[] { _fittedComponents }).ToVector();
 
         // Calculate scores for training data to set threshold
         var trainingScores = ScoreAnomaliesInternal(X);
@@ -173,205 +147,56 @@ public partial class PCADetector<T> : AnomalyDetectorBase<T>
     {
         ValidateInput(X);
 
-        var scores = new Vector<T>(X.Rows);
-        int d = X.Columns;
+        var engine = Engine;
+        var components = AnomalyTensorOps.ToTensor(FittedComponents);
+        var explained = FittedExplainedVariance.AsTensor();
 
-        // Pre-allocate reusable vectors outside the loop
-        var centered = new Vector<T>(d);
-        var projected = new Vector<T>(_fittedComponents);
-        var reconstructed = new Vector<T>(d);
-        var compCol = new Vector<T>(_fittedComponents);
+        // Center the points, project onto the components and reconstruct from the projection
+        var centered = AnomalyTensorOps.SubtractRow(AnomalyTensorOps.ToTensor(X), FittedMean.AsTensor());
+        var projected = engine.TensorMatMul(centered, engine.TensorTranspose(components));
+        var reconstructed = engine.TensorMatMul(projected, components);
 
-        for (int i = 0; i < X.Rows; i++)
-        {
-            // Center the point
-            for (int j = 0; j < d; j++)
-                centered[j] = NumOps.Subtract(X[i, j], FittedMean[j]);
+        // Reconstruction error (residual from unretained components)
+        var reconstructionError = engine.ReduceSum(
+            engine.TensorSquare(engine.TensorSubtract(centered, reconstructed)), new[] { 1 }, false);
 
-            // Project onto components
-            for (int c = 0; c < _fittedComponents; c++)
-            {
-                T dot = NumOps.Zero;
-                for (int j = 0; j < d; j++)
-                    dot = NumOps.Add(dot, NumOps.Multiply(centered[j], FittedComponents[c, j]));
-                projected[c] = dot;
-            }
+        // Mahalanobis distance in PCA space (distance along retained components, weighted by inverse
+        // eigenvalues, over the eigenvalues above the floor). This catches outliers that lie far from the
+        // mean along principal component directions, even when reconstruction error is low.
+        int k = _fittedComponents;
+        var significant = engine.TensorGreaterThan(explained, NumOps.FromDouble(EigenvalueFloor));
+        var inverse = engine.TensorWhere(significant,
+            engine.TensorReciprocal(engine.TensorWhere(significant, explained, Tensor<T>.CreateOnes(new[] { k }))),
+            Tensor<T>.CreateZeros(new[] { k }));
+        var mahalanobis = engine.ReduceSum(
+            AnomalyTensorOps.MultiplyRow(engine.TensorSquare(projected), inverse), new[] { 1 }, false);
 
-            // Reconstruct from projection
-            for (int j = 0; j < d; j++)
-            {
-                for (int c = 0; c < _fittedComponents; c++) compCol[c] = FittedComponents[c, j];
-                reconstructed[j] = Engine.DotProduct(projected, compCol);
-            }
-
-            // Compute reconstruction error (residual from unretained components)
-            T reconstructionError = NumOps.Zero;
-            for (int j = 0; j < d; j++)
-            {
-                T diff = NumOps.Subtract(centered[j], reconstructed[j]);
-                reconstructionError = NumOps.Add(reconstructionError, NumOps.Multiply(diff, diff));
-            }
-
-            // Compute Mahalanobis distance in PCA space (distance along retained components,
-            // weighted by inverse eigenvalues). This catches outliers that lie far from the mean
-            // along principal component directions, even when reconstruction error is low.
-            T mahalanobis = NumOps.Zero;
-            T eigenFloor = NumOps.FromDouble(EigenvalueFloor);
-            for (int c = 0; c < _fittedComponents; c++)
-            {
-                T eigenvalue = FittedExplainedVariance[c];
-                if (NumOps.GreaterThan(eigenvalue, eigenFloor))
-                {
-                    T proj = projected[c];
-                    mahalanobis = NumOps.Add(mahalanobis, NumOps.Divide(NumOps.Multiply(proj, proj), eigenvalue));
-                }
-            }
-
-            // Combined score: Hotelling's T² (Mahalanobis in PC space) + SPE/Q (reconstruction error).
-            scores[i] = NumOps.Add(mahalanobis, reconstructionError);
-        }
-
-        return scores;
+        // Combined score: Hotelling's T² (Mahalanobis in PC space) + SPE/Q (reconstruction error).
+        return engine.TensorAdd(mahalanobis, reconstructionError).ToVector();
     }
 
-    private Matrix<T> ComputeCovariance(Matrix<T> centered, int n, int d)
+    private int DetermineComponents(Tensor<T> eigenvalues)
     {
-        var cov = new Matrix<T>(d, d);
-
-        // Pre-allocate column vectors outside all loops
-        var colI = new Vector<T>(n);
-        var colJ = new Vector<T>(n);
-        for (int i = 0; i < d; i++)
+        // Find number of components to explain variance threshold: the first count whose cumulative
+        // positive variance reaches the threshold fraction of the total positive variance
+        var engine = Engine;
+        int count = eigenvalues.Length;
+        var positive = engine.TensorWhere(engine.TensorGreaterThan(eigenvalues, NumOps.Zero), eigenvalues,
+            Tensor<T>.CreateZeros(new[] { count }));
+        var cumulative = engine.TensorCumSum(positive, 0);
+        T totalVariance = engine.TensorSum(engine.TensorSlice(cumulative, new[] { count - 1 }, new[] { 1 }));
+        if (!NumOps.GreaterThan(totalVariance, NumOps.Zero))
         {
-            for (int k = 0; k < n; k++) colI[k] = centered[k, i];
-
-            for (int j = i; j < d; j++)
-            {
-                for (int k = 0; k < n; k++) colJ[k] = centered[k, j];
-                cov[i, j] = NumOps.Divide(Engine.DotProduct(colI, colJ), NumOps.FromDouble(n - 1));
-                cov[j, i] = cov[i, j];
-            }
+            return count;
         }
 
-        return cov;
-    }
-
-    private (Vector<T> eigenvalues, Matrix<T> eigenvectors) ComputeEigenDecomposition(Matrix<T> matrix, int d)
-    {
-        // Simplified power iteration method for eigendecomposition
-        var random = RandomHelper.CreateSeededRandom(_randomSeed);
-        var eigenvalues = new Vector<T>(d);
-        var eigenvectors = new Matrix<T>(d, d);
-        var A = CopyMatrix(matrix, d);
-
-        for (int e = 0; e < d; e++)
+        var reached = engine.ScalarMinusTensor(NumOps.One, engine.TensorLessThan(
+            engine.TensorDivideScalar(cumulative, totalVariance), NumOps.FromDouble(_varianceThreshold)));
+        if (!NumOps.GreaterThan(engine.TensorSum(reached), NumOps.Zero))
         {
-            // Initialize random vector
-            var v = new Vector<T>(d);
-            for (int j = 0; j < d; j++)
-            {
-                v[j] = NumOps.FromDouble(random.NextDouble() - 0.5);
-            }
-
-            // Power iteration
-            for (int iter = 0; iter < 100; iter++)
-            {
-                // Multiply A * v
-                var Av = new Vector<T>(d);
-                for (int i = 0; i < d; i++)
-                {
-                    T sum = NumOps.Zero;
-                    for (int j = 0; j < d; j++)
-                    {
-                        sum = NumOps.Add(sum, NumOps.Multiply(A[i, j], v[j]));
-                    }
-                    Av[i] = sum;
-                }
-
-                // Normalize
-                T norm = NumOps.Sqrt(Engine.DotProduct(Av, Av));
-
-                if (NumOps.LessThan(norm, NumOps.FromDouble(1e-10))) break;
-
-                for (int j = 0; j < d; j++)
-                {
-                    v[j] = NumOps.Divide(Av[j], norm);
-                }
-            }
-
-            // Compute eigenvalue: v'Av
-            var Av2 = new Vector<T>(d);
-            for (int i = 0; i < d; i++)
-            {
-                T sum = NumOps.Zero;
-                for (int j = 0; j < d; j++)
-                {
-                    sum = NumOps.Add(sum, NumOps.Multiply(A[i, j], v[j]));
-                }
-                Av2[i] = sum;
-            }
-
-            T eigenvalue = Engine.DotProduct(v, Av2);
-
-            eigenvalues[e] = eigenvalue;
-            for (int j = 0; j < d; j++)
-            {
-                eigenvectors[e, j] = v[j];
-            }
-
-            // Deflate matrix: A = A - lambda * v * v'
-            for (int i = 0; i < d; i++)
-            {
-                for (int j = 0; j < d; j++)
-                {
-                    A[i, j] = NumOps.Subtract(A[i, j],
-                        NumOps.Multiply(eigenvalue, NumOps.Multiply(v[i], v[j])));
-                }
-            }
+            return count;
         }
 
-        return (eigenvalues, eigenvectors);
-    }
-
-    private Matrix<T> CopyMatrix(Matrix<T> source, int d)
-    {
-        var copy = new Matrix<T>(d, d);
-        for (int i = 0; i < d; i++)
-        {
-            for (int j = 0; j < d; j++)
-            {
-                copy[i, j] = source[i, j];
-            }
-        }
-        return copy;
-    }
-
-    private int DetermineComponents(Vector<T> eigenvalues)
-    {
-        // Find number of components to explain variance threshold
-        T totalVariance = NumOps.Zero;
-        for (int i = 0; i < eigenvalues.Length; i++)
-        {
-            T ev = eigenvalues[i];
-            if (NumOps.GreaterThan(ev, NumOps.Zero))
-                totalVariance = NumOps.Add(totalVariance, ev);
-        }
-
-        T cumulativeVariance = NumOps.Zero;
-        T threshold = NumOps.FromDouble(_varianceThreshold);
-        for (int i = 0; i < eigenvalues.Length; i++)
-        {
-            T ev = eigenvalues[i];
-            if (NumOps.GreaterThan(ev, NumOps.Zero))
-                cumulativeVariance = NumOps.Add(cumulativeVariance, ev);
-
-            if (NumOps.GreaterThan(totalVariance, NumOps.Zero) &&
-                !NumOps.LessThan(NumOps.Divide(cumulativeVariance, totalVariance), threshold))
-            {
-                return i + 1;
-            }
-        }
-
-        return eigenvalues.Length;
+        return engine.TensorArgMax(reached, 0).ToArray()[0] + 1;
     }
 }

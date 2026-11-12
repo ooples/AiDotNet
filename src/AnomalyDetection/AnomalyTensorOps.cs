@@ -698,4 +698,17 @@ internal static class AnomalyTensorOps
 
         return Engine.TensorGather(v.AsTensor(), Vector<int>.Wrap(indices).AsTensor(), 0).ToVector();
     }
+
+    /// <summary>
+    /// Symmetric eigendecomposition with the eigenvalues in descending order ([d]) and the matching
+    /// eigenvectors as the rows of a [d, d] tensor.
+    /// </summary>
+    internal static (Tensor<T> Values, Tensor<T> Vectors) SymmetricEigenDescending<T>(Tensor<T> symmetric)
+    {
+        var engine = Engine;
+        var (values, vectors) = AiDotNet.Helpers.LinalgDispatch<T>.Eigh(symmetric);
+        var order = engine.TensorArgsort(values, 0, true);
+        return (engine.TensorGather(values, order, 0),
+            engine.TensorTranspose(engine.TensorIndexSelect(vectors, order, 1)));
+    }
 }
