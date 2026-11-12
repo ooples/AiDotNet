@@ -110,4 +110,87 @@ public class FederatedElementwiseSweep29bReferenceTests
 
         Assert.Equal(new[] { 2.0, 3.0, 4.0 }, aggregated.ToArray());
     }
+
+    [Fact(Timeout = 60000)]
+    public async Task FederatedAdapterTuning_HoulsbyAdaptersHaveTwoPerLayerWithBothBiases()
+    {
+        await Task.Yield();
+
+        // Houlsby et al. 2019 adapter: x + Up(ReLU(Down x + b_down)) + b_up, two adapters per layer.
+        // d = 2, m = 1: params per adapter = 2*2*1 + 1 + 2 = 7, so one layer holds 14 parameters.
+        var tuning = new FederatedAdapterTuning<double>(modelDim: 100, bottleneckDim: 1, numAdaptedLayers: 1, layerDim: 2);
+        Assert.Equal(14, tuning.AdapterParameterCount);
+
+        // Down = [1, 0], Up = [2, 3], b_down = 0.5, b_up = [0.1, 0.2]; x = [1, -1]:
+        // hidden = ReLU(1 + 0.5) = 1.5, adapter = [3 + 0.1, 4.5 + 0.2], output = [4.1, 3.7].
+        var ffnAdapter = new[] { 1.0, 0.0, 2.0, 3.0, 0.5, 0.1, 0.2 };
+        var all = new Vector<double>(new double[7].Concat(ffnAdapter).ToArray());
+        var extracted = tuning.GetLayerAdapterParams(all, layerIndex: 0, position: 1);
+        Assert.Equal(ffnAdapter, extracted);
+
+        var output = tuning.ApplyAdapterForward(new[] { 1.0, -1.0 }, extracted);
+        Assert.Equal(4.1, output[0], Precision);
+        Assert.Equal(3.7, output[1], Precision);
+    }
+
+    [Fact(Timeout = 60000)]
+    public async Task FederatedLoRA_ExactAggregationResidualIsMeanProductMinusProductOfMeans()
+    {
+        await Task.Yield();
+
+        // FedEx-LoRA (Sun et al. 2025): residual = avg(B_k A_k) - avg(B) avg(A).
+        // Client 0: B = 1, A = 2; client 1: B = 3, A = 4 (rank 1, 1x1 layer): avg(BA) = (2 + 12) / 2 = 7,
+        // avg(B) avg(A) = 2 * 3 = 6, so the residual is 1. The averaged factors are B = 2, A = 3.
+        var lora = new FederatedLoRA<double>(modelDim: 10, rank: 1, alpha: 2.0, numAdaptedLayers: 1, layerInputDim: 1, layerOutputDim: 1);
+        var clients = new Dictionary<int, Vector<double>>
+        {
+            [0] = new Vector<double>(new[] { 1.0, 2.0 }),
+            [1] = new Vector<double>(new[] { 3.0, 4.0 }),
+        };
+
+        var residual = lora.ComputeExactAggregationResidual(clients, null);
+        Assert.Equal(new[] { 1, 1, 1 }, residual.Shape.ToArray());
+        Assert.Equal(1.0, residual[0, 0, 0], Precision);
+        Assert.Equal(new[] { 2.0, 3.0 }, lora.AggregateAdapters(clients, null).ToArray());
+
+        // Merge writes the factors unscaled (alpha / rank = 2 is applied in the forward pass).
+        var merged = lora.MergeAdapterParameters(new Vector<double>(new[] { 9.0, 1.0, 1.0 }), new Vector<double>(new[] { 2.0, 3.0 }));
+        Assert.Equal(new[] { 9.0, 2.0, 3.0 }, merged.ToArray());
+    }
+
+    [Fact(Timeout = 60000)]
+    public async Task HeterogeneousLoRA_FlexLoRAAveragesFullUpdatesThenTruncatesBySvd()
+    {
+        await Task.Yield();
+
+        // FlexLoRA (Bai et al. 2024): dW = sum_k p_k B_k A_k, then SVD truncation at the requested rank.
+        // layerDim = 2. Client 0 (rank 1): B = [1, 0]^T, A = [2, 0] -> diag(2, 0).
+        // Client 1 (rank 2): B = I, A = [[0, 0], [0, 1]] -> diag(0, 1). Equal weights: dW = diag(1, 0.5).
+        var lora = new HeterogeneousLoRA<double>(modelDim: 100, layerDim: 2, targetRank: 1, maxRank: 2);
+        var clients = new Dictionary<int, Vector<double>>
+        {
+            [0] = new Vector<double>(new[] { 1.0, 0.0, 2.0, 0.0 }),
+            [1] = new Vector<double>(new[] { 1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0 }),
+        };
+
+        // Rank 1: the best approximation is diag(1, 0).
+        var rank1 = lora.AggregateAdapters(clients, null);
+        Assert.Equal(4, rank1.Length);
+        Assert.Equal(1.0, rank1[0] * rank1[2], Precision);
+        Assert.Equal(0.0, rank1[0] * rank1[3], Precision);
+        Assert.Equal(0.0, rank1[1] * rank1[2], Precision);
+        Assert.Equal(0.0, rank1[1] * rank1[3], Precision);
+
+        // Rank 2 reproduces dW = diag(1, 0.5) exactly. B is [2 x 2] then A is [2 x 2], both row-major.
+        var rank2 = lora.AggregateAdaptersForRank(clients, null, 2);
+        var expected = new[,] { { 1.0, 0.0 }, { 0.0, 0.5 } };
+        for (int i = 0; i < 2; i++)
+        {
+            for (int j = 0; j < 2; j++)
+            {
+                double product = rank2[i * 2] * rank2[4 + j] + rank2[i * 2 + 1] * rank2[4 + 2 + j];
+                Assert.Equal(expected[i, j], product, Precision);
+            }
+        }
+    }
 }
