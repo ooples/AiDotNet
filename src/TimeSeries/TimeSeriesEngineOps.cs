@@ -255,6 +255,30 @@ internal static class TimeSeriesEngineOps<T>
         return Array.FindIndex(hits.ToArray(), bit => (bool)bit);
     }
 
+    /// <summary>
+    /// Index of the first element that is the largest of those strictly above <paramref name="start"/>
+    /// (a running strict-greater scan seeded with <paramref name="start"/>; NaN never wins), or -1.
+    /// </summary>
+    public static int FirstStrictMaximumAbove(Vector<T> values, T start)
+    {
+        if (values.Length == 0)
+        {
+            return -1;
+        }
+
+        var tensor = Tensor<T>.FromVector(values);
+        var above = Engine.TensorGreaterThan(tensor, start);
+        var candidates = Engine.TensorWhere(above, tensor, Engine.TensorFullLike(tensor, start));
+        T maximum = Engine.TensorMaxValue(candidates);
+        if (!NumOps.GreaterThan(maximum, start))
+        {
+            return -1;
+        }
+
+        var hits = Engine.TensorEqScalar(candidates, maximum);
+        return Array.FindIndex(hits.ToArray(), bit => (bool)bit);
+    }
+
     /// <summary>The first <paramref name="length"/> elements of <paramref name="pattern"/> repeated periodically.</summary>
     public static Vector<T> RepeatPeriodic(Vector<T> pattern, int length)
     {
