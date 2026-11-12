@@ -247,12 +247,13 @@ public partial class MegaTTS2<T> : TtsModelBase<T>, IEndToEndTts<T>
         var phones = _options.Language == MegaTtsLanguage.English ? NatSpeechFrontEnd.EnglishPhonesOf(text) : NatSpeechFrontEnd.ChinesePhonesOf(text);
         var ids = NatSpeechFrontEnd.Encode(phones, _vocabulary).Take(_options.MaxTextLength).ToArray();
         if (ids.Length == 0) throw new ArgumentException("The text has no phonemes.", nameof(text));
-        return new Tensor<T>(new[] { ids.Length }, new Vector<T>(ids.Select(i => NumOps.FromDouble(i)).ToArray()));
+        return IdTensor(ids);
     }
 
     internal int[] Ids(Tensor<T> tokens, string name)
     {
-        var ids = tokens.ToArray().Select(v => (int)Math.Round(NumOps.ToDouble(v))).ToArray();
+        var ids = RoundedIds(tokens);
+
         if (ids.Length == 0) throw new ArgumentException("There are no phonemes.", name);
         if (ids.Any(i => i < 0 || i >= _vocabulary.Length))
             throw new ArgumentOutOfRangeException(name, $"Phone ids lie in [0, {_vocabulary.Length}).");
