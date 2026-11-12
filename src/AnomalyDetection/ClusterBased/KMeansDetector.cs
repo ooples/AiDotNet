@@ -161,7 +161,7 @@ public partial class KMeansDetector<T> : AnomalyDetectorBase<T>
         var points = AnomalyTensorOps.ToTensor(X);
 
         // Initialize centroids using K-Means++
-        var centroids = InitializeCentroids(points, random);
+        var centroids = AnomalyTensorOps.ToTensor(InitializeCentroids(X, random));
 
         // Assignment array
         var assignments = new int[n];
@@ -221,44 +221,72 @@ public partial class KMeansDetector<T> : AnomalyDetectorBase<T>
         return centroids.ToMatrix();
     }
 
-    private Tensor<T> InitializeCentroids(Tensor<T> points, Random random)
+    private Matrix<T> InitializeCentroids(Matrix<T> X, Random random)
     {
         // K-Means++ initialization
-        var engine = Engine;
-        int n = points.Shape[0];
-        int k = _k;
+        int n = X.Rows;
+        int d = X.Columns;
+        var centroids = new Matrix<T>(_k, d);
 
-        // Random draws in master's order: the first centroid index, then one uniform draw per further centroid
+        // Choose first centroid randomly
         int firstIdx = random.Next(n);
-        var draws = new double[Math.Max(k - 1, 0)];
-        for (int c = 1; c < k; c++)
+        for (int j = 0; j < d; j++)
         {
-            draws[c - 1] = random.NextDouble();
+            centroids[0, j] = X[firstIdx, j];
         }
 
-        var uniform = Tensor<double>.FromVector(Vector<double>.Wrap(draws), new[] { draws.Length }).Cast<T>();
-        var chosen = new Tensor<T>[k];
-        chosen[0] = engine.TensorSliceAxis(points, 0, firstIdx);
-
-        // Distance of every point to its nearest chosen centroid, updated as centroids are added
-        var minDist = engine.Fill(n, NumOps.MaxValue).AsTensor();
-        for (int c = 1; c < k; c++)
+        // Choose remaining centroids
+        for (int c = 1; c < _k; c++)
         {
-            minDist = engine.TensorMin(minDist, engine.TensorSqrt(
-                AnomalyTensorOps.SquaredDistancesToPoint(points, chosen[c - 1])));
+            // Calculate distance to nearest centroid for each point
+            // K-Means++ distance calculation — compute in T, convert to double only for sampling
+            var distances = new double[n];
+            double totalDist = 0;
 
-            // Next centroid with probability proportional to distance squared: the first point whose
-            // cumulative weight reaches uniform * total (the first point when none does)
-            var cumulative = engine.TensorCumSum(engine.TensorSquare(minDist), 0);
-            var total = engine.TensorSlice(cumulative, new[] { n - 1 }, new[] { 1 });
-            var threshold = engine.TensorBroadcastTo(
-                engine.TensorMultiply(engine.TensorSlice(uniform, new[] { c - 1 }, new[] { 1 }), total), new[] { n });
-            var reached = engine.TensorAdd(
-                engine.TensorGreaterThan(cumulative, threshold), engine.TensorEquals(cumulative, threshold));
-            int selectedIdx = AnomalyTensorOps.FirstArgMax(reached);
-            chosen[c] = engine.TensorSliceAxis(points, 0, selectedIdx);
+            for (int i = 0; i < n; i++)
+            {
+                T minDist = NumOps.MaxValue;
+                var point = new Vector<T>(X.GetRowReadOnlySpan(i).ToArray());
+
+                for (int prevC = 0; prevC < c; prevC++)
+                {
+                    var centroid = new Vector<T>(centroids.GetRowReadOnlySpan(prevC).ToArray());
+                    // Vectorized distance via Engine
+                    var diff = Engine.Subtract(point, centroid);
+                    T dist = NumOps.Sqrt(Engine.DotProduct(diff, diff));
+                    if (NumOps.LessThan(dist, minDist))
+                    {
+                        minDist = dist;
+                    }
+                }
+
+                // Convert to double only at sampling boundary (random.NextDouble is double)
+                double minDistDouble = NumOps.ToDouble(minDist);
+                distances[i] = minDistDouble * minDistDouble;
+                totalDist += distances[i];
+            }
+
+            // Choose next centroid with probability proportional to distance squared
+            double threshold = random.NextDouble() * totalDist;
+            double cumulative = 0;
+            int selectedIdx = 0;
+
+            for (int i = 0; i < n; i++)
+            {
+                cumulative += distances[i];
+                if (cumulative >= threshold)
+                {
+                    selectedIdx = i;
+                    break;
+                }
+            }
+
+            for (int j = 0; j < d; j++)
+            {
+                centroids[c, j] = X[selectedIdx, j];
+            }
         }
 
-        return engine.TensorStack(chosen, 0);
+        return centroids;
     }
 }

@@ -122,14 +122,14 @@ public partial class GESDDetector<T> : AnomalyDetectorBase<T>
         // R = max |x - mean| / s with s the sample standard deviation (n - 1 divisor), Rosner (1983)
         (_means, _stds) = AnomalyTensorOps.ColumnMeanStd(X, 1);
 
-        // Precompute critical values for each iteration
-        var lambdas = new double[_maxOutliers];
+        // Precompute critical values for each iteration, each lambda_i converted to T once
+        var criticalValues = new Vector<T>(_maxOutliers);
         for (int i = 0; i < _maxOutliers; i++)
         {
-            lambdas[i] = ComputeLambda(n, i + 1, _alpha);
+            criticalValues[i] = NumOps.FromDouble(ComputeLambda(n, i + 1, _alpha));
         }
 
-        _criticalValues = Tensor<double>.FromVector(Vector<double>.Wrap(lambdas), new[] { _maxOutliers }).Cast<T>().ToVector();
+        _criticalValues = criticalValues;
 
         // Calculate scores for training data to set threshold
         var trainingScores = ScoreAnomaliesInternal(X);

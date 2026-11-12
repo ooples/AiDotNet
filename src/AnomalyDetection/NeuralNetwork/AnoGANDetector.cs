@@ -290,16 +290,35 @@ public partial class AnoGANDetector<T> : AnomalyDetectorBase<T>
     /// </remarks>
     private Tensor<T> SampleLatent(Random rng, int rows)
     {
-        // Box-Muller draws, row by row and latent unit by latent unit
-        var draws = new double[rows * _latentDim];
-        for (int i = 0; i < draws.Length; i++)
+        // One latent code per row, drawn in row order (latent unit by latent unit within a row)
+        if (rows == 0)
+        {
+            return Tensor<T>.CreateZeros(new[] { 0, _latentDim });
+        }
+
+        var codes = new Tensor<T>[rows];
+        for (int r = 0; r < rows; r++)
+        {
+            codes[r] = SampleLatent(rng).AsTensor();
+        }
+
+        return Engine.TensorStack(codes, 0);
+    }
+
+    /// <summary>
+    /// Draws one latent code from the standard normal using <paramref name="rng"/>.
+    /// </summary>
+    private Vector<T> SampleLatent(Random rng)
+    {
+        var z = new Vector<T>(_latentDim);
+        for (int i = 0; i < _latentDim; i++)
         {
             double u1 = 1.0 - rng.NextDouble();
             double u2 = 1.0 - rng.NextDouble();
-            draws[i] = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2);
+            double val = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2);
+            z[i] = NumOps.FromDouble(val);
         }
-
-        return Tensor<double>.FromVector(Vector<double>.Wrap(draws), new[] { rows, _latentDim }).Cast<T>();
+        return z;
     }
 
     // Batched generator: h1 = LeakyReLU(z genW1 + genB1), h2 = LeakyReLU(h1 genW2 + genB2),
