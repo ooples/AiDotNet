@@ -189,6 +189,29 @@ internal static class WaveletEngineOps<T>
     }
 
     /// <summary>
+    /// The sample positions <c>i - size / 2</c> (integer division) for <c>i = 0 .. size - 1</c>.
+    /// </summary>
+    internal static Tensor<T> CenteredGrid(int size)
+    {
+        if (size <= 0)
+        {
+            return new Tensor<T>(new[] { 0 });
+        }
+
+        int half = size / 2;
+        return Engine.TensorArange<T>(-half, size - half, 1);
+    }
+
+    /// <summary>
+    /// The first <paramref name="length"/> entries of <paramref name="input"/> as a tensor (the whole vector when
+    /// it already has that length).
+    /// </summary>
+    internal static Tensor<T> Prefix(Vector<T> input, int length)
+    {
+        return Tensor<T>.FromVector(input.Length == length ? input : input.GetSubVector(0, length));
+    }
+
+    /// <summary>
     /// Element-wise sum of the first <c>min(a.Length, b.Length)</c> entries of two vectors.
     /// </summary>
     internal static Vector<T> AddTruncated(Vector<T> a, Vector<T> b)
