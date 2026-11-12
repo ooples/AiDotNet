@@ -97,7 +97,10 @@ public class FClassification<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISup
             engine.TensorWhere(usable, msWithin, PreprocessingTensorOps.Filled(new[] { p }, NumOps.One))), zeros);
 
         _fScores = fScores.ToVector();
-        _pValues = FeatureSelectionTensorOps.FSurvival(fScores, dfBetween, dfWithin).ToVector();
+        // scipy.stats.f.sf; a degenerate split (one class, or no within-class degrees of freedom) keeps p = 1
+        _pValues = (dfBetween > 0 && dfWithin > 0
+            ? FilterStatisticTensorOps.FSurvival(fScores, dfBetween, dfWithin)
+            : PreprocessingTensorOps.Filled(new[] { p }, NumOps.One)).ToVector();
 
         // Select top features by F-score
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
