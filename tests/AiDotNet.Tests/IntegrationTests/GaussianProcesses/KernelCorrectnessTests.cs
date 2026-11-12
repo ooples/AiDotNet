@@ -550,11 +550,31 @@ public class KernelCorrectnessTests
     }
 
     [Fact(Timeout = 120000)]
-    public async Task GridInterpolationKernel_PointOutsideGrid_Throws()
+    public async Task GridInterpolationKernel_PointOutsideGrid_ClampsToTheBoundary()
     {
+        // Master's nearest-grid-point interpolation accepted any x and used the boundary grid points beyond the
+        // grid; a point outside the grid is interpolated exactly as its per-dimension clamp to the grid bounds.
         var kernel = GPyTorchReferenceKernel();
-        var outside = new Vector<double>(new[] { 1.2, 0.0 });
-        Assert.Throws<ArgumentOutOfRangeException>(() => kernel.Calculate(outside, outside));
+        var outside1 = new Vector<double>(new[] { 1.2, 0.3 });
+        var outside2 = new Vector<double>(new[] { -0.5, 2.7 });
+        var clamped1 = new Vector<double>(new[] { 1.0, 0.3 });
+        var clamped2 = new Vector<double>(new[] { 0.0, 2.0 });
+
+        double k = kernel.Calculate(outside1, outside2);
+        Assert.False(double.IsNaN(k));
+        Assert.Equal(kernel.Calculate(clamped1, clamped2), k, 12);
+        Assert.Equal(kernel.Calculate(clamped1, clamped1), kernel.Calculate(outside1, outside1), 12);
+
+        var (outsideIndices, outsideWeights) = kernel.ComputeInterpolationMatrix(Matrix<double>.FromRowVectors(new[] { outside1, outside2 }));
+        var (clampedIndices, clampedWeights) = kernel.ComputeInterpolationMatrix(Matrix<double>.FromRowVectors(new[] { clamped1, clamped2 }));
+        for (int row = 0; row < 2; row++)
+        {
+            for (int c = 0; c < outsideWeights.Columns; c++)
+            {
+                Assert.Equal(clampedIndices[row, c], outsideIndices[row, c]);
+                Assert.Equal(clampedWeights[row, c], outsideWeights[row, c], 12);
+            }
+        }
     }
 
     [Fact(Timeout = 120000)]

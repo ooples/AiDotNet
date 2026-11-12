@@ -40,11 +40,6 @@ public class GridInterpolationKernel<T> : IKernelFunction<T>
     private const int InterpolationPoints = 4;
 
     /// <summary>
-    /// Distance a target may lie outside the grid before it is rejected (GPyTorch uses 1e-7).
-    /// </summary>
-    private const double RangeTolerance = 1e-7;
-
-    /// <summary>
     /// Relative tolerance of the uniform-spacing check, loose enough for float grids.
     /// </summary>
     private const double SpacingTolerance = 1e-6;
@@ -279,8 +274,8 @@ public class GridInterpolationKernel<T> : IKernelFunction<T>
     /// <param name="x1">First point.</param>
     /// <param name="x2">Second point.</param>
     /// <returns>Approximate kernel value via grid interpolation.</returns>
-    /// <exception cref="ArgumentOutOfRangeException">A point lies outside the grid.</exception>
     /// <remarks>
+    /// <para>Points outside the grid are clamped to its boundary, as the nearest-grid-point interpolation did.</para>
     /// <para>
     /// <b>For Beginners:</b> Approximates k(x1, x2) using interpolation:
     /// k(x1, x2) ≈ w(x1)' × K_grid × w(x2)
@@ -312,11 +307,11 @@ public class GridInterpolationKernel<T> : IKernelFunction<T>
     /// <summary>
     /// Computes the interpolation matrix W for a set of data points.
     /// </summary>
-    /// <param name="X">Data points (n × d), inside the grid.</param>
+    /// <param name="X">Data points (n × d); points outside the grid are clamped to its boundary.</param>
     /// <returns>Sparse interpolation matrix W (n × M): the flat grid indices and the weights of the
     /// 4^d stencil entries of each row, both n × 4^d.</returns>
-    /// <exception cref="ArgumentOutOfRangeException">A point lies outside the grid.</exception>
     /// <remarks>
+    /// <para>Points outside the grid are clamped to its boundary, as the nearest-grid-point interpolation did.</para>
     /// <para>
     /// <b>For Beginners:</b> The interpolation matrix W maps each data point to its
     /// interpolation weights on the grid. Each row has only a few non-zeros
@@ -484,12 +479,11 @@ public class GridInterpolationKernel<T> : IKernelFunction<T>
         var ones = Tensor<T>.CreateDefault(pointShape, _numOps.One);
         var starts = PerDimension(engine, _gridStarts, pointShape);
 
-        // GPyTorch rejects targets outside the grid.
-        var belowGrid = engine.TensorSubtract(starts, x);
-        var aboveGrid = engine.TensorSubtract(x, PerDimension(engine, _gridEnds, pointShape));
-        if (_numOps.GreaterThan(engine.TensorMaxValue(engine.TensorMax(belowGrid, aboveGrid)), _numOps.FromDouble(RangeTolerance)))
-            throw new ArgumentOutOfRangeException(nameof(x),
-                "Points must lie inside the interpolation grid; extend the grid bounds to cover the data.");
+        // A target outside the grid is clamped to the grid's boundary in each dimension, so it takes the boundary
+        // stencil (all weight on the nearest boundary grid point). This keeps the previous nearest-grid-point
+        // behaviour: prediction slightly past the training range returns the boundary value instead of throwing.
+        // (GPyTorch instead refits the grid bounds to cover the inputs; a fixed grid can only clamp.)
+        x = engine.TensorClampTensor(x, starts, PerDimension(engine, _gridEnds, pointShape));
 
         // Position in grid-index space, its left-bounding grid point and the distance from it.
         var spacing = engine.TensorClampMin(_gridSpacings, _numOps.FromDouble(1e-10));
