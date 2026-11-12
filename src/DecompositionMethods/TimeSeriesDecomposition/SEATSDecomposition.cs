@@ -301,12 +301,13 @@ public class SEATSDecomposition<T> : TimeSeriesDecompositionBase<T>
 
         // Design the canonical seasonal filter
         int filterLength = s * Math.Max(P, Q) + 1;
-        T normalizer = NumOps.Divide(NumOps.One, NumOps.FromDouble(s - 1));
         if (s < 2)
         {
-            // No seasonal frequencies: an empty sum scaled by 1 / (s - 1).
-            return Engine.TensorMultiplyScalar(new Tensor<T>(new[] { filterLength }), normalizer).ToVector();
+            // No seasonal frequencies (j = 1 .. s - 1 is empty): the seasonal filter is zero.
+            return new Vector<T>(filterLength);
         }
+
+        T normalizer = NumOps.Divide(NumOps.One, NumOps.FromDouble(s - 1));
 
         // Calculate the spectral density at seasonal frequencies
         Tensor<T> spectralDensities = CalculateSpectralDensitiesAtSeasonalFrequencies(sarParams, smaParams, s);
@@ -560,6 +561,12 @@ public class SEATSDecomposition<T> : TimeSeriesDecompositionBase<T>
         if (_signalLength == 0)
         {
             return new Vector<T>(0);
+        }
+
+        if (_filterLength == 0)
+        {
+            // An empty filter (seasonal period 0 in the Burman design) passes no signal.
+            return new Vector<T>(_signalLength);
         }
 
         // Full convolution with the reversed filter and zero padding:

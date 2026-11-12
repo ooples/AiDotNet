@@ -313,6 +313,51 @@ public class TimeSeriesDecompositionIntegrationTests
         Assert.True(components.Count > 0, "SEATS should produce components");
     }
 
+    [Theory]
+    [InlineData(1)]
+    [InlineData(0)]
+    public void SEATS_CanonicalSeasonalFilter_NoSeasonalFrequencies_IsZeroNotNaN(int seasonalPeriod)
+    {
+        // With s < 2 the sum over seasonal frequencies j = 1 .. s - 1 is empty, so the filter is
+        // zero; scaling it by 1 / (s - 1) gave 0 * Infinity = NaN for s = 1.
+        var decomp = new SEATSDecomposition<double>(CreateSeasonalTimeSeries());
+        var model = new AiDotNet.TimeSeries.SARIMAModel<double>(
+            new SARIMAOptions<double> { SeasonalPeriod = seasonalPeriod });
+        var design = typeof(SEATSDecomposition<double>).GetMethod(
+            "DesignCanonicalSeasonalFilter",
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+        Assert.NotNull(design);
+
+        var filter = Assert.IsType<Vector<double>>(design.Invoke(decomp, new object[] { model }));
+
+        Assert.True(filter.Length > 0);
+        for (int i = 0; i < filter.Length; i++)
+        {
+            Assert.Equal(0.0, filter[i]);
+        }
+    }
+
+    [Fact]
+    public void SEATS_ApplyFilter_EmptyFilter_ReturnsZeroSignalOfSameLength()
+    {
+        // A Burman seasonal filter has length 0 when the seasonal period is 0; filtering with it
+        // must give a zero component of the signal length instead of a Conv1D shape error.
+        var decomp = new SEATSDecomposition<double>(CreateSeasonalTimeSeries());
+        var apply = typeof(SEATSDecomposition<double>).GetMethod(
+            "ApplyFilter",
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+        Assert.NotNull(apply);
+        var signal = new Vector<double>(new[] { 1.0, 2.0, 3.0, 4.0 });
+
+        var filtered = Assert.IsType<Vector<double>>(apply.Invoke(decomp, new object[] { signal, new Vector<double>(0) }));
+
+        Assert.Equal(4, filtered.Length);
+        for (int i = 0; i < filtered.Length; i++)
+        {
+            Assert.Equal(0.0, filtered[i]);
+        }
+    }
+
     #endregion
 
     #region X11Decomposition Tests
