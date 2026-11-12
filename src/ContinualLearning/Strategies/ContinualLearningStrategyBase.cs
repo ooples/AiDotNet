@@ -265,10 +265,7 @@ public abstract class ContinualLearningStrategyBase<T, TInput, TOutput> : IConti
     protected Vector<T> CloneVector(Vector<T> source)
     {
         var result = new Vector<T>(source.Length);
-        for (int i = 0; i < source.Length; i++)
-        {
-            result[i] = source[i];
-        }
+        source.AsSpan().CopyTo(result.AsWritableSpan());
         return result;
     }
 
