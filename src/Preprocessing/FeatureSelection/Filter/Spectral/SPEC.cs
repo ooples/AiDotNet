@@ -14,6 +14,13 @@ namespace AiDotNet.Preprocessing.FeatureSelection.Filter.Spectral;
 /// as captured by a similarity graph's spectral representation. It uses the
 /// eigenvectors of the graph Laplacian to evaluate feature quality.
 /// </para>
+/// <para>
+/// The score is phi3 of Zhao and Liu (2007), "Spectral Feature Selection for Supervised and Unsupervised
+/// Learning" (ICML): for the normalised Laplacian <c>L = I - D^-1/2 W D^-1/2</c> of a k-nearest-neighbour Gaussian
+/// graph, <c>sum_{j=2..k} (2 - lambda_j) (f^ . xi_j)^2</c> over its smallest eigenpairs (eigenvalues ascending, the
+/// trivial first one skipped) with <c>f^ = D^1/2 f / ||D^1/2 f||</c>; <c>k</c> is <c>nEigenvectors</c>. Features
+/// that vary smoothly over the graph score highest.
+/// </para>
 /// <para><b>For Beginners:</b> SPEC builds a graph where similar data points are
 /// connected. It then looks at the graph's "shape" (via eigenvectors) and asks:
 /// which features align well with this structure? Features that respect the natural
@@ -77,59 +84,43 @@ public class SPEC<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IFixedCountFeat
             FilterStatisticTensorOps.FilledLike(D, NumOps.One), engine.TensorSqrt(D), Math.Sqrt(1e-10), NumOps.Zero);
         var L = engine.TensorSubtract(engine.TensorEye<T>(n), engine.TensorMultiply(W, engine.TensorOuter(dInvSqrt, dInvSqrt)));
 
-        var eigenvectors = ComputeTopEigenvectors(L, n, Math.Min(_nEigenvectors, n - 1));
-
-        // standardised features (population std) projected on the eigenvectors: score = sum_k (f' v_k)^2
-        var centered = FilterStatisticTensorOps.CenterColumns(x);
-        var std = engine.TensorSqrt(FilterStatisticTensorOps.ColumnPopulationVariance(x));
-        var scale = FilterStatisticTensorOps.GuardedDivide(FilterStatisticTensorOps.FilledLike(std, NumOps.One), std, 1e-10, NumOps.One);
-        var standardized = engine.TensorMultiply(centered, FilterStatisticTensorOps.RowBroadcast(scale, n));
-        var scores = eigenvectors.Count == 0
-            ? new Tensor<T>(new[] { p })
-            : engine.ReduceSum(engine.TensorSquare(engine.TensorMatMul(
-                engine.TensorTranspose(standardized), engine.TensorConcatenate(eigenvectors.ToArray(), 1))), new[] { 1 }, false);
-        _specScores = scores.ToVector();
-
-        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(scores, _nFeaturesToSelect);
-
-        IsFitted = true;
-    }
-
-    // Power iteration (50 steps from the uniform vector) with deflation against the vectors already found; each
-    // eigenvector is an [n, 1] tensor.
-    private List<Tensor<T>> ComputeTopEigenvectors(Tensor<T> L, int n, int k)
-    {
-        var engine = Engine;
-        var eigenvectors = new List<Tensor<T>>();
-        if (k <= 0)
-            return eigenvectors;
-
-        var start = FilterStatisticTensorOps.Filled(new[] { n, 1 }, NumOps.FromDouble(1.0 / Math.Sqrt(n)));
-        var tolerance = NumOps.FromDouble(1e-10);
-        T one = NumOps.One;
-        for (int ev = 0; ev < k; ev++)
+        // Zhao and Liu (2007), "Spectral Feature Selection for Supervised and Unsupervised Learning", score phi3:
+        // sum over the eigenpairs j = 2..k of L in ascending eigenvalue order of (2 - lambda_j) (f^ . xi_j)^2, with
+        // f^ = D^1/2 f / ||D^1/2 f|| (the first eigenpair, lambda = 0 and xi proportional to D^1/2 1, is skipped).
+        // Larger is better. k is nEigenvectors, capped at n.
+        int k = Math.Min(_nEigenvectors, n);
+        Tensor<T> scores;
+        if (k < 2 || p == 0)
         {
-            var v = start;
-            for (int iter = 0; iter < 50; iter++)
-            {
-                var Lv = engine.TensorMatMul(L, v);
-                foreach (var prev in eigenvectors)
-                {
-                    var dot = engine.TensorMatMul(engine.TensorTranspose(prev), Lv);
-                    Lv = engine.TensorSubtract(Lv, engine.TensorMultiply(prev, engine.TensorBroadcastTo(dot, new[] { n, 1 })));
-                }
+            scores = new Tensor<T>(new[] { p });
+        }
+        else
+        {
+            var (values, vectors) = LinalgDispatch<T>.Eigh(L);
+            var index = engine.TensorArange<int>(1, k, 1);
+            var xi = engine.TensorIndexSelect(vectors, index, 1);
+            var weight = engine.TensorSubtract(
+                FilterStatisticTensorOps.Filled(new[] { k - 1 }, NumOps.FromDouble(2)), engine.TensorIndexSelect(values, index, 0));
 
-                var norm = engine.TensorBroadcastTo(
-                    engine.TensorSqrt(engine.ReduceSum(engine.TensorSquare(Lv), new[] { 0 }, true)), new[] { n, 1 });
-                var moved = engine.TensorGreaterThan(norm, tolerance);
-                var safeNorm = engine.TensorWhere(moved, norm, FilterStatisticTensorOps.FilledLike(norm, one));
-                v = engine.TensorWhere(moved, engine.TensorDivide(Lv, safeNorm), v);
-            }
-
-            eigenvectors.Add(v);
+            // D^1/2 f, scaled by its largest magnitude before the norm (f^ does not change, and the squares stay
+            // inside Half's range); a feature that is 0 on every connected row has no direction and scores 0
+            var weighted = engine.TensorMultiply(x, FilterStatisticTensorOps.ColumnBroadcast(engine.TensorSqrt(D), p));
+            var largest = PreprocessingTensorOps.ColumnMax(engine.TensorAbs(weighted));
+            var scaled = FilterStatisticTensorOps.GuardedDivide(
+                weighted, FilterStatisticTensorOps.RowBroadcast(largest, n), 0, NumOps.Zero);
+            var norm = engine.TensorSqrt(engine.ReduceSum(engine.TensorSquare(scaled), new[] { 0 }, false));
+            var unit = FilterStatisticTensorOps.GuardedDivide(scaled, FilterStatisticTensorOps.RowBroadcast(norm, n), 0, NumOps.Zero);
+            var alpha = engine.TensorMatMul(engine.TensorTranspose(unit), xi);
+            scores = engine.ReduceSum(
+                engine.TensorMultiply(engine.TensorSquare(alpha), FilterStatisticTensorOps.RowBroadcast(weight, p)),
+                new[] { 1 }, false);
         }
 
-        return eigenvectors;
+        _specScores = scores.ToVector();
+
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(scores, Math.Min(_nFeaturesToSelect, p));
+
+        IsFitted = true;
     }
 
     /// <inheritdoc />
