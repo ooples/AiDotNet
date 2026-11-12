@@ -225,43 +225,51 @@ public partial class HippoMemoryCellLayer<T> : LayerBase<T>, IShapeContract
 
     private (Tensor<T> A, Tensor<T> B) CreateHippoOperator(string measure, int order)
     {
-        var a = new Tensor<T>(new[] { order, order });
-        var b = new Tensor<T>(new[] { 1, order });
+        // The operator is a fixed constant built from fresh tensors, so it stays off the tape.
+        using var noGrad = new NoGradScope<T>();
+        var index = Engine.TensorArange<T>(0, order, 1.0);                                   // i
+        var r = Engine.TensorSqrt(Engine.TensorAddScalar(
+            Engine.TensorMultiplyScalar(index, NumOps.FromDouble(2.0)), NumOps.One));       // sqrt(2i + 1)
+        var ones = new Tensor<T>(new[] { order, order });
+        ones.Fill(NumOps.One);
 
-        for (int i = 0; i < order; i++)
+        Tensor<T> a;
+        Tensor<T> bVector;
+        switch (measure)
         {
-            double ri = Math.Sqrt(2.0 * i + 1.0);
-            switch (measure)
-            {
-                case "legs":
-                    b[0, i] = NumOps.FromDouble(ri);
-                    for (int j = 0; j <= i; j++)
-                    {
-                        double value = i == j
-                            ? -(i + 1.0)
-                            : -ri * Math.Sqrt(2.0 * j + 1.0);
-                        a[i, j] = NumOps.FromDouble(value);
-                    }
-                    break;
+            case "legs":
+                // A[i, j] = -r_i r_j below the diagonal, -(i + 1) on it, zero above; B[i] = r_i.
+                bVector = r;
+                a = Engine.TensorSubtract(
+                    Engine.TensorDiag(Engine.TensorNegate(Engine.TensorAddScalar(index, NumOps.One))),
+                    Engine.TensorTril(Engine.TensorOuter(r, r), -1));
+                break;
 
-                case "legt":
-                    b[0, i] = NumOps.FromDouble(0.5 * ri);
-                    for (int j = 0; j < order; j++)
-                    {
-                        double sign = i < j && ((i - j) & 1) != 0 ? -1.0 : 1.0;
-                        a[i, j] = NumOps.FromDouble(-0.5 * ri * Math.Sqrt(2.0 * j + 1.0) * sign);
-                    }
-                    break;
+            case "legt":
+                // A[i, j] = -0.5 r_i r_j, with the sign flipped where i < j and i - j is odd; B[i] = 0.5 r_i.
+                bVector = Engine.TensorMultiplyScalar(r, NumOps.FromDouble(0.5));
+                var two = new Tensor<T>(new[] { order });
+                two.Fill(NumOps.FromDouble(2.0));
+                var parity = Engine.ScalarMinusTensor(NumOps.One,
+                    Engine.TensorMultiplyScalar(Engine.TensorRemainder(index, two), NumOps.FromDouble(2.0)));  // (-1)^i
+                // sign = 1 - [i < j] * (1 - (-1)^(i + j)), i.e. -1 exactly where i < j and i - j is odd.
+                var sign = Engine.TensorSubtract(ones,
+                    Engine.TensorTriu(Engine.TensorSubtract(ones, Engine.TensorOuter(parity, parity)), 1));
+                a = Engine.TensorMultiplyScalar(
+                    Engine.TensorMultiply(Engine.TensorOuter(r, r), sign), NumOps.FromDouble(-0.5));
+                break;
 
-                default: // lagt
-                    b[0, i] = NumOps.One;
-                    for (int j = 0; j <= i; j++)
-                        a[i, j] = NumOps.FromDouble(i == j ? -0.5 : -1.0);
-                    break;
-            }
+            default: // lagt
+                // A = I / 2 - tril(ones); B = ones.
+                bVector = new Tensor<T>(new[] { order });
+                bVector.Fill(NumOps.One);
+                a = Engine.TensorSubtract(
+                    Engine.TensorMultiplyScalar(Engine.TensorEye<T>(order), NumOps.FromDouble(0.5)),
+                    Engine.TensorTril(ones, 0));
+                break;
         }
 
-        return (a, b);
+        return (a, Engine.Reshape(bVector, new[] { 1, order }));
     }
 
     private void InitializeParameters(bool usePaperDefaults)
@@ -359,6 +367,7 @@ public partial class HippoMemoryCellLayer<T> : LayerBase<T>, IShapeContract
         var hidden = new Tensor<T>(new[] { batchSize, _hiddenSize });
         Tensor<T>? memory = null;
         var outputs = new Tensor<T>[sequenceLength];
+        T minusOne = NumOps.FromDouble(-1.0);
 
         for (int step = 0; step < sequenceLength; step++)
         {
@@ -380,8 +389,7 @@ public partial class HippoMemoryCellLayer<T> : LayerBase<T>, IShapeContract
                 var gate = Engine.TensorMatMul(xm, _gateWeights);
                 gate = Engine.TensorAdd(gate, _gateBias);
                 gate = Engine.Sigmoid(gate);
-                var keep = Engine.TensorAddScalar(
-                    Engine.TensorMultiplyScalar(gate, NumOps.FromDouble(-1.0)), NumOps.One);
+                var keep = Engine.TensorAddScalar(Engine.TensorMultiplyScalar(gate, minusOne), NumOps.One);
                 hidden = Engine.TensorAdd(
                     Engine.TensorMultiply(keep, hidden),
                     Engine.TensorMultiply(gate, candidate));
@@ -496,42 +504,19 @@ public partial class HippoMemoryCellLayer<T> : LayerBase<T>, IShapeContract
         if (rhs.Rank != 2 || rhs.Shape[1] != _memoryOrder)
             throw new ArgumentException("HiPPO solve expects [batch*memory, memoryOrder].", nameof(rhs));
 
-        int rows = rhs.Shape[0];
-        int n = _memoryOrder;
-        T[] rhsData = rhs.IsContiguous && rhs._storageOffset == 0
-            ? rhs.DataVector.GetDataArray()
-            : rhs.GetFlattenedData();
-        T[] aData = _a.DataVector.GetDataArray();
-        var output = new Tensor<T>(new[] { rows, n });
-        T[] outputData = output.DataVector.GetDataArray();
-
-        for (int row = 0; row < rows; row++)
-        {
-            if (!transpose)
-            {
-                for (int i = 0; i < n; i++)
-                {
-                    double value = NumOps.ToDouble(rhsData[row * n + i]);
-                    for (int j = 0; j < i; j++)
-                        value += scale * NumOps.ToDouble(aData[i * n + j]) * NumOps.ToDouble(outputData[row * n + j]);
-                    double diagonal = 1.0 - scale * NumOps.ToDouble(aData[i * n + i]);
-                    outputData[row * n + i] = NumOps.FromDouble(value / diagonal);
-                }
-            }
-            else
-            {
-                for (int i = n - 1; i >= 0; i--)
-                {
-                    double value = NumOps.ToDouble(rhsData[row * n + i]);
-                    for (int j = i + 1; j < n; j++)
-                        value += scale * NumOps.ToDouble(aData[j * n + i]) * NumOps.ToDouble(outputData[row * n + j]);
-                    double diagonal = 1.0 - scale * NumOps.ToDouble(aData[i * n + i]);
-                    outputData[row * n + i] = NumOps.FromDouble(value / diagonal);
-                }
-            }
-        }
-
-        return output;
+        // Each row x solves (I - scale*A) x = row (forward substitution on the lower-triangular LegS
+        // operator), or (I - scale*A)^T x = row for the transposed system used by the backward pass.
+        // The surrounding RecordUnary owns the tape entry, so the solve itself stays off the tape.
+        using var noGrad = new NoGradScope<T>();
+        var system = Engine.TensorSubtract(
+            Engine.TensorEye<T>(_memoryOrder),
+            Engine.TensorMultiplyScalar(_a, NumOps.FromDouble(scale)));
+        // The linalg kernels read raw storage, so hand them contiguous operands.
+        var rhsColumns = Engine.TensorTranspose(rhs).Contiguous();
+        var solved = transpose
+            ? SolveTriangularWide(Engine.TensorTranspose(system).Contiguous(), rhsColumns, upper: true)
+            : SolveTriangularWide(system.Contiguous(), rhsColumns, upper: false);
+        return Engine.TensorTranspose(solved).Contiguous();
     }
 
     private double ClampStep(double value) => Math.Max(_timescaleMin, Math.Min(_timescaleMax, value));
@@ -540,224 +525,178 @@ public partial class HippoMemoryCellLayer<T> : LayerBase<T>, IShapeContract
     {
         if (_discretization == "zoh") return BuildZohTransition(step);
 
+        // Fixed operator constants built from fresh tensors, so they stay off the tape.
+        using var noGrad = new NoGradScope<T>();
         int n = _memoryOrder;
-        var a = ToDoubleMatrix(_a);
-        var b = ToDoubleRow(_bRow);
-        var identity = Identity(n);
-        double[,] transition;
-        double[] inputTransition;
+        var identity = Engine.TensorEye<T>(n);
+        var bColumn = Engine.TensorTranspose(_bRow);                                         // [n, 1]
+        Tensor<T> transition;
+        Tensor<T> inputTransition;
 
         if (_discretization == "forward")
         {
-            transition = Add(identity, Scale(a, step));
-            inputTransition = Scale(b, step);
+            transition = Engine.TensorAdd(identity, Engine.TensorMultiplyScalar(_a, NumOps.FromDouble(step)));
+            inputTransition = Engine.TensorMultiplyScalar(bColumn, NumOps.FromDouble(step));
         }
         else
         {
+            // backward: (I - step*A)^-1 [I | step*B]; bilinear: (I - step/2*A)^-1 [I + step/2*A | step*B].
             double factor = _discretization == "bilinear" ? step * 0.5 : step;
-            var inverse = Invert(Subtract(identity, Scale(a, factor)));
-            transition = _discretization == "bilinear"
-                ? Multiply(inverse, Add(identity, Scale(a, factor)))
-                : inverse;
-            inputTransition = Multiply(inverse, Scale(b, step));
+            var scaledA = Engine.TensorMultiplyScalar(_a, NumOps.FromDouble(factor));
+            var system = Engine.TensorSubtract(identity, scaledA);
+            var stateRhs = _discretization == "bilinear" ? Engine.TensorAdd(identity, scaledA) : identity;
+            var rhs = Engine.TensorConcatenate(
+                new[] { stateRhs, Engine.TensorMultiplyScalar(bColumn, NumOps.FromDouble(step)) }, axis: 1);
+            var (solution, info) = SolveSystemWide(system.Contiguous(), rhs.Contiguous());
+            if (Engine.TensorCountNonzero(info) > 0)
+                throw new InvalidOperationException("HiPPO discretization matrix is singular.");
+            transition = Engine.TensorNarrow(solution, 1, 0, n);
+            inputTransition = Engine.TensorNarrow(solution, 1, n, 1);
         }
 
-        return (ToTensor(Transpose(transition)), ToRowTensor(inputTransition));
+        return (Engine.TensorTranspose(transition).Contiguous(), Engine.TensorTranspose(inputTransition).Contiguous());
+    }
+
+    private static (Tensor<T> Solution, Tensor<int> Info) SolveSystemWide(Tensor<T> system, Tensor<T> rhs)
+    {
+        if (typeof(T) == typeof(float) || typeof(T) == typeof(double))
+            return LinalgDispatch<T>.SolveEx(system, rhs);
+        // The installed linalg kernels support float/double; retain low-precision layer support.
+        using var noGrad = new NoGradScope<double>();
+        var (solution, info) = LinalgDispatch<double>.SolveEx(system.Cast<double>(), rhs.Cast<double>());
+        return (solution.Cast<T>(), info);
+    }
+
+    private static Tensor<T> SolveTriangularWide(Tensor<T> system, Tensor<T> rhs, bool upper)
+    {
+        if (typeof(T) == typeof(float) || typeof(T) == typeof(double))
+            return LinalgDispatch<T>.SolveTriangular(system, rhs, upper);
+        using var noGrad = new NoGradScope<double>();
+        return LinalgDispatch<double>.SolveTriangular(system.Cast<double>(), rhs.Cast<double>(), upper).Cast<T>();
     }
 
     private (Tensor<T> A, Tensor<T> B) BuildZohTransition(double interval)
     {
+        // exp([[A, B], [0, 0]] * interval) = [[Ad, Bd], [0, 1]] (Van Loan), built off the tape.
+        using var noGrad = new NoGradScope<T>();
         int n = _memoryOrder;
-        var augmented = new double[n + 1, n + 1];
-        var a = ToDoubleMatrix(_a);
-        var b = ToDoubleRow(_bRow);
-        for (int i = 0; i < n; i++)
+        T scale = NumOps.FromDouble(interval);
+        var top = Engine.TensorConcatenate(new[]
         {
-            for (int j = 0; j < n; j++) augmented[i, j] = a[i, j] * interval;
-            augmented[i, n] = b[i] * interval;
-        }
+            Engine.TensorMultiplyScalar(_a, scale),
+            Engine.TensorMultiplyScalar(Engine.TensorTranspose(_bRow), scale),
+        }, axis: 1);                                                                         // [n, n + 1]
+        var augmented = Engine.TensorConcatenate(new[] { top, new Tensor<T>(new[] { 1, n + 1 }) }, axis: 0);
 
         var exponential = MatrixExponential(augmented);
-        var transition = new double[n, n];
-        var inputTransition = new double[n];
-        for (int i = 0; i < n; i++)
+        var transition = Engine.TensorSlice(exponential, new[] { 0, 0 }, new[] { n, n });
+        var inputTransition = Engine.TensorSlice(exponential, new[] { 0, n }, new[] { n, 1 });
+        return (Engine.TensorTranspose(transition).Contiguous(), Engine.TensorTranspose(inputTransition).Contiguous());
+    }
+
+    // Pade approximant degrees and their backward-error bounds theta_m (Higham 2005, "The Scaling and
+    // Squaring Method for the Matrix Exponential Revisited", Table 2.3), the scheme scipy.linalg.expm
+    // follows. Coefficients b_k of the [m/m] Pade numerator are divided by b_0 when applied so every
+    // value stays inside the range of low-precision T (b_0 of degree 13 is 6.5e16); P and Q share the
+    // factor, so R = Q^-1 P is unchanged.
+    private static readonly int[] PadeDegrees = { 3, 5, 7, 9, 13 };
+    private static readonly double[] PadeThetas =
+    {
+        1.495585217958292e-2, 2.539398330063230e-1, 9.504178996162932e-1, 2.097847961257068e0, 5.371920351148152e0,
+    };
+    private static readonly double[][] PadeCoefficients =
+    {
+        new double[] { 120, 60, 12, 1 },
+        new double[] { 30240, 15120, 3360, 420, 30, 1 },
+        new double[] { 17297280, 8648640, 1995840, 277200, 25200, 1512, 56, 1 },
+        new double[] { 17643225600, 8821612800, 2075673600, 302702400, 30270240, 2162160, 110880, 3960, 90, 1 },
+        new double[]
         {
-            for (int j = 0; j < n; j++) transition[i, j] = exponential[i, j];
-            inputTransition[i] = exponential[i, n];
-        }
-        return (ToTensor(Transpose(transition)), ToRowTensor(inputTransition));
+            64764752532480000, 32382376266240000, 7771770303897600, 1187353796428800, 129060195264000,
+            10559470521600, 670442572800, 33522128640, 1323241920, 40840800, 960960, 16380, 182, 1,
+        },
+    };
+
+    /// <summary>
+    /// Matrix exponential by scaling and squaring with a diagonal Pade approximant (Higham 2005, the
+    /// algorithm of scipy.linalg.expm), in T through engine ops. The degree is the smallest m in
+    /// {3, 5, 7, 9, 13} whose theta_m bounds the 1-norm; otherwise the matrix is scaled by 2^-s down to
+    /// theta_13. Pade 13 needs about four fewer squarings than a Taylor series truncated at norm 0.5,
+    /// and each squaring roughly doubles the rounding error, which is what made float drift.
+    /// </summary>
+    private Tensor<T> MatrixExponential(Tensor<T> matrix)
+    {
+        int n = matrix.Shape[0];
+        var identity = Engine.TensorEye<T>(n);
+        if (n == 0) return identity;
+
+        // 1-norm (max column abs sum) as maxAbs * ||matrix / maxAbs||_1, so the column sums of a
+        // wide low-precision matrix cannot overflow.
+        double maxAbs = NumOps.ToDouble(Engine.TensorMaxValue(Engine.TensorAbs(matrix)));
+        if (maxAbs == 0.0) return identity;
+        var unit = Engine.TensorDivideScalar(matrix, NumOps.FromDouble(maxAbs));
+        double norm = maxAbs * NumOps.ToDouble(
+            Engine.TensorMaxValue(Engine.ReduceSum(Engine.TensorAbs(unit), new[] { 0 })));
+
+        int degreeIndex = 0;
+        while (degreeIndex < PadeDegrees.Length - 1 && norm > PadeThetas[degreeIndex]) degreeIndex++;
+        int squarings = norm > PadeThetas[degreeIndex]
+            ? Math.Max(0, (int)Math.Ceiling(Math.Log(norm / PadeThetas[degreeIndex], 2.0)))
+            : 0;
+
+        // Scale through the unit matrix: unit * (maxAbs / 2^s) keeps the factor representable in T.
+        var scaled = Engine.TensorMultiplyScalar(unit, NumOps.FromDouble(maxAbs / Math.Pow(2.0, squarings)));
+        var (u, v) = PadeTerms(scaled, identity, PadeDegrees[degreeIndex], PadeCoefficients[degreeIndex]);
+
+        // (V - U) R = (V + U).
+        var (result, info) = SolveSystemWide(
+            Engine.TensorSubtract(v, u).Contiguous(), Engine.TensorAdd(v, u).Contiguous());
+        if (Engine.TensorCountNonzero(info) > 0)
+            throw new InvalidOperationException("HiPPO ZOH Pade denominator is singular.");
+
+        for (int i = 0; i < squarings; i++) result = Engine.TensorMatMul(result, result);
+        return result;
     }
 
-    private static double[,] MatrixExponential(double[,] matrix)
+    /// <summary>
+    /// The odd (U) and even (V) parts of the [m/m] Pade numerator p(A) = V + U with coefficients
+    /// normalized by b_0, evaluated as in Higham 2005, Algorithm 2.3.
+    /// </summary>
+    private (Tensor<T> U, Tensor<T> V) PadeTerms(Tensor<T> a, Tensor<T> identity, int degree, double[] b)
     {
-        int n = matrix.GetLength(0);
-        double norm = 0;
-        for (int i = 0; i < n; i++)
+        double b0 = b[0];
+        Tensor<T> Scale(Tensor<T> m, int k) => Engine.TensorMultiplyScalar(m, NumOps.FromDouble(b[k] / b0));
+
+        var a2 = Engine.TensorMatMul(a, a);
+        if (degree == 13)
         {
-            double row = 0;
-            for (int j = 0; j < n; j++) row += Math.Abs(matrix[i, j]);
-            norm = Math.Max(norm, row);
-        }
-        int squarings = norm <= 0.5 ? 0 : Math.Max(0, (int)Math.Ceiling(Math.Log(norm / 0.5, 2.0)));
-        var scaled = Scale(matrix, 1.0 / Math.Pow(2.0, squarings));
-        var result = Identity(n);
-        var term = Identity(n);
-        for (int k = 1; k <= 24; k++)
-        {
-            term = Scale(Multiply(term, scaled), 1.0 / k);
-            result = Add(result, term);
-        }
-        for (int i = 0; i < squarings; i++) result = Multiply(result, result);
-        return result;
-    }
-
-    private double[,] ToDoubleMatrix(Tensor<T> tensor)
-    {
-        int rows = tensor.Shape[0], columns = tensor.Shape[1];
-        var result = new double[rows, columns];
-        T[] data = tensor.DataVector.GetDataArray();
-        for (int i = 0; i < rows; i++)
-            for (int j = 0; j < columns; j++)
-                result[i, j] = NumOps.ToDouble(data[i * columns + j]);
-        return result;
-    }
-
-    private double[] ToDoubleRow(Tensor<T> tensor)
-    {
-        var result = new double[tensor.Shape[1]];
-        T[] data = tensor.DataVector.GetDataArray();
-        for (int i = 0; i < result.Length; i++) result[i] = NumOps.ToDouble(data[i]);
-        return result;
-    }
-
-    private Tensor<T> ToTensor(double[,] values)
-    {
-        int rows = values.GetLength(0), columns = values.GetLength(1);
-        var result = new Tensor<T>(new[] { rows, columns });
-        T[] data = result.DataVector.GetDataArray();
-        for (int i = 0; i < rows; i++)
-            for (int j = 0; j < columns; j++)
-                data[i * columns + j] = NumOps.FromDouble(values[i, j]);
-        return result;
-    }
-
-    private Tensor<T> ToRowTensor(double[] values)
-    {
-        var result = new Tensor<T>(new[] { 1, values.Length });
-        T[] data = result.DataVector.GetDataArray();
-        for (int i = 0; i < values.Length; i++) data[i] = NumOps.FromDouble(values[i]);
-        return result;
-    }
-
-    private static double[,] Identity(int n)
-    {
-        var result = new double[n, n];
-        for (int i = 0; i < n; i++) result[i, i] = 1.0;
-        return result;
-    }
-
-    private static double[,] Add(double[,] a, double[,] b)
-    {
-        int rows = a.GetLength(0), columns = a.GetLength(1);
-        var result = new double[rows, columns];
-        for (int i = 0; i < rows; i++)
-            for (int j = 0; j < columns; j++) result[i, j] = a[i, j] + b[i, j];
-        return result;
-    }
-
-    private static double[,] Subtract(double[,] a, double[,] b)
-    {
-        int rows = a.GetLength(0), columns = a.GetLength(1);
-        var result = new double[rows, columns];
-        for (int i = 0; i < rows; i++)
-            for (int j = 0; j < columns; j++) result[i, j] = a[i, j] - b[i, j];
-        return result;
-    }
-
-    private static double[,] Scale(double[,] matrix, double scale)
-    {
-        int rows = matrix.GetLength(0), columns = matrix.GetLength(1);
-        var result = new double[rows, columns];
-        for (int i = 0; i < rows; i++)
-            for (int j = 0; j < columns; j++) result[i, j] = matrix[i, j] * scale;
-        return result;
-    }
-
-    private static double[] Scale(double[] vector, double scale)
-    {
-        var result = new double[vector.Length];
-        for (int i = 0; i < vector.Length; i++) result[i] = vector[i] * scale;
-        return result;
-    }
-
-    private static double[,] Multiply(double[,] a, double[,] b)
-    {
-        int rows = a.GetLength(0), inner = a.GetLength(1), columns = b.GetLength(1);
-        var result = new double[rows, columns];
-        for (int i = 0; i < rows; i++)
-            for (int k = 0; k < inner; k++)
-            {
-                double aik = a[i, k];
-                if (aik == 0) continue;
-                for (int j = 0; j < columns; j++) result[i, j] += aik * b[k, j];
-            }
-        return result;
-    }
-
-    private static double[] Multiply(double[,] matrix, double[] vector)
-    {
-        int rows = matrix.GetLength(0), columns = matrix.GetLength(1);
-        var result = new double[rows];
-        for (int i = 0; i < rows; i++)
-            for (int j = 0; j < columns; j++) result[i] += matrix[i, j] * vector[j];
-        return result;
-    }
-
-    private static double[,] Transpose(double[,] matrix)
-    {
-        int rows = matrix.GetLength(0), columns = matrix.GetLength(1);
-        var result = new double[columns, rows];
-        for (int i = 0; i < rows; i++)
-            for (int j = 0; j < columns; j++) result[j, i] = matrix[i, j];
-        return result;
-    }
-
-    private static double[,] Invert(double[,] matrix)
-    {
-        int n = matrix.GetLength(0);
-        var augmented = new double[n, 2 * n];
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < n; j++) augmented[i, j] = matrix[i, j];
-            augmented[i, n + i] = 1.0;
+            var a4 = Engine.TensorMatMul(a2, a2);
+            var a6 = Engine.TensorMatMul(a4, a2);
+            var oddInner = Engine.TensorMatMul(a6,
+                Engine.TensorAdd(Engine.TensorAdd(Scale(a6, 13), Scale(a4, 11)), Scale(a2, 9)));
+            oddInner = Engine.TensorAdd(
+                Engine.TensorAdd(Engine.TensorAdd(oddInner, Scale(a6, 7)), Engine.TensorAdd(Scale(a4, 5), Scale(a2, 3))),
+                Scale(identity, 1));
+            var even = Engine.TensorMatMul(a6,
+                Engine.TensorAdd(Engine.TensorAdd(Scale(a6, 12), Scale(a4, 10)), Scale(a2, 8)));
+            even = Engine.TensorAdd(
+                Engine.TensorAdd(Engine.TensorAdd(even, Scale(a6, 6)), Engine.TensorAdd(Scale(a4, 4), Scale(a2, 2))),
+                identity);
+            return (Engine.TensorMatMul(a, oddInner), even);
         }
 
-        for (int column = 0; column < n; column++)
+        // Degrees 3..9: U = A * sum_j b_(2j+1) A^(2j), V = sum_j b_(2j) A^(2j), with b_0 / b_0 = 1.
+        var oddSum = Scale(identity, 1);
+        var evenSum = identity;
+        var power = identity;
+        for (int j = 1; 2 * j <= degree; j++)
         {
-            int pivot = column;
-            for (int row = column + 1; row < n; row++)
-                if (Math.Abs(augmented[row, column]) > Math.Abs(augmented[pivot, column])) pivot = row;
-            if (Math.Abs(augmented[pivot, column]) < 1e-14)
-                throw new InvalidOperationException("HiPPO discretization matrix is singular.");
-            if (pivot != column)
-                for (int j = 0; j < 2 * n; j++)
-                    (augmented[column, j], augmented[pivot, j]) = (augmented[pivot, j], augmented[column, j]);
-
-            double diagonal = augmented[column, column];
-            for (int j = 0; j < 2 * n; j++) augmented[column, j] /= diagonal;
-            for (int row = 0; row < n; row++)
-            {
-                if (row == column) continue;
-                double factor = augmented[row, column];
-                if (factor == 0) continue;
-                for (int j = 0; j < 2 * n; j++) augmented[row, j] -= factor * augmented[column, j];
-            }
+            power = Engine.TensorMatMul(power, a2);
+            oddSum = Engine.TensorAdd(oddSum, Scale(power, (2 * j) + 1));
+            evenSum = Engine.TensorAdd(evenSum, Scale(power, 2 * j));
         }
 
-        var result = new double[n, n];
-        for (int i = 0; i < n; i++)
-            for (int j = 0; j < n; j++) result[i, j] = augmented[i, n + j];
-        return result;
+        return (Engine.TensorMatMul(a, oddSum), evenSum);
     }
 
     private IEnumerable<Tensor<T>> ParameterTensors()
@@ -780,9 +719,7 @@ public partial class HippoMemoryCellLayer<T> : LayerBase<T>, IShapeContract
         if (gradients.Length != ParameterCountHelper.ToFlatVectorSize(ParameterCount))
             throw new InvalidOperationException("HiPPO gradients are unavailable; run a backward pass first.");
         var parameters = GetParameters();
-        for (int i = 0; i < parameters.Length; i++)
-            parameters[i] = NumOps.Subtract(parameters[i], NumOps.Multiply(learningRate, gradients[i]));
-        SetParameters(parameters);
+        SetParameters(Engine.Subtract(parameters, Engine.Multiply(gradients, learningRate)));
     }
 
     /// <inheritdoc />
