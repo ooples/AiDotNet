@@ -308,6 +308,9 @@ internal static class CausalTensorHelpers
         var flatSource = source.Reshape(new[] { rows * cols });
         var flat = new Tensor<T>(new[] { rows * cols });
         var distinct = new SortedSet<int>(positions);
+        if (distinct.Count == 0)
+            return flat.Reshape(new[] { rows, cols }).ToMatrix();
+
         if (distinct.Count > 0)
         {
             var index = new Tensor<int>(distinct.ToArray(), new[] { distinct.Count });
