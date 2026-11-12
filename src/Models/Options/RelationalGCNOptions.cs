@@ -240,16 +240,17 @@ public class RelationalGCNOptions<T> : TimeSeriesRegressionOptions<T>
     /// <summary>
     /// Gets or sets the aggregation method for neighbor messages.
     /// </summary>
-    /// <value>The aggregation method, defaulting to <see cref="RelationalAggregation.Sum"/>.</value>
+    /// <value>The aggregation method, defaulting to <see cref="RelationalAggregation.Mean"/>, the paper's choice.</value>
     /// <remarks>
     /// <para><b>For Beginners:</b> How to combine messages from neighbors (the 1/c_{i,r} of
     /// Schlichtkrull et al. 2018, Eq. 2).
-    /// - <see cref="RelationalAggregation.Sum"/>: Add all neighbor messages (c_{i,r} = 1)
-    /// - <see cref="RelationalAggregation.Mean"/>: Average them over the node's neighbors under each relation
-    ///   (c_{i,r} = |N_i^r|, the paper's choice)
+    /// - <see cref="RelationalAggregation.Mean"/> (default): Average them over the node's neighbors under each
+    ///   relation, c_{i,r} = |N_i^r|, the normalization the paper uses
+    /// - <see cref="RelationalAggregation.Sum"/>: Add all neighbor messages, c_{i,r} = 1 (the default before the
+    ///   R-GCN rewrite)
     /// </para>
     /// </remarks>
-    public RelationalAggregation Aggregation { get; set; } = RelationalAggregation.Sum;
+    public RelationalAggregation Aggregation { get; set; } = RelationalAggregation.Mean;
 
     /// <summary>
     /// Gets or sets the number of samples for uncertainty estimation.
