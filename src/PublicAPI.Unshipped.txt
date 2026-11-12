@@ -22625,3 +22625,7 @@ AiDotNet.Kernels.LCMKernel<T>.LCMKernel(AiDotNet.Interfaces.IKernelFunction<T>![
 AiDotNet.Kernels.RFFKernel<T>.EstimateApproximationError(AiDotNet.Tensors.LinearAlgebra.Matrix<T>! X, AiDotNet.Interfaces.IKernelFunction<T>! exactKernel) -> T
 AiDotNet.Kernels.RFFKernel<T>.GetFeatureMatrix(AiDotNet.Tensors.LinearAlgebra.Matrix<T>! X) -> AiDotNet.Tensors.LinearAlgebra.Matrix<T>!
 AiDotNet.Kernels.RFFKernel<T>.GetFeatures(AiDotNet.Tensors.LinearAlgebra.Vector<T>! x) -> AiDotNet.Tensors.LinearAlgebra.Vector<T>!
+*REMOVED*AiDotNet.Kernels.GridKernel<T>.GridKernel(AiDotNet.Interfaces.IKernelFunction<T>![]! dimensionKernels, double[]![]! gridCoordinates) -> void
+*REMOVED*static AiDotNet.Kernels.GridKernel<T>.WithRBF(double[]![]! gridCoordinates, double[]? lengthscales = null) -> AiDotNet.Kernels.GridKernel<T>!
+AiDotNet.Kernels.GridKernel<T>.GridKernel(AiDotNet.Interfaces.IKernelFunction<T>![]! dimensionKernels, AiDotNet.Tensors.LinearAlgebra.Vector<T>![]! gridCoordinates) -> void
+static AiDotNet.Kernels.GridKernel<T>.WithRBF(AiDotNet.Tensors.LinearAlgebra.Vector<T>![]! gridCoordinates, double[]? lengthscales = null) -> AiDotNet.Kernels.GridKernel<T>!

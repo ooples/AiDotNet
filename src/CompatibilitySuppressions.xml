@@ -40901,4 +40901,46 @@
     <Right>lib/net8.0/AiDotNet.dll</Right>
     <IsBaselineSuppression>true</IsBaselineSuppression>
   </Suppression>
+  <Suppression>
+    <DiagnosticId>CP0002</DiagnosticId>
+    <Target>M:AiDotNet.Kernels.GridKernel`1.#ctor(AiDotNet.Interfaces.IKernelFunction{`0}[],System.Double[][])</Target>
+    <Left>lib/net10.0/AiDotNet.dll</Left>
+    <Right>lib/net10.0/AiDotNet.dll</Right>
+    <IsBaselineSuppression>true</IsBaselineSuppression>
+  </Suppression>
+  <Suppression>
+    <DiagnosticId>CP0002</DiagnosticId>
+    <Target>M:AiDotNet.Kernels.GridKernel`1.#ctor(AiDotNet.Interfaces.IKernelFunction{`0}[],System.Double[][])</Target>
+    <Left>lib/net471/AiDotNet.dll</Left>
+    <Right>lib/net471/AiDotNet.dll</Right>
+    <IsBaselineSuppression>true</IsBaselineSuppression>
+  </Suppression>
+  <Suppression>
+    <DiagnosticId>CP0002</DiagnosticId>
+    <Target>M:AiDotNet.Kernels.GridKernel`1.#ctor(AiDotNet.Interfaces.IKernelFunction{`0}[],System.Double[][])</Target>
+    <Left>lib/net8.0/AiDotNet.dll</Left>
+    <Right>lib/net8.0/AiDotNet.dll</Right>
+    <IsBaselineSuppression>true</IsBaselineSuppression>
+  </Suppression>
+  <Suppression>
+    <DiagnosticId>CP0002</DiagnosticId>
+    <Target>M:AiDotNet.Kernels.GridKernel`1.WithRBF(System.Double[][],System.Double[])</Target>
+    <Left>lib/net10.0/AiDotNet.dll</Left>
+    <Right>lib/net10.0/AiDotNet.dll</Right>
+    <IsBaselineSuppression>true</IsBaselineSuppression>
+  </Suppression>
+  <Suppression>
+    <DiagnosticId>CP0002</DiagnosticId>
+    <Target>M:AiDotNet.Kernels.GridKernel`1.WithRBF(System.Double[][],System.Double[])</Target>
+    <Left>lib/net471/AiDotNet.dll</Left>
+    <Right>lib/net471/AiDotNet.dll</Right>
+    <IsBaselineSuppression>true</IsBaselineSuppression>
+  </Suppression>
+  <Suppression>
+    <DiagnosticId>CP0002</DiagnosticId>
+    <Target>M:AiDotNet.Kernels.GridKernel`1.WithRBF(System.Double[][],System.Double[])</Target>
+    <Left>lib/net8.0/AiDotNet.dll</Left>
+    <Right>lib/net8.0/AiDotNet.dll</Right>
+    <IsBaselineSuppression>true</IsBaselineSuppression>
+  </Suppression>
 </Suppressions>

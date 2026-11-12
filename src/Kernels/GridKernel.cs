@@ -36,7 +36,7 @@ public class GridKernel<T> : IKernelFunction<T>
     /// <summary>
     /// Grid coordinates along each dimension.
     /// </summary>
-    private readonly double[][] _gridCoordinates;
+    private readonly Vector<T>[] _gridCoordinates;
 
     /// <summary>
     /// Precomputed 1D kernel matrices for each dimension.
@@ -79,15 +79,15 @@ public class GridKernel<T> : IKernelFunction<T>
     ///         new GaussianKernel&lt;double&gt;(1.0),  // x-dimension
     ///         new GaussianKernel&lt;double&gt;(2.0)   // y-dimension (different lengthscale)
     ///     },
-    ///     new double[][]
+    ///     new[]
     ///     {
-    ///         Enumerable.Range(0, 10).Select(i => (double)i).ToArray(),  // x: 0,1,...,9
-    ///         Enumerable.Range(0, 20).Select(i => (double)i).ToArray()   // y: 0,1,...,19
+    ///         new Vector&lt;double&gt;(Enumerable.Range(0, 10).Select(i => (double)i)),  // x: 0,1,...,9
+    ///         new Vector&lt;double&gt;(Enumerable.Range(0, 20).Select(i => (double)i))   // y: 0,1,...,19
     ///     }
     /// );
     /// </para>
     /// </remarks>
-    public GridKernel(IKernelFunction<T>[] dimensionKernels, double[][] gridCoordinates)
+    public GridKernel(IKernelFunction<T>[] dimensionKernels, Vector<T>[] gridCoordinates)
     {
         if (dimensionKernels is null)
             throw new ArgumentNullException(nameof(dimensionKernels));
@@ -110,7 +110,7 @@ public class GridKernel<T> : IKernelFunction<T>
         }
 
         _dimensionKernels = (IKernelFunction<T>[])dimensionKernels.Clone();
-        _gridCoordinates = gridCoordinates.Select(c => (double[])c.Clone()).ToArray();
+        _gridCoordinates = gridCoordinates.Select(c => c.Clone()).ToArray();
         _numOps = MathHelper.GetNumericOperations<T>();
         _precomputed = false;
     }
@@ -149,24 +149,10 @@ public class GridKernel<T> : IKernelFunction<T>
 
         for (int dim = 0; dim < d; dim++)
         {
-            int n = _gridCoordinates[dim].Length;
-            var K = new Matrix<T>(n, n);
-
-            // Build 1D kernel matrix
-            for (int i = 0; i < n; i++)
-            {
-                for (int j = i; j < n; j++)
-                {
-                    var xi = new Vector<T>(1);
-                    var xj = new Vector<T>(1);
-                    xi[0] = _numOps.FromDouble(_gridCoordinates[dim][i]);
-                    xj[0] = _numOps.FromDouble(_gridCoordinates[dim][j]);
-
-                    T kval = _dimensionKernels[dim].Calculate(xi, xj);
-                    K[i, j] = kval;
-                    K[j, i] = kval;
-                }
-            }
+            // Build 1D kernel matrix over the dimension's grid coordinates
+            var coordinates = _gridCoordinates[dim];
+            var points = Enumerable.Range(0, coordinates.Length).Select(i => coordinates.GetSubVector(i, 1)).ToArray();
+            var K = KernelVectorOps<T>.SymmetricGram(_dimensionKernels[dim], points);
 
             _dimensionKernelMatrices[dim] = K;
 
@@ -324,7 +310,7 @@ public class GridKernel<T> : IKernelFunction<T>
     /// <b>For Beginners:</b> Convenience factory for the common case of RBF kernels.
     /// </para>
     /// </remarks>
-    public static GridKernel<T> WithRBF(double[][] gridCoordinates, double[]? lengthscales = null)
+    public static GridKernel<T> WithRBF(Vector<T>[] gridCoordinates, double[]? lengthscales = null)
     {
         int d = gridCoordinates.Length;
         lengthscales ??= Enumerable.Repeat(1.0, d).ToArray();
