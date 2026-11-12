@@ -125,10 +125,7 @@ public class TreeBasedImportance<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, 
             var stacked = engine.TensorConcatenate(treeImportances, 0);
             importances = engine.ReduceMean(stacked, new[] { 0 }, false);
             // Two-pass: E[x^2] - E[x]^2 cancels to a tiny negative value (sqrt gives NaN) when the trees agree
-            var deviations = engine.TensorSubtract(stacked,
-                engine.TensorBroadcastTo(engine.Reshape(importances, new[] { 1, p }), stacked.Shape.ToArray()));
-            _importanceStds = engine.TensorSqrt(
-                engine.ReduceMean(engine.TensorSquare(deviations), new[] { 0 }, false)).ToVector();
+            _importanceStds = FeatureSelectionTensorOps.ColumnStd(stacked).ToVector();
         }
         else
         {
