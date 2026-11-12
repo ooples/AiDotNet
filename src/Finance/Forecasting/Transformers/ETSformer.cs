@@ -772,6 +772,23 @@ public partial class ETSformer<T> : ForecastingModelBase<T>
 
         var newInput = new Tensor<T>(input._shape);
 
+        int keepLen = seqLen - stepsUsed;
+        if (input.Rank == 3 && stepsUsed >= 0 && keepLen >= 0 && batchSize > 0 && features > 0
+            && prediction.Rank == 3 && prediction.Shape[0] >= batchSize && prediction.Shape[1] >= stepsUsed
+            && prediction.Shape[2] >= features)
+        {
+            // Window = the last keepLen input steps followed by the first stepsUsed predictions (detached).
+            using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+            var parts = new List<Tensor<T>>(2);
+            if (keepLen > 0)
+                parts.Add(Engine.TensorSlice(input, new[] { 0, stepsUsed, 0 }, new[] { batchSize, keepLen, features }));
+            if (stepsUsed > 0)
+                parts.Add(Engine.TensorSlice(prediction, new[] { 0, 0, 0 }, new[] { batchSize, stepsUsed, features }));
+            if (parts.Count == 0)
+                return newInput;
+            return parts.Count == 1 ? parts[0].Contiguous() : Engine.TensorConcatenate(parts.ToArray(), 1);
+        }
+
         for (int b = 0; b < batchSize; b++)
         {
             // Shift old data
@@ -813,6 +830,26 @@ public partial class ETSformer<T> : ForecastingModelBase<T>
             return new Tensor<T>(new[] { 1, steps, _numFeatures });
 
         int batchSize = predictions[0].Shape[0];
+        if (batchSize > 0 && _numFeatures > 0 && steps > 0
+            && predictions.TrueForAll(p => p.Rank == 3 && p.Shape[0] >= batchSize && p.Shape[2] >= _numFeatures))
+        {
+            // The leading steps of each prediction in order, zero-padded to the requested length (detached).
+            using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+            var parts = new List<Tensor<T>>();
+            int filled = 0;
+            foreach (var pred in predictions)
+            {
+                int take = Math.Min(pred.Shape[1], steps - filled);
+                if (take <= 0)
+                    continue;
+                parts.Add(Engine.TensorSlice(pred, new[] { 0, 0, 0 }, new[] { batchSize, take, _numFeatures }));
+                filled += take;
+            }
+            if (filled < steps)
+                parts.Add(new Tensor<T>(new[] { batchSize, steps - filled, _numFeatures }));
+            return parts.Count == 1 ? parts[0].Contiguous() : Engine.TensorConcatenate(parts.ToArray(), 1);
+        }
+
         var result = new Tensor<T>(new[] { batchSize, steps, _numFeatures });
 
         int currentStep = 0;

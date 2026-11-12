@@ -863,6 +863,29 @@ public partial class TCN<T> : ForecastingModelBase<T>
             return new Tensor<T>(new[] { 1, totalSteps });
 
         int batchSize = predictions[0].Shape[0];
+        if (batchSize > 0 && totalSteps > 0 && predictions.TrueForAll(p => p.Length / batchSize * batchSize <= p.Length))
+        {
+            // Row b takes the leading steps of each prediction's row b (rows are p.Length / batchSize long), then zeros (detached).
+            using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+            var parts = new List<Tensor<T>>();
+            int filled = 0;
+            foreach (var p in predictions)
+            {
+                int rowLength = p.Length / batchSize;
+                int take = Math.Min(rowLength, totalSteps - filled);
+                if (take <= 0)
+                    continue;
+                var rows = Engine.Reshape(
+                    Engine.TensorNarrow(Engine.Reshape(p.Contiguous(), new[] { p.Length }), 0, 0, batchSize * rowLength).Contiguous(),
+                    new[] { batchSize, rowLength });
+                parts.Add(Engine.TensorSlice(rows, new[] { 0, 0 }, new[] { batchSize, take }));
+                filled += take;
+            }
+            if (filled < totalSteps)
+                parts.Add(new Tensor<T>(new[] { batchSize, totalSteps - filled }));
+            return parts.Count == 1 ? parts[0].Contiguous() : Engine.TensorConcatenate(parts.ToArray(), 1);
+        }
+
         var result = new Tensor<T>(new[] { batchSize, totalSteps });
 
         int currentStep = 0;

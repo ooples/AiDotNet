@@ -1038,6 +1038,26 @@ public partial class TFT<T> : ForecastingModelBase<T>
             return new Tensor<T>(new[] { 1, totalSteps, _numFeatures });
 
         int batchSize = predictions[0].Shape[0];
+        if (batchSize > 0 && _numFeatures > 0 && totalSteps > 0
+            && predictions.TrueForAll(p => p.Rank == 3 && p.Shape[0] >= batchSize && p.Shape[2] >= _numFeatures))
+        {
+            // The leading steps of each prediction in order, zero-padded to the requested length (detached).
+            using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+            var parts = new List<Tensor<T>>();
+            int filled = 0;
+            foreach (var pred in predictions)
+            {
+                int take = Math.Min(pred.Shape[1], totalSteps - filled);
+                if (take <= 0)
+                    continue;
+                parts.Add(Engine.TensorSlice(pred, new[] { 0, 0, 0 }, new[] { batchSize, take, _numFeatures }));
+                filled += take;
+            }
+            if (filled < totalSteps)
+                parts.Add(new Tensor<T>(new[] { batchSize, totalSteps - filled, _numFeatures }));
+            return parts.Count == 1 ? parts[0].Contiguous() : Engine.TensorConcatenate(parts.ToArray(), 1);
+        }
+
         var result = new Tensor<T>(new[] { batchSize, totalSteps, _numFeatures });
 
         int currentStep = 0;
