@@ -179,81 +179,58 @@ public partial class Groma<T> : VisionLanguageModelBase<T>, IVisualGroundingMode
 
         int visDim = visualFeatures.Length;
 
-        // Step 2: Region proposal network with learned region queries
+        // Step 2: Region proposal network with learned region queries. Query q reads its stride of visual features;
+        // feature d sits at grid cell (d % grid, d / grid), and |feature| weights that cell position.
         int numRegionQueries = 64;
         int gridSize = (int)Math.Sqrt(visDim);
         if (gridSize < 4)
             gridSize = 4;
-
-        // Each region query attends to the visual features to propose a region
-        var regionProposals = new double[numRegionQueries][];
-        var regionScores = new double[numRegionQueries];
-
+        int stride = Math.Max(1, visDim / numRegionQueries);
+        var featurePositions = new int[numRegionQueries * stride];
+        var cellColumns = new int[numRegionQueries * stride];
+        var cellRows = new int[numRegionQueries * stride];
         for (int q = 0; q < numRegionQueries; q++)
         {
-            regionProposals[q] = new double[4]; // cx, cy, w, h
-
-            // Query-specific attention over visual features to determine region
-            double attnCx = 0,
-                attnCy = 0,
-                attnW = 0,
-                attnH = 0;
-            double attnSum = 0;
-
-            int stride = Math.Max(1, visDim / numRegionQueries);
-            int qStart = q * stride;
-            int qEnd = Math.Min(qStart + stride, visDim);
-
-            for (int d = qStart; d < qEnd; d++)
+            for (int k = 0; k < stride; k++)
             {
-                double val = NumOps.ToDouble(visualFeatures[d]);
-                double spatialX = (double)(d % gridSize) / gridSize;
-                int row = d / gridSize;   // the feature's integer grid row
-                double spatialY = (double)row / gridSize;
-                double weight = Math.Abs(val);
-                attnCx += spatialX * weight;
-                attnCy += spatialY * weight;
-                attnSum += weight;
+                int d = q * stride + k;
+                featurePositions[d] = d < visDim ? d : -1;
+                cellColumns[d] = d % gridSize;
+                cellRows[d] = d / gridSize;
             }
-
-            if (attnSum > 1e-8)
-            {
-                attnCx /= attnSum;
-                attnCy /= attnSum;
-            }
-            else
-            {
-                attnCx = 0.5;
-                attnCy = 0.5;
-            }
-
-            // Predict width/height from feature variance
-            double varX = 0,
-                varY = 0;
-            for (int d = qStart; d < qEnd; d++)
-            {
-                double val = NumOps.ToDouble(visualFeatures[d]);
-                double spatialX = (double)(d % gridSize) / gridSize;
-                int row = d / gridSize;   // the feature's integer grid row
-                double spatialY = (double)row / gridSize;
-                double weight = Math.Abs(val);
-                varX += weight * (spatialX - attnCx) * (spatialX - attnCx);
-                varY += weight * (spatialY - attnCy) * (spatialY - attnCy);
-            }
-            if (attnSum > 1e-8)
-            {
-                varX /= attnSum;
-                varY /= attnSum;
-            }
-            attnW = Math.Max(0.05, Math.Sqrt(varX) * 4);
-            attnH = Math.Max(0.05, Math.Sqrt(varY) * 4);
-
-            regionProposals[q][0] = attnCx;
-            regionProposals[q][1] = attnCy;
-            regionProposals[q][2] = Math.Min(1.0, attnW);
-            regionProposals[q][3] = Math.Min(1.0, attnH);
-            regionScores[q] = attnSum / stride;
         }
+
+        int[] queryShape = [numRegionQueries, stride];
+        var weights = Engine.TensorAbs(GroundingDetections<T>.Take(Engine, visualFeatures, featurePositions, queryShape));
+        var grid = NumOps.FromDouble(gridSize);
+        var spatialX = Engine.TensorDivideScalar(GroundingDetections<T>.IntsAsT(cellColumns).Reshape(queryShape), grid);
+        var spatialY = Engine.TensorDivideScalar(GroundingDetections<T>.IntsAsT(cellRows).Reshape(queryShape), grid);
+
+        var attnSum = Engine.ReduceSum(weights, [1], false);
+        var hasWeight = Engine.TensorGreaterThan(attnSum, NumOps.FromDouble(1e-8));
+        var safeSum = Engine.TensorWhere(hasWeight, attnSum,
+            Tensor<T>.CreateDefault([numRegionQueries], NumOps.One));
+        var middle = Tensor<T>.CreateDefault([numRegionQueries], NumOps.FromDouble(0.5));
+        var cx = Engine.TensorWhere(hasWeight,
+            Engine.TensorDivide(Engine.ReduceSum(Engine.TensorMultiply(spatialX, weights), [1], false), safeSum), middle);
+        var cy = Engine.TensorWhere(hasWeight,
+            Engine.TensorDivide(Engine.ReduceSum(Engine.TensorMultiply(spatialY, weights), [1], false), safeSum), middle);
+
+        // Predict width/height from the weighted spatial variance: max(0.05, 4 sqrt(var)), at most 1
+        Tensor<T> Extent(Tensor<T> spatial, Tensor<T> centre)
+        {
+            var offset = Engine.TensorSubtract(spatial,
+                Engine.TensorBroadcastTo(centre.Reshape([numRegionQueries, 1]), queryShape));
+            var spread = Engine.ReduceSum(Engine.TensorMultiply(weights, Engine.TensorMultiply(offset, offset)), [1], false);
+            var variance = Engine.TensorWhere(hasWeight, Engine.TensorDivide(spread, safeSum), spread);
+            return Engine.TensorClampMax(Engine.TensorMax(
+                Engine.TensorMultiplyScalar(Engine.TensorSqrt(variance), NumOps.FromDouble(4.0)), NumOps.FromDouble(0.05)),
+                NumOps.One);
+        }
+
+        var regionW = Extent(spatialX, cx);
+        var regionH = Extent(spatialY, cy);
+        var regionScores = Engine.TensorDivideScalar(attnSum, NumOps.FromDouble(stride));
 
         // Step 3: Text-conditioned region scoring via ConcatenateTensors
         var textTokens = TokenizeText(textQuery);
@@ -265,92 +242,45 @@ public partial class Groma<T> : VisionLanguageModelBase<T>, IVisualGroundingMode
             decoderOut = Layers[i].Forward(decoderOut);
 
         int outDim = decoderOut.Length;
-
-        // Score each region against text-conditioned features
-        int fieldsPerDet = 5;
         int maxDet = _options.MaxDetections;
-        var rawDetections = new double[maxDet, fieldsPerDet];
-        int validCount = 0;
+        if (maxDet <= 0)
+            return new Tensor<T>([GroundingDetections<T>.FieldsPerDetection]);
 
-        for (int q = 0; q < numRegionQueries && validCount < maxDet; q++)
+        // Score each region against text-conditioned decoder features: the region of interest starts at
+        // floor(cx * outDim) % outDim and spans max(1, floor(w * outDim / 2)) values, read cyclically.
+        int[] roiStarts = Engine.TensorFloor(Engine.TensorMultiplyScalar(cx, NumOps.FromDouble(outDim)))
+            .Cast<int>().ToArray();
+        int[] roiSpans = Engine.TensorFloor(Engine.TensorMultiplyScalar(regionW, NumOps.FromDouble(outDim * 0.5)))
+            .Cast<int>().ToArray();
+        int longestSpan = 1;
+        for (int q = 0; q < numRegionQueries; q++)
         {
-            double cx = regionProposals[q][0];
-            double cy = regionProposals[q][1];
-            double rw = regionProposals[q][2];
-            double rh = regionProposals[q][3];
-
-            // Score region using text-conditioned decoder features
-            int roiStart = (int)(cx * outDim) % outDim;
-            int roiSpan = Math.Max(1, (int)(rw * outDim * 0.5));
-            double roiFeatSum = 0;
-            for (int d = 0; d < roiSpan; d++)
-                roiFeatSum += NumOps.ToDouble(decoderOut[(roiStart + d) % outDim]);
-
-            double conf = 1.0 / (1.0 + Math.Exp(-roiFeatSum / Math.Max(1, roiSpan)));
-            conf = conf * regionScores[q];
-            conf = 1.0 / (1.0 + Math.Exp(-conf * 5.0 + 2.0));
-
-            double x1 = Math.Max(0, cx - rw / 2);
-            double y1 = Math.Max(0, cy - rh / 2);
-            double x2 = Math.Min(1, cx + rw / 2);
-            double y2 = Math.Min(1, cy + rh / 2);
-
-            if (conf >= confThreshold && x2 > x1 && y2 > y1)
-            {
-                rawDetections[validCount, 0] = x1;
-                rawDetections[validCount, 1] = y1;
-                rawDetections[validCount, 2] = x2;
-                rawDetections[validCount, 3] = y2;
-                rawDetections[validCount, 4] = conf;
-                validCount++;
-            }
+            roiStarts[q] %= outDim;
+            roiSpans[q] = Math.Max(1, roiSpans[q]);
+            longestSpan = Math.Max(longestSpan, roiSpans[q]);
         }
 
-        // Step 4: NMS
-        var kept = new bool[validCount];
-        for (int i = 0; i < validCount; i++)
-            kept[i] = true;
-        for (int i = 0; i < validCount; i++)
+        var roiPositions = new int[numRegionQueries * longestSpan];
+        for (int q = 0; q < numRegionQueries; q++)
         {
-            if (!kept[i])
-                continue;
-            for (int j = i + 1; j < validCount; j++)
-            {
-                if (!kept[j])
-                    continue;
-                double iou = ComputeIoU(
-                    rawDetections[i, 0],
-                    rawDetections[i, 1],
-                    rawDetections[i, 2],
-                    rawDetections[i, 3],
-                    rawDetections[j, 0],
-                    rawDetections[j, 1],
-                    rawDetections[j, 2],
-                    rawDetections[j, 3]
-                );
-                if (iou > nmsThreshold)
-                    kept[j] = false;
-            }
+            for (int d = 0; d < longestSpan; d++)
+                roiPositions[q * longestSpan + d] = d < roiSpans[q] ? (roiStarts[q] + d) % outDim : -1;
         }
 
-        int finalCount = 0;
-        for (int i = 0; i < validCount; i++)
-            if (kept[i])
-                finalCount++;
-        if (finalCount == 0)
-            return new Tensor<T>([fieldsPerDet]);
+        var roiFeatSum = Engine.ReduceSum(GroundingDetections<T>.Take(Engine, decoderOut, roiPositions,
+            [numRegionQueries, longestSpan]), [1], false);
+        var roiConf = Engine.TensorSigmoid(Engine.TensorDivide(roiFeatSum, GroundingDetections<T>.IntsAsT(roiSpans)));
+        var confidences = Engine.TensorSigmoid(Engine.TensorAddScalar(
+            Engine.TensorMultiplyScalar(Engine.TensorMultiply(roiConf, regionScores), NumOps.FromDouble(5.0)),
+            NumOps.FromDouble(-2.0)));
 
-        var result = new Tensor<T>([finalCount * fieldsPerDet]);
-        int idx = 0;
-        for (int i = 0; i < validCount; i++)
-        {
-            if (!kept[i])
-                continue;
-            for (int f = 0; f < fieldsPerDet; f++)
-                result[idx * fieldsPerDet + f] = NumOps.FromDouble(rawDetections[i, f]);
-            idx++;
-        }
-        return result;
+        var boxes = GroundingDetections<T>.ClippedCornerBoxes(Engine, cx, cy, regionW, regionH);
+        var eligible = Engine.TensorMultiply(
+            GroundingDetections<T>.AtLeast(Engine, confidences, NumOps.FromDouble(confThreshold)),
+            GroundingDetections<T>.HasArea(Engine, boxes));
+
+        // Step 4: NMS, highest confidence first
+        return GroundingDetections<T>.Select(Engine, boxes, confidences, eligible, maxDet, nmsThreshold);
     }
 
     /// <inheritdoc />
@@ -359,30 +289,6 @@ public partial class Groma<T> : VisionLanguageModelBase<T>, IVisualGroundingMode
         ThrowIfDisposed();
         string combined = string.Join(". ", categories) + ".";
         return GroundText(image, combined);
-    }
-
-    private static double ComputeIoU(
-        double x1a,
-        double y1a,
-        double x2a,
-        double y2a,
-        double x1b,
-        double y1b,
-        double x2b,
-        double y2b
-    )
-    {
-        double ix1 = Math.Max(x1a, x1b),
-            iy1 = Math.Max(y1a, y1b);
-        double ix2 = Math.Min(x2a, x2b),
-            iy2 = Math.Min(y2a, y2b);
-        double iw = Math.Max(0, ix2 - ix1),
-            ih = Math.Max(0, iy2 - iy1);
-        double inter = iw * ih;
-        double areaA = (x2a - x1a) * (y2a - y1a);
-        double areaB = (x2b - x1b) * (y2b - y1b);
-        double union = areaA + areaB - inter;
-        return union > 1e-8 ? inter / union : 0;
     }
 
     protected override void InitializeLayers()

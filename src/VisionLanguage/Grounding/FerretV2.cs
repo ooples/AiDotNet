@@ -167,152 +167,20 @@ public partial class FerretV2<T> : VisionLanguageModelBase<T>, IVisualGroundingM
             decoderOut = Layers[i].Forward(decoderOut);
 
         int outDim = decoderOut.Length;
-
-        // Step 3: Spatial attention from text-conditioned features
-        int gridSize = (int)Math.Sqrt(outDim);
-        if (gridSize < 2)
-            gridSize = 2;
-        int featsPerCell = Math.Max(1, outDim / (gridSize * gridSize));
-
-        var spatialAttention = new double[gridSize * gridSize];
-        double attnSum = 0;
-        for (int cell = 0; cell < gridSize * gridSize; cell++)
-        {
-            int cellStart = (cell * featsPerCell) % outDim;
-            double cellFeat = 0;
-            for (int d = 0; d < Math.Min(featsPerCell, 8); d++)
-                cellFeat += NumOps.ToDouble(decoderOut[(cellStart + d) % outDim]);
-
-            spatialAttention[cell] = Math.Exp(cellFeat * 0.08);
-            attnSum += spatialAttention[cell];
-        }
-
-        // Step 4: Multi-granularity region proposal extraction
         int maxDet = _options.MaxDetections;
-        int fieldsPerDet = 5;
-        var rawDetections = new double[maxDet, fieldsPerDet];
-        int validCount = 0;
+        if (maxDet <= 0 || outDim == 0)
+            return new Tensor<T>([GroundingDetections<T>.FieldsPerDetection]);
 
-        double peakThreshold = attnSum / ((double)gridSize * gridSize) * 1.3;
-        var visited = new bool[gridSize * gridSize];
+        // Step 3: Spatial attention from text-conditioned features, and Step 4: region proposals grown from its peaks
+        GroundingDetections<T>.AttentionRegions(Engine, decoderOut, featureCap: 8, logitScale: 0.08, seedFactor: 1.3,
+            growFactor: 0.6, confidenceOffset: 0.8, out var boxes, out var confidences);
+        if (confidences.Length == 0)
+            return new Tensor<T>([GroundingDetections<T>.FieldsPerDetection]);
 
-        for (int cell = 0; cell < gridSize * gridSize && validCount < maxDet; cell++)
-        {
-            if (visited[cell] || spatialAttention[cell] < peakThreshold)
-                continue;
+        var eligible = GroundingDetections<T>.AtLeast(Engine, confidences, NumOps.FromDouble(confThreshold));
 
-            int row = cell / gridSize;
-            int col = cell % gridSize;
-            int minR = row,
-                maxR = row,
-                minC = col,
-                maxC = col;
-            double regionConf = 0;
-            int regionSize = 0;
-            var stack = new Stack<int>();
-            stack.Push(cell);
-            visited[cell] = true;
-
-            while (stack.Count > 0)
-            {
-                int cur = stack.Pop();
-                int cr = cur / gridSize;
-                int cc = cur % gridSize;
-                regionConf += spatialAttention[cur];
-                regionSize++;
-                if (cr < minR)
-                    minR = cr;
-                if (cr > maxR)
-                    maxR = cr;
-                if (cc < minC)
-                    minC = cc;
-                if (cc > maxC)
-                    maxC = cc;
-
-                int[] dr = { -1, 1, 0, 0 };
-                int[] dc = { 0, 0, -1, 1 };
-                for (int n = 0; n < 4; n++)
-                {
-                    int nr = cr + dr[n];
-                    int nc = cc + dc[n];
-                    if (nr >= 0 && nr < gridSize && nc >= 0 && nc < gridSize)
-                    {
-                        int nIdx = nr * gridSize + nc;
-                        if (!visited[nIdx] && spatialAttention[nIdx] >= peakThreshold * 0.6)
-                        {
-                            visited[nIdx] = true;
-                            stack.Push(nIdx);
-                        }
-                    }
-                }
-            }
-
-            double x1 = (double)minC / gridSize;
-            double y1 = (double)minR / gridSize;
-            double x2 = (double)(maxC + 1) / gridSize;
-            double y2 = (double)(maxR + 1) / gridSize;
-            double conf = Math.Min(
-                1.0,
-                regionConf / (regionSize * attnSum / ((double)gridSize * gridSize))
-            );
-            conf = 1.0 / (1.0 + Math.Exp(-conf + 0.8));
-
-            if (conf >= confThreshold && x2 > x1 && y2 > y1)
-            {
-                rawDetections[validCount, 0] = x1;
-                rawDetections[validCount, 1] = y1;
-                rawDetections[validCount, 2] = x2;
-                rawDetections[validCount, 3] = y2;
-                rawDetections[validCount, 4] = conf;
-                validCount++;
-            }
-        }
-
-        // Step 5: NMS
-        var kept = new bool[validCount];
-        for (int i = 0; i < validCount; i++)
-            kept[i] = true;
-        for (int i = 0; i < validCount; i++)
-        {
-            if (!kept[i])
-                continue;
-            for (int j = i + 1; j < validCount; j++)
-            {
-                if (!kept[j])
-                    continue;
-                double iou = ComputeIoU(
-                    rawDetections[i, 0],
-                    rawDetections[i, 1],
-                    rawDetections[i, 2],
-                    rawDetections[i, 3],
-                    rawDetections[j, 0],
-                    rawDetections[j, 1],
-                    rawDetections[j, 2],
-                    rawDetections[j, 3]
-                );
-                if (iou > nmsThreshold)
-                    kept[j] = false;
-            }
-        }
-
-        int finalCount = 0;
-        for (int i = 0; i < validCount; i++)
-            if (kept[i])
-                finalCount++;
-        if (finalCount == 0)
-            return new Tensor<T>([fieldsPerDet]);
-
-        var result = new Tensor<T>([finalCount * fieldsPerDet]);
-        int idx = 0;
-        for (int i = 0; i < validCount; i++)
-        {
-            if (!kept[i])
-                continue;
-            for (int f = 0; f < fieldsPerDet; f++)
-                result[idx * fieldsPerDet + f] = NumOps.FromDouble(rawDetections[i, f]);
-            idx++;
-        }
-        return result;
+        // Step 5: NMS, highest confidence first
+        return GroundingDetections<T>.Select(Engine, boxes, confidences, eligible, maxDet, nmsThreshold);
     }
 
     /// <inheritdoc />
@@ -321,30 +189,6 @@ public partial class FerretV2<T> : VisionLanguageModelBase<T>, IVisualGroundingM
         ThrowIfDisposed();
         string combined = string.Join(". ", categories) + ".";
         return GroundText(image, combined);
-    }
-
-    private static double ComputeIoU(
-        double x1a,
-        double y1a,
-        double x2a,
-        double y2a,
-        double x1b,
-        double y1b,
-        double x2b,
-        double y2b
-    )
-    {
-        double ix1 = Math.Max(x1a, x1b),
-            iy1 = Math.Max(y1a, y1b);
-        double ix2 = Math.Min(x2a, x2b),
-            iy2 = Math.Min(y2a, y2b);
-        double iw = Math.Max(0, ix2 - ix1),
-            ih = Math.Max(0, iy2 - iy1);
-        double inter = iw * ih;
-        double areaA = (x2a - x1a) * (y2a - y1a);
-        double areaB = (x2b - x1b) * (y2b - y1b);
-        double union = areaA + areaB - inter;
-        return union > 1e-8 ? inter / union : 0;
     }
 
     protected override void InitializeLayers()

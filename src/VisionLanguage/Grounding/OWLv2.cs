@@ -174,122 +174,27 @@ public partial class OWLv2<T> : VisionLanguageModelBase<T>, IVisualGroundingMode
             decoderOut = Layers[i].Forward(decoderOut);
         int outDim = decoderOut.Length;
 
-        // Step 3: Per-patch detection with calibrated objectness
+        // Step 3: Per-patch detection with calibrated objectness. Patch p reads its dim consecutive decoder values
+        // (actualPatches * dim never exceeds outDim), scores them with sigmoid(sum / dim) and regresses its box.
         int patchSize = 14;
         int gridSize = _options.ImageSize / patchSize;
-        int numPatches = gridSize * gridSize;
-        int actualPatches = Math.Min(numPatches, outDim);
-
-        int fieldsPerDet = 5;
+        int actualPatches = Math.Min(gridSize * gridSize, outDim);
         int maxDet = Math.Min(actualPatches, _options.MaxDetections);
-        var rawDetections = new double[maxDet, fieldsPerDet];
-        int validCount = 0;
+        if (maxDet <= 0)
+            return new Tensor<T>([GroundingDetections<T>.FieldsPerDetection]);
 
-        for (int pIdx = 0; pIdx < actualPatches && validCount < maxDet; pIdx++)
-        {
-            int gridRow = pIdx / gridSize;
-            int gridCol = pIdx % gridSize;
-            double patchCenterX = (gridCol + 0.5) / gridSize;
-            double patchCenterY = (gridRow + 0.5) / gridSize;
+        int dim = Math.Max(1, outDim / actualPatches);
+        var features = Engine.TensorSlice(decoderOut.Reshape([outDim]), [0], [actualPatches * dim])
+            .Reshape([actualPatches, dim]);
+        var confidences = Engine.TensorSigmoid(Engine.TensorDivideScalar(
+            Engine.ReduceSum(features, [1], false), NumOps.FromDouble(dim)));
+        var boxes = GroundingDetections<T>.PatchOffsetBoxes(Engine, features, gridSize);
+        var eligible = Engine.TensorMultiply(
+            GroundingDetections<T>.AtLeast(Engine, confidences, NumOps.FromDouble(confThreshold)),
+            GroundingDetections<T>.HasArea(Engine, boxes));
 
-            // Extract text-conditioned patch features from decoder output
-            int dim = Math.Max(1, outDim / actualPatches);
-            var patchFeat = new double[dim];
-            for (int d = 0; d < dim; d++)
-            {
-                int srcIdx = (pIdx * dim + d) % outDim;
-                patchFeat[d] = NumOps.ToDouble(decoderOut[srcIdx]);
-            }
-
-            // Objectness score from text-conditioned features
-            double objectness = 0;
-            for (int d = 0; d < dim; d++)
-                objectness += patchFeat[d];
-            double conf = 1.0 / (1.0 + Math.Exp(-objectness / Math.Max(1, dim)));
-
-            // Box regression
-            double boxDx = 0,
-                boxDy = 0,
-                boxW = 0,
-                boxH = 0;
-            int quarter = Math.Max(1, dim / 4);
-            for (int d = 0; d < quarter && d < dim; d++)
-                boxDx += patchFeat[d];
-            for (int d = quarter; d < 2 * quarter && d < dim; d++)
-                boxDy += patchFeat[d];
-            for (int d = 2 * quarter; d < 3 * quarter && d < dim; d++)
-                boxW += patchFeat[d];
-            for (int d = 3 * quarter; d < dim; d++)
-                boxH += patchFeat[d];
-
-            boxDx = Math.Tanh(boxDx / quarter) * 0.5 / gridSize;
-            boxDy = Math.Tanh(boxDy / quarter) * 0.5 / gridSize;
-            boxW = 1.0 / (1.0 + Math.Exp(-boxW / quarter)) * 3.0 / gridSize;
-            boxH = 1.0 / (1.0 + Math.Exp(-boxH / quarter)) * 3.0 / gridSize;
-
-            double cx = patchCenterX + boxDx;
-            double cy = patchCenterY + boxDy;
-            double x1 = Math.Max(0, cx - boxW / 2);
-            double y1 = Math.Max(0, cy - boxH / 2);
-            double x2 = Math.Min(1, cx + boxW / 2);
-            double y2 = Math.Min(1, cy + boxH / 2);
-
-            if (conf >= confThreshold && x2 > x1 && y2 > y1)
-            {
-                rawDetections[validCount, 0] = x1;
-                rawDetections[validCount, 1] = y1;
-                rawDetections[validCount, 2] = x2;
-                rawDetections[validCount, 3] = y2;
-                rawDetections[validCount, 4] = conf;
-                validCount++;
-            }
-        }
-
-        // Step 4: NMS
-        var kept = new bool[validCount];
-        for (int i = 0; i < validCount; i++)
-            kept[i] = true;
-        for (int i = 0; i < validCount; i++)
-        {
-            if (!kept[i])
-                continue;
-            for (int j = i + 1; j < validCount; j++)
-            {
-                if (!kept[j])
-                    continue;
-                double iou = ComputeIoU(
-                    rawDetections[i, 0],
-                    rawDetections[i, 1],
-                    rawDetections[i, 2],
-                    rawDetections[i, 3],
-                    rawDetections[j, 0],
-                    rawDetections[j, 1],
-                    rawDetections[j, 2],
-                    rawDetections[j, 3]
-                );
-                if (iou > nmsThreshold)
-                    kept[j] = false;
-            }
-        }
-
-        int finalCount = 0;
-        for (int i = 0; i < validCount; i++)
-            if (kept[i])
-                finalCount++;
-        if (finalCount == 0)
-            return new Tensor<T>([fieldsPerDet]);
-
-        var result = new Tensor<T>([finalCount * fieldsPerDet]);
-        int idx = 0;
-        for (int i = 0; i < validCount; i++)
-        {
-            if (!kept[i])
-                continue;
-            for (int f = 0; f < fieldsPerDet; f++)
-                result[idx * fieldsPerDet + f] = NumOps.FromDouble(rawDetections[i, f]);
-            idx++;
-        }
-        return result;
+        // Step 4: NMS, highest confidence first
+        return GroundingDetections<T>.Select(Engine, boxes, confidences, eligible, maxDet, nmsThreshold);
     }
 
     /// <inheritdoc />
@@ -298,30 +203,6 @@ public partial class OWLv2<T> : VisionLanguageModelBase<T>, IVisualGroundingMode
         ThrowIfDisposed();
         string combined = string.Join(". ", categories) + ".";
         return GroundText(image, combined);
-    }
-
-    private static double ComputeIoU(
-        double x1a,
-        double y1a,
-        double x2a,
-        double y2a,
-        double x1b,
-        double y1b,
-        double x2b,
-        double y2b
-    )
-    {
-        double ix1 = Math.Max(x1a, x1b),
-            iy1 = Math.Max(y1a, y1b);
-        double ix2 = Math.Min(x2a, x2b),
-            iy2 = Math.Min(y2a, y2b);
-        double iw = Math.Max(0, ix2 - ix1),
-            ih = Math.Max(0, iy2 - iy1);
-        double inter = iw * ih;
-        double areaA = (x2a - x1a) * (y2a - y1a);
-        double areaB = (x2b - x1b) * (y2b - y1b);
-        double union = areaA + areaB - inter;
-        return union > 1e-8 ? inter / union : 0;
     }
 
     protected override void InitializeLayers()

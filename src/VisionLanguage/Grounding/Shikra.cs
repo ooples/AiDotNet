@@ -182,105 +182,39 @@ public partial class Shikra<T> : VisionLanguageModelBase<T>, IVisualGroundingMod
         // Shikra generates coordinates as groups of 4 values (x1,y1,x2,y2)
         // Each coordinate is sigmoid-bounded to [0,1]
         int coordsPerBox = 4;
-        int numPotentialBoxes = outDim / coordsPerBox;
-        int maxDet = Math.Min(numPotentialBoxes, _options.MaxDetections);
-        int fieldsPerDet = 5;
-        var rawDetections = new double[maxDet, fieldsPerDet];
-        int validCount = 0;
+        int maxDet = Math.Min(outDim / coordsPerBox, _options.MaxDetections);
+        if (maxDet <= 0)
+            return new Tensor<T>([GroundingDetections<T>.FieldsPerDetection]);
 
-        for (int b = 0; b < maxDet; b++)
-        {
-            int baseIdx = b * coordsPerBox;
-            if (baseIdx + 3 >= outDim)
-                break;
+        var raw = Engine.TensorSlice(decoderOut.Reshape([outDim]), [0], [maxDet * coordsPerBox])
+            .Reshape([maxDet, coordsPerBox]);
+        var unit = Engine.TensorSigmoid(raw);
+        Tensor<T> Column(int index) => Engine.TensorSlice(unit, [0, index], [maxDet, 1]);
 
-            // Read coordinate tokens and apply sigmoid normalization
-            double rawX1 = NumOps.ToDouble(decoderOut[baseIdx]);
-            double rawY1 = NumOps.ToDouble(decoderOut[baseIdx + 1]);
-            double rawX2 = NumOps.ToDouble(decoderOut[baseIdx + 2]);
-            double rawY2 = NumOps.ToDouble(decoderOut[baseIdx + 3]);
+        // Ensure x2 >= x1, y2 >= y1
+        var boxes = Engine.TensorConcatenate(
+            [
+                Engine.TensorMin(Column(0), Column(2)),
+                Engine.TensorMin(Column(1), Column(3)),
+                Engine.TensorMax(Column(0), Column(2)),
+                Engine.TensorMax(Column(1), Column(3))
+            ], 1);
 
-            double x1 = 1.0 / (1.0 + Math.Exp(-rawX1));
-            double y1 = 1.0 / (1.0 + Math.Exp(-rawY1));
-            double x2 = 1.0 / (1.0 + Math.Exp(-rawX2));
-            double y2 = 1.0 / (1.0 + Math.Exp(-rawY2));
+        // Confidence from coordinate token magnitudes: sigmoid(sum |raw| / 4 - 2)
+        var coordMagnitude = Engine.ReduceSum(Engine.TensorAbs(raw), [1], false);
+        var confidences = Engine.TensorSigmoid(Engine.TensorAddScalar(
+            Engine.TensorDivideScalar(coordMagnitude, NumOps.FromDouble(4.0)), NumOps.FromDouble(-2.0)));
 
-            // Ensure x2 > x1, y2 > y1
-            if (x2 < x1)
-            {
-                double tmp = x1;
-                x1 = x2;
-                x2 = tmp;
-            }
-            if (y2 < y1)
-            {
-                double tmp = y1;
-                y1 = y2;
-                y2 = tmp;
-            }
+        // Valid box check: confident, positive extent and area above 0.001
+        var width = Engine.TensorSubtract(Engine.TensorSlice(boxes, [0, 2], [maxDet, 1]), Engine.TensorSlice(boxes, [0, 0], [maxDet, 1]));
+        var height = Engine.TensorSubtract(Engine.TensorSlice(boxes, [0, 3], [maxDet, 1]), Engine.TensorSlice(boxes, [0, 1], [maxDet, 1]));
+        var largeEnough = Engine.TensorGreaterThan(Engine.TensorMultiply(width, height), NumOps.FromDouble(0.001)).Reshape([maxDet]);
+        var eligible = Engine.TensorMultiply(Engine.TensorMultiply(
+            GroundingDetections<T>.AtLeast(Engine, confidences, NumOps.FromDouble(confThreshold)),
+            GroundingDetections<T>.HasArea(Engine, boxes)), largeEnough);
 
-            // Confidence from coordinate token magnitudes
-            double coordMag = Math.Abs(rawX1) + Math.Abs(rawY1) + Math.Abs(rawX2) + Math.Abs(rawY2);
-            double conf = 1.0 / (1.0 + Math.Exp(-coordMag / 4.0 + 2.0));
-
-            // Valid box check
-            double boxArea = (x2 - x1) * (y2 - y1);
-            if (conf >= confThreshold && boxArea > 0.001 && x2 > x1 && y2 > y1)
-            {
-                rawDetections[validCount, 0] = x1;
-                rawDetections[validCount, 1] = y1;
-                rawDetections[validCount, 2] = x2;
-                rawDetections[validCount, 3] = y2;
-                rawDetections[validCount, 4] = conf;
-                validCount++;
-            }
-        }
-
-        // Step 5: NMS
-        var kept = new bool[validCount];
-        for (int i = 0; i < validCount; i++)
-            kept[i] = true;
-        for (int i = 0; i < validCount; i++)
-        {
-            if (!kept[i])
-                continue;
-            for (int j = i + 1; j < validCount; j++)
-            {
-                if (!kept[j])
-                    continue;
-                double iou = ComputeIoU(
-                    rawDetections[i, 0],
-                    rawDetections[i, 1],
-                    rawDetections[i, 2],
-                    rawDetections[i, 3],
-                    rawDetections[j, 0],
-                    rawDetections[j, 1],
-                    rawDetections[j, 2],
-                    rawDetections[j, 3]
-                );
-                if (iou > nmsThreshold)
-                    kept[j] = false;
-            }
-        }
-
-        int finalCount = 0;
-        for (int i = 0; i < validCount; i++)
-            if (kept[i])
-                finalCount++;
-        if (finalCount == 0)
-            return new Tensor<T>([fieldsPerDet]);
-
-        var result = new Tensor<T>([finalCount * fieldsPerDet]);
-        int idx = 0;
-        for (int i = 0; i < validCount; i++)
-        {
-            if (!kept[i])
-                continue;
-            for (int f = 0; f < fieldsPerDet; f++)
-                result[idx * fieldsPerDet + f] = NumOps.FromDouble(rawDetections[i, f]);
-            idx++;
-        }
-        return result;
+        // Step 5: NMS, highest confidence first
+        return GroundingDetections<T>.Select(Engine, boxes, confidences, eligible, maxDet, nmsThreshold);
     }
 
     /// <inheritdoc />
@@ -290,30 +224,6 @@ public partial class Shikra<T> : VisionLanguageModelBase<T>, IVisualGroundingMod
         // Shikra treats each category as a referential dialogue question
         string combined = string.Join(". ", categories) + ".";
         return GroundText(image, combined);
-    }
-
-    private static double ComputeIoU(
-        double x1a,
-        double y1a,
-        double x2a,
-        double y2a,
-        double x1b,
-        double y1b,
-        double x2b,
-        double y2b
-    )
-    {
-        double ix1 = Math.Max(x1a, x1b),
-            iy1 = Math.Max(y1a, y1b);
-        double ix2 = Math.Min(x2a, x2b),
-            iy2 = Math.Min(y2a, y2b);
-        double iw = Math.Max(0, ix2 - ix1),
-            ih = Math.Max(0, iy2 - iy1);
-        double inter = iw * ih;
-        double areaA = (x2a - x1a) * (y2a - y1a);
-        double areaB = (x2b - x1b) * (y2b - y1b);
-        double union = areaA + areaB - inter;
-        return union > 1e-8 ? inter / union : 0;
     }
 
     protected override void InitializeLayers()
