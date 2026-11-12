@@ -328,10 +328,7 @@ public partial class LinkPredictionModel<T> : GraphModelLayoutBase<T>
             return;
         }
 
-        var identity = new Tensor<T>(new[] { numNodes, numNodes });
-        for (int i = 0; i < numNodes; i++)
-            identity[i, i] = NumOps.One;
-        SetAdjacencyMatrix(identity);
+        SetAdjacencyMatrix(Engine.TensorEye<T>(numNodes));
         _usesFallbackAdjacency = true;
     }
 
@@ -373,70 +370,63 @@ public partial class LinkPredictionModel<T> : GraphModelLayoutBase<T>
         }
 
         int numEdges = edges.Shape[0];
-        var scores = new Tensor<T>([numEdges]);
-
-        for (int e = 0; e < numEdges; e++)
+        if (numEdges == 0)
         {
-            int sourceIdx = Convert.ToInt32(NumOps.ToDouble(edges[e, 0]));
-            int targetIdx = Convert.ToInt32(NumOps.ToDouble(edges[e, 1]));
-            scores[e] = ComputeEdgeScore(sourceIdx, targetIdx);
+            return new Tensor<T>([0]);
         }
 
-        return scores;
-    }
-
-    private T ComputeEdgeScore(int sourceIdx, int targetIdx)
-    {
-        if (_nodeEmbeddings is null)
-        {
-            throw new InvalidOperationException("Node embeddings not computed.");
-        }
-
-        var sourceEmb = GetNodeEmbedding(sourceIdx);
-        var targetEmb = GetNodeEmbedding(targetIdx);
+        var sourceEmb = GatherEmbeddings(EdgeEndpoints(edges, 0));
+        var targetEmb = GatherEmbeddings(EdgeEndpoints(edges, 1));
 
         return _decoderType switch
         {
-            LinkPredictionDecoder.DotProduct => VectorHelper.DotProduct(sourceEmb, targetEmb),
-            LinkPredictionDecoder.CosineSimilarity => NumOps.FromDouble(VectorHelper.CosineSimilarity(sourceEmb, targetEmb)),
-            LinkPredictionDecoder.Hadamard => Hadamard(sourceEmb, targetEmb),
-            LinkPredictionDecoder.Distance => NegativeDistance(sourceEmb, targetEmb),
-            _ => VectorHelper.DotProduct(sourceEmb, targetEmb)
+            LinkPredictionDecoder.CosineSimilarity => CosineSimilarityRows(sourceEmb, targetEmb),
+            LinkPredictionDecoder.Distance => Engine.TensorNegate(RowSums(SquaredDifference(sourceEmb, targetEmb))),
+            // Hadamard decoding sums the element-wise product, which is the dot product
+            _ => RowSums(Engine.TensorMultiply(sourceEmb, targetEmb))
         };
     }
 
-    private Vector<T> GetNodeEmbedding(int nodeIdx)
+    /// <summary>
+    /// Node indices in one column of an edge tensor, rounded to the nearest integer.
+    /// </summary>
+    private Tensor<int> EdgeEndpoints(Tensor<T> edges, int column)
+    {
+        int numEdges = edges.Shape[0];
+        return Engine.TensorRound(Engine.TensorNarrow(edges, 1, column, 1)).Reshape(numEdges).Cast<int>();
+    }
+
+    /// <summary>
+    /// Embedding rows [count, EmbeddingDim] of the given nodes.
+    /// </summary>
+    private Tensor<T> GatherEmbeddings(Tensor<int> nodes)
     {
         if (_nodeEmbeddings is null) throw new InvalidOperationException("Embeddings not computed.");
 
-        var embedding = new Vector<T>(EmbeddingDim);
-        for (int i = 0; i < EmbeddingDim; i++)
-        {
-            embedding[i] = _nodeEmbeddings[nodeIdx, i];
-        }
-        return embedding;
+        var table = Engine.TensorNarrow(_nodeEmbeddings, 1, 0, EmbeddingDim);
+        return Engine.TensorIndexSelect(table, nodes, 0);
     }
 
+    private Tensor<T> RowSums(Tensor<T> rows) => Engine.ReduceSum(rows, [1], keepDims: false);
 
-
-    private T Hadamard(Vector<T> a, Vector<T> b)
+    private Tensor<T> SquaredDifference(Tensor<T> a, Tensor<T> b)
     {
-        // Vectorized element-wise product sum using Engine
-        var tensorA = new Tensor<T>(a.ToArray(), [a.Length]);
-        var tensorB = new Tensor<T>(b.ToArray(), [b.Length]);
-        var product = Engine.TensorMultiply(tensorA, tensorB);
-        return Engine.TensorSum(product);
+        var diff = Engine.TensorSubtract(a, b);
+        return Engine.TensorMultiply(diff, diff);
     }
 
-    private T NegativeDistance(Vector<T> a, Vector<T> b)
+    /// <summary>
+    /// Row-wise cosine similarity clamped to [-1, 1], or 0 where ||a|| * ||b|| is not above 1e-10.
+    /// </summary>
+    private Tensor<T> CosineSimilarityRows(Tensor<T> a, Tensor<T> b)
     {
-        // Vectorized L2 distance calculation using Engine
-        var tensorA = new Tensor<T>(a.ToArray(), [a.Length]);
-        var tensorB = new Tensor<T>(b.ToArray(), [b.Length]);
-        var diff = Engine.TensorSubtract(tensorA, tensorB);
-        var squaredDiff = Engine.TensorMultiply(diff, diff);
-        T sumSquaredDiff = Engine.TensorSum(squaredDiff);
-        return NumOps.Multiply(NumOps.FromDouble(-1.0), sumSquaredDiff);
+        var dot = RowSums(Engine.TensorMultiply(a, b));
+        var denom = Engine.TensorMultiply(
+            Engine.TensorSqrt(RowSums(Engine.TensorMultiply(a, a))),
+            Engine.TensorSqrt(RowSums(Engine.TensorMultiply(b, b))));
+        var cosine = Engine.TensorClamp(Engine.TensorDivide(dot, denom), NumOps.FromDouble(-1.0), NumOps.One);
+        return Engine.TensorWhere(
+            Engine.TensorGreaterThan(denom, NumOps.FromDouble(1e-10)), cosine, Engine.TensorZerosLike(dot));
     }
 
     // UpdateParameters re-sliced the flat vector across Layers by hand -- the base walks
@@ -549,48 +539,64 @@ public partial class LinkPredictionModel<T> : GraphModelLayoutBase<T>
             throw new InvalidOperationException("Node embeddings not computed.");
         }
 
-        var gradient = new Tensor<T>(_nodeEmbeddings._shape);
         int numPos = posEdges.Shape[0];
         int numNeg = negEdges.Shape[0];
+        var indexParts = new List<Tensor<int>>(2);
+        var updateParts = new List<Tensor<T>>(2);
 
-        // Process positive edges (target = 1, grad = sigmoid(score) - 1)
-        for (int e = 0; e < numPos; e++)
+        // Positive edges (target = 1, grad = sigmoid(score) - 1)
+        if (numPos > 0)
         {
-            int srcIdx = Convert.ToInt32(NumOps.ToDouble(posEdges[e, 0]));
-            int tgtIdx = Convert.ToInt32(NumOps.ToDouble(posEdges[e, 1]));
-            double score = NumOps.ToDouble(posScores[e]);
-            double sigmoidGrad = 1.0 / (1.0 + Math.Exp(-score)) - 1.0;
-
-            AccumulateGradients(gradient, srcIdx, tgtIdx, sigmoidGrad);
+            var posGrad = Engine.TensorAddScalar(
+                Engine.Sigmoid(Engine.TensorNarrow(posScores, 0, 0, numPos)), NumOps.FromDouble(-1.0));
+            AddEdgeGradients(posEdges, posGrad, indexParts, updateParts);
         }
 
-        // Process negative edges (target = 0, grad = sigmoid(score))
-        for (int e = 0; e < numNeg; e++)
+        // Negative edges (target = 0, grad = sigmoid(score))
+        if (numNeg > 0)
         {
-            int srcIdx = Convert.ToInt32(NumOps.ToDouble(negEdges[e, 0]));
-            int tgtIdx = Convert.ToInt32(NumOps.ToDouble(negEdges[e, 1]));
-            double score = NumOps.ToDouble(negScores[e]);
-            double sigmoidGrad = 1.0 / (1.0 + Math.Exp(-score));
-
-            AccumulateGradients(gradient, srcIdx, tgtIdx, sigmoidGrad);
+            var negGrad = Engine.Sigmoid(Engine.TensorNarrow(negScores, 0, 0, numNeg));
+            AddEdgeGradients(negEdges, negGrad, indexParts, updateParts);
         }
 
-        return gradient;
+        var gradient = new Tensor<T>(_nodeEmbeddings._shape);
+        if (indexParts.Count == 0)
+        {
+            return gradient;
+        }
+
+        // Accumulate edge by edge: source row, then target row, positive edges before negative ones
+        var indices = indexParts.Count == 1 ? indexParts[0] : Engine.TensorConcatenate(indexParts.ToArray(), 0);
+        var updates = updateParts.Count == 1 ? updateParts[0] : Engine.TensorConcatenate(updateParts.ToArray(), 0);
+        var accumulated = Engine.TensorIndexAdd(Engine.TensorNarrow(gradient, 1, 0, EmbeddingDim), 0, indices, updates);
+        if (gradient.Shape[1] == EmbeddingDim)
+        {
+            return accumulated;
+        }
+
+        return Engine.TensorConcatenate(
+            new[] { accumulated, Engine.TensorNarrow(gradient, 1, EmbeddingDim, gradient.Shape[1] - EmbeddingDim) }, 1);
     }
 
-    private void AccumulateGradients(Tensor<T> gradient, int srcIdx, int tgtIdx, double lossGrad)
+    /// <summary>
+    /// Appends the interleaved (source, target) row indices of each edge and their updates
+    /// lossGrad * targetEmbedding and lossGrad * sourceEmbedding.
+    /// </summary>
+    private void AddEdgeGradients(
+        Tensor<T> edges, Tensor<T> lossGrad, List<Tensor<int>> indexParts, List<Tensor<T>> updateParts)
     {
-        var srcEmb = GetNodeEmbedding(srcIdx);
-        var tgtEmb = GetNodeEmbedding(tgtIdx);
+        int numEdges = edges.Shape[0];
+        var srcIdx = EdgeEndpoints(edges, 0);
+        var tgtIdx = EdgeEndpoints(edges, 1);
+        var scale = lossGrad.Reshape(numEdges, 1);
+        var srcGrad = Engine.TensorMultiply(GatherEmbeddings(tgtIdx), scale);
+        var tgtGrad = Engine.TensorMultiply(GatherEmbeddings(srcIdx), scale);
 
-        for (int d = 0; d < EmbeddingDim; d++)
-        {
-            T srcGrad = NumOps.FromDouble(lossGrad * NumOps.ToDouble(tgtEmb[d]));
-            T tgtGrad = NumOps.FromDouble(lossGrad * NumOps.ToDouble(srcEmb[d]));
-
-            gradient[srcIdx, d] = NumOps.Add(gradient[srcIdx, d], srcGrad);
-            gradient[tgtIdx, d] = NumOps.Add(gradient[tgtIdx, d], tgtGrad);
-        }
+        indexParts.Add(Engine.TensorConcatenate(
+            new[] { srcIdx.Reshape(numEdges, 1), tgtIdx.Reshape(numEdges, 1) }, 1).Reshape(2 * numEdges));
+        updateParts.Add(Engine.TensorConcatenate(
+            new[] { srcGrad.Reshape(numEdges, 1, EmbeddingDim), tgtGrad.Reshape(numEdges, 1, EmbeddingDim) }, 1)
+            .Reshape(2 * numEdges, EmbeddingDim));
     }
 
     private double ComputeBCELoss(Tensor<T> posScores, Tensor<T> negScores)
@@ -633,24 +639,21 @@ public partial class LinkPredictionModel<T> : GraphModelLayoutBase<T>
 
     private double ComputeAUC(Tensor<T> posScores, Tensor<T> negScores)
     {
-        int correctRankings = 0;
-        int totalPairs = 0;
         int numPos = posScores.Shape[0];
         int numNeg = negScores.Shape[0];
-
-        for (int i = 0; i < numPos; i++)
+        int totalPairs = numPos * numNeg;
+        if (totalPairs == 0)
         {
-            for (int j = 0; j < numNeg; j++)
-            {
-                if (NumOps.GreaterThan(posScores[i], negScores[j]))
-                {
-                    correctRankings++;
-                }
-                totalPairs++;
-            }
+            return 0.5;
         }
 
-        return totalPairs > 0 ? (double)correctRankings / totalPairs : 0.5;
+        // Count (positive, negative) pairs where the positive edge scores strictly higher
+        var pairShape = new[] { numPos, numNeg };
+        var pos = Engine.TensorBroadcastTo(posScores.Reshape(numPos, 1), pairShape);
+        var neg = Engine.TensorBroadcastTo(negScores.Reshape(1, numNeg), pairShape);
+        int correctRankings = Engine.TensorCountNonzero(Engine.TensorGreaterThan(pos, neg));
+
+        return (double)correctRankings / totalPairs;
     }
 
     #region Abstract Method Implementations
