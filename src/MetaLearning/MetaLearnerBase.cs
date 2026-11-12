@@ -1334,7 +1334,10 @@ public abstract partial class MetaLearnerBase<T, TInput, TOutput> : ModelBase<T,
                 var matches = Engine.TensorEquals(
                     Engine.TensorRound(Tensor<T>.FromVector(predVector)),
                     Engine.TensorRound(labelTensor));
-                return NumOps.Divide(Engine.TensorSum(matches), NumOps.FromDouble(predVector.Length));
+                // Count the matches with an integer op: a sum of the 0/1 mask in T stops being exact past 2048
+                // under Half, and the length itself is not representable there either.
+                int matched = Engine.TensorCountNonzero(matches);
+                return NumOps.FromDouble((double)matched / predVector.Length);
             }
         }
 

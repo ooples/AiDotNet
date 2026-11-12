@@ -79,8 +79,10 @@ internal static class ParameterModulation
 
         // 1 where |raw| > threshold (NaN compares false, so NaN entries are skipped like the scalar check).
         var mask = engine.TensorGreaterThan(engine.TensorAbs(rawT), numOps.FromDouble(threshold));
-        T count = engine.TensorSum(mask);
-        if (!numOps.GreaterThan(count, numOps.Zero))
+
+        // Count with an integer op: a sum of the mask in T stops being exact past 2048 under Half.
+        int count = engine.TensorCountNonzero(mask);
+        if (count == 0)
         {
             return null;
         }
@@ -88,8 +90,12 @@ internal static class ParameterModulation
         var safeRaw = engine.TensorWhere(mask, rawT, engine.TensorOnesLike(rawT));
         var ratio = engine.TensorClamp(
             engine.TensorDivide(adaptedT, safeRaw), numOps.FromDouble(lower), numOps.FromDouble(upper));
-        T sum = engine.TensorSum(engine.TensorWhere(mask, ratio, engine.TensorZerosLike(rawT)));
-        return new Vector<T>(new[] { numOps.Divide(sum, count) });
+
+        // The mean as the sum of ratio / count: every term is at most upper / count, so the sum stays near the mean
+        // instead of growing to upper * count, which overflows Half (max 65504) for large feature vectors.
+        var masked = engine.TensorWhere(mask, ratio, engine.TensorZerosLike(rawT));
+        T mean = engine.TensorSum(engine.TensorMultiplyScalar(masked, numOps.FromDouble(1.0 / count)));
+        return new Vector<T>(new[] { mean });
     }
 
     /// <summary>
