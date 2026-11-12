@@ -105,6 +105,7 @@ public abstract partial class TabRBase<T> : IParameterSource<T>
     [Scratch]
     private Matrix<int>? _neighborIndicesCache;
     [Scratch]
+    [KeepsActivation("Read after the pass by PredictWithConfidence; holds labels, not activations.")]
     private Tensor<T>? _neighborLabelsCache;   // [batch, m, labelDimension]
 
     /// <summary>
