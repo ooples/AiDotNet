@@ -161,6 +161,29 @@ internal static class CausalTensorHelpers
     }
 
     /// <summary>
+    /// Gaussian mutual information -0.5 log(1 - r^2) of two 1-D tensors, with r the correlation of the
+    /// population (1/n) moments (0 unless both variances are above 1e-15) clamped to [-0.9999, 0.9999].
+    /// </summary>
+    internal static T GaussianMutualInformation<T>(Tensor<T> x, Tensor<T> y)
+    {
+        var engine = AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<T>();
+        var dx = engine.TensorSubtractScalar(x, engine.TensorMean(x));
+        var dy = engine.TensorSubtractScalar(y, engine.TensorMean(y));
+        T sxx = engine.TensorMean(engine.TensorSquare(dx));
+        T syy = engine.TensorMean(engine.TensorSquare(dy));
+        T sxy = engine.TensorMean(engine.TensorMultiply(dx, dy));
+        T tiny = ops.FromDouble(1e-15);
+        T corr = ops.GreaterThan(sxx, tiny) && ops.GreaterThan(syy, tiny)
+            ? ops.Divide(sxy, ops.Sqrt(ops.Multiply(sxx, syy)))
+            : ops.Zero;
+        T bound = ops.FromDouble(0.9999);
+        if (ops.GreaterThan(corr, bound)) corr = bound;
+        if (ops.LessThan(corr, ops.Negate(bound))) corr = ops.Negate(bound);
+        return ops.Multiply(ops.FromDouble(-0.5), ops.Log(ops.Subtract(ops.One, ops.Multiply(corr, corr))));
+    }
+
+    /// <summary>
     /// Sum of squared deviations of a column from its mean.
     /// </summary>
     internal static T CenteredSumOfSquares<T>(Matrix<T> data, int column)
