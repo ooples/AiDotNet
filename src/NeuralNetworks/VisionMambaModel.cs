@@ -307,9 +307,12 @@ public partial class VisionMambaModel<T> : ImageClassifierModelLayoutBase<T>
 
         // Step 5: Global average pooling over sequence dimension
         int featureDim = current.Shape[2];
-        var summed = Engine.ReduceSum(current, new int[] { 1 });
+        var pooled = Engine.ReduceSum(current, new int[] { 1 });
         T seqLenT = NumOps.FromDouble(_numPatches);
-        var pooled = Engine.TensorDivide(summed, Tensor<T>.CreateDefault(summed._shape, seqLenT));
+        for (int i = 0; i < pooled.Length; i++)
+        {
+            pooled[i] = NumOps.Divide(pooled[i], seqLenT);
+        }
 
         // Step 6: Final RMS norm on pooled output
         var normedPooled = ApplyRMSNorm1D(pooled, _finalNormGamma, batchSize, featureDim);
@@ -361,30 +364,62 @@ public partial class VisionMambaModel<T> : ImageClassifierModelLayoutBase<T>
     private Tensor<T> ExtractPatches(Tensor<T> input, int batchSize)
     {
         int patchDim = _patchSize * _patchSize * _channels;
+        var patches = new Tensor<T>(new[] { batchSize, _numPatches, patchDim });
 
-        // [B, C, nH*p, nW*p] -> [B, C, nH, p, nW, p] -> [B, nH, nW, C, p, p] -> [B, numPatches, C*p*p]:
-        // patches row-major over (ph, pw), each flattened over (c, h, w)
-        var cropped = Engine.TensorNarrow(
-            Engine.TensorNarrow(Engine.TensorNarrow(input, 0, 0, batchSize), 2, 0, _numPatchesH * _patchSize),
-            3, 0, _numPatchesW * _patchSize);
-        var grid = cropped.Reshape(batchSize, _channels, _numPatchesH, _patchSize, _numPatchesW, _patchSize);
-        var patches = Engine.TensorPermute(grid, new[] { 0, 2, 4, 1, 3, 5 })
-            .Reshape(batchSize, _numPatches, patchDim);
+        for (int b = 0; b < batchSize; b++)
+        {
+            int patchIdx = 0;
+            for (int ph = 0; ph < _numPatchesH; ph++)
+            {
+                for (int pw = 0; pw < _numPatchesW; pw++)
+                {
+                    int flatIdx = 0;
+                    for (int c = 0; c < _channels; c++)
+                    {
+                        for (int h = 0; h < _patchSize; h++)
+                        {
+                            for (int w = 0; w < _patchSize; w++)
+                            {
+                                int srcH = ph * _patchSize + h;
+                                int srcW = pw * _patchSize + w;
+                                patches[new[] { b, patchIdx, flatIdx }] =
+                                    input[new[] { b, c, srcH, srcW }];
+                                flatIdx++;
+                            }
+                        }
+                    }
+                    patchIdx++;
+                }
+            }
+        }
 
         return patches;
     }
 
     private Tensor<T> ApplyRMSNorm1D(Tensor<T> input, Tensor<T> gamma, int batchSize, int dim)
     {
+        var output = TensorAllocator.Rent<T>(input._shape);
         T eps = NumOps.FromDouble(1e-6);
 
-        // y = x / sqrt(mean(x^2) + eps) * gamma, per row
-        var rows = input.Reshape(batchSize, dim);
-        var sumSq = Engine.ReduceSum(Engine.TensorMultiply(rows, rows), new[] { 1 }, true);
-        var meanSq = Engine.TensorDivide(sumSq, Tensor<T>.CreateDefault(sumSq._shape, NumOps.FromDouble(dim)));
-        var rms = Engine.TensorSqrt(TensorTapeOps.TapeAddScalar(Engine, meanSq, eps));
-        var scale = Engine.TensorNarrow(gamma.Reshape(gamma.Length), 0, 0, dim).Reshape(1, dim);
-        return Engine.TensorMultiply(Engine.TensorDivide(rows, rms), scale).Reshape(input._shape);
+        for (int b = 0; b < batchSize; b++)
+        {
+            T sumSq = NumOps.Zero;
+            for (int d = 0; d < dim; d++)
+            {
+                T val = input[new[] { b, d }];
+                sumSq = NumOps.Add(sumSq, NumOps.Multiply(val, val));
+            }
+            T meanSq = NumOps.Divide(sumSq, NumOps.FromDouble(dim));
+            T rms = NumOps.Sqrt(NumOps.Add(meanSq, eps));
+
+            for (int d = 0; d < dim; d++)
+            {
+                output[new[] { b, d }] = NumOps.Multiply(
+                    NumOps.Divide(input[new[] { b, d }], rms), gamma[d]);
+            }
+        }
+
+        return output;
     }
 
     #endregion
