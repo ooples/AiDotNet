@@ -2,6 +2,7 @@ using AiDotNet.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Enums;
 using AiDotNet.Attributes;
+using AiDotNet.Preprocessing.FeatureSelection.Helpers;
 
 namespace AiDotNet.Preprocessing.FeatureSelection.Regression;
 
@@ -28,7 +29,7 @@ public class ElasticNetSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, I
     private readonly int _maxIterations;
     private readonly double _tolerance;
 
-    private double[]? _coefficients;
+    private Vector<T>? _coefficients;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
@@ -36,7 +37,7 @@ public class ElasticNetSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, I
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public double Alpha => _alpha;
     public double L1Ratio => _l1Ratio;
-    public double[]? Coefficients => _coefficients;
+    public Vector<T>? Coefficients => _coefficients;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -77,92 +78,65 @@ public class ElasticNetSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, I
         _nInputFeatures = data.Columns;
         int n = data.Rows;
         int p = data.Columns;
+        if (n == 0)
+            throw new InvalidOperationException("Sequence contains no elements");
 
-        var X = new double[n, p];
-        var y = new double[n];
-        for (int i = 0; i < n; i++)
-        {
-            y[i] = NumOps.ToDouble(target[i]);
-            for (int j = 0; j < p; j++)
-                X[i, j] = NumOps.ToDouble(data[i, j]);
-        }
+        var engine = Engine;
 
-        // Standardize
-        var means = new double[p];
-        var stds = new double[p];
-        double yMean = y.Average();
+        // Standardize (population std; a constant column is only centred) and centre the target
+        var centered = FeatureSelectionTensorOps.CenterColumns(Tensor<T>.FromMatrix(data), out _, out var std);
+        var safeStd = engine.TensorWhere(engine.TensorLessThan(std, NumOps.FromDouble(1e-10)), FeatureSelectionTensorOps.Filled(new[] { p }, NumOps.One), std);
+        var X = engine.TensorDivide(centered, engine.Reshape(safeStd, new[] { 1, p }));
+        var yColumn = engine.Reshape(Tensor<T>.FromVector(target), new[] { n, 1 });
+        var y = engine.TensorSubtract(yColumn, engine.ReduceMean(yColumn, new[] { 0 }, true));
 
-        for (int j = 0; j < p; j++)
-        {
-            for (int i = 0; i < n; i++)
-                means[j] += X[i, j];
-            means[j] /= n;
+        // Coordinate descent for Elastic Net, (1/2n)||y - Xb||^2 + alpha * l1Ratio * ||b||_1
+        // + alpha * (1 - l1Ratio) / 2 * ||b||^2, with rho_j = (X'y)_j / n - sum_{k != j} (X'X)_jk b_k / n
+        var nT = FeatureSelectionTensorOps.Count<T>(n);
+        var gram = engine.TensorDivideScalar(engine.TensorMatMul(engine.TensorTranspose(X), X), nT); // [p, p]
+        var correlation = engine.TensorDivideScalar(engine.TensorMatMul(engine.TensorTranspose(X), y), nT); // [p, 1]
+        var eye = engine.TensorEye<T>(p);
+        T l1Penalty = NumOps.FromDouble(_alpha * _l1Ratio);
+        T negativeL1Penalty = NumOps.Negate(l1Penalty);
+        T shrinkage = NumOps.FromDouble(1 + _alpha * (1 - _l1Ratio));
+        T tolerance = NumOps.FromDouble(_tolerance);
 
-            for (int i = 0; i < n; i++)
-                stds[j] += (X[i, j] - means[j]) * (X[i, j] - means[j]);
-            stds[j] = Math.Sqrt(stds[j] / n);
-            if (stds[j] < 1e-10) stds[j] = 1;
-
-            for (int i = 0; i < n; i++)
-                X[i, j] = (X[i, j] - means[j]) / stds[j];
-        }
-
-        for (int i = 0; i < n; i++)
-            y[i] -= yMean;
-
-        // Coordinate descent for Elastic Net
-        _coefficients = new double[p];
-        double l1Penalty = _alpha * _l1Ratio;
-        double l2Penalty = _alpha * (1 - _l1Ratio);
-
+        var coefficients = new Tensor<T>(new[] { p, 1 });
         for (int iter = 0; iter < _maxIterations; iter++)
         {
-            double maxChange = 0;
-
+            var maxChange = new Tensor<T>(new[] { 1, 1 });
             for (int j = 0; j < p; j++)
             {
-                // Compute partial residual
-                double rhoJ = 0;
-                for (int i = 0; i < n; i++)
-                {
-                    double residual = y[i];
-                    for (int k = 0; k < p; k++)
-                    {
-                        if (k != j)
-                            residual -= X[i, k] * _coefficients[k];
-                    }
-                    rhoJ += X[i, j] * residual;
-                }
-                rhoJ /= n;
+                var oldCoef = engine.TensorSlice(coefficients, new[] { j, 0 }, new[] { 1, 1 });
+                var fit = engine.TensorMatMul(engine.TensorSlice(gram, new[] { j, 0 }, new[] { 1, p }), coefficients);
+                var own = engine.TensorMultiply(engine.TensorSlice(gram, new[] { j, j }, new[] { 1, 1 }), oldCoef);
+                var rhoJ = engine.TensorAdd(engine.TensorSubtract(engine.TensorSlice(correlation, new[] { j, 0 }, new[] { 1, 1 }), fit), own);
 
-                // Soft thresholding
-                double oldCoef = _coefficients[j];
-                if (rhoJ > l1Penalty)
-                    _coefficients[j] = (rhoJ - l1Penalty) / (1 + l2Penalty);
-                else if (rhoJ < -l1Penalty)
-                    _coefficients[j] = (rhoJ + l1Penalty) / (1 + l2Penalty);
-                else
-                    _coefficients[j] = 0;
-
-                maxChange = Math.Max(maxChange, Math.Abs(_coefficients[j] - oldCoef));
+                // Soft thresholding: S(rho, l1) / (1 + l2), with S(z, l) = z - clamp(z, -l, l)
+                var newCoef = engine.TensorDivideScalar(
+                    engine.TensorSubtract(rhoJ, engine.TensorClamp(rhoJ, negativeL1Penalty, l1Penalty)), shrinkage);
+                var change = engine.TensorSubtract(newCoef, oldCoef);
+                coefficients = engine.TensorAdd(coefficients,
+                    engine.TensorMultiply(engine.TensorSlice(eye, new[] { 0, j }, new[] { p, 1 }), engine.TensorBroadcastTo(change, new[] { p, 1 })));
+                maxChange = engine.TensorMax(maxChange, engine.TensorAbs(change));
             }
 
-            if (maxChange < _tolerance)
+            if (engine.TensorCountNonzero(engine.TensorLessThan(maxChange, tolerance)) > 0)
                 break;
         }
 
+        var flat = engine.Reshape(coefficients, new[] { p });
+        _coefficients = flat.ToVector();
+
         // Select features with largest coefficients
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = Enumerable.Range(0, p)
-            .OrderByDescending(j => Math.Abs(_coefficients[j]))
-            .Take(numToSelect)
-            .OrderBy(x => x)
-            .ToArray();
+        _selectedIndices = FeatureSelectionTensorOps.TopKIndicesSorted(engine.TensorAbs(flat), numToSelect);
 
         IsFitted = true;
     }
 
     /// <inheritdoc />
+
     public Matrix<T> FitTransform(Matrix<T> data, Vector<T> target)
     {
         Fit(data, target);
@@ -175,15 +149,7 @@ public class ElasticNetSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, I
         if (_selectedIndices is null)
             throw new InvalidOperationException("ElasticNetSelector has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return FeatureSelectionTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />
