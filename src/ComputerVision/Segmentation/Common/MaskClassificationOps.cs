@@ -11,11 +11,12 @@ namespace AiDotNet.ComputerVision.Segmentation.Common;
 /// <remarks>
 /// <para>
 /// A mask-classification model predicts <c>N</c> masks and one class distribution per mask instead of a
-/// class per pixel (MaskFormer, Cheng et al. 2021). The heads here work in "assignment space": the decoder's
+/// class per pixel (MaskFormer, Cheng et al. 2021). ODISE's head works in "assignment space": the decoder's
 /// last convolution emits the pixel embedding <c>P</c> (<c>D</c> channels), the initial mask logits
 /// <c>L0 = C0 P</c> of the <c>N</c> learnable cluster centers / queries <c>C0</c> (the convolution's weight
 /// rows), and per-pixel class projections. A center update <c>C &lt;- C + A P^T</c> then changes the mask
-/// logits by <c>(A P^T) P</c>, so the cross-attention runs without materializing the centers.
+/// logits by <c>(A P^T) P</c>, so the cross-attention runs without materializing the centers. kMaX-DeepLab reads
+/// several pixel-feature scales, so its decoder keeps the centers explicit.
 /// </para>
 /// </remarks>
 internal static class MaskClassificationOps
@@ -24,57 +25,53 @@ internal static class MaskClassificationOps
     internal const double LogEpsilon = 1e-8;
 
     /// <summary>
-    /// kMaX-DeepLab's k-means cross-attention (Yu et al. 2022, Eq. 4): each pixel is assigned to the cluster
-    /// center with the largest affinity (argmax over the <c>N</c> centers, a hard assignment), and every
-    /// center adds the sum of the pixel embeddings assigned to it.
+    /// kMaX-DeepLab's transformer decoder (Yu et al. 2022, Sec. 3.2-3.3): the cluster centers run k-means
+    /// cross-attention (Eq. 4) against the pixel decoder's multi-scale features, coarse to fine, and the final
+    /// centers give the mask logits on the finest pixel features.
     /// </summary>
-    /// <param name="raw">Decoder output <c>[B, D + N + K + 1, H, W]</c>: pixel embedding, initial cluster
-    /// logits and per-pixel class projections (K classes plus void).</param>
-    /// <param name="pixelDim">Pixel embedding width <c>D</c>.</param>
-    /// <param name="numClusters">Number of cluster centers <c>N</c>.</param>
-    /// <param name="iterations">Number of k-means cross-attention updates (the kMaX decoder layers).</param>
-    /// <returns>Mask logits <c>[B, N, H*W]</c> and class logits <c>[B, N, K + 1]</c>.</returns>
+    /// <param name="scales">The pixel features <c>[B, D, h_s * w_s]</c> the decoder stages read, in reading order
+    /// (strides 32, 16, 8 in the paper).</param>
+    /// <param name="iterations">Number of k-means cross-attention updates (the kMaX decoder layers, 6 in the paper);
+    /// update <c>t</c> reads scale <c>floor(t * S / iterations)</c>, so the paper's 6 layers over 3 scales read
+    /// each scale twice.</param>
+    /// <param name="initialCenters">The learnable initial cluster centers <c>[N, D]</c>.</param>
+    /// <param name="finest">The finest pixel features <c>[B, D, HW]</c> (stride 4 in the paper).</param>
+    /// <returns>The final cluster centers <c>[B, N, D]</c> and the mask logits <c>[B, N, HW]</c>.</returns>
     /// <remarks>
-    /// Pixel embeddings are L2-normalized along <c>D</c> so the affinities stay bounded. Keys and values share
-    /// the pixel embedding on the mask path; the class head acts on the per-pixel class projections, so a
-    /// center's class logits are the sum of the projections of the pixels assigned to it over all updates.
-    /// The argmax is not differentiable (as in the paper); gradients reach the network through the summed
-    /// pixel embeddings and projections.
+    /// Every pixel feature is L2-normalized along <c>D</c>. An update assigns each pixel to the center with the
+    /// largest affinity (argmax over the <c>N</c> centers, a hard assignment) and adds to every center the sum of
+    /// the pixel features assigned to it: <c>C &lt;- C + argmax_N(C P) P^T</c>. The argmax is not differentiable
+    /// (as in the paper); gradients reach the network through the summed pixel features.
     /// </remarks>
-    internal static (Tensor<T> MaskLogits, Tensor<T> ClassLogits) KMeansCrossAttention<T>(
-        Tensor<T> raw, int pixelDim, int numClusters, int iterations)
+    internal static (Tensor<T> Centers, Tensor<T> MaskLogits) KMeansDecoder<T>(
+        IReadOnlyList<Tensor<T>> scales, int iterations, Tensor<T> initialCenters, Tensor<T> finest)
     {
-        if (raw is null) throw new ArgumentNullException(nameof(raw));
-        if (raw.Rank != 4) throw new ArgumentException("The head input must be [B, C, H, W].", nameof(raw));
+        if (scales is null) throw new ArgumentNullException(nameof(scales));
+        if (initialCenters is null) throw new ArgumentNullException(nameof(initialCenters));
+        if (finest is null) throw new ArgumentNullException(nameof(finest));
+        if (scales.Count == 0) throw new ArgumentException("At least one pixel-feature scale is required.", nameof(scales));
         if (iterations < 1) throw new ArgumentOutOfRangeException(nameof(iterations), "At least one k-means update is required.");
-        int b = raw.Shape[0], c = raw.Shape[1], hw = raw.Shape[2] * raw.Shape[3];
-        int classWidth = c - pixelDim - numClusters;
-        if (pixelDim < 1 || numClusters < 1 || classWidth < 2)
-            throw new ArgumentException(
-                $"The head input has {c} channels; it needs {pixelDim} pixel, {numClusters} cluster and at least 2 class channels.",
-                nameof(raw));
-
-        var engine = AiDotNetEngine.Current;
-        var flat = engine.Reshape(raw, new[] { b, c, hw });
-        var pixel = NormalizeAxis(engine.TensorSlice(flat, new[] { 0, 0, 0 }, new[] { b, pixelDim, hw }), 1);
-        var logits = engine.TensorSlice(flat, new[] { 0, pixelDim, 0 }, new[] { b, numClusters, hw });
-        var classProjection = engine.TensorSlice(flat, new[] { 0, pixelDim + numClusters, 0 }, new[] { b, classWidth, hw });
-        var pixelT = engine.TensorPermute(pixel, new[] { 0, 2, 1 });
-        var classProjectionT = engine.TensorPermute(classProjection, new[] { 0, 2, 1 });
-
-        Tensor<T>? classLogits = null;
-        for (int t = 0; t < iterations; t++)
+        if (initialCenters.Rank != 2) throw new ArgumentException("The initial centers must be [N, D].", nameof(initialCenters));
+        int n = initialCenters.Shape[0], d = initialCenters.Shape[1], b = finest.Shape[0];
+        foreach (var scale in scales)
         {
-            // Hard cluster assignment: one-hot of the argmax over the N centers, [B, N, HW].
-            var assignment = engine.TensorPermute(
-                engine.TensorOneHot<T>(engine.TensorArgMax(logits, 1), numClusters), new[] { 0, 2, 1 });
-            var centerUpdate = engine.TensorMatMul(assignment, pixelT);                 // [B, N, D]
-            logits = engine.TensorAdd(logits, engine.TensorMatMul(centerUpdate, pixel)); // [B, N, HW]
-            var classUpdate = engine.TensorMatMul(assignment, classProjectionT);         // [B, N, K + 1]
-            classLogits = classLogits is null ? classUpdate : engine.TensorAdd(classLogits, classUpdate);
+            if (scale.Rank != 3 || scale.Shape[0] != b || scale.Shape[1] != d)
+                throw new ArgumentException($"Every pixel-feature scale must be [{b}, {d}, hw].", nameof(scales));
         }
 
-        return (logits, classLogits ?? throw new InvalidOperationException("No k-means update ran."));
+        var engine = AiDotNetEngine.Current;
+        var centers = engine.TensorBroadcastTo(engine.Reshape(initialCenters, new[] { 1, n, d }), new[] { b, n, d });
+        for (int t = 0; t < iterations; t++)
+        {
+            var pixel = NormalizeAxis(scales[(int)((long)t * scales.Count / iterations)], 1);           // [B, D, hw]
+            var affinity = engine.TensorMatMul(centers, pixel);                                         // [B, N, hw]
+            // Hard cluster assignment: one-hot of the argmax over the N centers, [B, N, hw].
+            var assignment = engine.TensorPermute(
+                engine.TensorOneHot<T>(engine.TensorArgMax(affinity, 1), n), new[] { 0, 2, 1 });
+            centers = engine.TensorAdd(centers, engine.TensorMatMul(assignment, engine.TensorPermute(pixel, new[] { 0, 2, 1 })));
+        }
+
+        return (centers, engine.TensorMatMul(centers, NormalizeAxis(finest, 1)));
     }
 
     /// <summary>
