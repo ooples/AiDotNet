@@ -240,26 +240,11 @@ namespace AiDotNet.NeuralNetworks
             var tokens = tokenResult.TokenIds.Take(_maxSequenceLength).ToList();
             if (tokens.Count == 0) tokens.Add(0);
 
-            var inputTensor = Tensor<T>.FromVector(new Vector<T>(tokens.Select(id => NumOps.FromDouble(id)).ToArray()), [1, tokens.Count]);
+            var inputTensor = Tensor<int>.FromVector(new Vector<int>(tokens), new[] { 1, tokens.Count }).Cast<T>();
             var output = Predict(inputTensor);
 
             // Standard mean pooling to get a single vector from token representations
-            int seqLen = output.Shape[1];
-            int dim = output.Shape[2];
-            var result = new Vector<T>(dim);
-            if (seqLen == 0) return result.SafeNormalize();
-
-            for (int d = 0; d < dim; d++)
-            {
-                T sum = NumOps.Zero;
-                for (int s = 0; s < seqLen; s++)
-                {
-                    sum = NumOps.Add(sum, output[0, s, d]);
-                }
-                result[d] = NumOps.Divide(sum, NumOps.FromDouble(seqLen));
-            }
-
-            return result.SafeNormalize();
+            return PoolOutput(output);
         }
 
         /// <summary>
@@ -268,13 +253,10 @@ namespace AiDotNet.NeuralNetworks
         public Matrix<T> EmbedBatch(IEnumerable<string> texts)
         {
             var textList = texts.ToList();
-            var matrix = new Matrix<T>(textList.Count, _embeddingDimension);
-            for (int i = 0; i < textList.Count; i++)
-            {
-                var emb = Embed(textList[i]);
-                for (int j = 0; j < _embeddingDimension; j++) matrix[i, j] = emb[j];
-            }
-            return matrix;
+            if (textList.Count == 0) return new Matrix<T>(0, _embeddingDimension);
+
+            // One embedding row per text.
+            return Matrix<T>.FromRowVectors(textList.Select(text => (IEnumerable<T>)Embed(text)));
         }
 
         /// <summary>
@@ -324,20 +306,12 @@ namespace AiDotNet.NeuralNetworks
         {
             int seqLen = output.Shape[1];
             int dim = output.Shape[2];
-            var result = new Vector<T>(dim);
-            if (seqLen == 0) return result.SafeNormalize();
+            if (seqLen == 0) return new Vector<T>(dim).SafeNormalize();
 
-            for (int d = 0; d < dim; d++)
-            {
-                T sum = NumOps.Zero;
-                for (int s = 0; s < seqLen; s++)
-                {
-                    sum = NumOps.Add(sum, output[0, s, d]);
-                }
-                result[d] = NumOps.Divide(sum, NumOps.FromDouble(seqLen));
-            }
-
-            return result.SafeNormalize();
+            // Mean over the sequence of the first batch row.
+            var first = Engine.TensorSlice(output, new[] { 0, 0, 0 }, new[] { 1, seqLen, dim });
+            var summed = Engine.ReduceSum(first, new[] { 0, 1 }, false);
+            return Engine.TensorDivideScalar(summed, NumOps.FromDouble(seqLen)).ToVector().SafeNormalize();
         }
 
         /// <summary>

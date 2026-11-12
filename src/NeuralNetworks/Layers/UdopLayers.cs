@@ -372,7 +372,7 @@ public partial class UdopTransformerLayer<T> : LayerBase<T>, IShapeContract
             if (x is not null)
             {
                 var points = new int[tokens.Length];
-                var keep = new Tensor<T>(new[] { tokens.Length, _dim });
+                var keepRow = new int[tokens.Length];
                 for (int i = 0; i < tokens.Length; i++)
                 {
                     var b = boxes[i];
@@ -381,9 +381,13 @@ public partial class UdopTransformerLayer<T> : LayerBase<T>, IShapeContract
                     points[i] = px + (py * grid);
                     claimed[points[i]] = true;
                     double mean = (b[0] + b[1] + b[2] + b[3]) / 4.0;
-                    if (mean != 0.0 && mean != 1.0)
-                        for (int d = 0; d < _dim; d++) keep[i, d] = NumOps.One;
+                    keepRow[i] = mean != 0.0 && mean != 1.0 ? 1 : 0;
                 }
+
+                // Each token row keeps its patch feature only when its box is not degenerate.
+                var keep = Engine.TensorBroadcastTo(
+                    Tensor<int>.FromVector(new Vector<int>(keepRow), new[] { tokens.Length, 1 }).Cast<T>(),
+                    new[] { tokens.Length, _dim });
                 x = Engine.TensorAdd(x, Engine.TensorMultiply(CvTensorOps<T>.Select(patchRows, points, 0), keep));
             }
 
@@ -417,13 +421,14 @@ public partial class UdopTransformerLayer<T> : LayerBase<T>, IShapeContract
         int s = boxes.Count;
         Tensor<T> Ids(int corner)
         {
-            var ids = new Tensor<T>(new[] { s });
+            // Integer grid ids of one box corner, as the T-valued indices the embedding layer takes.
+            var ids = new int[s];
             for (int i = 0; i < s; i++)
             {
                 double value = Math.Min(Math.Max(boxes[i][corner], 0.0), 1.0);
-                ids[i] = NumOps.FromDouble(Math.Min((long)(value * (_max2DPositions - 1)), _max2DPositions - 1));
+                ids[i] = (int)Math.Min((long)(value * (_max2DPositions - 1)), _max2DPositions - 1);
             }
-            return ids;
+            return Tensor<int>.FromVector(new Vector<int>(ids), new[] { s }).Cast<T>();
         }
         return Engine.TensorAdd(
             Engine.TensorAdd(_cellX.Forward(Ids(0)), _cellY.Forward(Ids(1))),
