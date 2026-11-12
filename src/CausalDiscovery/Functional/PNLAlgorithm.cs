@@ -67,7 +67,7 @@ public class PNLAlgorithm<T> : FunctionalBase<T>
 
         var standardized = StandardizeData(data);
 
-        var weights = new Dictionary<int, double>();
+        var W = new Matrix<T>(d, d);
 
         for (int i = 0; i < d; i++)
         {
@@ -94,33 +94,35 @@ public class PNLAlgorithm<T> : FunctionalBase<T>
                 // A symmetric pair is the convention CAMUVAlgorithm already uses for a pair it cannot
                 // orient, and RCDAlgorithm refuses to write an edge at all in the same situation.
                 // This aligns PNL with CAMUV: the adjacency is kept, the direction claim is not made.
+                T weightT = weightT;
+
                 // Both residual dependencies near zero: a deterministic relationship, where the PNL
                 // model has no residual asymmetry to read a direction from at all.
                 bool nearZeroDeps = depIJ < 1e-6 && depJI < 1e-6;
 
                 if (nearZeroDeps)
                 {
-                    weights[i * d + j] = weight;
-                    weights[j * d + i] = weight;
+                    W[i, j] = weightT;
+                    W[j, i] = weightT;
                 }
                 else if (Math.Abs(asymmetry) > _threshold * 0.1)
                 {
                     if (asymmetry > 0)
-                        weights[i * d + j] = weight;
+                        W[i, j] = weightT;
                     else
-                        weights[j * d + i] = weight;
+                        W[j, i] = weightT;
                 }
                 else
                 {
                     // Strongly related, but the finite-sample PNL independence scores cannot resolve
                     // the direction. Keep the adjacency, decline the orientation.
-                    weights[i * d + j] = weight;
-                    weights[j * d + i] = weight;
+                    W[i, j] = weightT;
+                    W[j, i] = weightT;
                 }
             }
         }
 
-        return CausalTensorHelpers.FromStatistics<T>(d, d, weights);
+        return W;
     }
 
     /// <summary>

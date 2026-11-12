@@ -124,12 +124,7 @@ public class FGESAlgorithm<T> : ScoreBasedBase<T>
             }
         }
 
-        var weights = new Dictionary<int, double>();
-        for (int to = 0; to < d; to++)
-            foreach (int from in parentSets[to])
-                weights[from * d + to] = Math.Max(1e-10, ComputeAbsCorrelation(data, from, to));
-
-        return CausalTensorHelpers.FromStatistics<T>(d, d, weights);
+        return CorrelationWeightedAdjacency(data, parentSets, 1e-10);
     }
 
     private double GetCachedBIC(Matrix<T> data, int target, HashSet<int> parents,

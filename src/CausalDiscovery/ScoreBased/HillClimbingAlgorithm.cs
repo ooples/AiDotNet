@@ -158,11 +158,6 @@ public class HillClimbingAlgorithm<T> : ScoreBasedBase<T>
         }
 
         // Build adjacency using Matrix<T>
-        var weights = new Dictionary<int, double>();
-        for (int to = 0; to < d; to++)
-            foreach (int from in parentSets[to])
-                weights[from * d + to] = Math.Max(MinimumEdgeWeight, ComputeAbsCorrelation(data, from, to));
-
-        return CausalTensorHelpers.FromStatistics<T>(d, d, weights);
+        return CorrelationWeightedAdjacency(data, parentSets, MinimumEdgeWeight);
     }
 }

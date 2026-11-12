@@ -123,16 +123,16 @@ public class H2PCAlgorithm<T> : HybridBase<T>
         }
 
         // Build weighted adjacency matrix
-        var weights = new Dictionary<int, double>();
+        var weights = new Dictionary<int, T>();
         for (int child = 0; child < d; child++)
         {
             foreach (int parent in parentSets[child])
             {
-                weights[parent * d + child] = ComputeOLSWeight(data, parent, child);
+                weights[parent * d + child] = CausalTensorHelpers.RegressionSlope(data, parent, child);
             }
         }
 
-        return CausalTensorHelpers.FromStatistics<T>(d, d, weights);
+        return CausalTensorHelpers.FromValues(d, d, weights);
     }
 
     /// <summary>
@@ -245,11 +245,6 @@ public class H2PCAlgorithm<T> : HybridBase<T>
         }
 
         return NumOps.ToDouble(CausalTensorHelpers.PearsonCorrelation(residI, residJ));
-    }
-
-    private double ComputeOLSWeight(Matrix<T> data, int parent, int child)
-    {
-        return NumOps.ToDouble(CausalTensorHelpers.RegressionSlope(data, parent, child));
     }
 
     private static bool WouldCreateCycle(HashSet<int>[] parents, int from, int to, int d)

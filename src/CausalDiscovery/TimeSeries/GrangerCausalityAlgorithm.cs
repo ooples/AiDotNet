@@ -82,7 +82,7 @@ public class GrangerCausalityAlgorithm<T> : TimeSeriesCausalBase<T>
             return new Matrix<T>(d, d);
         }
 
-        var weights = new Dictionary<int, double>();
+        var W = new Matrix<T>(d, d);
 
         for (int target = 0; target < d; target++)
         {
@@ -118,7 +118,7 @@ public class GrangerCausalityAlgorithm<T> : TimeSeriesCausalBase<T>
                             if (pValue <= _significanceLevel)
                             {
                                 double rSquaredImprovement = (rssRestricted - rssUnrestricted) / rssRestricted;
-                                weights[cause * d + target] = rSquaredImprovement;
+                                W[cause, target] = NumOps.FromDouble(rSquaredImprovement);
                             }
                         }
                     }
@@ -130,7 +130,7 @@ public class GrangerCausalityAlgorithm<T> : TimeSeriesCausalBase<T>
                         double rSquaredImprovement = (rssRestricted - rssUnrestricted) / rssRestricted;
                         if (rSquaredImprovement > 0.01)
                         {
-                            weights[cause * d + target] = Math.Min(rSquaredImprovement, 1.0);
+                            W[cause, target] = NumOps.FromDouble(Math.Min(rSquaredImprovement, 1.0));
                         }
                     }
                     else
@@ -142,14 +142,14 @@ public class GrangerCausalityAlgorithm<T> : TimeSeriesCausalBase<T>
                         double crossCorr = ComputeLaggedCrossCorrelation(data, cause, target, MaxLag);
                         if (Math.Abs(crossCorr) > 0.5)
                         {
-                            weights[cause * d + target] = Math.Abs(crossCorr);
+                            W[cause, target] = NumOps.FromDouble(Math.Abs(crossCorr));
                         }
                     }
                 }
             }
         }
 
-        return CausalTensorHelpers.FromStatistics<T>(d, d, weights);
+        return W;
     }
 
     private double ComputeARModelRSS(Matrix<T> data, int target, int lag, int effectiveN)

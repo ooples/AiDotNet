@@ -81,7 +81,7 @@ public class OCSEAlgorithm<T> : InfoTheoreticBase<T>
         var transitions = Engine.TensorSubtract(Engine.TensorSlice(x, new[] { 1, 0 }, new[] { effectiveN, d }), head);
         T constantTolerance = NumOps.FromDouble(1e-10);
 
-        var weights = new Dictionary<int, double>();
+        var result = new Matrix<T>(d, d);
 
         // For each target variable
         for (int target = 0; target < d; target++)
@@ -137,11 +137,11 @@ public class OCSEAlgorithm<T> : InfoTheoreticBase<T>
                 var otherParents = selectedParents.Where(p => p != parent).ToList();
                 double ce = ComputeCausationEntropy(head, deltaY, parent, otherParents);
                 if (ce > _threshold)
-                    weights[parent * d + target] = ce;
+                    result[parent, target] = NumOps.FromDouble(ce);
             }
         }
 
-        return CausalTensorHelpers.FromStatistics<T>(d, d, weights);
+        return result;
     }
 
     private double ComputeCausationEntropy(Tensor<T> head, Tensor<T> deltaY, int candidate, List<int> condSet)

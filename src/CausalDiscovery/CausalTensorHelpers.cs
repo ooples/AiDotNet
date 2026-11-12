@@ -11,25 +11,6 @@ internal static class CausalTensorHelpers
     /// <summary>
     /// A zero matrix holding <c>weights[p]</c> at the row-major position <c>p</c> of each entry.
     /// </summary>
-    internal static Matrix<T> FromStatistics<T>(int rows, int cols, Dictionary<int, double> weights)
-    {
-        var flat = new Tensor<T>(new[] { rows * cols });
-        if (weights.Count > 0)
-        {
-            var positions = new List<int>(weights.Keys);
-            var values = new List<double>(positions.Count);
-            values.AddRange(positions.Select(p => weights[p]));
-            flat = AiDotNetEngine.Current.TensorScatter(flat,
-                new Tensor<int>(positions.ToArray(), new[] { positions.Count }),
-                Vector<double>.FromList(values).AsTensor().Cast<T>(), 0);
-        }
-
-        return flat.Reshape(new[] { rows, cols }).ToMatrix();
-    }
-
-    /// <summary>
-    /// A zero matrix holding <c>weights[p]</c> at the row-major position <c>p</c> of each entry.
-    /// </summary>
     internal static Matrix<T> FromValues<T>(int rows, int cols, Dictionary<int, T> weights)
     {
         var flat = new Tensor<T>(new[] { rows * cols });
@@ -44,23 +25,6 @@ internal static class CausalTensorHelpers
         }
 
         return flat.Reshape(new[] { rows, cols }).ToMatrix();
-    }
-
-    /// <summary>
-    /// Overwrites <paramref name="destination"/> ([rows x cols]) with <c>weights[p]</c> at each row-major position <c>p</c>.
-    /// </summary>
-    internal static Tensor<T> OverwriteStatistics<T>(Tensor<T> destination, Dictionary<int, double> weights)
-    {
-        if (weights.Count == 0)
-            return destination;
-
-        int rows = destination.Shape[0], cols = destination.Shape[1];
-        var positions = new List<int>(weights.Keys);
-        var values = new List<double>(positions.Count);
-        values.AddRange(positions.Select(p => weights[p]));
-        return AiDotNetEngine.Current.TensorScatter(destination.Reshape(new[] { rows * cols }),
-            new Tensor<int>(positions.ToArray(), new[] { positions.Count }),
-            Vector<double>.FromList(values).AsTensor().Cast<T>(), 0).Reshape(new[] { rows, cols });
     }
 
     /// <summary>

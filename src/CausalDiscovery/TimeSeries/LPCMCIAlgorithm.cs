@@ -161,7 +161,7 @@ public class LPCMCIAlgorithm<T> : TimeSeriesCausalBase<T>
         // per-ordered-pair strength (max |partial correlation|). This is PCMCI's momentary
         // conditional-independence step; it yields a directed strength for i→j separate from
         // j→i, which the orientation phase turns into edges.
-        var linkStrength = new Dictionary<int, double>();
+        var linkStrength = new Matrix<T>(d, d);
         for (int j = 0; j < d; j++)
         {
             foreach (var (pVar, pLag) in parents[j])
@@ -178,8 +178,8 @@ public class LPCMCIAlgorithm<T> : TimeSeriesCausalBase<T>
                 if (pValue <= _alpha)
                 {
                     double absPartCorr = Math.Abs(partCorr);
-                    if (absPartCorr > Strength(linkStrength, pVar * d + j))
-                        linkStrength[pVar * d + j] = absPartCorr;
+                    if (absPartCorr > NumOps.ToDouble(linkStrength[pVar, j]))
+                        linkStrength[pVar, j] = NumOps.FromDouble(absPartCorr);
                 }
             }
         }
@@ -190,7 +190,10 @@ public class LPCMCIAlgorithm<T> : TimeSeriesCausalBase<T>
         // graph, fall back to the strongest UNCONDITIONAL lagged cross-correlation per pair
         // (single direction, past→present), preserving a meaningful, acyclic skeleton. This
         // only triggers when no link survived conditioning, so it never affects stochastic data.
-        bool hasEdges = linkStrength.Any(link => link.Key / d != link.Key % d && link.Value > 0.0);
+        bool hasEdges = false;
+        for (int i = 0; i < d && !hasEdges; i++)
+            for (int j = 0; j < d && !hasEdges; j++)
+                if (i != j && NumOps.ToDouble(linkStrength[i, j]) > 0.0) hasEdges = true;
 
         if (!hasEdges)
         {
@@ -209,7 +212,7 @@ public class LPCMCIAlgorithm<T> : TimeSeriesCausalBase<T>
                         if (cji > best) { best = cji; bi = j; bj = i; }
                     }
                     if (best > _correlationThreshold)
-                        linkStrength[bi * d + bj] = best;
+                        linkStrength[bi, bj] = NumOps.FromDouble(best);
                 }
             }
         }
@@ -224,13 +227,13 @@ public class LPCMCIAlgorithm<T> : TimeSeriesCausalBase<T>
         // NON-ancestorship at both ends, carries no direction, and therefore is excluded
         // from the directed-portion acyclicity check and never manifests as a spurious
         // asymmetric bidirectional (directed-cycle) edge.
-        var result = new Dictionary<int, double>();
+        var result = new Matrix<T>(d, d);
         for (int i = 0; i < d; i++)
         {
             for (int j = i + 1; j < d; j++)
             {
-                double sij = Strength(linkStrength, i * d + j);
-                double sji = Strength(linkStrength, j * d + i);
+                double sij = NumOps.ToDouble(linkStrength[i, j]);
+                double sji = NumOps.ToDouble(linkStrength[j, i]);
                 bool hasIJ = sij > _correlationThreshold;
                 bool hasJI = sji > _correlationThreshold;
 
@@ -239,29 +242,24 @@ public class LPCMCIAlgorithm<T> : TimeSeriesCausalBase<T>
                 if (hasIJ && hasJI)
                 {
                     // Both directions survive → bidirected, symmetric weight.
-                    double sym = Math.Max(sij, sji);
-                    result[i * d + j] = sym;
-                    result[j * d + i] = sym;
+                    T sym = NumOps.FromDouble(Math.Max(sij, sji));
+                    result[i, j] = sym;
+                    result[j, i] = sym;
                 }
                 else if (hasIJ)
                 {
-                    result[i * d + j] = sij;
+                    result[i, j] = linkStrength[i, j];
                 }
                 else
                 {
-                    result[j * d + i] = sji;
+                    result[j, i] = linkStrength[j, i];
                 }
             }
         }
 
-        return CausalTensorHelpers.FromStatistics<T>(d, d, result);
+        return result;
     }
 
-    /// <summary>
-    /// The recorded strength of a link (row-major position), 0 when none was recorded.
-    /// </summary>
-    private static double Strength(Dictionary<int, double> links, int position)
-        => links.TryGetValue(position, out double strength) ? strength : 0.0;
 
     /// <summary>
     /// Partial correlation between target(t) and source(t-lag), conditioned on a set of

@@ -121,7 +121,7 @@ public class VARLiNGAMAlgorithm<T> : FunctionalBase<T>
 
         if (!hasEdges)
         {
-            var correlations = new Dictionary<int, double>();
+            var fallback = result.ToMatrix();
             for (int i = 0; i < d; i++)
             {
                 for (int j = i + 1; j < d; j++)
@@ -131,12 +131,12 @@ public class VARLiNGAMAlgorithm<T> : FunctionalBase<T>
                     double corr = Math.Abs(ComputeCorrelation(xi, xj));
                     if (corr >= _threshold)
                     {
-                        correlations[i * d + j] = corr;
+                        fallback[i, j] = NumOps.FromDouble(corr);
                     }
                 }
             }
 
-            result = CausalTensorHelpers.OverwriteStatistics(result, correlations);
+            result = Tensor<T>.FromMatrix(fallback);
         }
 
         // A time-unrolled VAR graph may legitimately contain X_i(t-1)->X_j(t) and

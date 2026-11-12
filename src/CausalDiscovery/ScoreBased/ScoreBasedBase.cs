@@ -70,6 +70,28 @@ public abstract class ScoreBasedBase<T> : CausalDiscoveryBase<T>
     }
 
     /// <summary>
+    /// The [d x d] adjacency with weight max(|corr(from, to)|, <paramref name="minimumWeight"/>) on every
+    /// edge from -> to with from in <paramref name="parentSets"/>[to], and 0 elsewhere, computed in T.
+    /// </summary>
+    private protected Matrix<T> CorrelationWeightedAdjacency(Matrix<T> data, HashSet<int>[] parentSets,
+        double minimumWeight)
+    {
+        int d = data.Columns;
+        var correlations = new Dictionary<int, T>();
+        for (int to = 0; to < d; to++)
+            foreach (int from in parentSets[to])
+                correlations[from * d + to] = CausalTensorHelpers.PearsonCorrelation(data, from, to);
+
+        if (correlations.Count == 0)
+            return new Matrix<T>(d, d);
+
+        var raw = Tensor<T>.FromMatrix(CausalTensorHelpers.FromValues(d, d, correlations));
+        var selected = Tensor<T>.FromMatrix(CausalTensorHelpers.KeepPositions(Engine.TensorOnesLike(raw), correlations.Keys));
+        var weighted = Engine.TensorMax(Engine.TensorAbs(raw), NumOps.FromDouble(minimumWeight));
+        return Engine.TensorWhere(selected, weighted, Engine.TensorZerosLike(raw)).ToMatrix();
+    }
+
+    /// <summary>
     /// Computes the absolute Pearson correlation between two columns of data.
     /// </summary>
     protected double ComputeAbsCorrelation(Matrix<T> data, int col1, int col2)
