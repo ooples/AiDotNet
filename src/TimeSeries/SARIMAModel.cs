@@ -697,7 +697,7 @@ public partial class SARIMAModel<T> : TimeSeriesModelBase<T>
             TimeSeriesEngineOps<T>.DotPrefix(_arCoefficients, input, Math.Min(_p, input.Length)));
 
         // Seasonal AR: Φ_j · input[(j + 1)·m - 1] while that lag is inside the input
-        int seasonalCount = Math.Max(0, Math.Min(_P, input.Length / _m));
+        int seasonalCount = _m > 0 ? Math.Min(_P, input.Length / _m) : 0;
         if (seasonalCount > 0)
         {
             var seasonalLags = TimeSeriesEngineOps<T>.Gather(input, Enumerable.Range(0, seasonalCount).Select(j => (j + 1) * _m - 1));
@@ -715,7 +715,7 @@ public partial class SARIMAModel<T> : TimeSeriesModelBase<T>
                 TimeSeriesEngineOps<T>.DotPrefix(_maCoefficients, errors, Math.Min(_q, errorLength)));
 
             // Seasonal MA: Θ_j · e[j·m] while j·m is inside the residuals
-            int seasonalErrorCount = Math.Min(_Q, (errorLength + _m - 1) / _m);
+            int seasonalErrorCount = _m > 0 ? Math.Min(_Q, (errorLength + _m - 1) / _m) : 0;
             if (seasonalErrorCount > 0)
             {
                 var seasonalErrors = TimeSeriesEngineOps<T>.Gather(errors, Enumerable.Range(0, seasonalErrorCount).Select(j => j * _m));
