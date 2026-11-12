@@ -31,13 +31,13 @@ public class Relief<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFe
     private readonly int _nIterations;
     private readonly int? _randomState;
 
-    private double[]? _featureWeights;
+    private Vector<T>? _featureWeights;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
-    public double[]? FeatureWeights => _featureWeights;
+    public Vector<T>? FeatureWeights => _featureWeights;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -77,36 +77,12 @@ public class Relief<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFe
         int n = data.Rows;
         int p = data.Columns;
 
-        // Normalize features
-        var normalizedData = new double[n, p];
-        var minVals = new double[p];
-        var ranges = new double[p];
+        var engine = Engine;
 
-        for (int j = 0; j < p; j++)
-        {
-            minVals[j] = double.MaxValue;
-            double maxVal = double.MinValue;
-            for (int i = 0; i < n; i++)
-            {
-                double val = NumOps.ToDouble(data[i, j]);
-                minVals[j] = Math.Min(minVals[j], val);
-                maxVal = Math.Max(maxVal, val);
-            }
-            ranges[j] = maxVal - minVals[j];
-            if (ranges[j] < 1e-10) ranges[j] = 1;
-        }
-
-        for (int i = 0; i < n; i++)
-            for (int j = 0; j < p; j++)
-                normalizedData[i, j] = (NumOps.ToDouble(data[i, j]) - minVals[j]) / ranges[j];
-
-        // Get class labels
-        var targetLabels = new int[n];
-        for (int i = 0; i < n; i++)
-            targetLabels[i] = (int)Math.Round(NumOps.ToDouble(target[i]));
-
-        // Initialize weights
-        _featureWeights = new double[p];
+        // Features scaled to [0, 1] by their range (a constant feature never differs) and integer class labels
+        var scaled = FeatureSelectionTensorOps.RangeScaled(FilterStatisticTensorOps.AsTensor(data));
+        var labels = FilterStatisticTensorOps.ClassIndex(target, out int classCount);
+        var classOneHot = FilterStatisticTensorOps.ClassOneHot<T>(labels, classCount);
 
         var rand = _randomState.HasValue
             ? RandomHelper.CreateSeededRandom(_randomState.Value)
@@ -114,65 +90,33 @@ public class Relief<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFe
 
         int iterations = Math.Min(_nIterations, n);
 
-        for (int iter = 0; iter < iterations; iter++)
-        {
-            // Sample a random instance
-            int ri = rand.Next(n);
-            int riClass = targetLabels[ri];
+        // Sample the instances (with replacement), in the same random order as before
+        var sampled = Enumerable.Range(0, iterations).Select(_ => rand.Next(n)).ToArray();
 
-            // Find nearest hit (same class) and nearest miss (different class)
-            int nearestHit = -1;
-            int nearestMiss = -1;
-            double nearestHitDist = double.MaxValue;
-            double nearestMissDist = double.MaxValue;
+        // Manhattan distance from every sampled instance to every instance; the instance itself is no neighbour
+        var sampledRows = FeatureSelectionTensorOps.Rows(scaled, sampled);
+        var distance = engine.TensorCDist(sampledRows, scaled, 1.0);
+        var self = FeatureSelectionTensorOps.SelfMask<T>(sampled, n);
+        var sameClass = engine.TensorMatMul(FeatureSelectionTensorOps.Rows(classOneHot, sampled), engine.TensorTranspose(classOneHot));
+        T infinity = NumOps.FromDouble(double.PositiveInfinity);
 
-            for (int j = 0; j < n; j++)
-            {
-                if (j == ri) continue;
+        // nearest hit (same class) and nearest miss (other class), first index on ties
+        var (hit, hasHit) = FeatureSelectionTensorOps.FirstArgMinRows(FeatureSelectionTensorOps.KeepOrFill(
+            distance, engine.TensorMultiply(sameClass, FilterStatisticTensorOps.OneMinus(self)), infinity));
+        var (miss, hasMiss) = FeatureSelectionTensorOps.FirstArgMinRows(FeatureSelectionTensorOps.KeepOrFill(
+            distance, FilterStatisticTensorOps.OneMinus(sameClass), infinity));
 
-                double dist = 0;
-                for (int f = 0; f < p; f++)
-                    dist += Math.Abs(normalizedData[ri, f] - normalizedData[j, f]);
-
-                if (targetLabels[j] == riClass)
-                {
-                    if (dist < nearestHitDist)
-                    {
-                        nearestHitDist = dist;
-                        nearestHit = j;
-                    }
-                }
-                else
-                {
-                    if (dist < nearestMissDist)
-                    {
-                        nearestMissDist = dist;
-                        nearestMiss = j;
-                    }
-                }
-            }
-
-            // Update weights
-            if (nearestHit >= 0 && nearestMiss >= 0)
-            {
-                for (int f = 0; f < p; f++)
-                {
-                    double diffHit = Math.Abs(normalizedData[ri, f] - normalizedData[nearestHit, f]);
-                    double diffMiss = Math.Abs(normalizedData[ri, f] - normalizedData[nearestMiss, f]);
-                    _featureWeights[f] += (diffMiss - diffHit) / iterations;
-                }
-            }
-        }
+        // W += (|x - miss| - |x - hit|) / iterations for the instances that have both
+        var diffHit = engine.TensorAbs(engine.TensorSubtract(sampledRows, FeatureSelectionTensorOps.Rows(scaled, hit)));
+        var diffMiss = engine.TensorAbs(engine.TensorSubtract(sampledRows, FeatureSelectionTensorOps.Rows(scaled, miss)));
+        var both = engine.Reshape(engine.TensorMultiply(hasHit, hasMiss), new[] { 1, iterations });
+        var weights = engine.TensorDivideScalar(
+            engine.Reshape(engine.TensorMatMul(both, engine.TensorSubtract(diffMiss, diffHit)), new[] { p }),
+            NumOps.FromDouble(iterations));
+        _featureWeights = weights.ToVector();
 
         // Select top features
-        int nToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = _featureWeights
-            .Select((w, idx) => (Weight: w, Index: idx))
-            .OrderByDescending(x => x.Weight)
-            .Take(nToSelect)
-            .Select(x => x.Index)
-            .OrderBy(x => x)
-            .ToArray();
+        _selectedIndices = FilterStatisticTensorOps.TopKIndicesSorted(weights, Math.Min(_nFeaturesToSelect, p));
 
         IsFitted = true;
     }

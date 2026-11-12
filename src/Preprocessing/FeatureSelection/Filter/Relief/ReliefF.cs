@@ -32,7 +32,7 @@ public class ReliefF<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedF
     private readonly int _nSamples;
     private readonly int? _randomState;
 
-    private double[]? _featureWeights;
+    private Vector<T>? _featureWeights;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
@@ -40,7 +40,7 @@ public class ReliefF<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedF
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public int NNeighbors => _nNeighbors;
     public int NSamples => _nSamples;
-    public double[]? FeatureWeights => _featureWeights;
+    public Vector<T>? FeatureWeights => _featureWeights;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -88,120 +88,25 @@ public class ReliefF<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedF
             ? RandomHelper.CreateSeededRandom(_randomState.Value)
             : RandomHelper.CreateSecureRandom();
 
-        // Group instances by class
-        var classSamples = new Dictionary<int, List<int>>();
-        for (int i = 0; i < n; i++)
-        {
-            int label = (int)Math.Round(NumOps.ToDouble(target[i]));
-            if (!classSamples.ContainsKey(label))
-                classSamples[label] = new List<int>();
-            classSamples[label].Add(i);
-        }
+        // Integer class labels and features scaled to [0, 1] by their range (a constant feature never differs)
+        var classIndex = FilterStatisticTensorOps.ClassIndex(target, out int classCount);
+        var scaled = FeatureSelectionTensorOps.RangeScaled(FilterStatisticTensorOps.AsTensor(data));
 
-        // Compute class probabilities
-        var classProbabilities = new Dictionary<int, double>();
-        foreach (var kvp in classSamples)
-            classProbabilities[kvp.Key] = (double)kvp.Value.Count / n;
-
-        // Compute feature ranges for normalization
-        var featureRanges = new double[p];
-        for (int j = 0; j < p; j++)
-        {
-            double min = double.MaxValue, max = double.MinValue;
-            for (int i = 0; i < n; i++)
-            {
-                double val = NumOps.ToDouble(data[i, j]);
-                if (val < min) min = val;
-                if (val > max) max = val;
-            }
-            featureRanges[j] = max - min;
-        }
-
-        // Initialize weights
-        _featureWeights = new double[p];
-
-        // Sample instances
+        // Sample instances, in the same random order as before
         int sampleCount = Math.Min(_nSamples, n);
         var sampleIndices = Enumerable.Range(0, n)
             .OrderBy(_ => random.Next())
             .Take(sampleCount)
-            .ToList();
-
-        foreach (int idx in sampleIndices)
-        {
-            int sampleClass = (int)Math.Round(NumOps.ToDouble(target[idx]));
-
-            // Find k nearest hits (same class)
-            var hits = FindNearestNeighbors(data, idx, classSamples[sampleClass], p, featureRanges);
-
-            // Find k nearest misses (different classes, weighted by probability)
-            foreach (var classKvp in classSamples)
-            {
-                if (classKvp.Key == sampleClass) continue;
-
-                double classWeight = classProbabilities[classKvp.Key] / (1 - classProbabilities[sampleClass]);
-                var misses = FindNearestNeighbors(data, idx, classKvp.Value, p, featureRanges);
-
-                foreach (int missIdx in misses)
-                {
-                    for (int j = 0; j < p; j++)
-                    {
-                        double diff = Diff(data, idx, missIdx, j, featureRanges[j]);
-                        _featureWeights[j] += classWeight * diff / ((double)sampleCount * _nNeighbors);
-                    }
-                }
-            }
-
-            // Subtract hit contribution
-            foreach (int hitIdx in hits)
-            {
-                for (int j = 0; j < p; j++)
-                {
-                    double diff = Diff(data, idx, hitIdx, j, featureRanges[j]);
-                    _featureWeights[j] -= diff / ((double)sampleCount * _nNeighbors);
-                }
-            }
-        }
-
-        // Select top features
-        int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = Enumerable.Range(0, p)
-            .OrderByDescending(j => _featureWeights[j])
-            .Take(numToSelect)
-            .OrderBy(x => x)
             .ToArray();
 
+        // ReliefF weights: k nearest hits against the k nearest misses of every other class
+        var weights = FeatureSelectionTensorOps.ReliefFWeights(scaled, classIndex, classCount, sampleIndices, _nNeighbors);
+        _featureWeights = weights.ToVector();
+
+        // Select top features
+        _selectedIndices = FilterStatisticTensorOps.TopKIndicesSorted(weights, Math.Min(_nFeaturesToSelect, p));
+
         IsFitted = true;
-    }
-
-    private List<int> FindNearestNeighbors(Matrix<T> data, int idx, List<int> candidates, int p, double[] ranges)
-    {
-        var distances = new List<(int Index, double Distance)>();
-
-        foreach (int candIdx in candidates)
-        {
-            if (candIdx == idx) continue;
-
-            double dist = 0;
-            for (int j = 0; j < p; j++)
-            {
-                double diff = Diff(data, idx, candIdx, j, ranges[j]);
-                dist += diff * diff;
-            }
-            distances.Add((candIdx, dist));
-        }
-
-        return distances
-            .OrderBy(d => d.Distance)
-            .Take(_nNeighbors)
-            .Select(d => d.Index)
-            .ToList();
-    }
-
-    private double Diff(Matrix<T> data, int i1, int i2, int j, double range)
-    {
-        if (range < 1e-10) return 0;
-        return Math.Abs(NumOps.ToDouble(data[i1, j]) - NumOps.ToDouble(data[i2, j])) / range;
     }
 
     /// <inheritdoc />

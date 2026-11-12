@@ -83,6 +83,164 @@ internal static class FeatureSelectionTensorOps
         return mask;
     }
 
+    /// <summary>
+    /// Every column of an [n, p] tensor scaled to <c>(x - min) / (max - min)</c>; a column whose range is below
+    /// <paramref name="minimumRange"/> becomes 0 (it never differs between rows).
+    /// </summary>
+    public static Tensor<T> RangeScaled<T>(Tensor<T> x, double minimumRange = 1e-10)
+    {
+        var engine = AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<T>();
+        int n = x.Shape[0];
+        if (n == 0)
+            return x;
+
+        var min = ColumnMin(x);
+        var range = engine.TensorSubtract(ColumnMax(x), min);
+        var scale = FilterStatisticTensorOps.GuardedDivide(
+            FilterStatisticTensorOps.FilledLike(range, ops.One), range, minimumRange, ops.Zero);
+        return engine.TensorMultiply(
+            engine.TensorSubtract(x, FilterStatisticTensorOps.RowBroadcast(min, n)),
+            FilterStatisticTensorOps.RowBroadcast(scale, n));
+    }
+
+    /// <summary>The given rows of an [n, p] tensor ([rows.Length, p]).</summary>
+    public static Tensor<T> Rows<T>(Tensor<T> x, int[] rows) =>
+        AiDotNetEngine.Current.TensorIndexSelect(x, new Tensor<int>((int[])rows.Clone(), new[] { rows.Length }), 0);
+
+    /// <summary>The given entries of a 1-D tensor.</summary>
+    public static Tensor<T> Entries<T>(Tensor<T> x, int[] positions) =>
+        AiDotNetEngine.Current.TensorIndexSelect(x, new Tensor<int>((int[])positions.Clone(), new[] { positions.Length }), 0);
+
+    /// <summary>A 0/1 [rows.Length, n] mask with a 1 at (r, rows[r]): each sampled row's own column.</summary>
+    public static Tensor<T> SelfMask<T>(int[] rows, int n)
+    {
+        if (rows.Length == 0)
+            return new Tensor<T>(new[] { 0, n });
+        return AiDotNetEngine.Current.TensorOneHot<T>(new Tensor<int>((int[])rows.Clone(), new[] { rows.Length }), n);
+    }
+
+    /// <summary>
+    /// <paramref name="values"/> where <paramref name="keep"/> is non-zero, <paramref name="fill"/> elsewhere.
+    /// </summary>
+    public static Tensor<T> KeepOrFill<T>(Tensor<T> values, Tensor<T> keep, T fill) =>
+        AiDotNetEngine.Current.TensorWhere(keep, values, FilterStatisticTensorOps.FilledLike(values, fill));
+
+    /// <summary>
+    /// Per row of an [m, n] tensor, the first (lowest) column holding the row minimum, and a 0/1 [m] flag that is 1
+    /// where that minimum is finite (the row had a candidate at all).
+    /// </summary>
+    public static (int[] Index, Tensor<T> Found) FirstArgMinRows<T>(Tensor<T> values)
+    {
+        var engine = AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<T>();
+        int m = values.Shape[0];
+        int n = values.Shape[1];
+        if (m == 0 || n == 0)
+            return (new int[m], new Tensor<T>(new[] { m }));
+
+        var rowMin = engine.TensorNegate(engine.ReduceMax(engine.TensorNegate(values), new[] { 1 }, true));
+        var isMin = engine.TensorEquals(values, engine.TensorBroadcastTo(rowMin, new[] { m, n }));
+
+        // n - column is distinct per column, so the largest masked key is the first minimum, whatever the argmax tie rule
+        var key = engine.TensorMultiply(isMin, FilterStatisticTensorOps.RowBroadcast(
+            engine.TensorArange<T>(n, 0, -1), m));
+        var index = engine.TensorArgMax(key, 1).ToArray();
+        var found = engine.TensorLessThan(engine.Reshape(rowMin, new[] { m }), ops.FromDouble(double.PositiveInfinity));
+        return (index, found);
+    }
+
+    /// <summary>
+    /// The <paramref name="k"/> smallest entries of every row of an [m, n] tensor, in ascending order with ties to the
+    /// lower column (like a stable <c>OrderBy(distance).Take(k)</c>): per neighbour slot the column index and a 0/1
+    /// [m] flag that is 1 where the row still had a finite candidate for that slot.
+    /// </summary>
+    public static List<(int[] Index, Tensor<T> Found)> NearestPerRow<T>(Tensor<T> values, int k)
+    {
+        var engine = AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<T>();
+        int n = values.Shape.Length > 1 ? values.Shape[1] : 0;
+        var slots = new List<(int[] Index, Tensor<T> Found)>();
+        var remaining = values;
+        var infinity = FilterStatisticTensorOps.FilledLike(values, ops.FromDouble(double.PositiveInfinity));
+        for (int slot = 0; slot < Math.Min(k, n); slot++)
+        {
+            var (index, found) = FirstArgMinRows(remaining);
+            slots.Add((index, found));
+            var taken = engine.TensorOneHot<T>(new Tensor<int>(index, new[] { index.Length }), n);
+            remaining = engine.TensorWhere(taken, infinity, remaining);
+        }
+
+        return slots;
+    }
+
+    /// <summary>
+    /// ReliefF feature weights (Kononenko 1994; Robnik-Sikonja and Kononenko 2003, Fig. 3): for every sampled
+    /// instance, the <paramref name="k"/> nearest hits lower each weight by their mean feature difference and the
+    /// <paramref name="k"/> nearest misses of every other class C raise it by theirs, weighted by
+    /// <c>P(C) / (1 - P(class))</c>; everything is divided by <c>m k</c>. Distances are the sum of the feature
+    /// differences (Manhattan) on <paramref name="scaled"/>, which holds range-scaled features. Neighbours tie to
+    /// the lower index.
+    /// </summary>
+    public static Tensor<T> ReliefFWeights<T>(Tensor<T> scaled, int[] classIndex, int classCount, int[] samples, int k)
+    {
+        var engine = AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<T>();
+        int n = scaled.Shape[0];
+        int p = scaled.Shape[1];
+        int m = samples.Length;
+        var total = new Tensor<T>(new[] { p });
+        if (m == 0 || k <= 0)
+            return total;
+
+        T infinity = ops.FromDouble(double.PositiveInfinity);
+        var sampledRows = Rows(scaled, samples);
+        var distance = engine.TensorCDist(sampledRows, scaled, 1.0);
+        var oneHot = FilterStatisticTensorOps.ClassOneHot<T>(classIndex, classCount);
+        var sampleOneHot = Rows(oneHot, samples);
+        var notSelf = FilterStatisticTensorOps.OneMinus(SelfMask<T>(samples, n));
+        var priors = engine.TensorDivideScalar(engine.ReduceSum(oneHot, new[] { 0 }, false), ops.FromDouble(n));
+        var otherMass = FilterStatisticTensorOps.OneMinus(
+            engine.Reshape(engine.TensorMatMul(sampleOneHot, engine.Reshape(priors, new[] { classCount, 1 })), new[] { m }));
+
+        // nearest hits: same class, not the instance itself
+        var hitKeep = engine.TensorMultiply(engine.TensorMatMul(sampleOneHot, engine.TensorTranspose(oneHot)), notSelf);
+        foreach (var (index, found) in NearestPerRow(KeepOrFill(distance, hitKeep, infinity), k))
+            total = engine.TensorSubtract(total, WeightedRowSum(found, NeighbourDifference(sampledRows, scaled, index)));
+
+        // nearest misses of every other class, weighted by P(C) / (1 - P(class of the instance))
+        for (int c = 0; c < classCount; c++)
+        {
+            var inClass = Column(oneHot, c);
+            var otherClass = FilterStatisticTensorOps.OneMinus(Column(sampleOneHot, c));
+            var classPrior = engine.TensorBroadcastTo(Entries(priors, new[] { c }), new[] { m });
+            var factor = engine.TensorMultiply(
+                FilterStatisticTensorOps.GuardedDivide(classPrior, otherMass, 0.0, ops.Zero), otherClass);
+            var missKeep = FilterStatisticTensorOps.RowBroadcast(inClass, m);
+            foreach (var (index, found) in NearestPerRow(KeepOrFill(distance, missKeep, infinity), k))
+                total = engine.TensorAdd(total, WeightedRowSum(
+                    engine.TensorMultiply(found, factor), NeighbourDifference(sampledRows, scaled, index)));
+        }
+
+        return engine.TensorDivideScalar(total, ops.FromDouble((double)m * k));
+    }
+
+    /// <summary>|rows - x[neighbour]| feature by feature ([m, p]).</summary>
+    public static Tensor<T> NeighbourDifference<T>(Tensor<T> rows, Tensor<T> x, int[] neighbour)
+    {
+        var engine = AiDotNetEngine.Current;
+        return engine.TensorAbs(engine.TensorSubtract(rows, Rows(x, neighbour)));
+    }
+
+    /// <summary><c>sum_r weight[r] values[r, :]</c> of an [m, p] tensor ([p]).</summary>
+    public static Tensor<T> WeightedRowSum<T>(Tensor<T> weight, Tensor<T> values)
+    {
+        var engine = AiDotNetEngine.Current;
+        int m = values.Shape[0];
+        int p = values.Shape[1];
+        return engine.Reshape(engine.TensorMatMul(engine.Reshape(weight, new[] { 1, m }), values), new[] { p });
+    }
+
     /// <summary>One column of an [n, p] tensor as an [n] tensor.</summary>
     public static Tensor<T> Column<T>(Tensor<T> x, int column)
     {

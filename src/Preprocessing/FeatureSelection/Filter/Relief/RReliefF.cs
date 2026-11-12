@@ -11,8 +11,11 @@ namespace AiDotNet.Preprocessing.FeatureSelection.Filter.Relief;
 /// </summary>
 /// <remarks>
 /// <para>
-/// RReliefF extends ReliefF to handle continuous targets (regression).
-/// It uses distance-weighted contributions based on target value differences.
+/// RReliefF extends ReliefF to handle continuous targets (regression), following Robnik-Sikonja and
+/// Kononenko (1997): over the k nearest neighbours of each sampled instance it accumulates the probability of a
+/// different target (N_dC), of a different feature value (N_dA) and of both (N_dC&amp;dA), every neighbour having the
+/// same influence 1/k, and weights each feature by
+/// <c>W = N_dC&amp;dA / N_dC - (N_dA - N_dC&amp;dA) / (m - N_dC)</c>.
 /// </para>
 /// <para><b>For Beginners:</b> Standard Relief uses class labels (hit/miss).
 /// RReliefF works with numeric targets by weighting neighbors based on
@@ -29,14 +32,14 @@ public class RReliefF<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervised
     private readonly int _nIterations;
     private readonly int? _randomState;
 
-    private double[]? _featureWeights;
+    private Vector<T>? _featureWeights;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public int NNeighbors => _nNeighbors;
-    public double[]? FeatureWeights => _featureWeights;
+    public Vector<T>? FeatureWeights => _featureWeights;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -83,120 +86,57 @@ public class RReliefF<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervised
             ? RandomHelper.CreateSeededRandom(_randomState.Value)
             : RandomHelper.CreateSecureRandom();
 
-        // Normalize features
-        var minVals = new double[p];
-        var maxVals = new double[p];
-        for (int j = 0; j < p; j++)
+        var engine = Engine;
+        T infinity = NumOps.FromDouble(double.PositiveInfinity);
+
+        // Features and target scaled to [0, 1] by their range (a constant one never differs)
+        var scaled = FeatureSelectionTensorOps.RangeScaled(FilterStatisticTensorOps.AsTensor(data));
+        var y = engine.Reshape(FeatureSelectionTensorOps.RangeScaled(
+            engine.Reshape(FilterStatisticTensorOps.AsTensor(target), new[] { n, 1 })), new[] { n });
+
+        // Sample m instances, in the same random order as before
+        var sampleIndices = Enumerable.Range(0, n).OrderBy(_ => random.Next()).Take(m).ToArray();
+        int sampled = sampleIndices.Length;
+        var sampledRows = FeatureSelectionTensorOps.Rows(scaled, sampleIndices);
+        var sampledY = FeatureSelectionTensorOps.Entries(y, sampleIndices);
+
+        // k nearest neighbours by the sum of feature differences, the instance itself excluded
+        var distance = FeatureSelectionTensorOps.KeepOrFill(
+            engine.TensorCDist(sampledRows, scaled, 1.0),
+            FilterStatisticTensorOps.OneMinus(FeatureSelectionTensorOps.SelfMask<T>(sampleIndices, n)), infinity);
+        var neighbours = FeatureSelectionTensorOps.NearestPerRow(distance, _nNeighbors);
+
+        // every one of an instance's neighbours has the same influence d = 1 / (number of neighbours)
+        var neighbourCount = new Tensor<T>(new[] { sampled });
+        foreach (var (_, found) in neighbours)
+            neighbourCount = engine.TensorAdd(neighbourCount, found);
+
+        // N_dC = sum d diff(target), N_dA = sum d diff(A), N_dC&dA = sum d diff(target) diff(A)
+        var nD = new Tensor<T>(new[] { 1 });
+        var nDa = new Tensor<T>(new[] { p });
+        var nDcDa = new Tensor<T>(new[] { p });
+        foreach (var (index, found) in neighbours)
         {
-            minVals[j] = double.MaxValue;
-            maxVals[j] = double.MinValue;
-            for (int i = 0; i < n; i++)
-            {
-                double v = NumOps.ToDouble(data[i, j]);
-                if (v < minVals[j]) minVals[j] = v;
-                if (v > maxVals[j]) maxVals[j] = v;
-            }
+            var influence = FilterStatisticTensorOps.GuardedDivide(found, neighbourCount, 0.0, NumOps.Zero);
+            var yDiff = engine.TensorAbs(engine.TensorSubtract(sampledY, FeatureSelectionTensorOps.Entries(y, index)));
+            var featureDiff = FeatureSelectionTensorOps.NeighbourDifference(sampledRows, scaled, index);
+            nD = engine.TensorAdd(nD, engine.ReduceSum(engine.TensorMultiply(influence, yDiff), new[] { 0 }, true));
+            nDa = engine.TensorAdd(nDa, FeatureSelectionTensorOps.WeightedRowSum(influence, featureDiff));
+            nDcDa = engine.TensorAdd(nDcDa, FeatureSelectionTensorOps.WeightedRowSum(
+                engine.TensorMultiply(influence, yDiff), featureDiff));
         }
 
-        // Normalize target
-        double yMin = double.MaxValue, yMax = double.MinValue;
-        for (int i = 0; i < n; i++)
-        {
-            double y = NumOps.ToDouble(target[i]);
-            if (y < yMin) yMin = y;
-            if (y > yMax) yMax = y;
-        }
-        double yRange = yMax - yMin;
-        if (yRange < 1e-10) yRange = 1;
+        // W[A] = N_dC&dA / N_dC - (N_dA - N_dC&dA) / (m - N_dC)  (Robnik-Sikonja and Kononenko 1997)
+        var nDGrid = engine.TensorBroadcastTo(nD, new[] { p });
+        var different = FilterStatisticTensorOps.GuardedDivide(nDcDa, nDGrid, 1e-10, NumOps.Zero);
+        var restMass = engine.TensorAddScalar(engine.TensorNegate(nDGrid), NumOps.FromDouble(sampled));
+        var same = FilterStatisticTensorOps.GuardedDivide(engine.TensorSubtract(nDa, nDcDa), restMass, 1e-10, NumOps.Zero);
+        var weights = engine.TensorSubtract(different, same);
+        _featureWeights = weights.ToVector();
 
-        _featureWeights = new double[p];
-        var nDc = new double[p];  // Numerator for each feature
-        double nD = 0;            // Denominator (cumulative target differences)
-
-        // Sample m instances
-        var sampleIndices = Enumerable.Range(0, n).OrderBy(_ => random.Next()).Take(m).ToList();
-
-        foreach (int ri in sampleIndices)
-        {
-            double riY = (NumOps.ToDouble(target[ri]) - yMin) / yRange;
-
-            // Find k nearest neighbors
-            var neighbors = FindKNearest(data, ri, n, _nNeighbors, minVals, maxVals, p);
-
-            foreach (var (neighborIdx, dist) in neighbors)
-            {
-                double weight = 1.0 / (dist + 1e-10);  // Distance weight
-
-                double neighborY = (NumOps.ToDouble(target[neighborIdx]) - yMin) / yRange;
-                double yDiff = Math.Abs(riY - neighborY);
-
-                nD += weight * yDiff;
-
-                for (int j = 0; j < p; j++)
-                {
-                    double range = maxVals[j] - minVals[j];
-                    if (range < 1e-10) continue;
-
-                    double ri_val = NumOps.ToDouble(data[ri, j]);
-                    double neighbor_val = NumOps.ToDouble(data[neighborIdx, j]);
-                    double fDiff = Math.Abs(ri_val - neighbor_val) / range;
-
-                    nDc[j] += weight * yDiff * fDiff;
-                }
-            }
-        }
-
-        // Compute final weights
-        for (int j = 0; j < p; j++)
-        {
-            if (nD > 1e-10)
-                _featureWeights[j] = nDc[j] / nD;
-        }
-
-        int nToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = _featureWeights
-            .Select((w, idx) => (Weight: w, Index: idx))
-            .OrderByDescending(x => x.Weight)
-            .Take(nToSelect)
-            .Select(x => x.Index)
-            .OrderBy(x => x)
-            .ToArray();
+        _selectedIndices = FilterStatisticTensorOps.TopKIndicesSorted(weights, Math.Min(_nFeaturesToSelect, p));
 
         IsFitted = true;
-    }
-
-    private List<(int Index, double Distance)> FindKNearest(Matrix<T> data, int targetIdx, int n, int k,
-        double[] minVals, double[] maxVals, int p)
-    {
-        var distances = new List<(int Index, double Distance)>();
-
-        for (int i = 0; i < n; i++)
-        {
-            if (i == targetIdx) continue;
-            double dist = ComputeDistance(data, targetIdx, i, minVals, maxVals, p);
-            distances.Add((i, dist));
-        }
-
-        return distances
-            .OrderBy(d => d.Distance)
-            .Take(Math.Min(k, distances.Count))
-            .ToList();
-    }
-
-    private double ComputeDistance(Matrix<T> data, int i1, int i2, double[] minVals, double[] maxVals, int p)
-    {
-        double dist = 0;
-        for (int j = 0; j < p; j++)
-        {
-            double range = maxVals[j] - minVals[j];
-            if (range < 1e-10) continue;
-
-            double v1 = NumOps.ToDouble(data[i1, j]);
-            double v2 = NumOps.ToDouble(data[i2, j]);
-            double diff = (v1 - v2) / range;
-            dist += diff * diff;
-        }
-        return Math.Sqrt(dist);
     }
 
     /// <inheritdoc />
