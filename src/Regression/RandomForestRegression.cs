@@ -351,35 +351,22 @@ public partial class RandomForestRegression<T> : AsyncDecisionTreeRegressionBase
     /// </remarks>
     protected override async Task CalculateFeatureImportancesAsync(int numFeatures)
     {
-        var importances = new T[numFeatures];
-
         // Calculate importances in parallel for each tree
         var importanceTasks = _trees.Select(tree => Task.Run(() =>
-        {
-            var treeImportances = new T[numFeatures];
-            for (int i = 0; i < numFeatures; i++)
-            {
-                treeImportances[i] = tree.GetFeatureImportance(i);
-            }
-            return treeImportances;
-        }));
+            new Vector<T>(Enumerable.Range(0, numFeatures).Select(tree.GetFeatureImportance))));
 
         var allImportances = await ParallelProcessingHelper.ProcessTasksInParallel(importanceTasks).ConfigureAwait(false);
 
-        // Aggregate importances
-        for (int i = 0; i < numFeatures; i++)
+        // Aggregate importances, accumulating the trees in order
+        var importances = Engine.FillZero<T>(numFeatures);
+        foreach (var treeImportance in allImportances)
         {
-            importances[i] = allImportances.Aggregate(NumOps.Zero, (acc, treeImportance) => NumOps.Add(acc, treeImportance[i]));
+            importances = Engine.Add(importances, treeImportance);
         }
 
         // Normalize importances
-        T sum = importances.Aggregate(NumOps.Zero, NumOps.Add);
-        for (int i = 0; i < numFeatures; i++)
-        {
-            importances[i] = NumOps.Divide(importances[i], sum);
-        }
-
-        FeatureImportances = new Vector<T>(importances);
+        T sum = numFeatures == 0 ? NumOps.Zero : Engine.Sum(importances);
+        FeatureImportances = Engine.Divide(importances, sum);
     }
 
 }

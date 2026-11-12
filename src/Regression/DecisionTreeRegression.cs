@@ -406,65 +406,69 @@ public partial class DecisionTreeRegression<T> : DecisionTreeRegressionBase<T>
     private (int featureIndex, T threshold) FindBestSplitWithWeights(Matrix<T> x, Vector<T> y, Vector<T> weights, IEnumerable<int> featureIndices)
     {
         int n = y.Length;
-        int bestFeatureIndex = -1;
-        T bestThreshold = NumOps.Zero;
-        T bestScore = NumOps.MinValue;
+        var engine = AiDotNetEngine.Current;
 
         // Parent totals, computed once. The old path recomputed the parent weighted variance and the
         // total weight (plus re-partitioned the data) for every candidate threshold of every feature
         // at every node — O(n^2)/node, which made AdaBoost (many weighted trees) take minutes.
-        T totW = NumOps.Zero, totWy = NumOps.Zero, totWy2 = NumOps.Zero;
-        for (int i = 0; i < n; i++)
-        {
-            T w = weights[i];
-            T wy = NumOps.Multiply(w, y[i]);
-            totW = NumOps.Add(totW, w);
-            totWy = NumOps.Add(totWy, wy);
-            totWy2 = NumOps.Add(totWy2, NumOps.Multiply(wy, y[i]));
-        }
+        var weightedY = engine.Multiply(weights, y);
+        T totW = engine.Sum(weights);
+        T totWy = engine.Sum(weightedY);
+        T totWy2 = engine.DotProduct(weightedY, y);
 
         // parentTerm = totalWeight * weightedVariance(parent); the split score is
         // parentTerm - (W_L*var_L + W_R*var_R), identical to the previous formulation.
         T parentTerm = WeightedSseFromMoments(totW, totWy, totWy2);
 
+        var candidateFeatures = new List<int>();
+        var candidateScores = new List<T>();
+        var candidateThresholds = new List<T>();
         foreach (int featureIndex in featureIndices)
         {
-            var featureValues = x.GetColumn(featureIndex);
-            var sortedIndices = Enumerable.Range(0, n).OrderBy(idx => featureValues[idx]).ToArray();
-
-            // Feature-sorted sweep with running left/right weighted moments — each threshold is O(1).
-            T lW = NumOps.Zero, lWy = NumOps.Zero, lWy2 = NumOps.Zero;
-            for (int s = 1; s < n; s++)
+            if (n < 2)
             {
-                int prev = sortedIndices[s - 1];
-                T w = weights[prev];
-                T wy = NumOps.Multiply(w, y[prev]);
-                lW = NumOps.Add(lW, w);
-                lWy = NumOps.Add(lWy, wy);
-                lWy2 = NumOps.Add(lWy2, NumOps.Multiply(wy, y[prev]));
+                continue;
+            }
 
-                // No valid threshold between two equal feature values (sorted ascending).
-                if (!NumOps.GreaterThan(featureValues[sortedIndices[s]], featureValues[sortedIndices[s - 1]]))
-                {
-                    continue;
-                }
+            // Feature-sorted sweep with running left/right weighted moments for every threshold at once.
+            var featureValues = x.GetColumn(featureIndex);
+            var sortedIndices = RegressionEngineOps.StableAscendingOrder(featureValues);
+            var sortedFeature = RegressionEngineOps.Gather(featureValues, sortedIndices);
+            var sortedY = RegressionEngineOps.Gather(y, sortedIndices);
+            var sortedW = RegressionEngineOps.Gather(weights, sortedIndices);
+            var sortedWy = engine.Multiply(sortedW, sortedY);
 
-                T childrenTerm = NumOps.Add(
-                    WeightedSseFromMoments(lW, lWy, lWy2),
-                    WeightedSseFromMoments(NumOps.Subtract(totW, lW), NumOps.Subtract(totWy, lWy), NumOps.Subtract(totWy2, lWy2)));
-                T score = NumOps.Subtract(parentTerm, childrenTerm);
+            var lW = RegressionEngineOps.SplitPrefixSums(sortedW);
+            var lWy = RegressionEngineOps.SplitPrefixSums(sortedWy);
+            var lWy2 = RegressionEngineOps.SplitPrefixSums(engine.Multiply(sortedWy, sortedY));
+            var rW = engine.Subtract(engine.Fill(n - 1, totW), lW);
+            var rWy = engine.Subtract(engine.Fill(n - 1, totWy), lWy);
+            var rWy2 = engine.Subtract(engine.Fill(n - 1, totWy2), lWy2);
 
-                if (NumOps.GreaterThan(score, bestScore))
-                {
-                    bestScore = score;
-                    bestFeatureIndex = featureIndex;
-                    bestThreshold = NumOps.Divide(
-                        NumOps.Add(featureValues[sortedIndices[s - 1]], featureValues[sortedIndices[s]]), NumOps.FromDouble(2));
-                }
+            var childrenTerm = engine.Add(
+                RegressionEngineOps.WeightedSseFromMoments(lW, lWy, lWy2),
+                RegressionEngineOps.WeightedSseFromMoments(rW, rWy, rWy2));
+            var scores = engine.Subtract(engine.Fill(n - 1, parentTerm), childrenTerm);
+
+            // No valid threshold between two equal feature values (sorted ascending).
+            var (index, score, threshold) = RegressionEngineOps.BestSortedSplit(
+                scores, RegressionEngineOps.AdjacentIncreaseMask(sortedFeature), null, sortedFeature);
+            if (index >= 0)
+            {
+                candidateFeatures.Add(featureIndex);
+                candidateScores.Add(score);
+                candidateThresholds.Add(threshold);
             }
         }
 
-        return (bestFeatureIndex, bestThreshold);
+        if (candidateFeatures.Count == 0)
+        {
+            return (-1, NumOps.Zero);
+        }
+
+        // The first feature with the largest score wins (strictly-greater sweep order).
+        int best = RegressionEngineOps.ArgMaxFirst(candidateScores);
+        return (candidateFeatures[best], candidateThresholds[best]);
     }
 
     /// <summary>
@@ -497,13 +501,9 @@ public partial class DecisionTreeRegression<T> : DecisionTreeRegressionBase<T>
             return NumOps.Zero;
         }
         T weightedMean = NumOps.Divide(y.DotProduct(weights), totalWeight);
-        T weightedVariance = NumOps.Zero;
-
-        for (int i = 0; i < y.Length; i++)
-        {
-            T diff = NumOps.Subtract(y[i], weightedMean);
-            weightedVariance = NumOps.Add(weightedVariance, NumOps.Multiply(weights[i], NumOps.Multiply(diff, diff)));
-        }
+        var engine = AiDotNetEngine.Current;
+        var diff = engine.Subtract(y, engine.Fill(y.Length, weightedMean));
+        T weightedVariance = engine.DotProduct(weights, engine.Multiply(diff, diff));
 
         weightedVariance = NumOps.Divide(weightedVariance, totalWeight);
         return weightedVariance;
@@ -575,22 +575,9 @@ public partial class DecisionTreeRegression<T> : DecisionTreeRegressionBase<T>
     /// <returns>Two lists containing the indices of samples that go to the left and right child nodes.</returns>
     private (List<int> leftIndices, List<int> rightIndices) SplitDataWithWeights(Matrix<T> x, Vector<T> y, Vector<T> weights, int featureIndex, T threshold)
     {
-        var leftIndices = new List<int>();
-        var rightIndices = new List<int>();
+        var (leftIndices, rightIndices) = RegressionEngineOps.PartitionByThreshold(x.GetColumn(featureIndex), threshold);
 
-        for (int i = 0; i < x.Rows; i++)
-        {
-            if (NumOps.LessThanOrEquals(x[i, featureIndex], threshold))
-            {
-                leftIndices.Add(i);
-            }
-            else
-            {
-                rightIndices.Add(i);
-            }
-        }
-
-        return (leftIndices, rightIndices);
+        return (leftIndices.ToList(), rightIndices.ToList());
     }
 
     /// <summary>
@@ -630,13 +617,15 @@ public partial class DecisionTreeRegression<T> : DecisionTreeRegressionBase<T>
 
         int bestFeatureIndex = -1;
         T bestSplitValue = NumOps.Zero;
-        T bestScore = NumOps.MinValue;
 
         int featuresToConsider = (int)Math.Min(x.Columns, Math.Max(1, _options.MaxFeatures * x.Columns));
         var featureIndices = Enumerable.Range(0, x.Columns).OrderBy(_ => _random.Next()).Take(featuresToConsider).ToList();
 
         // Generic per-criterion path (variance reduction uses the faster index-based BuildTreeFast,
         // dispatched in Train; this path serves the other split criteria).
+        var candidateFeatures = new List<int>();
+        var candidateValues = new List<T>();
+        var candidateScores = new List<T>();
         foreach (int featureIndex in featureIndices)
         {
             var featureValues = x.GetColumn(featureIndex);
@@ -644,32 +633,22 @@ public partial class DecisionTreeRegression<T> : DecisionTreeRegressionBase<T>
 
             foreach (var splitValue in uniqueValues.Skip(1))
             {
-                var leftIndices = new List<int>();
-                var rightIndices = new List<int>();
-
-                for (int i = 0; i < x.Rows; i++)
-                {
-                    if (NumOps.LessThan(x[i, featureIndex], splitValue))
-                    {
-                        leftIndices.Add(i);
-                    }
-                    else
-                    {
-                        rightIndices.Add(i);
-                    }
-                }
+                var (leftIndices, rightIndices) = PartitionStrictlyBelow(featureValues, splitValue);
 
                 if (leftIndices.Count == 0 || rightIndices.Count == 0) continue;
 
-                T score = StatisticsHelper<T>.CalculateSplitScore(y, leftIndices, rightIndices, _options.SplitCriterion);
-
-                if (NumOps.GreaterThan(score, bestScore))
-                {
-                    bestScore = score;
-                    bestFeatureIndex = featureIndex;
-                    bestSplitValue = splitValue;
-                }
+                candidateFeatures.Add(featureIndex);
+                candidateValues.Add(splitValue);
+                candidateScores.Add(StatisticsHelper<T>.CalculateSplitScore(y, leftIndices, rightIndices, _options.SplitCriterion));
             }
+        }
+
+        // The first candidate with the largest (non-NaN) score wins, as in the sequential sweep.
+        var (bestCandidate, _) = RegressionEngineOps.MaskedArgMaxFirst(new Vector<T>(candidateScores), null, null);
+        if (bestCandidate >= 0 && NumOps.GreaterThan(candidateScores[bestCandidate], NumOps.MinValue))
+        {
+            bestFeatureIndex = candidateFeatures[bestCandidate];
+            bestSplitValue = candidateValues[bestCandidate];
         }
 
         if (bestFeatureIndex == -1)
@@ -681,38 +660,38 @@ public partial class DecisionTreeRegression<T> : DecisionTreeRegressionBase<T>
             };
         }
 
-        var leftX = new List<Vector<T>>();
-        var leftY = new List<T>();
-        var rightX = new List<Vector<T>>();
-        var rightY = new List<T>();
-
-        for (int i = 0; i < x.Rows; i++)
-        {
-            if (NumOps.LessThan(x[i, bestFeatureIndex], bestSplitValue))
-            {
-                leftX.Add(x.GetRow(i));
-                leftY.Add(y[i]);
-            }
-            else
-            {
-                rightX.Add(x.GetRow(i));
-                rightY.Add(y[i]);
-            }
-        }
+        var (bestLeft, bestRight) = PartitionStrictlyBelow(x.GetColumn(bestFeatureIndex), bestSplitValue);
 
         var node = new DecisionTreeNode<T>
         {
             FeatureIndex = bestFeatureIndex,
             SplitValue = bestSplitValue,
             IsLeaf = false, // Mark as internal node - required since default is true
-            Left = BuildTree(new Matrix<T>(leftX), new Vector<T>(leftY), depth + 1),
-            Right = BuildTree(new Matrix<T>(rightX), new Vector<T>(rightY), depth + 1),
-            LeftSampleCount = leftX.Count,
-            RightSampleCount = rightX.Count,
-            Samples = [.. x.GetRows().Select((_, i) => new Sample<T>(x.GetRow(i), y[i]))]
+            Left = BuildTree(x.GetRows(bestLeft), RegressionEngineOps.Gather(y, bestLeft.ToArray()), depth + 1),
+            Right = BuildTree(x.GetRows(bestRight), RegressionEngineOps.Gather(y, bestRight.ToArray()), depth + 1),
+            LeftSampleCount = bestLeft.Count,
+            RightSampleCount = bestRight.Count,
+            Samples = [.. x.GetRows().Zip(y, (row, target) => new Sample<T>(row, target))]
         };
 
         return node;
+    }
+
+    /// <summary>
+    /// Splits sample positions into those with <c>values[i] &lt; splitValue</c> (left) and the rest,
+    /// NaN included (right), both in ascending order.
+    /// </summary>
+    private static (List<int> Left, List<int> Right) PartitionStrictlyBelow(Vector<T> values, T splitValue)
+    {
+        if (values.Length == 0)
+        {
+            return (new List<int>(), new List<int>());
+        }
+
+        var engine = AiDotNetEngine.Current;
+        var leftMask = engine.TensorLessThan(Tensor<T>.FromVector(values), splitValue);
+        var rightMask = engine.ScalarMinusTensor(MathHelper.GetNumericOperations<T>().One, leftMask);
+        return (RegressionEngineOps.NonzeroIndices(leftMask).ToList(), RegressionEngineOps.NonzeroIndices(rightMask).ToList());
     }
 
     /// <summary>
@@ -1085,17 +1064,15 @@ public partial class DecisionTreeRegression<T> : DecisionTreeRegressionBase<T>
     /// </summary>
     private void NormalizeFeatureImportances()
     {
-        T sum = _featureImportances.Aggregate(NumOps.Zero, (acc, x) => NumOps.Add(acc, x));
+        var engine = AiDotNetEngine.Current;
+        T sum = engine.Sum(_featureImportances);
 
         if (NumOps.Equals(sum, NumOps.Zero))
         {
             return;
         }
 
-        for (int i = 0; i < _featureImportances.Length; i++)
-        {
-            _featureImportances[i] = NumOps.Divide(_featureImportances[i], sum);
-        }
+        _featureImportances = engine.Divide(_featureImportances, sum);
     }
 
     /// <summary>
@@ -1153,18 +1130,28 @@ public partial class DecisionTreeRegression<T> : DecisionTreeRegressionBase<T>
     /// <param name="featureCount">The total number of features.</param>
     protected override void CalculateFeatureImportances(int featureCount)
     {
-        _featureImportances = new Vector<T>(featureCount);
-        T totalImportance = NumOps.Zero;
+        var engine = AiDotNetEngine.Current;
+        var importanceFeatures = new List<int>();
+        var importanceValues = new List<T>();
 
-        // Traverse the tree and calculate feature importances
+        // Traverse the tree and record each split's weighted improvement
         CalculateNodeImportance(Root, NumOps.One);
 
-        // Normalize feature importances
-        if (!NumOps.Equals(totalImportance, NumOps.Zero))
+        _featureImportances = engine.FillZero<T>(featureCount);
+        if (importanceFeatures.Count > 0)
         {
-            for (int i = 0; i < _featureImportances.Length; i++)
+            var improvements = new Vector<T>(importanceValues);
+            _featureImportances = engine.TensorScatterAdd(
+                Tensor<T>.FromVector(_featureImportances),
+                new Tensor<int>(importanceFeatures.ToArray(), new[] { importanceFeatures.Count }),
+                Tensor<T>.FromVector(improvements),
+                0).ToVector();
+            T totalImportance = engine.Sum(improvements);
+
+            // Normalize feature importances
+            if (!NumOps.Equals(totalImportance, NumOps.Zero))
             {
-                _featureImportances[i] = NumOps.Divide(_featureImportances[i], totalImportance);
+                _featureImportances = engine.Divide(_featureImportances, totalImportance);
             }
         }
 
@@ -1178,8 +1165,8 @@ public partial class DecisionTreeRegression<T> : DecisionTreeRegressionBase<T>
             T improvement = CalculateImpurityImprovement(node);
             T weightedImprovement = NumOps.Multiply(improvement, nodeWeight);
 
-            _featureImportances[node.FeatureIndex] = NumOps.Add(_featureImportances[node.FeatureIndex], weightedImprovement);
-            totalImportance = NumOps.Add(totalImportance, weightedImprovement);
+            importanceFeatures.Add(node.FeatureIndex);
+            importanceValues.Add(weightedImprovement);
 
             T leftWeight = NumOps.Multiply(nodeWeight, NumOps.FromDouble(node.LeftSampleCount / (double)(node.LeftSampleCount + node.RightSampleCount)));
             T rightWeight = NumOps.Multiply(nodeWeight, NumOps.FromDouble(node.RightSampleCount / (double)(node.LeftSampleCount + node.RightSampleCount)));
@@ -1219,15 +1206,11 @@ public partial class DecisionTreeRegression<T> : DecisionTreeRegressionBase<T>
             }
 
             // For regression trees, we use variance as the impurity measure
-            T variance = NumOps.Zero;
             T mean = node.Prediction;
             int sampleCount = node.Samples.Count;
-
-            foreach (var sample in node.Samples)
-            {
-                T diff = NumOps.Subtract(sample.Target, mean);
-                variance = NumOps.Add(variance, NumOps.Multiply(diff, diff));
-            }
+            var targets = new Vector<T>(node.Samples.Select(sample => sample.Target));
+            var diff = engine.Subtract(targets, engine.Fill(sampleCount, mean));
+            T variance = engine.DotProduct(diff, diff);
 
             return NumOps.Divide(variance, NumOps.FromDouble(sampleCount));
         }
