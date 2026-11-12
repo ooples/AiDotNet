@@ -48,7 +48,7 @@ public class MaskVisualizer<T>
         for (int i = 0; i < result.Instances.Count; i++)
         {
             var instance = result.Instances[i];
-            DrawMaskOverlay(output, instance.Mask, i, instance.ClassId);
+            output = DrawMaskOverlay(output, instance.Mask, i, instance.ClassId);
         }
 
         // Draw bounding boxes and labels
@@ -71,7 +71,7 @@ public class MaskVisualizer<T>
         for (int i = 0; i < result.Instances.Count; i++)
         {
             var instance = result.Instances[i];
-            DrawMaskOverlay(output, instance.Mask, i, instance.ClassId);
+            output = DrawMaskOverlay(output, instance.Mask, i, instance.ClassId);
         }
 
         return output;
@@ -87,19 +87,7 @@ public class MaskVisualizer<T>
         foreach (var instance in result.Instances)
         {
             var color = GetClassColor(instance.ClassId);
-
-            for (int y = 0; y < Math.Min(instance.Mask.Shape[0], height); y++)
-            {
-                for (int x = 0; x < Math.Min(instance.Mask.Shape[1], width); x++)
-                {
-                    if (_numOps.ToDouble(instance.Mask[y, x]) > 0.5)
-                    {
-                        semanticMap[0, 0, y, x] = _numOps.FromDouble(color.R / 255.0);
-                        semanticMap[0, 1, y, x] = _numOps.FromDouble(color.G / 255.0);
-                        semanticMap[0, 2, y, x] = _numOps.FromDouble(color.B / 255.0);
-                    }
-                }
-            }
+            semanticMap = PaintWhere(semanticMap, instance.Mask, 3, ColorTensor(color, 3));
         }
 
         return semanticMap;
@@ -110,121 +98,133 @@ public class MaskVisualizer<T>
     /// </summary>
     public int[,] CreateInstanceIdMap(InstanceSegmentationResult<T> result, int height, int width)
     {
-        var instanceMap = new int[height, width];
+        var engine = AiDotNetEngine.Current;
 
-        // Initialize with -1 (background)
-        for (int y = 0; y < height; y++)
-        {
-            for (int x = 0; x < width; x++)
-            {
-                instanceMap[y, x] = -1;
-            }
-        }
+        // Initialize with -1 (background); later instances overwrite earlier ones.
+        var instanceMap = new Tensor<T>(new[] { 1, 1, height, width });
+        engine.TensorFill(instanceMap, _numOps.FromDouble(-1.0));
 
         for (int i = 0; i < result.Instances.Count; i++)
         {
-            var instance = result.Instances[i];
-
-            for (int y = 0; y < Math.Min(instance.Mask.Shape[0], height); y++)
-            {
-                for (int x = 0; x < Math.Min(instance.Mask.Shape[1], width); x++)
-                {
-                    if (_numOps.ToDouble(instance.Mask[y, x]) > 0.5)
-                    {
-                        instanceMap[y, x] = i;
-                    }
-                }
-            }
+            var id = new Tensor<T>(new[] { _numOps.FromDouble(i) }, new[] { 1, 1, 1, 1 });
+            instanceMap = PaintWhere(instanceMap, result.Instances[i].Mask, 1, id);
         }
 
-        return instanceMap;
+        var ids = new int[height, width];
+        var flat = instanceMap.Cast<int>().ToArray();
+        Buffer.BlockCopy(flat, 0, ids, 0, flat.Length * sizeof(int));
+        return ids;
     }
 
-    private void DrawMaskOverlay(Tensor<T> image, Tensor<T> mask, int instanceId, int classId)
+    private Tensor<T> DrawMaskOverlay(Tensor<T> image, Tensor<T> mask, int instanceId, int classId)
     {
+        var engine = AiDotNetEngine.Current;
         int channels = image.Shape[1];
         int imgH = image.Shape[2];
         int imgW = image.Shape[3];
 
         var color = GetInstanceColor(instanceId, classId);
-        double opacity = _options.MaskOpacity;
+        T opacity = _numOps.FromDouble(_options.MaskOpacity);
+        T keep = _numOps.Subtract(_numOps.One, opacity);
 
-        int maskH = mask.Shape[0];
-        int maskW = mask.Shape[1];
+        int h = Math.Min(mask.Shape[0], imgH);
+        int w = Math.Min(mask.Shape[1], imgW);
+        int blendChannels = channels >= 3 ? 3 : channels == 1 ? 1 : 0;
 
-        for (int y = 0; y < Math.Min(maskH, imgH); y++)
+        if (blendChannels > 0 && h > 0 && w > 0)
         {
-            for (int x = 0; x < Math.Min(maskW, imgW); x++)
-            {
-                double maskVal = _numOps.ToDouble(mask[y, x]);
-
-                if (maskVal > 0.5)
-                {
-                    // Blend with original pixel
-                    if (channels >= 3)
-                    {
-                        double origR = _numOps.ToDouble(image[0, 0, y, x]);
-                        double origG = _numOps.ToDouble(image[0, 1, y, x]);
-                        double origB = _numOps.ToDouble(image[0, 2, y, x]);
-
-                        double newR = origR * (1 - opacity) + (color.R / 255.0) * opacity;
-                        double newG = origG * (1 - opacity) + (color.G / 255.0) * opacity;
-                        double newB = origB * (1 - opacity) + (color.B / 255.0) * opacity;
-
-                        image[0, 0, y, x] = _numOps.FromDouble(newR);
-                        image[0, 1, y, x] = _numOps.FromDouble(newG);
-                        image[0, 2, y, x] = _numOps.FromDouble(newB);
-                    }
-                    else if (channels == 1)
-                    {
-                        double origVal = _numOps.ToDouble(image[0, 0, y, x]);
-                        double colorGray = (color.R + color.G + color.B) / 3.0 / 255.0;
-                        double newVal = origVal * (1 - opacity) + colorGray * opacity;
-                        image[0, 0, y, x] = _numOps.FromDouble(newVal);
-                    }
-                }
-            }
+            // Blend with original pixel: orig * (1 - opacity) + color * opacity, inside the mask only.
+            Tensor<T> tint = blendChannels == 3
+                ? ColorTensor(color, 3)
+                : new Tensor<T>(new[] { _numOps.FromDouble((color.R + color.G + color.B) / 3.0 / 255.0) }, new[] { 1, 1, 1, 1 });
+            var region = engine.TensorSlice(image, new[] { 0, 0, 0, 0 }, new[] { 1, blendChannels, h, w });
+            var blended = engine.TensorAdd(
+                engine.TensorMultiplyScalar(region, keep),
+                engine.TensorBroadcastTo(engine.TensorMultiplyScalar(tint, opacity), region.Shape.ToArray()));
+            var inside = engine.TensorBroadcastTo(
+                Reshape4D(MaskOn(engine.TensorSlice(mask, new[] { 0, 0 }, new[] { h, w }))), region.Shape.ToArray());
+            image = engine.TensorSetSlice(image, engine.TensorWhere(inside, blended, region), new[] { 0, 0, 0, 0 });
         }
 
         // Draw mask contour
-        DrawMaskContour(image, mask, color);
+        return DrawMaskContour(image, mask, color);
     }
 
-    private void DrawMaskContour(Tensor<T> image, Tensor<T> mask, (byte R, byte G, byte B) color)
+    private Tensor<T> DrawMaskContour(Tensor<T> image, Tensor<T> mask, (byte R, byte G, byte B) color)
     {
+        var engine = AiDotNetEngine.Current;
+        int channels = image.Shape[1];
         int imgH = image.Shape[2];
         int imgW = image.Shape[3];
-        int maskH = mask.Shape[0];
-        int maskW = mask.Shape[1];
 
-        // Find contour pixels (mask edge)
-        for (int y = 1; y < Math.Min(maskH - 1, imgH - 1); y++)
+        // Contour pixels are interior pixels y in [1, yEnd), x in [1, xEnd) that are on while at least
+        // one 4-neighbour is off.
+        int yEnd = Math.Min(mask.Shape[0] - 1, imgH - 1);
+        int xEnd = Math.Min(mask.Shape[1] - 1, imgW - 1);
+        int h = yEnd - 1;
+        int w = xEnd - 1;
+        int paintChannels = Math.Min(channels, 3);
+        if (h <= 0 || w <= 0 || paintChannels <= 0)
         {
-            for (int x = 1; x < Math.Min(maskW - 1, imgW - 1); x++)
-            {
-                double centerVal = _numOps.ToDouble(mask[y, x]);
-
-                if (centerVal > 0.5)
-                {
-                    // Check if this is an edge pixel
-                    bool isEdge = false;
-
-                    if (_numOps.ToDouble(mask[y - 1, x]) <= 0.5 ||
-                        _numOps.ToDouble(mask[y + 1, x]) <= 0.5 ||
-                        _numOps.ToDouble(mask[y, x - 1]) <= 0.5 ||
-                        _numOps.ToDouble(mask[y, x + 1]) <= 0.5)
-                    {
-                        isEdge = true;
-                    }
-
-                    if (isEdge)
-                    {
-                        // Draw contour pixel
-                        SetPixel(image, 0, y, x, color.R / 255.0, color.G / 255.0, color.B / 255.0);
-                    }
-                }
-            }
+            return image;
         }
+
+        var on = MaskOn(engine.TensorSlice(mask, new[] { 0, 0 }, new[] { h + 2, w + 2 }));
+        var centre = engine.TensorSlice(on, new[] { 1, 1 }, new[] { h, w });
+        var up = engine.TensorSlice(on, new[] { 0, 1 }, new[] { h, w });
+        var down = engine.TensorSlice(on, new[] { 2, 1 }, new[] { h, w });
+        var left = engine.TensorSlice(on, new[] { 1, 0 }, new[] { h, w });
+        var right = engine.TensorSlice(on, new[] { 1, 2 }, new[] { h, w });
+        var allNeighboursOn = engine.TensorMultiply(engine.TensorMultiply(up, down), engine.TensorMultiply(left, right));
+        var edge = engine.TensorMultiply(centre, engine.ScalarMinusTensor(_numOps.One, allNeighboursOn));
+
+        var region = engine.TensorSlice(image, new[] { 0, 0, 1, 1 }, new[] { 1, paintChannels, h, w });
+        var edgeMask = engine.TensorBroadcastTo(Reshape4D(edge), region.Shape.ToArray());
+        var paint = engine.TensorBroadcastTo(ColorTensor(color, paintChannels), region.Shape.ToArray());
+        return engine.TensorSetSlice(image, engine.TensorWhere(edgeMask, paint, region), new[] { 0, 0, 1, 1 });
+    }
+
+    /// <summary>
+    /// Writes <paramref name="value"/> (broadcast from <c>[1, channels, 1, 1]</c>) into
+    /// the first batch item's first <paramref name="channels"/> channels wherever the mask is above 0.5,
+    /// over the overlap of the mask and the target's spatial extent.
+    /// </summary>
+    private Tensor<T> PaintWhere(Tensor<T> target, Tensor<T> mask, int channels, Tensor<T> value)
+    {
+        var engine = AiDotNetEngine.Current;
+        int h = Math.Min(mask.Shape[0], target.Shape[2]);
+        int w = Math.Min(mask.Shape[1], target.Shape[3]);
+        if (h <= 0 || w <= 0)
+        {
+            return target;
+        }
+
+        var start = new[] { 0, 0, 0, 0 };
+        var region = engine.TensorSlice(target, start, new[] { 1, channels, h, w });
+        var inside = engine.TensorBroadcastTo(
+            Reshape4D(MaskOn(engine.TensorSlice(mask, new[] { 0, 0 }, new[] { h, w }))), region.Shape.ToArray());
+        var paint = engine.TensorBroadcastTo(value, region.Shape.ToArray());
+        return engine.TensorSetSlice(target, engine.TensorWhere(inside, paint, region), start);
+    }
+
+    /// <summary>1 where the mask is above 0.5, else 0.</summary>
+    private Tensor<T> MaskOn(Tensor<T> mask)
+        => AiDotNetEngine.Current.TensorGreaterThan(mask, _numOps.FromDouble(0.5));
+
+    /// <summary>Views a <c>[h, w]</c> plane as <c>[1, 1, h, w]</c>.</summary>
+    private static Tensor<T> Reshape4D(Tensor<T> plane)
+        => AiDotNetEngine.Current.Reshape(plane, new[] { 1, 1, plane.Shape[0], plane.Shape[1] });
+
+    /// <summary>The first <paramref name="channels"/> of (R, G, B) / 255 as <c>[1, channels, 1, 1]</c>.</summary>
+    private Tensor<T> ColorTensor((byte R, byte G, byte B) color, int channels)
+    {
+        var rgb = new[]
+        {
+            _numOps.FromDouble(color.R / 255.0),
+            _numOps.FromDouble(color.G / 255.0),
+            _numOps.FromDouble(color.B / 255.0),
+        };
+        return new Tensor<T>(rgb.Take(channels).ToArray(), new[] { 1, channels, 1, 1 });
     }
 
     private void DrawBoundingBox(Tensor<T> image, InstanceMask<T> instance, string[]? classNames)
@@ -419,13 +419,5 @@ public class MaskVisualizer<T>
         return ((byte)(r * 255), (byte)(g * 255), (byte)(b * 255));
     }
 
-    private Tensor<T> CloneImage(Tensor<T> image)
-    {
-        var clone = new Tensor<T>(image._shape);
-        for (int i = 0; i < image.Length; i++)
-        {
-            clone[i] = image[i];
-        }
-        return clone;
-    }
+    private static Tensor<T> CloneImage(Tensor<T> image) => image.Clone();
 }
