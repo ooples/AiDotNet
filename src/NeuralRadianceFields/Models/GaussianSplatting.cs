@@ -1720,40 +1720,26 @@ public partial class GaussianSplatting<T> : AiDotNet.NeuralNetworks.VectorModelL
         T farBound)
     {
         int numRays = rayOrigins.Shape[0];
-        var positions = new T[numRays * numSamples * 3];
-        var directions = new T[numRays * numSamples * 3];
-
-        double near = NumOps.ToDouble(nearBound);
-        double far = NumOps.ToDouble(farBound);
-        double step = numSamples > 1 ? (far - near) / (numSamples - 1) : 0.0;
-
-        var originData = rayOrigins.Data.Span;
-        var dirData = rayDirections.Data.Span;
-
-        for (int r = 0; r < numRays; r++)
+        if (numRays == 0 || numSamples <= 0)
         {
-            double ox = NumOps.ToDouble(originData[r * 3]);
-            double oy = NumOps.ToDouble(originData[r * 3 + 1]);
-            double oz = NumOps.ToDouble(originData[r * 3 + 2]);
-            double dx = NumOps.ToDouble(dirData[r * 3]);
-            double dy = NumOps.ToDouble(dirData[r * 3 + 1]);
-            double dz = NumOps.ToDouble(dirData[r * 3 + 2]);
-
-            for (int s = 0; s < numSamples; s++)
-            {
-                double t = near + step * s;
-                int baseIdx = (r * numSamples + s) * 3;
-                positions[baseIdx] = NumOps.FromDouble(ox + t * dx);
-                positions[baseIdx + 1] = NumOps.FromDouble(oy + t * dy);
-                positions[baseIdx + 2] = NumOps.FromDouble(oz + t * dz);
-                directions[baseIdx] = dirData[r * 3];
-                directions[baseIdx + 1] = dirData[r * 3 + 1];
-                directions[baseIdx + 2] = dirData[r * 3 + 2];
-            }
+            return (new Tensor<T>(new[] { numRays * Math.Max(numSamples, 0), 3 }),
+                new Tensor<T>(new[] { numRays * Math.Max(numSamples, 0), 3 }));
         }
 
-        return (new Tensor<T>(positions, [numRays * numSamples, 3]),
-            new Tensor<T>(directions, [numRays * numSamples, 3]));
+        var engine = Engine;
+        T step = numSamples > 1
+            ? NumOps.Divide(NumOps.Subtract(farBound, nearBound), NumOps.FromDouble(numSamples - 1))
+            : NumOps.Zero;
+        var ts = engine.TensorAddScalar(engine.TensorMultiplyScalar(engine.TensorArange<T>(0, numSamples, 1), step), nearBound);
+
+        // positions[r, s] = o_r + t_s d_r, ray-major.
+        var shape = new[] { numRays, numSamples, 3 };
+        var origins = engine.TensorBroadcastTo(rayOrigins.Reshape(numRays, 1, 3), shape);
+        var dirs = engine.TensorBroadcastTo(rayDirections.Reshape(numRays, 1, 3), shape);
+        var tGrid = engine.TensorBroadcastTo(ts.Reshape(1, numSamples, 1), shape);
+        var positions = engine.TensorAdd(origins, engine.TensorMultiply(tGrid, dirs)).Reshape(numRays * numSamples, 3);
+        var directions = engine.TensorRepeatInterleave(rayDirections.Reshape(numRays, 3), numSamples, 0);
+        return (positions, directions);
     }
 
     private Tensor<T> VolumeRendering(
@@ -1764,54 +1750,43 @@ public partial class GaussianSplatting<T> : AiDotNet.NeuralNetworks.VectorModelL
         T nearBound,
         T farBound)
     {
-        var colors = new T[numRays * 3];
-        var rgbData = rgb.Data.Span;
-        var densityData = density.Data.Span;
-
-        double near = NumOps.ToDouble(nearBound);
-        double far = NumOps.ToDouble(farBound);
-        double deltaT = numSamples > 0 ? (far - near) / numSamples : 0.0;
-
-        for (int r = 0; r < numRays; r++)
+        if (numRays <= 0 || numSamples <= 0)
         {
-            double transmittance = 1.0;
-            double accumR = 0.0;
-            double accumG = 0.0;
-            double accumB = 0.0;
-
-            for (int s = 0; s < numSamples; s++)
-            {
-                int idx = r * numSamples + s;
-                double sigma = NumOps.ToDouble(densityData[idx]);
-                double alpha = 1.0 - Math.Exp(-sigma * deltaT);
-                if (alpha <= 0.0)
-                {
-                    continue;
-                }
-
-                int rgbIdx = idx * 3;
-                double rVal = NumOps.ToDouble(rgbData[rgbIdx]);
-                double gVal = NumOps.ToDouble(rgbData[rgbIdx + 1]);
-                double bVal = NumOps.ToDouble(rgbData[rgbIdx + 2]);
-
-                accumR += transmittance * alpha * rVal;
-                accumG += transmittance * alpha * gVal;
-                accumB += transmittance * alpha * bVal;
-
-                transmittance *= (1.0 - alpha);
-                if (transmittance < 1e-4)
-                {
-                    break;
-                }
-            }
-
-            int outIdx = r * 3;
-            colors[outIdx] = NumOps.FromDouble(accumR);
-            colors[outIdx + 1] = NumOps.FromDouble(accumG);
-            colors[outIdx + 2] = NumOps.FromDouble(accumB);
+            return new Tensor<T>(new[] { Math.Max(numRays, 0), 3 });
         }
 
-        return new Tensor<T>(colors, [numRays, 3]);
+        var engine = Engine;
+        T deltaT = NumOps.Divide(NumOps.Subtract(farBound, nearBound), NumOps.FromDouble(numSamples));
+        var sigma = density.Reshape(numRays, numSamples);
+        var alpha = engine.ScalarMinusTensor(
+            NumOps.One, engine.TensorExp(engine.TensorNegate(engine.TensorMultiplyScalar(sigma, deltaT))));
+
+        // Samples with alpha <= 0 are skipped: they add nothing and leave the transmittance unchanged.
+        var contributes = engine.TensorLessEqual(alpha, engine.TensorZerosLike(alpha));
+        var factor = engine.TensorWhere(contributes, engine.TensorOnesLike(alpha), engine.ScalarMinusTensor(NumOps.One, alpha));
+        var weight = engine.TensorWhere(contributes, engine.TensorZerosLike(alpha), alpha);
+
+        // Transmittance reaching each sample: the product of the earlier factors (exclusive scan).
+        var leading = engine.TensorOnesLike(engine.TensorSlice(factor, new[] { 0, 0 }, new[] { numRays, 1 }));
+        var shifted = numSamples > 1
+            ? engine.TensorConcatenate(
+                new[] { leading, engine.TensorSlice(factor, new[] { 0, 0 }, new[] { numRays, numSamples - 1 }) }, 1)
+            : leading;
+        var transmittance = engine.TensorCumProd(shifted, 1);
+
+        // Marching stops once the transmittance falls below 1e-4: later samples are not composited, and skipped
+        // or stopped samples are never read (so their colours cannot leak NaN into the sum).
+        var stopped = engine.TensorLessThan(transmittance, NumOps.FromDouble(1e-4));
+        var zeros = engine.TensorZerosLike(alpha);
+        var keep = engine.TensorWhere(contributes, zeros, engine.TensorWhere(stopped, zeros, engine.TensorOnesLike(alpha)));
+        var sampleWeight = engine.TensorMultiply(transmittance, weight);
+
+        var shape = new[] { numRays, numSamples, 3 };
+        var keep3 = engine.TensorBroadcastTo(keep.Reshape(numRays, numSamples, 1), shape);
+        var weights = engine.TensorBroadcastTo(sampleWeight.Reshape(numRays, numSamples, 1), shape);
+        var contributions = engine.TensorMultiply(weights, rgb.Reshape(numRays, numSamples, 3));
+        var colors = engine.TensorWhere(keep3, contributions, engine.TensorZerosLike(contributions));
+        return engine.ReduceSum(colors, new[] { 1 }, false);
     }
 
     /// <inheritdoc />
