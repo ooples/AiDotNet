@@ -814,6 +814,51 @@ internal static class FeatureSelectionTensorOps
         var ops = MathHelper.GetNumericOperations<T>();
         return engine.TensorSqrt(engine.TensorDivideScalar(ColumnSumSquaredDeviations(x), ops.FromDouble(x.Shape[0])));
     }
+
+    /// <summary>
+    /// Pearson chi-squared statistic of every feature's bins (one-hot [n, p * bins]) against the classes (one-hot
+    /// [n, K]): <c>sum (O - E)^2 / E</c> over the cells with <c>E = n_bin * n_class / n &gt; 0</c>.
+    /// <paramref name="occupiedBins"/> receives the number of non-empty bins per feature. Returns [p].
+    /// </summary>
+    public static Tensor<T> ContingencyChiSquared<T>(Tensor<T> binOneHot, Tensor<T> classOneHot, int bins, out Tensor<T> occupiedBins)
+    {
+        var engine = AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<T>();
+        int n = binOneHot.Shape[0];
+        int k = classOneHot.Shape[1];
+        var observed = JointBinCounts(binOneHot, classOneHot, bins);
+        int p = observed.Shape[0];
+        var cellShape = new[] { p, bins, k };
+        var binCounts = engine.ReduceSum(observed, new[] { 2 }, true);
+        var classCounts = engine.Reshape(engine.ReduceSum(classOneHot, new[] { 0 }, false), new[] { 1, 1, k });
+        var expected = engine.TensorDivideScalar(engine.TensorMultiply(
+            engine.TensorBroadcastTo(binCounts, cellShape), engine.TensorBroadcastTo(classCounts, cellShape)), ops.FromDouble(n));
+        var positive = engine.TensorGreaterThan(expected, ops.Zero);
+        var safe = engine.TensorWhere(positive, expected, PreprocessingTensorOps.Filled(cellShape, ops.One));
+        var terms = engine.TensorWhere(positive,
+            engine.TensorDivide(engine.TensorSquare(engine.TensorSubtract(observed, expected)), safe), new Tensor<T>(cellShape));
+        occupiedBins = engine.ReduceSum(engine.TensorGreaterThan(engine.Reshape(binCounts, new[] { p, bins }), ops.Zero),
+            new[] { 1 }, false);
+        return engine.ReduceSum(terms, new[] { 1, 2 }, false);
+    }
+
+    /// <summary>
+    /// Chi-squared survival function <c>P(X &gt;= statistic)</c> for X ~ chi2(df), i.e. the regularized upper incomplete
+    /// gamma <c>Q(df / 2, statistic / 2)</c> (scipy.stats.chi2.sf); 1 where <c>df &lt;= 0</c> or the statistic is not
+    /// positive.
+    /// </summary>
+    public static Tensor<T> ChiSquaredSurvival<T>(Tensor<T> statistic, Tensor<T> df)
+    {
+        var engine = AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<T>();
+        var shape = statistic.Shape.ToArray();
+        var one = PreprocessingTensorOps.Filled(shape, ops.One);
+        var defined = engine.TensorMultiply(engine.TensorGreaterThan(df, ops.Zero), engine.TensorGreaterThan(statistic, ops.Zero));
+        T half = ops.FromDouble(0.5);
+        var q = engine.TensorIgammac(engine.TensorMultiplyScalar(engine.TensorWhere(defined, df, one), half),
+            engine.TensorMultiplyScalar(engine.TensorWhere(defined, statistic, one), half));
+        return engine.TensorWhere(defined, q, one);
+    }
 }
 
 /// <summary>Impurity used by <see cref="FeatureSelectionTensorOps.TryBestSplit{T}"/>.</summary>

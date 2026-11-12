@@ -28,16 +28,16 @@ public class ChiSquare<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervise
     private readonly int _nFeaturesToSelect;
     private readonly int _nBins;
 
-    private double[]? _chiSquareScores;
-    private double[]? _pValues;
+    private Vector<T>? _chiSquareScores;
+    private Vector<T>? _pValues;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public int NBins => _nBins;
-    public double[]? ChiSquareScores => _chiSquareScores;
-    public double[]? PValues => _pValues;
+    public Vector<T>? ChiSquareScores => _chiSquareScores;
+    public Vector<T>? PValues => _pValues;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -75,121 +75,26 @@ public class ChiSquare<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervise
         int n = data.Rows;
         int p = data.Columns;
 
-        // Get unique class labels
-        var classLabels = new HashSet<int>();
-        for (int i = 0; i < n; i++)
-            classLabels.Add((int)Math.Round(NumOps.ToDouble(target[i])));
+        var engine = Engine;
 
-        int nClasses = classLabels.Count;
-        var labelList = classLabels.OrderBy(x => x).ToList();
+        // Class labels (rounded target values) and range-scaled feature bins (0 for a constant feature)
+        PreprocessingTensorOps.ClassLabels(target, out var classes, out var classIndex);
+        int nClasses = classes.Length;
+        var classOneHot = PreprocessingTensorOps.ClassOneHot<T>(classIndex, nClasses);
+        var featureBins = PreprocessingTensorOps.RangeScaledBinOneHot(Tensor<T>.FromMatrix(data), _nBins);
 
-        _chiSquareScores = new double[p];
-        _pValues = new double[p];
-
-        for (int j = 0; j < p; j++)
-        {
-            // Discretize continuous feature
-            double minVal = double.MaxValue, maxVal = double.MinValue;
-            for (int i = 0; i < n; i++)
-            {
-                double val = NumOps.ToDouble(data[i, j]);
-                if (val < minVal) minVal = val;
-                if (val > maxVal) maxVal = val;
-            }
-
-            double range = maxVal - minVal;
-
-            // Build contingency table
-            var contingency = new int[_nBins, nClasses];
-            var featureCounts = new int[_nBins];
-            var classCounts = new int[nClasses];
-
-            for (int i = 0; i < n; i++)
-            {
-                int fBin = range > 1e-10
-                    ? Math.Min(_nBins - 1, (int)((NumOps.ToDouble(data[i, j]) - minVal) / range * (_nBins - 1)))
-                    : 0;
-                int cIdx = labelList.IndexOf((int)Math.Round(NumOps.ToDouble(target[i])));
-
-                contingency[fBin, cIdx]++;
-                featureCounts[fBin]++;
-                classCounts[cIdx]++;
-            }
-
-            // Compute chi-square statistic
-            double chiSq = 0;
-            int df = 0;
-
-            for (int f = 0; f < _nBins; f++)
-            {
-                for (int c = 0; c < nClasses; c++)
-                {
-                    double expected = (double)featureCounts[f] * classCounts[c] / n;
-                    if (expected > 0)
-                    {
-                        double observed = contingency[f, c];
-                        chiSq += Math.Pow(observed - expected, 2) / expected;
-                        if (featureCounts[f] > 0 && classCounts[c] > 0)
-                            df++;
-                    }
-                }
-            }
-
-            df = (_nBins - 1) * (nClasses - 1);
-            _chiSquareScores[j] = chiSq;
-            _pValues[j] = ComputePValue(chiSq, df);
-        }
+        // Chi-square statistic over the contingency table and its chi2((bins - 1)(classes - 1)) p-value
+        var chiSquare = FeatureSelectionTensorOps.ContingencyChiSquared(featureBins, classOneHot, _nBins, out _);
+        var df = PreprocessingTensorOps.Filled(new[] { p }, NumOps.FromDouble((_nBins - 1) * (nClasses - 1)));
+        _chiSquareScores = chiSquare.ToVector();
+        _pValues = FeatureSelectionTensorOps.ChiSquaredSurvival(chiSquare, df).ToVector();
 
         // Select top features by chi-square score
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = Enumerable.Range(0, p)
-            .OrderByDescending(j => _chiSquareScores[j])
-            .Take(numToSelect)
-            .OrderBy(x => x)
-            .ToArray();
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(chiSquare, numToSelect);
 
         IsFitted = true;
     }
-
-    private double ComputePValue(double chiSquare, int df)
-    {
-        if (chiSquare <= 0 || df <= 0) return 1.0;
-
-        // Approximation using Wilson-Hilferty transformation
-        double k = df;
-        double x = chiSquare;
-
-        if (k > 100)
-        {
-            double z = Math.Pow(x / k, 1.0 / 3.0) - (1 - 2.0 / (9 * k));
-            double se = Math.Sqrt(2.0 / (9 * k));
-            double standardZ = z / se;
-
-            return 0.5 * (1 - Erf(standardZ / Math.Sqrt(2)));
-        }
-
-        // Simple approximation for smaller df
-        return Math.Exp(-0.5 * chiSquare / Math.Max(1, df));
-    }
-
-    private double Erf(double x)
-    {
-        double a1 = 0.254829592;
-        double a2 = -0.284496736;
-        double a3 = 1.421413741;
-        double a4 = -1.453152027;
-        double a5 = 1.061405429;
-        double p = 0.3275911;
-
-        int sign = x < 0 ? -1 : 1;
-        x = Math.Abs(x);
-
-        double t = 1.0 / (1.0 + p * x);
-        double y = 1.0 - (((((a5 * t + a4) * t) + a3) * t + a2) * t + a1) * t * Math.Exp(-x * x);
-
-        return sign * y;
-    }
-
     /// <inheritdoc />
     public Matrix<T> FitTransform(Matrix<T> data, Vector<T> target)
     {
