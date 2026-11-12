@@ -286,15 +286,9 @@ public sealed class RT2ActionTokenizer<T>
 
         // Greedy argmax over the action window. NaN logits never win; on ties the lowest
         // token wins, so the first position holding the maximum is selected explicitly.
+        // The first logit is not NaN, so a winner always exists.
         var window = engine.TensorSlice(flat, [TokenIdOffset], [NumBins]);
-        var negInf = Tensor<T>.CreateDefault([NumBins], _numOps.FromDouble(double.NegativeInfinity));
-        var comparable = engine.TensorWhere(engine.TensorIsNan(window), negInf, window);
-        T bestLogit = engine.TensorMaxValue(comparable);
-        var isBest = engine.TensorEquals(comparable, bestLogit);
-        var positions = engine.TensorArange<T>(0, NumBins, 1);
-        var sentinel = Tensor<T>.CreateDefault([NumBins], _numOps.FromDouble(NumBins));
-        T firstBest = engine.TensorMinValue(engine.TensorWhere(isBest, positions, sentinel));
-        return TokenIdOffset + _numOps.ToInt(firstBest);
+        return TokenIdOffset + ArgExtremumSearch<T>.FirstIndex(engine, window, largest: true, out _);
     }
 
     private int ValueToBin(double value, int dim)

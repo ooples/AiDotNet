@@ -214,15 +214,6 @@ public partial class LongVILA<T> : VisionLanguageModelBase<T>, IVideoLanguageMod
 
         // Step 2: Process each chunk independently (local temporal processing)
         var engine = Engine;
-        // Encode every frame in order (chunk by chunk, as before).
-        var allFeatures = new Tensor<T>[count];
-        for (int f = 0; f < count; f++)
-            allFeatures[f] = EncodeImage(frames[f]);
-        // The feature width comes from the first chunk whose first frame is non-empty.
-        for (int c = 0; c < numChunks && dim == 0; c++)
-            dim = allFeatures[c * chunkSize].Length;
-
-        T invDim = NumOps.FromDouble(1.0 / dim);
         T attnFloor = NumOps.FromDouble(1e-8);
         var unitSum = Tensor<T>.CreateDefault([1], NumOps.One);
         var chunkSummaries = new Tensor<T>[numChunks];
@@ -234,9 +225,19 @@ public partial class LongVILA<T> : VisionLanguageModelBase<T>, IVideoLanguageMod
 
             // Local temporal attention within chunk: weight = exp(rms magnitude), normalized when the
             // weights sum above 1e-8, otherwise uniform.
-            var stacked = StackLeading(new ArraySegment<Tensor<T>>(allFeatures, chunkStart, chunkFrames), chunkFrames, dim);
-            var attnWeights = engine.TensorExp(engine.TensorSqrt(engine.TensorMultiplyScalar(
-                engine.ReduceSum(engine.TensorMultiply(stacked, stacked), [1], false), invDim)));
+            // Encode frames in this chunk; the feature width comes from the first chunk whose first
+            // frame is non-empty.
+            var chunkFeatures = new Tensor<T>[chunkFrames];
+            for (int f = 0; f < chunkFrames; f++)
+                chunkFeatures[f] = EncodeImage(frames[chunkStart + f]);
+            if (dim == 0)
+                dim = chunkFeatures[0].Length;
+
+            var stacked = StackLeading(chunkFeatures, chunkFrames, dim);
+            // magnitude / dim, with dim as a [1] tensor.
+            var chunkDim = engine.TensorBroadcastTo(engine.TensorArange<T>(dim, dim + 1, 1), [chunkFrames]);
+            var attnWeights = engine.TensorExp(engine.TensorSqrt(engine.TensorDivide(
+                engine.ReduceSum(engine.TensorMultiply(stacked, stacked), [1], false), chunkDim)));
             var attnSum = engine.ReduceSum(attnWeights, [0], true);
             var normalize = engine.TensorBroadcastTo(engine.TensorGreaterThan(attnSum, attnFloor), [chunkFrames]);
             var normalized = engine.TensorDivide(
@@ -248,6 +249,8 @@ public partial class LongVILA<T> : VisionLanguageModelBase<T>, IVideoLanguageMod
             // Normalize and aggregate
             chunkSummaries[c] = engine.TensorMatMul(weights.Reshape([1, chunkFrames]), stacked);
         }
+
+        T invDim = NumOps.FromDouble(1.0 / dim);
 
         // Step 3: Hierarchical temporal attention across chunks (global aggregation)
         // Each chunk summary attends to all other chunks based on temporal distance

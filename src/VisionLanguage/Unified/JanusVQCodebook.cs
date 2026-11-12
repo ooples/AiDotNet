@@ -133,15 +133,10 @@ internal sealed class JanusVQCodebook<T>
 
         // Nearest entry; NaN distances never win, an all-infinite/NaN row keeps id 0, and on
         // ties the lowest id wins (first position holding the minimum).
-        var posInf = Tensor<T>.CreateDefault([CodebookSize], _numOps.FromDouble(double.PositiveInfinity));
-        var comparable = engine.TensorWhere(engine.TensorIsNan(dist), posInf, dist);
-        T bestDist = engine.TensorMinValue(comparable);
-        if (!_numOps.LessThan(bestDist, _numOps.FromDouble(double.PositiveInfinity)))
+        int nearest = ArgExtremumSearch<T>.FirstIndex(engine, dist, largest: false, out T bestDist);
+        if (nearest < 0 || _numOps.IsInfinity(bestDist))
             return 0;
-        var isBest = engine.TensorEquals(comparable, bestDist);
-        var positions = engine.TensorArange<T>(0, CodebookSize, 1);
-        var sentinel = Tensor<T>.CreateDefault([CodebookSize], _numOps.FromDouble(CodebookSize));
-        return _numOps.ToInt(engine.TensorMinValue(engine.TensorWhere(isBest, positions, sentinel)));
+        return nearest;
     }
 
     /// <summary>
