@@ -22,16 +22,27 @@ public class SaltAndPepperNoise<T> : ImageAugmenterBase<T>
         var result = data.Clone();
         double maxVal = data.IsNormalized ? 1.0 : 255.0;
 
-        for (int y = 0; y < data.Height; y++)
-            for (int x = 0; x < data.Width; x++)
+        // Draw, per pixel in y, x order, whether it is hit and (only when hit) salt or pepper
+        int h = data.Height, w = data.Width;
+        var hit = new int[h * w];
+        var salt = new int[h * w];
+        for (int i = 0; i < hit.Length; i++)
+        {
+            if (context.GetRandomDouble(0, 1) < Amount)
             {
-                if (context.GetRandomDouble(0, 1) < Amount)
-                {
-                    double val = context.GetRandomDouble(0, 1) < SaltVsPepper ? maxVal : 0;
-                    for (int c = 0; c < data.Channels; c++)
-                        result.SetPixel(y, x, c, NumOps.FromDouble(val));
-                }
+                hit[i] = 1;
+                salt[i] = context.GetRandomDouble(0, 1) < SaltVsPepper ? 1 : 0;
             }
+        }
+
+        // Hit pixels take the salt/pepper value in every channel
+        var engine = Engine;
+        var image = data.ToPlanarTensor();
+        int[] shape = [data.Channels, h, w];
+        var hitMask = engine.TensorBroadcastTo(new Tensor<int>(hit, [1, h, w]).Cast<T>(), shape);
+        var saltMask = engine.TensorBroadcastTo(new Tensor<int>(salt, [1, h, w]).Cast<T>(), shape);
+        var values = engine.TensorWhere(saltMask, ImageTensor<T>.Constant(image, maxVal), ImageTensor<T>.Constant(image, 0.0));
+        result.SetFromPlanarTensor(engine.TensorWhere(hitMask, values, image));
 
         return result;
     }

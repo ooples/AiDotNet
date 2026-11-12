@@ -17,26 +17,29 @@ namespace AiDotNet.Tests.Generators;
 public class ModelCoverageBaselineTests
 {
     /// <summary>
-    /// Models with model-family test coverage: the recorded measurement is 1822 of 1822 (100%) from the
+    /// Models with model-family test coverage: the recorded measurement is 1787 of 1787 (100%) from the
     /// AiDotNetTests compilation's TestCoverage (read by reflection from the built net10.0 assembly), measured
-    /// 2026-11-08 on fix/v1-epic-2397 merged with master at 3ddd0c6b54. Master alone measured 1814 of 1820 on
-    /// 2026-11-05, its 6 untested being the proprietary-API TTS wrappers that gained fixtures on this branch
-    /// (#2394). The earlier recorded measurement was 1485 of 1816 (commit
-    /// e9d417a583444fc52c33fcb1c495cf1404d73443, 2026-09-09, #2091), after 1466 at the instrument fix and 1482
-    /// after the diffusion routing guard. These are generator-attribution counts, not the separate whole-word
+    /// 2026-11-08 on PR #2294 merged with master at 3ddd0c6b54. Before the merge this branch recorded 1687 of
+    /// 1783 (2026-10-17, after GLaMM's segmentation copy was deleted) and master 1814 of 1820 (2026-11-05); the
+    /// branch deletes duplicate model copies, so its census is smaller. The record before that was 1485 of 1816
+    /// (81.8%), from commit e9d417a583444fc52c33fcb1c495cf1404d73443 (2026-09-09, #2091); the earlier
+    /// measurements were 1466 and 1482. These are generator-attribution counts, not the separate whole-word
     /// reference-count estimate over hand-written and generated tests.
     ///
     /// Record the measured report and its source whenever changing this baseline. LOWERING it
     /// means models that were covered no longer are: establish why before editing this constant,
     /// because the point of the gate is that the number cannot quietly fall.
     /// </summary>
-    private const int BaselineTestedCount = 1822;
+    private const int BaselineTestedCount = 1787;
 
     /// <summary>
     /// Total annotated models at the same measurement. Only a floor: the census grows as models are
-    /// added, and a growing census must not by itself trip the tested-count gate.
+    /// added, and a growing census must not by itself trip the tested-count gate. It fell from 1816
+    /// to 1783 in PR #2294, which deleted 41 annotated model classes that duplicated another
+    /// implementation of the same paper (the TTS, diffusion-audio, video-generation, continual-learning,
+    /// probabilistic-forecasting, Grounded SAM 2 and GLaMM copies), while models were added elsewhere.
     /// </summary>
-    private const int BaselineTotalModels = 1822;
+    private const int BaselineTotalModels = 1787;
 
     [Fact]
     public void ThisAssemblyPublishesAMeasuredCoverageFigure()

@@ -52,6 +52,8 @@ public abstract class SpeakerRecognitionOptions : ModelHyperparameterOptions
     /// a layer list the caller supplied.
     /// </para>
     /// </remarks>
+    [AiDotNet.Attributes.OptionBehaviourExempt("The x-vector network's frame-level stack is the five TDNN layers of Snyder et al. 2018 Table 1, each with its own fixed temporal context, so its depth is not a free setting.", ModelType = typeof(AiDotNet.Audio.Speaker.SpeakerEmbeddingExtractor<>))]
+    [AiDotNet.Attributes.OptionBehaviourExempt("The x-vector network's frame-level stack is the five TDNN layers of Snyder et al. 2018 Table 1, each with its own fixed temporal context, so its depth is not a free setting. The verifier embeds with that network.", ModelType = typeof(AiDotNet.Audio.Speaker.SpeakerVerifier<>))]
     public int NumEncoderLayers { get; set; }
 
     /// <summary>

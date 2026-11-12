@@ -1,25 +1,22 @@
-using AiDotNet.Enums;
 using AiDotNet.Models.Options;
 using AiDotNet.Onnx;
 
 namespace AiDotNet.Video.Options;
 
 /// <summary>
-/// Configuration options for the RealBasicVSR real-world video super-resolution model.
+/// Configuration options for RealBasicVSR, real-world video super-resolution with an image-cleaning module.
 /// </summary>
 /// <remarks>
 /// <para>
-/// RealBasicVSR (Chan et al., CVPR 2022) addresses real-world video SR through:
-/// - Stochastic degradation scheme: random combination of blur, noise, resize, and compression
-///   during training to handle unknown real-world degradations
-/// - Pre-cleaning module: a lightweight network that removes noise/artifacts before the
-///   BasicVSR backbone, preventing degradation from propagating across frames
-/// - Dynamic refinement: the cleaning module strength adapts to the degradation level
+/// Defaults follow Chan et al., CVPR 2022, and the authors' release (open-mmlab/mmagic, RealBasicVSRNet and
+/// configs/real_basicvsr/realbasicvsr_wogan-c64b20-2x30x8_8xb2-lr1e-4-300k_reds.py, the PSNR-oriented first stage):
+/// 64 channels, 20 propagation and 20 cleaning blocks, 15-frame clips, L1 output and cleaning losses against the
+/// unsharp-masked target, Adam (0.9, 0.99) at 1e-4 without a schedule, SPyNet frozen, and a 0.999 moving average of the
+/// weights for inference.
 /// </para>
 /// <para>
-/// <b>For Beginners:</b> Real videos have unpredictable quality issues (noise, blur, compression).
-/// RealBasicVSR adds a "cleaning" step before upscaling that removes these artifacts first,
-/// then uses the BasicVSR backbone for high-quality super-resolution.
+/// <b>For Beginners:</b> RealBasicVSR first "cleans" each frame (removing noise, blur and compression artifacts),
+/// then upscales the cleaned frames with BasicVSR, so the artifacts are not spread from frame to frame.
 /// </para>
 /// </remarks>
 public class RealBasicVSROptions : NeuralNetworkOptions
@@ -36,44 +33,48 @@ public class RealBasicVSROptions : NeuralNetworkOptions
     /// </summary>
     /// <param name="other">The options instance to copy from.</param>
     /// <exception cref="ArgumentNullException">Thrown when other is null.</exception>
-    public RealBasicVSROptions(RealBasicVSROptions other)
+    public RealBasicVSROptions(RealBasicVSROptions other) : base(other)
     {
         if (other == null)
             throw new ArgumentNullException(nameof(other));
 
-        Variant = other.Variant;
-        NumFeatures = other.NumFeatures;
-        NumResBlocks = other.NumResBlocks;
-        CleaningModuleBlocks = other.CleaningModuleBlocks;
-        ScaleFactor = other.ScaleFactor;
+        Seed = other.Seed;
+        MidChannels = other.MidChannels;
+        NumPropagationBlocks = other.NumPropagationBlocks;
+        NumCleaningBlocks = other.NumCleaningBlocks;
         NumFrames = other.NumFrames;
+        InferenceCleaningThreshold = other.InferenceCleaningThreshold;
         ModelPath = other.ModelPath;
         OnnxOptions = other.OnnxOptions;
         LearningRate = other.LearningRate;
-        DropoutRate = other.DropoutRate;
-        WarmupSteps = other.WarmupSteps;
+        PixelLossWeight = other.PixelLossWeight;
+        CleaningLossWeight = other.CleaningLossWeight;
+        SharpenTarget = other.SharpenTarget;
+        UnsharpWeight = other.UnsharpWeight;
+        UnsharpKernelSize = other.UnsharpKernelSize;
+        UnsharpThreshold = other.UnsharpThreshold;
+        EmaMomentum = other.EmaMomentum;
     }
 
     #region Architecture
 
-    /// <summary>Gets or sets the model variant.</summary>
-    public VideoModelVariant Variant { get; set; } = VideoModelVariant.Base;
+    /// <summary>Gets or sets the feature channels (64).</summary>
+    public int MidChannels { get; set; } = 64;
 
-    /// <summary>Gets or sets the number of feature channels.</summary>
-    public int NumFeatures { get; set; } = 64;
+    /// <summary>Gets or sets the residual blocks per propagation branch (20).</summary>
+    public int NumPropagationBlocks { get; set; } = 20;
 
-    /// <summary>Gets or sets the number of residual blocks in the BasicVSR backbone.</summary>
-    public int NumResBlocks { get; set; } = 30;
+    /// <summary>Gets or sets the residual blocks of the cleaning module (20).</summary>
+    public int NumCleaningBlocks { get; set; } = 20;
 
-    /// <summary>Gets or sets the number of residual blocks in the pre-cleaning module.</summary>
-    /// <remarks>The cleaning module processes each frame independently before propagation.</remarks>
-    public int CleaningModuleBlocks { get; set; } = 20;
-
-    /// <summary>Gets or sets the spatial upscaling factor.</summary>
-    public int ScaleFactor { get; set; } = 4;
-
-    /// <summary>Gets or sets the number of input frames.</summary>
+    /// <summary>Gets or sets the frames of a training clip (15).</summary>
     public int NumFrames { get; set; } = 15;
+
+    /// <summary>
+    /// Gets or sets the mean absolute cleaning residue, in pixel levels 0-255, below which inference stops cleaning
+    /// (1.5, the release's test setting; training uses 255, i.e. one pass).
+    /// </summary>
+    public double InferenceCleaningThreshold { get; set; } = 1.5;
 
     #endregion
 
@@ -89,14 +90,32 @@ public class RealBasicVSROptions : NeuralNetworkOptions
 
     #region Training
 
-    /// <summary>Gets or sets the learning rate.</summary>
-    public double LearningRate { get; set; } = 2e-4;
+    /// <summary>Gets or sets Adam's learning rate (1e-4).</summary>
+    public double LearningRate { get; set; } = 1e-4;
 
-    /// <summary>Gets or sets the dropout rate.</summary>
-    public double DropoutRate { get; set; } = 0.0;
+    /// <summary>Gets or sets the weight of the L1 loss on the output (1.0).</summary>
+    public double PixelLossWeight { get; set; } = 1.0;
 
-    /// <summary>Gets or sets the warmup steps.</summary>
-    public int WarmupSteps { get; set; } = 5000;
+    /// <summary>Gets or sets the weight of the L1 loss of the cleaned frames against the 4x area-downsampled target (1.0).</summary>
+    public double CleaningLossWeight { get; set; } = 1.0;
+
+    /// <summary>Gets or sets whether the losses score the unsharp-masked target (true, is_use_sharpened_gt_in_pixel).</summary>
+    public bool SharpenTarget { get; set; } = true;
+
+    /// <summary>Gets or sets the unsharp-masking weight (0.5).</summary>
+    public double UnsharpWeight { get; set; } = 0.5;
+
+    /// <summary>Gets or sets the unsharp-masking Gaussian size (51).</summary>
+    public int UnsharpKernelSize { get; set; } = 51;
+
+    /// <summary>Gets or sets the unsharp-masking residue threshold in pixel levels (10).</summary>
+    public double UnsharpThreshold { get; set; } = 10;
+
+    /// <summary>
+    /// Gets or sets the momentum of the weights' moving average used for inference (0.001); null disables it and
+    /// inference uses the trained weights.
+    /// </summary>
+    public double? EmaMomentum { get; set; } = 0.001;
 
     #endregion
 }

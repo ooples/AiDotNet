@@ -102,19 +102,11 @@ public class MixUp<T> : LabelMixingAugmentationBase<T, ImageTensor<T>>
         int channels = result.Channels;
 
         // Mix pixels: result = λ * image1 + (1 - λ) * image2
-        for (int y = 0; y < height; y++)
-        {
-            for (int x = 0; x < width; x++)
-            {
-                for (int c = 0; c < channels; c++)
-                {
-                    double v1 = NumOps.ToDouble(image1.GetPixel(y, x, c));
-                    double v2 = NumOps.ToDouble(image2.GetPixel(y, x, c));
-                    double mixed = lambda * v1 + (1 - lambda) * v2;
-                    result.SetPixel(y, x, c, NumOps.FromDouble(mixed));
-                }
-            }
-        }
+        var engine = Engine;
+        var mixed = engine.TensorAdd(
+            engine.TensorMultiplyScalar(image1.ToPlanarTensor(), NumOps.FromDouble(lambda)),
+            engine.TensorMultiplyScalar(image2.ToPlanarTensor(), NumOps.FromDouble(1 - lambda)));
+        result.SetFromPlanarTensor(mixed);
 
         // Raise event for label mixing
         if (labels1 is not null && labels2 is not null)

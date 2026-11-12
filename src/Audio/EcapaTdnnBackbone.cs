@@ -4,6 +4,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.LinearAlgebra;
+using TorchParameters = AiDotNet.TextToSpeech.CodecBased.TorchParameters;
 
 namespace AiDotNet.Audio;
 
@@ -49,6 +50,7 @@ internal sealed class EcapaTdnnBackbone<T>
     private readonly int _seChannels;
     private readonly int _attentionChannels;
     private readonly int _embeddingDimension;
+    private readonly bool _sparkLayout;
     private readonly List<ILayer<T>> _layers = new();
 
     // Roles over _layers, assigned by Build.
@@ -76,6 +78,13 @@ internal sealed class EcapaTdnnBackbone<T>
         int seChannels,
         int attentionChannels,
         int embeddingDimension)
+        : this(channels, kernelSizes, dilations, res2NetScale, seChannels, attentionChannels, embeddingDimension, false)
+    {
+    }
+
+    /// <summary>Creates the SpeechBrain layout, or Spark's identity-last Res2 and unnormalized MFA/pooling variant.</summary>
+    public EcapaTdnnBackbone(int[] channels, int[] kernelSizes, int[] dilations, int res2NetScale,
+        int seChannels, int attentionChannels, int embeddingDimension, bool sparkLayout)
     {
         if (channels is null) throw new ArgumentNullException(nameof(channels));
         if (kernelSizes is null) throw new ArgumentNullException(nameof(kernelSizes));
@@ -113,12 +122,63 @@ internal sealed class EcapaTdnnBackbone<T>
         _seChannels = seChannels;
         _attentionChannels = attentionChannels;
         _embeddingDimension = embeddingDimension;
+        _sparkLayout = sparkLayout;
 
         Build();
     }
 
     /// <summary>The encoder's layers, in a fixed order, for the owning model to publish.</summary>
     public IReadOnlyList<ILayer<T>> Layers => _layers;
+
+    /// <summary>Loads the frame encoder under Spark-TTS's original ECAPA names.</summary>
+    internal void LoadSparkFrameWeights(Func<string, int[], double[]> read, int featureDimension) =>
+        LoadSparkFrameWeights(AiDotNet.ModelLoading.TorchTensorSource.From(read), featureDimension);
+
+    /// <summary>Loads the frame encoder under Spark-TTS's original ECAPA names straight from <paramref name="read"/>.</summary>
+    internal void LoadSparkFrameWeights(AiDotNet.ModelLoading.TorchTensorSource read, int featureDimension)
+    {
+        if (!_sparkLayout) throw new InvalidOperationException("Spark weights require the Spark ECAPA layout.");
+        foreach (var norm in _layers.OfType<BatchNormalizationLayer<T>>()) norm.SetTrainingMode(false);
+        using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
+            ForwardFrameFeatures(new Tensor<T>(new[] { 1, featureDimension, 5 }));
+        _frameBlock.Load(read, "layer1.conv", "layer1.bn", featureDimension, _channels[0], _kernelSizes[0]);
+        int previous = _channels[0];
+        for (int i = 0; i < _blocks.Count; i++)
+        {
+            _blocks[i].Load(read, $"layer{i + 2}.se_res2block.", previous, _channels[i + 1],
+                _kernelSizes[i + 1], _res2NetScale, _seChannels);
+            previous = _channels[i + 1];
+        }
+        _mfaBlock.Load(read, "conv", null, _channels.Skip(1).Take(_channels.Length - 2).Sum(),
+            _channels[_channels.Length - 1], _kernelSizes[_kernelSizes.Length - 1]);
+    }
+
+    /// <summary>Loads Spark's ASTP attention and optional utterance embedding head.</summary>
+    internal void LoadSparkPoolingWeights(Func<string, int[], double[]> read, bool includeProjection = true, string prefix = "pool.") =>
+        LoadSparkPoolingWeights(AiDotNet.ModelLoading.TorchTensorSource.From(read), includeProjection, prefix);
+
+    /// <summary>Loads Spark's ASTP attention and optional utterance embedding head straight from <paramref name="read"/>.</summary>
+    internal void LoadSparkPoolingWeights(AiDotNet.ModelLoading.TorchTensorSource read, bool includeProjection = true, string prefix = "pool.")
+    {
+        if (!_sparkLayout) throw new InvalidOperationException("Spark weights require the Spark ECAPA layout.");
+        int width = _channels[_channels.Length - 1];
+        foreach (var norm in _layers.OfType<BatchNormalizationLayer<T>>()) norm.SetTrainingMode(false);
+        using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
+            PoolStatistics(new Tensor<T>(new[] { 1, width, 5 }));
+        _attentionTdnn.Load(read, prefix + "linear1", null, 3 * width, _attentionChannels, 1);
+        LoadConv(read, _attentionScore, prefix + "linear2", _attentionChannels, width, 1);
+        if (!includeProjection) return;
+        LoadBatchNorm(read, _poolingNorm, "bn", 2 * width);
+        TorchParameters.Linear(AiDotNetEngine.Current, _embedding, 2 * width, _embeddingDimension, read, "linear.weight", "linear.bias");
+    }
+
+    internal Tensor<T> PoolStatistics(Tensor<T> features) => AttentiveStatisticsPooling(AiDotNetEngine.Current, features);
+
+    private static void LoadConv(AiDotNet.ModelLoading.TorchTensorSource read, Conv1DLayer<T> layer, string name, int input, int output, int kernel) =>
+        layer.LoadTorchWeights(read, name + ".weight", new[] { output, input, kernel }, name + ".bias");
+
+    private static void LoadBatchNorm(AiDotNet.ModelLoading.TorchTensorSource read, BatchNormalizationLayer<T> layer, string name, int width) =>
+        TorchParameters.BatchNorm(layer, read, name + ".", width);
 
     /// <summary>
     /// Points every role at the layers of <paramref name="layers"/>, position for position.
@@ -185,11 +245,11 @@ internal sealed class EcapaTdnnBackbone<T>
         }
 
         int mfaWidth = _channels[_channels.Length - 1];
-        _mfaBlock = AddTdnn(mfaWidth, _kernelSizes[_kernelSizes.Length - 1], _dilations[_dilations.Length - 1]);
+        _mfaBlock = AddTdnn(mfaWidth, _kernelSizes[_kernelSizes.Length - 1], _dilations[_dilations.Length - 1], normalize: !_sparkLayout);
 
-        _attentionTdnn = AddTdnn(_attentionChannels, 1, 1);
+        _attentionTdnn = AddTdnn(_attentionChannels, 1, 1, normalize: !_sparkLayout, useRelu: !_sparkLayout);
         _attentionScore = Add(new Conv1DLayer<T>(mfaWidth, 1));
-        _poolingNorm = Add(new BatchNormalizationLayer<T>());
+        _poolingNorm = Add(new BatchNormalizationLayer<T>(2 * mfaWidth));
         _embedding = Add(new DenseLayer<T>(_embeddingDimension, (IActivationFunction<T>)new IdentityActivation<T>()));
     }
 
@@ -205,18 +265,36 @@ internal sealed class EcapaTdnnBackbone<T>
                 nameof(features));
 
         var engine = AiDotNetEngine.Current;
-        var x = _frameBlock.Forward(engine, features);
+        var aggregated = ForwardFrameFeatures(features);
+        var pooled = AttentiveStatisticsPooling(engine, aggregated);
+        return _embedding.Forward(_poolingNorm.Forward(pooled));
+    }
 
+    /// <summary>
+    /// Returns the MFA frame sequence <c>[B, channels[^1], T]</c> before attentive statistics pooling.
+    /// </summary>
+    /// <remarks>
+    /// Speaker tokenizers such as Spark-TTS use ECAPA as a frame encoder and pool those frames with a
+    /// Perceiver rather than discarding time in ECAPA's utterance-level pooling head.
+    /// </remarks>
+    public Tensor<T> ForwardFrameFeatures(Tensor<T> features)
+    {
+        if (features is null) throw new ArgumentNullException(nameof(features));
+        if (features.Shape.Length != 3)
+            throw new ArgumentException(
+                $"ECAPA-TDNN expects channel-first features [B, F, T]; got rank {features.Shape.Length}.",
+                nameof(features));
+
+        var engine = AiDotNetEngine.Current;
+        var x = _frameBlock.Forward(engine, features);
         var blockOutputs = new Tensor<T>[_blocks.Count];
         for (int i = 0; i < _blocks.Count; i++)
         {
-            x = _blocks[i].Forward(engine, x, _res2NetScale);
+            x = _blocks[i].Forward(engine, x, _res2NetScale, _sparkLayout);
             blockOutputs[i] = x;
         }
 
-        var aggregated = _mfaBlock.Forward(engine, engine.TensorConcatenate(blockOutputs, axis: 1));
-        var pooled = AttentiveStatisticsPooling(engine, aggregated);
-        return _embedding.Forward(_poolingNorm.Forward(pooled));
+        return _mfaBlock.Forward(engine, engine.TensorConcatenate(blockOutputs, axis: 1));
     }
 
     /// <summary>
@@ -260,7 +338,7 @@ internal sealed class EcapaTdnnBackbone<T>
         return engine.TensorConcatenate(new[] { mean, std }, axis: 1);
     }
 
-    private static (Tensor<T> Mean, Tensor<T> Std) WeightedStatistics(IEngine engine, Tensor<T> x, Tensor<T>? weights)
+    private (Tensor<T> Mean, Tensor<T> Std) WeightedStatistics(IEngine engine, Tensor<T> x, Tensor<T>? weights)
     {
         Tensor<T> mean;
         Tensor<T> variance;
@@ -269,6 +347,8 @@ internal sealed class EcapaTdnnBackbone<T>
             mean = engine.ReduceMean(x, new[] { 2 }, keepDims: true);
             var centered = engine.TensorSubtract(x, mean);
             variance = engine.ReduceMean(engine.TensorMultiply(centered, centered), new[] { 2 }, keepDims: false);
+            if (_sparkLayout)
+                variance = engine.TensorMultiplyScalar(variance, MathHelper.GetNumericOperations<T>().FromDouble(x.Shape[2] / (double)Math.Max(1, x.Shape[2] - 1)));
         }
         else
         {
@@ -276,12 +356,17 @@ internal sealed class EcapaTdnnBackbone<T>
             var centered = engine.TensorSubtract(x, mean);
             variance = engine.ReduceSum(
                 engine.TensorMultiply(weights, engine.TensorMultiply(centered, centered)), new[] { 2 }, keepDims: false);
+            if (_sparkLayout)
+                variance = engine.TensorSubtract(engine.ReduceSum(engine.TensorMultiply(weights, engine.TensorMultiply(x, x)),
+                    new[] { 2 }, false), engine.Reshape(engine.TensorMultiply(mean, mean), variance.Shape.ToArray()));
         }
 
         // Both variance forms are weighted sums of squares, so they are non-negative; the epsilon only
         // keeps the square root's gradient finite where a channel is constant over time.
         var numOps = MathHelper.GetNumericOperations<T>();
-        var std = engine.TensorSqrt(engine.TensorAddScalar(variance, numOps.FromDouble(StatisticsEpsilon)));
+        var std = engine.TensorSqrt(_sparkLayout && weights is not null
+            ? engine.TensorClampMin(variance, numOps.FromDouble(1e-7))
+            : engine.TensorAddScalar(variance, numOps.FromDouble(_sparkLayout ? 1e-7 : StatisticsEpsilon)));
         return (engine.Reshape(mean, new[] { mean.Shape[0], mean.Shape[1] }), std);
     }
 
@@ -332,15 +417,16 @@ internal sealed class EcapaTdnnBackbone<T>
     private static readonly string[] ConvolutionContractKeys =
         { "OutputChannels", "KernelSize", "Dilation", "Stride", "Padding", "Groups" };
 
-    private TdnnBlock AddTdnn(int outputChannels, int kernelSize, int dilation)
+    private TdnnBlock AddTdnn(int outputChannels, int kernelSize, int dilation, bool normalize = true, bool useRelu = true)
         => new(
-            Add(new Conv1DLayer<T>(outputChannels, kernelSize, dilation: dilation, activation: new ReLUActivation<T>())),
-            Add(new BatchNormalizationLayer<T>()));
+            Add(new Conv1DLayer<T>(outputChannels, kernelSize, dilation: dilation,
+                activation: useRelu ? new ReLUActivation<T>() : new IdentityActivation<T>())),
+            normalize ? Add(new BatchNormalizationLayer<T>(outputChannels)) : null);
 
     private SeRes2Block AddSeRes2Block(int inputWidth, int width, int kernelSize, int dilation, int seChannels)
     {
         var reduce = AddTdnn(width, 1, 1);
-        var branches = new TdnnBlock[_res2NetScale - 1];
+        var branches = new TdnnBlock[_sparkLayout && _res2NetScale == 1 ? 1 : _res2NetScale - 1];
         for (int i = 0; i < branches.Length; i++)
         {
             branches[i] = AddTdnn(width / _res2NetScale, kernelSize, dilation);
@@ -357,15 +443,25 @@ internal sealed class EcapaTdnnBackbone<T>
     private sealed class TdnnBlock
     {
         private readonly Conv1DLayer<T> _conv;
-        private readonly BatchNormalizationLayer<T> _norm;
+        private readonly BatchNormalizationLayer<T>? _norm;
 
-        public TdnnBlock(Conv1DLayer<T> conv, BatchNormalizationLayer<T> norm)
+        public TdnnBlock(Conv1DLayer<T> conv, BatchNormalizationLayer<T>? norm)
         {
             _conv = conv;
             _norm = norm;
         }
 
-        public Tensor<T> Forward(IEngine engine, Tensor<T> x) => BatchNorm1d(engine, _norm, _conv.Forward(x));
+        public Tensor<T> Forward(IEngine engine, Tensor<T> x)
+        {
+            var convolved = _conv.Forward(x);
+            return _norm is null ? convolved : BatchNorm1d(engine, _norm, convolved);
+        }
+
+        internal void Load(AiDotNet.ModelLoading.TorchTensorSource read, string convName, string? normName, int input, int output, int kernel)
+        {
+            LoadConv(read, _conv, convName, input, output, kernel);
+            if (_norm is not null) LoadBatchNorm(read, _norm, normName ?? throw new ArgumentNullException(nameof(normName)), output);
+        }
     }
 
     private sealed class SeRes2Block
@@ -389,7 +485,7 @@ internal sealed class EcapaTdnnBackbone<T>
             _shortcut = shortcut;
         }
 
-        public Tensor<T> Forward(IEngine engine, Tensor<T> x, int scale)
+        public Tensor<T> Forward(IEngine engine, Tensor<T> x, int scale, bool sparkLayout)
         {
             var residual = _shortcut is null ? x : _shortcut.Forward(x);
             var h = _reduce.Forward(engine, x);
@@ -402,14 +498,14 @@ internal sealed class EcapaTdnnBackbone<T>
             for (int i = 0; i < scale; i++)
             {
                 var split = engine.TensorNarrow(h, dim: 1, start: i * splitWidth, length: splitWidth);
-                if (i == 0)
+                if ((!sparkLayout && i == 0) || (sparkLayout && scale > 1 && i == scale - 1))
                 {
                     splits[i] = split;
                     continue;
                 }
 
                 var branchInput = previous is null ? split : engine.TensorAdd(split, previous);
-                previous = _branches[i - 1].Forward(engine, branchInput);
+                previous = _branches[sparkLayout ? i : i - 1].Forward(engine, branchInput);
                 splits[i] = previous;
             }
 
@@ -421,6 +517,16 @@ internal sealed class EcapaTdnnBackbone<T>
             h = engine.TensorMultiply(h, engine.Reshape(gate, new[] { gate.Shape[0], gate.Shape[1], 1 }));
 
             return engine.TensorAdd(h, residual);
+        }
+
+        internal void Load(AiDotNet.ModelLoading.TorchTensorSource read, string prefix, int input, int width, int kernel, int scale, int seWidth)
+        {
+            _reduce.Load(read, prefix + "0.conv", prefix + "0.bn", input, width, 1);
+            for (int i = 0; i < _branches.Length; i++)
+                _branches[i].Load(read, prefix + $"1.convs.{i}", prefix + $"1.bns.{i}", width / scale, width / scale, kernel);
+            _expand.Load(read, prefix + "2.conv", prefix + "2.bn", width, width, 1);
+            TorchParameters.Linear(AiDotNetEngine.Current, _squeeze, width, seWidth, read, prefix + "3.linear1.weight", prefix + "3.linear1.bias");
+            TorchParameters.Linear(AiDotNetEngine.Current, _excite, seWidth, width, read, prefix + "3.linear2.weight", prefix + "3.linear2.bias");
         }
     }
 

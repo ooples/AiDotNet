@@ -68,64 +68,40 @@ public class RgbToLab<T> : ImageAugmenterBase<T>
             OriginalRange = data.OriginalRange
         };
 
-        for (int y = 0; y < data.Height; y++)
+        var engine = Engine;
+        var image = data.ToPlanarTensor();
+        var (r, g, b) = ImageTensor<T>.UnitRgbPlanes(image, data.IsNormalized);
+
+        // Step 1: Linear RGB (remove sRGB gamma)
+        r = ImageTensor<T>.SrgbToLinear(r);
+        g = ImageTensor<T>.SrgbToLinear(g);
+        b = ImageTensor<T>.SrgbToLinear(b);
+
+        // Step 2: RGB to XYZ (sRGB D65)
+        var xVal = ImageTensor<T>.MixPlanes(r, g, b, 0.4124564, 0.3575761, 0.1804375);
+        var yVal = ImageTensor<T>.MixPlanes(r, g, b, 0.2126729, 0.7151522, 0.0721750);
+        var zVal = ImageTensor<T>.MixPlanes(r, g, b, 0.0193339, 0.1191920, 0.9503041);
+
+        // Step 3: XYZ to L*a*b*
+        var fx = LabF(engine, engine.TensorDivideScalar(xVal, NumOps.FromDouble(RefX)));
+        var fy = LabF(engine, engine.TensorDivideScalar(yVal, NumOps.FromDouble(RefY)));
+        var fz = LabF(engine, engine.TensorDivideScalar(zVal, NumOps.FromDouble(RefZ)));
+
+        var lStar = engine.TensorSubtractScalar(engine.TensorMultiplyScalar(fy, NumOps.FromDouble(116.0)), NumOps.FromDouble(16.0));
+        var aStar = engine.TensorMultiplyScalar(engine.TensorSubtract(fx, fy), NumOps.FromDouble(500.0));
+        var bStar = engine.TensorMultiplyScalar(engine.TensorSubtract(fy, fz), NumOps.FromDouble(200.0));
+
+        if (NormalizeOutput)
         {
-            for (int x = 0; x < data.Width; x++)
-            {
-                double r = NumOps.ToDouble(data.GetPixel(y, x, 0));
-                double g = NumOps.ToDouble(data.GetPixel(y, x, 1));
-                double b = NumOps.ToDouble(data.GetPixel(y, x, 2));
-
-                if (!data.IsNormalized)
-                {
-                    r /= 255.0;
-                    g /= 255.0;
-                    b /= 255.0;
-                }
-
-                // Step 1: Linear RGB (remove sRGB gamma)
-                r = SrgbToLinear(r);
-                g = SrgbToLinear(g);
-                b = SrgbToLinear(b);
-
-                // Step 2: RGB to XYZ (sRGB D65)
-                double xVal = r * 0.4124564 + g * 0.3575761 + b * 0.1804375;
-                double yVal = r * 0.2126729 + g * 0.7151522 + b * 0.0721750;
-                double zVal = r * 0.0193339 + g * 0.1191920 + b * 0.9503041;
-
-                // Step 3: XYZ to L*a*b*
-                double xr = xVal / RefX;
-                double yr = yVal / RefY;
-                double zr = zVal / RefZ;
-
-                double fx = LabF(xr);
-                double fy = LabF(yr);
-                double fz = LabF(zr);
-
-                double lStar = 116.0 * fy - 16.0;
-                double aStar = 500.0 * (fx - fy);
-                double bStar = 200.0 * (fy - fz);
-
-                if (NormalizeOutput)
-                {
-                    // Shift a*/b* from [-128, 127] to [0, 255] using center offset,
-                    // then normalize to [0, 1]
-                    const double LabCenterOffset = 128.0;
-                    lStar /= 100.0;
-                    aStar = (aStar + LabCenterOffset) / 255.0;
-                    bStar = (bStar + LabCenterOffset) / 255.0;
-                }
-
-                result.SetPixel(y, x, 0, NumOps.FromDouble(lStar));
-                result.SetPixel(y, x, 1, NumOps.FromDouble(aStar));
-                result.SetPixel(y, x, 2, NumOps.FromDouble(bStar));
-
-                for (int c = 3; c < data.Channels; c++)
-                {
-                    result.SetPixel(y, x, c, data.GetPixel(y, x, c));
-                }
-            }
+            // Shift a*/b* from [-128, 127] to [0, 255] using center offset,
+            // then normalize to [0, 1]
+            const double LabCenterOffset = 128.0;
+            lStar = engine.TensorDivideScalar(lStar, NumOps.FromDouble(100.0));
+            aStar = engine.TensorDivideScalar(engine.TensorAddScalar(aStar, NumOps.FromDouble(LabCenterOffset)), NumOps.FromDouble(255.0));
+            bStar = engine.TensorDivideScalar(engine.TensorAddScalar(bStar, NumOps.FromDouble(LabCenterOffset)), NumOps.FromDouble(255.0));
         }
+
+        result.SetFromPlanarTensor(ImageTensor<T>.ReplaceLeadingChannels(image, lStar, aStar, bStar));
 
         return result;
     }
@@ -167,22 +143,18 @@ public class RgbToLab<T> : ImageAugmenterBase<T>
                 Math.Max(0, Math.Min(1, bOut)));
     }
 
-    private static double SrgbToLinear(double value)
-    {
-        return value <= 0.04045 ? value / 12.92 : Math.Pow((value + 0.055) / 1.055, 2.4);
-    }
-
     private static double LinearToSrgb(double value)
     {
         return value <= 0.0031308 ? 12.92 * value : 1.055 * Math.Pow(value, 1.0 / 2.4) - 0.055;
     }
 
-    private static double LabF(double t)
+    private static Tensor<T> LabF(IEngine engine, Tensor<T> t)
     {
         const double delta = 6.0 / 29.0;
-        return t > delta * delta * delta
-            ? Math.Pow(t, 1.0 / 3.0)
-            : t / (3.0 * delta * delta) + 4.0 / 29.0;
+        var cubeRoot = engine.TensorPower(t, NumOps.FromDouble(1.0 / 3.0));
+        var linear = engine.TensorAddScalar(
+            engine.TensorDivideScalar(t, NumOps.FromDouble(3.0 * delta * delta)), NumOps.FromDouble(4.0 / 29.0));
+        return engine.TensorWhere(engine.TensorGreaterThan(t, NumOps.FromDouble(delta * delta * delta)), cubeRoot, linear);
     }
 
     private static double LabFInverse(double t)

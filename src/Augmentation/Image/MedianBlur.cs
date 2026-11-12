@@ -27,26 +27,14 @@ public class MedianBlur<T> : ImageAugmenterBase<T>
         int half = kSize / 2;
         var result = data.Clone();
 
-        for (int c = 0; c < data.Channels; c++)
-        {
-            for (int y = 0; y < data.Height; y++)
-            {
-                for (int x = 0; x < data.Width; x++)
-                {
-                    var neighborhood = new List<double>(kSize * kSize);
-                    for (int ky = -half; ky <= half; ky++)
-                        for (int kx = -half; kx <= half; kx++)
-                        {
-                            int sy = Math.Max(0, Math.Min(data.Height - 1, y + ky));
-                            int sx = Math.Max(0, Math.Min(data.Width - 1, x + kx));
-                            neighborhood.Add(NumOps.ToDouble(data.GetPixel(sy, sx, c)));
-                        }
-
-                    neighborhood.Sort();
-                    result.SetPixel(y, x, c, NumOps.FromDouble(neighborhood[neighborhood.Count / 2]));
-                }
-            }
-        }
+        // Median of the edge-replicated neighbourhood: sort each window and take the middle element
+        var engine = Engine;
+        var image = data.ToPlanarTensor();
+        var windows = ImageTensor<T>.Neighbourhoods(image, kSize);
+        var sorted = engine.TensorSort(windows, 3, false).Values;
+        int count = kSize * kSize;
+        var median = engine.TensorSliceAxis(sorted, 3, count / 2);
+        result.SetFromPlanarTensor(median);
 
         return result;
     }
