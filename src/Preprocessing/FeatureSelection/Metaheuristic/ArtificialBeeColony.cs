@@ -3,6 +3,7 @@ using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Enums;
 using AiDotNet.Attributes;
+using AiDotNet.Preprocessing.FeatureSelection.Helpers;
 
 namespace AiDotNet.Preprocessing.FeatureSelection.Metaheuristic;
 
@@ -33,7 +34,7 @@ public class ArtificialBeeColony<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, 
     private readonly int _limit;
     private readonly int? _randomState;
 
-    private double[]? _featureScores;
+    private Vector<T>? _featureScores;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
@@ -41,7 +42,7 @@ public class ArtificialBeeColony<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, 
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public int ColonySize => _colonySize;
     public int MaxIterations => _maxIterations;
-    public double[]? FeatureScores => _featureScores;
+    public Vector<T>? FeatureScores => _featureScores;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -58,8 +59,9 @@ public class ArtificialBeeColony<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, 
     {
         if (nFeaturesToSelect < 1)
             throw new ArgumentException("Number of features must be at least 1.", nameof(nFeaturesToSelect));
-        if (colonySize < 2)
-            throw new ArgumentException("Colony size must be at least 2.", nameof(colonySize));
+        if (colonySize < 4)
+            throw new ArgumentException(
+                "Colony size must be at least 4 so there are at least two food sources to pair.", nameof(colonySize));
         if (maxIterations < 1)
             throw new ArgumentException("Max iterations must be at least 1.", nameof(maxIterations));
 
@@ -84,194 +86,153 @@ public class ArtificialBeeColony<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, 
             throw new ArgumentException("Target length must match rows in data.");
 
         _nInputFeatures = data.Columns;
-        int n = data.Rows;
         int p = data.Columns;
         int nFood = _colonySize / 2;
+        int targetCount = Math.Min(_nFeaturesToSelect, p);
 
         var random = _randomState.HasValue
             ? RandomHelper.CreateSeededRandom(_randomState.Value)
             : RandomHelper.CreateSecureRandom();
 
+        var correlations = PopulationSearchOps.AbsTargetCorrelations(data, target, NumOps.Zero);
+
         // Initialize food sources
-        var foodSources = new double[nFood, p];
-        for (int i = 0; i < nFood; i++)
-            for (int j = 0; j < p; j++)
-                foodSources[i, j] = random.NextDouble();
-
-        var fitness = new double[nFood];
+        var foodSources = PopulationSearchOps.Uniform<T>(random, nFood, p);
+        var fitness = PopulationSearchOps.ThresholdFitness(foodSources, correlations, targetCount, 0.1);
         var trials = new int[nFood];
-        for (int i = 0; i < nFood; i++)
-            fitness[i] = EvaluateSolution(data, target, foodSources, i, p, n);
 
-        var bestSolution = new double[p];
-        double bestFitness = double.MinValue;
+        // Memorize the best source
+        int bestIdx = PopulationSearchOps.ArgMax(fitness);
+        var bestFitness = PopulationSearchOps.At(fitness, bestIdx);
+        var bestSolution = PopulationSearchOps.Row(foodSources, bestIdx);
 
-        // Main loop
+        // Main loop (Karaboga 2005; one cycle = employed, onlooker and scout phases)
         for (int iter = 0; iter < _maxIterations; iter++)
         {
-            // Employed bees phase
+            // Employed bees phase: each bee tries a neighbour of its own source
             for (int i = 0; i < nFood; i++)
+                ExploitSource(i, ref foodSources, ref fitness, trials, correlations, targetCount, random);
+
+            // Onlooker bees phase: each onlooker picks a source by roulette on the ABC fitness and exploits it
+            var probabilities = SelectionProbabilities(fitness);
+            var cumulative = Engine.TensorCumSum(probabilities, 0);
+            for (int t = 0; t < nFood; t++)
             {
-                var newSolution = new double[p];
-                int partner = random.Next(nFood);
-                while (partner == i)
-                    partner = random.Next(nFood);
-
-                for (int j = 0; j < p; j++)
-                {
-                    double phi = 2 * random.NextDouble() - 1;
-                    newSolution[j] = foodSources[i, j] + phi * (foodSources[i, j] - foodSources[partner, j]);
-                    newSolution[j] = Math.Max(0, Math.Min(1, newSolution[j]));
-                }
-
-                var tempSources = (double[,])foodSources.Clone();
-                for (int j = 0; j < p; j++)
-                    tempSources[i, j] = newSolution[j];
-
-                double newFitness = EvaluateSolution(data, target, tempSources, i, p, n);
-
-                if (newFitness > fitness[i])
-                {
-                    for (int j = 0; j < p; j++)
-                        foodSources[i, j] = newSolution[j];
-                    fitness[i] = newFitness;
-                    trials[i] = 0;
-                }
-                else
-                {
-                    trials[i]++;
-                }
+                int selected = RouletteIndex(cumulative, PopulationSearchOps.Uniform<T>(random, 1));
+                ExploitSource(selected, ref foodSources, ref fitness, trials, correlations, targetCount, random);
             }
 
-            // Compute probabilities
-            double fitnessSum = fitness.Sum();
-            var probabilities = fitness.Select(f => f / (fitnessSum + 1e-10)).ToArray();
-
-            // Onlooker bees phase
-            for (int i = 0; i < nFood; i++)
+            // Memorize the best source
+            int cycleBest = PopulationSearchOps.ArgMax(fitness);
+            var cycleBestFitness = PopulationSearchOps.At(fitness, cycleBest);
+            if (PopulationSearchOps.Greater(cycleBestFitness, bestFitness))
             {
-                // Select food source based on probability
-                double r = random.NextDouble();
-                double cumSum = 0;
-                int selected = 0;
-                for (int k = 0; k < nFood; k++)
-                {
-                    cumSum += probabilities[k];
-                    if (r <= cumSum)
-                    {
-                        selected = k;
-                        break;
-                    }
-                }
-
-                var newSolution = new double[p];
-                int partner = random.Next(nFood);
-                while (partner == selected)
-                    partner = random.Next(nFood);
-
-                for (int j = 0; j < p; j++)
-                {
-                    double phi = 2 * random.NextDouble() - 1;
-                    newSolution[j] = foodSources[selected, j] + phi * (foodSources[selected, j] - foodSources[partner, j]);
-                    newSolution[j] = Math.Max(0, Math.Min(1, newSolution[j]));
-                }
-
-                var tempSources = (double[,])foodSources.Clone();
-                for (int j = 0; j < p; j++)
-                    tempSources[selected, j] = newSolution[j];
-
-                double newFitness = EvaluateSolution(data, target, tempSources, selected, p, n);
-
-                if (newFitness > fitness[selected])
-                {
-                    for (int j = 0; j < p; j++)
-                        foodSources[selected, j] = newSolution[j];
-                    fitness[selected] = newFitness;
-                    trials[selected] = 0;
-                }
-                else
-                {
-                    trials[selected]++;
-                }
+                bestFitness = cycleBestFitness;
+                bestSolution = PopulationSearchOps.Row(foodSources, cycleBest);
             }
 
-            // Scout bees phase
-            for (int i = 0; i < nFood; i++)
+            // Scout bee phase: the most exhausted source is abandoned once its trial count reaches the limit
+            int exhausted = 0;
+            for (int i = 1; i < nFood; i++)
             {
-                if (trials[i] > _limit)
-                {
-                    for (int j = 0; j < p; j++)
-                        foodSources[i, j] = random.NextDouble();
-                    fitness[i] = EvaluateSolution(data, target, foodSources, i, p, n);
-                    trials[i] = 0;
-                }
+                if (trials[i] > trials[exhausted])
+                    exhausted = i;
             }
 
-            // Track best
-            for (int i = 0; i < nFood; i++)
+            if (trials[exhausted] >= _limit)
             {
-                if (fitness[i] > bestFitness)
-                {
-                    bestFitness = fitness[i];
-                    for (int j = 0; j < p; j++)
-                        bestSolution[j] = foodSources[i, j];
-                }
+                var scout = PopulationSearchOps.Uniform<T>(random, 1, p);
+                foodSources = PopulationSearchOps.ScatterRows(foodSources, new[] { exhausted }, scout);
+                fitness = PopulationSearchOps.ReplaceAt(
+                    fitness, exhausted, PopulationSearchOps.ThresholdFitness(scout, correlations, targetCount, 0.1));
+                trials[exhausted] = 0;
             }
         }
 
-        _featureScores = bestSolution;
+        _featureScores = bestSolution.ToVector();
 
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = Enumerable.Range(0, p)
-            .OrderByDescending(j => _featureScores[j])
-            .Take(numToSelect)
-            .OrderBy(x => x)
-            .ToArray();
+        _selectedIndices = FeatureSelectionTensorOps.TopKIndicesSorted(bestSolution, numToSelect);
 
         IsFitted = true;
     }
 
-    private double EvaluateSolution(Matrix<T> data, Vector<T> target, double[,] positions, int idx, int p, int n)
+    /// <summary>
+    /// One neighbourhood search on source <paramref name="i"/>: a random dimension j and a random partner k != i,
+    /// then v = x_i with v_j = x_ij + phi (x_ij - x_kj), phi ~ U[-1, 1], clamped to [0, 1]. Greedy selection keeps
+    /// the better of v and x_i and counts a failed trial otherwise.
+    /// </summary>
+    private void ExploitSource(
+        int i, ref Tensor<T> foodSources, ref Tensor<T> fitness, int[] trials, Tensor<T> correlations, int targetCount,
+        Random random)
     {
-        var selectedFeatures = Enumerable.Range(0, p)
-            .Where(j => positions[idx, j] > 0.5)
-            .ToArray();
+        int nFood = foodSources.Shape[0];
+        int p = foodSources.Shape[1];
+        int dimension = random.Next(p);
+        int partner = random.Next(nFood);
+        while (partner == i)
+            partner = random.Next(nFood);
+        var phi = PopulationSearchOps.Affine(PopulationSearchOps.Uniform<T>(random, 1), 2, -1);
 
-        if (selectedFeatures.Length == 0)
-            return 0;
-
-        double totalScore = 0;
-        foreach (int f in selectedFeatures)
-            totalScore += ComputeCorrelation(data, target, f, n);
-
-        int targetCount = Math.Min(_nFeaturesToSelect, p);
-        double countPenalty = Math.Abs(selectedFeatures.Length - targetCount);
-
-        return totalScore / selectedFeatures.Length - 0.1 * countPenalty;
+        var candidate = NeighbourCandidate(foodSources, i, partner, dimension, phi);
+        var candidateFitness = PopulationSearchOps.ThresholdFitness(
+            Engine.Reshape(candidate, new[] { 1, p }), correlations, targetCount, 0.1);
+        if (PopulationSearchOps.Greater(candidateFitness, PopulationSearchOps.At(fitness, i)))
+        {
+            foodSources = PopulationSearchOps.ReplaceRow(foodSources, i, candidate);
+            fitness = PopulationSearchOps.ReplaceAt(fitness, i, candidateFitness);
+            trials[i] = 0;
+        }
+        else
+        {
+            trials[i]++;
+        }
     }
 
-    private double ComputeCorrelation(Matrix<T> data, Vector<T> target, int j, int n)
+    /// <summary>
+    /// Karaboga's candidate v = x_i, except v_j = clamp(x_ij + phi (x_ij - x_kj), 0, 1); <paramref name="phi"/> is
+    /// a [1] tensor.
+    /// </summary>
+    internal static Tensor<T> NeighbourCandidate(Tensor<T> foodSources, int i, int partner, int dimension, Tensor<T> phi)
     {
-        double xMean = 0, yMean = 0;
-        for (int i = 0; i < n; i++)
-        {
-            xMean += NumOps.ToDouble(data[i, j]);
-            yMean += NumOps.ToDouble(target[i]);
-        }
-        xMean /= n;
-        yMean /= n;
+        var engine = AiDotNetEngine.Current;
+        int p = foodSources.Shape[1];
+        var source = PopulationSearchOps.Row(foodSources, i);
+        var moved = PopulationSearchOps.Clamp01(engine.TensorAdd(
+            source,
+            PopulationSearchOps.Scale(engine.TensorSubtract(source, PopulationSearchOps.Row(foodSources, partner)), phi)));
+        return engine.TensorWhere(FeatureSelectionTensorOps.OneHot<T>(dimension, p), moved, source);
+    }
 
-        double sxy = 0, sxx = 0, syy = 0;
-        for (int i = 0; i < n; i++)
-        {
-            double xDiff = NumOps.ToDouble(data[i, j]) - xMean;
-            double yDiff = NumOps.ToDouble(target[i]) - yMean;
-            sxy += xDiff * yDiff;
-            sxx += xDiff * xDiff;
-            syy += yDiff * yDiff;
-        }
+    /// <summary>
+    /// Roulette probabilities p_i = fit_i / sum(fit). The selector maximizes its subset score F, so the cost Karaboga
+    /// minimizes is f = -F, and fit = 1 / (1 + f) for f &gt;= 0 and 1 + |f| for f &lt; 0.
+    /// </summary>
+    internal static Tensor<T> SelectionProbabilities(Tensor<T> score)
+    {
+        var engine = AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<T>();
+        int m = score.Shape[0];
+        var cost = engine.TensorNegate(score);
+        var negativeCost = engine.TensorLessThan(cost, ops.Zero);
+        var ones = FeatureSelectionTensorOps.Filled(new[] { m }, ops.One);
+        var fit = engine.TensorWhere(
+            negativeCost,
+            engine.TensorAdd(ones, engine.TensorAbs(cost)),
+            engine.TensorDivide(ones, engine.TensorAddScalar(cost, ops.One)));
+        return engine.TensorDivideScalar(fit, engine.TensorSum(fit));
+    }
 
-        return (sxx > 1e-10 && syy > 1e-10) ? Math.Abs(sxy / Math.Sqrt(sxx * syy)) : 0;
+    /// <summary>
+    /// The first index i whose cumulative probability reaches the uniform draw <paramref name="u"/> [1] (the last
+    /// index when rounding leaves the total below the draw).
+    /// </summary>
+    internal static int RouletteIndex(Tensor<T> cumulative, Tensor<T> u)
+    {
+        var engine = AiDotNetEngine.Current;
+        int m = cumulative.Shape[0];
+        int below = engine.TensorCountNonzero(engine.TensorLessThan(cumulative, engine.TensorBroadcastTo(u, new[] { m })));
+        return Math.Min(below, m - 1);
     }
 
     /// <inheritdoc />
@@ -287,15 +248,7 @@ public class ArtificialBeeColony<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, 
         if (_selectedIndices is null)
             throw new InvalidOperationException("ArtificialBeeColony has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return FeatureSelectionTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />
