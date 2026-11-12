@@ -190,4 +190,58 @@ public class FeatureSelectionTensorOpsReviewTests
         Assert.NotNull(selector.Correlations);
         Assert.Equal(1.0, (double)selector.Correlations[0], 2);
     }
+
+    private static Tensor<Half> HalfMatrix(double[] values, int rows, int columns)
+    {
+        var half = new Half[values.Length];
+        for (int j = 0; j < values.Length; j++)
+            half[j] = (Half)values[j];
+        return new Tensor<Half>(half, new[] { rows, columns });
+    }
+
+    // Feature graph edges |r|: a constant column has r = 0 with every feature (master offsets its standard deviation
+    // by 1e-10, which is 0 in Half, so 0 / 0 was NaN and the NaN passed the threshold), and 2 x_1 has r = 1 with x_1.
+    [Fact(Timeout = 60000)]
+    public async Task GraphBasedFS_Adjacency_Half_ConstantColumnHasNoEdges()
+    {
+        await Task.CompletedTask;
+        var x = HalfMatrix(new[] { 1.0, 1.0, 2.0, 1.0, 2.0, 4.0, 1.0, 3.0, 6.0 }, 3, 3);
+        var adjacency = AiDotNet.Preprocessing.FeatureSelection.Graph.GraphBasedFS<Half>.BuildAdjacencyMatrix(x, 0.5);
+        Assert.Equal(0.0, (double)adjacency[0, 1]);
+        Assert.Equal(0.0, (double)adjacency[0, 2]);
+        Assert.Equal(0.0, (double)adjacency[1, 0]);
+        Assert.Equal(1.0, (double)adjacency[1, 2], 2);
+        Assert.Equal(0.0, (double)adjacency[1, 1]);
+    }
+
+    // Normalized Laplacian of W = 1 [300, 300]: every degree is 300, so L = I - W / 300. The product of degrees
+    // 90000 overflowed Half before its root was taken, which made L = I.
+    [Fact(Timeout = 60000)]
+    public async Task SpectralClusteringFS_Laplacian_Half_DoesNotOverflowTheDegreeProduct()
+    {
+        await Task.CompletedTask;
+        const int p = 300;
+        var ones = new double[p * p];
+        for (int j = 0; j < ones.Length; j++)
+            ones[j] = 1;
+        var laplacian = AiDotNet.Preprocessing.FeatureSelection.Graph.SpectralClusteringFS<Half>.NormalizedLaplacian(
+            HalfMatrix(ones, p, p));
+        Assert.Equal(-1.0 / p, (double)laplacian[0, 1], 4);
+        Assert.Equal(1 - 1.0 / p, (double)laplacian[0, 0], 3);
+    }
+
+    // D^-1/2 A D^-1/2 with an isolated sample: its row and column are 0, the rest is A / sqrt(d_i d_j). The isolated
+    // degree guard 1e-10 is 0 in Half (1 / sqrt(0) = inf), and the outer product of the scales overflows, both NaN.
+    [Fact(Timeout = 60000)]
+    public async Task MCFS_Propagation_Half_IsolatedSampleStaysZero()
+    {
+        await Task.CompletedTask;
+        var propagation = AiDotNet.Preprocessing.FeatureSelection.Filter.Spectral.MCFS<Half>.Propagation(
+            HalfMatrix(new[] { 0.0, 0.0, 0.0, 0.0, 1.0, 1.0, 0.0, 1.0, 1.0 }, 3, 3));
+        Assert.Equal(0.0, (double)propagation[0, 0]);
+        Assert.Equal(0.0, (double)propagation[0, 1]);
+        Assert.Equal(0.0, (double)propagation[1, 0]);
+        Assert.Equal(0.5, (double)propagation[1, 2], 3);
+        Assert.Equal(0.5, (double)propagation[2, 2], 3);
+    }
 }
