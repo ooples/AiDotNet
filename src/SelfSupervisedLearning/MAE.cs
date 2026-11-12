@@ -229,6 +229,7 @@ public partial class MAE<T> : SelfSupervisedLearningMethodBase<T>
 
     private Tensor<T> Patchify(Tensor<T> images)
     {
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
         var batchSize = images.Shape[0];
         var numChannels = images.Shape.Length > 1 ? images.Shape[1] : 3;
         var height = images.Shape.Length > 2 ? images.Shape[2] : (int)Math.Sqrt(_numPatches) * _patchSize;
@@ -240,6 +241,18 @@ public partial class MAE<T> : SelfSupervisedLearningMethodBase<T>
         var numPatchesActual = patchesPerRow * patchesPerCol;
         var cropHeight = patchesPerCol * _patchSize;
         var cropWidth = patchesPerRow * _patchSize;
+
+        // Nothing to read: master's result was the zero-filled patch tensor
+        if (batchSize == 0 || numPatchesActual == 0 || patchDim == 0)
+        {
+            return new Tensor<T>(new[] { batchSize, numPatchesActual, patchDim });
+        }
+
+        // Master read images[b, c, y, x], which throws for rank > 4 on the first pixel read; keep that.
+        if (images.Shape.Length > 4)
+        {
+            _ = images[0, 0, 0, 0];
+        }
 
         // Pixel grid [B, C, cropHeight, cropWidth] that the patches tile, in [C, H, W] order
         Tensor<T> grid;
