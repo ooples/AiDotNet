@@ -160,4 +160,49 @@ internal static class FeatureSelectionTensorOps
         int p = oneHot.Shape[1] / bins;
         return engine.Reshape(engine.ReduceSum(oneHot, new[] { 0 }, false), new[] { p, bins });
     }
+
+    /// <summary>
+    /// Gaussian kernel sums for 1-D kernel density estimates of every column: for each grid point
+    /// (<paramref name="grid"/>, [g, p]) and column, <c>sum_i exp(-0.5 ((grid - values[i]) / bandwidth)^2)</c> over the
+    /// rows of <paramref name="values"/> ([m, p]). Returns [g, p] (unnormalized).
+    /// </summary>
+    public static Tensor<T> GaussianKernelSums<T>(Tensor<T> grid, Tensor<T> values, T bandwidth)
+    {
+        var engine = AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<T>();
+        int g = grid.Shape[0];
+        int m = values.Shape[0];
+        int p = grid.Shape[1];
+        var shape = new[] { g, m, p };
+        var u = engine.TensorDivideScalar(engine.TensorSubtract(
+            engine.TensorBroadcastTo(engine.Reshape(grid, new[] { g, 1, p }), shape),
+            engine.TensorBroadcastTo(engine.Reshape(values, new[] { 1, m, p }), shape)), bandwidth);
+        var kernel = engine.TensorExp(engine.TensorMultiplyScalar(engine.TensorSquare(u), ops.FromDouble(-0.5)));
+        return engine.ReduceSum(kernel, new[] { 1 }, false);
+    }
+
+    /// <summary>The positions (ascending) whose group in <paramref name="groups"/> is <paramref name="group"/>.</summary>
+    public static int[] GroupMembers(int[] groups, int group) =>
+        Enumerable.Range(0, groups.Length).Where(i => groups[i] == group).ToArray();
+
+    /// <summary>The rows of a 2-D tensor at the given positions, in order.</summary>
+    public static Tensor<T> Rows<T>(Tensor<T> x, int[] rows) =>
+        AiDotNetEngine.Current.TensorIndexSelect(x, new Tensor<int>((int[])rows.Clone(), new[] { rows.Length }), 0);
+
+    /// <summary>
+    /// A [count, p] grid whose column j runs evenly from <c>low[j]</c> (row 0) to <c>low[j] + span[j]</c>
+    /// (row count - 1): row i is <c>low + span * i / (count - 1)</c>.
+    /// </summary>
+    public static Tensor<T> EvenGrid<T>(Tensor<T> low, Tensor<T> span, int count)
+    {
+        var engine = AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<T>();
+        int p = low.Length;
+        var shape = new[] { count, p };
+        var steps = engine.TensorBroadcastTo(engine.Reshape(PreprocessingTensorOps.Range<T>(count), new[] { count, 1 }), shape);
+        var scaled = engine.TensorDivideScalar(
+            engine.TensorMultiply(steps, engine.TensorBroadcastTo(engine.Reshape(span, new[] { 1, p }), shape)),
+            ops.FromDouble(count - 1));
+        return engine.TensorAdd(engine.TensorBroadcastTo(engine.Reshape(low, new[] { 1, p }), shape), scaled);
+    }
 }
