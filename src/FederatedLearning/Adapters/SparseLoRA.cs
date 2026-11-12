@@ -117,36 +117,26 @@ public class SparseLoRA<T> : Infrastructure.FederatedLearningComponentBase<T>, I
         int adapterCount = Math.Min(AdapterParameterCount, totalParams);
         int start = totalParams - adapterCount;
 
-        var adapterParams = new T[adapterCount];
-        for (int i = 0; i < adapterCount; i++)
-        {
-            adapterParams[i] = fullModelParameters[start + i];
-        }
-
-        return new Vector<T>(adapterParams);
+        var adapterParams = new Vector<T>(adapterCount);
+        fullModelParameters.AsSpan().Slice(start, adapterCount).CopyTo(adapterParams.AsWritableSpan());
+        return adapterParams;
     }
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// The stored LoRA factors are written back unscaled. LoRA (Hu et al. 2021) applies alpha / rank to the
+    /// product B*A in the forward pass; scaling both stored factors here would apply it squared and compound
+    /// it every round.
+    /// </remarks>
     public Vector<T> MergeAdapterParameters(Vector<T> fullModelParameters, Vector<T> aggregatedAdapters)
     {
         int totalParams = fullModelParameters.Length;
         int adapterCount = aggregatedAdapters.Length;
         int start = totalParams - adapterCount;
 
-        var merged = new T[totalParams];
-        for (int i = 0; i < start; i++)
-        {
-            merged[i] = fullModelParameters[i];
-        }
-
-        double scale = _alpha / _rank;
-        var scaleT = NumOps.FromDouble(scale);
-        for (int i = 0; i < adapterCount; i++)
-        {
-            merged[start + i] = NumOps.Multiply(aggregatedAdapters[i], scaleT);
-        }
-
-        return new Vector<T>(merged);
+        var merged = fullModelParameters.Clone();
+        aggregatedAdapters.AsSpan().CopyTo(merged.AsWritableSpan().Slice(start, adapterCount));
+        return merged;
     }
 
     /// <inheritdoc/>
@@ -167,37 +157,30 @@ public class SparseLoRA<T> : Infrastructure.FederatedLearningComponentBase<T>, I
                     $"Client {clientId} adapter length {adapters.Length} differs from expected {adapterLen}.");
             }
         }
-        var aggregated = new T[adapterLen];
-        var counts = new double[adapterLen]; // Track how many clients contributed to each element.
+
+        // Each element is averaged over the clients that sent it (non-zero). Weights are normalized by
+        // their total first so the per-element weight sums stay within [0, 1] for narrow T.
         double totalWeight = 0;
+        foreach (var clientId in clientAdapters.Keys)
+        {
+            totalWeight += clientWeights?.GetValueOrDefault(clientId, 1.0) ?? 1.0;
+        }
+
+        double weightScale = totalWeight > 0 ? 1.0 / totalWeight : 1.0;
+        var aggregated = new Tensor<T>(new[] { adapterLen });
+        var counts = new Tensor<T>(new[] { adapterLen }); // Weight of the clients that sent each element.
 
         foreach (var (clientId, adapters) in clientAdapters)
         {
-            double w = clientWeights?.GetValueOrDefault(clientId, 1.0) ?? 1.0;
-            totalWeight += w;
-
-            var wT = NumOps.FromDouble(w);
-            for (int i = 0; i < adapterLen; i++)
-            {
-                double val = NumOps.ToDouble(adapters[i]);
-                if (val != 0.0) // Sparse: only non-zero elements were sent.
-                {
-                    aggregated[i] = NumOps.Add(aggregated[i], NumOps.Multiply(adapters[i], wT));
-                    counts[i] += w;
-                }
-            }
+            var wT = NumOps.FromDouble((clientWeights?.GetValueOrDefault(clientId, 1.0) ?? 1.0) * weightScale);
+            var sent = Engine.TensorNotEquals(adapters.AsTensor(), NumOps.Zero); // Sparse: only non-zero elements were sent.
+            aggregated = Engine.TensorAdd(aggregated, Engine.TensorMultiplyScalar(adapters.AsTensor(), wT));
+            counts = Engine.TensorAdd(counts, Engine.TensorMultiplyScalar(sent, wT));
         }
 
         // Normalize by the weight of contributing clients per element.
-        for (int i = 0; i < adapterLen; i++)
-        {
-            if (counts[i] > 0)
-            {
-                aggregated[i] = NumOps.Multiply(aggregated[i], NumOps.FromDouble(1.0 / counts[i]));
-            }
-        }
-
-        return new Vector<T>(aggregated);
+        var normalized = Engine.TensorDivide(aggregated, counts);
+        return Engine.TensorWhere(Engine.TensorGreaterThan(counts, NumOps.Zero), normalized, aggregated).ToVector();
     }
 
     /// <summary>
@@ -209,6 +192,8 @@ public class SparseLoRA<T> : Infrastructure.FederatedLearningComponentBase<T>, I
     /// But not all changes are equally important. This method keeps only the most significant
     /// changes (the ones with the largest absolute value) and zeros out the rest. This can
     /// reduce the amount of data sent by 2-10x with minimal loss of accuracy.</para>
+    /// <para>Every element strictly larger than the k-th largest magnitude is kept; ties at the k-th
+    /// magnitude fill the remaining slots in index order. Indices are returned in ascending order.</para>
     /// </remarks>
     /// <param name="adapterBefore">Adapter parameters before local training.</param>
     /// <param name="adapterAfter">Adapter parameters after local training.</param>
@@ -224,41 +209,33 @@ public class SparseLoRA<T> : Infrastructure.FederatedLearningComponentBase<T>, I
         }
 
         int len = adapterAfter.Length;
+        if (len == 0)
+        {
+            return new SparseUpdate<T>(Array.Empty<int>(), Array.Empty<T>(), 0);
+        }
+
         int k = Math.Max(1, (int)(len * _sparsityRatio));
 
-        // Compute the delta.
-        var delta = new double[len];
-        for (int i = 0; i < len; i++)
-        {
-            delta[i] = NumOps.ToDouble(adapterAfter[i]) - NumOps.ToDouble(adapterBefore[i]);
-        }
+        // Compute the delta and its magnitudes.
+        var delta = Engine.Subtract(adapterAfter, adapterBefore).AsTensor();
+        var magnitudes = Engine.TensorAbs(delta);
 
-        // Find the top-k threshold by magnitude using partial sort.
-        var magnitudes = new double[len];
-        for (int i = 0; i < len; i++)
-        {
-            magnitudes[i] = Math.Abs(delta[i]);
-        }
+        // The k-th largest magnitude is the threshold.
+        var (sortedMagnitudes, _) = Engine.TensorSort(magnitudes, 0, false);
+        T threshold = sortedMagnitudes[len - k];
 
-        // Find the k-th largest magnitude.
-        var sorted = (double[])magnitudes.Clone();
-        Array.Sort(sorted);
-        double threshold = sorted[len - k]; // Elements >= this threshold are in top-k.
+        // Keep everything above the threshold, then the first ties in index order (counted in int).
+        var above = Engine.TensorGreaterThan(magnitudes, threshold).Cast<int>();
+        int tieSlots = k - Engine.TensorCountNonzero(above);
+        var ties = Engine.TensorEquals(magnitudes, threshold).Cast<int>();
+        var tieRank = Engine.TensorCumSum(ties, 0);
+        var keptTies = Engine.TensorMultiply(ties, Engine.TensorLessThan(tieRank, tieSlots + 1));
+        var selected = Engine.TensorAdd(above, keptTies);
 
-        // Build sparse representation.
-        var indices = new List<int>(k);
-        var values = new List<T>(k);
-
-        for (int i = 0; i < len; i++)
-        {
-            if (magnitudes[i] >= threshold && indices.Count < k)
-            {
-                indices.Add(i);
-                values.Add(NumOps.FromDouble(delta[i]));
-            }
-        }
-
-        return new SparseUpdate<T>(indices.ToArray(), values.ToArray(), len);
+        var nonzero = Engine.TensorNonzero(selected);
+        var indexTensor = nonzero.Reshape(new[] { nonzero.Length });
+        var values = Engine.TensorGather(delta, indexTensor, 0);
+        return new SparseUpdate<T>(indexTensor.ToArray(), values.ToArray(), len);
     }
 
     /// <summary>
@@ -268,13 +245,15 @@ public class SparseLoRA<T> : Infrastructure.FederatedLearningComponentBase<T>, I
     /// <returns>Dense vector representation.</returns>
     public static Vector<T> ToDense(SparseUpdate<T> sparse)
     {
-        var dense = new T[sparse.TotalLength];
-        for (int i = 0; i < sparse.Indices.Length; i++)
+        var dense = new Tensor<T>(new[] { sparse.TotalLength });
+        if (sparse.Indices.Length == 0)
         {
-            dense[sparse.Indices[i]] = sparse.Values[i];
+            return dense.ToVector();
         }
 
-        return new Vector<T>(dense);
+        var indices = new Tensor<int>(sparse.Indices, new[] { sparse.Indices.Length });
+        var values = new Tensor<T>(sparse.Values, new[] { sparse.Values.Length });
+        return Engine.TensorIndexCopy(dense, 0, indices, values).ToVector();
     }
 
     /// <summary>
@@ -285,19 +264,14 @@ public class SparseLoRA<T> : Infrastructure.FederatedLearningComponentBase<T>, I
     /// <returns>Updated adapter parameters.</returns>
     public static Vector<T> ApplySparseUpdate(Vector<T> adapter, SparseUpdate<T> sparseUpdate)
     {
-        var result = new T[adapter.Length];
-        for (int i = 0; i < adapter.Length; i++)
+        if (sparseUpdate.Indices.Length == 0)
         {
-            result[i] = adapter[i];
+            return adapter.Clone();
         }
 
-        for (int i = 0; i < sparseUpdate.Indices.Length; i++)
-        {
-            int idx = sparseUpdate.Indices[i];
-            result[idx] = NumOps.Add(result[idx], sparseUpdate.Values[i]);
-        }
-
-        return new Vector<T>(result);
+        var indices = new Tensor<int>(sparseUpdate.Indices, new[] { sparseUpdate.Indices.Length });
+        var values = new Tensor<T>(sparseUpdate.Values, new[] { sparseUpdate.Values.Length });
+        return Engine.TensorIndexAdd(adapter.AsTensor().Clone(), 0, indices, values).ToVector();
     }
 
     /// <summary>
@@ -317,31 +291,36 @@ public class SparseLoRA<T> : Infrastructure.FederatedLearningComponentBase<T>, I
         }
 
         int len = sparseUpdates.Values.First().TotalLength;
-        var aggregated = new double[len];
-        var weightSums = new double[len];
+
+        // Weights are normalized by their total first so the per-position weight sums stay within [0, 1].
+        double totalWeight = 0;
+        foreach (var clientId in sparseUpdates.Keys)
+        {
+            totalWeight += clientWeights?.GetValueOrDefault(clientId, 1.0) ?? 1.0;
+        }
+
+        double weightScale = totalWeight > 0 ? 1.0 / totalWeight : 1.0;
+        var aggregated = new Tensor<T>(new[] { len });
+        var weightSums = new Tensor<T>(new[] { len });
 
         foreach (var (clientId, sparse) in sparseUpdates)
         {
-            double w = clientWeights?.GetValueOrDefault(clientId, 1.0) ?? 1.0;
-
-            for (int i = 0; i < sparse.Indices.Length; i++)
+            int nnz = sparse.Indices.Length;
+            if (nnz == 0)
             {
-                int idx = sparse.Indices[i];
-                aggregated[idx] += w * NumOps.ToDouble(sparse.Values[i]);
-                weightSums[idx] += w;
+                continue;
             }
+
+            var wT = NumOps.FromDouble((clientWeights?.GetValueOrDefault(clientId, 1.0) ?? 1.0) * weightScale);
+            var indices = new Tensor<int>(sparse.Indices, new[] { nnz });
+            var values = new Tensor<T>(sparse.Values, new[] { nnz });
+            aggregated = Engine.TensorIndexAdd(aggregated, 0, indices, Engine.TensorMultiplyScalar(values, wT));
+            weightSums = Engine.TensorIndexAdd(weightSums, 0, indices, Engine.TensorFullLike(values, wT));
         }
 
-        var result = new T[len];
-        for (int i = 0; i < len; i++)
-        {
-            if (weightSums[i] > 0)
-            {
-                result[i] = NumOps.FromDouble(aggregated[i] / weightSums[i]);
-            }
-        }
-
-        return new Vector<T>(result);
+        var normalized = Engine.TensorDivide(aggregated, weightSums);
+        return Engine.TensorWhere(
+            Engine.TensorGreaterThan(weightSums, NumOps.Zero), normalized, new Tensor<T>(new[] { len })).ToVector();
     }
 
     /// <summary>

@@ -60,6 +60,8 @@ public class FederatedElementwiseSweep29bReferenceTests
         {
             new DPFedLoRA<double>(modelDim: 5, rank: 8, alpha: 16.0),
             new FLoRA<double>(modelDim: 5, rank: 8, alpha: 16.0),
+            new FederatedLoRA<double>(modelDim: 5, rank: 8, alpha: 16.0),
+            new SparseLoRA<double>(modelDim: 5, rank: 8, alpha: 16.0),
         };
 
         foreach (var strategy in strategies)
@@ -226,5 +228,23 @@ public class FederatedElementwiseSweep29bReferenceTests
         Assert.Equal(0.0, local[0] * local[3], Precision);
         Assert.Equal(0.0, local[1] * local[2], Precision);
         Assert.Equal(0.0, local[1] * local[3], Precision);
+    }
+
+    [Fact(Timeout = 60000)]
+    public async Task SparseLoRA_SparsifyDeltaKeepsTrueTopKWhenTiesComeFirst()
+    {
+        await Task.Yield();
+
+        // Delta magnitudes [5, 5, 9], k = (int)(3 * 0.7) = 2. The top-2 by magnitude are 9 and one 5
+        // (the first in index order). Scanning in index order and stopping at k would keep both 5s and drop 9.
+        var lora = new SparseLoRA<double>(modelDim: 100, sparsityRatio: 0.7);
+        var before = new Vector<double>(new[] { 0.0, 0.0, 0.0 });
+        var after = new Vector<double>(new[] { 5.0, -5.0, 9.0 });
+
+        var sparse = lora.SparsifyDelta(before, after);
+
+        Assert.Equal(new[] { 0, 2 }, sparse.Indices);
+        Assert.Equal(new[] { 5.0, 9.0 }, sparse.Values);
+        Assert.Equal(new[] { 5.0, 0.0, 9.0 }, SparseLoRA<double>.ToDense(sparse).ToArray());
     }
 }
