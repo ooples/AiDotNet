@@ -202,6 +202,19 @@ internal static class FeatureSelectionInformationOps
         return engine.TensorWhere(defined, correlation, fallbackScores);
     }
 
+    /// <summary>
+    /// The class index (position among the sorted distinct values) of every entry of a label tensor, and the
+    /// number of distinct classes.
+    /// </summary>
+    public static Tensor<int> ClassIndices<T>(Tensor<T> labels, out int classCount)
+    {
+        var engine = AiDotNetEngine.Current;
+        var flat = labels.Rank == 1 ? labels : engine.Reshape(labels, new[] { labels.Length });
+        var classes = engine.TensorUnique(flat, true);
+        classCount = classes.Length;
+        return engine.TensorSearchSorted(classes, flat, false);
+    }
+
     /// <summary>Converts a natural-log information value to bits.</summary>
     public static Tensor<T> ToBits<T>(Tensor<T> nats) =>
         AiDotNetEngine.Current.TensorDivideScalar(nats, MathHelper.GetNumericOperations<T>().FromDouble(Math.Log(2)));
