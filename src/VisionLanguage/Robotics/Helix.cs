@@ -277,14 +277,13 @@ public partial class Helix<T> : VisionLanguageModelBase<T>, IVisionLanguageActio
         var s2Latent = System2Forward(preprocessed, instruction);
 
         var horizonActions = new Tensor<T>([actionDim * horizon]);
+        var steps = new Tensor<T>[horizon];
         for (int step = 0; step < horizon; step++)
         {
-            var s1Action = System1Forward(preprocessed, s2Latent);
-            int writeBase = step * actionDim;
-            int copyLen = Math.Min(actionDim, s1Action.Length);
-            for (int d = 0; d < copyLen; d++)
-                horizonActions[writeBase + d] = s1Action[d];
+            // Extra outputs are dropped and missing ones stay 0.
+            steps[step] = FitLength(System1Forward(preprocessed, s2Latent), actionDim);
         }
+        Engine.TensorCopy(Engine.TensorConcatenate(steps, 0), horizonActions);
         return horizonActions;
     }
 
@@ -296,14 +295,8 @@ public partial class Helix<T> : VisionLanguageModelBase<T>, IVisionLanguageActio
     /// </summary>
     private Tensor<T> TanhClampJointCommands(Tensor<T> raw, int actionDim)
     {
-        int len = Math.Min(actionDim, raw.Length);
-        var clamped = new Tensor<T>([actionDim]);
-        for (int j = 0; j < len; j++)
-        {
-            double v = NumOps.ToDouble(raw[j]);
-            clamped[j] = NumOps.FromDouble(Math.Tanh(v));
-        }
-        return clamped;
+        // Missing joints stay 0 (tanh(0) = 0).
+        return Engine.TensorTanh(FitLength(raw, actionDim));
     }
 
     /// <summary>
