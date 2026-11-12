@@ -177,6 +177,86 @@ public class MetaLearningPaperFidelityTests
     }
 
     [Fact]
+    public void IMAML_MetaGradient_SolvesTheProximalImplicitSystem()
+    {
+        // Rajeswaran et al. (2019): the inner problem is argmin_phi L_train(phi) + (lambda / 2)||phi - theta||^2, and
+        // the meta-gradient v solves (I + H / lambda) v = grad L_test(phi). For the linear model under MSE,
+        // H = (2 / n) Xa^T Xa with Xa = [X, 1], so the system can be checked exactly.
+        const double lambda = 2.0;
+        const double innerRate = 0.1;
+        var task = CreateRegressionTask(11);
+        var model = new LinearVectorModel(3);
+        var theta = model.GetParameters();
+        var options = new iMAMLOptions<double, Matrix<double>, Vector<double>>(model)
+        {
+            LossFunction = new MeanSquaredErrorLoss<double>(),
+            InnerLearningRate = innerRate,
+            OuterLearningRate = 1.0,
+            AdaptationSteps = 2,
+            LambdaRegularization = lambda,
+            ConjugateGradientIterations = 4,
+            ConjugateGradientTolerance = 1e-30,
+            GradientClipThreshold = null,
+            UseFirstOrder = false,
+        };
+        var algorithm = new iMAMLAlgorithm<double, Matrix<double>, Vector<double>>(options);
+
+        algorithm.MetaTrain(new TaskBatch<double, Matrix<double>, Vector<double>>(new[] { task }));
+
+        // Proximal inner steps: phi <- phi - alpha (grad L_train(phi) + lambda (phi - theta)).
+        var probe = new LinearVectorModel(3);
+        var loss = new MeanSquaredErrorLoss<double>();
+        var phi = theta.Clone();
+        for (int step = 0; step < 2; step++)
+        {
+            probe.SetParameters(phi);
+            var g = probe.ComputeGradients(task.SupportSetX, task.SupportSetY, loss);
+            var next = new Vector<double>(phi.Length);
+            for (int i = 0; i < phi.Length; i++) next[i] = phi[i] - innerRate * (g[i] + lambda * (phi[i] - theta[i]));
+            phi = next;
+        }
+
+        probe.SetParameters(phi);
+        var queryGradient = probe.ComputeGradients(task.QuerySetX, task.QuerySetY, loss);
+
+        var updated = model.GetParameters();
+        int n = phi.Length;
+        int rows = task.SupportSetX.Rows;
+        var v = new double[n];
+        for (int i = 0; i < n; i++) v[i] = theta[i] - updated[i]; // outer SGD at rate 1: theta' = theta - v
+
+        for (int i = 0; i < n; i++)
+        {
+            double hv = 0.0;
+            for (int j = 0; j < n; j++)
+            {
+                double h = 0.0;
+                for (int r = 0; r < rows; r++)
+                {
+                    double xi = i < 3 ? task.SupportSetX[r, i] : 1.0;
+                    double xj = j < 3 ? task.SupportSetX[r, j] : 1.0;
+                    h += 2.0 / rows * xi * xj;
+                }
+
+                hv += h * v[j];
+            }
+
+            Assert.Equal(queryGradient[i], v[i] + hv / lambda, 1e-6);
+        }
+    }
+
+    [Fact]
+    public void IMAML_Defaults_MatchRajeswaranEtAl2019()
+    {
+        var options = new iMAMLOptions<double, Matrix<double>, Vector<double>>(new LinearVectorModel(3));
+
+        Assert.Equal(1.0, options.LambdaRegularization);
+        Assert.Equal(5, options.ConjugateGradientIterations);
+        Assert.Equal(16, options.AdaptationSteps);
+        Assert.Null(options.GradientClipThreshold);
+    }
+
+    [Fact]
     public void ProtoNets_Defaults_MatchSnellEtAl2017()
     {
         // Snell, Swersky and Zemel (2017), Section 3: one gradient step per training episode, squared Euclidean
