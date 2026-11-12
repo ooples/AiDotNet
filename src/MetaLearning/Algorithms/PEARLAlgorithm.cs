@@ -234,11 +234,16 @@ public partial class PEARLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
         var muN = Engine.TensorMatMul(wMu, hidden);
         var logVarN = Engine.TensorClamp(Engine.TensorMatMul(wLogVar, hidden), NumOps.FromDouble(-10), NumOps.FromDouble(2));
 
-        var precisionN = Engine.TensorExp(Engine.TensorNegate(logVarN));
-        var precision = Engine.ReduceSum(precisionN, new[] { 1 }, keepDims: false);
-        var weightedMu = Engine.ReduceSum(Engine.TensorMultiply(muN, precisionN), new[] { 1 }, keepDims: false);
-        var mu = Engine.TensorDivide(weightedMu, precision);
-        var logVar = Engine.TensorNegate(Engine.TensorLog(precision));
+        // Precisions are summed in the log domain: with m = max_n(-log σ_n²) the factors are exp(-log σ_n² - m) <= 1,
+        // so Σ σ_n⁻² cannot overflow a narrow T (each raw factor reaches e^10 ≈ 22026, past Half's 65504 at n = 3).
+        // log σ² = -(m + log Σ exp(-log σ_n² - m)); μ = Σ μ_n w_n / Σ w_n is unchanged by the common factor e^m.
+        var negLogVarN = Engine.TensorNegate(logVarN);
+        var shift = Engine.ReduceMax(negLogVarN, new[] { 1 }, keepDims: true);
+        var weights = Engine.TensorExp(Engine.TensorSubtract(negLogVarN, Engine.TensorBroadcastTo(shift, new[] { _latentDim, negLogVarN.Shape[1] })));
+        var weightSum = Engine.ReduceSum(weights, new[] { 1 }, keepDims: false);
+        var weightedMu = Engine.ReduceSum(Engine.TensorMultiply(muN, weights), new[] { 1 }, keepDims: false);
+        var mu = Engine.TensorDivide(weightedMu, weightSum);
+        var logVar = Engine.TensorNegate(Engine.TensorAdd(shift.Reshape(new[] { _latentDim }), Engine.TensorLog(weightSum)));
         return (mu.ToVector(), logVar.ToVector());
     }
 

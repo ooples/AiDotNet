@@ -1,7 +1,9 @@
 using System;
+using System.Reflection;
 using AiDotNet.MetaLearning.Algorithms;
 using AiDotNet.MetaLearning.Options;
 using AiDotNet.Tensors.LinearAlgebra;
+using AiDotNet.Tests.Helpers;
 using AiDotNet.Tests.IntegrationTests.MetaLearning;
 using Xunit;
 
@@ -64,5 +66,33 @@ public class PEARLPaperTests
             Assert.Equal((muA[l] * pa + muB[l] * pb) / (pa + pb), mu[l], 10);
             Assert.Equal(-Math.Log(pa + pb), lv[l], 10);
         }
+    }
+
+    [Fact]
+    public void Posterior_StaysFiniteInHalfWhenTheFactorPrecisionsOverflow()
+    {
+        // Every factor has log s_n^2 clamped to -10, so 1 / s_n^2 = e^10 ~ 22026 and four of them sum past Half's
+        // 65504: a direct precision sum gives log s^2 = -log(inf) = -inf. The product of four identical factors
+        // is N(mu, s^2 / 4), so log s^2 = -10 - ln 4 exactly.
+        var algorithm = new PEARLAlgorithm<Half, Tensor<Half>, Tensor<Half>>(
+            new PEARLOptions<Half, Tensor<Half>, Tensor<Half>>(new MockFullModel<Half>(numParameters: 3))
+            {
+                LatentDim = 1, EncoderHiddenDim = 3, Seed = 21,
+            });
+        // w1 = 1 (hidden = 3 per unit for an all-ones context), wMu = 0, wLogVar = -2 (pre-clamp log s^2 = -18).
+        var encoder = new Half[15];
+        for (int i = 0; i < 9; i++) encoder[i] = (Half)1.0f;
+        for (int i = 12; i < 15; i++) encoder[i] = (Half)(-2.0f);
+        var field = typeof(PEARLAlgorithm<Half, Tensor<Half>, Tensor<Half>>)
+            .GetField("_encoderParams", BindingFlags.Instance | BindingFlags.NonPublic);
+        Assert.NotNull(field);
+        field.SetValue(algorithm, new Vector<Half>(encoder));
+
+        var ones = new Half[12];
+        for (int i = 0; i < ones.Length; i++) ones[i] = (Half)1.0f;
+        var (mu, logVar) = algorithm.Encode(Tensor<Half>.FromVector(new Vector<Half>(ones), new[] { 3, 4 }));
+
+        Assert.Equal(0.0, (double)(float)mu[0], 6);
+        Assert.Equal(-10.0 - Math.Log(4.0), (double)(float)logVar[0], 1);
     }
 }
