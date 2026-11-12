@@ -22,54 +22,34 @@ public class PlasmaTransform<T> : ImageAugmenterBase<T>
         double maxVal = data.IsNormalized ? 1.0 : 255.0;
         double intensity = context.GetRandomDouble(MinIntensity, MaxIntensity);
 
+        var engine = Engine;
+        var image = data.ToPlanarTensor();
+        var planes = new Tensor<T>[data.Channels];
+        T zero = NumOps.Zero;
+        T max = NumOps.FromDouble(maxVal);
+        T scale = NumOps.FromDouble(intensity * maxVal);
+
         // Generate plasma pattern using diamond-square algorithm (multi-octave noise per channel)
+        T[] octaveWeights = ImageTensor<T>.OctaveWeights(4);
         for (int c = 0; c < data.Channels; c++)
         {
-            var plasma = new double[data.Height, data.Width];
-
+            // Octave k: cells of max(2, 4 * 2^k) with smoothstep interpolation, weight 1 / 2^k
+            Tensor<T>? plasma = null;
             for (int octave = 0; octave < 4; octave++)
             {
                 int freq = Math.Max(2, 4 << octave);
-                double weight = 1.0 / (1 << octave);
-                int gH = data.Height / freq + 2;
-                int gW = data.Width / freq + 2;
-
-                var grid = new double[gH, gW];
-                for (int gy = 0; gy < gH; gy++)
-                    for (int gx = 0; gx < gW; gx++)
-                        grid[gy, gx] = context.GetRandomDouble(-1, 1);
-
-                for (int y = 0; y < data.Height; y++)
-                    for (int x = 0; x < data.Width; x++)
-                    {
-                        double fy = (double)y / freq;
-                        double fx = (double)x / freq;
-                        int y0 = (int)fy; int x0 = (int)fx;
-                        int y1 = Math.Min(y0 + 1, gH - 1);
-                        int x1 = Math.Min(x0 + 1, gW - 1);
-                        double ty = fy - y0; double tx = fx - x0;
-                        // Smoothstep
-                        ty = ty * ty * (3 - 2 * ty);
-                        tx = tx * tx * (3 - 2 * tx);
-
-                        double val = grid[y0, x0] * (1 - ty) * (1 - tx) +
-                                     grid[y1, x0] * ty * (1 - tx) +
-                                     grid[y0, x1] * (1 - ty) * tx +
-                                     grid[y1, x1] * ty * tx;
-                        plasma[y, x] += val * weight;
-                    }
+                var layer = engine.TensorMultiplyScalar(
+                    ImageTensor<T>.GridNoise(context, data.Height, data.Width, freq, -1, 1, smoothstep: true),
+                    octaveWeights[octave]);
+                plasma = plasma is null ? layer : engine.TensorAdd(plasma, layer);
             }
 
             // Apply plasma perturbation
-            for (int y = 0; y < data.Height; y++)
-                for (int x = 0; x < data.Width; x++)
-                {
-                    double val = NumOps.ToDouble(data.GetPixel(y, x, c));
-                    val += plasma[y, x] * intensity * maxVal;
-                    result.SetPixel(y, x, c,
-                        NumOps.FromDouble(Math.Max(0, Math.Min(maxVal, val))));
-                }
+            var perturbation = engine.TensorMultiplyScalar(plasma ?? new Tensor<T>([data.Height, data.Width]), scale);
+            planes[c] = engine.TensorClamp(engine.TensorAdd(engine.TensorSliceAxis(image, 0, c), perturbation), zero, max);
         }
+
+        result.SetFromPlanarTensor(engine.TensorStack(planes, 0));
 
         return result;
     }

@@ -43,6 +43,9 @@ public abstract class SegmentationModelOptions : ModelHyperparameterOptions
     /// reports results on, so the default reproduces the published configuration.
     /// </para>
     /// </remarks>
+    [AiDotNet.Attributes.OptionBehaviourExempt("Medical SAM 2 segments one prompted structure at a time (Zhu et al. 2024); its constructor requires NumClasses=1.", ModelType = typeof(AiDotNet.ComputerVision.Segmentation.Medical.MedicalSAM2<>))]
+    [AiDotNet.Attributes.OptionBehaviourExempt("SAM 2.1 segments one prompted object at a time (Ravi et al. 2024, section 4); its constructor requires NumClasses=1.", ModelType = typeof(AiDotNet.ComputerVision.Segmentation.Foundation.SAM21<>))]
+    [AiDotNet.Attributes.OptionBehaviourExempt("EfficientTAM segments one prompted object per mask (Xiong et al. 2024, following SAM 2); its constructor requires NumClasses=1.", ModelType = typeof(AiDotNet.ComputerVision.Segmentation.Video.EfficientTAM<>))]
     public int NumClasses { get; set; }
 
     /// <summary>
@@ -57,6 +60,9 @@ public abstract class SegmentationModelOptions : ModelHyperparameterOptions
     /// dropout at all — so it is accepted rather than rejected as "unset".
     /// </para>
     /// </remarks>
+    [AiDotNet.Attributes.OptionBehaviourExempt("Medical SAM 2 regularizes with Hiera's stochastic depth (MedicalSAM2Options.DropPath); its constructor requires DropRate=0.", ModelType = typeof(AiDotNet.ComputerVision.Segmentation.Medical.MedicalSAM2<>))]
+    [AiDotNet.Attributes.OptionBehaviourExempt("SAM 2.1 regularizes with Hiera's stochastic depth (SAM21Options.DropPath, Ravi et al. 2024 Table 12); its constructor requires DropRate=0.", ModelType = typeof(AiDotNet.ComputerVision.Segmentation.Foundation.SAM21<>))]
+    [AiDotNet.Attributes.OptionBehaviourExempt("EfficientTAM regularizes with stochastic depth (EfficientTAMOptions.DropPath); its constructor requires DropRate=0.", ModelType = typeof(AiDotNet.ComputerVision.Segmentation.Video.EfficientTAM<>))]
     public double DropRate { get; set; }
 
     /// <summary>

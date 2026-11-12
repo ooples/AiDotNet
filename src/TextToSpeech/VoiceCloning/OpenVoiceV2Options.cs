@@ -6,6 +6,13 @@ namespace AiDotNet.TextToSpeech.VoiceCloning;
 /// </remarks>
 public class OpenVoiceV2Options : VoiceCloningOptions
 {
+    [System.Runtime.Serialization.OnDeserialized]
+    private void RestoreLegacyDecoderMetadata(System.Runtime.Serialization.StreamingContext context)
+    {
+        // Older options retained the generic depth of six although the released renderer had four stages.
+        if (NumDecoderLayers == 6) NumDecoderLayers = 4;
+    }
+
     /// <summary>Initializes a new instance by copying from another instance.</summary>
     /// <param name="other">The options instance to copy from.</param>
     /// <exception cref="ArgumentNullException">Thrown when other is null.</exception>
@@ -22,15 +29,19 @@ public class OpenVoiceV2Options : VoiceCloningOptions
         Beta2 = other.Beta2;
         Epsilon = other.Epsilon;
         WeightDecay = other.WeightDecay;
+        Training = new OpenVoiceTrainingOptions(other.Training);
     }
 
     /// <summary>Initializes a new instance with default values.</summary>
     public OpenVoiceV2Options()
     {
+        SampleRate = 22050;
+        HiddenDim = 192;
         MinReferenceDurationSec = 3.0;
         NumEncoderLayers = 6;
+        NumDecoderLayers = 4;
         NumLLMLayers = 12;
-        NumHeads = 8;
+        NumHeads = 2;
         DropoutRate = 0.1;
         LearningRate = 3e-4;
         WeightDecay = 0.01;
@@ -49,5 +60,51 @@ public class OpenVoiceV2Options : VoiceCloningOptions
 
     /// <summary>AdamW numerical-stability epsilon used by the released recipe.</summary>
     public double Epsilon { get; set; } = 1e-9;
+
+    /// <summary>Number of layers in the auxiliary IPA training encoder. Shares the setting with <see cref="Training"/>.</summary>
+    public override int NumEncoderLayers
+    {
+        get => Training?.IpaLayers ?? base.NumEncoderLayers;
+        set
+        {
+            base.NumEncoderLayers = value;
+            if (Training is not null) Training.IpaLayers = value;
+        }
+    }
+
+    /// <summary>Attention heads in the auxiliary IPA training encoder. Shares the setting with <see cref="Training"/>.</summary>
+    public override int NumHeads
+    {
+        get => Training?.IpaHeads ?? base.NumHeads;
+        set
+        {
+            base.NumHeads = value;
+            if (Training is not null) Training.IpaHeads = value;
+        }
+    }
+
+    /// <summary>Dropout probability in the auxiliary IPA training encoder. Shares the setting with <see cref="Training"/>.</summary>
+    public override double DropoutRate
+    {
+        get => Training?.IpaDropout ?? base.DropoutRate;
+        set
+        {
+            base.DropoutRate = value;
+            if (Training is not null) Training.IpaDropout = value;
+        }
+    }
+
+    /// <summary>Number of mel bands used by the waveform reconstruction objective. Shares the setting with <see cref="Training"/>.</summary>
+    public override int MelChannels
+    {
+        get => Training?.MelChannels ?? base.MelChannels;
+        set
+        {
+            base.MelChannels = value;
+            if (Training is not null) Training.MelChannels = value;
+        }
+    }
+    /// <summary>Auxiliary IPA prior, waveform reconstruction and adversarial training configuration.</summary>
+    public OpenVoiceTrainingOptions Training { get; set; } = new() { LearningRate = 3e-4 };
 
 }

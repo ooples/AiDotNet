@@ -36,6 +36,7 @@ public abstract class EmbeddingModelOptions : ModelHyperparameterOptions
     /// <para><b>For Beginners:</b> 30522 is the BERT vocabulary, which many of these models
     /// inherit.</para>
     /// </remarks>
+    [AiDotNet.Attributes.OptionBehaviourExempt("FastText's softmax output is the architecture's OutputSize, which VocabSize restates; the layer factory rejects a mismatch, so VocabSize cannot vary on its own.", ModelType = typeof(AiDotNet.NeuralNetworks.FastText<>))]
     public int VocabSize { get; set; }
 
     /// <summary>

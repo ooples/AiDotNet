@@ -42,7 +42,7 @@ namespace AiDotNet.Attributes;
 /// }
 /// </code>
 /// </example>
-[AttributeUsage(AttributeTargets.Property, AllowMultiple = false, Inherited = true)]
+[AttributeUsage(AttributeTargets.Property, AllowMultiple = true, Inherited = true)]
 public sealed class OptionBehaviourExemptAttribute : Attribute
 {
     /// <summary>Exempts a property from the generated option-sensitivity test.</summary>
@@ -57,4 +57,10 @@ public sealed class OptionBehaviourExemptAttribute : Attribute
 
     /// <summary>Why this property cannot change observable behaviour at test scale.</summary>
     public string Reason { get; }
+
+    /// <summary>
+    /// Limits this exemption to one model type and its subclasses, or their open generic definitions.
+    /// Null applies it to every model using the options property.
+    /// </summary>
+    public Type? ModelType { get; set; }
 }

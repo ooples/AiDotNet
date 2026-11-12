@@ -1,0 +1,6 @@
+CosyVoice3 BPE merge table
+Source: https://huggingface.co/FunAudioLLM/Fun-CosyVoice3-0.5B-2512/blob/29e01c4e8d000f4bcd70751be16fa94bf3d85a18/CosyVoice-BlankEN/merges.txt
+License: Apache-2.0, as stated by the upstream release.
+Original uncompressed SHA-256: ac8ff86a72bee70828fbc1119bc4398c6f3a9a6e490d7b0dbe917be025478bd0
+The resource is the original file compressed with gzip, mtime=0. It contains 134935 pairs.
+The vocabulary IDs are identical to the existing Qwen vocabulary, but this release omits 16452 Qwen2.5 merge pairs.
