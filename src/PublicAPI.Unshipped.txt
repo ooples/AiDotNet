@@ -22565,3 +22565,14 @@ override AiDotNet.Diffusion.LatentDiffusionModelBase<T>.IsBatchedTrainingSample(
 virtual AiDotNet.Diffusion.DiffusionModelBase<T>.IsBatchedTrainingSample(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! sample) -> bool
 *REMOVED*AiDotNet.Document.Options.DocBankOptions.LearningRate.get -> double
 AiDotNet.Document.Options.DocBankOptions.LearningRate.get -> double?
+*REMOVED*AiDotNet.MetaLearning.Options.MetaTaskOptions<T, TInput, TOutput>.NumSyntheticTasks.get -> int
+*REMOVED*AiDotNet.MetaLearning.Options.MetaTaskOptions<T, TInput, TOutput>.NumSyntheticTasks.set -> void
+*REMOVED*AiDotNet.MetaLearning.Options.MetaTaskOptions<T, TInput, TOutput>.SyntheticWeight.get -> double
+*REMOVED*AiDotNet.MetaLearning.Options.MetaTaskOptions<T, TInput, TOutput>.SyntheticWeight.set -> void
+AiDotNet.MetaLearning.Options.MetaTaskOptions<T, TInput, TOutput>.NumMixedPairs.get -> int
+AiDotNet.MetaLearning.Options.MetaTaskOptions<T, TInput, TOutput>.NumMixedPairs.set -> void
+AiDotNet.MetaLearning.Options.MetaTaskOptions<T, TInput, TOutput>.MixSource.get -> AiDotNet.MetaLearning.Options.MetaMixSource
+AiDotNet.MetaLearning.Options.MetaTaskOptions<T, TInput, TOutput>.MixSource.set -> void
+AiDotNet.MetaLearning.Options.MetaMixSource
+AiDotNet.MetaLearning.Options.MetaMixSource.Query = 0 -> AiDotNet.MetaLearning.Options.MetaMixSource
+AiDotNet.MetaLearning.Options.MetaMixSource.SupportAndQuery = 1 -> AiDotNet.MetaLearning.Options.MetaMixSource
