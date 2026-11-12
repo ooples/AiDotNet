@@ -322,6 +322,25 @@ internal static class ComplexWaveletEngineOps<T>
     }
 
     /// <summary>
+    /// Centred "same"-length complex convolution with zero padding:
+    /// <c>result[i] = sum_j input[i - j + kernel.Length / 2] * kernel[j]</c>, length <c>input.Length</c>.
+    /// </summary>
+    internal static Vector<Complex<T>> CenteredConvolve(Vector<Complex<T>> input, Vector<Complex<T>> kernel)
+    {
+        if (input.Length == 0)
+        {
+            return new Vector<Complex<T>>(0);
+        }
+
+        if (kernel.Length == 0)
+        {
+            return Zeros(input.Length);
+        }
+
+        return FullConvolve(input, kernel).GetSubVector(kernel.Length / 2, input.Length);
+    }
+
+    /// <summary>
     /// Reverses a complex vector.
     /// </summary>
     internal static Vector<Complex<T>> Reverse(Vector<Complex<T>> input)
