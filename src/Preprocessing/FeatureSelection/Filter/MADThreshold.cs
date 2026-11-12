@@ -26,12 +26,12 @@ public class MADThreshold<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IFeatur
 {
     private readonly double _threshold;
 
-    private double[]? _madValues;
+    private Vector<T>? _madValues;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     public double Threshold => _threshold;
-    public double[]? MADValues => _madValues;
+    public Vector<T>? MADValues => _madValues;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -53,30 +53,17 @@ public class MADThreshold<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IFeatur
     {
         _nInputFeatures = data.Columns;
         int n = data.Rows;
-        int p = data.Columns;
+        var engine = Engine;
+        var x = FilterStatisticTensorOps.AsTensor(data);
 
-        _madValues = new double[p];
+        // MAD = median |x - median(x)| per feature (scipy.stats.median_abs_deviation, scale 1); the median of an
+        // even number of values is the mean of the two middle ones
+        var median = FilterStatisticTensorOps.ColumnQuantile(x, 0.5);
+        var deviations = engine.TensorAbs(engine.TensorSubtract(x, FilterStatisticTensorOps.RowBroadcast(median, n)));
+        var mad = FilterStatisticTensorOps.ColumnQuantile(deviations, 0.5);
+        _madValues = mad.ToVector();
 
-        for (int j = 0; j < p; j++)
-        {
-            var values = new double[n];
-            for (int i = 0; i < n; i++)
-                values[i] = NumOps.ToDouble(data[i, j]);
-
-            Array.Sort(values);
-            double median = values[n / 2];
-
-            var deviations = new double[n];
-            for (int i = 0; i < n; i++)
-                deviations[i] = Math.Abs(values[i] - median);
-
-            Array.Sort(deviations);
-            _madValues[j] = deviations[n / 2];
-        }
-
-        _selectedIndices = Enumerable.Range(0, p)
-            .Where(j => _madValues[j] > _threshold)
-            .ToArray();
+        _selectedIndices = FilterStatisticTensorOps.MaskPositions(engine.TensorGreaterThan(mad, NumOps.FromDouble(_threshold)));
 
         IsFitted = true;
     }
@@ -87,15 +74,7 @@ public class MADThreshold<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IFeatur
         if (_selectedIndices is null)
             throw new InvalidOperationException("MADThreshold has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return FilterStatisticTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />
