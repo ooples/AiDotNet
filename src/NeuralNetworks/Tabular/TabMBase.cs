@@ -1,3 +1,7 @@
+using System;
+using System.Collections.Generic;
+using AiDotNet.Interfaces;
+using System.Linq;
 using AiDotNet.Helpers;
 using AiDotNet.Engines;
 using AiDotNet.Attributes;
@@ -348,6 +352,36 @@ public abstract partial class TabMBase<T>
         }
 
         return TabularMetrics.ConcatenateVectors(parts);
+    }
+
+    /// <summary>
+    /// The live tensors a tape training step updates: the feature embeddings, the BatchEnsemble hidden layers and the task head.
+    /// </summary>
+    protected IEnumerable<Tensor<T>> GetTrainableTensors()
+    {
+        var tensors = new List<Tensor<T>>();
+        if (_featureEmbeddings != null) tensors.Add(_featureEmbeddings);
+        var layers = new List<ILayer<T>>();
+        layers.AddRange(_hiddenLayers);
+        layers.AddRange(GetExtraTrainableLayers());
+        tensors.AddRange(TabularTraining.LayerTensors(layers));
+        return tensors;
+    }
+
+    /// <summary>
+    /// One tape training step: gradients of <paramref name="objective"/> over every trainable tensor, then SGD.
+    /// </summary>
+    /// <returns>The loss before the update.</returns>
+    protected T TrainWithTape(Func<Tensor<T>> objective, T learningRate)
+    {
+        try
+        {
+            return TabularTraining.SgdStep(GetTrainableTensors, objective, learningRate);
+        }
+        finally
+        {
+            ResetState();
+        }
     }
 
     /// <summary>

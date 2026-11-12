@@ -1,3 +1,4 @@
+using System.Linq;
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using System;
@@ -337,6 +338,39 @@ public abstract class TabDPTBase<T> : IParameterSource<T>
     }
 
     /// <summary>
+    /// The live tensors a tape training step updates: the feature and categorical projections, every transformer and feature-attention block, the MLP, the final norm and the task head.
+    /// </summary>
+    protected IEnumerable<Tensor<T>> GetTrainableTensors()
+    {
+        var tensors = new List<Tensor<T>>();
+        foreach (var block in _transformerBlocks) tensors.AddRange(block.TrainableTensors());
+        if (_featureAttention != null) tensors.AddRange(_featureAttention.TrainableTensors());
+        var layers = new List<ILayer<T>> { _featureProjection };
+        layers.AddRange(_categoricalEmbeddings);
+        layers.AddRange(_mlpLayers);
+        layers.Add(_finalNorm);
+        layers.AddRange(GetExtraTrainableLayers().OfType<ILayer<T>>());
+        tensors.AddRange(TabularTraining.LayerTensors(layers));
+        return tensors;
+    }
+
+    /// <summary>
+    /// One tape training step: gradients of <paramref name="objective"/> over every trainable tensor, then SGD.
+    /// </summary>
+    /// <returns>The loss before the update.</returns>
+    protected T TrainWithTape(Func<Tensor<T>> objective, T learningRate)
+    {
+        try
+        {
+            return TabularTraining.SgdStep(GetTrainableTensors, objective, learningRate);
+        }
+        finally
+        {
+            ResetState();
+        }
+    }
+
+    /// <summary>
     /// Resets internal state and caches.
     /// </summary>
     public virtual void ResetState()
@@ -407,6 +441,10 @@ public abstract class TabDPTBase<T> : IParameterSource<T>
         // Cached values
         [Scratch]
         private Tensor<TBlock>? _attentionScoresCache;
+
+        /// <summary>The live tensors a tape training step updates: the projections, then the sub-layers.</summary>
+        public IEnumerable<Tensor<TBlock>> TrainableTensors()
+            => AttentionTensors().Concat(TabularTraining.LayerTensors(SubLayers()));
 
         /// <summary>The block attention projections, in serialization order.</summary>
         private IEnumerable<Tensor<TBlock>> AttentionTensors()
@@ -681,6 +719,9 @@ public abstract class TabDPTBase<T> : IParameterSource<T>
         private Tensor<TBlock> _featureKey;
         private Tensor<TBlock> _featureValue;
         private Tensor<TBlock> _featureOutput;
+
+        /// <summary>The live tensors a tape training step updates.</summary>
+        public IEnumerable<Tensor<TBlock>> TrainableTensors() => Tensors();
 
         /// <summary>The four projections, in serialization order.</summary>
         private IEnumerable<Tensor<TBlock>> Tensors()

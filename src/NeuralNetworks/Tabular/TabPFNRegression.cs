@@ -178,12 +178,9 @@ public class TabPFNRegression<T> : TabPFNBase<T>
     /// </remarks>
     public T TrainStep(Tensor<T> numericalFeatures, Tensor<T> targets, T learningRate, Matrix<int>? categoricalIndices = null)
     {
-        var predictions = Forward(numericalFeatures, categoricalIndices);
-        var loss = ComputeMSELoss(predictions, targets);
-        UpdateParameters(learningRate);
-        ResetState();
-
-        return loss;
+        return TrainWithTape(
+            () => TabularTraining.MeanSquaredErrorObjective(Forward(numericalFeatures, categoricalIndices), targets),
+            learningRate);
     }
 
     /// <summary>

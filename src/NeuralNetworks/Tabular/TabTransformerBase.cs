@@ -1,3 +1,5 @@
+using System;
+using System.Linq;
 using AiDotNet.Engines;
 using AiDotNet.Attributes;
 using System.Collections.Generic;
@@ -386,6 +388,38 @@ public abstract partial class TabTransformerBase<T> : IParameterSource<T>
         foreach (var layer in _mlpLayers)
         {
             layer.UpdateParameters(learningRate);
+        }
+    }
+
+    /// <summary>
+    /// The live tensors a tape training step updates: the categorical and column embeddings, the transformer encoder layers, the final norm, the MLP and the task head.
+    /// </summary>
+    protected IEnumerable<Tensor<T>> GetTrainableTensors()
+    {
+        var tensors = new List<Tensor<T>>(_categoricalEmbeddings);
+        if (_columnEmbeddings != null) tensors.Add(_columnEmbeddings);
+        var layers = new List<ILayer<T>>();
+        layers.AddRange(_encoderLayers);
+        if (_finalLayerNorm != null) layers.Add(_finalLayerNorm);
+        layers.AddRange(_mlpLayers);
+        layers.AddRange(GetExtraTrainableLayers().OfType<ILayer<T>>());
+        tensors.AddRange(TabularTraining.LayerTensors(layers));
+        return tensors;
+    }
+
+    /// <summary>
+    /// One tape training step: gradients of <paramref name="objective"/> over every trainable tensor, then SGD.
+    /// </summary>
+    /// <returns>The loss before the update.</returns>
+    protected T TrainWithTape(Func<Tensor<T>> objective, T learningRate)
+    {
+        try
+        {
+            return TabularTraining.SgdStep(GetTrainableTensors, objective, learningRate);
+        }
+        finally
+        {
+            ResetState();
         }
     }
 

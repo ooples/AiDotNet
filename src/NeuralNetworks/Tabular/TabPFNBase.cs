@@ -1,3 +1,4 @@
+using System.Linq;
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
@@ -502,6 +503,38 @@ public abstract partial class TabPFNBase<T> : IParameterSource<T>
     }
 
     /// <summary>
+    /// The live tensors a tape training step updates: the feature and categorical encoders, every transformer block, the output MLP, the final norm and the task head.
+    /// </summary>
+    protected IEnumerable<Tensor<T>> GetTrainableTensors()
+    {
+        var tensors = new List<Tensor<T>>();
+        foreach (var block in _transformerBlocks) tensors.AddRange(block.TrainableTensors());
+        var layers = new List<ILayer<T>> { _featureEncoder };
+        layers.AddRange(_categoricalEncoders);
+        layers.AddRange(_outputMLP);
+        layers.Add(_finalNorm);
+        layers.AddRange(GetExtraTrainableLayers());
+        tensors.AddRange(TabularTraining.LayerTensors(layers));
+        return tensors;
+    }
+
+    /// <summary>
+    /// One tape training step: gradients of <paramref name="objective"/> over every trainable tensor, then SGD.
+    /// </summary>
+    /// <returns>The loss before the update.</returns>
+    protected T TrainWithTape(Func<Tensor<T>> objective, T learningRate)
+    {
+        try
+        {
+            return TabularTraining.SgdStep(GetTrainableTensors, objective, learningRate);
+        }
+        finally
+        {
+            ResetState();
+        }
+    }
+
+    /// <summary>
     /// Resets internal state and caches.
     /// </summary>
     public virtual void ResetState()
@@ -600,6 +633,10 @@ public abstract partial class TabPFNBase<T> : IParameterSource<T>
             yield return _valueWeights;
             yield return _outputWeights;
         }
+
+        /// <summary>The live tensors a tape training step updates: the projections, then the sub-layers.</summary>
+        public IEnumerable<Tensor<TBlock>> TrainableTensors()
+            => AttentionTensors().Concat(TabularTraining.LayerTensors(SubLayers().OfType<ILayer<TBlock>>()));
 
         private IEnumerable<IParameterSource<TBlock>> SubLayers()
         {

@@ -140,12 +140,9 @@ public class NODERegression<T> : NODEBase<T>
     /// </summary>
     public T TrainStep(Tensor<T> features, Tensor<T> targets, T learningRate)
     {
-        var predictions = Forward(features);
-        var loss = ComputeMSELoss(predictions, targets);
-        UpdateParameters(learningRate);
-        ResetState();
-
-        return loss;
+        return TrainWithTape(
+            () => TabularTraining.MeanSquaredErrorObjective(Forward(features), targets),
+            learningRate);
     }
 
     /// <summary>

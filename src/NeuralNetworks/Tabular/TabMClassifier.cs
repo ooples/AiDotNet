@@ -166,21 +166,12 @@ public class TabMClassifier<T> : TabMBase<T>
     /// <returns>The training loss for this step.</returns>
     public T TrainStep(Tensor<T> features, int[] targets, T learningRate)
     {
-        // Forward pass
-        var probabilities = PredictProbabilities(features);
-
-        // Compute loss
-        var loss = ComputeCrossEntropyLoss(probabilities, targets);
-
-        // Backward pass
-
-        // Update parameters
-        UpdateParameters(learningRate);
-
-        // Reset for next iteration
-        ResetState();
-
-        return loss;
+        int batchSize = features.Shape[0];
+        var labels = TabularTraining.OneHotTargets<T>(Vector<int>.Wrap(targets), batchSize, _numClasses);
+        var epsilon = NumOps.FromDouble(1e-15);
+        return TrainWithTape(
+            () => TabularTraining.CrossEntropyObjective(PredictProbabilities(features), labels, epsilon),
+            learningRate);
     }
 
     /// <summary>

@@ -1,3 +1,5 @@
+using System;
+using System.Linq;
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using System.Collections.Generic;
@@ -457,6 +459,41 @@ public abstract partial class SAINTBase<T> : IParameterSource<T>
         foreach (var layer in _mlpLayers)
         {
             layer.UpdateParameters(learningRate);
+        }
+    }
+
+    /// <summary>
+    /// The live tensors a tape training step updates: the embeddings, the column and row attention, feed-forward and norm layers, the MLP and the task head.
+    /// </summary>
+    protected IEnumerable<Tensor<T>> GetTrainableTensors()
+    {
+        var tensors = new List<Tensor<T>>();
+        if (_categoricalEmbeddings != null) tensors.AddRange(_categoricalEmbeddings);
+        if (_columnEmbeddings != null) tensors.Add(_columnEmbeddings);
+        var layers = new List<ILayer<T>> { _numericalEmbedding };
+        layers.AddRange(_columnAttentionLayers);
+        if (_rowAttentionLayers != null) layers.AddRange(_rowAttentionLayers);
+        layers.AddRange(_ffnLayers);
+        if (_layerNorms != null) layers.AddRange(_layerNorms);
+        layers.AddRange(_mlpLayers);
+        layers.AddRange(GetExtraTrainableLayers().OfType<ILayer<T>>());
+        tensors.AddRange(TabularTraining.LayerTensors(layers));
+        return tensors;
+    }
+
+    /// <summary>
+    /// One tape training step: gradients of <paramref name="objective"/> over every trainable tensor, then SGD.
+    /// </summary>
+    /// <returns>The loss before the update.</returns>
+    protected T TrainWithTape(Func<Tensor<T>> objective, T learningRate)
+    {
+        try
+        {
+            return TabularTraining.SgdStep(GetTrainableTensors, objective, learningRate);
+        }
+        finally
+        {
+            ResetState();
         }
     }
 

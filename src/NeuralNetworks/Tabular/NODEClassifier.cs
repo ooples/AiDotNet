@@ -132,12 +132,12 @@ public class NODEClassifier<T> : NODEBase<T>
     /// </summary>
     public T TrainStep(Tensor<T> features, Vector<int> targets, T learningRate)
     {
-        var probabilities = PredictProbabilities(features);
-        var loss = ComputeCrossEntropyLoss(probabilities, targets);
-        UpdateParameters(learningRate);
-        ResetState();
-
-        return loss;
+        int batchSize = features.Shape[0];
+        var labels = TabularTraining.OneHotTargets<T>(targets, batchSize, _numClasses);
+        var epsilon = NumOps.FromDouble(1e-15);
+        return TrainWithTape(
+            () => TabularTraining.CrossEntropyObjective(PredictProbabilities(features), labels, epsilon),
+            learningRate);
     }
 
     /// <summary>

@@ -205,21 +205,9 @@ public class TabMRegression<T> : TabMBase<T>
     /// </summary>
     public T TrainStep(Tensor<T> features, Tensor<T> targets, T learningRate)
     {
-        // Forward pass
-        var predictions = Predict(features);
-
-        // Compute loss
-        var loss = ComputeMSELoss(predictions, targets);
-
-        // Backward pass
-
-        // Update parameters
-        UpdateParameters(learningRate);
-
-        // Reset for next iteration
-        ResetState();
-
-        return loss;
+        return TrainWithTape(
+            () => TabularTraining.MeanSquaredErrorObjective(Predict(features), targets),
+            learningRate);
     }
 
     /// <summary>

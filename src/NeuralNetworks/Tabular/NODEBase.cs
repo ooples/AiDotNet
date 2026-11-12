@@ -1,3 +1,5 @@
+using System;
+using System.Linq;
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using System.Collections.Generic;
@@ -303,6 +305,38 @@ public abstract class NODEBase<T> : IParameterSource<T>
 
         // Update tree parameters (simplified gradient descent)
         // In practice, this would use proper gradient computation
+    }
+
+    /// <summary>
+    /// The live tensors a tape training step updates: the feature-selection logits, split thresholds and leaf responses of every tree, the optional preprocessing layer and the task head.
+    /// </summary>
+    protected IEnumerable<Tensor<T>> GetTrainableTensors()
+    {
+        var tensors = new List<Tensor<T>>();
+        tensors.AddRange(_featureSelectionWeights);
+        tensors.AddRange(_splitThresholds);
+        tensors.AddRange(_leafValues);
+        var layers = new List<ILayer<T>>();
+        if (_featurePreprocessing is not null) layers.Add(_featurePreprocessing);
+        layers.AddRange(GetExtraTrainableLayers().OfType<ILayer<T>>());
+        tensors.AddRange(TabularTraining.LayerTensors(layers));
+        return tensors;
+    }
+
+    /// <summary>
+    /// One tape training step: gradients of <paramref name="objective"/> over every trainable tensor, then SGD.
+    /// </summary>
+    /// <returns>The loss before the update.</returns>
+    protected T TrainWithTape(Func<Tensor<T>> objective, T learningRate)
+    {
+        try
+        {
+            return TabularTraining.SgdStep(GetTrainableTensors, objective, learningRate);
+        }
+        finally
+        {
+            ResetState();
+        }
     }
 
     /// <summary>
