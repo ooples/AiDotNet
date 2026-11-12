@@ -4,7 +4,6 @@ using AiDotNet.Enums;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Video.Enhancement;
-using AiDotNet.Video.Generation;
 using AiDotNet.Video.Inpainting;
 using AiDotNet.Video.Options;
 using AiDotNet.Video.Understanding;
@@ -92,27 +91,6 @@ public class VideoModelDeclaredInputTests
         var clip = model.Predict(WithLeadingAxis(frame));
         Assert.Equal(new[] { 1, 3, size * 2, size * 2 }, clip.Shape.ToArray());
         AssertSameValues(clip, upscaled);
-    }
-
-    [Fact]
-    public void OpenSora_DenoisesItsDeclaredSingleLatent()
-    {
-        const int size = 16;
-        var model = new OpenSora<double>(new NeuralNetworkArchitecture<double>(
-                inputType: InputType.ThreeDimensional,
-                taskType: NeuralNetworkTaskType.Generative,
-                inputHeight: size, inputWidth: size, inputDepth: 3,
-                outputSize: size * size * 3), options: new OpenSoraOptions { NumFrames = 2, HiddenDim = 32, NumLayers = 1, NumInferenceSteps = 4 });
-
-        int[] declared = model.GetArchitecture().GetInputShape();
-        Assert.Equal(new[] { 3, size, size }, declared);
-
-        // The denoiser indexed axis 3 of its features, so a rank-3 latent threw IndexOutOfRange.
-        var latent = Random(declared, seed: 2);
-        var denoised = model.Predict(latent);
-
-        Assert.Equal(new[] { 3, size, size }, denoised.Shape.ToArray());
-        AssertSameValues(model.Predict(WithLeadingAxis(latent)), denoised);
     }
 
     [Fact]

@@ -16,6 +16,9 @@ public class KokoroOptions : EndToEndTtsOptions
             throw new ArgumentNullException(nameof(other));
 
         StyleDim = other.StyleDim;
+        Speed = other.Speed;
+        SynthesisSeed = other.SynthesisSeed;
+        UseNativeEnglishFallback = other.UseNativeEnglishFallback;
     }
 
     /// <summary>Initializes a new instance with default values.</summary>
@@ -23,11 +26,26 @@ public class KokoroOptions : EndToEndTtsOptions
     {
         SampleRate = 24000;
         MelChannels = 80;
-        HopSize = 256;
+        HopSize = 300;
         HiddenDim = 512;
         NumFlowSteps = 0;
+        VocabSize = 178;
+        NumEncoderLayers = 3;
+        NumDecoderLayers = 3;
+        NumHeads = 12;
+        FilterChannels = 2048;
+        DropoutRate = .2;
     }
 
     /// <summary>Gets or sets the width of the style vector that conditions synthesis.</summary>
+    [AiDotNet.Attributes.OptionBehaviourExempt("The released voice bank has two 128-dimensional style halves; the native constructor rejects other style widths.", ModelType = typeof(Kokoro<>))]
     public int StyleDim { get; set; } = 128;
+
+    /// <summary>Duration scaling used by the released model: sum(sigmoid(duration logits)) / speed.</summary>
+    public double Speed { get; set; } = 1;
+
+    /// <summary>Optional per-call seed for reproducible native excitation; null keeps the advancing random stream.</summary>
+    public int? SynthesisSeed { get; set; }
+    /// <summary>Explicitly opts into the repository's approximate English frontend. Faithful raw text processing uses the official Misaki frontend through TextPhonemizer.</summary>
+    public bool UseNativeEnglishFallback { get; set; }
 }

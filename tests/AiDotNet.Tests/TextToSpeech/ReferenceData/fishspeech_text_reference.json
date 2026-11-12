@@ -1,0 +1,832 @@
+{
+ "texts": [
+  "  Hello, world!  ",
+  "This is a test sentence. This is another test sentence. And a third one.",
+  "a,aaaaaa3.14",
+  "   ",
+  "a",
+  "This is a test sentence with only commas, and no dots, and no exclamation marks, and no question marks, and no newlines.",
+  "This is a test sentence This is a test sentence This is a test sentence. This is a test sentence, This is a test sentence, This is a test sentence.",
+  "这是一段很长的中文文本,而且没有句号,也没有感叹号,也没有问号,也没有换行符。",
+  "It’s ‘quoted’ and “double”… (with brackets) [and more] 【】（x）",
+  "Wait... what,,, really?! Yes!!! 3.14159 is pi, 2.5 is not.",
+  "Emoji 😀 here 🚀 and flags 🇺🇸 and a clef 𝄞 stays.",
+  "Line one\nline two\r\nline three four",
+  "Colons: semicolons; full-width：； tildes~～ dashes— dots·・ quotes「」《》",
+  "  Spaces　around\u001c\u001f",
+  "你好，世界！今天是2024年10月29日，温度是25.5%。",
+  "电话：0595-23865596或手机+86 19859213959。金额：12块5，34.5元。",
+  "我有25个苹果和3人，分数：3/4，编号：31520181154418。",
+  "共有20000人参加，200多人和3.5抽，1999人。",
+  "Mixed 中文 and English, with numbers 123 and 4.56, plus O2O and B2C.",
+  "A very long sentence without any punctuation that keeps going and going so that the splitter has to fall back to spaces and then even further it has to break words byeverypossiblemeansbecausethereisnospaceleftinthisverylongwordthatgoesonandon",
+  "日本語の文です。これはテストです！本当ですか？"
+ ],
+ "lengths": [
+  10,
+  50,
+  200
+ ],
+ "v14": {
+  "clean": [
+   "Hello, world!",
+   "This is a test sentence. This is another test sentence. And a third one.",
+   "a,aaaaaa3.14",
+   "",
+   "a",
+   "This is a test sentence with only commas, and no dots, and no exclamation marks, and no question marks, and no newlines.",
+   "This is a test sentence This is a test sentence This is a test sentence. This is a test sentence, This is a test sentence, This is a test sentence.",
+   "这是一段很长的中文文本,而且没有句号,也没有感叹号,也没有问号,也没有换行符。",
+   "It's 'quoted' and 'double'. with brackets and more x",
+   "Wait. what, really?! Yes!!! 3.14159 is pi, 2.5 is not.",
+   "Emoji  here  and flags  and a clef 𝄞 stays.",
+   "Line oneline two\rline three four",
+   "Colons, semicolons, full-width, tildes dashes dots quotes''''",
+   "Spaces　around",
+   "你好，世界！今天是2024年10月29日，温度是25.5%。",
+   "电话,0595-23865596或手机+86 19859213959。金额,12块5，34.5元。",
+   "我有25个苹果和3人，分数,3/4，编号,31520181154418。",
+   "共有20000人参加，200多人和3.5抽，1999人。",
+   "Mixed 中文 and English, with numbers 123 and 4.56, plus O2O and B2C.",
+   "A very long sentence without any punctuation that keeps going and going so that the splitter has to fall back to spaces and then even further it has to break words byeverypossiblemeansbecausethereisnospaceleftinthisverylongwordthatgoesonandon",
+   "日本語の文です。これはテストです！本当ですか？"
+  ],
+  "split": {
+   "10": [
+    [
+     "Hello,",
+     "world!"
+    ],
+    [
+     "This is a",
+     "test",
+     "sentence.",
+     "This is",
+     "another",
+     "test",
+     "sentence.",
+     "And a",
+     "third one."
+    ],
+    [
+     "a,",
+     "aaaaaa3.14"
+    ],
+    [],
+    [
+     "a"
+    ],
+    [
+     "This is a",
+     "test",
+     "sentence",
+     "with only",
+     "commas,",
+     "and no",
+     "dots, and",
+     "no",
+     "exclamatio",
+     "n marks,",
+     "and no",
+     "question",
+     "marks,",
+     "and no",
+     "newlines."
+    ],
+    [
+     "This is a",
+     "test",
+     "sentence",
+     "This is a",
+     "test",
+     "sentence",
+     "This is a",
+     "test",
+     "sentence.",
+     "This is a",
+     "test",
+     "sentence,",
+     "This is a",
+     "test",
+     "sentence,",
+     "This is a",
+     "test",
+     "sentence."
+    ],
+    [
+     "这是一段",
+     "很长的中",
+     "文文本,",
+     "而且没有",
+     "句号,",
+     "也没有感",
+     "叹号,",
+     "也没有问",
+     "号,",
+     "也没有换",
+     "行符。"
+    ],
+    [
+     "It's",
+     "'quoted'",
+     "and",
+     "'double'.",
+     "with",
+     "brackets",
+     "and more x"
+    ],
+    [
+     "Wait.",
+     "what,",
+     "really?!",
+     "Yes!!!",
+     "3.14159",
+     "is pi,",
+     "2.5 is",
+     "not."
+    ],
+    [
+     "Emoji",
+     "here  and",
+     "flags",
+     "and a",
+     "clef 𝄞",
+     "stays."
+    ],
+    [
+     "Line",
+     "oneline",
+     "two\rline",
+     "three fo",
+     "ur"
+    ],
+    [
+     "Colons,",
+     "semicolons",
+     "full-width",
+     ", tildes",
+     "dashes",
+     "dots",
+     "quotes''''"
+    ],
+    [
+     "Spaces　a",
+     "round"
+    ],
+    [
+     "你好，",
+     "世界！",
+     "今天是2",
+     "024年10月",
+     "29日，",
+     "温度是2",
+     "5.5%。"
+    ],
+    [
+     "电话,",
+     "0595-23865",
+     "596或手机",
+     "+86",
+     "1985921395",
+     "9。",
+     "金额,",
+     "12块5，",
+     "34.5元。"
+    ],
+    [
+     "我有25个",
+     "苹果和3",
+     "人，",
+     "分数,",
+     "3/4，",
+     "编号,",
+     "3152018115",
+     "4418。"
+    ],
+    [
+     "共有2000",
+     "0人参加",
+     "，",
+     "200多人和",
+     "3.5抽，",
+     "1999人。"
+    ],
+    [
+     "Mixed",
+     "中文",
+     "and",
+     "English,",
+     "with",
+     "numbers",
+     "123 and",
+     "4.56,",
+     "plus O2O",
+     "and B2C."
+    ],
+    [
+     "A very",
+     "long",
+     "sentence",
+     "without",
+     "any",
+     "punctuatio",
+     "n that",
+     "keeps",
+     "going and",
+     "going so",
+     "that the",
+     "splitter",
+     "has to",
+     "fall back",
+     "to spaces",
+     "and then",
+     "even",
+     "further",
+     "it has to",
+     "break",
+     "words",
+     "byeverypos",
+     "siblemeans",
+     "becausethe",
+     "reisnospac",
+     "eleftinthi",
+     "sverylongw",
+     "ordthatgoe",
+     "sonandon"
+    ],
+    [
+     "日本語の",
+     "文です。",
+     "これはテ",
+     "ストです",
+     "！",
+     "本当です",
+     "か？"
+    ]
+   ],
+   "50": [
+    [
+     "Hello, world!"
+    ],
+    [
+     "This is a test sentence.",
+     "This is another test sentence. And a third one."
+    ],
+    [
+     "a,aaaaaa3.14"
+    ],
+    [],
+    [
+     "a"
+    ],
+    [
+     "This is a test sentence with only commas,",
+     "and no dots, and no exclamation marks,",
+     "and no question marks, and no newlines."
+    ],
+    [
+     "This is a test sentence This is a test sentence",
+     "This is a test sentence. This is a test sentence,",
+     "This is a test sentence, This is a test sentence."
+    ],
+    [
+     "这是一段很长的中文文本,",
+     "而且没有句号,也没有感叹号,",
+     "也没有问号,也没有换行符。"
+    ],
+    [
+     "It's 'quoted' and 'double'.",
+     "with brackets and more x"
+    ],
+    [
+     "Wait. what, really?! Yes!!!",
+     "3.14159 is pi, 2.5 is not."
+    ],
+    [
+     "Emoji  here  and flags  and a clef 𝄞 stays."
+    ],
+    [
+     "Line oneline two\rline three four"
+    ],
+    [
+     "Colons, semicolons, full-width,",
+     "tildes dashes dots quotes''''"
+    ],
+    [
+     "Spaces　around"
+    ],
+    [
+     "你好，世界！",
+     "今天是2024年10月29日，温度是25.5%。"
+    ],
+    [
+     "电话,0595-23865596或手机+86 19859213959。",
+     "金额,12块5，34.5元。"
+    ],
+    [
+     "我有25个苹果和3人，分数,3/4，编号,",
+     "31520181154418。"
+    ],
+    [
+     "共有20000人参加，200多人和3.5抽，",
+     "1999人。"
+    ],
+    [
+     "Mixed 中文 and English,",
+     "with numbers 123 and 4.56, plus O2O and B2C."
+    ],
+    [
+     "A very long sentence without any punctuation that",
+     "keeps going and going so that the splitter has to",
+     "fall back to spaces and then even further it has",
+     "to break words",
+     "byeverypossiblemeansbecausethereisnospaceleftinthi",
+     "sverylongwordthatgoesonandon"
+    ],
+    [
+     "日本語の文です。",
+     "これはテストです！本当ですか？"
+    ]
+   ],
+   "200": [
+    [
+     "Hello, world!"
+    ],
+    [
+     "This is a test sentence. This is another test sentence. And a third one."
+    ],
+    [
+     "a,aaaaaa3.14"
+    ],
+    [],
+    [
+     "a"
+    ],
+    [
+     "This is a test sentence with only commas, and no dots, and no exclamation marks, and no question marks, and no newlines."
+    ],
+    [
+     "This is a test sentence This is a test sentence This is a test sentence. This is a test sentence, This is a test sentence, This is a test sentence."
+    ],
+    [
+     "这是一段很长的中文文本,而且没有句号,也没有感叹号,也没有问号,也没有换行符。"
+    ],
+    [
+     "It's 'quoted' and 'double'. with brackets and more x"
+    ],
+    [
+     "Wait. what, really?! Yes!!! 3.14159 is pi, 2.5 is not."
+    ],
+    [
+     "Emoji  here  and flags  and a clef 𝄞 stays."
+    ],
+    [
+     "Line oneline two\rline three four"
+    ],
+    [
+     "Colons, semicolons, full-width, tildes dashes dots quotes''''"
+    ],
+    [
+     "Spaces　around"
+    ],
+    [
+     "你好，世界！今天是2024年10月29日，温度是25.5%。"
+    ],
+    [
+     "电话,0595-23865596或手机+86 19859213959。金额,12块5，34.5元。"
+    ],
+    [
+     "我有25个苹果和3人，分数,3/4，编号,31520181154418。"
+    ],
+    [
+     "共有20000人参加，200多人和3.5抽，1999人。"
+    ],
+    [
+     "Mixed 中文 and English, with numbers 123 and 4.56, plus O2O and B2C."
+    ],
+    [
+     "A very long sentence without any punctuation that keeps going and going so that the splitter has to fall back to spaces and then even further it has to break words",
+     "byeverypossiblemeansbecausethereisnospaceleftinthisverylongwordthatgoesonandon"
+    ],
+    [
+     "日本語の文です。これはテストです！本当ですか？"
+    ]
+   ]
+  },
+  "normalized": [
+   "  Hello, world!  ",
+   "This is a test sentence. This is another test sentence. And a third one.",
+   "a,aaaaaa三点一四",
+   "   ",
+   "a",
+   "This is a test sentence with only commas, and no dots, and no exclamation marks, and no question marks, and no newlines.",
+   "This is a test sentence This is a test sentence This is a test sentence. This is a test sentence, This is a test sentence, This is a test sentence.",
+   "这是一段很长的中文文本,而且没有句号,也没有感叹号,也没有问号,也没有换行符。",
+   "It’s ‘quoted’ and “double”… (with brackets) [and more] 【】（x）",
+   "Wait... what,,, really?! Yes!!! 三.一四一五九 is pi, 二点五 is not.",
+   "Emoji 😀 here 🚀 and flags 🇺🇸 and a clef 𝄞 stays.",
+   "Line one\nline two\r\nline three four",
+   "Colons: semicolons; full-width：； tildes~～ dashes— dots·・ quotes「」《》",
+   "  Spaces　around\u001c\u001f",
+   "你好，世界！今天是二零二四年十月二十九日，温度是百分之二十五点五。",
+   "电话：零五九五二三八六五五九六或手机八六一九八五九二一三九五九。金额：十二块五，三十四点五元。",
+   "我有二十五个苹果和三人，分数：四分之三，编号：三一五二零一八一一五四四一八。",
+   "共有两万人参加，两百多人和三点五抽，一千九百九十九人。",
+   "Mixed 中文 and English, with numbers 一百二十三 and 四点五六, plus O2O and B2C.",
+   "A very long sentence without any punctuation that keeps going and going so that the splitter has to fall back to spaces and then even further it has to break words byeverypossiblemeansbecausethereisnospaceleftinthisverylongwordthatgoesonandon",
+   "日本語の文です。これはテストです！本当ですか？"
+  ]
+ },
+ "v15": {
+  "clean": [
+   "Hello, world!",
+   "This is a test sentence. This is another test sentence. And a third one.",
+   "a,aaaaaa3.14",
+   "",
+   "a",
+   "This is a test sentence with only commas, and no dots, and no exclamation marks, and no question marks, and no newlines.",
+   "This is a test sentence This is a test sentence This is a test sentence. This is a test sentence, This is a test sentence, This is a test sentence.",
+   "这是一段很长的中文文本,而且没有句号,也没有感叹号,也没有问号,也没有换行符。",
+   "It's 'quoted' and “double”… (with brackets) [and more] 【】（x）",
+   "Wait... what, really?! Yes!!! 3.14159 is pi, 2.5 is not.",
+   "Emoji  here  and flags  and a clef 𝄞 stays.",
+   "Line one\nline two\r\nline three four",
+   "Colons: semicolons; full-width：； tildes~～ dashes— dots·・ quotes「」《》",
+   "Spaces　around",
+   "你好，世界！今天是2024年10月29日，温度是25.5%。",
+   "电话：0595-23865596或手机+86 19859213959。金额：12块5，34.5元。",
+   "我有25个苹果和3人，分数：3/4，编号：31520181154418。",
+   "共有20000人参加，200多人和3.5抽，1999人。",
+   "Mixed 中文 and English, with numbers 123 and 4.56, plus O2O and B2C.",
+   "A very long sentence without any punctuation that keeps going and going so that the splitter has to fall back to spaces and then even further it has to break words byeverypossiblemeansbecausethereisnospaceleftinthisverylongwordthatgoesonandon",
+   "日本語の文です。これはテストです！本当ですか？"
+  ],
+  "split": {
+   "10": [
+    [
+     "Hello,",
+     "world!"
+    ],
+    [
+     "This is a",
+     "test",
+     "sentence.",
+     "This is",
+     "another",
+     "test",
+     "sentence.",
+     "And a",
+     "third one."
+    ],
+    [
+     "a,",
+     "aaaaaa3.14"
+    ],
+    [],
+    [
+     "a"
+    ],
+    [
+     "This is a",
+     "test",
+     "sentence",
+     "with only",
+     "commas,",
+     "and no",
+     "dots, and",
+     "no",
+     "exclamatio",
+     "n marks,",
+     "and no",
+     "question",
+     "marks,",
+     "and no",
+     "newlines."
+    ],
+    [
+     "This is a",
+     "test",
+     "sentence",
+     "This is a",
+     "test",
+     "sentence",
+     "This is a",
+     "test",
+     "sentence.",
+     "This is a",
+     "test",
+     "sentence,",
+     "This is a",
+     "test",
+     "sentence,",
+     "This is a",
+     "test",
+     "sentence."
+    ],
+    [
+     "这是一段",
+     "很长的中",
+     "文文本,",
+     "而且没有",
+     "句号,",
+     "也没有感",
+     "叹号,",
+     "也没有问",
+     "号,",
+     "也没有换",
+     "行符。"
+    ],
+    [
+     "It's",
+     "'quoted'",
+     "and",
+     "“double”",
+     "… (with",
+     "brackets)",
+     "[and",
+     "more]",
+     "【】（x",
+     "）"
+    ],
+    [
+     "Wait...",
+     "what,",
+     "really?!",
+     "Yes!!!",
+     "3.14159",
+     "is pi,",
+     "2.5 is",
+     "not."
+    ],
+    [
+     "Emoji",
+     "here  and",
+     "flags",
+     "and a",
+     "clef 𝄞",
+     "stays."
+    ],
+    [
+     "Line",
+     "one\nline",
+     "two\r\nline",
+     "three fo",
+     "ur"
+    ],
+    [
+     "Colons:",
+     "semicolons",
+     "full-width",
+     "：；",
+     "tildes~～",
+     "dashes—",
+     "dots·・",
+     "quotes「」",
+     "《》"
+    ],
+    [
+     "Spaces　a",
+     "round"
+    ],
+    [
+     "你好，",
+     "世界！",
+     "今天是2",
+     "024年10月",
+     "29日，",
+     "温度是2",
+     "5.5%。"
+    ],
+    [
+     "电话：0",
+     "595-238655",
+     "96或手机",
+     "+86",
+     "1985921395",
+     "9。",
+     "金额：1",
+     "2块5，",
+     "34.5元。"
+    ],
+    [
+     "我有25个",
+     "苹果和3",
+     "人，",
+     "分数：3",
+     "/4，",
+     "编号：3",
+     "1520181154",
+     "418。"
+    ],
+    [
+     "共有2000",
+     "0人参加",
+     "，",
+     "200多人和",
+     "3.5抽，",
+     "1999人。"
+    ],
+    [
+     "Mixed",
+     "中文",
+     "and",
+     "English,",
+     "with",
+     "numbers",
+     "123 and",
+     "4.56,",
+     "plus O2O",
+     "and B2C."
+    ],
+    [
+     "A very",
+     "long",
+     "sentence",
+     "without",
+     "any",
+     "punctuatio",
+     "n that",
+     "keeps",
+     "going and",
+     "going so",
+     "that the",
+     "splitter",
+     "has to",
+     "fall back",
+     "to spaces",
+     "and then",
+     "even",
+     "further",
+     "it has to",
+     "break",
+     "words",
+     "byeverypos",
+     "siblemeans",
+     "becausethe",
+     "reisnospac",
+     "eleftinthi",
+     "sverylongw",
+     "ordthatgoe",
+     "sonandon"
+    ],
+    [
+     "日本語の",
+     "文です。",
+     "これはテ",
+     "ストです",
+     "！",
+     "本当です",
+     "か？"
+    ]
+   ],
+   "50": [
+    [
+     "Hello, world!"
+    ],
+    [
+     "This is a test sentence.",
+     "This is another test sentence. And a third one."
+    ],
+    [
+     "a,aaaaaa3.14"
+    ],
+    [],
+    [
+     "a"
+    ],
+    [
+     "This is a test sentence with only commas,",
+     "and no dots, and no exclamation marks,",
+     "and no question marks, and no newlines."
+    ],
+    [
+     "This is a test sentence This is a test sentence",
+     "This is a test sentence. This is a test sentence,",
+     "This is a test sentence, This is a test sentence."
+    ],
+    [
+     "这是一段很长的中文文本,",
+     "而且没有句号,也没有感叹号,",
+     "也没有问号,也没有换行符。"
+    ],
+    [
+     "It's 'quoted' and “double”… (with brackets)",
+     "[and more] 【】（x）"
+    ],
+    [
+     "Wait... what, really?! Yes!!!",
+     "3.14159 is pi, 2.5 is not."
+    ],
+    [
+     "Emoji  here  and flags  and a clef 𝄞 stays."
+    ],
+    [
+     "Line one\nline two\r\nline three four"
+    ],
+    [
+     "Colons: semicolons; full-width：； tildes~～",
+     "dashes— dots·・ quotes「」《》"
+    ],
+    [
+     "Spaces　around"
+    ],
+    [
+     "你好，世界！",
+     "今天是2024年10月29日，温度是25.5%。"
+    ],
+    [
+     "电话：0595-23865596或手机+86 19859213959。",
+     "金额：12块5，34.5元。"
+    ],
+    [
+     "我有25个苹果和3人，分数：3/4，",
+     "编号：31520181154418。"
+    ],
+    [
+     "共有20000人参加，200多人和3.5抽，",
+     "1999人。"
+    ],
+    [
+     "Mixed 中文 and English,",
+     "with numbers 123 and 4.56, plus O2O and B2C."
+    ],
+    [
+     "A very long sentence without any punctuation that",
+     "keeps going and going so that the splitter has to",
+     "fall back to spaces and then even further it has",
+     "to break words",
+     "byeverypossiblemeansbecausethereisnospaceleftinthi",
+     "sverylongwordthatgoesonandon"
+    ],
+    [
+     "日本語の文です。",
+     "これはテストです！本当ですか？"
+    ]
+   ],
+   "200": [
+    [
+     "Hello, world!"
+    ],
+    [
+     "This is a test sentence. This is another test sentence. And a third one."
+    ],
+    [
+     "a,aaaaaa3.14"
+    ],
+    [],
+    [
+     "a"
+    ],
+    [
+     "This is a test sentence with only commas, and no dots, and no exclamation marks, and no question marks, and no newlines."
+    ],
+    [
+     "This is a test sentence This is a test sentence This is a test sentence. This is a test sentence, This is a test sentence, This is a test sentence."
+    ],
+    [
+     "这是一段很长的中文文本,而且没有句号,也没有感叹号,也没有问号,也没有换行符。"
+    ],
+    [
+     "It's 'quoted' and “double”… (with brackets) [and more] 【】（x）"
+    ],
+    [
+     "Wait... what, really?! Yes!!! 3.14159 is pi, 2.5 is not."
+    ],
+    [
+     "Emoji  here  and flags  and a clef 𝄞 stays."
+    ],
+    [
+     "Line one\nline two\r\nline three four"
+    ],
+    [
+     "Colons: semicolons; full-width：； tildes~～ dashes— dots·・ quotes「」《》"
+    ],
+    [
+     "Spaces　around"
+    ],
+    [
+     "你好，世界！今天是2024年10月29日，温度是25.5%。"
+    ],
+    [
+     "电话：0595-23865596或手机+86 19859213959。金额：12块5，34.5元。"
+    ],
+    [
+     "我有25个苹果和3人，分数：3/4，编号：31520181154418。"
+    ],
+    [
+     "共有20000人参加，200多人和3.5抽，1999人。"
+    ],
+    [
+     "Mixed 中文 and English, with numbers 123 and 4.56, plus O2O and B2C."
+    ],
+    [
+     "A very long sentence without any punctuation that keeps going and going so that the splitter has to fall back to spaces and then even further it has to break words",
+     "byeverypossiblemeansbecausethereisnospaceleftinthisverylongwordthatgoesonandon"
+    ],
+    [
+     "日本語の文です。これはテストです！本当ですか？"
+    ]
+   ]
+  }
+ }
+}

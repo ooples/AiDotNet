@@ -249,4 +249,36 @@ public abstract partial class VideoSuperResolutionBase<T> : VideoNeuralNetworkBa
     {
         return Upscale(input);
     }
+
+    private System.Random? _trainingClipRandom;
+
+    /// <summary>
+    /// Cuts a training pair to the <see cref="VideoNeuralNetworkBase{T}.NumFrames"/>-frame clip the papers train on.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The recurrent VSR recipes (BasicSR's REDS and Vimeo-90K recurrent datasets, which BasicVSR, IconVSR, RVRT,
+    /// PSRT and the real-world successors all train with) draw <c>num_frame</c> consecutive frames from a random
+    /// start in each sequence. A longer sequence handed to training is therefore cut to one such clip, the same
+    /// window from the low-resolution input and the high-resolution target; a sequence no longer than the clip is
+    /// trained on whole. The start comes from a generator seeded by the architecture's seed and used for nothing
+    /// else, so identically seeded models draw identical clips.
+    /// </para>
+    /// <para>
+    /// The frame axis is 0 for a [T, C, H, W] sequence and 1 for a [N, T, C, H, W] batch. A pair whose target does
+    /// not carry the input's frame count (a model that predicts fewer frames than it reads) is returned unchanged.
+    /// </para>
+    /// </remarks>
+    private protected (Tensor<T> Input, Tensor<T> Target) TrainingClip(Tensor<T> input, Tensor<T> target)
+    {
+        if (input is null) throw new System.ArgumentNullException(nameof(input));
+        if (target is null) throw new System.ArgumentNullException(nameof(target));
+        int axis = input.Rank == 5 ? 1 : input.Rank == 4 ? 0 : -1;
+        if (axis < 0 || target.Rank != input.Rank || NumFrames < 1) return (input, target);
+        int frames = input.Shape[axis];
+        if (frames <= NumFrames || target.Shape[axis] != frames) return (input, target);
+        _trainingClipRandom ??= AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(Architecture?.RandomSeed ?? 0);
+        int start = _trainingClipRandom.Next(frames - NumFrames + 1);
+        return (Engine.TensorNarrow(input, axis, start, NumFrames), Engine.TensorNarrow(target, axis, start, NumFrames));
+    }
 }

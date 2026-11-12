@@ -51,6 +51,8 @@ public abstract class VideoHyperparameterOptions : ModelHyperparameterOptions
     /// stack of frames — commonly 8 or 16 — so they can tell a person sitting down from a
     /// person standing up.</para>
     /// </remarks>
+    [AiDotNet.Attributes.OptionBehaviourExempt("The clip length is the architecture's declared InputFrames whenever it declares one; NumFrames sets it only for an architecture without a frame count, and a conflicting value is rejected.", ModelType = typeof(AiDotNet.Video.ActionRecognition.TimeSformer<>))]
+    [AiDotNet.Attributes.OptionBehaviourExempt("The clip length is the architecture's declared InputFrames whenever it declares one; NumFrames sets it only for an architecture without a frame count, and a conflicting value is rejected.", ModelType = typeof(AiDotNet.Video.ActionRecognition.VideoMAE<>))]
     public int NumFrames { get; set; }
 
     /// <summary>

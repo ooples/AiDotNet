@@ -271,7 +271,8 @@ public abstract class ReinforcementLearningTestBase<T>
         // action-width: ValidateTransitionShape rejects a mis-sized action just as it does a state.
         var target = new Vector<T>(EffectiveActionDim);
         for (int i = 0; i < target.Length; i++) target[i] = ToT(0.5);
-        model.Train(state, target);
+        // An agent the single-transition adapter cannot train (QMIX consumes joint transitions) acts untrained.
+        if (TrainsViaSingleTransitionAdapter) model.Train(state, target);
 
         var action = model.Predict(state);
         Assert.True(action.Length > 0, "RL agent produced empty action.");
@@ -304,7 +305,7 @@ public abstract class ReinforcementLearningTestBase<T>
     /// different action" invariant does not apply by the algorithm's design:
     /// non-contextual k-armed bandits (UCB / ε-greedy / Thompson / gradient —
     /// they pick by arm statistics, not state); tabular DP returning the default
-    /// action for unobserved states (Policy/ModifiedPolicy Iteration, Sutton &
+    /// action for unobserved states (Policy/ModifiedPolicy Iteration, Sutton &amp;
     /// Barto 2018 §4.3); actor-critic policy-gradient methods whose untrained
     /// policy is ~uniform and whose on-policy trajectory update the single-
     /// transition supervised adapter cannot drive (A2C / PPO / TRPO); on-policy
@@ -392,7 +393,7 @@ public abstract class ReinforcementLearningTestBase<T>
     /// learning rule needs an input this harness does not provide. The parameter-change
     /// invariant then does not apply by the algorithm's design. Examples:
     /// multi-agent QMIX (Train consumes a joint observation across all agents, not a
-    /// single agent's state) and TRPO (Sutton & Barto 2018 §13; Schulman et al. 2015 —
+    /// single agent's state) and TRPO (Sutton &amp; Barto 2018 §13; Schulman et al. 2015 —
     /// its KL-constrained trust-region step is computed over whole on-policy trajectories
     /// with advantages, so a stream of isolated terminal transitions yields ~zero update).
     /// </summary>
@@ -1127,7 +1128,7 @@ public abstract class ReinforcementLearningTestBase<T>
         using var model = CreateModel();
         var state = CreateRandomState(rng);
         var target = new Vector<T>(EffectiveActionDim);
-        model.Train(state, target);
+        if (TrainsViaSingleTransitionAdapter) model.Train(state, target);
         Assert.NotNull(model.GetModelMetadata());
     }
 
@@ -1172,7 +1173,7 @@ public abstract class ReinforcementLearningTestBase<T>
             $"disagrees with ParameterCount ({parameterizable.ParameterCount}). Callers pair these " +
             "by length, so a mismatch means a saved parameter vector restores into the wrong slots.");
 
-        model.Train(CreateRandomState(rng), new Vector<T>(EffectiveActionDim));
+        if (TrainsViaSingleTransitionAdapter) model.Train(CreateRandomState(rng), new Vector<T>(EffectiveActionDim));
 
         Assert.True(parameterizable.GetParameters().Length > 0,
             "After training, the agent should expose the parameters it learned.");
@@ -1368,13 +1369,37 @@ public abstract class ReinforcementLearningTestBase<T>
             options =>
             {
                 TryLowerInt(options, "WarmupSteps", 2);
-                TryLowerInt(options, "BatchSize", 8);
+                // A batch of eight masks every warmup candidate around two: neither agent can update yet.
+                TryLowerInt(options, "BatchSize", option == "WarmupSteps" ? 1 : 8);
+                if (options is AiDotNet.Models.Options.QMIXOptions<T> qmixOptions)
+                {
+                    // QMIX batches complete episodes, not transitions: this probe stores four episodes.
+                    TryLowerInt(options, "BatchSize", 2);
+                    if (option == "HypernetEmbed")
+                        options.GetType().GetProperty("HypernetLayers")!.SetValue(qmixOptions, 2);
+                }
+
                 // Dreamer trains on min(BatchLength, longest stored run) steps; the loop above ends an episode
                 // every 16 steps, so the paper's 50 and every candidate near it clamped to 16 and measured
                 // Insensitive. Below the episode length the perturbation reaches the sequence it sizes.
                 TryLowerInt(options, "BatchLength", 8);
+
+                // TRPO's backtracking shrinks the step only after the full natural-gradient step is rejected, and on
+                // this two-state bandit the full step clears the default 0.1 accept ratio at once. Requiring 90% of
+                // the linear prediction rejects the full step, so line search runs and the shrink factor sets the
+                // step that is accepted.
+                if (option == "LineSearchBacktrackCoeff" && options is AiDotNet.Models.Options.TRPOOptions<T>)
+                    options.GetType().GetProperty("LineSearchAcceptRatio")?.SetValue(options, 0.9);
+
+                // SACAlpha is the fixed temperature (Haarnoja et al. 2018a); with the learned temperature (2018b,
+                // AutoTuneAlpha) it is never read.
+                if (option == "SACAlpha" && options.GetType().GetProperty("AutoTuneAlpha") is { CanWrite: true } autoTune
+                    && autoTune.PropertyType == typeof(bool))
+                    autoTune.SetValue(options, false);
             },
-            model => DescribeAgent(model, battery));
+            model => DescribeAgent(model, battery),
+            controlGroup: option == "WarmupSteps" ? "rl-warmup"
+                : option == "HypernetEmbed" ? "qmix-two-layer-hypernet" : "rl-default");
         OptionSensitivityHarness.AssertChangesObservableBehaviour(GetType(), option, probe);
     }
 
@@ -1470,6 +1495,11 @@ public abstract class ReinforcementLearningTestBase<T>
     private static long ObserveAgent(IFullModel<T, Vector<T>, Vector<T>> model, Vector<T>[] battery)
     {
         var parts = new List<long>();
+        if (model is AiDotNet.ReinforcementLearning.Agents.QMIX.QMIXAgent<T> qmix)
+        {
+            parts.Add(OptionSensitivityHarness.Fingerprint(new[] { qmix.Epsilon }));
+        }
+
         var parameters = ((IParameterizable<T, Vector<T>, Vector<T>>)model).GetParameters();
         parts.Add(OptionSensitivityHarness.Fingerprint(Enumerable.Range(0, parameters.Length).Select(i => ToD(parameters[i]))));
         foreach (var state in battery)

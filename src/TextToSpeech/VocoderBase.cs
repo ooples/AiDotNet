@@ -60,7 +60,8 @@ public abstract class VocoderBase<T> : TtsModelBase<T>, IVocoder<T>, IShapeContr
             && contract[1].Relation.Kind == AxisRelation.Form.Fixed
             && contract[1].Relation.Value == 1
             && contract[2].Axis == TensorAxis.Length
-            && contract[2].Relation.Kind == AxisRelation.Form.Scaled
+            && (contract[2].Relation.Kind == AxisRelation.Form.Scaled
+                || (contract[2].Relation.Kind == AxisRelation.Form.Affine && contract[2].Relation.Value == WaveformLengthOffset))
             && contract[2].Relation.Sources.Count == 1
             && contract[2].Relation.Sources[0] == TensorAxis.Frames
             && contract[2].Relation.Numerator == UpsampleFactor
@@ -139,13 +140,23 @@ public abstract class VocoderBase<T> : TtsModelBase<T>, IVocoder<T>, IShapeContr
     {
         int factor = UpsampleFactor;
         if (inputRank != 3 || factor <= 0) return null;
+        int offset = WaveformLengthOffset;
         return
         [
             new OutputAxisContract(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch)),
             new OutputAxisContract(TensorAxis.Channels, AxisRelation.Fixed(1)),
-            new OutputAxisContract(TensorAxis.Length, AxisRelation.Scaled(TensorAxis.Frames, factor)),
+            new OutputAxisContract(TensorAxis.Length, offset == 0
+                ? AxisRelation.Scaled(TensorAxis.Frames, factor)
+                : AxisRelation.Affine(TensorAxis.Frames, factor, 1, offset)),
         ];
     }
+
+    /// <summary>
+    /// Samples added to <c>Frames · UpsampleFactor</c> in the waveform length (0: the transposed-convolution generators).
+    /// </summary>
+    /// <remarks>A vocoder that ends in a centred inverse STFT (<c>torch.istft(center=True)</c>, as Vocos and APNet do)
+    /// trims n_fft/2 samples at each end and returns <c>(frames − 1) · hop</c>, an offset of <c>−hop</c>.</remarks>
+    protected virtual int WaveformLengthOffset => 0;
 
     /// <inheritdoc />
     public abstract Tensor<T> MelToWaveform(Tensor<T> melSpectrogram);
