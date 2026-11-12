@@ -262,7 +262,7 @@ public class SegmentationInterfaceContractTests : IDisposable
     [Fact(Timeout = 120000)]
     public async Task ODISE_PanopticInterface_SegmentPanoptic()
     {
-        var model = new ODISE<float>(Arch(), new DeterministicTextEncoder<float>(), options: new ODISEOptions { NumClasses = 5, ModelSize = ODISEModelSize.Base });
+        var model = new ODISE<float>(Arch(), new DeterministicTextEncoder<float>(), new DeterministicVisualEncoder<float>(), options: new ODISEOptions { NumClasses = 5, ModelSize = ODISEModelSize.Base });
         var panoptic = (IPanopticSegmentation<float>)model;
         var result = panoptic.SegmentPanoptic(Rand(1, 3, 32, 32));
         Assert.NotNull(result);

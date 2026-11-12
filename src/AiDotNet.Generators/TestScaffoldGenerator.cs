@@ -347,6 +347,10 @@ public partial class TestScaffoldGenerator : IIncrementalGenerator
         "AdversarialImageEvaluator",
         "ODISE",
 
+        // UniverSeg (Butoi et al. 2023) is defined only for a non-empty support set, so it rejects a
+        // prediction before SetSupportSet; its manual scaffold gives every fixture a support set.
+        "UniverSeg",
+
         // GraphCodeBERT (Guo et al. 2021): its parameterless ctor builds the
         // CodeSynthesisArchitecture DEFAULTS — BERT-base scale (6 layers, 512 dim,
         // 512 seq, 50000 vocab). The 512->50000 output projection alone is ~25M

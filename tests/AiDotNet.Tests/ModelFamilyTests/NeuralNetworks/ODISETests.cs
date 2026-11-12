@@ -40,7 +40,7 @@ public class ODISETests : NeuralNetworkModelTestBase<float>
             inputWidth: Width,
             inputDepth: Channels,
             outputSize: NumClasses);
-        return new ODISE<float>(arch, new DeterministicTextEncoder<float>(), options: new ODISEOptions { NumClasses = NumClasses });
+        return new ODISE<float>(arch, new DeterministicTextEncoder<float>(), new DeterministicVisualEncoder<float>(), options: new ODISEOptions { NumClasses = NumClasses });
     }
 
     // Per Xu et al. 2023 §3 ODISE's encoder is the Stable Diffusion U-Net,
