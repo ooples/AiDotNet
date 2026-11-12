@@ -754,7 +754,7 @@ public abstract partial class FinancialModelBase<T> : NeuralNetworkBase<T>, IFin
     /// <param name="tensor">The tensor to read.</param>
     /// <param name="count">How many leading elements to keep; at most <c>tensor.Length</c>.</param>
     /// <returns>A rank-1 tensor of length <paramref name="count"/>.</returns>
-    protected Tensor<T> FlattenPrefix(Tensor<T> tensor, int count)
+    private protected Tensor<T> FlattenPrefix(Tensor<T> tensor, int count)
     {
         var flat = Engine.Reshape(tensor, new[] { tensor.Length });
         return count == tensor.Length ? flat : Engine.TensorSlice(flat, new[] { 0 }, new[] { count });
@@ -767,7 +767,7 @@ public abstract partial class FinancialModelBase<T> : NeuralNetworkBase<T>, IFin
     /// <param name="predictions">Predicted values.</param>
     /// <param name="actuals">Observed values.</param>
     /// <returns>The sum of squared errors, the sum of absolute errors and the number of pairs compared.</returns>
-    protected (T SumSquared, T SumAbsolute, int Count) SumSquaredAndAbsoluteError(Tensor<T> predictions, Tensor<T> actuals)
+    private protected (T SumSquared, T SumAbsolute, int Count) SumSquaredAndAbsoluteError(Tensor<T> predictions, Tensor<T> actuals)
     {
         int count = Math.Min(predictions.Length, actuals.Length);
         if (count <= 0)

@@ -258,8 +258,7 @@ public class GIFTEvalBenchmark<T>
             future.AsSpan().Slice(0, evalLen).CopyTo(actualSlice.Data.Span);
 
             T mase = ComputeMASE(predSlice, actualSlice, context, seasonalPeriod);
-            if (!NumOps.IsInfinity(mase) && !NumOps.IsNaN(mase))
-                maseScores.Add(mase);
+            maseScores.Add(mase);
 
             // Compute CRPS from quantile forecasts (single call with all quantile levels)
             var allQuantileForecast = model.Forecast(context, quantileLevels);
@@ -289,21 +288,34 @@ public class GIFTEvalBenchmark<T>
             }
 
             T crps = ComputeCRPS(quantileDict, actualSlice);
-            if (!NumOps.IsInfinity(crps) && !NumOps.IsNaN(crps))
-                crpsScores.Add(crps);
+            crpsScores.Add(crps);
         }
 
         var results = new Dictionary<string, T>();
-        results["MASE"] = MeanOrNaN(maseScores);
-        results["CRPS"] = MeanOrNaN(crpsScores);
+        var (maseMean, maseFinite) = FiniteMeanOrNaN(maseScores);
+        results["MASE"] = maseMean;
+        results["CRPS"] = FiniteMeanOrNaN(crpsScores).Mean;
         results["NumSeries"] = NumOps.FromDouble(testSeries.Count);
-        results["NumEvaluated"] = NumOps.FromDouble(maseScores.Count);
+        results["NumEvaluated"] = NumOps.FromDouble(maseFinite);
 
         return results;
     }
 
-    private static T MeanOrNaN(List<T> scores)
-        => scores.Count > 0
-            ? Engine.TensorMean(new Tensor<T>(new[] { scores.Count }, new Vector<T>(scores.ToArray())))
-            : NumOps.FromDouble(double.NaN);
+    /// <summary>
+    /// Mean of the finite scores (NaN and infinite ones are skipped) and how many were finite;
+    /// NaN when none are.
+    /// </summary>
+    private static (T Mean, int Finite) FiniteMeanOrNaN(List<T> scores)
+    {
+        if (scores.Count == 0)
+            return (NumOps.FromDouble(double.NaN), 0);
+        var all = new Tensor<T>(new[] { scores.Count }, new Vector<T>(scores.ToArray()));
+        // x - x is 0 exactly when x is finite (NaN and +/-infinity give NaN).
+        var finite = Engine.TensorEquals(Engine.TensorSubtract(all, all), NumOps.Zero);
+        int count = Engine.TensorCountNonzero(finite);
+        if (count == 0)
+            return (NumOps.FromDouble(double.NaN), 0);
+        var kept = Engine.TensorWhere(finite, all, Engine.TensorZerosLike(all));
+        return (NumOps.Divide(Engine.TensorSum(kept), NumOps.FromDouble(count)), count);
+    }
 }

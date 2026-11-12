@@ -362,17 +362,16 @@ public partial class MTGNN<T> : ForecastingModelBase<T>
     {
         // Initialize with small random values: (u - 0.5) * 2 * scale, drawn E1 then E2 for each entry.
         double scale = Math.Sqrt(2.0 / (_numNodes + _nodeEmbeddingDim));
-        var first = new T[_numNodes * _nodeEmbeddingDim];
-        var second = new T[_numNodes * _nodeEmbeddingDim];
-        for (int k = 0; k < first.Length; k++)
-        {
-            first[k] = NumOps.FromDouble((_random.NextDouble() - 0.5) * 2 * scale);
-            second[k] = NumOps.FromDouble((_random.NextDouble() - 0.5) * 2 * scale);
-        }
+        int entries = _numNodes * _nodeEmbeddingDim;
+        var draws = Enumerable.Range(0, 2 * entries)
+            .Select(_ => NumOps.FromDouble((_random.NextDouble() - 0.5) * 2 * scale))
+            .ToArray();
 
+        // Draws alternate E1, E2 per entry: column 0 of the [entries, 2] view is E1, column 1 is E2.
         var shape = new[] { _numNodes, _nodeEmbeddingDim };
-        _nodeEmbedding1 = new Tensor<T>(shape, new Vector<T>(first));
-        _nodeEmbedding2 = new Tensor<T>(shape, new Vector<T>(second));
+        var pairs = new Tensor<T>(new[] { entries, 2 }, new Vector<T>(draws));
+        _nodeEmbedding1 = Engine.Reshape(Engine.TensorNarrow(pairs, 1, 0, 1).Contiguous(), shape);
+        _nodeEmbedding2 = Engine.Reshape(Engine.TensorNarrow(pairs, 1, 1, 1).Contiguous(), shape);
 
         // Compute initial adaptive adjacency
         UpdateAdaptiveAdjacency();
@@ -633,9 +632,9 @@ public partial class MTGNN<T> : ForecastingModelBase<T>
         T gradNorm = NumOps.Sqrt(NumOps.Add(sumSquares, NumOps.FromDouble(1e-8)));
 
         // Simplified update: perturb both embeddings by the same (u - 0.5) * lr / |g| per entry.
-        var draws = new T[_numNodes * _nodeEmbeddingDim];
-        for (int k = 0; k < draws.Length; k++)
-            draws[k] = NumOps.FromDouble(_random.NextDouble() - 0.5);
+        var draws = Enumerable.Range(0, _numNodes * _nodeEmbeddingDim)
+            .Select(_ => NumOps.FromDouble(_random.NextDouble() - 0.5))
+            .ToArray();
         var noise = Engine.TensorDivideScalar(
             Engine.TensorMultiplyScalar(new Tensor<T>(_nodeEmbedding1._shape, new Vector<T>(draws)), NumOps.FromDouble(lr)), gradNorm);
         _nodeEmbedding1 = Engine.TensorAdd(_nodeEmbedding1, noise);
@@ -995,7 +994,7 @@ public partial class MTGNN<T> : ForecastingModelBase<T>
         var outputTensor = results.First().AsTensor<float>();
 
         var outputData = new T[outputTensor.Length];
-        NumOps.FromFloatSpan(outputTensor.ToDenseTensor().Buffer.Span.Slice(0, outputTensor.Length), outputData.AsSpan(0, outputTensor.Length));
+        NumOps.FromFloatSpan(outputTensor.ToDenseTensor().Buffer.Span.Slice(0, (int)outputTensor.Length), outputData.AsSpan(0, (int)outputTensor.Length));
 
         return new Tensor<T>(new[] { _numNodes * _forecastHorizon }, new Vector<T>(outputData));
     }

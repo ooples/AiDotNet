@@ -1121,7 +1121,7 @@ public partial class DCRNN<T> : ForecastingModelBase<T>
 
         var outputShape = outputTensor.Dimensions.ToArray();
         var output = new Tensor<T>(outputShape);
-        NumOps.FromFloatSpan(outputTensor.ToDenseTensor().Buffer.Span.Slice(0, outputTensor.Length), output.Data.Span.Slice(0, outputTensor.Length));
+        NumOps.FromFloatSpan(outputTensor.ToDenseTensor().Buffer.Span.Slice(0, (int)outputTensor.Length), output.Data.Span.Slice(0, (int)outputTensor.Length));
 
         return output;
     }

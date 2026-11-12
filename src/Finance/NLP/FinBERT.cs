@@ -733,7 +733,7 @@ public partial class FinBERT<T> : FinancialNLPModelBase<T>
             throw new InvalidOperationException("ONNX session not initialized.");
 
         // Token ids are integral; convert the whole buffer to the int64 the model expects.
-        var inputData = new Tensor<T>(new[] { input.Data.Length }, input.Data).Cast<long>().ToArray();
+        var inputData = Engine.Reshape(input.Contiguous(), new[] { input.Length }).Cast<long>().ToArray();
 
         var tensorShape = new[] { 1, _maxSequenceLength };
         var inputTensor = new OnnxTensors.DenseTensor<long>(
@@ -781,7 +781,7 @@ public partial class FinBERT<T> : FinancialNLPModelBase<T>
         var outputTensor = results.First().AsTensor<float>();
 
         var outputData = new T[outputTensor.Length];
-        NumOps.FromFloatSpan(outputTensor.ToDenseTensor().Buffer.Span.Slice(0, outputTensor.Length), outputData.AsSpan(0, outputTensor.Length));
+        NumOps.FromFloatSpan(outputTensor.ToDenseTensor().Buffer.Span.Slice(0, (int)outputTensor.Length), outputData.AsSpan(0, (int)outputTensor.Length));
 
         return new Tensor<T>(new[] { _numSentimentClasses }, new Vector<T>(outputData));
     }

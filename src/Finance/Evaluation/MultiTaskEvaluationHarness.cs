@@ -40,6 +40,10 @@ public class MultiTaskEvaluationHarness<T>
         return count == tensor.Length ? flat : Engine.TensorSlice(flat, new[] { 0 }, new[] { count });
     }
 
+    /// <summary>The sum of per-series scalars (zero when there are none).</summary>
+    private static T SumOf(List<T> values)
+        => values.Count == 0 ? NumOps.Zero : Engine.TensorSum(new Tensor<T>(new[] { values.Count }, new Vector<T>(values.ToArray())));
+
     /// <summary>
     /// Evaluates a foundation model's forecasting performance.
     /// </summary>
@@ -121,7 +125,12 @@ public class MultiTaskEvaluationHarness<T>
                 $"testSeries count ({testSeries.Count}) must match groundTruthLabels count ({groundTruthLabels.Count}).",
                 nameof(groundTruthLabels));
 
-        T tp = NumOps.Zero, predictedPositives = NumOps.Zero, actualPositives = NumOps.Zero;
+        // Per-series counts, summed once after the loop.
+        var tpCounts = new List<T>();
+        var predictedCounts = new List<T>();
+        var actualCounts = new List<T>();
+        T binarizationThreshold = NumOps.FromDouble(threshold ?? 0.5);
+        T labelThreshold = NumOps.FromDouble(0.5);
 
         for (int s = 0; s < testSeries.Count; s++)
         {
@@ -130,21 +139,21 @@ public class MultiTaskEvaluationHarness<T>
             var labels = groundTruthLabels[s];
 
             // For binarization: use the explicit threshold if provided,
-            // otherwise use 0.5 to binarize the model's returned scores
-            double binarizationThreshold = threshold ?? 0.5;
-
+            // otherwise use 0.5 to binarize the model's returned scores (hoisted above the loop).
             int evalLen = Math.Min(scores.Length, labels.Length);
 
             if (evalLen <= 0)
                 continue;
 
             // 1 where the score clears the threshold / the label is an anomaly, else 0.
-            var predicted = Engine.TensorGreaterThan(FlatPrefix(scores, evalLen), NumOps.FromDouble(binarizationThreshold));
-            var actual = Engine.TensorGreaterThan(FlatPrefix(labels, evalLen), NumOps.FromDouble(0.5));
-            tp = NumOps.Add(tp, Engine.TensorSum(Engine.TensorMultiply(predicted, actual)));
-            predictedPositives = NumOps.Add(predictedPositives, Engine.TensorSum(predicted));
-            actualPositives = NumOps.Add(actualPositives, Engine.TensorSum(actual));
+            var predicted = Engine.TensorGreaterThan(FlatPrefix(scores, evalLen), binarizationThreshold);
+            var actual = Engine.TensorGreaterThan(FlatPrefix(labels, evalLen), labelThreshold);
+            tpCounts.Add(Engine.TensorSum(Engine.TensorMultiply(predicted, actual)));
+            predictedCounts.Add(Engine.TensorSum(predicted));
+            actualCounts.Add(Engine.TensorSum(actual));
         }
+
+        T tp = SumOf(tpCounts), predictedPositives = SumOf(predictedCounts), actualPositives = SumOf(actualCounts);
 
         T fp = NumOps.Subtract(predictedPositives, tp);
         T fn = NumOps.Subtract(actualPositives, tp);
