@@ -37,9 +37,11 @@ public sealed class LayerInvariantCoverageTests
     public LayerInvariantCoverageTests(ITestOutputHelper output) => _output = output;
 
     /// <summary>
-    /// Layer types with no <see cref="LayerTestBase{T}"/> subclass. Ratchet this DOWN as layers are wired in.
+    /// Layer types with no invariant subclass (<see cref="LayerTestBase{T}"/>, or the dual- and multi-input harnesses for
+    /// layers that take several tensors). Ratchet this DOWN as layers are wired in. Measured at 110 of 401 when the
+    /// multi-input harnesses began to count.
     /// </summary>
-    private const int MaxUncoveredLayers = 119;
+    private const int MaxUncoveredLayers = 110;
 
     [Fact]
     [Trait("category", "integration-configure-method")]
@@ -115,7 +117,10 @@ public sealed class LayerInvariantCoverageTests
     {
         for (var t = type.BaseType; t is not null; t = t.BaseType)
         {
-            if (t.IsGenericType && t.GetGenericTypeDefinition() == typeof(LayerTestBase<>)) return true;
+            // The dual- and multi-input harnesses are the invariant suites for layers whose Forward takes several tensors.
+            if (t.IsGenericType && (t.GetGenericTypeDefinition() == typeof(LayerTestBase<>)
+                || t.GetGenericTypeDefinition() == typeof(Base.DualInputLayerTestBase<>)
+                || t.GetGenericTypeDefinition() == typeof(Base.MultiInputLayerTestBase<>))) return true;
         }
         return false;
     }

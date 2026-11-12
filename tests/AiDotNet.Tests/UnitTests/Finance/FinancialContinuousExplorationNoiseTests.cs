@@ -53,7 +53,11 @@ public sealed class FinancialContinuousExplorationNoiseTests
         double std = Math.Sqrt(Math.Max(0.0, (sumSq / samples) - (mean * mean)));
         double negativeFraction = negatives / (double)samples;
 
-        Assert.True(Math.Abs(mean) < 0.01, $"{kind} exploration noise mean {mean:F4} is biased (expected ~0).");
+        // SAC samples MaxPositionSize * tanh(mu + sigma * eps): centred on the policy in pre-squash space, so the action's
+        // MEDIAN is the greedy action (the negative-fraction check below) while its mean is pulled toward zero by the
+        // squash whenever mu != 0. The mean check applies to additive noise only.
+        if (kind != Sac)
+            Assert.True(Math.Abs(mean) < 0.01, $"{kind} exploration noise mean {mean:F4} is biased (expected ~0).");
         Assert.True(negativeFraction > 0.45 && negativeFraction < 0.55,
             $"{kind} exploration noise is one-sided: {negativeFraction:P1} of draws were negative.");
         Assert.True(std > 0.0, $"{kind} exploration noise has zero spread.");

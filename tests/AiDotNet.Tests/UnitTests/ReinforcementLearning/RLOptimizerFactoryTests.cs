@@ -185,8 +185,8 @@ public class RLOptimizerFactoryTests
             GlobalStateSize = 1,
             BatchSize = 1,
             ReplayBufferSize = 1,
-            AgentHiddenLayers = new List<int> { 4 },
-            MixingHiddenLayers = new List<int> { 4 },
+            RnnHiddenDim = 4,
+            MixingEmbedDim = 4,
             OptimizerFactory = factory,
         };
 
@@ -201,7 +201,7 @@ public class RLOptimizerFactoryTests
                 nextAgentStates: new List<Vector<double>> { State(step + 1, 0), State(step + 1, 1) },
                 globalState: new Vector<double>(new[] { 0.1 * step }),
                 nextGlobalState: new Vector<double>(new[] { 0.1 * (step + 1) }),
-                done: false);
+                done: true);
             agent.Train();
         }
     }

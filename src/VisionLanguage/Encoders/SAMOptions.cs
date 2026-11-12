@@ -32,18 +32,12 @@ public class SAMOptions : VisionEncoderOptions
         OnnxOptions = other.OnnxOptions;
         LearningRate = other.LearningRate;
         WeightDecay = other.WeightDecay;
-        MaxPointsPerPrompt = other.MaxPointsPerPrompt;
         MaskDecoderDim = other.MaskDecoderDim;
         NumMaskDecoderLayers = other.NumMaskDecoderLayers;
         NumMultimaskOutputs = other.NumMultimaskOutputs;
         UseRelativePositionalEncoding = other.UseRelativePositionalEncoding;
         WindowSize = other.WindowSize;
     }
-
-    /// <summary>
-    /// Gets or sets the maximum number of points per prompt.
-    /// </summary>
-    public int MaxPointsPerPrompt { get; set; } = 16;
 
     /// <summary>
     /// Gets or sets the mask decoder embedding dimension.

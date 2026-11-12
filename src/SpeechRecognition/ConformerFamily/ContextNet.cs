@@ -71,6 +71,7 @@ public partial class ContextNet<T> : AudioNeuralNetworkBase<T>, ISpeechRecognize
         _useNativeMode = false;
         base.SampleRate = _options.SampleRate;
         base.NumMels = _options.NumMels;
+        MelSpec = CreateMelSpectrogram(_options.SampleRate, _options.NumMels);
         if (string.IsNullOrWhiteSpace(modelPath)) throw new ArgumentException("Model path required.", nameof(modelPath));
         if (!File.Exists(modelPath)) throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath);
         // Validated after the path checks so a missing model file reports itself
@@ -104,6 +105,7 @@ public partial class ContextNet<T> : AudioNeuralNetworkBase<T>, ISpeechRecognize
                 { EnableGradientClipping = true, MaxGradientNorm = 1.0 }));
         base.SampleRate = _options.SampleRate;
         base.NumMels = _options.NumMels;
+        MelSpec = CreateMelSpectrogram(_options.SampleRate, _options.NumMels);
         SupportedLanguages = new[] { _options.Language };
         InitializeLayers();
     }
@@ -118,7 +120,22 @@ public partial class ContextNet<T> : AudioNeuralNetworkBase<T>, ISpeechRecognize
     {
         ThrowIfDisposed();
         var features = PreprocessAudio(audio);
-        var logits = IsOnnxMode && OnnxEncoder is not null ? OnnxEncoder.Run(features) : Predict(features);
+        Tensor<T> logits;
+        if (IsOnnxMode && OnnxEncoder is not null)
+        {
+            logits = OnnxEncoder.Run(features);
+        }
+        else
+        {
+            // The mel frontend emits [time, mel]; ContextNet convolutions consume [batch, mel, time].
+            var channelsFirst = new Tensor<T>(new[] { 1, features.Shape[1], features.Shape[0] });
+            for (int frame = 0; frame < features.Shape[0]; frame++)
+                for (int mel = 0; mel < features.Shape[1]; mel++)
+                    channelsFirst[0, mel, frame] = features[frame, mel];
+            logits = Predict(channelsFirst);
+            // The vocabulary head emits [1, time, vocabulary]; CTC decodes one utterance.
+            logits = Engine.Reshape(logits, new[] { logits.Shape[1], logits.Shape[2] });
+        }
         var (tokens, confidence) = CTCGreedyDecodeWithConfidence(logits); var text = TokensToText(tokens);
         double duration = audio.Length > 0 ? (double)audio.Shape[0] / SampleRate : 0;
         if (ResolveReturnTimestamps(includeTimestamps)) throw new NotSupportedException("Word-level timestamps are not supported for ContextNet.");
