@@ -4,6 +4,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Gpu;
+using AiDotNet.Tensors.Engines.Autodiff;
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
@@ -273,6 +274,12 @@ public partial class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLaye
     /// </para>
     /// </remarks>
     private int[,]? _lastTopKIndices;
+
+    /// <summary>
+    /// The 0/1 top-K selection mask [batch, numExperts] from the most recent forward pass.
+    /// </summary>
+    [Scratch]
+    private Tensor<T>? _lastTopKMask;
 
     /// <summary>
     /// Stores the original input shape for any-rank tensor support.
@@ -665,16 +672,14 @@ public partial class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLaye
             var onePlusExp = Engine.TensorAddScalar(expLogits, NumOps.One);
             var noiseScale = Engine.TensorLog(onePlusExp);
 
-            // Standard normal noise via Box-Muller
-            var noiseData = new T[routingLogits.Length];
-            var rng = RandomHelper.CreateSeededRandom(42);
-            for (int i = 0; i < noiseData.Length; i++)
+            // Standard normal noise, freshly drawn every training forward from the layer's RNG stream.
+            // A Random re-seeded with 42 on every call made the "noise" the same tensor at every step,
+            // a fixed bias rather than the exploration noise of Shazeer et al. 2017 §3.2.
+            Tensor<T> noise;
+            using (new NoGradScope<T>())
             {
-                double u1 = 1.0 - rng.NextDouble();
-                double u2 = rng.NextDouble();
-                noiseData[i] = NumOps.FromDouble(Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2));
+                noise = Engine.TensorRandnLike(routingLogits, Random.Next());
             }
-            var noise = new Tensor<T>(routingLogits._shape, new Vector<T>(noiseData));
             routingLogits = Engine.TensorAdd(routingLogits, Engine.TensorMultiply(noise, noiseScale));
         }
 
@@ -689,6 +694,7 @@ public partial class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLaye
         else
         {
             _lastTopKIndices = null;
+            _lastTopKMask = null;
         }
 
         _lastRoutingWeights = routingWeights;
@@ -843,6 +849,7 @@ public partial class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLaye
         _lastRoutingWeights = null;
         _lastPreActivation = null;
         _lastTopKIndices = null;
+        _lastTopKMask = null;
         _originalInputShape = null;
 
         // Reset router state
@@ -1076,47 +1083,33 @@ public partial class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLaye
         int batchSize = _lastInput.Shape[0];
         int numExperts = _experts.Count;
 
-        // Compute per-expert statistics
-        var tokenCounts = new T[numExperts];
-        var probabilityMass = new T[numExperts];
-        var avgWeights = new T[numExperts];
+        // Compute per-expert statistics as whole-tensor reductions over the batch axis.
+        var weights = _lastRoutingWeights;
+        Tensor<T> tokenCountTensor, probMassTensor, avgWeightTensor;
+        using (new NoGradScope<T>())
+        {
+            // Token assignment: the top-K mask, or weight > 0.01 for dense routing.
+            var activeMask = _topK > 0 && _lastTopKMask != null
+                ? _lastTopKMask
+                : Engine.TensorGreaterThan(weights, NumOps.FromDouble(0.01));
+            tokenCountTensor = Engine.ReduceSum(activeMask, new[] { 0 });
+            probMassTensor = Engine.ReduceSum(weights, new[] { 0 });
+            var weightSum = Engine.ReduceSum(Engine.TensorMultiply(weights, activeMask), new[] { 0 });
+            var anyActive = Engine.TensorGreaterThan(tokenCountTensor, NumOps.Zero);
+            var safeCount = Engine.TensorWhere(anyActive, tokenCountTensor, Engine.TensorAddScalar(tokenCountTensor, NumOps.One));
+            avgWeightTensor = Engine.TensorWhere(anyActive, Engine.TensorDivide(weightSum, safeCount), Engine.TensorMultiplyScalar(weightSum, NumOps.Zero));
+        }
+
+        // Formatting needs the individual values; take them out in bulk once.
+        var tokenCounts = tokenCountTensor.Contiguous().AsSpan().ToArray();
+        var probabilityMass = probMassTensor.Contiguous().AsSpan().ToArray();
+        var avgWeights = avgWeightTensor.Contiguous().AsSpan().ToArray();
 
         for (int i = 0; i < numExperts; i++)
         {
-            T tokenCount = NumOps.Zero;
-            T probMass = NumOps.Zero;
-            T weightSum = NumOps.Zero;
-            T activeCount = NumOps.Zero;
-
-            for (int b = 0; b < batchSize; b++)
-            {
-                var weight = _lastRoutingWeights[b, i];
-
-                // Count token assignment
-                bool isActive = _topK > 0
-                    ? IsExpertActive(b, i)
-                    : NumOps.GreaterThan(weight, NumOps.FromDouble(0.01));
-
-                if (isActive)
-                {
-                    tokenCount = NumOps.Add(tokenCount, NumOps.One);
-                    activeCount = NumOps.Add(activeCount, NumOps.One);
-                    weightSum = NumOps.Add(weightSum, weight);
-                }
-
-                // Accumulate probability mass
-                probMass = NumOps.Add(probMass, weight);
-            }
-
-            tokenCounts[i] = tokenCount;
-            probabilityMass[i] = probMass;
-            avgWeights[i] = NumOps.GreaterThan(activeCount, NumOps.Zero)
-                ? NumOps.Divide(weightSum, activeCount)
-                : NumOps.Zero;
-
             // Add to diagnostics
-            diagnostics[$"expert_{i}_tokens"] = Convert.ToDouble(tokenCount).ToString("F0");
-            diagnostics[$"expert_{i}_prob_mass"] = Convert.ToDouble(probMass).ToString("F4");
+            diagnostics[$"expert_{i}_tokens"] = Convert.ToDouble(tokenCounts[i]).ToString("F0");
+            diagnostics[$"expert_{i}_prob_mass"] = Convert.ToDouble(probabilityMass[i]).ToString("F4");
             diagnostics[$"expert_{i}_avg_weight"] = Convert.ToDouble(avgWeights[i]).ToString("F4");
         }
 
@@ -1138,14 +1131,9 @@ public partial class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLaye
         T variance = NumOps.Divide(Engine.Sum(diffsSquared), NumOps.FromDouble(numExperts));
         diagnostics["usage_variance"] = Convert.ToDouble(variance).ToString("F6");
 
-        // Compute max/min ratio (diagnostics - use indexed access)
-        T maxTokens = tokenCounts[0];
-        T minTokens = tokenCounts[0];
-        for (int i = 1; i < numExperts; i++)
-        {
-            if (NumOps.GreaterThan(tokenCounts[i], maxTokens)) maxTokens = tokenCounts[i];
-            if (NumOps.LessThan(tokenCounts[i], minTokens)) minTokens = tokenCounts[i];
-        }
+        // Compute max/min ratio
+        T maxTokens = Engine.TensorMaxValue(tokenCountTensor);
+        T minTokens = Engine.TensorMinValue(tokenCountTensor);
 
         T maxMinRatio = NumOps.GreaterThan(minTokens, NumOps.Zero)
             ? NumOps.Divide(maxTokens, minTokens)
@@ -1282,17 +1270,13 @@ public partial class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLaye
         // Gradients flow through the mask×weight product to the softmax weights for selected experts;
         // non-selected experts receive zero gradient. This is not a straight-through estimator
         // (which would use hard - soft.detach() + soft), but standard sparse gating per Shazeer et al.
-        // NOTE: The O(batchSize×k) scalar loop is intentional — TensorScatter is non-differentiable
-        // in the Tensors OpRegistry, so we must use this approach for gradient flow.
-        var mask = new Tensor<T>(weights._shape);
-        mask.Fill(NumOps.Zero);
-        for (int b = 0; b < batchSize; b++)
+        // The mask is the one-hot encoding of the K distinct indices summed over K, built off the tape.
+        Tensor<T> mask;
+        using (new NoGradScope<T>())
         {
-            for (int i = 0; i < k; i++)
-            {
-                mask[b, topKIndicesTensor[b, i]] = NumOps.One;
-            }
+            mask = Engine.ReduceSum(Engine.TensorOneHot<T>(topKIndicesTensor, numExperts), new[] { 1 }); // [batchSize, numExperts]
         }
+        _lastTopKMask = mask;
 
         // Step 3: Multiply original weights by mask using tape-tracked Engine operation
         var maskedWeights = Engine.TensorMultiply(weights, mask); // [batchSize, numExperts]
@@ -1302,15 +1286,10 @@ public partial class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLaye
         var safeSumPerRow = Engine.TensorAddScalar(sumPerRow, NumOps.FromDouble(1e-10));
         var sparseWeights = Engine.TensorDivide(maskedWeights, safeSumPerRow); // [batchSize, numExperts]
 
-        // Convert topKIndicesTensor to int[,] for backward compatibility
+        // Copy the indices into int[,] for the IsExpertActive bookkeeping (bulk copy, no arithmetic).
         var topKIndices = new int[batchSize, k];
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int i = 0; i < k; i++)
-            {
-                topKIndices[b, i] = topKIndicesTensor[b, i];
-            }
-        }
+        var flatIndices = topKIndicesTensor.Contiguous().AsSpan().ToArray();
+        Buffer.BlockCopy(flatIndices, 0, topKIndices, 0, batchSize * k * sizeof(int));
 
         return (sparseWeights, topKIndices);
     }
@@ -1660,35 +1639,6 @@ public partial class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLaye
 #endregion
 #region GPU Execution
 
-    /// <summary>
-    /// Divides tensor A by broadcast of tensor B along axis 1.
-    /// A: [batchSize, features], B: [batchSize, 1] -> Result: A[i,j] / B[i,0]
-    /// </summary>
-    private Tensor<T> DivideByBroadcastGpuHelper(DirectGpuTensorEngine gpuEngine, Tensor<T> a, Tensor<T> b)
-    {
-        // For normalization: a / b where b is [batchSize, 1]
-        // We can compute 1/b then multiply
-        // But we need an inverse operation. For now, download, compute, upload
-        // TODO: Add InverseGpu or DivideGpu to DirectGpuTensorEngine
-        var aData = a;
-        var bData = b;
-
-        int batchSize = aData.Shape[0];
-        int features = aData.Shape[1];
-
-        var result = TensorAllocator.Rent<T>(aData._shape);
-        for (int i = 0; i < batchSize; i++)
-        {
-            T divisor = bData[i, 0];
-            T safeDivisor = NumOps.GreaterThan(divisor, NumOps.Zero) ? divisor : NumOps.One;
-            for (int j = 0; j < features; j++)
-            {
-                result[i, j] = NumOps.Divide(aData[i, j], safeDivisor);
-            }
-        }
-
-        return gpuEngine.UploadToGpu(result, GpuTensorRole.Activation);
-    }
     #endregion
 
 }
