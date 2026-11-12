@@ -668,7 +668,33 @@ public abstract partial class TtsModelBase<T> : NeuralNetworkBase<T>, IShapeCont
         return Engine.TensorArgMax(Engine.TensorMultiply(isMax, reverseIndex), 0).ToArray()[0];
     }
 
+    /// <summary>Level-major codec codes <c>[levels, frames]</c> (the first <paramref name="levels"/> levels) as a
+    /// frame-major tensor <c>[frames, levels]</c> of T.</summary>
+    protected static Tensor<T> FrameMajorCodes(int[,] codes, int levels)
+    {
+        Guard.NotNull(codes);
+        int frames = codes.GetLength(1);
+        var flat = new int[frames * levels];
+        for (int f = 0; f < frames; f++)
+            for (int q = 0; q < levels; q++) flat[f * levels + q] = codes[q, f];
+        return new Tensor<int>(flat, new[] { frames, levels }).Cast<T>();
+    }
+
+    /// <summary>Frame-major codec tokens <c>[frames, levels]</c> carried in T, rounded half to even, as level-major
+    /// codes <c>[levels, frames]</c>.</summary>
+    protected int[,] LevelMajorCodes(Tensor<T> tokens)
+    {
+        Guard.NotNull(tokens);
+        int frames = tokens.Shape[0], levels = tokens.Shape[1];
+        var flat = RoundedIds(tokens);
+        var codes = new int[levels, frames];
+        for (int f = 0; f < frames; f++)
+            for (int q = 0; q < levels; q++) codes[q, f] = flat[f * levels + q];
+        return codes;
+    }
+
     /// <summary>Row <paramref name="index"/> of a <c>[batch, n]</c> tensor
+
 , as a <c>[n]</c> tensor.</summary>
     protected Tensor<T> BatchRow(Tensor<T> batch, int index)
     {

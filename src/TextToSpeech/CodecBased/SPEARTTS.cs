@@ -371,10 +371,7 @@ public partial class SPEARTTS<T> : TtsModelBase<T>, ICodecTts<T>
         var ids = EncodePhonemes(EnglishG2P.Default.Phonemize(text));
         if (ids.Length == 0) throw new ArgumentException("The text has no pronounceable content.", nameof(text));
         int length = Math.Min(ids.Length, _options.MaxTextLength - 1);
-        var tokens = new Tensor<T>(new[] { length + 1 });
-        for (int i = 0; i < length; i++) tokens[i] = NumOps.FromDouble(ids[i]);
-        tokens[length] = NumOps.FromDouble(EndToken);
-        return tokens;
+        return IdTensor(ids.Take(length).Concat(new[] { EndToken }).ToArray());
     }
 
     /// <summary>A voice for <see cref="TtsModelBase{T}.Voice"/>: a recording of the speaker, of which the first
@@ -384,14 +381,11 @@ public partial class SPEARTTS<T> : TtsModelBase<T>, ICodecTts<T>
     {
         if (recording is null) throw new ArgumentNullException(nameof(recording));
         int samples = Math.Min(recording.Length, (int)Math.Round(_options.PromptSeconds * _options.SampleRate));
-        var prompt = new Tensor<T>(new[] { samples });
-        for (int i = 0; i < samples; i++) prompt[i] = recording[i];
+        var prompt = Engine.TensorSlice(Engine.Reshape(recording, new[] { recording.Length }), new[] { 0 }, new[] { samples }).Clone();
         var tokens = semanticTokens ?? (_semanticTokenizer ?? throw new InvalidOperationException(
             "A voice needs its semantic tokens; pass them, or give SPEAR-TTS a semantic tokenizer (a W2vBert with a " +
             "fitted tokenizer).")).SemanticTokens(prompt);
-        var tensor = new Tensor<T>(new[] { tokens.Length });
-        for (int i = 0; i < tokens.Length; i++) tensor[i] = NumOps.FromDouble(tokens[i]);
-        return new TtsVoice<T> { ReferenceAudio = prompt, ReferenceTokens = tensor };
+        return new TtsVoice<T> { ReferenceAudio = prompt, ReferenceTokens = IdTensor(tokens) };
     }
 
     private int UpsampleFactor => CodecFrameRate / _options.SemanticFrameRate;
@@ -465,11 +459,12 @@ public partial class SPEARTTS<T> : TtsModelBase<T>, ICodecTts<T>
             "(or [frames, 1] of semantic tokens, with the recording when the stage needs acoustic tokens).", nameof(sample));
         if (tokens.Rank != 2 || (tokens.Shape[1] != codebooks && tokens.Shape[1] != 1))
             throw new ArgumentException($"Expected codec tokens [frames, {codebooks}], or [frames, 1] of semantic tokens.", nameof(sample));
-        int frames = tokens.Shape[0];
+        int frames = tokens.Shape[0], width = tokens.Shape[1];
+        var rounded = RoundedIds(tokens);
         var codes = new int[codebooks, frames];
         for (int f = 0; f < frames; f++)
         {
-            codes[0, f] = (int)Math.Round(NumOps.ToDouble(tokens[f, 0]));
+            codes[0, f] = rounded[f * width];
             if (codes[0, f] < 0 || codes[0, f] >= _options.SemanticCodes)
                 throw new ArgumentOutOfRangeException(nameof(sample), $"Semantic tokens lie in [0, {_options.SemanticCodes}).");
         }
@@ -478,7 +473,7 @@ public partial class SPEARTTS<T> : TtsModelBase<T>, ICodecTts<T>
             for (int f = 0; f < frames; f++)
                 for (int q = 1; q < codebooks; q++)
                 {
-                    codes[q, f] = (int)Math.Round(NumOps.ToDouble(tokens[f, q]));
+                    codes[q, f] = rounded[f * width + q];
                     if (codes[q, f] < 0 || codes[q, f] >= _options.CodebookSize)
                         throw new ArgumentOutOfRangeException(nameof(sample), $"Codes lie in [0, {_options.CodebookSize}).");
                 }
@@ -512,9 +507,8 @@ public partial class SPEARTTS<T> : TtsModelBase<T>, ICodecTts<T>
     private int[] TextOf(TtsTrainingSample<T> sample)
     {
         var ids = new List<int>();
-        for (int i = 0; i < sample.Tokens.Length; i++)
+        foreach (int id in RoundedIds(sample.Tokens))
         {
-            int id = (int)Math.Round(NumOps.ToDouble(sample.Tokens[i]));
             if (id == PadToken || id == EndToken) continue;
             if (id < PhonemeOffset || id >= SemanticOffset)
                 throw new ArgumentOutOfRangeException(nameof(sample), $"Text ids lie in [{PhonemeOffset}, {SemanticOffset}).");
@@ -526,9 +520,7 @@ public partial class SPEARTTS<T> : TtsModelBase<T>, ICodecTts<T>
 
     private Tensor<T> Ids(IReadOnlyList<int> ids)
     {
-        var tensor = new Tensor<T>(new[] { ids.Count });
-        for (int i = 0; i < ids.Count; i++) tensor[i] = NumOps.FromDouble(ids[i]);
-        return tensor;
+        return IdTensor(ids);
     }
 
     private int[] WithEnd(IEnumerable<int> ids) => ids.Concat(new[] { EndToken }).ToArray();
@@ -781,8 +773,7 @@ public partial class SPEARTTS<T> : TtsModelBase<T>, ICodecTts<T>
             {
                 var recording = voice.ReferenceAudio ?? throw new ArgumentException("A SPEAR-TTS voice needs its recording.");
                 var tokens = voice.ReferenceTokens ?? throw new ArgumentException("A SPEAR-TTS voice needs its semantic tokens at 25 Hz.");
-                promptSemantic = AudioLmCore<T>.Deduplicate(Enumerable.Range(0, tokens.Length)
-                    .Select(i => (int)Math.Round(NumOps.ToDouble(tokens[i]))).ToArray());
+                promptSemantic = AudioLmCore<T>.Deduplicate(RoundedIds(tokens));
                 if (promptSemantic.Any(code => code < 0 || code >= o.SemanticCodes))
                     throw new ArgumentOutOfRangeException(nameof(input), $"Semantic tokens lie in [0, {o.SemanticCodes}).");
                 var codes = Codec.Encode(recording);
@@ -839,10 +830,7 @@ public partial class SPEARTTS<T> : TtsModelBase<T>, ICodecTts<T>
             return OnnxModel.Run(audio);
         var codes = Codec.Encode(audio);
         int levels = Math.Min(codes.GetLength(0), _options.NumCodebooks), frames = codes.GetLength(1);
-        var tokens = new Tensor<T>(new[] { frames, levels });
-        for (int f = 0; f < frames; f++)
-            for (int q = 0; q < levels; q++) tokens[f, q] = NumOps.FromDouble(codes[q, f]);
-        return tokens;
+        return FrameMajorCodes(codes, levels);
     }
 
     /// <summary>The waveform of codec codes <c>[frames, Q]</c>.</summary>
@@ -854,11 +842,8 @@ public partial class SPEARTTS<T> : TtsModelBase<T>, ICodecTts<T>
         if (tokens is null) throw new ArgumentNullException(nameof(tokens));
         if (tokens.Rank != 2)
             throw new ArgumentException("Expected codec tokens [frames, levels].", nameof(tokens));
-        int frames = tokens.Shape[0], levels = tokens.Shape[1];
-        var codes = new int[levels, frames];
-        for (int f = 0; f < frames; f++)
-            for (int q = 0; q < levels; q++) codes[q, f] = (int)Math.Round(NumOps.ToDouble(tokens[f, q]));
-        var audio = Codec.Decode(codes);
+        var audio = Codec.Decode(LevelMajorCodes(tokens));
+
         return audio.Reshape(new[] { audio.Length });
     }
 
