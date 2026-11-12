@@ -1219,3 +1219,5 @@ AiDotNet.ComputerVision.Detection.TextDetection.EAST<T>.BoxScoreThreshold.set ->
 override AiDotNet.ComputerVision.Detection.TextDetection.EAST<T>.RegisterGeneratedState(AiDotNet.Models.ModelStateRegistry<T>! state) -> void
 *REMOVED*AiDotNet.Document.Options.DocBankOptions.LearningRate.get -> double
 AiDotNet.Document.Options.DocBankOptions.LearningRate.get -> double?
+AiDotNet.ReinforcementLearning.Agents.AdvancedRL.LSPIAgent<T>.JointFeatureSize.get -> int
+virtual AiDotNet.ReinforcementLearning.Agents.AdvancedRL.LSPIAgent<T>.StateActionFeatures(AiDotNet.Tensors.LinearAlgebra.Vector<T>! state, int action) -> AiDotNet.Tensors.LinearAlgebra.Vector<T>!

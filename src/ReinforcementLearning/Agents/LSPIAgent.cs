@@ -108,134 +108,92 @@ public partial class LSPIAgent<T> : ReinforcementLearningAgentBase<T>
     {
         if (_samples.Count == 0) return NumOps.Zero;
 
-        Matrix<T> previousWeights = CloneWeights(_weights);
-
-        // LSPI iterations
+        // LSPI (Lagoudakis & Parr 2003, Figure 8): repeat LSTDQ policy evaluation of the policy greedy in the
+        // current weights, one joint solve over phi(s, a), until ||w - w'|| < epsilon.
         for (int iter = 0; iter < _options.MaxIterations; iter++)
         {
             _iterations = iter + 1;
 
-            // LSTDQ: Solve for Q-function weights for each action
-            for (int targetAction = 0; targetAction < _options.ActionSize; targetAction++)
-            {
-                var (A, b) = ComputeLSTDQMatrices(targetAction);
+            var previousWeights = CloneWeights(_weights);
+            var updatedWeights = Lstdq(previousWeights);
+            _weights = updatedWeights;
 
-                // Add regularization: A += λI
-                T regParam = NumOps.FromDouble(_options.RegularizationParam);
-                A = RLTensorOps.AddToDiagonal(A, regParam);
-
-                // Solve: w = A^-1 * b
-                Vector<T> w = SolveLinearSystem(A, b);
-
-                // Update weights for this action
-                AiDotNetEngine.Current.SetRow(_weights, targetAction, w);
-            }
-
-            // Check convergence
-            T weightChange = ComputeWeightChange(previousWeights, _weights);
-            if (NumOps.ToDouble(weightChange) < _options.ConvergenceThreshold)
+            if (HasConverged(previousWeights, updatedWeights))
             {
                 break;
             }
-
-            previousWeights = CloneWeights(_weights);
         }
 
         return NumOps.Zero;
     }
 
-    private (Matrix<T> A, Vector<T> b) ComputeLSTDQMatrices(int targetAction)
+    /// <summary>
+    /// LSTDQ (Lagoudakis &amp; Parr 2003, Figure 5): evaluates the policy greedy in <paramref name="policyWeights"/> on
+    /// every stored sample with one joint system over the state-action features,
+    /// A = sum phi(s, a) (phi(s, a) - gamma phi(s', pi(s')))^T + lambda I and b = sum phi(s, a) r, and returns
+    /// w = A^-1 b laid out as the [ActionSize x FeatureSize] weight matrix (row a = block a of w).
+    /// </summary>
+    private Matrix<T> Lstdq(Matrix<T> policyWeights)
     {
-        // Accumulate A and b from samples where target action was taken
         var engine = AiDotNetEngine.Current;
-        var phiRows = new List<Vector<T>>();
-        var diffRows = new List<Vector<T>>();
-        var sampleRewards = new List<T>();
-        foreach (var (state, action, reward, nextState, done) in _samples)
-        {
-            if (action != targetAction) continue;
+        int jointSize = JointFeatureSize;
+        var flatPolicyWeights = Flatten(policyWeights);
 
-            // Find best next action
-            int nextAction = done ? 0 : GetGreedyAction(nextState);
+        var phiRows = _samples.Select(sample => StateActionFeaturesChecked(sample.state, sample.action)).ToList();
+        // phi(s, a) - gamma phi(s', pi(s')); a terminal step has no successor (phi(s', .) = 0).
+        var diffRows = _samples.Select((sample, i) => sample.done
+                ? phiRows[i]
+                : engine.Subtract(phiRows[i], engine.Multiply(
+                    StateActionFeaturesChecked(sample.nextState, GreedyAction(flatPolicyWeights, sample.nextState)), DiscountFactor)))
+            .ToList();
+        var rewards = _samples.Select(sample => sample.reward).ToList();
 
-            // phi(s,a) and the TD difference phi(s,a) - gamma * phi(s',a') (just phi at a terminal step)
-            Vector<T> phi = RLTensorOps.Head(state, _options.FeatureSize);
-            phiRows.Add(phi);
-            diffRows.Add(done
-                ? phi
-                : engine.Subtract(phi, engine.Multiply(RLTensorOps.Head(nextState, _options.FeatureSize), DiscountFactor)));
-            sampleRewards.Add(reward);
-        }
+        var (a, b) = RLTensorOps.LeastSquaresTdSystem(phiRows, diffRows, rewards, jointSize);
+        a = RLTensorOps.AddToDiagonal(a, NumOps.FromDouble(_options.RegularizationParam));
 
-        // A = sum phi (phi - gamma phi')^T and b = sum phi r over those samples
-        return RLTensorOps.LeastSquaresTdSystem(phiRows, diffRows, sampleRewards, _options.FeatureSize);
+        var solution = AiDotNet.Helpers.LinalgDispatch<T>.Solve(Tensor<T>.FromMatrix(a), new Tensor<T>(new[] { jointSize, 1 }, b));
+        var weights = new Matrix<T>(_options.ActionSize, _options.FeatureSize);
+        solution.AsSpan().CopyTo(weights.AsWritableSpan());
+        return weights;
     }
 
-    private Vector<T> SolveLinearSystem(Matrix<T> A, Vector<T> b)
+    /// <summary>Length of the joint state-action feature vector phi(s, a): ActionSize * FeatureSize.</summary>
+    protected int JointFeatureSize => _options.ActionSize * _options.FeatureSize;
+
+    /// <summary>
+    /// The state-action basis phi(s, a) that LSTDQ regresses Q(s, a) = w . phi(s, a) on. The default is the
+    /// paper's block basis: the first FeatureSize state entries placed in action a's block, zeros elsewhere, so
+    /// w's block a is the weight row for action a. Override to supply another basis of the same length
+    /// (<see cref="JointFeatureSize"/>).
+    /// </summary>
+    protected virtual Vector<T> StateActionFeatures(Vector<T> state, int action)
     {
-        int n = _options.FeatureSize;
-        var augmented = new Matrix<T>(n, n + 1);
+        Guard.NotNull(state);
+        int featureSize = _options.FeatureSize;
+        return RLTensorOps.Concat(
+            new Vector<T>(action * featureSize),
+            RLTensorOps.Head(state, featureSize),
+            new Vector<T>((_options.ActionSize - action - 1) * featureSize));
+    }
 
-        // Create augmented matrix [A|b]
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < n; j++)
-            {
-                augmented[i, j] = A[i, j];
-            }
-            augmented[i, n] = b[i];
-        }
+    private Vector<T> StateActionFeaturesChecked(Vector<T> state, int action)
+    {
+        var features = StateActionFeatures(state, action);
+        if (features is null || features.Length != JointFeatureSize)
+            throw new InvalidOperationException(
+                $"StateActionFeatures must return {JointFeatureSize} entries (ActionSize * FeatureSize).");
+        return features;
+    }
 
-        // Gaussian elimination with partial pivoting
-        for (int k = 0; k < n; k++)
-        {
-            // Find pivot
-            int maxRow = k;
-            T maxVal = augmented[k, k];
-            for (int i = k + 1; i < n; i++)
-            {
-                if (NumOps.GreaterThan(NumOps.Abs(augmented[i, k]), NumOps.Abs(maxVal)))
-                {
-                    maxVal = augmented[i, k];
-                    maxRow = i;
-                }
-            }
+    private static Vector<T> Flatten(Matrix<T> weights) => Vector<T>.FromSpan(weights.AsSpan());
 
-            // Swap rows
-            if (maxRow != k)
-            {
-                for (int j = 0; j <= n; j++)
-                {
-                    T temp = augmented[k, j];
-                    augmented[k, j] = augmented[maxRow, j];
-                    augmented[maxRow, j] = temp;
-                }
-            }
-
-            // Forward elimination
-            for (int i = k + 1; i < n; i++)
-            {
-                T factor = NumOps.Divide(augmented[i, k], augmented[k, k]);
-                for (int j = k; j <= n; j++)
-                {
-                    augmented[i, j] = NumOps.Subtract(augmented[i, j], NumOps.Multiply(factor, augmented[k, j]));
-                }
-            }
-        }
-
-        // Back substitution
-        var x = new Vector<T>(n);
-        for (int i = n - 1; i >= 0; i--)
-        {
-            T sum = augmented[i, n];
-            for (int j = i + 1; j < n; j++)
-            {
-                sum = NumOps.Subtract(sum, NumOps.Multiply(augmented[i, j], x[j]));
-            }
-            x[i] = NumOps.Divide(sum, augmented[i, i]);
-        }
-
-        return x;
+    /// <summary>First arg-max over a of w . phi(s, a).</summary>
+    private int GreedyAction(Vector<T> flatWeights, Vector<T> state)
+    {
+        var engine = AiDotNetEngine.Current;
+        var qValues = Vector<T>.FromEnumerable(Enumerable.Range(0, _options.ActionSize)
+            .Select(action => engine.DotProduct(flatWeights, StateActionFeaturesChecked(state, action))).ToList());
+        return RLTensorOps.ArgMax(qValues);
     }
 
     private Matrix<T> CloneWeights(Matrix<T> weights)
@@ -249,18 +207,14 @@ public partial class LSPIAgent<T> : ReinforcementLearningAgentBase<T>
         return RLTensorOps.FrobeniusNorm(AiDotNetEngine.Current.MatrixSubtract(w1, w2));
     }
 
-    private T ComputeQValue(Vector<T> features, int actionIndex)
-    {
-        // Q(s,a) = w_a . phi(s)
-        return RLTensorOps.LinearQValue(_weights, actionIndex, features);
-    }
+    /// <summary>The paper's stopping rule ||w - w'|| &lt; epsilon.</summary>
+    private bool HasConverged(Matrix<T> previousWeights, Matrix<T> updatedWeights)
+        => NumOps.ToDouble(ComputeWeightChange(previousWeights, updatedWeights)) < _options.ConvergenceThreshold;
 
     private int GetGreedyAction(Vector<T> state)
     {
-        // First arg-max of W * phi(s) over the actions.
-        int bestAction = RLTensorOps.ArgMax(RLTensorOps.LinearQValues(_weights, state));
-
-        return bestAction;
+        // First arg-max of Q(s, a) = w . phi(s, a) over the actions.
+        return GreedyAction(Flatten(_weights), state);
     }
 
     private int ArgMax(Vector<T> values)
