@@ -79,9 +79,9 @@ public class CRPSMetric<T> : IRegressionMetric<T>
 
         var engine = AiDotNetEngine.Current;
         using var noGrad = new NoGradScope<T>();
-        var pred = EvaluationTensorOps<T>.ToTensor(predictions);
-        var actual = EvaluationTensorOps<T>.ToTensor(actuals);
-        return engine.TensorMean(engine.TensorAbs(engine.TensorSubtract(pred, actual)));
+        var pred = EvaluationTensorOps<T>.ToTensor(predictions).Cast<double>();
+        var actual = EvaluationTensorOps<T>.ToTensor(actuals).Cast<double>();
+        return NumOps.FromDouble(engine.TensorMean(engine.TensorAbs(engine.TensorSubtract(pred, actual))));
     }
 
     /// <inheritdoc/>

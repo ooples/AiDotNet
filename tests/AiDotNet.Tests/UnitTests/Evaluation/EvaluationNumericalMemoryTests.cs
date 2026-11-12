@@ -11,6 +11,33 @@ namespace AiDotNet.Tests.UnitTests.Evaluation;
 public class EvaluationNumericalMemoryTests
 {
     [Fact]
+    public void HingeLoss_SelectsInfiniteMarginsWithoutMaskMultiplication()
+    {
+        var metric = new HingeLossMetric<double>();
+        Assert.Equal(0.0, metric.Compute(new[] { double.PositiveInfinity, double.NegativeInfinity }, new[] { 1.0, 0.0 }));
+        Assert.Equal(double.PositiveInfinity, metric.Compute(new[] { double.PositiveInfinity }, new[] { 0.0 }));
+        Assert.True(double.IsNaN(metric.Compute(new[] { double.NaN }, new[] { 1.0 })));
+        Assert.Equal(0.5, metric.Compute(new[] { 0.25, 0.75 }, new[] { 0.0, 1.0 }));
+    }
+
+    [Fact]
+    public void HalfProbabilisticMetrics_KeepReductionsAndVarianceFloorWide()
+    {
+        var predicted = Enumerable.Repeat((Half)1, 70000).ToArray();
+        var actual = new Half[predicted.Length];
+        Assert.Equal((Half)1, new CRPSMetric<Half>().Compute(predicted, actual));
+        Assert.Equal((Half)2, new HingeLossMetric<Half>().Compute(predicted, actual));
+        var logScore = new LogScoreMetric<Half>();
+        Assert.Equal((Half)(0.5 * Math.Log(2 * Math.PI) + 0.5), logScore.Compute(predicted, actual));
+        Assert.Equal((Half)(0.5 * Math.Log(2 * Math.PI * 1e-15)), logScore.Compute(actual, actual));
+        Assert.Equal((Half)30000, new CRPSMetric<Half>().Compute(
+            new[] { (Half)60000, (Half)0, (Half)0, (Half)0 },
+            new[] { (Half)(-60000), (Half)0, (Half)0, (Half)0 }));
+        Assert.Equal((Half)(0.5 * Math.Log(2 * Math.PI * 60000.0 * 60000) + 0.5),
+            logScore.Compute(new[] { (Half)60000 }, new[] { (Half)0 }));
+    }
+
+    [Fact]
     public void HalfLossMeans_KeepLargeSampleCountsWide()
     {
         var predicted = Enumerable.Repeat((Half)1, 70000).ToArray();

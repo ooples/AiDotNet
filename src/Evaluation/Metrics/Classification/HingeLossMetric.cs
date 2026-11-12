@@ -52,27 +52,27 @@ public class HingeLossMetric<T> : IClassificationMetric<T>
 
         var engine = AiDotNetEngine.Current;
         using var noGrad = new NoGradScope<T>();
-        var pred = EvaluationTensorOps<T>.ToTensor(predictions);
-        var actual = EvaluationTensorOps<T>.ToTensor(actuals);
+        var pred = EvaluationTensorOps<T>.ToTensor(predictions).Cast<double>();
+        var actual = EvaluationTensorOps<T>.ToTensor(actuals).Cast<double>();
         var one = engine.TensorOnesLike(pred);
 
         // Predictions should be raw decision function values (continuous scores); actuals are class labels
         // (0/1 or -1/+1). A 0/1-encoded actual maps to -1/+1: y = actual <= 0.5 ? -1 : 1.
-        var negative = engine.TensorLessEqual(actual, engine.TensorFullLike(actual, NumOps.FromDouble(0.5)));
-        var y = engine.TensorSubtract(one, engine.TensorMultiplyScalar(negative, NumOps.FromDouble(2.0)));
+        var negative = engine.TensorLessEqual(actual, engine.TensorFullLike(actual, 0.5));
+        var y = engine.TensorSubtract(one, engine.TensorMultiplyScalar(negative, 2.0));
 
         // Predictions in [0, 1] are likely probabilities and are moved to signed margin space (2 * pred - 1);
         // other scores are used as they are.
         var inUnitRange = engine.TensorMultiply(
             engine.TensorGreaterEqual(pred, engine.TensorZerosLike(pred)),
             engine.TensorLessEqual(pred, one));
-        var yHat = engine.TensorAdd(pred, engine.TensorMultiply(inUnitRange, engine.TensorSubtract(pred, one)));
+        var yHat = engine.TensorWhere(inUnitRange, engine.TensorSubtract(engine.TensorMultiplyScalar(pred, 2.0), one), pred);
 
         // Hinge loss: max(0, 1 - y * yHat). Math.Max propagates NaN, the engine max does not.
         var margin = engine.TensorSubtract(one, engine.TensorMultiply(y, yHat));
-        if (EvaluationTensorOps<T>.Count(EvaluationTensorOps<T>.NanMask(margin)) > 0) return NumOps.FromDouble(double.NaN);
+        if (EvaluationTensorOps<double>.Count(EvaluationTensorOps<double>.NanMask(margin)) > 0) return NumOps.FromDouble(double.NaN);
 
-        return engine.TensorMean(engine.TensorMax(margin, NumOps.Zero));
+        return NumOps.FromDouble(engine.TensorMean(engine.TensorMax(margin, 0.0)));
     }
 
     /// <inheritdoc />
