@@ -1294,3 +1294,4 @@ virtual AiDotNet.Geometry.Preprocessing.MeshStatistics<T>.PrintMembers(System.Te
 virtual AiDotNet.WaveletFunctions.WaveletFunctionBase<T>.Calculate(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! x) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 override AiDotNet.WaveletFunctions.GaussianWavelet<T>.Calculate(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! x) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 override AiDotNet.WaveletFunctions.MexicanHatWavelet<T>.Calculate(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! x) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+override AiDotNet.NeuralRadianceFields.Models.GaussianSplatting<T>.CopyGeneratedTrainableTensorsTo(AiDotNet.NeuralNetworks.NeuralNetworkBase<T>! destination) -> void
