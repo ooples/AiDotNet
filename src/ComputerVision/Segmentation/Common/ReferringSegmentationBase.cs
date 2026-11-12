@@ -154,12 +154,14 @@ public abstract partial class ReferringSegmentationBase<T> : SegmentationModelBa
     {
         var probs = engine.TensorSigmoid(logits);
         var mask = engine.TensorGreaterThan(probs, maskThreshold);
-        T area = engine.TensorSum(mask);
-        T confidence = numOps.Divide(engine.TensorSum(engine.TensorMultiply(mask, probs)), numOps.GreaterThan(area, numOps.One) ? area : numOps.One);
+        // The area is counted in int (a Half sum of the mask rounds above 2048 pixels and overflows above 65504)
+        // and the confidence is the mean over the mask's own pixels, so a NaN logit outside it cannot leak in.
+        int area = MaskStatistics.CountNonZero(mask);
+        T confidence = MaskStatistics.MaskedMean(probs, mask, area);
         var boxes = engine.MasksToBoxes(mask).Cast<T>();
-        bool found = numOps.GreaterThan(area, numOps.Zero);
-        string response = found
-            ? string.Format(CultureInfo.InvariantCulture, "Segmented region matching '{0}' with {1:F0} pixels ({2:F2} confidence)", expression, area, confidence)
+        string response = area > 0
+            ? string.Format(CultureInfo.InvariantCulture, "Segmented region matching '{0}' with {1} pixels ({2:F2} confidence)",
+                expression, area, numOps.ToDouble(confidence))
             : $"No region found matching '{expression}'";
         return new ReferringSegmentationResult<T> { Masks = mask, TextResponse = response, Confidence = confidence, BoundingBoxes = boxes };
     }

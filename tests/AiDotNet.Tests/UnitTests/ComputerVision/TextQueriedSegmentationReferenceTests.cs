@@ -183,4 +183,89 @@ public class TextQueriedSegmentationReferenceTests
         Assert.Throws<ArgumentException>(() => new SAN<double>(Arch(), encoder,
             options: new SANOptions { NumClasses = 3, ClassNames = new[] { "sky", "road" } }));
     }
+
+    private static Tensor<Half> H(int[] shape, params double[] values)
+        => new Tensor<Half>(shape, new Vector<Half>(Array.ConvertAll(values, v => (Half)(float)v)));
+
+    private static Tensor<Half> HalfFilled(int[] shape, double value)
+    {
+        int total = 1;
+        foreach (int s in shape) total *= s;
+        return new Tensor<Half>(shape, new Vector<Half>(Enumerable.Repeat((Half)(float)value, total).ToArray()));
+    }
+
+    [Fact]
+    public void OpenVocabularyResult_SingleName_IsASigmoidMaskNotTheWholeImage()
+    {
+        // A softmax over one name is 1 at every pixel; SegmentWithPrompt's single name is decided by its sigmoid.
+        // Logits (ln 3, -1, 0) -> sigmoid (0.75, 0.2689, 0.5): only the first pixel is strictly above 0.5.
+        var logits = T(new[] { 1, 1, 3 }, Math.Log(3), -1, 0);
+        var numOps = MathHelper.GetNumericOperations<double>();
+
+        var result = OpenVocabSegmentationBase<double>.BuildResult(AiDotNetEngine.Current, numOps, logits, new[] { "a cat" });
+
+        Assert.Equal(new[] { 1.0, 0.0, 0.0 }, new[] { result.Masks[0, 0, 0], result.Masks[0, 0, 1], result.Masks[0, 0, 2] });
+        Assert.Equal(0.75, result.Scores[0], Tolerance);
+        Assert.Equal(new[] { 0.0, -1.0, -1.0 }, new[] { result.SemanticMap[0, 0], result.SemanticMap[0, 1], result.SemanticMap[0, 2] });
+        Assert.Equal(new[] { "a cat" }, result.ClassNames);
+    }
+
+    [Fact]
+    public void OpenVocabularyResult_Half_ScoresStayExactBeyondTheHalfRange()
+    {
+        // 300 x 300 = 90000 pixels, all won by name 0 with probability 3/4: a Half sum of the mask or of the
+        // probabilities overflows (Half's largest finite value is 65504), which zeroed or corrupted the scores.
+        var first = HalfFilled(new[] { 1, 300, 300 }, Math.Log(3));
+        var second = HalfFilled(new[] { 1, 300, 300 }, 0);
+        var logits = AiDotNetEngine.Current.TensorConcatenate(new[] { first, second }, 0);
+        var numOps = MathHelper.GetNumericOperations<Half>();
+
+        var result = OpenVocabSegmentationBase<Half>.BuildResult(AiDotNetEngine.Current, numOps, logits, new[] { "sky", "road" });
+
+        Assert.Equal(0.75, (double)(float)result.Scores[0], 2e-3);
+        Assert.Equal(0.0, (double)(float)result.Scores[1], Tolerance);
+    }
+
+    [Fact]
+    public void ReferringResult_Half_CountsTheAreaInInt()
+    {
+        var logits = HalfFilled(new[] { 1, 300, 300 }, Math.Log(3));
+        var numOps = MathHelper.GetNumericOperations<Half>();
+
+        var result = ReferringSegmentationBase<Half>.BuildResult(
+            AiDotNetEngine.Current, numOps, logits, (Half)0.5f, "the road");
+
+        Assert.Contains("with 90000 pixels", result.TextResponse);
+        Assert.Equal(0.75, (double)(float)result.Confidence, 2e-3);
+    }
+
+    [Fact]
+    public void ReferringResult_NaNLogitOutsideTheMask_DoesNotReachTheConfidence()
+    {
+        // sigmoid(NaN) is NaN, which fails the threshold: the pixel is outside the mask and must not turn the
+        // confidence into NaN (0 * NaN did).
+        var logits = T(new[] { 1, 1, 3 }, Math.Log(3), double.NaN, -1);
+        var numOps = MathHelper.GetNumericOperations<double>();
+
+        var result = ReferringSegmentationBase<double>.BuildResult(AiDotNetEngine.Current, numOps, logits, 0.5, "the cat");
+
+        Assert.Equal(0.75, result.Confidence, Tolerance);
+        Assert.Contains("with 1 pixels", result.TextResponse);
+    }
+
+    [Fact]
+    public void Classify_Half_LargeAndZeroEmbeddingsStayFinite()
+    {
+        // Pixel 0 = (300, 400): its squares overflow Half, which made the norm infinite and the cosine 0.
+        // Pixel 1 = (0, 0): 1e-24 flushes to 0 in Half, which made its norm 0 and the cosine 0 / 0 = NaN.
+        var pixels = H(new[] { 2, 1, 2 }, 300, 0, 400, 0);
+        var text = TextEmbeddingClassifier.NormalizeRows(H(new[] { 2, 2 }, 1, 0, 0, 1));
+
+        var logits = TextEmbeddingClassifier.Classify(pixels, text, (Half)1f);
+
+        Assert.Equal(0.6, (double)(float)logits[0, 0, 0], 2e-3);
+        Assert.Equal(0.8, (double)(float)logits[1, 0, 0], 2e-3);
+        Assert.Equal(0.0, (double)(float)logits[0, 0, 1], Tolerance);
+        Assert.Equal(0.0, (double)(float)logits[1, 0, 1], Tolerance);
+    }
 }

@@ -149,22 +149,60 @@ public abstract partial class OpenVocabSegmentationBase<T> : SegmentationModelBa
     /// <summary>
     /// Turns per-name logits <c>[K, H, W]</c> into the softmax/argmax segmentation result.
     /// </summary>
+    /// <remarks>
+    /// A single name cannot be classified by a softmax (it is 1 at every pixel), so it is decided per pixel
+    /// by its sigmoid instead -- in the mask where <c>cos / tau &gt; 0</c> -- and pixels outside the mask get
+    /// semantic label -1. Areas are counted in <c>int</c> and each score is the mean over its own pixels only.
+    /// </remarks>
     internal static OpenVocabSegmentationResult<T> BuildResult(
         IEngine engine, INumericOperations<T> numOps, Tensor<T> logits, IReadOnlyList<string> classNames)
     {
         int numText = classNames.Count;
+        if (numText == 1)
+        {
+            return BuildSingleNameResult(engine, numOps, logits, classNames[0]);
+        }
+
+        int pixels = logits.Shape[1] * logits.Shape[2];
         var probs = engine.TensorSoftmax(logits, 0);
         var labels = engine.TensorArgMax(logits, 0);
         var masks = engine.TensorPermute(engine.TensorOneHot<T>(labels, numText), new[] { 2, 0, 1 });
-        var area = engine.ReduceSum(masks, new[] { 1, 2 }, false);
-        var confidence = engine.ReduceSum(engine.TensorMultiply(masks, probs), new[] { 1, 2 }, false);
-        var scores = engine.TensorDivide(confidence, engine.TensorClampMin(area, numOps.One));
+
+        // Every name's pixel count (exact, in int) and each pixel's probability for the name it won.
+        var labelIndex = engine.Reshape(labels, new[] { pixels });
+        int[] areas = engine.TensorBinCount(labelIndex, numText).ToArray();
+        var winningProbability = engine.TensorGatherClassValues(
+            engine.TensorPermute(engine.Reshape(probs, new[] { numText, pixels }), new[] { 1, 0 }),
+            labelIndex.Cast<T>());
+        var scores = new Vector<T>(Enumerable.Range(0, numText)
+            .Select(k => MaskStatistics.LabelMean(winningProbability, labelIndex, k, areas[k])));
         return new OpenVocabSegmentationResult<T>
         {
             Masks = masks,
             ClassNames = classNames.ToArray(),
-            Scores = scores.ToVector(),
+            Scores = scores,
             SemanticMap = labels.Cast<T>()
+        };
+    }
+
+    /// <summary>
+    /// The result for one name from its logits <c>[1, H, W]</c>: the pixels whose sigmoid exceeds 0.5,
+    /// scored by their mean probability.
+    /// </summary>
+    private static OpenVocabSegmentationResult<T> BuildSingleNameResult(
+        IEngine engine, INumericOperations<T> numOps, Tensor<T> logits, string name)
+    {
+        var probs = engine.TensorSigmoid(logits);
+        var mask = engine.TensorGreaterThan(probs, numOps.FromDouble(0.5));
+        int area = MaskStatistics.CountNonZero(mask);
+        T score = MaskStatistics.MaskedMean(probs, mask, area);
+        var semantic = engine.TensorAddScalar(mask, numOps.Negate(numOps.One));
+        return new OpenVocabSegmentationResult<T>
+        {
+            Masks = mask,
+            ClassNames = new[] { name },
+            Scores = new Vector<T>(new[] { score }),
+            SemanticMap = engine.Reshape(semantic, new[] { logits.Shape[1], logits.Shape[2] })
         };
     }
 

@@ -24,6 +24,12 @@ internal static class TextEmbeddingClassifier
     /// <summary>Squared epsilon added under the square root of every L2 norm.</summary>
     private const double NormEpsilonSquared = 1e-24;
 
+    /// <summary>The epsilon itself: the floor on the per-slice scale, so an all-zero slice is not divided by zero.</summary>
+    private const double NormEpsilon = 1e-12;
+
+    /// <summary>Half's smallest positive normal value, the floor for an epsilon Half would flush to zero.</summary>
+    private const double SmallestHalfNormal = 6.103515625e-05;
+
     /// <summary>
     /// Encodes each text with <paramref name="encoder"/> and returns the L2-normalized embeddings as
     /// rows of a <c>[K, D]</c> tensor.
@@ -95,12 +101,32 @@ internal static class TextEmbeddingClassifier
     /// <summary>L2-normalizes each row of a <c>[K, D]</c> tensor.</summary>
     internal static Tensor<T> NormalizeRows<T>(Tensor<T> rows) => NormalizeAxis(rows, 1);
 
+    /// <remarks>
+    /// Each slice along <paramref name="axis"/> is first divided by its largest |entry| -- the normalized
+    /// result does not depend on that factor, so it carries no gradient -- which bounds every square by 1:
+    /// in Half an entry above 256 squared overflowed to infinity. The epsilon terms are raised to Half's
+    /// smallest normal value where Half would flush them to zero (1e-24 is 0 in Half, making an all-zero
+    /// embedding 0 / 0 = NaN).
+    /// </remarks>
     private static Tensor<T> NormalizeAxis<T>(Tensor<T> x, int axis)
     {
         var engine = AiDotNetEngine.Current;
         var numOps = MathHelper.GetNumericOperations<T>();
-        var sumSquares = engine.ReduceSum(engine.TensorSquare(x), new[] { axis }, true);
-        var norm = engine.TensorSqrt(engine.TensorAddScalar(sumSquares, numOps.FromDouble(NormEpsilonSquared)));
-        return engine.TensorDivide(x, engine.TensorBroadcastTo(norm, x._shape));
+        var largest = engine.StopGradient(engine.TensorClampMin(
+            engine.ReduceMax(engine.TensorAbs(x), new[] { axis }, true), RepresentableEpsilon(numOps, NormEpsilon)));
+        var scaled = engine.TensorDivide(x, engine.TensorBroadcastTo(largest, x._shape));
+        var sumSquares = engine.ReduceSum(engine.TensorSquare(scaled), new[] { axis }, true);
+        var norm = engine.TensorSqrt(engine.TensorAddScalar(sumSquares, RepresentableEpsilon(numOps, NormEpsilonSquared)));
+        return engine.TensorDivide(scaled, engine.TensorBroadcastTo(norm, x._shape));
+    }
+
+    /// <summary>
+    /// <paramref name="epsilon"/> as a <typeparamref name="T"/>, or Half's smallest normal value when
+    /// <typeparamref name="T"/> flushes it to zero.
+    /// </summary>
+    private static T RepresentableEpsilon<T>(INumericOperations<T> numOps, double epsilon)
+    {
+        T value = numOps.FromDouble(epsilon);
+        return numOps.GreaterThan(value, numOps.Zero) ? value : numOps.FromDouble(SmallestHalfNormal);
     }
 }
