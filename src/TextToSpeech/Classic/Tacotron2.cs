@@ -215,10 +215,8 @@ public partial class Tacotron2<T> : TtsModelBase<T>, IAcousticModel<T>, ITrainin
     {
         double p = _options.PrenetDropout;
         if (p <= 0) return x;
-        var mask = new Tensor<T>(x._shape);
         var keep = NumOps.FromDouble(1.0 / (1.0 - p));
-        for (int i = 0; i < mask.Length; i++) mask[i] = _regularizationRandom.NextDouble() < p ? NumOps.Zero : keep;
-        return Engine.TensorMultiply(x, mask);
+        return Engine.TensorMultiply(x, Engine.TensorMultiplyScalar(BernoulliMask(x._shape, p, dropWhenDrawn: true), keep));
     }
 
     // Zoneout (Krueger et al. 2017), probability 0.1 (§2.2): in training each unit of the LSTM state keeps its previous
@@ -229,8 +227,7 @@ public partial class Tacotron2<T> : TtsModelBase<T>, IAcousticModel<T>, ITrainin
         if (p <= 0) return next;
         if (!IsTrainingMode)
             return Engine.TensorAdd(Engine.TensorMultiplyScalar(previous, NumOps.FromDouble(p)), Engine.TensorMultiplyScalar(next, NumOps.FromDouble(1 - p)));
-        var mask = new Tensor<T>(next._shape);
-        for (int i = 0; i < mask.Length; i++) mask[i] = _regularizationRandom.NextDouble() < p ? NumOps.One : NumOps.Zero;
+        var mask = BernoulliMask(next._shape, p, dropWhenDrawn: false);
         var change = Engine.TensorAddScalar(Engine.TensorNegate(mask), NumOps.One);
         return Engine.TensorAdd(Engine.TensorMultiply(mask, previous), Engine.TensorMultiply(change, next));
     }
@@ -290,19 +287,28 @@ public partial class Tacotron2<T> : TtsModelBase<T>, IAcousticModel<T>, ITrainin
         return (frames, stopLogits);
     }
 
+    // A 0/1 mask of one uniform draw per element in flat order: 1 where the draw falls below p (dropWhenDrawn false)
+    // or where it does not (dropWhenDrawn true).
+    private Tensor<T> BernoulliMask(int[] shape, double p, bool dropWhenDrawn)
+    {
+        int length = 1;
+        foreach (int d in shape) length *= d;
+        var bits = new int[length];
+        for (int i = 0; i < length; i++) bits[i] = (_regularizationRandom.NextDouble() < p) != dropWhenDrawn ? 1 : 0;
+        return new Tensor<int>(bits, shape).Cast<T>();
+    }
+
     // The ground-truth frame group of step `step`, zero-padded past the end.
     private Tensor<T> TargetGroup(Tensor<T> target, int step)
     {
         int r = _options.OutputsPerStep, mel = _options.MelChannels;
-        var group = new Tensor<T>(new[] { 1, mel * r });
-        for (int f = 0; f < r; f++)
-        {
-            int frame = step * r + f;
-            if (frame >= target.Shape[0]) break;
-            for (int m = 0; m < mel; m++) group[0, f * mel + m] = target[frame, m];
-        }
-        return group;
+        int first = step * r, available = Math.Max(0, Math.Min(r, target.Shape[0] - first));
+        if (available == 0) return new Tensor<T>(new[] { 1, mel * r });
+        var rows = Engine.Reshape(Engine.TensorSlice(target, new[] { first, 0 }, new[] { available, mel }), new[] { 1, available * mel });
+        if (available == r) return rows.Clone();
+        return Engine.TensorConcatenate(new[] { rows, new Tensor<T>(new[] { 1, (r - available) * mel }) }, 1);
     }
+
 
     /// <inheritdoc />
     /// <remarks>Synthesis (§2.2): encode, decode autoregressively until the stop token fires, add the post-net residual;
