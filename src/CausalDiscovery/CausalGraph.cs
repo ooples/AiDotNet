@@ -542,20 +542,19 @@ public class CausalGraph<T>
         int interventionVariable, T interventionValue,
         int targetVariable, Matrix<T> observationalData)
     {
-        int n = observationalData.Rows;
-        T count = _numOps.FromDouble(n);
         var data = Tensor<T>.FromMatrix(observationalData);
         var x = Engine.TensorSliceAxis(data, 1, interventionVariable);
         var y = Engine.TensorSliceAxis(data, 1, targetVariable);
 
-        // Simple OLS: target = a + b * intervention + noise
-        T sumX = Engine.TensorSum(x), sumY = Engine.TensorSum(y);
-        T sumXY = Engine.TensorSum(Engine.TensorMultiply(x, y));
-        T sumX2 = Engine.TensorSum(Engine.TensorSquare(x));
-        T mx = _numOps.Divide(sumX, count), my = _numOps.Divide(sumY, count);
+        // Simple OLS: target = a + b * intervention + noise, with the slope from the centered
+        // moments sum(dx dy) / (sum(dx^2) + 1e-10). Centering first avoids the cancellation of
+        // sum(x^2) - n mean(x)^2 when the intervention variable has a large mean.
+        T mx = Engine.TensorMean(x), my = Engine.TensorMean(y);
+        var dx = Engine.TensorSubtractScalar(x, mx);
+        var dy = Engine.TensorSubtractScalar(y, my);
         T b = _numOps.Divide(
-            _numOps.Subtract(sumXY, _numOps.Multiply(_numOps.Multiply(count, mx), my)),
-            _numOps.Add(_numOps.Subtract(sumX2, _numOps.Multiply(_numOps.Multiply(count, mx), mx)), _numOps.FromDouble(1e-10)));
+            Engine.TensorSum(Engine.TensorMultiply(dx, dy)),
+            _numOps.Add(Engine.TensorSum(Engine.TensorSquare(dx)), _numOps.FromDouble(1e-10)));
         T a = _numOps.Subtract(my, _numOps.Multiply(b, mx));
 
         // Generate interventional samples using the regression residuals:
