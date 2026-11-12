@@ -53,6 +53,41 @@ public static class StatisticsHelper<T>
     /// <summary>A tensor of the given shape with every element equal to <paramref name="value"/>.</summary>
     private static Tensor<T> Filled(int[] shape, T value) => Engine.TensorAddScalar(new Tensor<T>(shape), value);
 
+    /// <summary>The entries of <paramref name="y"/> at <paramref name="indices"/>, in index order.</summary>
+    private static Vector<T> GatherVector(Vector<T> y, List<int> indices)
+        => indices.Count == 0 ? new Vector<T>(0) : Gather(y.AsTensor(), indices).ToVector();
+
+    /// <summary>The first min(|a|, |b|) entries of each (Enumerable.Zip pairing).</summary>
+    private static (Tensor<T> A, Tensor<T> B) PairedPrefix(Tensor<T> a, Tensor<T> b)
+    {
+        int paired = Math.Min(a.Length, b.Length);
+        return (Engine.TensorNarrow(a, 0, 0, paired), Engine.TensorNarrow(b, 0, 0, paired));
+    }
+
+    /// <summary>Mean of |x - center| (NaN for no values, as the scalar mean is).</summary>
+    private static T MeanAbsoluteDeviationFrom(Vector<T> values, T center)
+        => CalculateMean(Engine.TensorAbs(Engine.TensorSubtractScalar(values.AsTensor(), center)).ToVector());
+
+    /// <summary>1 where value &gt;= threshold, else 0 (the scalar GreaterThanOrEquals label test).</summary>
+    private static Tensor<T> AtLeast(Tensor<T> values, T threshold)
+        => Engine.TensorGreaterEqual(values, Filled(values._shape, threshold));
+
+    /// <summary>1 where a &lt;= b element-wise, else 0.</summary>
+    private static Tensor<T> AtMost(Tensor<T> a, Tensor<T> b) => Engine.TensorLessEqual(a, b);
+
+    /// <summary>Element-wise logical AND of two 0/1 masks.</summary>
+    private static Tensor<T> And(Tensor<T> a, Tensor<T> b) => Engine.TensorMultiply(a, b);
+
+    /// <summary>Element-wise logical NOT of a 0/1 mask.</summary>
+    private static Tensor<T> Not(Tensor<T> mask)
+        => Engine.TensorSubtract(Filled(mask._shape, _numOps.One), mask);
+
+    /// <summary>Number of set entries of a 0/1 mask, as T.</summary>
+    private static T Count(Tensor<T> mask) => _numOps.FromDouble(Engine.TensorCountNonzero(mask));
+
+    /// <summary>The first <paramref name="length"/> entries of <paramref name="values"/> (throws when it is shorter).</summary>
+    private static Tensor<T> Prefix(Vector<T> values, int length) => Engine.TensorNarrow(values.AsTensor(), 0, 0, length);
+
     /// <summary>Gathers <paramref name="values"/> at <paramref name="indices"/> into a rank-1 tensor.</summary>
     private static Tensor<T> Gather(Tensor<T> values, List<int> indices)
         => Engine.TensorIndexSelect(values, new Tensor<int>(indices.ToArray(), new[] { indices.Count }), 0);
@@ -1408,24 +1443,20 @@ public static class StatisticsHelper<T>
             throw new ArgumentException("Actual and predicted vectors must have the same length.");
 
         var _epsilon = _numOps.FromDouble(1e-10); // Small constant to avoid division by zero
-        var _validPairs = 0;
-        var _sumAbsPercentageErrors = _numOps.Zero;
+        if (actual.Length == 0)
+            return _numOps.Zero;
 
-        for (int i = 0; i < actual.Length; i++)
-        {
-            if (_numOps.LessThanOrEquals(_numOps.Abs(actual[i]), _epsilon))
-            {
-                // Skip this pair if actual value is too close to zero
-                continue;
-            }
-
-            var _absolutePercentageError = _numOps.Abs(_numOps.Divide(_numOps.Subtract(actual[i], predicted[i]), actual[i]));
-            _sumAbsPercentageErrors = _numOps.Add(_sumAbsPercentageErrors, _absolutePercentageError);
-            _validPairs++;
-        }
+        // Skip actual values too close to zero to give a meaningful percentage (NaN is not "too close").
+        var _actual = AsTensor(actual);
+        var _tooSmall = Engine.TensorLessEqual(Engine.TensorAbs(_actual), Filled(_actual._shape, _epsilon));
+        var _valid = Engine.TensorSubtract(Filled(_actual._shape, _numOps.One), _tooSmall);
+        var _validPairs = Engine.TensorCountNonzero(_valid);
 
         if (_validPairs == 0)
             return _numOps.Zero;
+
+        var _absolutePercentageErrors = Engine.TensorAbs(Engine.TensorDivide(Engine.TensorSubtract(_actual, AsTensor(predicted)), _actual));
+        var _sumAbsPercentageErrors = Engine.TensorSum(Engine.TensorWhere(_valid, _absolutePercentageErrors, new Tensor<T>(_actual._shape)));
 
         return _numOps.Multiply(_numOps.Divide(_sumAbsPercentageErrors, _numOps.FromDouble(_validPairs)), _numOps.FromDouble(100));
     }
@@ -1447,14 +1478,16 @@ public static class StatisticsHelper<T>
     /// </remarks>
     public static T CalculateMeanAbsoluteError(Vector<T> y, List<int> leftIndices, List<int> rightIndices)
     {
-        T _leftMedian = StatisticsHelper<T>.CalculateMedian(leftIndices.Select(i => y[i]));
-        T _rightMedian = StatisticsHelper<T>.CalculateMedian(rightIndices.Select(i => y[i]));
+        var _left = GatherVector(y, leftIndices);
+        var _right = GatherVector(y, rightIndices);
+        T _leftMedian = StatisticsHelper<T>.CalculateMedian(_left);
+        T _rightMedian = StatisticsHelper<T>.CalculateMedian(_right);
 
-        T _leftMAE = StatisticsHelper<T>.CalculateMean(leftIndices.Select(i => _numOps.Abs(_numOps.Subtract(y[i], _leftMedian))));
-        T _rightMAE = StatisticsHelper<T>.CalculateMean(rightIndices.Select(i => _numOps.Abs(_numOps.Subtract(y[i], _rightMedian))));
+        T _leftMAE = MeanAbsoluteDeviationFrom(_left, _leftMedian);
+        T _rightMAE = MeanAbsoluteDeviationFrom(_right, _rightMedian);
 
-        T _leftWeight = _numOps.Divide(_numOps.FromDouble(leftIndices.Count), _numOps.FromDouble(y.Count()));
-        T _rightWeight = _numOps.Divide(_numOps.FromDouble(rightIndices.Count), _numOps.FromDouble(y.Count()));
+        T _leftWeight = _numOps.Divide(_numOps.FromDouble(leftIndices.Count), _numOps.FromDouble(y.Length));
+        T _rightWeight = _numOps.Divide(_numOps.FromDouble(rightIndices.Count), _numOps.FromDouble(y.Length));
 
         return _numOps.Negate(_numOps.Add(_numOps.Multiply(_leftWeight, _leftMAE), _numOps.Multiply(_rightWeight, _rightMAE)));
     }
@@ -1476,8 +1509,8 @@ public static class StatisticsHelper<T>
     /// </remarks>
     public static T CalculateFriedmanMSE(Vector<T> y, List<int> leftIndices, List<int> rightIndices)
     {
-        T _leftMean = StatisticsHelper<T>.CalculateMean(leftIndices.Select(i => y[i]));
-        T _rightMean = StatisticsHelper<T>.CalculateMean(rightIndices.Select(i => y[i]));
+        T _leftMean = StatisticsHelper<T>.CalculateMean(GatherVector(y, leftIndices));
+        T _rightMean = StatisticsHelper<T>.CalculateMean(GatherVector(y, rightIndices));
 
         T _totalMean = StatisticsHelper<T>.CalculateMean(y);
 
@@ -1505,14 +1538,16 @@ public static class StatisticsHelper<T>
     /// </remarks>
     public static T CalculateMeanSquaredError(Vector<T> y, List<int> leftIndices, List<int> rightIndices)
     {
-        T _leftMean = StatisticsHelper<T>.CalculateMean(leftIndices.Select(i => y[i]));
-        T _rightMean = StatisticsHelper<T>.CalculateMean(rightIndices.Select(i => y[i]));
+        var _left = GatherVector(y, leftIndices);
+        var _right = GatherVector(y, rightIndices);
+        T _leftMean = StatisticsHelper<T>.CalculateMean(_left);
+        T _rightMean = StatisticsHelper<T>.CalculateMean(_right);
 
-        T _leftMSE = StatisticsHelper<T>.CalculateMeanSquaredError(leftIndices.Select(i => y[i]), _leftMean);
-        T _rightMSE = StatisticsHelper<T>.CalculateMeanSquaredError(rightIndices.Select(i => y[i]), _rightMean);
+        T _leftMSE = StatisticsHelper<T>.CalculateMeanSquaredError(_left, _leftMean);
+        T _rightMSE = StatisticsHelper<T>.CalculateMeanSquaredError(_right, _rightMean);
 
-        T _leftWeight = _numOps.Divide(_numOps.FromDouble(leftIndices.Count), _numOps.FromDouble(y.Count()));
-        T _rightWeight = _numOps.Divide(_numOps.FromDouble(rightIndices.Count), _numOps.FromDouble(y.Count()));
+        T _leftWeight = _numOps.Divide(_numOps.FromDouble(leftIndices.Count), _numOps.FromDouble(y.Length));
+        T _rightWeight = _numOps.Divide(_numOps.FromDouble(rightIndices.Count), _numOps.FromDouble(y.Length));
 
         return _numOps.Add(_numOps.Multiply(_leftWeight, _leftMSE), _numOps.Multiply(_rightWeight, _rightMSE));
     }
@@ -1532,7 +1567,8 @@ public static class StatisticsHelper<T>
     /// </remarks>
     public static T CalculateMeanSquaredError(IEnumerable<T> values, T mean)
     {
-        return _numOps.Divide(values.Aggregate(_numOps.Zero, (acc, x) => _numOps.Add(acc, _numOps.Square(_numOps.Subtract(x, mean)))), _numOps.FromDouble(values.Count()));
+        var tensor = AsTensor(values);
+        return _numOps.Divide(SumOfSquaredDeviations(tensor, mean), _numOps.FromDouble(tensor.Length));
     }
 
     /// <summary>
@@ -1569,7 +1605,8 @@ public static class StatisticsHelper<T>
     /// </remarks>
     public static T CalculateMeanAbsoluteError(Vector<T> actualValues, Vector<T> predictedValues)
     {
-        T sumOfAbsoluteErrors = actualValues.Zip(predictedValues, (a, p) => _numOps.Abs(_numOps.Subtract(a, p))).Aggregate(_numOps.Zero, _numOps.Add);
+        var (actual, predicted) = PairedPrefix(AsTensor(actualValues), AsTensor(predictedValues));
+        T sumOfAbsoluteErrors = SumOfAbsoluteDifferences(actual, predicted);
 
         return _numOps.Divide(sumOfAbsoluteErrors, _numOps.FromDouble(actualValues.Length));
     }
@@ -1594,10 +1631,9 @@ public static class StatisticsHelper<T>
     public static T CalculateR2(Vector<T> actualValues, Vector<T> predictedValues)
     {
         T actualMean = CalculateMean(actualValues);
-        T totalSumSquares = actualValues.Select(a => _numOps.Square(_numOps.Subtract(a, actualMean)))
-                                        .Aggregate(_numOps.Zero, _numOps.Add);
-        T residualSumSquares = actualValues.Zip(predictedValues, (a, p) => _numOps.Square(_numOps.Subtract(a, p)))
-                                           .Aggregate(_numOps.Zero, _numOps.Add);
+        T totalSumSquares = SumOfSquaredDeviations(AsTensor(actualValues), actualMean);
+        var (actual, predicted) = PairedPrefix(AsTensor(actualValues), AsTensor(predictedValues));
+        T residualSumSquares = SumOfSquaredDifferences(actual, predicted);
 
         // Handle edge case where all actual values are constant (variance = 0)
         if (_numOps.Equals(totalSumSquares, _numOps.Zero))
@@ -3873,16 +3909,10 @@ public static class StatisticsHelper<T>
     /// </remarks>
     public static T CalculateAccuracy(Vector<T> actual, Vector<T> predicted)
     {
-        var correctPredictions = _numOps.Zero;
         var totalPredictions = _numOps.FromDouble(actual.Length);
-
-        for (int i = 0; i < actual.Length; i++)
-        {
-            if (_numOps.Equals(actual[i], predicted[i]))
-            {
-                correctPredictions = _numOps.Add(correctPredictions, _numOps.One);
-            }
-        }
+        var correctPredictions = actual.Length == 0
+            ? _numOps.Zero
+            : Count(Engine.TensorEquals(AsTensor(actual), Prefix(predicted, actual.Length)));
 
         return _numOps.Divide(correctPredictions, totalPredictions);
     }
@@ -3917,38 +3947,27 @@ public static class StatisticsHelper<T>
         tolerance = GetOrDefaultOptionalParameter(tolerance, _numOps.FromDouble(0.05), treatDefaultAsMissing);
         var classificationThreshold = _numOps.FromDouble(0.5);
 
-        for (int i = 0; i < actual.Length; i++)
+        if (actual.Length > 0)
         {
-            if (predictionType == PredictionType.BinaryClassification)
+            var a = AsTensor(actual);
+            var p = Prefix(predicted, actual.Length);
+            Tensor<T> correct;
+            if (predictionType == PredictionType.BinaryClassification || predictionType == PredictionType.MultiLabel)
             {
-                var actualLabel = _numOps.GreaterThanOrEquals(actual[i], classificationThreshold) ? _numOps.One : _numOps.Zero;
-                var predictedLabel = _numOps.GreaterThanOrEquals(predicted[i], classificationThreshold) ? _numOps.One : _numOps.Zero;
-                if (_numOps.Equals(actualLabel, predictedLabel))
-                    correctPredictions = _numOps.Add(correctPredictions, _numOps.One);
+                correct = Engine.TensorEquals(AtLeast(a, classificationThreshold), AtLeast(p, classificationThreshold));
             }
             else if (predictionType == PredictionType.MultiClass)
             {
-                int actualLabel = _numOps.ToInt32(actual[i]);
-                int predictedLabel = _numOps.ToInt32(predicted[i]);
-                if (actualLabel == predictedLabel)
-                    correctPredictions = _numOps.Add(correctPredictions, _numOps.One);
-            }
-            else if (predictionType == PredictionType.MultiLabel)
-            {
-                var actualLabel = _numOps.GreaterThanOrEquals(actual[i], classificationThreshold) ? _numOps.One : _numOps.Zero;
-                var predictedLabel = _numOps.GreaterThanOrEquals(predicted[i], classificationThreshold) ? _numOps.One : _numOps.Zero;
-                if (_numOps.Equals(actualLabel, predictedLabel))
-                    correctPredictions = _numOps.Add(correctPredictions, _numOps.One);
+                // Labels are the values rounded to the nearest integer (NumOps.ToInt32 rounds half to even).
+                correct = Engine.TensorEquals(Engine.TensorRound(a), Engine.TensorRound(p));
             }
             else // Regression
             {
-                var difference = _numOps.Abs(_numOps.Subtract(actual[i], predicted[i]));
-                var threshold = _numOps.Multiply(actual[i], tolerance);
-                if (_numOps.LessThanOrEquals(difference, threshold))
-                {
-                    correctPredictions = _numOps.Add(correctPredictions, _numOps.One);
-                }
+                var difference = Engine.TensorAbs(Engine.TensorSubtract(a, p));
+                correct = AtMost(difference, Engine.TensorMultiplyScalar(a, tolerance));
             }
+
+            correctPredictions = Count(correct);
         }
 
         return _numOps.Divide(correctPredictions, totalPredictions);
@@ -4005,57 +4024,27 @@ public static class StatisticsHelper<T>
             return CalculateMultiClassMacroPrecisionRecallF1(actual, predicted);
         }
 
-        for (int i = 0; i < actual.Length; i++)
+        if (actual.Length > 0)
         {
-            if (predictionType == PredictionType.BinaryClassification)
+            var a = AsTensor(actual);
+            var p = Prefix(predicted, actual.Length);
+            if (predictionType == PredictionType.BinaryClassification || predictionType == PredictionType.MultiLabel)
             {
-                var actualLabel = _numOps.GreaterThanOrEquals(actual[i], classificationThreshold) ? _numOps.One : _numOps.Zero;
-                var predictedLabel = _numOps.GreaterThanOrEquals(predicted[i], classificationThreshold) ? _numOps.One : _numOps.Zero;
-
-                if (_numOps.Equals(predictedLabel, _numOps.One))
-                {
-                    if (_numOps.Equals(actualLabel, _numOps.One))
-                        truePositives = _numOps.Add(truePositives, _numOps.One);
-                    else
-                        falsePositives = _numOps.Add(falsePositives, _numOps.One);
-                }
-                else if (_numOps.Equals(actualLabel, _numOps.One))
-                {
-                    falseNegatives = _numOps.Add(falseNegatives, _numOps.One);
-                }
-            }
-            else if (predictionType == PredictionType.MultiLabel)
-            {
-                var actualLabel = _numOps.GreaterThanOrEquals(actual[i], classificationThreshold) ? _numOps.One : _numOps.Zero;
-                var predictedLabel = _numOps.GreaterThanOrEquals(predicted[i], classificationThreshold) ? _numOps.One : _numOps.Zero;
-
-                if (_numOps.Equals(predictedLabel, _numOps.One))
-                {
-                    if (_numOps.Equals(actualLabel, _numOps.One))
-                        truePositives = _numOps.Add(truePositives, _numOps.One);
-                    else
-                        falsePositives = _numOps.Add(falsePositives, _numOps.One);
-                }
-                else if (_numOps.Equals(actualLabel, _numOps.One))
-                {
-                    falseNegatives = _numOps.Add(falseNegatives, _numOps.One);
-                }
+                var actualPositive = AtLeast(a, classificationThreshold);
+                var predictedPositive = AtLeast(p, classificationThreshold);
+                truePositives = Count(And(predictedPositive, actualPositive));
+                falsePositives = Count(And(predictedPositive, Not(actualPositive)));
+                falseNegatives = Count(And(Not(predictedPositive), actualPositive));
             }
             else // Regression
             {
-                var difference = _numOps.Abs(_numOps.Subtract(actual[i], predicted[i]));
-                if (_numOps.LessThanOrEquals(difference, regressionThreshold))
-                {
-                    truePositives = _numOps.Add(truePositives, _numOps.One);
-                }
-                else if (_numOps.GreaterThan(predicted[i], actual[i]))
-                {
-                    falsePositives = _numOps.Add(falsePositives, _numOps.One);
-                }
-                else
-                {
-                    falseNegatives = _numOps.Add(falseNegatives, _numOps.One);
-                }
+                // Within the threshold counts as a hit; otherwise over-prediction is a false positive and
+                // anything else (under-prediction, NaN) a false negative.
+                var withinThreshold = AtMost(Engine.TensorAbs(Engine.TensorSubtract(a, p)), Filled(a._shape, regressionThreshold));
+                var overPredicted = And(Not(withinThreshold), Engine.TensorGreaterThan(p, a));
+                truePositives = Count(withinThreshold);
+                falsePositives = Count(overPredicted);
+                falseNegatives = _numOps.FromDouble(actual.Length - Engine.TensorCountNonzero(withinThreshold) - Engine.TensorCountNonzero(overPredicted));
             }
         }
 
@@ -4068,67 +4057,51 @@ public static class StatisticsHelper<T>
 
     private static (T Precision, T Recall, T F1Score) CalculateMultiClassMacroPrecisionRecallF1(Vector<T> actual, Vector<T> predicted)
     {
-        var classIds = new HashSet<int>();
-
-        for (int i = 0; i < actual.Length; i++)
-        {
-            classIds.Add(_numOps.ToInt32(actual[i]));
-            classIds.Add(_numOps.ToInt32(predicted[i]));
-        }
-
-        if (classIds.Count == 0)
+        if (actual.Length == 0)
         {
             return (_numOps.Zero, _numOps.Zero, _numOps.Zero);
         }
 
-        T macroPrecision = _numOps.Zero;
-        T macroRecall = _numOps.Zero;
-        T macroF1 = _numOps.Zero;
-        T classCount = _numOps.FromDouble(classIds.Count);
+        // Class ids are the values rounded to the nearest integer (NumOps.ToInt32 rounds half to even).
+        var actualIds = Engine.TensorRound(AsTensor(actual));
+        var predictedIds = Engine.TensorRound(Prefix(predicted, actual.Length));
+        var classIds = Engine.TensorUnique(Engine.TensorConcatenate(new[] { actualIds, predictedIds }, 0), true);
 
-        foreach (int classId in classIds)
-        {
-            var tp = _numOps.Zero;
-            var fp = _numOps.Zero;
-            var fn = _numOps.Zero;
+        // Per class: tp = #(actual == c and predicted == c), predicted count = tp + fp, actual count = tp + fn.
+        var actualIsClass = OneHot(actualIds, classIds);
+        var predictedIsClass = OneHot(predictedIds, classIds);
+        var sampleAxis = new[] { 0 };
+        var tp = Engine.ReduceSum(And(actualIsClass, predictedIsClass), sampleAxis, false);
+        var precisionDen = Engine.ReduceSum(predictedIsClass, sampleAxis, false);
+        var recallDen = Engine.ReduceSum(actualIsClass, sampleAxis, false);
 
-            for (int i = 0; i < actual.Length; i++)
-            {
-                int a = _numOps.ToInt32(actual[i]);
-                int p = _numOps.ToInt32(predicted[i]);
+        var precision = SafeRatio(tp, precisionDen);
+        var recall = SafeRatio(tp, recallDen);
+        var f1 = SafeRatio(Engine.TensorMultiplyScalar(Engine.TensorMultiply(precision, recall), _numOps.FromDouble(2)),
+            Engine.TensorAdd(precision, recall));
 
-                bool actualIsClass = a == classId;
-                bool predictedIsClass = p == classId;
-
-                if (predictedIsClass)
-                {
-                    if (actualIsClass)
-                        tp = _numOps.Add(tp, _numOps.One);
-                    else
-                        fp = _numOps.Add(fp, _numOps.One);
-                }
-                else if (actualIsClass)
-                {
-                    fn = _numOps.Add(fn, _numOps.One);
-                }
-            }
-
-            var precisionDen = _numOps.Add(tp, fp);
-            var recallDen = _numOps.Add(tp, fn);
-
-            var precision = _numOps.Equals(precisionDen, _numOps.Zero) ? _numOps.Zero : _numOps.Divide(tp, precisionDen);
-            var recall = _numOps.Equals(recallDen, _numOps.Zero) ? _numOps.Zero : _numOps.Divide(tp, recallDen);
-            var f1 = CalculateF1Score(precision, recall);
-
-            macroPrecision = _numOps.Add(macroPrecision, precision);
-            macroRecall = _numOps.Add(macroRecall, recall);
-            macroF1 = _numOps.Add(macroF1, f1);
-        }
-
+        T classCount = _numOps.FromDouble(classIds.Length);
         return (
-            _numOps.Divide(macroPrecision, classCount),
-            _numOps.Divide(macroRecall, classCount),
-            _numOps.Divide(macroF1, classCount));
+            _numOps.Divide(Engine.TensorSum(precision), classCount),
+            _numOps.Divide(Engine.TensorSum(recall), classCount),
+            _numOps.Divide(Engine.TensorSum(f1), classCount));
+    }
+
+    /// <summary>[samples, classes] 0/1 grid: entry (i, c) is 1 when values[i] equals classes[c].</summary>
+    private static Tensor<T> OneHot(Tensor<T> values, Tensor<T> classes)
+    {
+        var grid = new[] { values.Length, classes.Length };
+        return Engine.TensorEquals(
+            Engine.TensorBroadcastTo(values.Reshape(new[] { values.Length, 1 }), grid),
+            Engine.TensorBroadcastTo(classes.Reshape(new[] { 1, classes.Length }), grid));
+    }
+
+    /// <summary>numerator / denominator element-wise, 0 where the denominator is 0.</summary>
+    private static Tensor<T> SafeRatio(Tensor<T> numerator, Tensor<T> denominator)
+    {
+        var zero = new Tensor<T>(denominator._shape);
+        return Engine.TensorWhere(Engine.TensorEquals(denominator, _numOps.Zero), zero,
+            Engine.TensorDivide(numerator, denominator));
     }
 
     /// <summary>
@@ -5433,19 +5406,14 @@ public static class StatisticsHelper<T>
         T falsePositives = _numOps.Zero;
         T falseNegatives = _numOps.Zero;
 
-        for (int i = 0; i < actual.Length; i++)
+        if (actual.Length > 0)
         {
-            bool actualPositive = _numOps.GreaterThan(actual[i], _numOps.Zero);
-            bool predictedPositive = _numOps.GreaterThanOrEquals(predicted[i], threshold);
-
-            if (actualPositive && predictedPositive)
-                truePositives = _numOps.Add(truePositives, _numOps.One);
-            else if (!actualPositive && !predictedPositive)
-                trueNegatives = _numOps.Add(trueNegatives, _numOps.One);
-            else if (!actualPositive && predictedPositive)
-                falsePositives = _numOps.Add(falsePositives, _numOps.One);
-            else
-                falseNegatives = _numOps.Add(falseNegatives, _numOps.One);
+            var actualPositive = Engine.TensorGreaterThan(AsTensor(actual), _numOps.Zero);
+            var predictedPositive = AtLeast(AsTensor(predicted), threshold);
+            truePositives = Count(And(actualPositive, predictedPositive));
+            trueNegatives = Count(And(Not(actualPositive), Not(predictedPositive)));
+            falsePositives = Count(And(Not(actualPositive), predictedPositive));
+            falseNegatives = Count(And(actualPositive, Not(predictedPositive)));
         }
 
         return new ConfusionMatrix<T>(truePositives, trueNegatives, falsePositives, falseNegatives);
