@@ -693,7 +693,38 @@ public abstract partial class TtsModelBase<T> : NeuralNetworkBase<T>, IShapeCont
         return codes;
     }
 
+    /// <summary>The frame mask <c>[1, 1, 1, padded]</c>: 1 on the first <paramref name="frames"/> frames, 0 on the padding.</summary>
+    protected Tensor<T> PaddedFrameMask(int frames, int padded)
+    {
+        var valid = Tensor<T>.CreateDefault(new[] { 1, 1, 1, frames }, NumOps.One);
+        return frames == padded ? valid
+            : Engine.TensorConcatenate(new[] { valid, new Tensor<T>(new[] { 1, 1, 1, padded - frames }) }, 3);
+    }
+
+    /// <summary>Inference durations <c>(int)(⌈exp(log d̂)⌉ · lengthScale)</c> (truncated toward zero), as Grad-TTS and
+    /// its descendants compute them.</summary>
+    protected int[] CeilScaledDurations(Tensor<T> logDurations, double lengthScale)
+    {
+        Guard.NotNull(logDurations);
+        return Engine.TensorTrunc(Engine.TensorMultiplyScalar(Engine.TensorCeiling(Engine.TensorExp(logDurations)),
+            NumOps.FromDouble(lengthScale))).Cast<int>().ToArray();
+    }
+
+    /// <summary>
+    /// The log-duration target <c>log(eps + d)</c> <c>[durations.Length]</c>. A zero duration's target is
+    /// <c>log(eps)</c> itself, which adding a narrow T's rounded eps (0 in Half for 1e-8) would turn into −∞.
+    /// </summary>
+    protected Tensor<T> LogDurationTarget(int[] durations, double eps)
+    {
+        Guard.NotNull(durations);
+        var counts = IdTensor(durations);
+        return Engine.TensorWhere(Engine.TensorEquals(counts, NumOps.Zero),
+            Tensor<T>.CreateDefault(new[] { durations.Length }, NumOps.FromDouble(Math.Log(eps))),
+            Engine.TensorLog(Engine.TensorAddScalar(counts, NumOps.FromDouble(eps))));
+    }
+
     /// <summary>Row <paramref name="index"/> of a <c>[batch, n]</c> tensor
+
 
 , as a <c>[n]</c> tensor.</summary>
     protected Tensor<T> BatchRow(Tensor<T> batch, int index)
