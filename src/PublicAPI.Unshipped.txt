@@ -22587,7 +22587,6 @@ AiDotNet.Metrics.AestheticScore<T>.ComputeBatch(System.Collections.Generic.IList
 AiDotNet.Metrics.AestheticScore<T>.AestheticScore(AiDotNet.Interfaces.IMultimodalEmbedding<T>! clipModel, AiDotNet.Tensors.LinearAlgebra.Vector<T>? aestheticWeights = null, string![]? positivePrompts = null, string![]? negativePrompts = null, T? aestheticBias = null) -> void
 *REMOVED*AiDotNet.Metrics.StructuralSimilarity<T>.StructuralSimilarity(T? maxValue = null, double k1 = 0.01, double k2 = 0.03, int windowSize = 11) -> void
 AiDotNet.Metrics.StructuralSimilarity<T>.StructuralSimilarity(T? maxValue = null, double k1 = 0.01, double k2 = 0.03, int windowSize = 11, double gaussianSigma = 1.5) -> void
-||||||| 0c06dc461c
 AiDotNet.AutoML.NAS.FBNet<T>.LatencyExponent.get -> double
 AiDotNet.AutoML.NAS.FBNet<T>.LatencyExponent.set -> void
 AiDotNet.AutoML.NAS.AttentiveNAS<T>.CandidatePoolSize.get -> int
@@ -22597,7 +22596,6 @@ AiDotNet.AutoML.NAS.AttentiveNAS<T>.SamplingStrategy.set -> void
 AiDotNet.AutoML.NAS.AttentiveSamplingStrategy
 AiDotNet.AutoML.NAS.AttentiveSamplingStrategy.BestUp = 0 -> AiDotNet.AutoML.NAS.AttentiveSamplingStrategy
 AiDotNet.AutoML.NAS.AttentiveSamplingStrategy.WorstUp = 1 -> AiDotNet.AutoML.NAS.AttentiveSamplingStrategy
-||||||| 0c06dc461c
 *REMOVED*AiDotNet.Kernels.GridInterpolationKernel<T>.ComputeInterpolationMatrix(AiDotNet.Tensors.LinearAlgebra.Matrix<T>! X) -> (int[]![]! Indices, double[]![]! Weights)
 *REMOVED*AiDotNet.Kernels.GridInterpolationKernel<T>.GridInterpolationKernel(AiDotNet.Interfaces.IKernelFunction<T>! baseKernel, double[]![]! gridCoordinates, int interpolationOrder = 4) -> void
 *REMOVED*AiDotNet.Kernels.GridInterpolationKernel<T>.KissGpMultiply(AiDotNet.Tensors.LinearAlgebra.Vector<T>! v, int[]![]! interpolationIndices, double[]![]! interpolationWeights) -> AiDotNet.Tensors.LinearAlgebra.Vector<T>!
