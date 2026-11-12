@@ -90,17 +90,16 @@ public class NeuralArchitectureSearch<T>
         // Create SuperNet with differentiable architecture
         var supernet = new SuperNet<T>(_searchSpace, numNodes: 4);
 
-        // Learning rates
-        T architectureLR = _ops.FromDouble(0.003);
-        T weightsLR = _ops.FromDouble(0.025);
-
-        // Momentum parameters
-        T momentum = _ops.FromDouble(0.9);
-
-        // Adam optimizer parameters
-        T beta1 = _ops.FromDouble(0.9);
-        T beta2 = _ops.FromDouble(0.999);
+        // DARTS (Liu et al. 2019, Sec. 5.1): alpha is trained with Adam (lr 3e-4, betas (0.5, 0.999), weight decay
+        // 1e-3); the network weights with SGD (momentum 0.9, weight decay 3e-4, gradient-norm clipping at 5) and a
+        // learning rate cosine-annealed from 0.025 to 0.001.
+        T architectureLR = _ops.FromDouble(DartsArchitectureLearningRate);
+        T beta1 = _ops.FromDouble(DartsArchitectureBeta1);
+        T beta2 = _ops.FromDouble(DartsArchitectureBeta2);
         T epsilon = _ops.FromDouble(1e-8);
+        T architectureWeightDecay = _ops.FromDouble(DartsArchitectureWeightDecay);
+        T momentum = _ops.FromDouble(DartsWeightMomentum);
+        T weightDecay = _ops.FromDouble(DartsWeightDecay);
 
         // Initialize Adam momentum buffers for architecture parameters
         var archMomentum = new List<Matrix<T>>();
@@ -111,9 +110,8 @@ public class NeuralArchitectureSearch<T>
             archVelocity.Add(new Matrix<T>(alpha.Rows, alpha.Columns));
         }
 
-        // Initialize momentum buffers for weights (will be populated dynamically)
+        // Initialize SGD momentum buffers for weights (will be populated dynamically)
         var weightMomentum = new Dictionary<string, Vector<T>>();
-        var weightVelocity = new Dictionary<string, Vector<T>>();
 
         // Do an initial forward pass to initialize weight parameters.
         // Only ONE sample is needed to materialise lazy weight shapes;
@@ -128,7 +126,6 @@ public class NeuralArchitectureSearch<T>
         foreach (var kvp in supernet.GetWeightParameters())
         {
             weightMomentum[kvp.Key] = new Vector<T>(kvp.Value.Length);
-            weightVelocity[kvp.Key] = new Vector<T>(kvp.Value.Length);
         }
 
         int t = 0; // Time step for Adam
@@ -145,26 +142,29 @@ public class NeuralArchitectureSearch<T>
 
             for (int i = 0; i < archParams.Count; i++)
             {
-                UpdateParametersAdam(archParams[i], archGrads[i], archMomentum[i], archVelocity[i],
-                    architectureLR, beta1, beta2, epsilon, t);
+                AdamStep(archParams[i], archGrads[i], archMomentum[i], archVelocity[i],
+                    architectureLR, beta1, beta2, epsilon, architectureWeightDecay, t);
             }
 
             // Phase 2: Update network weights on training set
             supernet.BackwardWeights(trainData, trainLabels, supernet.DefaultLossFunction);
             var weightParams = supernet.GetWeightParameters();
             var weightGrads = supernet.GetWeightGradients();
+            var weightKeys = weightParams.Keys.ToList();
 
-            foreach (var key in weightParams.Keys.ToList())
+            T weightsLR = _ops.FromDouble(CosineAnnealedLearningRate(epoch, _maxEpochs, DartsWeightMaxLearningRate, DartsWeightMinLearningRate));
+            T clipScale = GradientClipScale(weightKeys.Select(key => weightGrads[key]), _ops.FromDouble(DartsGradientClipNorm));
+
+            foreach (var key in weightKeys)
             {
-                // Initialize momentum/velocity if this is a new weight
+                // Initialize the momentum buffer if this is a new weight
                 if (!weightMomentum.ContainsKey(key))
                 {
                     weightMomentum[key] = new Vector<T>(weightParams[key].Length);
-                    weightVelocity[key] = new Vector<T>(weightParams[key].Length);
                 }
 
-                UpdateParametersAdam(weightParams[key], weightGrads[key], weightMomentum[key], weightVelocity[key],
-                    weightsLR, beta1, beta2, epsilon, t);
+                SgdMomentumStep(weightParams[key], weightGrads[key], weightMomentum[key],
+                    weightsLR, momentum, weightDecay, clipScale);
             }
 
             // Compute losses for logging
@@ -192,75 +192,97 @@ public class NeuralArchitectureSearch<T>
         return finalArchitecture;
     }
 
+    private const double DartsArchitectureLearningRate = 3e-4;
+    private const double DartsArchitectureBeta1 = 0.5;
+    private const double DartsArchitectureBeta2 = 0.999;
+    private const double DartsArchitectureWeightDecay = 1e-3;
+    private const double DartsWeightMaxLearningRate = 0.025;
+    private const double DartsWeightMinLearningRate = 0.001;
+    private const double DartsWeightMomentum = 0.9;
+    private const double DartsWeightDecay = 3e-4;
+    private const double DartsGradientClipNorm = 5.0;
+
     /// <summary>
-    /// Updates parameters using Adam optimizer
+    /// Cosine annealing without restarts: lr = min + (max - min) * (1 + cos(pi * epoch / epochs)) / 2.
     /// </summary>
-    private void UpdateParametersAdam(
-        object parameters,
-        object gradients,
-        object momentum,
-        object velocity,
-        T learningRate,
-        T beta1,
-        T beta2,
-        T epsilon,
-        int t)
+    internal static double CosineAnnealedLearningRate(int epoch, int epochs, double maxLearningRate, double minLearningRate)
     {
-        if (parameters is Matrix<T> paramMatrix && gradients is Matrix<T> gradMatrix &&
-            momentum is Matrix<T> momMatrix && velocity is Matrix<T> velMatrix)
-        {
-            for (int i = 0; i < paramMatrix.Rows; i++)
-            {
-                for (int j = 0; j < paramMatrix.Columns; j++)
-                {
-                    // m_t = β₁ * m_{t-1} + (1 - β₁) * g_t
-                    momMatrix[i, j] = _ops.Add(
-                        _ops.Multiply(beta1, momMatrix[i, j]),
-                        _ops.Multiply(_ops.Subtract(_ops.One, beta1), gradMatrix[i, j])
-                    );
+        double progress = epochs <= 0 ? 0.0 : (double)epoch / epochs;
+        return minLearningRate + (maxLearningRate - minLearningRate) * 0.5 * (1.0 + Math.Cos(Math.PI * progress));
+    }
 
-                    // v_t = β₂ * v_{t-1} + (1 - β₂) * g_t²
-                    velMatrix[i, j] = _ops.Add(
-                        _ops.Multiply(beta2, velMatrix[i, j]),
-                        _ops.Multiply(_ops.Subtract(_ops.One, beta2), _ops.Multiply(gradMatrix[i, j], gradMatrix[i, j]))
-                    );
+    /// <summary>
+    /// The factor that rescales a set of gradients to a global L2 norm of at most <paramref name="maxNorm"/>
+    /// (torch.nn.utils.clip_grad_norm_: maxNorm / (norm + 1e-6) when that is below 1, otherwise 1).
+    /// </summary>
+    internal static T GradientClipScale(IEnumerable<Vector<T>> gradients, T maxNorm)
+    {
+        var ops = MathHelper.GetNumericOperations<T>();
+        var engine = AiDotNetEngine.Current;
+        var squaredNorms = new Vector<T>(gradients.Select(g => engine.TensorSumOfSquares(g.AsTensor())));
+        T norm = ops.Sqrt(squaredNorms.Length == 0 ? ops.Zero : engine.Sum(squaredNorms));
+        T scale = ops.Divide(maxNorm, ops.Add(norm, ops.FromDouble(1e-6)));
+        return ops.LessThan(scale, ops.One) ? scale : ops.One;
+    }
 
-                    // Bias correction
-                    T mHat = _ops.Divide(momMatrix[i, j], _ops.Subtract(_ops.One, _ops.Power(beta1, _ops.FromDouble(t))));
-                    T vHat = _ops.Divide(velMatrix[i, j], _ops.Subtract(_ops.One, _ops.Power(beta2, _ops.FromDouble(t))));
+    /// <summary>
+    /// One in-place Adam step with L2 weight decay (PyTorch torch.optim.Adam): g' = g + wd * theta,
+    /// m = b1 m + (1 - b1) g', v = b2 v + (1 - b2) g'^2, theta -= lr * m_hat / (sqrt(v_hat) + eps).
+    /// </summary>
+    internal static void AdamStep(Matrix<T> parameters, Matrix<T> gradients, Matrix<T> momentum, Matrix<T> velocity,
+        T learningRate, T beta1, T beta2, T epsilon, T weightDecay, int t)
+    {
+        var p = Vector<T>.FromSpan(parameters.AsSpan());
+        var m = Vector<T>.FromSpan(momentum.AsSpan());
+        var v = Vector<T>.FromSpan(velocity.AsSpan());
+        AdamStep(p, Vector<T>.FromSpan(gradients.AsSpan()), m, v, learningRate, beta1, beta2, epsilon, weightDecay, t);
+        p.AsSpan().CopyTo(parameters.AsWritableSpan());
+        m.AsSpan().CopyTo(momentum.AsWritableSpan());
+        v.AsSpan().CopyTo(velocity.AsWritableSpan());
+    }
 
-                    // Update: θ_t = θ_{t-1} - α * m̂_t / (√v̂_t + ε)
-                    T update = _ops.Divide(_ops.Multiply(learningRate, mHat), _ops.Add(_ops.Sqrt(vHat), epsilon));
-                    paramMatrix[i, j] = _ops.Subtract(paramMatrix[i, j], update);
-                }
-            }
-        }
-        else if (parameters is Vector<T> paramVector && gradients is Vector<T> gradVector &&
-                 momentum is Vector<T> momVector && velocity is Vector<T> velVector)
-        {
-            for (int i = 0; i < paramVector.Length; i++)
-            {
-                // m_t = β₁ * m_{t-1} + (1 - β₁) * g_t
-                momVector[i] = _ops.Add(
-                    _ops.Multiply(beta1, momVector[i]),
-                    _ops.Multiply(_ops.Subtract(_ops.One, beta1), gradVector[i])
-                );
+    /// <inheritdoc cref="AdamStep(Matrix{T}, Matrix{T}, Matrix{T}, Matrix{T}, T, T, T, T, T, int)"/>
+    internal static void AdamStep(Vector<T> parameters, Vector<T> gradients, Vector<T> momentum, Vector<T> velocity,
+        T learningRate, T beta1, T beta2, T epsilon, T weightDecay, int t)
+    {
+        var ops = MathHelper.GetNumericOperations<T>();
+        var engine = AiDotNetEngine.Current;
+        var theta = parameters.AsTensor();
+        var g = engine.TensorAdd(gradients.AsTensor(), engine.TensorMultiplyScalar(theta, weightDecay));
 
-                // v_t = β₂ * v_{t-1} + (1 - β₂) * g_t²
-                velVector[i] = _ops.Add(
-                    _ops.Multiply(beta2, velVector[i]),
-                    _ops.Multiply(_ops.Subtract(_ops.One, beta2), _ops.Multiply(gradVector[i], gradVector[i]))
-                );
+        var m = engine.TensorAdd(engine.TensorMultiplyScalar(momentum.AsTensor(), beta1),
+            engine.TensorMultiplyScalar(g, ops.Subtract(ops.One, beta1)));
+        var v = engine.TensorAdd(engine.TensorMultiplyScalar(velocity.AsTensor(), beta2),
+            engine.TensorMultiplyScalar(engine.TensorMultiply(g, g), ops.Subtract(ops.One, beta2)));
 
-                // Bias correction
-                T mHat = _ops.Divide(momVector[i], _ops.Subtract(_ops.One, _ops.Power(beta1, _ops.FromDouble(t))));
-                T vHat = _ops.Divide(velVector[i], _ops.Subtract(_ops.One, _ops.Power(beta2, _ops.FromDouble(t))));
+        T biasCorrection1 = ops.Subtract(ops.One, ops.Power(beta1, ops.FromDouble(t)));
+        T biasCorrection2 = ops.Subtract(ops.One, ops.Power(beta2, ops.FromDouble(t)));
+        var mHat = engine.TensorDivideScalar(m, biasCorrection1);
+        var vHat = engine.TensorDivideScalar(v, biasCorrection2);
+        var update = engine.TensorDivide(engine.TensorMultiplyScalar(mHat, learningRate),
+            engine.TensorAddScalar(engine.TensorSqrt(vHat), epsilon));
 
-                // Update
-                T update = _ops.Divide(_ops.Multiply(learningRate, mHat), _ops.Add(_ops.Sqrt(vHat), epsilon));
-                paramVector[i] = _ops.Subtract(paramVector[i], update);
-            }
-        }
+        m.ToVector().AsSpan().CopyTo(momentum.AsWritableSpan());
+        v.ToVector().AsSpan().CopyTo(velocity.AsWritableSpan());
+        engine.TensorSubtract(theta, update).ToVector().AsSpan().CopyTo(parameters.AsWritableSpan());
+    }
+
+    /// <summary>
+    /// One in-place SGD step with momentum and L2 weight decay (PyTorch torch.optim.SGD, dampening 0):
+    /// g' = clip * g + wd * theta, buf = momentum * buf + g', theta -= lr * buf.
+    /// </summary>
+    internal static void SgdMomentumStep(Vector<T> parameters, Vector<T> gradients, Vector<T> buffer,
+        T learningRate, T momentum, T weightDecay, T gradientScale)
+    {
+        var engine = AiDotNetEngine.Current;
+        var theta = parameters.AsTensor();
+        var g = engine.TensorAdd(engine.TensorMultiplyScalar(gradients.AsTensor(), gradientScale),
+            engine.TensorMultiplyScalar(theta, weightDecay));
+        var buf = engine.TensorAdd(engine.TensorMultiplyScalar(buffer.AsTensor(), momentum), g);
+
+        buf.ToVector().AsSpan().CopyTo(buffer.AsWritableSpan());
+        engine.TensorSubtract(theta, engine.TensorMultiplyScalar(buf, learningRate)).ToVector().AsSpan()
+            .CopyTo(parameters.AsWritableSpan());
     }
 
     /// <summary>

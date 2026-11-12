@@ -245,6 +245,53 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
         }
 
         [Fact]
+        public void DartsOptimizers_MatchPyTorchAdamAndSgdWithWeightDecay()
+        {
+            // DARTS trains alpha with Adam(lr 3e-4, betas (0.5, 0.999), wd 1e-3) and weights with SGD(momentum 0.9,
+            // wd 3e-4) under a cosine schedule from 0.025 to 0.001; master used Adam(0.9, 0.999) without decay
+            // for both. These pin the per-step formulas of torch.optim.Adam / torch.optim.SGD.
+            var theta = new Vector<double>(new[] { 0.5, -1.0, 2.0 });
+            var grad = new Vector<double>(new[] { 0.1, 0.3, -0.2 });
+            var m = new Vector<double>(new[] { 0.01, -0.02, 0.03 });
+            var v = new Vector<double>(new[] { 0.001, 0.002, 0.003 });
+            double[] th0 = theta.ToArray(), m0 = m.ToArray(), v0 = v.ToArray();
+            const double lr = 3e-4, b1 = 0.5, b2 = 0.999, eps = 1e-8, wd = 1e-3;
+            const int t = 3;
+            NeuralArchitectureSearch<double>.AdamStep(theta, grad, m, v, lr, b1, b2, eps, wd, t);
+            for (int i = 0; i < 3; i++)
+            {
+                double g = grad[i] + wd * th0[i];
+                double mi = b1 * m0[i] + (1 - b1) * g;
+                double vi = b2 * v0[i] + (1 - b2) * g * g;
+                double mHat = mi / (1 - Math.Pow(b1, t));
+                double vHat = vi / (1 - Math.Pow(b2, t));
+                Assert.Equal(mi, m[i], 1e-15);
+                Assert.Equal(vi, v[i], 1e-15);
+                Assert.Equal(th0[i] - lr * mHat / (Math.Sqrt(vHat) + eps), theta[i], 1e-15);
+            }
+
+            var w = new Vector<double>(new[] { 1.0, -2.0 });
+            var wg = new Vector<double>(new[] { 3.0, 4.0 });
+            var buf = new Vector<double>(new[] { 0.5, 0.25 });
+            double scale = NeuralArchitectureSearch<double>.GradientClipScale(new[] { wg }, 2.5);
+            Assert.Equal(2.5 / (5.0 + 1e-6), scale, 1e-15);
+            Assert.Equal(1.0, NeuralArchitectureSearch<double>.GradientClipScale(new[] { wg }, 10.0));
+
+            NeuralArchitectureSearch<double>.SgdMomentumStep(w, wg, buf, 0.025, 0.9, 3e-4, scale);
+            double[] w0 = { 1.0, -2.0 }, g0 = { 3.0, 4.0 }, b0 = { 0.5, 0.25 };
+            for (int i = 0; i < 2; i++)
+            {
+                double b = 0.9 * b0[i] + (scale * g0[i] + 3e-4 * w0[i]);
+                Assert.Equal(b, buf[i], 1e-15);
+                Assert.Equal(w0[i] - 0.025 * b, w[i], 1e-15);
+            }
+
+            Assert.Equal(0.025, NeuralArchitectureSearch<double>.CosineAnnealedLearningRate(0, 50, 0.025, 0.001), 1e-15);
+            Assert.Equal(0.013, NeuralArchitectureSearch<double>.CosineAnnealedLearningRate(25, 50, 0.025, 0.001), 1e-15);
+            Assert.Equal(0.001, NeuralArchitectureSearch<double>.CosineAnnealedLearningRate(50, 50, 0.025, 0.001), 1e-15);
+        }
+
+        [Fact]
         public void HardwareCostModel_ArchitectureCost_SumsOperationCosts()
         {
             var model = new HardwareCostModel<double>(HardwarePlatform.Mobile);
