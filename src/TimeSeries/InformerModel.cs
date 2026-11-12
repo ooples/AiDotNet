@@ -133,9 +133,17 @@ public partial class InformerModel<T> : TimeSeriesModelBase<T>, ISupportsLossFun
             RegisterParameterComponent($"informer.layer{i}", _layers[i]);
     }
 
-    private T Scale(T value) => _numOps.FromDouble((_numOps.ToDouble(value) - _scaleMean) / _scaleStd);
-
     private T Unscale(double value) => _numOps.FromDouble(value * _scaleStd + _scaleMean);
+
+    // (x - mean) / std of every element.
+    private Tensor<T> ScaleAll(Tensor<T> values)
+        => Engine.TensorDivideScalar(Engine.TensorSubtractScalar(values, _numOps.FromDouble(_scaleMean)),
+            _numOps.FromDouble(_scaleStd));
+
+    // x * std + mean of every element.
+    private Tensor<T> UnscaleAll(Tensor<T> values)
+        => Engine.TensorAddScalar(Engine.TensorMultiplyScalar(values, _numOps.FromDouble(_scaleStd)),
+            _numOps.FromDouble(_scaleMean));
 
     /// <summary>
     /// Trains the Informer as the reference's experiment does: the series is standardized with statistics of the
@@ -151,25 +159,19 @@ public partial class InformerModel<T> : TimeSeriesModelBase<T>, ISupportsLossFun
         if (samples <= 0)
             throw new ArgumentException(
                 $"Not enough data to build a single training sample. Require at least {lookback + horizon} points, got {y.Length}.", nameof(y));
-        _trainingSeries = new Vector<T>(y.Length);
-        for (int i = 0; i < y.Length; i++) _trainingSeries[i] = y[i];
+        _trainingSeries = y.Clone();
         ModelParameters = new Vector<T>(1);
         ModelParameters[0] = _numOps.FromDouble(y.Length);
 
-        double mean = 0;
-        for (int i = 0; i < y.Length; i++) mean += _numOps.ToDouble(y[i]);
-        mean /= y.Length;
-        double variance = 0;
-        for (int i = 0; i < y.Length; i++)
-        {
-            double d = _numOps.ToDouble(y[i]) - mean;
-            variance += d * d;
-        }
-        _scaleMean = mean;
-        _scaleStd = Math.Sqrt(variance / y.Length);
+        // Population mean and standard deviation of the training series.
+        var series = Tensor<T>.FromVector(y);
+        T mean = Engine.TensorMean(series);
+        T variance = Engine.TensorMean(Engine.TensorSquare(Engine.TensorSubtractScalar(series, mean)));
+        _scaleMean = _numOps.ToDouble(mean);
+        _scaleStd = Math.Sqrt(_numOps.ToDouble(variance));
         if (_scaleStd < 1e-12) _scaleStd = 1.0;
-        var scaled = new T[y.Length];
-        for (int i = 0; i < y.Length; i++) scaled[i] = Scale(y[i]);
+        // Every window of the scaled series: [samples, the history and then the target values of each sample].
+        var windows = Engine.TensorUnfold(ScaleAll(series), 0, lookback + horizon, 1);
 
         var optimizer = new AdamOptimizer<T, Tensor<T>, Tensor<T>>(null, new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
         {
@@ -197,7 +199,7 @@ public partial class InformerModel<T> : TimeSeriesModelBase<T>, ISupportsLossFun
             {
                 if (timeBounded && TrainingCancellationToken.IsCancellationRequested) break;
                 TrainingCancellationToken.ThrowIfCancellationRequested();
-                var (history, target) = Batch(scaled, order, start, batchSize);
+                var (history, target) = Batch(windows, order, start, batchSize);
                 // Forward, loss, backward and the Adam update: one fused compiled plan when it applies (CPU or GPU),
                 // the eager tape otherwise.
                 T lossValue = TrainTapeBatch(Array.Empty<ITrainableLayer<T>>(), history, target,
@@ -213,48 +215,46 @@ public partial class InformerModel<T> : TimeSeriesModelBase<T>, ISupportsLossFun
     }
 
     // The windows of the given samples: history [B, LookbackWindow, 1] and the forecast target [B, ForecastHorizon, 1].
-    private (Tensor<T> history, Tensor<T> target) Batch(T[] series, int[] order, int start, int count)
+    private (Tensor<T> history, Tensor<T> target) Batch(Tensor<T> windows, int[] order, int start, int count)
     {
         int lookback = _options.LookbackWindow, horizon = _options.ForecastHorizon;
-        var history = new Tensor<T>(new[] { count, lookback, 1 });
-        var target = new Tensor<T>(new[] { count, horizon, 1 });
-        for (int b = 0; b < count; b++)
-        {
-            int s = order[start + b];
-            for (int t = 0; t < lookback; t++) history[b, t, 0] = series[s + t];
-            for (int h = 0; h < horizon; h++) target[b, h, 0] = series[s + lookback + h];
-        }
-        return (history, target);
+        var rows = new Tensor<int>(new[] { count }, new Vector<int>(new ArraySegment<int>(order, start, count)));
+        var picked = Engine.TensorIndexSelect(windows, rows, 0);
+        var history = Engine.TensorSlice(picked, new[] { 0, 0 }, new[] { count, lookback });
+        var target = Engine.TensorSlice(picked, new[] { 0, lookback }, new[] { count, horizon });
+        return (Engine.Reshape(history, new[] { count, lookback, 1 }), Engine.Reshape(target, new[] { count, horizon, 1 }));
     }
 
-    // The forecast (unscaled) of the ForecastHorizon steps after a history of raw values, the last LookbackWindow of
-    // them; a shorter history is extended to the left by repeating its first value.
-    private double[] ForecastFrom(IReadOnlyList<T> history) => ForecastFrom(new[] { history })[0];
+    // The unscaled forecast [1, ForecastHorizon] of the steps after a history of raw values, the last LookbackWindow
+    // of them; a shorter history is extended to the left by repeating its first value.
+    private Tensor<T> ForecastFrom(Vector<T> history) => ForecastFrom(history, new[] { 0 }, new[] { history.Length });
 
-    // The forecasts of several histories in one forward pass. ProbSparse samples one key set per forward, shared by
-    // the batch as in the reference, from the same inference seed, so each row gets what it would get alone.
-    private double[][] ForecastFrom(IReadOnlyList<IReadOnlyList<T>> histories)
+    // The unscaled forecasts [count, ForecastHorizon] of several histories in one forward pass. ProbSparse samples
+    // one key set per forward, shared by the batch as in the reference, from the same inference seed, so each row
+    // gets what it would get alone.
+    // History b is values[firsts[b] .. ends[b]); its window is the last LookbackWindow of them, extended to the left
+    // by repeating values[firsts[b]].
+    private Tensor<T> ForecastFrom(Vector<T> values, int[] firsts, int[] ends)
     {
-        int lookback = _options.LookbackWindow, count = histories.Count;
-        var window = new Tensor<T>(new[] { count, lookback, 1 });
+        int lookback = _options.LookbackWindow, count = ends.Length;
+        var positions = new int[count * lookback];
         for (int b = 0; b < count; b++)
         {
-            var history = histories[b];
-            if (history.Count == 0) throw new ArgumentException("Informer needs at least one observed value to forecast from.");
-            int offset = history.Count - lookback;
-            for (int t = 0; t < lookback; t++) window[b, t, 0] = Scale(history[Math.Max(0, offset + t)]);
+            if (ends[b] <= firsts[b]) throw new ArgumentException("Informer needs at least one observed value to forecast from.");
+            for (int t = 0; t < lookback; t++) positions[b * lookback + t] = Math.Max(firsts[b], ends[b] - lookback + t);
         }
+        var gathered = Engine.TensorIndexSelect(Tensor<T>.FromVector(values),
+            new Tensor<int>(new[] { positions.Length }, new Vector<int>(positions)), 0);
+        var window = Engine.Reshape(ScaleAll(gathered), new[] { count, lookback, 1 });
         using var _ = new Tensors.Engines.Autodiff.NoGradScope<T>();
         var forecast = _network.Forward(window, null, _network.DecoderInput(window), null, training: false,
             InformerNetwork<T>.InferenceRandom(_options.Seed));
-        var result = new double[count][];
-        for (int b = 0; b < count; b++)
-        {
-            result[b] = new double[_options.ForecastHorizon];
-            for (int h = 0; h < result[b].Length; h++) result[b][h] = _numOps.ToDouble(Unscale(_numOps.ToDouble(forecast[b, h, 0])));
-        }
-        return result;
+        return UnscaleAll(Engine.Reshape(forecast, new[] { count, _options.ForecastHorizon }));
     }
+
+    // The first forecast step of every row of [count, ForecastHorizon] forecasts, as [count, 1].
+    private Tensor<T> FirstSteps(Tensor<T> forecasts)
+        => Engine.TensorSlice(forecasts, new[] { 0, 0 }, new[] { forecasts.Shape[0], 1 });
 
     /// <summary>
     /// Predicts the series: with as many rows as the training series, the one-step forecast of each observation from
@@ -274,53 +274,42 @@ public partial class InformerModel<T> : TimeSeriesModelBase<T>, ISupportsLossFun
         if (n == 0) return predictions;
         if (n == _trainingSeries.Length)
         {
-            var observed = _trainingSeries.ToArray();
-            predictions[0] = GuardPrediction(Unscale(0.0));
-            if (n == 1) return predictions;
-            var prefixes = new IReadOnlyList<T>[n - 1];
-            for (int i = 1; i < n; i++) prefixes[i - 1] = new ArraySegment<T>(observed, 0, i);
-            var inSample = ForecastFrom(prefixes);
-            for (int i = 1; i < n; i++) predictions[i] = GuardPrediction(_numOps.FromDouble(inSample[i - 1][0]));
-            return predictions;
+            var first = new Vector<T>(new[] { GuardPrediction(Unscale(0.0)) });
+            if (n == 1) return first;
+            var inSample = ForecastFrom(_trainingSeries, new int[n - 1], Enumerable.Range(1, n - 1).ToArray());
+            return Vector<T>.Concatenate(first, GuardPredictions(FirstSteps(inSample)));
         }
         if (input.Columns == 1)
         {
             // Time steps after the series: the model's own forecast, continued from its forecasts.
-            var history = _trainingSeries.ToList();
+            var history = _trainingSeries;
             int produced = 0;
             while (produced < n)
             {
-                var forecast = ForecastFrom(history);
-                for (int h = 0; h < forecast.Length && produced < n; h++)
-                {
-                    var value = GuardPrediction(_numOps.FromDouble(forecast[h]));
-                    predictions[produced++] = value;
-                    history.Add(value);
-                }
+                var forecast = GuardPredictions(ForecastFrom(history));
+                var taken = forecast.GetSubVector(0, Math.Min(forecast.Length, n - produced));
+                history = Vector<T>.Concatenate(history, taken);
+                produced += taken.Length;
             }
-            return predictions;
+            return history.GetSubVector(_trainingSeries.Length, n);
         }
-        var rows = new IReadOnlyList<T>[n];
-        for (int i = 0; i < n; i++) rows[i] = input.GetRow(i).ToArray();
-        var forecasts = ForecastFrom(rows);
-        for (int i = 0; i < n; i++) predictions[i] = _numOps.FromDouble(forecasts[i][0]);
-        return predictions;
+        int columns = input.Columns;
+        var firsts = Enumerable.Range(0, n).Select(i => i * columns).ToArray();
+        var ends = Enumerable.Range(1, n).Select(i => i * columns).ToArray();
+        return FirstSteps(ForecastFrom(input.ToRowVector(), firsts, ends)).ToVector();
     }
 
     /// <summary>
     /// Predicts the value after the given history (its last LookbackWindow values).
     /// </summary>
-    public override T PredictSingle(Vector<T> input) => _numOps.FromDouble(ForecastFrom(input.ToArray())[0]);
+    public override T PredictSingle(Vector<T> input) => FirstSteps(ForecastFrom(input)).ToVector()[0];
 
     /// <summary>
     /// Forecasts the ForecastHorizon values after the given history in one forward pass of the generative decoder.
     /// </summary>
     public Vector<T> ForecastHorizon(Vector<T> input)
     {
-        var forecast = ForecastFrom(input.ToArray());
-        var result = new Vector<T>(forecast.Length);
-        for (int h = 0; h < forecast.Length; h++) result[h] = _numOps.FromDouble(forecast[h]);
-        return result;
+        return ForecastFrom(input).ToVector();
     }
 
     /// <inheritdoc />

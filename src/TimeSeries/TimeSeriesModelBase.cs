@@ -884,6 +884,20 @@ public abstract partial class TimeSeriesModelBase<T> : ITimeSeriesModel<T>, ICon
     }
 
     /// <summary>
+    /// <see cref="GuardPrediction"/> applied to every element of <paramref name="values"/> as whole-tensor ops:
+    /// NaN becomes zero and anything beyond the threshold, infinities included, is clamped to it.
+    /// </summary>
+    /// <returns>The guarded values, flattened in row-major order.</returns>
+    protected Vector<T> GuardPredictions(Tensor<T> values, double maxAbsValue = -1)
+    {
+        double threshold = maxAbsValue > 0
+            ? maxAbsValue
+            : Options.MaxPredictionAbsValue ?? _autoGuardThreshold;
+        var finite = Engine.TensorNanToNum(values, 0.0, threshold, -threshold);
+        return Engine.TensorClamp(finite, NumOps.FromDouble(-threshold), NumOps.FromDouble(threshold)).ToVector();
+    }
+
+    /// <summary>
     /// Answers a one-column time-index input (the public supervised calling convention) with the model's own forecasts,
     /// for models that read a lookback window of <paramref name="window"/> values (more than one, so a one-column input
     /// cannot itself be a window). With as many rows as the training series, row i is the one-step forecast of
