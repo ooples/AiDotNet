@@ -513,6 +513,8 @@ public abstract partial class SequenceLabelingNERBase<T> : NERNeuralNetworkBase<
     /// </remarks>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
+        // A model of this family that declares its own objective or learning rule takes its step through it.
+        if (TryTrainDeclaredObjectives(input, expectedOutput)) return;
         if (CrfTraining is not bool useCrf)
         {
             base.Train(input, expectedOutput);

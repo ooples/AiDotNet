@@ -254,7 +254,7 @@ public class EWCTrainer<T, TInput, TOutput> : ContinualLearnerBase<T, TInput, TO
                 }
 
                 // Adjust gradients using strategy (EWC adds regularization gradients)
-                var adjustedGradients = Strategy.AdjustGradients(batchGradients);
+                var adjustedGradients = Strategy.AdjustGradients(Model, batchGradients);
 
                 // Apply gradients to update model
                 GradModel.ApplyGradients(adjustedGradients, learningRate);
@@ -277,7 +277,7 @@ public class EWCTrainer<T, TInput, TOutput> : ContinualLearnerBase<T, TInput, TO
                     var replayGradients = ComputeReplayGradients(replayBatch);
                     if (replayGradients != null)
                     {
-                        var adjustedReplayGradients = Strategy.AdjustGradients(replayGradients);
+                        var adjustedReplayGradients = Strategy.AdjustGradients(Model, replayGradients);
                         GradModel.ApplyGradients(adjustedReplayGradients, replayLr);
                         totalGradientUpdates++;
                     }

@@ -287,7 +287,7 @@ public class GEMTrainer<T, TInput, TOutput> : ContinualLearnerBase<T, TInput, TO
                 batchViolationFlags.Add(violatedConstraint ? violatedFlag : satisfiedFlag);
 
                 // Adjust gradients using strategy (GEM projects gradients if they violate constraints)
-                var adjustedGradients = Strategy.AdjustGradients(batchGradients);
+                var adjustedGradients = Strategy.AdjustGradients(Model, batchGradients);
 
                 // Apply gradients to update model
                 InterfaceGuard.GradientComputable(Model).ApplyGradients(adjustedGradients, learningRate);

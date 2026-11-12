@@ -97,15 +97,15 @@ public class SpERTNER<T> : SpanBasedNERBase<T>
     }
 
     /// <inheritdoc />
+    /// <remarks>SpERT's span classifier (Eberts and Ulges 2020, section 3.1): each span is the max-pooled token states it covers, a learned 25-dimensional width embedding and the sentence context vector, classified by a linear layer; spans up to 10 tokens are candidates.</remarks>
     protected override IEnumerable<ILayer<T>> CreateDefaultLayers()
     {
-        return LayerHelper<T>.CreateDefaultSpanBasedNERLayers(
-            hiddenDimension: NEROptions.HiddenDimension,
-            numAttentionHeads: NEROptions.NumAttentionHeads,
-            numTransformerLayers: NEROptions.NumTransformerLayers,
-            intermediateDimension: NEROptions.IntermediateDimension,
-            spanEmbeddingDimension: NEROptions.SpanEmbeddingDimension,
-            numLabels: NEROptions.NumLabels,
-            dropoutRate: NEROptions.DropoutRate);
+        foreach (var layer in CreateTokenEncoderLayers()) yield return layer;
+        int maxWidth = NEROptions.MaxSpanLength > 0 ? NEROptions.MaxSpanLength : 10;
+        yield return new SpanRepresentationScorerLayer<T>(SpanRepresentationKind.MaxPool, NEROptions.HiddenDimension,
+            widthDim: 25, maxWidth: maxWidth, hiddenDim: 1, numCategories: NEROptions.NumLabels);
     }
+
+    /// <inheritdoc />
+    protected override Tensor<T> BuildTrainingTargets(Tensor<T> labels, int seqLen) => BuildSpanGridTargets(labels, seqLen);
 }

@@ -151,6 +151,11 @@ public partial class FasterRCNN<T> : ObjectDetectorBase<T>, IDetectionTrainingMo
         };
     }
 
+    /// <summary>Output 2, the proposal boxes the detection head classified, is data: training cannot change it.</summary>
+    protected override IReadOnlyCollection<int> DataOutputIndices => ProposalBoxesOutput;
+
+    private static readonly int[] ProposalBoxesOutput = { 2 };
+
     /// <summary>Proposals kept after the RPN's NMS (Ren et al. 2015 with FPN; torchvision's post_nms_top_n).</summary>
     internal const int PostNmsTopK = 1000;
 

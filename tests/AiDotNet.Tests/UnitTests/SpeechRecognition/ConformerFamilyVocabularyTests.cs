@@ -31,9 +31,9 @@ public class ConformerFamilyVocabularyTests
         nameof(ConformerTransducer<double>) => new ConformerTransducer<double>(Architecture(), new ConformerTransducerOptions
         { EncoderDim = 16, NumEncoderLayers = 1, NumAttentionHeads = 2, PredictionDim = 16, JointDim = 16, NumMels = 16, VocabSize = 4, Vocabulary = Vocabulary, Seed = 3 }),
         nameof(ConvTransformer<double>) => new ConvTransformer<double>(Architecture(), new ConvTransformerOptions
-        { EncoderDim = 16, NumEncoderLayers = 1, NumAttentionHeads = 2, FeedForwardDim = 32, NumMels = 16, VocabSize = 4, Vocabulary = Vocabulary, Seed = 3 }),
+        { EncoderDim = 16, NumEncoderLayers = 1, NumAttentionHeads = 2, FeedForwardMultiplier = 2, NumDecoderLayers = 1, DecoderEmbeddingDim = 16, MaxTextLength = 4, NumMels = 16, VocabSize = 4, Vocabulary = Vocabulary, Seed = 3 }),
         nameof(EBranchformer<double>) => new EBranchformer<double>(Architecture(), new EBranchformerOptions
-        { EncoderDim = 16, NumEncoderLayers = 1, NumAttentionHeads = 2, CgmlpDim = 32, MergeDim = 16, NumMels = 16, VocabSize = 4, Vocabulary = Vocabulary, Seed = 3 }),
+        { EncoderDim = 16, NumEncoderLayers = 1, NumAttentionHeads = 2, CgmlpDim = 32, AttentionDecoderLayers = 1, AttentionDecoderFeedForward = 32, MaxTextLength = 4, NumMels = 16, VocabSize = 4, Vocabulary = Vocabulary, Seed = 3 }),
         nameof(EfficientConformer<double>) => new EfficientConformer<double>(Architecture(), new EfficientConformerOptions
         { NumEncoderLayers = 3, NumMels = 16, VocabSize = 4, Vocabulary = Vocabulary, Seed = 3 }),
         nameof(Squeezeformer<double>) => new Squeezeformer<double>(Architecture(), new SqueezeformerOptions

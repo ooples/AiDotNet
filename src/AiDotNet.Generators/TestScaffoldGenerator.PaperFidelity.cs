@@ -208,14 +208,20 @@ public partial class TestScaffoldGenerator
         for (INamedTypeSymbol? walk = options.OriginalDefinition; walk is not null; walk = walk.BaseType?.OriginalDefinition)
         {
             foreach (var property in walk.GetMembers().OfType<IPropertySymbol>().OrderBy(p => p.Name, System.StringComparer.Ordinal)
-                .Where(property => !property.IsStatic && !property.IsIndexer && !property.IsOverride
+                // An override is the most-derived declaration, met first on the walk up, so its [OptionBehaviourExempt]
+                // decides the case; skipping overrides probed the base declaration and lost the exemption.
+                .Where(property => !property.IsStatic && !property.IsIndexer
                     && property.DeclaredAccessibility == Accessibility.Public
                     && property.SetMethod is { DeclaredAccessibility: Accessibility.Public }
                     && seen.Add(property.Name) && HasGenericPerturbation(property.Type)))
             {
                 string? skip = null;
                 var exemption = property.GetAttributes().FirstOrDefault(a =>
-                    a.AttributeClass?.ToDisplayString() == OptionsFidelityAnalyzer.OptionBehaviourExemptAttributeName);
+                    a.AttributeClass?.ToDisplayString() == OptionsFidelityAnalyzer.OptionBehaviourExemptAttributeName
+                    && (!a.NamedArguments.Any(argument => argument.Key == "ModelType")
+                        || a.NamedArguments.Any(argument => argument.Key == "ModelType"
+                            && (argument.Value.IsNull || argument.Value.Value is INamedTypeSymbol exemptModel
+                                && MatchesModelScope(exemptModel, modelClass)))));
                 if (exemption is { ConstructorArguments.Length: 1 } && exemption.ConstructorArguments[0].Value is string reason
                     && !string.IsNullOrWhiteSpace(reason))
                 {
@@ -234,6 +240,13 @@ public partial class TestScaffoldGenerator
         }
 
         return cases;
+    }
+
+    private static bool MatchesModelScope(INamedTypeSymbol scope, INamedTypeSymbol model)
+    {
+        for (INamedTypeSymbol? current = model; current is not null; current = current.BaseType)
+            if (SymbolEqualityComparer.Default.Equals(scope.OriginalDefinition, current.OriginalDefinition)) return true;
+        return false;
     }
 
     /// <summary>Whether the runtime harness has a generic valid perturbation for a property of this type.</summary>

@@ -285,7 +285,7 @@ public class SITrainer<T, TInput, TOutput> : ContinualLearnerBase<T, TInput, TOu
                 }
 
                 // Adjust gradients using strategy (SI adds regularization gradients)
-                var adjustedGradients = Strategy.AdjustGradients(batchGradients);
+                var adjustedGradients = Strategy.AdjustGradients(Model, batchGradients);
 
                 // Apply gradients to update model
                 GradModel.ApplyGradients(adjustedGradients, learningRate);
@@ -314,7 +314,7 @@ public class SITrainer<T, TInput, TOutput> : ContinualLearnerBase<T, TInput, TOu
                     var replayGradients = ComputeReplayGradients(replayBatch);
                     if (replayGradients != null)
                     {
-                        var adjustedReplayGradients = Strategy.AdjustGradients(replayGradients);
+                        var adjustedReplayGradients = Strategy.AdjustGradients(Model, replayGradients);
                         GradModel.ApplyGradients(adjustedReplayGradients, replayLr);
                         totalGradientUpdates++;
 

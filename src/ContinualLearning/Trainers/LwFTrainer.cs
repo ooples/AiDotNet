@@ -284,6 +284,21 @@ public class LwFTrainer<T, TInput, TOutput> : ContinualLearnerBase<T, TInput, TO
                         {
                             sampleDistillLoss = _lwfStrategy.ComputeDistillationLoss(teacherVector, studentVector);
                         }
+
+                        // λ_o ∇L_old (Li and Hoiem 2017, Eq. 1): the gradient of the distillation loss joins the task
+                        // gradient, so the update preserves the recorded outputs rather than only reporting them.
+                        if (includeDistillGrads)
+                        {
+                            var distillGradients = GradModel.ComputeGradients(input, teacherOutput, _lwfStrategy.DistillationLoss);
+                            int len = Math.Min(batchGradients.Length, distillGradients.Length);
+                            if (len > 0)
+                            {
+                                var scaledDistill = Engine.TensorMultiplyScalar(HeadView(distillGradients, len), currentDistillWeightT);
+                                Engine.TensorAdd(HeadView(batchGradients, len), scaledDistill)
+                                    .AsSpan()
+                                    .CopyTo(batchGradients.AsWritableSpan().Slice(0, len));
+                            }
+                        }
                     }
                     sampleDistillLosses.Add(sampleDistillLoss);
                 }
@@ -301,7 +316,7 @@ public class LwFTrainer<T, TInput, TOutput> : ContinualLearnerBase<T, TInput, TO
                 }
 
                 // Adjust gradients using strategy
-                var adjustedGradients = Strategy.AdjustGradients(batchGradients);
+                var adjustedGradients = Strategy.AdjustGradients(Model, batchGradients);
 
                 // Apply gradients to update model
                 GradModel.ApplyGradients(adjustedGradients, learningRate);
@@ -324,7 +339,7 @@ public class LwFTrainer<T, TInput, TOutput> : ContinualLearnerBase<T, TInput, TO
                     var replayGradients = ComputeReplayGradients(replayBatch);
                     if (replayGradients != null)
                     {
-                        var adjustedReplayGradients = Strategy.AdjustGradients(replayGradients);
+                        var adjustedReplayGradients = Strategy.AdjustGradients(Model, replayGradients);
                         GradModel.ApplyGradients(adjustedReplayGradients, replayLr);
                         totalGradientUpdates++;
                     }

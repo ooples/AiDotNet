@@ -1,31 +1,25 @@
-using AiDotNet.Enums;
 using AiDotNet.Models.Options;
 using AiDotNet.Onnx;
 
 namespace AiDotNet.Video.Options;
 
 /// <summary>
-/// Configuration options for the DualX-VSR dual axial spatial-temporal transformer.
+/// Configuration options for DualX-VSR, the dual axial spatial x temporal transformer for real-world video
+/// super-resolution without motion compensation.
 /// </summary>
 /// <remarks>
 /// <para>
-/// DualX-VSR (2025) eliminates explicit motion compensation through dual axial attention:
-/// - Dual axial attention: decomposes 3D (H x W x T) attention into two orthogonal axes
-///   -- spatial-height-temporal and spatial-width-temporal -- reducing complexity from
-///   O((HWT)^2) to O(HWT * max(H,W,T))
-/// - Motion-free alignment: the dual axial attention implicitly captures inter-frame
-///   correspondence without computing optical flow or deformable offsets
-/// - Symmetric bidirectional processing: forward and backward temporal propagation with
-///   shared axial attention weights
-/// - Efficient design: linear complexity in the number of frames while maintaining
-///   full spatial-temporal receptive field
+/// Defaults follow Cao et al. 2025 (arXiv 2506.04830), Tables 6-8 and Sec. 5.1: a 64-channel 3x3 shallow convolution,
+/// 2x2 patches embedded to 1,280 channels, six vertical-temporal then six horizontal-temporal blocks, 12 heads, MLP ratio
+/// 2, RoPE with base 10,000, temporal transformers of depth 2 in the embedding and the reconstruction, x4 upsampling and
+/// 16-frame clips. Training is AdamW at 5e-5 for 500,000 bicubic pretraining and 150,000 real-degradation fine-tuning
+/// iterations on Charbonnier loss, then 25,000 iterations at 1e-5 for the generator and discriminator on Charbonnier,
+/// perceptual and GAN losses weighted 0.01, 1 and 0.005. The paper gives no code; <see cref="HeadDim"/> (64, vit-pytorch's
+/// ViViT default) is the head width that reproduces its 127.95M parameters, and AdamW's unstated decay is PyTorch's 0.01.
 /// </para>
 /// <para>
-/// <b>For Beginners:</b> Most video SR models need to figure out how objects moved between
-/// frames (optical flow). DualX-VSR skips this step entirely by using a clever attention
-/// pattern that looks along two crossing axes simultaneously, naturally capturing motion
-/// without explicit computation. Think of it like looking at a crossword puzzle -- by
-/// reading both across and down, you understand the full picture.
+/// <b>For Beginners:</b> DualX-VSR upscales video four times without estimating motion. These settings control how wide
+/// and deep its attention is and how it is trained: first to match clean frames, then also to look realistic.
 /// </para>
 /// </remarks>
 public class DualXVSROptions : NeuralNetworkOptions
@@ -42,45 +36,82 @@ public class DualXVSROptions : NeuralNetworkOptions
     /// </summary>
     /// <param name="other">The options instance to copy from.</param>
     /// <exception cref="ArgumentNullException">Thrown when other is null.</exception>
-    public DualXVSROptions(DualXVSROptions other)
+    public DualXVSROptions(DualXVSROptions other) : base(other)
     {
         if (other == null)
             throw new ArgumentNullException(nameof(other));
 
-        Variant = other.Variant;
+        Seed = other.Seed;
         NumFeatures = other.NumFeatures;
-        NumAxialBlocks = other.NumAxialBlocks;
-        ScaleFactor = other.ScaleFactor;
+        PatchSize = other.PatchSize;
+        EmbedDim = other.EmbedDim;
         NumHeads = other.NumHeads;
-        TemporalWindow = other.TemporalWindow;
+        HeadDim = other.HeadDim;
+        MlpRatio = other.MlpRatio;
+        EmbeddingTemporalDepth = other.EmbeddingTemporalDepth;
+        VerticalDepth = other.VerticalDepth;
+        HorizontalDepth = other.HorizontalDepth;
+        ReconstructionTemporalDepth = other.ReconstructionTemporalDepth;
+        RopeBase = other.RopeBase;
+        ScaleFactor = other.ScaleFactor;
+        NumFrames = other.NumFrames;
+        DiscriminatorChannels = other.DiscriminatorChannels;
         ModelPath = other.ModelPath;
         OnnxOptions = other.OnnxOptions;
         LearningRate = other.LearningRate;
+        AdversarialLearningRate = other.AdversarialLearningRate;
+        DiscriminatorLearningRate = other.DiscriminatorLearningRate;
         WeightDecay = other.WeightDecay;
-        DropoutRate = other.DropoutRate;
+        ReconstructionIterations = other.ReconstructionIterations;
+        AdversarialPixelWeight = other.AdversarialPixelWeight;
+        PerceptualWeight = other.PerceptualWeight;
+        GANWeight = other.GANWeight;
+        CharbonnierEpsilon = other.CharbonnierEpsilon;
     }
 
     #region Architecture
 
-    /// <summary>Gets or sets the model variant.</summary>
-    public VideoModelVariant Variant { get; set; } = VideoModelVariant.Base;
-
-    /// <summary>Gets or sets the number of feature channels.</summary>
+    /// <summary>Gets or sets the shallow convolution's channels and the per-pixel temporal transformers' width (64).</summary>
     public int NumFeatures { get; set; } = 64;
 
-    /// <summary>Gets or sets the number of dual axial transformer blocks.</summary>
-    /// <remarks>Each block contains both height-temporal and width-temporal axial attention.</remarks>
-    public int NumAxialBlocks { get; set; } = 8;
+    /// <summary>Gets or sets the side of the square image patch a token covers (2).</summary>
+    public int PatchSize { get; set; } = 2;
 
-    /// <summary>Gets or sets the spatial upscaling factor.</summary>
+    /// <summary>Gets or sets the dual axial transformer's token width (1,280).</summary>
+    public int EmbedDim { get; set; } = 1280;
+
+    /// <summary>Gets or sets the attention heads of every transformer (12).</summary>
+    public int NumHeads { get; set; } = 12;
+
+    /// <summary>Gets or sets the channels of each attention head (64).</summary>
+    public int HeadDim { get; set; } = 64;
+
+    /// <summary>Gets or sets the MLP's hidden width as a multiple of the token width (2).</summary>
+    public double MlpRatio { get; set; } = 2.0;
+
+    /// <summary>Gets or sets the blocks of the input embedding's temporal transformer (2).</summary>
+    public int EmbeddingTemporalDepth { get; set; } = 2;
+
+    /// <summary>Gets or sets the vertical-temporal attention blocks (6).</summary>
+    public int VerticalDepth { get; set; } = 6;
+
+    /// <summary>Gets or sets the horizontal-temporal attention blocks, which follow the vertical ones (6).</summary>
+    public int HorizontalDepth { get; set; } = 6;
+
+    /// <summary>Gets or sets the blocks of the reconstruction's temporal transformer (2).</summary>
+    public int ReconstructionTemporalDepth { get; set; } = 2;
+
+    /// <summary>Gets or sets the rotary position embedding's base b (10,000).</summary>
+    public double RopeBase { get; set; } = 10000.0;
+
+    /// <summary>Gets or sets the spatial upscaling factor, a power of two (4).</summary>
     public int ScaleFactor { get; set; } = 4;
 
-    /// <summary>Gets or sets the number of attention heads for axial attention.</summary>
-    public int NumHeads { get; set; } = 8;
+    /// <summary>Gets or sets the frames of a clip (16).</summary>
+    public int NumFrames { get; set; } = 16;
 
-    /// <summary>Gets or sets the temporal window size for axial attention.</summary>
-    /// <remarks>Limits temporal extent per attention operation for memory efficiency.</remarks>
-    public int TemporalWindow { get; set; } = 7;
+    /// <summary>Gets or sets the discriminator's base width (64, RealBasicVSR's U-Net discriminator).</summary>
+    public int DiscriminatorChannels { get; set; } = 64;
 
     #endregion
 
@@ -96,14 +127,35 @@ public class DualXVSROptions : NeuralNetworkOptions
 
     #region Training
 
-    /// <summary>Gets or sets the learning rate.</summary>
-    public double LearningRate { get; set; } = 2e-4;
+    /// <summary>Gets or sets the AdamW rate of the pretraining and fine-tuning stages (5e-5).</summary>
+    public double LearningRate { get; set; } = 5e-5;
 
-    /// <summary>Gets or sets the decoupled weight decay for AdamW training.</summary>
+    /// <summary>Gets or sets the generator's AdamW rate in the GAN stage (1e-5).</summary>
+    public double AdversarialLearningRate { get; set; } = 1e-5;
+
+    /// <summary>Gets or sets the discriminator's AdamW rate (1e-5).</summary>
+    public double DiscriminatorLearningRate { get; set; } = 1e-5;
+
+    /// <summary>Gets or sets AdamW's decoupled weight decay (0.01, PyTorch's default; the paper states none).</summary>
     public double WeightDecay { get; set; } = 0.01;
 
-    /// <summary>Gets or sets the dropout rate.</summary>
-    public double DropoutRate { get; set; } = 0.0;
+    /// <summary>
+    /// Gets or sets the Charbonnier-only iterations before the GAN stage (650,000: 500,000 pretraining plus 150,000
+    /// fine-tuning, which differ only in their data).
+    /// </summary>
+    public int ReconstructionIterations { get; set; } = 650000;
+
+    /// <summary>Gets or sets the Charbonnier weight in the GAN stage (0.01).</summary>
+    public double AdversarialPixelWeight { get; set; } = 0.01;
+
+    /// <summary>Gets or sets the perceptual loss weight in the GAN stage (1; 0 leaves the VGG19 out).</summary>
+    public double PerceptualWeight { get; set; } = 1.0;
+
+    /// <summary>Gets or sets the GAN loss weight in the GAN stage (0.005).</summary>
+    public double GANWeight { get; set; } = 0.005;
+
+    /// <summary>Gets or sets the Charbonnier ε (1e-6, i.e. sqrt(d² + 1e-12)).</summary>
+    public double CharbonnierEpsilon { get; set; } = 1e-6;
 
     #endregion
 }

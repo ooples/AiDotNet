@@ -1,4 +1,3 @@
-using AiDotNet.Enums;
 using AiDotNet.Models.Options;
 using AiDotNet.Onnx;
 
@@ -9,10 +8,10 @@ namespace AiDotNet.Video.Options;
 /// </summary>
 /// <remarks>
 /// <para>
-/// BasicVSR (Chan et al., CVPR 2021) establishes the essential components for video SR:
-/// - Bidirectional recurrent propagation: forward and backward passes across frames
-/// - Optical flow-based alignment: SpyNet estimates motion between adjacent frames
-/// - Residual feature refinement: 30 residual blocks per propagation direction
+/// Defaults follow Chan et al., CVPR 2021, and the authors' release (open-mmlab/mmagic, BasicVSRNet and
+/// configs/basicvsr/basicvsr_2xb4_reds4.py): 64-channel features, 30 residual blocks per propagation branch, x4
+/// upsampling, 15-frame training clips, Charbonnier loss, and Adam (0.9, 0.99) at 2e-4 with SPyNet at 0.125 times the
+/// rate and frozen for the first 5,000 iterations, cosine-annealed to 1e-7 over 300,000 iterations.
 /// </para>
 /// <para>
 /// <b>For Beginners:</b> BasicVSR treats video frames like a sequence. It processes frames
@@ -35,44 +34,35 @@ public class BasicVSROptions : NeuralNetworkOptions
     /// </summary>
     /// <param name="other">The options instance to copy from.</param>
     /// <exception cref="ArgumentNullException">Thrown when other is null.</exception>
-    public BasicVSROptions(BasicVSROptions other)
+    public BasicVSROptions(BasicVSROptions other) : base(other)
     {
         if (other == null)
             throw new ArgumentNullException(nameof(other));
 
-        Variant = other.Variant;
-        NumFeatures = other.NumFeatures;
-        NumResBlocks = other.NumResBlocks;
-        ScaleFactor = other.ScaleFactor;
-        NumFrames = other.NumFrames;
+        Seed = other.Seed;
         MidChannels = other.MidChannels;
+        NumResBlocks = other.NumResBlocks;
+        NumFrames = other.NumFrames;
         ModelPath = other.ModelPath;
         OnnxOptions = other.OnnxOptions;
         LearningRate = other.LearningRate;
-        DropoutRate = other.DropoutRate;
-        WarmupSteps = other.WarmupSteps;
+        SpyNetLearningRateMultiplier = other.SpyNetLearningRateMultiplier;
+        FlowFreezeIterations = other.FlowFreezeIterations;
+        MinLearningRate = other.MinLearningRate;
+        CosineIterations = other.CosineIterations;
+        CharbonnierEpsilon = other.CharbonnierEpsilon;
     }
 
     #region Architecture
 
-    /// <summary>Gets or sets the model variant.</summary>
-    public VideoModelVariant Variant { get; set; } = VideoModelVariant.Base;
+    /// <summary>Gets or sets the feature channels of the propagation branches (64).</summary>
+    public int MidChannels { get; set; } = 64;
 
-    /// <summary>Gets or sets the number of feature channels in the propagation branches.</summary>
-    public int NumFeatures { get; set; } = 64;
-
-    /// <summary>Gets or sets the number of residual blocks per propagation direction.</summary>
-    /// <remarks>The paper uses 30 blocks for the base model.</remarks>
+    /// <summary>Gets or sets the residual blocks per propagation branch (30).</summary>
     public int NumResBlocks { get; set; } = 30;
 
-    /// <summary>Gets or sets the spatial upscaling factor.</summary>
-    public int ScaleFactor { get; set; } = 4;
-
-    /// <summary>Gets or sets the number of input frames for bidirectional propagation.</summary>
+    /// <summary>Gets or sets the frames of a training clip (15, the REDS recipe).</summary>
     public int NumFrames { get; set; } = 15;
-
-    /// <summary>Gets or sets the mid-channel dimension in residual blocks.</summary>
-    public int MidChannels { get; set; } = 64;
 
     #endregion
 
@@ -88,14 +78,25 @@ public class BasicVSROptions : NeuralNetworkOptions
 
     #region Training
 
-    /// <summary>Gets or sets the learning rate.</summary>
+    /// <summary>Gets or sets Adam's starting learning rate (2e-4).</summary>
     public double LearningRate { get; set; } = 2e-4;
 
-    /// <summary>Gets or sets the dropout rate.</summary>
-    public double DropoutRate { get; set; } = 0.0;
+    /// <summary>Gets or sets the multiplier of SPyNet's learning rate (0.125, i.e. 2.5e-5).</summary>
+    public double SpyNetLearningRateMultiplier { get; set; } = 0.125;
 
-    /// <summary>Gets or sets the number of warmup iterations.</summary>
-    public int WarmupSteps { get; set; } = 5000;
+    /// <summary>Gets or sets the iterations SPyNet stays frozen at the start of training (5,000).</summary>
+    public int FlowFreezeIterations { get; set; } = 5000;
+
+    /// <summary>Gets or sets the floor of the cosine schedule (1e-7).</summary>
+    public double MinLearningRate { get; set; } = 1e-7;
+
+    /// <summary>Gets or sets the iterations of the cosine schedule (300,000).</summary>
+    public int CosineIterations { get; set; } = 300000;
+
+    /// <summary>
+    /// Gets or sets the Charbonnier ε; the release's loss is sqrt(d² + 1e-12), so ε = 1e-6.
+    /// </summary>
+    public double CharbonnierEpsilon { get; set; } = 1e-6;
 
     #endregion
 }

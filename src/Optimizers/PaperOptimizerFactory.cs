@@ -60,22 +60,32 @@ internal static class PaperOptimizerFactory
     /// <returns>
     /// <c>null</c> when there is no applicable declaration, so callers keep their existing default.
     /// </returns>
+    /// <param name="model">The model whose declarations are read.</param>
+    /// <param name="component">The declared component, for models that train parts separately.</param>
+    /// <param name="warmupStepsOverride">A warmup the model's own options configure, applied to the recipe.</param>
+    /// <param name="learningRateOverride">A peak learning rate explicitly configured by the model options.</param>
+    /// <param name="weightDecayOverride">Weight decay explicitly configured by the model options.</param>
+    /// <param name="modelDimensionOverride">The native Transformer width needed by dimension-scaled schedules.</param>
+    /// <param name="trainingStepsOverride">The model's actual step budget, instead of the generic optimizer loop default.</param>
+    /// <param name="learningRateSchedulerOverride">An exact native schedule, independent of the generic optimizer loop budget.</param>
+    /// <param name="phase">The training phase whose declaration applies (a paper can state one optimizer for
+    /// pre-training and another for fine-tuning, as AlignTTS and AdaSpeech do).</param>
     internal static IGradientBasedOptimizer<T, TInput, TOutput>? CreateFor<T, TInput, TOutput>(
         IFullModel<T, TInput, TOutput> model, string component = "", int warmupStepsOverride = 0,
-        double? learningRateOverride = null)
+        TrainingPhase phase = TrainingPhase.PreTraining, double? learningRateOverride = null,
+        double? weightDecayOverride = null, int modelDimensionOverride = 0, int trainingStepsOverride = 0,
+        ILearningRateScheduler? learningRateSchedulerOverride = null)
     {
         if (model is null) return null;
         if (learningRateOverride is { } rate && (double.IsNaN(rate) || double.IsInfinity(rate) || rate <= 0))
             throw new ArgumentOutOfRangeException(
                 nameof(learningRateOverride), rate, "A learning-rate override must be finite and positive.");
 
-        var recipe = Find(model, component);
-        // A model whose own options configure a warmup (S4Options.WarmupSteps) or a learning rate
-        // (DocBankOptions.LearningRate) applies it to its paper recipe here, so the declared optimizer
-        // and the model's configuration agree rather than the configured value reaching only the
-        // fallback optimizer, which is never built while a recipe resolves. The rate replaces the
-        // recipe's, and the recipe's scheduler is built from it, so the schedule follows the override.
-        if (recipe is not null && (warmupStepsOverride > 0 || learningRateOverride is not null))
+        var recipe = Find(model, component, phase);
+        // A model whose own options configure a warmup (S4Options.WarmupSteps) applies it to its paper
+        // recipe here, so the declared optimizer and the model's configuration agree rather than the
+        // configured warmup reaching only the fallback optimizer.
+        if (recipe is not null && (warmupStepsOverride > 0 || learningRateOverride.HasValue || weightDecayOverride.HasValue))
             recipe = Merge(new PaperOptimizerAttribute(OptimizerKind.Unspecified)
             {
                 Phase = recipe.Phase,
@@ -85,6 +95,7 @@ internal static class PaperOptimizerFactory
                 Source = recipe.Source,
                 WarmupSteps = warmupStepsOverride,
                 LearningRate = learningRateOverride ?? double.NaN,
+                WeightDecay = weightDecayOverride ?? double.NaN,
             }, recipe);
         if (recipe is null)
         {
@@ -98,7 +109,9 @@ internal static class PaperOptimizerFactory
         var unhonoured = new List<string>();
         var cautions = new List<string>();
 
-        var optimizer = Build<T, TInput, TOutput>(model, recipe, adaptations, unhonoured, cautions);
+        var optimizer = Build<T, TInput, TOutput>(model, recipe, adaptations, unhonoured, cautions,
+            modelDimensionOverride, trainingStepsOverride, scaleLearningRateToBatch: !learningRateOverride.HasValue,
+            learningRateSchedulerOverride: learningRateSchedulerOverride);
 
         if (optimizer is null)
         {
@@ -166,7 +179,8 @@ internal static class PaperOptimizerFactory
         PaperOptimizerAttribute recipe,
         List<RecipeAdaptation> adaptations,
         List<string> unhonoured,
-        List<string> cautions)
+        List<string> cautions, int modelDimensionOverride = 0, int trainingStepsOverride = 0,
+        bool scaleLearningRateToBatch = true, ILearningRateScheduler? learningRateSchedulerOverride = null)
     {
         _pendingAdaptations.Value = adaptations;
         _pendingUnhonoured.Value = unhonoured;
@@ -182,6 +196,7 @@ internal static class PaperOptimizerFactory
         TOptions Configured<TOptions>(TOptions options)
             where TOptions : GradientBasedOptimizerOptions<T, TInput, TOutput>
         {
+            if (trainingStepsOverride > 0) options.MaxIterations = trainingStepsOverride;
             if (!double.IsNaN(recipe.LearningRate)) options.InitialLearningRate = recipe.LearningRate;
 
             // Adafactor normally derives its own step size. A paper that states a rate -- AudioPaLM
@@ -220,6 +235,9 @@ internal static class PaperOptimizerFactory
                 case RootMeanSquarePropagationOptimizerOptions<T, TInput, TOutput> rmsProp:
                     if (!double.IsNaN(recipe.Rho)) rmsProp.Decay = recipe.Rho;
                     if (!double.IsNaN(recipe.Epsilon)) rmsProp.Epsilon = recipe.Epsilon;
+                    // "RMSProp with momentum μ" is momentum on the uncentered update; InitialMomentum alone was
+                    // read only by the centered one, so every declared RMSProp momentum was dropped.
+                    if (!double.IsNaN(recipe.Momentum)) rmsProp.Momentum = recipe.Momentum;
                     break;
                 case AdagradOptimizerOptions<T, TInput, TOutput> adagrad:
                     if (!double.IsNaN(recipe.Epsilon)) adagrad.Epsilon = recipe.Epsilon;
@@ -237,6 +255,11 @@ internal static class PaperOptimizerFactory
                     if (!double.IsNaN(recipe.Beta2)) adamax.Beta2 = recipe.Beta2;
                     if (!double.IsNaN(recipe.Epsilon)) adamax.Epsilon = recipe.Epsilon;
                     break;
+                case RAdamOptimizerOptions<T, TInput, TOutput> radam:
+                    if (!double.IsNaN(recipe.Beta1)) radam.Beta1 = recipe.Beta1;
+                    if (!double.IsNaN(recipe.Beta2)) radam.Beta2 = recipe.Beta2;
+                    if (!double.IsNaN(recipe.Epsilon)) radam.Epsilon = recipe.Epsilon;
+                    break;
                 case NadamOptimizerOptions<T, TInput, TOutput> nadam:
                     if (!double.IsNaN(recipe.Beta1)) nadam.Beta1 = recipe.Beta1;
                     if (!double.IsNaN(recipe.Beta2)) nadam.Beta2 = recipe.Beta2;
@@ -247,6 +270,11 @@ internal static class PaperOptimizerFactory
                     if (!double.IsNaN(recipe.Beta2)) lamb.Beta2 = recipe.Beta2;
                     if (!double.IsNaN(recipe.Epsilon)) lamb.Epsilon = recipe.Epsilon;
                     if (!double.IsNaN(recipe.WeightDecay)) lamb.WeightDecay = recipe.WeightDecay;
+                    break;
+                case ScaledAdamOptimizerOptions<T, TInput, TOutput> scaledAdam:
+                    if (!double.IsNaN(recipe.Beta1)) scaledAdam.Beta1 = recipe.Beta1;
+                    if (!double.IsNaN(recipe.Beta2)) scaledAdam.Beta2 = recipe.Beta2;
+                    if (!double.IsNaN(recipe.Epsilon)) scaledAdam.Epsilon = recipe.Epsilon;
                     break;
                 case LionOptimizerOptions<T, TInput, TOutput> lion:
                     if (!double.IsNaN(recipe.Beta1))
@@ -263,9 +291,19 @@ internal static class PaperOptimizerFactory
                     break;
             }
 
+            // An optimizer with no weight-decay setting of its own (Adam, SGD with momentum, RMSProp, ...) takes the
+            // paper's decay the way PyTorch's weight_decay applies it: g + λθ before the update, which is explicit L2
+            // regularization of strength λ. These declarations used to be dropped without a report: 43 recipes,
+            // ResNet's 1e-4 among them.
+            if (recipe.WeightDecay > 0 && NativeWeightDecay(options) is null)
+                options.Regularization = new AiDotNet.Regularization.L2Regularization<T, TInput, TOutput>(new RegularizationOptions
+                {
+                    Type = RegularizationType.L2, Strength = recipe.WeightDecay, L1Ratio = 0.0,
+                });
+
             ReportUnsupportedElements(recipe);
-            ScaleToConfiguredRun(options, recipe);
-            ConfigureScheduleAndClipping(options, recipe);
+            ScaleToConfiguredRun(options, recipe, scaleLearningRateToBatch);
+            ConfigureScheduleAndClipping(options, recipe, modelDimensionOverride, learningRateSchedulerOverride);
             return options;
         }
 
@@ -304,11 +342,17 @@ internal static class PaperOptimizerFactory
             OptimizerKind.Nadam => new NadamOptimizer<T, TInput, TOutput>(
                 model, Configured(new NadamOptimizerOptions<T, TInput, TOutput>())),
 
+            OptimizerKind.RAdam => new RAdamOptimizer<T, TInput, TOutput>(
+                model, Configured(new RAdamOptimizerOptions<T, TInput, TOutput>())),
+
             OptimizerKind.Adam8Bit => new Adam8BitOptimizer<T, TInput, TOutput>(
                 model, Configured(new Adam8BitOptimizerOptions<T, TInput, TOutput>())),
 
             OptimizerKind.ScheduleFreeAdamW => new ScheduleFreeAdamWOptimizer<T, TInput, TOutput>(
                 model, Configured(new ScheduleFreeAdamWOptimizerOptions<T, TInput, TOutput>())),
+
+            OptimizerKind.DAdaptAdam => new DAdaptAdamOptimizer<T, TInput, TOutput>(
+                model, Configured(new DAdaptAdamOptimizerOptions<T, TInput, TOutput>())),
 
             OptimizerKind.Adafactor => new AdafactorOptimizer<T, TInput, TOutput>(
                 model, Configured(new AdafactorOptimizerOptions<T, TInput, TOutput>())),
@@ -321,6 +365,9 @@ internal static class PaperOptimizerFactory
 
             OptimizerKind.Lion => new LionOptimizer<T, TInput, TOutput>(
                 model, Configured(new LionOptimizerOptions<T, TInput, TOutput>())),
+
+            OptimizerKind.ScaledAdam => new ScaledAdamOptimizer<T, TInput, TOutput>(
+                model, Configured(new ScaledAdamOptimizerOptions<T, TInput, TOutput>())),
 
                 // Unspecified, and optimizers with no gradient-based implementation here, fall
                 // through to the caller's own default rather than being approximated by a
@@ -434,6 +481,7 @@ internal static class PaperOptimizerFactory
             Compare(options, "Beta2", recipe.Beta2, "Beta2", mismatches);
             Compare(options, "Epsilon", recipe.Epsilon, "Epsilon", mismatches);
             Compare(options, "WeightDecay", recipe.WeightDecay, "WeightDecay", mismatches);
+            CompareCoupledWeightDecay<T, TInput, TOutput>(options, recipe.WeightDecay, mismatches);
             Compare(options, "MaxGradientNorm", recipe.MaxGradientNorm, "MaxGradientNorm", mismatches);
         }
 
@@ -661,6 +709,25 @@ internal static class PaperOptimizerFactory
         mismatches.Add($"the paper states {label} {declared:G6} but this model builds {actual:G6}");
     }
 
+    /// <summary>An options object's own weight-decay property, or null when it has none.</summary>
+    private static PropertyInfo? NativeWeightDecay(object options)
+    {
+        var property = options.GetType().GetProperty("WeightDecay", BindingFlags.Public | BindingFlags.Instance);
+        return property is not null && property.PropertyType == typeof(double) ? property : null;
+    }
+
+    /// <summary>Reports a declared weight decay that an optimizer without a decay setting does not apply as explicit L2
+    /// of the same strength.</summary>
+    private static void CompareCoupledWeightDecay<T, TInput, TOutput>(object options, double declared, List<string> mismatches)
+    {
+        if (double.IsNaN(declared) || declared <= 0 || NativeWeightDecay(options) is not null) return;
+        double applied = options is GradientBasedOptimizerOptions<T, TInput, TOutput> { RegularizationExplicitlySet: true } gradientBased
+            && gradientBased.Regularization is AiDotNet.Regularization.L2Regularization<T, TInput, TOutput> l2
+            ? l2.GetOptions().Strength : 0.0;
+        if (Math.Abs(applied - declared) <= declared * 1e-9) return;
+        mismatches.Add($"the paper states WeightDecay {declared:G6} but this model applies {applied:G6}");
+    }
+
     internal static IReadOnlyList<TrainingRecipeReport> ReportsFor(object? model)
     {
         if (model is null) return [];
@@ -698,9 +765,11 @@ internal static class PaperOptimizerFactory
     /// gets the paper's numbers unmodified.
     /// </para>
     /// </remarks>
-    private static void ScaleToConfiguredRun(object options, PaperOptimizerAttribute recipe)
+    private static void ScaleToConfiguredRun(object options, PaperOptimizerAttribute recipe, bool scaleLearningRateToBatch)
     {
-        if (recipe.ReferenceBatchSize > 0 && !double.IsNaN(recipe.LearningRate))
+        // A rate supplied by the caller is already the configured rate. In particular, the optimizer's
+        // generic default BatchSize is not the batch used by a model's own Train(sample) path.
+        if (scaleLearningRateToBatch && recipe.ReferenceBatchSize > 0 && !double.IsNaN(recipe.LearningRate))
         {
             int batch = GetInt(options, "BatchSize");
             int reference = EffectiveReferenceBatch(recipe);
@@ -1009,7 +1078,8 @@ internal static class PaperOptimizerFactory
     }
 
     /// <summary>Applies schedule and gradient-clipping settings, which live on the gradient-based base.</summary>
-    private static void ConfigureScheduleAndClipping(object options, PaperOptimizerAttribute recipe)
+    private static void ConfigureScheduleAndClipping(object options, PaperOptimizerAttribute recipe, int modelDimensionOverride,
+        ILearningRateScheduler? schedulerOverride)
     {
         if (!double.IsNaN(recipe.MaxGradientNorm))
         {
@@ -1017,21 +1087,23 @@ internal static class PaperOptimizerFactory
             SetDouble(options, "MaxGradientNorm", recipe.MaxGradientNorm);
         }
 
-        if (recipe.Schedule == LearningRateSchedulerType.Constant && recipe.WarmupSteps <= 0) return;
+        if (schedulerOverride is null && recipe.Schedule == LearningRateSchedulerType.Constant && recipe.WarmupSteps <= 0) return;
 
         PropertyInfo? schedulerProperty = options.GetType().GetProperty(
             "LearningRateScheduler", BindingFlags.Public | BindingFlags.Instance);
         if (schedulerProperty is null || !schedulerProperty.CanWrite) return;
 
-        ValidateSchedule(recipe);
-
-        double baseRate = double.IsNaN(recipe.LearningRate) ? 0.001 : recipe.LearningRate;
-        int warmupSteps = EffectiveWarmupSteps(options, recipe);
-        int totalSteps = GetInt(options, "MaxIterations");
-
-        ILearningRateScheduler? scheduler = BuildScheduler(
-            recipe, baseRate, warmupSteps, totalSteps, ModelDimension(options));
-        scheduler = ComposeWarmup(scheduler, recipe, baseRate, warmupSteps, totalSteps);
+        ILearningRateScheduler? scheduler = schedulerOverride;
+        if (scheduler is null)
+        {
+            ValidateSchedule(recipe);
+            double baseRate = double.IsNaN(recipe.LearningRate) ? 0.001 : recipe.LearningRate;
+            int warmupSteps = EffectiveWarmupSteps(options, recipe);
+            int totalSteps = GetInt(options, "MaxIterations");
+            scheduler = BuildScheduler(recipe, baseRate, warmupSteps, totalSteps,
+                modelDimensionOverride > 0 ? modelDimensionOverride : ModelDimension(options));
+            scheduler = ComposeWarmup(scheduler, recipe, baseRate, warmupSteps, totalSteps);
+        }
         if (scheduler is not null)
         {
             schedulerProperty.SetValue(options, scheduler);

@@ -19,17 +19,23 @@ public class PoissonNoise<T> : ImageAugmenterBase<T>
         double maxVal = data.IsNormalized ? 1.0 : 255.0;
         var result = data.Clone();
 
-        for (int y = 0; y < data.Height; y++)
-            for (int x = 0; x < data.Width; x++)
-                for (int c = 0; c < data.Channels; c++)
-                {
-                    double val = NumOps.ToDouble(data.GetPixel(y, x, c));
-                    // Poisson noise approximated by Gaussian with variance = value
-                    double normalizedVal = val / maxVal;
-                    double stdDev = Math.Sqrt(Math.Max(normalizedVal, 1e-10)) * Scale * 0.1;
-                    double noisy = val + context.SampleGaussian(0, stdDev * maxVal);
-                    result.SetPixel(y, x, c, NumOps.FromDouble(Math.Max(0, Math.Min(maxVal, noisy))));
-                }
+        // Poisson noise approximated by Gaussian with variance = value:
+        // noise = N(0, sqrt(max(val / maxVal, 1e-10)) * Scale * 0.1 * maxVal), drawn in y, x, c order
+        int h = data.Height, w = data.Width, channels = data.Channels;
+        var standardNormal = AugmentationRandom<T>.Gaussian(context, [h, w, channels], 0, 1);
+
+        var engine = Engine;
+        var image = data.ToPlanarTensor();
+        var normalizedVal = engine.TensorDivideScalar(image, NumOps.FromDouble(maxVal));
+        var stdDev = engine.TensorMultiplyScalar(
+            engine.TensorMultiplyScalar(
+                engine.TensorSqrt(engine.TensorMax(normalizedVal, NumOps.FromDouble(1e-10))), NumOps.FromDouble(Scale)),
+            NumOps.FromDouble(0.1));
+        var noise = engine.TensorMultiply(
+            engine.TensorMultiplyScalar(stdDev, NumOps.FromDouble(maxVal)),
+            ImageTensor<T>.PlanarFromInterleaved(standardNormal, h, w, channels));
+        var noisy = engine.TensorAdd(image, noise);
+        result.SetFromPlanarTensor(engine.TensorClamp(noisy, NumOps.Zero, NumOps.FromDouble(maxVal)));
 
         return result;
     }
