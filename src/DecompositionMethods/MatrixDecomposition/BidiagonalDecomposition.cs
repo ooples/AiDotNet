@@ -170,7 +170,7 @@ public class BidiagonalDecomposition<T> : MatrixDecompositionBase<T>
                 Vector<T> x = B.GetColumnSegment(k, k, m - k);
                 Vector<T> v = HouseholderVector(x);
 
-                if (NumOps.GreaterThan(v.Norm(), tiny))
+                if (AnyAbove(Tensor<T>.FromScalar(v.Norm()), tiny))
                 {
                     Matrix<T> P = Matrix<T>.CreateIdentity(m - k).Subtract(v.OuterProduct(v).Multiply(two));
                     Matrix<T> subB = B.GetSubMatrix(k, k, m - k, n - k);
@@ -187,7 +187,7 @@ public class BidiagonalDecomposition<T> : MatrixDecompositionBase<T>
                 Vector<T> x = B.GetRowSegment(k, k + 1, n - k - 1);
                 Vector<T> v = HouseholderVector(x);
 
-                if (NumOps.GreaterThan(v.Norm(), tiny))
+                if (AnyAbove(Tensor<T>.FromScalar(v.Norm()), tiny))
                 {
                     Matrix<T> P = Matrix<T>.CreateIdentity(n - k - 1).Subtract(v.OuterProduct(v).Multiply(two));
                     Matrix<T> subB = B.GetSubMatrix(k, k + 1, m - k, n - k - 1);
@@ -277,7 +277,7 @@ public class BidiagonalDecomposition<T> : MatrixDecompositionBase<T>
 
             T alpha = u.Norm();
             u = (Vector<T>)Engine.Divide(u, alpha);
-            B[j, j] = alpha;
+            B.SetSubMatrix(j, j, ScalarBlock(alpha));
             U.SetColumn(j, u);
 
             if (j < n - 1)
@@ -287,13 +287,19 @@ public class BidiagonalDecomposition<T> : MatrixDecompositionBase<T>
                 next = next.Subtract(acceptedV.Multiply(acceptedV.Transpose().Multiply(next)));
                 T beta = next.Norm();
                 v = (Vector<T>)Engine.Divide(next, beta);
-                B[j, j + 1] = beta;
+                B.SetSubMatrix(j, j + 1, ScalarBlock(beta));
                 V.SetColumn(j + 1, v);
                 previousBeta = beta;
             }
 
             previousU = u;
         }
+    }
+
+    /// <summary>A 1 x 1 matrix holding <paramref name="value"/>, for writing one entry of B with SetSubMatrix.</summary>
+    private static Matrix<T> ScalarBlock(T value)
+    {
+        return Tensor<T>.FromScalar(value).Reshape(new[] { 1, 1 }).ToMatrix();
     }
 
     /// <summary>
