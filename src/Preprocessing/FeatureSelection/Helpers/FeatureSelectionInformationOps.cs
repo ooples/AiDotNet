@@ -215,6 +215,53 @@ internal static class FeatureSelectionInformationOps
         return engine.TensorSearchSorted(classes, flat, false);
     }
 
+    /// <summary>
+    /// Two-sided p-value of the t-test of a correlation coefficient (scipy.stats.pearsonr): with
+    /// <c>t = r sqrt(dof / (1 - r^2))</c> on <paramref name="dof"/> degrees of freedom, <c>p = 1 - A(t | dof)</c>,
+    /// where A is evaluated with the finite series of Abramowitz &amp; Stegun 26.7.3 / 26.7.4 in
+    /// <c>theta = asin |r|</c> (so <c>sin theta = |r|</c> and <c>cos^2 theta = 1 - r^2</c>). NaN when dof &lt; 1.
+    /// </summary>
+    public static Tensor<T> CorrelationPValue<T>(Tensor<T> r, int dof)
+    {
+        var engine = AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<T>();
+        var shape = r.Shape.ToArray();
+        if (dof < 1)
+            return FeatureSelectionTensorOps.Filled(shape, ops.FromDouble(double.NaN));
+
+        var absR = engine.TensorMin(engine.TensorAbs(r), ops.One);
+        var cosSquared = engine.TensorSubtract(FeatureSelectionTensorOps.Filled(shape, ops.One), engine.TensorSquare(absR));
+
+        // Series sum_k c_k cos^(2k) theta (even dof) or cos^(2k+1) theta (odd dof), k = 0 .. floor((dof - 2) / 2)
+        Tensor<T> term = dof % 2 == 0 ? FeatureSelectionTensorOps.Filled(shape, ops.One) : engine.TensorSqrt(cosSquared);
+        var series = term;
+        int terms = (dof - 2) / 2;
+        for (int k = 1; k <= terms; k++)
+        {
+            // even: c_k = c_{k-1} (2k - 1) / (2k);  odd: c_k = c_{k-1} (2k) / (2k + 1)
+            int numerator = dof % 2 == 0 ? 2 * k - 1 : 2 * k;
+            term = engine.TensorDivideScalar(
+                engine.TensorMultiplyScalar(engine.TensorMultiply(term, cosSquared), FeatureSelectionTensorOps.Count<T>(numerator)),
+                FeatureSelectionTensorOps.Count<T>(numerator + 1));
+            series = engine.TensorAdd(series, term);
+        }
+
+        Tensor<T> probability;
+        if (dof % 2 == 0)
+        {
+            probability = engine.TensorMultiply(absR, series);
+        }
+        else
+        {
+            var theta = engine.TensorAsin(absR);
+            var inner = dof == 1 ? theta : engine.TensorAdd(theta, engine.TensorMultiply(absR, series));
+            probability = engine.TensorMultiplyScalar(inner, ops.FromDouble(2 / Math.PI));
+        }
+
+        var p = engine.TensorSubtract(FeatureSelectionTensorOps.Filled(shape, ops.One), probability);
+        return engine.TensorMax(engine.TensorMin(p, ops.One), ops.Zero);
+    }
+
     /// <summary>Converts a natural-log information value to bits.</summary>
     public static Tensor<T> ToBits<T>(Tensor<T> nats) =>
         AiDotNetEngine.Current.TensorDivideScalar(nats, MathHelper.GetNumericOperations<T>().FromDouble(Math.Log(2)));
