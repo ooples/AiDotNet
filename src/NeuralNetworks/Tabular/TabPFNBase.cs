@@ -182,7 +182,8 @@ public abstract partial class TabPFNBase<T> : IParameterSource<T>
         foreach (var component in EnumerateParameterComponents())
         {
             var part = component.GetParameters();
-            for (int i = 0; i < part.Length; i++) result[offset++] = part[i];
+            part.AsSpan().CopyTo(result.AsWritableSpan().Slice(offset, part.Length));
+            offset += part.Length;
         }
 
         if (_positionalEncoding != null)
@@ -214,8 +215,8 @@ public abstract partial class TabPFNBase<T> : IParameterSource<T>
             int count = checked((int)component.ParameterCount);
             if (count == 0) continue;
 
-            var slice = new Vector<T>(count);
-            for (int i = 0; i < count; i++) slice[i] = parameters[offset++];
+            var slice = parameters.GetSubVector(offset, count);
+            offset += count;
             component.SetParameters(slice);
         }
 
@@ -634,13 +635,15 @@ public abstract partial class TabPFNBase<T> : IParameterSource<T>
 
             foreach (var tensor in AttentionTensors())
             {
-                for (int i = 0; i < tensor.Length; i++) result[offset++] = tensor[i];
+                tensor.AsSpan().CopyTo(result.AsWritableSpan().Slice(offset, tensor.Length));
+                offset += tensor.Length;
             }
 
             foreach (var layer in SubLayers())
             {
                 var part = layer.GetParameters();
-                for (int i = 0; i < part.Length; i++) result[offset++] = part[i];
+                part.AsSpan().CopyTo(result.AsWritableSpan().Slice(offset, part.Length));
+                offset += part.Length;
             }
 
             return result;
@@ -664,7 +667,8 @@ public abstract partial class TabPFNBase<T> : IParameterSource<T>
             // nothing else is looking at.
             foreach (var tensor in AttentionTensors())
             {
-                for (int i = 0; i < tensor.Length; i++) tensor[i] = parameters[offset++];
+                parameters.AsSpan().Slice(offset, tensor.Length).CopyTo(tensor.AsWritableSpan());
+                offset += tensor.Length;
             }
 
             foreach (var layer in SubLayers())
@@ -672,8 +676,8 @@ public abstract partial class TabPFNBase<T> : IParameterSource<T>
                 int count = checked((int)layer.ParameterCount);
                 if (count == 0) continue;
 
-                var slice = new Vector<TBlock>(count);
-                for (int i = 0; i < count; i++) slice[i] = parameters[offset++];
+                var slice = parameters.GetSubVector(offset, count);
+                offset += count;
                 layer.SetParameters(slice);
             }
         }
