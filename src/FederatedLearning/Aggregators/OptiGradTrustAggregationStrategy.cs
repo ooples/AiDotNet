@@ -99,49 +99,24 @@ public class OptiGradTrustAggregationStrategy<T> : ParameterDictionaryAggregatio
         // Compute the weighted mean update as reference direction.
         double totalWeight = GetTotalWeightOrThrow(clientWeights, clientModels.Keys, nameof(clientWeights));
         int totalParams = layerNames.Sum(ln => referenceModel[ln].Length);
-        var meanFlat = new double[totalParams];
+        var meanFlat = new Vector<T>(totalParams);
+        var clientFlats = new Vector<T>[n];
 
         for (int c = 0; c < n; c++)
         {
             double w = clientWeights.TryGetValue(clientIds[c], out var cw) ? cw / totalWeight : 1.0 / n;
-            int offset = 0;
-            foreach (var layerName in layerNames)
-            {
-                var cp = clientModels[clientIds[c]][layerName];
-                for (int i = 0; i < cp.Length; i++)
-                {
-                    meanFlat[offset++] += NumOps.ToDouble(cp[i]) * w;
-                }
-            }
+            clientFlats[c] = FlattenLayers(clientModels[clientIds[c]], layerNames, totalParams);
+            meanFlat = Engine.Add(meanFlat, Engine.Multiply(clientFlats[c], NumOps.FromDouble(w)));
         }
 
-        double meanNorm = 0;
-        for (int i = 0; i < totalParams; i++)
-        {
-            meanNorm += meanFlat[i] * meanFlat[i];
-        }
-
-        meanNorm = Math.Sqrt(meanNorm);
+        double meanNorm = Math.Sqrt(NumOps.ToDouble(Engine.DotProduct(meanFlat, meanFlat)));
 
         // Compute current trust scores and update reputations.
         var currentTrust = new double[n];
         for (int c = 0; c < n; c++)
         {
-            double dot = 0, clientNorm = 0;
-            int offset = 0;
-            foreach (var layerName in layerNames)
-            {
-                var cp = clientModels[clientIds[c]][layerName];
-                for (int i = 0; i < cp.Length; i++)
-                {
-                    double cv = NumOps.ToDouble(cp[i]);
-                    dot += cv * meanFlat[offset];
-                    clientNorm += cv * cv;
-                    offset++;
-                }
-            }
-
-            clientNorm = Math.Sqrt(clientNorm);
+            double dot = NumOps.ToDouble(Engine.DotProduct(clientFlats[c], meanFlat));
+            double clientNorm = Math.Sqrt(NumOps.ToDouble(Engine.DotProduct(clientFlats[c], clientFlats[c])));
             double cosSim = (clientNorm > 0 && meanNorm > 0) ? dot / (clientNorm * meanNorm) : 0.0;
             currentTrust[c] = Math.Max(0.0, cosSim);
         }
@@ -171,12 +146,7 @@ public class OptiGradTrustAggregationStrategy<T> : ParameterDictionaryAggregatio
 
             foreach (var layerName in layerNames)
             {
-                var cp = clientModel[layerName];
-                var rp = result[layerName];
-                for (int i = 0; i < rp.Length; i++)
-                {
-                    rp[i] = NumOps.Add(rp[i], NumOps.Multiply(cp[i], rw));
-                }
+                AddScaledInto(result[layerName], clientModel[layerName], rw);
             }
         }
 

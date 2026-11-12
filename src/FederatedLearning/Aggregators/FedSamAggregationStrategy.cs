@@ -172,13 +172,7 @@ public class FedSamAggregationStrategy<T> : ParameterDictionaryAggregationStrate
                     $"Perturbation layer '{layerName}' length {eps.Length} differs from parameter length {weights.Length}.");
             }
 
-            var result = new T[weights.Length];
-            for (int i = 0; i < weights.Length; i++)
-            {
-                result[i] = NumOps.Add(weights[i], eps[i]);
-            }
-
-            perturbed[layerName] = result;
+            perturbed[layerName] = Engine.Add(Vector<T>.Wrap(weights), Vector<T>.Wrap(eps)).ToArray();
         }
 
         return perturbed;
@@ -251,13 +245,7 @@ public class FedSamAggregationStrategy<T> : ParameterDictionaryAggregationStrate
 
         foreach (var (layerName, grad) in gradient)
         {
-            var eps = new T[grad.Length];
-            for (int i = 0; i < grad.Length; i++)
-            {
-                eps[i] = NumOps.Multiply(grad[i], scaleT);
-            }
-
-            perturbation[layerName] = eps;
+            perturbation[layerName] = Engine.Multiply(Vector<T>.Wrap(grad), scaleT).ToArray();
         }
 
         return perturbation;
@@ -281,13 +269,7 @@ public class FedSamAggregationStrategy<T> : ParameterDictionaryAggregationStrate
 
         foreach (var (layerName, grad) in gradient)
         {
-            var eps = new T[grad.Length];
-            for (int i = 0; i < grad.Length; i++)
-            {
-                eps[i] = NumOps.Multiply(grad[i], scaleT);
-            }
-
-            perturbation[layerName] = eps;
+            perturbation[layerName] = Engine.Multiply(Vector<T>.Wrap(grad), scaleT).ToArray();
         }
 
         return perturbation;
@@ -306,13 +288,7 @@ public class FedSamAggregationStrategy<T> : ParameterDictionaryAggregationStrate
 
         foreach (var (layerName, grad) in adjustedGrad)
         {
-            var eps = new T[grad.Length];
-            for (int i = 0; i < grad.Length; i++)
-            {
-                eps[i] = NumOps.Multiply(grad[i], scaleT);
-            }
-
-            perturbation[layerName] = eps;
+            perturbation[layerName] = Engine.Multiply(Vector<T>.Wrap(grad), scaleT).ToArray();
         }
 
         return perturbation;
@@ -353,11 +329,9 @@ public class FedSamAggregationStrategy<T> : ParameterDictionaryAggregationStrate
 
             if (_previousGradient != null && _previousGradient.TryGetValue(layerName, out var prevGrad))
             {
-                for (int i = 0; i < pGrad.Length; i++)
-                {
-                    var correction = NumOps.Multiply(NumOps.Subtract(cGrad[i], prevGrad[i]), coeff);
-                    output[i] = NumOps.Add(pGrad[i], correction);
-                }
+                var correction = Engine.Multiply(
+                    Engine.Subtract(Vector<T>.Wrap(cGrad, 0, pGrad.Length), Vector<T>.Wrap(prevGrad, 0, pGrad.Length)), coeff);
+                Engine.Add(Vector<T>.Wrap(pGrad), correction).AsSpan().CopyTo(output);
             }
             else
             {
@@ -387,12 +361,10 @@ public class FedSamAggregationStrategy<T> : ParameterDictionaryAggregationStrate
 
             if (_previousGradient.TryGetValue(layerName, out var prevGrad) && prevGrad.Length == grad.Length)
             {
-                for (int i = 0; i < grad.Length; i++)
-                {
-                    // adjusted = g + alpha * (g - g_prev)
-                    var diff = NumOps.Subtract(grad[i], prevGrad[i]);
-                    result[i] = NumOps.Add(grad[i], NumOps.Multiply(diff, alpha));
-                }
+                // adjusted = g + alpha * (g - g_prev)
+                var g = Vector<T>.Wrap(grad);
+                var diff = Engine.Subtract(g, Vector<T>.Wrap(prevGrad));
+                Engine.Add(g, Engine.Multiply(diff, alpha)).AsSpan().CopyTo(result);
             }
             else
             {
@@ -418,11 +390,8 @@ public class FedSamAggregationStrategy<T> : ParameterDictionaryAggregationStrate
         double normSq = 0;
         foreach (var (_, grad) in gradient)
         {
-            for (int i = 0; i < grad.Length; i++)
-            {
-                double v = NumOps.ToDouble(grad[i]);
-                normSq += v * v;
-            }
+            var g = Vector<T>.Wrap(grad);
+            normSq += NumOps.ToDouble(Engine.DotProduct(g, g));
         }
 
         return Math.Sqrt(normSq);

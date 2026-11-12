@@ -218,10 +218,7 @@ public class FedMaAggregationStrategy<T> : ParameterDictionaryAggregationStrateg
                 var clientParams = model[layerName];
                 var normalizedWeight = NumOps.FromDouble(w / totalWeight);
 
-                for (int i = 0; i < layerSize; i++)
-                {
-                    aggregated[i] = NumOps.Add(aggregated[i], NumOps.Multiply(clientParams[i], normalizedWeight));
-                }
+                AddScaledInto(aggregated, clientParams, normalizedWeight);
             }
 
             result[layerName] = aggregated;
@@ -232,16 +229,11 @@ public class FedMaAggregationStrategy<T> : ParameterDictionaryAggregationStrateg
 
     private static double CosineSimilarity(T[] a, int offsetA, T[] b, int offsetB, int length)
     {
-        double dot = 0, normA = 0, normB = 0;
-
-        for (int i = 0; i < length; i++)
-        {
-            double va = NumOps.ToDouble(a[offsetA + i]);
-            double vb = NumOps.ToDouble(b[offsetB + i]);
-            dot += va * vb;
-            normA += va * va;
-            normB += vb * vb;
-        }
+        var va = Vector<T>.Wrap(a, offsetA, length);
+        var vb = Vector<T>.Wrap(b, offsetB, length);
+        double dot = NumOps.ToDouble(Engine.DotProduct(va, vb));
+        double normA = NumOps.ToDouble(Engine.DotProduct(va, va));
+        double normB = NumOps.ToDouble(Engine.DotProduct(vb, vb));
 
         double denom = Math.Sqrt(normA) * Math.Sqrt(normB);
         return denom > 1e-10 ? dot / denom : 0;

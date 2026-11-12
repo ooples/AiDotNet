@@ -175,15 +175,9 @@ public class MoonAggregationStrategy<T> : ParameterDictionaryAggregationStrategy
             throw new ArgumentException("Vectors must have the same length for cosine similarity.");
         }
 
-        double dot = 0, normA = 0, normB = 0;
-        for (int i = 0; i < a.Length; i++)
-        {
-            double va = NumOps.ToDouble(a[i]);
-            double vb = NumOps.ToDouble(b[i]);
-            dot += va * vb;
-            normA += va * va;
-            normB += vb * vb;
-        }
+        double dot = NumOps.ToDouble(Engine.DotProduct(a, b));
+        double normA = NumOps.ToDouble(Engine.DotProduct(a, a));
+        double normB = NumOps.ToDouble(Engine.DotProduct(b, b));
 
         double denom = Math.Sqrt(normA) * Math.Sqrt(normB);
         return denom > CosineDenominatorEpsilon ? dot / denom : 0.0;
