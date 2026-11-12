@@ -110,4 +110,31 @@ public class CACTUsPaperTests
         Assert.All(assignment.Skip(4), a => Assert.Equal(assignment[4], a));
         Assert.NotEqual(assignment[0], assignment[4]);
     }
+
+    [Fact]
+    public void KMeans_HalfClusterOfMoreThan2048Points_HasItsTrueMean()
+    {
+        // 4096 points at 0.25, 100 at 1.0 and a probe at 0.6875. The large cluster's centroid is 0.25, so the probe
+        // (past the midpoint 0.625) joins the points at 1.0. The former size was a ReduceSum of the one-hot in Half,
+        // which stops at 2048 (2048 + 1 rounds to 2048): the centroid came out as 1024 / 2048 = 0.5, its midpoint
+        // with 1.0 moved to 0.75 and the probe was put in the large cluster.
+        const int large = 4096;
+        const int small = 100;
+        var data = new Half[large + small + 1];
+        for (int i = 0; i < large; i++)
+            data[i] = (Half)0.25f;
+        for (int i = large; i < large + small; i++)
+            data[i] = (Half)1f;
+        int probe = large + small;
+        data[probe] = (Half)0.6875f;
+
+        var algorithm = new UnsupervisedMetaLearnAlgorithm<Half, Tensor<Half>, Tensor<Half>>(
+            new UnsupervisedMetaLearnOptions<Half, Tensor<Half>, Tensor<Half>>(new MockFullModel<Half>()) { Seed = 17 });
+        var assignment = algorithm.KMeans(Tensor<Half>.FromVector(new Vector<Half>(data), new[] { data.Length, 1 }), 2);
+
+        Assert.All(assignment.Take(large), a => Assert.Equal(assignment[0], a));
+        Assert.All(assignment.Skip(large).Take(small), a => Assert.Equal(assignment[large], a));
+        Assert.NotEqual(assignment[0], assignment[large]);
+        Assert.Equal(assignment[large], assignment[probe]);
+    }
 }
