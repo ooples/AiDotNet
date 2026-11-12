@@ -308,18 +308,12 @@ public partial class FRNAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInpu
             int start = i * featureDim;
             int len = Math.Min(featureDim, supportFeatures.Length - start);
             if (len <= 0) break;
-            var vec = new Vector<T>(len);
-            for (int d = 0; d < len; d++)
-                vec[d] = supportFeatures[start + d];
-            supportList.Add(vec);
+            supportList.Add(supportFeatures.GetSubVector(start, len));
         }
 
         if (supportList.Count == 0)
         {
-            var fallback = new Vector<T>(queryFeatures.Length);
-            for (int i = 0; i < fallback.Length; i++)
-                fallback[i] = NumOps.FromDouble(0.5);
-            return fallback;
+            return Engine.Fill(queryFeatures.Length, NumOps.FromDouble(0.5));
         }
 
         // Split query features into per-example vectors using the same feature dimension
@@ -332,11 +326,10 @@ public partial class FRNAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInpu
             int qLen = Math.Min(featureDim, queryFeatures.Length - qStart);
             if (qLen <= 0) break;
 
-            var queryVec = new Vector<T>(qLen);
-            for (int d = 0; d < qLen; d++)
-                queryVec[d] = queryFeatures[qStart + d];
+            var queryVec = queryFeatures.GetSubVector(qStart, qLen);
 
-            // Compute reconstruction error using ridge regression (lower = better match)
+            // Compute reconstruction error using ridge regression (lower = better match); the error comes from
+            // the double-precision solve (the engine has no linear solve), so the weight is written per query.
             double error = ComputeReconstructionError(queryVec, supportList);
 
             // Convert error to weight via sigmoid of negative error (scaled by feature dim)
