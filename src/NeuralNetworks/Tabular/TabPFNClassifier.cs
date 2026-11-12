@@ -1,3 +1,4 @@
+using System;
 using AiDotNet.Attributes;
 using System.Collections.Generic;
 using AiDotNet.Enums;
@@ -69,7 +70,7 @@ public class TabPFNClassifier<T> : TabPFNBase<T>
         int numNumericalFeatures,
         int numClasses,
         TabPFNOptions<T>? options = null)
-        : base(numNumericalFeatures, options)
+        : base(numNumericalFeatures, options, Math.Max(numClasses, 0))
     {
         if (numClasses < 2)
         {

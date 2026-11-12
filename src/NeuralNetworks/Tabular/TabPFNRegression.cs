@@ -1,3 +1,4 @@
+using System;
 using AiDotNet.Attributes;
 using System.Collections.Generic;
 using AiDotNet.Enums;
@@ -68,7 +69,7 @@ public class TabPFNRegression<T> : TabPFNBase<T>
         int numNumericalFeatures,
         int outputDimension = 1,
         TabPFNOptions<T>? options = null)
-        : base(numNumericalFeatures, options)
+        : base(numNumericalFeatures, options, Math.Max(outputDimension, 0))
     {
         if (outputDimension < 1)
         {
