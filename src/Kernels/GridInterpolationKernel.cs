@@ -19,16 +19,31 @@ namespace AiDotNet.Kernels;
 /// - W is a sparse interpolation matrix (each data point → nearby grid points)
 /// - K_grid has Kronecker structure (efficient to work with)
 ///
+/// W uses the local cubic convolution interpolation of Keys (1981), as in Wilson &amp; Nickisch,
+/// "Kernel Interpolation for Scalable Structured Gaussian Processes (KISS-GP)" (ICML 2015) and
+/// GPyTorch's <c>Interpolation</c>: every data point draws on the 4 nearest grid points per dimension.
+///
 /// Complexity for N data points, M grid points:
 /// - Standard GP: O(N³)
 /// - Inducing points: O(NM² + M³)
-/// - KISS-GP: O(N + M log M) using FFT!
+/// - KISS-GP: O(N × 4^d + M × Σ n_d) per kernel-vector product
 ///
 /// This enables GPs with millions of data points on commodity hardware.
 /// </para>
 /// </remarks>
 public class GridInterpolationKernel<T> : IKernelFunction<T>
 {
+    /// <summary>
+    /// Grid points per dimension that cubic convolution draws on (GPyTorch's
+    /// <c>interp_points = range(-2, 2)</c>): two on each side of the target.
+    /// </summary>
+    private const int InterpolationPoints = 4;
+
+    /// <summary>
+    /// Relative tolerance of the uniform-spacing check, loose enough for float grids.
+    /// </summary>
+    private const double SpacingTolerance = 1e-6;
+
     /// <summary>
     /// The base kernel.
     /// </summary>
@@ -37,7 +52,7 @@ public class GridInterpolationKernel<T> : IKernelFunction<T>
     /// <summary>
     /// Grid coordinates along each dimension.
     /// </summary>
-    private readonly double[][] _gridCoordinates;
+    private readonly Vector<T>[] _gridCoordinates;
 
     /// <summary>
     /// Number of grid points per dimension.
@@ -45,14 +60,70 @@ public class GridInterpolationKernel<T> : IKernelFunction<T>
     private readonly int[] _gridSizes;
 
     /// <summary>
-    /// Number of nearest grid points to interpolate from per dimension.
+    /// All grid coordinates, concatenated dimension after dimension.
     /// </summary>
-    private readonly int _interpolationOrder;
+    private readonly Tensor<T> _allCoordinates;
 
     /// <summary>
-    /// Precomputed Toeplitz column for each dimension (for stationary kernels).
+    /// First grid coordinate of each dimension, shape [d].
     /// </summary>
-    private Vector<T>[]? _toeplitzColumns;
+    private readonly Tensor<T> _gridStarts;
+
+    /// <summary>
+    /// Last grid coordinate of each dimension, shape [d].
+    /// </summary>
+    private readonly Tensor<T> _gridEnds;
+
+    /// <summary>
+    /// Grid spacing of each dimension, shape [d].
+    /// </summary>
+    private readonly Tensor<T> _gridSpacings;
+
+    /// <summary>
+    /// The first four coordinates of each dimension, shape [d, 4].
+    /// </summary>
+    private readonly Tensor<T> _firstPoints;
+
+    /// <summary>
+    /// The last four coordinates of each dimension, shape [d, 4].
+    /// </summary>
+    private readonly Tensor<T> _lastPoints;
+
+    /// <summary>
+    /// Highest valid left-most stencil index of each dimension (grid size minus 4), shape [d].
+    /// </summary>
+    private readonly Tensor<T> _lastStencilStarts;
+
+    /// <summary>
+    /// Row-major stride of each dimension in the flattened grid, shape [d].
+    /// </summary>
+    private readonly Tensor<T> _gridStrides;
+
+    /// <summary>
+    /// Offset of each dimension's coordinates inside <see cref="_allCoordinates"/>, shape [d].
+    /// </summary>
+    private readonly Tensor<T> _coordinateOffsets;
+
+    /// <summary>
+    /// For each dimension, the stencil position (0..3) used by every one of the 4^d stencil combinations.
+    /// </summary>
+    private readonly Tensor<int>[] _combinationDigits;
+
+    /// <summary>
+    /// Distances from the left-bounding grid point to the stencil points, [1, 0, -1, -2]
+    /// (GPyTorch's flipped <c>interp_points</c>).
+    /// </summary>
+    private readonly Tensor<T> _stencilOffsets;
+
+    /// <summary>
+    /// Stencil positions [0, 1, 2, 3].
+    /// </summary>
+    private readonly Tensor<T> _stencilPositions;
+
+    /// <summary>
+    /// Precomputed per-dimension grid kernel matrices K_d (Toeplitz for stationary kernels).
+    /// </summary>
+    private Tensor<T>[]? _gridKernels;
 
     /// <summary>
     /// Whether precomputation is done.
@@ -68,8 +139,8 @@ public class GridInterpolationKernel<T> : IKernelFunction<T>
     /// Initializes a Grid Interpolation Kernel.
     /// </summary>
     /// <param name="baseKernel">The base kernel function (should be stationary for best results).</param>
-    /// <param name="gridCoordinates">Coordinates along each dimension.</param>
-    /// <param name="interpolationOrder">Number of nearest grid points per dimension (default 4).</param>
+    /// <param name="gridCoordinates">Strictly increasing, uniformly spaced coordinates along each dimension,
+    /// at least four per dimension.</param>
     /// <remarks>
     /// <para>
     /// <b>For Beginners:</b> Creates a KISS-GP kernel.
@@ -77,50 +148,89 @@ public class GridInterpolationKernel<T> : IKernelFunction<T>
     /// The grid should cover the range of your data with reasonable resolution.
     /// More grid points = better approximation but more computation.
     ///
-    /// Interpolation order:
-    /// - 2 = Linear interpolation (fastest, less accurate)
-    /// - 4 = Cubic interpolation (good balance)
-    /// - 6 = Higher order (most accurate, slower)
+    /// Each data point is interpolated from the 4 nearest grid points per dimension with
+    /// cubic convolution, so every dimension needs at least 4 uniformly spaced grid points.
     ///
     /// Example for 2D data in [0, 10] × [0, 10]:
-    /// var kernel = new GridInterpolationKernel&lt;double&gt;(
+    /// var kernel = GridInterpolationKernel&lt;double&gt;.WithUniformGrid(
     ///     new GaussianKernel&lt;double&gt;(1.0),
-    ///     new double[][]
-    ///     {
-    ///         Enumerable.Range(0, 50).Select(i => i * 0.2).ToArray(),  // 50 points, spacing 0.2
-    ///         Enumerable.Range(0, 50).Select(i => i * 0.2).ToArray()
-    ///     }
-    /// );
+    ///     new[] { (0.0, 10.0), (0.0, 10.0) },
+    ///     gridPointsPerDim: 50);
     /// </para>
     /// </remarks>
     public GridInterpolationKernel(
         IKernelFunction<T> baseKernel,
-        double[][] gridCoordinates,
-        int interpolationOrder = 4)
+        Vector<T>[] gridCoordinates)
     {
         Guard.NotNull(baseKernel);
         _baseKernel = baseKernel;
         Guard.NotNull(gridCoordinates);
-        _gridCoordinates = gridCoordinates;
 
         if (gridCoordinates.Length == 0)
             throw new ArgumentException("Must have at least one dimension.");
-        if (interpolationOrder < 2)
-            throw new ArgumentException("Interpolation order must be at least 2.");
 
-        // Validate each dimension has at least one coordinate
+        // Validate each dimension has enough coordinates for the 4-point cubic stencil
         for (int i = 0; i < gridCoordinates.Length; i++)
         {
             if (gridCoordinates[i] is null)
                 throw new ArgumentNullException($"gridCoordinates[{i}]", $"Grid coordinates for dimension {i} cannot be null.");
-            if (gridCoordinates[i].Length == 0)
-                throw new ArgumentException($"Grid coordinates for dimension {i} cannot be empty. Each dimension must have at least one coordinate.");
+            if (gridCoordinates[i].Length < InterpolationPoints)
+                throw new ArgumentException(
+                    $"Grid coordinates for dimension {i} must have at least {InterpolationPoints} points " +
+                    "for cubic convolution interpolation.");
         }
 
+        _gridCoordinates = gridCoordinates;
         _gridSizes = gridCoordinates.Select(c => c.Length).ToArray();
-        _interpolationOrder = interpolationOrder;
         _numOps = MathHelper.GetNumericOperations<T>();
         _precomputed = false;
+
+        var engine = AiDotNetEngine.Current;
+        int d = gridCoordinates.Length;
+        int[] offsets = new int[d];
+        for (int dim = 1; dim < d; dim++)
+            offsets[dim] = offsets[dim - 1] + _gridSizes[dim - 1];
+
+        _allCoordinates = engine.Concat(gridCoordinates.Select(c => c.AsTensor()).ToList(), 0);
+        _gridStarts = engine.TensorIndexSelect(_allCoordinates, IntTensor(offsets), 0);
+        _gridEnds = engine.TensorIndexSelect(
+            _allCoordinates, IntTensor(Enumerable.Range(0, d).Select(dim => offsets[dim] + _gridSizes[dim] - 1)), 0);
+        _gridSpacings = engine.TensorSubtract(
+            engine.TensorIndexSelect(_allCoordinates, IntTensor(offsets.Select(o => o + 1)), 0), _gridStarts);
+
+        ValidateUniformSpacing(engine, offsets);
+
+        _firstPoints = engine.Reshape(
+            engine.TensorIndexSelect(
+                _allCoordinates,
+                IntTensor(Enumerable.Range(0, d).SelectMany(dim => Enumerable.Range(offsets[dim], InterpolationPoints))),
+                0),
+            new[] { d, InterpolationPoints });
+        _lastPoints = engine.Reshape(
+            engine.TensorIndexSelect(
+                _allCoordinates,
+                IntTensor(Enumerable.Range(0, d).SelectMany(dim =>
+                    Enumerable.Range(offsets[dim] + _gridSizes[dim] - InterpolationPoints, InterpolationPoints))),
+                0),
+            new[] { d, InterpolationPoints });
+
+        _lastStencilStarts = IntTensor(_gridSizes.Select(g => g - InterpolationPoints)).Cast<T>();
+        _coordinateOffsets = IntTensor(offsets).Cast<T>();
+
+        int[] strides = new int[d];
+        strides[d - 1] = 1;
+        for (int dim = d - 2; dim >= 0; dim--)
+            strides[dim] = strides[dim + 1] * _gridSizes[dim + 1];
+        _gridStrides = IntTensor(strides).Cast<T>();
+
+        int combinations = IntPower(InterpolationPoints, d);
+        _combinationDigits = Enumerable.Range(0, d)
+            .Select(dim => IntTensor(Enumerable.Range(0, combinations)
+                .Select(k => k / IntPower(InterpolationPoints, d - 1 - dim) % InterpolationPoints)))
+            .ToArray();
+
+        _stencilOffsets = engine.TensorArange<T>(1, 1 - InterpolationPoints, -1);
+        _stencilPositions = engine.TensorArange<T>(0, InterpolationPoints, 1);
     }
 
     /// <summary>
@@ -139,62 +249,22 @@ public class GridInterpolationKernel<T> : IKernelFunction<T>
     public IKernelFunction<T> BaseKernel => _baseKernel;
 
     /// <summary>
-    /// Precomputes Toeplitz structure for efficient matrix-vector products.
+    /// Precomputes the per-dimension grid kernel matrices for efficient matrix-vector products.
     /// </summary>
     /// <remarks>
     /// <para>
     /// <b>For Beginners:</b> For stationary kernels (where k(x, x') depends only on x - x'),
-    /// the grid kernel matrix has Toeplitz structure. This means each row is a shifted
-    /// version of the previous row, so we only need to store one column.
+    /// the grid kernel matrix of each dimension has Toeplitz structure: entry (i, j) only depends
+    /// on |i - j|. So we only evaluate the kernel for the first column and fill the matrix from it.
     ///
-    /// This enables O(M log M) matrix-vector products using FFT instead of O(M²).
+    /// The full grid kernel is the Kronecker product of these per-dimension matrices, which
+    /// <see cref="FastGridMultiply"/> applies one dimension at a time.
     /// </para>
     /// </remarks>
     public void Precompute()
     {
-        int d = NumDimensions;
-        _toeplitzColumns = new Vector<T>[d];
-
-        // Validate uniform grid spacing (required for Toeplitz structure)
-        for (int dim = 0; dim < d; dim++)
-        {
-            var coords = _gridCoordinates[dim];
-            if (coords.Length >= 2)
-            {
-                double expectedSpacing = coords[1] - coords[0];
-                const double tolerance = 1e-10;
-                for (int i = 2; i < coords.Length; i++)
-                {
-                    double actualSpacing = coords[i] - coords[i - 1];
-                    if (Math.Abs(actualSpacing - expectedSpacing) > tolerance * Math.Max(1.0, Math.Abs(expectedSpacing)))
-                    {
-                        throw new InvalidOperationException(
-                            $"Grid dimension {dim} is not uniformly spaced. Toeplitz structure requires uniform spacing. " +
-                            $"Expected spacing {expectedSpacing:G6}, got {actualSpacing:G6} between indices {i - 1} and {i}.");
-                    }
-                }
-            }
-        }
-
-        for (int dim = 0; dim < d; dim++)
-        {
-            int n = _gridSizes[dim];
-            var column = new Vector<T>(n);
-
-            // First column of Toeplitz matrix = k(0, 0), k(1, 0), k(2, 0), ...
-            var x0 = new Vector<T>(1);
-            x0[0] = _numOps.FromDouble(_gridCoordinates[dim][0]);
-
-            for (int i = 0; i < n; i++)
-            {
-                var xi = new Vector<T>(1);
-                xi[0] = _numOps.FromDouble(_gridCoordinates[dim][i]);
-                column[i] = _baseKernel.Calculate(xi, x0);
-            }
-
-            _toeplitzColumns[dim] = column;
-        }
-
+        var engine = AiDotNetEngine.Current;
+        _gridKernels = _gridCoordinates.Select(coords => ToeplitzGridKernel(engine, coords)).ToArray();
         _precomputed = true;
     }
 
@@ -205,11 +275,12 @@ public class GridInterpolationKernel<T> : IKernelFunction<T>
     /// <param name="x2">Second point.</param>
     /// <returns>Approximate kernel value via grid interpolation.</returns>
     /// <remarks>
+    /// <para>Points outside the grid are clamped to its boundary, as the nearest-grid-point interpolation did.</para>
     /// <para>
     /// <b>For Beginners:</b> Approximates k(x1, x2) using interpolation:
     /// k(x1, x2) ≈ w(x1)' × K_grid × w(x2)
     ///
-    /// Where w(x) are the interpolation weights to nearby grid points.
+    /// Where w(x) are the cubic interpolation weights to nearby grid points.
     /// </para>
     /// </remarks>
     public T Calculate(Vector<T> x1, Vector<T> x2)
@@ -217,140 +288,89 @@ public class GridInterpolationKernel<T> : IKernelFunction<T>
         if (x1.Length != NumDimensions || x2.Length != NumDimensions)
             throw new ArgumentException($"Expected {NumDimensions}-dimensional vectors.");
 
-        // Get interpolation weights
-        var (indices1, weights1) = GetInterpolationWeights(x1);
-        var (indices2, weights2) = GetInterpolationWeights(x2);
+        var engine = AiDotNetEngine.Current;
+        int d = NumDimensions;
+        var stencil1 = Interpolate(engine, engine.Reshape(x1.AsTensor(), new[] { 1, d }));
+        var stencil2 = Interpolate(engine, engine.Reshape(x2.AsTensor(), new[] { 1, d }));
 
-        // Compute k(x1, x2) ≈ sum_i sum_j w1[i] * k(z_i, z_j) * w2[j]
-        double result = 0;
+        // Kernel between the grid points of the two stencils: k(z_i, z_j)
+        var points1 = GridPointRows(engine, stencil1.Points);
+        var points2 = GridPointRows(engine, stencil2.Points);
+        var gridKernel = Tensor<T>.FromMatrix(Matrix<T>.FromRowVectors(
+            points1.Select(z1 => points2.Select(z2 => _baseKernel.Calculate(z1, z2)))));
 
-        foreach (var (idx1, w1) in indices1.Zip(weights1, (i, w) => (i, w)))
-        {
-            foreach (var (idx2, w2) in indices2.Zip(weights2, (i, w) => (i, w)))
-            {
-                var z1 = IndexToGridPoint(idx1);
-                var z2 = IndexToGridPoint(idx2);
-                double kval = _numOps.ToDouble(_baseKernel.Calculate(z1, z2));
-                result += w1 * kval * w2;
-            }
-        }
-
-        return _numOps.FromDouble(result);
+        // w1' × K × w2
+        var left = engine.TensorMatMul(stencil1.Weights, gridKernel);
+        return engine.TensorSum(engine.TensorMultiply(left, stencil2.Weights));
     }
 
     /// <summary>
     /// Computes the interpolation matrix W for a set of data points.
     /// </summary>
-    /// <param name="X">Data points (n × d).</param>
-    /// <returns>Sparse interpolation matrix W (n × M).</returns>
+    /// <param name="X">Data points (n × d); points outside the grid are clamped to its boundary.</param>
+    /// <returns>Sparse interpolation matrix W (n × M): the flat grid indices and the weights of the
+    /// 4^d stencil entries of each row, both n × 4^d.</returns>
     /// <remarks>
+    /// <para>Points outside the grid are clamped to its boundary, as the nearest-grid-point interpolation did.</para>
     /// <para>
     /// <b>For Beginners:</b> The interpolation matrix W maps each data point to its
     /// interpolation weights on the grid. Each row has only a few non-zeros
-    /// (interpolationOrder^d entries).
+    /// (4^d entries).
     ///
-    /// This sparsity is crucial for efficiency: W × v is O(N × k^d) not O(N × M).
+    /// This sparsity is crucial for efficiency: W × v is O(N × 4^d) not O(N × M).
     /// </para>
     /// </remarks>
-    public (int[][] Indices, double[][] Weights) ComputeInterpolationMatrix(Matrix<T> X)
+    public (Tensor<int> Indices, Matrix<T> Weights) ComputeInterpolationMatrix(Matrix<T> X)
     {
-        int n = X.Rows;
-        var indices = new int[n][];
-        var weights = new double[n][];
+        Guard.NotNull(X);
+        if (X.Columns != NumDimensions)
+            throw new ArgumentException($"Expected {NumDimensions} columns.");
 
-        for (int i = 0; i < n; i++)
-        {
-            var xi = GetRow(X, i);
-            var (idx, w) = GetInterpolationWeights(xi);
-            indices[i] = idx;
-            weights[i] = w;
-        }
-
-        return (indices, weights);
+        var stencil = Interpolate(AiDotNetEngine.Current, Tensor<T>.FromMatrix(X));
+        return (stencil.Indices, stencil.Weights.ToMatrix());
     }
 
     /// <summary>
-    /// Performs fast matrix-vector product using Kronecker-Toeplitz structure.
+    /// Performs fast matrix-vector product using the Kronecker structure of the grid kernel.
     /// </summary>
     /// <param name="v">Vector to multiply (length = total grid points).</param>
     /// <returns>K_grid × v.</returns>
     /// <remarks>
     /// <para>
-    /// <b>For Beginners:</b> Uses the Kronecker-Toeplitz structure for O(M log M) multiply
-    /// instead of O(M²). This is where the huge speedup comes from.
-    ///
-    /// For a D-dimensional grid with M total points:
-    /// - Naive multiply: O(M²)
-    /// - Kronecker-Toeplitz with FFT: O(M log M)
-    ///
-    /// For M = 1,000,000: that's 1e12 vs 2e7 operations!
+    /// <b>For Beginners:</b> The grid kernel is a Kronecker product K_1 ⊗ ... ⊗ K_d of small
+    /// per-dimension matrices, so K_grid × v is computed by multiplying each K_d along its own axis
+    /// of v reshaped to the grid. For M grid points that costs O(M × Σ n_d) instead of O(M²).
     /// </para>
     /// </remarks>
     public Vector<T> FastGridMultiply(Vector<T> v)
     {
-        if (!_precomputed || _toeplitzColumns is null)
+        if (!_precomputed || _gridKernels is null)
             throw new InvalidOperationException("Call Precompute() first.");
 
         int total = TotalGridPoints;
         if (v.Length != total)
             throw new ArgumentException($"Vector length must be {total}.");
 
-        // Use FFT-based Toeplitz multiplication
-        // For multi-dimensional Kronecker-Toeplitz, we apply 1D FFT-Toeplitz
-        // along each dimension
+        var engine = AiDotNetEngine.Current;
+        int d = NumDimensions;
+        var grid = engine.Reshape(v.AsTensor(), _gridSizes.ToArray());
 
-        var result = new double[total];
-        for (int i = 0; i < total; i++)
-            result[i] = _numOps.ToDouble(v[i]);
-
-        for (int dim = NumDimensions - 1; dim >= 0; dim--)
+        for (int dim = 0; dim < d; dim++)
         {
-            int n = _gridSizes[dim];
-            var toeplitz = _toeplitzColumns[dim];
+            // Move this dimension to the front, multiply by K_dim, move it back.
+            int axis = dim;
+            int[] permutation = new[] { axis }.Concat(Enumerable.Range(0, d).Where(a => a != axis)).ToArray();
+            int[] inverse = new int[d];
+            for (int a = 0; a < d; a++)
+                inverse[permutation[a]] = a;
 
-            // Compute product of sizes after this dimension
-            int rightSize = 1;
-            for (int d = dim + 1; d < NumDimensions; d++)
-                rightSize *= _gridSizes[d];
-
-            // Compute product of sizes before this dimension
-            int leftSize = total / (n * rightSize);
-
-            var newResult = new double[total];
-
-            // Apply Toeplitz multiplication along this dimension
-            for (int left = 0; left < leftSize; left++)
-            {
-                for (int right = 0; right < rightSize; right++)
-                {
-                    // Extract fiber
-                    var fiber = new double[n];
-                    for (int i = 0; i < n; i++)
-                    {
-                        int idx = left * (n * rightSize) + i * rightSize + right;
-                        fiber[i] = result[idx];
-                    }
-
-                    // Toeplitz multiply (simple version - could use FFT)
-                    var newFiber = ToeplitzMultiply(toeplitz, fiber);
-
-                    // Write back
-                    for (int i = 0; i < n; i++)
-                    {
-                        int idx = left * (n * rightSize) + i * rightSize + right;
-                        newResult[idx] = newFiber[i];
-                    }
-                }
-            }
-
-            result = newResult;
+            int[] movedShape = permutation.Select(a => _gridSizes[a]).ToArray();
+            var flat = engine.Reshape(engine.TensorPermute(grid, permutation), new[] { _gridSizes[dim], total / _gridSizes[dim] });
+            var product = engine.TensorMatMul(_gridKernels[dim], flat);
+            grid = engine.TensorPermute(engine.Reshape(product, movedShape), inverse);
         }
 
-        var output = new Vector<T>(total);
-        for (int i = 0; i < total; i++)
-            output[i] = _numOps.FromDouble(result[i]);
-
-        return output;
+        return engine.Reshape(grid, new[] { total }).ToVector();
     }
 
     /// <summary>
@@ -365,61 +385,46 @@ public class GridInterpolationKernel<T> : IKernelFunction<T>
     /// <b>For Beginners:</b> This is the main operation for GP inference.
     ///
     /// Steps:
-    /// 1. W' × v: Scatter data to grid (O(N × k^d))
-    /// 2. K_grid × (W' × v): Fast grid multiply (O(M log M))
-    /// 3. W × result: Gather from grid to data (O(N × k^d))
-    ///
-    /// Total: O(N × k^d + M log M) instead of O(N²)!
+    /// 1. W' × v: Scatter data to grid (O(N × 4^d))
+    /// 2. K_grid × (W' × v): Fast grid multiply
+    /// 3. W × result: Gather from grid to data (O(N × 4^d))
     /// </para>
     /// </remarks>
     public Vector<T> KissGpMultiply(
         Vector<T> v,
-        int[][] interpolationIndices,
-        double[][] interpolationWeights)
+        Tensor<int> interpolationIndices,
+        Matrix<T> interpolationWeights)
     {
+        Guard.NotNull(v);
+        Guard.NotNull(interpolationIndices);
+        Guard.NotNull(interpolationWeights);
+
         int n = v.Length;
-        if (interpolationIndices.Length != n || interpolationWeights.Length != n)
+        int stencilSize = interpolationWeights.Columns;
+        if (interpolationIndices.Rank != 2 || interpolationIndices.Shape[0] != n
+            || interpolationWeights.Rows != n || interpolationIndices.Shape[1] != stencilSize)
             throw new ArgumentException("Interpolation arrays must match vector length.");
 
+        var engine = AiDotNetEngine.Current;
         int m = TotalGridPoints;
+        int entries = n * stencilSize;
+        var weights = Tensor<T>.FromMatrix(interpolationWeights);
+        var flatIndices = engine.Reshape(interpolationIndices, new[] { entries });
 
         // Step 1: W' × v (scatter to grid)
-        var gridVec = new double[m];
-        for (int i = 0; i < n; i++)
-        {
-            double vi = _numOps.ToDouble(v[i]);
-            var indices = interpolationIndices[i];
-            var weights = interpolationWeights[i];
-
-            for (int j = 0; j < indices.Length; j++)
-            {
-                gridVec[indices[j]] += weights[j] * vi;
-            }
-        }
+        var scaled = engine.TensorMultiply(
+            weights,
+            engine.TensorBroadcastTo(engine.Reshape(v.AsTensor(), new[] { n, 1 }), new[] { n, stencilSize }));
+        var gridVec = engine.TensorIndexAdd(
+            new Tensor<T>(new[] { m }), 0, flatIndices, engine.Reshape(scaled, new[] { entries }));
 
         // Step 2: K_grid × (W' × v)
-        var gridInput = new Vector<T>(m);
-        for (int i = 0; i < m; i++)
-            gridInput[i] = _numOps.FromDouble(gridVec[i]);
-
-        var gridOutput = FastGridMultiply(gridInput);
+        var gridOutput = FastGridMultiply(gridVec.ToVector());
 
         // Step 3: W × result (gather from grid)
-        var result = new Vector<T>(n);
-        for (int i = 0; i < n; i++)
-        {
-            var indices = interpolationIndices[i];
-            var weights = interpolationWeights[i];
-
-            double sum = 0;
-            for (int j = 0; j < indices.Length; j++)
-            {
-                sum += weights[j] * _numOps.ToDouble(gridOutput[indices[j]]);
-            }
-            result[i] = _numOps.FromDouble(sum);
-        }
-
-        return result;
+        var gathered = engine.Reshape(
+            engine.TensorIndexSelect(gridOutput.AsTensor(), flatIndices, 0), new[] { n, stencilSize });
+        return engine.ReduceSum(engine.TensorMultiply(weights, gathered), new[] { 1 }, keepDims: false).ToVector();
     }
 
     /// <summary>
@@ -427,8 +432,7 @@ public class GridInterpolationKernel<T> : IKernelFunction<T>
     /// </summary>
     /// <param name="baseKernel">The base kernel.</param>
     /// <param name="bounds">Min and max for each dimension: [(min1, max1), (min2, max2), ...]</param>
-    /// <param name="gridPointsPerDim">Number of grid points per dimension.</param>
-    /// <param name="interpolationOrder">Interpolation order (default 4).</param>
+    /// <param name="gridPointsPerDim">Number of grid points per dimension (at least 4).</param>
     /// <returns>A new Grid Interpolation Kernel.</returns>
     /// <remarks>
     /// <para>
@@ -442,194 +446,232 @@ public class GridInterpolationKernel<T> : IKernelFunction<T>
     /// </remarks>
     public static GridInterpolationKernel<T> WithUniformGrid(
         IKernelFunction<T> baseKernel,
-        (double Min, double Max)[] bounds,
-        int gridPointsPerDim,
-        int interpolationOrder = 4)
+        (T Min, T Max)[] bounds,
+        int gridPointsPerDim)
     {
-        if (gridPointsPerDim < 2)
+        Guard.NotNull(bounds);
+        if (gridPointsPerDim < InterpolationPoints)
             throw new ArgumentOutOfRangeException(nameof(gridPointsPerDim),
-                "gridPointsPerDim must be at least 2 to create a grid with valid spacing.");
+                $"gridPointsPerDim must be at least {InterpolationPoints} for cubic convolution interpolation.");
 
-        var gridCoordinates = new double[bounds.Length][];
+        var engine = AiDotNetEngine.Current;
+        var gridCoordinates = bounds
+            .Select(b => engine.TensorLinspace(b.Min, b.Max, gridPointsPerDim).ToVector())
+            .ToArray();
 
-        for (int d = 0; d < bounds.Length; d++)
-        {
-            double min = bounds[d].Min;
-            double max = bounds[d].Max;
-            double step = (max - min) / (gridPointsPerDim - 1);
-
-            gridCoordinates[d] = new double[gridPointsPerDim];
-            for (int i = 0; i < gridPointsPerDim; i++)
-            {
-                gridCoordinates[d][i] = min + i * step;
-            }
-        }
-
-        return new GridInterpolationKernel<T>(baseKernel, gridCoordinates, interpolationOrder);
+        return new GridInterpolationKernel<T>(baseKernel, gridCoordinates);
     }
 
     #region Private Methods
 
     /// <summary>
-    /// Gets interpolation weights for a point.
+    /// Cubic convolution stencils of a batch of points, as GPyTorch's <c>Interpolation.interpolate</c>.
     /// </summary>
-    private (int[] Indices, double[] Weights) GetInterpolationWeights(Vector<T> x)
+    /// <param name="engine">The engine.</param>
+    /// <param name="x">Points, shape [n, d].</param>
+    /// <returns>Flat grid indices [n, 4^d], weights [n, 4^d] and grid point coordinates [n, 4^d, d].</returns>
+    private (Tensor<int> Indices, Tensor<T> Weights, Tensor<T> Points) Interpolate(IEngine engine, Tensor<T> x)
     {
+        int n = x.Shape[0];
         int d = NumDimensions;
+        int[] pointShape = { n, d };
+        int[] stencilShape = { n, d, InterpolationPoints };
+        var ones = Tensor<T>.CreateDefault(pointShape, _numOps.One);
+        var starts = PerDimension(engine, _gridStarts, pointShape);
 
-        // Get 1D weights for each dimension
-        var dimIndices = new int[d][];
-        var dimWeights = new double[d][];
+        // A target outside the grid is clamped to the grid's boundary in each dimension, so it takes the boundary
+        // stencil (all weight on the nearest boundary grid point). This keeps the previous nearest-grid-point
+        // behaviour: prediction slightly past the training range returns the boundary value instead of throwing.
+        // (GPyTorch instead refits the grid bounds to cover the inputs; a fixed grid can only clamp.)
+        x = engine.TensorClampTensor(x, starts, PerDimension(engine, _gridEnds, pointShape));
 
+        // Position in grid-index space, its left-bounding grid point and the distance from it.
+        var spacing = engine.TensorClampMin(_gridSpacings, _numOps.FromDouble(1e-10));
+        var position = engine.TensorDivide(engine.TensorSubtract(x, starts), PerDimension(engine, spacing, pointShape));
+        var lowerPoint = engine.TensorFloor(position);
+        var relative = engine.TensorSubtract(position, lowerPoint);
+        var stencilStart = engine.TensorSubtract(lowerPoint, ones);
+
+        // Keys' cubic convolution kernel at the four stencil distances.
+        var scaled = engine.TensorAdd(
+            Expand(engine, relative, stencilShape),
+            engine.TensorBroadcastTo(engine.Reshape(_stencilOffsets, new[] { 1, 1, InterpolationPoints }), stencilShape));
+        var weights = CubicConvolution(engine, scaled, stencilShape);
+
+        // Boundary stencils: GPyTorch puts all weight on the closest of the first or last four grid points.
+        var leftBoundary = engine.TensorLessThan(stencilStart, _numOps.Zero);
+        var lastStart = PerDimension(engine, _lastStencilStarts, pointShape);
+        var rightBoundary = engine.TensorMultiply(
+            engine.TensorGreaterThan(stencilStart, lastStart), engine.TensorSubtract(ones, leftBoundary));
+        var interior = engine.TensorSubtract(ones, engine.TensorAdd(leftBoundary, rightBoundary));
+
+        var closestFirst = ClosestStencilPoint(engine, x, _firstPoints, stencilShape);
+        var closestLast = ClosestStencilPoint(engine, x, _lastPoints, stencilShape);
+        weights = engine.TensorAdd(
+            engine.TensorMultiply(weights, Expand(engine, interior, stencilShape)),
+            engine.TensorAdd(
+                engine.TensorMultiply(closestFirst, Expand(engine, leftBoundary, stencilShape)),
+                engine.TensorMultiply(closestLast, Expand(engine, rightBoundary, stencilShape))));
+        stencilStart = engine.TensorAdd(
+            engine.TensorMultiply(stencilStart, interior),
+            engine.TensorMultiply(lastStart, rightBoundary));
+
+        // Grid index of every stencil point per dimension, its flat-index contribution and its coordinate.
+        var gridIndex = engine.TensorAdd(
+            Expand(engine, stencilStart, stencilShape),
+            engine.TensorBroadcastTo(engine.Reshape(_stencilPositions, new[] { 1, 1, InterpolationPoints }), stencilShape));
+        var flatContribution = engine.TensorMultiply(
+            gridIndex, engine.TensorBroadcastTo(engine.Reshape(_gridStrides, new[] { 1, d, 1 }), stencilShape));
+        var coordinateIndex = engine.TensorAdd(
+            gridIndex, engine.TensorBroadcastTo(engine.Reshape(_coordinateOffsets, new[] { 1, d, 1 }), stencilShape));
+        var coordinates = engine.Reshape(
+            engine.TensorIndexSelect(
+                _allCoordinates, engine.Reshape(coordinateIndex, new[] { n * d * InterpolationPoints }).Cast<int>(), 0),
+            stencilShape);
+
+        // Combine the per-dimension stencils into the 4^d tensor-product stencil.
+        int combinations = _combinationDigits[0].Length;
+        var combinedWeights = Tensor<T>.CreateDefault(new[] { n, combinations }, _numOps.One);
+        var combinedIndices = new Tensor<T>(new[] { n, combinations });
+        var pointCoordinates = new Tensor<T>[d];
         for (int dim = 0; dim < d; dim++)
         {
-            (dimIndices[dim], dimWeights[dim]) = Get1DInterpolationWeights(
-                _numOps.ToDouble(x[dim]),
-                _gridCoordinates[dim],
-                _interpolationOrder);
+            var digits = _combinationDigits[dim];
+            combinedWeights = engine.TensorMultiply(
+                combinedWeights, engine.TensorIndexSelect(engine.TensorSelect(weights, 1, dim), digits, 1));
+            combinedIndices = engine.TensorAdd(
+                combinedIndices, engine.TensorIndexSelect(engine.TensorSelect(flatContribution, 1, dim), digits, 1));
+            pointCoordinates[dim] = engine.TensorIndexSelect(engine.TensorSelect(coordinates, 1, dim), digits, 1);
         }
 
-        // Compute all combinations (Cartesian product)
-        int numCombinations = 1;
-        for (int dim = 0; dim < d; dim++)
-            numCombinations *= dimIndices[dim].Length;
-
-        var indices = new int[numCombinations];
-        var weights = new double[numCombinations];
-
-        for (int combo = 0; combo < numCombinations; combo++)
-        {
-            int flatIdx = 0;
-            double weight = 1.0;
-            int remaining = combo;
-
-            for (int dim = d - 1; dim >= 0; dim--)
-            {
-                int localIdx = remaining % dimIndices[dim].Length;
-                remaining /= dimIndices[dim].Length;
-
-                int gridIdx = dimIndices[dim][localIdx];
-                weight *= dimWeights[dim][localIdx];
-
-                // Convert to flat index
-                int multiplier = 1;
-                for (int dd = dim + 1; dd < d; dd++)
-                    multiplier *= _gridSizes[dd];
-                flatIdx += gridIdx * multiplier;
-            }
-
-            indices[combo] = flatIdx;
-            weights[combo] = weight;
-        }
-
-        return (indices, weights);
+        return (combinedIndices.Cast<int>(), combinedWeights, engine.TensorStack(pointCoordinates, 2));
     }
 
     /// <summary>
-    /// Gets 1D cubic interpolation weights.
+    /// Keys' cubic convolution kernel with a = -0.5, written as GPyTorch writes it:
+    /// u(s) = 1.5|s|³ - 2.5|s|² + 1 for |s| &lt; 1 and -0.5|s|³ + 2.5|s|² - 4|s| + 2 otherwise.
     /// </summary>
-    private static (int[] Indices, double[] Weights) Get1DInterpolationWeights(
-        double x, double[] grid, int order)
+    private Tensor<T> CubicConvolution(IEngine engine, Tensor<T> distance, int[] shape)
     {
-        int n = grid.Length;
+        var u = engine.TensorAbs(distance);
+        var inner = engine.TensorLessThan(u, _numOps.One);
+        var outer = engine.TensorSubtract(Tensor<T>.CreateDefault(shape, _numOps.One), inner);
 
-        // Find nearest grid point
-        int nearest = 0;
-        double minDist = double.MaxValue;
-        for (int i = 0; i < n; i++)
-        {
-            double dist = Math.Abs(x - grid[i]);
-            if (dist < minDist)
-            {
-                minDist = dist;
-                nearest = i;
-            }
-        }
+        var nearCoefficient = engine.TensorAddScalar(engine.TensorMultiplyScalar(u, _numOps.FromDouble(1.5)), _numOps.FromDouble(-2.5));
+        var near = engine.TensorAddScalar(engine.TensorMultiply(engine.TensorMultiply(nearCoefficient, u), u), _numOps.One);
 
-        // Get surrounding indices
-        int halfOrder = order / 2;
-        int start = Math.Max(0, nearest - halfOrder);
-        int end = Math.Min(n, start + order);
-        start = Math.Max(0, end - order);
+        var farCoefficient = engine.TensorAddScalar(engine.TensorMultiplyScalar(u, _numOps.FromDouble(-0.5)), _numOps.FromDouble(2.5));
+        var farLinear = engine.TensorAddScalar(engine.TensorMultiply(farCoefficient, u), _numOps.FromDouble(-4.0));
+        var far = engine.TensorAddScalar(engine.TensorMultiply(farLinear, u), _numOps.FromDouble(2.0));
 
-        int actualOrder = end - start;
-        var indices = new int[actualOrder];
-        var weights = new double[actualOrder];
-
-        for (int i = 0; i < actualOrder; i++)
-        {
-            indices[i] = start + i;
-        }
-
-        // Lagrange interpolation weights
-        for (int i = 0; i < actualOrder; i++)
-        {
-            double wi = 1.0;
-            for (int j = 0; j < actualOrder; j++)
-            {
-                if (i != j)
-                {
-                    double xi = grid[indices[i]];
-                    double xj = grid[indices[j]];
-                    wi *= (x - xj) / (xi - xj);
-                }
-            }
-            weights[i] = wi;
-        }
-
-        return (indices, weights);
+        return engine.TensorAdd(engine.TensorMultiply(near, inner), engine.TensorMultiply(far, outer));
     }
 
     /// <summary>
-    /// Converts flat index to grid point.
+    /// One-hot weights [n, d, 4] on the closest of four boundary grid points (first one on ties, as torch.min).
     /// </summary>
-    private Vector<T> IndexToGridPoint(int flatIndex)
+    private Tensor<T> ClosestStencilPoint(IEngine engine, Tensor<T> x, Tensor<T> boundaryPoints, int[] stencilShape)
     {
-        int d = NumDimensions;
-        var point = new Vector<T>(d);
-        int remaining = flatIndex;
-
-        for (int dim = d - 1; dim >= 0; dim--)
-        {
-            int localIdx = remaining % _gridSizes[dim];
-            remaining /= _gridSizes[dim];
-            point[dim] = _numOps.FromDouble(_gridCoordinates[dim][localIdx]);
-        }
-
-        return point;
+        int n = stencilShape[0];
+        int d = stencilShape[1];
+        var distance = engine.TensorAbs(engine.TensorSubtract(
+            engine.TensorBroadcastTo(engine.Reshape(boundaryPoints, new[] { 1, d, InterpolationPoints }), stencilShape),
+            Expand(engine, x, stencilShape)));
+        var closest = engine.TensorArgMin(distance, 2).Cast<T>();
+        return engine.TensorEquals(
+            engine.TensorBroadcastTo(engine.Reshape(_stencilPositions, new[] { 1, 1, InterpolationPoints }), stencilShape),
+            Expand(engine, engine.Reshape(closest, new[] { n, d }), stencilShape));
     }
 
     /// <summary>
-    /// Extracts a row from a matrix.
+    /// Broadcasts a per-dimension [d] tensor to [n, d].
     /// </summary>
-    private Vector<T> GetRow(Matrix<T> matrix, int row)
+    private static Tensor<T> PerDimension(IEngine engine, Tensor<T> values, int[] pointShape)
+        => engine.TensorBroadcastTo(engine.Reshape(values, new[] { 1, pointShape[1] }), pointShape);
+
+    /// <summary>
+    /// Repeats a [n, d] tensor along a new trailing stencil axis.
+    /// </summary>
+    private static Tensor<T> Expand(IEngine engine, Tensor<T> perDimension, int[] stencilShape)
+        => engine.TensorBroadcastTo(
+            engine.Reshape(perDimension, new[] { stencilShape[0], stencilShape[1], 1 }), stencilShape);
+
+    /// <summary>
+    /// Dense grid kernel of one dimension from its Toeplitz first column k(z_i, z_0).
+    /// </summary>
+    private Tensor<T> ToeplitzGridKernel(IEngine engine, Vector<T> coords)
     {
-        var result = new Vector<T>(matrix.Columns);
-        for (int j = 0; j < matrix.Columns; j++)
-            result[j] = matrix[row, j];
-        return result;
+        int n = coords.Length;
+        var origin = coords.GetSubVector(0, 1);
+        var column = new Vector<T>(Enumerable.Range(0, n).Select(i => _baseKernel.Calculate(coords.GetSubVector(i, 1), origin)));
+
+        // K[i, j] = column[|i - j|]
+        var positions = engine.TensorArange<T>(0, n, 1);
+        var lag = engine.TensorAbs(engine.TensorSubtract(
+            engine.TensorBroadcastTo(engine.Reshape(positions, new[] { n, 1 }), new[] { n, n }),
+            engine.TensorBroadcastTo(engine.Reshape(positions, new[] { 1, n }), new[] { n, n })));
+        var gathered = engine.TensorIndexSelect(column.AsTensor(), engine.Reshape(lag, new[] { n * n }).Cast<int>(), 0);
+        return engine.Reshape(gathered, new[] { n, n });
     }
 
     /// <summary>
-    /// Toeplitz matrix-vector multiply (direct, O(n²) - could use FFT for O(n log n)).
+    /// Rows of a [1, c, d] stencil coordinate tensor as grid point vectors.
     /// </summary>
-    private double[] ToeplitzMultiply(Vector<T> column, double[] v)
+    private Vector<T>[] GridPointRows(IEngine engine, Tensor<T> points)
     {
-        int n = column.Length;
-        var result = new double[n];
+        var matrix = engine.Reshape(points, new[] { points.Shape[1], NumDimensions }).ToMatrix();
+        return Enumerable.Range(0, matrix.Rows).Select(row => matrix.GetRow(row)).ToArray();
+    }
 
-        for (int i = 0; i < n; i++)
+    /// <summary>
+    /// Rejects grids that are not strictly increasing and uniformly spaced (cubic convolution needs both).
+    /// </summary>
+    private void ValidateUniformSpacing(IEngine engine, int[] offsets)
+    {
+        if (!_numOps.GreaterThan(engine.TensorMinValue(_gridSpacings), _numOps.Zero))
+            throw new ArgumentException("Grid coordinates must be strictly increasing in every dimension.");
+
+        // Spacing between neighbours inside each dimension, against that dimension's first spacing.
+        int[] pairDimension = Enumerable.Range(0, NumDimensions)
+            .SelectMany(dim => Enumerable.Repeat(dim, _gridSizes[dim] - 1)).ToArray();
+        int[] pairStart = Enumerable.Range(0, NumDimensions)
+            .SelectMany(dim => Enumerable.Range(offsets[dim], _gridSizes[dim] - 1)).ToArray();
+
+        var steps = engine.TensorIndexSelect(engine.TensorDiff(_allCoordinates, 1, 0), IntTensor(pairStart), 0);
+        var expected = engine.TensorIndexSelect(_gridSpacings, IntTensor(pairDimension), 0);
+        var allowed = engine.TensorMultiplyScalar(
+            engine.TensorClampMin(engine.TensorAbs(expected), _numOps.One), _numOps.FromDouble(SpacingTolerance));
+        var excess = engine.TensorSubtract(engine.TensorAbs(engine.TensorSubtract(steps, expected)), allowed);
+
+        int worst = engine.TensorArgMax(excess, 0).ToArray()[0];
+        T[] excessValues = excess.ToArray();
+        if (_numOps.GreaterThan(excessValues[worst], _numOps.Zero))
         {
-            double sum = 0;
-            for (int j = 0; j < n; j++)
-            {
-                // Toeplitz: T[i,j] = column[|i-j|]
-                int idx = Math.Abs(i - j);
-                sum += _numOps.ToDouble(column[idx]) * v[j];
-            }
-            result[i] = sum;
+            int dim = pairDimension[worst];
+            int i = pairStart[worst] - offsets[dim] + 1;
+            throw new ArgumentException(
+                $"Grid dimension {dim} is not uniformly spaced. Cubic convolution interpolation requires uniform spacing. " +
+                $"Expected spacing {expected.ToArray()[worst]}, got {steps.ToArray()[worst]} between indices {i - 1} and {i}.");
         }
+    }
 
+    /// <summary>
+    /// Wraps integer indices as a 1-D index tensor.
+    /// </summary>
+    private static Tensor<int> IntTensor(IEnumerable<int> values)
+    {
+        int[] data = values.ToArray();
+        return new Tensor<int>(data, new[] { data.Length });
+    }
+
+    /// <summary>
+    /// Integer power for small stencil counts.
+    /// </summary>
+    private static int IntPower(int value, int exponent)
+    {
+        int result = 1;
+        for (int i = 0; i < exponent; i++)
+            result *= value;
         return result;
     }
 
