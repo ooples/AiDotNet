@@ -476,22 +476,9 @@ public partial class VAEEncoder<T> : LayerBase<T>, IShapeContract
         var rng = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : RandomHelper.CreateSecureRandom();
         var epsilon = SampleNoise(mean._shape, rng);
 
-        var result = new Tensor<T>(mean._shape);
-        var meanSpan = mean.AsSpan();
-        var logVarSpan = logVar.AsSpan();
-        var epsilonSpan = epsilon.AsSpan();
-        var resultSpan = result.AsWritableSpan();
-
-        var halfOne = NumOps.FromDouble(0.5);
-
-        for (int i = 0; i < resultSpan.Length; i++)
-        {
-            // std = exp(0.5 * logVar), z = mean + std * epsilon
-            var std = NumOps.Exp(NumOps.Multiply(halfOne, logVarSpan[i]));
-            resultSpan[i] = NumOps.Add(meanSpan[i], NumOps.Multiply(std, epsilonSpan[i]));
-        }
-
-        return result;
+        // std = exp(0.5 * logVar), z = mean + std * epsilon
+        var std = Engine.TensorExp(Engine.TensorMultiplyScalar(logVar, NumOps.FromDouble(0.5)));
+        return Engine.TensorAdd(mean, Engine.TensorMultiply(std, epsilon));
     }
 
     /// <summary>

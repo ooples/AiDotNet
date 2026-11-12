@@ -282,17 +282,7 @@ public partial class EQVAEModel<T> : VAEModelBase<T>
         var latentTrans = Encode(transformed);
 
         // L2 distance between latent representations should be preserved
-        var diff = new Tensor<T>(latentOrig._shape);
-        var origSpan = latentOrig.AsSpan();
-        var transSpan = latentTrans.AsSpan();
-        var diffSpan = diff.AsWritableSpan();
-
-        var sum = NumOps.Zero;
-        for (int i = 0; i < diffSpan.Length; i++)
-        {
-            var d = NumOps.Subtract(origSpan[i], transSpan[i]);
-            sum = NumOps.Add(sum, NumOps.Multiply(d, d));
-        }
+        var sum = Engine.TensorSum(Engine.TensorSquare(Engine.TensorSubtract(latentOrig, latentTrans)));
 
         return NumOps.Multiply(NumOps.FromDouble(_equivarianceWeight), sum);
     }

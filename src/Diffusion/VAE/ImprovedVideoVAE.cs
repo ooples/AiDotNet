@@ -280,20 +280,8 @@ public partial class ImprovedVideoVAE<T> : VAEModelBase<T>
         for (int i = 0; i < latents.Count; i += _temporalDownsample)
         {
             int groupEnd = Math.Min(i + _temporalDownsample, latents.Count);
-            int groupSize = groupEnd - i;
-
-            var avg = new Tensor<T>(latents[i]._shape);
-            var avgSpan = avg.AsWritableSpan();
-            var scale = NumOps.FromDouble(1.0 / groupSize);
-
-            for (int f = i; f < groupEnd; f++)
-            {
-                var fSpan = latents[f].AsSpan();
-                for (int j = 0; j < avgSpan.Length; j++)
-                    avgSpan[j] = NumOps.Add(avgSpan[j], NumOps.Multiply(fSpan[j], scale));
-            }
-
-            compressed.Add(avg);
+            var group = Engine.TensorStack(latents.GetRange(i, groupEnd - i).ToArray(), 0);
+            compressed.Add(Engine.ReduceMean(group, new[] { 0 }, false));
         }
 
         return compressed;
