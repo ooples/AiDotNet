@@ -579,14 +579,28 @@ public partial class TimeDiff<T> : TimeSeriesFoundationModelBase<T>, ITrainingOb
                     NumOps.Multiply(NumOps.Subtract(one, alphaBarPrev), _betas[k]), oneMinusBar))
                 : NumOps.Zero;
 
-            for (int i = 0; i < outputLen; i++)
+            using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
             {
-                T x0Hat = i < predicted.Length ? predicted[i] : NumOps.Zero;
-                T mean = NumOps.Add(
-                    NumOps.Multiply(coefficientXk, xk[i]),
-                    NumOps.Multiply(coefficientX0, x0Hat));
-                T z = k > 0 ? SampleStandardNormal(rand) : NumOps.Zero;
-                xk.Data.Span[i] = NumOps.Add(mean, NumOps.Multiply(sigma, z));
+                // x_hat_0 is the prediction's first outputLen values (zero past its end).
+                var gridShape = new[] { 1, outputLen };
+                int usedLen = Math.Min(predicted.Length, outputLen);
+                var x0Hat = new Tensor<T>(gridShape);
+                if (usedLen > 0)
+                    predicted.Contiguous().AsSpan().Slice(0, usedLen).CopyTo(x0Hat.Data.Span.Slice(0, usedLen));
+                var mean = Engine.TensorAdd(
+                    Engine.TensorMultiplyScalar(xk, coefficientXk),
+                    Engine.TensorMultiplyScalar(x0Hat, coefficientX0));
+
+                // Noise in the same order; none is drawn at the last step.
+                var z = new Tensor<T>(gridShape);
+                if (k > 0)
+                {
+                    var zSpan = z.Data.Span;
+                    for (int i = 0; i < outputLen; i++)
+                        zSpan[i] = SampleStandardNormal(rand);
+                }
+
+                xk = Engine.TensorAdd(mean, Engine.TensorMultiplyScalar(z, sigma));
             }
         }
 
