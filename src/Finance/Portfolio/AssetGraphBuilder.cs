@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.LinearAlgebra;
@@ -89,21 +90,22 @@ public class AssetGraphBuilder<T>
         // stays at a few panels instead of lookback copies of it.
         var engine = AiDotNetEngine.Current;
         using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
-        var count = NumOps.FromDouble(_volatilityLookback);
-        var sum = engine.TensorNarrow(returns, 0, 0, outSteps).Contiguous();
+        var wideReturns = returns.Cast<double>();
+        double count = _volatilityLookback;
+        var sum = engine.TensorNarrow(wideReturns, 0, 0, outSteps).Contiguous();
         for (int k = 1; k < _volatilityLookback; k++)
-            sum = engine.TensorAdd(sum, engine.TensorNarrow(returns, 0, k, outSteps).Contiguous());
+            sum = engine.TensorAdd(sum, engine.TensorNarrow(wideReturns, 0, k, outSteps).Contiguous());
         var mean = engine.TensorDivideScalar(sum, count);
 
-        Tensor<T>? squares = null;
+        Tensor<double>? squares = null;
         for (int k = 0; k < _volatilityLookback; k++)
         {
-            var centred = engine.TensorSubtract(engine.TensorNarrow(returns, 0, k, outSteps).Contiguous(), mean);
+            var centred = engine.TensorSubtract(engine.TensorNarrow(wideReturns, 0, k, outSteps).Contiguous(), mean);
             var square = engine.TensorMultiply(centred, centred);
             squares = squares is null ? square : engine.TensorAdd(squares, square);
         }
 
-        return engine.TensorSqrt(engine.TensorDivideScalar(squares ?? engine.TensorZerosLike(mean), count));
+        return engine.TensorSqrt(engine.TensorDivideScalar(squares ?? engine.TensorZerosLike(mean), count)).Cast<T>();
     }
 
     /// <summary>
@@ -135,12 +137,12 @@ public class AssetGraphBuilder<T>
 
         var engine = AiDotNetEngine.Current;
         using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
-        var columns = engine.TensorStack(new[] { Tensor<T>.FromVector(first), Tensor<T>.FromVector(second) }, 0);
+        var columns = engine.TensorStack(new[] { Tensor<T>.FromVector(first).Cast<double>(), Tensor<T>.FromVector(second).Cast<double>() }, 0);
         var centred = DoubleCentredDistances(columns, n);                       // [2, n * n]
         var dcov2 = MeanProducts(centred, centred, n);                          // [2, 2]
         var dvar = DiagonalOf(dcov2, 2);
-        return DistanceCorrelationFromCentred(engine.TensorNarrow(engine.TensorNarrow(dcov2, 0, 0, 1), 1, 1, 1),
-            engine.TensorNarrow(dvar, 0, 0, 1), engine.TensorNarrow(dvar, 0, 1, 1)).AsSpan()[0];
+        return NumOps.FromDouble(DistanceCorrelationFromCentred(engine.TensorNarrow(engine.TensorNarrow(dcov2, 0, 0, 1), 1, 1, 1),
+            engine.TensorNarrow(dvar, 0, 0, 1), engine.TensorNarrow(dvar, 0, 1, 1)).AsSpan()[0]);
     }
 
     /// <summary>
@@ -150,7 +152,7 @@ public class AssetGraphBuilder<T>
     /// <param name="dcov2">Squared distance covariances [rows, cols].</param>
     /// <param name="dvarRows">Squared distance variances of the row series, [rows] or [rows, 1].</param>
     /// <param name="dvarCols">Squared distance variances of the column series, [cols] or [1, cols].</param>
-    private static Tensor<T> DistanceCorrelationFromCentred(Tensor<T> dcov2, Tensor<T> dvarRows, Tensor<T> dvarCols)
+    private static Tensor<double> DistanceCorrelationFromCentred(Tensor<double> dcov2, Tensor<double> dvarRows, Tensor<double> dvarCols)
     {
         var engine = AiDotNetEngine.Current;
         int rows = dcov2.Shape[0];
@@ -162,11 +164,11 @@ public class AssetGraphBuilder<T>
         // A constant series has zero distance variance and no dependence structure to report, so the
         // correlation is 0 rather than a division by zero.
         var degenerate = engine.TensorLessEqual(denominator, engine.TensorZerosLike(denominator));
-        var safeDenominator = engine.TensorWhere(degenerate, engine.TensorFullLike(denominator, NumOps.One), denominator);
-        var dcor = engine.TensorDivide(engine.TensorSqrt(engine.TensorMax(dcov2, NumOps.Zero)), safeDenominator);
+        var safeDenominator = engine.TensorWhere(degenerate, engine.TensorFullLike(denominator, 1.0), denominator);
+        var dcor = engine.TensorDivide(engine.TensorSqrt(engine.TensorMax(dcov2, 0.0)), safeDenominator);
 
         // Clamp against floating-point drift a hair above 1, so callers can rely on the [0,1] range.
-        dcor = engine.TensorClamp(dcor, NumOps.Zero, NumOps.One);
+        dcor = engine.TensorClamp(dcor, 0.0, 1.0);
         return engine.TensorWhere(degenerate, engine.TensorZerosLike(dcor), dcor);
     }
 
@@ -177,7 +179,7 @@ public class AssetGraphBuilder<T>
     /// <param name="series">The series, one per row: [count, n].</param>
     /// <param name="n">Observations per series.</param>
     /// <returns>[count, n * n].</returns>
-    private static Tensor<T> DoubleCentredDistances(Tensor<T> series, int n)
+    private static Tensor<double> DoubleCentredDistances(Tensor<double> series, int n)
     {
         var engine = AiDotNetEngine.Current;
         int count = series.Shape[0];
@@ -192,18 +194,19 @@ public class AssetGraphBuilder<T>
     }
 
     /// <summary>Mean element-wise products of every row of <paramref name="a"/> with every row of <paramref name="b"/>.</summary>
-    private static Tensor<T> MeanProducts(Tensor<T> a, Tensor<T> b, int n)
+    private static Tensor<double> MeanProducts(Tensor<double> a, Tensor<double> b, int n)
     {
         var engine = AiDotNetEngine.Current;
         return engine.TensorDivideScalar(
-            engine.TensorMatMul(a, engine.TensorTranspose(b)), NumOps.FromDouble((double)n * n));
+            engine.TensorMatMul(a, engine.TensorTranspose(b)), (double)n * n);
     }
 
     /// <summary>The diagonal of a square [size, size] tensor, as [size].</summary>
-    private static Tensor<T> DiagonalOf(Tensor<T> square, int size)
+    private static Tensor<double> DiagonalOf(Tensor<double> square, int size)
     {
         var engine = AiDotNetEngine.Current;
-        return engine.ReduceSum(engine.TensorMultiply(square, engine.TensorEye<T>(size)), new[] { 1 }, false);
+        var indices = new Tensor<int>(System.Linq.Enumerable.Range(0, size).Select(i => checked(i * size + i)).ToArray(), [size]);
+        return engine.TensorGather(engine.Reshape(square, [square.Length]), indices, 0);
     }
 
     /// <summary>
@@ -220,6 +223,7 @@ public class AssetGraphBuilder<T>
 
         int steps = panel.Shape[0];
         int assets = panel.Shape[1];
+        if (assets == 0) return new Tensor<T>(new[] { 0, 0 });
         if (steps < 2)
             throw new ArgumentException("At least 2 observations are required.", nameof(panel));
 
@@ -241,7 +245,7 @@ public class AssetGraphBuilder<T>
 
         var engine = AiDotNetEngine.Current;
         using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
-        var series = engine.TensorTranspose(panel);                              // [assets, steps]
+        var series = engine.TensorTranspose(panel.Cast<double>());             // [assets, steps]
 
         // The squared distance covariance of every block pair on or above the diagonal, a block of rows
         // against a block of columns at a time, so at most two blocks of centred matrices are resident.
@@ -251,8 +255,8 @@ public class AssetGraphBuilder<T>
             starts.Add(start);
         int blocks = starts.Count;
         int CountOf(int b) => Math.Min(assets, starts[b] + blockSize) - starts[b];
-        var covariances = new Tensor<T>[blocks, blocks];
-        var variances = new Tensor<T>[blocks];
+        var covariances = new Tensor<double>[blocks, blocks];
+        var variances = new Tensor<double>[blocks];
         for (int r = 0; r < blocks; r++)
         {
             var rowCentred = DoubleCentredDistances(engine.TensorNarrow(series, 0, starts[r], CountOf(r)), steps);
@@ -269,15 +273,15 @@ public class AssetGraphBuilder<T>
 
         // Correlate the upper blocks and mirror each into the lower triangle with a transpose, so the
         // matrix is exactly symmetric.
-        var correlations = new Tensor<T>[blocks, blocks];
+        var correlations = new Tensor<double>[blocks, blocks];
         for (int r = 0; r < blocks; r++)
             for (int c = r; c < blocks; c++)
                 correlations[r, c] = DistanceCorrelationFromCentred(covariances[r, c], variances[r], variances[c]);
 
-        var rowBlocks = new Tensor<T>[blocks];
+        var rowBlocks = new Tensor<double>[blocks];
         for (int r = 0; r < blocks; r++)
         {
-            var columnBlocks = new Tensor<T>[blocks];
+            var columnBlocks = new Tensor<double>[blocks];
             for (int c = 0; c < blocks; c++)
                 columnBlocks[c] = c >= r ? correlations[r, c] : engine.TensorTranspose(correlations[c, r]).Contiguous();
             rowBlocks[r] = blocks == 1 ? columnBlocks[0] : engine.TensorConcatenate(columnBlocks, 1);
@@ -285,8 +289,8 @@ public class AssetGraphBuilder<T>
 
         // A series is perfectly dependent on itself.
         var dcor = blocks == 1 ? rowBlocks[0] : engine.TensorConcatenate(rowBlocks, 0);
-        var identity = engine.TensorEye<T>(assets);
-        return engine.TensorWhere(identity, identity, dcor);
+        var identity = engine.TensorEye<double>(assets);
+        return engine.TensorWhere(identity, identity, dcor).Cast<T>();
     }
 
     /// <summary>

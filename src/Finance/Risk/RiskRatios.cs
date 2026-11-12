@@ -118,16 +118,16 @@ public class RiskRatios<T> : IRiskRatioCalculator<T>
 
         // Compound an equity curve, tracking the running peak (starting from 1) and the worst drawdown.
         var engine = AiDotNetEngine.Current;
-        var curve = engine.TensorCumProd(engine.TensorAddScalar(ToTensor(returns), NumOps.One), 0);
-        var peak = engine.TensorMax(engine.TensorCumMax(curve, 0), NumOps.One);
+        var curve = engine.TensorCumProd(engine.TensorAddScalar(ToTensor(returns).Cast<double>(), 1.0), 0);
+        var peak = engine.TensorMax(engine.TensorCumMax(curve, 0), 1.0);
         var drawdowns = engine.TensorWhere(
-            engine.TensorGreaterThan(peak, NumOps.Zero),
+            engine.TensorGreaterThan(peak, 0.0),
             engine.TensorDivide(engine.TensorSubtract(peak, curve), peak),
             engine.TensorZerosLike(peak));
         var maxDrawdown = engine.TensorMaxValue(drawdowns);
         var equity = curve.AsSpan()[returns.Count - 1];
 
-        if (!NumOps.GreaterThan(maxDrawdown, NumOps.Zero))
+        if (!(maxDrawdown > 0))
         {
             return NumOps.Zero;
         }
@@ -136,10 +136,10 @@ public class RiskRatios<T> : IRiskRatioCalculator<T>
         // (any period return <= -100%). Math.Pow of a non-positive base by a
         // fractional exponent is NaN, so treat a wiped-out account as a total
         // (-100%) annualized loss rather than emitting NaN.
-        var annualizedReturn = NumOps.GreaterThan(equity, NumOps.Zero)
-            ? NumOps.Subtract(NumOps.Power(equity, NumOps.FromDouble((double)periodsPerYear / returns.Count)), NumOps.One)
-            : NumOps.Negate(NumOps.One);
-        return NumOps.Divide(annualizedReturn, maxDrawdown);
+        double annualizedReturn = equity > 0
+            ? Math.Pow(equity, (double)periodsPerYear / returns.Count) - 1.0
+            : -1.0;
+        return NumOps.FromDouble(annualizedReturn / maxDrawdown);
     }
 
     private static (T Mean, T Std) MeanStd(IReadOnlyList<T> returns, T riskFree)

@@ -37,7 +37,7 @@ public static class InformationCoefficient<T>
     /// </summary>
     public static T Pearson(IReadOnlyList<T> predicted, IReadOnlyList<T> realized)
     {
-        return PearsonCore(ToTensor(predicted), ToTensor(realized));
+        return NumOps.FromDouble(PearsonCore(ToTensor(predicted), ToTensor(realized)));
     }
 
     /// <summary>
@@ -46,7 +46,7 @@ public static class InformationCoefficient<T>
     /// </summary>
     public static T Spearman(IReadOnlyList<T> predicted, IReadOnlyList<T> realized)
     {
-        return PearsonCore(Ranks(ToTensor(predicted)), Ranks(ToTensor(realized)));
+        return NumOps.FromDouble(PearsonCore(Ranks(ToTensor(predicted)), Ranks(ToTensor(realized))));
     }
 
     /// <summary>
@@ -77,35 +77,33 @@ public static class InformationCoefficient<T>
 
         var engine = AiDotNetEngine.Current;
         var ics = ToTensor(perPeriodIcs);
-        T mean = engine.TensorMean(ics);
-        T sse = engine.TensorSumOfSquares(engine.TensorSubtractScalar(ics, mean));
+        double mean = engine.TensorMean(ics);
+        double sse = engine.TensorSumOfSquares(engine.TensorSubtractScalar(ics, mean));
 
         // Sample standard deviation (n-1), consistent with the rest of the Finance utilities.
-        T std = NumOps.Sqrt(NumOps.Divide(sse, NumOps.FromDouble(periods - 1)));
-        T icir = NumOps.GreaterThan(std, NumOps.Zero)
-            ? NumOps.Multiply(NumOps.Divide(mean, std), NumOps.Sqrt(NumOps.FromDouble(periods)))
-            : NumOps.Zero;
-        return (mean, std, icir);
+        double std = Math.Sqrt(sse / (periods - 1));
+        double icir = std > 0 ? mean / std * Math.Sqrt(periods) : 0.0;
+        return (NumOps.FromDouble(mean), NumOps.FromDouble(std), NumOps.FromDouble(icir));
     }
 
     // ---- internal double-precision helpers (statistical kernels) ----
 
-    private static Tensor<T> ToTensor(IReadOnlyList<T> values)
+    private static Tensor<double> ToTensor(IReadOnlyList<T> values)
     {
         if (values is null)
         {
             throw new ArgumentNullException(nameof(values));
         }
 
-        return new Tensor<T>(new[] { values.Count }, new Vector<T>(values.ToArray()));
+        return new Tensor<T>(new[] { values.Count }, new Vector<T>(values.ToArray())).Cast<double>();
     }
 
-    private static T PearsonCore(Tensor<T> x, Tensor<T> y)
+    private static double PearsonCore(Tensor<double> x, Tensor<double> y)
     {
         int n = Math.Min(x.Length, y.Length);
         if (n < 2)
         {
-            return NumOps.Zero;
+            return 0.0;
         }
 
         var engine = AiDotNetEngine.Current;
@@ -113,25 +111,14 @@ public static class InformationCoefficient<T>
         var ys = n == y.Length ? y : engine.TensorSlice(y, new[] { 0 }, new[] { n });
         var dx = engine.TensorSubtractScalar(xs, engine.TensorMean(xs));
         var dy = engine.TensorSubtractScalar(ys, engine.TensorMean(ys));
-        T sxy = engine.TensorSum(engine.TensorMultiply(dx, dy));
-        T sxx = engine.TensorSumOfSquares(dx);
-        T syy = engine.TensorSumOfSquares(dy);
-
-        T denom = NumOps.Sqrt(NumOps.Multiply(sxx, syy));
-        if (NumOps.LessThanOrEquals(denom, NumOps.Zero))
-        {
-            return NumOps.Zero;
-        }
-
-        T r = NumOps.Divide(sxy, denom);
-        // Clamp to [-1, 1] to absorb floating-point overshoot; NaN passes through as before.
-        T minusOne = NumOps.Negate(NumOps.One);
-        if (NumOps.LessThan(r, minusOne))
-        {
-            return minusOne;
-        }
-
-        return NumOps.GreaterThan(r, NumOps.One) ? NumOps.One : r;
+        double sxy = engine.TensorSum(engine.TensorMultiply(dx, dy));
+        double sxx = engine.TensorSumOfSquares(dx);
+        double syy = engine.TensorSumOfSquares(dy);
+        double denom = Math.Sqrt(sxx) * Math.Sqrt(syy);
+        if (denom <= 0) return 0.0;
+        double r = sxy / denom;
+        // Clamp finite overshoot while preserving NaN.
+        return Math.Min(1.0, Math.Max(-1.0, r));
     }
 
     /// <summary>Tie-averaged ("fractional") ranks of a sample, 1-based.</summary>
@@ -139,7 +126,7 @@ public static class InformationCoefficient<T>
     /// A tied block occupying sorted positions [j, k] gets (j + k) / 2 + 1. With j the count of smaller values and
     /// k + 1 the count of values not larger, that is (below + notAbove + 1) / 2, read off two binary searches.
     /// </remarks>
-    private static Tensor<T> Ranks(Tensor<T> values)
+    private static Tensor<double> Ranks(Tensor<double> values)
     {
         if (values.Length == 0)
         {
@@ -147,11 +134,13 @@ public static class InformationCoefficient<T>
         }
 
         var engine = AiDotNetEngine.Current;
+        if (engine.TensorCountNonzero(engine.TensorIsNan(values)) > 0)
+            return engine.TensorFullLike(values, double.NaN);
         var sorted = engine.TensorSort(values, 0, false).Values;
         var below = engine.TensorSearchSorted(sorted, values, false);
         var notAbove = engine.TensorSearchSorted(sorted, values, true);
-        var doubled = engine.TensorAddScalar(engine.TensorAdd(below, notAbove), 1).Cast<T>();
-        return engine.TensorMultiplyScalar(doubled, NumOps.FromDouble(0.5));
+        var doubled = engine.TensorAddScalar(engine.TensorAdd(below.Cast<double>(), notAbove.Cast<double>()), 1.0);
+        return engine.TensorMultiplyScalar(doubled, 0.5);
     }
 
     private static (double T, double P) SignificanceDouble(double ic, int n)
