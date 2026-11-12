@@ -12,6 +12,7 @@ using AiDotNet.LinearAlgebra;
 using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.NeuralNetworks.Options;
+using AiDotNet.NeuralNetworks.Tabular;
 using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.NeuralNetworks;
@@ -325,12 +326,11 @@ public partial class UnifiedMultimodalNetwork<T> : MultimodalModelLayoutBase<T>,
 
         // Create matrix from embeddings
         var matrix = new Matrix<T>(embeddings.Count, _embeddingDimension);
+        var rows = matrix.AsWritableSpan();
         for (int i = 0; i < embeddings.Count; i++)
         {
-            for (int j = 0; j < _embeddingDimension && j < embeddings[i].Length; j++)
-            {
-                matrix[i, j] = embeddings[i][j];
-            }
+            int width = Math.Min(_embeddingDimension, embeddings[i].Length);
+            embeddings[i].AsSpan().Slice(0, width).CopyTo(rows.Slice(i * _embeddingDimension, width));
         }
 
         return matrix;
@@ -374,15 +374,22 @@ public partial class UnifiedMultimodalNetwork<T> : MultimodalModelLayoutBase<T>,
     private Tensor<T> EncodeText(string text)
     {
         // Simple character-level encoding
-        var result = new Vector<T>(512);
-        var chars = text.ToCharArray();
-
-        for (int i = 0; i < Math.Min(chars.Length, 512); i++)
+        // code / 128 for the first 512 characters, zero after. Split as code / 128 + (code % 128) / 128 so
+        // both parts are exact in T and the sum rounds once, as code / 128.0 converted to T does.
+        int length = Math.Min(text.Length, 512);
+        var wholes = new int[512];
+        var remainders = new int[512];
+        for (int i = 0; i < length; i++)
         {
-            result[i] = _numOps.FromDouble(chars[i] / 128.0);
+            wholes[i] = text[i] / 128;
+            remainders[i] = text[i] % 128;
         }
 
-        return Tensor<T>.FromVector(result);
+        var engine = AiDotNetEngine.Current;
+        var whole = new Tensor<int>(wholes, new[] { 512 }).Cast<T>();
+        var remainder = new Tensor<int>(remainders, new[] { 512 }).Cast<T>();
+        var fraction = engine.TensorDivide(remainder, Tensor<T>.CreateDefault(new[] { 512 }, _numOps.FromDouble(128.0)));
+        return engine.TensorAdd(whole, fraction);
     }
 
     private Tensor<T> FlattenToExpectedSize(Tensor<T> input, DenseLayer<T> layer)
@@ -390,11 +397,8 @@ public partial class UnifiedMultimodalNetwork<T> : MultimodalModelLayoutBase<T>,
         var inputData = input.ToVector();
         int expectedSize = GetLayerInputSize(layer);
         var result = new Vector<T>(expectedSize);
-
-        for (int i = 0; i < Math.Min(inputData.Length, expectedSize); i++)
-        {
-            result[i] = inputData[i];
-        }
+        int copied = Math.Min(inputData.Length, expectedSize);
+        inputData.AsSpan().Slice(0, copied).CopyTo(result.AsWritableSpan());
 
         return Tensor<T>.FromVector(result);
     }
@@ -477,16 +481,7 @@ public partial class UnifiedMultimodalNetwork<T> : MultimodalModelLayoutBase<T>,
     private Vector<T> ApplyCrossModalAttention(Matrix<T> embeddings)
     {
         // Average pool across sequence
-        var pooled = new Vector<T>(_embeddingDimension);
-        for (int j = 0; j < _embeddingDimension; j++)
-        {
-            T sum = _numOps.Zero;
-            for (int i = 0; i < embeddings.Rows; i++)
-            {
-                sum = _numOps.Add(sum, embeddings[i, j]);
-            }
-            pooled[j] = _numOps.Divide(sum, _numOps.FromDouble(embeddings.Rows));
-        }
+        var pooled = ColumnMeans(embeddings);
 
         // Apply cross-modal attention layers
         var current = Tensor<T>.FromVector(pooled);
@@ -525,23 +520,18 @@ public partial class UnifiedMultimodalNetwork<T> : MultimodalModelLayoutBase<T>,
         var logits = _textDecoder.Forward(embedding);
         var logitsData = logits.ToVector();
 
-        // Simple greedy decoding
+        // Simple greedy decoding: the first highest of each block of 256 logits (NaN never wins)
         var text = new System.Text.StringBuilder();
-        for (int i = 0; i < Math.Min(maxLength, logitsData.Length / 256); i++)
+        int positions = Math.Max(0, Math.Min(maxLength, logitsData.Length / 256));
+        if (positions > 0)
         {
-            int maxIdx = 0;
-            T maxVal = logitsData[i * 256];
-            for (int j = 1; j < 256 && (i * 256 + j) < logitsData.Length; j++)
+            var blocks = Tensor<T>.FromVector(logitsData.GetSubVector(0, positions * 256)).Reshape(positions, 256);
+            foreach (int maxIdx in TieBreakArgMax.FirstMaxIndexPerRow(blocks).ToArray())
             {
-                if (_numOps.Compare(logitsData[i * 256 + j], maxVal) > 0)
+                if (maxIdx >= 32 && maxIdx < 127)
                 {
-                    maxVal = logitsData[i * 256 + j];
-                    maxIdx = j;
+                    text.Append((char)maxIdx);
                 }
-            }
-            if (maxIdx >= 32 && maxIdx < 127)
-            {
-                text.Append((char)maxIdx);
             }
         }
 
@@ -563,9 +553,12 @@ public partial class UnifiedMultimodalNetwork<T> : MultimodalModelLayoutBase<T>,
         var imageData = new Vector<T>(channels * height * width);
         var decodedData = decoded.ToVector();
 
-        for (int i = 0; i < imageData.Length && i < decodedData.Length; i++)
+        // Sigmoid of the decoded values; pixels beyond them stay 0
+        int filled = Math.Min(imageData.Length, decodedData.Length);
+        if (filled > 0)
         {
-            imageData[i] = MathHelper.Sigmoid(decodedData[i]);
+            var squashed = Engine.Sigmoid(Tensor<T>.FromVector(decodedData.GetSubVector(0, filled)));
+            squashed.AsSpan().CopyTo(imageData.AsWritableSpan());
         }
 
         return new MultimodalOutput<T>
@@ -581,13 +574,16 @@ public partial class UnifiedMultimodalNetwork<T> : MultimodalModelLayoutBase<T>,
         var decoded = _audioDecoder.Forward(embedding);
         var audioData = decoded.ToVector();
 
-        // Normalize to [-1, 1] range
+        // Normalize to [-1, 1] range: 2 * sigmoid(x) - 1; samples beyond the decoded ones stay 0
         var normalizedData = new Vector<T>(maxLength);
-        for (int i = 0; i < maxLength && i < audioData.Length; i++)
+        int filled = Math.Min(maxLength, audioData.Length);
+        if (filled > 0)
         {
-            normalizedData[i] = _numOps.Multiply(
-                _numOps.Subtract(_numOps.Multiply(MathHelper.Sigmoid(audioData[i]), _numOps.FromDouble(2.0)),
-                _numOps.One), _numOps.One);
+            var squashed = Engine.Sigmoid(Tensor<T>.FromVector(audioData.GetSubVector(0, filled)));
+            var centered = Engine.TensorSubtract(
+                Engine.TensorMultiplyScalar(squashed, _numOps.FromDouble(2.0)),
+                Tensor<T>.CreateDefault(squashed._shape, _numOps.One));
+            centered.AsSpan().CopyTo(normalizedData.AsWritableSpan());
         }
 
         return new MultimodalOutput<T>
@@ -674,18 +670,13 @@ public partial class UnifiedMultimodalNetwork<T> : MultimodalModelLayoutBase<T>,
         int topK = 10)
     {
         var queryEmb = Encode(query);
-        var results = new List<(int Index, T Score, ModalityType Modality)>();
-        int idx = 0;
+        var items = database.ToList();
+        var itemEmbs = items.Select(Encode).ToList();
+        var scores = PairCosine(Enumerable.Repeat(queryEmb, itemEmbs.Count).ToList(), itemEmbs);
 
-        foreach (var item in database)
-        {
-            var itemEmb = Encode(item);
-            var score = _numOps.FromDouble(VectorHelper.CosineSimilarity(queryEmb, itemEmb));
-            results.Add((idx, score, item.Modality));
-            idx++;
-        }
-
-        return results.OrderByDescending(r => _numOps.ToDouble(r.Score)).Take(topK);
+        return TieBreakArgMax.StableTopKDescending(scores, topK)
+            .Select(index => (index, scores[index], items[index].Modality))
+            .ToList();
     }
 
 
@@ -736,15 +727,28 @@ public partial class UnifiedMultimodalNetwork<T> : MultimodalModelLayoutBase<T>,
         var allInputs = inputs.ToList();
         var detections = new List<(string, T, ModalityType, object)>();
 
+        if (allInputs.Count == 0)
+        {
+            return detections;
+        }
+
+        // Encode each input, then the target description, in that order for every input
+        var inputEmbs = new List<Vector<T>>(allInputs.Count);
+        var targetEmbs = new List<Vector<T>>(allInputs.Count);
         foreach (var input in allInputs)
         {
-            var embedding = Encode(input);
-            var targetEmb = Encode(MultimodalInput<T>.FromText(targetDescription));
-            var similarity = _numOps.FromDouble(VectorHelper.CosineSimilarity(embedding, targetEmb));
+            inputEmbs.Add(Encode(input));
+            targetEmbs.Add(Encode(MultimodalInput<T>.FromText(targetDescription)));
+        }
 
-            if (_numOps.ToDouble(similarity) > 0.5)
+        var similarities = PairCosine(inputEmbs, targetEmbs);
+        var detected = Engine.TensorGreaterThan(
+            new Tensor<T>(similarities, new[] { similarities.Length }), _numOps.FromDouble(0.5)).Cast<int>().ToArray();
+        for (int i = 0; i < allInputs.Count; i++)
+        {
+            if (detected[i] != 0)
             {
-                detections.Add((targetDescription, similarity, input.Modality, input.SequenceIndex));
+                detections.Add((targetDescription, similarities[i], allInputs[i].Modality, allInputs[i].SequenceIndex));
             }
         }
 
@@ -775,26 +779,12 @@ public partial class UnifiedMultimodalNetwork<T> : MultimodalModelLayoutBase<T>,
         var embeddings = EncodeSequence(inputs);
         var numInputs = embeddings.Rows;
 
-        var alignment = new Matrix<T>(numInputs, numInputs);
-
-        for (int i = 0; i < numInputs; i++)
+        if (numInputs == 0)
         {
-            for (int j = 0; j < numInputs; j++)
-            {
-                var vecI = new Vector<T>(_embeddingDimension);
-                var vecJ = new Vector<T>(_embeddingDimension);
-
-                for (int k = 0; k < _embeddingDimension; k++)
-                {
-                    vecI[k] = embeddings[i, k];
-                    vecJ[k] = embeddings[j, k];
-                }
-
-                alignment[i, j] = _numOps.FromDouble(VectorHelper.CosineSimilarity(vecI, vecJ));
-            }
+            return new Matrix<T>(0, 0);
         }
 
-        return alignment;
+        return PairwiseRowCosine(embeddings).ToMatrix();
     }
 
     /// <inheritdoc/>
@@ -820,14 +810,8 @@ public partial class UnifiedMultimodalNetwork<T> : MultimodalModelLayoutBase<T>,
         int totalDim = embeddings.Rows * _embeddingDimension;
         var concat = new Vector<T>(Math.Min(totalDim, _embeddingDimension * 4));
 
-        int idx = 0;
-        for (int i = 0; i < embeddings.Rows && idx < concat.Length; i++)
-        {
-            for (int j = 0; j < _embeddingDimension && idx < concat.Length; j++)
-            {
-                concat[idx++] = embeddings[i, j];
-            }
-        }
+        // Row-major prefix of the [rows, _embeddingDimension] embeddings
+        embeddings.AsSpan().Slice(0, concat.Length).CopyTo(concat.AsWritableSpan());
 
         var fusedTensor = _fusionLayer.Forward(Tensor<T>.FromVector(concat));
         return fusedTensor.ToVector();
@@ -836,19 +820,92 @@ public partial class UnifiedMultimodalNetwork<T> : MultimodalModelLayoutBase<T>,
     private Vector<T> LateFusion(Matrix<T> embeddings)
     {
         // Average pooling
-        var result = new Vector<T>(_embeddingDimension);
+        return ColumnMeans(embeddings);
+    }
 
-        for (int j = 0; j < _embeddingDimension; j++)
+    /// <summary>
+    /// Mean of each of the first <c>_embeddingDimension</c> columns over all rows (NaN when there are none).
+    /// </summary>
+    private Vector<T> ColumnMeans(Matrix<T> embeddings)
+    {
+        var columns = Engine.TensorNarrow(Tensor<T>.FromMatrix(embeddings), 1, 0, _embeddingDimension);
+        var sums = Engine.ReduceSum(columns, new[] { 0 }, false);
+        var means = Engine.TensorDivide(sums, Tensor<T>.CreateDefault(sums._shape, _numOps.FromDouble(embeddings.Rows)));
+        return means.ToVector();
+    }
+
+    /// <summary>
+    /// Cosine similarity of every row of <paramref name="left"/> [n, D] with every row of
+    /// <paramref name="right"/> [m, D].
+    /// </summary>
+    private Tensor<T> CosineSimilarities(Tensor<T> left, Tensor<T> right)
+    {
+        int m = right.Shape[0];
+        var dots = Engine.TensorMatMul(left, Engine.TensorTranspose(right));
+        var denom = Engine.TensorMultiply(RowNorms(left), RowNorms(right).Reshape(1, m));
+        return FinishCosine(dots, denom);
+    }
+
+    /// <summary>
+    /// Cosine similarity of each (first[i], second[i]) pair. Every pair must share the first pair's length.
+    /// </summary>
+    private T[] PairCosine(List<Vector<T>> first, List<Vector<T>> second)
+    {
+        int count = first.Count;
+        if (count == 0)
         {
-            T sum = _numOps.Zero;
-            for (int i = 0; i < embeddings.Rows; i++)
-            {
-                sum = _numOps.Add(sum, embeddings[i, j]);
-            }
-            result[j] = _numOps.Divide(sum, _numOps.FromDouble(embeddings.Rows));
+            return new T[0];
         }
 
-        return result;
+        int width = first[0].Length;
+        for (int i = 0; i < count; i++)
+        {
+            if (first[i].Length != second[i].Length)
+            {
+                throw new ArgumentException(
+                    $"Vectors must have equal length for cosine similarity; got {first[i].Length} and {second[i].Length}.");
+            }
+
+            if (first[i].Length != width)
+            {
+                throw new ArgumentException(
+                    $"Embeddings must share one length for batched cosine similarity; got {width} and {first[i].Length}.");
+            }
+        }
+
+        var left = Tensor<T>.FromVector(TabularMetrics.ConcatenateVectors(first)).Reshape(count, width);
+        var right = Tensor<T>.FromVector(TabularMetrics.ConcatenateVectors(second)).Reshape(count, width);
+        var dots = Engine.ReduceSum(Engine.TensorMultiply(left, right), new[] { 1 }, true);
+        var denom = Engine.TensorMultiply(RowNorms(left), RowNorms(right));
+        return FinishCosine(dots, denom).ToArray();
+    }
+
+    /// <summary>
+    /// L2 norm of each row of [n, D], shape [n, 1].
+    /// </summary>
+    private Tensor<T> RowNorms(Tensor<T> rows)
+        => Engine.TensorSqrt(Engine.ReduceSum(Engine.TensorMultiply(rows, rows), new[] { 1 }, true));
+
+    /// <summary>
+    /// dot / (||a|| ||b||) clamped to [-1, 1] (NaN passed through), or 0 where the norm product is not above
+    /// 1e-10, as <see cref="VectorHelper.CosineSimilarity{T}(Vector{T}, Vector{T}, double)"/> defines it.
+    /// </summary>
+    private Tensor<T> FinishCosine(Tensor<T> dots, Tensor<T> denom)
+    {
+        var ratio = Engine.TensorDivide(dots, denom);
+        var clamped = Engine.TensorWhere(
+            Engine.TensorIsNan(ratio), ratio, Engine.TensorClamp(ratio, _numOps.FromDouble(-1.0), _numOps.One));
+        return Engine.TensorWhere(
+            Engine.TensorGreaterThan(denom, _numOps.FromDouble(1e-10)), clamped, Engine.TensorZerosLike(clamped));
+    }
+
+    /// <summary>
+    /// Pairwise cosine similarity [rows, rows] of the rows of a sequence embedding matrix.
+    /// </summary>
+    private Tensor<T> PairwiseRowCosine(Matrix<T> embeddings)
+    {
+        var rows = Engine.TensorNarrow(Tensor<T>.FromMatrix(embeddings), 1, 0, _embeddingDimension);
+        return CosineSimilarities(rows, rows);
     }
 
     #endregion
@@ -929,15 +986,23 @@ public partial class UnifiedMultimodalNetwork<T> : MultimodalModelLayoutBase<T>,
             return (false, flags);
         }
 
+        // The first NaN or infinity decides the flag; otherwise some element must be non-zero
         bool safe = true;
         bool anyFinite = false;
-        for (int i = 0; i < data.Length; i++)
+        var engine = AiDotNetEngine.Current;
+        var nonFinite = engine.TensorWhere(
+            engine.TensorIsFinite(data), engine.TensorZerosLike(data), engine.TensorOnesLike(data));
+        if (engine.TensorCountNonzero(nonFinite) > 0)
         {
-            double v = NumOps.ToDouble(data[i]);
-            if (double.IsNaN(v)) { flags.Add("nan"); safe = false; break; }
-            if (double.IsInfinity(v)) { flags.Add("inf"); safe = false; break; }
-            if (!anyFinite && v != 0) anyFinite = true;
+            double v = NumOps.ToDouble(data.GetFlat(TieBreakArgMax.FirstMaxIndex(nonFinite)));
+            flags.Add(double.IsNaN(v) ? "nan" : "inf");
+            safe = false;
         }
+        else
+        {
+            anyFinite = engine.TensorCountNonzero(data) > 0;
+        }
+
         if (safe && !anyFinite)
         {
             flags.Add("all-zero");
@@ -953,27 +1018,12 @@ public partial class UnifiedMultimodalNetwork<T> : MultimodalModelLayoutBase<T>,
         var embeddings = EncodeSequence(inputs);
         int numInputs = embeddings.Rows;
 
-        var attentionData = new Vector<T>(numInputs * numInputs);
-        int idx = 0;
-
-        for (int i = 0; i < numInputs; i++)
+        if (numInputs == 0)
         {
-            for (int j = 0; j < numInputs; j++)
-            {
-                var vecI = new Vector<T>(_embeddingDimension);
-                var vecJ = new Vector<T>(_embeddingDimension);
-
-                for (int k = 0; k < _embeddingDimension; k++)
-                {
-                    vecI[k] = embeddings[i, k];
-                    vecJ[k] = embeddings[j, k];
-                }
-
-                attentionData[idx++] = _numOps.FromDouble(VectorHelper.CosineSimilarity(vecI, vecJ));
-            }
+            return new Tensor<T>(new[] { 0, 0 });
         }
 
-        return new Tensor<T>(new[] { numInputs, numInputs }, attentionData);
+        return PairwiseRowCosine(embeddings);
     }
 
     #endregion
@@ -1029,16 +1079,9 @@ public partial class UnifiedMultimodalNetwork<T> : MultimodalModelLayoutBase<T>,
 
         foreach (var criterion in comparisonCriteria)
         {
-            var criterionScores = new List<T>();
             var criterionEmb = Encode(MultimodalInput<T>.FromText(criterion));
-
-            foreach (var input in inputList)
-            {
-                var inputEmb = Encode(input);
-                criterionScores.Add(_numOps.FromDouble(VectorHelper.CosineSimilarity(inputEmb, criterionEmb)));
-            }
-
-            scores[criterion] = criterionScores;
+            var inputEmbs = inputList.Select(Encode).ToList();
+            scores[criterion] = new List<T>(PairCosine(inputEmbs, Enumerable.Repeat(criterionEmb, inputEmbs.Count).ToList()));
         }
 
         var analysis = $"Compared {inputList.Count} items across {comparisonCriteria.Count()} criteria.";
