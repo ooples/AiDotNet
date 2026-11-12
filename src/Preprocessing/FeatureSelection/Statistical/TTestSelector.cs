@@ -107,10 +107,12 @@ public class TTestSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISuper
                     continue;
 
                 // var_c / n_c with the sample variance var_c = SS_c / (n_c - 1)
-                var a = Engine.TensorDivideScalar(PreprocessingTensorOps.RowVector(squares, c1),
-                    PreprocessingTensorOps.CountAsScalar<T>((n1 - 1) * n1));
-                var b = Engine.TensorDivideScalar(PreprocessingTensorOps.RowVector(squares, c2),
-                    PreprocessingTensorOps.CountAsScalar<T>((n2 - 1) * n2));
+                // (divided by n_c - 1 and then by n_c: the product (n_c - 1) n_c overflows int past 46341
+                // samples and Half past 256)
+                var a = Engine.TensorDivideScalar(Engine.TensorDivideScalar(PreprocessingTensorOps.RowVector(squares, c1),
+                    PreprocessingTensorOps.CountAsScalar<T>(n1 - 1)), PreprocessingTensorOps.CountAsScalar<T>(n1));
+                var b = Engine.TensorDivideScalar(Engine.TensorDivideScalar(PreprocessingTensorOps.RowVector(squares, c2),
+                    PreprocessingTensorOps.CountAsScalar<T>(n2 - 1)), PreprocessingTensorOps.CountAsScalar<T>(n2));
                 var seSquared = Engine.TensorAdd(a, b);
                 var usable = PreprocessingTensorOps.AtLeast(Engine.TensorSqrt(seSquared), eps);
                 var safeSeSquared = Engine.TensorWhere(usable, seSquared, ones);
