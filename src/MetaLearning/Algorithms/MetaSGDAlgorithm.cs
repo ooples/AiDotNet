@@ -248,32 +248,79 @@ public partial class MetaSGDAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, T
         // Li et al. 2017, Algorithm 1: every task adapts from the same (theta, alpha); the gradients of the
         // query losses are summed over the batch; then one step updates theta and alpha together.
         var coefficients = ReadCoefficients(_optimizer);
-        T totalLoss = NumOps.Zero;
-        double[]? thetaGradient = null;
-        double[]? coefficientGradient = null;
+        var losses = new List<T>(taskBatch.BatchSize);
+        Vector<T>? thetaGradient = null;
+        Vector<T>? coefficientGradient = null;
 
         foreach (var task in taskBatch.Tasks)
         {
             var (loss, taskTheta, taskCoefficients) = Episode(task, coefficients);
-            totalLoss = NumOps.Add(totalLoss, loss);
-            thetaGradient = Accumulate(thetaGradient, taskTheta);
-            coefficientGradient = Accumulate(coefficientGradient, taskCoefficients);
+            losses.Add(loss);
+            thetaGradient = thetaGradient is null ? taskTheta : Engine.Add(thetaGradient, taskTheta);
+            coefficientGradient = coefficientGradient is null
+                ? taskCoefficients
+                : Engine.Add(coefficientGradient, taskCoefficients);
         }
 
         // It used to update only the per-parameter coefficients, so theta - the initialization Meta-SGD
         // learns - stayed at its starting weights however long the model meta-trained.
+        double metaLearningRate = ScheduledMetaLearningRate(_currentIteration);
         var theta = ParamModel.GetParameters();
-        var updated = new Vector<T>(theta.Length);
-        for (int i = 0; i < theta.Length; i++)
+        if (thetaGradient is not null)
         {
-            updated[i] = NumOps.FromDouble(NumOps.ToDouble(theta[i])
-                - _metaSGDOptions.OuterLearningRate * (thetaGradient?[i] ?? 0.0));
+            theta = Engine.Subtract(theta, Engine.Multiply(thetaGradient, NumOps.FromDouble(metaLearningRate)));
         }
 
-        ParamModel.SetParameters(updated);
-        _optimizer.UpdateMetaParameters(ToVector(coefficientGradient ?? Array.Empty<double>()));
+        ParamModel.SetParameters(theta);
+        _optimizer.UpdateMetaParameters(coefficientGradient ?? new Vector<T>(0), metaLearningRate);
 
-        return NumOps.Divide(totalLoss, NumOps.FromDouble(taskBatch.BatchSize));
+        return ComputeMean(losses);
+    }
+
+    /// <summary>
+    /// The outer (meta) learning rate for meta-iteration <paramref name="iteration"/> (zero-based).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Li et al. (2017) meta-train with a fixed meta step size, which is what the default
+    /// (<see cref="MetaSGDOptions{T, TInput, TOutput}.UseLearningRateSchedule"/> = false) keeps. With the schedule
+    /// on, the rate ramps linearly over the first <see cref="MetaSGDOptions{T, TInput, TOutput}.ScheduleWarmupEpisodes"/>
+    /// iterations (Goyal et al. 2017) and then follows <see cref="MetaSGDOptions{T, TInput, TOutput}.LearningRateSchedule"/>
+    /// over the remaining iterations up to <see cref="MetaSGDOptions{T, TInput, TOutput}.NumMetaIterations"/>, with
+    /// progress p in [0, 1]:
+    /// Constant keeps the rate; StepDecay halves it at each quarter (gamma 0.5, PyTorch StepLR); Exponential
+    /// decays it to 1% (rate * 0.01^p, PyTorch ExponentialLR); CosineAnnealing is rate * (1 + cos(pi p)) / 2
+    /// (Loshchilov and Hutter 2017, no restarts); Cyclical is the triangular policy of Smith (2017) between
+    /// rate / 10 and rate with four cycles.
+    /// </para>
+    /// </remarks>
+    internal double ScheduledMetaLearningRate(int iteration)
+    {
+        double rate = _metaSGDOptions.OuterLearningRate;
+        if (!_metaSGDOptions.UseLearningRateSchedule) return rate;
+
+        int warmup = Math.Max(0, _metaSGDOptions.ScheduleWarmupEpisodes);
+        if (iteration < warmup) return rate * (iteration + 1) / warmup;
+
+        int span = Math.Max(1, _metaSGDOptions.NumMetaIterations - warmup);
+        double progress = Math.Min(1.0, Math.Max(0.0, (double)(iteration - warmup) / span));
+        switch (_metaSGDOptions.LearningRateSchedule)
+        {
+            case MetaSGDLearningRateScheduleType.StepDecay:
+                return rate * Math.Pow(0.5, Math.Min(3, Math.Floor(4 * progress)));
+            case MetaSGDLearningRateScheduleType.Exponential:
+                return rate * Math.Pow(0.01, progress);
+            case MetaSGDLearningRateScheduleType.CosineAnnealing:
+                return rate * 0.5 * (1 + Math.Cos(Math.PI * progress));
+            case MetaSGDLearningRateScheduleType.Cyclical:
+            {
+                double phase = 4 * progress - Math.Floor(4 * progress);
+                double triangle = 1 - Math.Abs(2 * phase - 1);
+                return rate * (0.1 + 0.9 * triangle);
+            }
+            default:
+                return rate;
+        }
     }
 
     /// <summary>
@@ -296,15 +343,12 @@ public partial class MetaSGDAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, T
     /// <para>
     /// <b>Adaptation Process:</b>
     /// <code>
-    /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(inputFeatures: 4, outputSize: 2);
-    /// var myNeuralNetwork = new NeuralNetwork&lt;double&gt;(architecture);
     /// for each adaptation step:
     ///     gradients = compute_gradients(model, support_set)
-    ///     for each parameter i:
-    ///         update_i = α_i × d_i × gradients[i] + β_i × velocity[i]
-    ///         params[i] = params[i] - update_i
+    ///     update = α ⊙ d ⊙ gradients + β ⊙ velocity
+    ///     params = params - update
     /// </code>
-    /// Where α_i, d_i, β_i are the learned per-parameter coefficients.
+    /// Where α, d, β are the learned per-parameter coefficients.
     /// </para>
     /// <para>
     /// <b>Advantages over MAML adaptation:</b>
@@ -334,9 +378,10 @@ public partial class MetaSGDAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, T
     }
 
     /// <summary>The per-parameter coefficients one episode adapts with, read once so every task shares them.</summary>
-    private readonly struct Coefficients
+    private sealed class Coefficients
     {
-        public Coefficients(double[] rate, double[] momentum, double[] direction, double[] beta1, double[] beta2, double[] epsilon)
+        public Coefficients(
+            Vector<T> rate, Vector<T> momentum, Vector<T> direction, Vector<T> beta1, Vector<T> beta2, Vector<T> epsilon)
         {
             Rate = rate;
             Momentum = momentum;
@@ -346,67 +391,93 @@ public partial class MetaSGDAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, T
             Epsilon = epsilon;
         }
 
-        public double[] Rate { get; }
-        public double[] Momentum { get; }
-        public double[] Direction { get; }
-        public double[] Beta1 { get; }
-        public double[] Beta2 { get; }
-        public double[] Epsilon { get; }
+        public Vector<T> Rate { get; }
+        public Vector<T> Momentum { get; }
+        public Vector<T> Direction { get; }
+        public Vector<T> Beta1 { get; }
+        public Vector<T> Beta2 { get; }
+        public Vector<T> Epsilon { get; }
     }
 
-    /// <summary>What one inner step recorded for the reverse pass: where it started and what it saw.</summary>
-    private sealed class InnerStep
+    /// <summary>The inner optimizer's per-parameter state before one step. Steps replace it; they never mutate it.</summary>
+    private sealed class OptimizerState
     {
-        public InnerStep(Vector<T> parameters, double[] rawGradient, double clipScale,
-            double[] velocity, double[] firstMoment, double[] secondMoment, double[] accumulatedDelta)
+        public OptimizerState(Vector<T> velocity, Vector<T> firstMoment, Vector<T> secondMoment, Vector<T> accumulatedDelta)
         {
-            Parameters = parameters;
-            RawGradient = rawGradient;
-            ClipScale = clipScale;
             Velocity = velocity;
             FirstMoment = firstMoment;
             SecondMoment = secondMoment;
             AccumulatedDelta = accumulatedDelta;
         }
 
+        public static OptimizerState Zero(int n)
+            => new OptimizerState(new Vector<T>(n), new Vector<T>(n), new Vector<T>(n), new Vector<T>(n));
+
+        public Vector<T> Velocity { get; }
+        public Vector<T> FirstMoment { get; }
+        public Vector<T> SecondMoment { get; }
+        public Vector<T> AccumulatedDelta { get; }
+    }
+
+    /// <summary>What one inner step recorded for the reverse pass: where it started and what it saw.</summary>
+    private sealed class InnerStep
+    {
+        public InnerStep(Vector<T> parameters, Vector<T> rawGradient, T clipScale, bool clipped, OptimizerState state)
+        {
+            Parameters = parameters;
+            RawGradient = rawGradient;
+            ClipScale = clipScale;
+            Clipped = clipped;
+            State = state;
+        }
+
         public Vector<T> Parameters { get; }
-        public double[] RawGradient { get; }
-        public double ClipScale { get; }
-        public double[] Velocity { get; }
-        public double[] FirstMoment { get; }
-        public double[] SecondMoment { get; }
-        public double[] AccumulatedDelta { get; }
+        public Vector<T> RawGradient { get; }
+        public T ClipScale { get; }
+        public bool Clipped { get; }
+        public OptimizerState State { get; }
+    }
+
+    /// <summary>The reverse pass's running adjoints and coefficient gradients.</summary>
+    private sealed class Adjoint
+    {
+        public Adjoint(Vector<T> theta)
+        {
+            int n = theta.Length;
+            Theta = theta;
+            Velocity = new Vector<T>(n);
+            FirstMoment = new Vector<T>(n);
+            SecondMoment = new Vector<T>(n);
+            AccumulatedDelta = new Vector<T>(n);
+            Rate = new Vector<T>(n);
+            Momentum = new Vector<T>(n);
+            Direction = new Vector<T>(n);
+            Beta1 = new Vector<T>(n);
+            Beta2 = new Vector<T>(n);
+            Epsilon = new Vector<T>(n);
+        }
+
+        public Vector<T> Theta { get; set; }
+        public Vector<T> Velocity { get; set; }
+        public Vector<T> FirstMoment { get; set; }
+        public Vector<T> SecondMoment { get; set; }
+        public Vector<T> AccumulatedDelta { get; set; }
+        public Vector<T> Rate { get; set; }
+        public Vector<T> Momentum { get; set; }
+        public Vector<T> Direction { get; set; }
+        public Vector<T> Beta1 { get; set; }
+        public Vector<T> Beta2 { get; set; }
+        public Vector<T> Epsilon { get; set; }
     }
 
     private static Coefficients ReadCoefficients(PerParameterOptimizer<T, TInput, TOutput> optimizer)
         => new Coefficients(
-            ToArray(optimizer.LearningRates), ToArray(optimizer.Momentums), ToArray(optimizer.Directions),
-            ToArray(optimizer.AdamBeta1), ToArray(optimizer.AdamBeta2), ToArray(optimizer.AdamEpsilon));
-
-    private static double[] ToArray(Vector<T> vector)
-    {
-        var values = new double[vector.Length];
-        for (int i = 0; i < values.Length; i++) values[i] = NumOps.ToDouble(vector[i]);
-        return values;
-    }
-
-    private static Vector<T> ToVector(double[] values)
-    {
-        var vector = new Vector<T>(values.Length);
-        for (int i = 0; i < values.Length; i++) vector[i] = NumOps.FromDouble(values[i]);
-        return vector;
-    }
-
-    private static double[] Accumulate(double[]? sum, double[] values)
-    {
-        if (sum is null) return (double[])values.Clone();
-        for (int i = 0; i < sum.Length; i++) sum[i] += values[i];
-        return sum;
-    }
+            optimizer.LearningRates.Clone(), optimizer.Momentums.Clone(), optimizer.Directions.Clone(),
+            optimizer.AdamBeta1.Clone(), optimizer.AdamBeta2.Clone(), optimizer.AdamEpsilon.Clone());
 
     /// <summary>
     /// One task's query loss and the exact gradients of that loss with respect to theta and to every learned
-    /// coefficient, in the layout <see cref="PerParameterOptimizer{T, TInput, TOutput}.UpdateMetaParameters"/> reads.
+    /// coefficient, in the layout <see cref="PerParameterOptimizer{T, TInput, TOutput}.UpdateMetaParameters(Vector{T})"/> reads.
     /// </summary>
     /// <remarks>
     /// <para>
@@ -419,7 +490,7 @@ public partial class MetaSGDAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, T
     /// optimizer itself, whose velocities and moments carried over from task to task.
     /// </para>
     /// </remarks>
-    private (T Loss, double[] ThetaGradient, double[] CoefficientGradient) Episode(
+    private (T Loss, Vector<T> ThetaGradient, Vector<T> CoefficientGradient) Episode(
         IMetaLearningTask<T, TInput, TOutput> task, Coefficients coefficients)
     {
         var model = CloneModel();
@@ -428,32 +499,34 @@ public partial class MetaSGDAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, T
             _metaSGDOptions.InnerSteps, coefficients, record: true);
 
         T loss = ComputeLossFromOutput(model.Predict(task.QueryInput), task.QueryOutput);
-        var queryGradient = ToArray(ComputeGradients(model, task.QueryInput, task.QueryOutput));
+        var queryGradient = ComputeGradients(model, task.QueryInput, task.QueryOutput).Clone();
 
-        var (theta, rate, momentum, direction, beta1, beta2, epsilon) = Backpropagate(
+        var adjoint = Backpropagate(
             model, trace ?? new List<InnerStep>(), queryGradient, task.SupportInput, task.SupportOutput, coefficients);
 
-        return (loss, theta, PackCoefficientGradients(rate, momentum, direction, beta1, beta2, epsilon));
+        return (loss, adjoint.Theta, PackCoefficientGradients(adjoint));
     }
 
-    private double[] PackCoefficientGradients(
-        double[] rate, double[] momentum, double[] direction, double[] beta1, double[] beta2, double[] epsilon)
+    /// <summary>
+    /// The coefficient gradients in <see cref="PerParameterOptimizer{T, TInput, TOutput}"/>'s layout: the learned
+    /// rates, momentums and directions as blocks, then (beta1, beta2, epsilon) interleaved per parameter.
+    /// </summary>
+    private Vector<T> PackCoefficientGradients(Adjoint adjoint)
     {
-        var packed = new List<double>();
-        if (_metaSGDOptions.LearnLearningRate) packed.AddRange(rate);
-        if (_metaSGDOptions.LearnMomentum) packed.AddRange(momentum);
-        if (_metaSGDOptions.LearnDirection) packed.AddRange(direction);
+        var blocks = new List<Tensor<T>>();
+        if (_metaSGDOptions.LearnLearningRate) blocks.Add(Tensor<T>.FromVector(adjoint.Rate));
+        if (_metaSGDOptions.LearnMomentum) blocks.Add(Tensor<T>.FromVector(adjoint.Momentum));
+        if (_metaSGDOptions.LearnDirection) blocks.Add(Tensor<T>.FromVector(adjoint.Direction));
         if (_metaSGDOptions.UpdateRuleType == MetaSGDUpdateRuleType.Adam && _metaSGDOptions.LearnAdamBetas)
         {
-            for (int i = 0; i < beta1.Length; i++)
+            var interleaved = Engine.TensorStack(new[]
             {
-                packed.Add(beta1[i]);
-                packed.Add(beta2[i]);
-                packed.Add(epsilon[i]);
-            }
+                Tensor<T>.FromVector(adjoint.Beta1), Tensor<T>.FromVector(adjoint.Beta2), Tensor<T>.FromVector(adjoint.Epsilon),
+            }, 1);
+            blocks.Add(interleaved.Reshape(interleaved.Length));
         }
 
-        return packed.ToArray();
+        return blocks.Count == 0 ? new Vector<T>(0) : Engine.Concat(blocks, 0).ToVector();
     }
 
     /// <summary>
@@ -465,37 +538,21 @@ public partial class MetaSGDAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, T
         int steps, Coefficients c, bool record)
     {
         var parameters = InterfaceGuard.Parameterizable(model);
-        int n = start.Length;
-        var theta = new Vector<T>(n);
-        for (int i = 0; i < n; i++) theta[i] = start[i];
-
-        var velocity = new double[n];
-        var firstMoment = new double[n];
-        var secondMoment = new double[n];
-        var accumulatedDelta = new double[n];
+        var theta = start.Clone();
+        var state = OptimizerState.Zero(start.Length);
         var trace = record ? new List<InnerStep>(steps) : null;
 
         for (int k = 0; k < steps; k++)
         {
             parameters.SetParameters(theta);
-            var raw = ToArray(ComputeGradients(model, input, target));
-            double scale = ClipScale(raw);
+            var raw = ComputeGradients(model, input, target).Clone();
+            var (scale, clipped) = ClipScale(raw);
 
-            trace?.Add(new InnerStep(theta, raw, scale,
-                (double[])velocity.Clone(), (double[])firstMoment.Clone(),
-                (double[])secondMoment.Clone(), (double[])accumulatedDelta.Clone()));
+            trace?.Add(new InnerStep(theta, raw, scale, clipped, state));
 
-            var next = new Vector<T>(n);
-            for (int i = 0; i < n; i++)
-            {
-                double u = StepElement(
-                    _metaSGDOptions.UpdateRuleType, k + 1, _metaSGDOptions.LearnDirection, raw[i] * scale,
-                    ref velocity[i], ref firstMoment[i], ref secondMoment[i], ref accumulatedDelta[i],
-                    c.Rate[i], c.Momentum[i], c.Direction[i], c.Beta1[i], c.Beta2[i], c.Epsilon[i]);
-                next[i] = NumOps.FromDouble(NumOps.ToDouble(theta[i]) - u);
-            }
-
-            theta = next;
+            var (update, next) = StepForward(k + 1, Engine.Multiply(raw, scale), state, c);
+            state = next;
+            theta = Engine.Subtract(theta, update);
         }
 
         parameters.SetParameters(theta);
@@ -503,59 +560,14 @@ public partial class MetaSGDAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, T
     }
 
     /// <summary>Global-norm clipping of the inner gradient (the factor multiplying it; 1 when not clipped).</summary>
-    private double ClipScale(double[] gradient)
+    private (T Scale, bool Clipped) ClipScale(Vector<T> gradient)
     {
-        if (!_metaSGDOptions.GradientClipThreshold.HasValue) return 1.0;
-        double norm = Math.Sqrt(gradient.Sum(g => g * g));
-        double threshold = _metaSGDOptions.GradientClipThreshold.Value;
-        return norm > threshold && norm > 0 ? threshold / norm : 1.0;
-    }
-
-    /// <summary>One element of one inner step: returns the update u (theta' = theta - u) and advances the state.</summary>
-    /// <remarks>
-    /// Adam carries its bias correction (Kingma and Ba 2015); the shared optimizer used to skip it "assuming
-    /// many iterations", which is exactly wrong for a few-step inner loop.
-    /// </remarks>
-    private static double StepElement(
-        MetaSGDUpdateRuleType rule, int t, bool useDirection, double g,
-        ref double velocity, ref double firstMoment, ref double secondMoment, ref double accumulatedDelta,
-        double rate, double momentum, double direction, double beta1, double beta2, double epsilon)
-    {
-        double scale = useDirection ? rate * direction : rate;
-        switch (rule)
-        {
-            case MetaSGDUpdateRuleType.SGD:
-                return scale * g;
-            case MetaSGDUpdateRuleType.SGDWithMomentum:
-                velocity = momentum * velocity + scale * g;
-                return velocity;
-            case MetaSGDUpdateRuleType.Adam:
-            {
-                firstMoment = beta1 * firstMoment + (1 - beta1) * g;
-                secondMoment = beta2 * secondMoment + (1 - beta2) * g * g;
-                double mHat = firstMoment / (1 - Math.Pow(beta1, t));
-                double sHat = secondMoment / (1 - Math.Pow(beta2, t));
-                return rate * mHat / (Math.Sqrt(Math.Max(0, sHat)) + epsilon);
-            }
-            case MetaSGDUpdateRuleType.RMSprop:
-                secondMoment = RmsDecay * secondMoment + (1 - RmsDecay) * g * g;
-                return rate * g / (Math.Sqrt(Math.Max(0, secondMoment)) + RmsEpsilon);
-            case MetaSGDUpdateRuleType.AdaGrad:
-                secondMoment += g * g;
-                return rate * g / (Math.Sqrt(Math.Max(0, secondMoment)) + RmsEpsilon);
-            case MetaSGDUpdateRuleType.AdaDelta:
-            {
-                // Zeiler 2012, Algorithm 1: RMS[x] = sqrt(E[x^2] + eps).
-                secondMoment = AdaDeltaRho * secondMoment + (1 - AdaDeltaRho) * g * g;
-                double rmsGradient = Math.Sqrt(secondMoment + AdaDeltaEpsilon);
-                double rmsDelta = Math.Sqrt(accumulatedDelta + AdaDeltaEpsilon);
-                double u = rmsDelta / rmsGradient * g;
-                accumulatedDelta = AdaDeltaRho * accumulatedDelta + (1 - AdaDeltaRho) * u * u;
-                return u;
-            }
-            default:
-                return rate * g;
-        }
+        if (!_metaSGDOptions.GradientClipThreshold.HasValue) return (NumOps.One, false);
+        T norm = Engine.Norm(gradient);
+        T threshold = NumOps.FromDouble(_metaSGDOptions.GradientClipThreshold.Value);
+        return NumOps.GreaterThan(norm, threshold) && NumOps.GreaterThan(norm, NumOps.Zero)
+            ? (NumOps.Divide(threshold, norm), true)
+            : (NumOps.One, false);
     }
 
     private const double RmsDecay = 0.9;
@@ -563,223 +575,278 @@ public partial class MetaSGDAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, T
     private const double AdaDeltaRho = 0.95;
     private const double AdaDeltaEpsilon = 1e-6;
 
+    /// <summary>1 - v, element-wise.</summary>
+    private Vector<T> OneMinus(Vector<T> v) => Engine.Negate(v) + NumOps.One;
+
+    /// <summary>The learned step scale: alpha, or alpha * d when directions are learned.</summary>
+    private Vector<T> StepScale(Coefficients c)
+        => _metaSGDOptions.LearnDirection ? Engine.Multiply(c.Rate, c.Direction) : c.Rate;
+
     /// <summary>
-    /// Reverse pass through a recorded inner loop: the exact gradient of the query loss with respect to the
-    /// starting parameters theta and to every per-parameter coefficient.
+    /// <paramref name="numerator"/> * 0.5 / <paramref name="root"/> where the root is positive and 0 where it is
+    /// not: the derivative of sqrt(max(0, s)) through s, which is 0 at s = 0.
     /// </summary>
-    /// <remarks>
-    /// For each step, theta_{k+1} = theta_k - u(g_k, state_k; coefficients) with g_k the support gradient at
-    /// theta_k. Walking back, lambda_theta_k = lambda_theta_{k+1} + H_k lambda_g, where lambda_g is the update's
-    /// sensitivity to g_k and H_k the support loss's Hessian at theta_k (a Hessian-vector product). First-order
-    /// mode drops the H_k term.
-    /// </remarks>
-    private (double[] Theta, double[] Rate, double[] Momentum, double[] Direction, double[] Beta1, double[] Beta2, double[] Epsilon)
-        Backpropagate(IFullModel<T, TInput, TOutput> model, List<InnerStep> trace, double[] queryGradient,
-            TInput supportInput, TOutput supportTarget, Coefficients c)
+    private Vector<T> HalfOverPositiveRoot(Vector<T> numerator, Vector<T> root)
     {
-        int n = queryGradient.Length;
-        var lambdaTheta = (double[])queryGradient.Clone();
-        var lambdaVelocity = new double[n];
-        var lambdaFirst = new double[n];
-        var lambdaSecond = new double[n];
-        var lambdaDelta = new double[n];
-        var gRate = new double[n];
-        var gMomentum = new double[n];
-        var gDirection = new double[n];
-        var gBeta1 = new double[n];
-        var gBeta2 = new double[n];
-        var gEpsilon = new double[n];
+        var positive = Engine.TensorGreaterThan(Tensor<T>.FromVector(root), NumOps.Zero).ToVector();
+        var safeRoot = Engine.Add(root, OneMinus(positive));
+        return Engine.Divide(Engine.Multiply(Engine.Multiply(numerator, positive), NumOps.FromDouble(0.5)), safeRoot);
+    }
+
+    private Vector<T> NonNegative(Vector<T> v) => Engine.Max(v, new Vector<T>(v.Length));
+
+    /// <summary>
+    /// One inner step of the configured update rule for every parameter at once: returns the update u
+    /// (theta' = theta - u) and the advanced optimizer state.
+    /// </summary>
+    private (Vector<T> Update, OptimizerState Next) StepForward(int t, Vector<T> g, OptimizerState s, Coefficients c)
+    {
+        switch (_metaSGDOptions.UpdateRuleType)
+        {
+            case MetaSGDUpdateRuleType.SGD:
+                return (Engine.Multiply(StepScale(c), g), s);
+            case MetaSGDUpdateRuleType.SGDWithMomentum:
+            {
+                var velocity = Engine.Add(Engine.Multiply(c.Momentum, s.Velocity), Engine.Multiply(StepScale(c), g));
+                return (velocity, new OptimizerState(velocity, s.FirstMoment, s.SecondMoment, s.AccumulatedDelta));
+            }
+            case MetaSGDUpdateRuleType.Adam:
+            {
+                var first = Engine.Add(Engine.Multiply(c.Beta1, s.FirstMoment), Engine.Multiply(OneMinus(c.Beta1), g));
+                var second = Engine.Add(
+                    Engine.Multiply(c.Beta2, s.SecondMoment), Engine.Multiply(OneMinus(c.Beta2), Engine.Multiply(g, g)));
+                T step = NumOps.FromDouble(t);
+                var firstHat = Engine.Divide(first, OneMinus(Engine.Power(c.Beta1, step)));
+                var secondHat = Engine.Divide(second, OneMinus(Engine.Power(c.Beta2, step)));
+                var denominator = Engine.Add(Engine.Sqrt(NonNegative(secondHat)), c.Epsilon);
+                var update = Engine.Divide(Engine.Multiply(c.Rate, firstHat), denominator);
+                return (update, new OptimizerState(s.Velocity, first, second, s.AccumulatedDelta));
+            }
+            case MetaSGDUpdateRuleType.RMSprop:
+            case MetaSGDUpdateRuleType.AdaGrad:
+            {
+                bool rms = _metaSGDOptions.UpdateRuleType == MetaSGDUpdateRuleType.RMSprop;
+                var squared = Engine.Multiply(g, g);
+                var second = rms
+                    ? Engine.Add(Engine.Multiply(s.SecondMoment, NumOps.FromDouble(RmsDecay)),
+                        Engine.Multiply(squared, NumOps.FromDouble(1 - RmsDecay)))
+                    : Engine.Add(s.SecondMoment, squared);
+                var denominator = Engine.Sqrt(NonNegative(second)) + NumOps.FromDouble(RmsEpsilon);
+                var update = Engine.Divide(Engine.Multiply(c.Rate, g), denominator);
+                return (update, new OptimizerState(s.Velocity, s.FirstMoment, second, s.AccumulatedDelta));
+            }
+            case MetaSGDUpdateRuleType.AdaDelta:
+            {
+                // Zeiler 2012, Algorithm 1: RMS[x] = sqrt(E[x^2] + eps).
+                var second = Engine.Add(Engine.Multiply(s.SecondMoment, NumOps.FromDouble(AdaDeltaRho)),
+                    Engine.Multiply(Engine.Multiply(g, g), NumOps.FromDouble(1 - AdaDeltaRho)));
+                var rmsGradient = Engine.Sqrt(second + NumOps.FromDouble(AdaDeltaEpsilon));
+                var rmsDelta = Engine.Sqrt(s.AccumulatedDelta + NumOps.FromDouble(AdaDeltaEpsilon));
+                var update = Engine.Multiply(Engine.Divide(rmsDelta, rmsGradient), g);
+                var delta = Engine.Add(Engine.Multiply(s.AccumulatedDelta, NumOps.FromDouble(AdaDeltaRho)),
+                    Engine.Multiply(Engine.Multiply(update, update), NumOps.FromDouble(1 - AdaDeltaRho)));
+                return (update, new OptimizerState(s.Velocity, s.FirstMoment, second, delta));
+            }
+            default:
+                return (Engine.Multiply(c.Rate, g), s);
+        }
+    }
+
+    /// <summary>
+    /// Reverse pass through the recorded inner loop: the exact gradient of the query loss with respect to theta
+    /// (through every step's support gradient, unless first-order) and to every learned coefficient.
+    /// </summary>
+    private Adjoint Backpropagate(IFullModel<T, TInput, TOutput> model, List<InnerStep> trace, Vector<T> queryGradient,
+        TInput supportInput, TOutput supportTarget, Coefficients c)
+    {
+        var adjoint = new Adjoint(queryGradient);
 
         for (int k = trace.Count - 1; k >= 0; k--)
         {
             var step = trace[k];
-            var lambdaG = new double[n];
-            for (int i = 0; i < n; i++)
-            {
-                StepElementBackward(
-                    _metaSGDOptions.UpdateRuleType, k + 1, _metaSGDOptions.LearnDirection,
-                    step.RawGradient[i] * step.ClipScale,
-                    step.Velocity[i], step.FirstMoment[i], step.SecondMoment[i], step.AccumulatedDelta[i],
-                    c.Rate[i], c.Momentum[i], c.Direction[i], c.Beta1[i], c.Beta2[i], c.Epsilon[i],
-                    -lambdaTheta[i],
-                    ref lambdaVelocity[i], ref lambdaFirst[i], ref lambdaSecond[i], ref lambdaDelta[i],
-                    out lambdaG[i],
-                    ref gRate[i], ref gMomentum[i], ref gDirection[i], ref gBeta1[i], ref gBeta2[i], ref gEpsilon[i]);
-            }
+            var lambdaG = StepBackward(k + 1, step, c, adjoint);
 
             // Through the clip: g_used = s(g) g with s = threshold / |g| when clipped.
-            if (step.ClipScale < 1.0)
-            {
-                double normSquared = step.RawGradient.Sum(g => g * g);
-                double projection = 0;
-                for (int i = 0; i < n; i++) projection += step.RawGradient[i] * lambdaG[i];
-                for (int i = 0; i < n; i++)
-                    lambdaG[i] = step.ClipScale * (lambdaG[i] - step.RawGradient[i] * projection / normSquared);
-            }
+            if (step.Clipped) lambdaG = ClipBackward(step, lambdaG);
 
             if (!_metaSGDOptions.UseFirstOrder)
             {
-                var hv = HessianVectorProduct(model, step.Parameters, lambdaG, supportInput, supportTarget);
-                for (int i = 0; i < n; i++) lambdaTheta[i] += hv[i];
+                adjoint.Theta = Engine.Add(
+                    adjoint.Theta, HessianVectorProduct(model, step.Parameters, lambdaG, supportInput, supportTarget));
             }
         }
 
-        return (lambdaTheta, gRate, gMomentum, gDirection, gBeta1, gBeta2, gEpsilon);
+        return adjoint;
     }
 
     /// <summary>
-    /// The derivative of one element's update, run backwards. <paramref name="lambdaU"/> is the loss's
-    /// sensitivity to the update u; the state adjoints come in for the state after the step and leave for the
-    /// state before it.
+    /// The adjoint of the clipped gradient g s(g), s = threshold / |g|:
+    /// s (lambda - g (g . lambda) / |g|^2).
     /// </summary>
-    private static void StepElementBackward(
-        MetaSGDUpdateRuleType rule, int t, bool useDirection, double g,
-        double velocity, double firstMoment, double secondMoment, double accumulatedDelta,
-        double rate, double momentum, double direction, double beta1, double beta2, double epsilon,
-        double lambdaU,
-        ref double lambdaVelocity, ref double lambdaFirst, ref double lambdaSecond, ref double lambdaDelta,
-        out double lambdaG,
-        ref double gRate, ref double gMomentum, ref double gDirection, ref double gBeta1, ref double gBeta2, ref double gEpsilon)
+    private Vector<T> ClipBackward(InnerStep step, Vector<T> lambdaG)
     {
-        double dirFactor = useDirection ? direction : 1.0;
-        double scale = rate * dirFactor;
-        switch (rule)
+        var raw = step.RawGradient;
+        T projection = NumOps.Divide(Engine.DotProduct(raw, lambdaG), Engine.DotProduct(raw, raw));
+        return Engine.Multiply(Engine.Subtract(lambdaG, Engine.Multiply(raw, projection)), step.ClipScale);
+    }
+
+    /// <summary>
+    /// One inner step of the reverse pass for every parameter at once: consumes the update's adjoint
+    /// -lambda_theta, carries the optimizer-state adjoints back one step, accumulates the coefficient
+    /// gradients, and returns the adjoint of the (clipped) gradient the step used.
+    /// </summary>
+    private Vector<T> StepBackward(int t, InnerStep step, Coefficients c, Adjoint a)
+    {
+        var g = Engine.Multiply(step.RawGradient, step.ClipScale);
+        var s = step.State;
+        var lambdaU = Engine.Negate(a.Theta);
+        bool useDirection = _metaSGDOptions.LearnDirection;
+        var scale = StepScale(c);
+
+        switch (_metaSGDOptions.UpdateRuleType)
         {
             case MetaSGDUpdateRuleType.SGD:
-                lambdaG = lambdaU * scale;
-                gRate += lambdaU * dirFactor * g;
-                if (useDirection) gDirection += lambdaU * rate * g;
-                return;
+            {
+                var directionFactor = useDirection ? c.Direction : null;
+                var lambdaUg = Engine.Multiply(lambdaU, g);
+                a.Rate = Engine.Add(a.Rate, directionFactor is null ? lambdaUg : Engine.Multiply(lambdaUg, directionFactor));
+                if (useDirection) a.Direction = Engine.Add(a.Direction, Engine.Multiply(lambdaUg, c.Rate));
+                return Engine.Multiply(lambdaU, scale);
+            }
 
             case MetaSGDUpdateRuleType.SGDWithMomentum:
             {
                 // v' = mu v + scale g, u = v'
-                double lv = lambdaVelocity + lambdaU;
-                gMomentum += lv * velocity;
-                gRate += lv * dirFactor * g;
-                if (useDirection) gDirection += lv * rate * g;
-                lambdaG = lv * scale;
-                lambdaVelocity = lv * momentum;
-                return;
+                var lv = Engine.Add(a.Velocity, lambdaU);
+                var lvg = Engine.Multiply(lv, g);
+                a.Momentum = Engine.Add(a.Momentum, Engine.Multiply(lv, s.Velocity));
+                a.Rate = Engine.Add(a.Rate, useDirection ? Engine.Multiply(lvg, c.Direction) : lvg);
+                if (useDirection) a.Direction = Engine.Add(a.Direction, Engine.Multiply(lvg, c.Rate));
+                a.Velocity = Engine.Multiply(lv, c.Momentum);
+                return Engine.Multiply(lv, scale);
             }
 
             case MetaSGDUpdateRuleType.Adam:
             {
-                double mNew = beta1 * firstMoment + (1 - beta1) * g;
-                double sNew = beta2 * secondMoment + (1 - beta2) * g * g;
-                double c1 = 1 - Math.Pow(beta1, t);
-                double c2 = 1 - Math.Pow(beta2, t);
-                double mHat = mNew / c1;
-                double sHat = sNew / c2;
-                double r = Math.Sqrt(Math.Max(0, sHat));
-                double den = r + epsilon;
+                T stepT = NumOps.FromDouble(t);
+                var squared = Engine.Multiply(g, g);
+                var firstNew = Engine.Add(Engine.Multiply(c.Beta1, s.FirstMoment), Engine.Multiply(OneMinus(c.Beta1), g));
+                var secondNew = Engine.Add(Engine.Multiply(c.Beta2, s.SecondMoment), Engine.Multiply(OneMinus(c.Beta2), squared));
+                var c1 = OneMinus(Engine.Power(c.Beta1, stepT));
+                var c2 = OneMinus(Engine.Power(c.Beta2, stepT));
+                var firstHat = Engine.Divide(firstNew, c1);
+                var secondHat = Engine.Divide(secondNew, c2);
+                var root = Engine.Sqrt(NonNegative(secondHat));
+                var denominator = Engine.Add(root, c.Epsilon);
 
-                gRate += lambdaU * mHat / den;
-                gEpsilon += lambdaU * (-rate * mHat / (den * den));
-                double lmHat = lambdaU * rate / den;
-                double lsHat = r > 0 ? lambdaU * (-rate * mHat / (den * den)) * 0.5 / r : 0.0;
+                // d u / d den = -rate mHat / den^2
+                var lambdaDenominator = Engine.Multiply(lambdaU,
+                    Engine.Negate(Engine.Divide(Engine.Multiply(c.Rate, firstHat), Engine.Multiply(denominator, denominator))));
+                a.Rate = Engine.Add(a.Rate, Engine.Divide(Engine.Multiply(lambdaU, firstHat), denominator));
+                a.Epsilon = Engine.Add(a.Epsilon, lambdaDenominator);
+                var lambdaFirstHat = Engine.Divide(Engine.Multiply(lambdaU, c.Rate), denominator);
+                var lambdaSecondHat = HalfOverPositiveRoot(lambdaDenominator, root);
 
-                double lmNew = lambdaFirst + lmHat / c1;
-                gBeta1 += lmHat * mNew * t * Math.Pow(beta1, t - 1) / (c1 * c1);
-                double lsNew = lambdaSecond + lsHat / c2;
-                gBeta2 += lsHat * sNew * t * Math.Pow(beta2, t - 1) / (c2 * c2);
-
-                gBeta1 += lmNew * (firstMoment - g);
-                gBeta2 += lsNew * (secondMoment - g * g);
-                lambdaFirst = lmNew * beta1;
-                lambdaSecond = lsNew * beta2;
-                lambdaG = lmNew * (1 - beta1) + lsNew * (1 - beta2) * 2 * g;
-                return;
+                // Bias corrections: d(1 - b^t)/db = -t b^(t-1), so d(m / c1)/db1 = m t b1^(t-1) / c1^2.
+                T stepMinusOne = NumOps.FromDouble(t - 1);
+                var lambdaFirstNew = Engine.Add(a.FirstMoment, Engine.Divide(lambdaFirstHat, c1));
+                var lambdaSecondNew = Engine.Add(a.SecondMoment, Engine.Divide(lambdaSecondHat, c2));
+                var beta1Correction = Engine.Divide(
+                    Engine.Multiply(Engine.Multiply(lambdaFirstHat, firstNew), Engine.Multiply(Engine.Power(c.Beta1, stepMinusOne), stepT)),
+                    Engine.Multiply(c1, c1));
+                var beta2Correction = Engine.Divide(
+                    Engine.Multiply(Engine.Multiply(lambdaSecondHat, secondNew), Engine.Multiply(Engine.Power(c.Beta2, stepMinusOne), stepT)),
+                    Engine.Multiply(c2, c2));
+                a.Beta1 = Engine.Add(Engine.Add(a.Beta1, beta1Correction),
+                    Engine.Multiply(lambdaFirstNew, Engine.Subtract(s.FirstMoment, g)));
+                a.Beta2 = Engine.Add(Engine.Add(a.Beta2, beta2Correction),
+                    Engine.Multiply(lambdaSecondNew, Engine.Subtract(s.SecondMoment, squared)));
+                a.FirstMoment = Engine.Multiply(lambdaFirstNew, c.Beta1);
+                a.SecondMoment = Engine.Multiply(lambdaSecondNew, c.Beta2);
+                return Engine.Add(
+                    Engine.Multiply(lambdaFirstNew, OneMinus(c.Beta1)),
+                    Engine.Multiply(Engine.Multiply(lambdaSecondNew, OneMinus(c.Beta2)), Engine.Multiply(g, NumOps.FromDouble(2))));
             }
 
             case MetaSGDUpdateRuleType.RMSprop:
             case MetaSGDUpdateRuleType.AdaGrad:
             {
-                bool rms = rule == MetaSGDUpdateRuleType.RMSprop;
-                double decay = rms ? RmsDecay : 1.0;
-                double gain = rms ? 1 - RmsDecay : 1.0;
-                double sNew = decay * secondMoment + gain * g * g;
-                double r = Math.Sqrt(Math.Max(0, sNew));
-                double den = r + RmsEpsilon;
+                bool rms = _metaSGDOptions.UpdateRuleType == MetaSGDUpdateRuleType.RMSprop;
+                T decay = NumOps.FromDouble(rms ? RmsDecay : 1.0);
+                T gain = NumOps.FromDouble(rms ? 1 - RmsDecay : 1.0);
+                var secondNew = Engine.Add(Engine.Multiply(s.SecondMoment, decay), Engine.Multiply(Engine.Multiply(g, g), gain));
+                var root = Engine.Sqrt(NonNegative(secondNew));
+                var denominator = root + NumOps.FromDouble(RmsEpsilon);
 
-                gRate += lambdaU * g / den;
-                lambdaG = lambdaU * rate / den;
-                double lDen = lambdaU * (-rate * g / (den * den));
-                double lsNew = lambdaSecond + (r > 0 ? lDen * 0.5 / r : 0.0);
-                lambdaSecond = lsNew * decay;
-                lambdaG += lsNew * gain * 2 * g;
-                return;
+                a.Rate = Engine.Add(a.Rate, Engine.Divide(Engine.Multiply(lambdaU, g), denominator));
+                var lambdaG = Engine.Divide(Engine.Multiply(lambdaU, c.Rate), denominator);
+                var lambdaDenominator = Engine.Multiply(lambdaU,
+                    Engine.Negate(Engine.Divide(Engine.Multiply(c.Rate, g), Engine.Multiply(denominator, denominator))));
+                var lambdaSecondNew = Engine.Add(a.SecondMoment, HalfOverPositiveRoot(lambdaDenominator, root));
+                a.SecondMoment = Engine.Multiply(lambdaSecondNew, decay);
+                return Engine.Add(lambdaG,
+                    Engine.Multiply(Engine.Multiply(lambdaSecondNew, g), NumOps.Multiply(gain, NumOps.FromDouble(2))));
             }
 
             case MetaSGDUpdateRuleType.AdaDelta:
             {
-                double sNew = AdaDeltaRho * secondMoment + (1 - AdaDeltaRho) * g * g;
-                double rmsGradient = Math.Sqrt(sNew + AdaDeltaEpsilon);
-                double rmsDelta = Math.Sqrt(accumulatedDelta + AdaDeltaEpsilon);
-                double u = rmsDelta / rmsGradient * g;
+                T rho = NumOps.FromDouble(AdaDeltaRho);
+                T oneMinusRho = NumOps.FromDouble(1 - AdaDeltaRho);
+                var secondNew = Engine.Add(Engine.Multiply(s.SecondMoment, rho), Engine.Multiply(Engine.Multiply(g, g), oneMinusRho));
+                var rmsGradient = Engine.Sqrt(secondNew + NumOps.FromDouble(AdaDeltaEpsilon));
+                var rmsDelta = Engine.Sqrt(s.AccumulatedDelta + NumOps.FromDouble(AdaDeltaEpsilon));
+                var u = Engine.Multiply(Engine.Divide(rmsDelta, rmsGradient), g);
 
                 // The accumulated update after this step depends on u, so its adjoint flows into u first.
-                double lu = lambdaU + lambdaDelta * (1 - AdaDeltaRho) * 2 * u;
-                lambdaG = lu * rmsDelta / rmsGradient;
-                double lRmsDelta = lu * g / rmsGradient;
-                double lRmsGradient = lu * (-rmsDelta * g / (rmsGradient * rmsGradient));
-                double lsNew = lambdaSecond + lRmsGradient * 0.5 / rmsGradient;
-                lambdaSecond = lsNew * AdaDeltaRho;
-                lambdaG += lsNew * (1 - AdaDeltaRho) * 2 * g;
-                lambdaDelta = lambdaDelta * AdaDeltaRho + lRmsDelta * 0.5 / rmsDelta;
-                return;
+                var lu = Engine.Add(lambdaU,
+                    Engine.Multiply(Engine.Multiply(a.AccumulatedDelta, u), NumOps.Multiply(oneMinusRho, NumOps.FromDouble(2))));
+                var lambdaG = Engine.Divide(Engine.Multiply(lu, rmsDelta), rmsGradient);
+                var lambdaRmsDelta = Engine.Divide(Engine.Multiply(lu, g), rmsGradient);
+                var lambdaRmsGradient = Engine.Negate(
+                    Engine.Divide(Engine.Multiply(Engine.Multiply(lu, rmsDelta), g), Engine.Multiply(rmsGradient, rmsGradient)));
+                var lambdaSecondNew = Engine.Add(a.SecondMoment,
+                    Engine.Divide(Engine.Multiply(lambdaRmsGradient, NumOps.FromDouble(0.5)), rmsGradient));
+                a.SecondMoment = Engine.Multiply(lambdaSecondNew, rho);
+                a.AccumulatedDelta = Engine.Add(Engine.Multiply(a.AccumulatedDelta, rho),
+                    Engine.Divide(Engine.Multiply(lambdaRmsDelta, NumOps.FromDouble(0.5)), rmsDelta));
+                return Engine.Add(lambdaG,
+                    Engine.Multiply(Engine.Multiply(lambdaSecondNew, g), NumOps.Multiply(oneMinusRho, NumOps.FromDouble(2))));
             }
 
             default:
-                lambdaG = lambdaU * rate;
-                gRate += lambdaU * g;
-                return;
+                a.Rate = Engine.Add(a.Rate, Engine.Multiply(lambdaU, g));
+                return Engine.Multiply(lambdaU, c.Rate);
         }
     }
 
     /// <summary>
-    /// H v for the support loss at <paramref name="at"/>: the central difference of two gradients along v.
+    /// H v at <paramref name="at"/> by a central difference of support gradients, with a step scaled to the
+    /// parameter and direction norms.
     /// </summary>
-    /// <remarks>
-    /// Exact for a loss quadratic in the parameters (a linear model under squared error) and second-order
-    /// accurate otherwise. It works for any model that can report its gradient.
-    /// </remarks>
-    private double[] HessianVectorProduct(
-        IFullModel<T, TInput, TOutput> model, Vector<T> at, double[] v, TInput input, TOutput target)
+    private Vector<T> HessianVectorProduct(
+        IFullModel<T, TInput, TOutput> model, Vector<T> at, Vector<T> v, TInput input, TOutput target)
     {
-        int n = v.Length;
-        double vNorm = Math.Sqrt(v.Sum(x => x * x));
-        if (vNorm == 0) return new double[n];
+        T vNorm = Engine.Norm(v);
+        if (NumOps.Equals(vNorm, NumOps.Zero)) return new Vector<T>(v.Length);
 
-        double atNorm = 0;
-        for (int i = 0; i < n; i++) atNorm += NumOps.ToDouble(at[i]) * NumOps.ToDouble(at[i]);
-        double h = 1e-5 * (1.0 + Math.Sqrt(atNorm)) / vNorm;
+        T h = NumOps.Divide(
+            NumOps.Multiply(NumOps.FromDouble(1e-5), NumOps.Add(NumOps.One, Engine.Norm(at))), vNorm);
+        var offset = Engine.Multiply(v, h);
 
         var parameters = InterfaceGuard.Parameterizable(model);
-        var plus = new Vector<T>(n);
-        var minus = new Vector<T>(n);
-        for (int i = 0; i < n; i++)
-        {
-            double value = NumOps.ToDouble(at[i]);
-            plus[i] = NumOps.FromDouble(value + h * v[i]);
-            minus[i] = NumOps.FromDouble(value - h * v[i]);
-        }
+        parameters.SetParameters(Engine.Add(at, offset));
+        var gradientPlus = ComputeGradients(model, input, target).Clone();
+        parameters.SetParameters(Engine.Subtract(at, offset));
+        var gradientMinus = ComputeGradients(model, input, target).Clone();
 
-        parameters.SetParameters(plus);
-        var gradientPlus = ToArray(ComputeGradients(model, input, target));
-        parameters.SetParameters(minus);
-        var gradientMinus = ToArray(ComputeGradients(model, input, target));
-
-        var hv = new double[n];
-        for (int i = 0; i < n; i++) hv[i] = (gradientPlus[i] - gradientMinus[i]) / (2 * h);
-        return hv;
+        return Engine.Divide(Engine.Subtract(gradientPlus, gradientMinus), NumOps.Multiply(NumOps.FromDouble(2), h));
     }
 
     /// <summary>The per-parameter optimizer holding the learned coefficients (for tests and inspection).</summary>
     internal PerParameterOptimizer<T, TInput, TOutput> LearnedOptimizer => _optimizer;
 
     /// <summary>One task's query loss and its exact gradients, for gradient checks.</summary>
-    internal (T Loss, double[] ThetaGradient, double[] CoefficientGradient) EpisodeGradientForTesting(
+    internal (T Loss, Vector<T> ThetaGradient, Vector<T> CoefficientGradient) EpisodeGradientForTesting(
         IMetaLearningTask<T, TInput, TOutput> task)
         => Episode(task, ReadCoefficients(_optimizer));
 
@@ -846,31 +913,65 @@ public partial class MetaSGDAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, T
     {
         int numParams = ParamModel.GetParameters().Length;
 
-        for (int i = 0; i < numParams; i++)
+        // Initialize learning rates based on initialization strategy. Random draws one value per parameter, in
+        // parameter order, from the learner's seeded stream.
+        if (_metaSGDOptions.LearningRateInitialization == MetaSGDLearningRateInitialization.Random)
         {
-            // Initialize learning rate based on initialization strategy
-            T initialLR = GetInitialLearningRate(i, numParams);
-            _optimizer.SetLearningRate(i, initialLR);
-
-            // Initialize momentum if enabled
-            if (_metaSGDOptions.LearnMomentum)
+            for (int i = 0; i < numParams; i++)
             {
-                _optimizer.SetMomentum(i, NumOps.FromDouble(0.9));
+                _optimizer.SetLearningRate(i, GetInitialLearningRate(i, numParams));
+            }
+        }
+        else
+        {
+            _optimizer.LearningRates = InitialLearningRates(numParams);
+        }
+
+        // Initialize momentum if enabled
+        if (_metaSGDOptions.LearnMomentum)
+        {
+            _optimizer.Momentums = Vector<T>.CreateDefault(numParams, NumOps.FromDouble(0.9));
+        }
+
+        // Initialize direction if enabled
+        if (_metaSGDOptions.LearnDirection)
+        {
+            _optimizer.Directions = Vector<T>.CreateDefault(numParams, NumOps.One);
+        }
+
+        // Initialize Adam parameters if using Adam
+        if (_metaSGDOptions.UpdateRuleType == MetaSGDUpdateRuleType.Adam)
+        {
+            _optimizer.AdamBeta1 = Vector<T>.CreateDefault(numParams, NumOps.FromDouble(_metaSGDOptions.AdamBeta1Init));
+            _optimizer.AdamBeta2 = Vector<T>.CreateDefault(numParams, NumOps.FromDouble(_metaSGDOptions.AdamBeta2Init));
+            _optimizer.AdamEpsilon = Vector<T>.CreateDefault(numParams, NumOps.FromDouble(_metaSGDOptions.AdamEpsilonInit));
+        }
+    }
+
+    /// <summary>
+    /// The deterministic initial learning rates: the base rate, scaled by 1/sqrt(n) for Xavier, or decayed by
+    /// LayerDecayFactor^(10 i / n) along the parameter index for layer-based initialization with layer-wise decay.
+    /// </summary>
+    private Vector<T> InitialLearningRates(int totalParams)
+    {
+        double baseLR = _metaSGDOptions.InnerLearningRate;
+        switch (_metaSGDOptions.LearningRateInitialization)
+        {
+            case MetaSGDLearningRateInitialization.LayerBased when _metaSGDOptions.UseLayerWiseDecay:
+            {
+                // Approximate layer from parameter index: baseLR * decay^(10 i / n) = baseLR * exp(i * 10 ln(decay) / n)
+                var exponent = Engine.TensorMultiplyScalar(
+                    Engine.TensorArange<T>(0, totalParams, 1),
+                    NumOps.FromDouble(10.0 * Math.Log(_metaSGDOptions.LayerDecayFactor) / totalParams));
+                return Engine.Multiply(Engine.TensorExp(exponent).ToVector(), NumOps.FromDouble(baseLR));
             }
 
-            // Initialize direction if enabled
-            if (_metaSGDOptions.LearnDirection)
-            {
-                _optimizer.SetDirection(i, NumOps.One);
-            }
+            case MetaSGDLearningRateInitialization.Xavier:
+                // Xavier-inspired: scale by 1/sqrt(n)
+                return Vector<T>.CreateDefault(totalParams, NumOps.FromDouble(baseLR / Math.Sqrt(totalParams)));
 
-            // Initialize Adam parameters if using Adam
-            if (_metaSGDOptions.UpdateRuleType == MetaSGDUpdateRuleType.Adam)
-            {
-                _optimizer.SetAdamBeta1(i, NumOps.FromDouble(_metaSGDOptions.AdamBeta1Init));
-                _optimizer.SetAdamBeta2(i, NumOps.FromDouble(_metaSGDOptions.AdamBeta2Init));
-                _optimizer.SetAdamEpsilon(i, NumOps.FromDouble(_metaSGDOptions.AdamEpsilonInit));
-            }
+            default:
+                return Vector<T>.CreateDefault(totalParams, NumOps.FromDouble(baseLR));
         }
     }
 
@@ -988,9 +1089,7 @@ public class PerParameterOptimizer<T, TInput, TOutput>
         if (value is null) throw new ArgumentNullException(nameof(value));
         if (value.Length != _numParameters)
             throw new ArgumentException($"Expected {_numParameters} coefficients, got {value.Length}.", nameof(value));
-        var copy = new Vector<T>(_numParameters);
-        for (int i = 0; i < _numParameters; i++) copy[i] = value[i];
-        return copy;
+        return value.Clone();
     }
 
     /// <summary>
@@ -1090,14 +1189,14 @@ public class PerParameterOptimizer<T, TInput, TOutput>
 
                 // Bias correction (Kingma and Ba 2015): a few-step inner loop is exactly where it matters.
                 int adamStep = ++_adamSteps[parameterIndex];
+                T stepCount = NumOps.FromDouble(adamStep);
                 T biasCorrectedFirst = NumOps.Divide(_firstMoments[parameterIndex],
-                    NumOps.FromDouble(1 - Math.Pow(NumOps.ToDouble(_adamBeta1[parameterIndex]), adamStep)));
+                    NumOps.Subtract(NumOps.One, NumOps.Power(_adamBeta1[parameterIndex], stepCount)));
                 T biasCorrectedSecond = NumOps.Divide(_secondMoments[parameterIndex],
-                    NumOps.FromDouble(1 - Math.Pow(NumOps.ToDouble(_adamBeta2[parameterIndex]), adamStep)));
+                    NumOps.Subtract(NumOps.One, NumOps.Power(_adamBeta2[parameterIndex], stepCount)));
 
                 // Compute update
-                double secondMomentVal = NumOps.ToDouble(biasCorrectedSecond);
-                T sqrtSecond = NumOps.FromDouble(Math.Sqrt(Math.Max(0, secondMomentVal)));
+                T sqrtSecond = SqrtOfNonNegative(biasCorrectedSecond);
                 T denominator = NumOps.Add(sqrtSecond, _adamEpsilon[parameterIndex]);
                 update = NumOps.Divide(NumOps.Multiply(lr, biasCorrectedFirst), denominator);
                 break;
@@ -1110,8 +1209,7 @@ public class PerParameterOptimizer<T, TInput, TOutput>
                     NumOps.Multiply(decayRate, _secondMoments[parameterIndex]),
                     NumOps.Multiply(oneMinusDecay, NumOps.Multiply(gradient, gradient)));
 
-                double secondVal = NumOps.ToDouble(_secondMoments[parameterIndex]);
-                T sqrtSecondRms = NumOps.FromDouble(Math.Sqrt(Math.Max(0, secondVal)));
+                T sqrtSecondRms = SqrtOfNonNegative(_secondMoments[parameterIndex]);
                 T denomRms = NumOps.Add(sqrtSecondRms, NumOps.FromDouble(1e-6));
                 update = NumOps.Divide(NumOps.Multiply(lr, gradient), denomRms);
                 break;
@@ -1122,8 +1220,7 @@ public class PerParameterOptimizer<T, TInput, TOutput>
                     _secondMoments[parameterIndex],
                     NumOps.Multiply(gradient, gradient));
 
-                double accumVal = NumOps.ToDouble(_secondMoments[parameterIndex]);
-                T sqrtAccum = NumOps.FromDouble(Math.Sqrt(Math.Max(0, accumVal)));
+                T sqrtAccum = SqrtOfNonNegative(_secondMoments[parameterIndex]);
                 T denomAda = NumOps.Add(sqrtAccum, NumOps.FromDouble(1e-6));
                 update = NumOps.Divide(NumOps.Multiply(lr, gradient), denomAda);
                 break;
@@ -1138,12 +1235,10 @@ public class PerParameterOptimizer<T, TInput, TOutput>
                     NumOps.Multiply(oneMinusRho, NumOps.Multiply(gradient, gradient)));
 
                 // Zeiler 2012, Algorithm 1: RMS[x] = sqrt(E[x^2] + eps), eps = 1e-6.
-                double accGradVal = NumOps.ToDouble(_secondMoments[parameterIndex]);
-                T rmsGrad = NumOps.FromDouble(Math.Sqrt(accGradVal + 1e-6));
+                T rmsGrad = NumOps.Sqrt(NumOps.Add(_secondMoments[parameterIndex], NumOps.FromDouble(1e-6)));
 
                 // Use velocity as accumulated parameter updates
-                double accDeltaVal = NumOps.ToDouble(_velocities[parameterIndex]);
-                T rmsDelta = NumOps.FromDouble(Math.Sqrt(accDeltaVal + 1e-6));
+                T rmsDelta = NumOps.Sqrt(NumOps.Add(_velocities[parameterIndex], NumOps.FromDouble(1e-6)));
 
                 update = NumOps.Multiply(NumOps.Divide(rmsDelta, rmsGrad), gradient);
 
@@ -1172,53 +1267,51 @@ public class PerParameterOptimizer<T, TInput, TOutput>
     /// </para>
     /// </remarks>
     public void UpdateMetaParameters(Vector<T> metaGradients)
+        => UpdateMetaParameters(metaGradients, _options.OuterLearningRate);
+
+    /// <summary>sqrt(max(0, x)).</summary>
+    private static T SqrtOfNonNegative(T x) => NumOps.Sqrt(NumOps.GreaterThan(x, NumOps.Zero) ? x : NumOps.Zero);
+
+    /// <summary>
+    /// Updates the meta-parameters (learned coefficients) with an explicit meta learning rate, such as the
+    /// scheduled rate of the current meta-iteration.
+    /// </summary>
+    /// <param name="metaGradients">Gradients for the meta-parameters, in <see cref="GetMetaParameterCount"/> layout.</param>
+    /// <param name="metaLearningRate">The step size of this update.</param>
+    public void UpdateMetaParameters(Vector<T> metaGradients, double metaLearningRate)
     {
+        if (metaGradients is null) throw new ArgumentNullException(nameof(metaGradients));
+        int n = _numParameters;
         int index = 0;
-        double metaLR = _options.OuterLearningRate;
+        T metaLR = NumOps.FromDouble(metaLearningRate);
+
+        // coefficient -= metaLR * gradient, for the block of the gradient that belongs to it
+        Vector<T> Step(Vector<T> coefficients, Vector<T> gradient)
+            => _engine.Subtract(coefficients, _engine.Multiply(gradient, metaLR));
+
+        Vector<T> NextBlock(int length)
+        {
+            var block = metaGradients.GetSubVector(index, length);
+            index += length;
+            return block;
+        }
 
         // Update learning rates
-        if (_options.LearnLearningRate)
-        {
-            for (int i = 0; i < _numParameters; i++)
-            {
-                T update = NumOps.Multiply(metaGradients[index++], NumOps.FromDouble(metaLR));
-                _learningRates[i] = NumOps.Subtract(_learningRates[i], update);
-            }
-        }
+        if (_options.LearnLearningRate) _learningRates = Step(_learningRates, NextBlock(n));
 
         // Update momentums
-        if (_options.LearnMomentum)
-        {
-            for (int i = 0; i < _numParameters; i++)
-            {
-                T update = NumOps.Multiply(metaGradients[index++], NumOps.FromDouble(metaLR));
-                _momentums[i] = NumOps.Subtract(_momentums[i], update);
-            }
-        }
+        if (_options.LearnMomentum) _momentums = Step(_momentums, NextBlock(n));
 
         // Update directions
-        if (_options.LearnDirection)
-        {
-            for (int i = 0; i < _numParameters; i++)
-            {
-                T update = NumOps.Multiply(metaGradients[index++], NumOps.FromDouble(metaLR));
-                _directions[i] = NumOps.Subtract(_directions[i], update);
-            }
-        }
+        if (_options.LearnDirection) _directions = Step(_directions, NextBlock(n));
 
-        // Update Adam parameters
+        // Update Adam parameters: (beta1, beta2, epsilon) interleaved per parameter
         if (_options.UpdateRuleType == MetaSGDUpdateRuleType.Adam && _options.LearnAdamBetas)
         {
-            for (int i = 0; i < _numParameters; i++)
-            {
-                T updateBeta1 = NumOps.Multiply(metaGradients[index++], NumOps.FromDouble(metaLR));
-                T updateBeta2 = NumOps.Multiply(metaGradients[index++], NumOps.FromDouble(metaLR));
-                T updateEps = NumOps.Multiply(metaGradients[index++], NumOps.FromDouble(metaLR));
-
-                _adamBeta1[i] = NumOps.Subtract(_adamBeta1[i], updateBeta1);
-                _adamBeta2[i] = NumOps.Subtract(_adamBeta2[i], updateBeta2);
-                _adamEpsilon[i] = NumOps.Subtract(_adamEpsilon[i], updateEps);
-            }
+            var rows = Tensor<T>.FromVector(NextBlock(3 * n)).Reshape(n, 3).ToMatrix();
+            _adamBeta1 = Step(_adamBeta1, rows.GetColumn(0));
+            _adamBeta2 = Step(_adamBeta2, rows.GetColumn(1));
+            _adamEpsilon = Step(_adamEpsilon, rows.GetColumn(2));
         }
 
         // Apply regularization and clipping
