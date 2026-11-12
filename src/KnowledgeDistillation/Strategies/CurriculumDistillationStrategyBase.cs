@@ -127,45 +127,32 @@ public abstract class CurriculumDistillationStrategyBase<T>
         ValidateLabelDimensions(studentBatchOutput, trueLabelsBatch);
 
         int batchSize = studentBatchOutput.Rows;
-        T totalLoss = NumOps.Zero;
 
         // Compute curriculum-adjusted temperature
         double curriculumTemp = ComputeCurriculumTemperature();
 
-        for (int r = 0; r < batchSize; r++)
+        // Soft loss per sample with curriculum temperature: T² KL(teacher || student)
+        var studentSoft = DistillationHelper<T>.SoftmaxRows(studentBatchOutput, curriculumTemp);
+        var teacherSoft = DistillationHelper<T>.SoftmaxRows(teacherBatchOutput, curriculumTemp);
+        Vector<T> sampleLosses = Engine.Multiply(
+            DistillationHelper<T>.KLDivergenceRows(teacherSoft, studentSoft),
+            NumOps.FromDouble(curriculumTemp * curriculumTemp));
+
+        // Add hard loss if labels provided: α × hard + (1 - α) × soft
+        if (trueLabelsBatch != null)
         {
-            Vector<T> studentOutput = studentBatchOutput.GetRow(r);
-            Vector<T> teacherOutput = teacherBatchOutput.GetRow(r);
-            Vector<T>? trueLabels = trueLabelsBatch?.GetRow(r);
+            var studentProbs = DistillationHelper<T>.SoftmaxRows(studentBatchOutput, temperature: 1.0);
+            var hardLosses = DistillationHelper<T>.CrossEntropyRows(studentProbs, trueLabelsBatch);
 
-            // Compute soft loss with curriculum temperature
-            var studentSoft = DistillationHelper<T>.Softmax(studentOutput, curriculumTemp);
-            var teacherSoft = DistillationHelper<T>.Softmax(teacherOutput, curriculumTemp);
+            var alphaT = NumOps.FromDouble(Alpha);
+            var oneMinusAlpha = NumOps.FromDouble(1.0 - Alpha);
 
-            var softLoss = DistillationHelper<T>.KLDivergence(teacherSoft, studentSoft);
-            softLoss = NumOps.Multiply(softLoss, NumOps.FromDouble(curriculumTemp * curriculumTemp));
-
-            // Add hard loss if labels provided
-            if (trueLabels != null)
-            {
-                var studentProbs = DistillationHelper<T>.Softmax(studentOutput, temperature: 1.0);
-                var hardLoss = DistillationHelper<T>.CrossEntropy(studentProbs, trueLabels);
-
-                var alphaT = NumOps.FromDouble(Alpha);
-                var oneMinusAlpha = NumOps.FromDouble(1.0 - Alpha);
-
-                var sampleLoss = NumOps.Add(
-                    NumOps.Multiply(alphaT, hardLoss),
-                    NumOps.Multiply(oneMinusAlpha, softLoss));
-
-                totalLoss = NumOps.Add(totalLoss, sampleLoss);
-            }
-            else
-            {
-                totalLoss = NumOps.Add(totalLoss, softLoss);
-            }
+            sampleLosses = Engine.Add(
+                Engine.Multiply(hardLosses, alphaT),
+                Engine.Multiply(sampleLosses, oneMinusAlpha));
         }
 
+        T totalLoss = Engine.Sum(sampleLosses);
         return NumOps.Divide(totalLoss, NumOps.FromDouble(batchSize));
     }
 
@@ -178,52 +165,28 @@ public abstract class CurriculumDistillationStrategyBase<T>
         ValidateLabelDimensions(studentBatchOutput, trueLabelsBatch);
 
         int batchSize = studentBatchOutput.Rows;
-        int outputDim = studentBatchOutput.Columns;
-        var gradientBatch = new Matrix<T>(batchSize, outputDim);
 
         // Compute curriculum-adjusted temperature
         double curriculumTemp = ComputeCurriculumTemperature();
 
-        for (int r = 0; r < batchSize; r++)
+        // Soft gradient with curriculum temperature: (student_soft - teacher_soft) × T
+        var studentSoft = DistillationHelper<T>.SoftmaxRows(studentBatchOutput, curriculumTemp);
+        var teacherSoft = DistillationHelper<T>.SoftmaxRows(teacherBatchOutput, curriculumTemp);
+        var gradientBatch = Engine.MatrixMultiplyScalar(
+            Engine.MatrixSubtract(studentSoft, teacherSoft), NumOps.FromDouble(curriculumTemp));
+
+        // Add hard gradient if labels provided: α × (probs - labels) + (1 - α) × soft
+        if (trueLabelsBatch != null)
         {
-            Vector<T> studentOutput = studentBatchOutput.GetRow(r);
-            Vector<T> teacherOutput = teacherBatchOutput.GetRow(r);
-            Vector<T>? trueLabels = trueLabelsBatch?.GetRow(r);
-
-            var gradient = new Vector<T>(outputDim);
-
-            // Soft gradient with curriculum temperature
-            var studentSoft = DistillationHelper<T>.Softmax(studentOutput, curriculumTemp);
-            var teacherSoft = DistillationHelper<T>.Softmax(teacherOutput, curriculumTemp);
-
-            for (int i = 0; i < outputDim; i++)
-            {
-                var diff = NumOps.Subtract(studentSoft[i], teacherSoft[i]);
-                gradient[i] = NumOps.Multiply(diff, NumOps.FromDouble(curriculumTemp));
-            }
-
-            // Add hard gradient if labels provided
-            if (trueLabels != null)
-            {
-                var studentProbs = DistillationHelper<T>.Softmax(studentOutput, temperature: 1.0);
-
-                for (int i = 0; i < outputDim; i++)
-                {
-                    var hardGrad = NumOps.Subtract(studentProbs[i], trueLabels[i]);
-                    var alphaWeighted = NumOps.Multiply(hardGrad, NumOps.FromDouble(Alpha));
-                    var softWeighted = NumOps.Multiply(gradient[i], NumOps.FromDouble(1.0 - Alpha));
-                    gradient[i] = NumOps.Add(alphaWeighted, softWeighted);
-                }
-            }
-
-            gradientBatch.SetRow(r, gradient);
+            var studentProbs = DistillationHelper<T>.SoftmaxRows(studentBatchOutput, temperature: 1.0);
+            gradientBatch = Engine.MatrixAdd(
+                Engine.MatrixMultiplyScalar(Engine.MatrixSubtract(studentProbs, trueLabelsBatch), NumOps.FromDouble(Alpha)),
+                Engine.MatrixMultiplyScalar(gradientBatch, NumOps.FromDouble(1.0 - Alpha)));
         }
 
         // Average gradients over the batch
         T oneOverBatch = NumOps.Divide(NumOps.One, NumOps.FromDouble(batchSize));
-        for (int r2 = 0; r2 < batchSize; r2++)
-            for (int c = 0; c < outputDim; c++)
-                gradientBatch[r2, c] = NumOps.Multiply(gradientBatch[r2, c], oneOverBatch);
+        gradientBatch = Engine.MatrixMultiplyScalar(gradientBatch, oneOverBatch);
 
         return gradientBatch;
     }
