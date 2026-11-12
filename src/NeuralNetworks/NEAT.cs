@@ -8,35 +8,48 @@ using AiDotNet.Models.Parameters;
 namespace AiDotNet.NeuralNetworks;
 
 /// <summary>
-/// Represents a NeuroEvolution of Augmenting Topologies (NEAT) algorithm implementation, which evolves
-/// neural networks through genetic algorithms.
+/// NeuroEvolution of Augmenting Topologies (Stanley &amp; Miikkulainen 2002): evolves the structure and the
+/// weights of feed-forward networks with historical markings, speciation and explicit fitness sharing.
 /// </summary>
 /// <remarks>
 /// <para>
-/// NEAT is an evolutionary algorithm that creates and evolves neural network topologies along with connection weights.
-/// Unlike traditional neural networks with fixed structures, NEAT starts with simple networks and gradually adds
-/// complexity through evolution. It uses genetic operators like mutation and crossover, along with speciation
-/// to protect innovation, to evolve networks that solve specific problems without requiring manual design
-/// of the network architecture.
+/// The algorithm follows the paper:
 /// </para>
-/// <para><b>For Beginners:</b> NEAT is a way to grow neural networks through evolution rather than training them with fixed structures.
-/// 
-/// Think of NEAT like breeding plants to get better features:
-/// - Instead of designing a neural network by hand, you start with simple networks
-/// - These networks "reproduce" and "mutate" over generations
-/// - Networks that perform better on your task are more likely to pass on their "genes"
-/// - Over time, the networks evolve complex structures that solve your problem well
-/// 
-/// The key differences from traditional neural networks:
-/// - The structure (connections between neurons) evolves along with the weights
-/// - Networks can grow more complex over time by adding new neurons and connections
-/// - You work with a population of many networks, not just one
-/// - Instead of training with gradient descent, you use evolution to improve performance
-/// 
-/// NEAT is particularly good for:
-/// - Problems where you don't know the ideal network structure
-/// - Reinforcement learning tasks (like game playing)
-/// - Finding novel solutions that a human designer might not think of
+/// <para>
+/// - <b>Historical markings</b>: every structural innovation gets a global innovation number; the same
+/// innovation within one generation (the same connection split, or the same new link) gets the same
+/// numbers in every genome. Initial genomes share one set of markings.
+/// </para>
+/// <para>
+/// - <b>Crossover</b>: genes are lined up by innovation number; matching genes are inherited at random,
+/// disjoint and excess genes from the fitter parent (from both when fitness is equal), and a gene
+/// disabled in either parent stays disabled with probability 0.75.
+/// </para>
+/// <para>
+/// - <b>Speciation</b>: compatibility distance <c>delta = c1 E / N + c2 D / N + c3 W</c> (c1 = c2 = 1,
+/// c3 = 0.4, delta_t = 3); each genome joins the first species whose representative (a random member of
+/// the previous generation) is within delta_t.
+/// </para>
+/// <para>
+/// - <b>Explicit fitness sharing</b>: adjusted fitness is fitness divided by species size, and each
+/// species gets offspring in proportion to its summed adjusted fitness. Species that have not improved in
+/// 15 generations do not reproduce; after 20 generations without population-wide improvement only the
+/// top two species do. The lowest-performing members are eliminated before reproduction, and the
+/// champion of every species with more than five members is copied unchanged.
+/// </para>
+/// <para>
+/// - <b>Mutation</b>: weights are mutated with probability 0.8 (each perturbed with probability 0.9,
+/// otherwise replaced); add-node (0.03) splits a connection; add-connection (0.05) links two unconnected
+/// nodes without creating a cycle.
+/// </para>
+/// <para>
+/// - <b>Activation</b>: the steepened sigmoid <c>1 / (1 + e^(-4.9 x))</c> on every hidden and output
+/// node, evaluated layer by layer so hidden activations propagate after squashing.
+/// </para>
+/// <para><b>For Beginners:</b> NEAT is a way to grow neural networks through evolution rather than
+/// training them with fixed structures. It starts with simple networks, and the networks that do better
+/// on your task are more likely to pass on their "genes". Grouping similar networks into species gives
+/// new structures time to improve before they have to compete with everything else.
 /// </para>
 /// </remarks>
 /// <example>
@@ -60,171 +73,84 @@ namespace AiDotNet.NeuralNetworks;
 [ResearchPaper("Evolving Neural Networks through Augmenting Topologies", "https://nn.cs.utexas.edu/downloads/papers/stanley.ec02.pdf", Year = 2002, Authors = "Kenneth O. Stanley, Risto Miikkulainen")]
 public partial class NEAT<T> : VectorModelLayoutBase<T>
 {
+    // Static numeric operations for the static helpers (the base class's NumOps is an instance field).
+    private static readonly INumericOperations<T> Ops = MathHelper.GetNumericOperations<T>();
+
     private readonly NEATOptions _options;
 
     /// <inheritdoc />
     /// <remarks>
-    /// Every non-input node is passed through <see cref="ApplySigmoid"/>, including
-    /// the output nodes, so supervised fitness targets must lie in the function's
-    /// actual codomain. NEAT has no ordinary final layer from which the base can
+    /// Every hidden and output node is passed through the steepened sigmoid, so supervised fitness
+    /// targets must lie in the unit interval. NEAT has no ordinary final layer from which the base can
     /// discover this domain.
     /// </remarks>
     public override LayerInputDomain GetOutputDomain(int[]? outputShape) =>
         UnitIntervalTensorDomain.Value;
 
-    /// <summary>
-    /// Gets the current population of genomes (neural network structures).
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// This list contains all the current individuals (genomes) in the population. Each genome represents
-    /// a different neural network structure with its own set of nodes and connections. The population evolves
-    /// over time through the evolutionary process.
-    /// </para>
-    /// <para><b>For Beginners:</b> This is the collection of all neural networks currently in your evolving population.
-    /// 
-    /// Think of Population as:
-    /// - A group of different neural networks (called "genomes")
-    /// - Each genome represents a different way to solve your problem
-    /// - Some genomes will perform better than others
-    /// - The best genomes get to "reproduce" and pass on their characteristics
-    /// 
-    /// During evolution, this population changes as:
-    /// - Higher-performing networks reproduce more often
-    /// - New networks are created through crossover (combining two parent networks)
-    /// - Mutations introduce new variations
-    /// 
-    /// This diversity in the population helps NEAT explore different possible solutions.
-    /// </para>
-    /// </remarks>
+    // The current population of genomes.
     private List<Genome<T>> _population;
 
-    /// <summary>
-    /// Gets or sets the size of the population (number of genomes).
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// The population size determines how many different network structures (genomes) are evolved in parallel.
-    /// A larger population provides more genetic diversity and exploration of the solution space, but requires
-    /// more computational resources. Typical values range from 50 to several hundred.
-    /// </para>
-    /// <para><b>For Beginners:</b> This controls how many different neural networks are in your evolving population.
-    /// 
-    /// Population size is important because:
-    /// - A larger population (like 100-500) provides more diversity
-    /// - More diversity helps explore more possible solutions
-    /// - But larger populations require more computing power
-    /// - Smaller populations evolve faster but might get stuck in suboptimal solutions
-    /// 
-    /// This is like having a larger or smaller gene pool in a biological population.
-    /// The right size depends on your problem complexity and available computing resources.
-    /// </para>
-    /// </remarks>
-    private int _populationSize { get; set; }
+    // Species of the current population (members are the genomes of the last evaluated generation).
+    private readonly List<Species> _species = new();
+
+    // Best genome of the current fitness function: what Predict and the parameter surface use.
+    private Genome<T>? _champion;
+
+    private readonly int _populationSize;
 
     /// <summary>
-    /// Gets or sets the probability of mutation occurring during reproduction.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// The mutation rate controls how frequently random changes occur in the network structure or weights
-    /// during evolution. Higher mutation rates increase exploration of new structures but can disrupt good solutions.
-    /// Lower rates provide more stability but may limit innovation. Typical values range from 0.05 to 0.3.
-    /// </para>
-    /// <para><b>For Beginners:</b> This controls how often random changes (mutations) occur in the networks.
-    /// 
-    /// Think of mutation rate as controlling how much experimentation happens:
-    /// - A value of 0.1 means there's a 10% chance of each type of mutation occurring
-    /// - Higher values (like 0.3) cause more random changes and exploration
-    /// - Lower values (like 0.05) cause fewer changes, keeping solutions more stable
-    /// 
-    /// Mutations include:
-    /// - Adding new neurons
-    /// - Adding new connections
-    /// - Changing connection weights
-    /// 
-    /// Finding the right mutation rate is important:
-    /// - Too high: networks change too randomly and can't preserve good solutions
-    /// - Too low: networks don't explore enough new possibilities
-    /// </para>
-    /// </remarks>
-    private T _mutationRate { get; set; }
-
-    /// <summary>
-    /// Per-instance deterministic RNG for the evolutionary search (selection,
-    /// crossover, mutation). Seeded from the architecture's RandomSeed when present.
+    /// Per-instance deterministic RNG for the evolutionary search. Seeded from the architecture's
+    /// RandomSeed when present; otherwise the shared thread-safe RNG.
     /// </summary>
     private readonly Random _rng;
 
-    // Faithful NEAT weight-mutation constants (Stanley & Miikkulainen 2002 §3.1;
-    // NEAT-Python's weight_mutate_power / weight_replace_rate / weight_max_value).
-    // A small perturbation power plus a hard clamp keep connection weights bounded
-    // so weights cannot random-walk to ever-larger magnitudes across generations.
-    private const double WeightPerturbPower = 0.5;
-    private const double WeightReplaceRate = 0.1;
-    private const double WeightCap = 8.0;
-
-    /// <summary>
-    /// Gets or sets the probability of crossover occurring during reproduction.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// The crossover rate determines how often two parent genomes combine to create offspring versus
-    /// simply cloning and mutating a single parent. Higher rates increase the mixing of genetic material
-    /// but may disrupt successful network structures. Typical values range from 0.5 to 0.8.
-    /// </para>
-    /// <para><b>For Beginners:</b> This controls how often two parent networks combine to create a child network.
-    /// 
-    /// Crossover is like breeding in biology:
-    /// - A value of 0.75 means 75% of new networks come from combining two parent networks
-    /// - The remaining 25% come from copying and mutating a single parent
-    /// 
-    /// During crossover:
-    /// - Parts from two successful networks are combined
-    /// - This helps mix good features from different networks
-    /// - The child gets some connections from each parent
-    /// 
-    /// This balance is important because:
-    /// - Too much crossover can break up good network structures
-    /// - Too little crossover limits how well good features can be combined
-    /// </para>
-    /// </remarks>
-    private T _crossoverRate { get; set; }
-
-    /// <summary>
-    /// Gets or sets the global innovation number counter used to track historical origins of genes.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// The innovation number is a key component of the NEAT algorithm that helps track the historical origin
-    /// of each connection gene. Each new structural innovation (a new connection or node) receives a unique,
-    /// incrementing ID. This historical marking allows NEAT to perform meaningful crossover between different
-    /// network topologies by matching genes with the same origin.
-    /// </para>
-    /// <para><b>For Beginners:</b> This is a counter that gives each new connection or neuron a unique ID number.
-    /// 
-    /// Innovation numbers are important because:
-    /// - They help NEAT know which parts of different networks correspond to each other
-    /// - When two networks reproduce, we need to know which connections match up
-    /// - Each time a new connection or neuron is created, it gets a new innovation number
-    /// 
-    /// Think of it like a family tree that helps track where each feature came from.
-    /// This historical marking is one of the key innovations in NEAT that allows
-    /// networks with different structures to be combined effectively.
-    /// </para>
-    /// </remarks>
+    // Global historical markings.
     private int _innovationNumber;
+    private int _nextNodeId;
 
-    // Issue #1392 perf: scratch HashSet reused across Crossover calls so we
-    // don't allocate a fresh one for every offspring. EvolvePopulation is
-    // single-threaded, so a per-instance buffer is safe; the .Clear() at the
-    // top of Crossover resets it without releasing the underlying entries
-    // table.
-    private readonly HashSet<int> _crossoverSeen = new HashSet<int>();
+    // Innovations of the current generation (paper Section 3.2): the same split / link gets the same
+    // node id and innovation numbers in every genome that makes it during one generation.
+    private readonly Dictionary<int, (int NodeId, int InInnovation, int OutInnovation)> _splitInnovations = new();
+    private readonly Dictionary<(int From, int To), int> _linkInnovations = new();
+
+    private int _generation;
+    private int _nextSpeciesId;
+    private int _populationLastImproved;
+    private T _populationBestFitness;
+    private bool _hasPopulationBest;
+
+    /// <summary>The current population (test access).</summary>
+    internal IReadOnlyList<Genome<T>> Population => _population;
+
+    /// <summary>Number of species after the last speciation.</summary>
+    internal int SpeciesCount => _species.Count;
 
     private const int DefaultInputSize = 10;
     private const int DefaultOutputSize = 1;
     private const int DefaultPopulationSize = 150;
+
+    private sealed class Species
+    {
+        public Species(int id, Genome<T> representative, int generation)
+        {
+            Id = id;
+            Representative = representative;
+            BestFitness = representative.Fitness;
+            LastImproved = generation;
+        }
+
+        public int Id { get; }
+
+        public Genome<T> Representative { get; set; }
+
+        public List<Genome<T>> Members { get; } = new();
+
+        public T BestFitness { get; set; }
+
+        public bool HasBest { get; set; }
+
+        public int LastImproved { get; set; }
+    }
 
     /// <summary>
     /// Initializes a new instance with default settings.
@@ -243,7 +169,9 @@ public partial class NEAT<T> : VectorModelLayoutBase<T>
     /// Initializes a new instance of the <see cref="NEAT{T}"/> class with the specified architecture and evolution parameters.
     /// </summary>
     /// <param name="architecture">The neural network architecture defining input and output sizes.</param>
-    /// <param name="populationSize">The number of individual genomes in the population.</param>
+    /// <param name="populationSize">The number of individual genomes in the population (the paper uses 150).</param>
+    /// <param name="lossFunction">Loss used to turn supervised error into fitness.</param>
+    /// <param name="options">Evolution parameters; defaults are the paper's.</param>
     /// <remarks>
     /// <para><b>For Beginners:</b> This creates a new NEAT system with your chosen settings.</para>
     /// </remarks>
@@ -254,96 +182,48 @@ public partial class NEAT<T> : VectorModelLayoutBase<T>
         : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType))
     {
         options ??= new NEATOptions();
+        options.Validate();
         _options = options;
         Options = _options;
         _populationSize = populationSize;
-        _mutationRate = NumOps.FromDouble(options.MutationRate);
-        _crossoverRate = NumOps.FromDouble(options.CrossoverRate);
-        _innovationNumber = 0;
-        // Deterministic, per-instance evolution RNG. NEAT's selection / crossover /
-        // mutation all draw from this stream; seeding it from the architecture's
-        // RandomSeed makes a NEAT run reproducible (the standard NEAT-Python contract —
-        // every config carries a seed). Without it the evolution drew from the
-        // process-shared RandomHelper.ThreadSafeRandom, whose state advances with
-        // unrelated prior work, so a NEAT invariant could pass in isolation yet flake
-        // when interleaved with other tests. When no seed is set (the production
-        // default) it falls back to the shared RNG, preserving non-reproducible
-        // production behaviour.
+        _populationBestFitness = NumOps.Zero;
         _rng = Architecture.RandomSeed.HasValue
             ? RandomHelper.CreateSeededRandom(Architecture.RandomSeed.Value)
             : RandomHelper.ThreadSafeRandom;
+        _nextNodeId = BiasNodeId + 1;
         _population = InitializePopulation();
     }
 
+    private int BiasNodeId => Architecture.InputSize + Architecture.OutputSize;
+
     /// <summary>
-    /// Initializes the layers of the neural network.
+    /// Initializes the layers of the neural network. NEAT evolves its structure, so there are no fixed layers.
     /// </summary>
-    /// <remarks>
-    /// <para>
-    /// This method is intentionally left empty because NEAT does not use fixed layers like traditional neural networks.
-    /// Instead, NEAT evolves the network structure dynamically through the evolutionary process, adding nodes
-    /// and connections as needed.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method is intentionally empty because NEAT works differently from traditional neural networks.
-    /// 
-    /// In traditional neural networks:
-    /// - You define specific layers (input, hidden, output)
-    /// - Each layer has a fixed number of neurons
-    /// - The connections between layers are predetermined
-    /// 
-    /// In NEAT:
-    /// - Networks don't have fixed layers
-    /// - The structure evolves dynamically
-    /// - Neurons and connections are added gradually through evolution
-    /// 
-    /// This fundamental difference is why this method doesn't need to do anything in NEAT.
-    /// The network structure is defined by the genome, not by predefined layers.
-    /// </para>
-    /// </remarks>
     protected override void InitializeLayers()
     {
-        // NEAT doesn't use fixed layers, so we'll leave this empty
+        // NEAT doesn't use fixed layers.
     }
 
     /// <summary>
-    /// NEAT's parameters are the connection weights of the best genome in the population.
+    /// NEAT's parameters are the connection weights of the best genome.
     /// </summary>
     /// <remarks>
-    /// <para>
-    /// A COMPUTED surface: the weights are not in a field, they are read out of a structure that
-    /// evolves. Declaring a source rather than overriding the fold is what makes the count and the
-    /// vector agree by construction -- both now read this one accessor, where three hand-written
-    /// members were three chances to disagree.
-    /// </para>
-    /// <para>
-    /// The count legitimately CHANGES as the population evolves, and that is not a defect: adding
-    /// or removing a connection is what NEAT does. What must hold is that the count and the vector
-    /// agree at any single instant, which they do because they come from the same source. This is
-    /// stronger than the usual arrangement, where a framework tells you to rebuild the optimizer
-    /// after mutating the parameter set and nothing checks that you did.
-    /// </para>
+    /// A computed surface: the count legitimately changes as the topology evolves, and the count and the
+    /// vector always agree because both read the same genome.
     /// </remarks>
     protected override void RegisterComponents()
     {
         base.RegisterComponents();
         RegisterParameterComponent(new DelegatingParameterSource<T>(
             () => GetBestGenome()?.Connections?.Count ?? 0,
-            () =>
-            {
-                var genome = GetBestGenome();
-                int n = genome?.Connections?.Count ?? 0;
-                var values = new Vector<T>(n);
-                for (int i = 0; i < n; i++) values[i] = (genome ?? throw new InvalidOperationException("genome is null where it is required.")).Connections[i].Weight;
-                return values;
-            },
+            () => new Vector<T>(GetBestGenome()?.Connections.Select(c => c.Weight) ?? Enumerable.Empty<T>()),
             values =>
             {
-                var genome = GetBestGenome();
-                int n = genome?.Connections?.Count ?? 0;
-                for (int i = 0; i < n && i < values.Length; i++)
-                {
-                    (genome ?? throw new InvalidOperationException("genome is null where it is required.")).Connections[i].Weight = values[i];
-                }
+                var connections = GetBestGenome()?.Connections;
+                if (connections is null) return;
+                var weights = values.ToArray();
+                int n = Math.Min(connections.Count, weights.Length);
+                for (int i = 0; i < n; i++) connections[i].Weight = weights[i];
             }));
     }
 
@@ -354,514 +234,508 @@ public partial class NEAT<T> : VectorModelLayoutBase<T>
         => throw new NotSupportedException(
             "NEAT is an evolutionary optimizer and does not expose parameter gradients.");
 
-    // Replaced by the declared parameter source below. Removed under AIDN082.
-
     /// <summary>
-    /// Creates the initial population of genomes with minimal network structures.
+    /// Creates the initial population: every genome is the same minimal network (inputs and bias fully
+    /// connected to the outputs) with the same historical markings and independent random weights.
     /// </summary>
-    /// <returns>A list of initialized genomes.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method creates the initial population of genomes. Each genome starts with a minimal structure
-    /// consisting of only input and output nodes with direct connections between them. This follows the NEAT
-    /// principle of starting with minimal structures and gradually adding complexity through evolution.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method creates the starting population of simple neural networks.
-    /// 
-    /// When NEAT begins:
-    /// - It creates a population of very simple neural networks
-    /// - Each network starts with just input and output neurons
-    /// - Each input neuron is connected directly to each output neuron
-    /// - The connection weights are randomized
-    /// 
-    /// This minimal starting point is important because:
-    /// - It follows the principle of starting simple and growing complexity as needed
-    /// - It doesn't make assumptions about what structure might work best
-    /// - It allows the evolutionary process to discover the right complexity
-    /// 
-    /// As evolution progresses, these simple networks will grow more complex
-    /// by adding neurons and connections where they're beneficial.
-    /// </para>
-    /// </remarks>
     private List<Genome<T>> InitializePopulation()
     {
-        var population = new List<Genome<T>>();
-        for (int i = 0; i < _populationSize; i++)
+        int inputs = Architecture.InputSize;
+        int outputs = Architecture.OutputSize;
+        var sources = Enumerable.Range(0, inputs).Concat(new[] { BiasNodeId }).ToArray();
+
+        // One shared innovation number per initial link, so crossover can line the genomes up.
+        var links = sources.SelectMany(s => Enumerable.Range(0, outputs).Select(o => (From: s, To: inputs + o))).ToArray();
+        int firstInnovation = _innovationNumber;
+        _innovationNumber += links.Length;
+
+        var population = new List<Genome<T>>(_populationSize);
+        for (int p = 0; p < _populationSize; p++)
         {
-            population.Add(CreateInitialGenome());
+            var weights = RandomWeights(links.Length);
+            var genome = new Genome<T>(inputs, outputs);
+            for (int i = 0; i < links.Length; i++)
+            {
+                genome.AddConnection(links[i].From, links[i].To, weights[i], true, firstInnovation + i);
+            }
+
+            population.Add(genome);
         }
 
         return population;
     }
 
-    /// <summary>
-    /// Creates a single initial genome with connections from each input to each output.
-    /// </summary>
-    /// <returns>A newly created genome with minimal structure.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method creates a single genome with a minimal structure. It initializes a network with the specified
-    /// number of input and output nodes, and creates direct connections from each input node to each output node
-    /// with random weights. Each connection is assigned a unique innovation number to track its historical origin.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method creates one simple starting neural network.
-    /// 
-    /// Each initial network:
-    /// - Has the input neurons you specified (for your problem's inputs)
-    /// - Has the output neurons you specified (for your problem's outputs)
-    /// - Connects each input directly to each output
-    /// - Assigns random weights to these connections
-    /// 
-    /// For example, if you have 3 inputs and 2 outputs:
-    /// - You'll have 6 connections (3 inputs × 2 outputs)
-    /// - Each connection gets a random weight between -1 and 1
-    /// - Each connection gets a unique innovation number for tracking
-    /// 
-    /// This simple structure provides a starting point that evolution can build upon,
-    /// adding complexity only where it's beneficial for solving your problem.
-    /// </para>
-    /// </remarks>
-    private Genome<T> CreateInitialGenome()
+    /// <summary>Uniform random weights in [-1, 1), drawn by the engine with one seed from the RNG.</summary>
+    private T[] RandomWeights(int count)
     {
-        var genome = new Genome<T>(Architecture.InputSize, Architecture.OutputSize);
-        for (int i = 0; i < Architecture.InputSize; i++)
-        {
-            for (int j = 0; j < Architecture.OutputSize; j++)
-            {
-                genome.AddConnection(i, Architecture.InputSize + j, RandomWeight(), true, _innovationNumber++);
-            }
-        }
-
-        return genome;
+        if (count == 0) return Array.Empty<T>();
+        return Engine.TensorRandomUniformRange(new[] { count }, NumOps.FromDouble(-1.0), NumOps.One, _rng.Next()).ToArray();
     }
 
     /// <summary>
     /// Evolves the population over a specified number of generations using the provided fitness function.
     /// </summary>
-    /// <param name="fitnessFunction">A function that evaluates the fitness of each genome.</param>
+    /// <param name="fitnessFunction">A function that evaluates the fitness of each genome (higher is better).</param>
     /// <param name="generations">The number of generations to evolve.</param>
     /// <remarks>
-    /// <para>
-    /// This method drives the evolutionary process over multiple generations. For each generation, it evaluates
-    /// the fitness of each genome using the provided fitness function, sorts the population by fitness,
-    /// and creates a new population through selection, crossover, and mutation. Through this process,
-    /// the networks evolve to better solve the specified problem.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method runs the evolutionary process for a specified number of generations.
-    /// 
-    /// The evolution process works like this:
-    /// 
-    /// 1. Evaluate each network:
-    ///    - The provided fitness function tests how well each network performs
-    ///    - Higher fitness scores mean better performance
-    /// 
-    /// 2. Sort networks by fitness:
-    ///    - The best-performing networks are prioritized for reproduction
-    /// 
-    /// 3. Create a new population:
-    ///    - Keep the very best network unchanged (called "elitism")
-    ///    - Create new networks through either:
-    ///      a) Crossover: Combining two parent networks
-    ///      b) Mutation: Copying and modifying a single parent
-    /// 
-    /// 4. Repeat for the specified number of generations
-    /// 
-    /// Each generation should produce slightly better networks as successful
-    /// traits are selected for and new beneficial mutations occur.
-    /// 
-    /// The fitness function you provide is crucial - it's what defines "good performance"
-    /// and guides the entire evolutionary process.
-    /// </para>
+    /// Each generation evaluates every genome, speciates the population, allocates offspring by explicit
+    /// fitness sharing, and breeds the next generation within species.
     /// </remarks>
     public void EvolvePopulation(Func<Genome<T>, T> fitnessFunction, int generations)
     {
+        if (_population.Count == 0) return;
+        SyncHistoricalMarkings();
+
+        // The champion is re-scored under this fitness function so it only survives on merit.
+        if (_champion is not null)
+        {
+            _champion.Fitness = fitnessFunction(_champion);
+        }
+
         for (int gen = 0; gen < generations; gen++)
         {
-            // Evaluate fitness
+            _generation++;
+            _splitInnovations.Clear();
+            _linkInnovations.Clear();
+
             foreach (var genome in _population)
             {
                 genome.Fitness = fitnessFunction(genome);
             }
 
-            // Sort population by fitness (descending)
-            _population.Sort((a, b) =>
+            var fitness = FitnessTensor(_population);
+            UpdateChampion(fitness);
+            Speciate();
+            var offspring = AllocateOffspring();
+            _population = Reproduce(offspring);
+        }
+    }
+
+    /// <summary>Makes the global counters exceed every node id and innovation number in use.</summary>
+    private void SyncHistoricalMarkings()
+    {
+        var all = _population.SelectMany(g => g.Connections).ToList();
+        if (all.Count == 0) return;
+        _innovationNumber = Math.Max(_innovationNumber, all.Max(c => c.Innovation) + 1);
+        _nextNodeId = Math.Max(_nextNodeId, all.Max(c => Math.Max(c.FromNode, c.ToNode)) + 1);
+    }
+
+    private static Tensor<T> FitnessTensor(IReadOnlyList<Genome<T>> genomes)
+        => new Tensor<T>(genomes.Select(g => g.Fitness).ToArray(), new[] { genomes.Count });
+
+    /// <summary>Keeps a copy of the fittest genome evaluated so far under the current fitness function.</summary>
+    private void UpdateChampion(Tensor<T> fitness)
+    {
+        int best = Engine.TensorArgMax(fitness, 0).GetFlat(0);
+        var candidate = _population[best];
+        bool populationImproved = !_hasPopulationBest || NumOps.GreaterThan(candidate.Fitness, _populationBestFitness);
+        if (populationImproved)
+        {
+            _populationBestFitness = candidate.Fitness;
+            _hasPopulationBest = true;
+            _populationLastImproved = _generation;
+        }
+
+        if (_champion is null || NumOps.GreaterThan(candidate.Fitness, _champion.Fitness))
+        {
+            var copy = candidate.Clone();
+            copy.Fitness = candidate.Fitness;
+            _champion = copy;
+        }
+    }
+
+    /// <summary>
+    /// Compatibility distance <c>delta = c1 E / N + c2 D / N + c3 W</c>: E excess genes, D disjoint genes,
+    /// W the mean absolute weight difference of matching genes (disabled genes included), N the gene
+    /// count of the larger genome, or 1 when both are smaller than the normalization threshold.
+    /// </summary>
+    internal T CompatibilityDistance(Genome<T> a, Genome<T> b)
+    {
+        var genesA = ByInnovation(a);
+        var genesB = ByInnovation(b);
+        int maxA = genesA.Count == 0 ? -1 : genesA.Keys.Max();
+        int maxB = genesB.Count == 0 ? -1 : genesB.Keys.Max();
+
+        var matching = genesA.Keys.Where(genesB.ContainsKey).OrderBy(k => k).ToArray();
+        var onlyA = genesA.Keys.Where(k => !genesB.ContainsKey(k)).ToArray();
+        var onlyB = genesB.Keys.Where(k => !genesA.ContainsKey(k)).ToArray();
+        int excess = onlyA.Count(k => k > maxB) + onlyB.Count(k => k > maxA);
+        int disjoint = onlyA.Length + onlyB.Length - excess;
+
+        int threshold = _options.GenomeSizeNormalizationThreshold;
+        int larger = Math.Max(genesA.Count, genesB.Count);
+        double n = genesA.Count < threshold && genesB.Count < threshold ? 1.0 : Math.Max(1, larger);
+
+        T structural = NumOps.FromDouble(
+            (_options.ExcessCoefficient * excess + _options.DisjointCoefficient * disjoint) / n);
+        if (matching.Length == 0) return structural;
+
+        var weightsA = new Tensor<T>(matching.Select(k => genesA[k].Weight).ToArray(), new[] { matching.Length });
+        var weightsB = new Tensor<T>(matching.Select(k => genesB[k].Weight).ToArray(), new[] { matching.Length });
+        T meanDifference = Engine.TensorMean(Engine.TensorAbs(Engine.TensorSubtract(weightsA, weightsB)));
+        return NumOps.Add(structural, NumOps.Multiply(NumOps.FromDouble(_options.WeightDifferenceCoefficient), meanDifference));
+    }
+
+    private static Dictionary<int, Connection<T>> ByInnovation(Genome<T> genome)
+        => genome.Connections.GroupBy(c => c.Innovation).ToDictionary(g => g.Key, g => g.First());
+
+    private bool IsCompatible(Genome<T> a, Genome<T> b)
+        => NumOps.LessThan(CompatibilityDistance(a, b), NumOps.FromDouble(_options.CompatibilityThreshold));
+
+    /// <summary>
+    /// Places every genome in the first species whose representative (a random member of that species
+    /// in the previous generation) is within the compatibility threshold, founding a new species otherwise.
+    /// </summary>
+    private void Speciate()
+    {
+        foreach (var species in _species)
+        {
+            if (species.Members.Count > 0)
             {
-                if (NumOps.GreaterThan(b.Fitness, a.Fitness)) return 1;
-                if (NumOps.GreaterThan(a.Fitness, b.Fitness)) return -1;
-                return 0;
-            });
+                species.Representative = species.Members[_rng.Next(species.Members.Count)];
+            }
 
-            // Create new population — issue #1392 perf: pre-size to the final
-            // capacity so the underlying array doesn't walk the 0→4→8→…
-            // capacity-doubling chain and memcpy on every grow. Population
-            // size is fixed for the lifetime of a NEAT instance.
-            var newPopulation = new List<Genome<T>>(_populationSize);
+            species.Members.Clear();
+        }
 
-            // Elitism: Keep the best individual
-            newPopulation.Add(_population[0]);
-
-            while (newPopulation.Count < _populationSize)
+        foreach (var genome in _population)
+        {
+            var home = _species.FirstOrDefault(s => IsCompatible(genome, s.Representative));
+            if (home is null)
             {
-                if (NumOps.LessThan(NumOps.FromDouble(_rng.NextDouble()), _crossoverRate))
+                home = new Species(_nextSpeciesId++, genome, _generation);
+                _species.Add(home);
+            }
+
+            home.Members.Add(genome);
+        }
+
+        _species.RemoveAll(s => s.Members.Count == 0);
+
+        foreach (var species in _species)
+        {
+            UpdateSpeciesBest(species, Engine.TensorMaxValue(FitnessTensor(species.Members)));
+        }
+    }
+
+    private void UpdateSpeciesBest(Species species, T best)
+    {
+        if (!species.HasBest || NumOps.GreaterThan(best, species.BestFitness))
+        {
+            species.BestFitness = best;
+            species.HasBest = true;
+            species.LastImproved = _generation;
+        }
+    }
+
+    /// <summary>
+    /// Offspring quota of every current species, from explicit fitness sharing. Species that have not
+    /// improved in <see cref="NEATOptions.SpeciesStagnationLimit"/> generations get none; after
+    /// <see cref="NEATOptions.PopulationStagnationLimit"/> generations without population-wide improvement
+    /// only the top two species reproduce.
+    /// </summary>
+    private int[] AllocateOffspring()
+    {
+        var fitness = _species.Select(sp => FitnessTensor(sp.Members)).ToList();
+        var eligible = _species
+            .Select(sp => _generation - sp.LastImproved < _options.SpeciesStagnationLimit)
+            .ToArray();
+        if (_generation - _populationLastImproved >= _options.PopulationStagnationLimit && _species.Count > 2)
+        {
+            var means = Engine.TensorConcatenate(fitness
+                .Select(f => Engine.ReduceMean(f, new[] { 0 }, true)).ToArray(), 0);
+            var top = Engine.TensorArgsort(means, 0, true).ToArray().Take(2).ToArray();
+            eligible = Enumerable.Range(0, _species.Count).Select(i => top.Contains(i)).ToArray();
+        }
+
+        return ShareOffspring(fitness, eligible, _populationSize);
+    }
+
+    /// <summary>
+    /// Explicit fitness sharing (paper Section 3.3): a member's adjusted fitness is f_i / |S|, and each
+    /// eligible species receives offspring in proportion to the sum of its adjusted fitness, which is its
+    /// mean fitness. Fitness is shifted to be non-negative first. Rounding remainders go to the largest
+    /// fractional shares; if no species is eligible, the one with the best mean keeps reproducing.
+    /// </summary>
+    internal static int[] ShareOffspring(IReadOnlyList<Tensor<T>> speciesFitness, bool[] eligible, int populationSize)
+    {
+        var engine = AiDotNetEngine.Current;
+        int s = speciesFitness.Count;
+        var means = engine.TensorConcatenate(speciesFitness
+            .Select(f => engine.ReduceMean(f, new[] { 0 }, true)).ToArray(), 0);
+        var all = engine.TensorConcatenate(speciesFitness.ToArray(), 0);
+        var adjusted = engine.TensorSubtractScalar(means, NonPositivePart(engine.TensorMinValue(all)));
+
+        eligible = (bool[])eligible.Clone();
+        if (!eligible.Any(e => e))
+        {
+            // Never let the whole population go extinct: the best species keeps reproducing.
+            eligible[engine.TensorArgMax(adjusted, 0).GetFlat(0)] = true;
+        }
+
+        T one = Ops.One;
+        T zero = Ops.Zero;
+        var mask = new Tensor<T>(eligible.Select(e => e ? one : zero).ToArray(), new[] { s });
+        var weighted = engine.TensorMultiply(adjusted, mask);
+        T total = engine.TensorSum(weighted);
+        if (!Ops.GreaterThan(total, zero))
+        {
+            weighted = mask;
+            total = engine.TensorSum(mask);
+        }
+
+        var share = engine.TensorMultiplyScalar(engine.TensorDivideScalar(weighted, total), Ops.FromDouble(populationSize));
+        var floor = engine.TensorFloor(share);
+        var counts = floor.Cast<int>().ToArray();
+        int remainder = populationSize - counts.Sum();
+        if (remainder > 0)
+        {
+            var fraction = engine.TensorWhere(mask, engine.TensorSubtract(share, floor), engine.TensorSubtractScalar(mask, one));
+            var order = engine.TensorArgsort(fraction, 0, true).ToArray();
+            int eligibleCount = eligible.Count(e => e);
+            for (int r = 0; r < remainder; r++) counts[order[r % eligibleCount]]++;
+        }
+
+        return counts;
+    }
+
+    // min(x, 0): the amount by which fitness must be shifted up to be non-negative (as a subtrahend).
+    private static T NonPositivePart(T value) => Ops.LessThan(value, Ops.Zero) ? value : Ops.Zero;
+
+    /// <summary>
+    /// Breeds the next generation species by species: the champion of a species with more than
+    /// <see cref="NEATOptions.ChampionSpeciesSize"/> members is copied unchanged, the lowest performers
+    /// are eliminated, and the rest of the species' offspring come from crossover (with an occasional
+    /// interspecies mate) or from cloning, each followed by mutation.
+    /// </summary>
+    private List<Genome<T>> Reproduce(int[] offspring)
+    {
+        var next = new List<Genome<T>>(_populationSize);
+        for (int s = 0; s < _species.Count; s++)
+        {
+            int quota = offspring[s];
+            if (quota <= 0) continue;
+
+            var species = _species[s];
+            var order = Engine.TensorArgsort(FitnessTensor(species.Members), 0, true).ToArray();
+            var ranked = order.Select(i => species.Members[i]).ToList();
+
+            if (species.Members.Count > _options.ChampionSpeciesSize)
+            {
+                next.Add(ranked[0]);
+                quota--;
+            }
+
+            int survivors = Math.Max(1, (int)Math.Ceiling(_options.SurvivalThreshold * ranked.Count));
+            var parents = ranked.Take(survivors).ToList();
+
+            for (int k = 0; k < quota; k++)
+            {
+                Genome<T> child;
+                if (_rng.NextDouble() < _options.CrossoverRate)
                 {
-                    var parent1 = SelectParent();
-                    var parent2 = SelectParent();
-                    var child = Crossover(parent1, parent2);
-                    Mutate(child);
-                    newPopulation.Add(child);
+                    var mother = parents[_rng.Next(parents.Count)];
+                    var father = _rng.NextDouble() < _options.InterspeciesMatingRate && _species.Count > 1
+                        ? RandomOtherSpeciesMember(s)
+                        : parents[_rng.Next(parents.Count)];
+                    child = Crossover(mother, father);
                 }
                 else
                 {
-                    var parent = SelectParent();
-                    var child = parent.Clone();
-                    Mutate(child);
-                    newPopulation.Add(child);
+                    child = parents[_rng.Next(parents.Count)].Clone();
                 }
+
+                Mutate(child);
+                next.Add(child);
             }
-
-            _population = newPopulation;
         }
-    }
 
-    /// <summary>
-    /// Selects a parent genome for reproduction using tournament selection.
-    /// </summary>
-    /// <returns>The selected parent genome.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method implements tournament selection, a common selection method in genetic algorithms.
-    /// It randomly selects a small number of genomes from the population, then returns the one with the
-    /// highest fitness. This process favors fitter individuals while still giving less fit individuals
-    /// a chance to reproduce, maintaining genetic diversity.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method selects a parent network for reproduction, favoring better-performing networks.
-    /// 
-    /// Tournament selection works like this:
-    /// 1. Randomly pick a small group of networks (3 in this case)
-    /// 2. Compare their fitness scores
-    /// 3. Select the best one from this small group
-    /// 
-    /// This approach has advantages:
-    /// - Better networks are more likely to be selected
-    /// - But even lower-performing networks have some chance
-    /// - This maintains diversity while still driving improvement
-    /// 
-    /// Think of it like a small competition where the winner gets to reproduce.
-    /// By not always selecting the absolute best network, we avoid getting
-    /// stuck in a single solution path too early.
-    /// </para>
-    /// </remarks>
-    private Genome<T> SelectParent()
-    {
-        // Tournament selection. Issue #1392 perf: the prior implementation
-        // allocated a fresh List<Genome<T>> and an OrderByDescending LINQ
-        // enumerator on every call. Across a Train run that's ~447 k allocs
-        // (149 children × 50 generations × ~30 Train calls × 2 parents per
-        // crossover). Tournament is fixed-size 3 — pick three random genomes
-        // and keep the running argmax inline. No allocations, no LINQ.
-        const int tournamentSize = 3;
-        int n = _population.Count;
-        var best = _population[_rng.Next(n)];
-        var bestFitness = best.Fitness;
-        for (int i = 1; i < tournamentSize; i++)
+        while (next.Count < _populationSize && _champion is not null)
         {
-            var candidate = _population[_rng.Next(n)];
-            if (NumOps.GreaterThan(candidate.Fitness, bestFitness))
-            {
-                best = candidate;
-                bestFitness = candidate.Fitness;
-            }
+            var filler = _champion.Clone();
+            Mutate(filler);
+            next.Add(filler);
         }
 
-        return best;
+        if (next.Count > _populationSize) next.RemoveRange(_populationSize, next.Count - _populationSize);
+        return next;
     }
 
-    /// <summary>
-    /// Creates a new genome by combining genetic material from two parent genomes.
-    /// </summary>
-    /// <param name="parent1">The first parent genome.</param>
-    /// <param name="parent2">The second parent genome.</param>
-    /// <returns>A new child genome created through crossover.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method implements crossover between two parent genomes to create a child genome. It combines
-    /// connection genes from both parents, with matching genes (those with the same innovation number) being
-    /// inherited from either parent. This allows NEAT to meaningfully combine networks with different topologies
-    /// by utilizing the historical markings provided by innovation numbers.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method creates a new network by combining parts from two parent networks.
-    /// 
-    /// The crossover process:
-    /// 1. Creates a new empty network (the child)
-    /// 2. Looks at all connections from both parents
-    /// 3. Adds each unique connection to the child
-    /// 
-    /// The key to making this work is the innovation number:
-    /// - Each connection has a unique ID number (innovation number)
-    /// - This lets NEAT identify which connections in different networks match
-    /// - When the same connection exists in both parents, only one copy is added to the child
-    /// 
-    /// This process allows NEAT to meaningfully combine networks with different structures,
-    /// which is one of its key advantages over other evolutionary methods.
-    /// </para>
-    /// </remarks>
-    private Genome<T> Crossover(Genome<T> parent1, Genome<T> parent2)
+    private Genome<T> RandomOtherSpeciesMember(int speciesIndex)
     {
-        // Issue #1392 perf: prior implementation used Enumerable.Concat (one
-        // enumerator alloc) and a fresh HashSet per call (rehash table alloc).
-        // Reuse the per-instance _crossoverSeen HashSet and walk both parent
-        // connection lists by index so the JIT can elide bounds checks. Child
-        // connection list is pre-sized to the upper bound (parent1.Count +
-        // parent2.Count) to skip the List capacity-doubling chain in the
-        // common case where most innovations are unique.
-        var p1 = parent1.Connections;
-        var p2 = parent2.Connections;
-        int p1Count = p1.Count;
-        int p2Count = p2.Count;
+        int other = _rng.Next(_species.Count - 1);
+        if (other >= speciesIndex) other++;
+        var members = _species[other].Members;
+        return members[_rng.Next(members.Count)];
+    }
+
+    /// <summary>1 when a is fitter, -1 when b is fitter, 0 when equal.</summary>
+    private static int CompareFitness(Genome<T> a, Genome<T> b)
+        => Ops.GreaterThan(a.Fitness, b.Fitness) ? 1 : Ops.GreaterThan(b.Fitness, a.Fitness) ? -1 : 0;
+
+    /// <summary>
+    /// Crossover by historical markings: matching genes are inherited from either parent at random;
+    /// disjoint and excess genes come from the fitter parent, or from both when fitness is equal. A gene
+    /// disabled in either parent is disabled in the child with probability
+    /// <see cref="NEATOptions.DisableInheritedRate"/>.
+    /// </summary>
+    internal Genome<T> Crossover(Genome<T> parent1, Genome<T> parent2)
+    {
+        int comparison = CompareFitness(parent1, parent2);
+        var fitter = comparison >= 0 ? parent1 : parent2;
+        var other = comparison >= 0 ? parent2 : parent1;
+        var otherGenes = ByInnovation(other);
         var child = new Genome<T>(Architecture.InputSize, Architecture.OutputSize);
-        int upperBound = p1Count + p2Count;
-        if (upperBound > 0)
-        {
-            child.Connections.Capacity = upperBound;
-        }
 
-        var seen = _crossoverSeen;
-        seen.Clear();
-        var childConnections = child.Connections;
-        for (int i = 0; i < p1Count; i++)
+        foreach (var gene in fitter.Connections)
         {
-            var c = p1[i];
-            if (seen.Add(c.Innovation))
+            if (otherGenes.TryGetValue(gene.Innovation, out var match))
             {
-                childConnections.Add(new Connection<T>(c.FromNode, c.ToNode, c.Weight, c.IsEnabled, c.Innovation));
+                var chosen = _rng.NextDouble() < 0.5 ? gene : match;
+                child.AddConnection(chosen.FromNode, chosen.ToNode, chosen.Weight,
+                    InheritEnabled(gene.IsEnabled && match.IsEnabled), gene.Innovation);
+            }
+            else
+            {
+                child.AddConnection(gene.FromNode, gene.ToNode, gene.Weight, InheritEnabled(gene.IsEnabled), gene.Innovation);
             }
         }
-        for (int i = 0; i < p2Count; i++)
+
+        if (comparison == 0)
         {
-            var c = p2[i];
-            if (seen.Add(c.Innovation))
+            var fitterInnovations = new HashSet<int>(fitter.Connections.Select(c => c.Innovation));
+            foreach (var gene in other.Connections.Where(c => !fitterInnovations.Contains(c.Innovation)))
             {
-                childConnections.Add(new Connection<T>(c.FromNode, c.ToNode, c.Weight, c.IsEnabled, c.Innovation));
+                child.AddConnection(gene.FromNode, gene.ToNode, gene.Weight, InheritEnabled(gene.IsEnabled), gene.Innovation);
             }
         }
 
         return child;
     }
 
+    private bool InheritEnabled(bool enabledInParents)
+        => enabledInParents || _rng.NextDouble() >= _options.DisableInheritedRate;
+
     /// <summary>
-    /// Applies random mutations to a genome based on the mutation rate.
+    /// Mutation as in the paper: add-node, add-connection and weight mutation, each with its own
+    /// probability.
     /// </summary>
-    /// <param name="genome">The genome to mutate.</param>
-    /// <remarks>
-    /// <para>
-    /// This method applies various types of mutations to a genome with probability based on the mutation rate.
-    /// Possible mutations include adding a new node (by splitting an existing connection), adding a new connection
-    /// between existing nodes, and modifying connection weights. These mutations allow NEAT to explore different
-    /// network structures and parameters to find better solutions.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method introduces random changes to a network to explore new possibilities.
-    /// 
-    /// NEAT uses three main types of mutations:
-    /// 
-    /// 1. Add Node Mutation:
-    ///    - Takes an existing connection and splits it by adding a new neuron in the middle
-    ///    - The original connection is disabled
-    ///    - Two new connections are created (from source to new node, and from new node to target)
-    ///    - This allows the network to create more complex behaviors
-    /// 
-    /// 2. Add Connection Mutation:
-    ///    - Creates a new connection between two previously unconnected neurons
-    ///    - This allows the network to create new paths for information flow
-    /// 
-    /// 3. Weight Mutation:
-    ///    - Changes the weights of existing connections
-    ///    - This fine-tunes the network behavior without changing its structure
-    /// 
-    /// Each type of mutation happens randomly based on the mutation rate.
-    /// These mutations are how NEAT explores different network structures
-    /// and gradually adds complexity where it's beneficial.
-    /// </para>
-    /// </remarks>
     private void Mutate(Genome<T> genome)
     {
-        // Issue #1392 perf: prior implementation used LINQ Max+Any on every
-        // call, allocating a Func delegate + an enumerator each time. Walk
-        // Connections by index. Add-node case derives the new node id from
-        // an inline scan over (FromNode, ToNode) since the existing
-        // CachedMaxNodeId on Genome covers max(referenced node id,
-        // biasNodeId), which already gives us "first free node id - 1".
-        var connections = genome.Connections;
-        int count = connections.Count;
-
-        if (NumOps.LessThan(NumOps.FromDouble(_rng.NextDouble()), _mutationRate) && count > 0)
-        {
-            // Add new node
-            var connection = connections[_rng.Next(count)];
-
-            // First-free-node-id scan including the bias node — without the
-            // explicit biasNodeId floor below, the first add-node mutation
-            // on an initial genome (where max(FromNode, ToNode) =
-            // InputSize + OutputSize − 1) would produce newNodeId =
-            // InputSize + OutputSize, which collides with biasNodeId.
-            // ActivateGenome writes activations[biasNodeId] = NumOps.One
-            // BEFORE the connection sweep, so any connection accumulating
-            // into this hidden slot would corrupt the bias value — and
-            // every connection targeting it would also read a polluted
-            // pre-activation from the same slot.
-            int biasNodeId = Architecture.InputSize + Architecture.OutputSize;
-            int maxNodeId = biasNodeId;
-            for (int i = 0; i < count; i++)
-            {
-                var c = connections[i];
-                int hi = c.FromNode > c.ToNode ? c.FromNode : c.ToNode;
-                if (hi > maxNodeId) maxNodeId = hi;
-            }
-            int newNodeId = maxNodeId + 1;
-
-            genome.DisableConnection(connection.Innovation);
-            genome.AddConnection(connection.FromNode, newNodeId, NumOps.One, true, _innovationNumber++);
-            genome.AddConnection(newNodeId, connection.ToNode, connection.Weight, true, _innovationNumber++);
-
-            // List grew under us; reload local references for downstream loops
-            connections = genome.Connections;
-            count = connections.Count;
-        }
-
-        if (NumOps.LessThan(NumOps.FromDouble(_rng.NextDouble()), _mutationRate))
-        {
-            // Add new connection
-            int fromNode = _rng.Next(Architecture.InputSize + Architecture.OutputSize);
-            int toNode = _rng.Next(Architecture.InputSize, Architecture.InputSize + Architecture.OutputSize);
-            bool exists = false;
-            for (int i = 0; i < count; i++)
-            {
-                var c = connections[i];
-                if (c.FromNode == fromNode && c.ToNode == toNode)
-                {
-                    exists = true;
-                    break;
-                }
-            }
-            if (!exists)
-            {
-                genome.AddConnection(fromNode, toNode, RandomWeight(), true, _innovationNumber++);
-                connections = genome.Connections;
-                count = connections.Count;
-            }
-        }
-
-        // Mutate weights — index loop so JIT can elide the List<T>.Enumerator
-        // bounds check overhead the foreach pays per step.
-        T perturbPower = NumOps.FromDouble(WeightPerturbPower);
-        T replaceRate = NumOps.FromDouble(WeightReplaceRate);
-        T weightCap = NumOps.FromDouble(WeightCap);
-        T negWeightCap = NumOps.FromDouble(-WeightCap);
-        for (int i = 0; i < count; i++)
-        {
-            if (NumOps.LessThan(NumOps.FromDouble(_rng.NextDouble()), _mutationRate))
-            {
-                var conn = connections[i];
-                // Faithful NEAT weight mutation (Stanley & Miikkulainen 2002 §3.1; the
-                // same scheme as NEAT-Python's weight_mutate_power / weight_replace_rate /
-                // weight_max_value): with the per-connection mutation probability, EITHER
-                // replace the weight with a fresh random value (small replace rate) OR
-                // nudge it by a SMALL perturbation, then CLAMP to a bounded range. The
-                // previous `weight += RandomWeight()` added a full uniform[-1,1] every
-                // time — an UNBOUNDED RANDOM WALK whose variance grows with the number of
-                // perturbations, so weight magnitudes drift without limit across
-                // generations. A small perturbation power plus a hard clamp keep the
-                // weights bounded, matching the paper's bounded-weight evolutionary search.
-                if (NumOps.LessThan(NumOps.FromDouble(_rng.NextDouble()), replaceRate))
-                {
-                    conn.Weight = RandomWeight();
-                }
-                else
-                {
-                    T perturbation = NumOps.Multiply(
-                        NumOps.FromDouble(_rng.NextDouble() * 2 - 1), perturbPower);
-                    conn.Weight = NumOps.Add(conn.Weight, perturbation);
-                }
-                if (NumOps.GreaterThan(conn.Weight, weightCap)) conn.Weight = weightCap;
-                else if (NumOps.LessThan(conn.Weight, negWeightCap)) conn.Weight = negWeightCap;
-            }
-        }
+        if (_rng.NextDouble() < _options.AddNodeRate) AddNodeMutation(genome);
+        if (_rng.NextDouble() < _options.AddConnectionRate) AddConnectionMutation(genome);
+        if (_rng.NextDouble() < _options.WeightMutationRate) MutateWeights(genome);
     }
 
     /// <summary>
-    /// Generates a random weight value for neural network connections.
+    /// Splits a random enabled connection: the old link is disabled, the link into the new node gets
+    /// weight 1 and the link out of it the old weight. The same split in one generation reuses the same
+    /// node id and innovation numbers.
     /// </summary>
-    /// <returns>A random weight value between -1 and 1.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method generates a random weight value between -1 and 1 for use in neural network connections.
-    /// These random weights provide the initial diversity for the evolutionary process and are also used
-    /// during weight mutation to introduce changes to connection strengths.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method creates a random connection weight value between -1 and 1.
-    /// 
-    /// In neural networks:
-    /// - Connections have weight values that determine their strength and effect
-    /// - Positive weights are excitatory (they increase activation)
-    /// - Negative weights are inhibitory (they decrease activation)
-    /// 
-    /// This method is used:
-    /// - When creating initial networks with random weights
-    /// - During mutation to change existing weights
-    /// 
-    /// Starting with random weights gives the evolutionary process diverse
-    /// starting points to work with, increasing the chances of finding good solutions.
-    /// </para>
-    /// </remarks>
-    private T RandomWeight()
+    private void AddNodeMutation(Genome<T> genome)
     {
-        return NumOps.FromDouble(_rng.NextDouble() * 2 - 1);
+        var enabled = genome.Connections.Where(c => c.IsEnabled).ToList();
+        if (enabled.Count == 0) return;
+
+        var connection = enabled[_rng.Next(enabled.Count)];
+        if (!_splitInnovations.TryGetValue(connection.Innovation, out var split))
+        {
+            split = (_nextNodeId++, _innovationNumber++, _innovationNumber++);
+            _splitInnovations[connection.Innovation] = split;
+        }
+
+        if (genome.Connections.Any(c => c.FromNode == split.NodeId || c.ToNode == split.NodeId)) return;
+
+        genome.DisableConnection(connection.Innovation);
+        genome.AddConnection(connection.FromNode, split.NodeId, NumOps.One, true, split.InInnovation);
+        genome.AddConnection(split.NodeId, connection.ToNode, connection.Weight, true, split.OutInnovation);
     }
 
-    // Replaced by the declared parameter source below. Removed under AIDN082.
+    /// <summary>
+    /// Links two previously unconnected nodes (source: any node; target: a hidden or output node) without
+    /// creating a cycle. The same new link in one generation reuses one innovation number.
+    /// </summary>
+    private void AddConnectionMutation(Genome<T> genome)
+    {
+        int inputs = Architecture.InputSize;
+        var hidden = genome.Connections.SelectMany(c => new[] { c.FromNode, c.ToNode })
+            .Where(id => id > BiasNodeId).Distinct().ToList();
+        var targets = Enumerable.Range(inputs, Architecture.OutputSize).Concat(hidden).ToArray();
+        var sources = Enumerable.Range(0, BiasNodeId + 1).Concat(hidden).ToArray();
+        var existing = new HashSet<(int, int)>(genome.Connections.Select(c => (c.FromNode, c.ToNode)));
+
+        for (int attempt = 0; attempt < _options.AddConnectionTries; attempt++)
+        {
+            int from = sources[_rng.Next(sources.Length)];
+            int to = targets[_rng.Next(targets.Length)];
+            bool outputToOutput = from >= inputs && from < BiasNodeId && to < BiasNodeId;
+            if (from == to || outputToOutput || existing.Contains((from, to)) || Reaches(genome, to, from)) continue;
+
+            if (!_linkInnovations.TryGetValue((from, to), out int innovation))
+            {
+                innovation = _innovationNumber++;
+                _linkInnovations[(from, to)] = innovation;
+            }
+
+            genome.AddConnection(from, to, RandomWeights(1)[0], true, innovation);
+            return;
+        }
+    }
+
+    /// <summary>Whether <paramref name="target"/> is reachable from <paramref name="start"/> along any connection.</summary>
+    private static bool Reaches(Genome<T> genome, int start, int target)
+    {
+        var outgoing = genome.Connections.ToLookup(c => c.FromNode, c => c.ToNode);
+        var visited = new HashSet<int>();
+        var stack = new Stack<int>();
+        stack.Push(start);
+        while (stack.Count > 0)
+        {
+            int node = stack.Pop();
+            if (node == target) return true;
+            if (!visited.Add(node)) continue;
+            foreach (int next in outgoing[node]) stack.Push(next);
+        }
+
+        return false;
+    }
 
     /// <summary>
-    /// Predicts output values for input data using the best genome in the population.
+    /// Weight mutation over the whole genome at once: each weight is replaced by a new uniform value with
+    /// probability <see cref="NEATOptions.WeightReplaceRate"/>, otherwise perturbed uniformly by up to
+    /// <see cref="NEATOptions.WeightPerturbPower"/>, then clamped to the weight cap.
     /// </summary>
-    /// <param name="input">The input tensor to process.</param>
-    /// <returns>The output tensor after processing.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method uses the highest-fitness genome in the population to make predictions. It activates the 
-    /// genome's neural network with the provided input data and returns the resulting output activations.
-    /// For batch inputs, it processes each sample independently.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method uses the best evolved network to make predictions.
-    /// 
-    /// When making a prediction:
-    /// - NEAT uses the highest-performing network from the population
-    /// - The input data is fed into this network
-    /// - The network processes the data through its evolved structure
-    /// - The resulting output values are returned
-    /// 
-    /// Unlike traditional neural networks with fixed structures, the network used here
-    /// has evolved its structure through the evolutionary process, potentially developing
-    /// complex and unique connection patterns that solve the problem effectively.
-    /// </para>
-    /// </remarks>
+    private void MutateWeights(Genome<T> genome)
+    {
+        var connections = genome.Connections;
+        int m = connections.Count;
+        if (m == 0) return;
+
+        var shape = new[] { m };
+        T power = NumOps.FromDouble(_options.WeightPerturbPower);
+        T cap = NumOps.FromDouble(_options.WeightCap);
+        var weights = new Tensor<T>(connections.Select(c => c.Weight).ToArray(), shape);
+        var draw = Engine.TensorRandomUniformRange(shape, NumOps.Zero, NumOps.One, _rng.Next());
+        var perturbation = Engine.TensorRandomUniformRange(shape, NumOps.Negate(power), power, _rng.Next());
+        var fresh = Engine.TensorRandomUniformRange(shape, NumOps.FromDouble(-1.0), NumOps.One, _rng.Next());
+        var replace = Engine.TensorLessThan(draw, NumOps.FromDouble(_options.WeightReplaceRate));
+        var mutated = Engine.TensorClamp(
+            Engine.TensorWhere(replace, fresh, Engine.TensorAdd(weights, perturbation)),
+            NumOps.Negate(cap), cap);
+
+        var values = mutated.ToArray();
+        for (int i = 0; i < m; i++) connections[i].Weight = values[i];
+    }
+
+    /// <summary>
+    /// Predicts output values for input data using the best genome.
+    /// </summary>
+    /// <param name="input">A rank-1 [features] or rank-2 [batch, features] tensor.</param>
+    /// <returns>The output activations, with the same rank as the input.</returns>
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
-
-        // Get the best genome (the one with highest fitness)
         var bestGenome = RequireBestGenome();
 
-        // Treat ANY rank-2 input as batched, even when the batch size is 1.
-        // Returning rank-1 for single-sample input was a real bug —
-        // NEAT.Train downstream reads `expectedOutput.Shape[1]`, which throws
-        // IndexOutOfRangeException for rank-1 targets, and EffectiveOutputShape
-        // cached the wrong rank for the test's warm-up Predict path. Per the
-        // implicit `(batch, features)` contract used by every other neural
-        // network in the codebase, output rank should match input rank.
-        //
-        // Validate rank explicitly: NEAT genomes activate over a flat feature
-        // vector, so anything beyond rank-2 (e.g., a stray rank-3 image
-        // tensor or rank-4 video) cannot be unambiguously interpreted as
-        // batched-features and would mis-index in the loop below. Fail
-        // fast at the boundary instead of producing garbage outputs.
         if (input.Shape.Length < 1 || input.Shape.Length > 2)
         {
             throw new ArgumentException(
@@ -869,744 +743,193 @@ public partial class NEAT<T> : VectorModelLayoutBase<T>
                 $"got rank {input.Shape.Length} (shape [{string.Join(",", input.Shape)}]).",
                 nameof(input));
         }
+
         bool isBatch = input.Shape.Length == 2;
-
-        if (isBatch)
-        {
-            // Process each input in the batch
-            int batchSize = input.Shape[0];
-            int featureSize = input.Shape[1];
-
-            // Create output tensor with correct shape
-            var output = TensorAllocator.Rent<T>(new int[] { batchSize, Architecture.OutputSize });
-
-            // Process each sample
-            for (int b = 0; b < batchSize; b++)
-            {
-                // Extract individual input
-                var sampleInput = new Vector<T>(featureSize);
-                for (int f = 0; f < featureSize; f++)
-                {
-                    sampleInput[f] = input[b, f];
-                }
-
-                // Get activations for this sample
-                var activations = ActivateGenome(bestGenome, sampleInput);
-
-                // Store output activations
-                for (int o = 0; o < Architecture.OutputSize; o++)
-                {
-                    output[b, o] = activations[Architecture.InputSize + o];
-                }
-            }
-
-            return output;
-        }
-        else
-        {
-            // Single input
-            // Convert input tensor to vector
-            var inputVector = input.ToVector();
-
-            // Get activations
-            var activations = ActivateGenome(bestGenome, inputVector);
-
-            // Create output tensor
-            var output = TensorAllocator.Rent<T>(new int[] { Architecture.OutputSize });
-            for (int i = 0; i < Architecture.OutputSize; i++)
-            {
-                output[i] = activations[Architecture.InputSize + i];
-            }
-
-            return output;
-        }
+        var batch = isBatch ? input : input.Reshape(new[] { 1, input.Length });
+        var outputs = Outputs(ActivateGenome(bestGenome, batch));
+        return isBatch ? outputs : outputs.Reshape(new[] { Architecture.OutputSize });
     }
 
-    /// <summary>
-    /// Gets the genome with the highest fitness from the population.
-    /// </summary>
-    /// <returns>The best genome in the population.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method sorts the population by fitness in descending order and returns the genome
-    /// with the highest fitness score. If the population hasn't been evaluated yet, it assigns
-    /// a default fitness value to each genome.
-    /// </para>
-    /// <para><b>For Beginners:</b> This finds the top-performing network from the population.
-    /// 
-    /// This method:
-    /// - Sorts all networks based on their fitness scores (performance)
-    /// - Returns the network with the highest score
-    /// - If networks haven't been evaluated yet, it assigns a neutral score
-    /// 
-    /// The returned network is the "champion" of the population - the one that
-    /// has evolved to best solve the problem you're working on.
-    /// </para>
-    /// </remarks>
     /// <summary>The best genome, for paths that cannot proceed without one.</summary>
-    /// <remarks>
-    /// <see cref="GetBestGenome"/> returns null for an unevolved population, which is correct for
-    /// the parameter-count probe that only wants a size. Predicting or reporting metadata genuinely
-    /// needs a genome, and saying so beats an ArgumentOutOfRangeException from an indexer three
-    /// frames deeper.
-    /// </remarks>
     private Genome<T> RequireBestGenome()
         => GetBestGenome()
             ?? throw new InvalidOperationException(
                 "NEAT has no genomes yet. Evolve a population (Train) before predicting or "
                     + "reading genome metadata.");
 
+    /// <summary>
+    /// The champion (fittest genome evaluated under the current fitness function); before any
+    /// evolution, the first genome of the population. Null only when the population is empty.
+    /// </summary>
     private Genome<T>? GetBestGenome()
     {
-        // AN UNEVOLVED POPULATION IS EMPTY, AND THAT IS NOT AN ERROR. This is reached during
-        // ordinary parameter enumeration: RegisterComponents publishes a DelegatingParameterSource
-        // whose count is GetBestGenome()?.Connections?.Count ?? 0, so the registry calls it while
-        // capturing a layout. On a freshly constructed model no generation has run, _population is
-        // empty, and indexing [0] below threw ArgumentOutOfRangeException out of what looks like a
-        // plain "how many parameters do you have" question -- the clone sweep saw it the moment
-        // generated test-scale bounds made NEAT constructible at all.
-        //
-        // The call sites already treat a missing genome as legitimate (?. and ?? 0). This makes the
-        // signature honest about that rather than throwing where they expect null.
-        if (_population.Count == 0) return null;
-
-        // Check if any genomes have fitness set
-        bool anyFitnessSet = _population.Any(g => !NumOps.Equals(g.Fitness, NumOps.Zero));
-
-        // If no fitness values are set, assign default
-        if (!anyFitnessSet)
-        {
-            foreach (var genome in _population)
-            {
-                genome.Fitness = NumOps.One; // Neutral fitness
-            }
-        }
-
-        // Find the genome with highest fitness (O(n) instead of O(n log n) sort)
-        var best = _population[0];
-        for (int i = 1; i < _population.Count; i++)
-        {
-            if (NumOps.GreaterThan(_population[i].Fitness, best.Fitness))
-            {
-                best = _population[i];
-            }
-        }
-
-        return best;
+        if (_champion is not null) return _champion;
+        return _population.Count == 0 ? null : _population[0];
     }
 
     /// <summary>
-    /// Activates a genome's neural network with the given input.
+    /// Activates a genome's network for a whole batch: returns the [batch, nodes] activation matrix,
+    /// indexed by node id (inputs, outputs, bias = 1, hidden nodes).
     /// </summary>
-    /// <param name="genome">The genome to activate.</param>
-    /// <param name="input">The input values.</param>
-    /// <returns>A dictionary mapping node IDs to their activation values.</returns>
     /// <remarks>
-    /// <para>
-    /// This method performs a forward pass through the genome's neural network. It initializes
-    /// input nodes with the provided values, processes connections in a topologically sorted order,
-    /// and applies activation functions to produce the final node activations.
-    /// </para>
-    /// <para><b>For Beginners:</b> This runs input data through the evolved neural network.
-    /// 
-    /// The activation process:
-    /// 1. Sets the input nodes to the provided input values
-    /// 2. Processes connections in the correct order (feed-forward)
-    /// 3. Applies the activation function to each neuron
-    /// 4. Returns all neuron activation values
-    /// 
-    /// This is how a NEAT network processes information, similar to a traditional
-    /// neural network but with the specific connection structure that evolved
-    /// during the evolutionary process.
-    /// </para>
+    /// Nodes are grouped into layers by their longest path from the inputs over enabled connections.
+    /// Each layer is one matrix product with the layer's incoming weights followed by the steepened
+    /// sigmoid, so every hidden activation is squashed before it feeds the next layer.
     /// </remarks>
-    private T[] ActivateGenome(Genome<T> genome, Vector<T> input)
+    internal Tensor<T> ActivateGenome(Genome<T> genome, Tensor<T> inputs)
     {
-        // Issue #1392 perf: switched from Dictionary<int, T> to flat T[] indexed
-        // by node id. NEAT node ids are dense small integers (inputs 0..InputSize-1,
-        // outputs InputSize..InputSize+OutputSize-1, bias = InputSize+OutputSize,
-        // hidden > biasNodeId). The Dictionary form added 2-3 heap allocations per
-        // call (Dictionary instance + internal buckets[] + entries[]) plus hash-
-        // compute + bucket-walk on every node access. With a flat array each
-        // activation is a single contiguous-memory store/load.
-        //
-        // Buffer size = max(node id observed in genome's connections, biasNodeId) + 1.
-        // Indices not referenced by any connection stay at default(T) and are
-        // never queried by callers, so over-provisioning is benign.
-
+        int batch = inputs.Shape[0];
+        int features = inputs.Shape[1];
         int inputSize = Architecture.InputSize;
         int outputSize = Architecture.OutputSize;
-        int biasNodeId = inputSize + outputSize;
-
-        // Sort connections topologically for proper feed-forward activation.
-        // Cached on the genome — weight-only mutations (the dominant case across
-        // the 50 internal generations per Train call) keep the topology
-        // signature unchanged, so the cache hits and skips the O(E²) sort.
-        var sortedConnections = GetOrBuildSortedConnections(genome);
-
-        int maxNodeId = GetOrBuildMaxNodeId(genome, biasNodeId);
-        var activations = new T[maxNodeId + 1];
-
-        // Set input nodes
-        for (int i = 0; i < inputSize; i++)
+        if (features < inputSize)
         {
-            activations[i] = input[i];
+            throw new ArgumentException(
+                $"NEAT expects {inputSize} input features but the input has {features}.", nameof(inputs));
         }
 
-        // Set bias node
-        activations[biasNodeId] = NumOps.One;
+        var enabled = genome.Connections.Where(c => c.IsEnabled).ToList();
+        int nodes = Math.Max(BiasNodeId, enabled.Count == 0 ? 0 : enabled.Max(c => Math.Max(c.FromNode, c.ToNode))) + 1;
+        var depth = NodeDepths(enabled, inputSize, outputSize);
 
-        // Output nodes + every other slot are pre-zeroed by `new T[]`
-        // (default(T) = NumOps.Zero for built-in numeric types) — no
-        // explicit init loop needed, no per-connection ContainsKey gymnastics
-        // since every FromNode/ToNode id is in range by construction of maxNodeId.
+        // Initial activations: inputs, zeroed outputs, the constant bias, zeroed hidden slots.
+        var x = features == inputSize ? inputs : Engine.TensorSlice(inputs, new[] { 0, 0 }, new[] { batch, inputSize });
+        var parts = new List<Tensor<T>> { x };
+        if (outputSize > 0) parts.Add(new Tensor<T>(new[] { batch, outputSize }));
+        var bias = new Tensor<T>(new[] { batch, 1 });
+        Engine.TensorFill(bias, NumOps.One);
+        parts.Add(bias);
+        if (nodes > BiasNodeId + 1) parts.Add(new Tensor<T>(new[] { batch, nodes - BiasNodeId - 1 }));
+        var activations = Engine.TensorConcatenate(parts.ToArray(), 1);
 
-        // Process connections in topological order.
-        foreach (var connection in sortedConnections)
+        T slope = NumOps.FromDouble(_options.SigmoidSlope);
+        foreach (var layer in depth.Where(kv => kv.Value > 0).GroupBy(kv => kv.Value).OrderBy(g => g.Key))
         {
-            if (!connection.IsEnabled) continue;
-            T weightedInput = NumOps.Multiply(activations[connection.FromNode], connection.Weight);
-            activations[connection.ToNode] = NumOps.Add(activations[connection.ToNode], weightedInput);
-        }
+            var members = layer.Select(kv => kv.Key).OrderBy(id => id).ToArray();
+            var position = members.Select((id, i) => (id, i)).ToDictionary(p => p.id, p => p.i);
+            var incoming = enabled
+                .Where(c => position.ContainsKey(c.ToNode) && depth.TryGetValue(c.FromNode, out int d) && d < layer.Key)
+                .ToList();
 
-        // Apply activation function to all non-input nodes the genome actually
-        // references (cached on the genome alongside the sort + max-node-id).
-        var nonInputNodes = GetOrBuildReferencedNonInputNodeIds(genome, inputSize);
-        foreach (var nodeId in nonInputNodes)
-        {
-            activations[nodeId] = ApplySigmoid(activations[nodeId]);
+            var weights = new Tensor<T>(new[] { nodes * members.Length });
+            if (incoming.Count > 0)
+            {
+                var cells = new Tensor<int>(incoming.Select(c => c.FromNode * members.Length + position[c.ToNode]).ToArray(), new[] { incoming.Count });
+                var values = new Tensor<T>(incoming.Select(c => c.Weight).ToArray(), new[] { incoming.Count });
+                weights = Engine.TensorIndexAdd(weights, 0, cells, values);
+            }
+
+            var z = Engine.TensorMatMul(activations, weights.Reshape(new[] { nodes, members.Length }));
+            var squashed = Engine.Sigmoid(Engine.TensorMultiplyScalar(z, slope));
+            var placement = Engine.TensorOneHot<T>(new Tensor<int>(members, new[] { members.Length }), nodes);
+            activations = Engine.TensorAdd(activations, Engine.TensorMatMul(squashed, placement));
         }
 
         return activations;
     }
 
     /// <summary>
-    /// Issue #1392 perf helper: returns the cached topologically-sorted
-    /// connection list for <paramref name="genome"/>, rebuilding only when
-    /// the topology signature changed since the last call.
+    /// Longest-path depth of every node: inputs and bias 0, other nodes 1 + the deepest source. Output
+    /// nodes are always present. A connection that would close a cycle is ignored.
     /// </summary>
-    private List<Connection<T>> GetOrBuildSortedConnections(Genome<T> genome)
+    private Dictionary<int, int> NodeDepths(List<Connection<T>> enabled, int inputSize, int outputSize)
     {
-        int count = genome.Connections.Count;
-        ulong signature = ComputeTopologySignature(genome.Connections);
-        if (genome.CachedSortedConnections != null
-            && genome.CachedTopologySignatureCount == count
-            && genome.CachedTopologySignatureMask == signature)
-        {
-            return genome.CachedSortedConnections;
-        }
-        var sorted = SortConnectionsTopologically(genome);
-        genome.CachedSortedConnections = sorted;
-        genome.CachedTopologySignatureCount = count;
-        genome.CachedTopologySignatureMask = signature;
-        // Invalidate the dependent caches — their content depends on the
-        // connection set, so a topology change forces a rebuild on the next
-        // call.
-        genome.CachedNonInputNodeIds = null;
-        genome.CachedMaxNodeId = -1;
-        return sorted;
-    }
+        var sourcesOf = enabled.ToLookup(c => c.ToNode, c => c.FromNode);
+        var depth = new Dictionary<int, int>();
+        var onStack = new HashSet<int>();
 
-    /// <summary>
-    /// Issue #1392 perf helper: returns max(FromNode, ToNode, biasNodeId)
-    /// across the genome's enabled connections. Cached on the genome so the
-    /// per-call O(E) scan only runs after topology mutations. Used to size
-    /// <see cref="ActivateGenome"/>'s flat activation buffer.
-    /// </summary>
-    private static int GetOrBuildMaxNodeId(Genome<T> genome, int biasNodeId)
-    {
-        if (genome.CachedMaxNodeId >= 0)
+        int Depth(int node)
         {
-            return genome.CachedMaxNodeId;
-        }
-        int max = biasNodeId;
-        var conns = genome.Connections;
-        for (int i = 0; i < conns.Count; i++)
-        {
-            var c = conns[i];
-            if (c.FromNode > max) max = c.FromNode;
-            if (c.ToNode > max) max = c.ToNode;
-        }
-        genome.CachedMaxNodeId = max;
-        return max;
-    }
-
-    /// <summary>
-    /// Issue #1392 perf helper: caches the list of node IDs &gt;= InputSize that
-    /// the sigmoid sweep should touch. Built directly from the connection list
-    /// (any FromNode/ToNode &gt;= InputSize that the genome references) so we
-    /// don't need to materialize a Dictionary first. Invalidated alongside
-    /// <see cref="GetOrBuildSortedConnections"/>.
-    /// </summary>
-    private List<int> GetOrBuildReferencedNonInputNodeIds(Genome<T> genome, int inputSize)
-    {
-        if (genome.CachedNonInputNodeIds != null)
-        {
-            return genome.CachedNonInputNodeIds;
-        }
-        var seen = new HashSet<int>();
-        var list = new List<int>();
-        foreach (var c in genome.Connections)
-        {
-            if (!c.IsEnabled) continue;
-            if (c.FromNode >= inputSize && seen.Add(c.FromNode)) list.Add(c.FromNode);
-            if (c.ToNode >= inputSize && seen.Add(c.ToNode)) list.Add(c.ToNode);
-        }
-        // Also include output nodes (always activated even if no connection
-        // wrote to them, because ActivateGenome zero-initializes the slot
-        // and the sigmoid should still run on the zero value for caller
-        // consistency with the pre-refactor Dictionary behavior).
-        int outputSize = Architecture.OutputSize;
-        for (int i = 0; i < outputSize; i++)
-        {
-            int outNode = inputSize + i;
-            if (seen.Add(outNode)) list.Add(outNode);
-        }
-        // Bias node: the pre-refactor Dictionary implementation set
-        // activations[InputSize+OutputSize] = NumOps.One BEFORE the sigmoid
-        // sweep and then iterated `activations.Keys.Where(k >= InputSize)`,
-        // so the bias slot was overwritten with Sigmoid(1) = ~0.731 by the
-        // end. Preserve that exact behavior here so callers that read the
-        // bias slot from the returned array see the same value they saw
-        // before this refactor.
-        int biasNodeId = inputSize + outputSize;
-        if (seen.Add(biasNodeId)) list.Add(biasNodeId);
-        genome.CachedNonInputNodeIds = list;
-        return list;
-    }
-
-    /// <summary>
-    /// O(N) FNV-1a hash over every connection slot's <c>(FromNode,
-    /// ToNode, IsEnabled)</c> tuple in iteration order. Used together
-    /// with <c>Connections.Count</c> as the cache key for the
-    /// topologically-sorted connection list on <see cref="Genome{T}"/>.
-    /// </summary>
-    /// <remarks>
-    /// Replaces an earlier bitmask-of-enabled-flags signature that
-    /// missed two real edit patterns and let stale cached sorts /
-    /// non-input-node sets / max-node-id leak back to callers:
-    /// <list type="bullet">
-    /// <item>Same-count rewires — swapping a connection's <c>FromNode</c>
-    /// or <c>ToNode</c> for a different node without flipping any
-    /// <c>IsEnabled</c> bit preserved both <c>Count</c> and the bitmask
-    /// → cache hit on the WRONG topology.</item>
-    /// <item>&gt;64-connection aliasing — the bitmask's <c>(i &amp; 63)</c>
-    /// wrap collapsed slots 0/64/128/… onto the same bit, so a flip at
-    /// slot 64 could XOR-cancel an earlier flip at slot 0 and leave the
-    /// mask unchanged.</item>
-    /// </list>
-    /// Weight is deliberately excluded from the signature — weight-only
-    /// mutations are the dominant case across the 50 internal
-    /// generations per public <c>Train</c> call, and we WANT the cached
-    /// topological sort to survive them.
-    /// </remarks>
-    private static ulong ComputeTopologySignature(List<Connection<T>> connections)
-    {
-        // FNV-1a 64-bit hash of every connection slot's
-        // (FromNode, ToNode, IsEnabled) tuple in iteration order. The
-        // earlier ComputeEnabledBitmask only hashed the enabled flags and
-        // would alias same-count rewires/replacements (e.g. swapping a
-        // connection's FromNode preserved both count and enabled-bitmask
-        // → stale cache → wrong activation). Hashing the full tuple
-        // also avoids the >64-connection aliasing the bitmask suffered
-        // once the wrap-around in `(i & 63)` started folding bits.
-        // Connection.Weight is intentionally excluded — weight-only
-        // mutations are the dominant case across the 50 internal
-        // generations per Train call and we WANT the cached topological
-        // sort to survive them.
-        const ulong FnvOffsetBasis = 14695981039346656037UL;
-        const ulong FnvPrime = 1099511628211UL;
-        ulong hash = FnvOffsetBasis;
-        int n = connections.Count;
-        for (int i = 0; i < n; i++)
-        {
-            var c = connections[i];
-            hash ^= (ulong)(uint)c.FromNode;
-            hash *= FnvPrime;
-            hash ^= (ulong)(uint)c.ToNode;
-            hash *= FnvPrime;
-            hash ^= c.IsEnabled ? 1UL : 0UL;
-            hash *= FnvPrime;
-        }
-        return hash;
-    }
-
-    /// <summary>
-    /// Sorts connections in topological order for proper feed-forward activation.
-    /// </summary>
-    /// <param name="genome">The genome containing connections to sort.</param>
-    /// <returns>A list of connections sorted in topological order.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method sorts the connections in a genome to ensure they are processed in the correct
-    /// order during network activation. It creates layers of nodes based on their depth in the network
-    /// and sorts connections accordingly.
-    /// </para>
-    /// <para><b>For Beginners:</b> This determines the correct order to process connections.
-    /// 
-    /// In a neural network:
-    /// - Information flows from input to output
-    /// - Connections must be processed in the correct order
-    /// - Inputs need to be calculated before they can be used
-    /// 
-    /// This method:
-    /// - Figures out which neurons depend on which other neurons
-    /// - Sorts connections so inputs are always processed before outputs
-    /// - Ensures the network processes information in a feed-forward manner
-    /// 
-    /// This is especially important in NEAT since the connection structure
-    /// evolves and isn't fixed in predefined layers.
-    /// </para>
-    /// </remarks>
-    private List<Connection<T>> SortConnectionsTopologically(Genome<T> genome)
-    {
-        // Create a dictionary to track nodes that feed into each node
-        var incomingConnections = new Dictionary<int, List<Connection<T>>>();
-
-        // Populate incoming connections
-        foreach (var conn in genome.Connections)
-        {
-            if (!conn.IsEnabled) continue;
-
-            if (!incomingConnections.ContainsKey(conn.ToNode))
+            if (node < inputSize || node == BiasNodeId) return 0;
+            if (depth.TryGetValue(node, out int known)) return known;
+            onStack.Add(node);
+            int deepest = 0;
+            foreach (int source in sourcesOf[node])
             {
-                incomingConnections[conn.ToNode] = new List<Connection<T>>();
+                if (onStack.Contains(source)) continue;
+                deepest = Math.Max(deepest, Depth(source));
             }
 
-            incomingConnections[conn.ToNode].Add(conn);
+            onStack.Remove(node);
+            depth[node] = deepest + 1;
+            return deepest + 1;
         }
 
-        // Create a dictionary to track processed nodes
-        var processedNodes = new Dictionary<int, bool>();
-
-        // Input nodes don't have incoming connections and are already processed
-        for (int i = 0; i < Architecture.InputSize; i++)
+        for (int i = 0; i < inputSize; i++) depth[i] = 0;
+        depth[BiasNodeId] = 0;
+        foreach (int node in Enumerable.Range(inputSize, outputSize)
+                     .Concat(enabled.SelectMany(c => new[] { c.FromNode, c.ToNode })).Distinct().ToList())
         {
-            processedNodes[i] = true;
+            Depth(node);
         }
 
-        // Sort connections
-        var sortedConnections = new List<Connection<T>>();
-        var sortedSet = new HashSet<int>(); // Track sorted connections by innovation for O(1) lookup
-
-        // Pre-filter enabled connections to avoid repeated enumeration
-        var enabledConnections = genome.Connections.Where(c => c.IsEnabled).ToList();
-        int enabledCount = enabledConnections.Count;
-
-        // Process until all connections are sorted
-        while (sortedConnections.Count < enabledCount)
-        {
-            bool addedConnection = false;
-
-            // Check each enabled connection
-            foreach (var conn in enabledConnections)
-            {
-                // Skip if already in sorted list (O(1) with HashSet)
-                if (sortedSet.Contains(conn.Innovation)) continue;
-
-                // Check if from node is processed
-                if (processedNodes.ContainsKey(conn.FromNode) && processedNodes[conn.FromNode])
-                {
-                    // Add connection to sorted list
-                    sortedConnections.Add(conn);
-                    sortedSet.Add(conn.Innovation);
-
-                    // Mark to node as processed
-                    processedNodes[conn.ToNode] = true;
-
-                    addedConnection = true;
-                }
-            }
-
-            // If no connections were added in this iteration, we might have a cycle
-            if (!addedConnection) break;
-        }
-
-        return sortedConnections;
+        return depth;
     }
 
-    /// <summary>
-    /// Applies the sigmoid activation function to a value.
-    /// </summary>
-    /// <param name="value">The input value.</param>
-    /// <returns>The sigmoid of the input.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method applies the sigmoid activation function (1 / (1 + e^-x)) to the input value.
-    /// Sigmoid squashes input values to the range (0, 1), which is useful for producing
-    /// normalized activation values in the network.
-    /// </para>
-    /// <para><b>For Beginners:</b> This transforms neuron values to a value between 0 and 1.
-    /// 
-    /// The sigmoid function:
-    /// - Takes any input value (positive or negative)
-    /// - Transforms it to a value between 0 and 1
-    /// - Creates a smooth, non-linear response
-    /// 
-    /// This non-linearity is important because:
-    /// - It allows the network to learn complex patterns
-    /// - It prevents the network from just computing weighted sums
-    /// - It gives neurons an "activation threshold" like biological neurons
-    /// 
-    /// Sigmoid is one of several possible activation functions used in neural networks.
-    /// </para>
-    /// </remarks>
-    private T ApplySigmoid(T value)
-    {
-        // Sigmoid function: 1 / (1 + e^-x)
-        T negValue = NumOps.Negate(value);
-        T expNeg = NumOps.Exp(negValue);
-        T denominator = NumOps.Add(NumOps.One, expNeg);
-
-        return NumOps.Divide(NumOps.One, denominator);
-    }
+    /// <summary>The output-node columns of an activation matrix, [batch, outputs].</summary>
+    private Tensor<T> Outputs(Tensor<T> activations)
+        => Engine.TensorSlice(activations, new[] { 0, Architecture.InputSize },
+            new[] { activations.Shape[0], Architecture.OutputSize });
 
     /// <summary>
-    /// Trains the NEAT system using supervised learning data.
+    /// Trains the NEAT system on supervised data: fitness is <c>1 / (loss + 0.01)</c> of the genome's
+    /// predictions, and the population evolves for <see cref="NEATOptions.GenerationsPerTrain"/> generations.
     /// </summary>
-    /// <param name="input">The input training data tensor.</param>
-    /// <param name="expectedOutput">The expected output tensor.</param>
-    /// <remarks>
-    /// <para>
-    /// This method adapts NEAT to work with traditional supervised learning data. It creates a fitness
-    /// function based on the mean squared error between network predictions and expected outputs,
-    /// then evolves the population to minimize this error. This allows NEAT to be used in scenarios
-    /// where traditional supervised learning would be applied.
-    /// </para>
-    /// <para><b>For Beginners:</b> This teaches the NEAT system using example input-output pairs.
-    /// 
-    /// Unlike traditional neural networks that use gradient descent, NEAT learns through evolution:
-    /// 1. It creates a fitness function based on prediction error
-    ///    - Networks that make more accurate predictions get higher fitness scores
-    ///    - Networks with lower error perform better
-    /// 
-    /// 2. It evolves the population for several generations
-    ///    - Better networks reproduce more often
-    ///    - Genetic operators (crossover and mutation) create diversity
-    ///    - The population gradually improves at the task
-    /// 
-    /// This allows NEAT to work with supervised learning data while using its
-    /// evolutionary approach to discover effective network structures.
-    /// </para>
-    /// </remarks>
     protected override bool TryApplyLearningRule(Tensor<T> input, Tensor<T> expectedOutput)
     {
-        // Check if input and output have compatible batch sizes
         if (input.Shape[0] != expectedOutput.Shape[0])
         {
             throw new ArgumentException("Input and expected output must have the same batch size");
         }
 
-        int batchSize = input.Shape[0];
+        var target = expectedOutput.ToVector();
+        T epsilon = NumOps.FromDouble(0.01);
 
-        // Convert input and expected output to a format suitable for the fitness function
-        var trainingData = ExtractTrainingData(input, expectedOutput);
+        T Loss(Genome<T> genome) => LossFunction.CalculateLoss(Outputs(ActivateGenome(genome, input)).ToVector(), target);
+        T Fitness(Genome<T> genome) => NumOps.Divide(NumOps.One, NumOps.Add(Loss(genome), epsilon));
 
-        // Create a fitness function that measures how well each genome performs on the training data
-        T fitnessFunction(Genome<T> genome)
+        EvolvePopulation(Fitness, _options.GenerationsPerTrain);
+
+        var champion = RequireBestGenome();
+        if (champion.Connections.Count > 0 && input.Shape[0] > 0)
         {
-            T totalError = NumOps.Zero;
-
-            // Calculate error for each training example
-            foreach (var (sampleInput, sampleExpected) in trainingData)
-            {
-                // Get actual output from genome
-                var activations = ActivateGenome(genome, sampleInput);
-
-                // Extract predicted values into a vector
-                var predictedVector = new Vector<T>(Architecture.OutputSize);
-                for (int i = 0; i < Architecture.OutputSize; i++)
-                {
-                    int outputNodeId = Architecture.InputSize + i;
-                    predictedVector[i] = activations[outputNodeId];
-                }
-
-                // Use the loss function to calculate error for this sample
-                T sampleLoss = LossFunction.CalculateLoss(predictedVector, sampleExpected);
-                totalError = NumOps.Add(totalError, sampleLoss);
-            }
-
-            // Calculate average loss across all samples
-            T averageLoss = NumOps.Divide(totalError, NumOps.FromDouble(batchSize));
-
-            // Issue #1392 perf fix: removed the inline LastLoss assignment that
-            // previously fired here gated on `genome == _population.OrderByDescending
-            // (g => g.Fitness).FirstOrDefault()`. That branch had two problems:
-            //
-            // 1. Perf: it ran `OrderByDescending` on the entire population for
-            //    EVERY genome's fitness eval, giving O(N²) work per generation
-            //    (N=150 default → 22,500 fitness-compare + allocations per
-            //    generation × 50 generations × 30 Train calls = ~34M ops just
-            //    for picking the best, before any actual genome activation).
-            //    On a tiny tabular input this dominated the per-Train wall time
-            //    and pushed Training_ShouldReduceLoss past the 120 s CI budget.
-            //
-            // 2. Correctness: the reference-equality probe `genome == best`
-            //    matched the PRE-EVALUATION best (Fitness values from the
-            //    previous generation) which is essentially random for the
-            //    current generation. The post-evolution recompute below
-            //    (lines 1130+) does the work properly by re-evaluating the
-            //    actual post-generation best genome, so the inline
-            //    LastLoss assignment was already dead code.
-            //
-            // Net: deleting the branch is pure speedup with no behavior change.
-
-            // Convert loss to fitness (higher is better, so invert loss)
-            // Add small constant to avoid division by zero
-            T fitness = NumOps.Divide(NumOps.One, NumOps.Add(averageLoss, NumOps.FromDouble(0.01)));
-
-            return fitness;
-        }
-
-        // Evolve the population for multiple generations
-        // The number of generations can be adjusted based on the problem complexity
-        int generations = 50;
-        EvolvePopulation(fitnessFunction, generations);
-
-        // Re-evaluate the post-evolution best genome and record its loss
-        // as LastLoss. The fitness-function-side LastLoss assignment uses
-        // a reference-equality probe against the pre-generation best,
-        // which silently misses the post-evolution best when the
-        // population reshuffles (every Train call after the first hit
-        // this — LastLoss stayed at its pre-Train value or NumOps.Zero,
-        // producing the misleading "step 1=0.000000, step N=0.000000"
-        // failure on LossStrictlyDecreasesOnMemorizationTask). Recompute
-        // here so the public Train contract surfaces a real per-call loss.
-        var postBest = RequireBestGenome();
-        if (postBest.Connections.Count > 0 && trainingData.Count > 0)
-        {
-            T totalErr = NumOps.Zero;
-            foreach (var (sampleInput, sampleExpected) in trainingData)
-            {
-                var act = ActivateGenome(postBest, sampleInput);
-                var pred = new Vector<T>(Architecture.OutputSize);
-                for (int i = 0; i < Architecture.OutputSize; i++)
-                {
-                    int outputNodeId = Architecture.InputSize + i;
-                    // ActivateGenome's flat array is sized to max(node id,
-                    // biasNodeId); output node ids are guaranteed in range
-                    // since biasNodeId = InputSize + OutputSize > any output id.
-                    pred[i] = act[outputNodeId];
-                }
-                totalErr = NumOps.Add(totalErr, LossFunction.CalculateLoss(pred, sampleExpected));
-            }
-            LastLoss = NumOps.Divide(totalErr, NumOps.FromDouble(trainingData.Count));
+            LastLoss = Loss(champion);
         }
 
         return true;
     }
 
     /// <summary>
-    /// Extracts training data pairs from input and expected output tensors.
-    /// </summary>
-    /// <param name="input">The input training data tensor.</param>
-    /// <param name="expectedOutput">The expected output tensor.</param>
-    /// <returns>A list of input-output vector pairs.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method converts tensor-based training data into a list of vector pairs that can be
-    /// more easily processed by the NEAT algorithm. Each pair consists of an input vector and
-    /// its corresponding expected output vector.
-    /// </para>
-    /// <para><b>For Beginners:</b> This converts tensor-based training data into a format NEAT can use.
-    /// 
-    /// The conversion process:
-    /// 1. Takes the tensor-based input and output data
-    /// 2. Extracts each individual training example
-    /// 3. Creates pairs of (input, expected output) vectors
-    /// 4. Returns a list of these pairs for the fitness function to use
-    /// 
-    /// This preprocessing step allows NEAT to work with the same types of
-    /// training data used by traditional neural networks, making it more
-    /// versatile for different applications.
-    /// </para>
-    /// </remarks>
-    private List<(Vector<T> input, Vector<T> expected)> ExtractTrainingData(Tensor<T> input, Tensor<T> expectedOutput)
-    {
-        int batchSize = input.Shape[0];
-        int inputFeatures = input.Shape[1];
-        int outputFeatures = expectedOutput.Shape[1];
-
-        var trainingData = new List<(Vector<T> input, Vector<T> expected)>(batchSize);
-
-        for (int b = 0; b < batchSize; b++)
-        {
-            // Extract input vector
-            var inputVector = new Vector<T>(inputFeatures);
-            for (int i = 0; i < inputFeatures; i++)
-            {
-                inputVector[i] = input[b, i];
-            }
-
-            // Extract expected output vector
-            var expectedVector = new Vector<T>(outputFeatures);
-            for (int o = 0; o < outputFeatures; o++)
-            {
-                expectedVector[o] = expectedOutput[b, o];
-            }
-
-            // Add pair to training data
-            trainingData.Add((inputVector, expectedVector));
-        }
-
-        return trainingData;
-    }
-
-    /// <summary>
     /// Gets metadata about the NEAT model.
     /// </summary>
-    /// <returns>A ModelMetaData object containing information about the NEAT model.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method returns comprehensive metadata about the NEAT model, including its architecture,
-    /// evolutionary parameters, and population statistics. This information is useful for model
-    /// management, tracking experiments, and reporting results.
-    /// </para>
-    /// <para><b>For Beginners:</b> This provides detailed information about your NEAT system.
-    /// 
-    /// The metadata includes:
-    /// - What this model is and what it does
-    /// - Population size and evolutionary parameters
-    /// - Statistics about the current population
-    /// - Information about the best-performing network
-    /// 
-    /// This information is useful for:
-    /// - Tracking your experiments
-    /// - Comparing different NEAT runs
-    /// - Documenting your work
-    /// - Understanding the evolved solution
-    /// </para>
-    /// </remarks>
     public override ModelMetadata<T> GetModelMetadata()
     {
-        // Get the best genome
         var bestGenome = RequireBestGenome();
 
-        // Count average number of connections and nodes in the population
         double avgConnections = _population.Average(g => g.Connections.Count);
         int maxConnections = _population.Max(g => g.Connections.Count);
-
-        // Count nodes by finding the highest node ID in each genome
         var nodeCounts = _population.Select(g =>
             g.Connections.Any() ?
                 g.Connections.Max(c => Math.Max(c.FromNode, c.ToNode)) + 1 :
-                Architecture.InputSize + Architecture.OutputSize
-        );
-        double avgNodes = nodeCounts.Average();
-        int maxNodes = nodeCounts.Max();
+                Architecture.InputSize + Architecture.OutputSize).ToList();
 
         return new ModelMetadata<T>
         {
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "PopulationSize", _populationSize },
-                { "MutationRate", NumOps.ToDouble(_mutationRate) },
-                { "CrossoverRate", NumOps.ToDouble(_crossoverRate) },
+                { "CrossoverRate", _options.CrossoverRate },
+                { "WeightMutationRate", _options.WeightMutationRate },
+                { "AddNodeRate", _options.AddNodeRate },
+                { "AddConnectionRate", _options.AddConnectionRate },
+                { "CompatibilityThreshold", _options.CompatibilityThreshold },
+                { "SpeciesCount", _species.Count },
+                { "Generation", _generation },
                 { "InnovationNumber", _innovationNumber },
                 { "AverageConnections", avgConnections },
                 { "MaxConnections", maxConnections },
-                { "AverageNodes", avgNodes },
-                { "MaxNodes", maxNodes },
+                { "AverageNodes", nodeCounts.Average() },
+                { "MaxNodes", nodeCounts.Max() },
                 { "BestGenomeFitness", Convert.ToDouble(bestGenome.Fitness) },
                 { "BestGenomeConnections", bestGenome.Connections.Count },
                 { "BestGenomeEnabledConnections", bestGenome.Connections.Count(c => c.IsEnabled) }
@@ -1615,139 +938,40 @@ public partial class NEAT<T> : VectorModelLayoutBase<T>
         };
     }
 
-    // Replaced by the declared parameter source below. Removed under AIDN082.
-
     /// <summary>
     /// Gets named activations from the best genome's network when processing input.
     /// </summary>
     public override Dictionary<string, Tensor<T>> GetNamedLayerActivations(Tensor<T> input)
     {
         var bestGenome = RequireBestGenome();
-        var inputVector = input.ToVector();
-        var activations = ActivateGenome(bestGenome, inputVector);
-
-        var result = new Dictionary<string, Tensor<T>>();
-
+        var matrix = ActivateGenome(bestGenome, input.Reshape(new[] { 1, input.Length }));
+        int nodes = matrix.Shape[1];
+        var activations = matrix.Reshape(new[] { nodes });
         int inputSize = Architecture.InputSize;
         int outputSize = Architecture.OutputSize;
-        int biasNodeId = inputSize + outputSize;
 
-        // Issue #1392 perf: ActivateGenome now returns a flat T[] sized to
-        // max(referenced node id, biasNodeId) + 1, so input + output + bias
-        // slots are guaranteed in range. The ContainsKey gymnastics from the
-        // Dictionary era are unnecessary — read straight by index.
-
-        var inputActivation = new Tensor<T>(new int[] { inputSize });
-        for (int i = 0; i < inputSize; i++)
+        var result = new Dictionary<string, Tensor<T>>
         {
-            inputActivation[i] = activations[i];
-        }
-        result["InputNodes"] = inputActivation;
+            ["InputNodes"] = Engine.TensorSlice(activations, new[] { 0 }, new[] { inputSize }),
+            ["OutputNodes"] = Engine.TensorSlice(activations, new[] { inputSize }, new[] { outputSize })
+        };
 
-        var outputActivation = new Tensor<T>(new int[] { outputSize });
-        for (int i = 0; i < outputSize; i++)
+        var hidden = bestGenome.Connections.Where(c => c.IsEnabled)
+            .SelectMany(c => new[] { c.FromNode, c.ToNode })
+            .Where(id => id > BiasNodeId && id < nodes)
+            .Distinct().OrderBy(id => id).ToArray();
+        if (hidden.Length > 0)
         {
-            outputActivation[i] = activations[inputSize + i];
-        }
-        result["OutputNodes"] = outputActivation;
-
-        // Hidden nodes: walk the genome's cached non-input-node-id list and
-        // pick out the entries beyond the bias slot. Sorted ascending by id
-        // for stable result ordering, matching what the prior OrderBy(k => k)
-        // chain produced.
-        var nonInputNodeIds = GetOrBuildReferencedNonInputNodeIds(bestGenome, inputSize);
-        var hiddenNodes = new List<int>();
-        foreach (var nodeId in nonInputNodeIds)
-        {
-            if (nodeId > biasNodeId) hiddenNodes.Add(nodeId);
-        }
-        hiddenNodes.Sort();
-
-        if (hiddenNodes.Count > 0)
-        {
-            var hiddenActivation = new Tensor<T>(new int[] { hiddenNodes.Count });
-            for (int i = 0; i < hiddenNodes.Count; i++)
-            {
-                hiddenActivation[i] = activations[hiddenNodes[i]];
-            }
-            result["HiddenNodes"] = hiddenActivation;
+            result["HiddenNodes"] = Engine.TensorIndexSelect(activations, new Tensor<int>(hidden, new[] { hidden.Length }), 0);
         }
 
         return result;
     }
 
     /// <summary>
-    /// Serializes NEAT-specific data to a binary writer.
-    /// </summary>
-    /// <param name="writer">The binary writer to write to.</param>
-    /// <remarks>
-    /// <para>
-    /// This method saves the state of the NEAT model to a binary stream. It serializes the
-    /// evolutionary parameters, innovation number, and all genomes in the population, allowing
-    /// the complete state to be restored later.
-    /// </para>
-    /// <para><b>For Beginners:</b> This saves the complete state of your NEAT system to a file.
-    /// 
-    /// When saving the NEAT model:
-    /// - Population size, mutation rate, and crossover rate are saved
-    /// - The current innovation number is saved
-    /// - Every genome in the population is saved with all its connections
-    /// 
-    /// This allows you to:
-    /// - Save your progress and continue evolution later
-    /// - Share evolved populations with others
-    /// - Keep records of particularly successful runs
-    /// - Deploy evolved networks in applications
-    /// </para>
-    /// </remarks>
-
-
-    /// <summary>
-    /// Deserializes NEAT-specific data from a binary reader.
-    /// </summary>
-    /// <param name="reader">The binary reader to read from.</param>
-    /// <remarks>
-    /// <para>
-    /// This method loads the state of a previously saved NEAT model from a binary stream. It restores
-    /// the evolutionary parameters, innovation number, and all genomes in the population, allowing
-    /// evolution to continue from exactly where it left off.
-    /// </para>
-    /// <para><b>For Beginners:</b> This loads a complete NEAT system from a saved file.
-    /// 
-    /// When loading the NEAT model:
-    /// - Population size, mutation rate, and crossover rate are restored
-    /// - The innovation number is restored
-    /// - Every genome in the population is recreated with all its connections
-    /// 
-    /// This lets you:
-    /// - Continue evolution from where you left off
-    /// - Use previously evolved populations
-    /// - Compare or combine results from different runs
-    /// </para>
-    /// </remarks>
-
-
-    /// <summary>
     /// Checks if the NEAT model is ready to make predictions.
     /// </summary>
-    /// <returns>True if the model is ready; otherwise, false.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method checks if the NEAT model has a population with at least one genome that can be
-    /// used for making predictions. It's useful for determining if the model has been properly
-    /// initialized and evolved.
-    /// </para>
-    /// <para><b>For Beginners:</b> This checks if your NEAT system is ready to use.
-    /// 
-    /// It verifies that:
-    /// - The population exists
-    /// - There is at least one genome in the population
-    /// - At least one genome has connections that can process inputs
-    /// 
-    /// This is helpful for error checking before trying to use the model
-    /// for predictions or continuing evolution.
-    /// </para>
-    /// </remarks>
+    /// <returns>True if the model has at least one genome with connections; otherwise, false.</returns>
     public bool IsReadyToPredict()
     {
         return _population != null &&
