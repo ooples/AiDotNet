@@ -59,7 +59,7 @@ public partial class MatrixProfileDetector<T> : AnomalyDetectorBase<T>
     private Vector<T>? _matrixProfile;
     [Buffer]
     private Vector<T>? _trainingValues;
-    private double _trainingChecksum;
+    private T _trainingChecksum;
 
     /// <summary>
     /// Gets the subsequence length.
@@ -123,19 +123,13 @@ public partial class MatrixProfileDetector<T> : AnomalyDetectorBase<T>
         }
 
         // Extract values
-        var trainingValuesD = new double[n];
-        double checksum = 0;
-        for (int i = 0; i < n; i++)
-        {
-            trainingValuesD[i] = NumOps.ToDouble(X[i, 0]);
-            checksum += trainingValuesD[i] * (i + 1);
-        }
-        _trainingChecksum = checksum;
-        _trainingValues = new Vector<T>(trainingValuesD.Select(v => NumOps.FromDouble(v)));
+        var engine = Engine;
+        var series = engine.Reshape(AnomalyTensorOps.ToTensor(X), new[] { n });
+        _trainingChecksum = Checksum(series);
+        _trainingValues = series.ToVector();
 
-        // Compute Matrix Profile using STOMP algorithm (simplified)
-        var matrixProfileD = ComputeMatrixProfile(trainingValuesD);
-        _matrixProfile = new Vector<T>(matrixProfileD.Select(v => NumOps.FromDouble(v)));
+        // Compute Matrix Profile (all-pairs z-normalized subsequence distances)
+        _matrixProfile = ComputeMatrixProfile(series).ToVector();
 
         // Calculate scores for training data to set threshold
         var trainingScores = ScoreAnomaliesInternal(X);
@@ -144,79 +138,39 @@ public partial class MatrixProfileDetector<T> : AnomalyDetectorBase<T>
         _isFitted = true;
     }
 
-    private double[] ComputeMatrixProfile(double[] values)
+    // sum_i values[i] * (i + 1), identifying the training series.
+    private T Checksum(Tensor<T> series)
     {
-        int n = values.Length;
-        int m = _subsequenceLength;
-        int profileLength = n - m + 1;
+        var engine = Engine;
+        int n = series.Length;
+        return engine.TensorSum(engine.TensorMultiply(series, engine.TensorArange<T>(1, n + 1, 1)));
+    }
 
-        var profile = new double[profileLength];
-        for (int i = 0; i < profileLength; i++)
-        {
-            profile[i] = double.MaxValue;
-        }
+    // The z-normalized subsequences of length m ([n - m + 1, m]); population std floored at 1e-10.
+    private Tensor<T> NormalizedSubsequences(Tensor<T> series)
+    {
+        var engine = Engine;
+        var windows = engine.TensorUnfold(series, 0, _subsequenceLength, 1);
+        var (std, mean) = engine.TensorStdMean(windows, new[] { 1 }, 0, false);
+        var flooredStd = engine.TensorMax(std, NumOps.FromDouble(1e-10));
+        return AnomalyTensorOps.DivideColumn(engine.TensorSubtract(windows,
+            AnomalyTensorOps.BroadcastColumn(mean, _subsequenceLength)), flooredStd);
+    }
 
-        // Compute means and standard deviations for all subsequences
-        var means = new double[profileLength];
-        var stds = new double[profileLength];
+    private Tensor<T> ComputeMatrixProfile(Tensor<T> series)
+    {
+        var engine = Engine;
+        var normalized = NormalizedSubsequences(series);
+        int profileLength = normalized.Shape[0];
 
-        for (int i = 0; i < profileLength; i++)
-        {
-            double sum = 0, sumSq = 0;
-            for (int j = 0; j < m; j++)
-            {
-                double v = values[i + j];
-                sum += v;
-                sumSq += v * v;
-            }
-            means[i] = sum / m;
-            double variance = sumSq / m - means[i] * means[i];
-            stds[i] = Math.Sqrt(Math.Max(0, variance));
-            if (stds[i] < 1e-10) stds[i] = 1e-10;
-        }
-
-        // Compute distance profile for each starting position
-        for (int i = 0; i < profileLength; i++)
-        {
-            // Extract and normalize query subsequence
-            var query = new double[m];
-            for (int j = 0; j < m; j++)
-            {
-                query[j] = (values[i + j] - means[i]) / stds[i];
-            }
-
-            // Compute distances to all other subsequences
-            for (int j = 0; j < profileLength; j++)
-            {
-                // Skip exclusion zone
-                if (Math.Abs(i - j) <= _exclusionZone)
-                {
-                    continue;
-                }
-
-                // Compute normalized Euclidean distance
-                double dist = 0;
-                for (int k = 0; k < m; k++)
-                {
-                    double normalizedK = (values[j + k] - means[j]) / stds[j];
-                    double diff = query[k] - normalizedK;
-                    dist += diff * diff;
-                }
-                dist = Math.Sqrt(dist);
-
-                // Update matrix profile
-                if (dist < profile[i])
-                {
-                    profile[i] = dist;
-                }
-                if (dist < profile[j])
-                {
-                    profile[j] = dist;
-                }
-            }
-        }
-
-        return profile;
+        // Nearest-neighbour distance of every subsequence, skipping the exclusion zone |i - j| <= zone
+        // (MaxValue when every other subsequence is excluded)
+        var distances = AnomalyTensorOps.PairwiseDistances(normalized, normalized);
+        var ones = Tensor<T>.CreateOnes(new[] { profileLength, profileLength });
+        int zone = Math.Min(_exclusionZone, profileLength);
+        var band = engine.TensorSubtract(engine.TensorTril(ones, zone), engine.TensorTril(ones, -zone - 1));
+        var excluded = engine.TensorEqScalar(band, NumOps.One);
+        return engine.TensorAmin(engine.TensorMaskedFill(distances, excluded, NumOps.MaxValue), new[] { 1 }, false);
     }
 
     /// <inheritdoc/>
@@ -238,11 +192,8 @@ public partial class MatrixProfileDetector<T> : AnomalyDetectorBase<T>
         }
 
         int n = X.Rows;
-        var values = new double[n];
-        for (int i = 0; i < n; i++)
-        {
-            values[i] = NumOps.ToDouble(X[i, 0]);
-        }
+        var engine = Engine;
+        var values = engine.Reshape(AnomalyTensorOps.ToTensor(X), new[] { n });
 
         // For same data as training, use precomputed profile
         var trainingValues = _trainingValues;
@@ -252,90 +203,57 @@ public partial class MatrixProfileDetector<T> : AnomalyDetectorBase<T>
         }
 
         // Check if this is the same data as training using length and checksum
-        bool isSameData = false;
-        if (n == trainingValues.Length)
-        {
-            double checksum = 0;
-            for (int i = 0; i < n; i++)
-            {
-                checksum += values[i] * (i + 1);
-            }
-            // Allow small floating point tolerance in checksum comparison
-            isSameData = Math.Abs(checksum - _trainingChecksum) < 1e-6;
-        }
+        // (allowing a small floating point tolerance in the checksum comparison)
+        bool isSameData = n == trainingValues.Length
+            && NumOps.LessThan(NumOps.Abs(NumOps.Subtract(Checksum(values), _trainingChecksum)), NumOps.FromDouble(1e-6));
 
+        int m = _subsequenceLength;
+        T scale = NumOps.FromDouble(2 * Math.Sqrt(m));
+        T one = NumOps.One;
         if (isSameData)
+        {
+            var matrixProfile = _matrixProfile;
+            if (matrixProfile == null)
             {
-                var matrixProfile = _matrixProfile;
-                if (matrixProfile == null)
-                {
-                    throw new InvalidOperationException("Model not properly fitted.");
-                }
+                throw new InvalidOperationException("Model not properly fitted.");
+            }
 
-                // Return profile-based scores.
-                // For each time point, use the MAXIMUM profile value across all
-                // subsequences that contain that point. Also add a point-level
-                // value deviation signal to disambiguate points within the same
-                // high-discord subsequence (e.g., the spike vs. adjacent normal values).
-                var scores = new Vector<T>(n);
-                int m = _subsequenceLength;
-                int profileLength = n - m + 1;
+            // Return profile-based scores.
+            // For each time point, use the MAXIMUM profile value across all
+            // subsequences that contain that point (at least 0). Also add a point-level
+            // value deviation signal to disambiguate points within the same
+            // high-discord subsequence (e.g., the spike vs. adjacent normal values).
+            var padding = Tensor<T>.CreateZeros(new[] { Math.Max(m - 1, 1) });
+            var padded = m > 1
+                ? engine.TensorConcatenate(new[] { padding, matrixProfile.AsTensor(), padding }, 0)
+                : matrixProfile.AsTensor();
+            var maxProfileValue = engine.TensorMax(
+                engine.ReduceMax(engine.TensorUnfold(padded, 0, m, 1), new[] { 1 }, false), NumOps.Zero);
 
-                // Compute global mean and std for value deviation scoring
-                double globalMean = 0;
-                for (int i = 0; i < n; i++)
-                {
-                    globalMean += values[i];
-                }
-                globalMean /= n;
+            // Profile component: normalized discord distance
+            var profileScore = engine.TensorDivideScalar(maxProfileValue, scale);
 
-                double globalVar = 0;
-                for (int i = 0; i < n; i++)
-                {
-                    double diff = values[i] - globalMean;
-                    globalVar += diff * diff;
-                }
-                double globalStd = Math.Sqrt(globalVar / n);
-                if (globalStd < 1e-10) globalStd = 1.0;
+            // Value deviation component: how extreme this specific point is (global population std,
+            // 1 when below 1e-10). This disambiguates the actual anomaly point from adjacent normal
+            // points that share the same high-discord subsequence.
+            var (globalStd, globalMean) = engine.TensorStdMean(values, new[] { 0 }, 0, true);
+            var floorMask = engine.TensorLessThan(globalStd, NumOps.FromDouble(1e-10));
+            var safeStd = engine.TensorWhere(floorMask, Tensor<T>.CreateOnes(new[] { 1 }), globalStd);
+            var valueDeviation = engine.TensorDivide(
+                engine.TensorAbs(engine.TensorSubtract(values, engine.TensorBroadcastTo(globalMean, new[] { n }))),
+                engine.TensorBroadcastTo(safeStd, new[] { n }));
 
-                for (int i = 0; i < n; i++)
-                {
-                    double maxProfileValue = 0;
-
-                    // Find all subsequences that contain point i
-                    int subStart = Math.Max(0, i - m + 1);
-                    int subEnd = Math.Min(i, profileLength - 1);
-
-                    for (int s = subStart; s <= subEnd; s++)
-                    {
-                        double mpVal = NumOps.ToDouble(matrixProfile[s]);
-                        if (mpVal > maxProfileValue)
-                        {
-                            maxProfileValue = mpVal;
-                        }
-                    }
-
-                    // Profile component: normalized discord distance
-                    double profileScore = maxProfileValue / (2 * Math.Sqrt(m));
-
-                    // Value deviation component: how extreme this specific point is.
-                    // This disambiguates the actual anomaly point from adjacent normal
-                    // points that share the same high-discord subsequence.
-                    double valueDeviation = Math.Abs(values[i] - globalMean) / globalStd;
-
-                    // Combined score (weighted sum)
-                    double score = profileScore + ValueDeviationWeight * valueDeviation;
-                    scores[i] = NumOps.FromDouble(Math.Min(score, 1.0));
-                }
-
-                return scores;
+            // Combined score (weighted sum), at most 1
+            var score = engine.TensorAdd(profileScore,
+                engine.TensorMultiplyScalar(valueDeviation, NumOps.FromDouble(ValueDeviationWeight)));
+            return engine.TensorMin(score, one).ToVector();
         }
 
         // For new data, compute distances to training subsequences
         return ComputeNewDataScores(values);
     }
 
-    private Vector<T> ComputeNewDataScores(double[] values)
+    private Vector<T> ComputeNewDataScores(Tensor<T> values)
     {
         var trainingValues = _trainingValues;
         if (trainingValues == null)
@@ -343,81 +261,28 @@ public partial class MatrixProfileDetector<T> : AnomalyDetectorBase<T>
             throw new InvalidOperationException("Model not properly fitted.");
         }
 
+        var engine = Engine;
         int n = values.Length;
         int m = _subsequenceLength;
-        int nTrain = trainingValues.Length;
-
-        // Compute training subsequence statistics
-        int trainProfileLen = nTrain - m + 1;
-        var trainMeans = new double[trainProfileLen];
-        var trainStds = new double[trainProfileLen];
-
-        for (int i = 0; i < trainProfileLen; i++)
+        T scale = NumOps.FromDouble(2 * Math.Sqrt(m));
+        if (n < m)
         {
-            double sum = 0, sumSq = 0;
-            for (int j = 0; j < m; j++)
-            {
-                double v = NumOps.ToDouble(trainingValues[i + j]);
-                sum += v;
-                sumSq += v * v;
-            }
-            trainMeans[i] = sum / m;
-            double variance = sumSq / m - trainMeans[i] * trainMeans[i];
-            trainStds[i] = Math.Sqrt(Math.Max(0, variance));
-            if (trainStds[i] < 1e-10) trainStds[i] = 1e-10;
+            // No test subsequence contains any point: the distance stays MaxValue and the score saturates at 1
+            return engine.TensorMin(engine.TensorDivideScalar(engine.Fill(n, NumOps.MaxValue).AsTensor(), scale), NumOps.One).ToVector();
         }
 
-        var scores = new Vector<T>(n);
+        // Minimum distance of every test subsequence to any training subsequence
+        var trainNormalized = NormalizedSubsequences(trainingValues.AsTensor());
+        var testNormalized = NormalizedSubsequences(values);
+        var subsequenceMin = engine.TensorAmin(
+            AnomalyTensorOps.PairwiseDistances(testNormalized, trainNormalized), new[] { 1 }, false);
 
-        // For each point, find minimum distance to any training subsequence
-        for (int i = 0; i < n; i++)
-        {
-            double minDist = double.MaxValue;
+        // For each point, the minimum over the test subsequences containing it
+        var padding = engine.Fill(Math.Max(m - 1, 1), NumOps.MaxValue).AsTensor();
+        var padded = m > 1 ? engine.TensorConcatenate(new[] { padding, subsequenceMin, padding }, 0) : subsequenceMin;
+        var minDist = engine.TensorAmin(engine.TensorUnfold(padded, 0, m, 1), new[] { 1 }, false);
 
-            // Check subsequences ending at or after this point
-            int start = Math.Max(0, i - m + 1);
-            int end = Math.Min(n - m + 1, i + 1);
-
-            for (int s = start; s < end; s++)
-            {
-                // Compute mean and std of test subsequence
-                double sum = 0, sumSq = 0;
-                for (int j = 0; j < m; j++)
-                {
-                    double v = values[s + j];
-                    sum += v;
-                    sumSq += v * v;
-                }
-                double mean = sum / m;
-                double variance = sumSq / m - mean * mean;
-                double std = Math.Sqrt(Math.Max(0, variance));
-                if (std < 1e-10) std = 1e-10;
-
-                // Find nearest training subsequence
-                for (int t = 0; t < trainProfileLen; t++)
-                {
-                    double dist = 0;
-                    for (int k = 0; k < m; k++)
-                    {
-                        double testNorm = (values[s + k] - mean) / std;
-                        double trainNorm = (NumOps.ToDouble(trainingValues[t + k]) - trainMeans[t]) / trainStds[t];
-                        double diff = testNorm - trainNorm;
-                        dist += diff * diff;
-                    }
-                    dist = Math.Sqrt(dist);
-
-                    if (dist < minDist)
-                    {
-                        minDist = dist;
-                    }
-                }
-            }
-
-            // Normalize score
-            double score = minDist / (2 * Math.Sqrt(m));
-            scores[i] = NumOps.FromDouble(Math.Min(score, 1.0));
-        }
-
-        return scores;
+        // Normalize score
+        return engine.TensorMin(engine.TensorDivideScalar(minDist, scale), NumOps.One).ToVector();
     }
 }
