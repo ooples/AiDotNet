@@ -2555,11 +2555,23 @@ public static class DeserializationHelper
 
             var router = new DenseLayer<T>(numExperts, new SoftmaxActivation<T>() as IActivationFunction<T>);
             // Files written before the option existed carry no W_noise weights: restore them with the
-            // router-logit noise they were trained with.
-            var gatingNoise = Enum.TryParse<MixtureOfExpertsGatingNoise>(
-                TryGetString(additionalParams, "GatingNoise"), out var parsedNoise)
-                ? parsedNoise
-                : MixtureOfExpertsGatingNoise.SoftplusOfRouterLogits;
+            // router-logit noise they were trained with. A key that is present but holds an
+            // unparseable or undefined value is a damaged file: reject it rather than silently
+            // rebuilding a different parameter layout.
+            var gatingNoise = MixtureOfExpertsGatingNoise.SoftplusOfRouterLogits;
+            if (additionalParams is not null && additionalParams.ContainsKey("GatingNoise"))
+            {
+                string? rawNoise = TryGetString(additionalParams, "GatingNoise");
+                if (rawNoise is null
+                    || !Enum.TryParse<MixtureOfExpertsGatingNoise>(rawNoise, out var parsedNoise)
+                    || !Enum.IsDefined(typeof(MixtureOfExpertsGatingNoise), parsedNoise))
+                {
+                    throw new InvalidOperationException(
+                        $"MixtureOfExpertsLayer has invalid GatingNoise metadata '{rawNoise}'.");
+                }
+
+                gatingNoise = parsedNoise;
+            }
             instance = new MixtureOfExpertsLayer<T>(experts, router, inputShape, outputShape, topK,
                 gatingNoise: gatingNoise);
         }

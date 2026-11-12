@@ -104,6 +104,62 @@ public sealed class MixtureOfExpertsNoisyGatingTests
     }
 
     [Fact]
+    public void ConstructorDefault_HasZeroInitializedNoiseWeightsPerExpert()
+    {
+        // No gatingNoise argument: the constructor's own default must be the paper's learned W_noise
+        // (Eq. 4), zero-initialized, one noise logit per expert.
+        var experts = new List<ILayer<double>>
+        {
+            new DenseLayer<double>(3),
+            new DenseLayer<double>(3),
+            new DenseLayer<double>(3),
+        };
+        var layer = new MixtureOfExpertsLayer<double>(experts, new DenseLayer<double>(3), [4], [3], topK: 2);
+
+        var noiseWeights = NoiseProjection(layer).GetParameters();
+        Assert.Equal(4 * 3, noiseWeights.Length);
+        for (int i = 0; i < noiseWeights.Length; i++)
+        {
+            Assert.Equal(0.0, noiseWeights[i]);
+        }
+
+        Assert.Equal(
+            MixtureOfExpertsGatingNoise.LearnedNoiseWeights.ToString(),
+            layer.GetMetadata()["GatingNoise"]);
+    }
+
+    [Theory]
+    [InlineData("NotAMode")]
+    [InlineData("17")]
+    [InlineData("")]
+    public void Deserialization_RejectsInvalidGatingNoiseMetadata(string rawValue)
+    {
+        var parameters = new Dictionary<string, object>
+        {
+            ["NumExperts"] = 3,
+            ["TopK"] = 2,
+            ["GatingNoise"] = rawValue,
+        };
+
+        Assert.Throws<InvalidOperationException>(() =>
+            AiDotNet.Helpers.DeserializationHelper.CreateLayerFromType<double>(
+                "MixtureOfExpertsLayer`1", [4], [3], parameters));
+    }
+
+    [Fact]
+    public void Deserialization_MissingGatingNoiseKey_RestoresLegacyRouterLogitNoise()
+    {
+        var parameters = new Dictionary<string, object> { ["NumExperts"] = 3, ["TopK"] = 2 };
+
+        var layer = AiDotNet.Helpers.DeserializationHelper.CreateLayerFromType<double>(
+            "MixtureOfExpertsLayer`1", [4], [3], parameters);
+
+        Assert.Null(typeof(MixtureOfExpertsLayer<double>)
+            .GetField("_noiseProjection", BindingFlags.NonPublic | BindingFlags.Instance)?
+            .GetValue(layer));
+    }
+
+    [Fact]
     public void LearnedNoiseWeights_SetTheNoiseScale()
     {
         // Softplus(x W_noise) with W_noise = -60 and positive inputs is below 1e-70, so the noisy
