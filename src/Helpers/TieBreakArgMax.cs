@@ -307,6 +307,29 @@ internal static class TieBreakArgMax
     }
 
     /// <summary>
+    /// Returns the indices of the <paramref name="topK"/> largest scores, largest first, ties in index order
+    /// and NaN last: the indices <c>OrderByDescending(score).Take(topK)</c> yields.
+    /// </summary>
+    public static int[] StableTopKDescending<T>(T[] scores, int topK)
+    {
+        if (scores is null)
+        {
+            throw new ArgumentNullException(nameof(scores));
+        }
+
+        int take = Math.Max(0, Math.Min(topK, scores.Length));
+        if (take == 0)
+        {
+            return new int[0];
+        }
+
+        var order = StableDescendingOrder1D(new Tensor<T>(scores, new[] { scores.Length })).ToArray();
+        var top = new int[take];
+        Array.Copy(order, top, take);
+        return top;
+    }
+
+    /// <summary>
     /// Returns the first index holding the maximum of a vector, with the same rules as
     /// <see cref="FirstMaxIndexPerRow{T}(Tensor{T}, ArgMaxScan)"/>.
     /// </summary>

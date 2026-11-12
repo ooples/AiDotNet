@@ -603,20 +603,7 @@ public partial class VideoCLIPNeuralNetwork<T> : MultimodalModelLayoutBase<T>, I
     /// </summary>
     private static List<(int Index, T Score)> TopScoring(T[] scores, int topK)
     {
-        int take = Math.Max(0, Math.Min(topK, scores.Length));
-        var picked = new List<(int Index, T Score)>(take);
-        if (take == 0)
-        {
-            return picked;
-        }
-
-        var order = TieBreakArgMax.StableDescendingOrder1D(new Tensor<T>(scores, new[] { scores.Length })).ToArray();
-        for (int rank = 0; rank < take; rank++)
-        {
-            picked.Add((order[rank], scores[order[rank]]));
-        }
-
-        return picked;
+        return TieBreakArgMax.StableTopKDescending(scores, topK).Select(index => (index, scores[index])).ToList();
     }
 
     /// <inheritdoc/>
