@@ -535,29 +535,82 @@ public class FederatedElementwiseSweep29bReferenceTests
     }
 
     [Fact(Timeout = 60000)]
-    public async Task FedGEN_StatisticsAndFullBatchDistillationStepMatchHandComputation()
+    public async Task FedGEN_GeneratorLearnsLabelWeightedEnsembleAndDistillsIntoClientHead()
     {
         await Task.Yield();
 
-        // Two classes, two features: means are theta[c * 2 + f], variances max(0.01, |mean|).
+        // Zhu et al. 2021. Two classes, latent dimension 2. Client A's head is the identity (class = argmax z) and
+        // it only has class-0 data; client B's head swaps the classes and only has class-1 data. With the
+        // label-count weights alpha_k^y the generator must satisfy A for y = 0 and B for y = 1, so both classes
+        // end up with z[0] > z[1]. (An unweighted ensemble sums to logits z0 + z1 for both classes and cannot
+        // separate them.) The old FedGEN shared parameter statistics and had no generator at all.
         var fedGen = new AiDotNet.FederatedLearning.Distillation.FedGENDistillation<double>(
-            numClasses: 2, featureDim: 2, generatorEpochs: 1, generatorLearningRate: 1.0);
-        var stats = fedGen.ExtractKnowledge(new Vector<double>(new[] { 1.0, -2.0, 0.001, 3.0 }), null);
-        Assert.Equal(new[] { 1.0, -2.0, 1.0, 2.0 }, stats.GetRow(0).ToArray());
-        Assert.Equal(new[] { 0.001, 3.0, 0.01, 3.0 }, stats.GetRow(1).ToArray());
+            numClasses: 2, featureDim: 2, generatorEpochs: 400, generatorLearningRate: 0.1, seed: 3,
+            noiseDim: 4, generatorHiddenDim: 16, batchSize: 32, distillationEpochs: 400, distillationLearningRate: 0.2);
+        Assert.Equal(6, fedGen.HeadParameterCount);
 
-        // Zero variance makes every synthetic sample its class mean: class 0 -> [1, 0], class 1 -> [0, 1],
-        // ten samples each. From theta = 0 the scores are 0 and grad W = (0 - Y)^T X / 20:
-        // row 0 = -10/20 [1, 0], row 1 = -10/20 [0, 1], so theta = [0.5, 0, 0, 0.5].
-        var global = new Matrix<double>(new[,] { { 1.0, 0.0, 0.0, 0.0 }, { 0.0, 1.0, 0.0, 0.0 } });
-        var updated = fedGen.ApplyKnowledge(new Vector<double>(4), global, null, 1.0);
-        Assert.Equal(0.5, updated[0], Precision);
-        Assert.Equal(0.0, updated[1], Precision);
-        Assert.Equal(0.0, updated[2], Precision);
-        Assert.Equal(0.5, updated[3], Precision);
+        var identityHead = new Vector<double>(new[] { 1.0, 0.0, 0.0, 1.0, 0.0, 0.0 });
+        var swappedHead = new Vector<double>(new[] { 0.0, 1.0, 1.0, 0.0, 0.0, 0.0 });
+        var knowledgeA = fedGen.ExtractKnowledge(identityHead, new[] { 10, 0 });
+        Assert.Equal(10.0, knowledgeA[0, 3], Precision);
+        var global = fedGen.AggregateKnowledge(new Dictionary<int, Matrix<double>>
+        {
+            [0] = knowledgeA,
+            [1] = fedGen.ExtractKnowledge(swappedHead, new[] { 0, 10 }),
+        }, null);
+        Assert.Equal(1, global.Rows);
+        Assert.Equal(fedGen.GeneratorParameterCount + 2, global.Columns);
+        Assert.Equal(0.5, global[0, global.Columns - 2], Precision);
 
-        // Fewer parameters than classes used to return empty statistics (and divide by zero when applied).
-        Assert.Throws<ArgumentException>(() => fedGen.ExtractKnowledge(new Vector<double>(new[] { 1.0 }), null));
+        for (int label = 0; label < 2; label++)
+        {
+            var features = fedGen.GenerateFeatures(label, 50);
+            int agreeing = 0;
+            for (int i = 0; i < features.Rows; i++)
+            {
+                if (features[i, 0] > features[i, 1])
+                {
+                    agreeing++;
+                }
+            }
+
+            Assert.True(agreeing >= 45, $"label {label}: only {agreeing}/50 generated samples have z[0] > z[1]");
+        }
+
+        // Distillation: train a second generator against two identity heads that both see every class (class
+        // y -> large z_y). A client whose head starts swapped (and carries two body parameters that must not
+        // change) learns to classify the generated features of each class as its label.
+        var distiller = new AiDotNet.FederatedLearning.Distillation.FedGENDistillation<double>(
+            numClasses: 2, featureDim: 2, generatorEpochs: 400, generatorLearningRate: 0.1, seed: 5,
+            noiseDim: 4, generatorHiddenDim: 16, batchSize: 32, distillationEpochs: 400, distillationLearningRate: 0.2);
+        var identityGlobal = distiller.AggregateKnowledge(new Dictionary<int, Matrix<double>>
+        {
+            [0] = distiller.ExtractKnowledge(identityHead, new[] { 10, 10 }),
+            [1] = distiller.ExtractKnowledge(identityHead, new[] { 10, 10 }),
+        }, null);
+        var client = new Vector<double>(new[] { 0.0, 1.0, 1.0, 0.0, 0.0, 0.0, 7.0, 8.0 });
+        var updated = distiller.ApplyKnowledge(client, identityGlobal, null, 1.0);
+        Assert.Equal(8, updated.Length);
+        Assert.Equal(7.0, updated[6], Precision);
+        Assert.Equal(8.0, updated[7], Precision);
+
+        // Generated class-1 and class-0 features now map to their labels under the distilled head on average.
+        for (int label = 0; label < 2; label++)
+        {
+            var features = distiller.GenerateFeatures(label, 50);
+            int correct = 0;
+            for (int i = 0; i < features.Rows; i++)
+            {
+                double s0 = updated[0] * features[i, 0] + updated[1] * features[i, 1] + updated[4];
+                double s1 = updated[2] * features[i, 0] + updated[3] * features[i, 1] + updated[5];
+                if ((s1 > s0) == (label == 1))
+                {
+                    correct++;
+                }
+            }
+
+            Assert.True(correct >= 45, $"label {label}: {correct}/50 generated samples classified correctly");
+        }
     }
 
     [Fact(Timeout = 60000)]
