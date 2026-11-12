@@ -49,41 +49,26 @@ public class FedMDDistillation<T> : Infrastructure.FederatedLearningComponentBas
     }
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// Class scores z / τ with z = X Wᵀ, where W[j, k] = θ[j·C + k] for the C public-data columns while
+    /// j·C + k &lt; d, and 0 beyond the parameter count.
+    /// </remarks>
     public Matrix<T> ExtractKnowledge(Vector<T> localModelParameters, Matrix<T>? publicData)
     {
+        Guard.NotNull(localModelParameters);
         if (publicData is null)
             throw new ArgumentException("FedMD requires a public dataset for logit extraction.", nameof(publicData));
-
-        int n = publicData.Rows;
-        int d = localModelParameters.Length;
-        int outputDim = Math.Max(1, d / 10); // Heuristic: output dim is a fraction of params
+        ValidateInputs(localModelParameters, publicData);
 
         // Compute logits: simple linear projection of public data through model parameters
         // In production, this would use the actual model forward pass
-        var logits = new Matrix<T>(n, outputDim);
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < outputDim; j++)
-            {
-                T sum = NumOps.Zero;
-                int paramCols = Math.Min(publicData.Columns, d - j * publicData.Columns);
-                for (int k = 0; k < Math.Min(publicData.Columns, paramCols); k++)
-                {
-                    int paramIdx = (j * publicData.Columns + k) % d;
-                    sum = NumOps.Add(sum, NumOps.Multiply(publicData[i, k], localModelParameters[paramIdx]));
-                }
-                logits[i, j] = sum;
-            }
-        }
-
-        // Apply temperature scaling
-        ApplyTemperatureScaling(logits, _temperature);
-        return logits;
+        return ComputeScaledLogits(localModelParameters, publicData, out _, out _).ToMatrix();
     }
 
     /// <inheritdoc/>
     public Matrix<T> AggregateKnowledge(Dictionary<int, Matrix<T>> clientKnowledge, Dictionary<int, double>? clientWeights)
     {
+        Guard.NotNull(clientKnowledge);
         if (clientKnowledge.Count == 0)
             throw new ArgumentException("No client knowledge provided.", nameof(clientKnowledge));
 
@@ -92,89 +77,106 @@ public class FedMDDistillation<T> : Infrastructure.FederatedLearningComponentBas
         int n = first.Rows;
         int outputDim = first.Columns;
 
-        // Weighted average of all client logits
-        double totalWeight = 0;
-        var aggregated = new Matrix<T>(n, outputDim);
+        double totalWeight = clientKnowledge.Keys.Sum(id => clientWeights?.GetValueOrDefault(id, 1.0) ?? 1.0);
+        if (totalWeight <= 0)
+            throw new ArgumentException("Client weights must sum to a positive value.", nameof(clientWeights));
 
+        // Weighted average of all client logits (weights normalized by their total).
+        var aggregated = new Tensor<T>(new[] { n, outputDim });
         foreach (var (clientId, knowledge) in clientKnowledge)
         {
+            if (knowledge.Rows != n || knowledge.Columns != outputDim)
+            {
+                throw new ArgumentException(
+                    $"Client {clientId} knowledge is {knowledge.Rows}x{knowledge.Columns}; expected {n}x{outputDim}.",
+                    nameof(clientKnowledge));
+            }
+
             double w = clientWeights?.GetValueOrDefault(clientId, 1.0) ?? 1.0;
-            totalWeight += w;
-
-            T weight = NumOps.FromDouble(w);
-            for (int i = 0; i < n; i++)
-            {
-                for (int j = 0; j < outputDim; j++)
-                {
-                    aggregated[i, j] = NumOps.Add(aggregated[i, j], NumOps.Multiply(knowledge[i, j], weight));
-                }
-            }
+            aggregated = Engine.TensorAdd(aggregated,
+                Engine.TensorMultiplyScalar(Tensor<T>.FromMatrix(knowledge), NumOps.FromDouble(w / totalWeight)));
         }
 
-        // Normalize
-        T invTotal = NumOps.FromDouble(1.0 / totalWeight);
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < outputDim; j++)
-            {
-                aggregated[i, j] = NumOps.Multiply(aggregated[i, j], invTotal);
-            }
-        }
-
-        return aggregated;
+        return aggregated.ToMatrix();
     }
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// The digest step: gradient descent on α/(2n) Σ ‖z/τ − consensus‖² over the public samples, so
+    /// ∇W = α (z/τ − consensus)ᵀ X / (n τ), scattered into the parameters W was read from. The scores and the
+    /// consensus share the constructor temperature, so <paramref name="temperature"/> is not used.
+    /// </remarks>
     public Vector<T> ApplyKnowledge(Vector<T> localModelParameters, Matrix<T> globalKnowledge,
         Matrix<T>? publicData, double temperature)
     {
+        Guard.NotNull(localModelParameters);
+        Guard.NotNull(globalKnowledge);
         if (publicData is null)
             throw new ArgumentException("FedMD requires a public dataset.", nameof(publicData));
+        ValidateInputs(localModelParameters, publicData);
 
         int d = localModelParameters.Length;
-        var updatedParams = new T[d];
-        Array.Copy(localModelParameters.ToArray(), updatedParams, d);
+        int n = publicData.Rows;
+        int columns = publicData.Columns;
+        int outputDim = OutputDimension(d);
+        if (globalKnowledge.Rows != n || globalKnowledge.Columns != outputDim)
+        {
+            throw new ArgumentException(
+                $"Global knowledge is {globalKnowledge.Rows}x{globalKnowledge.Columns}; expected {n}x{outputDim}.",
+                nameof(globalKnowledge));
+        }
 
-        // Distillation: minimize KL divergence between local logits and global consensus
+        var data = Tensor<T>.FromMatrix(publicData);
+        var consensus = Tensor<T>.FromMatrix(globalKnowledge);
+        var step = NumOps.FromDouble(_learningRate * _distillationAlpha / (n * _temperature));
+
+        // Distillation: move the local scores toward the global consensus
+        var parameters = localModelParameters.Clone();
         for (int epoch = 0; epoch < _distillationEpochs; epoch++)
         {
-            var localLogits = ExtractKnowledge(new Vector<T>(updatedParams), publicData);
-            int outputDim = Math.Min(localLogits.Columns, globalKnowledge.Columns);
-
-            // Compute gradient: difference between local and global soft labels
-            for (int j = 0; j < outputDim; j++)
-            {
-                T gradSum = NumOps.Zero;
-                for (int i = 0; i < publicData.Rows; i++)
-                {
-                    T diff = NumOps.Subtract(localLogits[i, j], globalKnowledge[i, j]);
-                    gradSum = NumOps.Add(gradSum, diff);
-                }
-
-                // Scale gradient
-                T scaledGrad = NumOps.Multiply(gradSum, NumOps.FromDouble(_learningRate * _distillationAlpha / publicData.Rows));
-
-                // Update parameters that contribute to this output dimension
-                for (int k = 0; k < Math.Min(publicData.Columns, d); k++)
-                {
-                    int paramIdx = (j * publicData.Columns + k) % d;
-                    updatedParams[paramIdx] = NumOps.Subtract(updatedParams[paramIdx], scaledGrad);
-                }
-            }
+            var scores = ComputeScaledLogits(parameters, publicData, out var weightIndex, out var weightMask);
+            var residual = Engine.TensorMultiplyScalar(Engine.TensorSubtract(scores, consensus), step);
+            var gradWeights = Engine.TensorMultiply(Engine.TensorMatMul(Engine.TensorTranspose(residual), data), weightMask);
+            var gradParams = Engine.TensorIndexAdd(new Tensor<T>(new[] { d }), 0, weightIndex,
+                gradWeights.Reshape(new[] { outputDim * columns }));
+            parameters = Engine.Subtract(parameters, gradParams.ToVector());
         }
 
-        return new Vector<T>(updatedParams);
+        return parameters;
     }
 
-    private void ApplyTemperatureScaling(Matrix<T> logits, double temp)
+    private static int OutputDimension(int parameterCount) => Math.Max(1, parameterCount / 10); // Heuristic: output dim is a fraction of params
+
+    private static void ValidateInputs(Vector<T> parameters, Matrix<T> publicData)
     {
-        T invTemp = NumOps.FromDouble(1.0 / temp);
-        for (int i = 0; i < logits.Rows; i++)
+        if (parameters.Length == 0)
+            throw new ArgumentException("Model parameters cannot be empty.", nameof(parameters));
+        if (publicData.Rows == 0 || publicData.Columns == 0)
+            throw new ArgumentException("Public data cannot be empty.", nameof(publicData));
+    }
+
+    private Tensor<T> ComputeScaledLogits(Vector<T> parameters, Matrix<T> publicData, out Tensor<int> weightIndex, out Tensor<T> weightMask)
+    {
+        int d = parameters.Length;
+        int columns = publicData.Columns;
+        int outputDim = OutputDimension(d);
+
+        var index = new int[outputDim * columns];
+        var mask = new int[outputDim * columns];
+        for (int k = 0; k < index.Length; k++)
         {
-            for (int j = 0; j < logits.Columns; j++)
-            {
-                logits[i, j] = NumOps.Multiply(logits[i, j], invTemp);
-            }
+            bool inRange = k < d;
+            index[k] = inRange ? k : 0;
+            mask[k] = inRange ? 1 : 0;
         }
+
+        weightIndex = new Tensor<int>(index, new[] { index.Length });
+        weightMask = new Tensor<int>(mask, new[] { outputDim, columns }).Cast<T>();
+        var weights = Engine.TensorMultiply(
+            Engine.TensorGather(parameters.AsTensor(), weightIndex, 0).Reshape(new[] { outputDim, columns }), weightMask);
+
+        // Apply temperature scaling
+        var logits = Engine.TensorMatMul(Tensor<T>.FromMatrix(publicData), Engine.TensorTranspose(weights));
+        return Engine.TensorMultiplyScalar(logits, NumOps.FromDouble(1.0 / _temperature));
     }
 }

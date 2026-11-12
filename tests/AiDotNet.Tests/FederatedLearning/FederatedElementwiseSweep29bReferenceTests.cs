@@ -559,4 +559,33 @@ public class FederatedElementwiseSweep29bReferenceTests
         // Fewer parameters than classes used to return empty statistics (and divide by zero when applied).
         Assert.Throws<ArgumentException>(() => fedGen.ExtractKnowledge(new Vector<double>(new[] { 1.0 }), null));
     }
+
+    [Fact(Timeout = 60000)]
+    public async Task FedMD_DigestStepFollowsSquaredErrorGradientThroughProjection()
+    {
+        await Task.Yield();
+
+        // d = 10 -> one output; C = 2 columns read theta[0..1]. tau = 2, alpha = 1, lr = 1, one epoch.
+        var fedMd = new AiDotNet.FederatedLearning.Distillation.FedMDDistillation<double>(
+            temperature: 2.0, distillationAlpha: 1.0, distillationEpochs: 1, learningRate: 1.0);
+        var theta = new Vector<double>(new[] { 1.0, 2.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0 });
+        var publicData = new Matrix<double>(new[,] { { 1.0, 1.0 } });
+
+        // z = 1 + 2 = 3, scaled by 1 / tau -> 1.5.
+        Assert.Equal(1.5, fedMd.ExtractKnowledge(theta, publicData)[0, 0], Precision);
+
+        // Consensus 0.5: grad W = alpha (1.5 - 0.5) x / (n tau) = [0.5, 0.5] -> theta[0..1] = [0.5, 1.5].
+        var updated = fedMd.ApplyKnowledge(theta, new Matrix<double>(new[,] { { 0.5 } }), publicData, 1.0);
+        Assert.Equal(0.5, updated[0], Precision);
+        Assert.Equal(1.5, updated[1], Precision);
+        Assert.Equal(0.0, updated[2], Precision);
+
+        // Consensus is the normalized weighted mean: (1 * 2 + 3 * 6) / 4 = 5.
+        var consensus = fedMd.AggregateKnowledge(new Dictionary<int, Matrix<double>>
+        {
+            [0] = new Matrix<double>(new[,] { { 2.0 } }),
+            [1] = new Matrix<double>(new[,] { { 6.0 } }),
+        }, new Dictionary<int, double> { [0] = 1.0, [1] = 3.0 });
+        Assert.Equal(5.0, consensus[0, 0], Precision);
+    }
 }
