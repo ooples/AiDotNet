@@ -141,6 +141,25 @@ public class LinearAnomalyDetectionTests
         AssertPredictClassifiesCorrectly(predictions, OutlierIndex);
     }
 
+    [Fact(Timeout = 120000)]
+    public async Task OneClassSVM_SolvesTheDualToItsMinimum()
+    {
+        // Scholkopf et al. (2001): minimize 1/2 a'Ka subject to sum(a) = 1, 0 <= a_i <= 1/(nu n).
+        // Points 0, 0, 10 with gamma = 1: K = [[1, 1, e], [1, 1, e], [e, e, 1]] with e = exp(-100) ~ 0,
+        // so 1/2 a'Ka ~ 1/2 ((a0 + a1)^2 + a2^2), minimized at a0 + a1 = a2 = 1/2 (inside the bound
+        // 1/(0.5 * 3) = 2/3). Every decision value sum_j a_j K[i, j] is then 1/2, rho (their mean over
+        // the free support vectors) is 1/2, and every training score -(f - rho) is 0. Stepping uphill
+        // instead drives the multipliers to the bounds and the scores away from 0.
+        var data = new Matrix<double>(new double[,] { { 0 }, { 0 }, { 10 } });
+        var detector = new OneClassSVM<double>(nu: 0.5, gamma: 1.0);
+        detector.Fit(data);
+        var scores = detector.ScoreAnomalies(data);
+
+        Assert.Equal(0.0, scores[0], 1e-9);
+        Assert.Equal(0.0, scores[1], 1e-9);
+        Assert.Equal(0.0, scores[2], 1e-9);
+    }
+
     #endregion
 
     #region EllipticEnvelopeDetector Tests

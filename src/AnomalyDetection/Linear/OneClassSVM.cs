@@ -177,30 +177,10 @@ public partial class OneClassSVM<T> : AnomalyDetectorBase<T>
         // Solve the dual problem using simplified SMO
         var alphas = SolveDual(K, n);
 
-        // Extract support vectors (points with alpha > 0)
-        var svIndices = new List<int>();
-        var svAlphas = new List<T>();
-
-        T alphaThreshold = NumOps.FromDouble(1e-7);
-
-        for (int i = 0; i < n; i++)
-        {
-            if (NumOps.GreaterThan(alphas[i], alphaThreshold))
-            {
-                svIndices.Add(i);
-                svAlphas.Add(alphas[i]);
-            }
-        }
-
-        // Store support vectors
-        _supportVectors = new Matrix<T>(svIndices.Count, numFeatures);
-        _alphas = new Vector<T>(svIndices.Count);
-
-        for (int i = 0; i < svIndices.Count; i++)
-        {
-            _supportVectors.SetRow(i, X.GetRow(svIndices[i]));
-            _alphas[i] = svAlphas[i];
-        }
+        // Extract support vectors (points with alpha > 1e-7)
+        var svIndices = AnomalyTensorOps.NonzeroIndices(Engine.TensorGreaterThan(alphas.AsTensor(), NumOps.FromDouble(1e-7)));
+        _supportVectors = AnomalyTensorOps.SelectRows(AnomalyTensorOps.ToTensor(X), svIndices).ToMatrix();
+        _alphas = AnomalyTensorOps.SelectElements(alphas, svIndices);
 
         // Compute rho (threshold)
         _rho = ComputeRho(X, alphas, K, effectiveGamma);
@@ -245,49 +225,22 @@ public partial class OneClassSVM<T> : AnomalyDetectorBase<T>
                 nameof(X));
         }
 
-        var scores = new Vector<T>(X.Rows);
-
-        for (int i = 0; i < X.Rows; i++)
-        {
-            var point = X.GetRow(i);
-            T score = NumOps.Zero;
-
-            for (int j = 0; j < supportVectors.Rows; j++)
-            {
-                T kernelVal = RbfKernel(point, supportVectors.GetRow(j), gamma);
-                score = NumOps.Add(score, NumOps.Multiply(alphas[j], kernelVal));
-            }
-
-            // Decision function: sign(sum(alpha_i * K(x, x_i)) - rho)
-            // We return the signed distance, not just the sign
-            // Negate so higher values = more anomalous (consistent with other detectors)
-            scores[i] = NumOps.Negate(NumOps.Subtract(score, _rho));
-        }
-
-        return scores;
+        // Decision function: sign(sum(alpha_i * K(x, x_i)) - rho)
+        // We return the signed distance, not just the sign
+        // Negate so higher values = more anomalous (consistent with other detectors)
+        var engine = Engine;
+        var kernel = AnomalyTensorOps.ToTensor(ComputeKernelMatrix(X, supportVectors, gamma));
+        var decision = engine.Reshape(
+            engine.TensorMatMul(kernel, engine.Reshape(alphas.AsTensor(), new[] { alphas.Length, 1 })), new[] { X.Rows });
+        return engine.TensorNegate(engine.TensorSubtractScalar(decision, _rho)).ToVector();
     }
 
+    // RBF kernel exp(-gamma * ||x1_i - x2_j||^2) between the rows of X1 and X2.
     private Matrix<T> ComputeKernelMatrix(Matrix<T> X1, Matrix<T> X2, double gamma)
     {
-        var K = new Matrix<T>(X1.Rows, X2.Rows);
-
-        for (int i = 0; i < X1.Rows; i++)
-        {
-            for (int j = 0; j < X2.Rows; j++)
-            {
-                K[i, j] = RbfKernel(X1.GetRow(i), X2.GetRow(j), gamma);
-            }
-        }
-
-        return K;
-    }
-
-    private T RbfKernel(Vector<T> x1, Vector<T> x2, double gamma)
-    {
-        // Vectorized distance using Engine
-        var diff = Engine.Subtract(x1, x2);
-        T squaredDist = Engine.DotProduct(diff, diff);
-        return NumOps.Exp(NumOps.Negate(NumOps.Multiply(NumOps.FromDouble(gamma), squaredDist)));
+        var engine = Engine;
+        var squared = AnomalyTensorOps.PairwiseSquaredDistances(AnomalyTensorOps.ToTensor(X1), AnomalyTensorOps.ToTensor(X2));
+        return engine.TensorExp(engine.TensorNegate(engine.TensorMultiplyScalar(squared, NumOps.FromDouble(gamma)))).ToMatrix();
     }
 
     private Vector<T> SolveDual(Matrix<T> K, int n)
@@ -296,14 +249,9 @@ public partial class OneClassSVM<T> : AnomalyDetectorBase<T>
         // Constraint: sum(alpha) = 1, 0 <= alpha_i <= 1/(n*nu)
 
         T upperBound = NumOps.FromDouble(1.0 / (n * _nu));
-        var alphas = new Vector<T>(n);
-
         // Initialize alphas uniformly
         T initialAlpha = NumOps.FromDouble(1.0 / n);
-        for (int i = 0; i < n; i++)
-        {
-            alphas[i] = initialAlpha;
-        }
+        var alphas = Engine.Fill(n, initialAlpha);
 
         // SMO iterations
         // SMO requires at least 2 samples to optimize pairs
@@ -312,6 +260,9 @@ public partial class OneClassSVM<T> : AnomalyDetectorBase<T>
             return alphas;
         }
 
+        var kernelRows = AnomalyTensorOps.RowVectors(AnomalyTensorOps.ToTensor(K));
+        T two = NumOps.FromDouble(2);
+        T tolerance = NumOps.FromDouble(_tolerance);
         for (int iter = 0; iter < _maxIterations; iter++)
         {
             bool changed = false;
@@ -323,20 +274,14 @@ public partial class OneClassSVM<T> : AnomalyDetectorBase<T>
                 int j = (i + offset) % n;
 
                 // Compute gradient components
-                T gi = NumOps.Zero;
-                T gj = NumOps.Zero;
-
-                for (int k = 0; k < n; k++)
-                {
-                    gi = NumOps.Add(gi, NumOps.Multiply(alphas[k], K[i, k]));
-                    gj = NumOps.Add(gj, NumOps.Multiply(alphas[k], K[j, k]));
-                }
+                T gi = Engine.DotProduct(alphas, kernelRows[i]);
+                T gj = Engine.DotProduct(alphas, kernelRows[j]);
 
                 // Compute optimal step
                 T kii = K[i, i];
                 T kjj = K[j, j];
                 T kij = K[i, j];
-                T eta = NumOps.Subtract(NumOps.Add(kii, kjj), NumOps.Multiply(NumOps.FromDouble(2), kij));
+                T eta = NumOps.Subtract(NumOps.Add(kii, kjj), NumOps.Multiply(two, kij));
 
                 if (NumOps.LessThanOrEquals(eta, NumOps.Zero))
                 {
@@ -344,7 +289,9 @@ public partial class OneClassSVM<T> : AnomalyDetectorBase<T>
                 }
 
                 // Update direction
-                T delta = NumOps.Divide(NumOps.Subtract(gi, gj), eta);
+                // The dual objective 1/2 a'Ka changes by delta * (g_i - g_j) + delta^2 * eta / 2 when
+                // a_i += delta and a_j -= delta, so its minimum along that line is at (g_j - g_i) / eta
+                T delta = NumOps.Divide(NumOps.Subtract(gj, gi), eta);
 
                 // Clip delta to keep alphas in bounds
                 T oldAlphaI = alphas[i];
@@ -384,7 +331,7 @@ public partial class OneClassSVM<T> : AnomalyDetectorBase<T>
                 if (NumOps.GreaterThan(newAlphaJ, upperBound)) newAlphaJ = upperBound;
 
                 T change = NumOps.Abs(NumOps.Subtract(newAlphaI, oldAlphaI));
-                if (NumOps.GreaterThan(change, NumOps.FromDouble(_tolerance)))
+                if (NumOps.GreaterThan(change, tolerance))
                 {
                     alphas[i] = newAlphaI;
                     alphas[j] = newAlphaJ;
@@ -403,47 +350,23 @@ public partial class OneClassSVM<T> : AnomalyDetectorBase<T>
 
     private T ComputeRho(Matrix<T> X, Vector<T> alphas, Matrix<T> K, double gamma)
     {
-        // Rho is computed from support vectors (0 < alpha < upperBound)
-        T upperBound = NumOps.FromDouble(1.0 / (X.Rows * _nu));
+        // Rho is the mean decision value sum_j alpha_j K[i, j] over the free support vectors
+        // (1e-7 < alpha < upperBound - 1e-7), or over all points when there are none
+        var engine = Engine;
+        int n = X.Rows;
+        T upperBound = NumOps.FromDouble(1.0 / (n * _nu));
         T lowerThreshold = NumOps.FromDouble(1e-7);
         T upperThreshold = NumOps.Subtract(upperBound, lowerThreshold);
-
-        T rhoSum = NumOps.Zero;
-        int count = 0;
-
-        for (int i = 0; i < X.Rows; i++)
-        {
-            if (NumOps.GreaterThan(alphas[i], lowerThreshold) &&
-                NumOps.LessThan(alphas[i], upperThreshold))
-            {
-                T score = NumOps.Zero;
-                for (int j = 0; j < X.Rows; j++)
-                {
-                    score = NumOps.Add(score, NumOps.Multiply(alphas[j], K[i, j]));
-                }
-
-                rhoSum = NumOps.Add(rhoSum, score);
-                count++;
-            }
-        }
-
-        if (count > 0)
-        {
-            return NumOps.Divide(rhoSum, NumOps.FromDouble(count));
-        }
+        var alphaTensor = alphas.AsTensor();
+        var scores = engine.Reshape(engine.TensorMatMul(AnomalyTensorOps.ToTensor(K),
+            engine.Reshape(alphaTensor, new[] { n, 1 })), new[] { n });
+        var free = engine.TensorMultiply(engine.TensorGreaterThan(alphaTensor, lowerThreshold),
+            engine.TensorLessThan(alphaTensor, upperThreshold));
+        T count = engine.TensorSum(free);
+        if (NumOps.GreaterThan(count, NumOps.Zero))
+            return NumOps.Divide(engine.TensorSum(engine.TensorWhere(free, scores, Tensor<T>.CreateZeros(new[] { n }))), count);
 
         // Fallback: use mean of all scores
-        for (int i = 0; i < X.Rows; i++)
-        {
-            T score = NumOps.Zero;
-            for (int j = 0; j < X.Rows; j++)
-            {
-                score = NumOps.Add(score, NumOps.Multiply(alphas[j], K[i, j]));
-            }
-
-            rhoSum = NumOps.Add(rhoSum, score);
-        }
-
-        return NumOps.Divide(rhoSum, NumOps.FromDouble(X.Rows));
+        return NumOps.Divide(engine.TensorSum(scores), NumOps.FromDouble(n));
     }
 }
