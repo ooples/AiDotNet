@@ -6067,18 +6067,18 @@ public partial class TestScaffoldGenerator : IIncrementalGenerator
             }
             else if (model.ClassName == "RNNTransducer" && model.TypeParameterCount == 1)
             {
-                // Graves' RNN-T keeps its encoder -> prediction network -> joint
-                // network topology. FP32 and the 1-vs-2 audio cap still hit the
-                // 120 s MoreData watchdog in run 30613315686, so bound only the
-                // generated fixture's public widths/depths and vocabulary.
+                // Graves' RNN-T: a transcription network over log-mel frames, a prediction network over the
+                // labels emitted so far and a joint network, trained with the transducer loss. It reads
+                // waveforms like the Conformer recognizers: 0.2 s at 16 kHz is 21 log-mel frames, 4 encoder
+                // frames over its 16 tokens. Only the fixture's widths, depths and vocabulary are bounded.
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
-                    "inputType: AiDotNet.Enums.InputType.TwoDimensional, " +
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.SequenceToSequence, " +
-                    "inputHeight: 64, inputWidth: 32, inputDepth: 1, outputSize: 16), " +
+                    "inputSize: 3200, outputSize: 16), " +
                     "new AiDotNet.Audio.SpeechRecognition.RNNTransducerOptions { " +
-                    "EncoderDim = 32, NumEncoderLayers = 1, NumEncoderHeads = 4, " +
-                    "PredictionDim = 32, NumPredictionLayers = 1, EmbeddingDim = 16, " +
-                    "JointDim = 32, NumMels = 32, VocabSize = 16, DropoutRate = 0.0 })";
+                    "EncoderDim = 16, NumEncoderLayers = 1, NumEncoderHeads = 2, " +
+                    "PredictionDim = 16, NumPredictionLayers = 1, EmbeddingDim = 8, " +
+                    "JointDim = 16, NumMels = 32, VocabSize = 16, DropoutRate = 0.0 })";
             }
             else if (model.ClassName == "Squeezeformer" && model.TypeParameterCount == 1)
             {
@@ -17377,6 +17377,7 @@ public partial class TestScaffoldGenerator : IIncrementalGenerator
                 or "InterCTC" or "SelfConditionedCTC" or "ParakeetCTC" or "ParakeetRNNT" or "FastEmit" or "ParakeetTDT" or "TDTDecoder"
                 or "ESPnetASR" or "SpeechBrain" or "OWSM" or "AssemblyAIUniversal2" or "CTCSegmentation" or "RevAI" or "EmformerRNNT" or "StreamingZipformer"
                 or "AzureSpeechSTT" or "AWSTranscribe" or "DeepgramNova2" or "SpeechmaticsASR" or "SarvamASR"
+                     || (model.ClassName == "RNNTransducer" && model.FullyQualifiedName.StartsWith("AiDotNet.Audio.SpeechRecognition.", System.StringComparison.Ordinal))
                      || (model.ClassName == "Conformer" && model.FullyQualifiedName.StartsWith("AiDotNet.Audio.SpeechRecognition.", System.StringComparison.Ordinal)))
             {
                 // Conformer reads waveforms: 0.2 s at 16 kHz is 21 log-mel frames, 4 encoder frames over its 16 tokens.
