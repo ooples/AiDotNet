@@ -5228,33 +5228,21 @@ public static class StatisticsHelper<T>
             return _numOps.Zero;
         }
 
-        T truePositives = _numOps.Zero;
-        T falsePositives = _numOps.Zero;
-        T auc = _numOps.Zero;
-        T prevRecall = _numOps.Zero;
-        T prevPrecision = _numOps.One;
+        // Walking the predictions from highest to lowest: tp and fp counts after each step give
+        // recall = tp / P and precision = tp / (tp + fp); the area is the trapezoid sum over the steps,
+        // starting from (recall 0, precision 1).
+        int n = sortedPairs.Count;
+        var isPositive = Engine.TensorGreaterThan(AsTensor(sortedPairs.Select(pair => pair.Actual)), _numOps.Zero);
+        var truePositives = Engine.TensorCumSum(isPositive, 0);
+        var falsePositives = Engine.TensorCumSum(Not(isPositive), 0);
+        var recall = Engine.TensorDivideScalar(truePositives, totalPositives);
+        var precision = Engine.TensorDivide(truePositives, Engine.TensorAdd(truePositives, falsePositives));
 
-        foreach (var pair in sortedPairs)
-        {
-            if (_numOps.GreaterThan(pair.Actual, _numOps.Zero))
-            {
-                truePositives = _numOps.Add(truePositives, _numOps.One);
-            }
-            else
-            {
-                falsePositives = _numOps.Add(falsePositives, _numOps.One);
-            }
-
-            T recall = _numOps.Divide(truePositives, totalPositives);
-            T precision = _numOps.Divide(truePositives, _numOps.Add(truePositives, falsePositives));
-
-            T deltaRecall = _numOps.Subtract(recall, prevRecall);
-            T avgPrecision = _numOps.Divide(_numOps.Add(precision, prevPrecision), _numOps.FromDouble(2.0));
-            auc = _numOps.Add(auc, _numOps.Multiply(deltaRecall, avgPrecision));
-
-            prevRecall = recall;
-            prevPrecision = precision;
-        }
+        var prevRecall = Engine.TensorConcatenate(new[] { Tensor<T>.FromScalar(_numOps.Zero).Reshape(new[] { 1 }), Engine.TensorNarrow(recall, 0, 0, n - 1) }, 0);
+        var prevPrecision = Engine.TensorConcatenate(new[] { Tensor<T>.FromScalar(_numOps.One).Reshape(new[] { 1 }), Engine.TensorNarrow(precision, 0, 0, n - 1) }, 0);
+        var deltaRecall = Engine.TensorSubtract(recall, prevRecall);
+        var avgPrecision = Engine.TensorDivideScalar(Engine.TensorAdd(precision, prevPrecision), _numOps.FromDouble(2.0));
+        T auc = Engine.TensorSum(Engine.TensorMultiply(deltaRecall, avgPrecision));
 
         return auc;
     }
@@ -5281,13 +5269,7 @@ public static class StatisticsHelper<T>
     {
         var uniqueValues = new HashSet<T>(predictedValues);
         var sortedValues = uniqueValues.OrderByDescending(v => _numOps.ToDouble(v)).ToList();
-        var thresholds = new Vector<T>(sortedValues.Count);
-        for (int i = 0; i < sortedValues.Count; i++)
-        {
-            thresholds[i] = sortedValues[i];
-        }
-
-        return thresholds;
+        return new Vector<T>(sortedValues);
     }
 
     /// <summary>
@@ -5319,23 +5301,15 @@ public static class StatisticsHelper<T>
         // Add endpoint (0, 0) - threshold above all predictions (nothing predicted positive)
         points.Add((0.0, 0.0));
 
-        for (int i = 0; i < thresholds.Length; i++)
+        if (thresholds.Length > 0)
         {
-            var confusionMatrix = StatisticsHelper<T>.CalculateConfusionMatrix(actualValues, predictedValues, thresholds[i]);
-            var totalNegatives = _numOps.Add(confusionMatrix.FalsePositives, confusionMatrix.TrueNegatives);
-            var totalPositives = _numOps.Add(confusionMatrix.TruePositives, confusionMatrix.FalseNegatives);
+            if (actualValues.Length != predictedValues.Length)
+                throw new ArgumentException("Actual and predicted vectors must have the same size.");
 
-            double fprVal = _numOps.Equals(totalNegatives, _numOps.Zero)
-                ? 0.0
-                : _numOps.ToDouble(_numOps.Divide(confusionMatrix.FalsePositives, totalNegatives));
-            double tprVal = _numOps.Equals(totalPositives, _numOps.Zero)
-                ? 0.0
-                : _numOps.ToDouble(_numOps.Divide(confusionMatrix.TruePositives, totalPositives));
-
-            points.Add((fprVal, tprVal));
+            var (fprAt, tprAt) = RocRatesPerThreshold(AsTensor(actualValues), AsTensor(predictedValues), AsTensor(thresholds));
+            points.AddRange(fprAt.ToVector().Zip(tprAt.ToVector(), (f, t) => (_numOps.ToDouble(f), _numOps.ToDouble(t))));
         }
 
-        // Add endpoint (1, 1) - threshold below all predictions (everything predicted positive)
         points.Add((1.0, 1.0));
 
         // For proper ROC curve, we need the upper envelope: for each FPR, take the max TPR
@@ -5345,15 +5319,53 @@ public static class StatisticsHelper<T>
             .OrderBy(p => p.fpr)
             .ToList();
 
-        var fpr = new Vector<T>(upperEnvelope.Count);
-        var tpr = new Vector<T>(upperEnvelope.Count);
+        var fpr = new Vector<T>(upperEnvelope.Select(p => _numOps.FromDouble(p.fpr)));
+        var tpr = new Vector<T>(upperEnvelope.Select(p => _numOps.FromDouble(p.tpr)));
 
-        for (int i = 0; i < upperEnvelope.Count; i++)
+        return (fpr, tpr);
+    }
+
+    /// <summary>
+    /// False- and true-positive rates of CalculateConfusionMatrix(actual, predicted, threshold) for every
+    /// threshold: a sample is actually positive when actual &gt; 0 and predicted positive when
+    /// predicted &gt;= threshold; a rate whose class is empty is 0. Thresholds are processed in row blocks so the
+    /// [thresholds, samples] grid stays bounded.
+    /// </summary>
+    private static (Tensor<T> Fpr, Tensor<T> Tpr) RocRatesPerThreshold(Tensor<T> actual, Tensor<T> predicted, Tensor<T> thresholds)
+    {
+        int samples = actual.Length;
+        int thresholdCount = thresholds.Length;
+        if (samples == 0)
         {
-            fpr[i] = _numOps.FromDouble(upperEnvelope[i].fpr);
-            tpr[i] = _numOps.FromDouble(upperEnvelope[i].tpr);
+            return (new Tensor<T>(new[] { thresholdCount }), new Tensor<T>(new[] { thresholdCount }));
         }
 
+        var actualPositive = Engine.TensorGreaterThan(actual, _numOps.Zero);
+        var actualNegative = Not(actualPositive);
+        int positives = Engine.TensorCountNonzero(actualPositive);
+        int negatives = samples - positives;
+        var positiveColumn = actualPositive.Reshape(new[] { samples, 1 });
+        var negativeColumn = actualNegative.Reshape(new[] { samples, 1 });
+
+        int blockRows = Math.Max(1, (1 << 22) / samples);
+        var truePositiveBlocks = new List<Tensor<T>>();
+        var falsePositiveBlocks = new List<Tensor<T>>();
+        for (int start = 0; start < thresholdCount; start += blockRows)
+        {
+            int rows = Math.Min(blockRows, thresholdCount - start);
+            var grid = new[] { rows, samples };
+            var predictedGrid = Engine.TensorBroadcastTo(predicted.Reshape(new[] { 1, samples }), grid);
+            var thresholdGrid = Engine.TensorBroadcastTo(Engine.TensorNarrow(thresholds, 0, start, rows).Reshape(new[] { rows, 1 }), grid);
+            var predictedPositive = Engine.TensorGreaterEqual(predictedGrid, thresholdGrid);
+            truePositiveBlocks.Add(Engine.TensorMatMul(predictedPositive, positiveColumn));
+            falsePositiveBlocks.Add(Engine.TensorMatMul(predictedPositive, negativeColumn));
+        }
+
+        var shape = new[] { thresholdCount };
+        var truePositives = Engine.TensorConcatenate(truePositiveBlocks.ToArray(), 0).Reshape(shape);
+        var falsePositives = Engine.TensorConcatenate(falsePositiveBlocks.ToArray(), 0).Reshape(shape);
+        var fpr = negatives == 0 ? new Tensor<T>(shape) : Engine.TensorDivideScalar(falsePositives, _numOps.FromDouble(negatives));
+        var tpr = positives == 0 ? new Tensor<T>(shape) : Engine.TensorDivideScalar(truePositives, _numOps.FromDouble(positives));
         return (fpr, tpr);
     }
 
@@ -5532,18 +5544,29 @@ public static class StatisticsHelper<T>
         int concordantPairs = 0;
         int discordantPairs = 0;
 
-        for (int i = 0; i < x.Length - 1; i++)
+        // Pairs (i, j > i): sign of (x[i] - x[j]) * (y[i] - y[j]). Rows i are processed in blocks against
+        // every j, and TensorTriu(diagonal = start + 1) keeps only j > i inside each block.
+        int length = x.Length;
+        if (length > 1)
         {
-            for (int j = i + 1; j < x.Length; j++)
+            var xt = AsTensor(x);
+            var yt = AsTensor(y);
+            var xRow = xt.Reshape(new[] { 1, length });
+            var yRow = yt.Reshape(new[] { 1, length });
+            int blockRows = Math.Max(1, (1 << 22) / length);
+            for (int start = 0; start < length - 1; start += blockRows)
             {
-                T xDiff = _numOps.Subtract(x[i], x[j]);
-                T yDiff = _numOps.Subtract(y[i], y[j]);
-                T product = _numOps.Multiply(xDiff, yDiff);
-
-                if (_numOps.GreaterThan(product, _numOps.Zero))
-                    concordantPairs++;
-                else if (_numOps.LessThan(product, _numOps.Zero))
-                    discordantPairs++;
+                int rows = Math.Min(blockRows, length - 1 - start);
+                var grid = new[] { rows, length };
+                var xDiff = Engine.TensorSubtract(
+                    Engine.TensorBroadcastTo(Engine.TensorNarrow(xt, 0, start, rows).Reshape(new[] { rows, 1 }), grid),
+                    Engine.TensorBroadcastTo(xRow, grid));
+                var yDiff = Engine.TensorSubtract(
+                    Engine.TensorBroadcastTo(Engine.TensorNarrow(yt, 0, start, rows).Reshape(new[] { rows, 1 }), grid),
+                    Engine.TensorBroadcastTo(yRow, grid));
+                var product = Engine.TensorMultiply(xDiff, yDiff);
+                concordantPairs += Engine.TensorCountNonzero(Engine.TensorTriu(Engine.TensorGreaterThan(product, _numOps.Zero), start + 1));
+                discordantPairs += Engine.TensorCountNonzero(Engine.TensorTriu(Engine.TensorLessThan(product, _numOps.Zero), start + 1));
             }
         }
 
