@@ -4,6 +4,7 @@ using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
+using AiDotNet.Tensors.Engines.Autodiff;
 using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.MetaLearning.Algorithms;
@@ -75,18 +76,14 @@ internal sealed partial class MbPAHeadLoss<T> : ILossFunction<T>
     /// <inheritdoc/>
     public T CalculateLoss(Vector<T> predicted, Vector<T> actual)
     {
-        double total = 0.0;
-        int batch = BatchSize(predicted.Length, actual.Length, out int stride);
+        int batch = BatchSize(predicted.Length, actual.Length, out _);
+        if (batch == 0) return Ops.Zero;
         actual = NormalizeTargets(actual, batch);
 
-        for (int i = 0; i < batch; i++)
-        {
-            total += MbPAOutputNetwork<T>.Loss(
-                _headParameters, Slice(predicted, i * stride, stride), Slice(actual, i * _outputDim, _outputDim),
-                weight: 1.0, _featureDim, _outputDim, _distribution);
-        }
-
-        return Ops.FromDouble(batch > 0 ? total / batch : 0.0);
+        T total = MbPAOutputNetwork<T>.Loss(
+            _headParameters, Rows(predicted, batch, _featureDim), Rows(actual, batch, _outputDim),
+            weight: 1.0, _featureDim, _outputDim, _distribution);
+        return Ops.Divide(total, Ops.FromDouble(batch));
     }
 
     /// <inheritdoc/>
@@ -102,12 +99,14 @@ internal sealed partial class MbPAHeadLoss<T> : ILossFunction<T>
         int batch = BatchSize(predicted.Length, target.Length, out _);
         if (batch == 0)
             return engine.ReduceSum(predicted, Enumerable.Range(0, predicted.Rank).ToArray(), keepDims: false);
-        var weights = new Tensor<T>([_featureDim, _outputDim]);
-        var bias = new Tensor<T>([1, _outputDim]);
-        for (int o = 0; o < _outputDim; o++)
+        // The head is read as a fixed copy, off the tape, exactly as the fresh tensors it replaces were.
+        Tensor<T> weights;
+        Tensor<T> bias;
+        using (new NoGradScope<T>())
         {
-            for (int f = 0; f < _featureDim; f++) weights[f * _outputDim + o] = _headParameters[o * _featureDim + f];
-            bias[o] = _headParameters[_featureDim * _outputDim + o];
+            var (headWeights, headBias) = MbPAOutputNetwork<T>.Split(_headParameters.Clone(), _featureDim, _outputDim);
+            weights = engine.TensorTranspose(headWeights).Clone();
+            bias = engine.Reshape(headBias, [1, _outputDim]).Clone();
         }
         var logits = engine.TensorAdd(engine.TensorMatMul(engine.Reshape(predicted, [batch, _featureDim]), weights), bias);
         var normalized = new Tensor<T>([batch, _outputDim], NormalizeTargets(target.ToVector(), batch));
@@ -121,9 +120,8 @@ internal sealed partial class MbPAHeadLoss<T> : ILossFunction<T>
 
     public Vector<T> CalculateDerivative(Vector<T> predicted, Vector<T> actual)
     {
-        var derivative = new Vector<T>(predicted.Length);
-        int batch = BatchSize(predicted.Length, actual.Length, out int stride);
-        if (batch == 0) return derivative;
+        int batch = BatchSize(predicted.Length, actual.Length, out _);
+        if (batch == 0) return new Vector<T>(predicted.Length);
         actual = NormalizeTargets(actual, batch);
 
         // Averaged over the batch to match CalculateLoss. A loss that is a mean and a derivative that
@@ -131,23 +129,11 @@ internal sealed partial class MbPAHeadLoss<T> : ILossFunction<T>
         // of how the caller happened to chunk its data.
         double scale = 1.0 / batch;
 
-        for (int i = 0; i < batch; i++)
-        {
-            var perExample = MbPAOutputNetwork<T>.InputGradient(
-                _headParameters, Slice(predicted, i * stride, stride), Slice(actual, i * _outputDim, _outputDim),
-                weight: scale, _featureDim, _outputDim, _distribution);
-
-            // The head reads the first _featureDim entries of the embedding, so those are the only
-            // entries that contributed to the loss and the only ones that receive gradient. Anything
-            // beyond that width genuinely has a zero derivative -- it is not a dropped term.
-            int copy = Math.Min(perExample.Length, stride);
-            for (int f = 0; f < copy; f++)
-            {
-                derivative[(i * stride) + f] = perExample[f];
-            }
-        }
-
-        return derivative;
+        // Each embedding row is exactly _featureDim wide (BatchSize enforces it), so the [batch, featureDim]
+        // input gradients are the derivative in the embedding's own layout.
+        return MbPAOutputNetwork<T>.InputGradient(
+            _headParameters, Rows(predicted, batch, _featureDim), Rows(actual, batch, _outputDim),
+            weight: scale, _featureDim, _outputDim, _distribution).ToVector();
     }
 
     /// <inheritdoc/>
@@ -182,23 +168,25 @@ internal sealed partial class MbPAHeadLoss<T> : ILossFunction<T>
         return batch;
     }
 
+    /// <summary>
+    /// One class index per example becomes a one-hot row per example. Indices must be integers in the
+    /// head's class range, as <see cref="MbPAConversions{T}.CategoricalTarget"/> requires of each one.
+    /// </summary>
     private Vector<T> NormalizeTargets(Vector<T> actual, int batch)
     {
         if (actual.Length == batch * _outputDim) return actual;
-        var normalized = new Vector<T>(batch * _outputDim);
-        for (int i = 0; i < batch; i++)
-        {
-            var row = MbPAConversions<T>.CategoricalTarget(Slice(actual, i, 1), _outputDim);
-            for (int o = 0; o < _outputDim; o++) normalized[i * _outputDim + o] = row[o];
-        }
-        return normalized;
+        var engine = AiDotNetEngine.Current;
+        var indices = Tensor<T>.FromVector(actual);
+        var integral = engine.TensorEquals(engine.TensorFloor(indices), indices);
+        var nonNegative = engine.ScalarMinusTensor(Ops.One, engine.TensorLessThan(indices, Ops.Zero));
+        var inRange = engine.TensorLessThan(indices, Ops.FromDouble(_outputDim));
+        T valid = engine.TensorSum(engine.TensorMultiply(engine.TensorMultiply(integral, nonNegative), inRange));
+        if (!Ops.Equals(valid, Ops.FromDouble(actual.Length)))
+            throw new ArgumentOutOfRangeException(nameof(actual), "Class indices must be integers in the head's class range.");
+        return engine.TensorOneHot<T>(indices.Cast<int>(), _outputDim).ToVector();
     }
 
-    private static Vector<T> Slice(Vector<T> source, int offset, int length)
-    {
-        int available = Math.Max(0, Math.Min(length, source.Length - offset));
-        var slice = new Vector<T>(length);
-        for (int i = 0; i < available; i++) slice[i] = source[offset + i];
-        return slice;
-    }
+    /// <summary>Views a flat vector of <paramref name="batch"/> rows as a [batch, width] tensor.</summary>
+    private static Tensor<T> Rows(Vector<T> flat, int batch, int width)
+        => Tensor<T>.FromVector(flat, new[] { batch, width });
 }
