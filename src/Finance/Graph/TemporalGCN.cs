@@ -231,6 +231,7 @@ public partial class TemporalGCN<T> : ForecastingModelBase<T>
     /// The ONNX model contains the trained graph convolution and temporal processing layers.
     /// </para>
     /// </remarks>
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("ApiDesign", "RS0026:Do not add multiple public overloads with optional parameters", Justification = "Both constructors replace removed overloads whose adjacency parameter changed type; no old overload remains for a call to become ambiguous with.")]
     public TemporalGCN(
         NeuralNetworkArchitecture<T> architecture,
         string onnxModelPath,
@@ -288,6 +289,7 @@ public partial class TemporalGCN<T> : ForecastingModelBase<T>
     /// a default graph with nearby connections is used.
     /// </para>
     /// </remarks>
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("ApiDesign", "RS0026:Do not add multiple public overloads with optional parameters", Justification = "Both constructors replace removed overloads whose adjacency parameter changed type; no old overload remains for a call to become ambiguous with.")]
     public TemporalGCN(
         NeuralNetworkArchitecture<T> architecture,
         TemporalGCNOptions<T>? options = null,

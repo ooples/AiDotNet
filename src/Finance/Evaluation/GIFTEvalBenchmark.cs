@@ -242,8 +242,7 @@ public class GIFTEvalBenchmark<T>
         var levelLosses = new List<Tensor<T>>();
         var absoluteTargets = new List<T>();
         int numQ = quantileLevels.Length;
-        var levelRow = new Tensor<T>(
-            new[] { 1, numQ }, new Vector<T>(quantileLevels.Select(q => NumOps.FromDouble(q)).ToArray()));
+        var levelRow = new Tensor<double>(new[] { 1, numQ }, new Vector<double>(quantileLevels.ToArray())).Cast<T>();
 
         for (int s = 0; s < testSeries.Count; s++)
         {
