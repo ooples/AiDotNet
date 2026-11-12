@@ -160,6 +160,27 @@ internal static class WaveletEngineOps<T>
     }
 
     /// <summary>
+    /// Periodic two-channel synthesis, the adjoint of the periodic analysis
+    /// <c>a[i] = sum_j h[j] x[(2i + j) mod n]</c>, <c>d[i] = sum_j g[j] x[(2i + j) mod n]</c>:
+    /// <c>x[m] = sum_j h[j] up(a)[(m - j) mod n] + g[j] up(d)[(m - j) mod n]</c>, where <c>up</c> inserts a zero
+    /// after every coefficient and <c>n = 2 * a.Length</c>. For orthonormal filters this inverts the analysis.
+    /// </summary>
+    internal static Vector<T> PeriodicSynthesis(Vector<T> approximation, Vector<T> detail, Vector<T> low, Vector<T> high)
+    {
+        int outputLength = approximation.Length * 2;
+        if (outputLength == 0)
+        {
+            return new Vector<T>(0);
+        }
+
+        // sum_j f[j] u[(m - j) mod n] is a periodic correlation with the reversed filter whose window starts
+        // L - 1 samples before m.
+        var lowBranch = PeriodicCorrelate(Upsample(approximation, 2), Reverse(low), 1, outputLength, -(low.Length - 1));
+        var highBranch = PeriodicCorrelate(Upsample(detail, 2), Reverse(high), 1, outputLength, -(high.Length - 1));
+        return Engine.Add(lowBranch, highBranch);
+    }
+
+    /// <summary>
     /// The sign pattern <c>(-1)^i</c> for <c>i = 0 .. length - 1</c> (starting with +1).
     /// </summary>
     internal static Vector<T> AlternatingSigns(int length)
