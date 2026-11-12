@@ -6,6 +6,41 @@ namespace AiDotNet.Tests.UnitTests.Helpers;
 
 public class BatchCosineSimilarityTests
 {
+    [Fact]
+    public void Scores_StreamCandidatesOnceAndSnapshotReusedBuffersAcrossBlocks()
+    {
+        const int count = 10001, width = 769;
+        int enumerations = 0;
+        var query = new Vector<double>(Enumerable.Repeat(1.0, width).ToArray());
+        IEnumerable<Vector<double>> Candidates()
+        {
+            Assert.Equal(1, ++enumerations);
+            var reused = new Vector<double>(width);
+            for (int row = 0; row < count; row++)
+            {
+                reused.AsWritableSpan().Fill(row % 3 - 1);
+                yield return reused;
+            }
+        }
+        var scores = BatchCosineSimilarity.Scores(query, Candidates());
+        Assert.Equal(count, scores.Length);
+        for (int row = 0; row < count; row++) Assert.Equal((double)(row % 3 - 1), scores.GetFlat(row), 12);
+    }
+
+    [Fact]
+    public void RowScores_BlocksKeepOrderAndMaskZeroAndNaNRows()
+    {
+        const int count = 2051, width = 129;
+        var query = new Vector<double>(Enumerable.Repeat(1.0, width).ToArray());
+        var rows = new Tensor<double>(new[] { count, width });
+        for (int row = 0; row < count; row++)
+            rows.AsWritableSpan().Slice(row * width, width).Fill(row % 3 - 1);
+        rows.SetFlat((count - 1) * width, double.NaN);
+        var scores = BatchCosineSimilarity.RowScores(query, rows);
+        for (int row = 0; row < count - 1; row++) Assert.Equal((double)(row % 3 - 1), scores.GetFlat(row), 12);
+        Assert.Equal(0.0, scores.GetFlat(count - 1));
+    }
+
     [Theory]
     [InlineData(100f)]
     [InlineData(1e10f)]

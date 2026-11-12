@@ -13,6 +13,8 @@ namespace AiDotNet.Helpers;
 /// </remarks>
 internal static class BatchCosineSimilarity
 {
+    private static int BlockRows(int width) => Math.Max(1, Math.Min(1024, 262144 / Math.Max(1, width)));
+
     /// <summary>Cosine similarity of <paramref name="query"/> with each candidate, in candidate order.</summary>
     /// <exception cref="ArgumentNullException">The query or a candidate is null.</exception>
     /// <exception cref="ArgumentException">A candidate's length differs from the query's.</exception>
@@ -22,17 +24,26 @@ internal static class BatchCosineSimilarity
         if (candidates is null) throw new ArgumentNullException(nameof(candidates));
 
         var rows = new List<Tensor<T>>();
+        var scores = new List<T>();
+        int blockRows = BlockRows(query.Length);
         foreach (var candidate in candidates)
         {
             if (candidate is null) throw new ArgumentNullException(nameof(candidates));
             if (candidate.Length != query.Length)
                 throw new ArgumentException(
                     $"Vectors must have equal length for cosine similarity; got {query.Length} and {candidate.Length}.");
-            rows.Add(Tensor<T>.FromVector(candidate));
+            // An iterator may reuse its vector buffer for the next candidate.
+            rows.Add(new Tensor<T>(candidate.AsSpan().ToArray(), [query.Length]));
+            if (rows.Count == blockRows)
+            {
+                scores.AddRange(RowScores(query, Tensor<T>.Stack(rows.ToArray()), epsilon).ToArray());
+                rows.Clear();
+            }
         }
 
-        if (rows.Count == 0) return new Tensor<T>(new[] { 0 });
-        return RowScores(query, Tensor<T>.Stack(rows.ToArray()), epsilon);
+        if (rows.Count > 0)
+            scores.AddRange(RowScores(query, Tensor<T>.Stack(rows.ToArray()), epsilon).ToArray());
+        return new Tensor<T>(scores.ToArray(), [scores.Count]);
     }
 
     /// <summary>Cosine similarity of <paramref name="query"/> with each row of a <c>[n, query.Length]</c> tensor.</summary>
@@ -48,6 +59,21 @@ internal static class BatchCosineSimilarity
         if (count == 0 || query.Length == 0)
             return new Tensor<T>(new[] { count });
 
+        var result = new Tensor<T>([count]);
+        int blockRows = BlockRows(query.Length);
+        for (int start = 0; start < count;)
+        {
+            int blockCount = Math.Min(blockRows, count - start);
+            var block = AiDotNetEngine.Current.TensorSlice(rows, [start, 0], [blockCount, query.Length]);
+            RowScoresBlock(query, block, epsilon).CopyTo(result.AsWritableSpan().Slice(start, blockCount));
+            start += blockCount;
+        }
+        return result;
+    }
+
+    private static Tensor<T> RowScoresBlock<T>(Vector<T> query, Tensor<T> rows, double epsilon)
+    {
+        int count = rows.Shape[0];
         var engine = AiDotNetEngine.Current;
         var queryColumn = Tensor<T>.FromVector(query, new[] { query.Length, 1 }).Cast<double>();
         var wideRows = rows.Cast<double>();

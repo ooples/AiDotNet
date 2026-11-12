@@ -1222,29 +1222,25 @@ public partial class ImageBindNeuralNetwork<T> : MultimodalModelLayoutBase<T>, I
         using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
         {
             // The signal is the waveform itself, or its first row
-            var signal = new Tensor<T>(waveform.ToArray().AsSpan(0, numSamples).ToArray(), [numSamples]);
-            var squares = Engine.TensorMultiply(signal, signal);
+            var signal = new Tensor<T>(waveform.ToArray().AsSpan(0, numSamples).ToArray(), [numSamples]).Cast<double>();
+            var squares = Engine.TensorSquare(signal);
 
-            // Simple energy-based features as placeholder: the mean square over each frame's two-hop window
-            var frameEnergies = new T[numFrames];
+            // Energy and its positive log floor must remain representable for low-precision samples.
+            var frameEnergies = new double[numFrames];
             for (int frame = 0; frame < numFrames; frame++)
             {
                 int start = frame * hopLength;
                 int count = Math.Max(0, Math.Min(start + hopLength * 2, numSamples) - start);
                 frameEnergies[frame] = count > 0
-                    ? NumOps.Divide(Engine.TensorSum(Engine.TensorSlice(squares, [start], [count])), NumOps.FromDouble(count))
-                    : NumOps.Zero;
+                    ? Engine.TensorSum(Engine.TensorSlice(squares, [start], [count])) / count
+                    : 0.0;
             }
-            var logEnergy = Engine.TensorLog(Engine.TensorAddScalar(new Tensor<T>(frameEnergies, [numFrames]), NumOps.FromDouble(1e-10)));
+            var logEnergy = Engine.TensorLog(Engine.TensorAddScalar(new Tensor<double>(frameEnergies, [numFrames]), 1e-10));
 
-            // Simple frequency-dependent scaling: 1 - mel / numMelBins * 0.5
-            var melIndex = Engine.TensorArange<T>(0, numMelBins);
+            var melIndex = Engine.TensorArange<double>(0, numMelBins);
             var scale = Engine.TensorAddScalar(
-                Engine.TensorMultiplyScalar(Engine.TensorMultiplyScalar(
-                    Engine.TensorDivideScalar(melIndex, NumOps.FromDouble(numMelBins)), NumOps.FromDouble(0.5)), NumOps.FromDouble(-1.0)),
-                NumOps.One);
-
-            return Engine.TensorOuter(scale, logEnergy);
+                Engine.TensorMultiplyScalar(Engine.TensorDivideScalar(melIndex, (double)numMelBins), -0.5), 1.0);
+            return Engine.TensorOuter(scale, logEnergy).Cast<T>();
         }
     }
 

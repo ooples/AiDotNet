@@ -17406,7 +17406,6 @@
 1	ADNELEM002|AiDotNet.NeuralNetworks.HopfieldNetwork<T>.TryApplyLearningRule(AiDotNet.Tensors.LinearAlgebra.Tensor<T>, AiDotNet.Tensors.LinearAlgebra.Tensor<T>)
 1	ADNELEM002|AiDotNet.NeuralNetworks.HTMNetwork<T>.TryApplyLearningRule(AiDotNet.Tensors.LinearAlgebra.Tensor<T>, AiDotNet.Tensors.LinearAlgebra.Tensor<T>)
 2	ADNELEM002|AiDotNet.NeuralNetworks.ImageBindNeuralNetwork<T>.ComputeCrossModalSimilarity(AiDotNet.Tensors.LinearAlgebra.Vector<T>, AiDotNet.Tensors.LinearAlgebra.Vector<T>)
-2	ADNELEM002|AiDotNet.NeuralNetworks.ImageBindNeuralNetwork<T>.ComputeMelSpectrogram(AiDotNet.Tensors.LinearAlgebra.Tensor<T>, int)
 1	ADNELEM002|AiDotNet.NeuralNetworks.ImageBindNeuralNetwork<T>.CrossModalRetrieval(AiDotNet.Tensors.LinearAlgebra.Vector<T>, System.Collections.Generic.IEnumerable<AiDotNet.Tensors.LinearAlgebra.Vector<T>>, int)
 1	ADNELEM002|AiDotNet.NeuralNetworks.ImageBindNeuralNetwork<T>.EncodeAudioOnnx(AiDotNet.Tensors.LinearAlgebra.Tensor<T>, int)
 1	ADNELEM002|AiDotNet.NeuralNetworks.ImageBindNeuralNetwork<T>.EncodeImageOnnx(AiDotNet.Tensors.LinearAlgebra.Tensor<T>)
