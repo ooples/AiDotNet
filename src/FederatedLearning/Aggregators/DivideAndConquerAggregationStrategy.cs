@@ -1,6 +1,5 @@
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
-using AiDotNet.Helpers;
 
 namespace AiDotNet.FederatedLearning.Aggregators;
 
@@ -153,7 +152,7 @@ public class DivideAndConquerAggregationStrategy<T> : ParameterDictionaryAggrega
             var centered = Engine.TensorSubtract(sub, Engine.TensorBroadcastTo(mu, new[] { n, subDim }));
 
             // Top right singular vector v of the centered sub-sampled updates.
-            var (_, _, vh) = LinalgDispatch<T>.Svd(centered, false);
+            var (_, _, vh) = AiDotNet.Helpers.LinalgDispatch<T>.Svd(centered, false);
             var topRight = Engine.TensorSlice(vh, new[] { 0, 0 }, new[] { 1, subDim }).Reshape(subDim, 1);
 
             // s_i = ((g_i - mu) . v)^2
