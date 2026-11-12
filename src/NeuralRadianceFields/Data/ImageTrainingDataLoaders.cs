@@ -171,7 +171,7 @@ public static class ImageTrainingDataLoaders
             var dzCam = engine.TensorOnesLike(dxCam);
             var cameraDirs = engine.TensorStack(new[] { dxCam, dyCam, dzCam }, 1);
             var norm = engine.TensorSqrt(engine.ReduceSum(engine.TensorSquare(cameraDirs), new[] { 1 }, true));
-            cameraDirs = engine.TensorDivide(cameraDirs, engine.TensorBroadcastTo(norm, cameraDirs.Shape));
+            cameraDirs = engine.TensorDivide(cameraDirs, engine.TensorBroadcastTo(norm, cameraDirs.Shape.ToArray()));
 
             // Rotate into world coordinates via CameraRotation columns: world = R * cam for every ray.
             var rotation = engine.TensorSlice(Tensor<T>.FromMatrix(view.CameraRotation), new[] { 0, 0 }, new[] { 3, 3 });

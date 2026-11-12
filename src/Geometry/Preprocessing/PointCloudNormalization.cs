@@ -32,7 +32,7 @@ public static class PointCloudNormalization<T>
             engine.ReduceSum(positions, new[] { 0 }, true), NumOps.FromDouble(numPoints));
 
         // Create centered point cloud
-        var centered = engine.TensorSubtract(positions, engine.TensorBroadcastTo(centroid, positions.Shape));
+        var centered = engine.TensorSubtract(positions, engine.TensorBroadcastTo(centroid, positions.Shape.ToArray()));
         var tensor = GeometryEngineOps<T>.WithPositions(pointCloud.Points, centered);
         return new PointCloudData<T>(tensor, pointCloud.Labels);
     }
@@ -101,7 +101,7 @@ public static class PointCloudNormalization<T>
         var mid = engine.TensorDivideScalar(engine.TensorAdd(min, max), NumOps.FromDouble(2.0)).Reshape(1, 3);
         T scale = NumOps.Divide(NumOps.One, maxRange);
 
-        var shifted = engine.TensorSubtract(positions, engine.TensorBroadcastTo(mid, positions.Shape));
+        var shifted = engine.TensorSubtract(positions, engine.TensorBroadcastTo(mid, positions.Shape.ToArray()));
         var scaled = engine.TensorMultiplyScalar(shifted, scale);
         var tensor = GeometryEngineOps<T>.WithPositions(workingCloud.Points, scaled);
         return new PointCloudData<T>(tensor, workingCloud.Labels);

@@ -44,7 +44,7 @@ public static class SceneBoundsEstimator
         var cameras = engine.TensorStack(cameraRows, 0);
         var centroid = engine.TensorDivideScalar(
             engine.ReduceSum(cameras, new[] { 0 }, true), numOps.FromDouble(viewList.Count));
-        var offsets = engine.TensorSubtract(cameras, engine.TensorBroadcastTo(centroid, cameras.Shape));
+        var offsets = engine.TensorSubtract(cameras, engine.TensorBroadcastTo(centroid, cameras.Shape.ToArray()));
         var distances = engine.TensorSqrt(engine.ReduceSum(engine.TensorSquare(offsets), new[] { 1 }, false));
         var isNan = engine.TensorIsNan(distances);
 

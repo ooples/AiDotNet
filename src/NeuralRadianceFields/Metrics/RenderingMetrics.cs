@@ -242,7 +242,7 @@ public static class RenderingMetrics<T>
         T unbiased = NumOps.FromDouble(perWindow - 1);
         T two = NumOps.FromDouble(2);
 
-        T total = NumOps.Zero;
+        var blocks = new List<Tensor<T>>();
         for (int start = 0; start < windowRows; start += blockRows)
         {
             int rows = Math.Min(blockRows, windowRows - start);
@@ -250,17 +250,17 @@ public static class RenderingMetrics<T>
             var py = Windows(y, halfWindow, start, rows);
             var meanX = Engine.ReduceMean(px, axes, true);
             var meanY = Engine.ReduceMean(py, axes, true);
-            var dx = Engine.TensorSubtract(px, Engine.TensorBroadcastTo(meanX, px.Shape));
-            var dy = Engine.TensorSubtract(py, Engine.TensorBroadcastTo(meanY, py.Shape));
+            var dx = Engine.TensorSubtract(px, Engine.TensorBroadcastTo(meanX, px.Shape.ToArray()));
+            var dy = Engine.TensorSubtract(py, Engine.TensorBroadcastTo(meanY, py.Shape.ToArray()));
             var varX = Engine.TensorDivideScalar(Engine.ReduceSum(Engine.TensorSquare(dx), axes, false), unbiased);
             var varY = Engine.TensorDivideScalar(Engine.ReduceSum(Engine.TensorSquare(dy), axes, false), unbiased);
             var covXY = Engine.TensorDivideScalar(Engine.ReduceSum(Engine.TensorMultiply(dx, dy), axes, false), unbiased);
             var mx = meanX.Reshape(rows, windowColumns);
             var my = meanY.Reshape(rows, windowColumns);
-            total = NumOps.Add(total, Engine.TensorSum(Ssim(mx, my, varX, varY, covXY, c1, c2, two)));
+            blocks.Add(Ssim(mx, my, varX, varY, covXY, c1, c2, two));
         }
 
-        return total;
+        return blocks.Count == 0 ? NumOps.Zero : Engine.TensorSum(Engine.TensorConcatenate(blocks.ToArray(), 0));
     }
 
     /// <summary>((2 mx my + c1)(2 cov + c2)) / ((mx^2 + my^2 + c1)(vx + vy + c2)), element-wise.</summary>
@@ -363,7 +363,7 @@ public static class RenderingMetrics<T>
         var axes = new[] { 2, 3, 4 };
         var windows = Windows(hwc, halfWindow, 0, height - 2 * halfWindow);
         var mean = Engine.ReduceMean(windows, axes, true);
-        var centred = Engine.TensorSubtract(windows, Engine.TensorBroadcastTo(mean, windows.Shape));
+        var centred = Engine.TensorSubtract(windows, Engine.TensorBroadcastTo(mean, windows.Shape.ToArray()));
         var deviation = Engine.TensorSqrt(Engine.ReduceMean(Engine.TensorSquare(centred), axes, false));
 
         var padding = new[] { halfWindow, halfWindow, halfWindow, halfWindow };

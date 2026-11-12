@@ -173,7 +173,7 @@ public static class PointCloudSampling<T>
             // Points strictly closer than the minimum distance to the candidate; it is rejected when any of
             // them is already selected.
             var candidate = engine.TensorSlice(positions, new[] { idx, 0 }, new[] { 1, 3 });
-            var offsets = engine.TensorSubtract(positions, engine.TensorBroadcastTo(candidate, positions.Shape));
+            var offsets = engine.TensorSubtract(positions, engine.TensorBroadcastTo(candidate, positions.Shape.ToArray()));
             var distancesSq = GeometryEngineOps<T>.RowSquaredNorms(offsets);
             var near = GeometryEngineOps<T>.NonzeroPairs(engine.TensorLessThan(distancesSq, minDistSq));
 
@@ -227,7 +227,7 @@ public static class PointCloudSampling<T>
         var engine = AiDotNetEngine.Current;
         var positions = GeometryEngineOps<T>.Positions(pointCloud.Points);
         var (min, _) = GeometryEngineOps<T>.RunningColumnBounds(positions);
-        var relative = engine.TensorSubtract(positions, engine.TensorBroadcastTo(min.Reshape(1, 3), positions.Shape));
+        var relative = engine.TensorSubtract(positions, engine.TensorBroadcastTo(min.Reshape(1, 3), positions.Shape.ToArray()));
         var cells = engine.TensorFloor(engine.TensorDivideScalar(relative, voxelSize));
 
         // Equal cell coordinates share an id per axis, so the id triple identifies the voxel.
@@ -235,7 +235,8 @@ public static class PointCloudSampling<T>
         for (int axis = 0; axis < 3; axis++)
         {
             var (_, inverse, _) = engine.TensorUniqueWithInfo(GeometryEngineOps<T>.Column(cells, axis), false, true, false);
-            cellIds[axis] = inverse.ToArray();
+            cellIds[axis] = inverse?.ToArray()
+                ?? throw new InvalidOperationException("TensorUniqueWithInfo returned no inverse indices.");
         }
 
         // Voxels are numbered in order of first appearance, the order the voxel dictionary enumerated them.
@@ -261,14 +262,15 @@ public static class PointCloudSampling<T>
         var sums = engine.TensorIndexAdd(new Tensor<T>(new[] { numSamples, numFeatures }), 0, groupIndex, pointCloud.Points);
         var ones = engine.TensorOnesLike(engine.TensorSlice(pointCloud.Points, new[] { 0, 0 }, new[] { numPoints, 1 }));
         var counts = engine.TensorIndexAdd(new Tensor<T>(new[] { numSamples, 1 }), 0, groupIndex, ones);
-        var tensor = engine.TensorDivide(sums, engine.TensorBroadcastTo(counts, sums.Shape));
+        var tensor = engine.TensorDivide(sums, engine.TensorBroadcastTo(counts, sums.Shape.ToArray()));
 
         Vector<T>? sampledLabels = null;
         if (pointCloud.Labels != null)
         {
             var (labelValues, labelInverse, _) = engine.TensorUniqueWithInfo(
                 Tensor<T>.FromVector(pointCloud.Labels), false, true, false);
-            var labelIds = labelInverse.ToArray();
+            var labelIds = labelInverse?.ToArray()
+                ?? throw new InvalidOperationException("TensorUniqueWithInfo returned no inverse indices.");
             var majority = new int[numSamples];
             for (int g = 0; g < numSamples; g++)
             {
@@ -310,7 +312,7 @@ public static class PointCloudSampling<T>
         var engine = AiDotNetEngine.Current;
         int numPoints = positions.Shape[0];
         var newPoint = engine.TensorSlice(positions, new[] { newPointIdx, 0 }, new[] { 1, 3 });
-        var offsets = engine.TensorSubtract(positions, engine.TensorBroadcastTo(newPoint, positions.Shape));
+        var offsets = engine.TensorSubtract(positions, engine.TensorBroadcastTo(newPoint, positions.Shape.ToArray()));
         var distances = GeometryEngineOps<T>.RowSquaredNorms(offsets).Reshape(numPoints);
 
         // Only a strictly smaller distance replaces the running minimum (NaN never does).

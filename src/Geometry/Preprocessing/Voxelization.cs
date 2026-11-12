@@ -70,7 +70,7 @@ public static class Voxelization<T>
     private static Tensor<T> MarkCells(Tensor<T> voxels, Tensor<T> positions, Tensor<T> origin, T voxelSize, int resolution)
     {
         var engine = AiDotNetEngine.Current;
-        var relative = engine.TensorSubtract(positions, engine.TensorBroadcastTo(origin.Reshape(1, 3), positions.Shape));
+        var relative = engine.TensorSubtract(positions, engine.TensorBroadcastTo(origin.Reshape(1, 3), positions.Shape.ToArray()));
         var cells = engine.TensorFloor(engine.TensorDivideScalar(relative, voxelSize));
         cells = engine.TensorWhere(engine.TensorIsNan(cells), engine.TensorZerosLike(cells), cells);
         cells = engine.TensorClamp(cells, NumOps.Zero, NumOps.FromDouble(resolution - 1));

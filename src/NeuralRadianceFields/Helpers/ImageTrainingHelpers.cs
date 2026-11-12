@@ -178,8 +178,8 @@ internal static class ImageTrainingHelpers
 
         var norm = engine.TensorSqrt(engine.ReduceSum(engine.TensorSquare(directions), new[] { 1 }, true));
         var normalized = engine.TensorMultiply(
-            directions, engine.TensorBroadcastTo(engine.TensorReciprocal(norm), directions.Shape));
-        var positive = engine.TensorBroadcastTo(engine.TensorGreaterThan(norm, numOps.Zero), directions.Shape);
+            directions, engine.TensorBroadcastTo(engine.TensorReciprocal(norm), directions.Shape.ToArray()));
+        var positive = engine.TensorBroadcastTo(engine.TensorGreaterThan(norm, numOps.Zero), directions.Shape.ToArray());
         directions = engine.TensorWhere(positive, normalized, directions);
 
         var position = Tensor<T>.FromVector(cameraPosition.GetSubVector(0, 3)).Reshape(1, 3);

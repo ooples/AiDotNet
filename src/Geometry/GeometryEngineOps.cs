@@ -51,7 +51,7 @@ internal static class GeometryEngineOps<T>
     /// </summary>
     internal static Tensor<T> ScaleRows(Tensor<T> rows, Tensor<T> factors)
     {
-        return Engine.TensorMultiply(rows, Engine.TensorBroadcastTo(factors, rows.Shape));
+        return Engine.TensorMultiply(rows, Engine.TensorBroadcastTo(factors, rows.Shape.ToArray()));
     }
 
     /// <summary>
@@ -82,7 +82,7 @@ internal static class GeometryEngineOps<T>
             return rows;
         }
 
-        var length = Engine.TensorBroadcastTo(Engine.TensorSqrt(RowSquaredNorms(rows)), rows.Shape);
+        var length = Engine.TensorBroadcastTo(Engine.TensorSqrt(RowSquaredNorms(rows)), rows.Shape.ToArray());
         var usable = Engine.TensorGreaterThan(length, minLength);
         return Engine.TensorWhere(usable, Engine.TensorDivide(rows, length), rows);
     }
@@ -255,7 +255,7 @@ internal static class GeometryEngineOps<T>
     {
         int columns = rows.Shape[1];
         var first = Engine.TensorSlice(rows, new[] { 0, 0 }, new[] { 1, columns });
-        var masked = Engine.TensorWhere(Engine.TensorIsNan(rows), Engine.TensorBroadcastTo(first, rows.Shape), rows);
+        var masked = Engine.TensorWhere(Engine.TensorIsNan(rows), Engine.TensorBroadcastTo(first, rows.Shape.ToArray()), rows);
         var min = Engine.TensorNegate(Engine.ReduceMax(Engine.TensorNegate(masked), new[] { 0 }, false));
         var max = Engine.ReduceMax(masked, new[] { 0 }, false);
         var firstRow = first.Reshape(columns);
