@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using AiDotNet.ComputerVision.Segmentation.OpenVocabulary;
 using AiDotNet.ComputerVision.Segmentation.Referring;
 using AiDotNet.Enums;
