@@ -315,11 +315,21 @@ public partial class ContextNet<T> : AudioNeuralNetworkBase<T>, ISpeechRecognize
 
         private TranscriptionResult<T> TranscribeSnapshot(List<Tensor<T>> snapshot)
         {
-            int totalLen = 0;
-            foreach (var ch in snapshot) totalLen += ch.Length;
-            var combined = new Tensor<T>(new[] { totalLen });
-            int offset = 0;
-            foreach (var ch in snapshot) { for (int i = 0; i < ch.Length; i++) combined[offset + i] = ch[i]; offset += ch.Length; }
+            // The chunks are joined end to end in flat order into one fresh buffer.
+            Tensor<T> combined;
+            if (snapshot.Count == 0)
+            {
+                combined = new Tensor<T>(new[] { 0 });
+            }
+            else
+            {
+                using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
+                {
+                    var flatChunks = snapshot.Select(ch => ch.Reshape(ch.Length)).ToArray();
+                    combined = AiDotNetEngine.Current.TensorConcatenate(flatChunks, 0);
+                }
+            }
+
             return _model.Transcribe(combined, _language);
         }
 

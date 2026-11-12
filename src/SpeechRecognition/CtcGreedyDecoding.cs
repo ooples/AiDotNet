@@ -63,42 +63,75 @@ internal static class CtcGreedyDecoding
         return DecodeFrames(frames.Reshape(numFrames, vocabSize), maxTokens);
     }
 
+    /// <summary>
+    /// Decodes like <see cref="Decode{T}"/>, but after every emitted token the scan jumps
+    /// <paramref name="framesAfterEmission"/> frames ahead instead of one (Token-and-Duration Transducer
+    /// style frame skipping). A single <c>[vocab]</c> frame is re-read whatever the frame position.
+    /// </summary>
+    /// <exception cref="ArgumentException">The logits have rank above 2 and at least one element would be read.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">A negative jump moves the scan before frame 0.</exception>
+    internal static (List<int> tokens, double confidence) DecodeSkippingAfterEmission<T>(
+        Tensor<T> logits, int maxTokens, int framesAfterEmission)
+    {
+        int numFrames = logits.Rank >= 2 ? logits.Shape[0] : 1;
+        int vocabSize = logits.Rank >= 2 ? logits.Shape[^1] : logits.Shape[0];
+        if (numFrames <= 0 || vocabSize <= 0 || maxTokens <= 0)
+        {
+            // With no vocabulary every frame decodes to the blank, so nothing is emitted.
+            return (new List<int>(), 0.0);
+        }
+
+        if (logits.Rank > 2)
+        {
+            throw new ArgumentException("Number of indices must match the tensor's rank.");
+        }
+
+        bool singleFrame = logits.Rank < 2;
+        using (new NoGradScope<T>())
+        {
+            var (bestIndex, frameConfidence) = ScoreFrames(logits.Reshape(numFrames, vocabSize));
+            int[] best = bestIndex.ToArray();
+
+            // The jump makes the visited frames data-dependent, so the walk runs over the integer ids.
+            var emittedFrames = new List<int>();
+            int previousToken = -1;
+            int t = 0;
+            while (t < numFrames && emittedFrames.Count < maxTokens)
+            {
+                if (!singleFrame && t < 0)
+                {
+                    // Same failure as reading row t of the logits.
+                    throw new ArgumentOutOfRangeException("indices", "Index 0 is out of range.");
+                }
+
+                int frame = singleFrame ? 0 : t;
+                int token = best[frame];
+                if (token != previousToken && token > 0)
+                {
+                    emittedFrames.Add(frame);
+                    t += framesAfterEmission;
+                }
+                else
+                {
+                    t++;
+                }
+
+                previousToken = token;
+            }
+
+            return Collect(bestIndex, frameConfidence, emittedFrames.ToArray());
+        }
+    }
+
     private static (List<int> tokens, double confidence) DecodeFrames<T>(Tensor<T> scores, int maxTokens)
     {
         var engine = AiDotNetEngine.Current;
-        var ops = MathHelper.GetNumericOperations<T>();
         int numFrames = scores.Shape[0];
-        int vocabSize = scores.Shape[1];
-        var shape = new[] { numFrames, vocabSize };
 
         // Decoding only reads values; nothing here belongs on a gradient tape.
         using (new NoGradScope<T>())
         {
-            var zeros = engine.TensorZerosLike(scores);
-            var ones = engine.TensorOnesLike(scores);
-
-            // Entries that can win a "value > best" scan started at negative infinity.
-            var negativeInfinity = engine.TensorWhere(
-                engine.TensorIsInf(scores), engine.TensorLessThan(scores, ops.Zero), zeros);
-            var eligible = engine.TensorSubtract(
-                engine.TensorWhere(engine.TensorIsNan(scores), zeros, ones), negativeInfinity);
-            var clean = engine.TensorWhere(eligible, scores, engine.TensorFullLike(scores, ops.MinValue));
-
-            var rowMax = engine.ReduceMax(clean, new[] { 1 }, true);
-            var rowMaxWide = engine.TensorBroadcastTo(rowMax, shape);
-            var isMax = engine.TensorMultiply(engine.TensorEquals(clean, rowMaxWide), eligible).Cast<int>();
-
-            // key = vocab - column on a frame's maxima, so the largest key is the lowest maximal column; 0 = none.
-            var reversedColumn = engine.TensorBroadcastTo(
-                engine.TensorArange<int>(vocabSize, 0, -1).Reshape(1, vocabSize), shape);
-            var key = engine.ReduceMax(engine.TensorMultiply(isMax, reversedColumn), new[] { 1 }, false);
-            var bestIndex = engine.TensorMultiply(
-                engine.ScalarMinusTensor(vocabSize, key), engine.TensorGreaterThan(key, 0));
-
-            // Softmax probability of the winning entry: 1 / sum(exp(logit - max)).
-            var sumExp = engine.ReduceSum(
-                engine.TensorExp(engine.TensorSubtract(scores, rowMaxWide)), new[] { 1 }, false);
-            var frameConfidence = engine.TensorReciprocal(sumExp);
+            var (bestIndex, frameConfidence) = ScoreFrames(scores);
 
             // Emit where the index differs from the previous frame's and is not the blank. The first frame is
             // compared against 0, which there is the same as "not blank".
@@ -114,16 +147,62 @@ internal static class CtcGreedyDecoding
             var kept = engine.TensorMultiply(emitted, engine.ScalarMinusTensor(1, overLimit));
 
             var positions = engine.TensorNonzero(kept);
-            int count = positions.Shape[0];
-            if (count == 0)
-            {
-                return (new List<int>(), 0.0);
-            }
-
-            var keptFrames = positions.Reshape(count);
-            var tokens = engine.TensorIndexSelect(bestIndex, keptFrames, 0).ToArray();
-            T confidenceSum = engine.TensorSum(engine.TensorIndexSelect(frameConfidence, keptFrames, 0));
-            return (new List<int>(tokens), ops.ToDouble(confidenceSum) / count);
+            return Collect(bestIndex, frameConfidence, positions.Reshape(positions.Shape[0]).ToArray());
         }
+    }
+
+    /// <summary>
+    /// Per frame of <c>[frames, vocab]</c> scores: the winning vocabulary index and its softmax probability.
+    /// </summary>
+    private static (Tensor<int> bestIndex, Tensor<T> frameConfidence) ScoreFrames<T>(Tensor<T> scores)
+    {
+        var engine = AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<T>();
+        int numFrames = scores.Shape[0];
+        int vocabSize = scores.Shape[1];
+        var shape = new[] { numFrames, vocabSize };
+
+        var zeros = engine.TensorZerosLike(scores);
+        var ones = engine.TensorOnesLike(scores);
+
+        // Entries that can win a "value > best" scan started at negative infinity.
+        var negativeInfinity = engine.TensorWhere(
+            engine.TensorIsInf(scores), engine.TensorLessThan(scores, ops.Zero), zeros);
+        var eligible = engine.TensorSubtract(
+            engine.TensorWhere(engine.TensorIsNan(scores), zeros, ones), negativeInfinity);
+        var clean = engine.TensorWhere(eligible, scores, engine.TensorFullLike(scores, ops.MinValue));
+
+        var rowMax = engine.ReduceMax(clean, new[] { 1 }, true);
+        var rowMaxWide = engine.TensorBroadcastTo(rowMax, shape);
+        var isMax = engine.TensorMultiply(engine.TensorEquals(clean, rowMaxWide), eligible).Cast<int>();
+
+        // key = vocab - column on a frame's maxima, so the largest key is the lowest maximal column; 0 = none.
+        var reversedColumn = engine.TensorBroadcastTo(
+            engine.TensorArange<int>(vocabSize, 0, -1).Reshape(1, vocabSize), shape);
+        var key = engine.ReduceMax(engine.TensorMultiply(isMax, reversedColumn), new[] { 1 }, false);
+        var bestIndex = engine.TensorMultiply(
+            engine.ScalarMinusTensor(vocabSize, key), engine.TensorGreaterThan(key, 0));
+
+        // Softmax probability of the winning entry: 1 / sum(exp(logit - max)).
+        var sumExp = engine.ReduceSum(
+            engine.TensorExp(engine.TensorSubtract(scores, rowMaxWide)), new[] { 1 }, false);
+        return (bestIndex, engine.TensorReciprocal(sumExp));
+    }
+
+    /// <summary>The tokens at <paramref name="frames"/>, in order, and the mean of their frame confidences.</summary>
+    private static (List<int> tokens, double confidence) Collect<T>(
+        Tensor<int> bestIndex, Tensor<T> frameConfidence, int[] frames)
+    {
+        if (frames.Length == 0)
+        {
+            return (new List<int>(), 0.0);
+        }
+
+        var engine = AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<T>();
+        var selected = new Tensor<int>(frames, new[] { frames.Length });
+        var tokens = engine.TensorIndexSelect(bestIndex, selected, 0).ToArray();
+        T confidenceSum = engine.TensorSum(engine.TensorIndexSelect(frameConfidence, selected, 0));
+        return (new List<int>(tokens), ops.ToDouble(confidenceSum) / frames.Length);
     }
 }
