@@ -1,4 +1,5 @@
 using AiDotNet.FederatedLearning.Adapters;
+using AiDotNet.FederatedLearning.Aggregators;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
@@ -246,5 +247,32 @@ public class FederatedElementwiseSweep29bReferenceTests
         Assert.Equal(new[] { 0, 2 }, sparse.Indices);
         Assert.Equal(new[] { 5.0, 9.0 }, sparse.Values);
         Assert.Equal(new[] { 5.0, 0.0, 9.0 }, SparseLoRA<double>.ToDense(sparse).ToArray());
+    }
+
+    [Fact(Timeout = 60000)]
+    public async Task Flame_AdmitsMajorityClusterAndClipsToMedianOfAllDistances()
+    {
+        await Task.Yield();
+
+        // FLAME (Nguyen et al. 2022), Algorithm 1, first round (G_{t-1} = 0), lambda = 0:
+        // honest models [1, 0], [1, 0.1], [1, -0.1], [0.9, 0] and an attacker [-1, 0] (cosine distance ~2).
+        // HDBSCAN with min_cluster_size = 5/2 + 1 = 3 admits the 4 honest models.
+        // S_t = median of all 5 distances {1, 1.00499, 1.00499, 0.9, 1} = 1, so [1, +-0.1] are scaled by
+        // 1 / sqrt(1.01). G_t = plain mean of the clipped admitted models.
+        var flame = new FlameAggregationStrategy<double>(noiseMultiplier: 0.0);
+        var points = new[] { new[] { 1.0, 0.0 }, new[] { 1.0, 0.1 }, new[] { 1.0, -0.1 }, new[] { 0.9, 0.0 }, new[] { -1.0, 0.0 } };
+        var models = new Dictionary<int, Dictionary<string, double[]>>();
+        var weights = new Dictionary<int, double>();
+        for (int i = 0; i < points.Length; i++)
+        {
+            models[i] = new Dictionary<string, double[]> { ["w"] = points[i] };
+            weights[i] = 1.0;
+        }
+
+        var aggregated = flame.Aggregate(models, weights);
+
+        double scale = 1.0 / Math.Sqrt(1.01);
+        Assert.Equal((1.0 + 2.0 * scale + 0.9) / 4.0, aggregated["w"][0], Precision);
+        Assert.Equal(0.0, aggregated["w"][1], Precision);
     }
 }
