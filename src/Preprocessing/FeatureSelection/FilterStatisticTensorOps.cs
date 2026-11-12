@@ -252,7 +252,8 @@ internal static class FilterStatisticTensorOps
         var engine = AiDotNetEngine.Current;
         int p = x.Shape[1];
         int k = classOneHot.Shape[1];
-        var counts = engine.ReduceSum(classOneHot, new[] { 0 }, false);
+        // Class sizes counted in int: 0/1 sums in a narrow T (Half) stop growing at 2048
+        var counts = engine.ReduceSum(classOneHot.Cast<int>(), new[] { 0 }, false).Cast<T>();
         var classMeans = engine.TensorDivide(
             engine.TensorMatMul(engine.TensorTranspose(classOneHot), x), ColumnBroadcast(counts, p));
         var deviation = engine.TensorSubtract(classMeans, RowBroadcast(ColumnMeans(x), k));
