@@ -186,7 +186,7 @@ public partial class Kokoro<T> : TtsModelBase<T>, IEndToEndTts<T>
     {
         if (_native is null) return base.PreprocessText(text);
         var ids = EncodePhonemes(PhonemizeText(text));
-        return new Tensor<T>(new[] { ids.Length }, new Vector<T>(ids.Select(id => NumOps.FromDouble(id))));
+        return IdTensor(ids);
     }
 
     /// <inheritdoc />
@@ -226,9 +226,21 @@ public partial class Kokoro<T> : TtsModelBase<T>, IEndToEndTts<T>
         ThrowIfDisposed();
         if (_native is null) throw new InvalidOperationException("Native Kokoro is required.");
         if (input.Length > _options.MaxTextLength) throw new ArgumentException("Token input exceeds MaxTextLength.", nameof(input));
-        var ids = input.ToArray().Select(value => checked((int)NumOps.ToDouble(value))).ToArray();
+        var ids = TruncatedIds(input);
         _native.SynthesisSeed = _options.SynthesisSeed;
         return _native.Forward(ids, SelectVoiceStyle(Math.Max(1, ids.Length - 2)), _options.Speed, training).Audio;
+    }
+
+    // checked((int)x) per id: truncated toward zero, and an OverflowException for NaN or a value outside Int32.
+    private int[] TruncatedIds(Tensor<T> input)
+    {
+        var truncated = Engine.TensorTrunc(input);
+        if (truncated.Length > 0
+            && (NumOps.IsNaN(Engine.TensorSum(truncated))
+                || NumOps.GreaterThanOrEquals(Engine.TensorMaxValue(truncated), NumOps.FromDouble(2147483648.0))
+                || NumOps.LessThan(Engine.TensorMinValue(truncated), NumOps.FromDouble(-2147483648.0))))
+            throw new OverflowException("Arithmetic operation resulted in an overflow.");
+        return truncated.Cast<int>().ToArray();
     }
 
     /// <inheritdoc />
