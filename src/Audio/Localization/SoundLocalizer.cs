@@ -341,23 +341,28 @@ public class SoundLocalizer<T> : IDisposable
             throw new InvalidOperationException("Model not loaded.");
 
         // Concatenate all channels
+        var engine = AiDotNetEngine.Current;
         int length = audioChannels[0].Length;
-        var input = new Tensor<T>([1, _numMicrophones, length]);
-
+        var channels = new Tensor<T>[_numMicrophones];
         for (int mic = 0; mic < _numMicrophones; mic++)
         {
-            for (int i = 0; i < length; i++)
-            {
-                input[0, mic, i] = audioChannels[mic][i];
-            }
+            if (audioChannels[mic].Length < length)
+                throw new IndexOutOfRangeException("Every channel must have at least as many samples as the first.");
+            channels[mic] = AudioEngineOps.FitLength(engine, audioChannels[mic], length);
         }
+        var input = _numMicrophones == 0
+            ? new Tensor<T>([1, 0, length])
+            : engine.Reshape(engine.TensorStack(channels, 0), [1, _numMicrophones, length]);
 
         var output = _model.Run(input);
 
         // Assume output is [azimuth, elevation, confidence]
-        double azimuth = output.Length > 0 ? _numOps.ToDouble(output[0]) : 0;
-        double elevation = output.Length > 1 ? _numOps.ToDouble(output[1]) : 0;
-        double confidence = output.Length > 2 ? _numOps.ToDouble(output[2]) : 0.5;
+        double[] head = output.Length == 0
+            ? new double[0]
+            : AudioEngineOps.FitLength(engine, output, Math.Min(3, output.Length)).Cast<double>().ToArray();
+        double azimuth = head.Length > 0 ? head[0] : 0;
+        double elevation = head.Length > 1 ? head[1] : 0;
+        double confidence = head.Length > 2 ? head[2] : 0.5;
 
         return new LocalizationResult
         {
@@ -398,43 +403,30 @@ public class SoundLocalizer<T> : IDisposable
     {
         int n = channel1.Length;
         int fftSize = NextPowerOf2(n * 2);
+        if (channel2.Length < n)
+            throw new IndexOutOfRangeException("The second channel is shorter than the first.");
 
-        // FFT of both channels
-        var fft1 = new Complex[fftSize];
-        var fft2 = new Complex[fftSize];
+        var engine = AiDotNetEngine.Current;
 
-        for (int i = 0; i < n; i++)
-        {
-            fft1[i] = new Complex(_numOps.ToDouble(channel1[i]), 0);
-            fft2[i] = new Complex(_numOps.ToDouble(channel2[i]), 0);
-        }
+        // FFT of both channels, zero-padded to fftSize
+        var fft1 = engine.NativeComplexFFT(AudioEngineOps.FitLength(engine, channel1, fftSize));
+        var fft2 = engine.NativeComplexFFT(AudioEngineOps.FitLength(engine, AudioEngineOps.FitLength(engine, channel2, n), fftSize));
+        var re1 = engine.TensorReal(fft1);
+        var im1 = engine.TensorImag(fft1);
+        var re2 = engine.TensorReal(fft2);
+        var im2 = engine.TensorImag(fft2);
 
-        Fft(fft1, false);
-        Fft(fft2, false);
+        // Cross-power spectrum X1 * conj(X2) with PHAT weighting (bins with |cross| <= 1e-10 stay 0)
+        var crossRe = engine.TensorAdd(engine.TensorMultiply(re1, re2), engine.TensorMultiply(im1, im2));
+        var crossIm = engine.TensorSubtract(engine.TensorMultiply(im1, re2), engine.TensorMultiply(re1, im2));
+        var mag = engine.TensorSqrt(engine.TensorAdd(engine.TensorSquare(crossRe), engine.TensorSquare(crossIm)));
+        var zeros = new Tensor<T>([fftSize]);
+        var keep = engine.TensorGreaterThan(mag, _numOps.FromDouble(1e-10));
+        var phatRe = engine.TensorWhere(keep, engine.TensorDivide(crossRe, mag), zeros);
+        var phatIm = engine.TensorWhere(keep, engine.TensorDivide(crossIm, mag), zeros);
 
-        // Cross-power spectrum with PHAT weighting
-        var crossSpec = new Complex[fftSize];
-        for (int k = 0; k < fftSize; k++)
-        {
-            Complex cross = fft1[k] * Complex.Conjugate(fft2[k]);
-            double mag = cross.Magnitude;
-            if (mag > 1e-10)
-            {
-                crossSpec[k] = cross / mag; // PHAT weighting
-            }
-        }
-
-        // Inverse FFT
-        Fft(crossSpec, true);
-
-        // Extract real part
-        var result = new double[fftSize];
-        for (int i = 0; i < fftSize; i++)
-        {
-            result[i] = crossSpec[i].Real;
-        }
-
-        return result;
+        // Inverse FFT (1/N normalised), real part
+        return engine.NativeComplexIFFTReal(engine.TensorComplex(phatRe, phatIm)).Cast<double>().ToArray();
     }
 
     private Complex[] ComputeFrameFft(Tensor<T> channel, int start, int size)
