@@ -153,11 +153,11 @@ public class HillClimbingAlgorithm<T> : ScoreBasedBase<T>
         }
 
         // Build adjacency using Matrix<T>
-        var W = new Matrix<T>(d, d);
+        var weights = new Dictionary<int, double>();
         for (int to = 0; to < d; to++)
             foreach (int from in parentSets[to])
-                W[from, to] = NumOps.FromDouble(Math.Max(1e-10, ComputeAbsCorrelation(data, from, to)));
+                weights[from * d + to] = Math.Max(1e-10, ComputeAbsCorrelation(data, from, to));
 
-        return W;
+        return CausalTensorHelpers.FromStatistics<T>(d, d, weights);
     }
 }

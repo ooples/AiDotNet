@@ -137,38 +137,21 @@ public class GESAlgorithm<T> : ScoreBasedBase<T>
         }
 
         // Build weighted adjacency using Matrix<T>
-        var W = new Matrix<T>(d, d);
+        var weights = new Dictionary<int, double>();
         for (int to = 0; to < d; to++)
         {
             foreach (int from in parentSets[to])
             {
                 double weight = Math.Abs(ComputeRegCoef(data, from, to));
-                W[from, to] = NumOps.FromDouble(Math.Max(weight, 0.01));
+                weights[from * d + to] = Math.Max(weight, 0.01);
             }
         }
 
-        return W;
+        return CausalTensorHelpers.FromStatistics<T>(d, d, weights);
     }
 
     private double ComputeRegCoef(Matrix<T> data, int from, int to)
     {
-        int n = data.Rows;
-        double meanX = 0, meanY = 0;
-        for (int i = 0; i < n; i++)
-        {
-            meanX += NumOps.ToDouble(data[i, from]);
-            meanY += NumOps.ToDouble(data[i, to]);
-        }
-        meanX /= n; meanY /= n;
-
-        double sxy = 0, sxx = 0;
-        for (int i = 0; i < n; i++)
-        {
-            double dx = NumOps.ToDouble(data[i, from]) - meanX;
-            sxy += dx * (NumOps.ToDouble(data[i, to]) - meanY);
-            sxx += dx * dx;
-        }
-
-        return sxx > 1e-10 ? sxy / sxx : 0;
+        return NumOps.ToDouble(CausalTensorHelpers.RegressionSlope(data, from, to));
     }
 }

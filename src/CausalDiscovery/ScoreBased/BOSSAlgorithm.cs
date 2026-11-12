@@ -124,25 +124,11 @@ public class BOSSAlgorithm<T> : ScoreBasedBase<T>
     /// </summary>
     private void SortByMarginalVariance(Matrix<T> data, List<int> ordering, int n)
     {
-        var variances = new double[ordering.Count];
-        for (int idx = 0; idx < ordering.Count; idx++)
-        {
-            int j = ordering[idx];
-            double mean = 0;
-            for (int i = 0; i < n; i++) mean += NumOps.ToDouble(data[i, j]);
-            mean /= n;
-
-            double variance = 0;
-            for (int i = 0; i < n; i++)
-            {
-                double diff = NumOps.ToDouble(data[i, j]) - mean;
-                variance += diff * diff;
-            }
-            variances[idx] = variance / n;
-        }
-
-        var indices = Enumerable.Range(0, ordering.Count).ToArray();
-        Array.Sort(indices, (a, b) => variances[a].CompareTo(variances[b]));
+        // Population variance of every column, then the ordering's columns ascending by variance
+        // (equal variances keep their position in the ordering).
+        var variances = Engine.ReduceMean(Engine.TensorSquare(CenterColumns(Tensor<T>.FromMatrix(data))), new[] { 0 }, false);
+        var keys = Engine.TensorIndexSelect(variances, new Tensor<int>(ordering.ToArray(), new[] { ordering.Count }), 0);
+        var indices = CausalTensorHelpers.StableArgsort(keys, descending: false);
         var sorted = indices.Select(i => ordering[i]).ToList();
         ordering.Clear();
         ordering.AddRange(sorted);
@@ -246,55 +232,21 @@ public class BOSSAlgorithm<T> : ScoreBasedBase<T>
         }
 
         // Build adjacency matrix with joint multivariate OLS edge weights
-        var W = new Matrix<T>(d, d);
+        // Centered multivariate OLS of each child on its parents (ridge 1e-10); beta[j] is W[parents[j], child].
+        var x = Tensor<T>.FromMatrix(data);
+        var positions = new List<int>();
+        var coefficients = new List<Tensor<T>>();
         for (int child = 0; child < d; child++)
         {
             var parents = parentSets[child].ToList();
             if (parents.Count == 0) continue;
 
-            int p = parents.Count;
-
-            // Compute means
-            double meanC = 0;
-            var parentMeans = new double[p];
-            for (int i = 0; i < n; i++)
-            {
-                meanC += NumOps.ToDouble(data[i, child]);
-                for (int j = 0; j < p; j++)
-                    parentMeans[j] += NumOps.ToDouble(data[i, parents[j]]);
-            }
-            meanC /= n;
-            for (int j = 0; j < p; j++) parentMeans[j] /= n;
-
-            // Build normal equations
-            var XtX = new double[p, p];
-            var Xty = new double[p];
-            for (int i = 0; i < n; i++)
-            {
-                double dy = NumOps.ToDouble(data[i, child]) - meanC;
-                var dx = new double[p];
-                for (int j = 0; j < p; j++)
-                    dx[j] = NumOps.ToDouble(data[i, parents[j]]) - parentMeans[j];
-                for (int a = 0; a < p; a++)
-                {
-                    Xty[a] += dx[a] * dy;
-                    for (int b = a; b < p; b++)
-                        XtX[a, b] += dx[a] * dx[b];
-                }
-            }
-            for (int a = 0; a < p; a++)
-            {
-                XtX[a, a] += 1e-10;
-                for (int b = a + 1; b < p; b++)
-                    XtX[b, a] = XtX[a, b];
-            }
-
-            var beta = SolveSmallSystem(XtX, Xty, p);
-            for (int j = 0; j < p; j++)
-                W[parents[j], child] = NumOps.FromDouble(beta[j]);
+            var (beta, _) = FitCenteredRegression(x, child, parents.ToArray());
+            positions.AddRange(parents.Select(parent => parent * d + child));
+            coefficients.Add(beta);
         }
 
-        return W;
+        return CausalTensorHelpers.FromTensorValues(d, d, positions, coefficients);
     }
 
     // SolveSmallSystem is inherited from CausalDiscoveryBase<T>
