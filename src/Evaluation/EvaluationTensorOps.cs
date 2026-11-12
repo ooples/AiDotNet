@@ -78,6 +78,40 @@ internal static class EvaluationTensorOps<T>
         return AiDotNetEngine.Current.TensorMultiply(a, b);
     }
 
+    /// <summary>Elementwise OR of two 1/0 masks.</summary>
+    internal static Tensor<T> Or(Tensor<T> a, Tensor<T> b)
+    {
+        using var noGrad = new NoGradScope<T>();
+        var engine = AiDotNetEngine.Current;
+        return engine.TensorSubtract(engine.TensorAdd(a, b), engine.TensorMultiply(a, b));
+    }
+
+    /// <summary>
+    /// The [numBins, n] 1/0 mask of reliability bins: value j is in bin i when i/numBins &lt;= p_j &lt; (i+1)/numBins,
+    /// the last bin also taking p_j == 1; NaN is in no bin.
+    /// </summary>
+    internal static Tensor<T> UniformBinMask(Tensor<T> probabilities, int numBins)
+    {
+        using var noGrad = new NoGradScope<T>();
+        var engine = AiDotNetEngine.Current;
+        int n = probabilities.Length;
+        var shape = new[] { numBins, n };
+        var column = new[] { numBins, 1 };
+        var binCount = NumOps.FromDouble(numBins);
+        var binIndex = engine.TensorArange<T>(0, numBins);
+        var p = engine.TensorBroadcastTo(engine.Reshape(probabilities, new[] { 1, n }), shape);
+        var starts = engine.TensorBroadcastTo(engine.Reshape(engine.TensorDivideScalar(binIndex, binCount), column), shape);
+        var ends = engine.TensorBroadcastTo(
+            engine.Reshape(engine.TensorDivideScalar(engine.TensorAddScalar(binIndex, NumOps.One), binCount), column), shape);
+        var isLast = engine.TensorBroadcastTo(engine.Reshape(EqualMask(binIndex, NumOps.FromDouble(numBins - 1)), column), shape);
+        var valid = engine.TensorBroadcastTo(engine.Reshape(Not(NanMask(probabilities)), new[] { 1, n }), shape);
+
+        var atLeastStart = Not(engine.TensorLessThan(p, starts));
+        var belowEnd = engine.TensorLessThan(p, ends);
+        var atMostEnd = Not(engine.TensorGreaterThan(p, ends));
+        return And(And(valid, atLeastStart), Or(belowEnd, And(isLast, atMostEnd)));
+    }
+
     /// <summary>The number of non-zero entries of a mask.</summary>
     internal static int Count(Tensor<T> mask)
     {
