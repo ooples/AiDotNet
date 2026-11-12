@@ -1107,8 +1107,8 @@ public partial class MusicSourceSeparator<T> : AudioNeuralNetworkBase<T>, IMusic
         if (length == 0)
             return output;
 
-        T negativeInfinity = NumOps.FromDouble(double.NegativeInfinity);
-        T nan = NumOps.FromDouble(double.NaN);
+        T negativeInfinity = AudioEngineOps.NegativeInfinityOrMin<T>();
+        T nan = AudioEngineOps.NaNOrZero<T>();
         T one = NumOps.One;
         T middleIndex = NumOps.FromDouble(halfKernel);
 

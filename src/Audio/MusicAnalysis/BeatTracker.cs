@@ -305,7 +305,7 @@ public class BeatTracker<T> : MusicAnalysisBase<T>
         if (length == 0)
             throw new InvalidOperationException("Sequence contains no elements");
         var isNaN = Engine.TensorIsNan(onsetEnvelope);
-        var ranked = Engine.TensorWhere(isNaN, Tensor<T>.CreateDefault([length], NumOps.FromDouble(double.NegativeInfinity)), onsetEnvelope);
+        var ranked = Engine.TensorWhere(isNaN, Tensor<T>.CreateDefault([length], AudioEngineOps.NegativeInfinityOrMin<T>()), onsetEnvelope);
         int nanCount = Engine.TensorNonzero(Engine.TensorWhere(isNaN, Tensor<T>.CreateDefault([length], NumOps.One), new Tensor<T>([length]))).Length;
         T maxEnvelope = nanCount == length ? NumOps.FromDouble(double.NaN) : Engine.TensorMaxValue(ranked);
         if (NumOps.LessThan(maxEnvelope, NumOps.FromDouble(1e-10))) return NumOps.Zero;

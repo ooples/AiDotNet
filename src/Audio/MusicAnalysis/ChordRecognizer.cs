@@ -204,44 +204,38 @@ public class ChordRecognizer<T> : MusicAnalysisBase<T>
         // CosineEpsilon); the best chord is the first holding the largest score above MinConfidence
         // Confidence per frame: 1 for a no-chord (low energy) frame, else the winning score, else MinConfidence
         var minConfidence = Tensor<T>.CreateDefault(frameShape, NumOps.FromDouble(_options.MinConfidence));
-        var frameConfidence = minConfidence;
-        int[] bestChords = new int[numFrames];
-        if (numChords == 0)
-        {
-            for (int f = 0; f < numFrames; f++)
-                bestChords[f] = -1;
-        }
-        else
-        {
-            var scoreShape = new[] { numFrames, numChords };
-            var templateMatrix = ChordTemplateTensor(templates);
-            var dot = Engine.TensorMatMul(normalized, Engine.TensorTranspose(templateMatrix));
-            var normA = Engine.TensorSqrt(Engine.ReduceSum(Engine.TensorSquare(normalized), [1], keepDims: true));
-            var normB = Engine.TensorSqrt(Engine.ReduceSum(Engine.TensorSquare(templateMatrix), [1], keepDims: true));
-            var denom = Engine.TensorMultiply(
-                Engine.TensorBroadcastTo(normA, scoreShape),
-                Engine.TensorBroadcastTo(Engine.Reshape(normB, [1, numChords]), scoreShape));
-            var scores = Engine.TensorWhere(
-                Engine.TensorGreaterThan(denom, NumOps.FromDouble(CosineEpsilon)),
-                Engine.TensorDivide(dot, denom),
-                new Tensor<T>(scoreShape));
+        // BuildChordTemplates always yields templates (at least "N"), so there is always a chord to score.
+        var scoreShape = new[] { numFrames, numChords };
+        var templateMatrix = ChordTemplateTensor(templates);
+        var dot = Engine.TensorMatMul(normalized, Engine.TensorTranspose(templateMatrix));
+        var normA = Engine.TensorSqrt(Engine.ReduceSum(Engine.TensorSquare(normalized), [1], keepDims: true));
+        var normB = Engine.TensorSqrt(Engine.ReduceSum(Engine.TensorSquare(templateMatrix), [1], keepDims: true));
+        var denom = Engine.TensorMultiply(
+            Engine.TensorBroadcastTo(normA, scoreShape),
+            Engine.TensorBroadcastTo(Engine.Reshape(normB, [1, numChords]), scoreShape));
+        var scores = Engine.TensorWhere(
+            Engine.TensorGreaterThan(denom, NumOps.FromDouble(CosineEpsilon)),
+            Engine.TensorDivide(dot, denom),
+            new Tensor<T>(scoreShape));
 
-            // NaN scores never win: rank them below every number
-            var ranked = Engine.TensorWhere(
-                Engine.TensorIsNan(scores), Tensor<T>.CreateDefault(scoreShape, NumOps.FromDouble(double.NegativeInfinity)), scores);
-            var best = Engine.ReduceMax(ranked, [1], keepDims: true);
-            var chordIndex = Engine.TensorBroadcastTo(Engine.Reshape(Engine.TensorArange<T>(0, numChords, 1), [1, numChords]), scoreShape);
-            var firstBest = Engine.TensorAmin(
-                Engine.TensorWhere(
-                    Engine.TensorEquals(ranked, Engine.TensorBroadcastTo(best, scoreShape)),
-                    chordIndex,
-                    Tensor<T>.CreateDefault(scoreShape, NumOps.FromDouble(numChords))),
-                [1], keepDims: true);
-            var wins = Engine.TensorGreaterThan(best, NumOps.FromDouble(_options.MinConfidence));
-            var winner = Engine.TensorWhere(wins, firstBest, Tensor<T>.CreateDefault(frameShape, NumOps.FromDouble(-1)));
-            frameConfidence = Engine.TensorWhere(wins, best, minConfidence);
-            bestChords = winner.Cast<int>().ToArray();
-        }
+        // NaN scores never win: rank them below every number (only floating types hold NaN, so the
+        // -inf substitute is only built when a NaN is present)
+        var scoreNaN = Engine.TensorIsNan(scores);
+        var ranked = Engine.TensorCountNonzero(scoreNaN) > 0
+            ? Engine.TensorWhere(scoreNaN, Tensor<T>.CreateDefault(scoreShape, AudioEngineOps.NegativeInfinityOrMin<T>()), scores)
+            : scores;
+        var best = Engine.ReduceMax(ranked, [1], keepDims: true);
+        var chordIndex = Engine.TensorBroadcastTo(Engine.Reshape(Engine.TensorArange<T>(0, numChords, 1), [1, numChords]), scoreShape);
+        var firstBest = Engine.TensorAmin(
+            Engine.TensorWhere(
+                Engine.TensorEquals(ranked, Engine.TensorBroadcastTo(best, scoreShape)),
+                chordIndex,
+                Tensor<T>.CreateDefault(scoreShape, NumOps.FromDouble(numChords))),
+            [1], keepDims: true);
+        var wins = Engine.TensorGreaterThan(best, NumOps.FromDouble(_options.MinConfidence));
+        var winner = Engine.TensorWhere(wins, firstBest, Tensor<T>.CreateDefault(frameShape, NumOps.FromDouble(-1)));
+        var frameConfidence = Engine.TensorWhere(wins, best, minConfidence);
+        int[] bestChords = winner.Cast<int>().ToArray();
 
         T[] confidences = Engine.TensorWhere(lowEnergy, Tensor<T>.CreateDefault(frameShape, NumOps.One), frameConfidence).ToArray();
         var noChord = Engine.TensorNonzero(lowEnergy).ToArray();
