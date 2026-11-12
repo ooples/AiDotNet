@@ -481,4 +481,34 @@ internal static class AudioEngineOps
         var values = new Tensor<T>(entries.Select(e => e.Value).ToArray(), new[] { entries.Count });
         return StableDescendingOrder(engine, values).Select(i => entries[i]).ToList();
     }
+
+    /// <summary>
+    /// <c>sigmoid(x[offset + i])</c> for <c>i &lt; count</c> where that element exists, zero after (a
+    /// fresh, detached tensor).
+    /// </summary>
+    internal static Tensor<T> SigmoidSegment<T>(IEngine engine, Tensor<T> x, int offset, int count)
+    {
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        int available = Math.Max(0, Math.Min(count, x.Length - offset));
+        if (available == 0) return new Tensor<T>(new[] { count });
+        var segment = engine.TensorSlice(Flatten(engine, x), new[] { offset }, new[] { available });
+        return FitLength(engine, engine.Sigmoid(segment), count);
+    }
+
+    /// <summary>
+    /// Indices <c>i &lt; count</c> (ascending) where <c>a[i] &gt;= aThreshold</c> and
+    /// <c>b[i] &gt;= bThreshold</c>; NaN never qualifies.
+    /// </summary>
+    internal static int[] IndicesBothAtLeast<T>(IEngine engine, Tensor<T> a, double aThreshold, Tensor<T> b, double bThreshold, int count)
+    {
+        if (count <= 0) return new int[0];
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var shape = new[] { count };
+        var aHead = FitLength(engine, a, count);
+        var bHead = FitLength(engine, b, count);
+        var both = engine.TensorMultiply(
+            engine.TensorGreaterEqual(aHead, Tensor<T>.CreateDefault(shape, numOps.FromDouble(aThreshold))),
+            engine.TensorGreaterEqual(bHead, Tensor<T>.CreateDefault(shape, numOps.FromDouble(bThreshold))));
+        return engine.TensorNonzero(both).ToArray();
+    }
 }
