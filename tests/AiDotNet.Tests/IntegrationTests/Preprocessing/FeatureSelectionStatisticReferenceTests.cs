@@ -1,3 +1,4 @@
+using AiDotNet.Enums;
 using AiDotNet.Preprocessing.FeatureSelection.Filter;
 using AiDotNet.Preprocessing.FeatureSelection.Filter.Statistical;
 using AiDotNet.Preprocessing.FeatureSelection.Filter.Univariate;
@@ -290,7 +291,7 @@ public class FeatureSelectionStatisticReferenceTests
     public async Task GenericUnivariateSelect_FClassif_MatchesSklearn()
     {
         var selector = new UnivariateSelector(
-            mode: AiDotNet.Preprocessing.FeatureSelection.SelectionMode.KBest, param: 1, defaultScoreFunc: "f_classif");
+            mode: AiDotNet.Preprocessing.FeatureSelection.SelectionMode.KBest, param: 1, defaultScoreFunc: UnivariateScoreFunction.FClassif);
         selector.Fit(M(ThreeClassData), V(ThreeClassTarget));
 
         Assert.NotNull(selector.Scores);
@@ -361,7 +362,7 @@ public class FeatureSelectionStatisticReferenceTests
     public async Task GenericUnivariateSelect_FRegression_MatchesSklearn()
     {
         var selector = new UnivariateSelector(
-            mode: AiDotNet.Preprocessing.FeatureSelection.SelectionMode.KBest, param: 1, defaultScoreFunc: "f_regression");
+            mode: AiDotNet.Preprocessing.FeatureSelection.SelectionMode.KBest, param: 1, defaultScoreFunc: UnivariateScoreFunction.FRegression);
         selector.Fit(M(RegressionData), V(RegressionTarget));
 
         Assert.NotNull(selector.Scores);
@@ -460,5 +461,151 @@ public class FeatureSelectionStatisticReferenceTests
 
         Assert.NotNull(selector.SelectedIndices);
         Assert.Equal(new[] { 0, 1, 2 }, selector.SelectedIndices);
+    }
+
+    // ---------------------------------------------------------------- NaN p-values
+
+    // scikit-learn never selects a feature whose p-value is NaN: SelectFdr's np.sort puts NaN last and
+    // SelectFpr's `pvalues < alpha` is false for NaN. The ranking used to map NaN to the lowest value in both
+    // directions, so a NaN p-value ranked first ascending and was kept.
+    private static UnivariateSelector FitWithPValues(
+        AiDotNet.Preprocessing.FeatureSelection.SelectionMode mode, double alpha, double[] pValues)
+    {
+        int p = pValues.Length;
+        var data = new Matrix<double>(2, p);
+        var target = V(new double[] { 0, 1 });
+        var pVector = new Vector<double>(pValues);
+        var scores = new Vector<double>(p);
+        var selector = new UnivariateSelector(mode: mode, param: alpha, scoreFunc: (m, t) => (scores, pVector));
+        selector.Fit(data, target);
+        return selector;
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task GenericUnivariateSelect_Fdr_NeverKeepsNaNPValue()
+    {
+        // p = [NaN, 0.02, 0.5, 0.03], alpha = 0.1, m = 4: sorted [0.02, 0.03, 0.5, NaN] against 0.025, 0.05,
+        // 0.075, 0.1, so ranks 1 and 2 pass and SelectFdr(alpha=0.1) keeps {1, 3}. NaN first kept {0, 1, 3}.
+        var selector = FitWithPValues(
+            AiDotNet.Preprocessing.FeatureSelection.SelectionMode.FDR, 0.1, new[] { double.NaN, 0.02, 0.5, 0.03 });
+
+        Assert.NotNull(selector.SelectedIndices);
+        Assert.Equal(new[] { 1, 3 }, selector.SelectedIndices);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task GenericUnivariateSelect_Fdr_FallbackSkipsNaNPValue()
+    {
+        // Nothing passes Benjamini-Hochberg; the single-best fallback is the smallest real p-value (feature 2).
+        var selector = FitWithPValues(
+            AiDotNet.Preprocessing.FeatureSelection.SelectionMode.FDR, 0.05, new[] { double.NaN, 0.9, 0.8 });
+
+        Assert.NotNull(selector.SelectedIndices);
+        Assert.Equal(new[] { 2 }, selector.SelectedIndices);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task GenericUnivariateSelect_Fpr_NeverKeepsNaNPValue()
+    {
+        var passing = FitWithPValues(
+            AiDotNet.Preprocessing.FeatureSelection.SelectionMode.FPR, 0.05, new[] { double.NaN, 0.01, 0.8 });
+        Assert.NotNull(passing.SelectedIndices);
+        Assert.Equal(new[] { 1 }, passing.SelectedIndices);
+
+        // None below alpha: the best-p-value fallback picks 0.8 (feature 2), not the NaN of feature 0.
+        var fallback = FitWithPValues(
+            AiDotNet.Preprocessing.FeatureSelection.SelectionMode.FPR, 0.05, new[] { double.NaN, 0.9, 0.8 });
+        Assert.NotNull(fallback.SelectedIndices);
+        Assert.Equal(new[] { 2 }, fallback.SelectedIndices);
+
+        // Every p-value NaN: there is no evidence for any feature, so nothing is selected.
+        var allNaN = FitWithPValues(
+            AiDotNet.Preprocessing.FeatureSelection.SelectionMode.FPR, 0.05, new[] { double.NaN, double.NaN });
+        Assert.NotNull(allNaN.SelectedIndices);
+        Assert.Empty(allNaN.SelectedIndices);
+    }
+
+    // ---------------------------------------------------------------- score function enum
+
+    // Non-negative counts for chi2: feature 0 tracks the class, feature 1 does not.
+    private static readonly double[,] CountData =
+    {
+        { 9, 3 }, { 8, 4 }, { 7, 3 }, { 1, 4 }, { 2, 3 }, { 0, 4 }
+    };
+
+    private static readonly double[] CountTarget = { 0, 0, 0, 1, 1, 1 };
+
+    [Fact(Timeout = 120000)]
+    public async Task GenericUnivariateSelect_Chi2_MatchesSelectKBest()
+    {
+        var generic = new UnivariateSelector(
+            mode: AiDotNet.Preprocessing.FeatureSelection.SelectionMode.KBest, param: 1,
+            defaultScoreFunc: UnivariateScoreFunction.Chi2);
+        generic.Fit(M(CountData), V(CountTarget));
+        var kBest = new AiDotNet.Preprocessing.FeatureSelection.SelectKBest<double>(
+            k: 1, defaultScoreFunc: UnivariateScoreFunction.Chi2);
+        kBest.Fit(M(CountData), V(CountTarget));
+
+        Assert.NotNull(generic.Scores);
+        Assert.NotNull(generic.PValues);
+        Assert.NotNull(kBest.Scores);
+        Assert.NotNull(kBest.PValues);
+        for (int j = 0; j < 2; j++)
+        {
+            Assert.Equal(kBest.Scores[j], generic.Scores[j], Tolerance);
+            Assert.Equal(kBest.PValues[j], generic.PValues[j], Tolerance);
+        }
+
+        Assert.Equal(new[] { 0 }, generic.SelectedIndices);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task GenericUnivariateSelect_Chi2_RejectsNegativeFeatures()
+    {
+        var selector = new UnivariateSelector(
+            mode: AiDotNet.Preprocessing.FeatureSelection.SelectionMode.KBest, param: 1,
+            defaultScoreFunc: UnivariateScoreFunction.Chi2);
+
+        Assert.Throws<ArgumentException>(() =>
+            selector.Fit(M(new double[,] { { 1, -1 }, { 2, 3 } }), V(new double[] { 0, 1 })));
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task GenericUnivariateSelect_MutualInfo_RanksWithoutPValues()
+    {
+        var selector = new UnivariateSelector(
+            mode: AiDotNet.Preprocessing.FeatureSelection.SelectionMode.KBest, param: 1,
+            defaultScoreFunc: UnivariateScoreFunction.MutualInfoClassif);
+        selector.Fit(M(CountData), V(CountTarget));
+
+        Assert.NotNull(selector.Scores);
+        Assert.Null(selector.PValues);
+        Assert.Equal(new[] { 0 }, selector.SelectedIndices);
+    }
+
+    [Theory(Timeout = 120000)]
+    [InlineData(AiDotNet.Preprocessing.FeatureSelection.SelectionMode.FPR)]
+    [InlineData(AiDotNet.Preprocessing.FeatureSelection.SelectionMode.FDR)]
+    [InlineData(AiDotNet.Preprocessing.FeatureSelection.SelectionMode.FWE)]
+    public async Task GenericUnivariateSelect_MutualInfo_RejectedByPValueModes(
+        AiDotNet.Preprocessing.FeatureSelection.SelectionMode mode)
+    {
+        // Mutual information has no p-values, so a p-value threshold mode cannot use it (an unrecognised
+        // score function name used to fall back to f_classif silently).
+        Assert.Throws<ArgumentException>(() =>
+            new UnivariateSelector(mode: mode, param: 0.05, defaultScoreFunc: UnivariateScoreFunction.MutualInfoClassif));
+
+        // A custom scorer supplies its own p-values, so the same mode is fine with it.
+        var custom = new UnivariateSelector(
+            mode: mode, param: 0.05, scoreFunc: (m, t) => (new Vector<double>(1), new Vector<double>(1)),
+            defaultScoreFunc: UnivariateScoreFunction.MutualInfoClassif);
+        Assert.Equal(mode, custom.Mode);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task GenericUnivariateSelect_UndefinedScoreFunction_Throws()
+    {
+        Assert.Throws<ArgumentException>(() =>
+            new UnivariateSelector(defaultScoreFunc: (UnivariateScoreFunction)99));
     }
 }

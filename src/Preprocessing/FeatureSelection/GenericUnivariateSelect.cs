@@ -47,7 +47,7 @@ public class GenericUnivariateSelect<T> : TransformerBase<T, Matrix<T>, Matrix<T
     private readonly SelectionMode _mode;
     private readonly double _param;
     private readonly Func<Matrix<T>, Vector<T>, (Vector<T> Scores, Vector<T> PValues)>? _scoreFunc;
-    private readonly string _defaultScoreFunc;
+    private readonly UnivariateScoreFunction _defaultScoreFunc;
 
     private Vector<T>? _scores;
     private Vector<T>? _pValues;
@@ -67,7 +67,7 @@ public class GenericUnivariateSelect<T> : TransformerBase<T, Matrix<T>, Matrix<T
         SelectionMode mode = SelectionMode.KBest,
         double param = 10.0,
         Func<Matrix<T>, Vector<T>, (Vector<T> Scores, Vector<T> PValues)>? scoreFunc = null,
-        string defaultScoreFunc = "f_classif",
+        UnivariateScoreFunction defaultScoreFunc = UnivariateScoreFunction.FClassif,
         int[]? columnIndices = null)
         : base(columnIndices)
     {
@@ -81,6 +81,19 @@ public class GenericUnivariateSelect<T> : TransformerBase<T, Matrix<T>, Matrix<T
 
     private void ValidateParameters()
     {
+        if (!Enum.IsDefined(typeof(UnivariateScoreFunction), _defaultScoreFunc))
+            throw new ArgumentException(
+                $"Unknown univariate score function {_defaultScoreFunc}.", "defaultScoreFunc");
+
+        // FPR, FDR and FWE threshold p-values; mutual information is a score without a test distribution
+        // (scikit-learn's mutual_info_classif returns no p-values), so it cannot drive them.
+        bool needsPValues = _mode == SelectionMode.FPR || _mode == SelectionMode.FDR || _mode == SelectionMode.FWE;
+        if (needsPValues && _scoreFunc is null && !ProducesPValues(_defaultScoreFunc))
+            throw new ArgumentException(
+                $"{_defaultScoreFunc} produces no p-values, so it cannot be used with {_mode} mode. " +
+                "Use FClassif, FRegression or Chi2, or pass a custom scoreFunc that returns p-values.",
+                "defaultScoreFunc");
+
         switch (_mode)
         {
             case SelectionMode.KBest:
@@ -128,9 +141,11 @@ public class GenericUnivariateSelect<T> : TransformerBase<T, Matrix<T>, Matrix<T
         {
             (_scores, _pValues) = _defaultScoreFunc switch
             {
-                "f_classif" => ComputeFClassif(data, target, n),
-                "f_regression" => ComputeFRegression(data, target, n),
-                _ => ComputeFClassif(data, target, n)
+                UnivariateScoreFunction.FClassif => ComputeFClassif(data, target, n),
+                UnivariateScoreFunction.FRegression => ComputeFRegression(data, target, n),
+                UnivariateScoreFunction.Chi2 => ComputeChi2(data, target),
+                UnivariateScoreFunction.MutualInfoClassif => ComputeMutualInfoClassif(data, target),
+                _ => throw new ArgumentException($"Unknown univariate score function {_defaultScoreFunc}.")
             };
         }
 
@@ -152,14 +167,14 @@ public class GenericUnivariateSelect<T> : TransformerBase<T, Matrix<T>, Matrix<T
     {
         var scores = _scores ?? throw new InvalidOperationException("_scores has not been initialized.");
         int k = Math.Min((int)_param, p);
-        return FilterStatisticTensorOps.TopKIndicesSorted(FilterStatisticTensorOps.AsTensor(scores), k);
+        return PreprocessingTensorOps.TopKIndicesSorted(FilterStatisticTensorOps.AsTensor(scores), k);
     }
 
     private int[] SelectPercentile(int p)
     {
         var scores = _scores ?? throw new InvalidOperationException("_scores has not been initialized.");
         int numToSelect = Math.Max(1, (int)Math.Ceiling(p * _param / 100.0));
-        return FilterStatisticTensorOps.TopKIndicesSorted(FilterStatisticTensorOps.AsTensor(scores), numToSelect);
+        return PreprocessingTensorOps.TopKIndicesSorted(FilterStatisticTensorOps.AsTensor(scores), numToSelect);
     }
 
     private int[] SelectFPR()
@@ -177,11 +192,12 @@ public class GenericUnivariateSelect<T> : TransformerBase<T, Matrix<T>, Matrix<T
             return [0];
 
         // Benjamini-Hochberg step-up procedure (scikit-learn SelectFdr): with the p-values sorted ascending,
-        // find the largest rank i with p_(i) <= i * alpha / p and keep every feature ranked at or before it
+        // find the largest rank i with p_(i) <= i * alpha / p and keep every feature ranked at or before it.
+        // A NaN p-value sorts last and never passes, so it is never kept (scikit-learn's np.sort does the same).
         var engine = Engine;
         var pValues = FilterStatisticTensorOps.AsTensor(_pValues);
         int count = pValues.Length;
-        var order = FilterStatisticTensorOps.StableOrder(pValues, descending: false);
+        var order = PreprocessingTensorOps.StableOrder(pValues, descending: false);
         var sorted = engine.TensorIndexSelect(pValues, new Tensor<int>((int[])order.Clone(), new[] { count }), 0);
         var thresholds = engine.TensorDivideScalar(
             engine.TensorMultiplyScalar(engine.TensorArange<T>(1, count + 1, 1), NumOps.FromDouble(_param)),
@@ -189,7 +205,7 @@ public class GenericUnivariateSelect<T> : TransformerBase<T, Matrix<T>, Matrix<T
         var passing = FilterStatisticTensorOps.MaskPositions(engine.TensorLessEqual(sorted, thresholds));
 
         if (passing.Length == 0)
-            return [order[0]];
+            return BestUnlessNaN(pValues, order[0]);
 
         var selected = order.Take(passing[passing.Length - 1] + 1).ToArray();
         Array.Sort(selected);
@@ -206,13 +222,32 @@ public class GenericUnivariateSelect<T> : TransformerBase<T, Matrix<T>, Matrix<T
     }
 
     // The features whose p-value is below the threshold, or the one with the lowest p-value when none is.
+    // NaN compares false against the threshold and orders last, so a NaN p-value is never selected.
     private int[] BelowOrBest(Tensor<T> pValues, double threshold)
     {
         var selected = FilterStatisticTensorOps.MaskPositions(Engine.TensorLessThan(pValues, NumOps.FromDouble(threshold)));
-        return selected.Length > 0 ? selected : new[] { FilterStatisticTensorOps.FirstArgMin(pValues) };
+        return selected.Length > 0 ? selected : BestUnlessNaN(pValues, FilterStatisticTensorOps.FirstArgMin(pValues));
     }
 
-    private (Vector<T> Scores, Vector<T> PValues) ComputeFClassif(Matrix<T> data, Vector<T> target, int n)
+    // The fallback "best feature" when nothing passes the test; empty when even the best p-value is NaN
+    // (every p-value is NaN), since a NaN p-value carries no evidence for selecting the feature.
+    private int[] BestUnlessNaN(Tensor<T> pValues, int best) =>
+        NumOps.IsNaN(pValues[best]) ? Array.Empty<int>() : new[] { best };
+
+    // Whether the built-in scorer comes with a p-value per feature.
+    private static bool ProducesPValues(UnivariateScoreFunction scoreFunction) =>
+        scoreFunction != UnivariateScoreFunction.MutualInfoClassif;
+
+    private static (Vector<T> Scores, Vector<T>? PValues) ComputeChi2(Matrix<T> data, Vector<T> target)
+    {
+        var scores = SelectorTensorOps.Chi2(Tensor<T>.FromMatrix(data), target, out var pValues);
+        return (scores.ToVector(), pValues.ToVector());
+    }
+
+    private static (Vector<T> Scores, Vector<T>? PValues) ComputeMutualInfoClassif(Matrix<T> data, Vector<T> target) =>
+        (SelectorTensorOps.MutualInfoClassif(Tensor<T>.FromMatrix(data), target).ToVector(), null);
+
+    private (Vector<T> Scores, Vector<T>? PValues) ComputeFClassif(Matrix<T> data, Vector<T> target, int n)
     {
         var engine = Engine;
         var classIndex = FilterStatisticTensorOps.ClassIndex(target, out int k);
@@ -229,7 +264,7 @@ public class GenericUnivariateSelect<T> : TransformerBase<T, Matrix<T>, Matrix<T
         return (scores.ToVector(), FPValues(scores, k - 1, n - k));
     }
 
-    private (Vector<T> Scores, Vector<T> PValues) ComputeFRegression(Matrix<T> data, Vector<T> target, int n)
+    private (Vector<T> Scores, Vector<T>? PValues) ComputeFRegression(Matrix<T> data, Vector<T> target, int n)
     {
         var engine = Engine;
 
