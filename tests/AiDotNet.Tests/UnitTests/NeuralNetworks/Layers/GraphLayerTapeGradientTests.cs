@@ -106,7 +106,8 @@ public class GraphLayerTapeGradientTests
     private static GraphTransformerLayer<double> TinyGraphTransformer()
     {
         var layer = new GraphTransformerLayer<double>(
-            inputFeatures: 4, outputFeatures: 3, numHeads: 2, headDim: 3, useStructuralEncoding: false, dropoutRate: 0.0);
+            inputFeatures: 4, outputFeatures: 3, numHeads: 2, headDim: 3, useStructuralEncoding: false, dropoutRate: 0.0,
+            activationFunction: null);
         // A connected 4-node graph with self loops.
         var adjacency = new Tensor<double>(new[] { 4, 4 });
         foreach (var (i, j) in new[] { (0, 0), (0, 1), (1, 0), (1, 1), (1, 2), (2, 1), (2, 2), (2, 3), (3, 2), (3, 3) })

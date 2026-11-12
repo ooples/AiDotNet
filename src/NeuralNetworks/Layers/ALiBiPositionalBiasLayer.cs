@@ -177,12 +177,17 @@ public partial class ALiBiPositionalBiasLayer<T> : LayerBase<T>, IShapeContract
             var effectiveQueryPos = Engine.Reshape(
                 Engine.TensorAddScalar(Engine.TensorArange<int>(0, queryLen), offset), new[] { queryLen, 1 });
             var keyPos = Engine.Reshape(Engine.TensorArange<int>(0, keyLen), new[] { 1, keyLen });
-            var offsetFromQuery = Engine.TensorSubtract(effectiveQueryPos, keyPos);   // [q, k]: eff - j
+            var offsetFromQuery = Engine.TensorSubtract(
+                Engine.TensorBroadcastTo(effectiveQueryPos, new[] { queryLen, keyLen }),
+                Engine.TensorBroadcastTo(keyPos, new[] { queryLen, keyLen }));
 
             // ALiBi bias: -slope * |effective_query_pos - key_pos|
             var distance = Engine.Reshape(Engine.TensorAbs(offsetFromQuery).Cast<T>(), new[] { 1, queryLen, keyLen });
             var slopes = Engine.Reshape(_slopes, new[] { _numHeads, 1, 1 });
-            bias = Engine.TensorNegate(Engine.TensorMultiply(slopes, distance));       // [h, q, k]
+            var biasShape = new[] { _numHeads, queryLen, keyLen };
+            bias = Engine.TensorNegate(Engine.TensorMultiply(
+                Engine.TensorBroadcastTo(slopes, biasShape),
+                Engine.TensorBroadcastTo(distance, biasShape)));
 
             if (useCausalMask)
             {

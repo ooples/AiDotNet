@@ -8,7 +8,8 @@ namespace AiDotNet.Helpers;
 /// </summary>
 /// <remarks>
 /// Each score is <c>dot / sqrt(|q|^2 |c|^2)</c> clamped to [-1, 1], or 0 when that denominator is not above
-/// <c>epsilon</c> (zero vectors and NaN norms score 0, as in the scalar helper). The math runs in T.
+/// <c>epsilon</c> (zero vectors and NaN norms score 0, as in the scalar helper). Reductions and
+/// normalization use double precision so low-precision norm products do not overflow.
 /// </remarks>
 internal static class BatchCosineSimilarity
 {
@@ -44,20 +45,22 @@ internal static class BatchCosineSimilarity
                 $"Vectors must have equal length for cosine similarity; got {query.Length} and {(rows.Rank == 2 ? rows.Shape[1] : rows.Length)}.");
 
         int count = rows.Shape[0];
-        var numOps = MathHelper.GetNumericOperations<T>();
         if (count == 0 || query.Length == 0)
             return new Tensor<T>(new[] { count });
 
         var engine = AiDotNetEngine.Current;
-        var queryColumn = Tensor<T>.FromVector(query, new[] { query.Length, 1 });
-        var dots = engine.Reshape(engine.TensorMatMul(rows, queryColumn), new[] { count });
-        T querySquaredNorm = engine.DotProduct(query, query);
-        var rowSquaredNorms = engine.ReduceSum(engine.TensorSquare(rows), new[] { 1 }, false);
+        var queryColumn = Tensor<T>.FromVector(query, new[] { query.Length, 1 }).Cast<double>();
+        var wideRows = rows.Cast<double>();
+        var dots = engine.Reshape(engine.TensorMatMul(wideRows, queryColumn), new[] { count });
+        double querySquaredNorm = engine.DotProduct(queryColumn.ToVector(), queryColumn.ToVector());
+        var rowSquaredNorms = engine.ReduceSum(engine.TensorSquare(wideRows), new[] { 1 }, false);
         var denominators = engine.TensorSqrt(engine.TensorMultiplyScalar(rowSquaredNorms, querySquaredNorm));
 
-        var ratios = engine.TensorClamp(engine.TensorDivide(dots, denominators), numOps.FromDouble(-1.0), numOps.One);
-        var epsilons = new Tensor<T>(new[] { count });
-        epsilons.Fill(numOps.FromDouble(epsilon));
-        return engine.TensorWhere(engine.TensorGreaterThan(denominators, epsilons), ratios, new Tensor<T>(new[] { count }));
+        var valid = engine.TensorGreaterThan(denominators, epsilon);
+        var ones = new Tensor<double>(new[] { count });
+        ones.Fill(1.0);
+        var safeDenominators = engine.TensorWhere(valid, denominators, ones);
+        var ratios = engine.TensorClamp(engine.TensorDivide(dots, safeDenominators), -1.0, 1.0);
+        return engine.TensorWhere(valid, ratios, new Tensor<double>(new[] { count })).Cast<T>();
     }
 }
