@@ -173,17 +173,20 @@ public class MomentumEncoder<T> : IMomentumEncoder<T>
         if (from.Length != to.Length) return false;
         for (int i = 0; i < to.Length; i++)
         {
-            // Same rank and the same extent on every axis
-            if (from[i].Shape != to[i].Shape) return false;
+            if (from[i].Rank != to[i].Rank) return false;
+            for (int d = 0; d < to[i].Rank; d++)
+                if (from[i].Shape[d] != to[i].Shape[d]) return false;
         }
         using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
         using var noArena = AiDotNet.Tensors.Helpers.TensorArena.Suspend();
         var engine = AiDotNetEngine.Current;
+        var keep = NumOps.FromDouble(momentum);
+        var take = NumOps.FromDouble(1 - momentum);
         var updated = momentum == 0
             ? AiDotNet.Training.TensorCheckpoint<T>.Capture(from)
             : to.Select((tensor, i) => engine.TensorAdd(
-                engine.TensorMultiplyScalar(tensor, NumOps.FromDouble(momentum)),
-                engine.TensorMultiplyScalar(from[i], NumOps.FromDouble(1 - momentum)))).ToArray();
+                engine.TensorMultiplyScalar(tensor, keep),
+                engine.TensorMultiplyScalar(from[i], take))).ToArray();
         _encoder.SetParameterChunks(updated);
         return true;
 #endif
