@@ -200,9 +200,8 @@ public partial class CoxProportionalHazards<T> : SurvivalModelBase<T>
         // Get unique event times
         TrainedEventTimes = GetUniqueEventTimes(times, events);
 
-        // Breslow risk sets: row i holds every subject with t_j >= t_i, so subjects with tied times
-        // share one risk set whatever their row order.
-        var riskSets = AtRiskMask(times, times);
+        // Breslow risk sets: subject i's risk set is every subject with t_j >= t_i, so subjects with tied
+        // times share one risk set whatever their row order (formed by a sorted reverse cumulative sum).
         var eventMask = engine.TensorEquals(events.AsTensor().Cast<T>(), NumOps.One);
         var design = Tensor<T>.FromMatrix(x);
         T learningRate = NumOps.FromDouble(_learningRate);
@@ -215,7 +214,7 @@ public partial class CoxProportionalHazards<T> : SurvivalModelBase<T>
         for (int iter = 0; iter < _maxIterations; iter++)
         {
             // Compute gradient and update coefficients
-            var (logLik, gradient) = ComputeGradient(design, riskSets, eventMask);
+            var (logLik, gradient) = ComputeGradient(design, times, eventMask);
 
             // Check convergence
             if (hasPrevious && HasConverged(logLik, prevLogLik))
@@ -247,10 +246,16 @@ public partial class CoxProportionalHazards<T> : SurvivalModelBase<T>
     /// </summary>
     private Tensor<T> RiskScores(Tensor<T> design, Vector<T> coefficients)
     {
+        return CappedExp(LinearPredictor(design, coefficients, NumOps.Zero));
+    }
+
+    /// <summary>
+    /// Computes exp(min(eta, 700)).
+    /// </summary>
+    private Tensor<T> CappedExp(Tensor<T> linearPred)
+    {
         var engine = AiDotNetEngine.Current;
-        int n = design.Shape[0];
-        var linearPred = engine.TensorMatMul(design, coefficients.AsTensor().Reshape(new[] { coefficients.Length, 1 }))
-            .Reshape(new[] { n });
+        int n = linearPred.Length;
 
         // Prevent overflow
         T cap = NumOps.FromDouble(700);
@@ -265,23 +270,22 @@ public partial class CoxProportionalHazards<T> : SurvivalModelBase<T>
     /// </summary>
     private (T logLik, Vector<T> gradient) ComputeGradient(
         Tensor<T> design,
-        Tensor<T> riskSets,
+        Vector<T> times,
         Tensor<T> eventMask)
     {
         var engine = AiDotNetEngine.Current;
         int n = design.Shape[0];
         int p = design.Shape[1];
-        var coefficients = _coefficients;
-        var linearPred = engine.TensorMatMul(design, coefficients.AsTensor().Reshape(new[] { p, 1 }))
-            .Reshape(new[] { n });
+        var linearPred = LinearPredictor(design, _coefficients, NumOps.Zero);
 
         // Compute risk scores exp(beta . X) for all subjects
-        var riskColumn = RiskScores(design, coefficients).Reshape(new[] { n, 1 });
+        var risk = CappedExp(linearPred);
+        var riskColumn = risk.Reshape(new[] { n, 1 });
 
         // Risk-set sums of exp(beta . X) and exp(beta . X) * X at each subject's time
-        var sumRisk = engine.TensorMatMul(riskSets, riskColumn);
-        var sumRiskX = engine.TensorMatMul(riskSets,
-            engine.TensorMultiply(design, engine.TensorBroadcastTo(riskColumn, new[] { n, p })));
+        var sumRisk = AtRiskSums(times, risk, times).Reshape(new[] { n, 1 });
+        var sumRiskX = AtRiskSums(times,
+            engine.TensorMultiply(design, engine.TensorBroadcastTo(riskColumn, new[] { n, p })), times);
 
         // Only subjects with an observed event contribute; the rest are masked out before summing
         // so an underflowed risk set cannot turn into 0 * -inf.
@@ -310,12 +314,9 @@ public partial class CoxProportionalHazards<T> : SurvivalModelBase<T>
 
         var engine = AiDotNetEngine.Current;
         int numTimes = TrainedEventTimes.Length;
-        int n = times.Length;
 
         // Sum of risk scores over the subjects at risk at each event time, and the events there
-        var riskScores = RiskScores(design, _coefficients);
-        var sumRiskAtRisk = engine.TensorMatMul(AtRiskMask(times, TrainedEventTimes), riskScores.Reshape(new[] { n, 1 }))
-            .Reshape(new[] { numTimes });
+        var sumRiskAtRisk = AtRiskSums(times, RiskScores(design, _coefficients), TrainedEventTimes);
         var (_, eventsAtTime) = CountAtRiskAndEvents(times, events, TrainedEventTimes);
 
         // Breslow estimator: H0(t) = sum d_i / sum_{j in R_i} exp(beta . X_j), skipping empty risk sets
