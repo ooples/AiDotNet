@@ -217,13 +217,18 @@ public partial class SDCLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
         {
             int axis = predicted.Rank - 1;
             T inverseTemperature = NumOps.FromDouble(1.0 / _temperature);
-            var pTeacher = Engine.TensorSoftmax(Engine.TensorMultiplyScalar(target, inverseTemperature), axis);
-            var pStudent = Engine.TensorSoftmax(Engine.TensorMultiplyScalar(predicted, inverseTemperature), axis);
-            var mask = Engine.TensorGreaterThan(pTeacher, NumOps.FromDouble(1e-10));
+            // Worked in log space so the 1e-10 floor and offset survive a narrow T: 1e-10 rounds to 0 in Half, which
+            // made log(p_T) = -inf and the masked term 0 * -inf = NaN. ln 1e-10 = -23.03 is representable in every T.
+            // log max(p_T, 1e-10) = max(log p_T, ln 1e-10) and log(p_S + 1e-10) = logaddexp(log p_S, ln 1e-10).
+            T logFloor = NumOps.FromDouble(Math.Log(1e-10));
+            var logTeacher = Engine.TensorLogSoftmax(Engine.TensorMultiplyScalar(target, inverseTemperature), axis);
+            var logStudent = Engine.TensorLogSoftmax(Engine.TensorMultiplyScalar(predicted, inverseTemperature), axis);
+            var floor = Engine.TensorFullLike(logStudent, logFloor);
             var logRatio = Engine.TensorSubtract(
-                Engine.TensorLog(Engine.TensorMax(pTeacher, NumOps.FromDouble(1e-10))),
-                Engine.TensorLog(Engine.TensorAddScalar(pStudent, NumOps.FromDouble(1e-10))));
-            var terms = Engine.TensorMultiply(mask, Engine.TensorMultiply(pTeacher, logRatio));
+                Engine.TensorMax(logTeacher, logFloor), Engine.TensorLogAddExp(logStudent, floor));
+            var mask = Engine.TensorGreaterThan(logTeacher, logFloor);
+            var terms = Engine.TensorWhere(
+                mask, Engine.TensorMultiply(Engine.TensorExp(logTeacher), logRatio), Engine.TensorZerosLike(logRatio));
             var allAxes = Enumerable.Range(0, terms.Rank).ToArray();
             return Engine.TensorMultiplyScalar(
                 Engine.ReduceSum(terms, allAxes, keepDims: false), NumOps.FromDouble(_temperature * _temperature));
