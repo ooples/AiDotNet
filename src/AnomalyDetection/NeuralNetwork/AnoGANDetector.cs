@@ -184,44 +184,14 @@ public partial class AnoGANDetector<T> : AnomalyDetectorBase<T>
 
     private (Matrix<T> normalized, Vector<T> means, Vector<T> stds) NormalizeData(Matrix<T> data)
     {
-        int n = data.Rows;
-        int d = data.Columns;
-
-        var means = new Vector<T>(d);
-        var stds = new Vector<T>(d);
-
-        for (int j = 0; j < d; j++)
-        {
-            T sum = NumOps.Zero;
-            for (int i = 0; i < n; i++)
-            {
-                sum = NumOps.Add(sum, data[i, j]);
-            }
-            means[j] = NumOps.Divide(sum, NumOps.FromDouble(n));
-
-            T variance = NumOps.Zero;
-            for (int i = 0; i < n; i++)
-            {
-                T diff = NumOps.Subtract(data[i, j], means[j]);
-                variance = NumOps.Add(variance, NumOps.Multiply(diff, diff));
-            }
-            T stdVal = NumOps.Sqrt(NumOps.Divide(variance, NumOps.FromDouble(n)));
-            T eps = NumOps.FromDouble(1e-10);
-            if (NumOps.LessThan(stdVal, eps)) stdVal = NumOps.One;
-            stds[j] = stdVal;
-        }
-
-        var normalized = new Matrix<T>(n, d);
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < d; j++)
-            {
-                T diff = NumOps.Subtract(data[i, j], means[j]);
-                normalized[i, j] = NumOps.Divide(diff, stds[j]);
-            }
-        }
-
-        return (normalized, means, stds);
+        // Per-feature mean and population std (std below 1e-10 replaced by 1), then (x - mean) / std
+        var engine = Engine;
+        var values = AnomalyTensorOps.ToTensor(data);
+        var (std, mean) = engine.TensorStdMean(values, new[] { 0 }, 0, false);
+        var tiny = engine.TensorLessThan(std, NumOps.FromDouble(1e-10));
+        var stds = engine.TensorWhere(tiny, Tensor<T>.CreateOnes(new[] { data.Columns }), std);
+        var normalized = AnomalyTensorOps.DivideRow(AnomalyTensorOps.SubtractRow(values, mean), stds);
+        return (normalized.ToMatrix(), mean.ToVector(), stds.ToVector());
     }
 
     private void InitializeWeights()
@@ -232,11 +202,11 @@ public partial class AnoGANDetector<T> : AnomalyDetectorBase<T>
         double genScale3 = Math.Sqrt(2.0 / (_hiddenDim + _inputDim));
 
         _genW1 = InitializeMatrix(_latentDim, _hiddenDim, genScale1);
-        _genB1 = InitializeVector(_hiddenDim);
+        _genB1 = new Vector<T>(_hiddenDim);
         _genW2 = InitializeMatrix(_hiddenDim, _hiddenDim, genScale2);
-        _genB2 = InitializeVector(_hiddenDim);
+        _genB2 = new Vector<T>(_hiddenDim);
         _genW3 = InitializeMatrix(_hiddenDim, _inputDim, genScale3);
-        _genB3 = InitializeVector(_inputDim);
+        _genB3 = new Vector<T>(_inputDim);
 
         // Discriminator: input -> hidden1 -> hidden2 -> 1
         double discScale1 = Math.Sqrt(2.0 / (_inputDim + _hiddenDim));
@@ -244,11 +214,11 @@ public partial class AnoGANDetector<T> : AnomalyDetectorBase<T>
         double discScale3 = Math.Sqrt(2.0 / (_hiddenDim + 1));
 
         _discW1 = InitializeMatrix(_inputDim, _hiddenDim, discScale1);
-        _discB1 = InitializeVector(_hiddenDim);
+        _discB1 = new Vector<T>(_hiddenDim);
         _discW2 = InitializeMatrix(_hiddenDim, _hiddenDim, discScale2);
-        _discB2 = InitializeVector(_hiddenDim);
+        _discB2 = new Vector<T>(_hiddenDim);
         _discW3 = InitializeMatrix(_hiddenDim, 1, discScale3);
-        _discB3 = InitializeVector(1);
+        _discB3 = new Vector<T>(1);
     }
 
     private Matrix<T> InitializeMatrix(int rows, int cols, double scale)
@@ -267,20 +237,12 @@ public partial class AnoGANDetector<T> : AnomalyDetectorBase<T>
         return matrix;
     }
 
-    private Vector<T> InitializeVector(int size)
-    {
-        var vector = new Vector<T>(size);
-        for (int i = 0; i < size; i++)
-        {
-            vector[i] = NumOps.Zero;
-        }
-        return vector;
-    }
-
     private void TrainGAN(Matrix<T> data)
     {
         int n = data.Rows;
         int batchSize = Math.Min(32, n);
+        var values = AnomalyTensorOps.ToTensor(data);
+        T lr = NumOps.FromDouble(_learningRate);
 
         for (int epoch = 0; epoch < _epochs; epoch++)
         {
@@ -290,31 +252,29 @@ public partial class AnoGANDetector<T> : AnomalyDetectorBase<T>
             {
                 int actualBatchSize = Math.Min(batchSize, n - batch);
 
-                // Train Discriminator
+                // Train Discriminator: one SGD step per sample (real row, then a fake row generated from a
+                // fresh latent code). The generator does not change during this phase, so the fakes are
+                // generated together from latent codes drawn in sample order.
+                var (_, _, fakeBatch) = Generate(SampleLatent(actualBatchSize));
                 for (int b = 0; b < actualBatchSize; b++)
                 {
-                    int idx = indices[batch + b];
-                    var realData = data.GetRow(idx);
-
-                    // Generate fake data
-                    var z = SampleLatent();
-                    var fakeData = Generate(z);
-
-                    // Update discriminator
-                    UpdateDiscriminator(realData, fakeData);
+                    var realData = AnomalyTensorOps.SelectRows(values, new[] { indices[batch + b] });
+                    var fakeData = AnomalyTensorOps.SelectRows(fakeBatch, new[] { b });
+                    UpdateDiscriminator(realData, fakeData, lr);
                 }
 
-                // Train Generator
+                // Train Generator: one SGD step per sample, latent codes drawn in sample order
+                var latentBatch = SampleLatent(actualBatchSize);
                 for (int b = 0; b < actualBatchSize; b++)
                 {
-                    var z = SampleLatent();
-                    UpdateGenerator(z);
+                    UpdateGenerator(AnomalyTensorOps.SelectRows(latentBatch, new[] { b }), lr);
                 }
             }
         }
     }
 
-    private Vector<T> SampleLatent() => SampleLatent(_random);
+    // [rows, latentDim] standard normal latent codes from the model's shared random stream.
+    private Tensor<T> SampleLatent(int rows) => SampleLatent(_random, rows);
 
     /// <summary>
     /// Draws a latent code from the standard normal using <paramref name="rng"/>.
@@ -328,20 +288,23 @@ public partial class AnoGANDetector<T> : AnomalyDetectorBase<T>
     /// <c>Predict_ShouldBeDeterministic</c> and <c>Clone_ShouldProduceSameScores</c> both failed
     /// because a second call to the same model on the same input resumed the stream further along.
     /// </remarks>
-    private Vector<T> SampleLatent(Random rng)
+    private Tensor<T> SampleLatent(Random rng, int rows)
     {
-        var z = new Vector<T>(_latentDim);
-        for (int i = 0; i < _latentDim; i++)
+        // Box-Muller draws, row by row and latent unit by latent unit
+        var draws = new double[rows * _latentDim];
+        for (int i = 0; i < draws.Length; i++)
         {
             double u1 = 1.0 - rng.NextDouble();
             double u2 = 1.0 - rng.NextDouble();
-            double val = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2);
-            z[i] = NumOps.FromDouble(val);
+            draws[i] = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2);
         }
-        return z;
+
+        return Tensor<double>.FromVector(Vector<double>.Wrap(draws), new[] { rows, _latentDim }).Cast<T>();
     }
 
-    private Vector<T> Generate(Vector<T> z)
+    // Batched generator: h1 = LeakyReLU(z genW1 + genB1), h2 = LeakyReLU(h1 genW2 + genB2),
+    // output = tanh(h2 genW3 + genB3).
+    private (Tensor<T> h1, Tensor<T> h2, Tensor<T> output) Generate(Tensor<T> z)
     {
         var genW1 = _genW1;
         var genB1 = _genB1;
@@ -356,30 +319,17 @@ public partial class AnoGANDetector<T> : AnomalyDetectorBase<T>
             throw new InvalidOperationException("Generator weights not initialized.");
         }
 
-        // Vectorized generator forward using Engine.TensorMatMul
-        // Layer 1: h1 = LeakyReLU(z @ genW1 + genB1)
-        var zTensor = Tensor<T>.FromVector(z).Reshape(1, _latentDim);
-        var layer1 = Engine.TensorMatMul(zTensor, Tensor<T>.FromMatrix(genW1));
-        layer1 = Engine.TensorAdd(layer1, Tensor<T>.FromVector(genB1).Reshape(1, _hiddenDim));
-        layer1 = Engine.LeakyReLU(layer1, NumOps.FromDouble(0.2));
-        var h1 = layer1.Reshape(_hiddenDim).ToVector();
-
-        // Layer 2: h2 = LeakyReLU(h1 @ genW2 + genB2)
-        var layer2 = Engine.TensorMatMul(layer1, Tensor<T>.FromMatrix(genW2));
-        layer2 = Engine.TensorAdd(layer2, Tensor<T>.FromVector(genB2).Reshape(1, _hiddenDim));
-        layer2 = Engine.LeakyReLU(layer2, NumOps.FromDouble(0.2));
-        var h2 = layer2.Reshape(_hiddenDim).ToVector();
-
-        // Output layer: output = tanh(h2 @ genW3 + genB3)
-        var layer3 = Engine.TensorMatMul(layer2, Tensor<T>.FromMatrix(genW3));
-        layer3 = Engine.TensorAdd(layer3, Tensor<T>.FromVector(genB3).Reshape(1, _inputDim));
-        layer3 = Engine.Tanh(layer3);
-        var output = layer3.Reshape(_inputDim).ToVector();
-
-        return output;
+        var engine = Engine;
+        T leakyAlpha = NumOps.FromDouble(0.2);
+        var h1 = engine.LeakyReLU(Affine(z, genW1, genB1), leakyAlpha);
+        var h2 = engine.LeakyReLU(Affine(h1, genW2, genB2), leakyAlpha);
+        var output = engine.Tanh(Affine(h2, genW3, genB3));
+        return (h1, h2, output);
     }
 
-    private (T output, Vector<T> features) Discriminate(Vector<T> x)
+    // Batched discriminator: h1 = LeakyReLU(x discW1 + discB1), h2 = LeakyReLU(h1 discW2 + discB2) (the
+    // features), output = sigmoid(h2 discW3 + discB3) = 1 / (1 + exp(-pre)), [rows, 1].
+    private (Tensor<T> h1, Tensor<T> h2, Tensor<T> output) Discriminate(Tensor<T> x)
     {
         var discW1 = _discW1;
         var discB1 = _discB1;
@@ -394,41 +344,40 @@ public partial class AnoGANDetector<T> : AnomalyDetectorBase<T>
             throw new InvalidOperationException("Discriminator weights not initialized.");
         }
 
-        // Vectorized discriminator forward
-        // Layer 1: h1 = LeakyReLU(x @ discW1 + discB1)
-        var xTensor = Tensor<T>.FromVector(x).Reshape(1, _inputDim);
-        var dLayer1 = Engine.TensorMatMul(xTensor, Tensor<T>.FromMatrix(discW1));
-        dLayer1 = Engine.TensorAdd(dLayer1, Tensor<T>.FromVector(discB1).Reshape(1, _hiddenDim));
-        dLayer1 = Engine.LeakyReLU(dLayer1, NumOps.FromDouble(0.2));
-        var h1 = dLayer1.Reshape(_hiddenDim).ToVector();
-
-        // Layer 2: h2 = LeakyReLU(h1 @ discW2 + discB2)
-        var dLayer2 = Engine.TensorMatMul(dLayer1, Tensor<T>.FromMatrix(discW2));
-        dLayer2 = Engine.TensorAdd(dLayer2, Tensor<T>.FromVector(discB2).Reshape(1, _hiddenDim));
-        dLayer2 = Engine.LeakyReLU(dLayer2, NumOps.FromDouble(0.2));
-        var h2 = dLayer2.Reshape(_hiddenDim).ToVector();
-
-        // Output layer: sigmoid(h2 @ discW3 + discB3)
-        var dLayer3 = Engine.TensorMatMul(dLayer2, Tensor<T>.FromMatrix(discW3));
-        dLayer3 = Engine.TensorAdd(dLayer3, Tensor<T>.FromVector(discB3).Reshape(1, 1));
-        // Sigmoid: 1/(1+exp(-x))
-        T output = NumOps.Divide(NumOps.One, NumOps.Add(NumOps.One, NumOps.Exp(NumOps.Negate(dLayer3[0]))));
-
-        return (output, h2);
+        var engine = Engine;
+        T leakyAlpha = NumOps.FromDouble(0.2);
+        var h1 = engine.LeakyReLU(Affine(x, discW1, discB1), leakyAlpha);
+        var h2 = engine.LeakyReLU(Affine(h1, discW2, discB2), leakyAlpha);
+        var output = engine.TensorReciprocal(engine.TensorAddScalar(
+            engine.TensorExp(engine.TensorNegate(Affine(h2, discW3, discB3))), NumOps.One));
+        return (h1, h2, output);
     }
 
-    private void UpdateDiscriminator(Vector<T> realData, Vector<T> fakeData)
-    {
-        double lr = _learningRate;
+    // input W + b (bias broadcast over the rows)
+    private Tensor<T> Affine(Tensor<T> input, Matrix<T> weights, Vector<T> bias)
+        => Engine.TensorAdd(Engine.TensorMatMul(input, Tensor<T>.FromMatrix(weights)),
+            AnomalyTensorOps.BroadcastRow(bias.AsTensor(), input.Shape[0]));
 
+    // LeakyReLU derivative from the activation (post-activation sign == pre-activation sign): 0.2 where
+    // negative, 1 elsewhere.
+    private Tensor<T> LeakySlope(Tensor<T> activation)
+        => Engine.TensorAddScalar(Engine.TensorMultiplyScalar(
+            Engine.TensorLessThan(activation, NumOps.Zero), NumOps.FromDouble(-0.8)), NumOps.One);
+
+    // weights - lr * gradients
+    private Tensor<T> Step(Tensor<T> weights, Tensor<T> gradients, T lr)
+        => Engine.TensorSubtract(weights, Engine.TensorMultiplyScalar(gradients, lr));
+
+    private void UpdateDiscriminator(Tensor<T> realData, Tensor<T> fakeData, T lr)
+    {
         // Forward pass for real data with cache
-        var (realH1, realH2, realOut) = DiscriminateWithCache(realData);
+        var (realH1, realH2, realOut) = Discriminate(realData);
         // Forward pass for fake data with cache
-        var (fakeH1, fakeH2, fakeOut) = DiscriminateWithCache(fakeData);
+        var (fakeH1, fakeH2, fakeOut) = Discriminate(fakeData);
 
         // Binary cross-entropy gradients
-        T dRealOut = NumOps.Subtract(realOut, NumOps.One);
-        T dFakeOut = fakeOut;
+        var dRealOut = Engine.TensorSubtractScalar(realOut, NumOps.One);
+        var dFakeOut = fakeOut;
 
         // Backprop through discriminator for real data
         BackpropDiscriminator(realData, realH1, realH2, dRealOut, lr);
@@ -436,7 +385,9 @@ public partial class AnoGANDetector<T> : AnomalyDetectorBase<T>
         BackpropDiscriminator(fakeData, fakeH1, fakeH2, dFakeOut, lr);
     }
 
-    private (Vector<T> h1, Vector<T> h2, T output) DiscriminateWithCache(Vector<T> x)
+    // Gradients of the discriminator output (seed dOut, [rows, 1]) computed with the current weights,
+    // then W -= lr * dW for every layer.
+    private void BackpropDiscriminator(Tensor<T> x, Tensor<T> h1, Tensor<T> h2, Tensor<T> dOut, T lr)
     {
         var discW1 = _discW1;
         var discB1 = _discB1;
@@ -451,142 +402,47 @@ public partial class AnoGANDetector<T> : AnomalyDetectorBase<T>
             throw new InvalidOperationException("Discriminator weights not initialized.");
         }
 
-        // Layer 1
-        var h1 = new Vector<T>(_hiddenDim);
-        for (int j = 0; j < _hiddenDim; j++)
-        {
-            T sum = discB1[j];
-            { var wCol_5 = new Vector<T>(_inputDim); for (int ii = 0; ii < _inputDim; ii++) wCol_5[ii] = discW1[ii, j]; sum = NumOps.Add(sum, Engine.DotProduct(x, wCol_5)); }
-            T alpha = NumOps.FromDouble(0.2);
-            h1[j] = NumOps.GreaterThan(sum, NumOps.Zero) ? sum : NumOps.Multiply(alpha, sum);
-        }
-
-        // Layer 2
-        var h2 = new Vector<T>(_hiddenDim);
-        for (int j = 0; j < _hiddenDim; j++)
-        {
-            T sum = discB2[j];
-            { var wCol_6 = new Vector<T>(_hiddenDim); for (int ii = 0; ii < _hiddenDim; ii++) wCol_6[ii] = discW2[ii, j]; sum = NumOps.Add(sum, Engine.DotProduct(h1, wCol_6)); }
-            T alpha = NumOps.FromDouble(0.2);
-            h2[j] = NumOps.GreaterThan(sum, NumOps.Zero) ? sum : NumOps.Multiply(alpha, sum);
-        }
-
-        // Output layer
-        T outSum = discB3[0];
-        { var _e1 = new Vector<T>(_hiddenDim); for (int _i = 0; _i < _hiddenDim; _i++) _e1[_i] = discW3[_i, 0]; outSum = NumOps.Add(outSum, Engine.DotProduct(h2, _e1)); }
-        T output = NumOps.Divide(NumOps.One, NumOps.Add(NumOps.One, NumOps.Exp(NumOps.Negate(outSum))));
-
-        return (h1, h2, output);
-    }
-
-    private void BackpropDiscriminator(Vector<T> x, Vector<T> h1, Vector<T> h2, T dOut, double lr)
-    {
-        var discW1 = _discW1;
-        var discB1 = _discB1;
-        var discW2 = _discW2;
-        var discB2 = _discB2;
-        var discW3 = _discW3;
-        var discB3 = _discB3;
-
-        if (discW1 == null || discB1 == null || discW2 == null || discB2 == null ||
-            discW3 == null || discB3 == null)
-        {
-            throw new InvalidOperationException("Discriminator weights not initialized.");
-        }
-
-        T lrT = NumOps.FromDouble(lr);
-        T dOutT = dOut;
-        T leakySlope = NumOps.FromDouble(0.2);
+        var engine = Engine;
+        var axis0 = new[] { 0 };
+        var w2Tensor = Tensor<T>.FromMatrix(discW2);
+        var w3Tensor = Tensor<T>.FromMatrix(discW3);
 
         // === Phase 1: Compute ALL gradients using original weights ===
-
-        // Layer 3 gradient: dH2 = W3 @ dOut (W3 is [hiddenDim, 1], dOut is scalar)
-        // dH2[i] = W3[i,0] * dOut — vectorized: column of W3 * scalar
-        var w3Col = new Vector<T>(_hiddenDim);
-        for (int i = 0; i < _hiddenDim; i++) w3Col[i] = discW3[i, 0];
-        var dH2 = (Vector<T>)Engine.Multiply(w3Col, dOutT);
-
-        // LeakyReLU derivative for h2
-        for (int i = 0; i < _hiddenDim; i++)
-        {
-            if (NumOps.LessThan(h2[i], NumOps.Zero))
-                dH2[i] = NumOps.Multiply(dH2[i], leakySlope);
-        }
-
-        // Layer 2 gradient: dH1 = W2^T @ dH2 — vectorized matmul
-        var w2Tensor = Tensor<T>.FromMatrix(discW2);
-        var dH2Tensor = Tensor<T>.FromVector(dH2).Reshape(_hiddenDim, 1);
-        var dH1Tensor = Engine.TensorMatMul(w2Tensor, dH2Tensor).Reshape(_hiddenDim);
-        var dH1 = dH1Tensor.ToVector();
-
-        // LeakyReLU derivative for h1
-        for (int i = 0; i < _hiddenDim; i++)
-        {
-            if (NumOps.LessThan(h1[i], NumOps.Zero))
-                dH1[i] = NumOps.Multiply(dH1[i], leakySlope);
-        }
+        var dH2 = engine.TensorMultiply(engine.TensorMatMul(dOut, engine.TensorTranspose(w3Tensor)), LeakySlope(h2));
+        var dH1 = engine.TensorMultiply(engine.TensorMatMul(dH2, engine.TensorTranspose(w2Tensor)), LeakySlope(h1));
 
         // === Phase 2: Compute weight gradients and apply updates ===
-
-        // Layer 3 weight gradient: dW3 = h2 * dOut, then W3 -= lr * dW3
-        var dW3 = (Vector<T>)Engine.Multiply(h2, dOutT);
-        for (int i = 0; i < _hiddenDim; i++)
-            discW3[i, 0] = NumOps.Subtract(discW3[i, 0], NumOps.Multiply(lrT, dW3[i]));
-        discB3[0] = NumOps.Subtract(discB3[0], NumOps.Multiply(lrT, dOutT));
-
-        // Layer 2 weight gradient: dW2 = h1 @ dH2^T (outer product), then W2 -= lr * dW2
-        var h1Tensor = Tensor<T>.FromVector(h1).Reshape(_hiddenDim, 1);
-        var dH2Row = Tensor<T>.FromVector(dH2).Reshape(1, _hiddenDim);
-        var dW2 = Engine.TensorMatMul(h1Tensor, dH2Row);
-        var w2Update = Engine.TensorMultiplyScalar(dW2, lrT);
-        var updatedW2 = Engine.TensorSubtract(w2Tensor, w2Update);
-        for (int i = 0; i < _hiddenDim; i++)
-            for (int j = 0; j < _hiddenDim; j++)
-                discW2[i, j] = updatedW2[i, j];
-
-        // Layer 2 bias gradient: dB2 = dH2, then B2 -= lr * dB2
-        var scaledDH2 = (Vector<T>)Engine.Multiply(dH2, lrT);
-        for (int j = 0; j < _hiddenDim; j++)
-            discB2[j] = NumOps.Subtract(discB2[j], scaledDH2[j]);
-
-        // Layer 1 weight gradient: dW1 = x @ dH1^T (outer product), then W1 -= lr * dW1
-        var xTensor = Tensor<T>.FromVector(x).Reshape(_inputDim, 1);
-        var dH1Row = Tensor<T>.FromVector(dH1).Reshape(1, _hiddenDim);
-        var dW1 = Engine.TensorMatMul(xTensor, dH1Row);
-        var w1Tensor = Tensor<T>.FromMatrix(discW1);
-        var w1Update = Engine.TensorMultiplyScalar(dW1, lrT);
-        var updatedW1 = Engine.TensorSubtract(w1Tensor, w1Update);
-        for (int i = 0; i < _inputDim; i++)
-            for (int j = 0; j < _hiddenDim; j++)
-                discW1[i, j] = updatedW1[i, j];
-
-        // Layer 1 bias gradient: dB1 = dH1, then B1 -= lr * dB1
-        var scaledDH1 = (Vector<T>)Engine.Multiply(dH1, lrT);
-        for (int j = 0; j < _hiddenDim; j++)
-            discB1[j] = NumOps.Subtract(discB1[j], scaledDH1[j]);
+        _discW3 = Step(w3Tensor, engine.TensorMatMul(engine.TensorTranspose(h2), dOut), lr).ToMatrix();
+        _discB3 = Step(discB3.AsTensor(), engine.ReduceSum(dOut, axis0, false), lr).ToVector();
+        _discW2 = Step(w2Tensor, engine.TensorMatMul(engine.TensorTranspose(h1), dH2), lr).ToMatrix();
+        _discB2 = Step(discB2.AsTensor(), engine.ReduceSum(dH2, axis0, false), lr).ToVector();
+        _discW1 = Step(Tensor<T>.FromMatrix(discW1), engine.TensorMatMul(engine.TensorTranspose(x), dH1), lr).ToMatrix();
+        _discB1 = Step(discB1.AsTensor(), engine.ReduceSum(dH1, axis0, false), lr).ToVector();
     }
 
-    private void UpdateGenerator(Vector<T> z)
+    private void UpdateGenerator(Tensor<T> z, T lr)
     {
-        double lr = _learningRate;
-
         // Forward pass through generator with cache
-        var (h1, h2, fakeData) = GenerateWithCache(z);
+        var (h1, h2, fakeData) = Generate(z);
 
         // Forward pass through discriminator
-        var (_, discH2, fakeOut) = DiscriminateWithCache(fakeData);
+        var (discH1, discH2, fakeOut) = Discriminate(fakeData);
 
         // Generator wants discriminator to output 1 for fake
-        T dOut = NumOps.Subtract(fakeOut, NumOps.One);
+        var dOut = Engine.TensorSubtractScalar(fakeOut, NumOps.One);
 
         // Backprop through discriminator to get gradient w.r.t. fakeData
-        var dFakeData = BackpropDiscriminatorToInput(fakeData, discH2, dOut);
+        var discW3 = _discW3 ?? throw new InvalidOperationException("Discriminator weights not initialized.");
+        var dFakeData = DiscriminatorInputGradient(discH1, discH2,
+            Engine.TensorMatMul(dOut, Engine.TensorTranspose(Tensor<T>.FromMatrix(discW3))));
 
         // Backprop through generator
-        BackpropGenerator(z, h1, h2, dFakeData, lr);
+        BackpropGenerator(z, h1, h2, fakeData, dFakeData, lr);
     }
 
-    private (Vector<T> h1, Vector<T> h2, Vector<T> output) GenerateWithCache(Vector<T> z)
+    // Gradients of the generator output (seed dOutput through the tanh) computed with the current weights,
+    // then W -= lr * dW for every layer.
+    private void BackpropGenerator(Tensor<T> z, Tensor<T> h1, Tensor<T> h2, Tensor<T> output, Tensor<T> dOutput, T lr)
     {
         var genW1 = _genW1;
         var genB1 = _genB1;
@@ -601,213 +457,34 @@ public partial class AnoGANDetector<T> : AnomalyDetectorBase<T>
             throw new InvalidOperationException("Generator weights not initialized.");
         }
 
-        // Layer 1
-        var h1 = new Vector<T>(_hiddenDim);
-        for (int j = 0; j < _hiddenDim; j++)
-        {
-            T sum = genB1[j];
-            { var wCol_7 = new Vector<T>(_latentDim); for (int ii = 0; ii < _latentDim; ii++) wCol_7[ii] = genW1[ii, j]; sum = NumOps.Add(sum, Engine.DotProduct(z, wCol_7)); }
-            T alpha = NumOps.FromDouble(0.2);
-            h1[j] = NumOps.GreaterThan(sum, NumOps.Zero) ? sum : NumOps.Multiply(alpha, sum);
-        }
-
-        // Layer 2
-        var h2 = new Vector<T>(_hiddenDim);
-        for (int j = 0; j < _hiddenDim; j++)
-        {
-            T sum = genB2[j];
-            { var wCol_8 = new Vector<T>(_hiddenDim); for (int ii = 0; ii < _hiddenDim; ii++) wCol_8[ii] = genW2[ii, j]; sum = NumOps.Add(sum, Engine.DotProduct(h1, wCol_8)); }
-            T alpha = NumOps.FromDouble(0.2);
-            h2[j] = NumOps.GreaterThan(sum, NumOps.Zero) ? sum : NumOps.Multiply(alpha, sum);
-        }
-
-        // Output layer (tanh for bounded output)
-        var output = new Vector<T>(_inputDim);
-        for (int j = 0; j < _inputDim; j++)
-        {
-            T sum = genB3[j];
-            { var wCol_9 = new Vector<T>(_hiddenDim); for (int ii = 0; ii < _hiddenDim; ii++) wCol_9[ii] = genW3[ii, j]; sum = NumOps.Add(sum, Engine.DotProduct(h2, wCol_9)); }
-            // Tanh via exp: (exp(2x)-1)/(exp(2x)+1)
-            T exp2x = NumOps.Exp(NumOps.Multiply(NumOps.FromDouble(2), sum));
-            output[j] = NumOps.Divide(NumOps.Subtract(exp2x, NumOps.One), NumOps.Add(exp2x, NumOps.One));
-        }
-
-        return (h1, h2, output);
-    }
-
-    private Vector<T> BackpropDiscriminatorToInput(Vector<T> x, Vector<T> h2, T dOut)
-    {
-        var discW1 = _discW1;
-        var discB1 = _discB1;
-        var discW2 = _discW2;
-        var discW3 = _discW3;
-
-        if (discW1 == null || discB1 == null || discW2 == null || discW3 == null)
-        {
-            throw new InvalidOperationException("Discriminator weights not initialized.");
-        }
-
-        T leakySlope = NumOps.FromDouble(0.2);
-
-        // Gradient through output layer: dH2 = W3[:,0] * dOut — vectorized
-        var w3ColVec = new Vector<T>(_hiddenDim);
-        for (int i = 0; i < _hiddenDim; i++) w3ColVec[i] = discW3[i, 0];
-        var dH2 = (Vector<T>)Engine.Multiply(w3ColVec, dOut);
-
-        // LeakyReLU derivative for h2
-        for (int i = 0; i < _hiddenDim; i++)
-        {
-            if (NumOps.LessThan(h2[i], NumOps.Zero))
-                dH2[i] = NumOps.Multiply(dH2[i], leakySlope);
-        }
-
-        // Recompute h1: h1 = LeakyReLU(x @ W1 + b1) — vectorized matmul
-        var xTensor = Tensor<T>.FromVector(x).Reshape(1, _inputDim);
-        var w1Tensor = Tensor<T>.FromMatrix(discW1);
-        var h1Pre = Engine.TensorMatMul(xTensor, w1Tensor).Reshape(_hiddenDim);
-        var h1PreVec = h1Pre.ToVector();
-        var h1 = new Vector<T>(_hiddenDim);
-        for (int j = 0; j < _hiddenDim; j++)
-        {
-            T val = NumOps.Add(h1PreVec[j], discB1[j]);
-            T alpha = NumOps.FromDouble(0.2);
-            h1[j] = NumOps.GreaterThan(val, NumOps.Zero) ? val : NumOps.Multiply(alpha, val);
-        }
-
-        // Gradient through layer 2: dH1 = W2 @ dH2 — vectorized matmul
-        var w2Tensor = Tensor<T>.FromMatrix(discW2);
-        var dH2Col = Tensor<T>.FromVector(dH2).Reshape(_hiddenDim, 1);
-        var dH1 = Engine.TensorMatMul(w2Tensor, dH2Col).Reshape(_hiddenDim).ToVector();
-
-        // LeakyReLU derivative for h1
-        for (int i = 0; i < _hiddenDim; i++)
-        {
-            if (NumOps.LessThan(h1[i], NumOps.Zero))
-                dH1[i] = NumOps.Multiply(dH1[i], leakySlope);
-        }
-
-        // Gradient through layer 1 to input: dX = W1 @ dH1 — vectorized matmul
-        var dH1Col = Tensor<T>.FromVector(dH1).Reshape(_hiddenDim, 1);
-        var dX = Engine.TensorMatMul(w1Tensor, dH1Col).Reshape(_inputDim).ToVector();
-
-        return dX;
-    }
-
-    private void BackpropGenerator(Vector<T> z, Vector<T> h1, Vector<T> h2, Vector<T> dOutput, double lr)
-    {
-        var genW1 = _genW1;
-        var genB1 = _genB1;
-        var genW2 = _genW2;
-        var genB2 = _genB2;
-        var genW3 = _genW3;
-        var genB3 = _genB3;
-
-        if (genW1 == null || genB1 == null || genW2 == null || genB2 == null ||
-            genW3 == null || genB3 == null)
-        {
-            throw new InvalidOperationException("Generator weights not initialized.");
-        }
-
-        T lrT = NumOps.FromDouble(lr);
-        T leakySlope = NumOps.FromDouble(0.2);
-
-        // Recompute output layer: output = tanh(h2 @ W3 + b3) — vectorized matmul
-        var h2Tensor = Tensor<T>.FromVector(h2).Reshape(1, _hiddenDim);
+        var engine = Engine;
+        var axis0 = new[] { 0 };
+        var w2Tensor = Tensor<T>.FromMatrix(genW2);
         var w3Tensor = Tensor<T>.FromMatrix(genW3);
-        var outputPre = Engine.TensorMatMul(h2Tensor, w3Tensor).Reshape(_inputDim);
-        var output = new Vector<T>(_inputDim);
-        var dOutputPre = new Vector<T>(_inputDim);
-        for (int j = 0; j < _inputDim; j++)
-        {
-            T pre = NumOps.Add(outputPre[j], genB3[j]);
-            // Tanh via exp: (exp(2x)-1)/(exp(2x)+1)
-            T exp2x = NumOps.Exp(NumOps.Multiply(NumOps.FromDouble(2), pre));
-            T tanhVal = NumOps.Divide(NumOps.Subtract(exp2x, NumOps.One), NumOps.Add(exp2x, NumOps.One));
-            output[j] = tanhVal;
-            T tanhDeriv = NumOps.Subtract(NumOps.One, NumOps.Multiply(tanhVal, tanhVal));
-            dOutputPre[j] = NumOps.Multiply(dOutput[j], tanhDeriv);
-        }
 
         // === Phase 1: Compute ALL gradients using original weights ===
-
-        // Layer 3 gradient: dH2 = W3 @ dOutputPre — vectorized matmul
-        var dOutPreCol = Tensor<T>.FromVector(dOutputPre).Reshape(_inputDim, 1);
-        var dH2 = Engine.TensorMatMul(w3Tensor, dOutPreCol).Reshape(_hiddenDim).ToVector();
-
-        // LeakyReLU derivative for h2
-        for (int i = 0; i < _hiddenDim; i++)
-        {
-            if (NumOps.LessThan(h2[i], NumOps.Zero))
-                dH2[i] = NumOps.Multiply(dH2[i], leakySlope);
-        }
-
-        // Layer 2 gradient: dH1 = W2 @ dH2 — vectorized matmul
-        var w2Tensor = Tensor<T>.FromMatrix(genW2);
-        var dH2Col = Tensor<T>.FromVector(dH2).Reshape(_hiddenDim, 1);
-        var dH1 = Engine.TensorMatMul(w2Tensor, dH2Col).Reshape(_hiddenDim).ToVector();
-
-        // LeakyReLU derivative for h1
-        for (int i = 0; i < _hiddenDim; i++)
-        {
-            if (NumOps.LessThan(h1[i], NumOps.Zero))
-                dH1[i] = NumOps.Multiply(dH1[i], leakySlope);
-        }
+        var dOutputPre = TanhGradient(output, dOutput);
+        var dH2 = engine.TensorMultiply(engine.TensorMatMul(dOutputPre, engine.TensorTranspose(w3Tensor)), LeakySlope(h2));
+        var dH1 = engine.TensorMultiply(engine.TensorMatMul(dH2, engine.TensorTranspose(w2Tensor)), LeakySlope(h1));
 
         // === Phase 2: Compute weight gradients and apply updates ===
-
-        // Layer 3: dW3 = h2 @ dOutputPre^T, W3 -= lr * dW3
-        var h2Col = Tensor<T>.FromVector(h2).Reshape(_hiddenDim, 1);
-        var dOutPreRow = Tensor<T>.FromVector(dOutputPre).Reshape(1, _inputDim);
-        var dW3 = Engine.TensorMatMul(h2Col, dOutPreRow);
-        var updatedW3 = Engine.TensorSubtract(w3Tensor, Engine.TensorMultiplyScalar(dW3, lrT));
-        for (int i = 0; i < _hiddenDim; i++)
-            for (int j = 0; j < _inputDim; j++)
-                genW3[i, j] = updatedW3[i, j];
-        var scaledDOutPre = (Vector<T>)Engine.Multiply(dOutputPre, lrT);
-        for (int j = 0; j < _inputDim; j++)
-            genB3[j] = NumOps.Subtract(genB3[j], scaledDOutPre[j]);
-
-        // Layer 2: dW2 = h1 @ dH2^T, W2 -= lr * dW2
-        var h1Col = Tensor<T>.FromVector(h1).Reshape(_hiddenDim, 1);
-        var dH2Row = Tensor<T>.FromVector(dH2).Reshape(1, _hiddenDim);
-        var dW2 = Engine.TensorMatMul(h1Col, dH2Row);
-        var updatedW2 = Engine.TensorSubtract(w2Tensor, Engine.TensorMultiplyScalar(dW2, lrT));
-        for (int i = 0; i < _hiddenDim; i++)
-            for (int j = 0; j < _hiddenDim; j++)
-                genW2[i, j] = updatedW2[i, j];
-        var scaledDH2 = (Vector<T>)Engine.Multiply(dH2, lrT);
-        for (int j = 0; j < _hiddenDim; j++)
-            genB2[j] = NumOps.Subtract(genB2[j], scaledDH2[j]);
-
-        // Layer 1: dW1 = z @ dH1^T, W1 -= lr * dW1
-        var zCol = Tensor<T>.FromVector(z).Reshape(_latentDim, 1);
-        var dH1Row = Tensor<T>.FromVector(dH1).Reshape(1, _hiddenDim);
-        var dW1 = Engine.TensorMatMul(zCol, dH1Row);
-        var w1Tensor = Tensor<T>.FromMatrix(genW1);
-        var updatedW1 = Engine.TensorSubtract(w1Tensor, Engine.TensorMultiplyScalar(dW1, lrT));
-        for (int i = 0; i < _latentDim; i++)
-            for (int j = 0; j < _hiddenDim; j++)
-                genW1[i, j] = updatedW1[i, j];
-        var scaledDH1 = (Vector<T>)Engine.Multiply(dH1, lrT);
-        for (int j = 0; j < _hiddenDim; j++)
-            genB1[j] = NumOps.Subtract(genB1[j], scaledDH1[j]);
+        _genW3 = Step(w3Tensor, engine.TensorMatMul(engine.TensorTranspose(h2), dOutputPre), lr).ToMatrix();
+        _genB3 = Step(genB3.AsTensor(), engine.ReduceSum(dOutputPre, axis0, false), lr).ToVector();
+        _genW2 = Step(w2Tensor, engine.TensorMatMul(engine.TensorTranspose(h1), dH2), lr).ToMatrix();
+        _genB2 = Step(genB2.AsTensor(), engine.ReduceSum(dH2, axis0, false), lr).ToVector();
+        _genW1 = Step(Tensor<T>.FromMatrix(genW1), engine.TensorMatMul(engine.TensorTranspose(z), dH1), lr).ToMatrix();
+        _genB1 = Step(genB1.AsTensor(), engine.ReduceSum(dH1, axis0, false), lr).ToVector();
     }
 
-    private static double LeakyReLU(double x, double alpha = 0.2)
-    {
-        return x >= 0 ? x : alpha * x;
-    }
+    // Gradient through the tanh output layer: dOutput * (1 - output^2).
+    private Tensor<T> TanhGradient(Tensor<T> output, Tensor<T> dOutput)
+        => Engine.TensorMultiply(dOutput, Engine.ScalarMinusTensor(NumOps.One, Engine.TensorSquare(output)));
 
     /// <summary>
-    /// Backpropagates a gradient on the generator OUTPUT to a gradient on the latent input z,
-    /// WITHOUT updating any weights. Used by the inference-time z-optimization in
-    /// <see cref="ScoreAnomaliesInternal"/> to compute the exact analytic gradient in a single
-    /// backward pass — replacing the previous central finite-difference estimate, which ran
-    /// 2 × latentDim full generator+discriminator forwards PER step (hundreds of thousands of
-    /// forwards per scoring call, the cause of the test-host hang). Generator layers:
-    /// h1 = LeakyReLU(z·W1+b1), h2 = LeakyReLU(h1·W2+b2), out = tanh(h2·W3+b3).
+    /// Gradient of a loss w.r.t. the generator input z, given its gradient <paramref name="dOutput"/> w.r.t.
+    /// the generator output: h1 = LeakyReLU(z·W1+b1), h2 = LeakyReLU(h1·W2+b2), out = tanh(h2·W3+b3).
     /// </summary>
-    private Vector<T> BackpropGeneratorToInput(Vector<T> h1, Vector<T> h2, Vector<T> output, Vector<T> dOutput)
+    private Tensor<T> GeneratorInputGradient(Tensor<T> h1, Tensor<T> h2, Tensor<T> output, Tensor<T> dOutput)
     {
         var genW1 = _genW1;
         var genW2 = _genW2;
@@ -817,45 +494,18 @@ public partial class AnoGANDetector<T> : AnomalyDetectorBase<T>
             throw new InvalidOperationException("Generator weights not initialized.");
         }
 
-        T leakySlope = NumOps.FromDouble(0.2);
-
-        // Output layer is tanh: d/dpre = (1 - out^2).
-        var dPre3 = new Vector<T>(_inputDim);
-        for (int j = 0; j < _inputDim; j++)
-        {
-            T tanhDeriv = NumOps.Subtract(NumOps.One, NumOps.Multiply(output[j], output[j]));
-            dPre3[j] = NumOps.Multiply(dOutput[j], tanhDeriv);
-        }
-
-        // dH2 = genW3 @ dPre3  (genW3 is [hiddenDim, inputDim]); then LeakyReLU derivative on h2.
-        var dH2 = Engine.TensorMatMul(Tensor<T>.FromMatrix(genW3), Tensor<T>.FromVector(dPre3).Reshape(_inputDim, 1))
-                        .Reshape(_hiddenDim).ToVector();
-        for (int i = 0; i < _hiddenDim; i++)
-        {
-            if (NumOps.LessThan(h2[i], NumOps.Zero)) dH2[i] = NumOps.Multiply(dH2[i], leakySlope);
-        }
-
-        // dH1 = genW2 @ dH2  (genW2 is [hiddenDim, hiddenDim]); then LeakyReLU derivative on h1.
-        var dH1 = Engine.TensorMatMul(Tensor<T>.FromMatrix(genW2), Tensor<T>.FromVector(dH2).Reshape(_hiddenDim, 1))
-                        .Reshape(_hiddenDim).ToVector();
-        for (int i = 0; i < _hiddenDim; i++)
-        {
-            if (NumOps.LessThan(h1[i], NumOps.Zero)) dH1[i] = NumOps.Multiply(dH1[i], leakySlope);
-        }
-
-        // dz = genW1 @ dH1  (genW1 is [latentDim, hiddenDim]).
-        return Engine.TensorMatMul(Tensor<T>.FromMatrix(genW1), Tensor<T>.FromVector(dH1).Reshape(_hiddenDim, 1))
-                     .Reshape(_latentDim).ToVector();
+        var engine = Engine;
+        var dPre3 = TanhGradient(output, dOutput);
+        var dH2 = engine.TensorMultiply(engine.TensorMatMul(dPre3, engine.TensorTranspose(Tensor<T>.FromMatrix(genW3))), LeakySlope(h2));
+        var dH1 = engine.TensorMultiply(engine.TensorMatMul(dH2, engine.TensorTranspose(Tensor<T>.FromMatrix(genW2))), LeakySlope(h1));
+        return engine.TensorMatMul(dH1, engine.TensorTranspose(Tensor<T>.FromMatrix(genW1)));
     }
 
     /// <summary>
-    /// Backpropagates a gradient on the discriminator's FEATURE layer (h2) to a gradient on the
-    /// discriminator input, WITHOUT updating weights. Used to flow the feature-matching loss term
-    /// back to the generated sample during inference-time z-optimization. Mirrors the hidden-layer
-    /// portion of <see cref="BackpropDiscriminatorToInput"/> but is seeded with a gradient on h2
-    /// directly (rather than derived from the scalar output).
+    /// Gradient w.r.t. the discriminator input, given the gradient <paramref name="dH2Seed"/> w.r.t. the
+    /// post-activation features h2 (LeakyReLU derivatives on h2 and h1, then through W2 and W1).
     /// </summary>
-    private Vector<T> BackpropDiscriminatorFeaturesToInput(Vector<T> h1, Vector<T> h2, Vector<T> dH2Seed)
+    private Tensor<T> DiscriminatorInputGradient(Tensor<T> h1, Tensor<T> h2, Tensor<T> dH2Seed)
     {
         var discW1 = _discW1;
         var discW2 = _discW2;
@@ -864,27 +514,10 @@ public partial class AnoGANDetector<T> : AnomalyDetectorBase<T>
             throw new InvalidOperationException("Discriminator weights not initialized.");
         }
 
-        T leakySlope = NumOps.FromDouble(0.2);
-
-        // LeakyReLU derivative on h2 (post-activation sign == pre-activation sign).
-        var dH2 = new Vector<T>(_hiddenDim);
-        for (int i = 0; i < _hiddenDim; i++)
-        {
-            dH2[i] = NumOps.LessThan(h2[i], NumOps.Zero) ? NumOps.Multiply(dH2Seed[i], leakySlope) : dH2Seed[i];
-        }
-
-        // dH1 = W2 @ dH2; LeakyReLU derivative on h1.
-        var dH1 = Engine.TensorMatMul(Tensor<T>.FromMatrix(discW2), Tensor<T>.FromVector(dH2).Reshape(_hiddenDim, 1))
-                        .Reshape(_hiddenDim).ToVector();
-        for (int i = 0; i < _hiddenDim; i++)
-        {
-            if (NumOps.LessThan(h1[i], NumOps.Zero)) dH1[i] = NumOps.Multiply(dH1[i], leakySlope);
-        }
-
-        // dX = W1 @ dH1.
-        var w1Tensor = Tensor<T>.FromMatrix(discW1);
-        return Engine.TensorMatMul(w1Tensor, Tensor<T>.FromVector(dH1).Reshape(_hiddenDim, 1))
-                     .Reshape(_inputDim).ToVector();
+        var engine = Engine;
+        var dH2 = engine.TensorMultiply(dH2Seed, LeakySlope(h2));
+        var dH1 = engine.TensorMultiply(engine.TensorMatMul(dH2, engine.TensorTranspose(Tensor<T>.FromMatrix(discW2))), LeakySlope(h1));
+        return engine.TensorMatMul(dH1, engine.TensorTranspose(Tensor<T>.FromMatrix(discW1)));
     }
 
     /// <inheritdoc/>
@@ -912,103 +545,62 @@ public partial class AnoGANDetector<T> : AnomalyDetectorBase<T>
             throw new InvalidOperationException("Model not properly fitted. Normalization parameters missing.");
         }
 
-        var scores = new Vector<T>(X.Rows);
+        var engine = Engine;
+        int n = X.Rows;
+        var x = AnomalyTensorOps.DivideRow(
+            AnomalyTensorOps.SubtractRow(AnomalyTensorOps.ToTensor(X), dataMeans.AsTensor()), dataStds.AsTensor());
 
         // Scoring-local RNG, re-seeded from the model's own seed on every call, so the latent
         // restarts are identical for identical input. The model's shared _random is deliberately
-        // untouched here: scoring must not advance the training stream either.
+        // untouched here: scoring must not advance the training stream either. One latent restart per
+        // row, drawn in row order.
         var scoringRng = RandomHelper.CreateSeededRandom(_randomSeed);
+        var z = SampleLatent(scoringRng, n);
 
-        for (int i = 0; i < X.Rows; i++)
+        // Find optimal z per row via gradient descent; the score is the lowest loss seen
+        var bestLoss = Tensor<T>.CreateDefault(new[] { n }, NumOps.MaxValue);
+        T zLr = NumOps.FromDouble(0.1);
+        T regularization = NumOps.FromDouble(0.001);
+        T featureWeight = NumOps.FromDouble(0.1);
+        T featureGradientWeight = NumOps.FromDouble(0.2);
+        T two = NumOps.FromDouble(2.0);
+        var axis1 = new[] { 1 };
+
+        // Discriminator features of the real input are constant across steps (x is fixed).
+        var (_, featReal, _) = Discriminate(x);
+
+        for (int step = 0; step < _inferenceSteps; step++)
         {
-            // Normalize
-            var x = new Vector<T>(_inputDim);
-            for (int j = 0; j < _inputDim; j++)
-            {
-                T diff = NumOps.Subtract(X[i, j], dataMeans[j]);
-                x[j] = NumOps.Divide(diff, dataStds[j]);
-            }
+            // Forward with cached activations for the analytic backward pass.
+            var (gH1, gH2, xGen) = Generate(z);
+            var (discH1, featGen, _) = Discriminate(xGen);
 
-            // Find optimal z via gradient descent
-            var z = SampleLatent(scoringRng);
-            var bestZ = new Vector<T>(_latentDim);
-            for (int j = 0; j < _latentDim; j++) bestZ[j] = z[j];
+            // Loss = ||x - xGen||^2 + 0.1 * ||featReal - featGen||^2 (feature matching)
+            var reconLoss = engine.ReduceSum(engine.TensorSquare(engine.TensorSubtract(x, xGen)), axis1, false);
+            var featLoss = engine.ReduceSum(engine.TensorSquare(engine.TensorSubtract(featReal, featGen)), axis1, false);
+            var loss = engine.TensorAdd(reconLoss, engine.TensorMultiplyScalar(featLoss, featureWeight));
+            bestLoss = engine.TensorWhere(engine.TensorLessThan(loss, bestLoss), loss, bestLoss);
 
-            T bestLoss = NumOps.MaxValue;
-            double zLr = 0.1;
+            // EXACT analytic gradient of the loss w.r.t. z in ONE backward pass. This replaces
+            // a central finite-difference estimate that ran 2 x latentDim full generator +
+            // discriminator forwards PER step (hundreds of thousands of forwards per scoring
+            // call) — the cause of the >5-minute test-host hang. Same loss, same descent.
+            //
+            // d(reconstruction)/dxGen = 2 (xGen - x); d(0.1 * feature-matching)/dh2 = 0.2 (featGen - featReal),
+            // flowed back through the discriminator's hidden layers to xGen and added.
+            var dxGen = engine.TensorAdd(
+                engine.TensorMultiplyScalar(engine.TensorSubtract(xGen, x), two),
+                DiscriminatorInputGradient(discH1, featGen,
+                    engine.TensorMultiplyScalar(engine.TensorSubtract(featGen, featReal), featureGradientWeight)));
 
-            // Discriminator features of the real input are constant across steps (x is fixed).
-            var (_, featReal) = Discriminate(x);
+            // Backprop dxGen through the generator to obtain dLoss/dz.
+            var dz = GeneratorInputGradient(gH1, gH2, xGen, dxGen);
 
-            for (int step = 0; step < _inferenceSteps; step++)
-            {
-                // Forward with cached activations for the analytic backward pass.
-                var (gH1, gH2, xGen) = GenerateWithCache(z);
-                var (discH1, featGen, _) = DiscriminateWithCache(xGen);
-
-                // Reconstruction loss: ||x - xGen||^2
-                T reconLoss = NumOps.Zero;
-                for (int j = 0; j < _inputDim; j++)
-                {
-                    T diff = NumOps.Subtract(x[j], xGen[j]);
-                    reconLoss = NumOps.Add(reconLoss, NumOps.Multiply(diff, diff));
-                }
-
-                // Feature-matching loss: ||featReal - featGen||^2
-                T featLoss = NumOps.Zero;
-                for (int j = 0; j < _hiddenDim; j++)
-                {
-                    T diff = NumOps.Subtract(featReal[j], featGen[j]);
-                    featLoss = NumOps.Add(featLoss, NumOps.Multiply(diff, diff));
-                }
-
-                T loss = NumOps.Add(reconLoss, NumOps.Multiply(NumOps.FromDouble(0.1), featLoss));
-
-                if (NumOps.LessThan(loss, bestLoss))
-                {
-                    bestLoss = loss;
-                    for (int j = 0; j < _latentDim; j++) bestZ[j] = z[j];
-                }
-
-                // EXACT analytic gradient of the loss w.r.t. z in ONE backward pass. This replaces
-                // a central finite-difference estimate that ran 2 x latentDim full generator +
-                // discriminator forwards PER step (hundreds of thousands of forwards per scoring
-                // call) — the cause of the >5-minute test-host hang. Same loss, same descent.
-                //
-                // d(reconstruction)/dxGen = 2 (xGen - x)
-                var dxGen = new Vector<T>(_inputDim);
-                for (int j = 0; j < _inputDim; j++)
-                {
-                    dxGen[j] = NumOps.Multiply(NumOps.FromDouble(2.0), NumOps.Subtract(xGen[j], x[j]));
-                }
-
-                // d(0.1 * feature-matching)/dh2 = 0.2 (featGen - featReal); flow it back through the
-                // discriminator's hidden layers to xGen and add to the reconstruction gradient.
-                var dFeatH2 = new Vector<T>(_hiddenDim);
-                for (int k = 0; k < _hiddenDim; k++)
-                {
-                    dFeatH2[k] = NumOps.Multiply(NumOps.FromDouble(0.2), NumOps.Subtract(featGen[k], featReal[k]));
-                }
-                var dFeatX = BackpropDiscriminatorFeaturesToInput(discH1, featGen, dFeatH2);
-                for (int j = 0; j < _inputDim; j++)
-                {
-                    dxGen[j] = NumOps.Add(dxGen[j], dFeatX[j]);
-                }
-
-                // Backprop dxGen through the generator to obtain dLoss/dz.
-                var dz = BackpropGeneratorToInput(gH1, gH2, xGen, dxGen);
-
-                // Gradient descent on z with L2 regularization.
-                for (int j = 0; j < _latentDim; j++)
-                {
-                    double gradWithReg = NumOps.ToDouble(dz[j]) + 0.001 * NumOps.ToDouble(z[j]);
-                    z[j] = NumOps.Subtract(z[j], NumOps.FromDouble(zLr * gradWithReg));
-                }
-            }
-
-            scores[i] = bestLoss;
+            // Gradient descent on z with L2 regularization.
+            z = engine.TensorSubtract(z, engine.TensorMultiplyScalar(
+                engine.TensorAdd(dz, engine.TensorMultiplyScalar(z, regularization)), zLr));
         }
 
-        return scores;
+        return bestLoss.ToVector();
     }
 }
