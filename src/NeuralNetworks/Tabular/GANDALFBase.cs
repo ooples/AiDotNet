@@ -395,7 +395,7 @@ public abstract class GANDALFBase<T> : IParameterSource<T>
     /// <param name="objective">Computes the batch-averaged scalar loss through differentiable engine operations.</param>
     /// <param name="learningRate">Step size applied to the computed gradients.</param>
     /// <returns>The loss before updating the model.</returns>
-    protected T TrainWithTape(Func<Tensor<T>> objective, T learningRate)
+    private protected T TrainWithTape(Func<Tensor<T>> objective, T learningRate)
     {
         List<Tensor<T>> CollectParameters()
         {
