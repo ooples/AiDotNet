@@ -802,6 +802,9 @@ public partial class Mamba<T> : ForecastingModelBase<T>
 
         SetTrainingMode(false);
 
+        if (TrySortedSampleQuantiles(samples, quantiles, out var sortedQuantiles))
+            return sortedQuantiles;
+
         var result = new Tensor<T>(new[] { 1, _forecastHorizon, quantiles.Length });
 
         for (int t = 0; t < _forecastHorizon; t++)
@@ -825,6 +828,38 @@ public partial class Mamba<T> : ForecastingModelBase<T>
         }
 
         return result;
+    }
+
+    /// <summary>
+    /// [1, horizon, Q] quantiles of the first horizon values of every sample: level q reads sorted
+    /// position min((int)(q * n), n - 1). False (leaving the element-wise path) when a sample is
+    /// shorter than the horizon, a level maps below zero, or a value is NaN (its sort order differs).
+    /// </summary>
+    private bool TrySortedSampleQuantiles(List<Tensor<T>> samples, double[] quantiles, out Tensor<T> result)
+    {
+        result = new Tensor<T>(new[] { 1, _forecastHorizon, quantiles.Length });
+        int n = samples.Count;
+        if (n == 0 || _forecastHorizon <= 0 || quantiles.Length == 0 || !samples.TrueForAll(s => s.Length >= _forecastHorizon))
+            return false;
+        var picks = new int[quantiles.Length];
+        for (int q = 0; q < quantiles.Length; q++)
+        {
+            picks[q] = Math.Min((int)(quantiles[q] * n), n - 1);
+            if (picks[q] < 0)
+                return false;
+        }
+
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        var rows = new Tensor<T>[n];
+        for (int s = 0; s < n; s++)
+            rows[s] = Engine.TensorNarrow(Engine.Reshape(samples[s].Contiguous(), new[] { samples[s].Length }), 0, 0, _forecastHorizon);
+        var grid = Engine.TensorStack(rows, 0);
+        if (Engine.TensorCountNonzero(Engine.TensorIsNan(grid)) > 0)
+            return false;
+        var sorted = Engine.TensorSort(grid, 0, false).Values;
+        var chosen = Engine.TensorIndexSelect(sorted, new Tensor<int>(new[] { picks.Length }, new Vector<int>(picks)), 0);
+        result = Engine.Reshape(Engine.TensorTranspose(chosen).Contiguous(), new[] { 1, _forecastHorizon, quantiles.Length });
+        return true;
     }
 
     /// <summary>
