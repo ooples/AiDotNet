@@ -1033,39 +1033,35 @@ public partial class SpikingLayer<T> : LayerBase<T>, IShapeContract
         if (_recoveryVariable == null)
             throw new InvalidOperationException("Recovery variable not initialized for Izhikevich model");
 
-        // Izhikevich model - complex biophysical dynamics require element-wise computation
-        // These equations are inherently non-vectorizable due to their coupled nonlinear nature
-        double aD = NumOps.ToDouble(_a);
-        double bD = NumOps.ToDouble(_b);
-        double cD = NumOps.ToDouble(_c);
-        double dD = NumOps.ToDouble(_d);
-        for (int i = 0; i < _membranePotential.Length; i++)
+        // Izhikevich (2003), one Euler step per neuron, whole-tensor:
+        //   v' = v + 0.04 v^2 + 5 v + 140 - u + I,   u' = u + a (b v - u)   (both from the old v, u)
+        //   spike where v' >= 30: v' <- c, u' <- u' + d.
+        // The state was written element by element (off the gradient tape), so it stays off the tape.
+        using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
         {
-            double v = Convert.ToDouble(_membranePotential[i]);
-            double u = Convert.ToDouble(_recoveryVariable[i]);
-            double I = Convert.ToDouble(current[i]);
+            var shape = _membranePotential._shape;
+            var v = _membranePotential;
+            var u = _recoveryVariable;
+            var input = Engine.Reshape(current, shape);
 
-            // Update membrane potential and recovery variable
-            double dv = 0.04 * v * v + 5 * v + 140 - u + I;
-            double du = aD * (bD * v - u);
+            var quadratic = Engine.TensorMultiplyScalar(Engine.TensorMultiply(v, v), NumOps.FromDouble(0.04));
+            var linear = Engine.TensorMultiplyScalar(v, NumOps.FromDouble(5.0));
+            var dv = Engine.TensorAdd(
+                Engine.TensorSubtract(Engine.TensorAddScalar(Engine.TensorAdd(quadratic, linear), NumOps.FromDouble(140.0)), u),
+                input);
+            var du = Engine.TensorMultiplyScalar(Engine.TensorSubtract(Engine.TensorMultiplyScalar(v, _b), u), _a);
+            var vNext = Engine.TensorAdd(v, dv);
+            var uNext = Engine.TensorAdd(u, du);
 
-            v += dv;
-            u += du;
+            var thirty = new Tensor<T>(shape);
+            thirty.Fill(NumOps.FromDouble(30.0));
+            var spikes = Engine.TensorGreaterEqual(vNext, thirty);
+            var reset = new Tensor<T>(shape);
+            reset.Fill(_c);
 
-            // Check for spike
-            if (v >= 30)
-            {
-                _spikes[i] = NumOps.One;
-                v = cD;
-                u += dD;
-            }
-            else
-            {
-                _spikes[i] = NumOps.Zero;
-            }
-
-            _membranePotential[i] = NumOps.FromDouble(v);
-            _recoveryVariable[i] = NumOps.FromDouble(u);
+            _membranePotential = Engine.TensorWhere(spikes, reset, vNext);
+            _recoveryVariable = Engine.TensorWhere(spikes, Engine.TensorAddScalar(uNext, _d), uNext);
+            _spikes = spikes;
         }
 
         return _spikes;
