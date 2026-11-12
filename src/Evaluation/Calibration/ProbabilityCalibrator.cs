@@ -1,6 +1,7 @@
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Models.Options;
+using AiDotNet.Tensors.Engines.Autodiff;
 
 namespace AiDotNet.Evaluation.Calibration;
 
@@ -232,35 +233,18 @@ public class ProbabilityCalibrator<T>
     public double ComputeECE(Vector<T> scores, Vector<T> labels, int numBins = 10)
     {
         int n = scores.Length;
-        T ece = NumOps.Zero;
+        if (numBins <= 0) return 0;
 
-        for (int b = 0; b < numBins; b++)
-        {
-            T lower = NumOps.FromDouble((double)b / numBins);
-            T upper = NumOps.FromDouble((double)(b + 1) / numBins);
+        var engine = AiDotNetEngine.Current;
+        using var noGrad = new NoGradScope<T>();
+        var (counts, avgProbs, avgAccs) = BinAverages(scores, labels, numBins);
 
-            // Include scores == 1.0 in the last bin
-            var binIndices = Enumerable.Range(0, n)
-                .Where(i => NumOps.GreaterThanOrEquals(scores[i], lower) && (b == numBins - 1 ? NumOps.LessThanOrEquals(scores[i], upper) : NumOps.LessThan(scores[i], upper)))
-                .ToList();
-
-            if (binIndices.Count > 0)
-            {
-                T sumProb = NumOps.Zero;
-                T sumAcc = NumOps.Zero;
-                foreach (var i in binIndices)
-                {
-                    sumProb = NumOps.Add(sumProb, scores[i]);
-                    sumAcc = NumOps.Add(sumAcc, labels[i]);
-                }
-                T count = NumOps.FromDouble(binIndices.Count);
-                T avgProb = NumOps.Divide(sumProb, count);
-                T avgAcc = NumOps.Divide(sumAcc, count);
-                T binWeight = NumOps.Divide(count, NumOps.FromDouble(n));
-
-                ece = NumOps.Add(ece, NumOps.Multiply(binWeight, NumOps.Abs(NumOps.Subtract(avgProb, avgAcc))));
-            }
-        }
+        // Sum over non-empty bins of (count / n) * |avgProb - avgAcc|; empty bins have zero count
+        var binWeights = engine.TensorDivideScalar(counts, NumOps.FromDouble(n));
+        var gaps = engine.TensorAbs(engine.TensorSubtract(avgProbs, avgAccs));
+        var nonEmpty = engine.TensorGreaterThan(counts, NumOps.Zero);
+        var weighted = engine.TensorWhere(nonEmpty, engine.TensorMultiply(binWeights, gaps), engine.TensorZerosLike(gaps));
+        T ece = engine.TensorSum(weighted);
 
         return NumOps.ToDouble(ece);
     }
@@ -270,39 +254,17 @@ public class ProbabilityCalibrator<T>
     /// </summary>
     public double ComputeMCE(Vector<T> scores, Vector<T> labels, int numBins = 10)
     {
-        int n = scores.Length;
-        T mce = NumOps.Zero;
+        if (numBins <= 0) return 0;
 
-        for (int b = 0; b < numBins; b++)
-        {
-            T lower = NumOps.FromDouble((double)b / numBins);
-            T upper = NumOps.FromDouble((double)(b + 1) / numBins);
+        var engine = AiDotNetEngine.Current;
+        using var noGrad = new NoGradScope<T>();
+        var (counts, avgProbs, avgAccs) = BinAverages(scores, labels, numBins);
 
-            // Include scores == 1.0 in the last bin
-            var binIndices = Enumerable.Range(0, n)
-                .Where(i => NumOps.GreaterThanOrEquals(scores[i], lower) && (b == numBins - 1 ? NumOps.LessThanOrEquals(scores[i], upper) : NumOps.LessThan(scores[i], upper)))
-                .ToList();
-
-            if (binIndices.Count > 0)
-            {
-                T sumProb = NumOps.Zero;
-                T sumAcc = NumOps.Zero;
-                foreach (var i in binIndices)
-                {
-                    sumProb = NumOps.Add(sumProb, scores[i]);
-                    sumAcc = NumOps.Add(sumAcc, labels[i]);
-                }
-                T count = NumOps.FromDouble(binIndices.Count);
-                T avgProb = NumOps.Divide(sumProb, count);
-                T avgAcc = NumOps.Divide(sumAcc, count);
-                T absError = NumOps.Abs(NumOps.Subtract(avgProb, avgAcc));
-
-                if (NumOps.GreaterThan(absError, mce))
-                {
-                    mce = absError;
-                }
-            }
-        }
+        // Largest |avgProb - avgAcc| over non-empty bins, starting from 0; a NaN error never replaces the maximum
+        var gaps = engine.TensorAbs(engine.TensorSubtract(avgProbs, avgAccs));
+        var counted = EvaluationTensorOps<T>.And(
+            engine.TensorGreaterThan(counts, NumOps.Zero), EvaluationTensorOps<T>.Not(EvaluationTensorOps<T>.NanMask(gaps)));
+        T mce = engine.TensorMaxValue(engine.TensorWhere(counted, gaps, engine.TensorZerosLike(gaps)));
 
         return NumOps.ToDouble(mce);
     }
@@ -315,12 +277,11 @@ public class ProbabilityCalibrator<T>
     /// <returns>Brier score (lower is better, 0 is perfect).</returns>
     public double ComputeBrierScore(Vector<T> scores, Vector<T> labels)
     {
-        T brier = NumOps.Zero;
-        for (int i = 0; i < scores.Length; i++)
-        {
-            T diff = NumOps.Subtract(scores[i], labels[i]);
-            brier = NumOps.Add(brier, NumOps.Multiply(diff, diff));
-        }
+        var engine = AiDotNetEngine.Current;
+        using var noGrad = new NoGradScope<T>();
+        var predicted = Tensor<T>.FromVector(scores);
+        var actual = engine.TensorNarrow(Tensor<T>.FromVector(labels), 0, 0, scores.Length);
+        T brier = engine.TensorSumOfSquares(engine.TensorSubtract(predicted, actual));
 
         return NumOps.ToDouble(NumOps.Divide(brier, NumOps.FromDouble(scores.Length)));
     }
@@ -335,44 +296,56 @@ public class ProbabilityCalibrator<T>
     public (T[] meanPredicted, T[] fractionPositives, int[] binCounts) GetReliabilityDiagram(
         Vector<T> scores, Vector<T> labels, int numBins = 10)
     {
-        int n = scores.Length;
-        var meanPredicted = new T[numBins];
-        var fractionPositives = new T[numBins];
-        var binCounts = new int[numBins];
+        if (numBins <= 0)
+            return (new T[numBins], new T[numBins], new int[numBins]);
 
-        for (int b = 0; b < numBins; b++)
-        {
-            T lower = NumOps.FromDouble((double)b / numBins);
-            T upper = NumOps.FromDouble((double)(b + 1) / numBins);
+        var engine = AiDotNetEngine.Current;
+        using var noGrad = new NoGradScope<T>();
+        var (counts, avgPreds, avgLabels) = BinAverages(scores, labels, numBins);
 
-            // Include scores == 1.0 in the last bin
-            var binIndices = Enumerable.Range(0, n)
-                .Where(i => NumOps.GreaterThanOrEquals(scores[i], lower) && (b == numBins - 1 ? NumOps.LessThanOrEquals(scores[i], upper) : NumOps.LessThan(scores[i], upper)))
-                .ToList();
+        // Empty bins report the bin midpoint (lower + upper) / 2 and a zero fraction of positives
+        var binCount = NumOps.FromDouble(numBins);
+        var binIndex = engine.TensorArange<T>(0, numBins);
+        var lower = engine.TensorDivideScalar(binIndex, binCount);
+        var upper = engine.TensorDivideScalar(engine.TensorAddScalar(binIndex, NumOps.One), binCount);
+        var midpoints = engine.TensorDivideScalar(engine.TensorAdd(lower, upper), NumOps.FromDouble(2));
+        var nonEmpty = engine.TensorGreaterThan(counts, NumOps.Zero);
 
-            binCounts[b] = binIndices.Count;
-
-            if (binIndices.Count > 0)
-            {
-                T sumPred = NumOps.Zero;
-                T sumLabel = NumOps.Zero;
-                foreach (var i in binIndices)
-                {
-                    sumPred = NumOps.Add(sumPred, scores[i]);
-                    sumLabel = NumOps.Add(sumLabel, labels[i]);
-                }
-                T count = NumOps.FromDouble(binIndices.Count);
-                meanPredicted[b] = NumOps.Divide(sumPred, count);
-                fractionPositives[b] = NumOps.Divide(sumLabel, count);
-            }
-            else
-            {
-                meanPredicted[b] = NumOps.Divide(NumOps.Add(lower, upper), NumOps.FromDouble(2));
-                fractionPositives[b] = NumOps.Zero;
-            }
-        }
+        var meanPredicted = engine.TensorWhere(nonEmpty, avgPreds, midpoints).ToArray();
+        var fractionPositives = engine.TensorWhere(nonEmpty, avgLabels, engine.TensorZerosLike(avgLabels)).ToArray();
+        var binCounts = counts.Cast<int>().ToArray();
 
         return (meanPredicted, fractionPositives, binCounts);
+    }
+
+    // Per-bin sample counts and mean score and mean label over the uniform bins [b/numBins, (b+1)/numBins) (the last
+    // bin also holds 1.0). Empty bins get a zero count and zero means.
+    private static (Tensor<T> Counts, Tensor<T> MeanScores, Tensor<T> MeanLabels) BinAverages(
+        Vector<T> scores, Vector<T> labels, int numBins)
+    {
+        var engine = AiDotNetEngine.Current;
+        using var noGrad = new NoGradScope<T>();
+        int n = scores.Length;
+        if (n == 0)
+        {
+            var zeros = new Tensor<T>(new[] { numBins });
+            return (zeros, zeros, zeros);
+        }
+
+        var shape = new[] { numBins, n };
+        var row = new[] { 1, n };
+        var scoreTensor = Tensor<T>.FromVector(scores);
+        var labelTensor = engine.TensorNarrow(Tensor<T>.FromVector(labels), 0, 0, n);
+        var inBin = EvaluationTensorOps<T>.UniformBinMask(scoreTensor, numBins);
+        var zero = engine.TensorZerosLike(inBin);
+        var binnedScores = engine.TensorWhere(inBin, engine.TensorBroadcastTo(engine.Reshape(scoreTensor, row), shape), zero);
+        var binnedLabels = engine.TensorWhere(inBin, engine.TensorBroadcastTo(engine.Reshape(labelTensor, row), shape), zero);
+
+        var counts = engine.ReduceSum(inBin, new[] { 1 }, false);
+        var safeCounts = engine.TensorMax(counts, NumOps.One);
+        return (counts,
+            engine.TensorDivide(engine.ReduceSum(binnedScores, new[] { 1 }, false), safeCounts),
+            engine.TensorDivide(engine.ReduceSum(binnedLabels, new[] { 1 }, false), safeCounts));
     }
 
     #region Platt Scaling
