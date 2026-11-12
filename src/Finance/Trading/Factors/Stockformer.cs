@@ -272,7 +272,7 @@ public partial class Stockformer<T> : CrossSectionalGraphModelBase<T>
     /// <param name="returnTarget">Realized forward return per stock.</param>
     /// <param name="directionTarget">Realized direction class per stock.</param>
     /// <returns>Regression term, classification term, and their task-weighted sum.</returns>
-    public (double Regression, double Classification, double Total) ComputeLoss(
+    public (T Regression, T Classification, T Total) ComputeLoss(
         Matrix<T> perStockReturns, Vector<T> returnTarget, Vector<T> directionTarget)
     {
         var prediction = PredictBands(perStockReturns);

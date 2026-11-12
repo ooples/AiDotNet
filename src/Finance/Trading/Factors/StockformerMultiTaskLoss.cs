@@ -50,7 +50,7 @@ public static class StockformerMultiTaskLoss<T>
     /// classification term.
     /// </remarks>
     /// <returns>The masked MAE, or zero when no entry is valid.</returns>
-    public static double MaskedMae(Vector<T> predictions, Vector<T> labels, double missingSentinel = 0.0)
+    public static T MaskedMae(Vector<T> predictions, Vector<T> labels, double missingSentinel = 0.0)
     {
         if (predictions is null) throw new ArgumentNullException(nameof(predictions));
         if (labels is null) throw new ArgumentNullException(nameof(labels));
@@ -59,30 +59,27 @@ public static class StockformerMultiTaskLoss<T>
                 $"Predictions ({predictions.Length}) and labels ({labels.Length}) must be the same length.",
                 nameof(predictions));
 
-        int valid = 0;
-        double sumAbsolute = 0.0;
+        var engine = AiDotNetEngine.Current;
+        int n = labels.Length;
+        var label = Tensor<T>.FromVector(labels);
+        var ones = new Tensor<T>(new[] { n });
+        engine.TensorFill(ones, Ops.One);
+        var zeros = new Tensor<T>(new[] { n });
 
-        for (int i = 0; i < labels.Length; i++)
-        {
-            double label = Ops.ToDouble(labels[i]);
-            if (double.IsNaN(missingSentinel) ? double.IsNaN(label) : label == missingSentinel) continue;
+        // 1 where the label is present. A NaN sentinel marks NaN labels missing; NaN never equals itself.
+        var valid = double.IsNaN(missingSentinel)
+            ? engine.TensorWhere(engine.TensorIsNan(label), zeros, ones)
+            : engine.ScalarMinusTensor(Ops.One, engine.TensorEquals(label, Ops.FromDouble(missingSentinel)));
 
-            double prediction = Ops.ToDouble(predictions[i]);
-            double error = Math.Abs(prediction - label);
-
-            // A NaN error is NOT skipped. The mask exists to drop missing LABELS, and this entry has
-            // a label. NaN here means the PREDICTION diverged, and skipping it removed the only
-            // evidence of that: with every prediction NaN, valid stayed 0 and the method returned
-            // 0.0 -- a perfect regression term for a completely broken model. Letting the NaN through
-            // makes the loss NaN, which is what a diverged model should report.
-
-            sumAbsolute += error;
-            valid++;
-        }
+        // A NaN error is NOT skipped. The mask exists to drop missing LABELS, and an entry with a label
+        // keeps its error: NaN there means the PREDICTION diverged, and the loss must report it.
+        var error = engine.TensorAbs(engine.TensorSubtract(Tensor<T>.FromVector(predictions), label));
+        T count = engine.TensorSum(valid);
+        T sumAbsolute = engine.TensorSum(engine.TensorWhere(valid, error, zeros));
 
         // Every entry masked out. The reference's mask/mean(mask) would be 0/0 here; returning zero
         // keeps the objective finite rather than propagating NaN into the summed loss.
-        return valid == 0 ? 0.0 : sumAbsolute / valid;
+        return Ops.Equals(count, Ops.Zero) ? Ops.Zero : Ops.Divide(sumAbsolute, count);
     }
 
     /// <summary>
@@ -96,7 +93,7 @@ public static class StockformerMultiTaskLoss<T>
     /// caller must not pre-normalize) and averaged over samples. Computed via the log-sum-exp shift so
     /// a large logit cannot overflow.
     /// </remarks>
-    public static double CrossEntropy(Vector<T> logits, Vector<T> targets, int numClasses)
+    public static T CrossEntropy(Vector<T> logits, Vector<T> targets, int numClasses)
     {
         if (logits is null) throw new ArgumentNullException(nameof(logits));
         if (targets is null) throw new ArgumentNullException(nameof(targets));
@@ -108,31 +105,34 @@ public static class StockformerMultiTaskLoss<T>
                 $"Expected {targets.Length * numClasses} logits for {targets.Length} samples x " +
                 $"{numClasses} classes, got {logits.Length}.", nameof(logits));
 
-        double total = 0.0;
-        for (int s = 0; s < targets.Length; s++)
+        var engine = AiDotNetEngine.Current;
+        int samples = targets.Length;
+        if (samples == 0)
         {
-            int offset = s * numClasses;
-
-            double max = double.NegativeInfinity;
-            for (int c = 0; c < numClasses; c++)
-            {
-                double v = Ops.ToDouble(logits[offset + c]);
-                if (v > max) max = v;
-            }
-
-            double sumExp = 0.0;
-            for (int c = 0; c < numClasses; c++) sumExp += Math.Exp(Ops.ToDouble(logits[offset + c]) - max);
-
-            int target = (int)Math.Round(Ops.ToDouble(targets[s]));
-            if (target < 0 || target >= numClasses)
-                throw new ArgumentException(
-                    $"Target class {target} at sample {s} is outside [0, {numClasses - 1}].", nameof(targets));
-
-            // -log softmax(target) = (max + log sum exp) - logit(target)
-            total += (max + Math.Log(sumExp)) - Ops.ToDouble(logits[offset + target]);
+            return Ops.Divide(Ops.Zero, Ops.Zero); // master's 0 / 0
         }
 
-        return total / targets.Length;
+        var target = engine.TensorRound(Tensor<T>.FromVector(targets));
+        T lowest = engine.TensorMinValue(target);
+        T highest = engine.TensorMaxValue(target);
+        if (Ops.LessThan(lowest, Ops.Zero) || Ops.GreaterThan(highest, Ops.FromDouble(numClasses - 1)))
+        {
+            T bad = Ops.LessThan(lowest, Ops.Zero) ? lowest : highest;
+            throw new ArgumentException(
+                $"Target class {bad} is outside [0, {numClasses - 1}].", nameof(targets));
+        }
+
+        // -log softmax(target) = logsumexp(row) - logit(target), averaged over samples.
+        var shape = new[] { samples, numClasses };
+        var rows = engine.Reshape(Tensor<T>.FromVector(logits), shape);
+        var logSumExp = engine.TensorLogSumExp(rows, 1, keepDims: false);
+        var classIds = engine.TensorBroadcastTo(
+            engine.Reshape(engine.TensorArange<T>(0, numClasses), new[] { 1, numClasses }), shape);
+        var oneHot = engine.TensorEquals(
+            classIds, engine.TensorBroadcastTo(engine.Reshape(target, new[] { samples, 1 }), shape));
+        var picked = engine.ReduceSum(
+            engine.TensorWhere(oneHot, rows, new Tensor<T>(shape)), new[] { 1 }, keepDims: false);
+        return Ops.Divide(engine.TensorSum(engine.TensorSubtract(logSumExp, picked)), Ops.FromDouble(samples));
     }
 
     /// <summary>
@@ -152,7 +152,7 @@ public static class StockformerMultiTaskLoss<T>
     /// value the reference implementation uses.
     /// </param>
     /// <returns>The regression term, the classification term, and their weighted sum.</returns>
-    public static (double Regression, double Classification, double Total) Compute(
+    public static (T Regression, T Classification, T Total) Compute(
         Vector<T> mainRegression, Vector<T> lowRegression,
         Vector<T> mainReturnTarget, Vector<T> lowReturnTarget,
         Vector<T> mainClassLogits, Vector<T> lowClassLogits,
@@ -161,17 +161,18 @@ public static class StockformerMultiTaskLoss<T>
         double missingSentinel = 0.0,
         double taskLossWeight = 1.0)
     {
-        double regression =
-            MaskedMae(mainRegression, mainReturnTarget, missingSentinel)
-            + MaskedMae(lowRegression, lowReturnTarget, missingSentinel);
+        T regression = Ops.Add(
+            MaskedMae(mainRegression, mainReturnTarget, missingSentinel),
+            MaskedMae(lowRegression, lowReturnTarget, missingSentinel));
 
-        double classification =
-            CrossEntropy(mainClassLogits, directionTarget, numClasses)
-            + CrossEntropy(lowClassLogits, directionTarget, numClasses);
+        T classification = Ops.Add(
+            CrossEntropy(mainClassLogits, directionTarget, numClasses),
+            CrossEntropy(lowClassLogits, directionTarget, numClasses));
 
         // L = L_reg + lambda*L_cla (paper Eq. 12). The reference uses lambda = 1, which is the
         // default here -- but the weighting exists in the paper, so it is a parameter rather than a
         // hardcoded 1:1 sum.
-        return (regression, classification, regression + (taskLossWeight * classification));
+        return (regression, classification,
+            Ops.Add(regression, Ops.Multiply(Ops.FromDouble(taskLossWeight), classification)));
     }
 }
