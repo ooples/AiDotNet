@@ -346,6 +346,78 @@ internal static class AnomalyTensorOps
         return engine.TensorMultiplyScalar(engine.TensorAdd(low, high), numOps.FromDouble(0.5));
     }
 
+    /// <summary>
+    /// The given percentile (0-100) of every column of an already column-sorted [n, d] tensor, by linear
+    /// interpolation between the order statistics around index p / 100 * (n - 1).
+    /// </summary>
+    internal static Tensor<T> SortedColumnPercentile<T>(Tensor<T> sortedColumns, double percentile)
+    {
+        var engine = Engine;
+        var numOps = MathHelper.GetNumericOperations<T>();
+        int n = sortedColumns.Shape[0];
+        double index = (percentile / 100.0) * (n - 1);
+        int lower = (int)Math.Floor(index);
+        int upper = (int)Math.Ceiling(index);
+
+        if (lower == upper || upper >= n)
+        {
+            return engine.TensorSliceAxis(sortedColumns, 0, Math.Min(lower, n - 1));
+        }
+
+        T fraction = numOps.FromDouble(index - lower);
+        var low = engine.TensorSliceAxis(sortedColumns, 0, lower);
+        var high = engine.TensorSliceAxis(sortedColumns, 0, upper);
+        return engine.TensorAdd(low, engine.TensorMultiplyScalar(engine.TensorSubtract(high, low), fraction));
+    }
+
+    /// <summary>
+    /// The quantile q of every column of an already column-sorted [n, d] tensor, as
+    /// StatisticsHelper.CalculateQuantile computes it: position = (n - 1) * q,
+    /// sorted[i] * (1 - f) + sorted[i + 1] * f with i = floor(position), f = position - i.
+    /// </summary>
+    internal static Tensor<T> SortedColumnQuantile<T>(Tensor<T> sortedColumns, double quantile)
+    {
+        var engine = Engine;
+        var numOps = MathHelper.GetNumericOperations<T>();
+        int n = sortedColumns.Shape[0];
+        T position = numOps.Multiply(numOps.FromDouble(n - 1), numOps.FromDouble(quantile));
+        int index = Convert.ToInt32(numOps.Floor(position));
+        T fraction = numOps.Subtract(position, numOps.FromDouble(index));
+
+        var low = engine.TensorSliceAxis(sortedColumns, 0, index);
+        if (index + 1 >= n)
+        {
+            return low;
+        }
+
+        var high = engine.TensorSliceAxis(sortedColumns, 0, index + 1);
+        return engine.TensorAdd(
+            engine.TensorMultiplyScalar(low, numOps.Subtract(numOps.One, fraction)),
+            engine.TensorMultiplyScalar(high, fraction));
+    }
+
+    /// <summary>
+    /// Per row, the largest distance outside the per-column band [low_j, high_j], divided by scale_j:
+    /// (low_j - x_ij) / scale_j below the band, (x_ij - high_j) / scale_j above it, 0 inside (and for NaN).
+    /// Columns whose scale is zero are skipped.
+    /// </summary>
+    internal static Vector<T> MaxOutsideBand<T>(Matrix<T> x, Tensor<T> low, Tensor<T> high, Tensor<T> scale)
+    {
+        var engine = Engine;
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var data = ToTensor(x);
+        int rows = x.Rows;
+        var below = engine.TensorSubtract(BroadcastRow(low, rows), data);
+        var above = SubtractRow(data, high);
+        var outside = engine.TensorMax(engine.TensorMax(below, above), numOps.Zero);
+        var score = DivideRow(outside, scale);
+
+        // Zero-scale columns are skipped: their ratio is +inf or NaN, times 0 is NaN, and NaN becomes 0.
+        score = MultiplyRow(score, engine.TensorNotEquals(scale, numOps.Zero));
+        score = engine.TensorMaskedFill(score, engine.TensorIsNan(score), numOps.Zero);
+        return engine.ReduceMax(score, new[] { 1 }, false).ToVector();
+    }
+
     /// <summary>Per-column median absolute deviation from the given per-column centers.</summary>
     internal static Tensor<T> ColumnMads<T>(Tensor<T> data, Tensor<T> centers)
         => ColumnMedians(Engine.TensorAbs(SubtractRow(data, centers)));
