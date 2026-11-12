@@ -47,39 +47,25 @@ public class FedDFDistillation<T> : Infrastructure.FederatedLearningComponentBas
     }
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// Returns the client's logits f(x̂_k, d) on the public data. Lin et al. (2020), Algorithm 1, averages the
+    /// client logits and applies the temperature softmax only inside the distillation loss.
+    /// </remarks>
     public Matrix<T> ExtractKnowledge(Vector<T> localModelParameters, Matrix<T>? publicData)
     {
+        Guard.NotNull(localModelParameters);
         if (publicData is null)
             throw new ArgumentException("FedDF requires unlabeled public data.", nameof(publicData));
+        ValidateInputs(localModelParameters, publicData);
 
-        int n = publicData.Rows;
-        int d = localModelParameters.Length;
-        int outputDim = Math.Max(2, (int)Math.Sqrt(d));
-
-        // Compute soft predictions via linear projection
-        var predictions = new Matrix<T>(n, outputDim);
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < outputDim; j++)
-            {
-                T sum = NumOps.Zero;
-                for (int k = 0; k < publicData.Columns; k++)
-                {
-                    int paramIdx = (j * publicData.Columns + k) % d;
-                    sum = NumOps.Add(sum, NumOps.Multiply(publicData[i, k], localModelParameters[paramIdx]));
-                }
-                predictions[i, j] = sum;
-            }
-        }
-
-        // Softmax with temperature
-        ApplySoftmax(predictions, _temperature);
-        return predictions;
+        return ComputeLogits(localModelParameters, publicData, out _).ToMatrix();
     }
 
     /// <inheritdoc/>
+    /// <remarks>Weighted average of the client logits (weights normalized over the participating clients).</remarks>
     public Matrix<T> AggregateKnowledge(Dictionary<int, Matrix<T>> clientKnowledge, Dictionary<int, double>? clientWeights)
     {
+        Guard.NotNull(clientKnowledge);
         if (clientKnowledge.Count == 0)
             throw new ArgumentException("No client knowledge provided.", nameof(clientKnowledge));
 
@@ -87,104 +73,107 @@ public class FedDFDistillation<T> : Infrastructure.FederatedLearningComponentBas
         int n = first.Rows;
         int outputDim = first.Columns;
 
-        // Ensemble average: uniform or weighted combination of soft predictions
-        double totalWeight = 0;
-        var ensemble = new Matrix<T>(n, outputDim);
+        double totalWeight = clientKnowledge.Keys.Sum(id => clientWeights?.GetValueOrDefault(id, 1.0) ?? 1.0);
+        if (totalWeight <= 0)
+            throw new ArgumentException("Client weights must sum to a positive value.", nameof(clientWeights));
 
+        // Ensemble average: uniform or weighted combination of client logits.
+        var ensemble = new Tensor<T>(new[] { n, outputDim });
         foreach (var (clientId, knowledge) in clientKnowledge)
         {
+            if (knowledge.Rows != n || knowledge.Columns != outputDim)
+            {
+                throw new ArgumentException(
+                    $"Client {clientId} knowledge is {knowledge.Rows}x{knowledge.Columns}; expected {n}x{outputDim}.",
+                    nameof(clientKnowledge));
+            }
+
             double w = clientWeights?.GetValueOrDefault(clientId, 1.0) ?? 1.0;
-            totalWeight += w;
-
-            T weight = NumOps.FromDouble(w);
-            for (int i = 0; i < n; i++)
-            {
-                for (int j = 0; j < outputDim; j++)
-                {
-                    ensemble[i, j] = NumOps.Add(ensemble[i, j], NumOps.Multiply(knowledge[i, j], weight));
-                }
-            }
+            ensemble = Engine.TensorAdd(ensemble,
+                Engine.TensorMultiplyScalar(Tensor<T>.FromMatrix(knowledge), NumOps.FromDouble(w / totalWeight)));
         }
 
-        T invTotal = NumOps.FromDouble(1.0 / totalWeight);
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < outputDim; j++)
-            {
-                ensemble[i, j] = NumOps.Multiply(ensemble[i, j], invTotal);
-            }
-        }
-
-        return ensemble;
+        return ensemble.ToMatrix();
     }
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// Runs gradient descent on KL(σ(ensemble / τ) || σ(f(x, d) / τ)) averaged over the public samples. With
+    /// logits z = X Wᵀ, the gradient with respect to W is (σ(z / τ) − σ(ensemble / τ))ᵀ X / (n τ). A positive
+    /// <paramref name="temperature"/> overrides the constructor temperature.
+    /// </remarks>
     public Vector<T> ApplyKnowledge(Vector<T> localModelParameters, Matrix<T> globalKnowledge,
         Matrix<T>? publicData, double temperature)
     {
+        Guard.NotNull(localModelParameters);
+        Guard.NotNull(globalKnowledge);
         if (publicData is null)
             throw new ArgumentException("FedDF requires unlabeled public data.", nameof(publicData));
+        ValidateInputs(localModelParameters, publicData);
+
+        double tau = temperature > 0 ? temperature : _temperature;
+        if (!(tau > 0) || double.IsInfinity(tau))
+            throw new ArgumentOutOfRangeException(nameof(temperature), "Distillation temperature must be positive and finite.");
 
         int d = localModelParameters.Length;
-        var updatedParams = new T[d];
-        Array.Copy(localModelParameters.ToArray(), updatedParams, d);
+        int n = publicData.Rows;
+        int outputDim = OutputDimension(d);
+        if (globalKnowledge.Rows != n || globalKnowledge.Columns != outputDim)
+        {
+            throw new ArgumentException(
+                $"Global knowledge is {globalKnowledge.Rows}x{globalKnowledge.Columns}; expected {n}x{outputDim}.",
+                nameof(globalKnowledge));
+        }
 
-        // Server-side distillation: train local model to match ensemble predictions
+        var data = Tensor<T>.FromMatrix(publicData);
+        var invTau = NumOps.FromDouble(1.0 / tau);
+        var target = Engine.Softmax(Engine.TensorMultiplyScalar(Tensor<T>.FromMatrix(globalKnowledge), invTau), 1);
+        var step = NumOps.FromDouble(_serverLearningRate / (n * tau));
+
+        var parameters = localModelParameters.Clone();
         for (int epoch = 0; epoch < _serverDistillationEpochs; epoch++)
         {
-            var localPredictions = ExtractKnowledge(new Vector<T>(updatedParams), publicData);
-            int outputDim = Math.Min(localPredictions.Columns, globalKnowledge.Columns);
+            var logits = ComputeLogits(parameters, publicData, out var weightIndex);
+            var student = Engine.Softmax(Engine.TensorMultiplyScalar(logits, invTau), 1);
 
-            // Cross-entropy gradient between local predictions and ensemble target
-            for (int j = 0; j < outputDim; j++)
-            {
-                T gradSum = NumOps.Zero;
-                for (int i = 0; i < publicData.Rows; i++)
-                {
-                    // KL divergence gradient: local - target
-                    T diff = NumOps.Subtract(localPredictions[i, j], globalKnowledge[i, j]);
-                    gradSum = NumOps.Add(gradSum, diff);
-                }
-
-                T scaledGrad = NumOps.Multiply(gradSum, NumOps.FromDouble(_serverLearningRate / publicData.Rows));
-
-                for (int k = 0; k < publicData.Columns; k++)
-                {
-                    int paramIdx = (j * publicData.Columns + k) % d;
-                    updatedParams[paramIdx] = NumOps.Subtract(updatedParams[paramIdx], scaledGrad);
-                }
-            }
+            // dKL/dz = (p - q) / τ, averaged over samples, chained through z = X Wᵀ.
+            var gradLogits = Engine.TensorMultiplyScalar(Engine.TensorSubtract(student, target), step);
+            var gradWeights = Engine.TensorMatMul(Engine.TensorTranspose(gradLogits), data);
+            var gradParams = Engine.TensorIndexAdd(new Tensor<T>(new[] { d }), 0, weightIndex,
+                gradWeights.Reshape(new[] { outputDim * publicData.Columns }));
+            parameters = Engine.Subtract(parameters, gradParams.ToVector());
         }
 
-        return new Vector<T>(updatedParams);
+        return parameters;
     }
 
-    private void ApplySoftmax(Matrix<T> logits, double temp)
+    private static int OutputDimension(int parameterCount) => Math.Max(2, (int)Math.Sqrt(parameterCount));
+
+    private static void ValidateInputs(Vector<T> parameters, Matrix<T> publicData)
     {
-        for (int i = 0; i < logits.Rows; i++)
+        if (parameters.Length == 0)
+            throw new ArgumentException("Model parameters cannot be empty.", nameof(parameters));
+        if (publicData.Rows == 0 || publicData.Columns == 0)
+            throw new ArgumentException("Public data cannot be empty.", nameof(publicData));
+    }
+
+    /// <summary>
+    /// Linear projection logits z = X Wᵀ, where W[j, k] = θ[(j·C + k) mod d] for C public-data columns.
+    /// </summary>
+    private Tensor<T> ComputeLogits(Vector<T> parameters, Matrix<T> publicData, out Tensor<int> weightIndex)
+    {
+        int d = parameters.Length;
+        int columns = publicData.Columns;
+        int outputDim = OutputDimension(d);
+
+        var index = new int[outputDim * columns];
+        for (int k = 0; k < index.Length; k++)
         {
-            // Find max for numerical stability
-            double maxVal = double.NegativeInfinity;
-            for (int j = 0; j < logits.Columns; j++)
-            {
-                double val = NumOps.ToDouble(logits[i, j]) / temp;
-                if (val > maxVal) maxVal = val;
-            }
-
-            // Compute exp and sum
-            double sumExp = 0;
-            var expVals = new double[logits.Columns];
-            for (int j = 0; j < logits.Columns; j++)
-            {
-                expVals[j] = Math.Exp(NumOps.ToDouble(logits[i, j]) / temp - maxVal);
-                sumExp += expVals[j];
-            }
-
-            // Normalize
-            for (int j = 0; j < logits.Columns; j++)
-            {
-                logits[i, j] = NumOps.FromDouble(expVals[j] / sumExp);
-            }
+            index[k] = k % d;
         }
+
+        weightIndex = new Tensor<int>(index, new[] { index.Length });
+        var weights = Engine.TensorGather(parameters.AsTensor(), weightIndex, 0).Reshape(new[] { outputDim, columns });
+        return Engine.TensorMatMul(Tensor<T>.FromMatrix(publicData), Engine.TensorTranspose(weights));
     }
 }

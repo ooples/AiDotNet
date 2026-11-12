@@ -499,4 +499,38 @@ public class FederatedElementwiseSweep29bReferenceTests
             new Dictionary<int, double> { [0] = 1.0, [1] = 2.0 });
         Assert.Equal(new[] { 6.0, 4.0 }, aggregated.ToArray());
     }
+
+    [Fact(Timeout = 60000)]
+    public async Task FedDF_AveragesLogitsAndDistillsWithKlGradientThroughProjection()
+    {
+        await Task.Yield();
+
+        // Lin et al. 2020, Algorithm 1. d = 4 -> 2 outputs, C = 2 columns, W[j, k] = theta[j * 2 + k].
+        // theta = [1, 0, 0, 1] (W = I), x = [1, 0]: client logits are [1, 0].
+        var fedDf = new AiDotNet.FederatedLearning.Distillation.FedDFDistillation<double>(
+            temperature: 3.0, serverDistillationEpochs: 1, serverLearningRate: 1.0);
+        var publicData = new Matrix<double>(new[,] { { 1.0, 0.0 } });
+        var theta = new Vector<double>(new[] { 1.0, 0.0, 0.0, 1.0 });
+        var logits = fedDf.ExtractKnowledge(theta, publicData);
+        Assert.Equal(1.0, logits[0, 0], Precision);
+        Assert.Equal(0.0, logits[0, 1], Precision);
+
+        // The ensemble is the mean of client logits: ([1, 0] + [-1, 2]) / 2 = [0, 1].
+        var ensemble = fedDf.AggregateKnowledge(new Dictionary<int, Matrix<double>>
+        {
+            [0] = logits,
+            [1] = new Matrix<double>(new[,] { { -1.0, 2.0 } }),
+        }, null);
+        Assert.Equal(0.0, ensemble[0, 0], Precision);
+        Assert.Equal(1.0, ensemble[0, 1], Precision);
+
+        // tau = 2: p = softmax([0.5, 0]), q = softmax([0, 0.5]), p - q = [a, -a] with a = tanh(0.25).
+        // dL/dW = (p - q)^T x / (n tau) = [[a / 2, 0], [-a / 2, 0]] -> theta = [1 - a / 2, 0, a / 2, 1].
+        var updated = fedDf.ApplyKnowledge(theta, ensemble, publicData, temperature: 2.0);
+        double a = Math.Tanh(0.25);
+        Assert.Equal(1.0 - a / 2.0, updated[0], Precision);
+        Assert.Equal(0.0, updated[1], Precision);
+        Assert.Equal(a / 2.0, updated[2], Precision);
+        Assert.Equal(1.0, updated[3], Precision);
+    }
 }
