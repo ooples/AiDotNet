@@ -899,7 +899,7 @@ public partial class ScoreGrad<T> : ForecastingModelBase<T>
         var outputTensor = results.First().AsTensor<float>();
 
         var outputData = new T[outputTensor.Length];
-        NumOps.FromFloatSpan(outputTensor.ToDenseTensor().Buffer.Span.Slice(0, outputTensor.Length), outputData.AsSpan(0, outputTensor.Length));
+        NumOps.FromFloatSpan(outputTensor.ToDenseTensor().Buffer.Span.Slice(0, (int)outputTensor.Length), outputData.AsSpan(0, (int)outputTensor.Length));
 
         return new Tensor<T>(new[] { _forecastHorizon }, new Vector<T>(outputData));
     }

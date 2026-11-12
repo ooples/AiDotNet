@@ -953,15 +953,11 @@ public partial class MQCNN<T> : ForecastingModelBase<T>
         if (_quantileCoefficients is null)
         {
             // The configured levels are converted once, as master did per use: FromDouble(q), FromDouble(q - 1), ...
-            var table = new T[4 * levels];
-            for (int q = 0; q < levels; q++)
-            {
-                double level = _quantiles[q];
-                table[q] = NumOps.FromDouble(level);
-                table[levels + q] = NumOps.FromDouble(level - 1);
-                table[2 * levels + q] = NumOps.FromDouble(-level);
-                table[3 * levels + q] = NumOps.FromDouble(1 - level);
-            }
+            var table = _quantiles.Select(q => NumOps.FromDouble(q))
+                .Concat(_quantiles.Select(q => NumOps.FromDouble(q - 1)))
+                .Concat(_quantiles.Select(q => NumOps.FromDouble(-q)))
+                .Concat(_quantiles.Select(q => NumOps.FromDouble(1 - q)))
+                .ToArray();
             _quantileCoefficients = new Tensor<T>(new[] { 4, levels }, new Vector<T>(table));
         }
 
@@ -1141,7 +1137,7 @@ public partial class MQCNN<T> : ForecastingModelBase<T>
         // Convert back to Tensor<T>
         var outputShape = outputTensor.Dimensions.ToArray();
         var outputData = new T[outputTensor.Length];
-        NumOps.FromFloatSpan(outputTensor.ToDenseTensor().Buffer.Span.Slice(0, outputTensor.Length), outputData.AsSpan(0, outputTensor.Length));
+        NumOps.FromFloatSpan(outputTensor.ToDenseTensor().Buffer.Span.Slice(0, (int)outputTensor.Length), outputData.AsSpan(0, (int)outputTensor.Length));
 
         return new Tensor<T>(outputShape, new Vector<T>(outputData));
     }
