@@ -87,24 +87,26 @@ public class SemanticJailbreakDetector<T> : TextSafetyModuleBase<T>
         }
 
         var inputEmbedding = ComputeTextEmbedding(text);
+        if (_attackIntents.Length == 0) return findings;
 
-        foreach (var intent in _attackIntents)
+        // Compare against every attack intent at once
+        var intents = Engine.TensorStack(Array.ConvertAll(_attackIntents, intent => Tensor<T>.FromVector(intent.Embedding)), 0);
+        var similarities = SafetyTensorOps<T>.CosineSimilarities(Tensor<T>.FromVector(inputEmbedding), intents);
+        var similarityValues = similarities.ToArray();
+
+        foreach (int i in SafetyTensorOps<T>.IndicesAtLeast(similarities, _threshold))
         {
-            T similarity = NumOps.FromDouble(VectorHelper.CosineSimilarity(inputEmbedding, intent.Embedding));
-
-            if (NumOps.GreaterThanOrEquals(similarity, _threshold))
+            var intent = _attackIntents[i];
+            double simDouble = NumOps.ToDouble(similarityValues[i]);
+            findings.Add(new SafetyFinding
             {
-                double simDouble = NumOps.ToDouble(similarity);
-                findings.Add(new SafetyFinding
-                {
-                    Category = SafetyCategory.JailbreakAttempt,
-                    Severity = simDouble >= 0.8 ? SafetySeverity.High : SafetySeverity.Medium,
-                    Confidence = simDouble,
-                    Description = $"Semantic jailbreak detection: {intent.Name} (similarity: {simDouble:F3}).",
-                    RecommendedAction = SafetyAction.Block,
-                    SourceModule = ModuleName
-                });
-            }
+                Category = SafetyCategory.JailbreakAttempt,
+                Severity = simDouble >= 0.8 ? SafetySeverity.High : SafetySeverity.Medium,
+                Confidence = simDouble,
+                Description = $"Semantic jailbreak detection: {intent.Name} (similarity: {simDouble:F3}).",
+                RecommendedAction = SafetyAction.Block,
+                SourceModule = ModuleName
+            });
         }
 
         return findings;
@@ -112,62 +114,46 @@ public class SemanticJailbreakDetector<T> : TextSafetyModuleBase<T>
 
     private Vector<T> ComputeTextEmbedding(string text)
     {
-        var embedding = new Vector<T>(_embeddingDim);
         string normalized = text.ToLowerInvariant().Trim();
 
         // Word-level and character n-gram combined hashing
         string[] words = normalized.Split(new[] { ' ', '\t', '\n', '\r' },
             StringSplitOptions.RemoveEmptyEntries);
 
-        // Word unigrams
+        // Word unigrams (weight 1)
+        var unigramHashes = new List<int>(words.Length);
         foreach (var word in words)
-        {
-            int hash = HashString(word);
-            int idx = ((hash % _embeddingDim) + _embeddingDim) % _embeddingDim;
-            T delta = (hash & 0x80000) != 0 ? NumOps.One : NumOps.Negate(NumOps.One);
-            embedding[idx] = NumOps.Add(embedding[idx], delta);
-        }
+            unigramHashes.Add(HashString(word));
 
-        // Word bigrams for phrase-level semantics
+        // Word bigrams for phrase-level semantics (weight 1.5)
+        var bigramHashes = new List<int>(Math.Max(0, words.Length - 1));
         for (int i = 0; i < words.Length - 1; i++)
-        {
-            string bigram = words[i] + " " + words[i + 1];
-            int hash = HashString(bigram);
-            int idx = ((hash % _embeddingDim) + _embeddingDim) % _embeddingDim;
-            T delta = (hash & 0x80000) != 0 ? NumOps.One : NumOps.Negate(NumOps.One);
-            embedding[idx] = NumOps.Add(embedding[idx], NumOps.Multiply(delta, NumOps.FromDouble(1.5)));
-        }
+            bigramHashes.Add(HashString(words[i] + " " + words[i + 1]));
 
-        // Character 3-grams
-        for (int i = 0; i <= normalized.Length - 3; i++)
-        {
-            int hash = HashNgram(normalized, i, 3);
-            int idx = ((hash % _embeddingDim) + _embeddingDim) % _embeddingDim;
-            T delta = (hash & 0x80000) != 0 ? NumOps.One : NumOps.Negate(NumOps.One);
-            embedding[idx] = NumOps.Add(embedding[idx], NumOps.Multiply(delta, NumOps.FromDouble(0.5)));
-        }
+        // Character 3-grams (weight 0.5)
+        var trigramHashes = SafetyTensorOps<T>.NgramHashes(normalized, 3);
 
-        VectorHelper.NormalizeInPlace(embedding);
-        return embedding;
+        var engine = Engine;
+        var embedding = engine.TensorAdd(
+            engine.TensorAdd(
+                SafetyTensorOps<T>.HashedCounts(_embeddingDim, unigramHashes, signed: true),
+                engine.TensorMultiplyScalar(
+                    SafetyTensorOps<T>.HashedCounts(_embeddingDim, bigramHashes, signed: true), NumOps.FromDouble(1.5))),
+            engine.TensorMultiplyScalar(
+                SafetyTensorOps<T>.HashedCounts(_embeddingDim, trigramHashes, signed: true), NumOps.FromDouble(0.5)));
+
+        return SafetyTensorOps<T>.NormalizeUnlessTiny(embedding).ToVector();
     }
 
     private Vector<T> ComputeConceptEmbedding(string[] phrases)
     {
-        var centroid = new Vector<T>(_embeddingDim);
+        if (phrases.Length == 0) return new Vector<T>(_embeddingDim);
 
-        foreach (var phrase in phrases)
-        {
-            var phraseEmb = ComputeTextEmbedding(phrase);
-            for (int i = 0; i < _embeddingDim; i++)
-            {
-                centroid[i] = NumOps.Add(centroid[i], phraseEmb[i]);
-            }
-        }
-
-        VectorHelper.NormalizeInPlace(centroid);
-        return centroid;
+        var phraseEmbeddings = Engine.TensorStack(
+            Array.ConvertAll(phrases, phrase => Tensor<T>.FromVector(ComputeTextEmbedding(phrase))), 0);
+        var centroid = Engine.ReduceSum(phraseEmbeddings, new[] { 0 }, false);
+        return SafetyTensorOps<T>.NormalizeUnlessTiny(centroid).ToVector();
     }
-
 
     private static int HashString(string text)
     {
@@ -175,20 +161,6 @@ public class SemanticJailbreakDetector<T> : TextSafetyModuleBase<T>
         {
             int hash = (int)2166136261;
             for (int i = 0; i < text.Length; i++)
-            {
-                hash ^= text[i];
-                hash *= 16777619;
-            }
-            return hash;
-        }
-    }
-
-    private static int HashNgram(string text, int start, int length)
-    {
-        unchecked
-        {
-            int hash = (int)2166136261;
-            for (int i = start; i < start + length && i < text.Length; i++)
             {
                 hash ^= text[i];
                 hash *= 16777619;

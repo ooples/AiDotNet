@@ -354,6 +354,105 @@ internal static class SafetyTensorOps<T>
         return new string(Array.ConvertAll(codePoints, code => (char)code));
     }
 
+    /// <summary>FNV-1a hash of <c>text[start .. start + length)</c> (clipped to the text), as the text detectors use.</summary>
+    internal static int HashNgram(string text, int start, int length)
+    {
+        unchecked
+        {
+            int hash = (int)2166136261;
+            for (int i = start; i < start + length && i < text.Length; i++)
+            {
+                hash ^= text[i];
+                hash *= 16777619;
+            }
+
+            return hash;
+        }
+    }
+
+    /// <summary>
+    /// Hashing-trick accumulation into a <paramref name="dim"/>-vector: every hash adds
+    /// <paramref name="signed"/> ? (+1 when bit 0x80000 is set, else -1) : +1 at
+    /// <c>((hash % dim) + dim) % dim</c>.
+    /// </summary>
+    internal static Tensor<T> HashedCounts(int dim, IReadOnlyList<int> hashes, bool signed)
+    {
+        var engine = Engine;
+        var counts = Tensor<T>.CreateZeros(dim);
+        if (hashes.Count == 0) return counts;
+
+        var buckets = new int[hashes.Count];
+        var signBits = new int[hashes.Count];
+        for (int i = 0; i < buckets.Length; i++)
+        {
+            int hash = hashes[i];
+            buckets[i] = ((hash % dim) + dim) % dim;
+            signBits[i] = signed && (hash & 0x80000) == 0 ? 0 : 1;
+        }
+
+        // signBits picks -1 (0) or +1 (1) from a two-entry table.
+        var signTable = Engine.TensorArange<T>(-1, 2, 2);
+        var deltas = engine.TensorTake(signTable, new Tensor<int>(new[] { signBits.Length }, new Vector<int>(signBits)));
+        return engine.TensorIndexAdd(counts, 0, new Tensor<int>(new[] { buckets.Length }, new Vector<int>(buckets)), deltas);
+    }
+
+    /// <summary>Hashes of every character n-gram of length <paramref name="n"/>, left to right.</summary>
+    internal static List<int> NgramHashes(string text, int n)
+    {
+        var hashes = new List<int>(Math.Max(0, text.Length - n + 1));
+        for (int i = 0; i <= text.Length - n; i++)
+            hashes.Add(HashNgram(text, i, n));
+        return hashes;
+    }
+
+    /// <summary>
+    /// <c>v / sqrt(v . v)</c> when that norm exceeds 1e-10, otherwise <paramref name="v"/> unchanged.
+    /// </summary>
+    internal static Tensor<T> DivideByNorm(Tensor<T> v)
+    {
+        T norm = NumOps.Sqrt(Engine.TensorSumOfSquares(v));
+        return NumOps.GreaterThan(norm, C(1e-10)) ? Engine.TensorDivideScalar(v, norm) : v;
+    }
+
+    /// <summary>
+    /// <c>VectorHelper.NormalizeInPlace</c>: scale by <c>1 / sqrt(max(0, v . v))</c> unless that
+    /// norm is below 1e-10.
+    /// </summary>
+    internal static Tensor<T> NormalizeUnlessTiny(Tensor<T> v)
+    {
+        T norm = NumOps.Sqrt(MaxZero(Engine.TensorSumOfSquares(v)));
+        if (NumOps.LessThan(norm, C(1e-10))) return v;
+        return Engine.TensorMultiplyScalar(v, NumOps.Divide(NumOps.One, norm));
+    }
+
+    /// <summary>
+    /// <c>VectorHelper.CosineSimilarity(query, row)</c> for every row of <paramref name="rows"/>
+    /// (<c>[count, dim]</c>): <c>clamp(dot / sqrt(|q|^2 |r|^2), -1, 1)</c>, 0 when that
+    /// denominator is at most 1e-10.
+    /// </summary>
+    internal static Tensor<T> CosineSimilarities(Tensor<T> query, Tensor<T> rows)
+    {
+        var engine = Engine;
+        int count = rows.Shape[0];
+        int dim = rows.Shape[1];
+        var dot = engine.Reshape(engine.TensorMatMul(rows, engine.Reshape(query, new[] { dim, 1 })), new[] { count });
+        T queryNorm = engine.TensorSumOfSquares(query);
+        var rowNorms = engine.ReduceSum(engine.TensorSquare(rows), new[] { 1 }, false);
+        var denom = engine.TensorSqrt(engine.TensorMultiplyScalar(rowNorms, queryNorm));
+        var valid = Gt(denom, 1e-10);
+        var ratio = engine.TensorDivide(dot, Where(valid, denom, 1.0));
+        ratio = Where(Lt(ratio, -1.0), -1.0, MinOne(ratio));
+        return Where(valid, ratio, 0.0);
+    }
+
+    /// <summary>Positions (ascending) where <c>values &gt;= threshold</c> (NaN never qualifies).</summary>
+    internal static int[] IndicesAtLeast(Tensor<T> values, T threshold)
+    {
+        var engine = Engine;
+        var hit = engine.TensorGreaterEqual(values, Full(values.Shape.ToArray(), threshold));
+        return engine.TensorNonzero(hit).ToArray();
+    }
+
     /// <summary>Population mean and variance (two-pass, like the scalar code) of a rank-1 tensor.</summary>
     internal static (T Mean, T Variance) MeanVariance(Tensor<T> x)
     {
