@@ -121,41 +121,14 @@ public class BackwardElimination<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, 
 
     private double DefaultScoring(Matrix<T> data, Vector<T> target, int[] features)
     {
+        // R-squared of the least-squares fit (with intercept) of the target on the subset, as scikit-learn's
+        // LinearRegression().fit(X, y).score(X, y); the sum of squared univariate correlations it replaces is only
+        // the R-squared when the features are uncorrelated
         int n = data.Rows;
         if (features.Length == 0 || n <= features.Length)
             return 0;
 
-        double yMean = 0;
-        for (int i = 0; i < n; i++)
-            yMean += NumOps.ToDouble(target[i]);
-        yMean /= n;
-
-        double totalCorr = 0;
-        foreach (int j in features)
-        {
-            double xMean = 0;
-            for (int i = 0; i < n; i++)
-                xMean += NumOps.ToDouble(data[i, j]);
-            xMean /= n;
-
-            double ssXY = 0, ssXX = 0, ssYY = 0;
-            for (int i = 0; i < n; i++)
-            {
-                double dx = NumOps.ToDouble(data[i, j]) - xMean;
-                double dy = NumOps.ToDouble(target[i]) - yMean;
-                ssXY += dx * dy;
-                ssXX += dx * dx;
-                ssYY += dy * dy;
-            }
-
-            if (ssXX > 1e-10 && ssYY > 1e-10)
-            {
-                double corr = ssXY / Math.Sqrt(ssXX * ssYY);
-                totalCorr += corr * corr;
-            }
-        }
-
-        return totalCorr;
+        return WrapperScoringOps.LinearRegressionRSquared(data, target, features);
     }
 
     /// <inheritdoc />
@@ -171,15 +144,7 @@ public class BackwardElimination<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, 
         if (_selectedIndices is null)
             throw new InvalidOperationException("BackwardElimination has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

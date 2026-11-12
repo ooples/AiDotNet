@@ -88,7 +88,6 @@ public class AntColonyFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervi
             throw new ArgumentException("Target length must match rows in data.");
 
         _nInputFeatures = data.Columns;
-        int n = data.Rows;
         int p = data.Columns;
 
         var random = _randomState.HasValue
@@ -98,7 +97,7 @@ public class AntColonyFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervi
         var scorer = _scorer ?? DefaultScorer;
 
         // Compute initial heuristic (correlation-based)
-        var heuristic = ComputeHeuristic(data, target, n, p);
+        var heuristic = ComputeHeuristic(data, target, p);
 
         // Initialize pheromones
         _pheromones = new double[p];
@@ -207,37 +206,11 @@ public class AntColonyFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervi
         return selected.ToArray();
     }
 
-    private double[] ComputeHeuristic(Matrix<T> data, Vector<T> target, int n, int p)
+    private double[] ComputeHeuristic(Matrix<T> data, Vector<T> target, int p)
     {
-        var heuristic = new double[p];
-
-        double yMean = 0;
-        for (int i = 0; i < n; i++)
-            yMean += NumOps.ToDouble(target[i]);
-        yMean /= n;
-
-        for (int j = 0; j < p; j++)
-        {
-            double xMean = 0;
-            for (int i = 0; i < n; i++)
-                xMean += NumOps.ToDouble(data[i, j]);
-            xMean /= n;
-
-            double sxy = 0, sxx = 0, syy = 0;
-            for (int i = 0; i < n; i++)
-            {
-                double xDiff = NumOps.ToDouble(data[i, j]) - xMean;
-                double yDiff = NumOps.ToDouble(target[i]) - yMean;
-                sxy += xDiff * yDiff;
-                sxx += xDiff * xDiff;
-                syy += yDiff * yDiff;
-            }
-
-            double corr = (sxx > 1e-10 && syy > 1e-10) ? Math.Abs(sxy / Math.Sqrt(sxx * syy)) : 0;
-            heuristic[j] = corr + 0.01; // Add small value to avoid zero
-        }
-
-        return heuristic;
+        // |Pearson r| with the target plus a small value to avoid zero
+        var correlations = WrapperScoringOps.AbsTargetCorrelations(data, target, Enumerable.Range(0, p).ToArray());
+        return WrapperScoringOps.ToDoubleArray(Engine.TensorAddScalar(correlations, NumOps.FromDouble(0.01)));
     }
 
     private double DefaultScorer(Matrix<T> data, Vector<T> target, int[] featureIndices)
@@ -245,37 +218,8 @@ public class AntColonyFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervi
         if (featureIndices.Length == 0)
             return double.NegativeInfinity;
 
-        // Simple correlation-based score
-        int n = data.Rows;
-        double totalCorr = 0;
-
-        double yMean = 0;
-        for (int i = 0; i < n; i++)
-            yMean += NumOps.ToDouble(target[i]);
-        yMean /= n;
-
-        foreach (int j in featureIndices)
-        {
-            double xMean = 0;
-            for (int i = 0; i < n; i++)
-                xMean += NumOps.ToDouble(data[i, j]);
-            xMean /= n;
-
-            double sxy = 0, sxx = 0, syy = 0;
-            for (int i = 0; i < n; i++)
-            {
-                double xDiff = NumOps.ToDouble(data[i, j]) - xMean;
-                double yDiff = NumOps.ToDouble(target[i]) - yMean;
-                sxy += xDiff * yDiff;
-                sxx += xDiff * xDiff;
-                syy += yDiff * yDiff;
-            }
-
-            double corr = (sxx > 1e-10 && syy > 1e-10) ? sxy / Math.Sqrt(sxx * syy) : 0;
-            totalCorr += Math.Abs(corr);
-        }
-
-        return totalCorr / featureIndices.Length;
+        // Simple correlation-based score: mean |Pearson r| with the target
+        return WrapperScoringOps.MeanAbsTargetCorrelation(data, target, featureIndices);
     }
 
     /// <inheritdoc />
@@ -291,15 +235,7 @@ public class AntColonyFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervi
         if (_selectedIndices is null)
             throw new InvalidOperationException("AntColonyFS has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />
