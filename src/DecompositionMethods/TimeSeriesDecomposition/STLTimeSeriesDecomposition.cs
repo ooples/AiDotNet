@@ -175,8 +175,16 @@ public class STLTimeSeriesDecomposition<T> : TimeSeriesDecompositionBase<T>
 
     private Tensor<T> IqrOutlierMask(Tensor<T> values)
     {
-        var sortedSeries = TimeSeries.OrderBy(x => x).ToList();
+        // Quartiles of the finite values only; NaN would otherwise sort into the order statistics.
+        var sortedSeries = TimeSeries
+            .Where(x => !NumOps.IsNaN(x) && !NumOps.IsInfinity(x))
+            .OrderBy(x => x)
+            .ToList();
         int n = sortedSeries.Count;
+        if (n == 0)
+        {
+            return Engine.TensorZerosLike(values);
+        }
 
         T q1 = sortedSeries[n / 4];
         T q3 = sortedSeries[3 * n / 4];
@@ -319,8 +327,14 @@ public class STLTimeSeriesDecomposition<T> : TimeSeriesDecompositionBase<T>
     /// <returns>The mean value of the time series.</returns>
     private T CalculateSeriesMean()
     {
-        T sum = Engine.TensorSum(Tensor<T>.FromVector(TimeSeries));
-        return NumOps.Divide(sum, NumOps.FromDouble(TimeSeries.Length));
+        // Non-finite entries (NaN, +-Infinity) are excluded; PreprocessSeries accepts them and imputes
+        // them later, and one of them would otherwise turn the mean (and every z-score) into NaN.
+        var values = Tensor<T>.FromVector(TimeSeries);
+        var finite = Engine.TensorIsFinite(values);
+        var zeros = Engine.TensorZerosLike(values);
+        T sum = Engine.TensorSum(Engine.TensorWhere(finite, values, zeros));
+        T count = Engine.TensorSum(Engine.TensorWhere(finite, Engine.TensorOnesLike(values), zeros));
+        return NumOps.Divide(sum, count);
     }
 
     /// <summary>
@@ -340,11 +354,16 @@ public class STLTimeSeriesDecomposition<T> : TimeSeriesDecompositionBase<T>
     /// <returns>The standard deviation of the time series.</returns>
     private T CalculateSeriesStdDev()
     {
+        // Sample standard deviation over the finite entries only (see CalculateSeriesMean).
         T mean = CalculateSeriesMean();
-        var deviations = Engine.TensorSubtractScalar(Tensor<T>.FromVector(TimeSeries), mean);
-        T sumSquaredDiff = Engine.TensorSum(Engine.TensorMultiply(deviations, deviations));
+        var values = Tensor<T>.FromVector(TimeSeries);
+        var finite = Engine.TensorIsFinite(values);
+        var zeros = Engine.TensorZerosLike(values);
+        var deviations = Engine.TensorSubtractScalar(values, mean);
+        T sumSquaredDiff = Engine.TensorSum(Engine.TensorWhere(finite, Engine.TensorMultiply(deviations, deviations), zeros));
+        T count = Engine.TensorSum(Engine.TensorWhere(finite, Engine.TensorOnesLike(values), zeros));
 
-        T variance = NumOps.Divide(sumSquaredDiff, NumOps.FromDouble(TimeSeries.Length - 1));
+        T variance = NumOps.Divide(sumSquaredDiff, NumOps.Subtract(count, NumOps.One));
         return NumOps.Sqrt(variance);
     }
 }
