@@ -3,6 +3,8 @@ using AiDotNet.Enums;
 using AiDotNet.Models;
 using AiDotNet.Safety;
 using AiDotNet.Tensors.LinearAlgebra;
+using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Engines.Autodiff;
 
 namespace AiDotNet.Safety.Audio;
 
@@ -45,7 +47,6 @@ public class WatermarkDeepfakeDetector<T> : AudioSafetyModuleBase<T>
 {
 
     private readonly T _threshold;
-    private readonly FastFourierTransform<T> _fft;
 
     /// <inheritdoc />
     public override string ModuleName => "WatermarkDeepfakeDetector";
@@ -59,7 +60,6 @@ public class WatermarkDeepfakeDetector<T> : AudioSafetyModuleBase<T>
         : base(sampleRate)
     {
         _threshold = NumOps.FromDouble(threshold);
-        _fft = new FastFourierTransform<T>();
     }
 
     /// <inheritdoc />
@@ -72,18 +72,23 @@ public class WatermarkDeepfakeDetector<T> : AudioSafetyModuleBase<T>
             return findings;
         }
 
+        using var noGrad = new NoGradScope<T>();
+        var audio = SafetyTensorOps<T>.AsTensor(audioSamples);
+
         // Check for various watermark signatures
-        double spreadSpectrumScore = DetectSpreadSpectrumWatermark(audioSamples, sampleRate);
-        double subBandScore = DetectSubBandWatermark(audioSamples, sampleRate);
-        double phaseScore = DetectPhaseWatermark(audioSamples, sampleRate);
+        T spreadSpectrumScore = DetectSpreadSpectrumWatermark(audio, sampleRate);
+        T subBandScore = DetectSubBandWatermark(audio, sampleRate);
+        T phaseScore = DetectPhaseWatermark(audio, sampleRate);
 
         // Also check for natural recording artifacts (their absence is suspicious)
-        double naturalArtifactScore = DetectNaturalRecordingArtifacts(audioSamples, sampleRate);
+        T naturalArtifactScore = DetectNaturalRecordingArtifacts(audio, sampleRate);
 
         // Combined watermark detection
-        double watermarkScore = Math.Max(spreadSpectrumScore, Math.Max(subBandScore, phaseScore));
+        T watermarkScoreT = SafetyTensorOps<T>.MaxNaN(spreadSpectrumScore,
+            SafetyTensorOps<T>.MaxNaN(subBandScore, phaseScore));
+        double watermarkScore = NumOps.ToDouble(watermarkScoreT);
 
-        if (watermarkScore >= NumOps.ToDouble(_threshold))
+        if (NumOps.GreaterThanOrEquals(watermarkScoreT, _threshold))
         {
             findings.Add(new SafetyFinding
             {
@@ -91,8 +96,8 @@ public class WatermarkDeepfakeDetector<T> : AudioSafetyModuleBase<T>
                 Severity = SafetySeverity.Info,
                 Confidence = Math.Min(1.0, watermarkScore),
                 Description = $"Audio watermark detected (score: {watermarkScore:F3}). " +
-                              $"Spread-spectrum: {spreadSpectrumScore:F3}, sub-band: {subBandScore:F3}, " +
-                              $"phase: {phaseScore:F3}. This indicates AI-generated audio " +
+                              $"Spread-spectrum: {NumOps.ToDouble(spreadSpectrumScore):F3}, sub-band: {NumOps.ToDouble(subBandScore):F3}, " +
+                              $"phase: {NumOps.ToDouble(phaseScore):F3}. This indicates AI-generated audio " +
                               $"from a responsible provider.",
                 RecommendedAction = SafetyAction.Log,
                 SourceModule = ModuleName
@@ -100,9 +105,11 @@ public class WatermarkDeepfakeDetector<T> : AudioSafetyModuleBase<T>
         }
 
         // If no watermark but also no natural artifacts → suspicious
-        double suspiciousScore = (1.0 - watermarkScore) * (1.0 - naturalArtifactScore);
-        if (suspiciousScore >= NumOps.ToDouble(_threshold))
+        T suspiciousScoreT = NumOps.Multiply(NumOps.Subtract(NumOps.One, watermarkScoreT),
+            NumOps.Subtract(NumOps.One, naturalArtifactScore));
+        if (NumOps.GreaterThanOrEquals(suspiciousScoreT, _threshold))
         {
+            double suspiciousScore = NumOps.ToDouble(suspiciousScoreT);
             findings.Add(new SafetyFinding
             {
                 Category = SafetyCategory.AIGenerated,
@@ -119,215 +126,170 @@ public class WatermarkDeepfakeDetector<T> : AudioSafetyModuleBase<T>
         return findings;
     }
 
-    private double DetectSpreadSpectrumWatermark(Vector<T> audio, int sampleRate)
+    private static T DetectSpreadSpectrumWatermark(Tensor<T> audio, int sampleRate)
     {
+        var engine = SafetyTensorOps<T>.Engine;
+
         // Spread-spectrum watermarks distribute energy uniformly across frequencies
         int frameSize = 512;
         int numFrames = Math.Min(8, audio.Length / frameSize);
-        if (numFrames < 2) return 0;
+        if (numFrames < 2) return NumOps.Zero;
 
         // Check for unusually uniform mid-band energy across frames
-        var midBandFlatness = new List<double>();
+        var frames = SafetyTensorOps<T>.Frames(audio, frameSize, frameSize, numFrames);
+        var magnitudes = SafetyTensorOps<T>.FftMagnitude(frames);
+        int halfLen = frameSize / 2;
+        int lowBand = halfLen / 4;
+        int highBand = halfLen * 3 / 4;
 
-        for (int f = 0; f < numFrames; f++)
-        {
-            int start = f * frameSize;
-            var frame = new Vector<T>(frameSize);
-            for (int i = 0; i < frameSize && start + i < audio.Length; i++)
-            {
-                frame[i] = audio[start + i];
-            }
+        // Spectral flatness in mid-band over the bins with magnitude > 1e-20
+        var axis1 = new[] { 1 };
+        var band = engine.TensorNarrow(magnitudes, 1, lowBand, highBand - lowBand);
+        var present = SafetyTensorOps<T>.Gt(band, 1e-20);
+        var logSum = engine.ReduceSum(
+            SafetyTensorOps<T>.Where(present, engine.TensorLog(SafetyTensorOps<T>.Where(present, band, 1.0)), 0.0),
+            axis1, false);
+        var arithSum = engine.ReduceSum(SafetyTensorOps<T>.Where(present, band, 0.0), axis1, false);
+        var count = engine.ReduceSum(present, axis1, false);
 
-            var spectrum = _fft.Forward(frame);
-            int halfLen = spectrum.Length / 2;
-            int lowBand = halfLen / 4;
-            int highBand = halfLen * 3 / 4;
+        var valid = SafetyTensorOps<T>.And(SafetyTensorOps<T>.Gt(count, 0.0), SafetyTensorOps<T>.Gt(arithSum, 1e-20));
+        var safeCount = SafetyTensorOps<T>.Where(valid, count, 1.0);
+        var geoMean = engine.TensorExp(engine.TensorDivide(logSum, safeCount));
+        var arithMean = engine.TensorDivide(SafetyTensorOps<T>.Where(valid, arithSum, 1.0), safeCount);
+        var midBandFlatness = SafetyTensorOps<T>.Compact(engine.TensorDivide(geoMean, arithMean), valid);
 
-            // Spectral flatness in mid-band
-            double logSum = 0, arithSum = 0;
-            int count = 0;
-            for (int k = lowBand; k < highBand; k++)
-            {
-                double mag = NumOps.ToDouble(spectrum[k].Magnitude);
-                if (mag > 1e-20)
-                {
-                    logSum += Math.Log(mag);
-                    arithSum += mag;
-                    count++;
-                }
-            }
-
-            if (count > 0 && arithSum > 1e-20)
-            {
-                double geoMean = Math.Exp(logSum / count);
-                double arithMean = arithSum / count;
-                midBandFlatness.Add(geoMean / arithMean);
-            }
-        }
-
-        if (midBandFlatness.Count < 2) return 0;
+        if (midBandFlatness.Length < 2) return NumOps.Zero;
 
         // High and consistent mid-band flatness = spread-spectrum watermark
-        double meanFlatness = 0;
-        foreach (var f in midBandFlatness) meanFlatness += f;
-        meanFlatness /= midBandFlatness.Count;
-
-        double variance = 0;
-        foreach (var f in midBandFlatness)
-        {
-            double diff = f - meanFlatness;
-            variance += diff * diff;
-        }
-        variance /= midBandFlatness.Count;
+        var (meanFlatness, variance) = SafetyTensorOps<T>.MeanVariance(midBandFlatness);
 
         // Watermarked: mean flatness > 0.6, low variance
-        double flatnessScore = Math.Max(0, (meanFlatness - 0.5) * 2);
-        double consistencyScore = Math.Max(0, 1.0 - variance * 50);
+        T flatnessScore = SafetyTensorOps<T>.MaxZero(
+            NumOps.Multiply(NumOps.Subtract(meanFlatness, NumOps.FromDouble(0.5)), NumOps.FromDouble(2)));
+        T consistencyScore = SafetyTensorOps<T>.MaxZero(
+            NumOps.Subtract(NumOps.One, NumOps.Multiply(variance, NumOps.FromDouble(50))));
 
-        return Math.Min(1.0, flatnessScore * consistencyScore);
+        return SafetyTensorOps<T>.MinOne(NumOps.Multiply(flatnessScore, consistencyScore));
     }
 
-    private double DetectSubBandWatermark(Vector<T> audio, int sampleRate)
+    private static T DetectSubBandWatermark(Tensor<T> audio, int sampleRate)
     {
+        var engine = SafetyTensorOps<T>.Engine;
+
         // Sub-band watermarks embed energy in specific narrow frequency bands
         int frameSize = 1024;
-        if (audio.Length < frameSize) return 0;
+        if (audio.Length < frameSize) return NumOps.Zero;
 
-        var frame = new Vector<T>(frameSize);
         int mid = (audio.Length - frameSize) / 2;
-        for (int i = 0; i < frameSize; i++)
-        {
-            frame[i] = audio[mid + i];
-        }
-
-        var spectrum = _fft.Forward(frame);
-        int halfLen = spectrum.Length / 2;
+        var frame = engine.Reshape(engine.TensorNarrow(audio, 0, mid, frameSize), new[] { 1, frameSize });
 
         // Compute magnitude spectrum
-        var magnitudes = new double[halfLen];
-        for (int k = 0; k < halfLen; k++)
+        int halfLen = frameSize / 2;
+        var magnitudes = engine.Reshape(
+            engine.TensorNarrow(SafetyTensorOps<T>.FftMagnitude(frame), 1, 0, halfLen), new[] { halfLen });
+
+        // Peak test at every bin k in [2, halfLen-2]:
+        // m[k] > m[k-1] && m[k] > m[k+1] && m[k] > m[k-2] * 1.5
+        int inner = halfLen - 3;
+        var center = engine.TensorNarrow(magnitudes, 0, 2, inner);
+        var isPeak = SafetyTensorOps<T>.And(
+            SafetyTensorOps<T>.And(
+                engine.TensorGreaterThan(center, engine.TensorNarrow(magnitudes, 0, 1, inner)),
+                engine.TensorGreaterThan(center, engine.TensorNarrow(magnitudes, 0, 3, inner))),
+            engine.TensorGreaterThan(center,
+                engine.TensorMultiplyScalar(engine.TensorNarrow(magnitudes, 0, 0, inner), NumOps.FromDouble(1.5))));
+        var peaks = engine.TensorConcatenate(new[]
         {
-            magnitudes[k] = NumOps.ToDouble(spectrum[k].Magnitude);
-        }
+            Tensor<T>.CreateZeros(2), isPeak, Tensor<T>.CreateZeros(1)
+        }, 0);
 
         // Look for unusually regular energy peaks at specific intervals
-        // (watermarks often use fixed frequency spacing)
-        int maxPeakCount = 0;
-        for (int spacing = 4; spacing <= 32; spacing++)
-        {
-            int peakCount = 0;
-            for (int k = spacing; k < halfLen - spacing; k += spacing)
-            {
-                bool isPeak = magnitudes[k] > magnitudes[k - 1] &&
-                             magnitudes[k] > magnitudes[k + 1] &&
-                             magnitudes[k] > magnitudes[k - 2] * 1.5;
-                if (isPeak) peakCount++;
-            }
-            if (peakCount > maxPeakCount) maxPeakCount = peakCount;
-        }
+        // (watermarks often use fixed frequency spacing): for each spacing s in [4, 32],
+        // count the peaks at k = s, 2s, ... while k < halfLen - s.
+        int spacings = 32 - 4 + 1;
+        var k = engine.Reshape(SafetyTensorOps<T>.Range(halfLen), new[] { 1, halfLen });
+        var s = engine.Reshape(engine.TensorAddScalar(SafetyTensorOps<T>.Range(spacings), NumOps.FromDouble(4)),
+            new[] { spacings, 1 });
+        var grid = new[] { spacings, halfLen };
+        var kGrid = engine.TensorBroadcastTo(k, grid);
+        var sGrid = engine.TensorBroadcastTo(s, grid);
+        var onMultiple = engine.TensorEquals(engine.TensorRemainder(kGrid, sGrid), NumOps.Zero);
+        var inRange = SafetyTensorOps<T>.And(
+            engine.TensorGreaterEqual(kGrid, sGrid),
+            engine.TensorLessThan(kGrid, engine.ScalarMinusTensor(NumOps.FromDouble(halfLen), sGrid)));
+        var selection = SafetyTensorOps<T>.And(onMultiple, inRange);
+        var peakCounts = engine.TensorMatMul(selection, engine.Reshape(peaks, new[] { halfLen, 1 }));
+        T maxPeakCount = SafetyTensorOps<T>.MaxNaN(NumOps.Zero, engine.TensorMaxValue(peakCounts));
 
         int expectedPeaks = halfLen / 16; // Expected for watermarked audio
-        return Math.Min(1.0, (double)maxPeakCount / expectedPeaks);
+        return SafetyTensorOps<T>.MinOne(NumOps.Divide(maxPeakCount, NumOps.FromDouble(expectedPeaks)));
     }
 
-    private double DetectPhaseWatermark(Vector<T> audio, int sampleRate)
+    private static T DetectPhaseWatermark(Tensor<T> audio, int sampleRate)
     {
+        var engine = SafetyTensorOps<T>.Engine;
+
         // Phase-based watermarks encode data in phase differences between frames
         int frameSize = 512;
         int numFrames = Math.Min(4, audio.Length / frameSize);
-        if (numFrames < 2) return 0;
+        if (numFrames < 2) return NumOps.Zero;
 
-        var prevPhases = new double[0];
-        var phaseDiffConsistency = new List<double>();
+        var frames = SafetyTensorOps<T>.Frames(audio, frameSize, frameSize, numFrames);
+        engine.FFT(frames, Tensor<T>.CreateZeros(numFrames, frameSize), out var re, out var im);
+        int halfLen = frameSize / 2;
+        var phases = engine.TensorNarrow(engine.TensorAtan2(im, re), 1, 0, halfLen);
 
-        for (int f = 0; f < numFrames; f++)
-        {
-            int start = f * frameSize;
-            var frame = new Vector<T>(frameSize);
-            for (int i = 0; i < frameSize && start + i < audio.Length; i++)
-            {
-                frame[i] = audio[start + i];
-            }
+        // Check if phase differences between consecutive frames cluster around discrete values
+        // (watermarks encode bits as specific phase offsets), bins 10 .. halfLen-1
+        var band = engine.TensorNarrow(phases, 1, 10, halfLen - 10);
+        var diff = engine.TensorDiff(band, 1, 0);
 
-            var spectrum = _fft.Forward(frame);
-            int halfLen = spectrum.Length / 2;
+        // Normalize to [-pi, pi]
+        diff = SafetyTensorOps<T>.Where(SafetyTensorOps<T>.Gt(diff, Math.PI),
+            engine.TensorSubtractScalar(diff, NumOps.FromDouble(2 * Math.PI)), diff);
+        diff = SafetyTensorOps<T>.Where(SafetyTensorOps<T>.Lt(diff, -Math.PI),
+            engine.TensorAddScalar(diff, NumOps.FromDouble(2 * Math.PI)), diff);
 
-            var phases = new double[halfLen];
-            for (int k = 0; k < halfLen; k++)
-            {
-                phases[k] = NumOps.ToDouble(spectrum[k].Phase);
-            }
+        // Check if close to 0, pi/2, pi, or -pi/2
+        var absDiff = engine.TensorAbs(diff);
+        var discrete = SafetyTensorOps<T>.Or(
+            SafetyTensorOps<T>.Or(
+                SafetyTensorOps<T>.Lt(absDiff, 0.1),
+                SafetyTensorOps<T>.Lt(engine.TensorAbs(engine.TensorSubtractScalar(absDiff, NumOps.FromDouble(Math.PI / 2))), 0.1)),
+            SafetyTensorOps<T>.Lt(engine.TensorAbs(engine.TensorSubtractScalar(absDiff, NumOps.FromDouble(Math.PI))), 0.1));
+        var discreteRatio = engine.TensorDivideScalar(
+            engine.ReduceSum(discrete, new[] { 1 }, false), NumOps.FromDouble(halfLen));
 
-            if (prevPhases.Length > 0)
-            {
-                // Check if phase differences cluster around discrete values
-                // (watermarks encode bits as specific phase offsets)
-                int discreteCount = 0;
-                for (int k = 10; k < halfLen; k++)
-                {
-                    double diff = phases[k] - prevPhases[k];
-                    // Normalize to [-pi, pi]
-                    while (diff > Math.PI) diff -= 2 * Math.PI;
-                    while (diff < -Math.PI) diff += 2 * Math.PI;
-
-                    // Check if close to 0, pi/2, pi, or -pi/2
-                    double absDiff = Math.Abs(diff);
-                    if (absDiff < 0.1 || Math.Abs(absDiff - Math.PI / 2) < 0.1 ||
-                        Math.Abs(absDiff - Math.PI) < 0.1)
-                    {
-                        discreteCount++;
-                    }
-                }
-
-                double discreteRatio = (double)discreteCount / halfLen;
-                phaseDiffConsistency.Add(discreteRatio);
-            }
-
-            prevPhases = phases;
-        }
-
-        if (phaseDiffConsistency.Count == 0) return 0;
-
-        double maxConsistency = 0;
-        foreach (var c in phaseDiffConsistency)
-        {
-            if (c > maxConsistency) maxConsistency = c;
-        }
+        T maxConsistency = SafetyTensorOps<T>.FirstStrictMax(
+            engine.Reshape(discreteRatio, new[] { 1, numFrames - 1 }), 0.0).Best.GetFlat(0);
 
         // High ratio of discrete phase differences = likely watermarked
-        return Math.Min(1.0, Math.Max(0, (maxConsistency - 0.3) * 2));
+        return SafetyTensorOps<T>.ClampUnit(
+            NumOps.Multiply(NumOps.Subtract(maxConsistency, NumOps.FromDouble(0.3)), NumOps.FromDouble(2)));
     }
 
-    private double DetectNaturalRecordingArtifacts(Vector<T> audio, int sampleRate)
+    private static T DetectNaturalRecordingArtifacts(Tensor<T> audio, int sampleRate)
     {
+        var engine = SafetyTensorOps<T>.Engine;
+
         // Natural recordings have: background noise, slight DC offset, frequency roll-off
         int frameSize = Math.Min(1024, audio.Length);
-        var frame = new Vector<T>(frameSize);
-        for (int i = 0; i < frameSize; i++)
-        {
-            frame[i] = audio[i];
-        }
+        var frame = engine.TensorNarrow(audio, 0, 0, frameSize);
 
         // DC offset (natural recordings often have slight DC bias)
-        double dcSum = 0;
-        for (int i = 0; i < frameSize; i++)
-        {
-            dcSum += NumOps.ToDouble(frame[i]);
-        }
-        double dcOffset = Math.Abs(dcSum / frameSize);
-        double hasDC = dcOffset > 0.001 ? 1.0 : 0;
+        T dcOffset = NumOps.Abs(NumOps.Divide(engine.TensorSum(frame), NumOps.FromDouble(frameSize)));
+        T hasDC = NumOps.GreaterThan(dcOffset, NumOps.FromDouble(0.001)) ? NumOps.One : NumOps.Zero;
 
-        // Background noise floor (silent portions should have some noise)
-        var sortedAbsValues = new double[frameSize];
-        for (int i = 0; i < frameSize; i++)
-        {
-            sortedAbsValues[i] = Math.Abs(NumOps.ToDouble(frame[i]));
-        }
-        Array.Sort(sortedAbsValues);
-        double noiseFloor = sortedAbsValues[frameSize / 10]; // 10th percentile
-        double hasNoise = noiseFloor > 0.0001 ? 1.0 : 0;
+        // Background noise floor (silent portions should have some noise): 10th percentile of
+        // the sorted magnitudes. NaN sorts first, so it is placed below every magnitude (-1).
+        var magnitude = engine.TensorAbs(frame);
+        var ordered = engine.TensorWhere(engine.TensorIsNan(magnitude),
+            SafetyTensorOps<T>.FullLike(magnitude, -1.0), magnitude);
+        var sorted = engine.TensorSort(ordered, 0, false).Values;
+        T noiseFloor = sorted.GetFlat(frameSize / 10);
+        T hasNoise = NumOps.GreaterThan(noiseFloor, NumOps.FromDouble(0.0001)) ? NumOps.One : NumOps.Zero;
 
         // Natural = has DC + has noise → score ~1.0
-        return (hasDC + hasNoise) / 2.0;
+        return NumOps.Divide(NumOps.Add(hasDC, hasNoise), NumOps.FromDouble(2.0));
     }
 }
