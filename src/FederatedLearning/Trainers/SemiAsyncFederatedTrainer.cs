@@ -132,6 +132,7 @@ public class SemiAsyncFederatedTrainer<T> : Infrastructure.FederatedLearningComp
             int staleness = _currentRound - pending.ClientRound;
             double discount = Math.Pow(_stalenessDiscount, Math.Max(staleness, 0));
             double effectiveLR = _asyncLearningRate * discount;
+            T effectiveLRT = NumOps.FromDouble(effectiveLR);
 
             foreach (var (layerName, delta) in pending.Update)
             {
@@ -143,12 +144,9 @@ public class SemiAsyncFederatedTrainer<T> : Infrastructure.FederatedLearningComp
                             $"Client {pending.ClientId} layer '{layerName}' length {delta.Length} differs from expected {globalLayer.Length}.");
                     }
 
-                    for (int i = 0; i < delta.Length; i++)
-                    {
-                        double g = NumOps.ToDouble(globalLayer[i]);
-                        double d = NumOps.ToDouble(delta[i]);
-                        globalLayer[i] = NumOps.FromDouble(g + effectiveLR * d);
-                    }
+                    // global += lr * delta, written back into the copied layer
+                    Engine.Add(Vector<T>.Wrap(globalLayer), Engine.Multiply(Vector<T>.Wrap(delta), effectiveLRT))
+                        .AsSpan().CopyTo(globalLayer);
                 }
             }
         }
@@ -192,7 +190,7 @@ public class SemiAsyncFederatedTrainer<T> : Infrastructure.FederatedLearningComp
 
         foreach (var (layerName, layerParams) in updated)
         {
-            var merged = new double[layerParams.Length];
+            var merged = new Vector<T>(layerParams.Length);
 
             // Weight each client's contribution by its sample count.
             double effectiveTotalWeight = 0;
@@ -210,10 +208,7 @@ public class SemiAsyncFederatedTrainer<T> : Infrastructure.FederatedLearningComp
                     double w = clientSampleCounts.TryGetValue(clientId, out var sc) ? sc : 1.0;
                     effectiveTotalWeight += w;
 
-                    for (int i = 0; i < clientLayer.Length; i++)
-                    {
-                        merged[i] += w * NumOps.ToDouble(clientLayer[i]);
-                    }
+                    merged = Engine.Add(merged, Engine.Multiply(Vector<T>.Wrap(clientLayer), NumOps.FromDouble(w)));
                 }
             }
 
@@ -223,15 +218,9 @@ public class SemiAsyncFederatedTrainer<T> : Infrastructure.FederatedLearningComp
                 : 1.0;
             effectiveTotalWeight += globalWeight;
 
-            var mergedT = new T[layerParams.Length];
             double invTotal = effectiveTotalWeight > 0 ? 1.0 / effectiveTotalWeight : 0;
-            for (int i = 0; i < mergedT.Length; i++)
-            {
-                mergedT[i] = NumOps.FromDouble(
-                    (merged[i] + globalWeight * NumOps.ToDouble(layerParams[i])) * invTotal);
-            }
-
-            result[layerName] = mergedT;
+            var withGlobal = Engine.Add(merged, Engine.Multiply(Vector<T>.Wrap(layerParams), NumOps.FromDouble(globalWeight)));
+            result[layerName] = Engine.Multiply(withGlobal, NumOps.FromDouble(invTotal)).ToArray();
         }
 
         return result;
