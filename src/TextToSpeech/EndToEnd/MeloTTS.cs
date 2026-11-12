@@ -239,7 +239,9 @@ public partial class MeloTTS<T> : TtsModelBase<T>, IEndToEndTts<T>
         if (!HasPaperLayers) return base.PredictCore(input);
         var o = _options;
         int count = MeloSymbols.Symbols.Count;
-        var raw = input.ToVector().Select(v => Math.Max(0, Math.Min(count - 1, (int)Math.Round(NumOps.ToDouble(v))))).ToArray();
+        // Each id rounded half to even and clamped to the symbol table; NaN and infinities read as 0.
+        var rounded = Engine.TensorNanToNum(Engine.TensorRound(input), 0.0, 0.0, 0.0);
+        var raw = Engine.TensorClamp(rounded, NumOps.Zero, NumOps.FromDouble(count - 1)).Cast<int>().ToArray();
         var symbols = MeloSymbols.Intersperse(raw);
         string code = MeloTextPipeline.Code(o.Language);
         var tones = MeloSymbols.Intersperse(Enumerable.Repeat(MeloSymbols.ToneStart(code), raw.Length).ToArray());
@@ -413,13 +415,14 @@ public partial class MeloTTS<T> : TtsModelBase<T>, IEndToEndTts<T>
         List<(Tensor<T> Score, List<Tensor<T>> Features)> realScores;
         using (new NoGradScope<T>()) realScores = _discriminators.Forward(Segment(u, o));
         loss = Engine.TensorAdd(loss, GeneratorAdversarialLoss(fake.Select(f => f.Score).ToList()));
+        var featureWeight = NumOps.FromDouble(2);
         for (int k = 0; k < fake.Count; k++)
             for (int l = 0; l < fake[k].Features.Count; l++)
             {
                 // feature_loss: 2 Σ mean |r − g|.
                 var r = Detached(realScores[k].Features[l]);
                 loss = Engine.TensorAdd(loss, Engine.TensorMultiplyScalar(Mean(Engine.TensorAbs(Engine.TensorSubtract(r, fake[k].Features[l]))),
-                    NumOps.FromDouble(2)));
+                    featureWeight));
             }
         if (_options.UseDurationDiscriminator)
         {
