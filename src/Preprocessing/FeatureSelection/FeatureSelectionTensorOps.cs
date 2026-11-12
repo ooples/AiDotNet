@@ -225,6 +225,47 @@ internal static class FeatureSelectionTensorOps
         return engine.TensorDivideScalar(total, ops.FromDouble((double)m * k));
     }
 
+    /// <summary>
+    /// <c>sum_{i, j} pairWeight[i, j] |x[i, a] - x[j, a]|</c> for every feature a of an [n, p] tensor, with an
+    /// [n, n] pair weighting ([p]). Evaluated one feature at a time so only n x n values are ever held.
+    /// </summary>
+    public static Tensor<T> PairWeightedDifference<T>(Tensor<T> x, Tensor<T> pairWeight)
+    {
+        var engine = AiDotNetEngine.Current;
+        int n = x.Shape[0];
+        int p = x.Shape[1];
+        if (n == 0 || p == 0)
+            return new Tensor<T>(new[] { p });
+
+        var perFeature = new Tensor<T>[p];
+        for (int a = 0; a < p; a++)
+        {
+            var column = Column(x, a);
+            var difference = engine.TensorAbs(engine.TensorSubtract(
+                FilterStatisticTensorOps.ColumnBroadcast(column, n), FilterStatisticTensorOps.RowBroadcast(column, n)));
+            perFeature[a] = engine.ReduceSum(engine.Reshape(engine.TensorMultiply(difference, pairWeight), new[] { 1, n * n }), new[] { 1 }, false);
+        }
+
+        return engine.TensorConcatenate(perFeature, 0);
+    }
+
+    /// <summary>
+    /// The SURF-family pair weighting for near neighbours: <c>-hit[i, j] / (n max(1, hits_i)) +
+    /// miss[i, j] / (n max(1, misses_i))</c>, from 0/1 [n, n] hit and miss masks.
+    /// </summary>
+    public static Tensor<T> NearNeighbourPairWeight<T>(Tensor<T> hits, Tensor<T> misses)
+    {
+        var engine = AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<T>();
+        int n = hits.Shape[0];
+        T scale = ops.FromDouble(n);
+        var hitCount = engine.TensorMultiplyScalar(engine.TensorMax(engine.ReduceSum(hits, new[] { 1 }, false), ops.One), scale);
+        var missCount = engine.TensorMultiplyScalar(engine.TensorMax(engine.ReduceSum(misses, new[] { 1 }, false), ops.One), scale);
+        return engine.TensorSubtract(
+            engine.TensorDivide(misses, FilterStatisticTensorOps.ColumnBroadcast(missCount, n)),
+            engine.TensorDivide(hits, FilterStatisticTensorOps.ColumnBroadcast(hitCount, n)));
+    }
+
     /// <summary>|rows - x[neighbour]| feature by feature ([m, p]).</summary>
     public static Tensor<T> NeighbourDifference<T>(Tensor<T> rows, Tensor<T> x, int[] neighbour)
     {

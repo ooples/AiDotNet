@@ -1,3 +1,4 @@
+using AiDotNet.Preprocessing.FeatureSelection.Helpers;
 using AiDotNet.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Enums;
@@ -27,13 +28,13 @@ public class MultiSURF<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervise
 {
     private readonly int _nFeaturesToSelect;
 
-    private double[]? _featureWeights;
+    private Vector<T>? _featureWeights;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
-    public double[]? FeatureWeights => _featureWeights;
+    public Vector<T>? FeatureWeights => _featureWeights;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -65,121 +66,41 @@ public class MultiSURF<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervise
         int n = data.Rows;
         int p = data.Columns;
 
-        // Normalize features
-        var minVals = new double[p];
-        var maxVals = new double[p];
-        for (int j = 0; j < p; j++)
-        {
-            minVals[j] = double.MaxValue;
-            maxVals[j] = double.MinValue;
-            for (int i = 0; i < n; i++)
-            {
-                double v = NumOps.ToDouble(data[i, j]);
-                if (v < minVals[j]) minVals[j] = v;
-                if (v > maxVals[j]) maxVals[j] = v;
-            }
-        }
+        var engine = Engine;
 
-        _featureWeights = new double[p];
+        // Features scaled to [0, 1] by their range; a constant feature never differs between instances
+        var scaled = FeatureSelectionTensorOps.RangeScaled(FilterStatisticTensorOps.AsTensor(data));
+        var classOneHot = StatisticalTestHelper.ClassOneHot(target, out _);
 
-        // Precompute all distances
-        var distances = new double[n, n];
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = i + 1; j < n; j++)
-            {
-                double dist = ComputeDistance(data, i, j, minVals, maxVals, p);
-                distances[i, j] = dist;
-                distances[j, i] = dist;
-            }
-        }
+        // All pairwise distances; an instance is not its own neighbour
+        var distances = engine.TensorCDist(scaled, scaled, 2.0);
+        var others = FilterStatisticTensorOps.OneMinus(engine.TensorEye<T>(n));
+        T otherCount = NumOps.FromDouble(n - 1);
 
-        for (int ri = 0; ri < n; ri++)
-        {
-            double riClass = NumOps.ToDouble(target[ri]);
+        // Per-instance threshold: mean - 0.5 * std of its distances to the others (closer than average)
+        var meanDist = engine.TensorDivideScalar(
+            engine.ReduceSum(engine.TensorMultiply(distances, others), new[] { 1 }, false), otherCount);
+        var deviation = engine.TensorMultiply(
+            engine.TensorSubtract(distances, FilterStatisticTensorOps.ColumnBroadcast(meanDist, n)), others);
+        var stdDist = engine.TensorSqrt(engine.TensorDivideScalar(
+            engine.ReduceSum(engine.TensorSquare(deviation), new[] { 1 }, false), otherCount));
+        var threshold = engine.TensorSubtract(meanDist, engine.TensorMultiplyScalar(stdDist, NumOps.FromDouble(0.5)));
 
-            // Compute mean and std of distances from ri
-            double sumDist = 0;
-            for (int i = 0; i < n; i++)
-                if (i != ri) sumDist += distances[ri, i];
-            double meanDist = sumDist / (n - 1);
+        // Near neighbours (within the threshold), split into hits (same class) and misses
+        var near = engine.TensorMultiply(FilterStatisticTensorOps.OneMinus(engine.TensorGreaterThan(
+            distances, FilterStatisticTensorOps.ColumnBroadcast(threshold, n))), others);
+        var sameClass = engine.TensorMatMul(classOneHot, engine.TensorTranspose(classOneHot));
+        var hits = engine.TensorMultiply(near, sameClass);
+        var misses = engine.TensorMultiply(near, FilterStatisticTensorOps.OneMinus(sameClass));
 
-            double sumSqDiff = 0;
-            for (int i = 0; i < n; i++)
-                if (i != ri) sumSqDiff += Math.Pow(distances[ri, i] - meanDist, 2);
-            double stdDist = Math.Sqrt(sumSqDiff / (n - 1));
+        // W -= diff(hit) / (n * #hits), W += diff(miss) / (n * #misses)
+        var weights = FeatureSelectionTensorOps.PairWeightedDifference(
+            scaled, FeatureSelectionTensorOps.NearNeighbourPairWeight(hits, misses));
+        _featureWeights = weights.ToVector();
 
-            // Threshold: mean - 0.5 * std (closer than average)
-            double threshold = meanDist - 0.5 * stdDist;
-
-            // Find near neighbors
-            var nearHits = new List<int>();
-            var nearMisses = new List<int>();
-
-            for (int i = 0; i < n; i++)
-            {
-                if (i == ri) continue;
-                if (distances[ri, i] > threshold) continue;
-
-                double iClass = NumOps.ToDouble(target[i]);
-                if (Math.Abs(iClass - riClass) < 1e-10)
-                    nearHits.Add(i);
-                else
-                    nearMisses.Add(i);
-            }
-
-            // Update weights
-            for (int j = 0; j < p; j++)
-            {
-                double range = maxVals[j] - minVals[j];
-                if (range < 1e-10) continue;
-
-                double ri_val = NumOps.ToDouble(data[ri, j]);
-
-                // Contribution from hits
-                foreach (int hitIdx in nearHits)
-                {
-                    double hit_val = NumOps.ToDouble(data[hitIdx, j]);
-                    double diffHit = Math.Abs(ri_val - hit_val) / range;
-                    _featureWeights[j] -= diffHit / ((double)n * Math.Max(1, nearHits.Count));
-                }
-
-                // Contribution from misses
-                foreach (int missIdx in nearMisses)
-                {
-                    double miss_val = NumOps.ToDouble(data[missIdx, j]);
-                    double diffMiss = Math.Abs(ri_val - miss_val) / range;
-                    _featureWeights[j] += diffMiss / ((double)n * Math.Max(1, nearMisses.Count));
-                }
-            }
-        }
-
-        int nToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = _featureWeights
-            .Select((w, idx) => (Weight: w, Index: idx))
-            .OrderByDescending(x => x.Weight)
-            .Take(nToSelect)
-            .Select(x => x.Index)
-            .OrderBy(x => x)
-            .ToArray();
+        _selectedIndices = FilterStatisticTensorOps.TopKIndicesSorted(weights, Math.Min(_nFeaturesToSelect, p));
 
         IsFitted = true;
-    }
-
-    private double ComputeDistance(Matrix<T> data, int i1, int i2, double[] minVals, double[] maxVals, int p)
-    {
-        double dist = 0;
-        for (int j = 0; j < p; j++)
-        {
-            double range = maxVals[j] - minVals[j];
-            if (range < 1e-10) continue;
-
-            double v1 = NumOps.ToDouble(data[i1, j]);
-            double v2 = NumOps.ToDouble(data[i2, j]);
-            double diff = (v1 - v2) / range;
-            dist += diff * diff;
-        }
-        return Math.Sqrt(dist);
     }
 
     /// <inheritdoc />
