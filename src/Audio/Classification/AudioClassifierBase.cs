@@ -202,14 +202,18 @@ public abstract class AudioClassifierBase<T> : AudioNeuralNetworkBase<T>,
         // Inverse frequency weighting: total / (numClasses * count), for every class at once.
         var entries = classCounts.ToList();
         var counts = new Tensor<int>(entries.Select(kvp => kvp.Value).ToArray(), [entries.Count]).Cast<T>();
+        var positive = Engine.TensorGreaterThan(counts, NumOps.Zero);
+        // Non-positive counts divide by one instead (their weight is replaced below), so a type whose
+        // division by zero throws (decimal) never sees a zero denominator.
+        var safeCounts = Engine.TensorWhere(positive, counts, Tensor<T>.CreateDefault([entries.Count], NumOps.One));
         var inverse = Engine.TensorDivide(
             Tensor<T>.CreateDefault([entries.Count], NumOps.FromDouble(totalSamples)),
-            Engine.TensorMultiplyScalar(counts, NumOps.FromDouble(numClasses)));
+            Engine.TensorMultiplyScalar(safeCounts, NumOps.FromDouble(numClasses)));
         // Classes with zero samples get the maximum weight (they need the most attention): the weight
         // of the rarest non-empty class, total / (numClasses * minCount).
         T maxWeight = NumOps.FromDouble((double)totalSamples / ((double)numClasses * nonZeroCounts.Min(kvp => kvp.Value)));
         T[] weightValues = Engine.TensorWhere(
-            Engine.TensorGreaterThan(counts, NumOps.Zero),
+            positive,
             inverse,
             Tensor<T>.CreateDefault([entries.Count], maxWeight)).ToArray();
 
