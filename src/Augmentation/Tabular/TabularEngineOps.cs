@@ -53,9 +53,9 @@ internal static class TabularEngineOps<T>
 
     /// <summary>
     /// Synthetic rows from[i] + gaps[i] * (to[i] - from[i]), followed by zero rows up to
-    /// <paramref name="totalRows"/>; <paramref name="gaps"/> are the raw generator draws.
+    /// <paramref name="totalRows"/>; <paramref name="gaps"/> holds one interpolation factor per synthetic row.
     /// </summary>
-    internal static Matrix<T> InterpolateRows(Matrix<T> data, int[] from, int[] to, double[] gaps, int totalRows)
+    internal static Matrix<T> InterpolateRows(Matrix<T> data, int[] from, int[] to, Vector<T> gaps, int totalRows)
     {
         var engine = AiDotNetEngine.Current;
         int cols = data.Columns;
@@ -65,12 +65,11 @@ internal static class TabularEngineOps<T>
             return new Matrix<T>(totalRows, cols);
         }
 
-        // The generator draws are converted to T once, in bulk; the interpolation itself runs in T.
         var values = Tensor<T>.FromMatrix(data);
         var start = engine.TensorIndexSelect(values, new Tensor<int>(from, [count]), 0);
         var end = engine.TensorIndexSelect(values, new Tensor<int>(to, [count]), 0);
         var step = engine.TensorMultiply(
-            engine.TensorBroadcastTo(new Tensor<double>(gaps, [count, 1]).Cast<T>(), [count, cols]),
+            engine.TensorBroadcastTo(engine.Reshape(gaps.AsTensor(), [count, 1]), [count, cols]),
             engine.TensorSubtract(end, start));
         var synthetic = engine.TensorAdd(start, step);
         if (count < totalRows)

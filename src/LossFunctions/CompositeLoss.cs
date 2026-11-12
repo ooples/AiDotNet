@@ -82,6 +82,7 @@ public class CompositeLoss<T> : LossFunctionBase<T>
         }
 
         _losses = new LossFunctionBase<T>[terms.Length];
+        _weights = new T[terms.Length];
         for (int i = 0; i < terms.Length; i++)
         {
             if (terms[i].Loss is null)
@@ -89,11 +90,8 @@ public class CompositeLoss<T> : LossFunctionBase<T>
             if (double.IsNaN(terms[i].Weight) || double.IsInfinity(terms[i].Weight))
                 throw new ArgumentException($"Weight for loss term {i} must be finite.", nameof(terms));
             _losses[i] = terms[i].Loss;
+            _weights[i] = NumOps.FromDouble(terms[i].Weight);
         }
-
-        _weights = Vector<double>.Wrap(terms.Select(term => term.Weight).ToArray())
-            .Transform(NumOps.FromDouble)
-            .ToArray();
     }
 
     /// <summary>Gets the number of terms in this composite objective.</summary>
