@@ -3114,8 +3114,7 @@ public partial class GaussianSplatting<T> : AiDotNet.NeuralNetworks.VectorModelL
 
         ResetDensificationStats();
 
-        // Densification is a STRUCTURAL
- parameter change: the per-Gaussian tensors are the model's parameters, so
+        // Densification is a STRUCTURAL parameter change: the per-Gaussian tensors are the model's parameters, so
         // pruning or splitting resizes the parameter surface exactly the way adding or removing a layer does.
         // Without this the cached ParameterLayoutSnapshot keeps describing the previous cloud and the next
         // PublishFlatParameterGradients call fails its length check.
