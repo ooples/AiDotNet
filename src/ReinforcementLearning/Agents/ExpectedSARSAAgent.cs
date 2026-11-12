@@ -204,18 +204,8 @@ public partial class ExpectedSARSAAgent<T> : ReinforcementLearningAgentBase<T>, 
             throw new ArgumentException("Action vector cannot be null or empty", nameof(action));
         }
 
-        for (int i = 0; i < action.Length; i++)
-        {
-            if (NumOps.GreaterThan(action[i], NumOps.Zero))
-            {
-                return i;
-            }
-        }
-
-        // Fallback: If no positive element found (potentially malformed input),
-        // log a warning and return 0 to prevent crashes
-        // In production, consider throwing an exception instead
-        return 0;
+        // The first positive slot; 0 when none is positive (potentially malformed input).
+        return RLTensorOps.FirstPositiveIndex(action, NumOps.Zero);
     }
 
     private void EnsureStateExists(string stateKey)
