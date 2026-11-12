@@ -26,6 +26,8 @@ internal static class LinalgDispatch<T>
     private static Func<Tensor<T>, Tensor<T>, bool, Tensor<T>>? _choleskySolve;
     private static Func<Tensor<T>, bool, Tensor<T>>? _choleskyInverse;
     private static Func<Tensor<T>, Tensor<T>, Tensor<T>>? _solve;
+    private static Func<Tensor<T>, (Tensor<T>, Tensor<int>)>? _luFactor;
+    private static Func<Tensor<T>, Tensor<int>, Tensor<T>, Tensor<T>>? _luSolve;
 
     /// <summary>Cholesky factor with per-matrix failure info (<c>Linalg.CholeskyEx</c>).</summary>
     internal static (Tensor<T> L, Tensor<int> Info) CholeskyEx(Tensor<T> input, bool upper = false)
@@ -90,6 +92,16 @@ internal static class LinalgDispatch<T>
     /// <summary>Linear solve (<c>Linalg.Solve</c>).</summary>
     internal static Tensor<T> Solve(Tensor<T> a, Tensor<T> b)
         => (_solve ??= Bind<Func<Tensor<T>, Tensor<T>, Tensor<T>>>(nameof(Linalg.Solve), 2))(a, b);
+
+    /// <summary>Packed LU factor with its pivots (<c>Linalg.LuFactor</c>, LAPACK getrf form); the
+    /// diagonal of the packed factor is the diagonal of U.</summary>
+    internal static (Tensor<T> LU, Tensor<int> Pivots) LuFactor(Tensor<T> input)
+        => (_luFactor ??= Bind<Func<Tensor<T>, (Tensor<T>, Tensor<int>)>>(nameof(Linalg.LuFactor), 1))(input);
+
+    /// <summary>Solve <c>AX = B</c> from a <see cref="LuFactor"/> result (<c>Linalg.LuSolve</c>).</summary>
+    internal static Tensor<T> LuSolve(Tensor<T> lu, Tensor<int> pivots, Tensor<T> b)
+        => (_luSolve ??= Bind<Func<Tensor<T>, Tensor<int>, Tensor<T>, Tensor<T>>>(
+            nameof(Linalg.LuSolve), 3))(lu, pivots, b);
 
     private static TDelegate Bind<TDelegate>(string name, int parameterCount) where TDelegate : Delegate
     {
