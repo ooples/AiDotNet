@@ -22,12 +22,21 @@ public class MinMaxScaleTransform<T> : ITransform<T[], T[]>
     private readonly double _targetMax;
 
     /// <summary>
+    /// Creates a min-max scaler from a reference dataset that maps to the range [0, 1].
+    /// </summary>
+    /// <param name="referenceData">The reference data to compute min/max from.</param>
+    public MinMaxScaleTransform(T[][] referenceData)
+        : this(referenceData, 0.0, 1.0)
+    {
+    }
+
+    /// <summary>
     /// Creates a min-max scaler from a reference dataset.
     /// </summary>
     /// <param name="referenceData">The reference data to compute min/max from.</param>
-    /// <param name="targetMin">The minimum value of the target range. Default is 0.</param>
-    /// <param name="targetMax">The maximum value of the target range. Default is 1.</param>
-    public MinMaxScaleTransform(T[][] referenceData, double targetMin = 0.0, double targetMax = 1.0)
+    /// <param name="targetMin">The minimum value of the target range.</param>
+    /// <param name="targetMax">The maximum value of the target range.</param>
+    public MinMaxScaleTransform(T[][] referenceData, double targetMin, double targetMax)
     {
         if (referenceData is null)
         {
