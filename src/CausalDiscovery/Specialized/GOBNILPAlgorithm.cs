@@ -115,6 +115,9 @@ public class GOBNILPAlgorithm<T> : CausalDiscoveryBase<T>
         // inserting edges strongest-first and skipping any that would close a cycle — dropping the
         // weakest edge of each cycle keeps the higher-scoring parent choices. An already-acyclic
         // assignment (incl. the empty DAG, which is a valid ILP optimum) is preserved unchanged.
+        if (candidates.Count == 0)
+            return new Matrix<T>(d, d);
+
         // Strongest |weight| first; equal strengths keep their collection order.
         var strengths = Engine.TensorIndexSelect(Engine.TensorAbs(olsWeights).Reshape(new[] { d * d }),
             new Tensor<int>(candidates.ToArray(), new[] { candidates.Count }), 0);
