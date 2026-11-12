@@ -48,7 +48,7 @@ public sealed class ObliviousDecisionTreeChoiceFunctionTests
     [Fact]
     public void SoftmaxSigmoidOption_KeepsTheSmoothChoiceFunctions()
     {
-        var layer = new ObliviousDecisionTreeLayer<double>(inputDim: 3, depth: 1, outputDim: 1,
+        var layer = new ObliviousDecisionTreeLayer<double>(inputDim: 3, depth: 1, outputDim: 1, initScale: 0.01,
             choiceFunction: ObliviousTreeChoiceFunction.SoftmaxSigmoid);
         layer.SetParameters(new Vector<double>(new[] { 1.0, 0.5, -0.2, 2.5, 0.0, 1.0 }));
 
