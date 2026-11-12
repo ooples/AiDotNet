@@ -83,29 +83,19 @@ public class AssetGraphBuilder<T>
                 nameof(returns));
 
         int outSteps = steps - _volatilityLookback + 1;
-        var result = new Tensor<T>(new[] { outSteps, assets });
 
-        for (int a = 0; a < assets; a++)
-        {
-            for (int s = 0; s < outSteps; s++)
-            {
-                double mean = 0.0;
-                for (int k = 0; k < _volatilityLookback; k++)
-                    mean += NumOps.ToDouble(returns[((s + k) * assets) + a]);
-                mean /= _volatilityLookback;
-
-                double variance = 0.0;
-                for (int k = 0; k < _volatilityLookback; k++)
-                {
-                    double d = NumOps.ToDouble(returns[((s + k) * assets) + a]) - mean;
-                    variance += d * d;
-                }
-
-                result[(s * assets) + a] = NumOps.FromDouble(Math.Sqrt(variance / _volatilityLookback));
-            }
-        }
-
-        return result;
+        // Window k of every output step is rows [k, k + outSteps) of the panel: stack the lookback shifts as
+        // [lookback, outSteps, assets] and take the two-pass population standard deviation down the first axis.
+        var engine = AiDotNetEngine.Current;
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        var shifts = new Tensor<T>[_volatilityLookback];
+        for (int k = 0; k < _volatilityLookback; k++)
+            shifts[k] = engine.TensorNarrow(returns, 0, k, outSteps);
+        var windows = engine.TensorStack(shifts, 0);
+        var mean = engine.ReduceMean(windows, new[] { 0 }, true);
+        var centred = engine.TensorSubtract(windows, mean);
+        var variance = engine.ReduceMean(engine.TensorMultiply(centred, centred), new[] { 0 }, false);
+        return engine.TensorSqrt(variance);
     }
 
     /// <summary>
@@ -124,7 +114,7 @@ public class AssetGraphBuilder<T>
     /// never negative — it measures strength of dependence, not direction.
     /// </para>
     /// </remarks>
-    public double DistanceCorrelation(Vector<T> first, Vector<T> second)
+    public T DistanceCorrelation(Vector<T> first, Vector<T> second)
     {
         if (first == null) throw new ArgumentNullException(nameof(first));
         if (second == null) throw new ArgumentNullException(nameof(second));
@@ -134,80 +124,78 @@ public class AssetGraphBuilder<T>
         if (first.Length < 2)
             throw new ArgumentException("At least 2 observations are required.", nameof(first));
         int n = first.Length;
-        return DistanceCorrelationFromCentred(
-            DoubleCentredDistances(first, n), DoubleCentredDistances(second, n), n);
+
+        var engine = AiDotNetEngine.Current;
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        var columns = engine.TensorStack(new[] { Tensor<T>.FromVector(first), Tensor<T>.FromVector(second) }, 0);
+        var centred = DoubleCentredDistances(columns, n);                       // [2, n * n]
+        var dcov2 = MeanProducts(centred, centred, n);                          // [2, 2]
+        var dvar = DiagonalOf(dcov2, 2);
+        return DistanceCorrelationFromCentred(engine.TensorNarrow(engine.TensorNarrow(dcov2, 0, 0, 1), 1, 1, 1),
+            engine.TensorNarrow(dvar, 0, 0, 1), engine.TensorNarrow(dvar, 0, 1, 1)).AsSpan()[0];
     }
 
     /// <summary>
-    /// The distance correlation of two series whose double-centred distance matrices are already in
-    /// hand.
+    /// Distance correlation from the squared distance covariances: dcor = sqrt(max(0, dcov2)) / sqrt(sqrt(dvarX2) *
+    /// sqrt(dvarY2)), clamped to [0, 1], and 0 where the denominator is not positive.
     /// </summary>
-    /// <remarks>
-    /// Split out so a pairwise sweep can centre each column ONCE instead of once per partner. The
-    /// centring is the expensive half -- it is O(n^2) per call and allocates an n x n array -- so
-    /// doing it inside the pair loop repeated each column's work (assets - 1) times.
-    /// </remarks>
-    private static double DistanceCorrelationFromCentred(double[] a, double[] b, int n)
+    /// <param name="dcov2">Squared distance covariances [rows, cols].</param>
+    /// <param name="dvarRows">Squared distance variances of the row series, [rows] or [rows, 1].</param>
+    /// <param name="dvarCols">Squared distance variances of the column series, [cols] or [1, cols].</param>
+    private static Tensor<T> DistanceCorrelationFromCentred(Tensor<T> dcov2, Tensor<T> dvarRows, Tensor<T> dvarCols)
     {
-
-        double dcov2 = 0.0, dvarX2 = 0.0, dvarY2 = 0.0;
-        for (int i = 0; i < n * n; i++)
-        {
-            dcov2 += a[i] * b[i];
-            dvarX2 += a[i] * a[i];
-            dvarY2 += b[i] * b[i];
-        }
-
-        dcov2 /= n * n;
-        dvarX2 /= n * n;
-        dvarY2 /= n * n;
-
-        double denominator = Math.Sqrt(Math.Sqrt(dvarX2) * Math.Sqrt(dvarY2));
+        var engine = AiDotNetEngine.Current;
+        int rows = dcov2.Shape[0];
+        int cols = dcov2.Shape[1];
+        var rowScale = engine.Reshape(engine.TensorSqrt(dvarRows), new[] { rows, 1 });
+        var colScale = engine.Reshape(engine.TensorSqrt(dvarCols), new[] { 1, cols });
+        var denominator = engine.TensorSqrt(engine.TensorMultiply(rowScale, colScale));
 
         // A constant series has zero distance variance and no dependence structure to report, so the
         // correlation is 0 rather than a division by zero.
-        if (denominator <= 0.0) return 0.0;
-
-        double dcor = Math.Sqrt(Math.Max(0.0, dcov2)) / denominator;
+        var degenerate = engine.TensorLessEqual(denominator, engine.TensorZerosLike(denominator));
+        var safeDenominator = engine.TensorWhere(degenerate, engine.TensorFullLike(denominator, NumOps.One), denominator);
+        var dcor = engine.TensorDivide(engine.TensorSqrt(engine.TensorMax(dcov2, NumOps.Zero)), safeDenominator);
 
         // Clamp against floating-point drift a hair above 1, so callers can rely on the [0,1] range.
-        return Math.Min(1.0, Math.Max(0.0, dcor));
+        dcor = engine.TensorClamp(dcor, NumOps.Zero, NumOps.One);
+        return engine.TensorWhere(degenerate, engine.TensorZerosLike(dcor), dcor);
     }
 
-    private static double[] DoubleCentredDistances(Vector<T> series, int n)
+    /// <summary>
+    /// Double-centred pairwise distance matrices of a block of series, flattened row-major: for each series x,
+    /// A[i, j] = |x_i - x_j| - rowMean[i] - colMean[j] + grandMean.
+    /// </summary>
+    /// <param name="series">The series, one per row: [count, n].</param>
+    /// <param name="n">Observations per series.</param>
+    /// <returns>[count, n * n].</returns>
+    private static Tensor<T> DoubleCentredDistances(Tensor<T> series, int n)
     {
-        var d = new double[n * n];
-        for (int i = 0; i < n; i++)
-        {
-            double vi = NumOps.ToDouble(series[i]);
-            for (int j = 0; j < n; j++)
-                d[(i * n) + j] = Math.Abs(vi - NumOps.ToDouble(series[j]));
-        }
+        var engine = AiDotNetEngine.Current;
+        int count = series.Shape[0];
+        var distances = engine.TensorAbs(engine.TensorSubtract(
+            engine.Reshape(series, new[] { count, n, 1 }), engine.Reshape(series, new[] { count, 1, n })));
+        var rowMean = engine.ReduceMean(distances, new[] { 2 }, true);
+        var colMean = engine.ReduceMean(distances, new[] { 1 }, true);
+        var grand = engine.ReduceMean(distances, new[] { 1, 2 }, true);
+        var centred = engine.TensorAdd(
+            engine.TensorSubtract(engine.TensorSubtract(distances, rowMean), colMean), grand);
+        return engine.Reshape(centred, new[] { count, n * n });
+    }
 
-        var rowMean = new double[n];
-        var colMean = new double[n];
-        double grand = 0.0;
-        for (int i = 0; i < n; i++)
-        {
-            double sum = 0.0;
-            for (int j = 0; j < n; j++) sum += d[(i * n) + j];
-            rowMean[i] = sum / n;
-            grand += sum;
-        }
-        grand /= n * n;
+    /// <summary>Mean element-wise products of every row of <paramref name="a"/> with every row of <paramref name="b"/>.</summary>
+    private static Tensor<T> MeanProducts(Tensor<T> a, Tensor<T> b, int n)
+    {
+        var engine = AiDotNetEngine.Current;
+        return engine.TensorDivideScalar(
+            engine.TensorMatMul(a, engine.TensorTranspose(b)), NumOps.FromDouble((double)n * n));
+    }
 
-        for (int j = 0; j < n; j++)
-        {
-            double sum = 0.0;
-            for (int i = 0; i < n; i++) sum += d[(i * n) + j];
-            colMean[j] = sum / n;
-        }
-
-        for (int i = 0; i < n; i++)
-            for (int j = 0; j < n; j++)
-                d[(i * n) + j] = d[(i * n) + j] - rowMean[i] - colMean[j] + grand;
-
-        return d;
+    /// <summary>The diagonal of a square [size, size] tensor, as [size].</summary>
+    private static Tensor<T> DiagonalOf(Tensor<T> square, int size)
+    {
+        var engine = AiDotNetEngine.Current;
+        return engine.ReduceSum(engine.TensorMultiply(square, engine.TensorEye<T>(size)), new[] { 1 }, false);
     }
 
     /// <summary>
@@ -225,13 +213,6 @@ public class AssetGraphBuilder<T>
         int steps = panel.Shape[0];
         int assets = panel.Shape[1];
 
-        var columns = new Vector<T>[assets];
-        for (int a = 0; a < assets; a++)
-        {
-            var column = new Vector<T>(steps);
-            for (int s = 0; s < steps; s++) column[s] = panel[(s * assets) + a];
-            columns[a] = column;
-        }
         // Each column is double-centred ONCE instead of once per partner. That loop called
         // DistanceCorrelation for every pair, and each of those calls centred BOTH of its arguments,
         // so every column paid the O(steps^2) centring and its n x n allocation (assets - 1) times.
@@ -239,53 +220,58 @@ public class AssetGraphBuilder<T>
         // BOUNDED, because the cache is the trade: holding every column's centred matrix costs
         // assets * steps^2 * 8 bytes, which at 500 assets over a 250-step panel is about 250 MB and
         // grows with the paper's ~5,000-firm scale. Columns are processed in blocks sized to a fixed
-        // memory budget, so only one block plus one partner column is resident. Every pair is still
-        // visited exactly once, and each column is centred at most (blocks) times rather than
-        // (assets - 1) times.
+        // memory budget, so only a row block and a column block of centred matrices are resident at once;
+        // each block pair's covariances come from one matrix product.
         const long CentringBudgetBytes = 64L * 1024 * 1024;
         long perColumnBytes = (long)steps * steps * sizeof(double);
         int blockSize = perColumnBytes > 0
             ? (int)Math.Max(1, Math.Min(assets, CentringBudgetBytes / perColumnBytes))
             : assets;
 
-        var result = new Tensor<T>(new[] { assets, assets });
-        for (int i = 0; i < assets; i++) result[(i * assets) + i] = NumOps.One;   // a series is perfectly dependent on itself
+        var engine = AiDotNetEngine.Current;
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        var series = engine.TensorTranspose(panel);                              // [assets, steps]
 
+        // Pass 1: each column's squared distance variance, one block of centred matrices at a time.
+        var variances = new List<Tensor<T>>();
         for (int blockStart = 0; blockStart < assets; blockStart += blockSize)
         {
-            int blockEnd = Math.Min(assets, blockStart + blockSize);
-
-            var block = new double[blockEnd - blockStart][];
-            for (int i = blockStart; i < blockEnd; i++)
-                block[i - blockStart] = DoubleCentredDistances(columns[i], steps);
-
-            // Pairs inside the block: both centred matrices are already resident.
-            for (int i = blockStart; i < blockEnd; i++)
-            {
-                for (int j = i + 1; j < blockEnd; j++)
-                {
-                    double dcor = DistanceCorrelationFromCentred(
-                        block[i - blockStart], block[j - blockStart], steps);
-                    result[(i * assets) + j] = NumOps.FromDouble(dcor);
-                    result[(j * assets) + i] = NumOps.FromDouble(dcor);
-                }
-            }
-
-            // Pairs crossing into later blocks: the partner is centred once and reused against the
-            // whole resident block, so it is centred once per block rather than once per pair.
-            for (int j = blockEnd; j < assets; j++)
-            {
-                var partner = DoubleCentredDistances(columns[j], steps);
-                for (int i = blockStart; i < blockEnd; i++)
-                {
-                    double dcor = DistanceCorrelationFromCentred(block[i - blockStart], partner, steps);
-                    result[(i * assets) + j] = NumOps.FromDouble(dcor);
-                    result[(j * assets) + i] = NumOps.FromDouble(dcor);
-                }
-            }
+            int count = Math.Min(assets, blockStart + blockSize) - blockStart;
+            var centred = DoubleCentredDistances(engine.TensorNarrow(series, 0, blockStart, count), steps);
+            variances.Add(engine.TensorDivideScalar(
+                engine.ReduceSum(engine.TensorMultiply(centred, centred), new[] { 1 }, false),
+                NumOps.FromDouble((double)steps * steps)));
         }
 
-        return result;
+        var dvar = engine.TensorConcatenate(variances.ToArray(), 0);              // [assets]
+
+        // Pass 2: the squared distance covariance of every pair, a block of rows against a block of columns at a
+        // time, so at most two blocks of centred matrices are resident.
+        var rowBlocks = new List<Tensor<T>>();
+        for (int rowStart = 0; rowStart < assets; rowStart += blockSize)
+        {
+            int rowCount = Math.Min(assets, rowStart + blockSize) - rowStart;
+            var rowCentred = DoubleCentredDistances(engine.TensorNarrow(series, 0, rowStart, rowCount), steps);
+            var columnBlocks = new List<Tensor<T>>();
+            for (int colStart = 0; colStart < assets; colStart += blockSize)
+            {
+                int colCount = Math.Min(assets, colStart + blockSize) - colStart;
+                var colCentred = colStart == rowStart
+                    ? rowCentred
+                    : DoubleCentredDistances(engine.TensorNarrow(series, 0, colStart, colCount), steps);
+                columnBlocks.Add(DistanceCorrelationFromCentred(
+                    MeanProducts(rowCentred, colCentred, steps),
+                    engine.TensorNarrow(dvar, 0, rowStart, rowCount),
+                    engine.TensorNarrow(dvar, 0, colStart, colCount)));
+            }
+
+            rowBlocks.Add(engine.TensorConcatenate(columnBlocks.ToArray(), 1));
+        }
+
+        // A series is perfectly dependent on itself.
+        var dcor = engine.TensorConcatenate(rowBlocks.ToArray(), 0);
+        var identity = engine.TensorEye<T>(assets);
+        return engine.TensorWhere(identity, identity, dcor);
     }
 
     /// <summary>
@@ -454,19 +440,32 @@ public class AssetGraphBuilder<T>
         if (nodeCount <= 0)
             throw new ArgumentOutOfRangeException(nameof(nodeCount), nodeCount, "nodeCount must be positive.");
 
-        var mask = new Tensor<T>(new[] { nodeCount, nodeCount });
-        for (int i = 0; i < nodeCount; i++) mask[(i * nodeCount) + i] = NumOps.One;
-
+        var rows = new int[edges.Count * 2];
+        var cols = new int[edges.Count * 2];
+        int written = 0;
         foreach (var e in edges)
         {
             if (e.Source < 0 || e.Source >= nodeCount || e.Target < 0 || e.Target >= nodeCount)
                 throw new ArgumentException(
                     $"Edge ({e.Source}, {e.Target}) is outside a {nodeCount}-node graph.", nameof(edges));
 
-            mask[(e.Source * nodeCount) + e.Target] = NumOps.One;
-            mask[(e.Target * nodeCount) + e.Source] = NumOps.One;
+            rows[written] = e.Source;
+            cols[written] = e.Target;
+            written++;
+            rows[written] = e.Target;
+            cols[written] = e.Source;
+            written++;
         }
 
-        return mask;
+        // Self-loops on the diagonal plus both directions of every edge.
+        var engine = AiDotNetEngine.Current;
+        var mask = engine.TensorEye<T>(nodeCount);
+        if (written == 0)
+            return mask;
+
+        var rowIndex = new Tensor<int>(new[] { written }, new Vector<int>(rows));
+        var colIndex = new Tensor<int>(new[] { written }, new Vector<int>(cols));
+        var ones = engine.TensorFullLike(new Tensor<T>(new[] { written }), NumOps.One);
+        return engine.TensorIndexPut(mask, new[] { rowIndex, colIndex }, ones, false);
     }
 }
