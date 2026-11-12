@@ -25,14 +25,14 @@ public class HaralickSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IFi
     private readonly int _nFeaturesToSelect;
     private readonly int _nLevels;
 
-    private double[]? _textureScores;
+    private Vector<T>? _textureScores;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public int NLevels => _nLevels;
-    public double[]? TextureScores => _textureScores;
+    public Vector<T>? TextureScores => _textureScores;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -58,93 +58,37 @@ public class HaralickSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IFi
         int n = data.Rows;
         int p = data.Columns;
 
-        var X = new double[n, p];
-        for (int i = 0; i < n; i++)
-            for (int j = 0; j < p; j++)
-                X[i, j] = NumOps.ToDouble(data[i, j]);
-
-        _textureScores = new double[p];
-
-        for (int j = 0; j < p; j++)
+        var engine = Engine;
+        var x = Tensor<T>.FromMatrix(data);
+        var scores = PreprocessingTensorOps.Filled(new[] { p }, NumOps.Zero);
+        if (n > 0 && p > 0)
         {
-            var col = new double[n];
-            for (int i = 0; i < n; i++)
-                col[i] = X[i, j];
+            // Entropy (bits) of the equal-width level histogram; constant columns contribute 0
+            var levels = PreprocessingTensorOps.EqualWidthBinOneHot(x, _nLevels, out var varying);
+            var counts = engine.TensorTranspose(
+                engine.Reshape(engine.ReduceSum(levels, new[] { 0 }, false), new[] { p, _nLevels }));
+            var entropy = engine.TensorMultiply(SelectorTensorOps.ColumnEntropyBits(counts, 0, 0), varying);
+            scores = entropy;
 
-            // Compute Haralick-inspired statistics
-            double contrast = ComputeContrast(col, n);
-            double homogeneity = ComputeHomogeneity(col, n);
-            double entropy = ComputeEntropy(col, n);
-
-            // Combine into overall texture score
-            _textureScores[j] = contrast + homogeneity + entropy;
-        }
-
-        int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = Enumerable.Range(0, p)
-            .OrderByDescending(j => _textureScores[j])
-            .Take(numToSelect)
-            .OrderBy(x => x)
-            .ToArray();
-
-        IsFitted = true;
-    }
-
-    private double ComputeContrast(double[] values, int n)
-    {
-        if (n < 2) return 0;
-
-        // Contrast measures local variation
-        double contrast = 0;
-        for (int i = 1; i < n; i++)
-        {
-            double diff = values[i] - values[i - 1];
-            contrast += diff * diff;
-        }
-
-        return contrast / (n - 1);
-    }
-
-    private double ComputeHomogeneity(double[] values, int n)
-    {
-        if (n < 2) return 0;
-
-        // Homogeneity measures smoothness
-        double homogeneity = 0;
-        for (int i = 1; i < n; i++)
-        {
-            double diff = Math.Abs(values[i] - values[i - 1]);
-            homogeneity += 1.0 / (1 + diff);
-        }
-
-        return homogeneity / (n - 1);
-    }
-
-    private double ComputeEntropy(double[] values, int n)
-    {
-        double minVal = values.Min(), maxVal = values.Max();
-        if (Math.Abs(maxVal - minVal) < 1e-10) return 0;
-
-        double binWidth = (maxVal - minVal) / _nLevels + 1e-10;
-        var counts = new int[_nLevels];
-
-        for (int i = 0; i < n; i++)
-        {
-            int bin = Math.Min((int)((values[i] - minVal) / binWidth), _nLevels - 1);
-            counts[bin]++;
-        }
-
-        double entropy = 0;
-        for (int b = 0; b < _nLevels; b++)
-        {
-            if (counts[b] > 0)
+            if (n >= 2)
             {
-                double p = (double)counts[b] / n;
-                entropy -= p * Math.Log(p) / Math.Log(2);
+                // Contrast (mean squared step) and homogeneity (mean 1 / (1 + |step|)) between consecutive rows
+                var steps = engine.TensorDiff(x, 1, 0);
+                var contrast = engine.TensorDivideScalar(
+                    SelectorTensorOps.ColumnSumOfSquares(steps), NumOps.FromDouble(n - 1));
+                var similarity = engine.TensorDivide(
+                    PreprocessingTensorOps.Filled(new[] { n - 1, p }, NumOps.One),
+                    engine.TensorAddScalar(engine.TensorAbs(steps), NumOps.One));
+                var homogeneity = engine.TensorDivideScalar(
+                    engine.ReduceSum(similarity, new[] { 0 }, false), NumOps.FromDouble(n - 1));
+                scores = engine.TensorAdd(engine.TensorAdd(contrast, homogeneity), entropy);
             }
         }
 
-        return entropy;
+        _textureScores = scores.ToVector();
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(scores, Math.Min(_nFeaturesToSelect, p));
+
+        IsFitted = true;
     }
 
     public new Matrix<T> FitTransform(Matrix<T> data)
@@ -159,15 +103,7 @@ public class HaralickSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IFi
         if (_selectedIndices is null)
             throw new InvalidOperationException("HaralickSelector has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />
