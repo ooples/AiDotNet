@@ -49,6 +49,12 @@ public class ProbabilityCalibrator<T>
     private List<(T x, T y)>? _isotonicPoints;
 
     /// <summary>
+    /// The isotonic fit's (score, fitted value) points, one per calibration sample in fit order (scores ascending,
+    /// NaN first, ties in input order); null before an isotonic fit.
+    /// </summary>
+    internal IReadOnlyList<(T x, T y)>? IsotonicPoints => _isotonicPoints;
+
+    /// <summary>
     /// Temperature parameter for temperature scaling.
     /// </summary>
     private T _temperature;
@@ -435,7 +441,7 @@ public class ProbabilityCalibrator<T>
 
     #region Isotonic Regression
 
-    private void FitIsotonicRegression(T[] scores, T[] labels)
+    internal void FitIsotonicRegression(T[] scores, T[] labels)
     {
         // Pool Adjacent Violators Algorithm (PAVA) - uses double internally for numerical stability
         var sorted = scores.Zip(labels, (s, l) => (score: s, label: NumOps.ToDouble(l)))

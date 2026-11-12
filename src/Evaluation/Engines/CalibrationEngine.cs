@@ -164,56 +164,39 @@ public class CalibrationEngine<T>
     /// <summary>
     /// Applies isotonic regression calibration.
     /// </summary>
+    /// <remarks>
+    /// Fits the least-squares non-decreasing sequence to the 0/1 labels (actual == 1) ordered by probability, using
+    /// the pool-adjacent-violators fit shared with <see cref="Calibration.ProbabilityCalibrator{T}"/>, and returns the
+    /// fitted value of each sample in input order (scikit-learn's <c>IsotonicRegression().fit_transform</c> for
+    /// distinct probabilities).
+    /// </remarks>
     public T[] IsotonicCalibration(T[] probabilities, T[] actuals)
     {
         int n = probabilities.Length;
+        if (actuals.Length < n)
+            throw new IndexOutOfRangeException("Index was outside the bounds of the array.");
+        if (n == 0) return [];
 
-        // Sort by predicted probability
-        var indexed = new (double prob, double actual, int idx)[n];
+        var engine = AiDotNetEngine.Current;
+        using var noGrad = new NoGradScope<T>();
+        var labels = EvaluationTensorOps<T>.EqualMask(new Tensor<T>(actuals, new[] { actuals.Length }), NumOps.One).ToArray();
+
+        var calibrator = new Calibration.ProbabilityCalibrator<T>();
+        calibrator.FitIsotonicRegression(probabilities, labels);
+        var points = calibrator.IsotonicPoints;
+        if (points is null || points.Count != n)
+            throw new InvalidOperationException("Isotonic fit did not produce one point per sample.");
+
+        // The fit's points are in sorted order (NaN first, ties in input order); scatter them back to input order
+        var fitted = new T[n];
         for (int i = 0; i < n; i++)
         {
-            indexed[i] = (NumOps.ToDouble(probabilities[i]), NumOps.Compare(actuals[i], NumOps.One) == 0 ? 1 : 0, i);
-        }
-        Array.Sort(indexed, (a, b) => a.prob.CompareTo(b.prob));
-
-        // Pool Adjacent Violators Algorithm (PAVA)
-        var calibratedValues = new double[n];
-        var weights = new int[n];
-        for (int i = 0; i < n; i++)
-        {
-            calibratedValues[i] = indexed[i].actual;
-            weights[i] = 1;
+            fitted[i] = points[i].y;
         }
 
-        // PAVA: merge adjacent violators
-        bool changed = true;
-        while (changed)
-        {
-            changed = false;
-            for (int i = 0; i < n - 1; i++)
-            {
-                if (calibratedValues[i] > calibratedValues[i + 1])
-                {
-                    // Merge
-                    double newValue = (calibratedValues[i] * weights[i] + calibratedValues[i + 1] * weights[i + 1])
-                                     / (weights[i] + weights[i + 1]);
-                    calibratedValues[i] = newValue;
-                    calibratedValues[i + 1] = newValue;
-                    weights[i] = weights[i] + weights[i + 1];
-                    weights[i + 1] = weights[i];
-                    changed = true;
-                }
-            }
-        }
-
-        // Map back to original indices
-        var result = new T[n];
-        for (int i = 0; i < n; i++)
-        {
-            result[indexed[i].idx] = NumOps.FromDouble(calibratedValues[i]);
-        }
-
-        return result;
+        var order = EvaluationTensorOps<T>.ArgsortNaNFirst(new Tensor<T>(probabilities, new[] { n }));
+        var inverse = engine.TensorArgsort(order);
+        return engine.TensorGather(new Tensor<T>(fitted, new[] { n }), inverse, 0).ToArray();
     }
 }
 

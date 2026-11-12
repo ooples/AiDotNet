@@ -435,6 +435,22 @@ internal static class EvaluationTensorOps<T>
     }
 
     /// <summary>
+    /// The stable sort permutation for the <c>OrderBy</c> order of doubles: NaN first (in input order), then
+    /// ascending with ties in input order.
+    /// </summary>
+    internal static Tensor<int> ArgsortNaNFirst(Tensor<T> values)
+    {
+        using var noGrad = new NoGradScope<T>();
+        var engine = AiDotNetEngine.Current;
+        var order = engine.TensorSort(values).Indices;
+        int n = values.Length;
+        int nanCount = Count(NanMask(values));
+        if (nanCount == 0 || nanCount == n) return order;
+        return engine.TensorConcatenate(
+            new[] { engine.TensorNarrow(order, 0, n - nanCount, nanCount), engine.TensorNarrow(order, 0, 0, n - nanCount) }, 0);
+    }
+
+    /// <summary>
     /// Concatenates groups into one rank-1 tensor and returns, for each pooled element, the index of its group.
     /// </summary>
     internal static (Tensor<T> Pooled, Tensor<int> GroupIndex, Tensor<T> Sizes) PoolGroups(T[][] groups)

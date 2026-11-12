@@ -1,3 +1,4 @@
+using AiDotNet.Evaluation.Engines;
 using AiDotNet.Evaluation.Metrics.Classification;
 using AiDotNet.Evaluation.Statistics;
 using Xunit;
@@ -62,5 +63,39 @@ public class EvaluationTieReferenceTests
         Assert.Equal(0.17971249487899985, results[(0, 2)], 9);
         Assert.Equal(0.17971249487899985, results[(1, 2)], 9);
         Assert.Equal(3, results.Count);
+    }
+
+    [Fact]
+    public void IsotonicCalibration_RunOfThreeViolators_MatchesSklearnPav()
+    {
+        // scikit-learn 1.9.1:
+        // IsotonicRegression().fit_transform([0.1, 0.2, 0.3, 0.4, 0.5, 0.6], [1, 0, 0, 1, 0, 1])
+        // == [1/3, 1/3, 1/3, 0.5, 0.5, 1.0]. The first three samples form one pooled block of three.
+        var probabilities = new[] { 0.1, 0.2, 0.3, 0.4, 0.5, 0.6 };
+        var actuals = new[] { 1.0, 0.0, 0.0, 1.0, 0.0, 1.0 };
+
+        var calibrated = new CalibrationEngine<double>().IsotonicCalibration(probabilities, actuals);
+
+        var expected = new[] { 1.0 / 3.0, 1.0 / 3.0, 1.0 / 3.0, 0.5, 0.5, 1.0 };
+        Assert.Equal(expected.Length, calibrated.Length);
+        for (int i = 0; i < expected.Length; i++)
+            Assert.Equal(expected[i], calibrated[i], 12);
+    }
+
+    [Fact]
+    public void IsotonicCalibration_UnsortedInput_ReturnsFitInInputOrder()
+    {
+        // scikit-learn 1.9.1:
+        // IsotonicRegression().fit_transform([0.6, 0.1, 0.4, 0.2, 0.5, 0.3], [1, 0, 0, 1, 0, 1])
+        // == [1.0, 0.0, 0.5, 0.5, 0.5, 0.5] (sorted labels 0, 1, 1, 0, 0, 1 pool the middle four to 0.5).
+        var probabilities = new[] { 0.6, 0.1, 0.4, 0.2, 0.5, 0.3 };
+        var actuals = new[] { 1.0, 0.0, 0.0, 1.0, 0.0, 1.0 };
+
+        var calibrated = new CalibrationEngine<double>().IsotonicCalibration(probabilities, actuals);
+
+        var expected = new[] { 1.0, 0.0, 0.5, 0.5, 0.5, 0.5 };
+        Assert.Equal(expected.Length, calibrated.Length);
+        for (int i = 0; i < expected.Length; i++)
+            Assert.Equal(expected[i], calibrated[i], 12);
     }
 }
