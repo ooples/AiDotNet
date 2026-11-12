@@ -64,6 +64,7 @@ namespace AiDotNet.ContinualLearning;
 public class ProgressiveNeuralNetworks<T> : IContinualLearningStrategy<T>
 {
     private readonly INumericOperations<T> _numOps;
+    private static IEngine Engine => AiDotNetEngine.Current;
     private readonly List<ColumnInfo> _columns;
     private readonly bool _useLateralConnections;
     private double _lambda;
@@ -183,9 +184,10 @@ public class ProgressiveNeuralNetworks<T> : IContinualLearningStrategy<T>
         var frozenParamCount = GetFrozenParameterCount();
 
         // Zero gradients for frozen parameters
-        for (int i = 0; i < Math.Min(frozenParamCount, gradients.Length); i++)
+        int frozenCount = Math.Min(frozenParamCount, gradients.Length);
+        if (frozenCount > 0)
         {
-            gradients[i] = _numOps.Zero;
+            gradients.AsWritableSpan().Slice(0, frozenCount).Fill(_numOps.Zero);
         }
 
         return gradients;
@@ -249,12 +251,23 @@ public class ProgressiveNeuralNetworks<T> : IContinualLearningStrategy<T>
             var activation = previousActivations[c];
             var weights = lateralWeights[c];
 
-            // Simple weighted sum (in practice, this would be a matrix multiply)
-            for (int i = 0; i < Math.Min(outputSize, activation.Length); i++)
+            // Simple weighted sum (in practice, this would be a matrix multiply):
+            // result[i] += h[i] * w[i mod |w|] for i < min(outputSize, |h|)
+            int count = Math.Min(outputSize, activation.Length);
+            if (count <= 0)
             {
-                var weighted = _numOps.Multiply(activation[i], weights[i % weights.Length]);
-                result[i] = _numOps.Add(result[i], weighted);
+                continue;
             }
+
+            int weightCount = weights.Length;
+            int repeats = (count + weightCount - 1) / weightCount;
+            var h = Engine.TensorSlice(activation.Reshape(activation.Length), new[] { 0 }, new[] { count });
+            var cyclicWeights = Engine.TensorSlice(
+                Engine.TensorTile(weights.Reshape(weightCount), new[] { repeats }), new[] { 0 }, new[] { count });
+            var resultHead = count == result.Length
+                ? result.AsTensor()
+                : Tensor<T>.FromMemory(result.AsWritableMemory().Slice(0, count), new[] { count });
+            Engine.TensorAddInPlace(resultHead, Engine.TensorMultiply(h, cyclicWeights));
         }
 
         return new Tensor<T>([1, outputSize], result);
