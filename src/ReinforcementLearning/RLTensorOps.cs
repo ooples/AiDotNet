@@ -300,9 +300,25 @@ internal static class RLTensorOps
         }
 
         var ops = MathHelper.GetNumericOperations<T>();
-        T zero = ops.Zero;
-        T one = ops.One;
-        return new Vector<T>(Enumerable.Range(0, count).Select(_ => MathHelper.GetNormalRandom(zero, one, random)));
+        return NormalRandom(random, count, ops.Zero, ops.One);
+    }
+
+    /// <summary>
+    /// <paramref name="count"/> draws of <c>MathHelper.GetNormalRandom(mean, stdDev, random)</c>, in index order.
+    /// </summary>
+    internal static Vector<T> NormalRandom<T>(Random random, int count, T mean, T stdDev)
+    {
+        if (random is null)
+        {
+            throw new ArgumentNullException(nameof(random));
+        }
+
+        if (count <= 0)
+        {
+            return new Vector<T>(0);
+        }
+
+        return new Vector<T>(Enumerable.Range(0, count).Select(_ => MathHelper.GetNormalRandom(mean, stdDev, random)));
     }
 
     /// <summary>

@@ -233,13 +233,10 @@ public partial class TD3Agent<T> : DeepReinforcementLearningAgentBase<T>, IGradi
 
         if (training)
         {
-            // Add exploration noise during training
-            for (int i = 0; i < action.Length; i++)
-            {
-                var noise = MathHelper.GetNormalRandom<T>(_numOps.Zero, _numOps.FromDouble(_options.ExplorationNoise), _random);
-                action[i] = _numOps.Add(action[i], noise);
-                action[i] = MathHelper.Clamp<T>(action[i], _numOps.FromDouble(-1), _numOps.FromDouble(1));
-            }
+            // Add exploration noise during training: clip(a + N(0, sigma), -1, 1), one draw per dimension in order
+            var engine = AiDotNetEngine.Current;
+            var noise = RLTensorOps.NormalRandom(_random, action.Length, _numOps.Zero, _numOps.FromDouble(_options.ExplorationNoise));
+            action = engine.Clamp(engine.Add(action, noise), _numOps.FromDouble(-1), _numOps.FromDouble(1));
         }
 
         return action;
@@ -271,10 +268,8 @@ public partial class TD3Agent<T> : DeepReinforcementLearningAgentBase<T>, IGradi
 
         var action = SelectAction(state, training: true);
 
-        T reward = NumOps.Zero;
-        for (int i = 0; i < target.Length; i++)
-            reward = NumOps.Add(reward, target[i]);
-        reward = NumOps.Divide(reward, NumOps.FromDouble(target.Length));
+        // mean of the supervised target
+        T reward = NumOps.Divide(AiDotNetEngine.Current.Sum(target), NumOps.FromDouble(target.Length));
 
         // Treat this one-shot supervised transition as terminal: nextState is fabricated as `state`, so
         // done: false would add a TD3 bootstrap term from the target critics and optimize against an
@@ -321,14 +316,11 @@ public partial class TD3Agent<T> : DeepReinforcementLearningAgentBase<T>, IGradi
         // Target action with policy smoothing: a' = clip(mu'(s') + clip(N(0,sigma), -c, c), -1, 1).
         // Clipped double-Q target: y = r + gamma*(1-done)*min(Q'1(s',a'), Q'2(s',a')). Regress both
         // critics toward y.
-        var saInputs = new Tensor<T>([n, saDim]);
-        var yTargets = new Tensor<T>([n, 1]);
-        for (int i = 0; i < n; i++)
+        // Validate replay-sample shapes before any tensor write/index: a malformed transition
+        // (wrong State/Action/NextState length) would otherwise crash tensor construction or
+        // train the twin critics on corrupted inputs.
+        foreach (var exp in batch)
         {
-            var exp = batch[i];
-            // Validate replay-sample shapes before any tensor write/index: a malformed transition
-            // (wrong State/Action/NextState length) would otherwise crash tensor construction or
-            // train the twin critics on corrupted inputs.
             if (exp.State.Length != stateDim || exp.NextState.Length != stateDim || exp.Action.Length != actionDim)
             {
                 throw new InvalidOperationException(
@@ -336,27 +328,33 @@ public partial class TD3Agent<T> : DeepReinforcementLearningAgentBase<T>, IGradi
                     $"NextState={stateDim}, Action={actionDim} but got State={exp.State.Length}, " +
                     $"NextState={exp.NextState.Length}, Action={exp.Action.Length}.");
             }
-            var nextA = _targetActorNetwork.Predict(Tensor<T>.FromVector(exp.NextState)).ToVector();
-            for (int k = 0; k < actionDim; k++)
-            {
-                T noise = MathHelper.GetNormalRandom<T>(_numOps.Zero, _numOps.FromDouble(_options.TargetPolicyNoise), _random);
-                noise = MathHelper.Clamp<T>(noise,
-                    _numOps.FromDouble(-_options.TargetNoiseClip), _numOps.FromDouble(_options.TargetNoiseClip));
-                nextA[k] = MathHelper.Clamp<T>(_numOps.Add(nextA[k], noise),
-                    _numOps.FromDouble(-1), _numOps.FromDouble(1));
-            }
-            var nextSA = Tensor<T>.FromVector(ConcatenateStateAction(exp.NextState, nextA));
-            T q1n = _targetCritic1Network.Predict(nextSA).ToVector()[0];
-            T q2n = _targetCritic2Network.Predict(nextSA).ToVector()[0];
-            T minN = _numOps.LessThan(q1n, q2n) ? q1n : q2n;
-
-            T y = exp.Reward;
-            if (!exp.Done) y = _numOps.Add(y, _numOps.Multiply(gamma, minN));
-
-            var saVec = ConcatenateStateAction(exp.State, exp.Action);
-            for (int j = 0; j < saDim; j++) saInputs[i, j] = saVec[j];
-            yTargets[i, 0] = y;
         }
+
+        // Target policy smoothing for the whole batch; the smoothing noise is drawn sample by sample, dimension by
+        // dimension, as before.
+        var engine = AiDotNetEngine.Current;
+        var nextStates = RLTensorOps.Batch(batch.Select(exp => exp.NextState), stateDim);
+        var targetActions = _targetActorNetwork.Predict(nextStates);
+        T noiseClip = _numOps.FromDouble(_options.TargetNoiseClip);
+        var smoothing = engine.Clamp(
+            RLTensorOps.NormalRandom(_random, n * actionDim, _numOps.Zero, _numOps.FromDouble(_options.TargetPolicyNoise)),
+            _numOps.Negate(noiseClip), noiseClip);
+        var smoothedFlat = engine.Clamp(
+            engine.Add(targetActions.ToVector().GetSubVector(0, n * actionDim), smoothing), _numOps.FromDouble(-1), _numOps.FromDouble(1));
+        var nextActions = RLTensorOps.Rows(new Tensor<T>([n, actionDim], smoothedFlat), n);
+        var nextSA = RLTensorOps.Batch(batch.Select((exp, row) => ConcatenateStateAction(exp.NextState, nextActions[row])), saDim);
+
+        // Clipped double-Q: min(Q'1, Q'2) (Q'2 when the first is not strictly smaller)
+        var q1n = RLTensorOps.FirstColumn(_targetCritic1Network.Predict(nextSA), n).AsTensor();
+        var q2n = RLTensorOps.FirstColumn(_targetCritic2Network.Predict(nextSA), n).AsTensor();
+        var minN = engine.TensorWhere(engine.TensorLessThan(q1n, q2n), q1n, q2n).ToVector();
+
+        var rewards = Vector<T>.FromEnumerable(batch.Select(exp => exp.Reward));
+        var done = batch.Select(exp => exp.Done).ToArray();
+        var y = RLTensorOps.TdTargets(rewards, minN, done, gamma);
+
+        var saInputs = RLTensorOps.Batch(batch.Select(exp => ConcatenateStateAction(exp.State, exp.Action)), saDim);
+        var yTargets = new Tensor<T>([n, 1], y);
         _critic1Network.Train(saInputs, yTargets);
         _critic2Network.Train(saInputs, yTargets);
         T criticLoss = _numOps.Divide(
@@ -369,20 +367,18 @@ public partial class TD3Agent<T> : DeepReinforcementLearningAgentBase<T>, IGradi
         // a + step·∇a Q1 makes its parameters move along ∇θ mu in the gradient-ascent direction.
         if (_updateCount % _options.PolicyUpdateFrequency == 0)
         {
-            var actorInputs = new Tensor<T>([n, stateDim]);
-            var actorTargets = new Tensor<T>([n, actionDim]);
             T step = _numOps.FromDouble(ActorPolicyGradientStep);
-            for (int i = 0; i < n; i++)
-            {
-                var s = batch[i].State;
-                var a = _actorNetwork.Predict(Tensor<T>.FromVector(s)).ToVector();
-                var g = FiniteDiffActionGradient(_critic1Network, s, a);
-                for (int j = 0; j < stateDim; j++) actorInputs[i, j] = s[j];
-                for (int k = 0; k < actionDim; k++)
-                    actorTargets[i, k] = MathHelper.Clamp<T>(
-                        _numOps.Add(a[k], _numOps.Multiply(step, g[k])),
-                        _numOps.FromDouble(-1), _numOps.FromDouble(1));
-            }
+            T lowerBound = _numOps.FromDouble(-1);
+            T upperBound = _numOps.FromDouble(1);
+            var actorInputs = RLTensorOps.Batch(batch.Select(exp => exp.State), stateDim);
+            var currentActions = RLTensorOps.Rows(_actorNetwork.Predict(actorInputs), n);
+
+            // clip(a + step * dQ1/da, -1, 1) per sample
+            var actorTargets = RLTensorOps.Batch(
+                batch.Select((exp, row) => engine.Clamp(
+                    engine.Add(currentActions[row], engine.Multiply(FiniteDiffActionGradient(_critic1Network, exp.State, currentActions[row]), step)),
+                    lowerBound, upperBound)),
+                actionDim);
             _actorNetwork.Train(actorInputs, actorTargets);
 
             // Update target networks with soft updates (delayed, with the policy)
@@ -401,20 +397,22 @@ public partial class TD3Agent<T> : DeepReinforcementLearningAgentBase<T>, IGradi
     /// </summary>
     private Vector<T> FiniteDiffActionGradient(INeuralNetwork<T> critic, Vector<T> state, Vector<T> action)
     {
-        var grad = new Vector<T>(action.Length);
+        // dQ/da_i = (Q(s, a + eps e_i) - Q(s, a - eps e_i)) / (2 eps), all 2 |a| probes in one batched forward
+        var engine = AiDotNetEngine.Current;
+        int width = action.Length;
+        if (width == 0)
+        {
+            return new Vector<T>(0);
+        }
+
         T eps = _numOps.FromDouble(FiniteDifferenceEpsilon);
         T twoEps = _numOps.FromDouble(2.0 * FiniteDifferenceEpsilon);
-        for (int i = 0; i < action.Length; i++)
-        {
-            var aPlus = action.Clone();
-            var aMinus = action.Clone();
-            aPlus[i] = _numOps.Add(action[i], eps);
-            aMinus[i] = _numOps.Subtract(action[i], eps);
-            T qPlus = critic.Predict(Tensor<T>.FromVector(ConcatenateStateAction(state, aPlus))).ToVector()[0];
-            T qMinus = critic.Predict(Tensor<T>.FromVector(ConcatenateStateAction(state, aMinus))).ToVector()[0];
-            grad[i] = _numOps.Divide(_numOps.Subtract(qPlus, qMinus), twoEps);
-        }
-        return grad;
+        var perturbations = Enumerable.Range(0, width).Select(dim => engine.Multiply(RLTensorOps.OneHot<T>(width, dim), eps)).ToList();
+        var probes = perturbations.Select(delta => ConcatenateStateAction(state, engine.Add(action, delta)))
+            .Concat(perturbations.Select(delta => ConcatenateStateAction(state, engine.Subtract(action, delta))))
+            .ToList();
+        var q = RLTensorOps.FirstColumn(critic.Predict(RLTensorOps.StackRows(probes)), 2 * width);
+        return engine.Divide(engine.Subtract(q.GetSubVector(0, width), q.GetSubVector(width, width)), twoEps);
     }
 
     private void SoftUpdateTargetNetworks()
