@@ -147,22 +147,7 @@ public partial class AveragingDetector<T> : AnomalyDetectorBase<T>
 
     private Vector<T> NormalizeScores(Vector<T> scores, T trainMin, T trainMax)
     {
-        T range = NumOps.Subtract(trainMax, trainMin);
-        T eps = NumOps.FromDouble(1e-10);
-        T half = NumOps.FromDouble(0.5);
-
-        if (!NumOps.GreaterThan(range, eps))
-        {
-            return Engine.Fill(scores.Length, half); // Constant scores map to midpoint
-        }
-
-        if (scores.Length == 0)
-        {
-            return new Vector<T>(0);
-        }
-
-        // Normalize using training min/max, clamp to [0, 1]
-        var normalized = Engine.TensorDivideScalar(Engine.TensorSubtractScalar(scores.AsTensor(), trainMin), range);
-        return Engine.TensorClamp(normalized, NumOps.Zero, NumOps.One).ToVector();
+        // Normalize using training min/max, clamp to [0, 1]; constant scores map to the midpoint
+        return AnomalyTensorOps.NormalizeToTrainingRange(scores, trainMin, trainMax);
     }
 }

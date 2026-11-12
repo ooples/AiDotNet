@@ -480,6 +480,29 @@ internal static class AnomalyTensorOps
         return engine.ReduceMax(comparable, new[] { 0 }, false).ToVector();
     }
 
+    /// <summary>
+    /// Min-max normalization against a training range, clamped to [0, 1]; every score maps to 0.5 when the
+    /// range is not above 1e-10.
+    /// </summary>
+    internal static Vector<T> NormalizeToTrainingRange<T>(Vector<T> scores, T trainMin, T trainMax)
+    {
+        var engine = Engine;
+        var numOps = MathHelper.GetNumericOperations<T>();
+        T range = numOps.Subtract(trainMax, trainMin);
+        if (!numOps.GreaterThan(range, numOps.FromDouble(1e-10)))
+        {
+            return engine.Fill(scores.Length, numOps.FromDouble(0.5));
+        }
+
+        if (scores.Length == 0)
+        {
+            return new Vector<T>(0);
+        }
+
+        var normalized = engine.TensorDivideScalar(engine.TensorSubtractScalar(scores.AsTensor(), trainMin), range);
+        return engine.TensorClamp(normalized, numOps.Zero, numOps.One).ToVector();
+    }
+
     /// <summary>The element-wise mean over a non-empty list of equal-length vectors (summed in list order).</summary>
     internal static Vector<T> ElementwiseMean<T>(IReadOnlyList<Vector<T>> vectors)
     {
