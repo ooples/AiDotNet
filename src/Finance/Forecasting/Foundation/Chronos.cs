@@ -61,6 +61,8 @@ public partial class Chronos<T> : TimeSeriesFoundationModelBase<T>, ITrainingObj
     private readonly ChronosFinanceOptions<T>? _options;
     private ChronosT5<T>? _core;
     private Random? _trainingRandom;
+
+    private Random TrainingRandom => _trainingRandom ?? throw new InvalidOperationException("The Chronos network is not built.");
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
 
     /// <summary>
@@ -116,7 +118,7 @@ public partial class Chronos<T> : TimeSeriesFoundationModelBase<T>, ITrainingObj
         var values = new double[series.Length];
         var span = series.Data.Span;
         for (int i = 0; i < values.Length; i++) values[i] = NumOps.ToDouble(span[i]);
-        var random = _trainingRandom ?? throw new InvalidOperationException("The Chronos network is not built.");
+        var random = TrainingRandom;
         SetTrainingMode(true);
         try
         {
@@ -274,7 +276,7 @@ public partial class Chronos<T> : TimeSeriesFoundationModelBase<T>, ITrainingObj
         var (ids, mask, _) = Core.Tokenizer.Context(rows[0]);
         var tokens = new Tensor<T>(new[] { ids.Length });
         for (int i = 0; i < ids.Length; i++) tokens[i] = NumOps.FromDouble(ids[i]);
-        return Core.Network.Encode(tokens, IsTrainingMode, _trainingRandom!, mask);
+        return Core.Network.Encode(tokens, IsTrainingMode, TrainingRandom, mask);
     }
 
     /// <summary>The differentiable function of the input this model defines: the encoder states (see
@@ -292,9 +294,11 @@ public partial class Chronos<T> : TimeSeriesFoundationModelBase<T>, ITrainingObj
     protected override bool TryApplyLearningRule(Tensor<T> input, Tensor<T> target)
     {
         var windows = Windows(input, target);
+        var optimizer = _optimizer ?? throw new InvalidOperationException("The Chronos optimizer is not built.");
+        var random = TrainingRandom;
         var parameters = AiDotNet.Training.TapeTrainingStep<T>.CollectParameters(Layers.OfType<LayerBase<T>>().ToList());
         LastLoss = AiDotNet.Training.TapeTrainingStepper<T>.EagerObjectiveStep(parameters,
-            () => Core.BatchLoss(windows, training: true, _trainingRandom!), _optimizer!,
+            () => Core.BatchLoss(windows, training: true, random), optimizer,
             onGradients: gradients => PublishParameterGradients(gradients));
         return true;
     }
@@ -323,7 +327,7 @@ public partial class Chronos<T> : TimeSeriesFoundationModelBase<T>, ITrainingObj
     T ITrainingObjectiveProvider<T>.EvaluateTrainingObjective(Tensor<T> input, Tensor<T> target)
     {
         using var _ = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
-        return Core.BatchLoss(Windows(input, target), training: false, _trainingRandom!)[0];
+        return Core.BatchLoss(Windows(input, target), training: false, TrainingRandom)[0];
     }
 
     /// <summary>The activations of the layer calls a forecast makes (the network is not a chain of its layers).</summary>
