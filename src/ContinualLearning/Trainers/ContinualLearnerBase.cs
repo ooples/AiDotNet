@@ -384,14 +384,10 @@ public abstract class ContinualLearnerBase<T, TInput, TOutput> : IContinualLearn
         T backwardTransfer = NumOps.Zero;
         if (_tasksLearned > 1)
         {
-            for (int i = 0; i < _tasksLearned - 1; i++)
+            var (finalAccuracies, peaks) = PairWithPeaks(accuracies, _tasksLearned - 1);
+            if (finalAccuracies.Length > 0)
             {
-                if (_peakAccuracies.TryGetValue(i, out var peakAcc))
-                {
-                    backwardTransfer = NumOps.Add(
-                        backwardTransfer,
-                        NumOps.Subtract(accuracies[i], peakAcc));
-                }
+                backwardTransfer = Engine.Sum(Engine.Subtract(finalAccuracies, peaks));
             }
             backwardTransfer = NumOps.Divide(
                 backwardTransfer,
@@ -402,12 +398,8 @@ public abstract class ContinualLearnerBase<T, TInput, TOutput> : IContinualLearn
         T forwardTransfer = NumOps.Zero;
         if (_initialAccuracies.Count > 0)
         {
-            foreach (var acc in _initialAccuracies.Values)
-            {
-                forwardTransfer = NumOps.Add(forwardTransfer, acc);
-            }
             forwardTransfer = NumOps.Divide(
-                forwardTransfer,
+                Engine.Sum(new Vector<T>(_initialAccuracies.Values)),
                 NumOps.FromDouble(_initialAccuracies.Count));
         }
 
@@ -415,17 +407,10 @@ public abstract class ContinualLearnerBase<T, TInput, TOutput> : IContinualLearn
         T? maxForgetting = default;
         if (_peakAccuracies.Count > 0)
         {
-            var forgettingValues = new List<T>();
-            for (int i = 0; i < accuracies.Count && i < _peakAccuracies.Count; i++)
+            var (currentAccuracies, peakValues) = PairWithPeaks(accuracies, Math.Min(accuracies.Count, _peakAccuracies.Count));
+            if (currentAccuracies.Length > 0)
             {
-                if (_peakAccuracies.TryGetValue(i, out var peak))
-                {
-                    forgettingValues.Add(NumOps.Subtract(peak, accuracies[i]));
-                }
-            }
-            if (forgettingValues.Count > 0)
-            {
-                maxForgetting = forgettingValues.OrderByDescending(v => NumOps.ToDouble(v)).First();
+                maxForgetting = Engine.TensorMaxValue(Engine.Subtract(peakValues, currentAccuracies).AsTensor());
             }
         }
 
@@ -443,6 +428,25 @@ public abstract class ContinualLearnerBase<T, TInput, TOutput> : IContinualLearn
         };
     }
 
+    /// <summary>
+    /// Pairs the accuracy of each task i &lt; <paramref name="taskLimit"/> that has a recorded peak with that peak.
+    /// </summary>
+    private (Vector<T> Accuracies, Vector<T> Peaks) PairWithPeaks(List<T> accuracies, int taskLimit)
+    {
+        var current = new List<T>();
+        var peaks = new List<T>();
+        for (int i = 0; i < taskLimit; i++)
+        {
+            if (_peakAccuracies.TryGetValue(i, out var peak))
+            {
+                current.Add(accuracies[i]);
+                peaks.Add(peak);
+            }
+        }
+
+        return (new Vector<T>(current), new Vector<T>(peaks));
+    }
+
     /// <inheritdoc/>
     public virtual TaskEvaluationResult<T> EvaluateTask(int taskId, IDataset<T, TInput, TOutput> testData)
     {
@@ -453,7 +457,7 @@ public abstract class ContinualLearnerBase<T, TInput, TOutput> : IContinualLearn
 
         var stopwatch = Stopwatch.StartNew();
 
-        T totalLoss = NumOps.Zero;
+        var sampleLosses = new List<T>(testData.Count);
         int correct = 0;
         var predictions = new List<(int Predicted, int Actual)>();
 
@@ -464,7 +468,7 @@ public abstract class ContinualLearnerBase<T, TInput, TOutput> : IContinualLearn
             var predicted = Model.Predict(input);
 
             var loss = LossFunction.CalculateLoss(ConversionsHelper.ConvertToVector<T, TOutput>(predicted), ConversionsHelper.ConvertToVector<T, TOutput>(expected));
-            totalLoss = NumOps.Add(totalLoss, loss);
+            sampleLosses.Add(loss);
 
             // Check if prediction is correct (implementation may vary by output type)
             if (IsPredictionCorrect(expected, predicted))
@@ -480,6 +484,7 @@ public abstract class ContinualLearnerBase<T, TInput, TOutput> : IContinualLearn
 
         stopwatch.Stop();
 
+        T totalLoss = sampleLosses.Count > 0 ? Engine.Sum(new Vector<T>(sampleLosses)) : NumOps.Zero;
         var avgLoss = NumOps.Divide(totalLoss, NumOps.FromDouble(testData.Count));
         var accuracy = NumOps.FromDouble((double)correct / testData.Count);
 
@@ -515,14 +520,28 @@ public abstract class ContinualLearnerBase<T, TInput, TOutput> : IContinualLearn
     public IReadOnlyDictionary<int, T> ComputeForgetting()
     {
         var forgetting = new Dictionary<int, T>();
+        var taskIds = new List<int>();
+        var peaks = new List<T>();
+        var currentAccuracies = new List<T>();
 
         for (int i = 0; i < _tasksLearned; i++)
         {
             if (_peakAccuracies.TryGetValue(i, out var peakAcc) && i < _taskTestSets.Count)
             {
                 var currentResult = EvaluateOnDataset(_taskTestSets[i]);
-                forgetting[i] = NumOps.Subtract(peakAcc, currentResult.Accuracy);
+                taskIds.Add(i);
+                peaks.Add(peakAcc);
+                currentAccuracies.Add(currentResult.Accuracy);
             }
+        }
+
+        if (taskIds.Count == 0)
+            return forgetting;
+
+        var drops = Engine.Subtract(new Vector<T>(peaks), new Vector<T>(currentAccuracies));
+        foreach (var (taskId, drop) in taskIds.Zip(drops, (taskId, drop) => (taskId, drop)))
+        {
+            forgetting[taskId] = drop;
         }
 
         return forgetting;
@@ -559,10 +578,10 @@ public abstract class ContinualLearnerBase<T, TInput, TOutput> : IContinualLearn
             ["MemoryBufferCount"] = MemoryBuffer.Count,
             ["InitialAccuracies"] = JObject.FromObject(_initialAccuracies.ToDictionary(
                 kv => kv.Key.ToString(),
-                kv => NumOps.ToDouble(kv.Value))),
+                kv => kv.Value)),
             ["PeakAccuracies"] = JObject.FromObject(_peakAccuracies.ToDictionary(
                 kv => kv.Key.ToString(),
-                kv => NumOps.ToDouble(kv.Value)))
+                kv => kv.Value))
         };
 
         File.WriteAllText(metadataPath, metadata.ToString());
@@ -608,9 +627,9 @@ public abstract class ContinualLearnerBase<T, TInput, TOutput> : IContinualLearn
             {
                 foreach (var prop in initialObj.Properties())
                 {
-                    if (int.TryParse(prop.Name, out var taskId))
+                    if (int.TryParse(prop.Name, out var taskId) && prop.Value.ToObject<T>() is T accuracy)
                     {
-                        _initialAccuracies[taskId] = NumOps.FromDouble(prop.Value.Value<double>());
+                        _initialAccuracies[taskId] = accuracy;
                     }
                 }
             }
@@ -619,9 +638,9 @@ public abstract class ContinualLearnerBase<T, TInput, TOutput> : IContinualLearn
             {
                 foreach (var prop in peakObj.Properties())
                 {
-                    if (int.TryParse(prop.Name, out var taskId))
+                    if (int.TryParse(prop.Name, out var taskId) && prop.Value.ToObject<T>() is T accuracy)
                     {
-                        _peakAccuracies[taskId] = NumOps.FromDouble(prop.Value.Value<double>());
+                        _peakAccuracies[taskId] = accuracy;
                     }
                 }
             }
@@ -681,7 +700,7 @@ public abstract class ContinualLearnerBase<T, TInput, TOutput> : IContinualLearn
     /// </summary>
     protected virtual (T Accuracy, T Loss) EvaluateOnDataset(IDataset<T, TInput, TOutput> data)
     {
-        T totalLoss = NumOps.Zero;
+        var sampleLosses = new List<T>(data.Count);
         int correct = 0;
 
         for (int i = 0; i < data.Count; i++)
@@ -690,12 +709,13 @@ public abstract class ContinualLearnerBase<T, TInput, TOutput> : IContinualLearn
             var expected = data.GetOutput(i);
             var predicted = Model.Predict(input);
 
-            totalLoss = NumOps.Add(totalLoss, LossFunction.CalculateLoss(ConversionsHelper.ConvertToVector<T, TOutput>(predicted), ConversionsHelper.ConvertToVector<T, TOutput>(expected)));
+            sampleLosses.Add(LossFunction.CalculateLoss(ConversionsHelper.ConvertToVector<T, TOutput>(predicted), ConversionsHelper.ConvertToVector<T, TOutput>(expected)));
 
             if (IsPredictionCorrect(expected, predicted))
                 correct++;
         }
 
+        T totalLoss = sampleLosses.Count > 0 ? Engine.Sum(new Vector<T>(sampleLosses)) : NumOps.Zero;
         var avgLoss = NumOps.Divide(totalLoss, NumOps.FromDouble(data.Count));
         var accuracy = NumOps.FromDouble((double)correct / data.Count);
 
@@ -728,18 +748,17 @@ public abstract class ContinualLearnerBase<T, TInput, TOutput> : IContinualLearn
         if (_tasksLearned == 0)
             return NumOps.Zero;
 
-        T sum = NumOps.Zero;
-        int count = 0;
+        var taskAccuracies = new List<T>();
 
         for (int i = 0; i < _tasksLearned && i < _taskTestSets.Count; i++)
         {
             var result = EvaluateOnDataset(_taskTestSets[i]);
-            sum = NumOps.Add(sum, result.Accuracy);
-            count++;
+            taskAccuracies.Add(result.Accuracy);
         }
 
+        int count = taskAccuracies.Count;
         return count > 0
-            ? NumOps.Divide(sum, NumOps.FromDouble(count))
+            ? NumOps.Divide(Engine.Sum(new Vector<T>(taskAccuracies)), NumOps.FromDouble(count))
             : NumOps.Zero;
     }
 
@@ -751,22 +770,25 @@ public abstract class ContinualLearnerBase<T, TInput, TOutput> : IContinualLearn
         if (_peakAccuracies.Count == 0)
             return default;
 
-        T sum = NumOps.Zero;
-        int count = 0;
+        var peaks = new List<T>();
+        var currentAccuracies = new List<T>();
 
         foreach (var kvp in _peakAccuracies)
         {
             if (kvp.Key < _taskTestSets.Count)
             {
                 var current = EvaluateOnDataset(_taskTestSets[kvp.Key]);
-                sum = NumOps.Add(sum, NumOps.Subtract(kvp.Value, current.Accuracy));
-                count++;
+                peaks.Add(kvp.Value);
+                currentAccuracies.Add(current.Accuracy);
             }
         }
 
-        return count > 0
-            ? NumOps.Divide(sum, NumOps.FromDouble(count))
-            : NumOps.Zero;
+        int count = peaks.Count;
+        if (count == 0)
+            return NumOps.Zero;
+
+        var drops = Engine.Subtract(new Vector<T>(peaks), new Vector<T>(currentAccuracies));
+        return NumOps.Divide(Engine.Sum(drops), NumOps.FromDouble(count));
     }
 
     /// <summary>
