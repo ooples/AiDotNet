@@ -232,6 +232,14 @@ internal static class SafetyTensorOps<T>
     /// <summary><c>Math.Max(0, x)</c> for a scalar (NaN passes through).</summary>
     internal static T MaxZero(T x) => NumOps.LessThan(x, NumOps.Zero) ? NumOps.Zero : x;
 
+    /// <summary><c>Math.Max(a, b)</c> for scalars: NaN if either operand is NaN.</summary>
+    internal static T MaxNaN(T a, T b)
+    {
+        if (NumOps.IsNaN(a)) return a;
+        if (NumOps.IsNaN(b)) return b;
+        return NumOps.GreaterThan(a, b) ? a : b;
+    }
+
     /// <summary><c>Math.Min(1, Math.Max(0, x))</c> for a scalar (NaN passes through).</summary>
     internal static T ClampUnit(T x) => MinOne(MaxZero(x));
 
