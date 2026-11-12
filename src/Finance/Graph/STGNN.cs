@@ -820,10 +820,7 @@ public partial class STGNN<T> : ForecastingModelBase<T>
 
         var flatInput = FlattenInput(input);
         var inputData = new float[flatInput.Data.Length];
-        for (int i = 0; i < flatInput.Data.Length; i++)
-        {
-            inputData[i] = Convert.ToSingle(NumOps.ToDouble(flatInput.Data.Span[i]));
-        }
+        NumOps.ToFloatSpan(flatInput.Data.Span.Slice(0, flatInput.Data.Length), inputData.AsSpan(0, flatInput.Data.Length));
 
         var inputTensor = new OnnxTensors.DenseTensor<float>(
             inputData,
@@ -838,10 +835,7 @@ public partial class STGNN<T> : ForecastingModelBase<T>
         var outputTensor = results.First().AsTensor<float>();
 
         var outputData = new T[outputTensor.Length];
-        for (int i = 0; i < outputTensor.Length; i++)
-        {
-            outputData[i] = NumOps.FromDouble(outputTensor.GetValue(i));
-        }
+        NumOps.FromFloatSpan(outputTensor.ToDenseTensor().Buffer.Span.Slice(0, outputTensor.Length), outputData.AsSpan(0, outputTensor.Length));
 
         return new Tensor<T>(new[] { _numNodes * _forecastHorizon }, new Vector<T>(outputData));
     }

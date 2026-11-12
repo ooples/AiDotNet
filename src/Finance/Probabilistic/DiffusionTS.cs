@@ -905,7 +905,7 @@ public partial class DiffusionTS<T> : ForecastingModelBase<T>
         using var results = OnnxSession.Run(inputs);
         var output = results.First().AsTensor<float>();
         var result = new Tensor<T>(output.Dimensions.ToArray());
-        for (int i = 0; i < result.Length; i++) result[i] = NumOps.FromDouble(output.GetValue(i));
+        NumOps.FromFloatSpan(output.ToDenseTensor().Buffer.Span.Slice(0, result.Length), result.Data.Span.Slice(0, result.Length));
         return result;
     }
 

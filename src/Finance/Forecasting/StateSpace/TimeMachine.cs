@@ -1026,10 +1026,7 @@ public partial class TimeMachine<T> : ForecastingModelBase<T>
 
         var flatInput = FlattenInput(input);
         var inputData = new float[flatInput.Data.Length];
-        for (int i = 0; i < flatInput.Data.Length; i++)
-        {
-            inputData[i] = Convert.ToSingle(flatInput.Data.Span[i]);
-        }
+        NumOps.ToFloatSpan(flatInput.Data.Span.Slice(0, flatInput.Data.Length), inputData.AsSpan(0, flatInput.Data.Length));
 
         var inputTensor = new OnnxTensors.DenseTensor<float>(
             inputData,
@@ -1044,10 +1041,7 @@ public partial class TimeMachine<T> : ForecastingModelBase<T>
         var outputTensor = results[0].AsTensor<float>();
 
         var output = new Tensor<T>(new[] { _forecastHorizon });
-        for (int i = 0; i < _forecastHorizon; i++)
-        {
-            output.Data.Span[i] = NumOps.FromDouble(outputTensor.GetValue(i));
-        }
+        NumOps.FromFloatSpan(outputTensor.ToDenseTensor().Buffer.Span.Slice(0, _forecastHorizon), output.Data.Span.Slice(0, _forecastHorizon));
 
         return output;
     }

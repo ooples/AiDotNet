@@ -874,10 +874,7 @@ public partial class ETSformer<T> : ForecastingModelBase<T>
     private float[] ConvertToFloatArray(Tensor<T> tensor)
     {
         var result = new float[tensor.Length];
-        for (int i = 0; i < tensor.Length; i++)
-        {
-            result[i] = (float)NumOps.ToDouble(tensor.Data.Span[i]);
-        }
+        NumOps.ToFloatSpan(tensor.Data.Span.Slice(0, tensor.Length), result.AsSpan(0, tensor.Length));
         return result;
     }
 
