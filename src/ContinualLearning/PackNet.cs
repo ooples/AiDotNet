@@ -55,6 +55,7 @@ namespace AiDotNet.ContinualLearning;
 public class PackNet<T> : IContinualLearningStrategy<T>
 {
     private readonly INumericOperations<T> _numOps;
+    private static IEngine Engine => AiDotNetEngine.Current;
     private readonly Dictionary<int, HashSet<int>> _taskMasks;  // Which weights belong to which task
     private HashSet<int> _freeWeights;                          // Currently available weights
     private readonly double _pruningRatio;
@@ -165,15 +166,9 @@ public class PackNet<T> : IContinualLearningStrategy<T>
         Guard.NotNull(network);
         Guard.NotNull(gradients);
 
-        // Zero out gradients for frozen weights (belonging to previous tasks)
-        for (int i = 0; i < gradients.Length; i++)
-        {
-            if (!_freeWeights.Contains(i))
-            {
-                // This weight is frozen (belongs to a previous task)
-                gradients[i] = _numOps.Zero;
-            }
-        }
+        // Zero out gradients for frozen weights (belonging to previous tasks), in place like master
+        var frozen = Engine.TensorMaskedFill(gradients.AsTensor(), MaskOutside(_freeWeights, gradients.Length), _numOps.Zero);
+        frozen.AsSpan().CopyTo(gradients.AsWritableSpan());
 
         return gradients;
     }
@@ -220,15 +215,27 @@ public class PackNet<T> : IContinualLearningStrategy<T>
         var parameters = network.GetParameters();
         var taskWeights = GetAllWeightsUpToTask(taskId);
 
-        for (int i = 0; i < parameters.Length; i++)
+        var masked = Engine.TensorMaskedFill(parameters.AsTensor(), MaskOutside(taskWeights, parameters.Length), _numOps.Zero);
+        masked.AsSpan().CopyTo(parameters.AsWritableSpan());
+
+        network.SetParameters(parameters);
+    }
+
+    /// <summary>
+    /// Builds a mask over <paramref name="length"/> slots that is true for every slot not in <paramref name="keep"/>.
+    /// </summary>
+    private static bool[] MaskOutside(HashSet<int> keep, int length)
+    {
+        var mask = Enumerable.Repeat(true, length).ToArray();
+        foreach (var idx in keep)
         {
-            if (!taskWeights.Contains(i))
+            if (idx >= 0 && idx < length)
             {
-                parameters[i] = _numOps.Zero;
+                mask[idx] = false;
             }
         }
 
-        network.SetParameters(parameters);
+        return mask;
     }
 
     /// <summary>
