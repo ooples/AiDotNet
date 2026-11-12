@@ -667,25 +667,19 @@ public partial class NBEATSFinance<T> : ForecastingModelBase<T>
     {
         var metrics = new Dictionary<string, T>();
 
-        T mse = NumOps.Zero;
-        T mae = NumOps.Zero;
+        var (mse, mae, count) = SumSquaredAndAbsoluteError(predictions, actuals);
         T smape = NumOps.Zero;
-        int count = 0;
-
-        for (int i = 0; i < predictions.Length && i < actuals.Length; i++)
+        if (count > 0)
         {
-            var diff = NumOps.Subtract(predictions[i], actuals[i]);
-            mse = NumOps.Add(mse, NumOps.Multiply(diff, diff));
-            mae = NumOps.Add(mae, NumOps.Abs(diff));
-
-            // sMAPE calculation
-            var absSum = NumOps.Add(NumOps.Abs(predictions[i]), NumOps.Abs(actuals[i]));
-            if (NumOps.Compare(absSum, NumOps.Zero) > 0)
-            {
-                var smapeContrib = NumOps.Divide(NumOps.Abs(diff), absSum);
-                smape = NumOps.Add(smape, smapeContrib);
-            }
-            count++;
+            // sMAPE terms |p - a| / (|p| + |a|), counted only where the denominator is positive.
+            using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+            var p = FlattenPrefix(predictions, count);
+            var a = FlattenPrefix(actuals, count);
+            var absSum = Engine.TensorAdd(Engine.TensorAbs(p), Engine.TensorAbs(a));
+            var positive = Engine.TensorGreaterThan(absSum, NumOps.Zero);
+            var safeSum = Engine.TensorWhere(positive, absSum, Engine.TensorFullLike(absSum, NumOps.One));
+            var terms = Engine.TensorDivide(Engine.TensorAbs(Engine.TensorSubtract(p, a)), safeSum);
+            smape = Engine.TensorSum(Engine.TensorWhere(positive, terms, Engine.TensorZerosLike(terms)));
         }
 
         if (count > 0)

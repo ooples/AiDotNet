@@ -344,21 +344,52 @@ public partial class TimeMoE<T> : TimeSeriesFoundationModelBase<T>
     {
         int batchSize = input.Rank > 1 ? input.Shape[0] : 1;
         int seqLen = input.Rank > 1 ? input.Shape[1] : input.Length;
-        var result = new Tensor<T>(input._shape);
-
-        for (int b = 0; b < batchSize; b++)
+        // Row b of the leading batchSize * seqLen values becomes (x - mean_b) / std_b (mean 0, std 1 past the
+        // given statistics); anything after those rows stays zero.
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        int covered = Math.Min(batchSize * seqLen, input.Length);
+        if (covered <= 0 || seqLen <= 0)
+            return new Tensor<T>(input._shape);
+        int fullRows = covered / seqLen;
+        int partial = covered - fullRows * seqLen;
+        int rowCount = fullRows + (partial > 0 ? 1 : 0);
+        var meanColumn = StatColumn(means, rowCount, NumOps.Zero);
+        var stdColumn = StatColumn(stds, rowCount, NumOps.One);
+        var flat = Engine.Reshape(input.Contiguous(), new[] { input.Length });
+        var pieces = new List<Tensor<T>>(3);
+        if (fullRows > 0)
         {
-            T mean = b < means.Length ? means[b] : NumOps.Zero;
-            T std = b < stds.Length ? stds[b] : NumOps.One;
-            for (int t = 0; t < seqLen; t++)
-            {
-                int idx = b * seqLen + t;
-                if (idx < input.Length && idx < result.Length)
-                    result.Data.Span[idx] = NumOps.Divide(NumOps.Subtract(input[idx], mean), std);
-            }
+            var rows = Engine.Reshape(Engine.TensorNarrow(flat, 0, 0, fullRows * seqLen), new[] { fullRows, seqLen });
+            var shape = rows._shape;
+            var normalized = Engine.TensorDivide(
+                Engine.TensorSubtract(rows, Engine.TensorBroadcastTo(Engine.TensorNarrow(meanColumn, 0, 0, fullRows), shape)),
+                Engine.TensorBroadcastTo(Engine.TensorNarrow(stdColumn, 0, 0, fullRows), shape));
+            pieces.Add(Engine.Reshape(normalized, new[] { normalized.Length }));
         }
 
-        return result;
+        if (partial > 0)
+        {
+            var tail = Engine.TensorNarrow(flat, 0, fullRows * seqLen, partial).Contiguous();
+            T mean = meanColumn.AsSpan()[fullRows];
+            T std = stdColumn.AsSpan()[fullRows];
+            pieces.Add(Engine.TensorDivideScalar(Engine.TensorSubtractScalar(tail, mean), std));
+        }
+
+        if (covered < input.Length)
+            pieces.Add(new Tensor<T>(new[] { input.Length - covered }));
+
+        var joined = pieces.Count == 1 ? pieces[0] : Engine.TensorConcatenate(pieces.ToArray(), 0);
+        return Engine.Reshape(joined.Contiguous(), input._shape);
+    }
+
+    /// <summary>The first <paramref name="rows"/> statistics as a [rows, 1] column, padded with <paramref name="fill"/>.</summary>
+    private Tensor<T> StatColumn(T[] values, int rows, T fill)
+    {
+        int given = Math.Min(values.Length, rows);
+        var column = Engine.TensorFullLike(new Tensor<T>(new[] { rows, 1 }), fill);
+        if (given > 0)
+            values.AsSpan(0, given).CopyTo(column.Data.Span.Slice(0, given));
+        return column;
     }
 
     /// <inheritdoc/>
@@ -428,35 +459,17 @@ public partial class TimeMoE<T> : TimeSeriesFoundationModelBase<T>
     {
         int batchSize = input.Rank > 1 ? input.Shape[0] : 1;
         int seqLen = input.Rank > 1 ? input.Shape[1] : input.Length;
-        means = new T[batchSize];
-        stds = new T[batchSize];
-
-        for (int b = 0; b < batchSize; b++)
-        {
-            T mean = NumOps.Zero;
-            for (int t = 0; t < seqLen; t++)
-            {
-                int idx = b * seqLen + t;
-                if (idx < input.Length)
-                    mean = NumOps.Add(mean, input[idx]);
-            }
-            mean = NumOps.Divide(mean, NumOps.FromDouble(seqLen));
-
-            T variance = NumOps.Zero;
-            for (int t = 0; t < seqLen; t++)
-            {
-                int idx = b * seqLen + t;
-                if (idx < input.Length)
-                {
-                    var diff = NumOps.Subtract(input[idx], mean);
-                    variance = NumOps.Add(variance, NumOps.Multiply(diff, diff));
-                }
-            }
-            variance = NumOps.Divide(variance, NumOps.FromDouble(seqLen));
-
-            means[b] = mean;
-            stds[b] = NumOps.Sqrt(NumOps.Add(variance, NumOps.FromDouble(1e-5)));
-        }
+        // Row b is the flat values [b * seqLen, (b + 1) * seqLen): mean, then sqrt(population variance + 1e-5).
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        T count = NumOps.FromDouble(seqLen);
+        var rows = Engine.Reshape(
+            Engine.TensorNarrow(Engine.Reshape(input.Contiguous(), new[] { input.Length }), 0, 0, batchSize * seqLen),
+            new[] { batchSize, seqLen });
+        var mean = Engine.TensorDivideScalar(Engine.ReduceSum(rows, new[] { 1 }, true), count);
+        var centered = Engine.TensorSubtract(rows, Engine.TensorBroadcastTo(mean, rows._shape));
+        var variance = Engine.TensorDivideScalar(Engine.ReduceSum(Engine.TensorMultiply(centered, centered), new[] { 1 }, true), count);
+        means = mean.ToArray();
+        stds = Engine.TensorSqrt(Engine.TensorAddScalar(variance, NumOps.FromDouble(1e-5))).ToArray();
     }
 
     /// <summary>
