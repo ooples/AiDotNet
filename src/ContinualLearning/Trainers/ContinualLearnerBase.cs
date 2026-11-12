@@ -46,6 +46,17 @@ public abstract class ContinualLearnerBase<T, TInput, TOutput> : IContinualLearn
     protected IEngine Engine => AiDotNetEngine.Current;
 
     /// <summary>
+    /// Zero-copy rank-1 tensor view over the first <paramref name="count"/> elements of a vector,
+    /// so engine operations cover the same prefix an index loop bounded by <paramref name="count"/> would.
+    /// </summary>
+    private protected static Tensor<T> HeadView(Vector<T> vector, int count)
+    {
+        return count == vector.Length
+            ? vector.AsTensor()
+            : Tensor<T>.FromMemory(vector.AsWritableMemory().Slice(0, count), new[] { count });
+    }
+
+    /// <summary>
     /// The underlying model being trained.
     /// </summary>
     protected readonly IFullModel<T, TInput, TOutput> Model;
