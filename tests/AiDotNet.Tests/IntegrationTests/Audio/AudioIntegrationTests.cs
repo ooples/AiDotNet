@@ -1139,7 +1139,41 @@ public class AudioIntegrationTests
         }
     }
 
-    private static AudioGenModel<double> BuildSmallAudioGen(int layerSeed)
+    [Theory]
+    [InlineData(4, 2, new double[] { 2, 1, 2, 3 })]
+    [InlineData(4, 4, new double[] { 2, 3, 4, 3 })]
+    [InlineData(2, 2, new double[] { 2, 1 })]
+    [InlineData(2, 4, new double[] { 2, 0 })]
+    [InlineData(1, 2, new double[] { 0 })]
+    [InlineData(1, 4, new double[] { 0 })]
+    public void AudioGenModel_EnCodecDecoder_UsesAudiocraftReflectionAtBoundaries(int tokens, int tap, double[] expected)
+    {
+        var previousFallback = AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.AmbientFallbackSeed;
+        try
+        {
+            // Hop 1 removes upsampling blocks. Only one codebook channel, one shifted input-convolution
+            // tap and one identity output-convolution tap remain; the zero LSTM contributes only its skip.
+            using var model = BuildSmallAudioGen(layerSeed: 1337, sampleRate: 50);
+            var weights = model.CodecDecoderWeights;
+            foreach (var weight in weights) weight.Fill(0.0);
+            for (int i = 0; i < 4; i++) weights[0][i, 0] = i + 1;
+            weights[1][0, 0, tap] = 1;
+            weights[weights.Count - 2][0, 0, 3] = 1;
+            var codes = new AiDotNet.Tensors.LinearAlgebra.Tensor<double>(
+                Enumerable.Range(0, tokens).Select(i => (double)i).ToArray(), new[] { 1, 1, tokens });
+            var actual = model.DecodeCodecTokens(codes, tokens / 50.0).ToArray();
+            Assert.Equal(expected.Length, actual.Length);
+            for (int i = 0; i < expected.Length; i++) Assert.Equal(expected[i], actual[i], 10);
+        }
+        finally
+        {
+            AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.AmbientFallbackSeed = previousFallback;
+            AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.ResetForModelConstruction(null);
+        }
+    }
+
+
+    private static AudioGenModel<double> BuildSmallAudioGen(int layerSeed, int sampleRate = 8000)
     {
         AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.AmbientFallbackSeed = layerSeed;
         AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.ResetForModelConstruction(layerSeed);
@@ -1151,7 +1185,7 @@ public class AudioIntegrationTests
             options: new AudioGenOptions
             {
                 ModelSize = AudioGenModelSize.Medium,
-                SampleRate = 8000,
+                SampleRate = sampleRate,
                 DurationSeconds = 0.1,
                 MaxDurationSeconds = 0.1,
                 TextHiddenDim = 32,
@@ -1161,7 +1195,7 @@ public class AudioIntegrationTests
                 NumCodebooks = 1,
                 CodebookSize = 4,
                 MaxTextLength = 8,
-                Seed = 7,
+                Seed = layerSeed,
             });
     }
 

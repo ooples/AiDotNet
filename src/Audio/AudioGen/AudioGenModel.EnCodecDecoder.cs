@@ -202,11 +202,22 @@ public partial class AudioGenModel<T>
         return Engine.TensorMultiply(direction, Engine.TensorBroadcastTo(scale, shape));
     }
 
-    /// <summary>Conv1d over <c>[1, C, T]</c> with "same" padding for odd kernels, plus bias.</summary>
+    /// <summary>Conv1d with audiocraft's non-causal reflection padding, including its short-input rule.</summary>
     private Tensor<T> CodecConv(Tensor<T> x, Tensor<T> weight, Tensor<T> bias)
     {
-        int kernel = weight.Shape[2];
-        var y = Engine.Conv1D(x, weight, 1, (kernel - 1) / 2, 1);
+        int padding = (weight.Shape[2] - 1) / 2;
+        if (padding > 0)
+        {
+            int length = x.Shape[2];
+            // audiocraft.modules.conv.pad1d temporarily appends zeros before reflecting short inputs.
+            int extra = Math.Max(0, padding - length + 1);
+            if (extra > 0)
+                x = Engine.PadNd(x, new[] { 0, extra }, AiDotNet.Tensors.Engines.PadMode.Constant, NumOps.Zero);
+            x = Engine.PadNd<T>(x, new[] { padding, padding }, AiDotNet.Tensors.Engines.PadMode.Reflect, NumOps.Zero);
+            if (extra > 0)
+                x = Engine.TensorSlice(x, new[] { 0, 0, 0 }, new[] { x.Shape[0], x.Shape[1], length + 2 * padding });
+        }
+        var y = Engine.Conv1D(x, weight, 1, 0, 1);
         return Engine.TensorAdd(y, Engine.TensorBroadcastTo(Engine.Reshape(bias, new[] { 1, bias.Length, 1 }), y.Shape.ToArray()));
     }
 
