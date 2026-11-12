@@ -95,9 +95,7 @@ public partial class PMFAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInpu
             ParamModel.SetParameters(initParams);
 
             // Inner loop adaptation
-            var taskParams = new Vector<T>(initParams.Length);
-            for (int i = 0; i < initParams.Length; i++)
-                taskParams[i] = initParams[i];
+            var taskParams = initParams.Clone();
 
             for (int step = 0; step < _pmfOptions.AdaptationSteps; step++)
             {
@@ -135,9 +133,7 @@ public partial class PMFAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInpu
     public override IModel<TInput, TOutput, ModelMetadata<T>> Adapt(IMetaLearningTask<T, TInput, TOutput> task)
     {
         var initParams = ParamModel.GetParameters();
-        var adaptedParams = new Vector<T>(initParams.Length);
-        for (int i = 0; i < initParams.Length; i++)
-            adaptedParams[i] = initParams[i];
+        var adaptedParams = initParams.Clone();
 
         // Inner-loop adaptation
         for (int step = 0; step < _pmfOptions.AdaptationSteps; step++)
