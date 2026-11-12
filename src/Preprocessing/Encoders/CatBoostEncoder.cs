@@ -226,11 +226,30 @@ public class CatBoostEncoder<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             visitPosition[visit[t]] = t;
         }
 
-        // Target sum of the earlier rows of the same category: exclusive prefix sum minus its value at the run start
+        // Target sum of the earlier rows of the same category: an exclusive prefix sum restarted at every category
+        // run. Each run gets its own cumulative sum (shifted by one row) so a NaN or infinite target, or the
+        // rounding of a long running total, never leaks into another category, as with master's per-category sums.
         var visited = engine.TensorIndexSelect(y, new Tensor<int>(visit, new[] { numRows }), 0);
-        var exclusive = engine.TensorSubtract(engine.TensorCumSum(visited, 0), visited);
-        var previousSum = engine.TensorSubtract(
-            exclusive, engine.TensorIndexSelect(exclusive, new Tensor<int>(runStart, new[] { numRows }), 0));
+        var runs = new List<Tensor<T>>();
+        for (int start = 0; start < numRows;)
+        {
+            int end = start + 1;
+            while (end < numRows && runStart[end] == start)
+                end++;
+
+            int length = end - start;
+            var first = new Tensor<T>(new[] { 1 });
+            runs.Add(length == 1
+                ? first
+                : engine.TensorConcatenate(new[]
+                {
+                    first,
+                    engine.TensorCumSum(engine.TensorSlice(visited, new[] { start }, new[] { length - 1 }), 0),
+                }, 0));
+            start = end;
+        }
+
+        var previousSum = runs.Count == 1 ? runs[0] : engine.TensorConcatenate(runs.ToArray(), 0);
 
         // Ordered target encoding formula
         var encoded = engine.TensorDivide(
