@@ -153,17 +153,11 @@ public partial class MedSAM2<T> : Common.MedicalSegmentationBase<T>, ITrainingOb
     /// <summary>A binary segmentation result from probabilities <c>[..., H, W]</c>: the labels (above 0.5) and one structure.</summary>
     private MedicalSegmentationResult<T> Result(Tensor<T> probabilities)
     {
-        var labels = new Tensor<T>(probabilities.Shape.ToArray());
-        double area = 0, confidence = 0;
-        var values = probabilities.ToArray();
-        for (int i = 0; i < values.Length; i++)
-        {
-            double p = NumOps.ToDouble(values[i]);
-            if (p <= 0.5) continue;
-            labels[i] = NumOps.One;
-            area++;
-            confidence += p;
-        }
+        // Foreground is every pixel not at or below 0.5 (so a NaN probability counts as foreground, as before).
+        var labels = Engine.ScalarMinusTensor(NumOps.One,
+            Engine.TensorLessEqual(probabilities, Engine.TensorFullLike(probabilities, NumOps.FromDouble(0.5))));
+        double area = NumOps.ToDouble(Engine.TensorSum(labels));
+        double confidence = NumOps.ToDouble(Engine.TensorSum(Engine.TensorMultiply(labels, probabilities)));
         var structures = area > 0
             ? new List<SegmentedStructure> { new() { ClassId = 1, Name = "Prompted structure", VolumeOrArea = area, MeanConfidence = confidence / area } }
             : new List<SegmentedStructure>();

@@ -231,14 +231,14 @@ public partial class SwinUNETR<T> : Common.MedicalSegmentationBase<T>
         if (_onnxSession is null) throw new InvalidOperationException("ONNX session is not initialized.");
         bool hasBatch = input.Rank == 4 || input.Rank == 5; if (!hasBatch) input = AddLeadingBatchDimension(input);
         var inputData = new float[input.Length];
-        for (int i = 0; i < input.Length; i++) inputData[i] = Convert.ToSingle(input.Data.Span[i]);
+        NumOps.ToFloatSpan(input.Data.Span.Slice(0, input.Length), inputData);
         var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input._shape);
         string inputName = _onnxSession.InputMetadata.Keys.FirstOrDefault() ?? "images";
         var inputs = new List<NamedOnnxValue> { NamedOnnxValue.CreateFromTensor(inputName, onnxInput) };
         using var results = _onnxSession.Run(inputs);
         var outputTensor = results.First().AsTensor<float>();
         var outputData = new T[outputTensor.Length];
-        for (int i = 0; i < outputTensor.Length; i++) outputData[i] = NumOps.FromDouble(outputTensor.GetValue(i));
+        NumOps.FromFloatSpan(outputTensor.ToDenseTensor().Buffer.Span, outputData);
         var result = new Tensor<T>(outputTensor.Dimensions.ToArray(), new Vector<T>(outputData));
         if (!hasBatch) result = RemoveBatchDimension(result); return result;
     }
@@ -339,18 +339,7 @@ public partial class SwinUNETR<T> : Common.MedicalSegmentationBase<T>
         var output = Predict(slice);
         var labels = Common.SegmentationTensorOps.ArgmaxAlongClassDim(output);
         var probs = Common.SegmentationTensorOps.SoftmaxAlongClassDim(output);
-        int h = labels.Shape[0], w = labels.Shape[1];
-        int numC = probs.Shape[0];
-        var structures = new List<SegmentedStructure>();
-        for (int c = 0; c < numC; c++)
-        {
-            int area = 0; double confSum = 0;
-            for (int y = 0; y < h; y++)
-                for (int x = 0; x < w; x++)
-                    if ((int)NumOps.ToDouble(labels[y, x]) == c) { area++; confSum += NumOps.ToDouble(probs[c, y, x]); }
-            if (area > 0)
-                structures.Add(new SegmentedStructure { ClassId = c, Name = $"Class_{c}", VolumeOrArea = area, MeanConfidence = confSum / area });
-        }
+        var structures = Common.SegmentationStructureStatistics.Summarize(labels, probs);
         return new MedicalSegmentationResult<T> { Labels = labels, Probabilities = probs, Structures = structures };
     }
     /// <summary>Segments a 3D volume slice-by-slice and aggregates the per-structure statistics.</summary>
@@ -358,25 +347,20 @@ public partial class SwinUNETR<T> : Common.MedicalSegmentationBase<T>
     {
         if (volume.Rank <= 3)
             return SegmentSlice(volume);
-        int numC = volume.Shape[0], depth = volume.Shape[1], h = volume.Shape[2], w = volume.Shape[3];
-        var volLabels = new Tensor<T>([depth, h, w]);
-        var volProbs = new Tensor<T>([numC, depth, h, w]);
+        int inChannels = volume.Shape[0], depth = volume.Shape[1], h = volume.Shape[2], w = volume.Shape[3];
+        var sliceLabels = new List<Tensor<T>>(depth);
+        var sliceProbs = new List<Tensor<T>>(depth);
         var structAccum = new Dictionary<int, (double area, double confSum)>();
         for (int d = 0; d < depth; d++)
         {
-            var slice = new Tensor<T>([numC, h, w]);
-            for (int c = 0; c < numC; c++)
-                for (int y = 0; y < h; y++)
-                    for (int x = 0; x < w; x++)
-                        slice[c, y, x] = volume[c, d, y, x];
+            var slice = Engine.Reshape(
+                Engine.TensorSlice(volume, new[] { 0, d, 0, 0 }, new[] { inChannels, 1, h, w }), new[] { inChannels, h, w });
             var result = SegmentSlice(slice);
-            for (int y = 0; y < h; y++)
-                for (int x = 0; x < w; x++)
-                    volLabels[d, y, x] = result.Labels[y, x];
-            for (int c = 0; c < numC; c++)
-                for (int y = 0; y < h; y++)
-                    for (int x = 0; x < w; x++)
-                        volProbs[c, d, y, x] = result.Probabilities[c, y, x];
+            // Stack each slice's [H, W] labels and [numClasses, H, W] probabilities along a new depth axis.
+            // The probability volume has one plane per output class (not per input channel).
+            sliceLabels.Add(Engine.Reshape(result.Labels, new[] { 1, result.Labels.Shape[0], result.Labels.Shape[1] }));
+            var p = result.Probabilities;
+            sliceProbs.Add(Engine.Reshape(p, new[] { p.Shape[0], 1, p.Shape[1], p.Shape[2] }));
             foreach (var s in result.Structures)
             {
                 if (structAccum.TryGetValue(s.ClassId, out var existing))
@@ -388,6 +372,10 @@ public partial class SwinUNETR<T> : Common.MedicalSegmentationBase<T>
         var structures = new List<SegmentedStructure>();
         foreach (var kvp in structAccum)
             structures.Add(new SegmentedStructure { ClassId = kvp.Key, Name = $"Class_{kvp.Key}", VolumeOrArea = kvp.Value.area, MeanConfidence = kvp.Value.confSum / kvp.Value.area });
+        if (depth == 0)
+            return new MedicalSegmentationResult<T> { Labels = new Tensor<T>([0, h, w]), Probabilities = new Tensor<T>([_numClasses, 0, h, w]), Structures = structures };
+        var volLabels = Engine.TensorConcatenate(sliceLabels.ToArray(), 0);
+        var volProbs = Engine.TensorConcatenate(sliceProbs.ToArray(), 1);
         return new MedicalSegmentationResult<T> { Labels = volLabels, Probabilities = volProbs, Structures = structures };
     }
     /// <inheritdoc/>
