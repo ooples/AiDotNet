@@ -102,13 +102,13 @@ public class DiffusiveNoiseUnlearner<T> : FederatedLearningComponentBase<T>, IFe
         return (noisedModel, certificate);
     }
 
-    private double[] ComputeInfluenceScores(
+    private Tensor<T> ComputeInfluenceScores(
         int targetClientId,
         Dictionary<int, List<Tensor<T>>> clientHistories,
         int modelSize,
         out int targetRounds)
     {
-        var influence = new double[modelSize];
+        var influence = new Tensor<T>(new[] { modelSize });
         targetRounds = 0;
 
         if (!clientHistories.ContainsKey(targetClientId))
@@ -119,71 +119,59 @@ public class DiffusiveNoiseUnlearner<T> : FederatedLearningComponentBase<T>, IFe
         var targetUpdates = clientHistories[targetClientId];
         targetRounds = targetUpdates.Count;
 
-        // Compute variance of target client's updates per parameter
-        // Higher variance = parameter was more actively learned = higher influence
-        var mean = new double[modelSize];
-        var meanSq = new double[modelSize];
-
-        foreach (var update in targetUpdates)
-        {
-            for (int i = 0; i < modelSize && i < update.Shape[0]; i++)
-            {
-                double val = NumOps.ToDouble(update[i]);
-                mean[i] += val;
-                meanSq[i] += val * val;
-            }
-        }
-
         if (targetRounds > 0)
         {
-            for (int i = 0; i < modelSize; i++)
+            // Compute variance of target client's updates per parameter
+            // Higher variance = parameter was more actively learned = higher influence
+            var sum = new Tensor<T>(new[] { modelSize });
+            var sumSq = new Tensor<T>(new[] { modelSize });
+            foreach (var update in targetUpdates)
             {
-                mean[i] /= targetRounds;
-                meanSq[i] /= targetRounds;
-                // Variance = E[x^2] - (E[x])^2
-                double variance = Math.Max(0, meanSq[i] - mean[i] * mean[i]);
-                // Influence = magnitude of mean update * (1 + variance for uncertainty)
-                influence[i] = Math.Abs(mean[i]) * (1.0 + Math.Sqrt(variance));
+                var fitted = UnlearningEngineOps.FitLength(update, modelSize);
+                sum = Engine.TensorAdd(sum, fitted);
+                sumSq = Engine.TensorAdd(sumSq, Engine.TensorSquare(fitted));
             }
+
+            T rounds = NumOps.FromDouble(targetRounds);
+            var mean = Engine.TensorDivideScalar(sum, rounds);
+            var meanSq = Engine.TensorDivideScalar(sumSq, rounds);
+
+            // Variance = E[x^2] - (E[x])^2, floored at 0
+            var variance = Engine.TensorMax(Engine.TensorSubtract(meanSq, Engine.TensorSquare(mean)), NumOps.Zero);
+
+            // Influence = magnitude of mean update * (1 + variance for uncertainty)
+            influence = Engine.TensorMultiply(Engine.TensorAbs(mean), Engine.TensorAddScalar(Engine.TensorSqrt(variance), NumOps.One));
         }
 
-        // Normalize influence scores to [0, 1]
-        double maxInfluence = 0;
-        for (int i = 0; i < modelSize; i++)
+        // Normalize influence scores to [0, 1]; a NaN score leaves them unnormalized, as the Math.Max fold did.
+        if (modelSize > 0 && !double.IsNaN(NumOps.ToDouble(Engine.TensorSum(influence))))
         {
-            maxInfluence = Math.Max(maxInfluence, influence[i]);
-        }
-
-        if (maxInfluence > 0)
-        {
-            for (int i = 0; i < modelSize; i++)
+            T maxInfluence = Engine.ReduceMax(influence, new[] { 0 }, false).GetFlat(0);
+            if (NumOps.GreaterThan(maxInfluence, NumOps.Zero))
             {
-                influence[i] /= maxInfluence;
+                influence = Engine.TensorDivideScalar(influence, maxInfluence);
             }
         }
 
         return influence;
     }
 
-    private Tensor<T> InjectStructuredNoise(Tensor<T> model, double[] influenceScores)
+    private Tensor<T> InjectStructuredNoise(Tensor<T> model, Tensor<T> influenceScores)
     {
         int modelSize = model.Shape[0];
-        var noisedModel = new Tensor<T>(new[] { modelSize });
 
         var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSecureRandom();
 
-        for (int i = 0; i < modelSize; i++)
-        {
-            double param = NumOps.ToDouble(model[i]);
+        // Standard normals seeded from the secure RNG, so the noise stays unpredictable.
+        var standardNormals = new Tensor<T>(new[] { modelSize });
+        Engine.TensorNormalInPlace(standardNormals, 0.0, 1.0, rng.Next());
 
-            // Scale noise by influence score — high-influence params get more noise
-            double noiseScale = _options.NoiseScale * influenceScores[i];
-            double noise = SampleGaussian(rng, 0, noiseScale);
+        // Scale noise by influence score: high-influence params get more noise.
+        var noise = Engine.TensorMultiply(
+            standardNormals,
+            Engine.TensorMultiplyScalar(influenceScores, NumOps.FromDouble(_options.NoiseScale)));
 
-            noisedModel[i] = NumOps.FromDouble(param + noise);
-        }
-
-        return noisedModel;
+        return Engine.TensorAdd(UnlearningEngineOps.FitLength(model, modelSize), noise);
     }
 
     private void HealModel(
@@ -194,47 +182,32 @@ public class DiffusiveNoiseUnlearner<T> : FederatedLearningComponentBase<T>, IFe
         int healingEpochs = Math.Max(1, _options.MaxUnlearningEpochs / 2);
         double lr = _options.UnlearningLearningRate * 0.05; // Very gentle healing
 
-        for (int epoch = 0; epoch < healingEpochs; epoch++)
-        {
-            var avgUpdate = new double[modelSize];
-            int clientCount = 0;
+        // The remaining clients' last updates are the same every epoch, so the healing epochs
+        // add up to param += epochs * lr * avgUpdate.
+        var lastUpdates = clientHistories
+            .Where(kvp => kvp.Key != targetClientId && kvp.Value.Count > 0)
+            .Select(kvp => kvp.Value[kvp.Value.Count - 1])
+            .ToList();
+        if (lastUpdates.Count == 0) return;
 
-            foreach (var kvp in clientHistories)
-            {
-                if (kvp.Key == targetClientId || kvp.Value.Count == 0) continue;
+        var sumUpdate = UnlearningEngineOps.SumFitted(lastUpdates, modelSize);
+        var healed = Engine.TensorAdd(
+            UnlearningEngineOps.FitLength(model, modelSize),
+            Engine.TensorMultiplyScalar(sumUpdate, NumOps.FromDouble(healingEpochs * lr / lastUpdates.Count)));
 
-                var lastUpdate = kvp.Value[kvp.Value.Count - 1];
-                for (int i = 0; i < modelSize && i < lastUpdate.Shape[0]; i++)
-                {
-                    avgUpdate[i] += NumOps.ToDouble(lastUpdate[i]);
-                }
-
-                clientCount++;
-            }
-
-            if (clientCount == 0) break;
-
-            for (int i = 0; i < modelSize; i++)
-            {
-                double param = NumOps.ToDouble(model[i]);
-                param += lr * avgUpdate[i] / clientCount;
-                model[i] = NumOps.FromDouble(param);
-            }
-        }
+        // Written back into the caller's model
+        healed.AsSpan().CopyTo(model.AsWritableSpan().Slice(0, modelSize));
     }
 
-    private double ComputeMembershipScore(double[] influence, Tensor<T> original, Tensor<T> unlearned)
+    private double ComputeMembershipScore(Tensor<T> influence, Tensor<T> original, Tensor<T> unlearned)
     {
         int size = Math.Min(original.Shape[0], unlearned.Shape[0]);
-        double influencedChange = 0;
-        double totalInfluence = 0;
+        if (size <= 0) return 0.5;
 
-        for (int i = 0; i < size; i++)
-        {
-            double change = Math.Abs(NumOps.ToDouble(original[i]) - NumOps.ToDouble(unlearned[i]));
-            influencedChange += change * influence[i];
-            totalInfluence += influence[i];
-        }
+        var weights = UnlearningEngineOps.FitLength(influence, size);
+        var change = Engine.TensorAbs(Engine.TensorSubtract(UnlearningEngineOps.FitLength(original, size), UnlearningEngineOps.FitLength(unlearned, size)));
+        double influencedChange = NumOps.ToDouble(Engine.TensorSum(Engine.TensorMultiply(change, weights)));
+        double totalInfluence = NumOps.ToDouble(Engine.TensorSum(weights));
 
         if (totalInfluence < 1e-12) return 0.5;
 
@@ -246,14 +219,6 @@ public class DiffusiveNoiseUnlearner<T> : FederatedLearningComponentBase<T>, IFe
     private double ComputeL2Distance(Tensor<T> a, Tensor<T> b)
     {
         return NumOps.ToDouble(VectorHelper.EuclideanDistance(a.ToVector(), b.ToVector()));
-    }
-
-    private static double SampleGaussian(Random rng, double mean, double stdDev)
-    {
-        double u1 = 1.0 - rng.NextDouble();
-        double u2 = rng.NextDouble();
-        double z = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2);
-        return mean + stdDev * z;
     }
 
     private string ComputeModelHash(Tensor<T> model)

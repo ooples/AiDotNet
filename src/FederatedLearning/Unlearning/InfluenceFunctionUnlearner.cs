@@ -65,20 +65,13 @@ public class InfluenceFunctionUnlearner<T> : FederatedLearningComponentBase<T>, 
         int targetRounds = 0;
 
         // Step 1: Compute target client's aggregate gradient
-        var targetGradient = new double[modelSize];
+        var targetGradient = new Tensor<T>(new[] { modelSize });
 
         if (clientHistories.ContainsKey(targetClientId))
         {
             var targetUpdates = clientHistories[targetClientId];
             targetRounds = targetUpdates.Count;
-
-            foreach (var update in targetUpdates)
-            {
-                for (int i = 0; i < modelSize && i < update.Shape[0]; i++)
-                {
-                    targetGradient[i] += NumOps.ToDouble(update[i]);
-                }
-            }
+            targetGradient = UnlearningEngineOps.SumFitted(targetUpdates, modelSize);
         }
 
         // Step 2: Approximate inverse Hessian-vector product using LiSSA
@@ -87,14 +80,8 @@ public class InfluenceFunctionUnlearner<T> : FederatedLearningComponentBase<T>, 
 
         // Step 3: Apply Newton step: unlearned = global - (1/N) * H^{-1} * gradient
         int totalClients = clientHistories.Count;
-        var unlearnedModel = new Tensor<T>(new[] { modelSize });
-
-        for (int i = 0; i < modelSize; i++)
-        {
-            double param = NumOps.ToDouble(globalModel[i]);
-            double correction = totalClients > 0 ? hvp[i] / totalClients : hvp[i];
-            unlearnedModel[i] = NumOps.FromDouble(param - correction);
-        }
+        var correction = totalClients > 0 ? Engine.TensorDivideScalar(hvp, NumOps.FromDouble(totalClients)) : hvp;
+        var unlearnedModel = Engine.TensorSubtract(UnlearningEngineOps.FitLength(globalModel, modelSize), correction);
 
         stopwatch.Stop();
         string postHash = ComputeModelHash(unlearnedModel);
@@ -123,8 +110,8 @@ public class InfluenceFunctionUnlearner<T> : FederatedLearningComponentBase<T>, 
         return (unlearnedModel, certificate);
     }
 
-    private double[] ApproximateInverseHvp(
-        double[] targetGradient,
+    private Tensor<T> ApproximateInverseHvp(
+        Tensor<T> targetGradient,
         Dictionary<int, List<Tensor<T>>> clientHistories,
         int targetClientId,
         int modelSize)
@@ -134,8 +121,7 @@ public class InfluenceFunctionUnlearner<T> : FederatedLearningComponentBase<T>, 
         // h_{t+1} = v + (I - H_sample) * h_t
         // where H_sample is an empirical Hessian estimate from a random client's data
 
-        var h = new double[modelSize];
-        Array.Copy(targetGradient, h, modelSize);
+        var h = UnlearningEngineOps.FitLength(targetGradient, modelSize);
 
         // Collect non-target client updates for Hessian estimation
         var otherClientIds = new List<int>();
@@ -154,6 +140,8 @@ public class InfluenceFunctionUnlearner<T> : FederatedLearningComponentBase<T>, 
 
         var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSecureRandom();
         double damping = 0.01; // Regularization to ensure convergence
+        T keep = NumOps.FromDouble(1.0 - damping);
+        T tolerance = NumOps.FromDouble(_options.InfluenceTolerance);
 
         for (int iter = 0; iter < _options.MaxInfluenceIterations; iter++)
         {
@@ -167,16 +155,14 @@ public class InfluenceFunctionUnlearner<T> : FederatedLearningComponentBase<T>, 
             var hessianVp = ApproximateHessianVectorProduct(sampleUpdates, h, modelSize);
 
             // LiSSA update: h = v + (1 - damping) * h - hessian_vp
-            double maxDiff = 0;
-            for (int i = 0; i < modelSize; i++)
-            {
-                double newH = targetGradient[i] + (1.0 - damping) * h[i] - hessianVp[i];
-                maxDiff = Math.Max(maxDiff, Math.Abs(newH - h[i]));
-                h[i] = newH;
-            }
+            var newH = Engine.TensorSubtract(Engine.TensorAdd(targetGradient, Engine.TensorMultiplyScalar(h, keep)), hessianVp);
+
+            // Converged when max |newH - h| < tolerance, i.e. every entry is (a NaN never is)
+            int below = Engine.TensorSum(Engine.TensorLessThan(Engine.TensorAbs(Engine.TensorSubtract(newH, h)), tolerance).Cast<int>());
+            h = newH;
 
             // Check convergence
-            if (maxDiff < _options.InfluenceTolerance)
+            if (below == modelSize)
             {
                 break;
             }
@@ -185,45 +171,28 @@ public class InfluenceFunctionUnlearner<T> : FederatedLearningComponentBase<T>, 
         return h;
     }
 
-    private double[] ApproximateHessianVectorProduct(List<Tensor<T>> updates, double[] vector, int modelSize)
+    private Tensor<T> ApproximateHessianVectorProduct(List<Tensor<T>> updates, Tensor<T> vector, int modelSize)
     {
         // Finite-difference Hessian-vector product approximation
         // H * v ≈ (grad(theta + epsilon * v) - grad(theta - epsilon * v)) / (2 * epsilon)
         // We approximate this using consecutive update differences as gradient estimates
-        var result = new double[modelSize];
+        if (updates.Count < 2) return new Tensor<T>(new[] { modelSize });
 
-        if (updates.Count < 2) return result;
-
-        // Use consecutive update differences as gradient approximation
-        for (int r = 1; r < updates.Count; r++)
-        {
-            var gradBefore = updates[r - 1];
-            var gradAfter = updates[r];
-
-            for (int i = 0; i < modelSize; i++)
-            {
-                double gBefore = i < gradBefore.Shape[0] ? NumOps.ToDouble(gradBefore[i]) : 0;
-                double gAfter = i < gradAfter.Shape[0] ? NumOps.ToDouble(gradAfter[i]) : 0;
-                double gradDiff = gAfter - gBefore;
-
-                // Approximate: d^2L/dw^2 * v_i ≈ gradDiff * v_i
-                result[i] += gradDiff * vector[i] / Math.Max(1, updates.Count - 1);
-            }
-        }
-
-        return result;
+        // The mean of the consecutive differences (g_r - g_{r-1}) telescopes to (g_last - g_first) / (R - 1).
+        // Approximate: d^2L/dw^2 * v_i ≈ gradDiff * v_i
+        var gradDiff = Engine.TensorSubtract(
+            UnlearningEngineOps.FitLength(updates[updates.Count - 1], modelSize),
+            UnlearningEngineOps.FitLength(updates[0], modelSize));
+        var meanDiff = Engine.TensorDivideScalar(gradDiff, NumOps.FromDouble(updates.Count - 1));
+        return Engine.TensorMultiply(meanDiff, UnlearningEngineOps.FitLength(vector, modelSize));
     }
 
-    private static double EstimateMembershipScore(double[] gradient, double[] correction)
+    private static double EstimateMembershipScore(Tensor<T> gradient, Tensor<T> correction)
     {
         // How well the correction aligns with the original gradient
-        double dot = 0, normA = 0, normB = 0;
-        for (int i = 0; i < gradient.Length; i++)
-        {
-            dot += gradient[i] * correction[i];
-            normA += gradient[i] * gradient[i];
-            normB += correction[i] * correction[i];
-        }
+        double dot = NumOps.ToDouble(Engine.TensorSum(Engine.TensorMultiply(gradient, correction)));
+        double normA = NumOps.ToDouble(Engine.TensorSum(Engine.TensorSquare(gradient)));
+        double normB = NumOps.ToDouble(Engine.TensorSum(Engine.TensorSquare(correction)));
         double denomCS = Math.Sqrt(normA) * Math.Sqrt(normB);
         double alignment = denomCS > CosineEpsilon ? dot / denomCS : 0;
 

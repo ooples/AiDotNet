@@ -63,53 +63,36 @@ public class GradientAscentUnlearner<T> : FederatedLearningComponentBase<T>, IFe
         int targetRounds = 0;
 
         // Compute the target client's aggregate contribution
-        var targetContribution = new double[modelSize];
+        var targetContribution = new Tensor<T>(new[] { modelSize });
 
         if (clientHistories.ContainsKey(targetClientId))
         {
             var targetUpdates = clientHistories[targetClientId];
             targetRounds = targetUpdates.Count;
 
-            foreach (var update in targetUpdates)
-            {
-                for (int i = 0; i < modelSize && i < update.Shape[0]; i++)
-                {
-                    targetContribution[i] += NumOps.ToDouble(update[i]);
-                }
-            }
-
             // Average the contribution
             if (targetRounds > 0)
             {
-                for (int i = 0; i < modelSize; i++)
-                {
-                    targetContribution[i] /= targetRounds;
-                }
+                targetContribution = Engine.TensorDivideScalar(
+                    UnlearningEngineOps.SumFitted(targetUpdates, modelSize), NumOps.FromDouble(targetRounds));
             }
         }
 
         // Apply gradient ascent: move OPPOSITE to client's contribution
-        var unlearnedModel = new Tensor<T>(new[] { modelSize });
         double lr = _options.UnlearningLearningRate;
 
-        for (int i = 0; i < modelSize; i++)
-        {
-            unlearnedModel[i] = globalModel[i];
-        }
-
+        // Each epoch subtracts its decayed rate times the same contribution, so the epochs add up to
+        // one step with the summed rate.
+        double totalLr = 0.0;
         for (int epoch = 0; epoch < _options.MaxUnlearningEpochs; epoch++)
         {
             // Decay learning rate over epochs
-            double currentLr = lr * (1.0 - (double)epoch / _options.MaxUnlearningEpochs);
-
-            for (int i = 0; i < modelSize; i++)
-            {
-                double param = NumOps.ToDouble(unlearnedModel[i]);
-                // Ascend: ADD the contribution direction (opposite of descent)
-                param -= currentLr * targetContribution[i];
-                unlearnedModel[i] = NumOps.FromDouble(param);
-            }
+            totalLr += lr * (1.0 - (double)epoch / _options.MaxUnlearningEpochs);
         }
+
+        var unlearnedModel = Engine.TensorSubtract(
+            UnlearningEngineOps.FitLength(globalModel, modelSize),
+            Engine.TensorMultiplyScalar(targetContribution, NumOps.FromDouble(totalLr)));
 
         // Fine-tune on remaining clients to recover accuracy
         FineTuneOnRemaining(unlearnedModel, targetClientId, clientHistories);
@@ -149,49 +132,33 @@ public class GradientAscentUnlearner<T> : FederatedLearningComponentBase<T>, IFe
         int healingEpochs = Math.Max(1, _options.MaxUnlearningEpochs / 3);
         double lr = _options.UnlearningLearningRate * 0.1; // Lower LR for fine-tuning
 
-        for (int epoch = 0; epoch < healingEpochs; epoch++)
-        {
-            var avgUpdate = new double[modelSize];
-            int clientCount = 0;
+        // Use the last round's update as representative. It is the same every epoch, so the
+        // healing epochs add up to param += epochs * lr * avgUpdate.
+        var lastUpdates = clientHistories
+            .Where(kvp => kvp.Key != targetClientId && kvp.Value.Count > 0)
+            .Select(kvp => kvp.Value[kvp.Value.Count - 1])
+            .ToList();
+        if (lastUpdates.Count == 0) return;
 
-            foreach (var kvp in clientHistories)
-            {
-                if (kvp.Key == targetClientId || kvp.Value.Count == 0) continue;
+        var sumUpdate = UnlearningEngineOps.SumFitted(lastUpdates, modelSize);
+        var healed = Engine.TensorAdd(
+            UnlearningEngineOps.FitLength(model, modelSize),
+            Engine.TensorMultiplyScalar(sumUpdate, NumOps.FromDouble(healingEpochs * lr / lastUpdates.Count)));
 
-                // Use the last round's update as representative
-                var lastUpdate = kvp.Value[kvp.Value.Count - 1];
-                for (int i = 0; i < modelSize && i < lastUpdate.Shape[0]; i++)
-                {
-                    avgUpdate[i] += NumOps.ToDouble(lastUpdate[i]);
-                }
-
-                clientCount++;
-            }
-
-            if (clientCount == 0) break;
-
-            for (int i = 0; i < modelSize; i++)
-            {
-                double param = NumOps.ToDouble(model[i]);
-                param += lr * avgUpdate[i] / clientCount;
-                model[i] = NumOps.FromDouble(param);
-            }
-        }
+        // Written back into the caller's model
+        healed.AsSpan().CopyTo(model.AsWritableSpan().Slice(0, modelSize));
     }
 
-    private double ComputeMembershipScore(double[] contribution, Tensor<T> unlearned, Tensor<T> original)
+    private double ComputeMembershipScore(Tensor<T> contribution, Tensor<T> unlearned, Tensor<T> original)
     {
         // Measure how much of the target's contribution remains
         int size = Math.Min(unlearned.Shape[0], original.Shape[0]);
-        double remainingInfluence = 0;
-        double totalInfluence = 0;
+        if (size <= 0) return 0.5;
 
-        for (int i = 0; i < size; i++)
-        {
-            double diff = NumOps.ToDouble(unlearned[i]) - NumOps.ToDouble(original[i]);
-            remainingInfluence += diff * contribution[i];
-            totalInfluence += contribution[i] * contribution[i];
-        }
+        var weights = UnlearningEngineOps.FitLength(contribution, size);
+        var diff = Engine.TensorSubtract(UnlearningEngineOps.FitLength(unlearned, size), UnlearningEngineOps.FitLength(original, size));
+        double remainingInfluence = NumOps.ToDouble(Engine.TensorSum(Engine.TensorMultiply(diff, weights)));
+        double totalInfluence = NumOps.ToDouble(Engine.TensorSum(Engine.TensorSquare(weights)));
 
         if (totalInfluence < 1e-12) return 0.5;
 
