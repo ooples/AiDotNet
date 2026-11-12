@@ -156,29 +156,31 @@ public class MorletWavelet<T> : WaveletFunctionBase<T>
     public override (Vector<T> approximation, Vector<T> detail) Decompose(Vector<T> input)
     {
         int size = input.Length;
-        var complexOps = MathHelper.GetNumericOperations<Complex<T>>();
-        // Perform FFT
-        var spectrum = _fft.Forward(input);
-        // Apply Morlet wavelet in frequency domain
-        var scalingSpectrum = new Vector<Complex<T>>(size);
-        var waveletSpectrum = new Vector<Complex<T>>(size);
-        for (int i = 0; i < size; i++)
-        {
-            T freq = NumOps.Divide(NumOps.FromDouble(i - size / 2), NumOps.FromDouble(size));
-            Complex<T> psi = MorletFourierTransform(freq);
+        var engine = AiDotNetEngine.Current;
 
-            // Low-pass (scaling) filter
-            if (NumOps.LessThanOrEquals(NumOps.Abs(freq), NumOps.FromDouble(0.5)))
-            {
-                scalingSpectrum[i] = complexOps.Multiply(spectrum[i], psi);
-            }
-            // High-pass (wavelet) filter
-            waveletSpectrum[i] = complexOps.Multiply(spectrum[i],
-                complexOps.Subtract(new Complex<T>(NumOps.One, NumOps.Zero), psi));
-        }
-        // Perform inverse FFT
-        var approximation = _fft.Inverse(scalingSpectrum);
-        var detail = _fft.Inverse(waveletSpectrum);
+        var spectrum = Tensor<Complex<T>>.FromVector(_fft.Forward(input));
+        var spectrumReal = engine.TensorReal(spectrum);
+        var spectrumImag = engine.TensorImag(spectrum);
+
+        // psi is real, so multiplying the spectrum by it (or by 1 - psi) scales both planes.
+        var freq = FrequencyGrid(size);
+        var psi = MorletFourierTransform(freq);
+
+        // Apply scaling function (low-pass), only inside |freq| <= 0.5
+        var outside = engine.TensorGreaterThan(engine.TensorAbs(freq), NumOps.FromDouble(0.5));
+        var zeros = engine.TensorZerosLike(psi);
+        var scalingSpectrum = engine.TensorComplex(
+            engine.TensorWhere(outside, zeros, engine.TensorMultiply(spectrumReal, psi)),
+            engine.TensorWhere(outside, zeros, engine.TensorMultiply(spectrumImag, psi)));
+
+        // Apply wavelet function (high-pass)
+        var highPass = engine.ScalarMinusTensor(NumOps.One, psi);
+        var waveletSpectrum = engine.TensorComplex(
+            engine.TensorMultiply(spectrumReal, highPass),
+            engine.TensorMultiply(spectrumImag, highPass));
+
+        var approximation = _fft.Inverse(scalingSpectrum.ToVector());
+        var detail = _fft.Inverse(waveletSpectrum.ToVector());
         return (approximation, detail);
     }
 
@@ -208,16 +210,11 @@ public class MorletWavelet<T> : WaveletFunctionBase<T>
     public override Vector<T> GetScalingCoefficients()
     {
         int size = 1024; // Use a power of 2 for efficient FFT
-        var coeffs = new Vector<T>(size);
-        for (int i = 0; i < size; i++)
-        {
-            T freq = NumOps.Divide(NumOps.FromDouble(i - size / 2), NumOps.FromDouble(size));
-            coeffs[i] = NumOps.LessThanOrEquals(NumOps.Abs(freq), NumOps.FromDouble(0.5))
-                ? MorletFourierTransform(freq).Magnitude
-                : NumOps.Zero;
-        }
-
-        return coeffs;
+        var engine = AiDotNetEngine.Current;
+        var freq = FrequencyGrid(size);
+        var magnitude = engine.TensorSqrt(engine.TensorSquare(MorletFourierTransform(freq)));
+        var outside = engine.TensorGreaterThan(engine.TensorAbs(freq), NumOps.FromDouble(0.5));
+        return engine.TensorWhere(outside, engine.TensorZerosLike(magnitude), magnitude).ToVector();
     }
 
     /// <summary>
@@ -246,14 +243,11 @@ public class MorletWavelet<T> : WaveletFunctionBase<T>
     public override Vector<T> GetWaveletCoefficients()
     {
         int size = 1024; // Use a power of 2 for efficient FFT
-        var coeffs = new Vector<T>(size);
-        for (int i = 0; i < size; i++)
-        {
-            T freq = NumOps.Divide(NumOps.FromDouble(i - size / 2), NumOps.FromDouble(size));
-            coeffs[i] = NumOps.Subtract(NumOps.One, MorletFourierTransform(freq).Magnitude);
-        }
+        var engine = AiDotNetEngine.Current;
+        var psi = MorletFourierTransform(FrequencyGrid(size));
 
-        return coeffs;
+        // 1 - |psi| (the magnitude of the real transform is sqrt(psi^2))
+        return engine.ScalarMinusTensor(NumOps.One, engine.TensorSqrt(engine.TensorSquare(psi))).ToVector();
     }
 
     /// <summary>
@@ -279,13 +273,24 @@ public class MorletWavelet<T> : WaveletFunctionBase<T>
     /// allows the wavelet to be applied efficiently in either domain, depending on the application.
     /// </para>
     /// </remarks>
-    private Complex<T> MorletFourierTransform(T omega)
+    private Tensor<T> MorletFourierTransform(Tensor<T> omega)
     {
-        T term1 = NumOps.Exp(NumOps.Multiply(NumOps.FromDouble(-0.5), NumOps.Multiply(omega, omega)));
-        T term2 = NumOps.Exp(NumOps.Multiply(NumOps.FromDouble(-0.5), NumOps.Multiply(NumOps.Subtract(omega, _omega), NumOps.Subtract(omega, _omega))));
-        T real = NumOps.Subtract(term2, term1);
+        var engine = AiDotNetEngine.Current;
+        T half = NumOps.FromDouble(-0.5);
+        var term1 = engine.TensorExp(engine.TensorMultiplyScalar(engine.TensorMultiply(omega, omega), half));
+        var shifted = engine.TensorSubtractScalar(omega, _omega);
+        var term2 = engine.TensorExp(engine.TensorMultiplyScalar(engine.TensorMultiply(shifted, shifted), half));
 
-        return new Complex<T>(real, NumOps.Zero);
+        // The transform is real: psi(w) = exp(-(w - w0)^2 / 2) - exp(-w^2 / 2)
+        return engine.TensorSubtract(term2, term1);
+    }
+
+    /// <summary>
+    /// The normalized frequencies <c>(i - size / 2) / size</c> of the spectrum bins.
+    /// </summary>
+    private static Tensor<T> FrequencyGrid(int size)
+    {
+        return AiDotNetEngine.Current.TensorDivideScalar(WaveletEngineOps<T>.CenteredGrid(size), NumOps.FromDouble(size));
     }
 
     /// <summary>
@@ -310,21 +315,14 @@ public class MorletWavelet<T> : WaveletFunctionBase<T>
     /// </remarks>
     public Vector<T> Reconstruct(Vector<T> approximation, Vector<T> detail)
     {
-        int size = approximation.Length;
-        var complexOps = MathHelper.GetNumericOperations<Complex<T>>();
-
-        // Transform both to frequency domain
+        // Perform FFT on both approximation and detail
         Vector<Complex<T>> approxSpectrum = _fft.Forward(approximation);
         Vector<Complex<T>> detailSpectrum = _fft.Forward(detail);
 
-        // Combine spectrums
-        var combined = new Vector<Complex<T>>(size);
-        for (int i = 0; i < size; i++)
-        {
-            combined[i] = complexOps.Add(approxSpectrum[i], detailSpectrum[i]);
-        }
+        // Combine the spectra
+        var combined = ComplexWaveletEngineOps<T>.AddTruncated(approxSpectrum, detailSpectrum);
 
-        // Transform back to time domain
+        // Perform inverse FFT
         return _fft.Inverse(combined);
     }
 }
