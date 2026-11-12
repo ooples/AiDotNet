@@ -82,6 +82,7 @@ public class DirectLiNGAMAlgorithm<T> : FunctionalBase<T>
         var standardized = StandardizeData(data);
 
         var remaining = Enumerable.Range(0, d).ToList();
+        T varianceFloor = NumOps.FromDouble(1e-10);
         var causalOrder = new List<int>();
         var currentData = standardized;
 
@@ -128,11 +129,11 @@ public class DirectLiNGAMAlgorithm<T> : FunctionalBase<T>
                 var current = Tensor<T>.FromMatrix(currentData);
                 var centered = CenterColumns(current);
                 var rootCentered = Engine.TensorSliceAxis(centered, 1, root).Reshape(new[] { n, 1 });
-                T sxx = Engine.TensorSum(Engine.TensorSquare(rootCentered));
+                // beta = sxy / sxx, or 0 when the root has no variation (sxx <= 1e-10)
+                var sxx = Engine.TensorBroadcastTo(Engine.ReduceSum(Engine.TensorSquare(rootCentered), new[] { 0 }, true), new[] { 1, centered.Shape[1] });
                 var sxy = Engine.TensorMatMul(Engine.TensorTranspose(rootCentered), centered);
-                var beta = NumOps.GreaterThan(sxx, NumOps.FromDouble(1e-10))
-                    ? Engine.TensorDivideScalar(sxy, sxx)
-                    : Engine.TensorZerosLike(sxy);
+                var beta = Engine.TensorWhere(Engine.TensorGreaterThan(sxx, varianceFloor),
+                    Engine.TensorDivide(sxy, sxx), Engine.TensorZerosLike(sxy));
                 var residuals = Engine.TensorSubtract(centered, Engine.TensorMatMul(rootCentered, beta));
 
                 var remainingIndex = new Tensor<int>(remaining.ToArray(), new[] { remaining.Count });
