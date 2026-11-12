@@ -43,18 +43,9 @@ public class HingeLoss<T> : LossFunctionBase<T>
     {
         ValidateVectorLengths(predicted, actual);
 
-        T sum = NumOps.Zero;
-        for (int i = 0; i < predicted.Length; i++)
-        {
-            // Hinge loss: max(0, 1 - y*f(x))
-            T margin = NumOps.Subtract(
-                NumOps.One,
-                NumOps.Multiply(actual[i], predicted[i])
-            );
-
-            T loss = MathHelper.Max(NumOps.Zero, margin);
-            sum = NumOps.Add(sum, loss);
-        }
+        // Hinge loss: max(0, 1 - y*f(x))
+        var margin = Engine.ScalarMinusTensor(NumOps.One, Engine.TensorMultiply(actual.AsTensor(), predicted.AsTensor()));
+        T sum = Engine.TensorSum(Engine.TensorMax(margin, NumOps.Zero));
 
         return NumOps.Divide(sum, NumOps.FromDouble(predicted.Length));
     }
