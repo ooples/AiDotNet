@@ -26,7 +26,7 @@ public class SeasonalitySelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, 
     private readonly int _minPeriod;
     private readonly int _maxPeriod;
 
-    private double[]? _seasonalityStrengths;
+    private Vector<T>? _seasonalityStrengths;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
@@ -34,7 +34,7 @@ public class SeasonalitySelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, 
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public int MinPeriod => _minPeriod;
     public int MaxPeriod => _maxPeriod;
-    public double[]? SeasonalityStrengths => _seasonalityStrengths;
+    public Vector<T>? SeasonalityStrengths => _seasonalityStrengths;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -62,59 +62,29 @@ public class SeasonalitySelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, 
         int n = data.Rows;
         int p = data.Columns;
 
-        var X = new double[n, p];
-        for (int i = 0; i < n; i++)
-            for (int j = 0; j < p; j++)
-                X[i, j] = NumOps.ToDouble(data[i, j]);
-
-        _seasonalityStrengths = new double[p];
+        var engine = Engine;
         int effectiveMaxPeriod = Math.Min(_maxPeriod, n / 2);
+        var centered = FeatureSelectionTensorOps.CenterColumns(Tensor<T>.FromMatrix(data));
+        var totalVariance = FeatureSelectionTensorOps.ColumnSumOfSquares(centered);
 
-        for (int j = 0; j < p; j++)
+        // Largest DFT power (|X(1/period)|^2 / n) over the candidate periods
+        var maxPower = PreprocessingTensorOps.Filled(new[] { p }, NumOps.Zero);
+        if (effectiveMaxPeriod >= _minPeriod)
         {
-            var col = new double[n];
-            for (int i = 0; i < n; i++)
-                col[i] = X[i, j];
-
-            // Remove mean
-            double mean = col.Average();
-            for (int i = 0; i < n; i++)
-                col[i] -= mean;
-
-            double totalVariance = col.Sum(v => v * v);
-            if (totalVariance < 1e-10)
-            {
-                _seasonalityStrengths[j] = 0;
-                continue;
-            }
-
-            // Find dominant periodic component using spectral analysis
-            double maxPower = 0;
-            for (int period = _minPeriod; period <= effectiveMaxPeriod; period++)
-            {
-                // Compute power at this frequency using DFT
-                double freq = 1.0 / period;
-                double real = 0, imag = 0;
-                for (int i = 0; i < n; i++)
-                {
-                    double angle = 2 * Math.PI * freq * i;
-                    real += col[i] * Math.Cos(angle);
-                    imag -= col[i] * Math.Sin(angle);
-                }
-                double power = (real * real + imag * imag) / n;
-                maxPower = Math.Max(maxPower, power);
-            }
-
-            // Seasonality strength as ratio of max periodic power to total variance
-            _seasonalityStrengths[j] = maxPower / totalVariance;
+            var periods = engine.TensorArange<T>(_minPeriod, effectiveMaxPeriod + 1, 1);
+            var frequencies = engine.TensorDivide(
+                PreprocessingTensorOps.Filled(periods.Shape.ToArray(), NumOps.One), periods);
+            var power = engine.TensorDivideScalar(
+                FeatureSelectionTensorOps.FrequencyPower(centered, frequencies), NumOps.FromDouble(n));
+            maxPower = engine.TensorMax(maxPower, engine.ReduceMax(power, new[] { 0 }, false));
         }
 
-        int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = Enumerable.Range(0, p)
-            .OrderByDescending(j => _seasonalityStrengths[j])
-            .Take(numToSelect)
-            .OrderBy(x => x)
-            .ToArray();
+        // Seasonality strength as ratio of max periodic power to total variance (near-constant columns score 0)
+        var strengths = FeatureSelectionTensorOps.ZeroUnless(
+            PreprocessingTensorOps.AtLeast(totalVariance, NumOps.FromDouble(1e-10)),
+            engine.TensorDivide(maxPower, totalVariance));
+        _seasonalityStrengths = strengths.ToVector();
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(strengths, Math.Min(_nFeaturesToSelect, p));
 
         IsFitted = true;
     }
