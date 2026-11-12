@@ -124,12 +124,12 @@ public class MambularClassifier<T> : MambularBase<T>
     /// </summary>
     public T TrainStep(Tensor<T> numericalFeatures, Vector<int> targets, T learningRate, Matrix<int>? categoricalIndices = null)
     {
-        var probabilities = PredictProbabilities(numericalFeatures, categoricalIndices);
-        var loss = ComputeCrossEntropyLoss(probabilities, targets);
-        UpdateParameters(learningRate);
-        ResetState();
-
-        return loss;
+        int batchSize = numericalFeatures.Shape[0];
+        var labels = TabularTraining.OneHotTargets<T>(targets, batchSize, _numClasses);
+        var epsilon = NumOps.FromDouble(1e-15);
+        return TrainWithTape(
+            () => TabularTraining.CrossEntropyObjective(PredictProbabilities(numericalFeatures, categoricalIndices), labels, epsilon),
+            learningRate);
     }
 
     /// <summary>

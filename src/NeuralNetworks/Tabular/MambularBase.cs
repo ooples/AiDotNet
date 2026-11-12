@@ -9,6 +9,8 @@ using AiDotNet.Extensions;
 using AiDotNet.Helpers;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.NeuralNetworks.Layers.SSM;
+using System.Linq;
 
 namespace AiDotNet.NeuralNetworks.Tabular;
 
@@ -19,7 +21,10 @@ namespace AiDotNet.NeuralNetworks.Tabular;
 /// <para>
 /// Mambular applies the Mamba architecture to tabular data:
 /// 1. Features are embedded and treated as a sequence
-/// 2. Selective State Space Model (S4/Mamba) processes the sequence
+/// 2. A stack of pre-norm residual Mamba layers, x + Mamba(RMSNorm(x)), processes the feature sequence. Each
+///    Mamba layer is the full selective state space block of Gu and Dao (2023): input projection, causal
+///    depthwise conv1d, SiLU, the selective S6 scan with input-dependent delta, B and C, SiLU output gating
+///    and the output projection (<see cref="MambaBlock{T}"/>).
 /// 3. Final representation is used for prediction
 /// </para>
 /// <para>
@@ -53,7 +58,10 @@ public abstract partial class MambularBase<T> : IParameterSource<T>
     private readonly Tensor<T>[]? _categoricalEmbeddings;
 
     // Mamba layers
-    private readonly List<MambaBlock> _mambaBlocks;
+    private readonly List<MambaBlock<T>> _mambaBlocks;
+
+    // Pre-norm of each residual Mamba layer (Mambular: x + Mamba(RMSNorm(x)))
+    private readonly List<RMSNormalizationLayer<T>> _blockNorms;
 
     // MLP head
     private readonly List<FullyConnectedLayer<T>> _mlpLayers;
@@ -106,6 +114,9 @@ public abstract partial class MambularBase<T> : IParameterSource<T>
 
             for (int i = 0; i < _mambaBlocks.Count; i++)
                 registry.Register($"00000002/{i:D8}", _mambaBlocks[i]);
+
+            for (int i = 0; i < _blockNorms.Count; i++)
+                registry.Register($"00000004/{i:D8}", _blockNorms[i]);
 
             for (int i = 0; i < _mlpLayers.Count; i++)
                 registry.Register($"00000003/{i:D8}", _mlpLayers[i]);
@@ -164,16 +175,18 @@ public abstract partial class MambularBase<T> : IParameterSource<T>
 
         // Mamba blocks
         _mambaBlocks = [];
+        _blockNorms = [];
         for (int i = 0; i < Options.NumLayers; i++)
         {
-            _mambaBlocks.Add(new MambaBlock(
-                Options.EmbeddingDimension,
-                Options.StateDimension,
-                Options.InnerDimension,
-                Options.ConvKernelSize,
-                Options.DeltaMin,
-                Options.DeltaMax,
-                _random));
+            _blockNorms.Add(new RMSNormalizationLayer<T>(Options.EmbeddingDimension));
+            _mambaBlocks.Add(new MambaBlock<T>(
+                sequenceLength: TotalFeatures,
+                modelDimension: Options.EmbeddingDimension,
+                stateDimension: Options.StateDimension,
+                expandFactor: Options.ExpansionFactor,
+                convKernelSize: Options.ConvKernelSize,
+                deltaMin: Options.DeltaMin,
+                deltaMax: Options.DeltaMax));
         }
 
         // MLP head
@@ -255,22 +268,14 @@ public abstract partial class MambularBase<T> : IParameterSource<T>
         var embedded = EmbedFeatures(numericalFeatures, categoricalIndices);
 
         // Forward direction
-        var forward = embedded;
-        foreach (var block in _mambaBlocks)
-        {
-            forward = block.Forward(forward, batchSize, TotalFeatures, Options.EmbeddingDimension);
-        }
+        var forward = ApplyMambaLayers(embedded);
 
         Tensor<T> combined;
         if (Options.UseBidirectional)
         {
             // Backward direction (reverse sequence)
             var reversed = ReverseSequence(embedded, batchSize, TotalFeatures, Options.EmbeddingDimension);
-            var backward = reversed;
-            foreach (var block in _mambaBlocks)
-            {
-                backward = block.Forward(backward, batchSize, TotalFeatures, Options.EmbeddingDimension);
-            }
+            var backward = ApplyMambaLayers(reversed);
             backward = ReverseSequence(backward, batchSize, TotalFeatures, Options.EmbeddingDimension);
 
             // Concatenate forward and backward
@@ -294,6 +299,55 @@ public abstract partial class MambularBase<T> : IParameterSource<T>
         return mlpOutput;
     }
 
+    /// <summary>
+    /// The residual Mamba stack over a [batch, features, embedding] sequence: x = x + Mamba(RMSNorm(x)) per layer.
+    /// </summary>
+    private Tensor<T> ApplyMambaLayers(Tensor<T> sequence)
+    {
+        var current = sequence;
+        for (int i = 0; i < _mambaBlocks.Count; i++)
+        {
+            var normed = _blockNorms[i].Forward(current);
+            current = Engine.TensorAdd(current, _mambaBlocks[i].Forward(normed));
+        }
+
+        return current;
+    }
+
+    /// <summary>
+    /// The live tensors a tape training step updates: the embeddings, every Mamba layer and norm, the MLP and
+    /// the task head a subclass adds.
+    /// </summary>
+    protected IEnumerable<Tensor<T>> GetTrainableTensors()
+    {
+        var tensors = new List<Tensor<T>> { _numericalEmbeddings };
+        if (_categoricalEmbeddings != null) tensors.AddRange(_categoricalEmbeddings);
+
+        var layers = new List<ILayer<T>>();
+        layers.AddRange(_blockNorms);
+        layers.AddRange(_mambaBlocks);
+        layers.AddRange(_mlpLayers);
+        layers.AddRange(GetExtraTrainableLayers().OfType<ILayer<T>>());
+        tensors.AddRange(TabularTraining.LayerTensors(layers));
+        return tensors;
+    }
+
+    /// <summary>
+    /// One tape training step: gradients of <paramref name="objective"/> over every trainable tensor, then SGD.
+    /// </summary>
+    /// <returns>The loss before the update.</returns>
+    protected T TrainWithTape(Func<Tensor<T>> objective, T learningRate)
+    {
+        try
+        {
+            return TabularTraining.SgdStep(GetTrainableTensors, objective, learningRate);
+        }
+        finally
+        {
+            ResetState();
+        }
+    }
+
     private Tensor<T> ReverseSequence(Tensor<T> input, int batchSize, int seqLen, int dim)
     {
         return Engine.TensorFlip(input.Reshape(batchSize, seqLen, dim), new[] { 1 }).Reshape(input._shape);
@@ -304,6 +358,11 @@ public abstract partial class MambularBase<T> : IParameterSource<T>
     /// </summary>
     public virtual void UpdateParameters(T learningRate)
     {
+        foreach (var norm in _blockNorms)
+        {
+            norm.UpdateParameters(learningRate);
+        }
+
         foreach (var block in _mambaBlocks)
         {
             block.UpdateParameters(learningRate);
@@ -320,6 +379,11 @@ public abstract partial class MambularBase<T> : IParameterSource<T>
     /// </summary>
     public virtual void ResetState()
     {
+        foreach (var norm in _blockNorms)
+        {
+            norm.ResetState();
+        }
+
         foreach (var block in _mambaBlocks)
         {
             block.ResetState();
@@ -328,229 +392,6 @@ public abstract partial class MambularBase<T> : IParameterSource<T>
         foreach (var layer in _mlpLayers)
         {
             layer.ResetState();
-        }
-    }
-
-    /// <summary>
-    /// Simplified Mamba block for tabular data.
-    /// </summary>
-    private class MambaBlock : IParameterSource<T>
-    {
-        private readonly int _modelDim;
-        private readonly int _stateDim;
-        private readonly int _innerDim;
-
-        // SSM parameters
-        private readonly Tensor<T> _A;  // State transition
-        private readonly Tensor<T> _B;  // Input projection
-        private readonly Tensor<T> _C;  // Output projection
-        private readonly Tensor<T> _D;  // Skip connection
-
-        // Projections
-        private readonly Tensor<T> _inProj;
-        private readonly Tensor<T> _outProj;
-
-        // Convolution
-        private readonly Tensor<T> _convWeight;
-
-        // Delta (discretization). Built once in the constructor and only ever read afterwards, and
-        // it is yielded from Tensors() below, so it travels in the parameter vector exactly like the
-        // seven weights above it. It was briefly labelled Scratch, which would have declared the
-        // opposite -- a value the restore path is free to discard -- while the vector was still
-        // carrying it. A field cannot be both.
-        private readonly Tensor<T> _deltaProj;
-
-        /// <summary>
-        /// The block's tensors in serialization order. Count, read and restore all walk THIS, so a
-        /// tensor added later joins all three at once instead of only the sum.
-        /// </summary>
-        private IEnumerable<Tensor<T>> Tensors()
-        {
-            yield return _A;
-            yield return _B;
-            yield return _C;
-            yield return _D;
-            yield return _inProj;
-            yield return _outProj;
-            yield return _convWeight;
-            yield return _deltaProj;
-        }
-
-        /// <inheritdoc />
-        public long ParameterCount
-        {
-            get
-            {
-                long count = 0;
-                foreach (var tensor in Tensors()) count += tensor.Length;
-                return count;
-            }
-        }
-
-        /// <inheritdoc />
-        public Vector<T> GetParameters()
-        {
-            var result = new Vector<T>(checked((int)ParameterCount));
-            var destination = result.AsWritableSpan();
-            int offset = 0;
-
-            foreach (var tensor in Tensors())
-            {
-                tensor.AsSpan().CopyTo(destination.Slice(offset, tensor.Length));
-                offset += tensor.Length;
-            }
-
-            return result;
-        }
-
-        /// <summary>Writes THROUGH the tensors, so the block computes with what was restored.</summary>
-        /// <remarks>
-        /// Rebinding the fields instead would leave any view or gradient buffer sharing the old
-        /// buffer, which is the stale-weights defect: the restore reports success and the block goes
-        /// on computing with its pre-restore values.
-        /// </remarks>
-        public void SetParameters(Vector<T> parameters)
-        {
-            if (parameters is null) throw new ArgumentNullException(nameof(parameters));
-
-            long expected = ParameterCount;
-            if (parameters.Length != expected)
-            {
-                throw new ArgumentException(
-                    $"Expected {expected} parameters, got {parameters.Length}.", nameof(parameters));
-            }
-
-            int offset = 0;
-            var source = parameters.AsSpan();
-            foreach (var tensor in Tensors())
-            {
-                source.Slice(offset, tensor.Length).CopyTo(tensor.AsWritableSpan());
-                offset += tensor.Length;
-            }
-        }
-
-        public MambaBlock(
-            int modelDim,
-            int stateDim,
-            int innerDim,
-            int convKernelSize,
-            double deltaMin,
-            double deltaMax,
-            Random random)
-        {
-            _modelDim = modelDim;
-            _stateDim = stateDim;
-            _innerDim = innerDim;
-
-            var scale = NumOps.FromDouble(0.02);
-
-            // SSM parameters
-            _A = new Tensor<T>(new[] { innerDim, stateDim });
-            _B = new Tensor<T>(new[] { innerDim, stateDim });
-            _C = new Tensor<T>(new[] { innerDim, stateDim });
-            _D = new Tensor<T>(new[] { innerDim });
-
-            // Initialize A with negative values (for stability)
-            for (int i = 0; i < _A.Length; i++)
-            {
-                _A[i] = NumOps.Negate(NumOps.FromDouble(1.0 + random.NextDouble() * 4.0));
-            }
-
-            InitializeWeights(_B, scale, random);
-            InitializeWeights(_C, scale, random);
-
-            AiDotNetEngine.Current.TensorFill(_D, NumOps.One);
-
-            // Projections
-            _inProj = new Tensor<T>(new[] { modelDim, innerDim * 2 });
-            _outProj = new Tensor<T>(new[] { innerDim, modelDim });
-            InitializeWeights(_inProj, scale, random);
-            InitializeWeights(_outProj, scale, random);
-
-            // Convolution
-            _convWeight = new Tensor<T>(new[] { innerDim, convKernelSize });
-            InitializeWeights(_convWeight, scale, random);
-
-            // Delta projection -- Mamba's dt_init (Gu & Dao 2023, §3.6 and the reference
-            // implementation): draw the discretization step log-uniformly from
-            // [DeltaMin, DeltaMax], then store its INVERSE SOFTPLUS, because Forward applies
-            // Softplus to this tensor. The constant 0.01 that stood here is the geometric mean
-            // of the declared 0.001 and 0.1 -- the midpoint of the range both options describe,
-            // hardcoded so that neither of them did anything.
-            _deltaProj = new Tensor<T>(new[] { innerDim });
-            double logMin = Math.Log(deltaMin);
-            double logMax = Math.Log(deltaMax);
-            for (int i = 0; i < _deltaProj.Length; i++)
-            {
-                double dt = Math.Exp(logMin + (random.NextDouble() * (logMax - logMin)));
-                // inverse softplus, written as log(expm1(dt)) so small dt does not cancel.
-                double inverseSoftplus = dt < 1e-3
-                    ? Math.Log(dt) + (dt / 2.0)
-                    : Math.Log(Math.Exp(dt) - 1.0);
-                _deltaProj[i] = NumOps.FromDouble(inverseSoftplus);
-            }
-        }
-
-        private static void InitializeWeights(Tensor<T> tensor, T scale, Random random)
-        {
-            for (int i = 0; i < tensor.Length; i++)
-            {
-                tensor[i] = NumOps.Multiply(NumOps.FromDouble(random.NextGaussian()), scale);
-            }
-        }
-
-        public Tensor<T> Forward(Tensor<T> input, int batchSize, int seqLen, int dim)
-        {
-            var engine = AiDotNetEngine.Current;
-            int innerDim = _innerDim;
-            int stateDim = _stateDim;
-            int rows = batchSize * seqLen;
-
-            // Input projection: x -> (z, x'), for every position at once
-            var x = TabularMetrics.Flat(input, rows * dim).Reshape(rows, dim);
-            var projected = engine.TensorMatMul(x, _inProj);
-            var gate = engine.Sigmoid(engine.TensorNarrow(projected, 1, 0, innerDim)).Reshape(batchSize, seqLen, innerDim);
-            var xPrime = engine.TensorNarrow(projected, 1, innerDim, innerDim).Reshape(batchSize, seqLen, innerDim);
-
-            // Discretization: delta = softplus(deltaProj) = log(1 + exp(deltaProj)); a = exp(A * delta), b = B * delta
-            var delta = engine.TensorLog(engine.TensorAddScalar(engine.TensorExp(_deltaProj), NumOps.One))
-                .Reshape(innerDim, 1);
-            var decay = engine.TensorExp(engine.TensorMultiply(_A.Reshape(innerDim, stateDim), delta))
-                .Reshape(1, innerDim, stateDim);
-            var inputGain = engine.TensorMultiply(_B.Reshape(innerDim, stateDim), delta).Reshape(1, innerDim, stateDim);
-            var readout = _C.Reshape(1, innerDim, stateDim);
-            var skip = _D.Reshape(1, innerDim);
-
-            // Simplified SSM scan over the sequence: h = a * h + b * x', y = (C . h + D * x') * z
-            var state = new Tensor<T>(new[] { batchSize, innerDim, stateDim });
-            var steps = new Tensor<T>[seqLen];
-            for (int s = 0; s < seqLen; s++)
-            {
-                var xs = engine.TensorNarrow(xPrime, 1, s, 1).Reshape(batchSize, innerDim);
-                state = engine.TensorAdd(
-                    engine.TensorMultiply(decay, state),
-                    engine.TensorMultiply(inputGain, xs.Reshape(batchSize, innerDim, 1)));
-
-                var hSum = engine.ReduceSum(engine.TensorMultiply(readout, state), new[] { 2 }, false);
-                var y = engine.TensorAdd(hSum, engine.TensorMultiply(skip, xs));
-                steps[s] = engine.TensorMultiply(y, engine.TensorNarrow(gate, 1, s, 1).Reshape(batchSize, innerDim))
-                    .Reshape(batchSize, 1, innerDim);
-            }
-
-            // Output projection with residual connection
-            var ySequence = engine.TensorConcatenate(steps, 1).Reshape(rows, innerDim);
-            var output = engine.TensorAdd(x, engine.TensorMatMul(ySequence, _outProj));
-            return output.Reshape(input._shape);
-        }
-
-        public void UpdateParameters(T learningRate)
-        {
-            // Simplified - in practice would use proper gradients
-        }
-
-        public void ResetState()
-        {
-            // Reset any cached state
         }
     }
 }
