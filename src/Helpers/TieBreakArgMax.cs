@@ -247,6 +247,66 @@ internal static class TieBreakArgMax
     }
 
     /// <summary>
+    /// Returns the order of a STABLE descending sort of a vector of any length under <c>NumOps.Compare</c>
+    /// ordering (NaN ranks below every number, so it comes last), in O(n log n). This is the order
+    /// <c>OrderByDescending</c> gives on the values.
+    /// </summary>
+    /// <remarks>
+    /// The engine sort puts equal values next to each other in some order. Each element's group rank (0 for
+    /// the largest value), its NaN flag and its index then form the unique 64-bit key
+    /// <c>rank * 2n + nan * n + index</c>, so arg-sorting the key is unambiguous. NaN joins the group of the
+    /// smallest number with its flag set, which places it after every number.
+    /// </remarks>
+    /// <param name="values">Values of any shape; they are ordered as one flat vector.</param>
+    /// <returns>Flat indices of shape [n], largest value first.</returns>
+    public static Tensor<int> StableDescendingOrder1D<T>(Tensor<T> values)
+    {
+        if (values is null)
+        {
+            throw new ArgumentNullException(nameof(values));
+        }
+
+        int n = values.Length;
+        if (n == 0)
+        {
+            return new Tensor<int>(new[] { 0 });
+        }
+
+        var engine = AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<T>();
+        var flat = values.Reshape(n);
+        var isNaN = engine.TensorIsNan(flat);
+        T smallest = engine.TensorMinValue(engine.TensorWhere(isNaN, engine.TensorFullLike(flat, ops.MaxValue), flat));
+        var clean = engine.TensorWhere(isNaN, engine.TensorFullLike(flat, smallest), flat);
+
+        // Dense rank of every value, counted from the largest
+        var sortedIndices = engine.TensorArgsort(clean, 0, true);
+        var sorted = engine.TensorTake(clean, sortedIndices);
+        var startsGroup = n == 1
+            ? new Tensor<int>(new[] { 1 })
+            : engine.TensorConcatenate(
+                new[]
+                {
+                    new Tensor<int>(new[] { 1 }),
+                    engine.TensorNotEquals(
+                        engine.TensorNarrow(sorted, 0, 1, n - 1), engine.TensorNarrow(sorted, 0, 0, n - 1)).Cast<int>(),
+                },
+                0);
+        var sortedRank = engine.TensorCumSum(startsGroup, 0);
+        var rank = engine.TensorIndexAdd(new Tensor<int>(new[] { n }), 0, sortedIndices, sortedRank);
+
+        long count = n;
+        var nanFlag = engine.TensorWhere(isNaN, Tensor<long>.CreateDefault(new[] { n }, 1L), new Tensor<long>(new[] { n }));
+        var index = engine.TensorArange<int>(0, n).Cast<long>();
+        var key = engine.TensorAdd(
+            engine.TensorAdd(
+                engine.TensorMultiplyScalar(rank.Cast<long>(), 2L * count),
+                engine.TensorMultiplyScalar(nanFlag, count)),
+            index);
+        return engine.TensorArgsort(key, 0, false);
+    }
+
+    /// <summary>
     /// Returns the first index holding the maximum of a vector, with the same rules as
     /// <see cref="FirstMaxIndexPerRow{T}(Tensor{T}, ArgMaxScan)"/>.
     /// </summary>
