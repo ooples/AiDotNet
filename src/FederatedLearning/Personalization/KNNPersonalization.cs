@@ -103,15 +103,8 @@ public class KNNPersonalization<T> : Infrastructure.FederatedLearningComponentBa
         }
 
         // Compute cosine similarities to all cache entries.
-        double queryNorm = 0;
-        var queryDoubles = new double[queryFeatures.Length];
-        for (int j = 0; j < queryFeatures.Length; j++)
-        {
-            queryDoubles[j] = NumOps.ToDouble(queryFeatures[j]);
-            queryNorm += queryDoubles[j] * queryDoubles[j];
-        }
-
-        queryNorm = Math.Sqrt(queryNorm);
+        var query = Vector<T>.Wrap(queryFeatures);
+        double queryNorm = NumOps.ToDouble(Engine.Norm(query));
 
         var similarities = new (double Similarity, int Label)[_cache.Count];
         for (int i = 0; i < _cache.Count; i++)
@@ -119,15 +112,9 @@ public class KNNPersonalization<T> : Infrastructure.FederatedLearningComponentBa
             var cached = _cache[i].Features;
             int len = Math.Min(queryFeatures.Length, cached.Length);
 
-            double dot = 0, cachedNorm = 0;
-            for (int j = 0; j < len; j++)
-            {
-                double cv = NumOps.ToDouble(cached[j]);
-                dot += queryDoubles[j] * cv;
-                cachedNorm += cv * cv;
-            }
-
-            cachedNorm = Math.Sqrt(cachedNorm);
+            var cachedVec = Vector<T>.Wrap(cached, 0, len);
+            double dot = NumOps.ToDouble(Engine.DotProduct(Vector<T>.Wrap(queryFeatures, 0, len), cachedVec));
+            double cachedNorm = NumOps.ToDouble(Engine.Norm(cachedVec));
             double denom = queryNorm * cachedNorm;
             double sim = denom > 1e-10 ? dot / denom : 0;
 
