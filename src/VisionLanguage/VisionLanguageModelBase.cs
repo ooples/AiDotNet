@@ -405,6 +405,74 @@ public abstract partial class VisionLanguageModelBase<T> : NeuralNetworkBase<T>,
     }
 
     /// <summary>
+    /// Stacks the leading <paramref name="width"/> values of the first <paramref name="count"/> feature
+    /// tensors (each read flattened) into a [count, width] matrix.
+    /// </summary>
+    /// <param name="features">Per-item features.</param>
+    /// <param name="count">Number of leading items to stack.</param>
+    /// <param name="width">Number of leading values taken from each item.</param>
+    /// <returns>A [count, width] tensor.</returns>
+    protected Tensor<T> StackLeading(IReadOnlyList<Tensor<T>> features, int count, int width)
+    {
+        var rows = new Tensor<T>[count];
+        for (int f = 0; f < count; f++)
+        {
+            var item = features[f];
+            rows[f] = Engine.TensorSlice(item.Reshape([item.Length]), [0], [width]).Reshape([1, width]);
+        }
+        return Engine.TensorConcatenate(rows, 0);
+    }
+
+    /// <summary>
+    /// Returns the flattened values truncated or zero-padded to exactly <paramref name="length"/> values.
+    /// </summary>
+    /// <param name="values">Values to fit.</param>
+    /// <param name="length">Required length.</param>
+    /// <returns>A [length] tensor.</returns>
+    protected Tensor<T> FitLength(Tensor<T> values, int length)
+    {
+        int n = values.Length;
+        var flat = values.Reshape([n]);
+        if (n == length)
+            return flat;
+        if (n > length)
+            return Engine.TensorSlice(flat, [0], [length]);
+        return Engine.TensorConcatenate([flat, new Tensor<T>([length - n])], 0);
+    }
+
+    /// <summary>
+    /// The instruction-gated 2-layer MLP connector used by the video-language models:
+    /// projected[v] = gelu_tanh(0.8 x) * 0.7 + 0.15 x, read cyclically to <paramref name="dim"/>; with a prompt,
+    /// tok[d] = prompt[d % promptLen] / vocabSize gates it as projected * (0.5 + sigmoid(5 tok)) + 0.3 tok.
+    /// </summary>
+    /// <param name="visual">Encoder output (read flattened).</param>
+    /// <param name="promptTokens">Optional prompt token ids.</param>
+    /// <param name="dim">Decoder input width.</param>
+    /// <param name="vocabSize">Vocabulary size used to scale token ids.</param>
+    /// <returns>The [dim] decoder input.</returns>
+    protected Tensor<T> GatedConnectorInput(Tensor<T> visual, Tensor<T>? promptTokens, int dim, int vocabSize)
+    {
+        var x = visual.Reshape([visual.Length]);
+        var h = Engine.TensorMultiplyScalar(x, NumOps.FromDouble(0.8));
+        var cubic = Engine.TensorMultiplyScalar(Engine.TensorMultiply(Engine.TensorMultiply(h, h), h), NumOps.FromDouble(0.044715));
+        var inner = Engine.TensorMultiplyScalar(Engine.TensorAdd(h, cubic), NumOps.FromDouble(Math.Sqrt(2.0 / Math.PI)));
+        var gelu = Engine.TensorMultiply(
+            Engine.TensorMultiplyScalar(h, NumOps.FromDouble(0.5)), Engine.TensorAddScalar(Engine.TensorTanh(inner), NumOps.One));
+        var projected = Engine.TensorAdd(
+            Engine.TensorMultiplyScalar(gelu, NumOps.FromDouble(0.7)), Engine.TensorMultiplyScalar(x, NumOps.FromDouble(0.15)));
+
+        var visVal = CyclicTake(projected, dim);
+        if (promptTokens is null || promptTokens.Length == 0 || dim <= 0)
+            return visVal;
+
+        var tokVal = Engine.TensorMultiplyScalar(CyclicTake(promptTokens, dim), NumOps.FromDouble(1.0 / vocabSize));
+        var gate = Engine.TensorSigmoid(Engine.TensorMultiplyScalar(tokVal, NumOps.FromDouble(5.0)));
+        return Engine.TensorAdd(
+            Engine.TensorMultiply(visVal, Engine.TensorAddScalar(gate, NumOps.FromDouble(0.5))),
+            Engine.TensorMultiplyScalar(tokVal, NumOps.FromDouble(0.3)));
+    }
+
+    /// <summary>
     /// Shifts a flat sequence: result[t] = values[t + offset] when 0 &lt;= t + offset &lt; n, otherwise 0.
     /// </summary>
     /// <param name="values">Values to shift (read flattened).</param>

@@ -182,29 +182,7 @@ public partial class SlowFastLLaVA<T> : VisionLanguageModelBase<T>, IVideoLangua
 
         // Step 3: Slow pathway visual features + text cross-attention
         // 2-layer MLP cross-modal connector (Linear -> GELU -> Linear)
-        var projected = new double[visLen];
-        for (int v = 0; v < visLen; v++)
-        {
-            double x = NumOps.ToDouble(encoderOut[v]);
-            double h = x * 0.8;
-            double gelu =
-                h * 0.5 * (1.0 + Math.Tanh(Math.Sqrt(2.0 / Math.PI) * (h + 0.044715 * h * h * h)));
-            projected[v] = gelu * 0.7 + x * 0.15;
-        }
-        var decoderInput = new Tensor<T>([dim]);
-        for (int d = 0; d < dim; d++)
-        {
-            double visVal = projected[d % visLen];
-            double textEmb = 0;
-            if (promptTokens is not null && promptLen > 0)
-            {
-                double tokVal = NumOps.ToDouble(promptTokens[d % promptLen]) / _options.VocabSize;
-                double gate = 1.0 / (1.0 + Math.Exp(-tokVal * 5.0));
-                visVal *= (0.5 + gate);
-                textEmb = tokVal * 0.3;
-            }
-            decoderInput[d] = NumOps.FromDouble(visVal + textEmb);
-        }
+        var decoderInput = GatedConnectorInput(encoderOut, promptTokens, dim, _options.VocabSize);
 
         // Step 4: LLM decoder
         var output = decoderInput;
@@ -245,14 +223,9 @@ public partial class SlowFastLLaVA<T> : VisionLanguageModelBase<T>, IVideoLangua
         int dim = slowFeatures[0].Length;
 
         // Slow pathway: preserve full spatial detail, average across slow frames
-        var slowOutput = new Tensor<T>([dim]);
-        for (int d = 0; d < dim; d++)
-        {
-            double sum = 0;
-            for (int s = 0; s < slowCount; s++)
-                sum += NumOps.ToDouble(slowFeatures[s][d]);
-            slowOutput[d] = NumOps.FromDouble(sum / slowCount);
-        }
+        var engine = Engine;
+        var slowOutput = engine.TensorDivideScalar(
+            engine.ReduceSum(StackLeading(slowFeatures, slowCount, dim), [0], false), NumOps.FromDouble(slowCount));
 
         // === Fast Pathway: many frames, aggressive spatial pooling ===
         // Uniformly sample fastCount frames and apply 2x spatial pooling (halve feature dim)
@@ -266,35 +239,24 @@ public partial class SlowFastLLaVA<T> : VisionLanguageModelBase<T>, IVideoLangua
             frameIdx = Math.Min(frameIdx, totalFrames - 1);
             var enc = EncodeImage(frames[frameIdx]);
 
-            // Spatial pooling: average adjacent pairs of features (2x reduction)
-            for (int d = 0; d < fastDim; d++)
-            {
-                int srcIdx = d * 2;
-                double v1 = srcIdx < enc.Length ? NumOps.ToDouble(enc[srcIdx]) : 0;
-                double v2 = (srcIdx + 1) < enc.Length ? NumOps.ToDouble(enc[srcIdx + 1]) : 0;
-                double pooled = (v1 + v2) / 2.0;
-                double current = NumOps.ToDouble(fastOutput[d]);
-                fastOutput[d] = NumOps.FromDouble(current + pooled);
-            }
+            // Spatial pooling: average adjacent pairs of features (2x reduction); missing values read as 0.
+            var pairs = FitLength(enc, fastDim * 2).Reshape([fastDim, 2]);
+            var pooled = engine.TensorMultiplyScalar(engine.ReduceSum(pairs, [1], false), NumOps.FromDouble(0.5));
+            fastOutput = engine.TensorAdd(fastOutput, pooled);
         }
 
         // Average fast pathway across frames
         T fastScale = NumOps.FromDouble(1.0 / fastCount);
-        for (int d = 0; d < fastDim; d++)
-            fastOutput[d] = NumOps.Multiply(fastOutput[d], fastScale);
+        fastOutput = engine.TensorMultiplyScalar(fastOutput, fastScale);
 
         // === Lateral Fusion: combine slow and fast pathways ===
-        // Per the paper, fast pathway features are projected up and added to slow pathway
-        var fused = new Tensor<T>([dim]);
-        for (int d = 0; d < dim; d++)
-        {
-            double slowVal = NumOps.ToDouble(slowOutput[d]);
-            // Project fast features to full dimension by replication
-            int fastIdx = d / 2;
-            double fastVal = fastIdx < fastDim ? NumOps.ToDouble(fastOutput[fastIdx]) : 0;
-            // Weighted fusion: slow carries spatial detail, fast carries temporal dynamics
-            fused[d] = NumOps.FromDouble(slowVal * 0.7 + fastVal * 0.3);
-        }
+        // Per the paper, fast pathway features are projected up and added to slow pathway:
+        // fused[d] = 0.7 * slow[d] + 0.3 * fast[d / 2] (0 past the fast features).
+        var fastReplicated = FitLength(
+            engine.TensorBroadcastTo(fastOutput.Reshape([fastDim, 1]), [fastDim, 2]).Reshape([fastDim * 2]), dim);
+        var fused = engine.TensorAdd(
+            engine.TensorMultiplyScalar(slowOutput, NumOps.FromDouble(0.7)),
+            engine.TensorMultiplyScalar(fastReplicated, NumOps.FromDouble(0.3)));
 
         // Project fused features through the LLM decoder
         var output = fused;

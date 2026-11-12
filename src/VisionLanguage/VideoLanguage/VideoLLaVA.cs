@@ -215,38 +215,39 @@ public partial class VideoLLaVA<T> : VisionLanguageModelBase<T>, IVideoLanguageM
 
         // Step 2: Add sinusoidal temporal position embeddings (alignment before projection)
         // Video-LLaVA uses temporal embeddings to distinguish frame order
-        for (int f = 0; f < count; f++)
+        var engine = Engine;
+        var stacked = StackLeading(frameFeatures, count, dim);
+        Tensor<T> unified;
+        if (dim == 0)
         {
-            double pos = (double)f / Math.Max(1, count - 1);
-            for (int d = 0; d < dim; d++)
-            {
-                double freq = 1.0 / Math.Pow(10000.0, (double)(d - d % 2) / dim);   // 2*(d/2): the sin/cos pair index
-                double embedding =
-                    d % 2 == 0 ? Math.Sin(pos * freq * Math.PI) : Math.Cos(pos * freq * Math.PI);
-                double val = NumOps.ToDouble(frameFeatures[f][d]);
-                frameFeatures[f][d] = NumOps.FromDouble(val + embedding * 0.1);
-            }
+            unified = new Tensor<T>([0]);
         }
-
-        // Step 3: Unified alignment - concatenate temporal features and apply learned alignment
-        // The paper's key insight: align video and image representations BEFORE projection
-        // so the same MLP projector works for both modalities
-        var unified = new Tensor<T>([dim]);
-        for (int d = 0; d < dim; d++)
+        else
         {
-            // Weighted temporal aggregation using attention-like scoring
-            double sumWeighted = 0;
-            double sumWeights = 0;
-            for (int f = 0; f < count; f++)
-            {
-                double val = NumOps.ToDouble(frameFeatures[f][d]);
-                // Learned temporal attention weight (approximated by frame-content-based weighting)
-                double magnitude = Math.Abs(val);
-                double weight = Math.Exp(magnitude * 0.5); // Soft attention based on feature magnitude
-                sumWeighted += val * weight;
-                sumWeights += weight;
-            }
-            unified[d] = NumOps.FromDouble(sumWeights > 1e-8 ? sumWeighted / sumWeights : 0);
+            // embedding[f, d] = sin / cos(pos_f * freq_d * pi) for even / odd d, with
+            // pos_f = f / max(1, count - 1) and freq_d = 10000^(-2 * floor(d / 2) / dim).
+            var featureIndex = engine.TensorArange<T>(0, dim, 1);
+            var pairIndex = engine.TensorMultiplyScalar(
+                engine.TensorFloor(engine.TensorMultiplyScalar(featureIndex, NumOps.FromDouble(0.5))), NumOps.FromDouble(2.0));
+            var freq = engine.TensorExp(engine.TensorMultiplyScalar(pairIndex, NumOps.FromDouble(-Math.Log(10000.0) / dim)));
+            var pos = engine.TensorMultiplyScalar(
+                engine.TensorArange<T>(0, count, 1), NumOps.FromDouble(Math.PI / Math.Max(1, count - 1)));
+            var phase = engine.TensorOuter(pos, freq);
+            var even = engine.TensorEquals(
+                engine.TensorRemainder(featureIndex, Tensor<T>.CreateDefault([dim], NumOps.FromDouble(2))), NumOps.Zero);
+            var embedding = engine.TensorWhere(
+                engine.TensorBroadcastTo(even.Reshape([1, dim]), [count, dim]), engine.TensorSin(phase), engine.TensorCos(phase));
+            stacked = engine.TensorAdd(stacked, engine.TensorMultiplyScalar(embedding, NumOps.FromDouble(0.1)));
+
+            // Step 3: Unified alignment - weighted temporal aggregation with soft attention on
+            // feature magnitude: weight = exp(0.5 |x|); unified = sum(x * w) / sum(w) when sum(w) > 1e-8.
+            var weight = engine.TensorExp(engine.TensorMultiplyScalar(engine.TensorAbs(stacked), NumOps.FromDouble(0.5)));
+            var sumWeighted = engine.ReduceSum(engine.TensorMultiply(stacked, weight), [0], false);
+            var sumWeights = engine.ReduceSum(weight, [0], false);
+            var usable = engine.TensorGreaterThan(sumWeights, NumOps.FromDouble(1e-8));
+            var ones = Tensor<T>.CreateDefault([dim], NumOps.One);
+            unified = engine.TensorWhere(
+                usable, engine.TensorDivide(sumWeighted, engine.TensorWhere(usable, sumWeights, ones)), new Tensor<T>([dim]));
         }
 
         // Step 4: Project aligned features through the LLM decoder

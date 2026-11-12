@@ -202,29 +202,7 @@ public partial class VideoLLaMA3<T> : VisionLanguageModelBase<T>, IVideoLanguage
         }
 
         // 2-layer MLP cross-modal connector (Linear -> GELU -> Linear)
-        var projected = new double[visLen];
-        for (int v = 0; v < visLen; v++)
-        {
-            double x = NumOps.ToDouble(encoderOut[v]);
-            double h = x * 0.8;
-            double gelu =
-                h * 0.5 * (1.0 + Math.Tanh(Math.Sqrt(2.0 / Math.PI) * (h + 0.044715 * h * h * h)));
-            projected[v] = gelu * 0.7 + x * 0.15;
-        }
-        var decoderInput = new Tensor<T>([dim]);
-        for (int d = 0; d < dim; d++)
-        {
-            double visVal = projected[d % visLen];
-            double textEmb = 0;
-            if (promptTokens is not null && promptLen > 0)
-            {
-                double tokVal = NumOps.ToDouble(promptTokens[d % promptLen]) / _options.VocabSize;
-                double gate = 1.0 / (1.0 + Math.Exp(-tokVal * 5.0));
-                visVal *= (0.5 + gate);
-                textEmb = tokVal * 0.3;
-            }
-            decoderInput[d] = NumOps.FromDouble(visVal + textEmb);
-        }
+        var decoderInput = GatedConnectorInput(encoderOut, promptTokens, dim, _options.VocabSize);
 
         // Step 5: LLM decoder
         var output = decoderInput;
@@ -282,36 +260,26 @@ public partial class VideoLLaMA3<T> : VisionLanguageModelBase<T>, IVideoLanguage
         // Step 3: Adaptive temporal token merging across frames
         // For each spatial position, merge temporally similar tokens
         double temporalMergeThreshold = 0.9;
-        var merged = new Tensor<T>([dim]);
-        for (int d = 0; d < dim; d++)
+        var engine = Engine;
+        var stacked = StackLeading(frameFeatures, count, dim);
+        var merged = engine.ReduceSum(engine.TensorSlice(stacked, [0, 0], [1, dim]), [0], false);
+        if (count > 1)
         {
-            // Group temporally similar tokens
-            double sum = NumOps.ToDouble(frameFeatures[0][d]);
-            int groupCount = 1;
-
-            for (int f = 1; f < count; f++)
-            {
-                double current = NumOps.ToDouble(frameFeatures[f][d]);
-                double prev = NumOps.ToDouble(frameFeatures[f - 1][d]);
-                double normC = Math.Abs(current) + 1e-8;
-                double normP = Math.Abs(prev) + 1e-8;
-                double sim = (current * prev) / (normC * normP);
-
-                if (sim > temporalMergeThreshold)
-                {
-                    // Similar to previous: merge into running group
-                    sum += current;
-                    groupCount++;
-                }
-                else
-                {
-                    // Dissimilar: keep as new information with higher weight
-                    sum += current * 1.5; // Boost novel temporal information
-                    groupCount++;
-                }
-            }
-            merged[d] = NumOps.FromDouble(sum / groupCount);
+            // Frame f (f >= 1) adds x when it is similar to frame f - 1 (sim > threshold), else 1.5 x
+            // to boost novel temporal information; sim = (x * prev) / ((|x| + 1e-8) (|prev| + 1e-8)).
+            var current = engine.TensorSlice(stacked, [1, 0], [count - 1, dim]);
+            var prev = engine.TensorSlice(stacked, [0, 0], [count - 1, dim]);
+            T eps = NumOps.FromDouble(1e-8);
+            var sim = engine.TensorDivide(
+                engine.TensorMultiply(current, prev),
+                engine.TensorMultiply(engine.TensorAddScalar(engine.TensorAbs(current), eps), engine.TensorAddScalar(engine.TensorAbs(prev), eps)));
+            var factor = engine.TensorWhere(
+                engine.TensorGreaterThan(sim, NumOps.FromDouble(temporalMergeThreshold)),
+                Tensor<T>.CreateDefault([count - 1, dim], NumOps.One),
+                Tensor<T>.CreateDefault([count - 1, dim], NumOps.FromDouble(1.5)));
+            merged = engine.TensorAdd(merged, engine.ReduceSum(engine.TensorMultiply(current, factor), [0], false));
         }
+        merged = engine.TensorDivideScalar(merged, NumOps.FromDouble(count));
 
         // Step 4: Decode through LLM layers
         var output = merged;
