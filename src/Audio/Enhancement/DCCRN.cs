@@ -762,9 +762,10 @@ public partial class DCCRN<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
         int numFrames = (samples.Length - _fftSize) / _hopSize + 1;
         int numBins = _fftSize / 2 + 1;
 
-        // Shape: [1, 2, numBins, numFrames] for batch, real/imag, freq, time
-        if (numFrames <= 0)
-            return new Tensor<T>([1, 2, numBins, numFrames]);
+        // Shape: [1, 2, numBins, numFrames] for batch, real/imag, freq, time. Audio shorter than one
+        // analysis frame (including empty audio, where the count would be negative) is analysed as
+        // one zero-padded frame instead of producing an empty or invalid time axis.
+        numFrames = Math.Max(1, numFrames);
 
         var window = CreateHannWindow(_fftSize);
         var frames = new Tensor<T>[numFrames];
