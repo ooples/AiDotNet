@@ -211,6 +211,19 @@ internal static class FilterStatisticTensorOps
     /// <summary>Column means of an [n, p] tensor ([p]).</summary>
     public static Tensor<T> ColumnMeans<T>(Tensor<T> x) => AiDotNetEngine.Current.ReduceMean(x, new[] { 0 }, false);
 
+    /// <summary>
+    /// The <paramref name="q"/>-quantile of every column of an [n, p] tensor ([p]) with linear interpolation between
+    /// the order statistics at position <c>q (n - 1)</c> (numpy.quantile's default); q = 0.5 is the median, the
+    /// mean of the two middle values when n is even.
+    /// </summary>
+    public static Tensor<T> ColumnQuantile<T>(Tensor<T> x, double q) =>
+        AiDotNetEngine.Current.TensorQuantile(x, q, 0, false, QuantileInterpolation.Linear);
+
+    /// <summary>Column variances of an [n, p] tensor with divisor n (numpy.var, ddof = 0) ([p]).</summary>
+    public static Tensor<T> ColumnPopulationVariance<T>(Tensor<T> x) =>
+        AiDotNetEngine.Current.TensorDivideScalar(
+            ColumnSumOfSquaredDeviations(x), MathHelper.GetNumericOperations<T>().FromDouble(x.Shape[0]));
+
     /// <summary>Every column of an [n, p] tensor minus its mean.</summary>
     public static Tensor<T> CenterColumns<T>(Tensor<T> x)
     {
