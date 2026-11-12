@@ -11,6 +11,17 @@ namespace AiDotNet.Preprocessing.FeatureSelection;
 internal static class FeatureSelectionTensorOps
 {
     /// <summary>
+    /// <paramref name="value"/> in T as a positive guard (added to a denominator), raised to 2^-24 when it rounds
+    /// to 0 in T: 1e-10 underflows to 0 in Half, which turns x / (0 + eps) into 0 / 0 = NaN.
+    /// </summary>
+    public static T Tiny<T>(double value)
+    {
+        var ops = MathHelper.GetNumericOperations<T>();
+        T tiny = ops.FromDouble(value);
+        return ops.Equals(tiny, ops.Zero) ? ops.FromDouble(Math.Pow(2, -24)) : tiny;
+    }
+
+    /// <summary>
     /// A [p] tensor holding <paramref name="values"/> at the positions <paramref name="columns"/> and
     /// <paramref name="fill"/> everywhere else.
     /// </summary>

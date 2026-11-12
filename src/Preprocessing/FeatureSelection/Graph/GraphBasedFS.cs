@@ -78,7 +78,7 @@ public class GraphBasedFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISuperv
         var targetCorrelations = FeatureSelectionTensorOps.AbsoluteCorrelation(x, FilterStatisticTensorOps.AsTensor(target));
 
         // Build adjacency matrix based on feature correlations
-        var adjacency = BuildAdjacencyMatrix(x, n, p);
+        var adjacency = BuildAdjacencyMatrix(x, _edgeThreshold);
 
         // Compute centrality scores
         var centrality = _centralityMeasure switch
@@ -96,22 +96,25 @@ public class GraphBasedFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISuperv
         IsFitted = true;
     }
 
-    // |r| between features (sample statistics, each standard deviation offset by 1e-10) where it reaches the edge
-    // threshold, 0 elsewhere and on the diagonal
-    private Tensor<T> BuildAdjacencyMatrix(Tensor<T> x, int n, int p)
+    // |r| between features where it reaches the edge threshold, 0 elsewhere and on the diagonal. r = z_j1 . z_j2
+    // with z_j = (x_j - mean) / (sqrt(SS_j) + eps), the master formula cov / ((n - 1) s_j1 s_j2) without forming
+    // the covariance or the product of the deviations, which overflow Half; eps does not underflow to 0 in Half,
+    // where a constant column gave 0 / 0.
+    internal static Tensor<T> BuildAdjacencyMatrix(Tensor<T> x, double edgeThreshold)
     {
+        var engine = AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<T>();
+        int n = x.Shape[0];
+        int p = x.Shape[1];
         var centered = FilterStatisticTensorOps.CenterColumns(x);
-        T dof = NumOps.FromDouble(n - 1);
-        var std = Engine.TensorAddScalar(
-            Engine.TensorSqrt(Engine.TensorDivideScalar(FilterStatisticTensorOps.ColumnSumOfSquaredDeviations(x), dof)),
-            NumOps.FromDouble(1e-10));
-        var covariance = Engine.TensorMatMul(Engine.TensorTranspose(centered), centered);
-        var strength = Engine.TensorAbs(Engine.TensorDivide(
-            covariance, Engine.TensorMultiplyScalar(Engine.TensorOuter(std, std), dof)));
-        var offDiagonal = PreprocessingTensorOps.OneMinus(Engine.TensorEye<T>(p));
-        var edge = Engine.TensorMultiply(
-            PreprocessingTensorOps.OneMinus(Engine.TensorLessThan(strength, NumOps.FromDouble(_edgeThreshold))), offDiagonal);
-        return Engine.TensorMultiply(strength, edge);
+        var norm = engine.TensorAddScalar(
+            engine.TensorSqrt(FilterStatisticTensorOps.ColumnSumOfSquaredDeviations(x)), FeatureSelectionTensorOps.Tiny<T>(1e-10));
+        var z = engine.TensorDivide(centered, engine.TensorBroadcastTo(engine.Reshape(norm, new[] { 1, p }), new[] { n, p }));
+        var strength = engine.TensorAbs(engine.TensorMatMul(engine.TensorTranspose(z), z));
+        var offDiagonal = PreprocessingTensorOps.OneMinus(engine.TensorEye<T>(p));
+        var edge = engine.TensorMultiply(
+            PreprocessingTensorOps.OneMinus(engine.TensorLessThan(strength, ops.FromDouble(edgeThreshold))), offDiagonal);
+        return engine.TensorMultiply(strength, edge);
     }
 
     // PageRank (Page et al. 1999) on the weighted graph, 100 power steps from the uniform vector: the rank of a

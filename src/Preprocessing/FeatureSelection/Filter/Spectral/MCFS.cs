@@ -89,10 +89,7 @@ public class MCFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IFixedCountFeat
             neighbours);
         var affinity = engine.TensorMax(directed, engine.TensorTranspose(directed));
 
-        // I - L for the normalised Laplacian L = I - D^-1/2 A D^-1/2 (degrees offset by 1e-10)
-        var degreeScale = engine.TensorReciprocal(engine.TensorSqrt(
-            engine.TensorAddScalar(engine.ReduceSum(affinity, new[] { 1 }, false), NumOps.FromDouble(1e-10))));
-        var propagation = engine.TensorMultiply(affinity, engine.TensorOuter(degreeScale, degreeScale));
+        var propagation = Propagation(affinity);
 
         // Bottom k eigenvectors of L (cluster indicators): power iteration on I - L from random starts
         var rand = _randomState.HasValue
@@ -129,6 +126,23 @@ public class MCFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IFixedCountFeat
     {
         FitCore(data);
         return Transform(data);
+    }
+
+    /// <summary>
+    /// I - L for the normalised Laplacian L = I - D^-1/2 A D^-1/2 of an affinity [n, n] (degrees offset by 1e-10),
+    /// scaled by rows then columns: for an isolated sample the outer product of the two 1/sqrt(eps) factors
+    /// overflows Half and 0 * inf gave NaN, and 1e-10 itself is 0 in Half.
+    /// </summary>
+    internal static Tensor<T> Propagation(Tensor<T> affinity)
+    {
+        var engine = AiDotNetEngine.Current;
+        int n = affinity.Shape[0];
+        var degreeScale = engine.TensorReciprocal(engine.TensorSqrt(
+            engine.TensorAddScalar(engine.ReduceSum(affinity, new[] { 1 }, false), FeatureSelectionTensorOps.Tiny<T>(1e-10))));
+        var rows = engine.TensorMultiply(
+            affinity, engine.TensorBroadcastTo(engine.Reshape(degreeScale, new[] { n, 1 }), new[] { n, n }));
+        return engine.TensorMultiply(
+            rows, engine.TensorBroadcastTo(engine.Reshape(degreeScale, new[] { 1, n }), new[] { n, n }));
     }
 
     /// <inheritdoc />

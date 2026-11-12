@@ -63,10 +63,7 @@ public class SpectralClusteringFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>,
         var distances = FeatureSelectionTensorOps.SquaredDistances(Engine.TensorTranspose(x));
         var w = Engine.TensorExp(Engine.TensorMultiplyScalar(distances, NumOps.FromDouble(-1.0 / (2 * _sigma * _sigma * n))));
 
-        // Normalized Laplacian: L = I - D^(-1/2) W D^(-1/2), the root offset by 1e-10
-        var degree = Engine.ReduceSum(w, new[] { 1 }, false);
-        var scale = Engine.TensorAddScalar(Engine.TensorSqrt(Engine.TensorOuter(degree, degree)), NumOps.FromDouble(1e-10));
-        var laplacian = Engine.TensorSubtract(Engine.TensorEye<T>(p), Engine.TensorDivide(w, scale));
+        var laplacian = NormalizedLaplacian(w);
 
         // Bottom k eigenvectors (eigenvalues ascending)
         int k = Math.Min(_nClusters, p);
@@ -119,6 +116,19 @@ public class SpectralClusteringFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>,
         }
 
         return assignments;
+    }
+
+    /// <summary>
+    /// The normalized Laplacian L = I - D^(-1/2) W D^(-1/2) of a similarity matrix W [p, p], the root offset by
+    /// 1e-10: sqrt(d_j1) sqrt(d_j2) rather than sqrt(d_j1 d_j2), whose product overflows Half once p &gt; 255.
+    /// </summary>
+    internal static Tensor<T> NormalizedLaplacian(Tensor<T> w)
+    {
+        var engine = AiDotNetEngine.Current;
+        int p = w.Shape[0];
+        var rootDegree = engine.TensorSqrt(engine.ReduceSum(w, new[] { 1 }, false));
+        var scale = engine.TensorAddScalar(engine.TensorOuter(rootDegree, rootDegree), FeatureSelectionTensorOps.Tiny<T>(1e-10));
+        return engine.TensorSubtract(engine.TensorEye<T>(p), engine.TensorDivide(w, scale));
     }
 
     /// <inheritdoc />
