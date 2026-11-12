@@ -161,6 +161,7 @@ public partial class ObliviousDecisionTreeLayer<T> : LayerBase<T>, IShapeContrac
             throw new ArgumentOutOfRangeException(nameof(depth), "Depth must be between 1 and 30.");
         if (outputDim <= 0)
             throw new ArgumentOutOfRangeException(nameof(outputDim), "Output dimension must be positive.");
+        ValidateChoiceFunction(choiceFunction);
 
         _inputDim = inputDim;
         _depth = depth;
@@ -182,6 +183,16 @@ public partial class ObliviousDecisionTreeLayer<T> : LayerBase<T>, IShapeContrac
         InitializeParameters(initScale, Random);
         _isInitialized = true;
         NoteConstructorInitialization(_featureSelectionWeights, _thresholds, _leafValues);
+    }
+
+    private static void ValidateChoiceFunction(ObliviousTreeChoiceFunction choiceFunction)
+    {
+        if (choiceFunction != ObliviousTreeChoiceFunction.Entmax15
+            && choiceFunction != ObliviousTreeChoiceFunction.SoftmaxSigmoid)
+        {
+            throw new ArgumentOutOfRangeException(nameof(choiceFunction), choiceFunction,
+                "Choice function must be Entmax15 or SoftmaxSigmoid.");
+        }
     }
 
     /// <summary>
@@ -240,6 +251,7 @@ public partial class ObliviousDecisionTreeLayer<T> : LayerBase<T>, IShapeContrac
             throw new ArgumentOutOfRangeException(nameof(depth), "Depth must be between 1 and 30.");
         if (outputDim <= 0)
             throw new ArgumentOutOfRangeException(nameof(outputDim), "Output dimension must be positive.");
+        ValidateChoiceFunction(choiceFunction);
 
         _inputDim = -1;
         _depth = depth;
