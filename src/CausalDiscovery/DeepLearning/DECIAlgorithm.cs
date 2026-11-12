@@ -47,6 +47,15 @@ namespace AiDotNet.CausalDiscovery.DeepLearning;
 [ResearchPaper("Deep End-to-end Causal Inference", "https://arxiv.org/abs/2202.02195", Year = 2022, Authors = "Tomas Geffner, Javier Antoran, Adam Foster, Wenbo Gong, Chao Ma, Emre Kiciman, Amit Sharma, Angus Lamb, Martin Kukla, Nick Pawlowski, Miltiadis Allamanis, Cheng Zhang")]
 public class DECIAlgorithm<T> : DeepCausalBase<T>
 {
+    /// <summary>Parent variance at or below which no OLS weight is formed for the edge.</summary>
+    private const double MinVarianceForOls = 1e-10;
+
+    /// <summary>Posterior edge probability at or above which an edge is selected.</summary>
+    private const double PosteriorProbabilityGate = 0.5;
+
+    /// <summary>OLS weight magnitude a selected edge must exceed.</summary>
+    private const double MinOlsWeight = 0.1;
+
     /// <inheritdoc/>
     public override string Name => "DECI";
 
@@ -92,7 +101,7 @@ public class DECIAlgorithm<T> : DeepCausalBase<T>
         // Final output: threshold edge probabilities and compute OLS weights
         var c = Tensor<T>.FromMatrix(cov);
         var variance = Engine.TensorBroadcastTo(Engine.TensorDiagonal(c).Reshape(new[] { d, 1 }), new[] { d, d });
-        var usable = Engine.TensorMultiply(offDiagonal, Engine.TensorGreaterThan(variance, NumOps.FromDouble(1e-10)));
+        var usable = Engine.TensorMultiply(offDiagonal, Engine.TensorGreaterThan(variance, NumOps.FromDouble(MinVarianceForOls)));
         var weight = Engine.TensorDivide(c, Engine.TensorWhere(usable, variance, Engine.TensorOnesLike(variance)));
         var magnitude = Engine.TensorAbs(weight);
 
@@ -102,8 +111,8 @@ public class DECIAlgorithm<T> : DeepCausalBase<T>
         // covariance/OLS weight below could still establish a valid edge.
         var prob = ClampedSigmoid(Z, 0.1);
         var posterior = Engine.TensorMultiply(Engine.TensorMultiply(usable,
-            Engine.TensorGreaterEqual(prob, Engine.TensorFullLike(prob, NumOps.FromDouble(0.5)))),
-            Engine.TensorGreaterThan(magnitude, NumOps.FromDouble(0.1)));
+            Engine.TensorGreaterEqual(prob, Engine.TensorFullLike(prob, NumOps.FromDouble(PosteriorProbabilityGate)))),
+            Engine.TensorGreaterThan(magnitude, NumOps.FromDouble(MinOlsWeight)));
         bool selectedPosteriorEdge = Engine.TensorCountNonzero(posterior) > 0;
         if (selectedPosteriorEdge)
             return Engine.TensorWhere(posterior, weight, Engine.TensorZerosLike(weight)).ToMatrix();

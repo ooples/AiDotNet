@@ -48,6 +48,21 @@ namespace AiDotNet.CausalDiscovery.DeepLearning;
 [ResearchPaper("CASTLE: Regularization via Auxiliary Causal Graph Discovery", "https://proceedings.neurips.cc/paper/2020/hash/1f8d87e1461a3d422a3e0eaa8e945e19-Abstract.html", Year = 2020, Authors = "Trent Kyono, Yao Zhang, Mihaela van der Schaar")]
 public class CASTLEAlgorithm<T> : DeepCausalBase<T>
 {
+    /// <summary>Group-lasso weight λ1 on the rows of Wh_j.</summary>
+    private const double GroupLassoWeight = 0.02;
+
+    /// <summary>Offset inside the group-norm square root of the group-lasso subgradient.</summary>
+    private const double GroupNormEpsilon = 1e-8;
+
+    /// <summary>Adam first-moment decay β1.</summary>
+    private const double AdamBeta1 = 0.9;
+
+    /// <summary>Adam second-moment decay β2.</summary>
+    private const double AdamBeta2 = 0.999;
+
+    /// <summary>Adam denominator offset ε.</summary>
+    private const double AdamEpsilon = 1e-8;
+
     /// <inheritdoc/>
     public override string Name => "CASTLE";
 
@@ -323,8 +338,8 @@ public class CASTLEAlgorithm<T> : DeepCausalBase<T>
         T twoAlRhoH = NumOps.Multiply(NumOps.FromDouble(2.0), NumOps.Add(alpha, NumOps.Multiply(rho, hVal)));
 
         // Row norm ‖Wh_j[i,:]‖ for the group-lasso subgradient: λ1 / sqrt(A_sq + 1e-8)
-        var l1Coef = Engine.TensorReciprocal(Engine.TensorSqrt(Engine.TensorAddScalar(aSq, NumOps.FromDouble(1e-8))));
-        l1Coef = Engine.TensorMultiplyScalar(l1Coef, NumOps.FromDouble(0.02));
+        var l1Coef = Engine.TensorReciprocal(Engine.TensorSqrt(Engine.TensorAddScalar(aSq, NumOps.FromDouble(GroupNormEpsilon))));
+        l1Coef = Engine.TensorMultiplyScalar(l1Coef, NumOps.FromDouble(GroupLassoWeight));
         var acycCoef = Engine.TensorMultiplyScalar(Engine.TensorTranspose(expAsq), twoAlRhoH);
         var coef = Engine.TensorMultiply(Engine.TensorAdd(l1Coef, acycCoef), OffDiagonalMask(d));
 
@@ -341,14 +356,14 @@ public class CASTLEAlgorithm<T> : DeepCausalBase<T>
     private (Tensor<T> Parameter, Tensor<T> M, Tensor<T> V) CastleAdamStep(Tensor<T> parameter, Tensor<T> g,
         Tensor<T> m, Tensor<T> v, int t, double lr, Tensor<T>? mask)
     {
-        var newM = Engine.TensorAdd(Engine.TensorMultiplyScalar(m, NumOps.FromDouble(0.9)),
-            Engine.TensorMultiplyScalar(g, NumOps.FromDouble(0.1)));
-        var newV = Engine.TensorAdd(Engine.TensorMultiplyScalar(v, NumOps.FromDouble(0.999)),
-            Engine.TensorMultiplyScalar(Engine.TensorMultiply(g, g), NumOps.FromDouble(0.001)));
-        var mhat = Engine.TensorDivideScalar(newM, NumOps.FromDouble(1.0 - Math.Pow(0.9, t)));
-        var vhat = Engine.TensorDivideScalar(newV, NumOps.FromDouble(1.0 - Math.Pow(0.999, t)));
+        var newM = Engine.TensorAdd(Engine.TensorMultiplyScalar(m, NumOps.FromDouble(AdamBeta1)),
+            Engine.TensorMultiplyScalar(g, NumOps.FromDouble(1.0 - AdamBeta1)));
+        var newV = Engine.TensorAdd(Engine.TensorMultiplyScalar(v, NumOps.FromDouble(AdamBeta2)),
+            Engine.TensorMultiplyScalar(Engine.TensorMultiply(g, g), NumOps.FromDouble(1.0 - AdamBeta2)));
+        var mhat = Engine.TensorDivideScalar(newM, NumOps.FromDouble(1.0 - Math.Pow(AdamBeta1, t)));
+        var vhat = Engine.TensorDivideScalar(newV, NumOps.FromDouble(1.0 - Math.Pow(AdamBeta2, t)));
         var stepVal = Engine.TensorDivide(Engine.TensorMultiplyScalar(mhat, NumOps.FromDouble(lr)),
-            Engine.TensorAddScalar(Engine.TensorSqrt(vhat), NumOps.FromDouble(1e-8)));
+            Engine.TensorAddScalar(Engine.TensorSqrt(vhat), NumOps.FromDouble(AdamEpsilon)));
         var updated = Engine.TensorSubtract(parameter, stepVal);
         if (mask is null)
             return (updated, newM, newV);
