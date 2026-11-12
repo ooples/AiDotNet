@@ -52,9 +52,9 @@ public partial class INFLODetector<T> : AnomalyDetectorBase<T>
     [Buffer]
     private Vector<T>? _localDensities;
     // [n, k] kNN of every training point (itself excluded). The influence space IS(j) = kNN(j) union RkNN(j)
-    // follows from it: i is in RkNN(j) exactly when j is in kNN(i).
-    [Buffer]
-    private Tensor<int>? _knnIndices;
+    // follows from it: i is in RkNN(j) exactly when j is in kNN(i). Held row-major as int[] so the fitted
+    // state serializes; the [n, k] tensor is rebuilt from it at scoring time.
+    private int[]? _knnIndexData;
     private int _nFeatures;
 
     /// <summary>
@@ -103,7 +103,7 @@ public partial class INFLODetector<T> : AnomalyDetectorBase<T>
         _localDensities = LocalDensities(engine.ReduceSum(distances, new[] { 1 }, false), NumOps.FromDouble(_k)).ToVector();
 
         // Influence spaces kNN union RkNN are derived from the kNN lists at scoring time (no [n, n] matrix)
-        _knnIndices = neighbors;
+        _knnIndexData = neighbors.ToArray();
 
         // Calculate scores for training data to set threshold
         var trainingScores = ScoreAnomaliesInternal(X);
@@ -131,12 +131,15 @@ public partial class INFLODetector<T> : AnomalyDetectorBase<T>
         }
 
         var localDensities = _localDensities;
-        var knnIndices = _knnIndices;
+        var knnIndexData = _knnIndexData;
         var trainingData = _trainingData;
-        if (localDensities == null || knnIndices == null || trainingData == null)
+        if (localDensities == null || knnIndexData == null || trainingData == null
+            || trainingData.Rows == 0 || knnIndexData.Length % trainingData.Rows != 0)
         {
             throw new InvalidOperationException("Model not properly fitted.");
         }
+
+        var knnIndices = new Tensor<int>(knnIndexData, new[] { trainingData.Rows, knnIndexData.Length / trainingData.Rows });
 
         // Query rows are scored in bounded blocks (only [block, nTraining * k] tensors are live)
         var training = AnomalyTensorOps.ToTensor(trainingData);

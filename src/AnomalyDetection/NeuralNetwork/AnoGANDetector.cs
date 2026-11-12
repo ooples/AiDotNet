@@ -291,11 +291,6 @@ public partial class AnoGANDetector<T> : AnomalyDetectorBase<T>
     private Tensor<T> SampleLatent(Random rng, int rows)
     {
         // One latent code per row, drawn in row order (latent unit by latent unit within a row)
-        if (rows == 0)
-        {
-            return Tensor<T>.CreateZeros(new[] { 0, _latentDim });
-        }
-
         var codes = new Tensor<T>[rows];
         for (int r = 0; r < rows; r++)
         {
@@ -564,16 +559,24 @@ public partial class AnoGANDetector<T> : AnomalyDetectorBase<T>
             throw new InvalidOperationException("Model not properly fitted. Normalization parameters missing.");
         }
 
-        var engine = Engine;
-        int n = X.Rows;
         var x = AnomalyTensorOps.DivideRow(
             AnomalyTensorOps.SubtractRow(AnomalyTensorOps.ToTensor(X), dataMeans.AsTensor()), dataStds.AsTensor());
 
         // Scoring-local RNG, re-seeded from the model's own seed on every call, so the latent
         // restarts are identical for identical input. The model's shared _random is deliberately
         // untouched here: scoring must not advance the training stream either. One latent restart per
-        // row, drawn in row order.
+        // row, drawn in row order; the ONE stream is shared by every block, so the draws keep that order.
+        // Query rows are searched in bounded blocks so only [block, width] activations are live at once.
         var scoringRng = RandomHelper.CreateSeededRandom(_randomSeed);
+        long perRow = 4L * (_inputDim + _latentDim + _hiddenDim);
+        return AnomalyTensorOps.MapRowBlocks(x, perRow, block => ScoreBlock(block, scoringRng)).ToVector();
+    }
+
+    // Latent search (Schlegl et al. 2017) for one block of normalized query rows; returns the lowest loss per row.
+    private Tensor<T> ScoreBlock(Tensor<T> x, Random scoringRng)
+    {
+        var engine = Engine;
+        int n = x.Shape[0];
         var z = SampleLatent(scoringRng, n);
 
         // Find optimal z per row via gradient descent; the score is the lowest loss seen
@@ -620,6 +623,6 @@ public partial class AnoGANDetector<T> : AnomalyDetectorBase<T>
                 engine.TensorAdd(dz, engine.TensorMultiplyScalar(z, regularization)), zLr));
         }
 
-        return bestLoss.ToVector();
+        return bestLoss;
     }
 }

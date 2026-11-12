@@ -118,6 +118,14 @@ public partial class GESDDetector<T> : AnomalyDetectorBase<T>
                 nameof(X));
         }
 
+        // lambda_r needs t on n - r - 1 >= 1 degrees of freedom, so two samples must remain after r removals
+        if (n - _maxOutliers < 2)
+        {
+            throw new ArgumentException(
+                $"Number of samples ({n}) must exceed maximum outliers ({_maxOutliers}) by at least two.",
+                nameof(X));
+        }
+
         _nFeatures = X.Columns;
         // R = max |x - mean| / s with s the sample standard deviation (n - 1 divisor), Rosner (1983)
         (_means, _stds) = AnomalyTensorOps.ColumnMeanStd(X, 1);
@@ -171,9 +179,8 @@ public partial class GESDDetector<T> : AnomalyDetectorBase<T>
     {
         // Rosner (1983) GESD critical value for the i-th largest statistic (i = 1..r) of n observations:
         // lambda_i = (n - i) t_{p, n-i-1} / sqrt((n - i - 1 + t^2)(n - i + 1)), p = 1 - alpha / (2(n - i + 1))
+        // Fit guarantees i <= n - 2, so df >= 1
         int df = n - i - 1;
-        if (df < 1) return double.MaxValue; // Cannot compute for very small samples
-
         double p = 1 - alpha / (2.0 * (n - i + 1));
         double t = AnomalyTensorOps.StudentTQuantile(p, df);
         return (n - i) * t / Math.Sqrt((n - i - 1 + t * t) * (n - i + 1));

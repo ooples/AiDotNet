@@ -201,11 +201,6 @@ public partial class LSCPDetector<T> : AnomalyDetectorBase<T>
 
         // Query rows are combined in bounded blocks so that the [rows, n] region and correlation tensors
         // only ever cover one block; the feature subspaces are drawn once and shared by every block
-        if (m == 0)
-        {
-            return new Vector<T>(0);
-        }
-
         var featureSets = DrawFeatureSubspaces(trainingData.Columns);
         var query = AnomalyTensorOps.ToTensor(X);
         var reference = AnomalyTensorOps.ToTensor(trainingData);
