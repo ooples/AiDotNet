@@ -1,4 +1,3 @@
-
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 
@@ -11,44 +10,18 @@ internal static class DistillationHelper<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 
+    private static IEngine Engine => AiDotNetEngine.Current;
+
+    private const double Epsilon = 1e-10;
+
     /// <summary>
     /// Applies temperature-scaled softmax to logits.
     /// </summary>
     public static Vector<T> Softmax(Vector<T> logits, double temperature)
     {
-        int n = logits.Length;
-        var result = new Vector<T>(n);
-        var scaledLogits = new T[n];
-
-        for (int i = 0; i < n; i++)
-        {
-            double val = Convert.ToDouble(logits[i]) / temperature;
-            scaledLogits[i] = NumOps.FromDouble(val);
-        }
-
-        T maxLogit = scaledLogits[0];
-        for (int i = 1; i < n; i++)
-        {
-            if (NumOps.GreaterThan(scaledLogits[i], maxLogit))
-                maxLogit = scaledLogits[i];
-        }
-
-        T sum = NumOps.Zero;
-        var expValues = new T[n];
-
-        for (int i = 0; i < n; i++)
-        {
-            double val = Convert.ToDouble(NumOps.Subtract(scaledLogits[i], maxLogit));
-            expValues[i] = NumOps.FromDouble(Math.Exp(val));
-            sum = NumOps.Add(sum, expValues[i]);
-        }
-
-        for (int i = 0; i < n; i++)
-        {
-            result[i] = NumOps.Divide(expValues[i], sum);
-        }
-
-        return result;
+        // Max-shifted softmax of logits / temperature
+        return Engine.Softmax(
+            Engine.TensorDivideScalar(Tensor<T>.FromVector(logits), NumOps.FromDouble(temperature)), -1).ToVector();
     }
 
     /// <summary>
@@ -56,18 +29,9 @@ internal static class DistillationHelper<T>
     /// </summary>
     public static T KLDivergence(Vector<T> p, Vector<T> q)
     {
-        T divergence = NumOps.Zero;
-        const double epsilon = 1e-10;
-
-        for (int i = 0; i < p.Length; i++)
-        {
-            double pVal = Math.Max(Convert.ToDouble(p[i]), epsilon);
-            double qVal = Math.Max(Convert.ToDouble(q[i]), epsilon);
-            double term = pVal * Math.Log(pVal / qVal);
-            divergence = NumOps.Add(divergence, NumOps.FromDouble(term));
-        }
-
-        return divergence;
+        Vector<T> pClamped = ClampBelow(p, Epsilon);
+        Vector<T> qClamped = ClampBelow(q, Epsilon);
+        return Engine.Sum(Engine.Multiply(pClamped, Engine.Log(Engine.Divide(pClamped, qClamped))));
     }
 
     /// <summary>
@@ -75,17 +39,59 @@ internal static class DistillationHelper<T>
     /// </summary>
     public static T CrossEntropy(Vector<T> p, Vector<T> q)
     {
-        T loss = NumOps.Zero;
-        const double epsilon = 1e-10;
+        return NumOps.Negate(Engine.Sum(Engine.Multiply(p, Engine.Log(ClampBelow(q, Epsilon)))));
+    }
 
-        for (int i = 0; i < p.Length; i++)
-        {
-            double pVal = Convert.ToDouble(p[i]);
-            double qVal = Math.Max(Convert.ToDouble(q[i]), epsilon);
-            double term = -pVal * Math.Log(qVal);
-            loss = NumOps.Add(loss, NumOps.FromDouble(term));
-        }
+    /// <summary>
+    /// Applies temperature-scaled softmax to each row of a logits matrix.
+    /// </summary>
+    public static Matrix<T> SoftmaxRows(Matrix<T> logits, double temperature)
+    {
+        return Engine.Softmax(
+            Engine.TensorDivideScalar(Tensor<T>.FromMatrix(logits), NumOps.FromDouble(temperature)), 1).ToMatrix();
+    }
 
-        return loss;
+    /// <summary>
+    /// Computes KL(p[r] || q[r]) for every row r (same clamping as <see cref="KLDivergence"/>).
+    /// </summary>
+    public static Vector<T> KLDivergenceRows(Matrix<T> p, Matrix<T> q)
+    {
+        Tensor<T> pClamped = ClampBelow(Tensor<T>.FromMatrix(p), Epsilon);
+        Tensor<T> qClamped = ClampBelow(Tensor<T>.FromMatrix(q), Epsilon);
+        return RowSums(Engine.TensorMultiply(pClamped, Engine.TensorLog(Engine.TensorDivide(pClamped, qClamped))));
+    }
+
+    /// <summary>
+    /// Computes H(p[r], q[r]) for every row r (same clamping as <see cref="CrossEntropy"/>).
+    /// </summary>
+    public static Vector<T> CrossEntropyRows(Matrix<T> p, Matrix<T> q)
+    {
+        Tensor<T> terms = Engine.TensorMultiply(
+            Tensor<T>.FromMatrix(p), Engine.TensorLog(ClampBelow(Tensor<T>.FromMatrix(q), Epsilon)));
+        return Engine.Negate(RowSums(terms));
+    }
+
+    /// <summary>
+    /// Sums each row of a [rows, cols] tensor into a vector of length rows.
+    /// </summary>
+    public static Vector<T> RowSums(Tensor<T> matrix)
+    {
+        return Engine.ReduceSum(matrix, [1], keepDims: false).ToVector();
+    }
+
+    /// <summary>
+    /// Elementwise max(value, floor); NaN entries stay NaN (like Math.Max).
+    /// </summary>
+    private static Vector<T> ClampBelow(Vector<T> values, double floor)
+    {
+        return Engine.Max(Vector<T>.CreateDefault(values.Length, NumOps.FromDouble(floor)), values);
+    }
+
+    /// <summary>
+    /// Elementwise max(value, floor); NaN entries stay NaN (like Math.Max).
+    /// </summary>
+    private static Tensor<T> ClampBelow(Tensor<T> values, double floor)
+    {
+        return Engine.TensorMax(Tensor<T>.CreateDefault(values.Shape.ToArray(), NumOps.FromDouble(floor)), values);
     }
 }

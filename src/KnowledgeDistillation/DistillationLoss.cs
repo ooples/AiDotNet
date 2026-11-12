@@ -105,13 +105,10 @@ public class DistillationLoss<T> : DistillationStrategyBase<T>
 
         // Scale by T² to balance gradient magnitudes
         // This is crucial: without T² scaling, the soft loss gradients would be too small
-        T softLoss = NumOps.Zero;
         T tSquared = NumOps.FromDouble(Temperature * Temperature);
-        for (int i = 0; i < batchSize; i++)
-        {
-            softLoss = NumOps.Add(softLoss, NumOps.Multiply(softLossesPerSample[i], tSquared));
-        }
+        T softLoss = Engine.Sum(Engine.Multiply(softLossesPerSample, tSquared));
         softLoss = NumOps.Divide(softLoss, NumOps.FromDouble(batchSize)); // Average over batch
+
 
         // If we have true labels, add hard loss
         if (trueLabelsBatch != null)
@@ -119,12 +116,9 @@ public class DistillationLoss<T> : DistillationStrategyBase<T>
             Matrix<T> studentProbs = Softmax(studentBatchOutput, temperature: 1.0);
             Vector<T> hardLossesPerSample = CrossEntropy(studentProbs, trueLabelsBatch);
 
-            T hardLoss = NumOps.Zero;
-            for (int i = 0; i < batchSize; i++)
-            {
-                hardLoss = NumOps.Add(hardLoss, hardLossesPerSample[i]);
-            }
-            hardLoss = NumOps.Divide(hardLoss, NumOps.FromDouble(batchSize)); // Average over batch
+            T hardLoss = Engine.Sum(hardLossesPerSample);
+            hardLoss = NumOps.Divide
+(hardLoss, NumOps.FromDouble(batchSize)); // Average over batch
 
             // Combine: α × hard_loss + (1 - α) × soft_loss
             T alphaT = NumOps.FromDouble(Alpha);
@@ -164,9 +158,6 @@ public class DistillationLoss<T> : DistillationStrategyBase<T>
         ValidateLabelDimensions(studentBatchOutput, trueLabelsBatch);
 
         int batchSize = studentBatchOutput.Rows;
-        int numClasses = studentBatchOutput.Columns;
-
-        Matrix<T> gradient = new Matrix<T>(batchSize, numClasses);
 
         // Soft gradient: ∂L_soft/∂logits = (student_soft - teacher_soft) × T
         // The T² loss scaling combined with 1/T from the softmax chain rule gives net factor of T
@@ -174,56 +165,27 @@ public class DistillationLoss<T> : DistillationStrategyBase<T>
         Matrix<T> teacherSoft = Softmax(teacherBatchOutput, Temperature);
 
         T tFactor = NumOps.FromDouble(Temperature);
-
-        for (int r = 0; r < batchSize; r++)
-        {
-            for (int c = 0; c < numClasses; c++)
-            {
-                T diff = NumOps.Subtract(studentSoft[r, c], teacherSoft[r, c]);
-                gradient[r, c] = NumOps.Multiply(diff, tFactor);
-            }
-        }
+        Matrix<T> gradient = Engine.MatrixMultiplyScalar(Engine.MatrixSubtract(studentSoft, teacherSoft), tFactor);
 
         // If we have true labels, add hard gradient
         if (trueLabelsBatch != null)
         {
             Matrix<T> studentProbs = Softmax(studentBatchOutput, temperature: 1.0);
-            Matrix<T> hardGradient = new Matrix<T>(batchSize, numClasses);
-
             // Hard gradient: ∂L_hard/∂logits = student_probs - true_labels
-            for (int r = 0; r < batchSize; r++)
-            {
-                for (int c = 0; c < numClasses; c++)
-                {
-                    hardGradient[r, c] = NumOps.Subtract(studentProbs[r, c], trueLabelsBatch[r, c]);
-                }
-            }
+            Matrix<T> hardGradient = Engine.MatrixSubtract(studentProbs, trueLabelsBatch);
 
             // Combine gradients: α × hard_grad + (1 - α) × soft_grad
             T alphaT = NumOps.FromDouble(Alpha);
             T oneMinusAlpha = NumOps.FromDouble(1.0 - Alpha);
 
-            for (int r = 0; r < batchSize; r++)
-            {
-                for (int c = 0; c < numClasses; c++)
-                {
-                    gradient[r, c] = NumOps.Add(
-                        NumOps.Multiply(alphaT, hardGradient[r, c]),
-                        NumOps.Multiply(oneMinusAlpha, gradient[r, c])
-                    );
-                }
-            }
+            gradient = Engine.MatrixAdd(
+                Engine.MatrixMultiplyScalar(hardGradient, alphaT),
+                Engine.MatrixMultiplyScalar(gradient, oneMinusAlpha));
         }
 
         // Average gradients over the batch
         T oneOverBatchSize = NumOps.Divide(NumOps.One, NumOps.FromDouble(batchSize));
-        for (int r = 0; r < batchSize; r++)
-        {
-            for (int c = 0; c < numClasses; c++)
-            {
-                gradient[r, c] = NumOps.Multiply(gradient[r, c], oneOverBatchSize);
-            }
-        }
+        gradient = Engine.MatrixMultiplyScalar(gradient, oneOverBatchSize);
 
         return gradient;
     }
@@ -244,48 +206,9 @@ public class DistillationLoss<T> : DistillationStrategyBase<T>
     /// </remarks>
     private Matrix<T> Softmax(Matrix<T> logits, double temperature)
     {
-        int batchSize = logits.Rows;
-        int numClasses = logits.Columns;
-        Matrix<T> result = new Matrix<T>(batchSize, numClasses);
-
-        for (int r = 0; r < batchSize; r++)
-        {
-            // Extract row for processing
-            Vector<T> rowLogits = logits.GetRow(r);
-
-            // Divide logits by temperature
-            T[] scaledLogits = new T[numClasses];
-            for (int i = 0; i < numClasses; i++)
-            {
-                double val = Convert.ToDouble(rowLogits[i]) / temperature;
-                scaledLogits[i] = NumOps.FromDouble(val);
-            }
-
-            // Find max for numerical stability (prevents overflow in exp)
-            T maxLogit = scaledLogits[0];
-            for (int i = 1; i < numClasses; i++)
-            {
-                if (NumOps.GreaterThan(scaledLogits[i], maxLogit))
-                    maxLogit = scaledLogits[i];
-            }
-
-            // Compute exp(logit - max) and sum
-            T sum = NumOps.Zero;
-            T[] expValues = new T[numClasses];
-
-            for (int i = 0; i < numClasses; i++)
-            {
-                double val = Convert.ToDouble(NumOps.Subtract(scaledLogits[i], maxLogit));
-                expValues[i] = NumOps.FromDouble(Math.Exp(val));
-                sum = NumOps.Add(sum, expValues[i]);
-            }
-
-            // Normalize to get probabilities and set row in result matrix
-            for (int i = 0; i < numClasses; i++)
-            {
-                result[r, i] = NumOps.Divide(expValues[i], sum);
-            }
-        }
+        // Divide logits by temperature, then a max-shifted (overflow-safe) softmax along each row
+        Matrix<T> result = Engine.Softmax(
+            Engine.TensorDivideScalar(Tensor<T>.FromMatrix(logits), NumOps.FromDouble(temperature)), 1).ToMatrix();
 
         return result;
     }
@@ -306,29 +229,14 @@ public class DistillationLoss<T> : DistillationStrategyBase<T>
     /// </remarks>
     private Vector<T> KLDivergence(Matrix<T> p, Matrix<T> q)
     {
-        int batchSize = p.Rows;
-        int numClasses = p.Columns;
-        Vector<T> divergences = new Vector<T>(batchSize);
-
-        for (int r = 0; r < batchSize; r++)
-        {
-            T divergence = NumOps.Zero;
-            // Small value to avoid log(0)
-            const double epsilon = Epsilon;
-
-            for (int i = 0; i < numClasses; i++)
-            {
-                double pVal = Convert.ToDouble(p[r, i]);
-                double qVal = Convert.ToDouble(q[r, i]);
-
-                if (pVal > epsilon) // Only compute where p is non-zero
-                {
-                    double contrib = pVal * Math.Log(pVal / (qVal + epsilon));
-                    divergence = NumOps.Add(divergence, NumOps.FromDouble(contrib));
-                }
-            }
-            divergences[r] = divergence;
-        }
+        // Small value to avoid log(0); only entries where p is non-zero (p > epsilon) contribute
+        T epsilon = NumOps.FromDouble(Epsilon);
+        Tensor<T> pValues = Tensor<T>.FromMatrix(p);
+        Tensor<T> contributions = Engine.TensorMultiply(
+            pValues, Engine.TensorLog(Engine.TensorDivide(pValues, Engine.TensorAddScalar(Tensor<T>.FromMatrix(q), epsilon))));
+        Tensor<T> masked = Engine.TensorWhere(
+            Engine.TensorGreaterThan(pValues, epsilon), contributions, new Tensor<T>(pValues.Shape.ToArray()));
+        Vector<T> divergences = Engine.ReduceSum(masked, [1], keepDims: false).ToVector();
 
         return divergences;
     }
@@ -350,29 +258,14 @@ public class DistillationLoss<T> : DistillationStrategyBase<T>
     /// </remarks>
     private Vector<T> CrossEntropy(Matrix<T> predictions, Matrix<T> trueLabels)
     {
-        int batchSize = predictions.Rows;
-        int numClasses = predictions.Columns;
-        Vector<T> entropies = new Vector<T>(batchSize);
-
-        for (int r = 0; r < batchSize; r++)
-        {
-            T entropy = NumOps.Zero;
-            // Small value to avoid log(0)
-            const double epsilon = Epsilon;
-
-            for (int i = 0; i < numClasses; i++)
-            {
-                double pred = Convert.ToDouble(predictions[r, i]);
-                double label = Convert.ToDouble(trueLabels[r, i]);
-
-                if (label > epsilon) // Only compute where label is non-zero
-                {
-                    double contrib = -label * Math.Log(pred + epsilon);
-                    entropy = NumOps.Add(entropy, NumOps.FromDouble(contrib));
-                }
-            }
-            entropies[r] = entropy;
-        }
+        // Small value to avoid log(0); only entries where the label is non-zero (label > epsilon) contribute
+        T epsilon = NumOps.FromDouble(Epsilon);
+        Tensor<T> labels = Tensor<T>.FromMatrix(trueLabels);
+        Tensor<T> contributions = Engine.TensorNegate(Engine.TensorMultiply(
+            labels, Engine.TensorLog(Engine.TensorAddScalar(Tensor<T>.FromMatrix(predictions), epsilon))));
+        Tensor<T> masked = Engine.TensorWhere(
+            Engine.TensorGreaterThan(labels, epsilon), contributions, new Tensor<T>(labels.Shape.ToArray()));
+        Vector<T> entropies = Engine.ReduceSum(masked, [1], keepDims: false).ToVector();
 
         return entropies;
     }
