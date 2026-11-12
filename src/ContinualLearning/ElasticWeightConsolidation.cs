@@ -43,6 +43,7 @@ namespace AiDotNet.ContinualLearning;
 public class ElasticWeightConsolidation<T> : IContinualLearningStrategy<T>
 {
     private readonly INumericOperations<T> _numOps;
+    private static IEngine Engine => AiDotNetEngine.Current;
     private readonly List<Vector<T>> _fisherDiagonals;
     private readonly List<Vector<T>> _optimalParameters;
     private double _lambda;
@@ -117,20 +118,16 @@ public class ElasticWeightConsolidation<T> : IContinualLearningStrategy<T>
 
             int inputStride = taskData.inputs.Length / batchSize;
             int targetStride = taskData.targets.Length / batchSize;
-            for (int j = 0; j < inputStride; j++)
-                sampleInput.Data.Span[j] = taskData.inputs.Data.Span[n * inputStride + j];
-            for (int j = 0; j < targetStride; j++)
-                sampleTarget.Data.Span[j] = taskData.targets.Data.Span[n * targetStride + j];
+            taskData.inputs.Data.Span.Slice(n * inputStride, inputStride).CopyTo(sampleInput.Data.Span);
+            taskData.targets.Data.Span.Slice(n * targetStride, targetStride).CopyTo(sampleTarget.Data.Span);
 
             var grads = network.ComputeGradients(sampleInput, sampleTarget);
-            for (int i = 0; i < grads.Length; i++)
-                fisherDiag[i] = _numOps.Add(fisherDiag[i], _numOps.Multiply(grads[i], grads[i]));
+            fisherDiag = Engine.Add(fisherDiag, Engine.Multiply(grads, grads));
         }
 
         // Average over samples
         var invN = _numOps.FromDouble(1.0 / batchSize);
-        for (int i = 0; i < fisherDiag.Length; i++)
-            fisherDiag[i] = _numOps.Multiply(fisherDiag[i], invN);
+        fisherDiag = Engine.Multiply(fisherDiag, invN);
 
         _fisherDiagonals.Add(fisherDiag);
     }
@@ -154,13 +151,9 @@ public class ElasticWeightConsolidation<T> : IContinualLearningStrategy<T>
             var fisher = _fisherDiagonals[task];
             var optimal = _optimalParameters[task];
 
-            for (int i = 0; i < currentParams.Length; i++)
-            {
-                var diff = _numOps.Subtract(currentParams[i], optimal[i]);
-                var squaredDiff = _numOps.Multiply(diff, diff);
-                var penalty = _numOps.Multiply(fisher[i], squaredDiff);
-                loss = _numOps.Add(loss, penalty);
-            }
+            var diff = Engine.Subtract(currentParams, optimal);
+            var penalty = Engine.Multiply(fisher, Engine.Multiply(diff, diff));
+            loss = _numOps.Add(loss, Engine.Sum(penalty));
         }
 
         // Multiply by lambda/2
@@ -206,21 +199,13 @@ public class ElasticWeightConsolidation<T> : IContinualLearningStrategy<T>
                 Math.Min(currentParams.Length, gradients.Length),
                 Math.Min(fisher.Length, optimal.Length));
 
-            for (int i = 0; i < n; i++)
-            {
-                var diff = _numOps.Subtract(currentParams[i], optimal[i]);
-                var grad = _numOps.Multiply(fisher[i], diff);
-                ewcGrad[i] = _numOps.Add(ewcGrad[i], grad);
-            }
+            var diff = Engine.TensorSubtract(Head(currentParams, n), Head(optimal, n));
+            Engine.TensorAddInPlace(Head(ewcGrad, n), Engine.TensorMultiply(Head(fisher, n), diff));
         }
 
-        // Scale by lambda and add to original gradients
+        // Scale by lambda and add to original gradients (in place, like master)
         var lambdaT = _numOps.FromDouble(_lambda);
-        for (int i = 0; i < gradients.Length; i++)
-        {
-            var scaledEwcGrad = _numOps.Multiply(lambdaT, ewcGrad[i]);
-            gradients[i] = _numOps.Add(gradients[i], scaledEwcGrad);
-        }
+        Engine.TensorAddInPlace(gradients.AsTensor(), Engine.TensorMultiplyScalar(ewcGrad.AsTensor(), lambdaT));
 
         return gradients;
     }
@@ -252,12 +237,19 @@ public class ElasticWeightConsolidation<T> : IContinualLearningStrategy<T>
 
         var data = new Vector<T>(sampleSize);
         var startIdx = index * sampleSize;
-        for (int i = 0; i < sampleSize; i++)
-        {
-            data[i] = batch[startIdx + i];
-        }
+        batch.Contiguous().AsSpan().Slice(startIdx, sampleSize).CopyTo(data.AsWritableSpan());
 
         return new Tensor<T>(newShape, data);
+    }
+
+    /// <summary>
+    /// Zero-copy rank-1 tensor view over the first <paramref name="count"/> elements of a vector.
+    /// </summary>
+    private static Tensor<T> Head(Vector<T> vector, int count)
+    {
+        return count == vector.Length
+            ? vector.AsTensor()
+            : Tensor<T>.FromMemory(vector.AsWritableMemory().Slice(0, count), new[] { count });
     }
 
     /// <summary>
@@ -266,12 +258,6 @@ public class ElasticWeightConsolidation<T> : IContinualLearningStrategy<T>
     private Tensor<T> ComputeLogLikelihoodGradient(Tensor<T> output, Tensor<T> target)
     {
         // For softmax cross-entropy, the gradient is (output - target)
-        var gradData = new Vector<T>(output.Length);
-        for (int i = 0; i < output.Length; i++)
-        {
-            gradData[i] = _numOps.Subtract(output[i], target[i]);
-        }
-
-        return new Tensor<T>(output._shape, gradData);
+        return Engine.TensorSubtract(output, target.Reshape(output._shape));
     }
 }
