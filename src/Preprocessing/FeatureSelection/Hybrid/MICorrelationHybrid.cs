@@ -2,6 +2,7 @@ using AiDotNet.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Enums;
 using AiDotNet.Attributes;
+using AiDotNet.Preprocessing.FeatureSelection.Helpers;
 
 namespace AiDotNet.Preprocessing.FeatureSelection.Hybrid;
 
@@ -29,18 +30,18 @@ public class MICorrelationHybrid<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, 
     private readonly double _miWeight;
     private readonly int _nBins;
 
-    private double[]? _miScores;
-    private double[]? _correlationScores;
-    private double[]? _hybridScores;
+    private Vector<T>? _miScores;
+    private Vector<T>? _correlationScores;
+    private Vector<T>? _hybridScores;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public double MIWeight => _miWeight;
-    public double[]? MIScores => _miScores;
-    public double[]? CorrelationScores => _correlationScores;
-    public double[]? HybridScores => _hybridScores;
+    public Vector<T>? MIScores => _miScores;
+    public Vector<T>? CorrelationScores => _correlationScores;
+    public Vector<T>? HybridScores => _hybridScores;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -79,115 +80,50 @@ public class MICorrelationHybrid<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, 
         _nInputFeatures = data.Columns;
         int n = data.Rows;
         int p = data.Columns;
+        if (n == 0 || p == 0)
+            throw new InvalidOperationException("Sequence contains no elements");
 
-        _miScores = new double[p];
-        _correlationScores = new double[p];
-        _hybridScores = new double[p];
+        var engine = Engine;
+        var X = Tensor<T>.FromMatrix(data);
+        var y = engine.Reshape(Tensor<T>.FromVector(target), new[] { n, 1 });
 
-        // Compute target statistics
-        double yMean = 0;
-        var yValues = new double[n];
-        for (int i = 0; i < n; i++)
-        {
-            yValues[i] = NumOps.ToDouble(target[i]);
-            yMean += yValues[i];
-        }
-        yMean /= n;
+        // Compute Pearson correlation
+        var correlation = FeatureSelectionInformationOps.AbsCorrelationWithTarget(X, y, NumOps.Zero);
 
-        double yMin = yValues.Min();
-        double yMax = yValues.Max();
-        double yRange = yMax - yMin;
-
-        var yBins = new int[n];
-        for (int i = 0; i < n; i++)
-            yBins[i] = yRange > 1e-10 ? Math.Min((int)((yValues[i] - yMin) / yRange * (_nBins - 1)), _nBins - 1) : 0;
-
-        var yCounts = new int[_nBins];
-        foreach (int b in yBins)
-            yCounts[b]++;
-
-        for (int j = 0; j < p; j++)
-        {
-            // Get feature values
-            var xValues = new double[n];
-            double xMean = 0;
-            double xMin = double.MaxValue, xMax = double.MinValue;
-
-            for (int i = 0; i < n; i++)
-            {
-                xValues[i] = NumOps.ToDouble(data[i, j]);
-                xMean += xValues[i];
-                xMin = Math.Min(xMin, xValues[i]);
-                xMax = Math.Max(xMax, xValues[i]);
-            }
-            xMean /= n;
-
-            // Compute Pearson correlation
-            double sxy = 0, sxx = 0, syy = 0;
-            for (int i = 0; i < n; i++)
-            {
-                double xDiff = xValues[i] - xMean;
-                double yDiff = yValues[i] - yMean;
-                sxy += xDiff * yDiff;
-                sxx += xDiff * xDiff;
-                syy += yDiff * yDiff;
-            }
-
-            _correlationScores[j] = (sxx > 1e-10 && syy > 1e-10) ? Math.Abs(sxy / Math.Sqrt(sxx * syy)) : 0;
-
-            // Compute Mutual Information
-            double xRange = xMax - xMin;
-            var xBins = new int[n];
-            for (int i = 0; i < n; i++)
-                xBins[i] = xRange > 1e-10 ? Math.Min((int)((xValues[i] - xMin) / xRange * (_nBins - 1)), _nBins - 1) : 0;
-
-            var xCounts = new int[_nBins];
-            foreach (int b in xBins)
-                xCounts[b]++;
-
-            var jointCounts = new Dictionary<(int, int), int>();
-            for (int i = 0; i < n; i++)
-            {
-                var key = (xBins[i], yBins[i]);
-                jointCounts[key] = jointCounts.GetValueOrDefault(key) + 1;
-            }
-
-            double mi = 0;
-            foreach (var kvp in jointCounts)
-            {
-                double pxy = (double)kvp.Value / n;
-                double px = (double)xCounts[kvp.Key.Item1] / n;
-                double py = (double)yCounts[kvp.Key.Item2] / n;
-
-                if (pxy > 0 && px > 0 && py > 0)
-                    mi += pxy * Math.Log(pxy / (px * py));
-            }
-
-            _miScores[j] = mi;
-        }
+        // Compute Mutual Information (nats) over nBins equal-width bins (numpy.histogram bins)
+        var xBins = FeatureSelectionInformationOps.EqualWidthBinsExactRange(X, _nBins);
+        var yBins = FeatureSelectionInformationOps.EqualWidthBinsExactRange(y, _nBins);
+        var mi = FeatureSelectionInformationOps.MutualInformation(
+            FeatureSelectionInformationOps.JointCounts<T>(xBins, _nBins, yBins, _nBins), n);
 
         // Normalize scores
-        double maxMI = _miScores.Max();
-        double maxCorr = _correlationScores.Max();
+        var normalizedMI = NormalizeByMax(mi);
+        var normalizedCorr = NormalizeByMax(correlation);
+        var hybrid = engine.TensorAdd(
+            engine.TensorMultiplyScalar(normalizedMI, NumOps.FromDouble(_miWeight)),
+            engine.TensorMultiplyScalar(normalizedCorr, NumOps.FromDouble(1 - _miWeight)));
 
-        for (int j = 0; j < p; j++)
-        {
-            double normalizedMI = maxMI > 1e-10 ? _miScores[j] / maxMI : 0;
-            double normalizedCorr = maxCorr > 1e-10 ? _correlationScores[j] / maxCorr : 0;
-            _hybridScores[j] = _miWeight * normalizedMI + (1 - _miWeight) * normalizedCorr;
-        }
+        _miScores = mi.ToVector();
+        _correlationScores = correlation.ToVector();
+        _hybridScores = hybrid.ToVector();
 
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = Enumerable.Range(0, p)
-            .OrderByDescending(j => _hybridScores[j])
-            .Take(numToSelect)
-            .OrderBy(x => x)
-            .ToArray();
+        _selectedIndices = FeatureSelectionTensorOps.TopKIndicesSorted(hybrid, numToSelect);
 
         IsFitted = true;
     }
 
+    /// <summary>Scores divided by their maximum, or all 0 when the maximum is not above 1e-10.</summary>
+    private Tensor<T> NormalizeByMax(Tensor<T> scores)
+    {
+        T max = Engine.TensorMaxValue(scores);
+        return NumOps.GreaterThan(max, NumOps.FromDouble(1e-10))
+            ? Engine.TensorDivideScalar(scores, max)
+            : new Tensor<T>(scores.Shape.ToArray());
+    }
+
     /// <inheritdoc />
+
     public Matrix<T> FitTransform(Matrix<T> data, Vector<T> target)
     {
         Fit(data, target);
@@ -200,15 +136,7 @@ public class MICorrelationHybrid<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, 
         if (_selectedIndices is null)
             throw new InvalidOperationException("MICorrelationHybrid has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return FeatureSelectionTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

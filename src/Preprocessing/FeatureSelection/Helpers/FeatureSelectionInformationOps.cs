@@ -177,6 +177,31 @@ internal static class FeatureSelectionInformationOps
         return engine.TensorNegate(engine.ReduceSum(terms, new[] { counts.Rank - 1 }, false));
     }
 
+    /// <summary>
+    /// |Pearson correlation| of every column of <paramref name="x"/> ([n, p]) with the target column
+    /// <paramref name="y"/> ([n, 1]), as [p]; <paramref name="fallback"/> where either sum of squared deviations
+    /// is not above 1e-10.
+    /// </summary>
+    public static Tensor<T> AbsCorrelationWithTarget<T>(Tensor<T> x, Tensor<T> y, T fallback)
+    {
+        var engine = AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<T>();
+        int p = x.Shape[1];
+        var xc = engine.TensorSubtract(x, engine.ReduceMean(x, new[] { 0 }, true));
+        var yc = engine.TensorSubtract(y, engine.ReduceMean(y, new[] { 0 }, true));
+        var sxy = engine.Reshape(engine.TensorMatMul(engine.TensorTranspose(xc), yc), new[] { p });
+        var sxx = engine.ReduceSum(engine.TensorSquare(xc), new[] { 0 }, false);
+        T syy = engine.TensorSum(engine.TensorSquare(yc));
+        var fallbackScores = FeatureSelectionTensorOps.Filled(new[] { p }, fallback);
+        if (!ops.GreaterThan(syy, ops.FromDouble(1e-10)))
+            return fallbackScores;
+
+        var defined = engine.TensorGreaterThan(sxx, ops.FromDouble(1e-10));
+        var safeSxx = engine.TensorWhere(defined, sxx, FeatureSelectionTensorOps.Filled(new[] { p }, ops.One));
+        var correlation = engine.TensorAbs(engine.TensorDivide(sxy, engine.TensorSqrt(engine.TensorMultiplyScalar(safeSxx, syy))));
+        return engine.TensorWhere(defined, correlation, fallbackScores);
+    }
+
     /// <summary>Converts a natural-log information value to bits.</summary>
     public static Tensor<T> ToBits<T>(Tensor<T> nats) =>
         AiDotNetEngine.Current.TensorDivideScalar(nats, MathHelper.GetNumericOperations<T>().FromDouble(Math.Log(2)));
