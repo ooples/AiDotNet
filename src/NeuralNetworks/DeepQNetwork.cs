@@ -573,6 +573,10 @@ public partial class DeepQNetwork<T> : VectorModelLayoutBase<T>
         // Prepare input batch (states) and output batch (Q-values)
         var states = new Tensor<T>[_batchSize];
         var targetQValues = new Tensor<T>[_batchSize];
+        var currentQValues = new Tensor<T>[_batchSize];
+        var rewards = new T[_batchSize];
+        var terminal = new bool[_batchSize];
+        var maxNextQ = new Tensor<T>[_batchSize];
 
         for (int i = 0; i < _batchSize; i++)
         {
@@ -580,34 +584,42 @@ public partial class DeepQNetwork<T> : VectorModelLayoutBase<T>
             states[i] = experience.State;
 
             // Get current Q-values for the state
-            var currentQValues = GetQValues(experience.State);
-
-            // Create copy for updating
-            var updatedQValues = currentQValues.Clone();
-
-            // Calculate target Q-value for the action taken
-            T targetQ;
+            currentQValues[i] = GetQValues(experience.State);
+            rewards[i] = experience.Reward;
 
             if (experience.Done || _targetNetwork is null)
             {
                 // For terminal states (or if no target network), target Q-value is just the reward
-                targetQ = experience.Reward;
+                terminal[i] = true;
+                maxNextQ[i] = new Tensor<T>(new[] { 1 });
             }
             else
             {
                 // For non-terminal states, target Q-value is reward + gamma * max(Q(s', a'))
-                // where gamma is the discount factor (typically 0.99)
                 var nextStateQValues = _targetNetwork.GetQValues(experience.NextState);
                 int bestNextAction = nextStateQValues.Max().maxIndex;
-                T maxNextQ = nextStateQValues[bestNextAction];
-                T gamma = NumOps.FromDouble(0.99); // Discount factor
-                targetQ = NumOps.Add(experience.Reward, NumOps.Multiply(gamma, maxNextQ));
+                maxNextQ[i] = Engine.TensorSlice(
+                    Engine.Reshape(nextStateQValues, new[] { nextStateQValues.Length }), new[] { bestNextAction }, new[] { 1 });
             }
+        }
 
-            // Update only the Q-value for the action that was taken
-            updatedQValues[experience.Action] = targetQ;
+        // targetQ = reward for terminal steps, reward + gamma * max(Q(s', a')) otherwise (gamma = 0.99).
+        T gamma = NumOps.FromDouble(0.99); // Discount factor
+        var rewardTensor = new Tensor<T>(rewards, new[] { _batchSize });
+        var bootstrapped = Engine.TensorAdd(
+            rewardTensor, Engine.TensorMultiplyScalar(Engine.TensorConcatenate(maxNextQ, 0), gamma));
+        var targetQ = Engine.TensorWhere(terminal, rewardTensor, bootstrapped);
 
-            targetQValues[i] = updatedQValues;
+        for (int i = 0; i < _batchSize; i++)
+        {
+            // Update only the Q-value for the action that was taken, on a copy
+            var updatedQValues = currentQValues[i].Clone();
+            var flatUpdated = Engine.TensorScatter(
+                Engine.Reshape(updatedQValues, new[] { updatedQValues.Length }),
+                new Tensor<int>(new[] { batch[i].Action }, new[] { 1 }),
+                Engine.TensorSlice(targetQ, new[] { i }, new[] { 1 }),
+                0);
+            targetQValues[i] = Engine.Reshape(flatUpdated, updatedQValues._shape);
         }
 
         // Combine all states and target Q-values into batches

@@ -394,9 +394,10 @@ public partial class DeepBoltzmannMachine<T> : VectorModelLayoutBase<T>
                 _layerSizes[layer + 1], null as IActivationFunction<T>);
 
             // Train the RBM on the current layer activations
+            T sampleCount = NumOps.FromDouble(layerInput.Shape[0]);
             for (int epoch = 0; epoch < pretrainingEpochs; epoch++)
             {
-                T epochLoss = NumOps.Zero;
+                var batchLosses = new List<T>();
                 for (int i = 0; i < layerInput.Shape[0]; i += _batchSize)
                 {
                     var batchSize = Math.Min(_batchSize, layerInput.Shape[0] - i);
@@ -405,11 +406,13 @@ public partial class DeepBoltzmannMachine<T> : VectorModelLayoutBase<T>
 
                     // Calculate loss (simplified)
                     var reconstructed = tmpRBM.Forward(Tensor<T>.FromVector(batch.ToVector()));
-                    var loss = CalculateLoss(batch, reconstructed);
-                    epochLoss = NumOps.Add(epochLoss, loss);
+                    batchLosses.Add(CalculateLoss(batch, reconstructed));
                 }
 
-                epochLoss = NumOps.Divide(epochLoss, NumOps.FromDouble(layerInput.Shape[0]));
+                T epochLoss = batchLosses.Count == 0
+                    ? NumOps.Zero
+                    : Engine.TensorSum(new Tensor<T>(batchLosses.ToArray(), new[] { batchLosses.Count }));
+                epochLoss = NumOps.Divide(epochLoss, sampleCount);
                 Console.WriteLine($"Layer {layer + 1}, Epoch {epoch + 1}/{pretrainingEpochs}, Loss: {epochLoss}");
             }
 
@@ -524,27 +527,17 @@ public partial class DeepBoltzmannMachine<T> : VectorModelLayoutBase<T>
     }
 
     /// <summary>
-    /// Manual 2D matrix multiplication to avoid Engine.TensorMatMul issues with certain shapes.
+    /// 2D matrix product [m, k] x [k, n] of the leading k columns of <paramref name="a"/> and rows of
+    /// <paramref name="b"/>. The result is a plain value: the contrastive-divergence math is not on a tape.
     /// </summary>
     private Tensor<T> MatMul2D(Tensor<T> a, Tensor<T> b)
     {
         int m = a.Shape[0];
         int k = a.Shape[1];
         int n = b.Shape[1];
-        var result = new Tensor<T>([m, n]);
-        for (int i = 0; i < m; i++)
-        {
-            for (int j = 0; j < n; j++)
-            {
-                T sum = NumOps.Zero;
-                for (int p = 0; p < k; p++)
-                {
-                    sum = NumOps.Add(sum, NumOps.Multiply(a[i, p], b[p, j]));
-                }
-                result[i, j] = sum;
-            }
-        }
-        return result;
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        var right = b.Shape[0] == k ? b : Engine.TensorSlice(b, new[] { 0, 0 }, new[] { k, n });
+        return Engine.TensorMatMul(a, right);
     }
 
     /// <summary>
@@ -556,26 +549,24 @@ public partial class DeepBoltzmannMachine<T> : VectorModelLayoutBase<T>
         int hiddenSize = _layerWeights[0].Shape[1];
 
         // Resize first weight matrix
-        var newWeights = new Tensor<T>([actualInputSize, hiddenSize]);
         int sharedSize = Math.Min(oldInputSize, actualInputSize);
-        for (int i = 0; i < sharedSize; i++)
-            for (int j = 0; j < hiddenSize; j++)
-                newWeights[i, j] = _layerWeights[0][i, j];
-        // New rows get Xavier-scale random values
+        var newWeights = Engine.TensorSlice(_layerWeights[0], new[] { 0, 0 }, new[] { sharedSize, hiddenSize });
+        // New rows get Xavier-scale random values in [-scale, scale), drawn in bulk from a secure seed
         if (actualInputSize > sharedSize)
         {
             double scale = Math.Sqrt(2.0 / (actualInputSize + hiddenSize));
             var rng = RandomHelper.CreateSecureRandom();
-            for (int i = sharedSize; i < actualInputSize; i++)
-                for (int j = 0; j < hiddenSize; j++)
-                    newWeights[i, j] = NumOps.FromDouble((rng.NextDouble() * 2 - 1) * scale);
+            var newRows = Engine.TensorUniform<T>(new[] { actualInputSize - sharedSize, hiddenSize }, -scale, scale, rng.Next());
+            newWeights = Engine.TensorConcatenate(new[] { newWeights, newRows }, 0);
         }
         _layerWeights[0] = newWeights;
 
-        // Resize first bias
-        var newBias = new Tensor<T>([1, actualInputSize]);
-        for (int i = 0; i < Math.Min(oldInputSize, actualInputSize); i++)
-            newBias[0, i] = _layerBiases[0][0, i];
+        // Resize first bias (new entries start at zero)
+        var newBias = Engine.TensorSlice(_layerBiases[0], new[] { 0, 0 }, new[] { 1, sharedSize });
+        if (actualInputSize > sharedSize)
+        {
+            newBias = Engine.TensorConcatenate(new[] { newBias, new Tensor<T>(new[] { 1, actualInputSize - sharedSize }) }, 1);
+        }
         _layerBiases[0] = newBias;
 
         _layerSizes[0] = actualInputSize;

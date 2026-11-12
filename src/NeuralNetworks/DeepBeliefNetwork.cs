@@ -535,18 +535,22 @@ public partial class DeepBeliefNetwork<T> : VectorModelLayoutBase<T>
         if (input.Length == 0)
             throw new ArgumentException("Pre-training input must not be empty.", nameof(input));
 
-        double minimum = double.PositiveInfinity;
-        double maximum = double.NegativeInfinity;
-        for (int i = 0; i < input.Length; i++)
+        var flatInput = Engine.Reshape(input, new[] { input.Length });
+        var zeros = new Tensor<T>(new[] { input.Length });
+        var ones = new Tensor<T>(new[] { input.Length });
+        ones.Fill(NumOps.One);
+        var nonFinite = Engine.TensorWhere(Engine.TensorIsFinite(flatInput), zeros, ones);
+        if (NumOps.GreaterThan(Engine.TensorMaxValue(nonFinite), NumOps.Zero))
         {
-            double value = NumOps.ToDouble(input[i]);
-            if (double.IsNaN(value) || double.IsInfinity(value))
-                throw new ArgumentException(
-                    $"Pre-training input contains a non-finite value at index {i}.",
-                    nameof(input));
-            minimum = Math.Min(minimum, value);
-            maximum = Math.Max(maximum, value);
+            // ArgMax returns the first flagged index, the one the scan reported.
+            int firstBad = Engine.TensorArgMax(nonFinite, 0)[0];
+            throw new ArgumentException(
+                $"Pre-training input contains a non-finite value at index {firstBad}.",
+                nameof(input));
         }
+
+        double minimum = NumOps.ToDouble(Engine.TensorMinValue(flatInput));
+        double maximum = NumOps.ToDouble(Engine.TensorMaxValue(flatInput));
 
         if (minimum >= 0.0 && maximum <= 1.0)
             return input;
@@ -560,13 +564,9 @@ public partial class DeepBeliefNetwork<T> : VectorModelLayoutBase<T>
         }
 
         double inverseRange = 1.0 / range;
-        for (int i = 0; i < input.Length; i++)
-        {
-            double unitValue = (NumOps.ToDouble(input[i]) - minimum) * inverseRange;
-            normalized[i] = NumOps.FromDouble(unitValue);
-        }
-
-        return normalized;
+        return Engine.TensorMultiplyScalar(
+            Engine.TensorSubtractScalar(input, NumOps.FromDouble(minimum)),
+            NumOps.FromDouble(inverseRange));
     }
 
     /// <summary>
