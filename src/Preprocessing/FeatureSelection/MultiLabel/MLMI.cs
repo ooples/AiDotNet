@@ -2,6 +2,7 @@ using AiDotNet.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Enums;
 using AiDotNet.Attributes;
+using AiDotNet.Preprocessing.FeatureSelection.Helpers;
 
 namespace AiDotNet.Preprocessing.FeatureSelection.MultiLabel;
 
@@ -29,7 +30,7 @@ public class MLMI<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFeat
     private readonly int _nBins;
     private readonly bool _considerLabelCorrelations;
 
-    private double[]? _mutualInformation;
+    private Vector<T>? _mutualInformation;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
@@ -37,7 +38,7 @@ public class MLMI<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFeat
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public int NBins => _nBins;
     public bool ConsiderLabelCorrelations => _considerLabelCorrelations;
-    public double[]? MutualInformation => _mutualInformation;
+    public Vector<T>? MutualInformation => _mutualInformation;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -77,213 +78,61 @@ public class MLMI<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFeat
         int p = data.Columns;
         int numLabels = labels.Columns;
 
-        _mutualInformation = new double[p];
+        var engine = Engine;
 
-        // Convert labels to binary
-        var binaryLabels = new int[n, numLabels];
-        for (int i = 0; i < n; i++)
-            for (int l = 0; l < numLabels; l++)
-                binaryLabels[i, l] = NumOps.GreaterThan(labels[i, l], NumOps.FromDouble(0.5)) ? 1 : 0;
+        // Convert labels to binary, and discretize the features into nBins equal-width bins
+        // (numpy.histogram bins; a constant feature is one bin)
+        var binaryLabels = engine.TensorGreaterThan(Tensor<T>.FromMatrix(labels), NumOps.FromDouble(0.5)).Cast<int>();
+        var discretized = FeatureSelectionInformationOps.EqualWidthBinsExactRange(Tensor<T>.FromMatrix(data), _nBins);
 
-        // Compute mutual information for each feature
-        for (int j = 0; j < p; j++)
+        Tensor<T> mutualInformation;
+        if (_considerLabelCorrelations)
         {
-            if (_considerLabelCorrelations)
+            // Compute MI (nats) with the label powerset: each distinct label combination is one class
+            var combination = new Tensor<int>(new[] { n });
+            int combinations = 1;
+            for (int l = 0; l < numLabels; l++)
             {
-                // Compute MI with label powerset (subset of common combinations)
-                _mutualInformation[j] = ComputeMIWithLabelSet(data, binaryLabels, j, n, numLabels);
+                var label = engine.Reshape(engine.TensorSlice(binaryLabels, new[] { 0, l }, new[] { n, 1 }), new[] { n });
+                var code = engine.TensorAdd(engine.TensorMultiplyScalar(combination, 2), label);
+                var (values, inverse, _) = engine.TensorUniqueWithInfo(code, true, true, false);
+                combination = inverse ?? throw new InvalidOperationException("The unique label combinations were not returned.");
+                combinations = values.Length;
             }
-            else
-            {
-                // Sum of MI with individual labels
-                double totalMI = 0;
-                for (int l = 0; l < numLabels; l++)
-                {
-                    var singleLabel = new int[n];
-                    for (int i = 0; i < n; i++)
-                        singleLabel[i] = binaryLabels[i, l];
 
-                    totalMI += ComputeMIWithSingleLabel(data, singleLabel, j, n);
-                }
-                _mutualInformation[j] = totalMI / numLabels;
-            }
+            mutualInformation = FeatureSelectionInformationOps.MutualInformation(
+                FeatureSelectionInformationOps.JointCounts<T>(discretized, _nBins, combination, combinations), n);
         }
+        else
+        {
+            // Mean over the labels of the MI (nats) with each single label
+            var total = new Tensor<T>(new[] { p });
+            for (int l = 0; l < numLabels; l++)
+            {
+                var label = engine.TensorSlice(binaryLabels, new[] { 0, l }, new[] { n, 1 });
+                total = engine.TensorAdd(total, FeatureSelectionInformationOps.MutualInformation(
+                    FeatureSelectionInformationOps.JointCounts<T>(discretized, _nBins, label, 2), n));
+            }
+
+            mutualInformation = engine.TensorDivideScalar(total, FeatureSelectionTensorOps.Count<T>(numLabels));
+        }
+
+        _mutualInformation = mutualInformation.ToVector();
 
         // Select top features
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = _mutualInformation
-            .Select((mi, idx) => (MI: mi, Index: idx))
-            .OrderByDescending(x => x.MI)
-            .Take(numToSelect)
-            .Select(x => x.Index)
-            .OrderBy(x => x)
-            .ToArray();
+        _selectedIndices = FeatureSelectionTensorOps.TopKIndicesSorted(mutualInformation, numToSelect);
 
         IsFitted = true;
     }
 
+    /// <inheritdoc />
     public void Fit(Matrix<T> data, Vector<T> target)
     {
-        // Convert single-label to multi-label format
-        int n = data.Rows;
-        var uniqueLabels = new HashSet<int>();
-        for (int i = 0; i < n; i++)
-            uniqueLabels.Add((int)Math.Round(NumOps.ToDouble(target[i])));
-
-        var labelList = uniqueLabels.OrderBy(x => x).ToList();
-        int numLabels = labelList.Count;
-
-        var labelsArray = new T[n, numLabels];
-        for (int i = 0; i < n; i++)
-        {
-            int label = (int)Math.Round(NumOps.ToDouble(target[i]));
-            int labelIdx = labelList.IndexOf(label);
-            labelsArray[i, labelIdx] = NumOps.FromDouble(1.0);
-        }
-
-        Fit(data, new Matrix<T>(labelsArray));
-    }
-
-    private double ComputeMIWithLabelSet(Matrix<T> data, int[,] labels, int featureIdx, int n, int numLabels)
-    {
-        // Discretize feature
-        var featureValues = new double[n];
-        double minVal = double.MaxValue, maxVal = double.MinValue;
-
-        for (int i = 0; i < n; i++)
-        {
-            featureValues[i] = NumOps.ToDouble(data[i, featureIdx]);
-            if (featureValues[i] < minVal) minVal = featureValues[i];
-            if (featureValues[i] > maxVal) maxVal = featureValues[i];
-        }
-
-        var discretizedFeature = new int[n];
-        double range = maxVal - minVal;
-        if (range < 1e-10)
-        {
-            for (int i = 0; i < n; i++)
-                discretizedFeature[i] = 0;
-        }
-        else
-        {
-            for (int i = 0; i < n; i++)
-            {
-                int bin = (int)((featureValues[i] - minVal) / range * (_nBins - 1));
-                discretizedFeature[i] = Math.Min(_nBins - 1, Math.Max(0, bin));
-            }
-        }
-
-        // Create label combination signature
-        var labelSignatures = new Dictionary<string, int>();
-        var sampleSignatures = new int[n];
-
-        for (int i = 0; i < n; i++)
-        {
-            var sig = new System.Text.StringBuilder();
-            for (int l = 0; l < numLabels; l++)
-                sig.Append(labels[i, l]);
-
-            string sigStr = sig.ToString();
-            if (!labelSignatures.ContainsKey(sigStr))
-                labelSignatures[sigStr] = labelSignatures.Count;
-
-            sampleSignatures[i] = labelSignatures[sigStr];
-        }
-
-        // Compute joint and marginal distributions
-        int numLabelCombos = labelSignatures.Count;
-        var jointCounts = new int[_nBins, numLabelCombos];
-        var featureCounts = new int[_nBins];
-        var labelCounts = new int[numLabelCombos];
-
-        for (int i = 0; i < n; i++)
-        {
-            jointCounts[discretizedFeature[i], sampleSignatures[i]]++;
-            featureCounts[discretizedFeature[i]]++;
-            labelCounts[sampleSignatures[i]]++;
-        }
-
-        // Compute MI
-        double mi = 0;
-        for (int f = 0; f < _nBins; f++)
-        {
-            for (int l = 0; l < numLabelCombos; l++)
-            {
-                if (jointCounts[f, l] > 0)
-                {
-                    double pJoint = (double)jointCounts[f, l] / n;
-                    double pFeature = (double)featureCounts[f] / n;
-                    double pLabel = (double)labelCounts[l] / n;
-
-                    if (pFeature > 0 && pLabel > 0)
-                        mi += pJoint * Math.Log(pJoint / (pFeature * pLabel) + 1e-10);
-                }
-            }
-        }
-
-        return mi;
-    }
-
-    private double ComputeMIWithSingleLabel(Matrix<T> data, int[] labels, int featureIdx, int n)
-    {
-        // Discretize feature
-        var featureValues = new double[n];
-        double minVal = double.MaxValue, maxVal = double.MinValue;
-
-        for (int i = 0; i < n; i++)
-        {
-            featureValues[i] = NumOps.ToDouble(data[i, featureIdx]);
-            if (featureValues[i] < minVal) minVal = featureValues[i];
-            if (featureValues[i] > maxVal) maxVal = featureValues[i];
-        }
-
-        var discretizedFeature = new int[n];
-        double range = maxVal - minVal;
-        if (range < 1e-10)
-        {
-            for (int i = 0; i < n; i++)
-                discretizedFeature[i] = 0;
-        }
-        else
-        {
-            for (int i = 0; i < n; i++)
-            {
-                int bin = (int)((featureValues[i] - minVal) / range * (_nBins - 1));
-                discretizedFeature[i] = Math.Min(_nBins - 1, Math.Max(0, bin));
-            }
-        }
-
-        // Compute counts
-        var jointCounts = new int[_nBins, 2];
-        var featureCounts = new int[_nBins];
-        var labelCounts = new int[2];
-
-        for (int i = 0; i < n; i++)
-        {
-            jointCounts[discretizedFeature[i], labels[i]]++;
-            featureCounts[discretizedFeature[i]]++;
-            labelCounts[labels[i]]++;
-        }
-
-        // Compute MI
-        double mi = 0;
-        for (int f = 0; f < _nBins; f++)
-        {
-            for (int l = 0; l < 2; l++)
-            {
-                if (jointCounts[f, l] > 0)
-                {
-                    double pJoint = (double)jointCounts[f, l] / n;
-                    double pFeature = (double)featureCounts[f] / n;
-                    double pLabel = (double)labelCounts[l] / n;
-
-                    if (pFeature > 0 && pLabel > 0)
-                        mi += pJoint * Math.Log(pJoint / (pFeature * pLabel) + 1e-10);
-                }
-            }
-        }
-
-        return mi;
+        // Convert single-label to multi-label format: one indicator column per distinct (rounded) label, ascending
+        var classIds = FeatureSelectionInformationOps.ClassIndices(Engine.TensorRound(Tensor<T>.FromVector(target)), out int numLabels);
+        var indicators = Engine.TensorOneHot<T>(classIds, numLabels);
+        Fit(data, indicators.ToMatrix());
     }
 
     public Matrix<T> FitTransform(Matrix<T> data, Matrix<T> labels)
@@ -304,15 +153,7 @@ public class MLMI<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFeat
         if (_selectedIndices is null)
             throw new InvalidOperationException("MLMI has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return FeatureSelectionTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

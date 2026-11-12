@@ -2,6 +2,7 @@ using AiDotNet.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Enums;
 using AiDotNet.Attributes;
+using AiDotNet.Preprocessing.FeatureSelection.Helpers;
 
 namespace AiDotNet.Preprocessing.FeatureSelection.Interaction;
 
@@ -25,14 +26,14 @@ public class InteractionStrengthSelector<T> : TransformerBase<T, Matrix<T>, Matr
     private readonly int _nFeaturesToSelect;
     private readonly int _topInteractions;
 
-    private double[]? _interactionScores;
+    private Vector<T>? _interactionScores;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public int TopInteractions => _topInteractions;
-    public double[]? InteractionScores => _interactionScores;
+    public Vector<T>? InteractionScores => _interactionScores;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -67,113 +68,53 @@ public class InteractionStrengthSelector<T> : TransformerBase<T, Matrix<T>, Matr
         _nInputFeatures = data.Columns;
         int n = data.Rows;
         int p = data.Columns;
+        if (n == 0 && p > 1)
+            throw new InvalidOperationException("Sequence contains no elements");
 
-        var X = new double[n, p];
-        var y = new double[n];
-        for (int i = 0; i < n; i++)
-        {
-            y[i] = NumOps.ToDouble(target[i]);
-            for (int j = 0; j < p; j++)
-                X[i, j] = NumOps.ToDouble(data[i, j]);
-        }
+        var engine = Engine;
+        var y = engine.Reshape(Tensor<T>.FromVector(target), new[] { n, 1 });
 
-        // Standardize features
-        var means = new double[p];
-        var stds = new double[p];
-        for (int j = 0; j < p; j++)
-        {
-            for (int i = 0; i < n; i++)
-                means[j] += X[i, j];
-            means[j] /= n;
+        // Standardize features (population std; a constant column is only centred)
+        var centered = FeatureSelectionTensorOps.CenterColumns(Tensor<T>.FromMatrix(data), out _, out var std);
+        var safeStd = engine.TensorWhere(engine.TensorLessThan(std, NumOps.FromDouble(1e-10)), FeatureSelectionTensorOps.Filled(new[] { p }, NumOps.One), std);
+        var X = engine.TensorDivide(centered, engine.Reshape(safeStd, new[] { 1, p }));
 
-            for (int i = 0; i < n; i++)
-                stds[j] += (X[i, j] - means[j]) * (X[i, j] - means[j]);
-            stds[j] = Math.Sqrt(stds[j] / n);
-            if (stds[j] < 1e-10) stds[j] = 1;
-        }
+        // Individual |correlations| with the target, as a [1, p] row
+        var individual = engine.Reshape(engine.TensorAbs(FeatureSelectionTensorOps.ColumnCorrelations(X, y)), new[] { 1, p });
 
-        for (int i = 0; i < n; i++)
-            for (int j = 0; j < p; j++)
-                X[i, j] = (X[i, j] - means[j]) / stds[j];
-
-        _interactionScores = new double[p];
-
-        // For each feature, measure interaction strength with top correlated features
+        // For each feature j1, how much each product term X_j1 * X_j2 correlates with the target beyond
+        // the stronger of the two individual correlations
+        var boostRows = new Tensor<T>[p];
         for (int j1 = 0; j1 < p; j1++)
         {
-            var interactionStrengths = new List<double>();
-
-            for (int j2 = 0; j2 < p; j2++)
-            {
-                if (j1 == j2) continue;
-
-                // Create interaction term
-                var interaction = new double[n];
-                for (int i = 0; i < n; i++)
-                    interaction[i] = X[i, j1] * X[i, j2];
-
-                // Correlation of interaction with target
-                double interactionMean = interaction.Average();
-                double yMean = y.Average();
-
-                double numerator = 0, interactionSumSq = 0, ySumSq = 0;
-                for (int i = 0; i < n; i++)
-                {
-                    numerator += (interaction[i] - interactionMean) * (y[i] - yMean);
-                    interactionSumSq += (interaction[i] - interactionMean) * (interaction[i] - interactionMean);
-                    ySumSq += (y[i] - yMean) * (y[i] - yMean);
-                }
-
-                double denominator = Math.Sqrt(interactionSumSq * ySumSq);
-                double interactionCorr = denominator > 1e-10 ? Math.Abs(numerator / denominator) : 0;
-
-                // Individual correlations
-                double corr1 = ComputeCorrelation(X, j1, y, n);
-                double corr2 = ComputeCorrelation(X, j2, y, n);
-
-                // Interaction strength = how much the interaction adds beyond individuals
-                double interactionBoost = interactionCorr - Math.Max(corr1, corr2);
-                if (interactionBoost > 0)
-                    interactionStrengths.Add(interactionBoost);
-            }
-
-            // Feature score = sum of top interaction strengths
-            _interactionScores[j1] = interactionStrengths
-                .OrderByDescending(s => s)
-                .Take(_topInteractions)
-                .Sum();
+            var column = engine.TensorSlice(X, new[] { 0, j1 }, new[] { n, 1 });
+            var products = engine.TensorMultiply(X, engine.TensorBroadcastTo(column, new[] { n, p }));
+            var interactionCorr = engine.Reshape(engine.TensorAbs(FeatureSelectionTensorOps.ColumnCorrelations(products, y)), new[] { 1, p });
+            var own = engine.TensorBroadcastTo(engine.TensorSlice(individual, new[] { 0, j1 }, new[] { 1, 1 }), new[] { 1, p });
+            boostRows[j1] = engine.TensorSubtract(interactionCorr, engine.TensorMax(individual, own));
         }
 
+        // Feature score = sum of its top positive interaction boosts (the feature itself excluded)
+        var scores = new Tensor<T>(new[] { p });
+        int top = Math.Min(_topInteractions, p);
+        if (p > 0 && top > 0)
+        {
+            var boosts = engine.TensorMax(engine.TensorConcatenate(boostRows, 0), NumOps.Zero);
+            boosts = engine.TensorMultiply(boosts, FeatureSelectionTensorOps.OneMinus(engine.TensorEye<T>(p)));
+            var largest = engine.TensorTopK(boosts, top, 1, out _);
+            scores = engine.ReduceSum(largest, new[] { 1 }, false);
+        }
+
+        _interactionScores = scores.ToVector();
+
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = Enumerable.Range(0, p)
-            .OrderByDescending(j => _interactionScores[j])
-            .Take(numToSelect)
-            .OrderBy(x => x)
-            .ToArray();
+        _selectedIndices = FeatureSelectionTensorOps.TopKIndicesSorted(scores, numToSelect);
 
         IsFitted = true;
     }
 
-    private double ComputeCorrelation(double[,] X, int j, double[] y, int n)
-    {
-        double xMean = 0, yMean = y.Average();
-        for (int i = 0; i < n; i++)
-            xMean += X[i, j];
-        xMean /= n;
-
-        double numerator = 0, xSumSq = 0, ySumSq = 0;
-        for (int i = 0; i < n; i++)
-        {
-            numerator += (X[i, j] - xMean) * (y[i] - yMean);
-            xSumSq += (X[i, j] - xMean) * (X[i, j] - xMean);
-            ySumSq += (y[i] - yMean) * (y[i] - yMean);
-        }
-
-        double denominator = Math.Sqrt(xSumSq * ySumSq);
-        return denominator > 1e-10 ? Math.Abs(numerator / denominator) : 0;
-    }
-
     /// <inheritdoc />
+
     public Matrix<T> FitTransform(Matrix<T> data, Vector<T> target)
     {
         Fit(data, target);
@@ -186,15 +127,7 @@ public class InteractionStrengthSelector<T> : TransformerBase<T, Matrix<T>, Matr
         if (_selectedIndices is null)
             throw new InvalidOperationException("InteractionStrengthSelector has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return FeatureSelectionTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

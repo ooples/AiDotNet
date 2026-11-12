@@ -3,6 +3,7 @@ using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Enums;
 using AiDotNet.Attributes;
+using AiDotNet.Preprocessing.FeatureSelection.Helpers;
 
 namespace AiDotNet.Preprocessing.FeatureSelection.MultiLabel;
 
@@ -29,13 +30,13 @@ public class ReliefMLC<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IFixedCoun
     private readonly int _nIterations;
     private readonly int? _randomState;
 
-    private double[]? _featureWeights;
+    private Vector<T>? _featureWeights;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
-    public double[]? FeatureWeights => _featureWeights;
+    public Vector<T>? FeatureWeights => _featureWeights;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -82,127 +83,66 @@ public class ReliefMLC<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IFixedCoun
             ? RandomHelper.CreateSeededRandom(_randomState.Value)
             : RandomHelper.CreateSecureRandom();
 
-        // Normalize features
-        var minVals = new double[p];
-        var maxVals = new double[p];
-        for (int j = 0; j < p; j++)
-        {
-            minVals[j] = double.MaxValue;
-            maxVals[j] = double.MinValue;
-            for (int i = 0; i < n; i++)
-            {
-                double v = NumOps.ToDouble(data[i, j]);
-                if (v < minVals[j]) minVals[j] = v;
-                if (v > maxVals[j]) maxVals[j] = v;
-            }
-        }
+        var engine = Engine;
+
+        // Normalize features by their range; a feature whose range is below 1e-10 is ignored
+        var X = Tensor<T>.FromMatrix(data);
+        var range = engine.Reshape(engine.TensorSubtract(FeatureSelectionTensorOps.ColumnMax(X), FeatureSelectionTensorOps.ColumnMin(X)), new[] { 1, p });
+        var used = FeatureSelectionTensorOps.OneMinus(engine.TensorLessThan(range, NumOps.FromDouble(1e-10)));
+        var safeRange = engine.TensorWhere(used, range, FeatureSelectionTensorOps.Filled(new[] { 1, p }, NumOps.One));
+        var scaled = engine.TensorMultiply(engine.TensorDivide(X, safeRange), engine.TensorBroadcastTo(used, new[] { n, p }));
 
         // Extract label sets
-        var labelSets = new bool[n][];
-        for (int i = 0; i < n; i++)
-        {
-            labelSets[i] = new bool[nLabels];
-            for (int l = 0; l < nLabels; l++)
-                labelSets[i][l] = NumOps.GreaterThan(targets[i, l], NumOps.FromDouble(0.5));
-        }
-
-        _featureWeights = new double[p];
+        var labelSets = engine.TensorGreaterThan(Tensor<T>.FromMatrix(targets), NumOps.FromDouble(0.5)); // [n, L]
+        var labelCounts = engine.ReduceSum(labelSets, new[] { 1 }, false); // [n]
+        var everyRow = FeatureSelectionTensorOps.Filled(new[] { n }, NumOps.One);
+        int k = Math.Min(_nNeighbors, Math.Max(n - 1, 0));
+        var weights = new Tensor<T>(new[] { 1, p });
+        T two = NumOps.FromDouble(2);
 
         // Sample m instances
         var sampleIndices = Enumerable.Range(0, n).OrderBy(_ => random.Next()).Take(m).ToList();
 
         foreach (int ri in sampleIndices)
         {
-            // Find k nearest neighbors based on feature distance
-            var neighbors = FindKNearest(data, ri, n, _nNeighbors, minVals, maxVals, p);
+            // Find k nearest neighbors based on the range-scaled Euclidean distance (ties by index)
+            var differences = engine.TensorAbs(engine.TensorSubtract(
+                scaled, engine.TensorBroadcastTo(engine.TensorSlice(scaled, new[] { ri, 0 }, new[] { 1, p }), new[] { n, p })));
+            var closeness = engine.TensorNegate(engine.TensorSqrt(engine.ReduceSum(engine.TensorSquare(differences), new[] { 1 }, false)));
+            var notSelf = engine.TensorSubtract(everyRow, FeatureSelectionTensorOps.OneHot<T>(ri, n));
+            var neighbors = FeatureSelectionTensorOps.TopKWhere(closeness, notSelf, k);
+            if (neighbors.Length == 0)
+                continue;
 
-            foreach (var (neighborIdx, dist) in neighbors)
-            {
-                // Compute label similarity using Jaccard or Hamming
-                double labelSimilarity = ComputeLabelSimilarity(labelSets[ri], labelSets[neighborIdx], nLabels);
+            // Jaccard label similarity (1 when neither instance has a label)
+            var index = new Tensor<int>(neighbors, new[] { neighbors.Length });
+            var own = engine.TensorSlice(labelSets, new[] { ri, 0 }, new[] { 1, nLabels });
+            var neighbourLabels = engine.TensorIndexSelect(labelSets, index, 0); // [k, L]
+            var intersection = engine.Reshape(engine.TensorMatMul(neighbourLabels, engine.TensorTranspose(own)), new[] { neighbors.Length });
+            var union = engine.TensorSubtract(
+                engine.TensorAdd(engine.TensorIndexSelect(labelCounts, index, 0),
+                    engine.TensorBroadcastTo(engine.TensorSlice(labelCounts, new[] { ri }, new[] { 1 }), new[] { neighbors.Length })),
+                intersection);
+            var hasUnion = engine.TensorGreaterThan(union, NumOps.Zero);
+            var neighbourOnes = FeatureSelectionTensorOps.Filled(new[] { neighbors.Length }, NumOps.One);
+            var similarity = engine.TensorWhere(hasUnion, engine.TensorDivide(intersection, engine.TensorWhere(hasUnion, union, neighbourOnes)), neighbourOnes);
 
-                // Weight: similar labels = hit, different labels = miss
-                double weight = labelSimilarity;  // 1 = perfect match, 0 = no overlap
-
-                for (int j = 0; j < p; j++)
-                {
-                    double range = maxVals[j] - minVals[j];
-                    if (range < 1e-10) continue;
-
-                    double ri_val = NumOps.ToDouble(data[ri, j]);
-                    double neighbor_val = NumOps.ToDouble(data[neighborIdx, j]);
-                    double featureDiff = Math.Abs(ri_val - neighbor_val) / range;
-
-                    // Hit contribution (similar labels = subtract diff)
-                    // Miss contribution (different labels = add diff)
-                    _featureWeights[j] += (1 - weight) * featureDiff - weight * featureDiff;
-                }
-            }
+            // Similar labels (hit) subtract the difference, different labels (miss) add it:
+            // (1 - s) * diff - s * diff = (1 - 2s) * diff
+            var factor = engine.TensorSubtract(neighbourOnes, engine.TensorMultiplyScalar(similarity, two));
+            weights = engine.TensorAdd(weights, engine.TensorMatMul(
+                engine.Reshape(factor, new[] { 1, neighbors.Length }), engine.TensorIndexSelect(differences, index, 0)));
         }
 
         // Normalize weights
-        for (int j = 0; j < p; j++)
-            _featureWeights[j] /= (double)m * _nNeighbors;
+        var featureWeights = engine.Reshape(engine.TensorDivideScalar(weights,
+            NumOps.Multiply(FeatureSelectionTensorOps.Count<T>(m), FeatureSelectionTensorOps.Count<T>(_nNeighbors))), new[] { p });
+        _featureWeights = featureWeights.ToVector();
 
         int nToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = _featureWeights
-            .Select((w, idx) => (Weight: w, Index: idx))
-            .OrderByDescending(x => x.Weight)
-            .Take(nToSelect)
-            .Select(x => x.Index)
-            .OrderBy(x => x)
-            .ToArray();
+        _selectedIndices = FeatureSelectionTensorOps.TopKIndicesSorted(featureWeights, nToSelect);
 
         IsFitted = true;
-    }
-
-    private List<(int Index, double Distance)> FindKNearest(Matrix<T> data, int targetIdx, int n, int k,
-        double[] minVals, double[] maxVals, int p)
-    {
-        var distances = new List<(int Index, double Distance)>();
-
-        for (int i = 0; i < n; i++)
-        {
-            if (i == targetIdx) continue;
-            double dist = ComputeDistance(data, targetIdx, i, minVals, maxVals, p);
-            distances.Add((i, dist));
-        }
-
-        return distances
-            .OrderBy(d => d.Distance)
-            .Take(Math.Min(k, distances.Count))
-            .ToList();
-    }
-
-    private double ComputeDistance(Matrix<T> data, int i1, int i2, double[] minVals, double[] maxVals, int p)
-    {
-        double dist = 0;
-        for (int j = 0; j < p; j++)
-        {
-            double range = maxVals[j] - minVals[j];
-            if (range < 1e-10) continue;
-
-            double v1 = NumOps.ToDouble(data[i1, j]);
-            double v2 = NumOps.ToDouble(data[i2, j]);
-            double diff = (v1 - v2) / range;
-            dist += diff * diff;
-        }
-        return Math.Sqrt(dist);
-    }
-
-    private double ComputeLabelSimilarity(bool[] labels1, bool[] labels2, int nLabels)
-    {
-        // Jaccard similarity
-        int intersection = 0;
-        int union = 0;
-
-        for (int l = 0; l < nLabels; l++)
-        {
-            if (labels1[l] && labels2[l]) intersection++;
-            if (labels1[l] || labels2[l]) union++;
-        }
-
-        return union > 0 ? (double)intersection / union : 1.0;
     }
 
     public Matrix<T> FitTransform(Matrix<T> data, Matrix<T> targets)
@@ -217,15 +157,7 @@ public class ReliefMLC<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IFixedCoun
         if (_selectedIndices is null)
             throw new InvalidOperationException("ReliefMLC has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return FeatureSelectionTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />
