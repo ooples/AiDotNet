@@ -388,6 +388,44 @@ public abstract class GANDALFBase<T> : IParameterSource<T>
     }
 
     /// <summary>
+    /// Computes the scalar objective's gradients on the tape and applies one SGD step to every
+    /// trainable tensor: gating layers, gating output, each tree's split weights, split biases
+    /// and leaf values, and the subclass head.
+    /// </summary>
+    /// <param name="objective">Computes the batch-averaged scalar loss through differentiable engine operations.</param>
+    /// <param name="learningRate">Step size applied to the computed gradients.</param>
+    /// <returns>The loss before updating the model.</returns>
+    protected T TrainWithTape(Func<Tensor<T>> objective, T learningRate)
+    {
+        List<Tensor<T>> CollectParameters()
+        {
+            var parameters = new List<Tensor<T>>();
+            foreach (var layer in _gatingLayers) parameters.AddRange(layer.GetTrainableParameters());
+            parameters.AddRange(_gatingOutput.GetTrainableParameters());
+            parameters.AddRange(_treeSplitWeights);
+            parameters.AddRange(_treeSplitBiases);
+            parameters.AddRange(_treeLeafValues);
+            foreach (var layer in GetExtraTrainableLayers().OfType<ITrainableLayer<T>>())
+                parameters.AddRange(layer.GetTrainableParameters());
+            return parameters;
+        }
+
+        List<Tensor<T>>? collected = null;
+        try
+        {
+            // The objective already averages over the batch; do not divide its gradients again.
+            return AiDotNet.Training.TapeTrainingStepper<T>.EagerSgdObjectiveStep(
+                () => collected = CollectParameters(), objective, learningRate);
+        }
+        finally
+        {
+            foreach (var parameter in (collected ?? CollectParameters()).Distinct())
+                Engine.InvalidatePersistentTensor(parameter);
+            ResetState();
+        }
+    }
+
+    /// <summary>
     /// Updates all parameters using the calculated gradients.
     /// </summary>
     public virtual void UpdateParameters(T learningRate)

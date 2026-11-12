@@ -157,12 +157,18 @@ public class GANDALFRegression<T> : GANDALFBase<T>
     /// <returns>The training loss.</returns>
     public T TrainStep(Tensor<T> features, Tensor<T> targets, T learningRate)
     {
-        var predictions = Forward(features);
-        var loss = ComputeMSELoss(predictions, targets);
-        UpdateParameters(learningRate);
-        ResetState();
-
-        return loss;
+        // Mean squared error differentiated on the tape through the head, the trees and the gating
+        // network. (This step used to compute the loss and call UpdateParameters with no gradients,
+        // so nothing ever trained.)
+        return TrainWithTape(() =>
+        {
+            var predictions = Forward(features);
+            if (predictions.Length != targets.Length)
+                throw new ArgumentException("Predictions and targets must have the same size");
+            var diff = Engine.TensorSubtract(predictions, Engine.Reshape(targets, predictions._shape));
+            var sum = Engine.ReduceSum(Engine.TensorMultiply(diff, diff), Enumerable.Range(0, diff.Rank).ToArray(), keepDims: false);
+            return Engine.TensorMultiplyScalar(sum, NumOps.FromDouble(1.0 / predictions.Length));
+        }, learningRate);
     }
 
     /// <summary>
