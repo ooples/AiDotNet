@@ -692,7 +692,7 @@ public abstract partial class LoRAAdapterBase<T> : LayerBase<T>, ILoRAAdapter<T>
     /// <param name="weightDelta">The weight delta whose row-major flattening matches the weight block.</param>
     /// <param name="weightCount">The number of leading weight parameters.</param>
     /// <returns>A new parameter vector with the delta added to the weights.</returns>
-    protected Vector<T> AddFlatWeightsToParameters(Vector<T> baseParams, Matrix<T> weightDelta, int weightCount)
+    private protected Vector<T> AddFlatWeightsToParameters(Vector<T> baseParams, Matrix<T> weightDelta, int weightCount)
     {
         if (weightDelta.Rows * weightDelta.Columns != weightCount)
         {

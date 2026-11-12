@@ -256,10 +256,12 @@ public partial class DeltaLoRAAdapter<T> : LoRAAdapterBase<T>
             T momentumT = NumOps.FromDouble(_momentumFactor);
             T oneMinusMomentumT = NumOps.FromDouble(1.0 - _momentumFactor);
 
-            // Update velocity: v = momentum * v + (1 - momentum) * gradient
-            _velocity = Engine.MatrixAdd(
+            // Update velocity: v = momentum * v + (1 - momentum) * gradient, written back into
+            // the velocity's own storage (a reassignment could alias a recycled scratch buffer)
+            Matrix<T> updatedVelocity = Engine.MatrixAdd(
                 Engine.MatrixMultiplyScalar(_velocity, momentumT),
                 Engine.MatrixMultiplyScalar(_deltaGradients, oneMinusMomentumT));
+            updatedVelocity.AsSpan().CopyTo(_velocity.AsWritableSpan());
 
             // Update delta weights: delta -= learning_rate * velocity
             Engine.TensorSubtractInPlace(

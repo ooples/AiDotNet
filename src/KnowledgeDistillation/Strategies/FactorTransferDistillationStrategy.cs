@@ -70,13 +70,16 @@ public class FactorTransferDistillationStrategy<T> : DistillationStrategyBase<T>
     /// </summary>
     private readonly Random _random;
 
+    /// <summary>
+    /// Creates a factor transfer strategy with a secure, unseeded generator for the power-iteration starts.
+    /// </summary>
     public FactorTransferDistillationStrategy(
-        double factorWeight = 0.5,
-        FactorMode mode = FactorMode.LowRankApproximation,
-        int numFactors = 32,
-        bool normalizeFactors = true,
-        double temperature = 3.0,
-        double alpha = 0.3)
+        double factorWeight,
+        FactorMode mode,
+        int numFactors,
+        bool normalizeFactors,
+        double temperature,
+        double alpha)
         : this(factorWeight, mode, numFactors, normalizeFactors, temperature, alpha, seed: null)
     {
     }
@@ -93,13 +96,13 @@ public class FactorTransferDistillationStrategy<T> : DistillationStrategyBase<T>
     /// <param name="seed">Seed for the power-iteration starting vectors; null uses a secure, unseeded generator.
     /// With a fixed seed, the same sequence of calls gives identical factors.</param>
     public FactorTransferDistillationStrategy(
-        double factorWeight,
-        FactorMode mode,
-        int numFactors,
-        bool normalizeFactors,
-        double temperature,
-        double alpha,
-        int? seed)
+        double factorWeight = 0.5,
+        FactorMode mode = FactorMode.LowRankApproximation,
+        int numFactors = 32,
+        bool normalizeFactors = true,
+        double temperature = 3.0,
+        double alpha = 0.3,
+        int? seed = null)
         : base(temperature, alpha)
     {
         if (factorWeight < 0 || factorWeight > 1)
