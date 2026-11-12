@@ -1,5 +1,6 @@
 using AiDotNet.FederatedLearning.Adapters;
 using AiDotNet.FederatedLearning.Aggregators;
+using AiDotNet.FederatedLearning.Compression;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
@@ -274,5 +275,33 @@ public class FederatedElementwiseSweep29bReferenceTests
         double scale = 1.0 / Math.Sqrt(1.01);
         Assert.Equal((1.0 + 2.0 * scale + 0.9) / 4.0, aggregated["w"][0], Precision);
         Assert.Equal(0.0, aggregated["w"][1], Precision);
+    }
+
+    [Fact(Timeout = 60000)]
+    public async Task FetchSGD_KeepsMomentumAndErrorInSketchSpaceOnTheServer()
+    {
+        await Task.Yield();
+
+        // FetchSGD (Rothchild et al. 2020), Algorithm 1, with rho = 0.9, eta = 1, k = 1 and one client sending
+        // g = [3, 1] twice. Sketches are linear and (3 rows x 1000 columns, 2 coordinates) collision-free
+        // under the median, so in vector terms:
+        //   round 1: u = g, e = g, Delta = top-1(e) = [3, 0], e = [0, 1]
+        //   round 2: u = 0.9 g + g = [5.7, 1.9], e = [0, 1] + u = [5.7, 2.9], Delta = [5.7, 0]
+        // (Without server momentum and error accumulation round 2 would return [3, 0] again.)
+        var fetch = new FetchSGDCompressor<double>(sketchRows: 3, sketchCols: 1000, topK: 1, momentum: 0.9, learningRate: 1.0);
+        var gradient = new[] { 3.0, 1.0 };
+
+        var round1 = fetch.ServerStep(fetch.MergeSketches(new[] { fetch.Sketch(gradient) }), gradient.Length);
+        Assert.Equal(3.0, round1[0], Precision);
+        Assert.Equal(0.0, round1[1], Precision);
+
+        var round2 = fetch.ServerStep(fetch.MergeSketches(new[] { fetch.Sketch(gradient) }), gradient.Length);
+        Assert.Equal(5.7, round2[0], Precision);
+        Assert.Equal(0.0, round2[1], Precision);
+
+        // The aggregate is the mean of the client sketches: two clients sending g and 3g recover 2g.
+        var mean = fetch.RecoverTopK(
+            fetch.MergeSketches(new[] { fetch.Sketch(gradient), fetch.Sketch(new[] { 9.0, 3.0 }) }), gradient.Length);
+        Assert.Equal(6.0, mean[0], Precision);
     }
 }

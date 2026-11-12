@@ -4,21 +4,24 @@ using AiDotNet.Enums;
 namespace AiDotNet.FederatedLearning.Compression;
 
 /// <summary>
-/// Implements FetchSGD — Count-Sketch + Top-k hybrid compression for massive models.
+/// Implements FetchSGD — Count-Sketch compression with momentum and error accumulation in sketch space.
 /// </summary>
 /// <remarks>
-/// <para><b>For Beginners:</b> FetchSGD combines two compression ideas: count-min sketches
-/// (a probabilistic data structure) for aggregation and top-k for decompression. Each client
-/// compresses their gradient into a small sketch (fixed-size regardless of model size). The
-/// server merges sketches (just element-wise addition) and then recovers the top-k heavy hitters.
-/// This is especially efficient for very large models (billions of parameters).</para>
+/// <para><b>For Beginners:</b> Each client compresses its gradient into a small count sketch (a fixed-size
+/// table that is the same size whatever the model size). Because sketches are linear, the server can add them
+/// up, and it keeps momentum and the not-yet-applied error <em>as sketches too</em>, so the server never stores
+/// a full-size vector. Each round it recovers the k largest coordinates ("heavy hitters") from the error
+/// sketch, applies them as a sparse update and subtracts their sketch from the error.</para>
 ///
-/// <para>Algorithm:</para>
+/// <para>Algorithm 1 of the paper (per round t, W participating clients):</para>
 /// <code>
-/// Client: sketch_k = CountSketch(gradient_k)     // O(sketch_size)
-/// Server: merged = sum(sketch_k)                  // element-wise
-/// Server: top_k = HeavyHitters(merged)            // recover large values
-/// Server: update = top_k                          // sparse update
+/// Client i:  S_i = S(g_i)                              // count sketch of the gradient
+/// Server:    S   = (1 / W) * sum_i S_i                 // aggregate
+///            S_u = rho * S_u + S                       // momentum in sketch space
+///            S_e = eta * S_u + S_e                     // error feedback in sketch space
+///            Delta = Top-k(U(S_e))                     // unsketch: median estimates, keep top-k
+///            S_e = S_e - S(Delta)                      // error accumulation
+///            w = w - Delta
 /// </code>
 ///
 /// <para>Reference: Rothchild, D., et al. (2020). "FetchSGD: Communication-Efficient Federated
@@ -33,12 +36,23 @@ public class FetchSGDCompressor<T> : Infrastructure.FederatedLearningComponentBa
     private readonly int _sketchCols;
     private readonly int _topK;
     private readonly int _seed;
+    private readonly double _momentum;
+    private readonly double _learningRate;
     private readonly long[] _hashA; // 2-universal hash: h(x) = (a*x + b) mod p mod m
     private readonly long[] _hashB;
     private readonly long[] _signA; // Separate 2-universal hash for sign
     private readonly long[] _signB;
     private const long LARGE_PRIME = 2147483647L; // 2^31 - 1 (Mersenne prime)
-    private double[]? _errorAccumulator;
+
+    // Hash tables for the last gradient length: flat sketch index r * cols + h_r(i) and sign s_r(i),
+    // both laid out [rows, length].
+    private int _hashedLength = -1;
+    private Tensor<int> _flatIndices = new Tensor<int>(new[] { 0 });
+    private Tensor<T> _signs = new Tensor<T>(new[] { 0 });
+
+    // Server state (sketch space), [rows, cols].
+    private Tensor<T>? _momentumSketch;
+    private Tensor<T>? _errorSketch;
 
     /// <summary>
     /// Creates a new FetchSGD compressor.
@@ -47,7 +61,16 @@ public class FetchSGDCompressor<T> : Infrastructure.FederatedLearningComponentBa
     /// <param name="sketchCols">Width of each row. Default: 10000.</param>
     /// <param name="topK">Number of heavy hitters to recover. Default: 1000.</param>
     /// <param name="seed">Random seed. Default: 42.</param>
-    public FetchSGDCompressor(int sketchRows = 5, int sketchCols = 10000, int topK = 1000, int seed = 42)
+    /// <param name="momentum">Server momentum rho applied in sketch space. Default: 0.9 (the paper's value).</param>
+    /// <param name="learningRate">Server learning rate eta folded into the error sketch, so the returned
+    /// update Delta already includes it. Default: 1.0.</param>
+    public FetchSGDCompressor(
+        int sketchRows = 5,
+        int sketchCols = 10000,
+        int topK = 1000,
+        int seed = 42,
+        double momentum = 0.9,
+        double learningRate = 1.0)
     {
         if (sketchRows < 1)
         {
@@ -64,10 +87,22 @@ public class FetchSGDCompressor<T> : Infrastructure.FederatedLearningComponentBa
             throw new ArgumentOutOfRangeException(nameof(topK), "Top-k must be at least 1.");
         }
 
+        if (momentum < 0 || momentum >= 1)
+        {
+            throw new ArgumentOutOfRangeException(nameof(momentum), "Momentum must be in [0, 1).");
+        }
+
+        if (learningRate <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(learningRate), "Learning rate must be positive.");
+        }
+
         _sketchRows = sketchRows;
         _sketchCols = sketchCols;
         _topK = topK;
         _seed = seed;
+        _momentum = momentum;
+        _learningRate = learningRate;
 
         // Initialize 2-universal hash families: h(x) = ((a*x + b) mod p) mod m
         // where a, b are random, p is a large prime, m is the table size.
@@ -89,67 +124,189 @@ public class FetchSGDCompressor<T> : Infrastructure.FederatedLearningComponentBa
     }
 
     /// <summary>
-    /// Compresses a flattened gradient into a count sketch with error feedback.
+    /// Client step: compresses a flattened gradient into a count sketch S(g).
     /// </summary>
     /// <remarks>
-    /// <para><b>For Beginners:</b> Error feedback stores the difference between the original gradient
-    /// and what was actually communicated (the sketch lossy reconstruction). This residual is added
-    /// to the next round's gradient, ensuring no information is permanently lost. Over many rounds,
-    /// all gradient information eventually gets communicated.</para>
+    /// <para><b>For Beginners:</b> Every coordinate i is added, with a pseudo-random sign s_r(i), into one
+    /// bucket h_r(i) of every row r. The sketch is linear, so sketches from many clients can simply be
+    /// added. FetchSGD keeps no error feedback on the client; momentum and error live on the server, in
+    /// sketch space (see <see cref="ServerStep"/>).</para>
     /// </remarks>
     /// <param name="gradient">The gradient values.</param>
-    /// <param name="useErrorFeedback">Whether to apply error feedback. Default: true.</param>
     /// <returns>Count sketch matrix (rows x cols).</returns>
-    public double[,] Sketch(T[] gradient, bool useErrorFeedback = true)
+    public Matrix<T> Sketch(T[] gradient)
     {
         Guard.NotNull(gradient);
-        var sketch = new double[_sketchRows, _sketchCols];
+        return SketchTensor(new Tensor<T>(gradient, new[] { gradient.Length })).ToMatrix();
+    }
 
-        // Add error feedback from previous round.
-        if (useErrorFeedback && _errorAccumulator != null && _errorAccumulator.Length == gradient.Length)
+    /// <summary>
+    /// Aggregates client sketches: S = (1 / W) * sum_i S_i.
+    /// </summary>
+    /// <param name="sketches">The client sketches.</param>
+    /// <returns>The average sketch (all zeros when no sketches are given).</returns>
+    public Matrix<T> MergeSketches(IReadOnlyList<Matrix<T>> sketches)
+    {
+        Guard.NotNull(sketches);
+        var merged = new Tensor<T>(new[] { _sketchRows, _sketchCols });
+        if (sketches.Count == 0)
         {
-            for (int i = 0; i < gradient.Length; i++)
-            {
-                double val = NumOps.ToDouble(gradient[i]) + _errorAccumulator[i];
-                for (int r = 0; r < _sketchRows; r++)
-                {
-                    int col = HashColumn(i, r);
-                    int sign = HashSign(i, r);
-                    sketch[r, col] += sign * val;
-                }
-            }
-        }
-        else
-        {
-            for (int i = 0; i < gradient.Length; i++)
-            {
-                double val = NumOps.ToDouble(gradient[i]);
-                for (int r = 0; r < _sketchRows; r++)
-                {
-                    int col = HashColumn(i, r);
-                    int sign = HashSign(i, r);
-                    sketch[r, col] += sign * val;
-                }
-            }
+            return merged.ToMatrix();
         }
 
-        // Update error accumulator if using feedback.
-        if (useErrorFeedback)
+        foreach (var sketch in sketches)
         {
-            var previousError = _errorAccumulator;
-            _errorAccumulator = new double[gradient.Length];
-            for (int i = 0; i < gradient.Length; i++)
+            Guard.NotNull(sketch);
+            if (sketch.Rows != _sketchRows || sketch.Columns != _sketchCols)
             {
-                // Error = (original gradient + previous error) - sketch reconstruction.
-                // This correctly tracks the residual of the signal that was fed into the sketch.
-                double inputSignal = NumOps.ToDouble(gradient[i]) +
-                    (previousError != null && i < previousError.Length ? previousError[i] : 0);
-                double estimate = EstimateFromSketch(sketch, i);
-                _errorAccumulator[i] = inputSignal - estimate;
+                throw new ArgumentException(
+                    $"Sketch shape {sketch.Rows}x{sketch.Columns} differs from {_sketchRows}x{_sketchCols}.",
+                    nameof(sketches));
+            }
+
+            merged = Engine.TensorAdd(merged, Tensor<T>.FromMatrix(sketch));
+        }
+
+        return Engine.TensorDivideScalar(merged, NumOps.FromDouble(sketches.Count)).ToMatrix();
+    }
+
+    /// <summary>
+    /// Server step: momentum and error feedback in sketch space, top-k unsketch and error accumulation.
+    /// </summary>
+    /// <param name="aggregatedSketch">The aggregated client sketch S for this round
+    /// (from <see cref="MergeSketches"/>).</param>
+    /// <param name="gradientLength">Number of model parameters.</param>
+    /// <returns>The sparse update Delta (dense array, zero outside the top-k coordinates); apply it as
+    /// w = w - Delta.</returns>
+    public T[] ServerStep(Matrix<T> aggregatedSketch, int gradientLength)
+    {
+        var sketch = ValidateSketch(aggregatedSketch, gradientLength);
+        var momentumSketch = _momentumSketch ?? new Tensor<T>(new[] { _sketchRows, _sketchCols });
+        var errorSketch = _errorSketch ?? new Tensor<T>(new[] { _sketchRows, _sketchCols });
+
+        // S_u = rho * S_u + S;  S_e = eta * S_u + S_e.
+        momentumSketch = Engine.TensorAdd(Engine.TensorMultiplyScalar(momentumSketch, NumOps.FromDouble(_momentum)), sketch);
+        errorSketch = Engine.TensorAdd(Engine.TensorMultiplyScalar(momentumSketch, NumOps.FromDouble(_learningRate)), errorSketch);
+
+        // Delta = Top-k(U(S_e));  S_e = S_e - S(Delta).
+        var delta = UnsketchTopK(errorSketch, gradientLength);
+        errorSketch = Engine.TensorSubtract(errorSketch, SketchTensor(delta));
+
+        _momentumSketch = momentumSketch;
+        _errorSketch = errorSketch;
+        return delta.ToArray();
+    }
+
+    /// <summary>
+    /// Clears the server's momentum and error sketches.
+    /// </summary>
+    public void ResetServerState()
+    {
+        _momentumSketch = null;
+        _errorSketch = null;
+    }
+
+    /// <summary>
+    /// Recovers the top-k heavy hitters from a sketch without touching the server state.
+    /// </summary>
+    /// <param name="mergedSketch">Merged sketch.</param>
+    /// <param name="gradientLength">Original gradient length.</param>
+    /// <returns>Sparse recovery array (non-heavy-hitters are zero).</returns>
+    public T[] RecoverTopK(Matrix<T> mergedSketch, int gradientLength)
+    {
+        return UnsketchTopK(ValidateSketch(mergedSketch, gradientLength), gradientLength).ToArray();
+    }
+
+    private Tensor<T> ValidateSketch(Matrix<T> sketch, int gradientLength)
+    {
+        Guard.NotNull(sketch);
+        if (sketch.Rows != _sketchRows || sketch.Columns != _sketchCols)
+        {
+            throw new ArgumentException(
+                $"Sketch shape {sketch.Rows}x{sketch.Columns} differs from {_sketchRows}x{_sketchCols}.",
+                nameof(sketch));
+        }
+
+        if (gradientLength < 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(gradientLength), "Gradient length must be non-negative.");
+        }
+
+        return Tensor<T>.FromMatrix(sketch);
+    }
+
+    /// <summary>Count sketch of a length-n vector as a [rows, cols] tensor.</summary>
+    private Tensor<T> SketchTensor(Tensor<T> values)
+    {
+        int length = values.Length;
+        var sketch = new Tensor<T>(new[] { _sketchRows * _sketchCols });
+        if (length > 0)
+        {
+            EnsureHashTables(length);
+
+            // Every row adds s_r(i) * g_i into bucket h_r(i); one index-add covers all rows.
+            var signed = Engine.TensorMultiply(_signs, values.Reshape(new[] { 1, length }));
+            sketch = Engine.TensorIndexAdd(
+                sketch, 0, _flatIndices.Reshape(new[] { _sketchRows * length }), signed.Reshape(new[] { _sketchRows * length }));
+        }
+
+        return sketch.Reshape(new[] { _sketchRows, _sketchCols });
+    }
+
+    /// <summary>U(S) followed by Top-k: median-of-rows estimates, keeping the k largest magnitudes.</summary>
+    private Tensor<T> UnsketchTopK(Tensor<T> sketch, int length)
+    {
+        if (length == 0)
+        {
+            return new Tensor<T>(new[] { 0 });
+        }
+
+        EnsureHashTables(length);
+
+        // Estimates per row: s_r(i) * S[r, h_r(i)]; the estimate is the median over rows
+        // (the upper middle value for an even row count).
+        var bucketValues = Engine.TensorGather(
+            sketch.Reshape(new[] { _sketchRows * _sketchCols }), _flatIndices.Reshape(new[] { _sketchRows * length }), 0);
+        var rowEstimates = Engine.TensorMultiply(_signs, bucketValues.Reshape(new[] { _sketchRows, length }));
+        var (sortedEstimates, _) = Engine.TensorSort(rowEstimates, 0, false);
+        var estimates = Engine.TensorSlice(sortedEstimates, new[] { _sketchRows / 2, 0 }, new[] { 1, length })
+            .Reshape(new[] { length });
+
+        // Keep the k largest magnitudes: everything above the k-th largest, then ties in index order.
+        int k = Math.Min(_topK, length);
+        var magnitudes = Engine.TensorAbs(estimates);
+        var (sortedMagnitudes, _) = Engine.TensorSort(magnitudes, 0, false);
+        T threshold = sortedMagnitudes[length - k];
+        var above = Engine.TensorGreaterThan(magnitudes, threshold).Cast<int>();
+        int tieSlots = k - Engine.TensorCountNonzero(above);
+        var ties = Engine.TensorEquals(magnitudes, threshold).Cast<int>();
+        var keptTies = Engine.TensorMultiply(ties, Engine.TensorLessThan(Engine.TensorCumSum(ties, 0), tieSlots + 1));
+        var keep = Engine.TensorAdd(above, keptTies).Cast<T>();
+
+        return Engine.TensorWhere(keep, estimates, new Tensor<T>(new[] { length }));
+    }
+
+    private void EnsureHashTables(int length)
+    {
+        if (_hashedLength == length)
+        {
+            return;
+        }
+
+        var flatIndices = new int[_sketchRows * length];
+        var signs = new int[_sketchRows * length];
+        for (int r = 0; r < _sketchRows; r++)
+        {
+            for (int i = 0; i < length; i++)
+            {
+                flatIndices[r * length + i] = r * _sketchCols + HashColumn(i, r);
+                signs[r * length + i] = HashSign(i, r);
             }
         }
 
-        return sketch;
+        _flatIndices = new Tensor<int>(flatIndices, new[] { _sketchRows, length });
+        _signs = new Tensor<int>(signs, new[] { _sketchRows, length }).Cast<T>();
+        _hashedLength = length;
     }
 
     private int HashColumn(int index, int row)
@@ -164,74 +321,6 @@ public class FetchSGDCompressor<T> : Infrastructure.FederatedLearningComponentBa
         return (h % 2 == 0) ? 1 : -1;
     }
 
-    private double EstimateFromSketch(double[,] sketch, int index)
-    {
-        var estimates = new double[_sketchRows];
-        for (int r = 0; r < _sketchRows; r++)
-        {
-            int col = HashColumn(index, r);
-            int sign = HashSign(index, r);
-            estimates[r] = sign * sketch[r, col];
-        }
-
-        Array.Sort(estimates);
-        return estimates[_sketchRows / 2]; // Median estimator.
-    }
-
-    /// <summary>
-    /// Merges multiple sketches by element-wise addition.
-    /// </summary>
-    public double[,] MergeSketches(IReadOnlyList<double[,]> sketches)
-    {
-        Guard.NotNull(sketches);
-        if (sketches.Count == 0)
-        {
-            return new double[_sketchRows, _sketchCols];
-        }
-
-        var merged = new double[_sketchRows, _sketchCols];
-        foreach (var sketch in sketches)
-        {
-            for (int r = 0; r < _sketchRows; r++)
-            {
-                for (int c = 0; c < _sketchCols; c++)
-                {
-                    merged[r, c] += sketch[r, c];
-                }
-            }
-        }
-
-        return merged;
-    }
-
-    /// <summary>
-    /// Recovers the top-k heavy hitters from a merged sketch.
-    /// </summary>
-    /// <param name="mergedSketch">Merged sketch.</param>
-    /// <param name="gradientLength">Original gradient length.</param>
-    /// <returns>Sparse recovery array (non-heavy-hitters are zero).</returns>
-    public T[] RecoverTopK(double[,] mergedSketch, int gradientLength)
-    {
-        // Estimate each coordinate from the sketch using median of estimates.
-        var estimates = new (int Index, double AbsValue, double Value)[gradientLength];
-        for (int i = 0; i < gradientLength; i++)
-        {
-            double median = EstimateFromSketch(mergedSketch, i);
-            estimates[i] = (i, Math.Abs(median), median);
-        }
-
-        // Top-k by magnitude.
-        Array.Sort(estimates, (a, b) => b.AbsValue.CompareTo(a.AbsValue));
-        var result = new T[gradientLength];
-        int effectiveK = Math.Min(_topK, gradientLength);
-        for (int i = 0; i < effectiveK; i++)
-        {
-            result[estimates[i].Index] = NumOps.FromDouble(estimates[i].Value);
-        }
-
-        return result;
-    }
-
     /// <summary>Gets the sketch dimensions.</summary>
     public int SketchRows => _sketchRows;
 
@@ -240,4 +329,10 @@ public class FetchSGDCompressor<T> : Infrastructure.FederatedLearningComponentBa
 
     /// <summary>Gets the top-k value.</summary>
     public int TopK => _topK;
+
+    /// <summary>Gets the server momentum rho.</summary>
+    public double Momentum => _momentum;
+
+    /// <summary>Gets the server learning rate eta.</summary>
+    public double LearningRate => _learningRate;
 }
