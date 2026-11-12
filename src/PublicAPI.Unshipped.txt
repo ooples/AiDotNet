@@ -22587,3 +22587,5 @@ AiDotNet.Preprocessing.FeatureSelection.Quantile.QuantileRatioSelector<T>.RatioV
 AiDotNet.Preprocessing.FeatureSelection.Morphological.ErosionDilationSelector<T>.MorphologicalScores.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
 *REMOVED*AiDotNet.Preprocessing.FeatureSelection.Morphological.GranulometrySelector<T>.GranulometryScores.get -> double[]?
 AiDotNet.Preprocessing.FeatureSelection.Morphological.GranulometrySelector<T>.GranulometryScores.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
+*REMOVED*AiDotNet.Preprocessing.FeatureSelection.NLP.TfIdfFS<T>.TfIdfScores.get -> double[]?
+AiDotNet.Preprocessing.FeatureSelection.NLP.TfIdfFS<T>.TfIdfScores.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?

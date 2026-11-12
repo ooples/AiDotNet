@@ -120,6 +120,23 @@ internal static class FeatureSelectionTensorOps
     }
 
     /// <summary>
+    /// Among the entries where the 0/1 <paramref name="mask"/> is set, the positions of the (at most
+    /// <paramref name="k"/>) largest scores, returned in ascending index order; ties keep the lower index first.
+    /// </summary>
+    public static int[] TopKWhere<T>(Tensor<T> scores, Tensor<T> mask, int k)
+    {
+        int candidates = CountNonZero(mask);
+        if (candidates == 0)
+            return Array.Empty<int>();
+
+        var engine = AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<T>();
+        T below = ops.Subtract(engine.TensorMinValue(scores), ops.One);
+        var ranked = engine.TensorWhere(mask, scores, Filled(scores.Shape.ToArray(), below));
+        return TopKIndicesSorted(ranked, Math.Min(k, candidates));
+    }
+
+    /// <summary>
     /// The indices that sort a 1-D tensor ascending (or descending), with tied values kept in their original
     /// index order like LINQ <c>OrderBy</c>/<c>OrderByDescending</c>. The engine argsort is not documented as
     /// stable, so it sorts a distinct composite key (rank of the value, then the index).

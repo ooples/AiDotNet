@@ -1,5 +1,6 @@
 using AiDotNet.Preprocessing.FeatureSelection.Moment;
 using AiDotNet.Preprocessing.FeatureSelection.Morphological;
+using AiDotNet.Preprocessing.FeatureSelection.NLP;
 using AiDotNet.Preprocessing.FeatureSelection.Quantile;
 using AiDotNet.Preprocessing.FeatureSelection.Range;
 using AiDotNet.Tensors.LinearAlgebra;
@@ -107,6 +108,29 @@ public class FeatureSelectionScipyReferenceTests
         AssertValues(new[] { 0.9148210087144519, 0.9239841591414172, 0.9182958340544896 }, granulometry.GranulometryScores);
         Assert.Equal(new[] { 0 }, gradient.SelectedIndices);
         Assert.Equal(new[] { 1 }, granulometry.SelectedIndices);
+    }
+
+    [Fact]
+    public void TextSelectors_MatchScikitLearnTfidfAndDocumentFrequency()
+    {
+        // TfidfTransformer(smooth_idf=False, norm=None).fit_transform(C).mean(axis=0); df = (C > 0).sum(axis=0)
+        var counts = new Matrix<double>(new double[,]
+        {
+            { 3, 0, 1, 0 },
+            { 2, 0, 0, 1 },
+            { 0, 1, 0, 1 },
+            { 4, 0, 2, 1 },
+            { 0, 0, 0, 1 },
+        });
+        var tfidf = new TfIdfFS<double>(nFeaturesToSelect: 2);
+        tfidf.Fit(counts);
+        var frequency = new DocumentFrequencyFS<double>(nFeaturesToSelect: 3, minDf: 2, maxDf: 3);
+        frequency.Fit(counts);
+
+        AssertValues(new[] { 2.7194861227787834, 0.5218875824868201, 1.149774439124493, 0.9785148410513678 }, tfidf.TfIdfScores);
+        Assert.Equal(new[] { 0, 2 }, tfidf.SelectedIndices);
+        Assert.Equal(new[] { 3, 1, 2, 4 }, frequency.DocumentFrequencies);
+        Assert.Equal(new[] { 0, 2 }, frequency.SelectedIndices);
     }
 
     private static void AssertValues(double[] expected, Vector<double>? actual)

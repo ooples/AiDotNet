@@ -2,6 +2,7 @@ using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
+using AiDotNet.Preprocessing.FeatureSelection.Helpers;
 
 namespace AiDotNet.Preprocessing.FeatureSelection.NLP;
 
@@ -38,7 +39,7 @@ public class TfIdfFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IFixedCountF
     private readonly double _minDf;
     private readonly double _maxDf;
 
-    private double[]? _tfidfScores;
+    private Vector<T>? _tfidfScores;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
@@ -46,7 +47,7 @@ public class TfIdfFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IFixedCountF
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public double MinDf => _minDf;
     public double MaxDf => _maxDf;
-    public double[]? TfIdfScores => _tfidfScores;
+    public Vector<T>? TfIdfScores => _tfidfScores;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -80,58 +81,33 @@ public class TfIdfFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IFixedCountF
         int n = data.Rows; // Number of documents
         int p = data.Columns; // Number of terms
 
-        // Compute document frequency for each term
-        var docFreq = new int[p];
-        for (int j = 0; j < p; j++)
-        {
-            for (int i = 0; i < n; i++)
-            {
-                if (NumOps.GreaterThan(data[i, j], NumOps.Zero))
-                    docFreq[j]++;
-            }
-        }
+        var engine = Engine;
+        var x = Tensor<T>.FromMatrix(data);
 
-        // Compute IDF
-        var idf = new double[p];
-        for (int j = 0; j < p; j++)
-        {
-            if (docFreq[j] > 0)
-                idf[j] = Math.Log((double)n / docFreq[j]) + 1; // Smoothed IDF
-            else
-                idf[j] = 0;
-        }
+        // Document frequency of each term
+        var docFreq = engine.ReduceSum(engine.TensorGreaterThan(x, NumOps.Zero), new[] { 0 }, false);
 
-        // Compute average TF-IDF score for each feature
-        _tfidfScores = new double[p];
-        for (int j = 0; j < p; j++)
-        {
-            double docFreqRatio = (double)docFreq[j] / n;
+        // IDF = ln(n / df) + 1 (scikit-learn's TfidfTransformer with smooth_idf=False); 0 for unseen terms
+        var seen = engine.TensorGreaterThan(docFreq, NumOps.Zero);
+        var safeDocFreq = engine.TensorWhere(seen, docFreq, FeatureSelectionTensorOps.Filled(new[] { p }, NumOps.One));
+        var idf = engine.TensorWhere(
+            seen,
+            engine.TensorAddScalar(engine.TensorLog(engine.TensorDivide(FeatureSelectionTensorOps.Filled(new[] { p }, NumOps.FromDouble(n)), safeDocFreq)), NumOps.One),
+            new Tensor<T>(new[] { p }));
 
-            // Filter by document frequency
-            if (docFreqRatio < _minDf || docFreqRatio > _maxDf)
-            {
-                _tfidfScores[j] = 0;
-                continue;
-            }
-
-            double totalTfidf = 0;
-            for (int i = 0; i < n; i++)
-            {
-                double tf = NumOps.ToDouble(data[i, j]);
-                totalTfidf += tf * idf[j];
-            }
-            _tfidfScores[j] = totalTfidf / n;
-        }
+        // Average TF-IDF of each term over the documents; terms whose document-frequency ratio lies outside
+        // [minDf, maxDf] score 0
+        var docFreqRatio = engine.TensorDivideScalar(docFreq, NumOps.FromDouble(n));
+        var tooRare = engine.TensorLessThan(docFreqRatio, NumOps.FromDouble(_minDf));
+        var tooCommon = engine.TensorGreaterThan(docFreqRatio, NumOps.FromDouble(_maxDf));
+        var kept = engine.TensorMultiply(FeatureSelectionTensorOps.OneMinus(tooRare), FeatureSelectionTensorOps.OneMinus(tooCommon));
+        var meanTf = engine.ReduceMean(x, new[] { 0 }, false);
+        var scores = engine.TensorWhere(kept, engine.TensorMultiply(meanTf, idf), new Tensor<T>(new[] { p }));
+        _tfidfScores = scores.ToVector();
 
         // Select top features by TF-IDF score
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = _tfidfScores
-            .Select((s, idx) => (Score: s, Index: idx))
-            .OrderByDescending(x => x.Score)
-            .Take(numToSelect)
-            .Select(x => x.Index)
-            .OrderBy(x => x)
-            .ToArray();
+        _selectedIndices = FeatureSelectionTensorOps.TopKIndicesSorted(scores, numToSelect);
 
         IsFitted = true;
     }
@@ -142,15 +118,7 @@ public class TfIdfFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IFixedCountF
         if (_selectedIndices is null)
             throw new InvalidOperationException("TfIdfFS has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return FeatureSelectionTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />
