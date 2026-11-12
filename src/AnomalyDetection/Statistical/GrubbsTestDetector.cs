@@ -65,10 +65,10 @@ public partial class GrubbsTestDetector<T> : AnomalyDetectorBase<T>
     /// Creates a new Grubbs' Test anomaly detector.
     /// </summary>
     /// <param name="alpha">
-    /// The significance level for the test. Default is 0.05 (5%). It sets the two-sided critical value
-    /// G_crit computed by Fit (a lower alpha gives a larger G_crit, a more conservative test); compare
-    /// <c>ScoreAnomalies</c> with G_crit to apply the test itself. <c>Predict</c> labels come from the
-    /// <paramref name="contamination"/> threshold and do not depend on alpha.
+    /// The significance level for the test. Default is 0.05 (5%). Fit derives the two-sided Grubbs
+    /// critical value from it (a lower alpha gives a larger critical value, a more conservative test).
+    /// <c>ScoreAnomalies</c> returns the Grubbs statistic G of each row, and <c>Predict</c> labels come
+    /// from the <paramref name="contamination"/> threshold, so neither output depends on alpha.
     /// Common values: 0.01, 0.05, 0.10.
     /// </param>
     /// <param name="contamination">

@@ -293,7 +293,9 @@ public partial class AnomalyTransformerDetector<T> : AnomalyDetectorBase<T>
                 var pass = ForwardPass(seq);
 
                 // Reconstruction loss gradient (MSE) against the projected input:
-                // dL/dOutput = 2 * (output - projected) / N
+                // dL/dOutput = 2 * (output - projected) / N. The target is a stop-gradient (as on master): its
+                // -dOutput term is deliberately not sent into the input projection, since through the residual
+                // path it would reward shrinking the projection toward zero rather than reconstructing it.
                 var dOutput = engine.TensorMultiplyScalar(engine.TensorSubtract(pass.Output, pass.Projected), lossScale);
 
                 // Backprop through feed-forward (output -> attnOutput), attention (attnOutput -> projected)

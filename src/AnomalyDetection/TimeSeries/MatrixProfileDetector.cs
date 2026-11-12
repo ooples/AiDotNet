@@ -59,7 +59,6 @@ public partial class MatrixProfileDetector<T> : AnomalyDetectorBase<T>
     private Vector<T>? _matrixProfile;
     [Buffer]
     private Vector<T>? _trainingValues;
-    private T _trainingChecksum;
 
     // Upper bound on the elements of one block of the subsequence distance matrix.
     private const int ProfileBlockElements = 1 << 22;
@@ -102,8 +101,6 @@ public partial class MatrixProfileDetector<T> : AnomalyDetectorBase<T>
         _subsequenceLength = subsequenceLength;
         // -1 = auto (m/4), 0 = no exclusion zone, positive = explicit value
         _exclusionZone = exclusionZone == -1 ? subsequenceLength / 4 : exclusionZone;
-        // No training series yet; Fit replaces this with the checksum of the training values
-        _trainingChecksum = NumOps.Zero;
     }
 
     /// <inheritdoc/>
@@ -130,7 +127,6 @@ public partial class MatrixProfileDetector<T> : AnomalyDetectorBase<T>
         // Extract values
         var engine = Engine;
         var series = engine.Reshape(AnomalyTensorOps.ToTensor(X), new[] { n });
-        _trainingChecksum = Checksum(series);
         _trainingValues = series.ToVector();
 
         // Compute Matrix Profile (all-pairs z-normalized subsequence distances)
@@ -141,14 +137,6 @@ public partial class MatrixProfileDetector<T> : AnomalyDetectorBase<T>
         SetThresholdFromContamination(trainingScores);
 
         _isFitted = true;
-    }
-
-    // sum_i values[i] * (i + 1), identifying the training series.
-    private T Checksum(Tensor<T> series)
-    {
-        var engine = Engine;
-        int n = series.Length;
-        return engine.TensorSum(engine.TensorMultiply(series, engine.TensorArange<T>(1, n + 1, 1)));
     }
 
     // The z-normalized subsequences of length m ([n - m + 1, m]); population std floored at 1e-10.
@@ -218,10 +206,10 @@ public partial class MatrixProfileDetector<T> : AnomalyDetectorBase<T>
             throw new InvalidOperationException("Model not properly fitted.");
         }
 
-        // Check if this is the same data as training using length and checksum
-        // (allowing a small floating point tolerance in the checksum comparison)
+        // Same data as training only when every value matches exactly: a sum of |differences| is zero
+        // only if each difference is (a rounded checksum in T can collide for different series)
         bool isSameData = n == trainingValues.Length
-            && NumOps.LessThan(NumOps.Abs(NumOps.Subtract(Checksum(values), _trainingChecksum)), NumOps.FromDouble(1e-6));
+            && NumOps.Equals(engine.TensorSum(engine.TensorAbs(engine.TensorSubtract(values, trainingValues.AsTensor()))), NumOps.Zero);
 
         int m = _subsequenceLength;
         T scale = NumOps.FromDouble(2 * Math.Sqrt(m));
