@@ -36,16 +36,6 @@ namespace AiDotNet.WaveletFunctions;
 public partial class BiorthogonalWavelet<T> : WaveletFunctionBase<T>
 {
     /// <summary>
-    /// The order of the wavelet used for decomposition.
-    /// </summary>
-    private readonly int _decompositionOrder;
-
-    /// <summary>
-    /// The order of the wavelet used for reconstruction.
-    /// </summary>
-    private readonly int _reconstructionOrder;
-
-    /// <summary>
     /// Coefficients used for the decomposition process.
     /// </summary>
     [AiDotNet.Attributes.TrainableParameter]
@@ -58,11 +48,21 @@ public partial class BiorthogonalWavelet<T> : WaveletFunctionBase<T>
     private readonly Vector<T> _reconstructionCoefficients;
 
     /// <summary>
+    /// The four PyWavelets filter-tap tables (<c>dec_lo</c>, <c>dec_hi</c>, <c>rec_lo</c>, <c>rec_hi</c>) of the
+    /// selected <c>bior{reconstructionOrder}.{decompositionOrder}</c> wavelet.
+    /// </summary>
+    private readonly (double[] DecLo, double[] DecHi, double[] RecLo, double[] RecHi) _taps;
+
+    /// <summary>
     /// Initializes a new instance of the BiorthogonalWavelet class with the specified decomposition and reconstruction orders.
     /// </summary>
     /// <param name="decompositionOrder">The order of the wavelet used for decomposition. Default is 2.</param>
     /// <param name="reconstructionOrder">The order of the wavelet used for reconstruction. Default is 2.</param>
-    /// <exception cref="ArgumentException">Thrown when either order is less than 1 or greater than 6.</exception>
+    /// <exception cref="ArgumentException">
+    /// Thrown when the pair does not name a biorthogonal wavelet: the supported
+    /// <c>bior{reconstructionOrder}.{decompositionOrder}</c> pairs are 1.1, 1.3, 1.5, 2.2, 2.4, 2.6, 2.8, 3.1, 3.3,
+    /// 3.5, 3.7, 3.9, 4.4, 5.5 and 6.8, the same set PyWavelets provides.
+    /// </exception>
     /// <remarks>
     /// <para>
     /// <b>For Beginners:</b>
@@ -83,22 +83,30 @@ public partial class BiorthogonalWavelet<T> : WaveletFunctionBase<T>
     /// - 5,5: Higher smoothness
     /// - 6,8: Also used in JPEG2000
     ///
-    /// This implementation supports orders 1 through 6 for both decomposition and reconstruction.
-    /// The constructor initializes the appropriate coefficient sets based on these orders.
+    /// The pair maps to PyWavelets' <c>bior{reconstructionOrder}.{decompositionOrder}</c>, so for example
+    /// decompositionOrder 4 with reconstructionOrder 2 is <c>bior2.4</c>. The filters are exactly PyWavelets'
+    /// <c>dec_lo</c>, <c>dec_hi</c>, <c>rec_lo</c> and <c>rec_hi</c>. A biorthogonal pair only exists for
+    /// certain combinations, so any other pair is rejected.
     /// </para>
     /// </remarks>
     public BiorthogonalWavelet(int decompositionOrder = 2, int reconstructionOrder = 2)
     {
-        if (decompositionOrder < 1 || decompositionOrder > 6)
-            throw new ArgumentException("Order must be between 1 and 6.", nameof(decompositionOrder));
-
         if (reconstructionOrder < 1 || reconstructionOrder > 6)
-            throw new ArgumentException("Order must be between 1 and 6.", nameof(reconstructionOrder));
+            throw new ArgumentException("Reconstruction order must be between 1 and 6.", nameof(reconstructionOrder));
 
-        _decompositionOrder = decompositionOrder;
-        _reconstructionOrder = reconstructionOrder;
-        _decompositionCoefficients = GetDecompositionCoefficients(_decompositionOrder);
-        _reconstructionCoefficients = GetReconstructionCoefficients(_reconstructionOrder);
+        var taps = GetFilterTaps(reconstructionOrder, decompositionOrder);
+        if (taps is null)
+        {
+            throw new ArgumentException(
+                $"bior{reconstructionOrder}.{decompositionOrder} is not a biorthogonal wavelet. Supported pairs " +
+                "(reconstruction.decomposition): 1.1, 1.3, 1.5, 2.2, 2.4, 2.6, 2.8, 3.1, 3.3, 3.5, 3.7, 3.9, 4.4, " +
+                "5.5, 6.8.",
+                nameof(decompositionOrder));
+        }
+
+        _taps = taps.Value;
+        _decompositionCoefficients = ToFilter(_taps.DecLo);
+        _reconstructionCoefficients = ToFilter(_taps.RecLo);
     }
 
     /// <summary>
@@ -172,132 +180,362 @@ public partial class BiorthogonalWavelet<T> : WaveletFunctionBase<T>
     }
 
     /// <summary>
-    /// Gets the decomposition coefficients for the specified order.
+    /// Gets PyWavelets' filter taps for <c>bior{reconstructionOrder}.{decompositionOrder}</c>.
     /// </summary>
-    /// <param name="order">The order of the decomposition wavelet.</param>
-    /// <returns>A vector of decomposition coefficients.</returns>
-    /// <exception cref="ArgumentException">Thrown when the specified order is not implemented.</exception>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b>
-    /// These coefficients define the wavelet used for decomposing (analyzing) a signal.
-    /// 
-    /// The method provides pre-calculated coefficients for three different orders:
-    /// 
-    /// - Order 1: The simplest wavelet, equivalent to the Haar wavelet
-    ///   - Good for detecting abrupt changes
-    ///   - Less smooth, more localized in time
-    /// 
-    /// - Order 2: A more balanced wavelet
-    ///   - Better frequency localization than order 1
-    ///   - Still reasonably compact in time
-    /// 
-    /// - Order 3: The smoothest option
-    ///   - Best frequency localization
-    ///   - Less localized in time (affects more neighboring points)
-    /// 
-    /// These coefficients are carefully designed to work with the corresponding reconstruction
-    /// coefficients to ensure perfect reconstruction of the signal.
-    /// </para>
-    /// </remarks>
-    private Vector<T> GetDecompositionCoefficients(int order)
+    /// <param name="reconstructionOrder">The reconstruction (synthesis) order, the first number of the name.</param>
+    /// <param name="decompositionOrder">The decomposition (analysis) order, the second number of the name.</param>
+    /// <returns>
+    /// The <c>dec_lo</c>, <c>dec_hi</c>, <c>rec_lo</c> and <c>rec_hi</c> taps of
+    /// <c>pywt.Wavelet("biorNr.Nd")</c>, or <c>null</c> when the pair is not a biorthogonal wavelet.
+    /// </returns>
+    private static (double[] DecLo, double[] DecHi, double[] RecLo, double[] RecHi)? GetFilterTaps(
+        int reconstructionOrder, int decompositionOrder)
     {
-        return order switch
+        return (reconstructionOrder, decompositionOrder) switch
         {
-            1 => new Vector<T>([NumOps.FromDouble(0.7071067811865476), NumOps.FromDouble(0.7071067811865476)]),
-            2 => new Vector<T>([ NumOps.FromDouble(-0.1767766952966369), NumOps.FromDouble(0.3535533905932738),
-                                             NumOps.FromDouble(1.0606601717798214), NumOps.FromDouble(0.3535533905932738),
-                                             NumOps.FromDouble(-0.1767766952966369) ]),
-            3 => new Vector<T>([ NumOps.FromDouble(0.0352262918857095), NumOps.FromDouble(-0.0854412738820267),
-                                             NumOps.FromDouble(-0.1350110200102546), NumOps.FromDouble(0.4598775021184914),
-                                             NumOps.FromDouble(0.8068915093110924), NumOps.FromDouble(0.3326705529500826),
-                                             NumOps.FromDouble(-0.0279837694169839) ]),
-            // CDF 9/7 wavelet coefficients (bior4.4) - used in JPEG2000
-            4 => new Vector<T>([ NumOps.FromDouble(0.026748757411),  NumOps.FromDouble(-0.016864118443),
-                                             NumOps.FromDouble(-0.078223266529), NumOps.FromDouble(0.266864118443),
-                                             NumOps.FromDouble(0.602949018236),  NumOps.FromDouble(0.266864118443),
-                                             NumOps.FromDouble(-0.078223266529), NumOps.FromDouble(-0.016864118443),
-                                             NumOps.FromDouble(0.026748757411) ]),
-            // bior5.5 coefficients
-            5 => new Vector<T>([ NumOps.FromDouble(0.01345671), NumOps.FromDouble(-0.00269497),
-                                             NumOps.FromDouble(-0.13670658), NumOps.FromDouble(0.09350469),
-                                             NumOps.FromDouble(0.47680327), NumOps.FromDouble(0.89950611),
-                                             NumOps.FromDouble(0.47680327), NumOps.FromDouble(0.09350469),
-                                             NumOps.FromDouble(-0.13670658), NumOps.FromDouble(-0.00269497),
-                                             NumOps.FromDouble(0.01345671) ]),
-            // bior6.8 coefficients
-            6 => new Vector<T>([ NumOps.FromDouble(0.0019088317),  NumOps.FromDouble(-0.0019142862),
-                                             NumOps.FromDouble(-0.0170080345), NumOps.FromDouble(0.0119509435),
-                                             NumOps.FromDouble(0.0498175178),  NumOps.FromDouble(-0.0771721906),
-                                             NumOps.FromDouble(-0.0940779761), NumOps.FromDouble(0.4207962846),
-                                             NumOps.FromDouble(0.8259229975),  NumOps.FromDouble(0.4207962846),
-                                             NumOps.FromDouble(-0.0940779761), NumOps.FromDouble(-0.0771721906),
-                                             NumOps.FromDouble(0.0498175178),  NumOps.FromDouble(0.0119509435),
-                                             NumOps.FromDouble(-0.0170080345), NumOps.FromDouble(-0.0019142862),
-                                             NumOps.FromDouble(0.0019088317) ]),
-            _ => throw new ArgumentException($"Biorthogonal wavelet of order {order} is not implemented."),
-        };
-    }
-
-    /// <summary>
-    /// Gets the reconstruction coefficients for the specified order.
-    /// </summary>
-    /// <param name="order">The order of the reconstruction wavelet.</param>
-    /// <returns>A vector of reconstruction coefficients.</returns>
-    /// <exception cref="ArgumentException">Thrown when the specified order is not implemented.</exception>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b>
-    /// These coefficients define the wavelet used for reconstructing (synthesizing) a signal.
-    /// 
-    /// The reconstruction coefficients are designed to work with the decomposition coefficients
-    /// to ensure perfect reconstruction. They have a special mathematical relationship with
-    /// the decomposition coefficients that ensures:
-    /// 
-    /// 1. When you decompose a signal and then reconstruct it, you get exactly the original signal back
-    /// 2. The decomposition and reconstruction processes are stable and well-behaved
-    /// 
-    /// For order 1, the reconstruction coefficients are identical to the decomposition coefficients.
-    /// For higher orders, they differ but maintain the biorthogonality relationship.
-    /// 
-    /// The choice of reconstruction order affects how smooth the reconstructed signal will be,
-    /// with higher orders producing smoother results.
-    /// </para>
-    /// </remarks>
-    private Vector<T> GetReconstructionCoefficients(int order)
-    {
-        return order switch
-        {
-            1 => new Vector<T>([NumOps.FromDouble(0.7071067811865476), NumOps.FromDouble(0.7071067811865476)]),
-            2 => new Vector<T>([ NumOps.FromDouble(0.3535533905932738), NumOps.FromDouble(1.0606601717798214),
-                                             NumOps.FromDouble(0.3535533905932738), NumOps.FromDouble(-0.1767766952966369) ]),
-            3 => new Vector<T>([ NumOps.FromDouble(-0.0279837694169839), NumOps.FromDouble(0.3326705529500826),
-                                             NumOps.FromDouble(0.8068915093110924), NumOps.FromDouble(0.4598775021184914),
-                                             NumOps.FromDouble(-0.1350110200102546), NumOps.FromDouble(-0.0854412738820267),
-                                             NumOps.FromDouble(0.0352262918857095) ]),
-            // CDF 9/7 reconstruction coefficients (bior4.4)
-            4 => new Vector<T>([ NumOps.FromDouble(-0.045635881557),  NumOps.FromDouble(-0.028771763114),
-                                             NumOps.FromDouble(0.295635881557),  NumOps.FromDouble(0.557543526229),
-                                             NumOps.FromDouble(0.295635881557),  NumOps.FromDouble(-0.028771763114),
-                                             NumOps.FromDouble(-0.045635881557) ]),
-            // bior5.5 reconstruction coefficients
-            5 => new Vector<T>([ NumOps.FromDouble(-0.01345671), NumOps.FromDouble(-0.00269497),
-                                             NumOps.FromDouble(0.13670658), NumOps.FromDouble(0.09350469),
-                                             NumOps.FromDouble(-0.47680327), NumOps.FromDouble(0.89950611),
-                                             NumOps.FromDouble(-0.47680327), NumOps.FromDouble(0.09350469),
-                                             NumOps.FromDouble(0.13670658), NumOps.FromDouble(-0.00269497),
-                                             NumOps.FromDouble(-0.01345671) ]),
-            // bior6.8 reconstruction coefficients
-            6 => new Vector<T>([ NumOps.FromDouble(0.0019088317),  NumOps.FromDouble(0.0019142862),
-                                             NumOps.FromDouble(-0.0170080345), NumOps.FromDouble(-0.0119509435),
-                                             NumOps.FromDouble(0.0498175178),  NumOps.FromDouble(0.0771721906),
-                                             NumOps.FromDouble(-0.0940779761), NumOps.FromDouble(-0.4207962846),
-                                             NumOps.FromDouble(0.8259229975),  NumOps.FromDouble(-0.4207962846),
-                                             NumOps.FromDouble(-0.0940779761), NumOps.FromDouble(0.0771721906),
-                                             NumOps.FromDouble(0.0498175178),  NumOps.FromDouble(-0.0119509435),
-                                             NumOps.FromDouble(-0.0170080345), NumOps.FromDouble(0.0019142862),
-                                             NumOps.FromDouble(0.0019088317) ]),
-            _ => throw new ArgumentException($"Biorthogonal wavelet of order {order} is not implemented."),
+            (1, 1) => (
+                new[]
+                {
+                    0.7071067811865476, 0.7071067811865476
+                },
+                new[]
+                {
+                    -0.7071067811865476, 0.7071067811865476
+                },
+                new[]
+                {
+                    0.7071067811865476, 0.7071067811865476
+                },
+                new[]
+                {
+                    0.7071067811865476, -0.7071067811865476
+                }),
+            (1, 3) => (
+                new[]
+                {
+                    -0.08838834764831845, 0.08838834764831845, 0.7071067811865476, 0.7071067811865476,
+                    0.08838834764831845, -0.08838834764831845
+                },
+                new[]
+                {
+                    -0.0, 0.0, -0.7071067811865476, 0.7071067811865476, -0.0, 0.0
+                },
+                new[]
+                {
+                    0.0, 0.0, 0.7071067811865476, 0.7071067811865476, 0.0, 0.0
+                },
+                new[]
+                {
+                    -0.08838834764831845, -0.08838834764831845, 0.7071067811865476, -0.7071067811865476,
+                    0.08838834764831845, 0.08838834764831845
+                }),
+            (1, 5) => (
+                new[]
+                {
+                    0.016572815184059706, -0.016572815184059706, -0.12153397801643785, 0.12153397801643785,
+                    0.7071067811865476, 0.7071067811865476, 0.12153397801643785, -0.12153397801643785,
+                    -0.016572815184059706, 0.016572815184059706
+                },
+                new[]
+                {
+                    -0.0, 0.0, -0.0, 0.0, -0.7071067811865476, 0.7071067811865476, -0.0, 0.0, -0.0, 0.0
+                },
+                new[]
+                {
+                    0.0, 0.0, 0.0, 0.0, 0.7071067811865476, 0.7071067811865476, 0.0, 0.0, 0.0, 0.0
+                },
+                new[]
+                {
+                    0.016572815184059706, 0.016572815184059706, -0.12153397801643785, -0.12153397801643785,
+                    0.7071067811865476, -0.7071067811865476, 0.12153397801643785, 0.12153397801643785,
+                    -0.016572815184059706, -0.016572815184059706
+                }),
+            (2, 2) => (
+                new[]
+                {
+                    0.0, -0.1767766952966369, 0.3535533905932738, 1.0606601717798212, 0.3535533905932738,
+                    -0.1767766952966369
+                },
+                new[]
+                {
+                    -0.0, 0.3535533905932738, -0.7071067811865476, 0.3535533905932738, -0.0, 0.0
+                },
+                new[]
+                {
+                    0.0, 0.3535533905932738, 0.7071067811865476, 0.3535533905932738, 0.0, 0.0
+                },
+                new[]
+                {
+                    0.0, 0.1767766952966369, 0.3535533905932738, -1.0606601717798212, 0.3535533905932738,
+                    0.1767766952966369
+                }),
+            (2, 4) => (
+                new[]
+                {
+                    0.0, 0.03314563036811941, -0.06629126073623882, -0.1767766952966369, 0.4198446513295126,
+                    0.9943689110435825, 0.4198446513295126, -0.1767766952966369, -0.06629126073623882,
+                    0.03314563036811941
+                },
+                new[]
+                {
+                    -0.0, 0.0, -0.0, 0.3535533905932738, -0.7071067811865476, 0.3535533905932738, -0.0, 0.0, -0.0,
+                    0.0
+                },
+                new[]
+                {
+                    0.0, 0.0, 0.0, 0.3535533905932738, 0.7071067811865476, 0.3535533905932738, 0.0, 0.0, 0.0, 0.0
+                },
+                new[]
+                {
+                    0.0, -0.03314563036811941, -0.06629126073623882, 0.1767766952966369, 0.4198446513295126,
+                    -0.9943689110435825, 0.4198446513295126, 0.1767766952966369, -0.06629126073623882,
+                    -0.03314563036811941
+                }),
+            (2, 6) => (
+                new[]
+                {
+                    0.0, -0.006905339660024878, 0.013810679320049757, 0.04695630968816917, -0.1077232986963881,
+                    -0.16987135563661201, 0.4474660099696121, 0.966747552403483, 0.4474660099696121,
+                    -0.16987135563661201, -0.1077232986963881, 0.04695630968816917, 0.013810679320049757,
+                    -0.006905339660024878
+                },
+                new[]
+                {
+                    -0.0, 0.0, -0.0, 0.0, -0.0, 0.3535533905932738, -0.7071067811865476, 0.3535533905932738, -0.0,
+                    0.0, -0.0, 0.0, -0.0, 0.0
+                },
+                new[]
+                {
+                    0.0, 0.0, 0.0, 0.0, 0.0, 0.3535533905932738, 0.7071067811865476, 0.3535533905932738, 0.0, 0.0,
+                    0.0, 0.0, 0.0, 0.0
+                },
+                new[]
+                {
+                    0.0, 0.006905339660024878, 0.013810679320049757, -0.04695630968816917, -0.1077232986963881,
+                    0.16987135563661201, 0.4474660099696121, -0.966747552403483, 0.4474660099696121,
+                    0.16987135563661201, -0.1077232986963881, -0.04695630968816917, 0.013810679320049757,
+                    0.006905339660024878
+                }),
+            (2, 8) => (
+                new[]
+                {
+                    0.0, 0.0015105430506304422, -0.0030210861012608843, -0.012947511862546647, 0.02891610982635418,
+                    0.05299848189069094, -0.13491307360773605, -0.16382918343409023, 0.46257144047591653,
+                    0.9516421218971786, 0.46257144047591653, -0.16382918343409023, -0.13491307360773605,
+                    0.05299848189069094, 0.02891610982635418, -0.012947511862546647, -0.0030210861012608843,
+                    0.0015105430506304422
+                },
+                new[]
+                {
+                    -0.0, 0.0, -0.0, 0.0, -0.0, 0.0, -0.0, 0.3535533905932738, -0.7071067811865476,
+                    0.3535533905932738, -0.0, 0.0, -0.0, 0.0, -0.0, 0.0, -0.0, 0.0
+                },
+                new[]
+                {
+                    0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.3535533905932738, 0.7071067811865476, 0.3535533905932738,
+                    0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0
+                },
+                new[]
+                {
+                    0.0, -0.0015105430506304422, -0.0030210861012608843, 0.012947511862546647, 0.02891610982635418,
+                    -0.05299848189069094, -0.13491307360773605, 0.16382918343409023, 0.46257144047591653,
+                    -0.9516421218971786, 0.46257144047591653, 0.16382918343409023, -0.13491307360773605,
+                    -0.05299848189069094, 0.02891610982635418, 0.012947511862546647, -0.0030210861012608843,
+                    -0.0015105430506304422
+                }),
+            (3, 1) => (
+                new[]
+                {
+                    -0.3535533905932738, 1.0606601717798212, 1.0606601717798212, -0.3535533905932738
+                },
+                new[]
+                {
+                    -0.1767766952966369, 0.5303300858899106, -0.5303300858899106, 0.1767766952966369
+                },
+                new[]
+                {
+                    0.1767766952966369, 0.5303300858899106, 0.5303300858899106, 0.1767766952966369
+                },
+                new[]
+                {
+                    -0.3535533905932738, -1.0606601717798212, 1.0606601717798212, 0.3535533905932738
+                }),
+            (3, 3) => (
+                new[]
+                {
+                    0.06629126073623882, -0.1988737822087165, -0.15467960838455727, 0.9943689110435825,
+                    0.9943689110435825, -0.15467960838455727, -0.1988737822087165, 0.06629126073623882
+                },
+                new[]
+                {
+                    -0.0, 0.0, -0.1767766952966369, 0.5303300858899106, -0.5303300858899106, 0.1767766952966369,
+                    -0.0, 0.0
+                },
+                new[]
+                {
+                    0.0, 0.0, 0.1767766952966369, 0.5303300858899106, 0.5303300858899106, 0.1767766952966369, 0.0,
+                    0.0
+                },
+                new[]
+                {
+                    0.06629126073623882, 0.1988737822087165, -0.15467960838455727, -0.9943689110435825,
+                    0.9943689110435825, 0.15467960838455727, -0.1988737822087165, -0.06629126073623882
+                }),
+            (3, 5) => (
+                new[]
+                {
+                    -0.013810679320049757, 0.04143203796014927, 0.052480581416189075, -0.26792717880896527,
+                    -0.07181553246425873, 0.966747552403483, 0.966747552403483, -0.07181553246425873,
+                    -0.26792717880896527, 0.052480581416189075, 0.04143203796014927, -0.013810679320049757
+                },
+                new[]
+                {
+                    -0.0, 0.0, -0.0, 0.0, -0.1767766952966369, 0.5303300858899106, -0.5303300858899106,
+                    0.1767766952966369, -0.0, 0.0, -0.0, 0.0
+                },
+                new[]
+                {
+                    0.0, 0.0, 0.0, 0.0, 0.1767766952966369, 0.5303300858899106, 0.5303300858899106,
+                    0.1767766952966369, 0.0, 0.0, 0.0, 0.0
+                },
+                new[]
+                {
+                    -0.013810679320049757, -0.04143203796014927, 0.052480581416189075, 0.26792717880896527,
+                    -0.07181553246425873, -0.966747552403483, 0.966747552403483, 0.07181553246425873,
+                    -0.26792717880896527, -0.052480581416189075, 0.04143203796014927, 0.013810679320049757
+                }),
+            (3, 7) => (
+                new[]
+                {
+                    0.0030210861012608843, -0.009063258303782653, -0.01683176542131064, 0.074663985074019,
+                    0.03133297870736289, -0.301159125922835, -0.02649924094534547, 0.9516421218971786,
+                    0.9516421218971786, -0.02649924094534547, -0.301159125922835, 0.03133297870736289,
+                    0.074663985074019, -0.01683176542131064, -0.009063258303782653, 0.0030210861012608843
+                },
+                new[]
+                {
+                    -0.0, 0.0, -0.0, 0.0, -0.0, 0.0, -0.1767766952966369, 0.5303300858899106, -0.5303300858899106,
+                    0.1767766952966369, -0.0, 0.0, -0.0, 0.0, -0.0, 0.0
+                },
+                new[]
+                {
+                    0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.1767766952966369, 0.5303300858899106, 0.5303300858899106,
+                    0.1767766952966369, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0
+                },
+                new[]
+                {
+                    0.0030210861012608843, 0.009063258303782653, -0.01683176542131064, -0.074663985074019,
+                    0.03133297870736289, 0.301159125922835, -0.02649924094534547, -0.9516421218971786,
+                    0.9516421218971786, 0.02649924094534547, -0.301159125922835, -0.03133297870736289,
+                    0.074663985074019, 0.01683176542131064, -0.009063258303782653, -0.0030210861012608843
+                }),
+            (3, 9) => (
+                new[]
+                {
+                    -0.0006797443727836989, 0.002039233118351097, 0.005060319219611981, -0.020618912641105536,
+                    -0.014112787930175844, 0.09913478249423216, 0.012300136269419315, -0.32019196836077857,
+                    0.0020500227115698858, 0.9421257006782068, 0.9421257006782068, 0.0020500227115698858,
+                    -0.32019196836077857, 0.012300136269419315, 0.09913478249423216, -0.014112787930175844,
+                    -0.020618912641105536, 0.005060319219611981, 0.002039233118351097, -0.0006797443727836989
+                },
+                new[]
+                {
+                    -0.0, 0.0, -0.0, 0.0, -0.0, 0.0, -0.0, 0.0, -0.1767766952966369, 0.5303300858899106,
+                    -0.5303300858899106, 0.1767766952966369, -0.0, 0.0, -0.0, 0.0, -0.0, 0.0, -0.0, 0.0
+                },
+                new[]
+                {
+                    0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.1767766952966369, 0.5303300858899106,
+                    0.5303300858899106, 0.1767766952966369, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0
+                },
+                new[]
+                {
+                    -0.0006797443727836989, -0.002039233118351097, 0.005060319219611981, 0.020618912641105536,
+                    -0.014112787930175844, -0.09913478249423216, 0.012300136269419315, 0.32019196836077857,
+                    0.0020500227115698858, -0.9421257006782068, 0.9421257006782068, -0.0020500227115698858,
+                    -0.32019196836077857, -0.012300136269419315, 0.09913478249423216, 0.014112787930175844,
+                    -0.020618912641105536, -0.005060319219611981, 0.002039233118351097, 0.0006797443727836989
+                }),
+            (4, 4) => (
+                new[]
+                {
+                    0.0, 0.03782845550726404, -0.023849465019556843, -0.11062440441843718, 0.37740285561283066,
+                    0.8526986790088938, 0.37740285561283066, -0.11062440441843718, -0.023849465019556843,
+                    0.03782845550726404
+                },
+                new[]
+                {
+                    -0.0, -0.06453888262869706, 0.04068941760916406, 0.41809227322161724, -0.7884856164055829,
+                    0.41809227322161724, 0.04068941760916406, -0.06453888262869706, -0.0, 0.0
+                },
+                new[]
+                {
+                    0.0, -0.06453888262869706, -0.04068941760916406, 0.41809227322161724, 0.7884856164055829,
+                    0.41809227322161724, -0.04068941760916406, -0.06453888262869706, 0.0, 0.0
+                },
+                new[]
+                {
+                    0.0, -0.03782845550726404, -0.023849465019556843, 0.11062440441843718, 0.37740285561283066,
+                    -0.8526986790088938, 0.37740285561283066, 0.11062440441843718, -0.023849465019556843,
+                    -0.03782845550726404
+                }),
+            (5, 5) => (
+                new[]
+                {
+                    0.0, 0.0, 0.03968708834740544, 0.007948108637240322, -0.05446378846823691, 0.34560528195603346,
+                    0.7366601814282105, 0.34560528195603346, -0.05446378846823691, 0.007948108637240322,
+                    0.03968708834740544, 0.0
+                },
+                new[]
+                {
+                    -0.013456709459118716, -0.002694966880111507, 0.13670658466432914, -0.09350469740093886,
+                    -0.47680326579848425, 0.8995061097486484, -0.47680326579848425, -0.09350469740093886,
+                    0.13670658466432914, -0.002694966880111507, -0.013456709459118716, 0.0
+                },
+                new[]
+                {
+                    0.013456709459118716, -0.002694966880111507, -0.13670658466432914, -0.09350469740093886,
+                    0.47680326579848425, 0.8995061097486484, 0.47680326579848425, -0.09350469740093886,
+                    -0.13670658466432914, -0.002694966880111507, 0.013456709459118716, 0.0
+                },
+                new[]
+                {
+                    0.0, -0.0, 0.03968708834740544, -0.007948108637240322, -0.05446378846823691,
+                    -0.34560528195603346, 0.7366601814282105, -0.34560528195603346, -0.05446378846823691,
+                    -0.007948108637240322, 0.03968708834740544, -0.0
+                }),
+            (6, 8) => (
+                new[]
+                {
+                    0.0, 0.0019088317364812906, -0.0019142861290887667, -0.016990639867602342, 0.01193456527972926,
+                    0.04973290349094079, -0.07726317316720414, -0.09405920349573646, 0.4207962846098268,
+                    0.8259229974584023, 0.4207962846098268, -0.09405920349573646, -0.07726317316720414,
+                    0.04973290349094079, 0.01193456527972926, -0.016990639867602342, -0.0019142861290887667,
+                    0.0019088317364812906
+                },
+                new[]
+                {
+                    -0.0, 0.0, -0.0, 0.014426282505624435, -0.014467504896790148, -0.07872200106262882,
+                    0.04036797903033992, 0.41784910915027457, -0.7589077294536541, 0.41784910915027457,
+                    0.04036797903033992, -0.07872200106262882, -0.014467504896790148, 0.014426282505624435, -0.0,
+                    0.0, -0.0, 0.0
+                },
+                new[]
+                {
+                    0.0, 0.0, 0.0, 0.014426282505624435, 0.014467504896790148, -0.07872200106262882,
+                    -0.04036797903033992, 0.41784910915027457, 0.7589077294536541, 0.41784910915027457,
+                    -0.04036797903033992, -0.07872200106262882, 0.014467504896790148, 0.014426282505624435, 0.0,
+                    0.0, 0.0, 0.0
+                },
+                new[]
+                {
+                    0.0, -0.0019088317364812906, -0.0019142861290887667, 0.016990639867602342, 0.01193456527972926,
+                    -0.04973290349094079, -0.07726317316720414, 0.09405920349573646, 0.4207962846098268,
+                    -0.8259229974584023, 0.4207962846098268, 0.09405920349573646, -0.07726317316720414,
+                    -0.04973290349094079, 0.01193456527972926, 0.016990639867602342, -0.0019142861290887667,
+                    -0.0019088317364812906
+                }),
+            _ => null,
         };
     }
 
@@ -335,10 +573,11 @@ public partial class BiorthogonalWavelet<T> : WaveletFunctionBase<T>
             throw new ArgumentException("Input length must be even for biorthogonal wavelet decomposition.");
 
         int halfLength = input.Length / 2;
-        var decompositionLowPass = GetDecompositionLowPassFilter();
-        var decompositionHighPass = GetDecompositionHighPassFilter();
-
-        // a[i] = sum_j h[j] * x[(2i + j) mod n], d[i] = sum_j g[j] * x[(2i + j) mod n]
+        // PyWavelets' dec_lo / dec_hi are convolution taps; correlating with the time-reversed taps gives
+        // a[i] = sum_j h[j] * x[(2i + j) mod n] and d[i] = sum_j g[j] * x[(2i + j) mod n], which
+        // Reconstruct inverts exactly with rec_lo / rec_hi.
+        var decompositionLowPass = WaveletEngineOps<T>.Reverse(GetDecompositionLowPassFilter());
+        var decompositionHighPass = WaveletEngineOps<T>.Reverse(GetDecompositionHighPassFilter());
         var approximation = WaveletEngineOps<T>.PeriodicCorrelate(input, decompositionLowPass, 2, halfLength);
         var detail = WaveletEngineOps<T>.PeriodicCorrelate(input, decompositionHighPass, 2, halfLength);
         return (approximation, detail);
@@ -357,7 +596,7 @@ public partial class BiorthogonalWavelet<T> : WaveletFunctionBase<T>
     ///
     /// For biorthogonal wavelets, the reconstruction uses different filters than decomposition:
     /// 1. Upsample the approximation and detail coefficients by inserting zeros
-    /// 2. Convolve with the reconstruction low-pass and high-pass filters
+    /// 2. Circularly convolve with the reconstruction low-pass and high-pass filters
     /// 3. Add the results together
     ///
     /// This is the inverse of the Decompose method, so:
@@ -366,23 +605,15 @@ public partial class BiorthogonalWavelet<T> : WaveletFunctionBase<T>
     /// </remarks>
     public Vector<T> Reconstruct(Vector<T> approximation, Vector<T> detail)
     {
-        int outputLength = approximation.Length * 2;
-        if (outputLength == 0)
+        if (approximation.Length != detail.Length)
         {
-            return new Vector<T>(0);
+            throw new ArgumentException("Approximation and detail coefficients must have the same length.", nameof(detail));
         }
 
-        var engine = AiDotNetEngine.Current;
-        var reconLowPass = GetReconstructionLowPassFilter();
-        var reconHighPass = GetReconstructionHighPassFilter();
-
-        // x[i] = sum_j f[j] * c[(i - j) / 2] over even, in-range i - j: zero-insertion upsampling followed by a
-        // zero-padded linear convolution, keeping the first 2 * n outputs.
-        var lowBranch = WaveletEngineOps<T>.FullConvolve(WaveletEngineOps<T>.Upsample(approximation, 2), reconLowPass)
-            .GetSubVector(0, outputLength);
-        var highBranch = WaveletEngineOps<T>.FullConvolve(WaveletEngineOps<T>.Upsample(detail, 2), reconHighPass)
-            .GetSubVector(0, outputLength);
-        return engine.Add(lowBranch, highBranch);
+        // Periodic synthesis x[m] = sum_i a[i] rec_lo[(m - 2i) mod n] + d[i] rec_hi[(m - 2i) mod n], the exact
+        // inverse of the periodic analysis in Decompose.
+        return WaveletEngineOps<T>.PeriodicSynthesis(approximation, detail, GetReconstructionLowPassFilter(),
+            GetReconstructionHighPassFilter());
     }
 
     /// <summary>
@@ -453,37 +684,13 @@ public partial class BiorthogonalWavelet<T> : WaveletFunctionBase<T>
     /// - Blocks the high-frequency components
     /// - Produces the approximation coefficients
     /// 
-    /// In this implementation, the filter coefficients are pre-calculated for a specific
-    /// biorthogonal wavelet family (9/7 wavelet, commonly used in JPEG2000).
-    /// 
-    /// These coefficients are carefully designed to:
-    /// - Be symmetric (reducing edge artifacts)
-    /// - Have good frequency separation properties
-    /// - Work perfectly with the reconstruction filters
-    /// 
-    /// The coefficients are normalized to ensure proper energy preservation during
-    /// the decomposition process.
+    /// The coefficients are PyWavelets' dec_lo taps for the selected biorNr.Nd wavelet. They are
+    /// symmetric (reducing edge artifacts) and work perfectly with the reconstruction filters.
     /// </para>
     /// </remarks>
     private Vector<T> GetDecompositionLowPassFilter()
     {
-        double[] coeffs = _decompositionOrder switch
-        {
-            1 => new[] { 0.7071067811865476, 0.7071067811865476 },
-            2 => new[] { -0.1767766952966369, 0.3535533905932738, 1.0606601717798214, 0.3535533905932738, -0.1767766952966369 },
-            3 => new[] { 0.0352262918857095, -0.0854412738820267, -0.1350110200102546, 0.4598775021184914,
-                         0.8068915093110924, 0.3326705529500826, -0.0279837694169839 },
-            4 => new[] { 0.026748757410810, -0.016864118442875, -0.078223266528990, 0.266864118442872,
-                         0.602949018236360, 0.266864118442872, -0.078223266528990, -0.016864118442875, 0.026748757410810 },
-            5 => new[] { 0.01345671, -0.00269497, -0.13670658, 0.09350469, 0.47680327, 0.89950611,
-                         0.47680327, 0.09350469, -0.13670658, -0.00269497, 0.01345671 },
-            6 => new[] { 0.0019088317, -0.0019142862, -0.0170080345, 0.0119509435, 0.0498175178, -0.0771721906,
-                         -0.0940779761, 0.4207962846, 0.8259229975, 0.4207962846, -0.0940779761, -0.0771721906,
-                         0.0498175178, 0.0119509435, -0.0170080345, -0.0019142862, 0.0019088317 },
-            _ => throw new ArgumentException($"Order {_decompositionOrder} not supported")
-        };
-
-        return NormalizeAndConvert(coeffs);
+        return ToFilter(_taps.DecLo);
     }
 
     /// <summary>
@@ -512,25 +719,7 @@ public partial class BiorthogonalWavelet<T> : WaveletFunctionBase<T>
     /// </remarks>
     private Vector<T> GetDecompositionHighPassFilter()
     {
-        // High-pass filter derived from low-pass using quadrature mirror filter relationship
-        // Must have same length as low-pass filter
-        double[] coeffs = _decompositionOrder switch
-        {
-            1 => new[] { -0.7071067811865476, 0.7071067811865476 },
-            2 => new[] { 0.1767766952966369, -0.3535533905932738, 1.0606601717798214, -0.3535533905932738, 0.1767766952966369 },
-            3 => new[] { -0.0279837694169839, -0.3326705529500826, 0.8068915093110924, -0.4598775021184914,
-                         -0.1350110200102546, 0.0854412738820267, 0.0352262918857095 },
-            4 => new[] { 0.0, 0.091271763114250, -0.057543526228500, -0.591271763114250,
-                         1.115087052456994, -0.591271763114250, -0.057543526228500, 0.091271763114250, 0.0 },
-            5 => new[] { 0.01345671, 0.00269497, -0.13670658, -0.09350469, 0.47680327, -0.89950611,
-                         0.47680327, -0.09350469, -0.13670658, 0.00269497, 0.01345671 },
-            6 => new[] { -0.0019088317, -0.0019142862, 0.0170080345, 0.0119509435, -0.0498175178, -0.0771721906,
-                         0.0940779761, 0.4207962846, -0.8259229975, 0.4207962846, 0.0940779761, -0.0771721906,
-                         -0.0498175178, 0.0119509435, 0.0170080345, -0.0019142862, -0.0019088317 },
-            _ => throw new ArgumentException($"Order {_decompositionOrder} not supported")
-        };
-
-        return NormalizeAndConvert(coeffs);
+        return ToFilter(_taps.DecHi);
     }
 
     /// <summary>
@@ -557,24 +746,7 @@ public partial class BiorthogonalWavelet<T> : WaveletFunctionBase<T>
     /// </remarks>
     private Vector<T> GetReconstructionLowPassFilter()
     {
-        // Reconstruction low-pass filter - time-reversed version of decomposition low-pass
-        double[] coeffs = _reconstructionOrder switch
-        {
-            1 => new[] { 0.7071067811865476, 0.7071067811865476 },
-            2 => new[] { -0.1767766952966369, 0.3535533905932738, 1.0606601717798214, 0.3535533905932738, -0.1767766952966369 },
-            3 => new[] { -0.0279837694169839, 0.3326705529500826, 0.8068915093110924, 0.4598775021184914,
-                         -0.1350110200102546, -0.0854412738820267, 0.0352262918857095 },
-            4 => new[] { 0.0, -0.091271763114250, -0.057543526228500, 0.591271763114250,
-                         1.115087052456994, 0.591271763114250, -0.057543526228500, -0.091271763114250, 0.0 },
-            5 => new[] { -0.01345671, -0.00269497, 0.13670658, 0.09350469, -0.47680327, 0.89950611,
-                         -0.47680327, 0.09350469, 0.13670658, -0.00269497, -0.01345671 },
-            6 => new[] { 0.0019088317, 0.0019142862, -0.0170080345, -0.0119509435, 0.0498175178, 0.0771721906,
-                         -0.0940779761, -0.4207962846, 0.8259229975, -0.4207962846, -0.0940779761, 0.0771721906,
-                         0.0498175178, -0.0119509435, -0.0170080345, 0.0019142862, 0.0019088317 },
-            _ => throw new ArgumentException($"Order {_reconstructionOrder} not supported")
-        };
-
-        return NormalizeAndConvert(coeffs);
+        return ToFilter(_taps.RecLo);
     }
 
     /// <summary>
@@ -601,53 +773,18 @@ public partial class BiorthogonalWavelet<T> : WaveletFunctionBase<T>
     /// </remarks>
     private Vector<T> GetReconstructionHighPassFilter()
     {
-        // Reconstruction high-pass filter - must have same length as reconstruction low-pass
-        double[] coeffs = _reconstructionOrder switch
-        {
-            1 => new[] { 0.7071067811865476, -0.7071067811865476 },
-            2 => new[] { 0.1767766952966369, 0.3535533905932738, -1.0606601717798214, 0.3535533905932738, 0.1767766952966369 },
-            3 => new[] { 0.0352262918857095, 0.0854412738820267, -0.1350110200102546, -0.4598775021184914,
-                         0.8068915093110924, -0.3326705529500826, -0.0279837694169839 },
-            4 => new[] { 0.026748757410810, 0.016864118442875, -0.078223266528990, -0.266864118442872,
-                         0.602949018236360, -0.266864118442872, -0.078223266528990, 0.016864118442875, 0.026748757410810 },
-            5 => new[] { 0.01345671, -0.00269497, -0.13670658, 0.09350469, 0.47680327, -0.89950611,
-                         0.47680327, 0.09350469, -0.13670658, -0.00269497, 0.01345671 },
-            6 => new[] { 0.0019088317, -0.0019142862, -0.0170080345, 0.0119509435, 0.0498175178, -0.0771721906,
-                         -0.0940779761, 0.4207962846, 0.8259229975, 0.4207962846, -0.0940779761, -0.0771721906,
-                         0.0498175178, 0.0119509435, -0.0170080345, -0.0019142862, 0.0019088317 },
-            _ => throw new ArgumentException($"Order {_reconstructionOrder} not supported")
-        };
-
-        return NormalizeAndConvert(coeffs);
+        return ToFilter(_taps.RecHi);
     }
 
     /// <summary>
-    /// Normalizes and converts an array of double coefficients to type T.
+    /// Converts a table of PyWavelets filter taps to a vector of type T.
     /// </summary>
-    /// <param name="coeffs">The array of double coefficients to normalize and convert.</param>
-    /// <returns>A vector of normalized coefficients of type T.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b>
-    /// This helper method performs two important tasks:
-    /// 
-    /// 1. Normalization: It adjusts the coefficients so that their energy (sum of squares)
-    ///    equals 1. This ensures that the wavelet transform preserves the energy of the signal.
-    /// 
-    /// 2. Type conversion: It converts the double-precision coefficients to the generic
-    ///    numeric type T used by the class.
-    /// 
-    /// Normalization is important because it ensures that the wavelet transform doesn't
-    /// artificially amplify or reduce the signal's energy. It's a standard practice in
-    /// wavelet design to ensure consistent results regardless of the specific wavelet used.
-    /// 
-    /// The type conversion allows the class to work with different numeric types (float, double, etc.)
-    /// while maintaining the same coefficient values.
-    /// </para>
-    /// </remarks>
-    private Vector<T> NormalizeAndConvert(double[] coeffs)
+    /// <param name="taps">The filter taps, in PyWavelets order.</param>
+    /// <returns>The taps as a vector of type T, unscaled.</returns>
+    private Vector<T> ToFilter(double[] taps)
     {
-        double normFactor = Math.Sqrt(coeffs.Sum(c => c * c));
-        return new Vector<T>([.. coeffs.Select(c => NumOps.FromDouble(c / normFactor))]);
+        // The taps are used as published: biorthogonal filters are not unit-norm, and rescaling them would
+        // break perfect reconstruction.
+        return new Vector<T>([.. taps.Select(c => NumOps.FromDouble(c))]);
     }
 }
