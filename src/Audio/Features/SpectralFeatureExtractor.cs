@@ -80,6 +80,9 @@ public class SpectralFeatureExtractor<T> : AudioFeatureExtractorBase<T>
     /// <inheritdoc/>
     public override Tensor<T> Extract(Tensor<T> audio)
     {
+        // Features are computed from fresh values as before (not part of the autodiff graph).
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+
         // Compute STFT - returns Tensor<Complex<T>> with shape [numFrames, numFreqs]
         var stftResult = _stft.Forward(audio);
 
@@ -87,293 +90,221 @@ public class SpectralFeatureExtractor<T> : AudioFeatureExtractorBase<T>
         int numFreqs = stftResult.Shape[1];
 
         // Compute magnitude spectrum
-        var magnitude = new double[numFrames, numFreqs];
-        var power = new double[numFrames, numFreqs];
-
-        for (int frame = 0; frame < numFrames; frame++)
-        {
-            for (int freq = 0; freq < numFreqs; freq++)
-            {
-                var complex = stftResult[frame, freq];
-                double real = NumOps.ToDouble(complex.Real);
-                double imag = NumOps.ToDouble(complex.Imaginary);
-                magnitude[frame, freq] = Math.Sqrt(real * real + imag * imag);
-                power[frame, freq] = real * real + imag * imag;
-            }
-        }
+        var real = Engine.TensorReal(stftResult);
+        var imag = Engine.TensorImag(stftResult);
+        var magnitude = Engine.TensorSqrt(Engine.TensorAdd(Engine.TensorSquare(real), Engine.TensorSquare(imag)));
 
         // Calculate frequency bins in Hz
-        var freqBins = new double[numFreqs];
         // Guard against division by zero when numFreqs == 1 (only DC component)
         double freqScale = numFreqs > 1 ? (double)SampleRate / (2 * (numFreqs - 1)) : 0.0;
-        for (int freq = 0; freq < numFreqs; freq++)
-        {
-            freqBins[freq] = freq * freqScale;
-        }
+        var freqBins = Engine.TensorMultiplyScalar(Engine.TensorArange<T>(0, numFreqs, 1), NumOps.FromDouble(freqScale));
 
-        // Extract features
-        var features = new List<double[]>();
+        // Extract features (each a [numFrames] column)
+        var features = new List<Tensor<T>>();
 
-        if (_featureTypes.HasFlag(SpectralFeatureType.Centroid))
+        if (numFrames > 0)
         {
-            features.Add(ComputeSpectralCentroid(magnitude, freqBins, numFrames, numFreqs));
-        }
-
-        if (_featureTypes.HasFlag(SpectralFeatureType.Bandwidth))
-        {
-            var centroids = ComputeSpectralCentroid(magnitude, freqBins, numFrames, numFreqs);
-            features.Add(ComputeSpectralBandwidth(magnitude, freqBins, centroids, numFrames, numFreqs));
-        }
-
-        if (_featureTypes.HasFlag(SpectralFeatureType.Rolloff))
-        {
-            features.Add(ComputeSpectralRolloff(magnitude, freqBins, numFrames, numFreqs));
-        }
-
-        if (_featureTypes.HasFlag(SpectralFeatureType.Flux))
-        {
-            features.Add(ComputeSpectralFlux(magnitude, numFrames, numFreqs));
-        }
-
-        if (_featureTypes.HasFlag(SpectralFeatureType.Flatness))
-        {
-            features.Add(ComputeSpectralFlatness(magnitude, numFrames, numFreqs));
-        }
-
-        if (_featureTypes.HasFlag(SpectralFeatureType.Contrast))
-        {
-            var contrast = ComputeSpectralContrast(magnitude, numFrames, numFreqs);
-            foreach (var band in contrast)
+            if (_featureTypes.HasFlag(SpectralFeatureType.Centroid))
             {
-                features.Add(band);
+                features.Add(ComputeSpectralCentroid(magnitude, freqBins, numFrames, numFreqs));
+            }
+
+            if (_featureTypes.HasFlag(SpectralFeatureType.Bandwidth))
+            {
+                var centroids = ComputeSpectralCentroid(magnitude, freqBins, numFrames, numFreqs);
+                features.Add(ComputeSpectralBandwidth(magnitude, freqBins, centroids, numFrames, numFreqs));
+            }
+
+            if (_featureTypes.HasFlag(SpectralFeatureType.Rolloff))
+            {
+                features.Add(ComputeSpectralRolloff(magnitude, freqScale, numFrames, numFreqs));
+            }
+
+            if (_featureTypes.HasFlag(SpectralFeatureType.Flux))
+            {
+                features.Add(ComputeSpectralFlux(magnitude, numFrames, numFreqs));
+            }
+
+            if (_featureTypes.HasFlag(SpectralFeatureType.Flatness))
+            {
+                features.Add(ComputeSpectralFlatness(magnitude, numFrames, numFreqs));
+            }
+
+            if (_featureTypes.HasFlag(SpectralFeatureType.Contrast))
+            {
+                features.AddRange(ComputeSpectralContrast(magnitude, numFrames, numFreqs));
+            }
+
+            if (_featureTypes.HasFlag(SpectralFeatureType.ZeroCrossingRate))
+            {
+                features.Add(ComputeZeroCrossingRate(audio, numFrames));
             }
         }
 
-        if (_featureTypes.HasFlag(SpectralFeatureType.ZeroCrossingRate))
-        {
-            features.Add(ComputeZeroCrossingRate(audio, numFrames));
-        }
+        // Combine all features into result tensor [numFrames, featureDimension]
+        if (features.Count == 0)
+            return new Tensor<T>([numFrames, _featureDimension]);
 
-        // Combine all features into result tensor
-        var result = new Tensor<T>([numFrames, _featureDimension]);
-        int featureOffset = 0;
-
-        foreach (var featureArray in features)
-        {
-            for (int frame = 0; frame < numFrames; frame++)
-            {
-                result[frame, featureOffset] = NumOps.FromDouble(featureArray[frame]);
-            }
-            featureOffset++;
-        }
-
-        return result;
+        var columns = Engine.TensorStack(features.ToArray(), 1);
+        if (features.Count >= _featureDimension)
+            return features.Count == _featureDimension ? columns : Engine.TensorSlice(columns, [0, 0], [numFrames, _featureDimension]);
+        return Engine.Concat(new[] { columns, new Tensor<T>([numFrames, _featureDimension - features.Count]) }, 1);
     }
 
-    private double[] ComputeSpectralCentroid(double[,] magnitude, double[] freqBins, int numFrames, int numFreqs)
+    /// <summary>Per-frame value where <paramref name="condition"/> holds, else zero.</summary>
+    private Tensor<T> WhereOrZero(Tensor<T> condition, Tensor<T> value)
+        => Engine.TensorWhere(condition, value, new Tensor<T>(value.Shape.ToArray()));
+
+    /// <summary>Frames as rows: <paramref name="column"/> <c>[numFrames]</c> broadcast to <c>[numFrames, numFreqs]</c>.</summary>
+    private Tensor<T> AcrossFreqs(Tensor<T> column, int numFrames, int numFreqs)
+        => Engine.TensorBroadcastTo(Engine.Reshape(column, [numFrames, 1]), [numFrames, numFreqs]);
+
+    /// <summary>Bins as columns: <paramref name="row"/> <c>[numFreqs]</c> broadcast to <c>[numFrames, numFreqs]</c>.</summary>
+    private Tensor<T> AcrossFrames(Tensor<T> row, int numFrames, int numFreqs)
+        => Engine.TensorBroadcastTo(Engine.Reshape(row, [1, numFreqs]), [numFrames, numFreqs]);
+
+    /// <summary>Sum over the bins of each frame, <c>[numFrames]</c>.</summary>
+    private Tensor<T> SumOverFreqs(Tensor<T> x, int numFrames, int numFreqs)
+        => numFreqs == 0 ? new Tensor<T>([numFrames]) : Engine.ReduceSum(x, [1], keepDims: false);
+
+    private Tensor<T> ComputeSpectralCentroid(Tensor<T> magnitude, Tensor<T> freqBins, int numFrames, int numFreqs)
     {
-        var centroid = new double[numFrames];
+        // sum_f freq * |X| / sum_f |X| where the denominator exceeds 1e-10, else 0
+        var numerator = SumOverFreqs(Engine.TensorMultiply(magnitude, AcrossFrames(freqBins, numFrames, numFreqs)), numFrames, numFreqs);
+        var denominator = SumOverFreqs(magnitude, numFrames, numFreqs);
 
-        for (int frame = 0; frame < numFrames; frame++)
-        {
-            double numerator = 0;
-            double denominator = 0;
-
-            for (int freq = 0; freq < numFreqs; freq++)
-            {
-                numerator += freqBins[freq] * magnitude[frame, freq];
-                denominator += magnitude[frame, freq];
-            }
-
-            centroid[frame] = denominator > 1e-10 ? numerator / denominator : 0;
-        }
-
-        return centroid;
+        return WhereOrZero(
+            Engine.TensorGreaterThan(denominator, NumOps.FromDouble(1e-10)),
+            Engine.TensorDivide(numerator, denominator));
     }
 
-    private double[] ComputeSpectralBandwidth(double[,] magnitude, double[] freqBins, double[] centroids, int numFrames, int numFreqs)
+    private Tensor<T> ComputeSpectralBandwidth(Tensor<T> magnitude, Tensor<T> freqBins, Tensor<T> centroids, int numFrames, int numFreqs)
     {
-        var bandwidth = new double[numFrames];
+        // sqrt(sum_f |X| (freq - centroid)^2 / sum_f |X|) where the denominator exceeds 1e-10, else 0
+        var diff = Engine.TensorSubtract(AcrossFrames(freqBins, numFrames, numFreqs), AcrossFreqs(centroids, numFrames, numFreqs));
+        var numerator = SumOverFreqs(Engine.TensorMultiply(Engine.TensorMultiply(magnitude, diff), diff), numFrames, numFreqs);
+        var denominator = SumOverFreqs(magnitude, numFrames, numFreqs);
 
-        for (int frame = 0; frame < numFrames; frame++)
-        {
-            double numerator = 0;
-            double denominator = 0;
-
-            for (int freq = 0; freq < numFreqs; freq++)
-            {
-                double diff = freqBins[freq] - centroids[frame];
-                numerator += magnitude[frame, freq] * diff * diff;
-                denominator += magnitude[frame, freq];
-            }
-
-            bandwidth[frame] = denominator > 1e-10 ? Math.Sqrt(numerator / denominator) : 0;
-        }
-
-        return bandwidth;
+        return WhereOrZero(
+            Engine.TensorGreaterThan(denominator, NumOps.FromDouble(1e-10)),
+            Engine.TensorSqrt(Engine.TensorDivide(numerator, denominator)));
     }
 
-    private double[] ComputeSpectralRolloff(double[,] magnitude, double[] freqBins, int numFrames, int numFreqs)
+    private Tensor<T> ComputeSpectralRolloff(Tensor<T> magnitude, double freqScale, int numFrames, int numFreqs)
     {
-        var rolloff = new double[numFrames];
+        if (numFreqs == 0)
+            return new Tensor<T>([numFrames]);
 
-        for (int frame = 0; frame < numFrames; frame++)
-        {
-            double totalEnergy = 0;
-            for (int freq = 0; freq < numFreqs; freq++)
-            {
-                totalEnergy += magnitude[frame, freq];
-            }
+        // Frequency of the first bin whose cumulative magnitude reaches rolloff * total (0 if none)
+        var totalEnergy = SumOverFreqs(magnitude, numFrames, numFreqs);
+        var threshold = Engine.TensorMultiplyScalar(totalEnergy, NumOps.FromDouble(_rolloffPercentage));
+        var cumEnergy = Engine.TensorCumSum(magnitude, 1);
+        var reached = Engine.TensorGreaterEqual(cumEnergy, AcrossFreqs(threshold, numFrames, numFreqs));
 
-            double threshold = totalEnergy * _rolloffPercentage;
-            double cumEnergy = 0;
+        // First reaching bin: the smallest bin index among reaching bins (numFreqs when none)
+        var binIndex = AcrossFrames(Engine.TensorArange<T>(0, numFreqs, 1), numFrames, numFreqs);
+        var candidates = Engine.TensorWhere(
+            reached, binIndex, Tensor<T>.CreateDefault([numFrames, numFreqs], NumOps.FromDouble(numFreqs)));
+        var firstBin = Engine.TensorAmin(candidates, [1], keepDims: false);
 
-            for (int freq = 0; freq < numFreqs; freq++)
-            {
-                cumEnergy += magnitude[frame, freq];
-                if (cumEnergy >= threshold)
-                {
-                    rolloff[frame] = freqBins[freq];
-                    break;
-                }
-            }
-        }
-
-        return rolloff;
+        return WhereOrZero(
+            Engine.TensorLessThan(firstBin, NumOps.FromDouble(numFreqs)),
+            Engine.TensorMultiplyScalar(firstBin, NumOps.FromDouble(freqScale)));
     }
 
-    private static double[] ComputeSpectralFlux(double[,] magnitude, int numFrames, int numFreqs)
+    private Tensor<T> ComputeSpectralFlux(Tensor<T> magnitude, int numFrames, int numFreqs)
     {
-        var flux = new double[numFrames];
+        // Frame 0 has no predecessor (flux 0); otherwise the L2 norm of the frame-to-frame change
+        if (numFrames < 2)
+            return new Tensor<T>([numFrames]);
 
-        for (int frame = 1; frame < numFrames; frame++)
-        {
-            double sum = 0;
-            for (int freq = 0; freq < numFreqs; freq++)
-            {
-                double diff = magnitude[frame, freq] - magnitude[frame - 1, freq];
-                sum += diff * diff;
-            }
-            flux[frame] = Math.Sqrt(sum);
-        }
+        var diff = Engine.TensorSubtract(
+            Engine.TensorSlice(magnitude, [1, 0], [numFrames - 1, numFreqs]),
+            Engine.TensorSlice(magnitude, [0, 0], [numFrames - 1, numFreqs]));
+        var flux = Engine.TensorSqrt(SumOverFreqs(Engine.TensorSquare(diff), numFrames - 1, numFreqs));
 
-        return flux;
+        return Engine.Concat(new[] { new Tensor<T>([1]), flux }, 0);
     }
 
-    private static double[] ComputeSpectralFlatness(double[,] magnitude, int numFrames, int numFreqs)
+    private Tensor<T> ComputeSpectralFlatness(Tensor<T> magnitude, int numFrames, int numFreqs)
     {
-        var flatness = new double[numFrames];
+        // Geometric / arithmetic mean over the bins above 1e-10 (0 when none, or their sum is tiny)
+        T epsilon = NumOps.FromDouble(1e-10);
+        var zeros = new Tensor<T>([numFrames, numFreqs]);
+        var above = Engine.TensorGreaterThan(magnitude, epsilon);
+        var logSum = SumOverFreqs(Engine.TensorWhere(above, Engine.TensorLog(magnitude), zeros), numFrames, numFreqs);
+        var sum = SumOverFreqs(Engine.TensorWhere(above, magnitude, zeros), numFrames, numFreqs);
+        var count = SumOverFreqs(above, numFrames, numFreqs);
 
-        for (int frame = 0; frame < numFrames; frame++)
-        {
-            double logSum = 0;
-            double sum = 0;
-            int count = 0;
+        var geometricMean = Engine.TensorExp(Engine.TensorDivide(logSum, count));
+        var arithmeticMean = Engine.TensorDivide(sum, count);
+        var valid = Engine.TensorMultiply(
+            Engine.TensorGreaterThan(count, NumOps.Zero),
+            Engine.TensorGreaterThan(sum, epsilon));
 
-            for (int freq = 0; freq < numFreqs; freq++)
-            {
-                double val = magnitude[frame, freq];
-                if (val > 1e-10)
-                {
-                    logSum += Math.Log(val);
-                    sum += val;
-                    count++;
-                }
-            }
-
-            if (count > 0 && sum > 1e-10)
-            {
-                double geometricMean = Math.Exp(logSum / count);
-                double arithmeticMean = sum / count;
-                flatness[frame] = geometricMean / arithmeticMean;
-            }
-        }
-
-        return flatness;
+        return WhereOrZero(valid, Engine.TensorDivide(geometricMean, arithmeticMean));
     }
 
-    private static double[][] ComputeSpectralContrast(double[,] magnitude, int numFrames, int numFreqs)
+    private Tensor<T>[] ComputeSpectralContrast(Tensor<T> magnitude, int numFrames, int numFreqs)
     {
         const int numBands = 6;
-        var contrast = new double[numBands][];
-        for (int b = 0; b < numBands; b++)
-        {
-            contrast[b] = new double[numFrames];
-        }
+        var contrast = new Tensor<T>[numBands];
 
         int freqsPerBand = numFreqs / numBands;
 
-        for (int frame = 0; frame < numFrames; frame++)
+        for (int band = 0; band < numBands; band++)
         {
-            for (int band = 0; band < numBands; band++)
+            int startFreq = band * freqsPerBand;
+            int endFreq = Math.Min((band + 1) * freqsPerBand, numFreqs);
+            int count = endFreq - startFreq;
+
+            if (count <= 0)
             {
-                int startFreq = band * freqsPerBand;
-                int endFreq = Math.Min((band + 1) * freqsPerBand, numFreqs);
-
-                // Get magnitudes for this band
-                var bandMags = new List<double>();
-                for (int freq = startFreq; freq < endFreq; freq++)
-                {
-                    bandMags.Add(magnitude[frame, freq]);
-                }
-
-                if (bandMags.Count > 0)
-                {
-                    bandMags.Sort();
-                    int peakCount = Math.Max(1, bandMags.Count / 4);
-
-                    // Peak mean (top 25%)
-                    double peakMean = 0;
-                    for (int i = bandMags.Count - peakCount; i < bandMags.Count; i++)
-                    {
-                        peakMean += bandMags[i];
-                    }
-                    peakMean /= peakCount;
-
-                    // Valley mean (bottom 25%)
-                    double valleyMean = 0;
-                    for (int i = 0; i < peakCount; i++)
-                    {
-                        valleyMean += bandMags[i];
-                    }
-                    valleyMean /= peakCount;
-
-                    contrast[band][frame] = peakMean - valleyMean;
-                }
+                contrast[band] = new Tensor<T>([numFrames]);
+                continue;
             }
+
+            // Sorted band magnitudes; contrast = mean of the top 25% - mean of the bottom 25%
+            var (sorted, _) = Engine.TensorSort(
+                Engine.TensorSlice(magnitude, [0, startFreq], [numFrames, count]), axis: 1);
+            int peakCount = Math.Max(1, count / 4);
+            T divisor = NumOps.FromDouble(peakCount);
+
+            var peakMean = Engine.TensorDivideScalar(
+                Engine.ReduceSum(Engine.TensorSlice(sorted, [0, count - peakCount], [numFrames, peakCount]), [1], keepDims: false), divisor);
+            var valleyMean = Engine.TensorDivideScalar(
+                Engine.ReduceSum(Engine.TensorSlice(sorted, [0, 0], [numFrames, peakCount]), [1], keepDims: false), divisor);
+
+            contrast[band] = Engine.TensorSubtract(peakMean, valleyMean);
         }
 
         return contrast;
     }
 
-    private double[] ComputeZeroCrossingRate(Tensor<T> audio, int numFrames)
+    private Tensor<T> ComputeZeroCrossingRate(Tensor<T> audio, int numFrames)
     {
-        var zcr = new double[numFrames];
-        var audioData = audio.ToArray();
+        var crossings = new int[numFrames];
+        var intervals = new int[numFrames];
+        var audioData = AudioEngineOps.Flatten(Engine, audio);
         int hopLength = HopLength;
         int windowLength = WindowLength;
 
         for (int frame = 0; frame < numFrames; frame++)
         {
             int startSample = frame * hopLength;
-            int crossings = 0;
-
-            for (int i = startSample + 1; i < startSample + windowLength && i < audioData.Length; i++)
-            {
-                double prev = NumOps.ToDouble(audioData[i - 1]);
-                double curr = NumOps.ToDouble(audioData[i]);
-
-                if ((prev > 0 && curr < 0) || (prev < 0 && curr > 0))
-                {
-                    crossings++;
-                }
-            }
-
             int validSamples = Math.Min(windowLength, audioData.Length - startSample);
-            zcr[frame] = validSamples > 1 ? (double)crossings / (validSamples - 1) : 0;
+            if (validSamples <= 1) continue;
+
+            // Strict sign changes between consecutive samples of the frame
+            crossings[frame] = AudioEngineOps.StrictSignChangeCount(Engine, Engine.TensorSlice(audioData, [startSample], [validSamples]));
+            intervals[frame] = validSamples - 1;
         }
 
-        return zcr;
+        // crossings / (validSamples - 1), 0 for frames with fewer than two samples
+        var intervalTensor = new Tensor<int>(intervals, [numFrames]).Cast<T>();
+        return WhereOrZero(
+            Engine.TensorGreaterThan(intervalTensor, NumOps.Zero),
+            Engine.TensorDivide(new Tensor<int>(crossings, [numFrames]).Cast<T>(), intervalTensor));
     }
 
     private static int CountEnabledFeatures(SpectralFeatureType types)
