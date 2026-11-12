@@ -453,14 +453,6 @@ public partial class Zero123Model<T> : LatentDiffusionModelBase<T>
 
 
 
-    private void AddParams(List<T> allParams, Vector<T> p)
-    {
-        for (int i = 0; i < p.Length; i++)
-        {
-            allParams.Add(p[i]);
-        }
-    }
-
     #endregion
 
     #region ICloneable Implementation

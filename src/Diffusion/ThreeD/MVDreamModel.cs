@@ -636,19 +636,8 @@ public partial class MVDreamModel<T> : ThreeDDiffusionModelBase<T>
     private Tensor<T> CombineConditions(Tensor<T> contentCondition, Tensor<T> cameraCondition)
     {
         // Concatenate along sequence dimension or add as extra tokens
-        var contentFlat = contentCondition.ToVector();
-        var cameraFlat = cameraCondition.ToVector();
-
-        var combinedLen = contentFlat.Length + cameraFlat.Length;
-        var combined = new Tensor<T>(new[] { 1, combinedLen });
-        var span = combined.AsWritableSpan();
-
-        for (int i = 0; i < contentFlat.Length; i++)
-            span[i] = contentFlat[i];
-        for (int i = 0; i < cameraFlat.Length; i++)
-            span[contentFlat.Length + i] = cameraFlat[i];
-
-        return combined;
+        var combined = Vector<T>.Concatenate(contentCondition.ToVector(), cameraCondition.ToVector());
+        return new Tensor<T>(new[] { 1, combined.Length }, combined);
     }
 
     /// <summary>

@@ -411,28 +411,22 @@ public abstract partial class ThreeDDiffusionModelBase<T> : LatentDiffusionModel
     /// </summary>
     protected virtual Tensor<T> CreateViewEmbedding(double azimuth, double elevation)
     {
-        // Sinusoidal embedding for camera angles
+        // Sinusoidal embedding for camera angles: [sin(az f), cos(az f), sin(el f), cos(el f)] with the
+        // frequencies f_i = exp(-i * ln(10000) / (halfDim - 1)).
         var embeddingDim = 64;
-        var embedding = new Tensor<T>(new[] { 1, embeddingDim });
-        var span = embedding.AsWritableSpan();
-
         var halfDim = embeddingDim / 4;
         var logScale = Math.Log(10000.0) / (halfDim - 1);
 
-        for (int i = 0; i < halfDim; i++)
+        var frequencies = Engine.TensorExp(Engine.TensorMultiplyScalar(
+            Engine.TensorArange<T>(0.0, halfDim, 1.0), NumOps.FromDouble(-logScale)));
+        var azimuthPhase = Engine.TensorMultiplyScalar(frequencies, NumOps.FromDouble(azimuth));
+        var elevationPhase = Engine.TensorMultiplyScalar(frequencies, NumOps.FromDouble(elevation));
+        var embedding = Engine.TensorConcatenate(new[]
         {
-            var freq = Math.Exp(-i * logScale);
-
-            // Azimuth embedding
-            span[i] = NumOps.FromDouble(Math.Sin(azimuth * freq));
-            span[i + halfDim] = NumOps.FromDouble(Math.Cos(azimuth * freq));
-
-            // Elevation embedding
-            span[i + 2 * halfDim] = NumOps.FromDouble(Math.Sin(elevation * freq));
-            span[i + 3 * halfDim] = NumOps.FromDouble(Math.Cos(elevation * freq));
-        }
-
-        return embedding;
+            Engine.TensorSin(azimuthPhase), Engine.TensorCos(azimuthPhase),
+            Engine.TensorSin(elevationPhase), Engine.TensorCos(elevationPhase)
+        }, 0);
+        return embedding.Reshape(new[] { 1, embeddingDim });
     }
 
     /// <summary>
@@ -441,19 +435,8 @@ public abstract partial class ThreeDDiffusionModelBase<T> : LatentDiffusionModel
     protected virtual Tensor<T> CombineImageAndViewConditioning(Tensor<T> imageLatent, Tensor<T> viewEmbedding)
     {
         // Simple concatenation - derived classes may implement cross-attention
-        var imgFlat = imageLatent.ToVector();
-        var viewFlat = viewEmbedding.ToVector();
-
-        var combinedLength = imgFlat.Length + viewFlat.Length;
-        var combined = new Tensor<T>(new[] { 1, combinedLength });
-        var span = combined.AsWritableSpan();
-
-        for (int i = 0; i < imgFlat.Length; i++)
-            span[i] = imgFlat[i];
-        for (int i = 0; i < viewFlat.Length; i++)
-            span[imgFlat.Length + i] = viewFlat[i];
-
-        return combined;
+        var combined = Vector<T>.Concatenate(imageLatent.ToVector(), viewEmbedding.ToVector());
+        return new Tensor<T>(new[] { 1, combined.Length }, combined);
     }
 
     /// <summary>
@@ -481,21 +464,26 @@ public abstract partial class ThreeDDiffusionModelBase<T> : LatentDiffusionModel
         // Simplified multi-view reconstruction
         // Real implementation would use structure from motion or neural reconstruction
         var numPoints = DefaultPointCount;
-        var points = new Tensor<T>(new[] { 1, numPoints, 3 });
-        var pointSpan = points.AsWritableSpan();
 
-        // Sample points from depth estimated from views
+        // Random points on the unit sphere. The seeded (theta, phi) uniform draws stay interleaved per point in
+        // master's order (no engine op consumes a caller Random); the trigonometry runs as engine ops.
         var rng = RandomGenerator;
+        var uniforms = new Tensor<T>(new[] { numPoints, 2 });
+        var uniformSpan = uniforms.AsWritableSpan();
         for (int i = 0; i < numPoints; i++)
         {
-            // Random point on unit sphere
-            var theta = 2.0 * Math.PI * rng.NextDouble();
-            var phi = Math.Acos(2.0 * rng.NextDouble() - 1.0);
-
-            pointSpan[i * 3] = NumOps.FromDouble(Math.Sin(phi) * Math.Cos(theta));
-            pointSpan[i * 3 + 1] = NumOps.FromDouble(Math.Sin(phi) * Math.Sin(theta));
-            pointSpan[i * 3 + 2] = NumOps.FromDouble(Math.Cos(phi));
+            uniformSpan[i * 2] = NumOps.FromDouble(rng.NextDouble());
+            uniformSpan[i * 2 + 1] = NumOps.FromDouble(rng.NextDouble());
         }
+
+        var theta = Engine.TensorMultiplyScalar(Engine.TensorSelect(uniforms, 1, 0), NumOps.FromDouble(2.0 * Math.PI));
+        var phi = Engine.TensorAcos(Engine.TensorSubtractScalar(
+            Engine.TensorMultiplyScalar(Engine.TensorSelect(uniforms, 1, 1), NumOps.FromDouble(2.0)), NumOps.One));
+        var sinPhi = Engine.TensorSin(phi);
+        var x = Engine.TensorMultiply(sinPhi, Engine.TensorCos(theta));
+        var y = Engine.TensorMultiply(sinPhi, Engine.TensorSin(theta));
+        var z = Engine.TensorCos(phi);
+        var points = Engine.TensorStack(new[] { x, y, z }, 1).Reshape(new[] { 1, numPoints, 3 });
 
         return PointCloudToMesh(points, SurfaceReconstructionMethod.Poisson);
     }
@@ -505,47 +493,18 @@ public abstract partial class ThreeDDiffusionModelBase<T> : LatentDiffusionModel
     /// </summary>
     protected virtual Tensor<T> NormalizePointCloud(Tensor<T> pointCloud)
     {
-        var span = pointCloud.AsSpan();
-        var result = new Tensor<T>(pointCloud._shape);
-        var resultSpan = result.AsWritableSpan();
+        // Bounding box over every point, then map the largest extent to [-scale, scale].
+        int count = pointCloud.Length / 3;
+        var xyz = pointCloud.Reshape(new[] { count, 3 });
+        var axis = new[] { 0 };
+        var maximum = Engine.ReduceMax(xyz, axis, true);
+        var minimum = Engine.TensorNegate(Engine.ReduceMax(Engine.TensorNegate(xyz), axis, true));
+        T maxRange = Engine.TensorMaxValue(Engine.TensorSubtract(maximum, minimum));
+        if (NumOps.LessThan(maxRange, NumOps.FromDouble(1e-6))) maxRange = NumOps.One;
 
-        // Find bounding box
-        double minX = double.MaxValue, minY = double.MaxValue, minZ = double.MaxValue;
-        double maxX = double.MinValue, maxY = double.MinValue, maxZ = double.MinValue;
-
-        for (int i = 0; i < span.Length; i += 3)
-        {
-            var x = NumOps.ToDouble(span[i]);
-            var y = NumOps.ToDouble(span[i + 1]);
-            var z = NumOps.ToDouble(span[i + 2]);
-
-            minX = Math.Min(minX, x);
-            minY = Math.Min(minY, y);
-            minZ = Math.Min(minZ, z);
-            maxX = Math.Max(maxX, x);
-            maxY = Math.Max(maxY, y);
-            maxZ = Math.Max(maxZ, z);
-        }
-
-        // Normalize to [-scale, scale]
-        var rangeX = maxX - minX;
-        var rangeY = maxY - minY;
-        var rangeZ = maxZ - minZ;
-        var maxRange = Math.Max(rangeX, Math.Max(rangeY, rangeZ));
-        if (maxRange < 1e-6) maxRange = 1.0;
-
-        for (int i = 0; i < span.Length; i += 3)
-        {
-            var x = NumOps.ToDouble(span[i]);
-            var y = NumOps.ToDouble(span[i + 1]);
-            var z = NumOps.ToDouble(span[i + 2]);
-
-            resultSpan[i] = NumOps.FromDouble(((x - minX) / maxRange - 0.5) * 2.0 * CoordinateScale);
-            resultSpan[i + 1] = NumOps.FromDouble(((y - minY) / maxRange - 0.5) * 2.0 * CoordinateScale);
-            resultSpan[i + 2] = NumOps.FromDouble(((z - minZ) / maxRange - 0.5) * 2.0 * CoordinateScale);
-        }
-
-        return result;
+        var shifted = Engine.TensorSubtract(xyz, Engine.TensorBroadcastTo(minimum, new[] { count, 3 }));
+        var unit = Engine.TensorSubtractScalar(Engine.TensorDivideScalar(shifted, maxRange), NumOps.FromDouble(0.5));
+        return Engine.TensorMultiplyScalar(unit, NumOps.FromDouble(2.0 * CoordinateScale)).Reshape(pointCloud._shape);
     }
 
     /// <summary>
@@ -553,17 +512,9 @@ public abstract partial class ThreeDDiffusionModelBase<T> : LatentDiffusionModel
     /// </summary>
     protected virtual Tensor<T> NormalizeColors(Tensor<T> colors)
     {
-        var result = new Tensor<T>(colors._shape);
-        var span = colors.AsSpan();
-        var resultSpan = result.AsWritableSpan();
-
-        for (int i = 0; i < span.Length; i++)
-        {
-            var val = NumOps.ToDouble(span[i]);
-            resultSpan[i] = NumOps.FromDouble(MathPolyfill.Clamp((val + 1.0) / 2.0, 0.0, 1.0));
-        }
-
-        return result;
+        // [-1, 1] -> [0, 1], clamped.
+        var shifted = Engine.TensorMultiplyScalar(Engine.TensorAddScalar(colors, NumOps.One), NumOps.FromDouble(0.5));
+        return Engine.TensorClamp(shifted, NumOps.Zero, NumOps.One);
     }
 
     /// <summary>
