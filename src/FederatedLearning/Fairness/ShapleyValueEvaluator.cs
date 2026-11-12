@@ -64,6 +64,9 @@ public class ShapleyValueEvaluator<T> : FederatedLearningComponentBase<T>, IClie
 
         if (n == 0) return shapleyValues;
 
+        // A zero-length model has nothing to evaluate: every coalition value is 0.
+        if (globalModel.Shape[0] == 0) return shapleyValues;
+
         // For small N, enumerate all subsets; for larger N, fall back to sampling
         if (n > 15)
         {
@@ -72,30 +75,23 @@ public class ShapleyValueEvaluator<T> : FederatedLearningComponentBase<T>, IClie
 
         int modelSize = globalModel.Shape[0];
 
-        // Enumerate all 2^N subsets
+        // Enumerate all 2^N subsets: evaluate every coalition once, then accumulate the weighted marginals.
         int totalSubsets = 1 << n;
+        var coalitionValues = EvaluateAllCoalitions(clientModels, clientIds, globalModel, modelSize);
 
         for (int mask = 0; mask < totalSubsets; mask++)
         {
-            // Build the coalition model by aggregating included clients
-            var coalitionModel = AggregateCoalition(clientModels, clientIds, mask, modelSize);
-            double coalitionPerformance = EvaluateModel(coalitionModel, globalModel);
+            double coalitionPerformance = coalitionValues[mask];
+
+            // Shapley weight: |S|! * (N - |S| - 1)! / N!
+            double weight = ShapleyWeight(CountBits(mask), n);
 
             // For each client NOT in the coalition, compute their marginal contribution
             for (int j = 0; j < n; j++)
             {
                 if ((mask & (1 << j)) != 0) continue; // Client already in coalition
 
-                int maskWithClient = mask | (1 << j);
-                var coalitionWithClient = AggregateCoalition(clientModels, clientIds, maskWithClient, modelSize);
-                double performanceWithClient = EvaluateModel(coalitionWithClient, globalModel);
-
-                double marginal = performanceWithClient - coalitionPerformance;
-
-                // Shapley weight: |S|! * (N - |S| - 1)! / N!
-                int coalitionSize = CountBits(mask);
-                double weight = ShapleyWeight(coalitionSize, n);
-
+                double marginal = coalitionValues[mask | (1 << j)] - coalitionPerformance;
                 shapleyValues[clientIds[j]] += weight * marginal;
             }
         }
@@ -149,6 +145,10 @@ public class ShapleyValueEvaluator<T> : FederatedLearningComponentBase<T>, IClie
 
         var rng = RandomHelper.CreateSecureRandom();
         int rounds = Math.Min(_options.SamplingRounds, 1000);
+        var reference = FitToLength(globalModel, modelSize).Reshape(new[] { 1, modelSize });
+
+        // The empty coalition aggregates to the zero model, exactly as in the enumerated path.
+        double emptyPerformance = NegativeRowDistances(new Tensor<T>(new[] { 1, modelSize }), reference)[0];
 
         for (int round = 0; round < rounds; round++)
         {
@@ -160,19 +160,30 @@ public class ShapleyValueEvaluator<T> : FederatedLearningComponentBase<T>, IClie
                 (perm[i], perm[j]) = (perm[j], perm[i]);
             }
 
-            double prevPerformance = 0; // Empty coalition performance
-            int currentMask = 0;
-
+            // Prefix means of the permuted clients: row i is the coalition of the first i + 1 clients
+            // (a running sum, so any number of clients works without a bit mask).
+            var ordered = new Tensor<T>[n];
             for (int i = 0; i < n; i++)
             {
-                int clientIdx = clientIds.IndexOf(perm[i]);
-                currentMask |= (1 << clientIdx);
+                ordered[i] = FitToLength(clientModels[perm[i]], modelSize).Reshape(new[] { 1, modelSize });
+            }
 
-                var coalitionModel = AggregateCoalition(clientModels, clientIds, currentMask, modelSize);
-                double currentPerformance = EvaluateModel(coalitionModel, globalModel);
+            var counts = new double[n];
+            for (int i = 0; i < n; i++)
+            {
+                counts[i] = i + 1;
+            }
 
-                shapleyValues[perm[i]] += (currentPerformance - prevPerformance) / rounds;
-                prevPerformance = currentPerformance;
+            var prefixSums = Engine.TensorCumSum(Engine.TensorConcatenate(ordered, 0), 0);
+            var prefixMeans = Engine.TensorDivide(prefixSums,
+                Engine.TensorBroadcastTo(new Tensor<double>(counts, new[] { n, 1 }).Cast<T>(), new[] { n, modelSize }));
+            var performances = NegativeRowDistances(prefixMeans, reference);
+
+            double prevPerformance = emptyPerformance;
+            for (int i = 0; i < n; i++)
+            {
+                shapleyValues[perm[i]] += (performances[i] - prevPerformance) / rounds;
+                prevPerformance = performances[i];
             }
         }
 
@@ -180,56 +191,87 @@ public class ShapleyValueEvaluator<T> : FederatedLearningComponentBase<T>, IClie
         return shapleyValues;
     }
 
-    private Tensor<T> AggregateCoalition(
-        Dictionary<int, Tensor<T>> clientModels,
-        List<int> clientIds,
-        int mask,
-        int modelSize)
+    /// <summary>
+    /// Values v(S) = -‖mean(S) - global‖ of every coalition bit mask; the empty coalition is the zero model.
+    /// Coalitions are averaged as a batched product of membership weights and the client matrix.
+    /// </summary>
+    private double[] EvaluateAllCoalitions(
+        Dictionary<int, Tensor<T>> clientModels, List<int> clientIds, Tensor<T> globalModel, int modelSize)
     {
-        var result = new Tensor<T>(new[] { modelSize });
-        int count = 0;
-
-        for (int i = 0; i < clientIds.Count; i++)
+        int n = clientIds.Count;
+        int totalSubsets = 1 << n;
+        var rows = new Tensor<T>[n];
+        for (int i = 0; i < n; i++)
         {
-            if ((mask & (1 << i)) == 0) continue;
-
-            var model = clientModels[clientIds[i]];
-            for (int j = 0; j < modelSize && j < model.Shape[0]; j++)
-            {
-                double current = NumOps.ToDouble(result[j]);
-                current += NumOps.ToDouble(model[j]);
-                result[j] = NumOps.FromDouble(current);
-            }
-
-            count++;
+            rows[i] = FitToLength(clientModels[clientIds[i]], modelSize).Reshape(new[] { 1, modelSize });
         }
 
-        if (count > 0)
+        var clientMatrix = Engine.TensorConcatenate(rows, 0); // [n, modelSize]
+        var reference = FitToLength(globalModel, modelSize).Reshape(new[] { 1, modelSize });
+        var values = new double[totalSubsets];
+
+        // Batch the masks so the coalition block stays around a million entries.
+        int batch = Math.Max(1, Math.Min(totalSubsets, (1 << 20) / Math.Max(1, modelSize)));
+        for (int start = 0; start < totalSubsets; start += batch)
         {
-            for (int j = 0; j < modelSize; j++)
+            int size = Math.Min(batch, totalSubsets - start);
+            var membership = new double[size * n];
+            for (int r = 0; r < size; r++)
             {
-                result[j] = NumOps.FromDouble(NumOps.ToDouble(result[j]) / count);
+                int mask = start + r;
+                int count = CountBits(mask);
+                for (int i = 0; i < n; i++)
+                {
+                    if ((mask & (1 << i)) != 0)
+                    {
+                        membership[r * n + i] = 1.0 / count;
+                    }
+                }
             }
+
+            var coalitions = Engine.TensorMatMul(new Tensor<double>(membership, new[] { size, n }).Cast<T>(), clientMatrix);
+            var batchValues = NegativeRowDistances(coalitions, reference);
+            Array.Copy(batchValues, 0, values, start, size);
         }
 
-        return result;
+        return values;
     }
 
-    private double EvaluateModel(Tensor<T> candidateModel, Tensor<T> referenceModel)
+    /// <summary>
+    /// -‖row - reference‖ for every row. Each difference is divided by its largest magnitude before squaring
+    /// so the sum of squares cannot overflow narrow T.
+    /// </summary>
+    private double[] NegativeRowDistances(Tensor<T> rows, Tensor<T> reference)
     {
         // Evaluate model quality as negative L2 distance from the reference (global) model
         // Lower distance = higher performance
-        int size = Math.Min(candidateModel.Shape[0], referenceModel.Shape[0]);
-        double sumSq = 0;
-
-        for (int i = 0; i < size; i++)
-        {
-            double diff = NumOps.ToDouble(candidateModel[i]) - NumOps.ToDouble(referenceModel[i]);
-            sumSq += diff * diff;
-        }
+        int count = rows.Shape[0];
+        var shape = new[] { count, rows.Shape[1] };
+        var diff = Engine.TensorSubtract(rows, Engine.TensorBroadcastTo(reference, shape));
+        var rowMax = Engine.ReduceMax(Engine.TensorAbs(diff), new[] { 1 }, true);
+        var one = Engine.TensorFullLike(rowMax, NumOps.One);
+        var safeMax = Engine.TensorWhere(Engine.TensorGreaterThan(rowMax, NumOps.Zero), rowMax, one);
+        var scaled = Engine.TensorDivide(diff, Engine.TensorBroadcastTo(safeMax, shape));
+        var scaledNorm = Engine.TensorSqrt(Engine.ReduceSum(Engine.TensorSquare(scaled), new[] { 1 }, true));
+        var distances = Engine.TensorNegate(Engine.TensorMultiply(rowMax, scaledNorm)).Cast<double>().ToArray();
 
         // Return negative distance so higher = better
-        return -Math.Sqrt(sumSq);
+        return distances;
+    }
+
+    /// <summary>
+    /// Copies the first <paramref name="length"/> entries of a flattened model, zero-padding short models.
+    /// </summary>
+    private Tensor<T> FitToLength(Tensor<T> model, int length)
+    {
+        var flat = model.Reshape(new[] { model.Length });
+        int covered = Math.Min(length, model.Length);
+        if (covered == length)
+        {
+            return covered == model.Length ? flat : Engine.TensorSlice(flat, new[] { 0 }, new[] { length });
+        }
+
+        return Engine.TensorConcatenate(new[] { flat, new Tensor<T>(new[] { length - covered }) }, 0);
     }
 
     private static double ShapleyWeight(int coalitionSize, int totalPlayers)

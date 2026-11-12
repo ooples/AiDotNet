@@ -603,4 +603,42 @@ public class FederatedElementwiseSweep29bReferenceTests
         var scores = evaluator.EvaluateContributions(clients, new Tensor<double>(new[] { 2 }), new Dictionary<int, List<Tensor<double>>>());
         Assert.Equal(-5.0, scores[7], Precision);
     }
+
+    [Fact(Timeout = 60000)]
+    public async Task ShapleyValue_SampledPathUsesTheSameEmptyCoalitionValueAsEnumeration()
+    {
+        await Task.Yield();
+
+        // Identical clients [1] and global [1]: v(S) = 0 for every non-empty coalition and the empty
+        // coalition is the zero model, v({}) = -1.
+        var global = new Tensor<double>(new[] { 1.0 }, new[] { 1 });
+
+        // Enumeration (n = 3): each client gets (v(N) - v({})) / n = 1/3; equal scores are not rescaled.
+        var exact = new AiDotNet.FederatedLearning.Fairness.ShapleyValueEvaluator<double>(new AiDotNet.Models.Options.ContributionEvaluationOptions());
+        var small = new Dictionary<int, Tensor<double>>();
+        for (int i = 0; i < 3; i++)
+        {
+            small[i] = new Tensor<double>(new[] { 1.0 }, new[] { 1 });
+        }
+
+        foreach (var score in exact.EvaluateContributions(small, global, new Dictionary<int, List<Tensor<double>>>()).Values)
+        {
+            Assert.Equal(1.0 / 3.0, score, Precision);
+        }
+
+        // Sampling (n = 16, one permutation): only the first client has a non-zero marginal, 0 - (-1) = 1, so
+        // after min-max scaling exactly one client scores 1 and the rest 0. Treating v({}) as 0 made every
+        // marginal 0.
+        var sampled = new AiDotNet.FederatedLearning.Fairness.ShapleyValueEvaluator<double>(
+            new AiDotNet.Models.Options.ContributionEvaluationOptions { SamplingRounds = 1 });
+        var large = new Dictionary<int, Tensor<double>>();
+        for (int i = 0; i < 16; i++)
+        {
+            large[i] = new Tensor<double>(new[] { 1.0 }, new[] { 1 });
+        }
+
+        var scores = sampled.EvaluateContributions(large, global, new Dictionary<int, List<Tensor<double>>>()).Values.ToList();
+        Assert.Equal(1, scores.Count(s => Math.Abs(s - 1.0) < 1e-12));
+        Assert.Equal(15, scores.Count(s => Math.Abs(s) < 1e-12));
+    }
 }
