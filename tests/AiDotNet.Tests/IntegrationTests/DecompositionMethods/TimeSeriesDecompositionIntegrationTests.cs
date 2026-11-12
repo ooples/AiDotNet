@@ -221,6 +221,44 @@ public class TimeSeriesDecompositionIntegrationTests
         Assert.True(components.Count > 0, "STL should produce components");
     }
 
+    [Theory]
+    [InlineData(OutlierDetectionMethod.ZScore)]
+    [InlineData(OutlierDetectionMethod.IQR)]
+    public void STL_OutlierMask_IgnoresNonFiniteValues(OutlierDetectionMethod method)
+    {
+        // One NaN must not make the mean / standard deviation (or the IQR order statistics) NaN,
+        // which silently disabled outlier detection for the whole series.
+        var options = new STLDecompositionOptions<double> { OutlierDetectionMethod = method };
+        var decomp = new STLTimeSeriesDecomposition<double>(CreateSeasonalTimeSeries(), options);
+
+        var data = new double[21];
+        for (int i = 0; i < data.Length; i++)
+        {
+            data[i] = 1.0 + 0.01 * i;
+        }
+
+        data[5] = 100.0;
+        data[12] = double.NaN;
+        var series = new Vector<double>(data);
+        var backingField = typeof(TimeSeriesDecompositionBase<double>).GetField(
+            "<TimeSeries>k__BackingField",
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+        Assert.NotNull(backingField);
+        backingField.SetValue(decomp, series);
+
+        string maskMethod = method == OutlierDetectionMethod.ZScore ? "ZScoreOutlierMask" : "IqrOutlierMask";
+        var mask = typeof(STLTimeSeriesDecomposition<double>).GetMethod(
+            maskMethod, System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+        Assert.NotNull(mask);
+
+        var result = Assert.IsType<AiDotNet.Tensors.LinearAlgebra.Tensor<double>>(
+            mask.Invoke(decomp, new object[] { AiDotNet.Tensors.LinearAlgebra.Tensor<double>.FromVector(series) }));
+
+        Assert.Equal(1.0, result[5]);
+        Assert.Equal(0.0, result[0]);
+        Assert.Equal(0.0, result[20]);
+    }
+
     #endregion
 
     #region SSADecomposition Tests
