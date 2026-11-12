@@ -58,6 +58,9 @@ public partial class GrubbsTestDetector<T> : AnomalyDetectorBase<T>
     /// </summary>
     public double Alpha => _alpha;
 
+    /// <summary>The two-sided Grubbs critical value G_crit per feature (set by Fit).</summary>
+    internal Vector<T>? CriticalValues => _criticalValues;
+
     /// <summary>
     /// Creates a new Grubbs' Test anomaly detector.
     /// </summary>
@@ -109,7 +112,9 @@ public partial class GrubbsTestDetector<T> : AnomalyDetectorBase<T>
         double tCritical = GetTCritical(n);
         double gCritical = ((n - 1) / Math.Sqrt(n)) * Math.Sqrt(tCritical * tCritical / (n - 2 + tCritical * tCritical));
 
-        (_means, _stds) = AnomalyTensorOps.ColumnMeanStd(X);
+        // G = max |x - mean| / s with s the sample standard deviation (n - 1 divisor), as Grubbs (1950)
+        // and the NIST/SEMATECH e-Handbook (1.3.5.17.1) define the statistic
+        (_means, _stds) = AnomalyTensorOps.ColumnMeanStd(X, 1);
         _criticalValues = Engine.Fill(nFeatures, NumOps.FromDouble(gCritical));
 
         // Calculate scores for training data to set threshold
@@ -144,55 +149,6 @@ public partial class GrubbsTestDetector<T> : AnomalyDetectorBase<T>
         return AnomalyTensorOps.MaxStandardizedDeviation(X, means, stds);
     }
 
-    private double GetTCritical(int n)
-    {
-        // Approximate t-critical value for alpha/(2n) with n-2 degrees of freedom
-        // Using approximation since we don't have a full t-distribution implementation
-        double adjustedAlpha = _alpha / (2 * n);
-        int df = n - 2;
-
-        // Guard against df < 2 which would cause NaN in the approximation
-        if (df < 2)
-        {
-            // For very small samples (n=3, df=1), use a conservative large critical value
-            // This essentially makes it harder to flag outliers with minimal data
-            return GetZCritical(adjustedAlpha) * 2.0;
-        }
-
-        // Simple approximation for t-distribution critical value
-        // For large df, t approaches z (standard normal)
-        // For small df, we use a lookup/approximation
-        if (df >= 30)
-        {
-            // Use normal approximation
-            return GetZCritical(adjustedAlpha);
-        }
-        else
-        {
-            // Approximate t-critical using Wilson-Hilferty transformation
-            double z = GetZCritical(adjustedAlpha);
-            double g1 = 1.0 / df;
-            return z * Math.Sqrt((df - 2.0) / (df - 1.0)) + g1 * (z * z * z - 3 * z) / 4;
-        }
-    }
-
-    private double GetZCritical(double alpha)
-    {
-        // Approximation of inverse standard normal CDF (probit function)
-        // Using Abramowitz and Stegun approximation
-        double p = alpha;
-        if (p > 0.5) p = 1 - p;
-
-        double t = Math.Sqrt(-2 * Math.Log(p));
-        double c0 = 2.515517;
-        double c1 = 0.802853;
-        double c2 = 0.010328;
-        double d1 = 1.432788;
-        double d2 = 0.189269;
-        double d3 = 0.001308;
-
-        double z = t - (c0 + c1 * t + c2 * t * t) / (1 + d1 * t + d2 * t * t + d3 * t * t * t);
-
-        return alpha > 0.5 ? -z : z;
-    }
+    // Upper alpha / (2n) quantile of Student's t with n - 2 degrees of freedom (two-sided test).
+    private double GetTCritical(int n) => AnomalyTensorOps.StudentTQuantile(1 - _alpha / (2.0 * n), n - 2);
 }

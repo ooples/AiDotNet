@@ -163,10 +163,42 @@ internal static class AnomalyTensorOps
     }
 
     /// <summary>Per-column mean and population (divide by n) standard deviation of a matrix.</summary>
-    internal static (Vector<T> Means, Vector<T> Stds) ColumnMeanStd<T>(Matrix<T> x)
+    internal static (Vector<T> Means, Vector<T> Stds) ColumnMeanStd<T>(Matrix<T> x, int correction = 0)
     {
-        var (std, mean) = Engine.TensorStdMean(ToTensor(x), new[] { 0 }, 0, false);
+        var (std, mean) = Engine.TensorStdMean(ToTensor(x), new[] { 0 }, correction, false);
         return (mean.ToVector(), std.ToVector());
+    }
+
+    /// <summary>
+    /// The quantile t with P(T &lt;= t) = <paramref name="p"/> (p &gt;= 0.5) of Student's t distribution with
+    /// <paramref name="degreesOfFreedom"/> degrees of freedom, by bisection on the exact CDF (regularized
+    /// incomplete beta). Used for test critical values computed from the configured significance level.
+    /// </summary>
+    internal static double StudentTQuantile(double p, int degreesOfFreedom)
+    {
+        var distribution = new AiDotNet.Distributions.StudentTDistribution<double>(degreesOfFreedom);
+        double lo = 0;
+        double hi = 1;
+        while (distribution.Cdf(hi) < p && hi < 1e15)
+        {
+            lo = hi;
+            hi *= 2;
+        }
+
+        for (int i = 0; i < 200 && hi - lo > 1e-13 * hi; i++)
+        {
+            double mid = 0.5 * (lo + hi);
+            if (distribution.Cdf(mid) < p)
+            {
+                lo = mid;
+            }
+            else
+            {
+                hi = mid;
+            }
+        }
+
+        return 0.5 * (lo + hi);
     }
 
     /// <summary>
