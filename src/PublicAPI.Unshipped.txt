@@ -22579,7 +22579,6 @@ AiDotNet.MetaLearning.Options.MANNOptions<T, TInput, TOutput>.UsageDecay.get -> 
 AiDotNet.MetaLearning.Options.MANNOptions<T, TInput, TOutput>.UsageDecay.set -> void
 AiDotNet.MetaLearning.Options.MANNOptions<T, TInput, TOutput>.WriteGateLogit.get -> double
 AiDotNet.MetaLearning.Options.MANNOptions<T, TInput, TOutput>.WriteGateLogit.set -> void
-||||||| 0c06dc461c
 *REMOVED*virtual AiDotNet.MetaLearning.MetaLearnerBase<T, TInput, TOutput>.ComputeAccuracy(TOutput predictions, TOutput labels) -> double
 virtual AiDotNet.MetaLearning.MetaLearnerBase<T, TInput, TOutput>.ComputeAccuracy(TOutput predictions, TOutput labels) -> T
 AiDotNet.MetaLearning.Options.ReptileOptions<T, TInput, TOutput>.FinalOuterLearningRate.get -> double?
