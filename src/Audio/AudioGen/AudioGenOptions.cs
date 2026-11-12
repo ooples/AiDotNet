@@ -29,7 +29,7 @@ public class AudioGenOptions : AudioNeuralNetworkOptions
     public AudioGenOptions()
     {
         ModelSize = AudioGenModelSize.Medium;
-        SampleRate = 32000;
+        SampleRate = 16000;
         DurationSeconds = 5.0;
         MaxDurationSeconds = 30.0;
         Temperature = 1.0;
@@ -81,9 +81,15 @@ public class AudioGenOptions : AudioNeuralNetworkOptions
     public AudioGenModelSize ModelSize { get; set; } = AudioGenModelSize.Medium;
 
     /// <summary>
-    /// Gets or sets the output sample rate.
+    /// Gets or sets the output sample rate in Hz.
     /// </summary>
-    public int SampleRate { get; set; } = 32000;
+    /// <remarks>
+    /// Defaults to 16000, the rate of AudioGen (Kreuk et al. 2022) and of its released compression
+    /// model: EnCodec tokens at 50 per second with upsampling ratios 8 x 5 x 4 x 2, a hop of 320
+    /// samples. Earlier versions defaulted to 32000 (MusicGen's rate); set it explicitly to keep that.
+    /// Other rates still work: the decoder hop is the rate divided by 50.
+    /// </remarks>
+    public int SampleRate { get; set; } = 16000;
 
     /// <summary>
     /// Gets or sets the duration of generated audio in seconds.
@@ -168,6 +174,15 @@ public class AudioGenOptions : AudioNeuralNetworkOptions
     /// names) whose decoder and codebooks the native model decodes with; null keeps the seeded
     /// initialization. AudioGen decodes with a pretrained, frozen EnCodec (Kreuk et al. 2022, §3.1).
     /// </summary>
+    /// <remarks>
+    /// The released checkpoint (facebook/audiogen-medium, <c>compression_state_dict.bin</c>) is a
+    /// PyTorch pickle whose tensors sit under <c>best_state</c>. Convert it to safetensors first and
+    /// strip the <c>best_state.</c> prefix from every name, for example
+    /// <c>safetensors.torch.save_file(torch.load(path)["best_state"], "encodec.safetensors")</c>.
+    /// It matches <see cref="SampleRate"/> = 16000, <see cref="NumCodebooks"/> = 4 and
+    /// <see cref="CodebookSize"/> = 2048; other settings change the tensor shapes and the load is
+    /// rejected.
+    /// </remarks>
     public string? EncodecWeightsPath { get; set; }
 
     /// <summary>

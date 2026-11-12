@@ -327,7 +327,7 @@ public partial class AudioGenModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerat
     /// <param name="audioDecoderPath">Path to the audio decoder (EnCodec) ONNX model.</param>
     /// <param name="tokenizer">Tokenizer for text processing. REQUIRED - must match the text encoder (typically T5).</param>
     /// <param name="modelSize">Model size variant (default: Medium).</param>
-    /// <param name="sampleRate">Output sample rate in Hz (default: 32000 for AudioGen).</param>
+    /// <param name="sampleRate">Output sample rate in Hz (default: 16000 for AudioGen).</param>
     /// <param name="durationSeconds">Default generation duration in seconds (default: 5.0).</param>
     /// <param name="maxDurationSeconds">Maximum generation duration in seconds (default: 30.0).</param>
     /// <param name="temperature">Sampling temperature - higher values produce more random output (default: 1.0).</param>
@@ -463,7 +463,7 @@ public partial class AudioGenModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerat
     /// </summary>
     /// <param name="architecture">The neural network architecture configuration.</param>
     /// <param name="modelSize">Model size variant (default: Medium).</param>
-    /// <param name="sampleRate">Output sample rate in Hz (default: 32000 for AudioGen).</param>
+    /// <param name="sampleRate">Output sample rate in Hz (default: 16000 for AudioGen).</param>
     /// <param name="durationSeconds">Default generation duration in seconds (default: 5.0).</param>
     /// <param name="maxDurationSeconds">Maximum generation duration in seconds (default: 30.0).</param>
     /// <param name="temperature">Sampling temperature - higher values produce more random output (default: 1.0).</param>
@@ -603,8 +603,8 @@ public partial class AudioGenModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerat
         }
         else
         {
-            // Calculate max audio tokens: sample_rate * max_duration / encodec_framerate (~50 tokens/sec)
-            int maxAudioTokens = (int)(_sampleRate * _maxDurationSeconds / 640);
+            // Max audio tokens: EnCodec emits 50 tokens per second (hop = sample rate / 50, 320 at 16 kHz)
+            int maxAudioTokens = (int)(_maxDurationSeconds * CodecTokensPerSecond);
 
             // Use default AudioGen architecture
             Layers.AddRange(LayerHelper<T>.CreateDefaultAudioGenLayers(
@@ -960,7 +960,7 @@ public partial class AudioGenModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerat
         var random = RandomHelper.CreateSeededRandom(seed);
 
         // Calculate number of tokens based on duration
-        int tokensPerSecond = 50;  // EnCodec: ~50 tokens per second at 32kHz
+        int tokensPerSecond = CodecTokensPerSecond;  // EnCodec: 50 tokens per second (hop 320 at 16 kHz)
         int numTokens = (int)(durationSeconds * tokensPerSecond);
 
         var codes = new Tensor<T>([1, _numCodebooks, numTokens]);
@@ -1059,7 +1059,7 @@ public partial class AudioGenModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerat
 
         var random = RandomHelper.CreateSeededRandom(seed);
 
-        int tokensPerSecond = 50;
+        int tokensPerSecond = CodecTokensPerSecond;
         int numTokens = (int)(durationSeconds * tokensPerSecond);
 
         var codes = new Tensor<T>([1, _numCodebooks, numTokens]);

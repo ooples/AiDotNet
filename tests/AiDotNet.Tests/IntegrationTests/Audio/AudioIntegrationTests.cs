@@ -837,7 +837,8 @@ public class AudioIntegrationTests
     {
         var options = new AudioGenOptions();
         Assert.Equal(AudioGenModelSize.Medium, options.ModelSize);
-        Assert.Equal(32000, options.SampleRate);
+        // AudioGen and its released compression model are 16 kHz (Kreuk et al. 2022).
+        Assert.Equal(16000, options.SampleRate);
         Assert.Equal(5.0, options.DurationSeconds, Tolerance);
         Assert.Equal(30.0, options.MaxDurationSeconds, Tolerance);
         Assert.Equal(1.0, options.Temperature, Tolerance);
