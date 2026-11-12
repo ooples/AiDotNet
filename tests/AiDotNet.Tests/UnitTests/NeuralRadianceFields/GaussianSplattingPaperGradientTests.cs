@@ -125,6 +125,10 @@ public class GaussianSplattingPaperGradientTests
                 positions[i, j] = Positions[i, j];
                 logScales[i, j] = Math.Log(Scales[i, j]);
                 sh[i, 0, j] = Rgb[i, j] / ShDc;
+
+                // View-dependent terms: small enough that only the saturated red channel of Gaussian 2 clamps.
+                for (int b = 1; b < k; b++)
+                    sh[i, b, j] = 0.1 * (((i + b + j) % 3) - 1);
             }
 
             opacity[i] = OpacityLogits[i];
@@ -169,10 +173,27 @@ public class GaussianSplattingPaperGradientTests
     [Fact]
     public void ImageGradient_MatchesFiniteDifferenceOfTheRenderedLoss()
     {
-        var model = BuildModel(shDegree: 0);
-        LoadScene(model, shDegree: 0);
+        AssertImageGradientMatchesFiniteDifference(shDegree: 0);
+    }
+
+    /// <summary>
+    /// With view-dependent spherical harmonics the colour depends on the viewing direction (x - c) / |x - c|, so
+    /// the position gradient also flows through the colour (Kerbl et al. 2023 back-propagate through the SH
+    /// evaluation into the mean).
+    /// </summary>
+    [Fact]
+    public void ImageGradient_WithViewDependentColour_MatchesFiniteDifferenceOfTheRenderedLoss()
+    {
+        AssertImageGradientMatchesFiniteDifference(shDegree: 1);
+    }
+
+    private static void AssertImageGradientMatchesFiniteDifference(int shDegree)
+    {
+        var model = BuildModel(shDegree);
+        LoadScene(model, shDegree);
         int n = Positions.GetLength(0);
-        Assert.Equal(n * (3 + 4 + 3 + 1 + 3), model.ParameterCount);
+        int k = (shDegree + 1) * (shDegree + 1);
+        Assert.Equal(n * (3 + 4 + 3 + 1 + 3 * k), model.ParameterCount);
 
         var target = Target();
         var rot = CameraRotation();
@@ -238,7 +259,8 @@ public class GaussianSplattingPaperGradientTests
 
         // The saturated red channel of Gaussian 2 contributes nothing.
         int shStart = 11 * n;
-        Assert.Equal(0.0, gradient[shStart + 2 * 3 + 0], 12);
+        for (int b = 0; b < k; b++)
+            Assert.Equal(0.0, gradient[shStart + (2 * k + b) * 3 + 0], 12);
     }
 
     [Fact]

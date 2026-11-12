@@ -2470,12 +2470,22 @@ public partial class GaussianSplatting<T> : AiDotNet.NeuralNetworks.VectorModelL
         var lrColour = engine.TensorMultiplyScalar(Col(lrScales, LrColor), ops.FromDouble(ColorLearningRate)).Reshape(m, 1, 1);
         Tensor<T> gradSh;
         Tensor<T> newSh;
+        var densificationGrad = gradPos;
         if (_useSphericalHarmonics)
         {
             var raw = engine.TensorStack(new[] { Col(extra, ExRawRed), Col(extra, ExRawGreen), Col(extra, ExRawBlue) }, 1);
             var passes = engine.TensorMultiply(Not(Le(raw, zero)), Not(Ge(raw, one)));
-            gradSh = Mul(splats.Basis.Reshape(m, basisCount, 1), engine.TensorMultiply(colourGrad, passes).Reshape(m, 1, 3));
+            var passedColourGrad = engine.TensorMultiply(colourGrad, passes);
+            gradSh = Mul(splats.Basis.Reshape(m, basisCount, 1), passedColourGrad.Reshape(m, 1, 3));
             newSh = engine.TensorSubtract(shRows, Mul(lrColour, gradSh));
+            if (_shDegree > 0)
+            {
+                // The colour is evaluated along d = (x - c) / |x - c|, so it also depends on the position:
+                // dL/dx += (I - d d^T) / |x - c| * sum_k (dL/dbasis_k) dbasis_k/dd.
+                gradPos = engine.TensorAdd(gradPos, ViewDirectionGradient(
+                    engine.TensorIndexSelect(camera.WorldOffset, rows, 0),
+                    engine.ReduceSum(Mul(shRows, passedColourGrad.Reshape(m, 1, 3)), new[] { 2 }, false)));
+            }
         }
         else
         {
@@ -2520,9 +2530,125 @@ public partial class GaussianSplatting<T> : AiDotNet.NeuralNetworks.VectorModelL
         shGrad = engine.TensorIndexAdd(shGrad, 0, rows, gradSh.Reshape(m, basisCount * 3));
         PublishImageGradients(positionGrad, rotationGrad, scaleGrad, opacityGrad, shGrad);
 
-        gradients.Add(new GaussianGradient(rows, gradPos));
+        // Densification keys off the gradient of the projected mean (the paper's view-space positional gradient).
+        gradients.Add(new GaussianGradient(rows, densificationGrad));
         return gradients;
     }
+
+    /// <summary>
+    /// Position gradient [M, 3] through the viewing direction d = u / |u| (u = x - camera) of the colour, from the
+    /// gradient of the loss with respect to each spherical-harmonics basis value [M, K].
+    /// </summary>
+    private Tensor<T> ViewDirectionGradient(Tensor<T> offsets, Tensor<T> basisGrad)
+    {
+        var engine = Engine;
+        var unit = NormalizeRows(offsets);
+        var (dBx, dBy, dBz) = ShBasisDerivatives(unit);
+        var directionGrad = engine.TensorStack(new[]
+        {
+            engine.ReduceSum(engine.TensorMultiply(basisGrad, dBx), new[] { 1 }, false),
+            engine.ReduceSum(engine.TensorMultiply(basisGrad, dBy), new[] { 1 }, false),
+            engine.ReduceSum(engine.TensorMultiply(basisGrad, dBz), new[] { 1 }, false),
+        }, 1);
+        var radial = engine.ReduceSum(engine.TensorMultiply(directionGrad, unit), new[] { 1 }, true);
+        var tangential = engine.TensorSubtract(directionGrad, Mul(unit, radial));
+        var norm = engine.TensorSqrt(engine.ReduceSum(engine.TensorMultiply(offsets, offsets), new[] { 1 }, true));
+        var inverse = Select(Gt(norm, NumOps.Zero), engine.TensorReciprocal(norm), engine.TensorZerosLike(norm));
+        return Mul(tangential, inverse);
+    }
+
+    /// <summary>
+    /// Partial derivatives [R, K] of the spherical-harmonics basis of <see cref="ShBasis"/> with respect to the x, y
+    /// and z components of unit directions [R, 3].
+    /// </summary>
+    private (Tensor<T> X, Tensor<T> Y, Tensor<T> Z) ShBasisDerivatives(Tensor<T> unit)
+    {
+        var engine = Engine;
+        int rows = unit._shape[0];
+        int degree = _useSphericalHarmonics ? _shDegree : 0;
+        var x = Col(unit, 0);
+        var y = Col(unit, 1);
+        var z = Col(unit, 2);
+        var zero = new Tensor<T>(new[] { rows });
+        var dx = new List<Tensor<T>> { zero };
+        var dy = new List<Tensor<T>> { zero };
+        var dz = new List<Tensor<T>> { zero };
+        if (degree >= 1)
+        {
+            var c1 = Full(new[] { rows }, NumOps.FromDouble(0.488603));
+            dx.Add(zero); dy.Add(c1); dz.Add(zero);
+            dx.Add(zero); dy.Add(zero); dz.Add(c1);
+            dx.Add(c1); dy.Add(zero); dz.Add(zero);
+        }
+        if (degree >= 2)
+        {
+            T c2 = NumOps.FromDouble(1.092548);
+            T c3 = NumOps.FromDouble(0.315392);
+            T c4 = NumOps.FromDouble(0.546274);
+            dx.Add(engine.TensorMultiplyScalar(y, c2)); dy.Add(engine.TensorMultiplyScalar(x, c2)); dz.Add(zero);
+            dx.Add(zero); dy.Add(engine.TensorMultiplyScalar(z, c2)); dz.Add(engine.TensorMultiplyScalar(y, c2));
+            dx.Add(zero); dy.Add(zero); dz.Add(engine.TensorMultiplyScalar(z, NumOps.Multiply(NumOps.FromDouble(6.0), c3)));
+            dx.Add(engine.TensorMultiplyScalar(z, c2)); dy.Add(zero); dz.Add(engine.TensorMultiplyScalar(x, c2));
+            dx.Add(engine.TensorMultiplyScalar(x, NumOps.Multiply(NumOps.FromDouble(2.0), c4)));
+            dy.Add(engine.TensorMultiplyScalar(y, NumOps.Multiply(NumOps.FromDouble(-2.0), c4)));
+            dz.Add(zero);
+            if (degree >= 3)
+            {
+                T c5 = NumOps.FromDouble(0.590044);
+                T c6 = NumOps.FromDouble(2.890611);
+                T c7 = NumOps.FromDouble(0.457046);
+                T c8 = NumOps.FromDouble(0.373176);
+                T c9 = NumOps.FromDouble(1.445306);
+                T three = NumOps.FromDouble(3.0);
+                var xx = engine.TensorMultiply(x, x);
+                var yy = engine.TensorMultiply(y, y);
+                var zz = engine.TensorMultiply(z, z);
+                var xy = engine.TensorMultiply(x, y);
+                var xz = engine.TensorMultiply(x, z);
+                var yz = engine.TensorMultiply(y, z);
+                var xxMinusYy = engine.TensorSubtract(xx, yy);
+                var fiveZzMinusOne = engine.TensorSubtractScalar(engine.TensorMultiplyScalar(zz, NumOps.FromDouble(5.0)), NumOps.One);
+
+                // c5 y (3x^2 - y^2)
+                dx.Add(engine.TensorMultiplyScalar(xy, NumOps.Multiply(NumOps.FromDouble(6.0), c5)));
+                dy.Add(engine.TensorMultiplyScalar(xxMinusYy, NumOps.Multiply(three, c5)));
+                dz.Add(zero);
+
+                // c6 x y z
+                dx.Add(engine.TensorMultiplyScalar(yz, c6));
+                dy.Add(engine.TensorMultiplyScalar(xz, c6));
+                dz.Add(engine.TensorMultiplyScalar(xy, c6));
+
+                // c7 y (5z^2 - 1)
+                dx.Add(zero);
+                dy.Add(engine.TensorMultiplyScalar(fiveZzMinusOne, c7));
+                dz.Add(engine.TensorMultiplyScalar(yz, NumOps.Multiply(NumOps.FromDouble(10.0), c7)));
+
+                // c8 z (5z^2 - 3)
+                dx.Add(zero);
+                dy.Add(zero);
+                dz.Add(engine.TensorMultiplyScalar(engine.TensorSubtractScalar(engine.TensorMultiplyScalar(zz, NumOps.FromDouble(15.0)), three), c8));
+
+                // c7 x (5z^2 - 1)
+                dx.Add(engine.TensorMultiplyScalar(fiveZzMinusOne, c7));
+                dy.Add(zero);
+                dz.Add(engine.TensorMultiplyScalar(xz, NumOps.Multiply(NumOps.FromDouble(10.0), c7)));
+
+                // c9 z (x^2 - y^2)
+                dx.Add(engine.TensorMultiplyScalar(xz, NumOps.Multiply(NumOps.FromDouble(2.0), c9)));
+                dy.Add(engine.TensorMultiplyScalar(yz, NumOps.Multiply(NumOps.FromDouble(-2.0), c9)));
+                dz.Add(engine.TensorMultiplyScalar(xxMinusYy, c9));
+
+                // c5 x (x^2 - 3y^2)
+                dx.Add(engine.TensorMultiplyScalar(xxMinusYy, NumOps.Multiply(three, c5)));
+                dy.Add(engine.TensorMultiplyScalar(xy, NumOps.Multiply(NumOps.FromDouble(-6.0), c5)));
+                dz.Add(zero);
+            }
+        }
+
+        return (engine.TensorStack(dx.ToArray(), 1), engine.TensorStack(dy.ToArray(), 1), engine.TensorStack(dz.ToArray(), 1));
+    }
+
 
     /// <summary>
     /// dL/dq of a unit quaternion (w, x, y, z) from dL/dR [M, 9] (row-major), through the rotation-matrix formulas of
