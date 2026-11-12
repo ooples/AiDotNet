@@ -98,7 +98,8 @@ public class iMAMLOptions<T, TInput, TOutput> : ModelOptions, IMetaLearnerOption
     /// <summary>
     /// Gets or sets the number of gradient steps to take during inner loop adaptation.
     /// </summary>
-    /// <value>Default: 10 (iMAML can use more steps than MAML due to constant memory cost).</value>
+    /// <value>Default: 16, the gradient-descent inner steps of Rajeswaran et al. (2019) (iMAML can use more steps
+    /// than MAML due to constant memory cost).</value>
     /// <remarks>
     /// <para>
     /// One of iMAML's key advantages: because memory usage is constant regardless of
@@ -110,7 +111,7 @@ public class iMAMLOptions<T, TInput, TOutput> : ModelOptions, IMetaLearnerOption
     /// use many steps freely. Try 10-20 steps for better performance.
     /// </para>
     /// </remarks>
-    public int AdaptationSteps { get; set; } = 10;
+    public int AdaptationSteps { get; set; } = 16;
 
     /// <summary>
     /// Gets or sets the number of tasks to sample per meta-training iteration.
@@ -140,8 +141,8 @@ public class iMAMLOptions<T, TInput, TOutput> : ModelOptions, IMetaLearnerOption
     /// <summary>
     /// Gets or sets the maximum gradient norm for gradient clipping.
     /// </summary>
-    /// <value>Default: 10.0 (prevents exploding gradients).</value>
-    public double? GradientClipThreshold { get; set; } = 10.0;
+    /// <value>Default: null: Rajeswaran et al. (2019) do not clip the implicit meta-gradient.</value>
+    public double? GradientClipThreshold { get; set; } = null;
 
     /// <summary>
     /// Gets or sets the random seed for reproducibility.
@@ -178,19 +179,19 @@ public class iMAMLOptions<T, TInput, TOutput> : ModelOptions, IMetaLearnerOption
     #region iMAML-Specific Properties
 
     /// <summary>
-    /// Gets or sets the regularization strength for implicit gradient computation.
+    /// Gets or sets the strength lambda of iMAML's proximal regularizer.
     /// </summary>
-    /// <value>Default: 1.0 (balances stability and accuracy).</value>
+    /// <value>Default: 1.0, as in the reference implementation of Rajeswaran et al. (2019).</value>
     /// <remarks>
     /// <para>
-    /// This parameter (often called lambda) controls the regularization in the
-    /// implicit equation: (I + lambda * H)^(-1) * g, where H is the Hessian.
+    /// The inner problem is phi*(theta) = argmin_phi L_train(phi) + (lambda / 2) ||phi - theta||^2, so every inner
+    /// step adds lambda * (phi - theta) to the support gradient, and the implicit meta-gradient is
+    /// (I + H / lambda)^(-1) * g, where H is the Hessian of the support loss at phi (the paper's Lemma 1).
     /// </para>
     /// <para>
-    /// <b>For Beginners:</b> This controls how "smooth" the implicit gradient is:
-    /// - Higher values (e.g., 2.0, 5.0): More stable but less accurate gradients
-    /// - Lower values (e.g., 0.5, 0.1): More accurate but potentially unstable
-    /// - 1.0 is a good default that balances both concerns
+    /// <b>For Beginners:</b> This controls how closely each task's solution stays to the shared starting point:
+    /// - Higher values (e.g., 2.0, 5.0): Solutions stay closer, and the implicit gradient is closer to the plain one
+    /// - Lower values (e.g., 0.5, 0.1): Solutions adapt further, and the curvature matters more
     /// </para>
     /// </remarks>
     public double LambdaRegularization { get; set; } = 1.0;
@@ -198,7 +199,7 @@ public class iMAMLOptions<T, TInput, TOutput> : ModelOptions, IMetaLearnerOption
     /// <summary>
     /// Gets or sets the maximum number of Conjugate Gradient iterations.
     /// </summary>
-    /// <value>Default: 10 (usually sufficient for convergence).</value>
+    /// <value>Default: 5, the CG steps of Rajeswaran et al. (2019).</value>
     /// <remarks>
     /// <para>
     /// The Conjugate Gradient (CG) method is used to solve the linear system
@@ -210,7 +211,7 @@ public class iMAMLOptions<T, TInput, TOutput> : ModelOptions, IMetaLearnerOption
     /// the implicit equation. 10-20 is usually enough.
     /// </para>
     /// </remarks>
-    public int ConjugateGradientIterations { get; set; } = 10;
+    public int ConjugateGradientIterations { get; set; } = 5;
 
     /// <summary>
     /// Gets or sets the convergence tolerance for Conjugate Gradient.
@@ -231,8 +232,9 @@ public class iMAMLOptions<T, TInput, TOutput> : ModelOptions, IMetaLearnerOption
     /// <remarks>
     /// <para>
     /// The Neumann series provides a faster but approximate solution to the
-    /// implicit equation. Set to true for faster training at the cost of
-    /// some gradient accuracy.
+    /// implicit equation: (I + H / lambda)^(-1) g is approximated by sum_{j &lt; K} (-H / lambda)^j g, which
+    /// converges when the spectral radius of H / lambda is below 1. Set to true for faster training at the
+    /// cost of some gradient accuracy.
     /// </para>
     /// </remarks>
     public bool UseNeumannApproximation { get; set; } = false;
@@ -289,7 +291,7 @@ public class iMAMLOptions<T, TInput, TOutput> : ModelOptions, IMetaLearnerOption
                MetaBatchSize > 0 &&
                NumMetaIterations > 0 &&
                EvaluationTasks > 0 &&
-               LambdaRegularization >= 0 &&
+               LambdaRegularization > 0 &&
                ConjugateGradientIterations > 0 &&
                ConjugateGradientTolerance > 0 &&
                ConjugateGradientTolerance < 1.0 &&

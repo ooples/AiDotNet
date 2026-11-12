@@ -258,10 +258,7 @@ public partial class GNNMetaAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, T
             }
             else
             {
-                for (int i = 0; i < accumulatedMetaGradients.Length; i++)
-                {
-                    accumulatedMetaGradients[i] = NumOps.Add(accumulatedMetaGradients[i], metaGradients[i]);
-                }
+                accumulatedMetaGradients = Engine.Add(accumulatedMetaGradients, metaGradients);
             }
         }
 
@@ -272,10 +269,7 @@ public partial class GNNMetaAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, T
 
         // Average gradients
         T batchSizeT = NumOps.FromDouble(taskBatch.BatchSize);
-        for (int i = 0; i < accumulatedMetaGradients.Length; i++)
-        {
-            accumulatedMetaGradients[i] = NumOps.Divide(accumulatedMetaGradients[i], batchSizeT);
-        }
+        accumulatedMetaGradients = Engine.Divide(accumulatedMetaGradients, batchSizeT);
 
         // Clip gradients if configured
         if (_gnnOptions.GradientClipThreshold.HasValue && _gnnOptions.GradientClipThreshold.Value > 0)
@@ -369,32 +363,19 @@ public partial class GNNMetaAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, T
             nodeEmbeddings.Add(embedding);
         }
 
-        // Compute adjacency matrix based on similarity
-        for (int i = 0; i < numTasks; i++)
+        // Compute adjacency matrix based on similarity: self-loops with weight 1, other edges kept when the
+        // graph is fully connected or the similarity reaches the threshold (NaN never does)
+        if (numTasks > 0)
         {
-            for (int j = 0; j < numTasks; j++)
-            {
-                if (i == j)
-                {
-                    // Self-loops with weight 1
-                    adjacencyMatrix[i, j] = NumOps.One;
-                }
-                else
-                {
-                    // Compute similarity
-                    T similarity = ComputeTaskSimilarity(nodeEmbeddings[i], nodeEmbeddings[j]);
-                    double simValue = NumOps.ToDouble(similarity);
-
-                    if (_gnnOptions.UseFullyConnectedGraph || simValue >= _gnnOptions.EdgeThreshold)
-                    {
-                        adjacencyMatrix[i, j] = similarity;
-                    }
-                    else
-                    {
-                        adjacencyMatrix[i, j] = NumOps.Zero;
-                    }
-                }
-            }
+            var similarity = SimilarityMatrix(StackRows(nodeEmbeddings));
+            var kept = _gnnOptions.UseFullyConnectedGraph
+                ? Engine.TensorOnesLike(similarity)
+                : Engine.TensorAdd(
+                    Engine.TensorGreaterThan(similarity, NumOps.FromDouble(_gnnOptions.EdgeThreshold)),
+                    Engine.TensorEquals(similarity, NumOps.FromDouble(_gnnOptions.EdgeThreshold)));
+            var edges = Engine.TensorWhere(kept, similarity, Engine.TensorZerosLike(similarity));
+            var eye = Engine.TensorEye<T>(numTasks);
+            adjacencyMatrix = Engine.TensorWhere(eye, eye, edges).ToMatrix();
         }
 
         return (adjacencyMatrix, nodeEmbeddings);
@@ -412,68 +393,74 @@ public partial class GNNMetaAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, T
         var adaptedParams = InnerLoopAdaptation(taskModel, task);
 
         // Use adapted parameters as embedding (or a projection of them)
-        int numToUse = Math.Min(adaptedParams.Length, _gnnOptions.NodeEmbeddingDimension);
-        for (int i = 0; i < numToUse; i++)
-        {
-            embedding[i] = adaptedParams[i % adaptedParams.Length];
-        }
+        int embeddingDim = _gnnOptions.NodeEmbeddingDimension;
+        int numToUse = Math.Min(adaptedParams.Length, embeddingDim);
+        var head = numToUse > 0 ? adaptedParams.GetSubVector(0, numToUse) : new Vector<T>(0);
 
         // Fill remaining dimensions
-        if (numToUse < _gnnOptions.NodeEmbeddingDimension)
+        if (numToUse < embeddingDim)
         {
-            T mean = ComputeMeanPartial(embedding, numToUse);
-            for (int i = numToUse; i < _gnnOptions.NodeEmbeddingDimension; i++)
-            {
-                embedding[i] = mean;
-            }
+            var fill = Engine.Fill(embeddingDim - numToUse, ComputeMeanPartial(head, numToUse));
+            embedding = numToUse > 0 ? Vector<T>.Concatenate(head, fill) : fill;
+        }
+        else
+        {
+            embedding = head;
         }
 
         return embedding;
     }
 
-    /// <summary>
-    /// Computes similarity between two task embeddings.
-    /// </summary>
-    private T ComputeTaskSimilarity(Vector<T> embedding1, Vector<T> embedding2)
+    /// <summary>Stacks equal-length vectors as the rows of a [count, length] tensor.</summary>
+    private Tensor<T> StackRows(List<Vector<T>> rows)
     {
-        switch (_gnnOptions.SimilarityMetric)
-        {
-            case TaskSimilarityMetric.ParameterDistance:
-                return NumOps.FromDouble(VectorHelper.CosineSimilarity(embedding1, embedding2));
-
-            case TaskSimilarityMetric.GradientSimilarity:
-                return NumOps.FromDouble(VectorHelper.CosineSimilarity(embedding1, embedding2));
-
-            case TaskSimilarityMetric.DataDistribution:
-                return NumOps.FromDouble(VectorHelper.CosineSimilarity(embedding1, embedding2));
-
-            case TaskSimilarityMetric.Learned:
-                return ComputeLearnedSimilarity(embedding1, embedding2);
-
-            default:
-                return NumOps.FromDouble(VectorHelper.CosineSimilarity(embedding1, embedding2));
-        }
+        var tensors = new Tensor<T>[rows.Count];
+        for (int i = 0; i < rows.Count; i++) tensors[i] = Tensor<T>.FromVector(rows[i]);
+        return Engine.TensorStack(tensors, 0);
     }
 
     /// <summary>
-    /// Computes learned similarity using edge weights.
+    /// Pairwise task similarity of the rows under the configured metric: the learned metric is
+    /// sigmoid(sum_k w_k a_k b_k) over the first min(D, |w|) dimensions, every other metric is cosine.
     /// </summary>
-    private T ComputeLearnedSimilarity(Vector<T> a, Vector<T> b)
+    private Tensor<T> SimilarityMatrix(Tensor<T> rows)
     {
-        // Simple learned similarity: weighted dot product
-        T similarity = NumOps.Zero;
-        int minLen = Math.Min(Math.Min(a.Length, b.Length), _edgeWeights.Length);
+        if (_gnnOptions.SimilarityMetric != TaskSimilarityMetric.Learned)
+            return CosineMatrix(rows, rows);
 
-        for (int i = 0; i < minLen; i++)
-        {
-            T product = NumOps.Multiply(a[i], b[i]);
-            similarity = NumOps.Add(similarity, NumOps.Multiply(_edgeWeights[i], product));
-        }
+        // Simple learned similarity: weighted dot product
+        int count = rows._shape[0];
+        int minLen = Math.Min(rows._shape[1], _edgeWeights.Length);
+        if (minLen == 0) return Engine.TensorAddScalar(new Tensor<T>(new[] { count, count }), NumOps.FromDouble(0.5));
+
+        var used = minLen == rows._shape[1] ? rows : Engine.TensorSlice(rows, new[] { 0, 0 }, new[] { count, minLen });
+        var weights = Engine.TensorBroadcastTo(
+            Tensor<T>.FromVector(_edgeWeights.GetSubVector(0, minLen), new[] { 1, minLen }), new[] { count, minLen });
 
         // Apply sigmoid to get 0-1 range
-        double val = NumOps.ToDouble(similarity);
-        double sigmoid = 1.0 / (1.0 + Math.Exp(-val));
-        return NumOps.FromDouble(sigmoid);
+        return Engine.TensorSigmoid(Engine.TensorMatMulTransposed(Engine.TensorMultiply(used, weights), used));
+    }
+
+    /// <summary>
+    /// Cosine similarity of every row of <paramref name="queries"/> with every row of <paramref name="keys"/>,
+    /// matching VectorHelper.CosineSimilarity: 0 when sqrt(|q|^2 |k|^2) &lt;= 1e-10, otherwise the ratio clamped
+    /// to [-1, 1] (NaN passes through).
+    /// </summary>
+    private Tensor<T> CosineMatrix(Tensor<T> queries, Tensor<T> keys)
+    {
+        int m = queries._shape[0];
+        int n = keys._shape[0];
+        var shape = new[] { m, n };
+        var dots = Engine.TensorMatMulTransposed(queries, keys);
+        var queryNorms = Engine.ReduceSum(Engine.TensorSquare(queries), new[] { 1 }, keepDims: false);
+        var keyNorms = Engine.ReduceSum(Engine.TensorSquare(keys), new[] { 1 }, keepDims: false);
+        var denom = Engine.TensorSqrt(Engine.TensorOuter(queryNorms, keyNorms));
+
+        var ratio = Engine.TensorDivide(dots, denom);
+        var one = Engine.TensorOnesLike(ratio);
+        ratio = Engine.TensorWhere(Engine.TensorGreaterThan(ratio, NumOps.One), one, ratio);
+        ratio = Engine.TensorWhere(Engine.TensorLessThan(ratio, NumOps.FromDouble(-1.0)), Engine.TensorNegate(one), ratio);
+        return Engine.TensorWhere(Engine.TensorGreaterThan(denom, NumOps.FromDouble(1e-10)), ratio, Engine.TensorZerosLike(ratio));
     }
 
     /// <summary>
@@ -486,34 +473,26 @@ public partial class GNNMetaAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, T
 
         for (int layer = 0; layer < _gnnOptions.NumMessagePassingLayers; layer++)
         {
-            var newEmbeddings = new List<Vector<T>>();
+            if (numNodes == 0) break;
 
-            for (int i = 0; i < numNodes; i++)
+            // Aggregate messages from neighbors
+            var aggregated = AggregateNeighborMessages(StackRows(currentEmbeddings), adjacencyMatrix);
+
+            // Transform and combine with self embedding
+            var transformed = TransformEmbedding(aggregated, layer);
+
+            // Residual connection if enabled
+            if (_gnnOptions.UseResidualConnections)
             {
-                // Aggregate messages from neighbors
-                var aggregatedMessage = AggregateNeighborMessages(i, currentEmbeddings, adjacencyMatrix);
-
-                // Transform and combine with self embedding
-                var transformed = TransformEmbedding(aggregatedMessage, layer);
-
-                // Residual connection if enabled
-                if (_gnnOptions.UseResidualConnections)
-                {
-                    for (int j = 0; j < transformed.Length; j++)
-                    {
-                        transformed[j] = NumOps.Add(transformed[j], currentEmbeddings[i][j]);
-                    }
-                }
-
-                // Apply activation
-                for (int j = 0; j < transformed.Length; j++)
-                {
-                    double val = NumOps.ToDouble(transformed[j]);
-                    transformed[j] = ScalarTanh(NumOps.FromDouble(val));
-                }
-
-                newEmbeddings.Add(transformed);
+                transformed = Engine.TensorAdd(transformed, StackRows(currentEmbeddings));
             }
+
+            // Apply activation
+            var activated = Engine.TensorTanh(transformed);
+
+            var newEmbeddings = new List<Vector<T>>(numNodes);
+            for (int i = 0; i < numNodes; i++)
+                newEmbeddings.Add(Engine.TensorSlice(activated, new[] { i, 0 }, new[] { 1, activated._shape[1] }).ToVector());
 
             currentEmbeddings = newEmbeddings;
         }
@@ -522,90 +501,56 @@ public partial class GNNMetaAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, T
     }
 
     /// <summary>
-    /// Aggregates messages from neighboring nodes.
+    /// Every node's positively-weighted neighbour mean: rows of (A+ E), each divided by its total positive
+    /// edge weight when that exceeds 1e-8, with A+ the adjacency with non-positive (and NaN) weights dropped.
     /// </summary>
-    private Vector<T> AggregateNeighborMessages(int nodeIdx, List<Vector<T>> embeddings, Matrix<T> adjacencyMatrix)
+    private Tensor<T> AggregateNeighborMessages(Tensor<T> embeddings, Matrix<T> adjacencyMatrix)
     {
         int embDim = _gnnOptions.NodeEmbeddingDimension;
-        var aggregated = new Vector<T>(embDim);
-        T totalWeight = NumOps.Zero;
+        int numNodes = embeddings._shape[0];
+        var used = embeddings._shape[1] == embDim
+            ? embeddings
+            : Engine.TensorSlice(embeddings, new[] { 0, 0 }, new[] { numNodes, embDim });
 
-        for (int j = 0; j < embeddings.Count; j++)
-        {
-            T edgeWeight = adjacencyMatrix[nodeIdx, j];
-            double weightVal = NumOps.ToDouble(edgeWeight);
-
-            if (weightVal > 0)
-            {
-                for (int k = 0; k < embDim; k++)
-                {
-                    T weighted = NumOps.Multiply(edgeWeight, embeddings[j][k]);
-                    aggregated[k] = NumOps.Add(aggregated[k], weighted);
-                }
-                totalWeight = NumOps.Add(totalWeight, edgeWeight);
-            }
-        }
+        var positive = PositiveEdges(adjacencyMatrix);
+        var aggregated = Engine.TensorMatMul(positive, used);
 
         // Normalize by total weight
-        double totalWeightVal = NumOps.ToDouble(totalWeight);
-        if (totalWeightVal > 1e-8)
-        {
-            for (int k = 0; k < embDim; k++)
-            {
-                aggregated[k] = NumOps.Divide(aggregated[k], totalWeight);
-            }
-        }
+        var totalWeight = Engine.TensorBroadcastTo(
+            Engine.ReduceSum(positive, new[] { 1 }, keepDims: true), new[] { numNodes, embDim });
+        return Engine.TensorWhere(
+            Engine.TensorGreaterThan(totalWeight, NumOps.FromDouble(1e-8)),
+            Engine.TensorDivide(aggregated, totalWeight),
+            aggregated);
+    }
 
-        return aggregated;
+    /// <summary>The adjacency with every weight that is not &gt; 0 (including NaN) replaced by 0.</summary>
+    private Tensor<T> PositiveEdges(Matrix<T> adjacencyMatrix)
+    {
+        var adjacency = Tensor<T>.FromMatrix(adjacencyMatrix);
+        return Engine.TensorWhere(Engine.TensorGreaterThan(adjacency, NumOps.Zero), adjacency, Engine.TensorZerosLike(adjacency));
     }
 
     /// <summary>
-    /// Transforms embedding using message passing weights with a two-layer projection.
-    /// Uses the allocated embDim → hidDim → embDim weight structure.
+    /// The layer's two-layer transform of every row: tanh(x W1^T) W2^T, with W1 [hidDim, embDim] and
+    /// W2 [embDim, hidDim] read from the layer's block of the message passing weights.
     /// </summary>
-    private Vector<T> TransformEmbedding(Vector<T> embedding, int layer)
+    private Tensor<T> TransformEmbedding(Tensor<T> embeddings, int layer)
     {
         int embDim = _gnnOptions.NodeEmbeddingDimension;
         int hidDim = _gnnOptions.GNNHiddenDimension;
-        var hidden = new Vector<T>(hidDim);
-        var output = new Vector<T>(embDim);
 
         // Two-layer transformation: embDim → hidDim → embDim
         int layerOffset = layer * (embDim * hidDim + hidDim * embDim);
+        var first = Tensor<T>.FromVector(_messagePassingWeights.GetSubVector(layerOffset, hidDim * embDim), new[] { hidDim, embDim });
+        var second = Tensor<T>.FromVector(
+            _messagePassingWeights.GetSubVector(layerOffset + embDim * hidDim, embDim * hidDim), new[] { embDim, hidDim });
 
-        // First layer: embDim → hidDim
-        for (int i = 0; i < hidDim; i++)
-        {
-            T sum = NumOps.Zero;
-            for (int j = 0; j < Math.Min(embDim, embedding.Length); j++)
-            {
-                int weightIdx = layerOffset + i * embDim + j;
-                if (weightIdx < _messagePassingWeights.Length)
-                {
-                    sum = NumOps.Add(sum, NumOps.Multiply(_messagePassingWeights[weightIdx], embedding[j]));
-                }
-            }
-            // Apply tanh nonlinearity
-            hidden[i] = ScalarTanh(sum);
-        }
+        // First layer: embDim → hidDim, with tanh nonlinearity
+        var hidden = Engine.TensorTanh(Engine.TensorMatMulTransposed(embeddings, first));
 
         // Second layer: hidDim → embDim
-        int secondLayerOffset = layerOffset + embDim * hidDim;
-        for (int i = 0; i < embDim; i++)
-        {
-            T sum = NumOps.Zero;
-            for (int j = 0; j < hidDim; j++)
-            {
-                int weightIdx = secondLayerOffset + i * hidDim + j;
-                if (weightIdx < _messagePassingWeights.Length)
-                {
-                    sum = NumOps.Add(sum, NumOps.Multiply(_messagePassingWeights[weightIdx], hidden[j]));
-                }
-            }
-            output[i] = sum;
-        }
-
-        return output;
+        return Engine.TensorMatMulTransposed(hidden, second);
     }
 
     /// <summary>
@@ -647,83 +592,47 @@ public partial class GNNMetaAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, T
     }
 
     /// <summary>
-    /// Computes mean context from neighbor embeddings using the adjacency matrix.
+    /// The edge-weighted sum of the node's positively-connected neighbours divided by their count, or the
+    /// node's own embedding when it has none.
     /// </summary>
     private Vector<T> ComputeMeanContext(List<Vector<T>> embeddings, int nodeIndex, Matrix<T> adjacencyMatrix)
     {
         int embDim = _gnnOptions.NodeEmbeddingDimension;
-        var context = new Vector<T>(embDim);
-        int neighborCount = 0;
+        int numNodes = embeddings.Count;
 
         // Aggregate embeddings of neighbors based on adjacency matrix
-        for (int j = 0; j < embeddings.Count; j++)
-        {
-            // Check if there's an edge from nodeIndex to j (non-zero adjacency)
-            T edgeWeight = adjacencyMatrix[nodeIndex, j];
-            if (NumOps.GreaterThan(edgeWeight, NumOps.Zero))
-            {
-                for (int i = 0; i < embDim; i++)
-                {
-                    // Weight the embedding by the edge weight
-                    context[i] = NumOps.Add(context[i], NumOps.Multiply(edgeWeight, embeddings[j][i]));
-                }
-                neighborCount++;
-            }
-        }
+        var row = Engine.TensorSlice(PositiveEdges(adjacencyMatrix), new[] { nodeIndex, 0 }, new[] { 1, numNodes });
+        var neighborCount = Engine.TensorSum(Engine.TensorGreaterThan(row, NumOps.Zero));
 
-        // Normalize by neighbor count (if any neighbors exist)
-        if (neighborCount > 0)
-        {
-            T count = NumOps.FromDouble(neighborCount);
-            for (int i = 0; i < embDim; i++)
-            {
-                context[i] = NumOps.Divide(context[i], count);
-            }
-        }
-        else
-        {
-            // If no neighbors, use the node's own embedding
-            var selfEmbedding = embeddings[nodeIndex];
-            for (int i = 0; i < embDim; i++)
-            {
-                context[i] = selfEmbedding[i];
-            }
-        }
+        // If no neighbors, use the node's own embedding
+        if (!NumOps.GreaterThan(neighborCount, NumOps.Zero))
+            return embeddings[nodeIndex].GetSubVector(0, embDim);
 
-        return context;
+        var rows = StackRows(embeddings);
+        var used = rows._shape[1] == embDim ? rows : Engine.TensorSlice(rows, new[] { 0, 0 }, new[] { numNodes, embDim });
+
+        // Normalize by neighbor count
+        return Engine.TensorDivideScalar(Engine.TensorMatMul(row, used), neighborCount).ToVector();
     }
 
     /// <summary>
-    /// Computes attention-weighted context from node embeddings.
+    /// sum_i (cos(q, e_i) / max(sum_j cos(q, e_j), 1e-8)) e_i.
     /// </summary>
     private Vector<T> ComputeAttentionContext(List<Vector<T>> embeddings, Vector<T> query)
     {
         int embDim = _gnnOptions.NodeEmbeddingDimension;
-        var context = new Vector<T>(embDim);
-        var attentionWeights = new T[embeddings.Count];
+        if (embeddings.Count == 0) return new Vector<T>(embDim);
 
         // Compute attention scores
-        T totalScore = NumOps.Zero;
-        for (int i = 0; i < embeddings.Count; i++)
-        {
-            T score = NumOps.FromDouble(VectorHelper.CosineSimilarity(query, embeddings[i]));
-            attentionWeights[i] = score;
-            totalScore = NumOps.Add(totalScore, score);
-        }
+        var rows = StackRows(embeddings);
+        var scores = CosineMatrix(Tensor<T>.FromVector(query, new[] { 1, query.Length }), rows);
+        T totalScore = Engine.TensorSum(scores);
 
-        // Normalize and apply
-        double totalVal = Math.Max(NumOps.ToDouble(totalScore), 1e-8);
-        for (int i = 0; i < embeddings.Count; i++)
-        {
-            T weight = NumOps.Divide(attentionWeights[i], NumOps.FromDouble(totalVal));
-            for (int j = 0; j < embDim; j++)
-            {
-                T contribution = NumOps.Multiply(weight, embeddings[i][j]);
-                context[j] = NumOps.Add(context[j], contribution);
-            }
-        }
-
-        return context;
+        // Normalize and apply (Math.Max keeps a NaN total)
+        T floor = NumOps.FromDouble(1e-8);
+        T total = NumOps.IsNaN(totalScore) || NumOps.GreaterThan(totalScore, floor) ? totalScore : floor;
+        var used = rows._shape[1] == embDim ? rows : Engine.TensorSlice(rows, new[] { 0, 0 }, new[] { embeddings.Count, embDim });
+        return Engine.TensorMatMul(Engine.TensorDivideScalar(scores, total), used).ToVector();
     }
 
     /// <summary>
@@ -751,28 +660,16 @@ public partial class GNNMetaAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, T
         return parameters;
     }
 
-    /// <summary>
-    /// Modulates gradients using graph context.
-    /// </summary>
+    /// <summary>g_i * (1 + 0.1 * tanh(context[i mod |context|])), a soft modulation.</summary>
     private Vector<T> ModulateGradientsWithContext(Vector<T> gradients, Vector<T> context)
     {
-        var modulated = new Vector<T>(gradients.Length);
-
-        for (int i = 0; i < gradients.Length; i++)
-        {
-            // Use context to scale gradients
-            int contextIdx = i % context.Length;
-            double contextVal = NumOps.ToDouble(context[contextIdx]);
-            double scale = 1.0 + 0.1 * Math.Tanh(contextVal);  // Soft modulation
-
-            modulated[i] = NumOps.Multiply(NumOps.FromDouble(scale), gradients[i]);
-        }
-
-        return modulated;
+        var scale = Engine.Add(Engine.Fill(context.Length, NumOps.One), Engine.Multiply(Engine.Tanh(context), NumOps.FromDouble(0.1)));
+        return ParameterModulation.Apply(Engine, gradients, scale);
     }
 
     /// <summary>
-    /// Finds the most similar cached context for a new task.
+    /// The cached node embedding with the highest cosine similarity to the task (the first on ties, NaN never
+    /// selected), or the task embedding itself when nothing is cached or every similarity is NaN.
     /// </summary>
     private Vector<T> FindMostSimilarContext(Vector<T> taskEmbedding)
     {
@@ -781,22 +678,21 @@ public partial class GNNMetaAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, T
             return taskEmbedding;
         }
 
-        Vector<T>? bestMatch = null;
-        double bestSimilarity = double.MinValue;
+        int count = _currentNodeEmbeddings.Count;
+        var similarity = CosineMatrix(Tensor<T>.FromVector(taskEmbedding, new[] { 1, taskEmbedding.Length }), StackRows(_currentNodeEmbeddings));
 
-        foreach (var cachedEmbedding in _currentNodeEmbeddings)
-        {
-            T similarity = NumOps.FromDouble(VectorHelper.CosineSimilarity(taskEmbedding, cachedEmbedding));
-            double simVal = NumOps.ToDouble(similarity);
+        // NaN compares unequal to itself; cosine lies in [-1, 1], so -3 ranks below every real score
+        var valid = Engine.TensorEquals(similarity, similarity);
+        if (!NumOps.GreaterThan(Engine.TensorSum(valid), NumOps.Zero)) return taskEmbedding;
+        var keyed = Engine.TensorWhere(valid, similarity, Engine.TensorAddScalar(Engine.TensorZerosLike(similarity), NumOps.FromDouble(-3.0)));
 
-            if (simVal > bestSimilarity)
-            {
-                bestSimilarity = simVal;
-                bestMatch = cachedEmbedding;
-            }
-        }
-
-        return bestMatch ?? taskEmbedding;
+        // First maximum: among the entries equal to the max, the largest (count - index) wins
+        var best = Engine.TensorEquals(keyed, Engine.TensorMaxValue(keyed));
+        var reversedIndex = Engine.TensorSubtract(
+            Engine.TensorAddScalar(Engine.TensorZerosLike(keyed), NumOps.FromDouble(count)),
+            Engine.Reshape(Engine.TensorArange<T>(0, count, 1), new[] { 1, count }));
+        int index = count - (int)Math.Round(NumOps.ToDouble(Engine.TensorMaxValue(Engine.TensorMultiply(best, reversedIndex))));
+        return _currentNodeEmbeddings[index];
     }
 
     /// <summary>
@@ -822,27 +718,27 @@ public partial class GNNMetaAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, T
     private void UpdateGNNWeights(TaskBatch<T, TInput, TOutput> taskBatch, T currentLoss)
     {
         double epsilon = 1e-5;
-        double currentLossVal = NumOps.ToDouble(currentLoss);
+        T epsilonT = NumOps.FromDouble(epsilon);
 
         // Update message passing weights (sample a subset for efficiency)
         int sampleCount = Math.Min(_messagePassingWeights.Length, 50);
         // Scale factor for unbiased gradient estimation when subsampling
         double scaleFactor = (double)_messagePassingWeights.Length / sampleCount;
+        T stepSize = NumOps.FromDouble(_gnnOptions.OuterLearningRate * scaleFactor);
 
         for (int i = 0; i < sampleCount; i++)
         {
             int idx = (i * _messagePassingWeights.Length / sampleCount) % _messagePassingWeights.Length;
 
             T original = _messagePassingWeights[idx];
-            _messagePassingWeights[idx] = NumOps.Add(original, NumOps.FromDouble(epsilon));
+            _messagePassingWeights[idx] = NumOps.Add(original, epsilonT);
 
             // Recompute loss with perturbed weight
             T newLoss = ComputeBatchLoss(taskBatch);
-            double grad = (NumOps.ToDouble(newLoss) - currentLossVal) / epsilon;
+            T grad = NumOps.Divide(NumOps.Subtract(newLoss, currentLoss), epsilonT);
 
             // Apply scaled gradient update
-            _messagePassingWeights[idx] = NumOps.Subtract(original,
-                NumOps.FromDouble(_gnnOptions.OuterLearningRate * grad * scaleFactor));
+            _messagePassingWeights[idx] = NumOps.Subtract(original, NumOps.Multiply(stepSize, grad));
         }
     }
 
@@ -891,12 +787,7 @@ public partial class GNNMetaAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, T
     {
         if (n <= 0) return NumOps.Zero;
 
-        T sum = NumOps.Zero;
-        for (int i = 0; i < n; i++)
-        {
-            sum = NumOps.Add(sum, vec[i]);
-        }
-
+        T sum = Engine.Sum(vec.Length == n ? vec : vec.GetSubVector(0, n));
         return NumOps.Divide(sum, NumOps.FromDouble(n));
     }
 }

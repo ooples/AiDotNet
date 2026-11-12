@@ -39,7 +39,7 @@ namespace AiDotNet.MetaLearning.Algorithms;
 ///       θ_τ ← θ_τ - η * (grad_task + λ * grad_prior)
 ///
 /// Outer loop (hierarchical PAC-Bayes bound):
-///   L = (1/T)Σ Loss_τ + (λ/T) * Σ_g KL_g(Q_g || P_g) + KL(P || P_0)
+///   L = (1/T)Σ Loss_τ + (λ/T) * (Σ_g KL_g(Q_g || P_g) + KL(P || P_0) + ln(2√T / δ))
 ///   Update μ_P, {log(σ²_g)} via gradient descent
 /// </code>
 /// </para>
@@ -87,6 +87,9 @@ public partial class MetaPACOHAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T,
                options, options.DataLoader, options.MetaOptimizer, options.InnerOptimizer,
                optimizerUse: MetaLearnerOptimizerUse.InnerAndOuter)
     {
+        if (options.Delta <= 0 || options.Delta >= 1)
+            throw new ArgumentOutOfRangeException(nameof(options), "Delta must lie in (0, 1).");
+
         _algoOptions = options;
         _paramDim = InterfaceGuard.Parameterizable(options.MetaModel).GetParameters().Length;
         if (_paramDim == 0)
@@ -97,8 +100,7 @@ public partial class MetaPACOHAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T,
 
         // Initialize per-group log-variances
         _groupLogVars = new Vector<T>(_numGroups);
-        for (int g = 0; g < _numGroups; g++)
-            _groupLogVars[g] = NumOps.FromDouble(options.InitialLogVariance);
+        _groupLogVars.Fill(NumOps.FromDouble(options.InitialLogVariance));
 
         // Assign parameters to groups (even partition)
         _groupOf = new int[_paramDim];
@@ -120,30 +122,8 @@ public partial class MetaPACOHAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T,
 
         foreach (var task in taskBatch.Tasks)
         {
-            // Initialize from prior mean
-            var theta = new Vector<T>(_paramDim);
-            for (int d = 0; d < _paramDim; d++) theta[d] = _priorMean[d];
-
-            // Inner loop: MAP estimation with group-specific prior regularization
-            for (int step = 0; step < _algoOptions.AdaptationSteps; step++)
-            {
-                ParamModel.SetParameters(theta);
-                var taskGrad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
-
-                // Prior gradient with per-group variances
-                var stepGradient = new Vector<T>(_paramDim);
-                for (int d = 0; d < _paramDim; d++)
-                {
-                    int g = _groupOf[d];
-                    double diff = NumOps.ToDouble(theta[d]) - NumOps.ToDouble(_priorMean[d]);
-                    double var_g = Math.Exp(NumOps.ToDouble(_groupLogVars[g])) + 1e-10;
-                    double priorGrad = diff / var_g;
-                    double combined = NumOps.ToDouble(taskGrad[d]) + _algoOptions.KLCoefficient * priorGrad;
-                    stepGradient[d] = NumOps.FromDouble(combined);
-                }
-                theta = ApplyInnerGradients(theta, stepGradient, _algoOptions.InnerLearningRate, step == 0);
-            }
-
+            // Inner loop: MAP estimation with group-specific prior regularization, from the prior mean
+            var theta = AdaptToTask(task, clipTaskGradients: true);
             adaptedParamsList.Add(theta);
             ParamModel.SetParameters(theta);
             var queryLoss = ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput);
@@ -152,10 +132,8 @@ public partial class MetaPACOHAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T,
         }
 
         // Compute hierarchical PAC-Bayesian bound: per-group KL + hyper-prior KL
-        double totalKL = ComputeHierarchicalKL(adaptedParamsList);
-        double hyperPriorKL = ComputeHyperPriorKL();
-        int numTasks = Math.Max(taskBatch.Tasks.Length, 1);
-        double pacBayesLoss = _algoOptions.KLCoefficient * (totalKL + hyperPriorKL) / numTasks;
+        var pacBayesLoss = BoundPenalty(
+            NumOps.Add(ComputeHierarchicalKL(adaptedParamsList), ComputeHyperPriorKL()), taskBatch.Tasks.Length);
 
         // Update prior mean via meta-gradients
         ParamModel.SetParameters(_priorMean);
@@ -169,127 +147,107 @@ public partial class MetaPACOHAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T,
         // Update per-group log-variances via SPSA
         UpdateAuxiliaryParamsSPSA(taskBatch, ref _groupLogVars, _algoOptions.OuterLearningRate * 0.1, ComputeMetaPACOHLoss);
 
-        var totalLoss = NumOps.Add(ComputeMean(losses), NumOps.FromDouble(pacBayesLoss));
-        return totalLoss;
+        return NumOps.Add(ComputeMean(losses), pacBayesLoss);
     }
 
     /// <inheritdoc/>
     public override IModel<TInput, TOutput, ModelMetadata<T>> Adapt(IMetaLearningTask<T, TInput, TOutput> task)
     {
-        var theta = new Vector<T>(_paramDim);
-        for (int d = 0; d < _paramDim; d++) theta[d] = _priorMean[d];
-
-        for (int step = 0; step < _algoOptions.AdaptationSteps; step++)
-        {
-            ParamModel.SetParameters(theta);
-            var taskGrad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
-
-            var stepGradient = new Vector<T>(_paramDim);
-            for (int d = 0; d < _paramDim; d++)
-            {
-                int g = _groupOf[d];
-                double diff = NumOps.ToDouble(theta[d]) - NumOps.ToDouble(_priorMean[d]);
-                double var_g = Math.Exp(NumOps.ToDouble(_groupLogVars[g])) + 1e-10;
-                double priorGrad = diff / var_g;
-                double combined = NumOps.ToDouble(taskGrad[d]) + _algoOptions.KLCoefficient * priorGrad;
-                stepGradient[d] = NumOps.FromDouble(combined);
-            }
-            theta = ApplyInnerGradients(theta, stepGradient, _algoOptions.InnerLearningRate, step == 0);
-        }
-
+        var theta = AdaptToTask(task, clipTaskGradients: true);
         ParamModel.SetParameters(_priorMean);
         return new AdaptedMetaModel<T, TInput, TOutput>(MetaModel, theta);
     }
 
-    /// <summary>
-    /// Computes per-group KL divergences between empirical posteriors and group priors.
-    /// </summary>
-    private double ComputeHierarchicalKL(List<Vector<T>> adaptedParams)
+    /// <summary>Each parameter's prior variance σ²_{g(d)} + 1e-10, read from its group's log-variance.</summary>
+    private Vector<T> ParameterPriorVariance()
     {
-        if (adaptedParams.Count == 0) return 0;
-
-        // Compute empirical posterior mean and variance per group
-        var posteriorMean = new double[_paramDim];
-        var posteriorVar = new double[_paramDim];
-
-        foreach (var theta in adaptedParams)
-            for (int d = 0; d < _paramDim; d++)
-                posteriorMean[d] += NumOps.ToDouble(theta[d]);
-        for (int d = 0; d < _paramDim; d++)
-            posteriorMean[d] /= adaptedParams.Count;
-
-        foreach (var theta in adaptedParams)
-            for (int d = 0; d < _paramDim; d++)
-            {
-                double diff = NumOps.ToDouble(theta[d]) - posteriorMean[d];
-                posteriorVar[d] += diff * diff;
-            }
-        for (int d = 0; d < _paramDim; d++)
-            posteriorVar[d] = posteriorVar[d] / adaptedParams.Count + 1e-10;
-
-        // Sum KL per dimension using group-specific prior variance
-        double kl = 0;
-        for (int d = 0; d < _paramDim; d++)
-        {
-            int g = _groupOf[d];
-            double priorVar = Math.Exp(NumOps.ToDouble(_groupLogVars[g])) + 1e-10;
-            double diff = posteriorMean[d] - NumOps.ToDouble(_priorMean[d]);
-            kl += (diff * diff + posteriorVar[d]) / priorVar - 1.0 + Math.Log(priorVar / posteriorVar[d]);
-        }
-        return 0.5 * kl;
+        var perParameterLogVar = Engine.TensorIndexSelect(
+            Tensor<T>.FromVector(_groupLogVars), new Tensor<int>(_groupOf, new[] { _paramDim }), 0).ToVector();
+        return Engine.Exp(perParameterLogVar) + NumOps.FromDouble(1e-10);
     }
 
     /// <summary>
-    /// Computes KL divergence from the group log-variances to the hyper-prior.
-    /// KL(N(log_σ²_g, ε) || N(hyperPriorLogVar, σ²_hyper)) summed over groups.
+    /// MAP adaptation from the prior mean: each step descends the support loss plus
+    /// KLCoefficient * (θ_d - μ_P_d) / σ²_{g(d)}.
     /// </summary>
-    private double ComputeHyperPriorKL()
+    private Vector<T> AdaptToTask(IMetaLearningTask<T, TInput, TOutput> task, bool clipTaskGradients)
+    {
+        var theta = _priorMean.Clone();
+        var priorVariance = ParameterPriorVariance();
+        var klCoefficient = NumOps.FromDouble(_algoOptions.KLCoefficient);
+
+        for (int step = 0; step < _algoOptions.AdaptationSteps; step++)
+        {
+            ParamModel.SetParameters(theta);
+            var taskGrad = ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput);
+            if (clipTaskGradients) taskGrad = ClipGradients(taskGrad);
+
+            // Prior gradient with per-group variances, then combined gradient
+            var priorGrad = Engine.Divide(Engine.Subtract(theta, _priorMean), priorVariance);
+            var stepGradient = Engine.Add(taskGrad, Engine.Multiply(priorGrad, klCoefficient));
+            theta = ApplyInnerGradients(theta, stepGradient, _algoOptions.InnerLearningRate, step == 0);
+        }
+
+        return theta;
+    }
+
+    /// <summary>
+    /// The PAC-Bayesian complexity term KLCoefficient * (KL + ln(2 sqrt(n) / δ)) / n over n tasks, with the
+    /// confidence term of the PAC-Bayes bound (Rothfuss et al. 2021, Thm. 1).
+    /// </summary>
+    private T BoundPenalty(T kl, int taskCount)
+    {
+        int n = Math.Max(taskCount, 1);
+        double confidence = Math.Log(2.0 * Math.Sqrt(n) / _algoOptions.Delta);
+        return NumOps.Multiply(
+            NumOps.FromDouble(_algoOptions.KLCoefficient / n), NumOps.Add(kl, NumOps.FromDouble(confidence)));
+    }
+
+    private T ComputeHierarchicalKL(List<Vector<T>> adaptedParams)
+    {
+        if (adaptedParams.Count == 0) return NumOps.Zero;
+
+        // Empirical posterior mean and variance across tasks
+        var (posteriorMean, posteriorVar) = PACOHAlgorithm<T, TInput, TOutput>.EmpiricalMoments(adaptedParams, _paramDim);
+        posteriorVar = posteriorVar + NumOps.FromDouble(1e-10);
+
+        // Sum KL per dimension using group-specific prior variance
+        var priorVar = ParameterPriorVariance();
+        var diff = Engine.Subtract(posteriorMean, _priorMean);
+        var terms = Engine.Add(
+            Engine.Divide(Engine.Add(Engine.Multiply(diff, diff), posteriorVar), priorVar),
+            VectorLog(Engine.Divide(priorVar, posteriorVar)));
+        return NumOps.Multiply(
+            NumOps.FromDouble(0.5), NumOps.Subtract(Engine.Sum(terms), NumOps.FromDouble(_paramDim)));
+    }
+
+    /// <summary>KL of the group log-variances to the hyper-prior: Σ_g (log σ²_g - h)² / (2 (e^h + 1e-10)).</summary>
+    private T ComputeHyperPriorKL()
     {
         double hyperVar = Math.Exp(_algoOptions.HyperPriorLogVar) + 1e-10;
-        double kl = 0;
-        for (int g = 0; g < _numGroups; g++)
-        {
-            double logVarG = NumOps.ToDouble(_groupLogVars[g]);
-            double diff = logVarG - _algoOptions.HyperPriorLogVar;
-            kl += diff * diff / (2.0 * hyperVar);
-        }
-        return kl;
+        var diff = _groupLogVars - NumOps.FromDouble(_algoOptions.HyperPriorLogVar);
+        return NumOps.Divide(Engine.Sum(Engine.Multiply(diff, diff)), NumOps.FromDouble(2.0 * hyperVar));
     }
 
     private double ComputeMetaPACOHLoss(TaskBatch<T, TInput, TOutput> taskBatch)
     {
-        double totalLoss = 0;
+        var losses = new List<T>();
         var adapted = new List<Vector<T>>();
 
         foreach (var task in taskBatch.Tasks)
         {
-            var theta = new Vector<T>(_paramDim);
-            for (int d = 0; d < _paramDim; d++) theta[d] = _priorMean[d];
-
-            for (int step = 0; step < _algoOptions.AdaptationSteps; step++)
-            {
-                ParamModel.SetParameters(theta);
-                var grad = ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput);
-                var stepGradient = new Vector<T>(_paramDim);
-                for (int d = 0; d < _paramDim; d++)
-                {
-                    int g = _groupOf[d];
-                    double diff = NumOps.ToDouble(theta[d]) - NumOps.ToDouble(_priorMean[d]);
-                    double var_g = Math.Exp(NumOps.ToDouble(_groupLogVars[g])) + 1e-10;
-                    double combined = NumOps.ToDouble(grad[d]) + _algoOptions.KLCoefficient * diff / var_g;
-                    stepGradient[d] = NumOps.FromDouble(combined);
-                }
-                theta = ApplyInnerGradients(theta, stepGradient, _algoOptions.InnerLearningRate, step == 0);
-            }
-
+            var theta = AdaptToTask(task, clipTaskGradients: false);
             adapted.Add(theta);
             ParamModel.SetParameters(theta);
-            totalLoss += NumOps.ToDouble(ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput));
+            losses.Add(ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput));
         }
 
-        int numTasks = Math.Max(taskBatch.Tasks.Length, 1);
-        double klPenalty = _algoOptions.KLCoefficient * (ComputeHierarchicalKL(adapted) + ComputeHyperPriorKL()) / numTasks;
+        var bound = losses.Count == 0
+            ? NumOps.Zero
+            : NumOps.Add(
+                ComputeMean(losses),
+                BoundPenalty(NumOps.Add(ComputeHierarchicalKL(adapted), ComputeHyperPriorKL()), taskBatch.Tasks.Length));
         ParamModel.SetParameters(_priorMean);
-        return totalLoss / numTasks + klPenalty;
+        return NumOps.ToDouble(bound);
     }
 }

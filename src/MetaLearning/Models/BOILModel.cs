@@ -148,27 +148,9 @@ public partial class BOILModel<T, TInput, TOutput> : IModel<TInput, TOutput, Mod
     public Vector<T> GetParameters()
     {
         // Return combined body + head parameters
-        int totalSize = _adaptedBodyParams.Length + _headWeights.Length + (_headBias?.Length ?? 0);
-        var combined = new Vector<T>(totalSize);
-
-        int idx = 0;
-        for (int i = 0; i < _adaptedBodyParams.Length; i++)
-        {
-            combined[idx++] = _adaptedBodyParams[i];
-        }
-        for (int i = 0; i < _headWeights.Length; i++)
-        {
-            combined[idx++] = _headWeights[i];
-        }
-        if (_headBias != null)
-        {
-            for (int i = 0; i < _headBias.Length; i++)
-            {
-                combined[idx++] = _headBias[i];
-            }
-        }
-
-        return combined;
+        return _headBias is null
+            ? Vector<T>.Concatenate(_adaptedBodyParams, _headWeights)
+            : Vector<T>.Concatenate(_adaptedBodyParams, _headWeights, _headBias);
     }
 
     /// <inheritdoc/>

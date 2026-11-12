@@ -161,7 +161,7 @@ internal sealed class TapeLstmCell<T>
         {
             if (gradients.TryGetValue(leaf, out var gradient))
             {
-                for (int i = 0; i < leaf.Length; i++) into[position + i] = gradient[i];
+                gradient.AsSpan().Slice(0, leaf.Length).CopyTo(into.AsWritableSpan().Slice(position, leaf.Length));
             }
 
             position += leaf.Length;
@@ -171,7 +171,7 @@ internal sealed class TapeLstmCell<T>
     private Tensor<T> Take(Vector<T> packed, ref int position, params int[] shape)
     {
         var block = new Tensor<T>(shape);
-        for (int i = 0; i < block.Length; i++) block[i] = packed[position + i];
+        packed.AsSpan().Slice(position, block.Length).CopyTo(block.AsWritableSpan());
         position += block.Length;
         _leaves.Add(block);
         return block;
