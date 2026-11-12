@@ -22924,3 +22924,4 @@ AiDotNet.Enums.ObliviousTreeChoiceFunction.SoftmaxSigmoid = 1 -> AiDotNet.Enums.
 override AiDotNet.Diffusion.Schedulers.FlowDPMSolverScheduler<T>.SetTimesteps(int inferenceSteps) -> void
 override AiDotNet.Diffusion.Schedulers.PeRFlowScheduler<T>.SetTimesteps(int inferenceSteps) -> void
 override AiDotNet.Diffusion.Schedulers.SASolverScheduler<T>.SetTimesteps(int inferenceSteps) -> void
+AiDotNet.Diffusion.NoisePredictors.UNetNoisePredictor<T>.PredictNoise(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! noisySample, int timestep, AiDotNet.Tensors.LinearAlgebra.Tensor<T>? conditioning, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! addedTimeEmbedding) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!

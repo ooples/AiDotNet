@@ -504,6 +504,43 @@ public partial class UNetNoisePredictor<T> : NoisePredictorBase<T>
 
     /// <inheritdoc />
     public override Tensor<T> PredictNoise(Tensor<T> noisySample, int timestep, Tensor<T>? conditioning = null)
+        => PredictNoiseCore(noisySample, timestep, conditioning, null);
+
+    /// <summary>
+    /// Predicts noise with an additional embedding added to the projected timestep embedding, as SDXL's
+    /// <c>add_embedding</c> (and diffusers' <c>class_embedding</c>) does: <c>emb = time_mlp(t) + added</c>.
+    /// </summary>
+    /// <param name="noisySample">The noisy latent.</param>
+    /// <param name="timestep">The timestep.</param>
+    /// <param name="conditioning">Optional cross-attention conditioning.</param>
+    /// <param name="addedTimeEmbedding">
+    /// The embedding to add, with <see cref="TimeEmbeddingDim"/> values per batch item ([1, dim] or [batch, dim]).
+    /// </param>
+    /// <returns>The predicted noise.</returns>
+    public Tensor<T> PredictNoise(Tensor<T> noisySample, int timestep, Tensor<T>? conditioning, Tensor<T> addedTimeEmbedding)
+    {
+        if (addedTimeEmbedding is null)
+            throw new ArgumentNullException(nameof(addedTimeEmbedding));
+        return PredictNoiseCore(noisySample, timestep, conditioning, addedTimeEmbedding);
+    }
+
+    /// <summary>
+    /// Adds <paramref name="added"/> ([1, dim] or [batch, dim]) to the projected time embedding.
+    /// </summary>
+    private Tensor<T> AddToTimeEmbedding(Tensor<T> timeEmbed, Tensor<T> added)
+    {
+        int dim = timeEmbed.Length;
+        if (added.Length == dim)
+            return Engine.TensorAdd(timeEmbed, added.Reshape(timeEmbed._shape));
+        if (added.Length % dim != 0)
+            throw new ArgumentException(
+                $"The added time embedding must hold {dim} values per batch item; it has {added.Length}.",
+                nameof(added));
+        var batched = new[] { added.Length / dim, dim };
+        return Engine.TensorAdd(Engine.TensorBroadcastTo(timeEmbed.Reshape(new[] { 1, dim }), batched), added.Reshape(batched));
+    }
+
+    private Tensor<T> PredictNoiseCore(Tensor<T> noisySample, int timestep, Tensor<T>? conditioning, Tensor<T>? addedTimeEmbedding)
     {
         EnsureLayersInitialized();
         using var streaming = LayerBase<T>.IsInferringShapes ? null : BeginWeightStreamingForward();
@@ -529,6 +566,8 @@ public partial class UNetNoisePredictor<T> : NoisePredictorBase<T>
         // Compute timestep embedding (already cached per-timestep in the base class).
         var timeEmbed = GetTimestepEmbedding(timestep);
         timeEmbed = ProjectTimeEmbedding(timeEmbed);
+        if (addedTimeEmbedding is not null)
+            timeEmbed = AddToTimeEmbedding(timeEmbed, addedTimeEmbedding);
 
         Tensor<T> output;
         // #1650/#638 speedup: when enabled and the active engine is a capture-capable CUDA
