@@ -115,7 +115,7 @@ public class BrierScoreMetric<T> : IProbabilisticClassificationMetric<T>
         int n = actuals.Length;
         if (n == 0) return (NumOps.Zero, NumOps.One);
         var random = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : RandomHelper.CreateSecureRandom();
-        var values = new double[samples];
+        var values = new List<T>(samples);
         var probArr = probs.ToArray();
         var actArr = actuals.ToArray();
         int probsPerSample = numClasses == 2 ? 1 : numClasses;
@@ -131,12 +131,11 @@ public class BrierScoreMetric<T> : IProbabilisticClassificationMetric<T>
                 for (int c = 0; c < probsPerSample; c++)
                     sp[i * probsPerSample + c] = probArr[idx * probsPerSample + c];
             }
-            values[b] = NumOps.ToDouble(Compute(sp, sa, numClasses));
+            values.Add(Compute(sp, sa, numClasses));
         }
-        Array.Sort(values);
         double alpha = 1 - conf;
         int lo = Math.Max(0, (int)(alpha / 2 * samples));
         int hi = Math.Min(samples - 1, (int)((1 - alpha / 2) * samples) - 1);
-        return (NumOps.FromDouble(values[lo]), NumOps.FromDouble(values[hi]));
+        return EvaluationTensorOps<T>.OrderStatistics(values, lo, hi);
     }
 }

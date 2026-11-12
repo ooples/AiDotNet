@@ -264,7 +264,7 @@ public class F1ScoreMetric<T> : IClassificationMetric<T>
             ? RandomHelper.CreateSeededRandom(randomSeed.Value)
             : RandomHelper.CreateSecureRandom();
 
-        var bootstrapValues = new double[bootstrapSamples];
+        var bootstrapValues = new List<T>(bootstrapSamples);
         var predArray = predictions.ToArray();
         var actualArray = actuals.ToArray();
 
@@ -280,10 +280,8 @@ public class F1ScoreMetric<T> : IClassificationMetric<T>
                 sampledActual[i] = actualArray[idx];
             }
 
-            bootstrapValues[b] = NumOps.ToDouble(Compute(sampledPred, sampledActual));
+            bootstrapValues.Add(Compute(sampledPred, sampledActual));
         }
-
-        Array.Sort(bootstrapValues);
 
         double alpha = 1 - confidenceLevel;
         int lowerIdx = (int)Math.Floor(alpha / 2 * bootstrapSamples);
@@ -292,6 +290,6 @@ public class F1ScoreMetric<T> : IClassificationMetric<T>
         lowerIdx = Math.Max(0, Math.Min(bootstrapSamples - 1, lowerIdx));
         upperIdx = Math.Max(0, Math.Min(bootstrapSamples - 1, upperIdx));
 
-        return (NumOps.FromDouble(bootstrapValues[lowerIdx]), NumOps.FromDouble(bootstrapValues[upperIdx]));
+        return EvaluationTensorOps<T>.OrderStatistics(bootstrapValues, lowerIdx, upperIdx);
     }
 }
