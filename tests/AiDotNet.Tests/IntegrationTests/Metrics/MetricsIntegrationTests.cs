@@ -708,15 +708,72 @@ public class MetricsIntegrationTests
     {
         var stoi = new ShortTimeObjectiveIntelligibility<double>(sampleRate: 16000);
 
-        var data = new double[1600]; // 100ms at 16kHz
+        // 1 s at 16 kHz: STOI correlates 30-frame (384 ms) segments of 25.6 ms frames, so a 100 ms
+        // signal has no segment at all and Taal et al. / pystoi return 1e-5 for it.
+        var data = new double[16000];
         for (int i = 0; i < data.Length; i++) data[i] = Math.Sin(i * 0.1);
 
-        var degraded = new Tensor<double>(new[] { 1600 }, new Vector<double>(data));
-        var clean = new Tensor<double>(new[] { 1600 }, new Vector<double>(data));
+        var degraded = new Tensor<double>(new[] { 16000 }, new Vector<double>(data));
+        var clean = new Tensor<double>(new[] { 16000 }, new Vector<double>(data));
 
         var result = stoi.Compute(degraded, clean);
 
         Assert.True(result >= 0.9); // High STOI for identical signals
+    }
+
+    /// <summary>
+    /// Deterministic test speech: a modulated 220 Hz tone plus an FM 1250 Hz tone, silent for the first
+    /// 0.25 s and between 0.9 s and 1.1 s (so silent-frame removal is exercised); the degraded signal adds
+    /// a 500 Hz to 4100 Hz chirp.
+    /// </summary>
+    private static (Tensor<double> Clean, Tensor<double> Degraded) StoiReferenceSignals(int sampleRate, double seconds)
+    {
+        int n = (int)(sampleRate * seconds);
+        var clean = new double[n];
+        var degraded = new double[n];
+        for (int i = 0; i < n; i++)
+        {
+            double t = (double)i / sampleRate;
+            double gate = t < 0.25 || (t > 0.9 && t < 1.1) ? 0.0 : 1.0;
+            clean[i] = gate * (Math.Sin(2 * Math.PI * 220 * t) * (0.6 + 0.4 * Math.Sin(2 * Math.PI * 3 * t))
+                + 0.3 * Math.Sin(2 * Math.PI * 1250 * t + 0.5 * Math.Sin(2 * Math.PI * 2 * t)));
+            degraded[i] = clean[i] + 0.3 * Math.Sin(2 * Math.PI * (500 * t + 900 * t * t));
+        }
+
+        return (new Tensor<double>(new[] { n }, new Vector<double>(clean)), new Tensor<double>(new[] { n }, new Vector<double>(degraded)));
+    }
+
+    [Theory(Timeout = 120000)]
+    [InlineData(16000, 0.7960788623927364)]
+    [InlineData(10000, 0.793824816546637)]
+    [InlineData(8000, 0.7713217073181784)]
+    public async Task STOI_MatchesPystoiReference(int sampleRate, double expected)
+    {
+        // pystoi 0.4.1: stoi(clean, degraded, sampleRate) on 2 s of the reference signals.
+        var (clean, degraded) = StoiReferenceSignals(sampleRate, 2.0);
+        var stoi = new ShortTimeObjectiveIntelligibility<double>(sampleRate: sampleRate);
+
+        Assert.Equal(expected, stoi.Compute(degraded, clean), 10);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task STOI_IdenticalReferenceSignals_MatchesPystoi()
+    {
+        // pystoi 0.4.1: stoi(clean, clean, 16000) = 0.9999999999998951 (the epsilon guards keep it below 1).
+        var (clean, _) = StoiReferenceSignals(16000, 2.0);
+        var stoi = new ShortTimeObjectiveIntelligibility<double>(sampleRate: 16000);
+
+        Assert.Equal(0.9999999999998951, stoi.Compute(clean, clean), 10);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task STOI_TooFewFramesAfterSilenceRemoval_ReturnsPystoiFloor()
+    {
+        // 0.5 s whose first 0.25 s is silent leaves fewer than 30 frames; pystoi returns 1e-5.
+        var (clean, degraded) = StoiReferenceSignals(16000, 0.5);
+        var stoi = new ShortTimeObjectiveIntelligibility<double>(sampleRate: 16000);
+
+        Assert.Equal(1e-5, stoi.Compute(degraded, clean), 15);
     }
 
     [Fact(Timeout = 120000)]
