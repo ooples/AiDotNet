@@ -1074,4 +1074,37 @@ public class FeatureSelectionPopulationReferenceTests
         selector.Fit(x, y);
         Assert.Equal(1, selector.SelectedIndices?.Length);
     }
+
+    // ---------------------------------------------------------------- Stability selection
+
+    [Fact]
+    public void StabilitySelection_SelectionProbabilityIsTheFractionOfSubsamplesSelectingTheFeature()
+    {
+        var (x, y) = Problem(16, 40, 4);
+        int seed = 4, subsamples = 20;
+        var seen = new List<double[]>();
+        var selector = new AiDotNet.Preprocessing.FeatureSelection.Hybrid.StabilitySelection<double>(
+            2, subsamples, 0.5, 0.6,
+            (m, v) =>
+            {
+                seen.Add(v.ToArray());
+                return v[0] > 0 ? new[] { 0, 0, 1, 7 } : new[] { 2, -1 };
+            },
+            seed);
+        selector.Fit(x, y);
+
+        // Subsamples of floor(n / 2) rows drawn without replacement, in master's order
+        var rng = new System.Random(seed);
+        int positive = 0;
+        for (int b = 0; b < subsamples; b++)
+        {
+            var rows = Enumerable.Range(0, 40).OrderBy(_ => rng.Next()).Take(20).ToArray();
+            Assert.Equal(rows.Select(i => y[i]).ToArray(), seen[b]);
+            if (y[rows[0]] > 0) positive++;
+        }
+
+        // A feature listed twice in one subsample still counts once; out-of-range indices are ignored
+        double share = (double)positive / subsamples;
+        Assert.Equal(new[] { share, share, 1 - share, 0 }, selector.SelectionProbabilities?.ToArray());
+    }
 }
