@@ -276,23 +276,18 @@ public partial class DeepEMDAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, T
         // since nK * featureDimK <= length).
         var nodes1 = NodeRows(features1, n1, featureDim1, featureDim);
         var nodes2 = NodeRows(features2, n2, featureDim2, featureDim);
-
-        // Cost matrix: squared Euclidean distance between node feature vectors
-        var shape = new[] { n1, n2, featureDim };
-        var diff = Engine.TensorSubtract(
-            Engine.TensorBroadcastTo(Engine.Reshape(nodes1, new[] { n1, 1, featureDim }), shape),
-            Engine.TensorBroadcastTo(Engine.Reshape(nodes2, new[] { 1, n2, featureDim }), shape));
-        var costMatrix = Engine.ReduceSum(Engine.TensorSquare(diff), new[] { 2 }, false);
-
+        // Assemble squared distances in bounded pair and feature blocks. The transport matrix remains quadratic,
+        // but feature workspaces contain at most 32 * 32 * 256 double values.
+        var costMatrix = PairwiseCosts(nodes1.Cast<double>(), nodes2.Cast<double>(), n1, n2, featureDim);
         // K = exp(-C / epsilon)
         double epsilon = _deepEmdOptions.SinkhornRegularization;
         var K = Engine.TensorExp(
-            Engine.TensorMultiplyScalar(costMatrix, NumOps.FromDouble(-1.0 / Math.Max(epsilon, SinkhornStabilityEpsilon))));
+            Engine.TensorMultiplyScalar(costMatrix, -1.0 / Math.Max(epsilon, SinkhornStabilityEpsilon)));
         var kT = Engine.TensorTranspose(K);
 
         // Uniform marginals and unit initial scalings
-        var u = Tensor<T>.FromVector(Engine.Fill(n1, NumOps.FromDouble(1.0 / n1)));
-        var v = Tensor<T>.FromVector(Engine.Fill(n2, NumOps.FromDouble(1.0 / n2)));
+        var u = Tensor<double>.FromVector(Engine.Fill(n1, 1.0 / n1));
+        var v = Tensor<double>.FromVector(Engine.Fill(n2, 1.0 / n2));
         var scalingU = Engine.TensorOnesLike(u);
         var scalingV = Engine.TensorOnesLike(v);
 
@@ -308,7 +303,34 @@ public partial class DeepEMDAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, T
         var transport = Engine.TensorMultiply(
             Engine.TensorMultiply(K, Engine.TensorBroadcastTo(Engine.Reshape(scalingU, new[] { n1, 1 }), new[] { n1, n2 })),
             Engine.TensorBroadcastTo(Engine.Reshape(scalingV, new[] { 1, n2 }), new[] { n1, n2 }));
-        return Engine.TensorSum(Engine.TensorMultiply(transport, costMatrix));
+        return NumOps.FromDouble(Engine.TensorSum(Engine.TensorMultiply(transport, costMatrix)));
+    }
+
+    private Tensor<double> PairwiseCosts(Tensor<double> first, Tensor<double> second, int n1, int n2, int dimensions)
+    {
+        var costs = new double[checked(n1 * n2)];
+        for (int row = 0; row < n1; row += 32)
+        for (int column = 0; column < n2; column += 32)
+        {
+            int rows = Math.Min(32, n1 - row);
+            int columns = Math.Min(32, n2 - column);
+            var block = new Tensor<double>(new[] { rows, columns });
+            for (int feature = 0; feature < dimensions; feature += 256)
+            {
+                int width = Math.Min(256, dimensions - feature);
+                var left = Engine.TensorSlice(first, new[] { row, feature }, new[] { rows, width });
+                var right = Engine.TensorSlice(second, new[] { column, feature }, new[] { columns, width });
+                var shape = new[] { rows, columns, width };
+                var difference = Engine.TensorSubtract(
+                    Engine.TensorBroadcastTo(Engine.Reshape(left, new[] { rows, 1, width }), shape),
+                    Engine.TensorBroadcastTo(Engine.Reshape(right, new[] { 1, columns, width }), shape));
+                block = Engine.TensorAdd(block, Engine.ReduceSum(Engine.TensorSquare(difference), new[] { 2 }, false));
+            }
+            var values = block.AsSpan();
+            for (int r = 0; r < rows; r++)
+                values.Slice(r * columns, columns).CopyTo(costs.AsSpan((row + r) * n2 + column, columns));
+        }
+        return new Tensor<double>(costs, new[] { n1, n2 });
     }
 
     /// <summary>The [count, width] node rows: row i is features[i * stride .. i * stride + width).</summary>
@@ -319,15 +341,15 @@ public partial class DeepEMDAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, T
     }
 
     /// <summary>The [rows] product of a [rows, columns] matrix and a [columns] vector.</summary>
-    private Tensor<T> MatVec(Tensor<T> matrix, Tensor<T> vector, int rows, int columns)
+    private Tensor<double> MatVec(Tensor<double> matrix, Tensor<double> vector, int rows, int columns)
     {
         return Engine.Reshape(Engine.TensorMatMul(matrix, Engine.Reshape(vector, new[] { columns, 1 })), new[] { rows });
     }
 
     /// <summary>marginal / sum where sum exceeds the stability epsilon, the marginal itself elsewhere.</summary>
-    private Tensor<T> SinkhornScaling(Tensor<T> marginal, Tensor<T> sum)
+    private Tensor<double> SinkhornScaling(Tensor<double> marginal, Tensor<double> sum)
     {
-        var stable = Engine.TensorGreaterThan(sum, NumOps.FromDouble(SinkhornStabilityEpsilon));
+        var stable = Engine.TensorGreaterThan(sum, SinkhornStabilityEpsilon);
         var safeSum = Engine.TensorWhere(stable, sum, Engine.TensorOnesLike(sum));
         return Engine.TensorWhere(stable, Engine.TensorDivide(marginal, safeSum), marginal);
     }

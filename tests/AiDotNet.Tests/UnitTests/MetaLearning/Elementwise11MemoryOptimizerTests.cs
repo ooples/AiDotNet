@@ -14,6 +14,61 @@ namespace AiDotNet.Tests.UnitTests.MetaLearning;
 public class Elementwise11MemoryOptimizerTests
 {
     [Fact]
+    public void DeepEmd_BlockedCostsMatchScalarDistancesAcrossAllBlockBoundaries()
+    {
+        var algorithm = Uninitialized<DeepEMDAlgorithm<double, Matrix<double>, Vector<double>>>();
+        const int rows = 33, columns = 35, dimensions = 257;
+        var first = new Tensor<double>(new[] { rows, dimensions });
+        var second = new Tensor<double>(new[] { columns, dimensions });
+        for (int i = 0; i < rows; i++)
+        for (int d = 0; d < dimensions; d++) first[i, d] = i * 0.1 + d % 7;
+        for (int j = 0; j < columns; j++)
+        for (int d = 0; d < dimensions; d++) second[j, d] = j * 0.2 - d % 3;
+        var costs = Assert.IsType<Tensor<double>>(Call(algorithm, "PairwiseCosts", first, second, rows, columns, dimensions));
+        for (int i = 0; i < rows; i++)
+        for (int j = 0; j < columns; j++)
+        {
+            double expected = 0;
+            for (int d = 0; d < dimensions; d++) expected += Math.Pow(first[i, d] - second[j, d], 2);
+            Assert.Equal(expected, costs[i, j], 7);
+        }
+    }
+
+    [Fact]
+    public void DeepEmd_LargeFeatureGridHasAnalyticTransportCost()
+    {
+        var algorithm = Uninitialized<DeepEMDAlgorithm<double, Matrix<double>, Vector<double>>>();
+        var options = Uninitialized<DeepEMDOptions<double, Matrix<double>, Vector<double>>>();
+        options.NumNodes = 257;
+        options.SinkhornIterations = 3;
+        options.SinkhornRegularization = 1024;
+        Field(algorithm, "_deepEmdOptions", options);
+        var first = new Vector<double>(257 * 257);
+        var second = new Vector<double>(Enumerable.Repeat(1.0, first.Length).ToArray());
+        double score = Assert.IsType<double>(Call(algorithm, "ComputeEMDScore", first, second));
+        Assert.Equal(257.0, score, 8);
+    }
+
+    [Fact]
+    public void DeepEmd_HalfKeepsKernelScalingAndSquaredCostsWide()
+    {
+        var algorithm = Uninitialized<DeepEMDAlgorithm<Half, Matrix<Half>, Vector<Half>>>();
+        var options = Uninitialized<DeepEMDOptions<Half, Matrix<Half>, Vector<Half>>>();
+        options.NumNodes = 1;
+        options.SinkhornIterations = 3;
+        options.SinkhornRegularization = 1;
+        Field(algorithm, "_deepEmdOptions", options);
+        var zero = new Vector<Half>(new[] { (Half)0 });
+        Assert.Equal((Half)20.25, Assert.IsType<Half>(Call(algorithm, "ComputeEMDScore", zero, new Vector<Half>(new[] { (Half)4.5 }))));
+        // Below the existing stability threshold, the marginal is retained rather than divided by a tiny sum.
+        Assert.Equal((Half)0, Assert.IsType<Half>(Call(algorithm, "ComputeEMDScore", zero, new Vector<Half>(new[] { (Half)5 }))));
+        options.NumNodes = 2;
+        var extreme = new Vector<Half>(new[] { (Half)(-60000), (Half)60000 });
+        Assert.Equal((Half)0, Assert.IsType<Half>(Call(algorithm, "ComputeEMDScore", extreme, extreme)));
+        Assert.Equal((Half)0, Assert.IsType<Half>(Call(algorithm, "ComputeEMDScore", new Vector<Half>(0), extreme)));
+    }
+
+    [Fact]
     public void PublicCheckpoint_PreservesHalfEncoderParameters()
     {
         using var persistence = AiDotNet.Helpers.ModelPersistenceGuard.InternalOperation();
