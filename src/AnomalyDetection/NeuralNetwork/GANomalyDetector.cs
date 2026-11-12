@@ -172,11 +172,9 @@ public partial class GANomalyDetector<T> : AnomalyDetectorBase<T>
                 "Learning rate must be positive. Recommended is 0.0002.");
         }
 
-        if (adversarialWeight < 0 || contextualWeight < 0 || encoderWeight < 0)
-        {
-            throw new ArgumentOutOfRangeException(nameof(adversarialWeight),
-                "Loss weights must be non-negative. Recommended are 1 (adversarial), 50 (contextual), 1 (encoder).");
-        }
+        ValidateLossWeight(adversarialWeight, nameof(adversarialWeight), 1);
+        ValidateLossWeight(contextualWeight, nameof(contextualWeight), 50);
+        ValidateLossWeight(encoderWeight, nameof(encoderWeight), 1);
 
         _latentDim = latentDim;
         _hiddenDim = hiddenDim;
@@ -185,6 +183,32 @@ public partial class GANomalyDetector<T> : AnomalyDetectorBase<T>
         _adversarialWeight = adversarialWeight;
         _contextualWeight = contextualWeight;
         _encoderWeight = encoderWeight;
+    }
+
+    /// <summary>
+    /// Creates a new GANomaly anomaly detector with the default loss weights (1 adversarial, 50 contextual,
+    /// 1 encoder); keeps the shipped six-parameter signature binary compatible.
+    /// </summary>
+    /// <param name="latentDim">Dimensions of latent space.</param>
+    /// <param name="hiddenDim">Dimensions of hidden layers.</param>
+    /// <param name="epochs">Number of training epochs.</param>
+    /// <param name="learningRate">Learning rate.</param>
+    /// <param name="contamination">Expected proportion of anomalies.</param>
+    /// <param name="randomSeed">Random seed for reproducibility.</param>
+    public GANomalyDetector(int latentDim, int hiddenDim, int epochs, double learningRate, double contamination,
+        int randomSeed)
+        : this(latentDim, hiddenDim, epochs, learningRate, contamination, randomSeed, 1, 50, 1)
+    {
+    }
+
+    // A loss weight must be finite and non-negative.
+    private static void ValidateLossWeight(double weight, string name, double recommended)
+    {
+        if (double.IsNaN(weight) || double.IsInfinity(weight) || weight < 0)
+        {
+            throw new ArgumentOutOfRangeException(name,
+                $"Loss weight must be finite and non-negative. Recommended is {recommended}.");
+        }
     }
 
     /// <inheritdoc/>

@@ -61,6 +61,9 @@ public partial class MatrixProfileDetector<T> : AnomalyDetectorBase<T>
     private Vector<T>? _trainingValues;
     private T _trainingChecksum;
 
+    // Upper bound on the elements of one block of the subsequence distance matrix.
+    private const int ProfileBlockElements = 1 << 22;
+
     /// <summary>
     /// Gets the subsequence length.
     /// </summary>
@@ -166,13 +169,24 @@ public partial class MatrixProfileDetector<T> : AnomalyDetectorBase<T>
         int profileLength = normalized.Shape[0];
 
         // Nearest-neighbour distance of every subsequence, skipping the exclusion zone |i - j| <= zone
-        // (MaxValue when every other subsequence is excluded)
-        var distances = AnomalyTensorOps.PairwiseDistances(normalized, normalized);
-        var ones = Tensor<T>.CreateOnes(new[] { profileLength, profileLength });
+        // (MaxValue when every other subsequence is excluded). Rows are processed in bounded blocks and only
+        // their row minima are kept, so the full [P, P] distance matrix is never materialised; the band of
+        // block rows first..first+count-1 is j - r in [first - zone, first + zone] for local row r.
         int zone = Math.Min(_exclusionZone, profileLength);
-        var band = engine.TensorSubtract(engine.TensorTril(ones, zone), engine.TensorTril(ones, -zone - 1));
-        var excluded = engine.TensorEqScalar(band, NumOps.One);
-        return engine.TensorAmin(engine.TensorMaskedFill(distances, excluded, NumOps.MaxValue), new[] { 1 }, false);
+        int rowsPerBlock = Math.Max(1, Math.Min(profileLength, ProfileBlockElements / Math.Max(1, profileLength)));
+        var minima = new List<Tensor<T>>();
+        for (int first = 0; first < profileLength; first += rowsPerBlock)
+        {
+            int count = Math.Min(rowsPerBlock, profileLength - first);
+            var block = engine.TensorSlice(normalized, new[] { first, 0 }, new[] { count, _subsequenceLength });
+            var distances = AnomalyTensorOps.PairwiseDistances(block, normalized);
+            var ones = Tensor<T>.CreateOnes(new[] { count, profileLength });
+            var band = engine.TensorSubtract(engine.TensorTril(ones, first + zone), engine.TensorTril(ones, first - zone - 1));
+            var excluded = engine.TensorEqScalar(band, NumOps.One);
+            minima.Add(engine.TensorAmin(engine.TensorMaskedFill(distances, excluded, NumOps.MaxValue), new[] { 1 }, false));
+        }
+
+        return minima.Count == 1 ? minima[0] : engine.TensorConcatenate(minima.ToArray(), 0);
     }
 
     /// <inheritdoc/>
@@ -276,8 +290,9 @@ public partial class MatrixProfileDetector<T> : AnomalyDetectorBase<T>
         // Minimum distance of every test subsequence to any training subsequence
         var trainNormalized = NormalizedSubsequences(trainingValues.AsTensor());
         var testNormalized = NormalizedSubsequences(values);
-        var subsequenceMin = engine.TensorAmin(
-            AnomalyTensorOps.PairwiseDistances(testNormalized, trainNormalized), new[] { 1 }, false);
+        // (bounded blocks of test subsequences; only their row minima are kept)
+        var subsequenceMin = AnomalyTensorOps.MapRowBlocks(testNormalized, trainNormalized.Shape[0],
+            block => engine.TensorAmin(AnomalyTensorOps.PairwiseDistances(block, trainNormalized), new[] { 1 }, false));
 
         // For each point, the minimum over the test subsequences containing it
         var padding = engine.Fill(Math.Max(m - 1, 1), NumOps.MaxValue).AsTensor();

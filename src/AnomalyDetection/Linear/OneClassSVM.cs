@@ -228,10 +228,15 @@ public partial class OneClassSVM<T> : AnomalyDetectorBase<T>
         // Decision function: sign(sum(alpha_i * K(x, x_i)) - rho)
         // We return the signed distance, not just the sign
         // Negate so higher values = more anomalous (consistent with other detectors)
+        // Query rows are scored in bounded blocks: only a [block, nSupport] kernel is held at a time
         var engine = Engine;
-        var kernel = AnomalyTensorOps.ToTensor(ComputeKernelMatrix(X, supportVectors, gamma));
-        var decision = engine.Reshape(
-            engine.TensorMatMul(kernel, engine.Reshape(alphas.AsTensor(), new[] { alphas.Length, 1 })), new[] { X.Rows });
+        var support = AnomalyTensorOps.ToTensor(supportVectors);
+        var alphaColumn = engine.Reshape(alphas.AsTensor(), new[] { alphas.Length, 1 });
+        T negGamma = NumOps.FromDouble(-gamma);
+        var decision = AnomalyTensorOps.MapRowBlocks(AnomalyTensorOps.ToTensor(X), supportVectors.Rows,
+            block => engine.Reshape(engine.TensorMatMul(engine.TensorExp(engine.TensorMultiplyScalar(
+                AnomalyTensorOps.PairwiseSquaredDistances(block, support), negGamma)), alphaColumn),
+                new[] { block.Shape[0] }));
         return engine.TensorNegate(engine.TensorSubtractScalar(decision, _rho)).ToVector();
     }
 

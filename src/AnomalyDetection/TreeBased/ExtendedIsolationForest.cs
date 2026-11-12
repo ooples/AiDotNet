@@ -124,14 +124,15 @@ public partial class ExtendedIsolationForest<T> : AnomalyDetectorBase<T>
 
         _trees = new List<ExtendedIsolationTree>();
 
-        // Build trees using Matrix<T> directly
+        // Build trees using Matrix<T> directly (the training data is converted to a tensor once)
+        var dataTensor = AnomalyTensorOps.ToTensor(X);
         for (int t = 0; t < _numTrees; t++)
         {
             var random = RandomHelper.CreateSeededRandom(_randomSeed + t);
 
             // Sample data
             var sampleIndices = SampleIndices(X.Rows, nSamples, random);
-            var sampleData = AnomalyTensorOps.SelectRows(AnomalyTensorOps.ToTensor(X), sampleIndices).ToMatrix();
+            var sampleData = AnomalyTensorOps.SelectRows(dataTensor, sampleIndices).ToMatrix();
 
             // Build tree
             var tree = new ExtendedIsolationTree(effectiveExtension, random, NumOps);

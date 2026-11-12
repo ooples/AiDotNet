@@ -633,9 +633,13 @@ public partial class DAGMMDetector<T> : AnomalyDetectorBase<T>
         var engine = Engine;
         var normalized = AnomalyTensorOps.DivideRow(
             AnomalyTensorOps.SubtractRow(AnomalyTensorOps.ToTensor(X), dataMeans.AsTensor()), dataStds.AsTensor());
+        // computed in log space: -logsumexp(log phi_k + log N_k, log 1e-10), so no density overflows T
         var forward = Forward(normalized);
-        var densities = AnomalyTensorOps.MultiplyRow(engine.TensorExp(ComponentLogDensities(forward.Zc)), phi);
-        var energy = engine.ReduceSum(densities, new[] { 1 }, false);
-        return engine.TensorNegate(engine.TensorLog(engine.TensorAddScalar(energy, NumOps.FromDouble(1e-10)))).ToVector();
+        int rows = X.Rows;
+        var weighted = engine.TensorAdd(ComponentLogDensities(forward.Zc),
+            AnomalyTensorOps.BroadcastRow(engine.TensorLog(phi), rows));
+        var floor = Tensor<T>.CreateDefault(new[] { rows, 1 }, NumOps.FromDouble(Math.Log(1e-10)));
+        var logTotal = engine.TensorLogSumExp(engine.Concat(new[] { weighted, floor }, 1), 1, false);
+        return engine.TensorNegate(logTotal).ToVector();
     }
 }

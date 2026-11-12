@@ -279,7 +279,12 @@ public partial class SCiForest<T> : AnomalyDetectorBase<T>
         T gain = engine.TensorSlice(gains, new[] { best }, new[] { 1 }).ToVector()[0];
         T low = engine.TensorSlice(lower, new[] { best }, new[] { 1 }).ToVector()[0];
         T high = engine.TensorSlice(upper, new[] { best }, new[] { 1 }).ToVector()[0];
-        return (gain, numOps.Multiply(numOps.Add(low, high), numOps.FromDouble(0.5)));
+
+        // Midpoint halved before adding (no overflow); when it rounds down onto low, split at high so that
+        // low < p <= high always separates the two neighbours
+        T half = numOps.FromDouble(0.5);
+        T midpoint = numOps.Add(numOps.Multiply(low, half), numOps.Multiply(high, half));
+        return (gain, numOps.GreaterThan(midpoint, low) ? midpoint : high);
     }
 
     // sqrt(max(sumSquares / count - (sum / count)^2, 0))
@@ -389,6 +394,12 @@ public partial class SCiForest<T> : AnomalyDetectorBase<T>
             var goesLeft = engine.TensorLessThan(f, _ops.Zero);
             var leftIndices = AnomalyTensorOps.NonzeroIndices(goesLeft);
             var rightIndices = AnomalyTensorOps.NonzeroIndices(engine.ScalarMinusTensor(_ops.One, goesLeft));
+            if (leftIndices.Length == 0 || rightIndices.Length == 0)
+            {
+                // A split that leaves one side empty separates nothing
+                _isLeaf = true;
+                return;
+            }
 
             _isLeaf = false;
             _weights = bestWeights;

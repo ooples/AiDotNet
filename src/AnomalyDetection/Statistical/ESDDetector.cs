@@ -121,7 +121,8 @@ public partial class ESDDetector<T> : AnomalyDetectorBase<T>
 
         _nFeatures = X.Columns;
         _nSamples = X.Rows;
-        (_means, _stds) = AnomalyTensorOps.ColumnMeanStd(X);
+        // R = max |x - mean| / s with s the sample standard deviation (n - 1 divisor), as Rosner's lambda assumes
+        (_means, _stds) = AnomalyTensorOps.ColumnMeanStd(X, 1);
 
         // Compute ESD critical value for the first iteration
         // lambda_1 = (n-1) * t_(alpha/(2n), n-2) / sqrt((n-2+t^2)*(n))
@@ -147,52 +148,17 @@ public partial class ESDDetector<T> : AnomalyDetectorBase<T>
     {
         // ESD critical value for iteration i when testing for up to r outliers
         // lambda_i = (n-i) * t_(p, n-i-1) / sqrt((n-i-1+t^2)*(n-i+1))
-        // where p = alpha / (2*(n-i+1))
+        // with t_(p, df) the exact Student t quantile at p = 1 - alpha / (2*(n-i+1)) (Rosner 1983)
         int ni = n - i;
         if (ni < 3) return double.MaxValue; // Cannot compute for very small samples
 
-        double p = _alpha / (2.0 * (ni + 1));
-        double t = GetTCritical(p, ni - 1);
+        double p = 1 - _alpha / (2.0 * (ni + 1));
+        double t = AnomalyTensorOps.StudentTQuantile(p, ni - 1);
 
         double numerator = ni * t;
         double denominator = Math.Sqrt((ni - 1 + t * t) * (ni + 1));
 
         return numerator / denominator;
-    }
-
-    private double GetTCritical(double p, int df)
-    {
-        if (df < 1) return double.MaxValue;
-
-        // Approximation for t-distribution critical value
-        double z = GetZCritical(p);
-
-        if (df >= 30)
-        {
-            return z;
-        }
-
-        // Use Wilson-Hilferty transformation for small df
-        double g1 = 1.0 / df;
-        return z + g1 * (z * z * z + z) / 4.0;
-    }
-
-    private double GetZCritical(double p)
-    {
-        // Approximation of inverse standard normal CDF
-        if (p <= 0) return double.MaxValue;
-        if (p >= 1) return double.MinValue;
-        if (p > 0.5) return -GetZCritical(1 - p);
-
-        double t = Math.Sqrt(-2 * Math.Log(p));
-        double c0 = 2.515517;
-        double c1 = 0.802853;
-        double c2 = 0.010328;
-        double d1 = 1.432788;
-        double d2 = 0.189269;
-        double d3 = 0.001308;
-
-        return t - (c0 + c1 * t + c2 * t * t) / (1 + d1 * t + d2 * t * t + d3 * t * t * t);
     }
 
     /// <inheritdoc/>

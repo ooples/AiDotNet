@@ -154,7 +154,12 @@ public partial class PCADetector<T> : AnomalyDetectorBase<T>
         // Center the points, project onto the components and reconstruct from the projection
         var centered = AnomalyTensorOps.SubtractRow(AnomalyTensorOps.ToTensor(X), FittedMean.AsTensor());
         var projected = engine.TensorMatMul(centered, engine.TensorTranspose(components));
-        var reconstructed = engine.TensorMatMul(projected, components);
+
+        // Only components whose eigenvalue is above the floor reconstruct the point: deviations along
+        // retained zero-variance directions stay in the residual instead of vanishing from both terms
+        int k = _fittedComponents;
+        var significant = engine.TensorGreaterThan(explained, NumOps.FromDouble(EigenvalueFloor));
+        var reconstructed = engine.TensorMatMul(AnomalyTensorOps.MultiplyRow(projected, significant), components);
 
         // Reconstruction error (residual from unretained components)
         var reconstructionError = engine.ReduceSum(
@@ -163,8 +168,6 @@ public partial class PCADetector<T> : AnomalyDetectorBase<T>
         // Mahalanobis distance in PCA space (distance along retained components, weighted by inverse
         // eigenvalues, over the eigenvalues above the floor). This catches outliers that lie far from the
         // mean along principal component directions, even when reconstruction error is low.
-        int k = _fittedComponents;
-        var significant = engine.TensorGreaterThan(explained, NumOps.FromDouble(EigenvalueFloor));
         var inverse = engine.TensorWhere(significant,
             engine.TensorReciprocal(engine.TensorWhere(significant, explained, Tensor<T>.CreateOnes(new[] { k }))),
             Tensor<T>.CreateZeros(new[] { k }));

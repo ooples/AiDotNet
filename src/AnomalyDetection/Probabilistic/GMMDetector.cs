@@ -220,26 +220,27 @@ public partial class GMMDetector<T> : AnomalyDetectorBase<T>
             var newMeans = AnomalyTensorOps.DivideColumn(engine.TensorMatMul(resT, data), safeNc);
             _means = engine.TensorWhere(AnomalyTensorOps.BroadcastColumn(hasMass, _nFeatures), newMeans, _means);
 
-            var squaredDiff = engine.TensorSquare(Differences(data));
-            var weighted = engine.TensorMultiply(squaredDiff,
-                engine.TensorBroadcastTo(engine.Reshape(responsibilities, new[] { n, k, 1 }), new[] { n, k, _nFeatures }));
-            var newVariances = AnomalyTensorOps.DivideColumn(engine.ReduceSum(weighted, new[] { 0 }, false), safeNc);
+            // Responsibility-weighted squared differences, one component at a time ([n, d] working tensors)
+            var weightedRows = new Tensor<T>[k];
+            for (int c = 0; c < k; c++)
+            {
+                var weighted = engine.TensorMultiply(SquaredDifferences(data, c),
+                    AnomalyTensorOps.BroadcastColumn(engine.TensorSliceAxis(responsibilities, 1, c), _nFeatures));
+                weightedRows[c] = engine.ReduceSum(weighted, new[] { 0 }, true);
+            }
+
+            var newVariances = AnomalyTensorOps.DivideColumn(engine.TensorConcatenate(weightedRows, 0), safeNc);
             newVariances = engine.TensorWhere(engine.TensorLessThan(newVariances, minVar), minVar, newVariances);
             var enoughMass = engine.TensorGreaterThan(Nc, ncEps);
             _variances = engine.TensorWhere(AnomalyTensorOps.BroadcastColumn(enoughMass, _nFeatures), newVariances, _variances);
         }
     }
 
-    // x_i - mean_c for every point and component, [n, nComponents, nFeatures].
-    private Tensor<T> Differences(Tensor<T> data)
+    // (x_i - mean_c)^2 for every point and feature of component c, [n, nFeatures].
+    private Tensor<T> SquaredDifferences(Tensor<T> data, int c)
     {
         var engine = Engine;
-        int n = data.Shape[0];
-        int k = _nComponents;
-        int d = _nFeatures;
-        return engine.TensorSubtract(
-            engine.TensorBroadcastTo(engine.Reshape(data, new[] { n, 1, d }), new[] { n, k, d }),
-            engine.TensorBroadcastTo(engine.Reshape(_means, new[] { 1, k, d }), new[] { n, k, d }));
+        return engine.TensorSquare(AnomalyTensorOps.SubtractRow(data, engine.TensorSliceAxis(_means, 0, c)));
     }
 
     // Variance floor per component and feature: max(0.01 * global variance, 1e-6), [nComponents, nFeatures].
@@ -267,8 +268,17 @@ public partial class GMMDetector<T> : AnomalyDetectorBase<T>
         var minVar = VarianceFloor();
         var variances = engine.TensorWhere(engine.TensorLessThan(_variances, minVar), minVar, _variances);
         var logDet = engine.ReduceSum(engine.TensorLog(variances), new[] { 1 }, false);
-        var mahalanobis = engine.ReduceSum(engine.TensorDivide(engine.TensorSquare(Differences(data)),
-            engine.TensorBroadcastTo(engine.Reshape(variances, new[] { 1, k, d }), new[] { n, k, d })), new[] { 2 }, false);
+
+        // Mahalanobis distance to each component, one component at a time ([n, d] working tensors)
+        var mahalanobisColumns = new Tensor<T>[k];
+        for (int c = 0; c < k; c++)
+        {
+            var distance = engine.ReduceSum(AnomalyTensorOps.DivideRow(SquaredDifferences(data, c),
+                engine.TensorSliceAxis(variances, 0, c)), new[] { 1 }, false);
+            mahalanobisColumns[c] = engine.Reshape(distance, new[] { n, 1 });
+        }
+
+        var mahalanobis = engine.TensorConcatenate(mahalanobisColumns, 1);
         var logDensity = engine.TensorNegate(engine.TensorMultiplyScalar(
             engine.TensorAdd(AnomalyTensorOps.BroadcastRow(engine.TensorAddScalar(logDet, constant), n), mahalanobis), half));
         return AnomalyTensorOps.MultiplyRow(engine.TensorExp(logDensity), _weights.AsTensor());

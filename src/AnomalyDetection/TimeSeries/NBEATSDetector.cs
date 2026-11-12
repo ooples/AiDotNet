@@ -301,8 +301,10 @@ public partial class NBEATSDetector<T> : AnomalyDetectorBase<T>
                 var (forecast, caches) = ForwardBatch(input);
                 var gradForecast = engine.TensorMultiplyScalar(engine.TensorSubtract(forecast, target), two);
 
-                // Backprop through all blocks (reverse order), summing the gradients over the batch
+                // Backprop through all blocks (reverse order), summing the gradients over the batch.
+                // dResidualNext is dL/d(residual input of the following block), carried down the chain.
                 var gradients = new BlockGradients[blocks.Count];
+                Tensor<T>? dResidualNext = null;
                 for (int blockIdx = blocks.Count - 1; blockIdx >= 0; blockIdx--)
                 {
                     var block = blocks[blockIdx];
@@ -312,30 +314,14 @@ public partial class NBEATSDetector<T> : AnomalyDetectorBase<T>
                     var dWThetaF = engine.TensorMatMul(engine.TensorTranspose(cache.H4), gradForecast);
                     var dH = engine.TensorMatMul(gradForecast, engine.TensorTranspose(block.WTheta_f));
 
-                    // Gradient through WTheta_b (backcast theta)
-                    // The backcast affects residual learning: residual_next = residual - backcast
-                    // Gradient flows from subsequent blocks back through the residual chain
-                    // For the last block, backcast gradient is zero (no subsequent blocks)
-                    // For earlier blocks, gradient comes from how backcast affects next block's forecast:
-                    // dL/d(backcast) = -dL/d(residual_next) = -dH_next * W1_next^T (simplified)
+                    // Gradient through WTheta_b (backcast theta): residual_next = residual - h WTheta_b, so
+                    // dL/d(backcast) = -dL/d(residual_next), the complete gradient carried back from every later
+                    // block. The last block's residual output is unused, so its backcast gradient is zero.
                     var dWThetaB = Tensor<T>.CreateZeros(new[] { block.WTheta_b.Shape[0], block.WTheta_b.Shape[1] });
-                    if (blockIdx < blocks.Count - 1)
+                    if (dResidualNext is not null)
                     {
-                        var nextBlock = blocks[blockIdx + 1];
-                        var nextH = caches[blockIdx + 1].H4;
-
-                        // dH for the next block from its forecast contribution, through its ReLU
-                        var dHNext = engine.TensorMultiply(
-                            engine.TensorMatMul(gradForecast, engine.TensorTranspose(nextBlock.WTheta_f)),
-                            engine.TensorGreaterThan(nextH, NumOps.Zero));
-
-                        // Backprop through next block's first FC layer to get dResidual; the gradient for
-                        // WTheta_b is h * (-dResidual)^T (negative because residual = prev_residual - backcast)
-                        var negDResidual = engine.TensorNegate(
-                            engine.TensorMatMul(dHNext, engine.TensorTranspose(nextBlock.W1)));
+                        var negDResidual = engine.TensorNegate(dResidualNext);
                         dWThetaB = engine.TensorMatMul(engine.TensorTranspose(cache.H4), negDResidual);
-
-                        // Also add gradient through h from backcast path
                         dH = engine.TensorAdd(dH, engine.TensorMatMul(negDResidual, engine.TensorTranspose(block.WTheta_b)));
                     }
 
@@ -347,6 +333,10 @@ public partial class NBEATSDetector<T> : AnomalyDetectorBase<T>
                         engine.TensorGreaterThan(cache.H2, NumOps.Zero));
                     var dH1 = engine.TensorMultiply(engine.TensorMatMul(dH2, engine.TensorTranspose(block.W2)),
                         engine.TensorGreaterThan(cache.H1, NumOps.Zero));
+
+                    // dL/d(this block's residual input): the identity path to the next residual plus FC1
+                    var dResidualFc = engine.TensorMatMul(dH1, engine.TensorTranspose(block.W1));
+                    dResidualNext = dResidualNext is null ? dResidualFc : engine.TensorAdd(dResidualNext, dResidualFc);
 
                     gradients[blockIdx] = new BlockGradients
                     {
