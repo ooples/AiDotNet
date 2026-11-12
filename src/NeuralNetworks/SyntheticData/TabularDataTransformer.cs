@@ -223,6 +223,15 @@ public class TabularDataTransformer<T> : IModelSerializer
     }
 
     /// <summary>
+    /// Gets the fitted VGM parameters of the continuous column at <paramref name="continuousIndex"/>
+    /// (its <see cref="ColumnTransformInfo.Index"/>).
+    /// </summary>
+    internal VGMColumnInfo GetContinuousColumnInfo(int continuousIndex)
+    {
+        return _continuousColumnInfos[continuousIndex];
+    }
+
+    /// <summary>
     /// Serializes the fitted transformer state (column metadata, per-column transform layout, and
     /// the fitted VGM / categorical parameters) so a saved or cloned generator can inverse-transform
     /// generated samples back to the original column space without re-fitting.
@@ -400,6 +409,17 @@ public class TabularDataTransformer<T> : IModelSerializer
         int k = Math.Min(_vgmModes, Math.Max(1, n / 5));
         int[] grid = { n, k };
 
+        // The fit runs on the column divided by its largest magnitude and the fitted means and
+        // stds are scaled back at the end. Squaring raw values overflows narrow types (float data
+        // at ±1e20 squares to +inf, which turned the variance into inf and every responsibility
+        // into NaN); in scaled units every value is within [-1, 1], so its square cannot overflow.
+        // The Normal-Gamma posterior is scale-equivariant (b0 is the data variance), so this only
+        // changes units, not the fitted modes.
+        T scale = MathHelper.Max(
+            NumOps.Abs(engine.TensorMinValue(x)), NumOps.Abs(engine.TensorMaxValue(x)));
+        if (!NumOps.GreaterThan(scale, NumOps.Zero)) scale = NumOps.One;
+        x = engine.TensorDivideScalar(x, scale);
+
         T valMin = engine.TensorMinValue(x);
         T valMax = engine.TensorMaxValue(x);
         T range = NumOps.Subtract(valMax, valMin);
@@ -437,6 +457,7 @@ public class TabularDataTransformer<T> : IModelSerializer
         var bp = Tensor<T>.CreateDefault(new[] { k }, NumOps.Add(b0, NumOps.Multiply(NumOps.Multiply(half, dataVar), perMode)));
 
         var xGrid = Expand(x.Reshape(new[] { n, 1 }), grid);
+        var ones = Tensor<T>.CreateDefault(new[] { k }, NumOps.One);
         const int maxIter = 100;
         for (int iter = 0; iter < maxIter; iter++)
         {
@@ -459,11 +480,15 @@ public class TabularDataTransformer<T> : IModelSerializer
             // --- Variational M-step: update posteriors from sufficient statistics.
             var nk = engine.ReduceSum(r, new[] { 0 }, false);
             var hasMass = engine.TensorGreaterThan(nk, massFloor);
+            // Massless components divide by 1 instead of their (possibly exactly zero) count and the
+            // quotient is then masked out: the division runs before the mask, and a zero divisor
+            // throws for decimal.
+            var safeNk = engine.TensorWhere(hasMass, nk, ones);
             var weightedSum = engine.ReduceSum(engine.TensorMultiply(r, xGrid), new[] { 0 }, false);
-            var xbar = engine.TensorWhere(hasMass, engine.TensorDivide(weightedSum, nk), weightedSum);
+            var xbar = engine.TensorWhere(hasMass, engine.TensorDivide(weightedSum, safeNk), weightedSum);
             var dev = engine.TensorSubtract(xGrid, Row(xbar, grid));
             var weightedSq = engine.ReduceSum(engine.TensorMultiply(r, engine.TensorMultiply(dev, dev)), new[] { 0 }, false);
-            var sk = engine.TensorWhere(hasMass, engine.TensorDivide(weightedSq, nk), weightedSq);
+            var sk = engine.TensorWhere(hasMass, engine.TensorDivide(weightedSq, safeNk), weightedSq);
 
             alpha = engine.TensorAddScalar(nk, alpha0);
             betap = engine.TensorAddScalar(nk, beta0);
@@ -510,10 +535,24 @@ public class TabularDataTransformer<T> : IModelSerializer
             weights = engine.TensorIndexSelect(weight, kept, 0);
         }
 
-        // Renormalize the kept weights so they sum to 1.
+        // Renormalize the kept weights so they sum to 1, and return means and stds to data units.
         weights = engine.TensorDivideScalar(weights, engine.TensorSum(weights));
+        means = engine.TensorMultiplyScalar(means, scale);
+        stds = engine.TensorMultiplyScalar(stds, scale);
 
-        return new VGMColumnInfo(means, stds, weights);
+        // Engine results may live in the caller's TensorArena and be recycled when its scope ends;
+        // the fitted parameters are persistent state, so store detached heap copies.
+        return new VGMColumnInfo(Detach(means), Detach(stds), Detach(weights));
+    }
+
+    /// <summary>
+    /// Copies a 1-D tensor into a freshly allocated heap array, independent of any arena buffer.
+    /// </summary>
+    private static Tensor<T> Detach(Tensor<T> tensor)
+    {
+        var copy = new T[tensor.Length];
+        tensor.AsSpan().CopyTo(copy);
+        return new Tensor<T>(copy, new[] { copy.Length });
     }
 
     /// <summary>Broadcasts <paramref name="tensor"/> to <paramref name="shape"/> as a dense tensor.</summary>

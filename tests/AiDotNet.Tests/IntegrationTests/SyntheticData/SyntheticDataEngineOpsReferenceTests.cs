@@ -200,4 +200,178 @@ public class SyntheticDataEngineOpsReferenceTests
             Assert.Equal(data[i, 1], a[i, 1]);
         }
     }
+
+    [Fact]
+    public void AuxElements_ReadsLegacyCountPlusDoubles_AsT()
+    {
+        // master's layout: a count followed directly by that many doubles, no format marker
+        using var stream = new MemoryStream();
+        using (var writer = new BinaryWriter(stream, System.Text.Encoding.UTF8, leaveOpen: true))
+        {
+            writer.Write(3);
+            writer.Write(1.5);
+            writer.Write(-0.25);
+            writer.Write(1e10);
+            writer.Write(0);
+        }
+
+        stream.Position = 0;
+        using var reader = new BinaryReader(stream);
+        var restored = AuxLayerSerialization.ReadElements<float>(reader);
+        var empty = AuxLayerSerialization.ReadElements<float>(reader);
+
+        Assert.Equal(3, restored.Length);
+        Assert.Equal(new[] { 1.5f, -0.25f, 1e10f }, new[] { restored[0], restored[1], restored[2] });
+        Assert.Equal(0, empty.Length);
+        Assert.Equal(stream.Length, stream.Position);
+    }
+
+    [Fact]
+    public void TransformerState_LoadsLegacyCheckpoint_AndNewFormatRoundTrips()
+    {
+        var meta = new ColumnMetadata("X", ColumnDataType.Continuous, columnIndex: 0);
+
+        // Bytes exactly as master's Serialize wrote them: each VGM array is count + doubles.
+        byte[] legacy;
+        using (var stream = new MemoryStream())
+        {
+            using (var writer = new BinaryWriter(stream, System.Text.Encoding.UTF8, leaveOpen: true))
+            {
+                writer.Write(true);   // IsFitted
+                writer.Write(3);      // transformed width: 1 + 2 modes
+                writer.Write(1);      // column count
+                meta.Serialize(writer);
+                writer.Write(1);      // transform count
+                writer.Write(0);      // key
+                writer.Write(true);   // continuous
+                writer.Write(0);      // index
+                writer.Write(0);      // start offset
+                writer.Write(3);      // width
+                writer.Write(1);      // continuous column count
+                writer.Write(2); writer.Write(-2.0); writer.Write(3.0);   // means
+                writer.Write(2); writer.Write(0.5); writer.Write(0.25);   // stds
+                writer.Write(2); writer.Write(0.4); writer.Write(0.6);    // weights
+                writer.Write(0);      // categorical column count
+            }
+
+            legacy = stream.ToArray();
+        }
+
+        var loaded = new TabularDataTransformer<float>();
+        loaded.Deserialize(legacy);
+
+        Assert.True(loaded.IsFitted);
+        Assert.Equal(3, loaded.TransformedWidth);
+        var info = loaded.GetContinuousColumnInfo(0);
+        Assert.Equal(new[] { -2f, 3f }, info.Means.ToArray());
+        Assert.Equal(new[] { 0.5f, 0.25f }, info.Stds.ToArray());
+        Assert.Equal(new[] { 0.4f, 0.6f }, info.Weights.ToArray());
+
+        // normalized 0.5 in mode 1: 0.5 * 4 * 0.25 + 3 = 3.5
+        var encoded = new Matrix<float>(1, 3);
+        encoded[0, 0] = 0.5f; encoded[0, 1] = 0f; encoded[0, 2] = 1f;
+        Assert.Equal(3.5f, loaded.InverseTransform(encoded)[0, 0]);
+
+        // The new format (with its marker) round-trips the same values.
+        var reloaded = new TabularDataTransformer<float>();
+        reloaded.Deserialize(loaded.Serialize());
+        var info2 = reloaded.GetContinuousColumnInfo(0);
+        Assert.Equal(info.Means.ToArray(), info2.Means.ToArray());
+        Assert.Equal(info.Stds.ToArray(), info2.Stds.ToArray());
+        Assert.Equal(info.Weights.ToArray(), info2.Weights.ToArray());
+        Assert.Equal(3.5f, reloaded.InverseTransform(encoded)[0, 0]);
+    }
+
+    [Fact]
+    public void Vgm_FloatColumnAtPlusMinus1e20_FitsFiniteModes()
+    {
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(Seed);
+        const int perMode = 100;
+        var data = new Matrix<float>(perMode * 2, 1);
+        for (int i = 0; i < perMode; i++) data[i, 0] = (float)(-1e20 * (1.0 + 0.01 * (rng.NextDouble() - 0.5)));
+        for (int i = 0; i < perMode; i++) data[perMode + i, 0] = (float)(1e20 * (1.0 + 0.01 * (rng.NextDouble() - 0.5)));
+        var columns = new List<ColumnMetadata> { new("X", ColumnDataType.Continuous, columnIndex: 0) };
+
+        var transformer = new TabularDataTransformer<float>(vgmModes: 10, random: AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(Seed));
+        transformer.Fit(data, columns);
+
+        var info = transformer.GetContinuousColumnInfo(0);
+        foreach (float v in info.Means.ToArray()) Assert.False(float.IsNaN(v) || float.IsInfinity(v), $"mean {v} is not finite");
+        foreach (float v in info.Stds.ToArray()) Assert.True(!float.IsNaN(v) && !float.IsInfinity(v) && v > 0f, $"std {v} is not finite and positive");
+        foreach (float v in info.Weights.ToArray()) Assert.False(float.IsNaN(v) || float.IsInfinity(v), $"weight {v} is not finite");
+
+        // both real modes are found, near -1e20 and +1e20
+        var means = info.Means.ToArray();
+        Assert.Contains(means, m => Math.Abs(m + 1e20) < 0.05 * 1e20);
+        Assert.Contains(means, m => Math.Abs(m - 1e20) < 0.05 * 1e20);
+
+        var recon = transformer.InverseTransform(transformer.Transform(data));
+        for (int i = 0; i < data.Rows; i++)
+        {
+            Assert.True(Math.Abs((double)recon[i, 0] - data[i, 0]) < 0.05 * 1e20,
+                $"row {i}: reconstructed {recon[i, 0]} from {data[i, 0]}");
+        }
+    }
+
+    [Fact]
+    public void Vgm_DecimalConstantColumn_FitsWithoutDividingByZero()
+    {
+        var data = new Matrix<decimal>(50, 1);
+        for (int i = 0; i < data.Rows; i++) data[i, 0] = 7m;
+        var columns = new List<ColumnMetadata> { new("X", ColumnDataType.Continuous, columnIndex: 0) };
+
+        var transformer = new TabularDataTransformer<decimal>(vgmModes: 10, random: AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(Seed));
+        transformer.Fit(data, columns);
+
+        var info = transformer.GetContinuousColumnInfo(0);
+        Assert.True(info.NumActiveModes >= 1);
+        decimal weightSum = 0m;
+        foreach (decimal w in info.Weights.ToArray()) weightSum += w;
+        Assert.Equal(1m, Math.Round(weightSum, 6));
+
+        var recon = transformer.InverseTransform(transformer.Transform(data));
+        for (int i = 0; i < data.Rows; i++)
+        {
+            Assert.True(Math.Abs(recon[i, 0] - 7m) < 0.01m, $"row {i}: reconstructed {recon[i, 0]}");
+        }
+    }
+
+    [Fact]
+    public void VgmParameters_SurviveALaterArenaScope()
+    {
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(Seed);
+        var data = new Matrix<double>(200, 1);
+        for (int i = 0; i < data.Rows; i++) data[i, 0] = (i % 2 == 0 ? -3.0 : 3.0) + 0.2 * (rng.NextDouble() - 0.5);
+        var columns = new List<ColumnMetadata> { new("X", ColumnDataType.Continuous, columnIndex: 0) };
+        var transformer = new TabularDataTransformer<double>(vgmModes: 10, random: AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(Seed));
+
+        double[] means;
+        double[] stds;
+        double[] weights;
+        using (AiDotNet.Tensors.Helpers.TensorArena.Create())
+        {
+            transformer.Fit(data, columns);
+            var fitted = transformer.GetContinuousColumnInfo(0);
+            means = fitted.Means.ToArray();
+            stds = fitted.Stds.ToArray();
+            weights = fitted.Weights.ToArray();
+        }
+
+        // A later arena scope rents (and overwrites) whatever buffers the first one released.
+        var engine = AiDotNet.Tensors.Engines.AiDotNetEngine.Current;
+        using (AiDotNet.Tensors.Helpers.TensorArena.Create())
+        {
+            for (int round = 0; round < 50; round++)
+            {
+                var noise = AiDotNet.Tensors.LinearAlgebra.Tensor<double>.CreateDefault(new[] { means.Length }, -12345.0 - round);
+                engine.TensorMultiplyScalar(engine.TensorAddScalar(noise, 1.0), 3.0);
+                engine.TensorDivideScalar(noise, 7.0);
+            }
+        }
+
+        var info = transformer.GetContinuousColumnInfo(0);
+        Assert.Equal(means, info.Means.ToArray());
+        Assert.Equal(stds, info.Stds.ToArray());
+        Assert.Equal(weights, info.Weights.ToArray());
+    }
 }
