@@ -290,16 +290,7 @@ public partial class GPT4Point<T> : VisionLanguageModelBase<T>, IThreeDVisionLan
         for (int i = 0; i < _encoderLayerEnd && i < Layers.Count; i++)
             encoded = Layers[i].Forward(encoded);
 
-        // Prompt gate 0.5 + sigmoid(prompt[d % promptLen] / 100) on every encoded value.
-        var promptTokens = TokenizeText(prompt);
-        int promptLen = promptTokens.Length;
-        if (promptLen > 0)
-        {
-            var gate = engine.TensorAddScalar(
-                engine.TensorSigmoid(engine.TensorDivideScalar(CyclicTake(promptTokens, encoded.Length), NumOps.FromDouble(100.0))),
-                NumOps.FromDouble(0.5));
-            encoded = engine.TensorMultiply(encoded, gate.Reshape(encoded.Shape.ToArray()));
-        }
+        encoded = PromptGated(encoded, TokenizeText(prompt));
 
         var output = encoded;
         for (int i = _encoderLayerEnd; i < Layers.Count; i++)

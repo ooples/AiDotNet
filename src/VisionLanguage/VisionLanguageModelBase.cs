@@ -405,6 +405,101 @@ public abstract partial class VisionLanguageModelBase<T> : NeuralNetworkBase<T>,
     }
 
     /// <summary>
+    /// Number of points a point-cloud scan reads: points p &lt; numPoints whose first three values
+    /// p * channels .. p * channels + 2 lie inside the cloud (the scan stops at the first that does not).
+    /// </summary>
+    /// <param name="numPoints">Points the scan visits at most.</param>
+    /// <param name="channels">Values per point.</param>
+    /// <param name="totalValues">Values in the cloud.</param>
+    /// <returns>The number of points read.</returns>
+    /// <exception cref="IndexOutOfRangeException">A negative channel count would address values before the start.</exception>
+    private protected static int ReadablePointCount(int numPoints, int channels, int totalValues)
+    {
+        int readPoints;
+        if (totalValues <= 2)
+            readPoints = 0;
+        else if (channels > 0)
+            readPoints = Math.Min(numPoints, (totalValues - 2 + channels - 1) / channels);
+        else
+            readPoints = Math.Max(0, numPoints);
+        if (channels < 0 && readPoints > 1)
+            throw new IndexOutOfRangeException("A negative point channel count addresses values before the start of the point cloud.");
+        return readPoints;
+    }
+
+    /// <summary>
+    /// The XYZ values (the first three values) of the first <paramref name="readPoints"/> points.
+    /// </summary>
+    /// <param name="pointCloud">The point cloud (read flattened).</param>
+    /// <param name="readPoints">Number of points (see <see cref="ReadablePointCount"/>).</param>
+    /// <param name="channels">Values per point.</param>
+    /// <returns>A [readPoints, 3] tensor.</returns>
+    private protected Tensor<T> PointCoordinates(Tensor<T> pointCloud, int readPoints, int channels)
+    {
+        var engine = Engine;
+        var pointBase = engine.TensorMultiplyScalar(engine.TensorArange<int>(0, readPoints, 1), channels).Reshape([readPoints, 1]);
+        var coordIndex = engine.TensorAdd(
+            engine.TensorBroadcastTo(pointBase, [readPoints, 3]),
+            engine.TensorBroadcastTo(engine.TensorArange<int>(0, 3, 1).Reshape([1, 3]), [readPoints, 3]));
+        return engine.TensorTake(pointCloud.Reshape([pointCloud.Length]), coordIndex);
+    }
+
+    /// <summary>
+    /// Per-point features: value c &lt; channels of point p (when inside the cloud) is added to feature
+    /// c % featureDim.
+    /// </summary>
+    /// <param name="pointCloud">The point cloud (read flattened).</param>
+    /// <param name="readPoints">Number of points.</param>
+    /// <param name="channels">Values per point.</param>
+    /// <param name="featureDim">Feature width.</param>
+    /// <returns>A [readPoints, featureDim] tensor.</returns>
+    /// <exception cref="DivideByZeroException">featureDim is 0 while some value is read.</exception>
+    private protected Tensor<T> FoldedPointChannels(Tensor<T> pointCloud, int readPoints, int channels, int featureDim)
+    {
+        var engine = Engine;
+        int pointChannels = Math.Max(0, channels);
+        if (pointChannels == 0 || readPoints == 0)
+            return new Tensor<T>([readPoints, featureDim]);
+        if (featureDim == 0)
+            throw new DivideByZeroException("Point values cannot be folded into a zero-width feature vector.");
+
+        int totalValues = pointCloud.Length;
+        int folds = (pointChannels + featureDim - 1) / featureDim;
+        int width = folds * featureDim;
+        var local = engine.TensorBroadcastTo(engine.TensorArange<int>(0, width, 1).Reshape([1, width]), [readPoints, width]);
+        var channelIndex = engine.TensorAdd(
+            engine.TensorBroadcastTo(
+                engine.TensorMultiplyScalar(engine.TensorArange<int>(0, readPoints, 1), channels).Reshape([readPoints, 1]),
+                [readPoints, width]),
+            local);
+        var validChannel = engine.TensorMultiply(
+            engine.TensorLessThan(local, pointChannels), engine.TensorLessThan(channelIndex, totalValues)).Cast<T>();
+        var channelValues = engine.TensorWhere(
+            validChannel,
+            engine.TensorTake(pointCloud.Reshape([totalValues]), engine.TensorMin(channelIndex, totalValues - 1)),
+            new Tensor<T>([readPoints, width]));
+        return engine.ReduceSum(channelValues.Reshape([readPoints, folds, featureDim]), [1], false);
+    }
+
+    /// <summary>
+    /// Gates values with the prompt: values[d] * (0.5 + sigmoid(prompt[d % promptLength] / 100)); the
+    /// values themselves when the prompt is empty.
+    /// </summary>
+    /// <param name="values">Values to gate.</param>
+    /// <param name="promptTokens">Prompt token ids.</param>
+    /// <returns>The gated values, shaped like <paramref name="values"/>.</returns>
+    private protected Tensor<T> PromptGated(Tensor<T> values, Tensor<T> promptTokens)
+    {
+        if (promptTokens.Length == 0)
+            return values;
+        var engine = Engine;
+        var gate = engine.TensorAddScalar(
+            engine.TensorSigmoid(engine.TensorDivideScalar(CyclicTake(promptTokens, values.Length), NumOps.FromDouble(100.0))),
+            NumOps.FromDouble(0.5));
+        return engine.TensorMultiply(values, gate.Reshape(values.Shape.ToArray()));
+    }
+
+    /// <summary>
     /// PointNet-style max pooling of point-cloud values into per-patch features: patch p reads the
     /// values at p * patchStride + i for i &lt; patchValues (only those below validLimit) and keeps, per
     /// feature f, the largest value with i % featureDim == f, floored at 0 (NaN values never win).
