@@ -630,12 +630,14 @@ public partial class StableVideoDiffusion<T> : VideoDiffusionModelBase<T>
     /// p = f / (F - 1) (p = 0 for a single frame) by weight 0.1 * (timestep / 1000) * p. Every batch item is
     /// guided, by its own start/end latent when one is given per item and by the first one otherwise.
     /// </remarks>
-    internal Tensor<T> ApplyEndImageGuidance(
+    internal static Tensor<T> ApplyEndImageGuidance(
         Tensor<T> latents,
         Tensor<T> startLatent,
         Tensor<T> endLatent,
         int timestep)
     {
+        var engine = AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<T>();
         // Video latent shape: [batch, frames, channels, height, width]; start/end: [batch, channels, height, width].
         var shape = latents._shape;
         var startShape = startLatent._shape;
@@ -655,27 +657,28 @@ public partial class StableVideoDiffusion<T> : VideoDiffusionModelBase<T>
         // Frame progress determines blend toward end
         var progress = frames == 1
             ? new Tensor<T>(new[] { 1 })
-            : Engine.TensorMultiplyScalar(Engine.TensorArange<T>(0, frames, 1), NumOps.FromDouble(1.0 / (frames - 1)));
-        var frameProgress = Engine.TensorBroadcastTo(progress.Reshape(new[] { 1, frames, 1, 1, 1 }), shape);
+            : engine.TensorMultiplyScalar(engine.TensorArange<T>(0, frames, 1), ops.FromDouble(1.0 / (frames - 1)));
+        var frameProgress = engine.TensorBroadcastTo(progress.Reshape(new[] { 1, frames, 1, 1, 1 }), shape);
 
         var start = BroadcastOverFrames(startLatent, shape);
-        var target = Engine.TensorAdd(start,
-            Engine.TensorMultiply(frameProgress, Engine.TensorSubtract(BroadcastOverFrames(endLatent, shape), start)));
+        var target = engine.TensorAdd(start,
+            engine.TensorMultiply(frameProgress, engine.TensorSubtract(BroadcastOverFrames(endLatent, shape), start)));
 
         // Soft blend with predicted latent: (1 - w) * x + w * target = x + w * (target - x).
-        var weight = Engine.TensorMultiplyScalar(frameProgress, NumOps.FromDouble(baseGuidanceStrength));
-        return Engine.TensorAdd(latents, Engine.TensorMultiply(weight, Engine.TensorSubtract(target, latents)));
+        var weight = engine.TensorMultiplyScalar(frameProgress, ops.FromDouble(baseGuidanceStrength));
+        return engine.TensorAdd(latents, engine.TensorMultiply(weight, engine.TensorSubtract(target, latents)));
     }
 
     /// <summary>
     /// Broadcasts a [batch, channels, height, width] latent over the frame axis of <paramref name="videoShape"/>,
     /// using the first item when the batch sizes differ.
     /// </summary>
-    private Tensor<T> BroadcastOverFrames(Tensor<T> imageLatent, int[] videoShape)
+    private static Tensor<T> BroadcastOverFrames(Tensor<T> imageLatent, int[] videoShape)
     {
-        var source = imageLatent._shape[0] == videoShape[0] ? imageLatent : Engine.TensorNarrow(imageLatent, 0, 0, 1);
+        var engine = AiDotNetEngine.Current;
+        var source = imageLatent._shape[0] == videoShape[0] ? imageLatent : engine.TensorNarrow(imageLatent, 0, 0, 1);
         var s = source._shape;
-        return Engine.TensorBroadcastTo(source.Reshape(new[] { s[0], 1, s[1], s[2], s[3] }), videoShape);
+        return engine.TensorBroadcastTo(source.Reshape(new[] { s[0], 1, s[1], s[2], s[3] }), videoShape);
     }
 
     /// <summary>

@@ -583,13 +583,15 @@ public partial class AnimateDiffModel<T> : VideoDiffusionModelBase<T>
     /// edges); a one-frame window sits at the middle and gets weight 1 rather than the 0 / 0 position.
     /// <paramref name="weights"/> holds one accumulated weight per frame, shaped [1, frames, 1, 1, 1].
     /// </remarks>
-    internal (Tensor<T> Accumulated, Tensor<T> Weights) BlendWindowNoise(
+    internal static (Tensor<T> Accumulated, Tensor<T> Weights) BlendWindowNoise(
         Tensor<T> accumulated,
         Tensor<T> weights,
         Tensor<T> windowNoise,
         int startFrame,
         int windowSize)
     {
+        var engine = AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<T>();
         var shape = accumulated._shape;
         int totalFrames = shape[1];
         int frames = Math.Min(windowSize, totalFrames - startFrame);
@@ -597,26 +599,27 @@ public partial class AnimateDiffModel<T> : VideoDiffusionModelBase<T>
             return (accumulated, weights);
 
         var frameWeights = frames == 1
-            ? Tensor<T>.CreateDefault(new[] { 1 }, NumOps.One)
-            : Engine.ScalarMinusTensor(NumOps.One, Engine.TensorMultiplyScalar(
-                Engine.TensorAbs(Engine.TensorSubtractScalar(
-                    Engine.TensorArange<T>(0, frames, 1), NumOps.FromDouble(0.5 * (frames - 1)))),
-                NumOps.FromDouble(0.5 / (frames - 1))));
+            ? Tensor<T>.CreateDefault(new[] { 1 }, ops.One)
+            : engine.ScalarMinusTensor(ops.One, engine.TensorMultiplyScalar(
+                engine.TensorAbs(engine.TensorSubtractScalar(
+                    engine.TensorArange<T>(0, frames, 1), ops.FromDouble(0.5 * (frames - 1)))),
+                ops.FromDouble(0.5 / (frames - 1))));
         frameWeights = frameWeights.Reshape(new[] { 1, frames, 1, 1, 1 });
 
-        var window = Engine.TensorNarrow(windowNoise, 1, 0, frames);
-        var weighted = Engine.TensorMultiply(window, Engine.TensorBroadcastTo(frameWeights, window._shape));
+        var window = engine.TensorNarrow(windowNoise, 1, 0, frames);
+        var weighted = engine.TensorMultiply(window, engine.TensorBroadcastTo(frameWeights, window._shape));
 
-        return (Engine.TensorAdd(accumulated, PadFrames(weighted, startFrame, totalFrames)),
-                Engine.TensorAdd(weights, PadFrames(frameWeights, startFrame, totalFrames)));
+        return (engine.TensorAdd(accumulated, PadFrames(weighted, startFrame, totalFrames)),
+                engine.TensorAdd(weights, PadFrames(frameWeights, startFrame, totalFrames)));
     }
 
     /// <summary>
     /// Zero-pads <paramref name="block"/> along the frame axis so it starts at <paramref name="startFrame"/>
     /// of a <paramref name="totalFrames"/>-frame tensor.
     /// </summary>
-    private Tensor<T> PadFrames(Tensor<T> block, int startFrame, int totalFrames)
+    private static Tensor<T> PadFrames(Tensor<T> block, int startFrame, int totalFrames)
     {
+        var engine = AiDotNetEngine.Current;
         int after = totalFrames - startFrame - block._shape[1];
         if (startFrame == 0 && after == 0)
             return block;
@@ -627,7 +630,7 @@ public partial class AnimateDiffModel<T> : VideoDiffusionModelBase<T>
         pieces.Add(block);
         if (after > 0)
             pieces.Add(new Tensor<T>(FrameShape(block._shape, after)));
-        return Engine.TensorConcatenate(pieces.ToArray(), 1);
+        return engine.TensorConcatenate(pieces.ToArray(), 1);
     }
 
     private static int[] FrameShape(int[] shape, int frames)
@@ -641,11 +644,13 @@ public partial class AnimateDiffModel<T> : VideoDiffusionModelBase<T>
     /// Normalizes accumulated noise by the per-frame accumulated weights; frames no window covered keep their
     /// (zero) accumulation.
     /// </summary>
-    internal Tensor<T> NormalizeAccumulatedNoise(Tensor<T> accumulated, Tensor<T> weights)
+    internal static Tensor<T> NormalizeAccumulatedNoise(Tensor<T> accumulated, Tensor<T> weights)
     {
-        var fullWeights = Engine.TensorBroadcastTo(weights, accumulated._shape);
-        var uncovered = Engine.ScalarMinusTensor(NumOps.One, Engine.TensorGreaterThan(fullWeights, NumOps.Zero));
-        return Engine.TensorDivide(accumulated, Engine.TensorAdd(fullWeights, uncovered));
+        var engine = AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<T>();
+        var fullWeights = engine.TensorBroadcastTo(weights, accumulated._shape);
+        var uncovered = engine.ScalarMinusTensor(ops.One, engine.TensorGreaterThan(fullWeights, ops.Zero));
+        return engine.TensorDivide(accumulated, engine.TensorAdd(fullWeights, uncovered));
     }
 
     /// <summary>
