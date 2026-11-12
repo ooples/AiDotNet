@@ -2,6 +2,7 @@ using AiDotNet.Autodiff;
 using AiDotNet.Attributes;
 using AiDotNet.Extensions;
 using AiDotNet.Helpers;
+using AiDotNet.Tensors.Engines.Autodiff;
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
@@ -425,36 +426,12 @@ public partial class ObliviousDecisionTreeLayer<T> : LayerBase<T>, IShapeContrac
                 "yet resolved. Run at least one Forward(input) before querying feature " +
                 "importance, or construct via the eager ctor with an explicit inputDim.");
         }
-        var importance = new Vector<T>(_inputDim);
-
-        if (_featureSelectionsCache != null)
-        {
-            for (int f = 0; f < _inputDim; f++)
-            {
-                var sum = NumOps.Zero;
-                for (int level = 0; level < _depth; level++)
-                {
-                    sum = NumOps.Add(sum, _featureSelectionsCache[level * _inputDim + f]);
-                }
-                importance[f] = NumOps.Divide(sum, NumOps.FromDouble(_depth));
-            }
-        }
-        else
-        {
-            // Use raw weights if forward hasn't been called
-            var selections = ComputeFeatureSelections();
-            for (int f = 0; f < _inputDim; f++)
-            {
-                var sum = NumOps.Zero;
-                for (int level = 0; level < _depth; level++)
-                {
-                    sum = NumOps.Add(sum, selections[level * _inputDim + f]);
-                }
-                importance[f] = NumOps.Divide(sum, NumOps.FromDouble(_depth));
-            }
-        }
-
-        return importance;
+        // Use the cached selections, or raw weights if forward hasn't been called. The selections
+        // are [depth, inputDim]; importance[f] is the mean over levels.
+        var selections = _featureSelectionsCache ?? ComputeFeatureSelections();
+        using var noGrad = new NoGradScope<T>();
+        var levelSum = Engine.ReduceSum(Engine.Reshape(selections, [_depth, _inputDim]), [0]);
+        return Engine.TensorDivideScalar(levelSum, NumOps.FromDouble(_depth)).ToVector();
     }
 
     /// <inheritdoc/>
