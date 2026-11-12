@@ -363,32 +363,20 @@ public partial class ANILAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
         int rows = embeddings.Shape[0];
         int classes = _anilOptions.NumClasses;
         int width = _anilOptions.FeatureDimension;
-        var weightGradient = new Vector<T>(weights.Length);
-        var biasGradient = new Vector<T>(bias.Length);
-        for (int r = 0; r < rows; r++)
-        {
-            for (int c = 0; c < classes; c++)
-            {
-                T g = logitGradient[r * classes + c];
-                for (int f = 0; f < width; f++)
-                {
-                    weightGradient[c * width + f] = NumOps.Add(
-                        weightGradient[c * width + f], NumOps.Multiply(g, embeddings[r * width + f]));
-                }
 
-                if (bias.Length > 0) biasGradient[c] = NumOps.Add(biasGradient[c], g);
-            }
-        }
+        // dL/dW = G^T H and dL/db = column sums of G, with G = dL/dlogits [rows, classes] and H [rows, width].
+        var g = Engine.Reshape(logitGradient, new[] { rows, classes });
+        var weightGradient = Engine.TensorMatMul(
+            Engine.TensorTranspose(g), Engine.Reshape(embeddings, new[] { rows, width })).ToVector();
+        var biasGradient = bias.Length > 0
+            ? Engine.ReduceSum(g, new[] { 0 }, false).ToVector()
+            : new Vector<T>(bias.Length);
 
         if (regularize && _anilOptions.HeadL2Regularization > 0)
         {
             T strength = NumOps.FromDouble(_anilOptions.HeadL2Regularization);
-            T penalty = NumOps.Zero;
-            for (int i = 0; i < weights.Length; i++)
-            {
-                penalty = NumOps.Add(penalty, NumOps.Multiply(weights[i], weights[i]));
-                weightGradient[i] = NumOps.Add(weightGradient[i], NumOps.Multiply(strength, weights[i]));
-            }
+            T penalty = Engine.DotProduct(weights, weights);
+            weightGradient = Engine.Add(weightGradient, Engine.Multiply(weights, strength));
 
             loss = NumOps.Add(loss, NumOps.Multiply(NumOps.FromDouble(0.5 * _anilOptions.HeadL2Regularization), penalty));
         }
@@ -436,69 +424,43 @@ public partial class ANILAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
     /// </summary>
     private static double DifferenceStep(Vector<T> weights, Vector<T> bias, Vector<T> directionWeights, Vector<T> directionBias)
     {
-        double directionNorm = 0, headNorm = 0;
-        for (int i = 0; i < weights.Length; i++)
-        {
-            double d = NumOps.ToDouble(directionWeights[i]);
-            double w = NumOps.ToDouble(weights[i]);
-            directionNorm += d * d;
-            headNorm += w * w;
-        }
+        var engine = AiDotNetEngine.Current;
+        T directionSquared = NumOps.Add(
+            engine.DotProduct(directionWeights, directionWeights), engine.DotProduct(directionBias, directionBias));
+        T headSquared = NumOps.Add(engine.DotProduct(weights, weights), engine.DotProduct(bias, bias));
 
-        for (int i = 0; i < bias.Length; i++)
-        {
-            double d = NumOps.ToDouble(directionBias[i]);
-            double b = NumOps.ToDouble(bias[i]);
-            directionNorm += d * d;
-            headNorm += b * b;
-        }
-
-        directionNorm = Math.Sqrt(directionNorm);
-        return directionNorm == 0 ? 0 : 1e-5 * (1.0 + Math.Sqrt(headNorm)) / directionNorm;
+        // The step is a scalar control value for the finite difference, so it leaves T once here.
+        double directionNorm = Math.Sqrt(NumOps.ToDouble(directionSquared));
+        return directionNorm == 0 ? 0 : 1e-5 * (1.0 + Math.Sqrt(NumOps.ToDouble(headSquared))) / directionNorm;
     }
 
     private static Vector<T> Shift(Vector<T> values, Vector<T> direction, double step)
     {
-        var shifted = new Vector<T>(values.Length);
-        for (int i = 0; i < values.Length; i++)
-        {
-            shifted[i] = NumOps.Add(values[i], NumOps.Multiply(NumOps.FromDouble(step), direction[i]));
-        }
-
-        return shifted;
+        var engine = AiDotNetEngine.Current;
+        return engine.Add(values, engine.Multiply(direction, NumOps.FromDouble(step)));
     }
 
     /// <summary><c>baseline + scale * (plus - minus)</c>.</summary>
     private static Vector<T> Combine(Vector<T> baseline, Vector<T> plus, Vector<T> minus, double scale)
     {
-        var combined = new Vector<T>(baseline.Length);
-        T s = NumOps.FromDouble(scale);
-        for (int i = 0; i < baseline.Length; i++)
-        {
-            combined[i] = NumOps.Add(baseline[i], NumOps.Multiply(s, NumOps.Subtract(plus[i], minus[i])));
-        }
-
-        return combined;
+        var engine = AiDotNetEngine.Current;
+        return engine.Add(baseline, engine.Multiply(engine.Subtract(plus, minus), NumOps.FromDouble(scale)));
     }
 
     private static Vector<T> Accumulate(Vector<T>? sum, Vector<T> values)
     {
         if (sum is null) return Copy(values);
-        for (int i = 0; i < sum.Length; i++) sum[i] = NumOps.Add(sum[i], values[i]);
-        return sum;
+        return AiDotNetEngine.Current.Add(sum, values);
     }
 
     private static Vector<T> Scale(Vector<T> values, T divisor)
     {
-        for (int i = 0; i < values.Length; i++) values[i] = NumOps.Divide(values[i], divisor);
-        return values;
+        return AiDotNetEngine.Current.Divide(values, divisor);
     }
 
     private static Vector<T> Copy(Vector<T> source)
     {
-        var copy = new Vector<T>(source.Length);
-        for (int i = 0; i < source.Length; i++) copy[i] = source[i];
-        return copy;
+        return source.Clone();
     }
 
     /// <summary>
