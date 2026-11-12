@@ -504,20 +504,17 @@ public partial class DyLoRAAdapter<T> : LoRAAdapterBase<T>
         {
             for (int epoch = 0; epoch < epochs; epoch++)
             {
-                T totalLoss = NumOps.Zero;
-
                 for (int i = 0; i < inputs.Length; i++)
                 {
                     // Forward pass (uses random rank due to training mode)
                     Tensor<T> output = Forward(inputs[i]);
 
                     // Compute loss
-                    T loss = lossFunction(output, targets[i]);
-                    totalLoss = NumOps.Add(totalLoss, loss);
+                    // (the per-sample loss is not accumulated: nothing reads an epoch total)
+                    _ = lossFunction(output, targets[i]);
 
                     // Compute output gradient (simplified - assumes MSE loss)
                     Tensor<T> outputGrad = Engine.TensorSubtract(output, Engine.Reshape(targets[i], output.Shape.ToArray()));
-
 
                     // Backward pass
 
@@ -525,8 +522,6 @@ public partial class DyLoRAAdapter<T> : LoRAAdapterBase<T>
                     UpdateParameters(learningRate);
                 }
 
-                // Optional: Print epoch loss
-                // Console.WriteLine($"Epoch {epoch + 1}/{epochs}, Loss: {totalLoss}");
             }
         }
         finally
