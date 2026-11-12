@@ -51,6 +51,12 @@ public class NOTEARSNonlinear<T> : ContinuousOptimizationBase<T>
 {
     #region Constants
 
+    /// <summary>
+    /// Maximum number of entries of one [rows, d, h] activation tensor in the gradient pass; samples are
+    /// processed in blocks of at most this many entries.
+    /// </summary>
+    private const int MaxSampleBlockElements = 1 << 22;
+
     private const double DEFAULT_RHO_MAX = 1e+16;
     private const double DEFAULT_RHO_INIT = 1.0;
     private const double RHO_MULTIPLY_FACTOR = 10.0;
@@ -282,27 +288,45 @@ public class NOTEARSNonlinear<T> : ContinuousOptimizationBase<T>
         ComputeAugLagGradient(Matrix<T> data, int n, int d, int h, double alpha, double rho)
     {
         var x = Tensor<T>.FromMatrix(data);
-        var (pred, hidden) = ForwardMLP(x, n, d, h);
-        var residual = Engine.TensorSubtract(pred, x);
-        double totalLoss = NumOps.ToDouble(Engine.TensorSum(Engine.TensorSquare(residual)));
+        T sampleCount = NumOps.FromDouble(n);
 
-        // Backward pass through every MLP, summed over samples
-        var dOutput = Engine.TensorDivideScalar(residual, NumOps.FromDouble(n));
-        var gB2 = Engine.ReduceSum(dOutput, new[] { 0 }, false);
-        var dOutputPerUnit = Engine.TensorBroadcastTo(dOutput.Reshape(new[] { n, d, 1 }), new[] { n, d, h });
-        var gW2 = Engine.ReduceSum(Engine.TensorMultiply(dOutputPerUnit, hidden), new[] { 0 }, false);
+        // Data term and its backward pass through every MLP, summed over samples. The samples are processed
+        // in blocks so the [rows, d, h] activations stay bounded (MaxSampleBlockElements) for large n;
+        // dL/d(pred) is still normalized by the full sample count.
+        var squaredError = new Tensor<T>(new[] { d });
+        var gB2 = new Tensor<T>(new[] { d });
+        var gW2 = new Tensor<T>(new[] { d, h });
+        var gB1 = new Tensor<T>(new[] { d, h });
+        var gradByInput = new Tensor<T>(new[] { d, d * h });
+        int blockRows = Math.Max(1, Math.Min(n, MaxSampleBlockElements / Math.Max(1, d * h)));
+        for (int b0 = 0; b0 < n; b0 += blockRows)
+        {
+            int rows = Math.Min(blockRows, n - b0);
+            var unitShape = new[] { rows, d, h };
+            var xb = Engine.TensorSlice(x, new[] { b0, 0 }, new[] { rows, d });
+            var (pred, hidden) = ForwardMLP(xb, rows, d, h);
+            var residual = Engine.TensorSubtract(pred, xb);
+            squaredError = Engine.TensorAdd(squaredError, Engine.ReduceSum(Engine.TensorSquare(residual), new[] { 0 }, false));
 
-        // dHidden = dOutput * W2 * hidden * (1 - hidden)
-        var dHidden = Engine.TensorMultiply(
-            Engine.TensorMultiply(
-                Engine.TensorMultiply(dOutputPerUnit,
-                    Engine.TensorBroadcastTo(_W2.Reshape(new[] { 1, d, h }), new[] { n, d, h })),
-                hidden),
-            Engine.ScalarMinusTensor(NumOps.One, hidden));
-        var gB1 = Engine.ReduceSum(dHidden, new[] { 0 }, false);
+            var dOutput = Engine.TensorDivideScalar(residual, sampleCount);
+            gB2 = Engine.TensorAdd(gB2, Engine.ReduceSum(dOutput, new[] { 0 }, false));
+            var dOutputPerUnit = Engine.TensorBroadcastTo(dOutput.Reshape(new[] { rows, d, 1 }), unitShape);
+            gW2 = Engine.TensorAdd(gW2, Engine.ReduceSum(Engine.TensorMultiply(dOutputPerUnit, hidden), new[] { 0 }, false));
 
-        // gW1[j, i, k] = sum_s x[s, i] * dHidden[s, j, k]
-        var gradByInput = Engine.TensorMatMul(Engine.TensorTranspose(x), dHidden.Reshape(new[] { n, d * h }));
+            // dHidden = dOutput * W2 * hidden * (1 - hidden)
+            var dHidden = Engine.TensorMultiply(
+                Engine.TensorMultiply(
+                    Engine.TensorMultiply(dOutputPerUnit, Engine.TensorBroadcastTo(_W2.Reshape(new[] { 1, d, h }), unitShape)),
+                    hidden),
+                Engine.ScalarMinusTensor(NumOps.One, hidden));
+            gB1 = Engine.TensorAdd(gB1, Engine.ReduceSum(dHidden, new[] { 0 }, false));
+
+            // gW1[j, i, k] = sum_s x[s, i] * dHidden[s, j, k]
+            gradByInput = Engine.TensorAdd(gradByInput,
+                Engine.TensorMatMul(Engine.TensorTranspose(xb), dHidden.Reshape(new[] { rows, d * h })));
+        }
+
+        double totalLoss = NumOps.ToDouble(Engine.TensorSum(squaredError));
         var gW1 = Engine.Reshape(Engine.TensorPermute(gradByInput.Reshape(new[] { d, d, h }), new[] { 1, 0, 2 }),
             new[] { d, d, h });
 
