@@ -64,16 +64,16 @@ public class NeuralCleanseDetector<T> : Infrastructure.FederatedLearningComponen
             int groupSize = Math.Max(1, d / _numClasses);
             var groupNorms = new double[_numClasses];
 
-            for (int c = 0; c < _numClasses; c++)
+            // Every non-empty group has exactly groupSize coordinates; groups past the end stay 0.
+            int fullGroups = Math.Min(_numClasses, d / groupSize);
+            var groupL1 = fullGroups == 0 ? Array.Empty<T>() : Engine.ReduceSum(
+                Engine.TensorAbs(Engine.TensorSlice(update.AsTensor(), new[] { 0 }, new[] { fullGroups * groupSize })
+                    .Reshape(fullGroups, groupSize)),
+                new[] { 1 },
+                false).ToArray();
+            for (int c = 0; c < fullGroups; c++)
             {
-                int start = c * groupSize;
-                int end = Math.Min(start + groupSize, d);
-                double norm = 0;
-                for (int i = start; i < end; i++)
-                {
-                    norm += Math.Abs(NumOps.ToDouble(update[i]));
-                }
-                groupNorms[c] = norm;
+                groupNorms[c] = NumOps.ToDouble(groupL1[c]);
             }
 
             // Compute anomaly index: MAD-based outlier detection on group norms

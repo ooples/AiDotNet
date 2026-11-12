@@ -129,6 +129,33 @@ public class FederatedElementwiseSweepReferenceTests
         Assert.Equal(0.8, privatized["w"][1], 6);
     }
 
+    [Fact(Timeout = 60000)]
+    public async Task DirectionAlignment_UsesTrueMedianForEvenClientCount()
+    {
+        await Task.Yield();
+
+        // Coordinate-wise median of {-5, -2, 1, 3} is (-2 + 1) / 2 = -0.5 (negative). With one 1-D
+        // subspace the cosine is the sign agreement with the consensus: clients -5 and -2 align
+        // (cos = 1, suspicion 0); clients 1 and 3 oppose it (cos = -1, suspicion min(1, 1 - (-1)) = 1).
+        // Taking the upper middle value (1) as the "median" would flip every score.
+        var inspector = new AiDotNet.FederatedLearning.BackdoorDefense.DirectionAlignmentInspector<double>(
+            numSubspaces: 1, alignmentThreshold: 0.3);
+        var updates = new System.Collections.Generic.Dictionary<int, Vector<double>>
+        {
+            [0] = new Vector<double>(new[] { -5.0 }),
+            [1] = new Vector<double>(new[] { -2.0 }),
+            [2] = new Vector<double>(new[] { 1.0 }),
+            [3] = new Vector<double>(new[] { 3.0 }),
+        };
+
+        var scores = inspector.DetectSuspiciousUpdates(updates, new Vector<double>(1));
+
+        Assert.Equal(0.0, scores[0], 12);
+        Assert.Equal(0.0, scores[1], 12);
+        Assert.Equal(1.0, scores[2], 12);
+        Assert.Equal(1.0, scores[3], 12);
+    }
+
     private static Vector<double> Parameters(IFullModel<double, Matrix<double>, Vector<double>> model)
         => ((IParameterizable<double, Matrix<double>, Vector<double>>)model).GetParameters();
 
