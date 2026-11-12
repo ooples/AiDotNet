@@ -562,4 +562,202 @@ internal static class SelectorTensorOps
         return engine.ReduceSum(engine.TensorMultiply(engine.TensorSquare(engine.TensorSubtract(classMeans, overallMean)),
             engine.TensorBroadcastTo(engine.Reshape(counts, new[] { classCount, 1 }), shape)), new[] { 0 }, false);
     }
+
+    /// <summary>
+    /// ANOVA F-value of every column of <paramref name="x"/> ([n, p]) against the integer classes of
+    /// <paramref name="target"/> (scikit-learn <c>f_classif</c>): <c>F = (SSB / (k - 1)) / (SSW / (n - k))</c>.
+    /// A feature with no within-class scatter whose class means differ separates the classes perfectly and scores
+    /// +infinity (p-value 0); a constant feature scores 0 (p-value 1). Degenerate degrees of freedom give 0 / 1.
+    /// </summary>
+    public static Tensor<T> FClassif<T>(Tensor<T> x, Vector<T> target, out Tensor<T> pValues)
+    {
+        var engine = AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<T>();
+        int n = x.Shape[0];
+        int p = x.Shape[1];
+        PreprocessingTensorOps.ClassLabels(target, out var classes, out var classIndex);
+        int k = classes.Length;
+        int dfBetween = k - 1;
+        int dfWithin = n - k;
+        if (dfBetween <= 0 || dfWithin <= 0)
+        {
+            pValues = PreprocessingTensorOps.Filled(new[] { p }, ops.One);
+            return PreprocessingTensorOps.Filled(new[] { p }, ops.Zero);
+        }
+
+        var between = ClassScatter(x, new Tensor<int>(classIndex, new[] { n }), k, out var within);
+        var msb = engine.TensorDivideScalar(between, ops.FromDouble(dfBetween));
+        var msw = engine.TensorDivideScalar(within, ops.FromDouble(dfWithin));
+        var scores = SeparationRatio(msb, msw, 1e-10);
+        pValues = FSurvival(scores, dfBetween, dfWithin);
+        return scores;
+    }
+
+    /// <summary>
+    /// F-value of the univariate least-squares regression of the target on every column (scikit-learn
+    /// <c>f_regression</c>): <c>F = SS_regression / (SS_residual / (n - 2))</c>, +infinity for a perfect fit,
+    /// 0 for a constant feature or target; p-values from F(1, n - 2).
+    /// </summary>
+    public static Tensor<T> FRegression<T>(Tensor<T> x, Vector<T> target, out Tensor<T> pValues)
+    {
+        var engine = AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<T>();
+        int n = x.Shape[0];
+        int p = x.Shape[1];
+        int dfResidual = n - 2;
+        if (dfResidual <= 0)
+        {
+            pValues = PreprocessingTensorOps.Filled(new[] { p }, ops.One);
+            return PreprocessingTensorOps.Filled(new[] { p }, ops.Zero);
+        }
+
+        var xc = CenterColumns(x);
+        var yc = CenteredColumn(target);
+        var sxy = engine.ReduceSum(engine.TensorMultiply(xc, yc), new[] { 0 }, false);
+        var sxx = ColumnSumOfSquares(xc);
+        T ssTotal = engine.TensorSum(engine.TensorMultiply(yc, yc));
+
+        // Slope (0 for a near-constant feature) and the residual sum of squares of y - beta x
+        var beta = ZeroUnless(engine.TensorGreaterThan(sxx, ops.FromDouble(1e-10)), engine.TensorDivide(sxy, sxx));
+        var residual = engine.TensorSubtract(yc, engine.TensorMultiply(xc, engine.Reshape(beta, new[] { 1, p })));
+        var ssResidual = ColumnSumOfSquares(residual);
+        var ssRegression = engine.TensorMax(engine.TensorSubtract(
+            PreprocessingTensorOps.Filled(new[] { p }, ssTotal), ssResidual), ops.Zero);
+        var msResidual = engine.TensorDivideScalar(ssResidual, ops.FromDouble(dfResidual));
+
+        var scores = SeparationRatio(ssRegression, msResidual, 1e-10);
+        pValues = FSurvival(scores, 1, dfResidual);
+        return scores;
+    }
+
+    /// <summary>
+    /// <c>numerator / denominator</c> where the denominator is above <paramref name="epsilon"/>; otherwise +infinity
+    /// when the numerator is above <paramref name="epsilon"/> (a perfect separation or fit) and 0 when it is not.
+    /// </summary>
+    public static Tensor<T> SeparationRatio<T>(Tensor<T> numerator, Tensor<T> denominator, double epsilon)
+    {
+        var engine = AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<T>();
+        var shape = numerator.Shape.ToArray();
+        T eps = ops.FromDouble(epsilon);
+        var usable = engine.TensorGreaterThan(denominator, eps);
+        var safeDenominator = engine.TensorWhere(usable, denominator, PreprocessingTensorOps.Filled(shape, ops.One));
+        var degenerate = engine.TensorWhere(engine.TensorGreaterThan(numerator, eps),
+            PreprocessingTensorOps.Filled(shape, ops.FromDouble(double.PositiveInfinity)),
+            PreprocessingTensorOps.Filled(shape, ops.Zero));
+        return engine.TensorWhere(usable, engine.TensorDivide(numerator, safeDenominator), degenerate);
+    }
+
+    /// <summary>
+    /// Chi-squared statistic of every non-negative column of <paramref name="x"/> against the integer classes of
+    /// <paramref name="target"/> (scikit-learn <c>chi2</c>): observed class sums against
+    /// <c>expected = total * classCount / n</c>, p-values from chi2(k - 1).
+    /// </summary>
+    /// <exception cref="ArgumentException">Any feature value is negative.</exception>
+    public static Tensor<T> Chi2<T>(Tensor<T> x, Vector<T> target, out Tensor<T> pValues)
+    {
+        var engine = AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<T>();
+        int n = x.Shape[0];
+        int p = x.Shape[1];
+        if (x.Length > 0 && PreprocessingTensorOps.IsBelow(engine.TensorMinValue(x), ops.Zero))
+            throw new ArgumentException("Chi-squared scoring requires non-negative feature values (counts or frequencies).");
+
+        PreprocessingTensorOps.ClassLabels(target, out var classes, out var classIndex);
+        int k = classes.Length;
+        var membership = PreprocessingTensorOps.ClassOneHot<T>(classIndex, k);
+        var observed = engine.TensorMatMul(engine.TensorTranspose(membership), x);
+        var classShare = engine.TensorDivideScalar(engine.ReduceSum(membership, new[] { 0 }, false), ops.FromDouble(n));
+        var expected = engine.TensorOuter(classShare, engine.ReduceSum(x, new[] { 0 }, false));
+        var difference = engine.TensorSubtract(observed, expected);
+        var counted = engine.TensorGreaterThan(expected, ops.FromDouble(1e-10));
+        var safeExpected = engine.TensorWhere(counted, expected, PreprocessingTensorOps.Filled(new[] { k, p }, ops.One));
+        var terms = ZeroUnless(counted, engine.TensorDivide(engine.TensorMultiply(difference, difference), safeExpected));
+        var scores = engine.ReduceSum(terms, new[] { 0 }, false);
+        pValues = ChiSquaredSurvival(scores, PreprocessingTensorOps.Filled(new[] { p }, ops.FromDouble(k - 1)));
+        return scores;
+    }
+
+    /// <summary>
+    /// Mutual information (nats) between every continuous column of <paramref name="x"/> and the integer classes of
+    /// <paramref name="target"/> by the nearest-neighbour estimator of Ross (2014), as scikit-learn
+    /// <c>mutual_info_classif</c> with <c>n_neighbors = 3</c>:
+    /// <c>psi(N) + mean psi(k_i) - mean psi(N_c(i)) - mean psi(m_i)</c>, clamped at 0, where k_i = min(3, N_c - 1),
+    /// d_i is the distance to the k_i-th nearest same-class sample and m_i counts all samples closer than d_i
+    /// (itself included). Samples whose class has a single member are ignored. The 1e-10 tie-breaking noise of
+    /// scikit-learn is not added, so tie-free data reproduces it exactly.
+    /// </summary>
+    public static Tensor<T> MutualInfoClassif<T>(Tensor<T> x, Vector<T> target)
+    {
+        var engine = AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<T>();
+        int p = x.Shape[1];
+        var zeros = PreprocessingTensorOps.Filled(new[] { p }, ops.Zero);
+        PreprocessingTensorOps.ClassLabels(target, out var classes, out var classIndex);
+        int k = classes.Length;
+        if (p == 0 || classIndex.Length == 0)
+            return zeros;
+
+        // Keep the samples whose class has more than one member
+        var classCounts = engine.ReduceSum(PreprocessingTensorOps.ClassOneHot<T>(classIndex, k), new[] { 0 }, false);
+        var allClasses = new Tensor<int>(classIndex, new[] { classIndex.Length });
+        var rowClassCount = engine.TensorIndexSelect(classCounts, allClasses, 0);
+        var kept = PreprocessingTensorOps.MaskPositions(engine.TensorGreaterThan(rowClassCount, ops.One));
+        int m = kept.Length;
+        if (m == 0)
+            return zeros;
+
+        var keptIndex = new Tensor<int>(kept, new[] { m });
+        var labelCounts = engine.TensorIndexSelect(rowClassCount, keptIndex, 0);
+        var neighbours = engine.TensorMin(engine.TensorSubtractScalar(labelCounts, ops.One), ops.FromDouble(3));
+
+        // Same-class pairs (self excluded) and the per-sample constant part of the estimate
+        var classColumn = engine.TensorIndexSelect(allClasses, keptIndex, 0).Cast<T>();
+        var shape = new[] { m, m };
+        var sameClass = engine.TensorEquals(
+            engine.TensorBroadcastTo(engine.Reshape(classColumn, new[] { m, 1 }), shape),
+            engine.TensorBroadcastTo(engine.Reshape(classColumn, new[] { 1, m }), shape));
+        sameClass = engine.TensorSubtract(sameClass, engine.TensorEye<T>(m));
+        var infinity = PreprocessingTensorOps.Filled(shape, ops.FromDouble(double.PositiveInfinity));
+        var origin = PreprocessingTensorOps.Filled(shape, ops.Zero);
+        T constant = ops.Subtract(
+            ops.Add(engine.TensorSum(engine.TensorDigamma(PreprocessingTensorOps.Filled(new[] { 1 }, ops.FromDouble(m)))),
+                engine.TensorMean(engine.TensorDigamma(neighbours))),
+            engine.TensorMean(engine.TensorDigamma(labelCounts)));
+        var constantTensor = PreprocessingTensorOps.Filled(new[] { 1 }, constant);
+        int columnsNeeded = Math.Min(3, m);
+        var isFirst = engine.TensorEquals(neighbours, ops.One);
+        var isSecond = engine.TensorEquals(neighbours, ops.FromDouble(2));
+        var positiveRadius = PreprocessingTensorOps.Filled(new[] { m }, ops.Zero);
+
+        var keptRows = engine.TensorIndexSelect(x, keptIndex, 0);
+        var results = new Tensor<T>[p];
+        for (int j = 0; j < p; j++)
+        {
+            var column = engine.TensorSliceAxis(keptRows, 1, j);
+            var distances = engine.TensorAbs(engine.TensorSubtract(
+                engine.TensorBroadcastTo(engine.Reshape(column, new[] { m, 1 }), shape),
+                engine.TensorBroadcastTo(engine.Reshape(column, new[] { 1, m }), shape)));
+
+            // Distance to the k_i-th nearest same-class neighbour
+            var nearest = engine.TensorSort(engine.TensorWhere(sameClass, distances, infinity), 1, false).Values;
+            var first = engine.TensorSliceAxis(nearest, 1, 0);
+            var second = columnsNeeded > 1 ? engine.TensorSliceAxis(nearest, 1, 1) : first;
+            var third = columnsNeeded > 2 ? engine.TensorSliceAxis(nearest, 1, 2) : second;
+            var radius = engine.TensorWhere(isFirst, first, engine.TensorWhere(isSecond, second, third));
+
+            // Samples strictly within the radius (at distance 0 when the radius is 0), itself included
+            var radiusColumn = engine.TensorBroadcastTo(engine.Reshape(radius, new[] { m, 1 }), shape);
+            var hasRadius = engine.TensorBroadcastTo(
+                engine.Reshape(engine.TensorGreaterThan(radius, positiveRadius), new[] { m, 1 }), shape);
+            var within = engine.TensorWhere(hasRadius,
+                engine.TensorLessThan(distances, radiusColumn), engine.TensorLessEqual(distances, origin));
+            var counts = engine.ReduceSum(within, new[] { 1 }, false);
+
+            results[j] = engine.TensorSubtract(constantTensor,
+                engine.Reshape(engine.ReduceMean(engine.TensorDigamma(counts), new[] { 0 }, false), new[] { 1 }));
+        }
+
+        return engine.TensorMax(engine.TensorConcatenate(results, 0), ops.Zero);
+    }
 }

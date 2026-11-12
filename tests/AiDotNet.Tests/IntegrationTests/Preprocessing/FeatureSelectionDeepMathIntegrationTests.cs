@@ -1,3 +1,4 @@
+using AiDotNet.Enums;
 using AiDotNet.Preprocessing.FeatureSelection;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
@@ -35,7 +36,7 @@ public class FeatureSelectionDeepMathIntegrationTests
         var matrix = new Matrix<double>(data);
         var target = new Vector<double>(new double[] { 0, 0, 0, 1, 1, 1 });
 
-        var selector = new SelectKBest<double>(k: 1, defaultScoreFunc: "f_classif");
+        var selector = new SelectKBest<double>(k: 1, defaultScoreFunc: UnivariateScoreFunction.FClassif);
         selector.Fit(matrix, target);
 
         Assert.NotNull(selector.Scores);
@@ -51,14 +52,18 @@ public class FeatureSelectionDeepMathIntegrationTests
         // Feature 1: grand mean = 10.5, class0 mean = 10, class1 mean = 11
         // SSB = 3*(10-10.5)^2 + 3*(11-10.5)^2 = 3*0.25 + 3*0.25 = 1.5
         // SSW: class0: all 10 → 0, class1: all 11 → 0 → SSW=0
-        // MSW = 0/4 = 0 → F = 0 (due to MSW <= 1e-10 threshold)
-        // Actually SSW = 0, so msw = 0 which is <= 1e-10, so F = 0
-        Assert.Equal(0.0, selector.Scores[1], Tolerance);
+        // MSW = 0/4 = 0 while MSB = 1.5 > 0 → F = 1.5 / 0 = +inf: feature 1 separates the classes perfectly.
+        // scikit-learn agrees: f_classif([[1,10],[2,10],[3,10],[4,11],[5,11],[6,11]], [0,0,0,1,1,1])
+        // -> F = [13.5, inf], p = [0.0213116411, 0.]. The old F = 0 ranked the perfectly separating feature last.
+        Assert.True(double.IsPositiveInfinity(selector.Scores[1]), $"Expected F = +inf, got {selector.Scores[1]}");
+        Assert.NotNull(selector.PValues);
+        Assert.Equal(0.021311641128756713, selector.PValues[0], 1e-9);
+        Assert.Equal(0.0, selector.PValues[1], Tolerance);
 
-        // Feature 0 has higher F-score, so it should be selected
+        // Feature 1 has the higher F-score, so it is the one selected
         Assert.NotNull(selector.SelectedIndices);
         Assert.Single(selector.SelectedIndices);
-        Assert.Equal(0, selector.SelectedIndices[0]);
+        Assert.Equal(1, selector.SelectedIndices[0]);
     }
 
     [Fact(Timeout = 120000)]
@@ -77,7 +82,7 @@ public class FeatureSelectionDeepMathIntegrationTests
         var matrix = new Matrix<double>(data);
         var target = new Vector<double>(new double[] { 0, 0, 0, 1, 1, 1 });
 
-        var selector = new SelectKBest<double>(k: 2, defaultScoreFunc: "f_classif");
+        var selector = new SelectKBest<double>(k: 2, defaultScoreFunc: UnivariateScoreFunction.FClassif);
         selector.Fit(matrix, target);
 
         Assert.NotNull(selector.Scores);
@@ -108,7 +113,7 @@ public class FeatureSelectionDeepMathIntegrationTests
         var matrix = new Matrix<double>(data);
         var target = new Vector<double>(new double[] { 2.1, 3.9, 6.1, 7.9, 10.1 });
 
-        var selector = new SelectKBest<double>(k: 1, defaultScoreFunc: "f_regression");
+        var selector = new SelectKBest<double>(k: 1, defaultScoreFunc: UnivariateScoreFunction.FRegression);
         selector.Fit(matrix, target);
 
         Assert.NotNull(selector.Scores);
@@ -136,7 +141,7 @@ public class FeatureSelectionDeepMathIntegrationTests
         var matrix = new Matrix<double>(data);
         var target = new Vector<double>(new double[] { 2, 4, 5, 4, 5 });
 
-        var selector = new SelectKBest<double>(k: 1, defaultScoreFunc: "f_regression");
+        var selector = new SelectKBest<double>(k: 1, defaultScoreFunc: UnivariateScoreFunction.FRegression);
         selector.Fit(matrix, target);
 
         Assert.NotNull(selector.Scores);
@@ -170,7 +175,7 @@ public class FeatureSelectionDeepMathIntegrationTests
         var matrix = new Matrix<double>(data);
         var target = new Vector<double>(new double[] { 0, 0, 0, 1, 1, 1 });
 
-        var selector = new SelectKBest<double>(k: 1, defaultScoreFunc: "chi2");
+        var selector = new SelectKBest<double>(k: 1, defaultScoreFunc: UnivariateScoreFunction.Chi2);
         selector.Fit(matrix, target);
 
         Assert.NotNull(selector.Scores);
@@ -201,7 +206,7 @@ public class FeatureSelectionDeepMathIntegrationTests
         var matrix = new Matrix<double>(data);
         var target = new Vector<double>(new double[] { 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1 });
 
-        var selector = new SelectKBest<double>(k: 2, defaultScoreFunc: "mutual_info_classif");
+        var selector = new SelectKBest<double>(k: 2, defaultScoreFunc: UnivariateScoreFunction.MutualInfoClassif);
         selector.Fit(matrix, target);
 
         Assert.NotNull(selector.Scores);
@@ -227,7 +232,7 @@ public class FeatureSelectionDeepMathIntegrationTests
         var matrix = new Matrix<double>(data);
         var target = new Vector<double>(new double[] { 0, 0, 0, 1, 1, 1 });
 
-        var selector = new SelectKBest<double>(k: 2, defaultScoreFunc: "f_classif");
+        var selector = new SelectKBest<double>(k: 2, defaultScoreFunc: UnivariateScoreFunction.FClassif);
         var result = selector.FitTransform(matrix, target);
 
         Assert.Equal(6, result.Rows);
@@ -247,7 +252,7 @@ public class FeatureSelectionDeepMathIntegrationTests
         var matrix = new Matrix<double>(data);
         var target = new Vector<double>(new double[] { 0, 0, 1, 1 });
 
-        var selector = new SelectKBest<double>(k: 1, defaultScoreFunc: "f_classif");
+        var selector = new SelectKBest<double>(k: 1, defaultScoreFunc: UnivariateScoreFunction.FClassif);
         var result = selector.FitTransform(matrix, target);
 
         Assert.NotNull(selector.SelectedIndices);
@@ -273,7 +278,7 @@ public class FeatureSelectionDeepMathIntegrationTests
         var matrix = new Matrix<double>(data);
         var target = new Vector<double>(new double[] { 0, 0, 1, 1 });
 
-        var selector = new SelectKBest<double>(k: 2, defaultScoreFunc: "f_classif");
+        var selector = new SelectKBest<double>(k: 2, defaultScoreFunc: UnivariateScoreFunction.FClassif);
         selector.Fit(matrix, target);
 
         var mask = selector.GetSupportMask();
@@ -305,7 +310,7 @@ public class FeatureSelectionDeepMathIntegrationTests
         var target = new Vector<double>(new double[] { 0, 0, 1, 1 });
 
         // k=100 but only 2 features
-        var selector = new SelectKBest<double>(k: 100, defaultScoreFunc: "f_classif");
+        var selector = new SelectKBest<double>(k: 100, defaultScoreFunc: UnivariateScoreFunction.FClassif);
         var result = selector.FitTransform(matrix, target);
 
         Assert.Equal(2, result.Columns); // Should select all
@@ -324,7 +329,7 @@ public class FeatureSelectionDeepMathIntegrationTests
         var matrix = new Matrix<double>(data);
         var target = new Vector<double>(new double[] { 0, 0, 1, 1 });
 
-        var selector = new SelectKBest<double>(k: 3, defaultScoreFunc: "f_classif");
+        var selector = new SelectKBest<double>(k: 3, defaultScoreFunc: UnivariateScoreFunction.FClassif);
         selector.Fit(matrix, target);
 
         Assert.NotNull(selector.SelectedIndices);
@@ -352,7 +357,7 @@ public class FeatureSelectionDeepMathIntegrationTests
         var matrix = new Matrix<double>(data);
         var target = new Vector<double>(new double[] { 0, 0, 1, 1 });
 
-        var selector = new SelectPercentile<double>(percentile: 50.0, defaultScoreFunc: "f_classif");
+        var selector = new SelectPercentile<double>(percentile: 50.0, defaultScoreFunc: UnivariateScoreFunction.FClassif);
         var result = selector.FitTransform(matrix, target);
 
         // 50% of 4 features = ceil(4 * 50/100) = 2 features
@@ -373,7 +378,7 @@ public class FeatureSelectionDeepMathIntegrationTests
         var target = new Vector<double>(new double[] { 0, 0, 1, 1 });
 
         // 25% of 2 features = ceil(0.5) = 1
-        var selector = new SelectPercentile<double>(percentile: 25.0, defaultScoreFunc: "f_classif");
+        var selector = new SelectPercentile<double>(percentile: 25.0, defaultScoreFunc: UnivariateScoreFunction.FClassif);
         var result = selector.FitTransform(matrix, target);
 
         Assert.True(result.Columns >= 1, "Should select at least 1 feature");
@@ -392,7 +397,7 @@ public class FeatureSelectionDeepMathIntegrationTests
         var matrix = new Matrix<double>(data);
         var target = new Vector<double>(new double[] { 0, 0, 1, 1 });
 
-        var selector = new SelectPercentile<double>(percentile: 100.0, defaultScoreFunc: "f_classif");
+        var selector = new SelectPercentile<double>(percentile: 100.0, defaultScoreFunc: UnivariateScoreFunction.FClassif);
         var result = selector.FitTransform(matrix, target);
 
         Assert.Equal(3, result.Columns);
@@ -430,7 +435,7 @@ public class FeatureSelectionDeepMathIntegrationTests
             mode: SelectionMode.KBest, param: 2, defaultScoreFunc: "f_classif");
         genericSelector.Fit(matrix, target);
 
-        var kbestSelector = new SelectKBest<double>(k: 2, defaultScoreFunc: "f_classif");
+        var kbestSelector = new SelectKBest<double>(k: 2, defaultScoreFunc: UnivariateScoreFunction.FClassif);
         kbestSelector.Fit(matrix, target);
 
         Assert.NotNull(genericSelector.SelectedIndices);
@@ -660,7 +665,7 @@ public class FeatureSelectionDeepMathIntegrationTests
         var matrix = new Matrix<double>(data);
         var target = new Vector<double>(new double[] { 0, 0, 0, 1, 1, 1 });
 
-        var selector = new SelectKBest<double>(k: 1, defaultScoreFunc: "f_classif");
+        var selector = new SelectKBest<double>(k: 1, defaultScoreFunc: UnivariateScoreFunction.FClassif);
         selector.Fit(matrix, target);
 
         Assert.NotNull(selector.Scores);
@@ -680,7 +685,7 @@ public class FeatureSelectionDeepMathIntegrationTests
         var matrix = new Matrix<double>(data);
         var target = new Vector<double>(new double[] { 0, 0, 0, 1, 1, 1 });
 
-        var selector = new SelectKBest<double>(k: 1, defaultScoreFunc: "f_classif");
+        var selector = new SelectKBest<double>(k: 1, defaultScoreFunc: UnivariateScoreFunction.FClassif);
         selector.Fit(matrix, target);
 
         Assert.NotNull(selector.Scores);
@@ -737,7 +742,7 @@ public class FeatureSelectionDeepMathIntegrationTests
         var matrix = new Matrix<double>(data);
         var target = new Vector<double>(new double[] { 0, 0, 1, 1 });
 
-        var selector = new SelectKBest<double>(k: 2, defaultScoreFunc: "f_classif");
+        var selector = new SelectKBest<double>(k: 2, defaultScoreFunc: UnivariateScoreFunction.FClassif);
         selector.Fit(matrix, target);
 
         var names = selector.GetFeatureNamesOut(new[] { "alpha", "beta", "gamma" });
