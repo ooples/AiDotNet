@@ -104,38 +104,11 @@ public class NeuronSelectivityDistillationStrategy<T> : DistillationStrategyBase
         ValidateLabelDimensions(studentBatchOutput, trueLabelsBatch);
 
         int batchSize = studentBatchOutput.Rows;
-        T totalLoss = NumOps.Zero;
 
         // Standard distillation loss on final outputs
         // Selectivity loss requires intermediate activations - use ComputeSelectivityLoss separately
-        for (int r = 0; r < batchSize; r++)
-        {
-            Vector<T> studentOutput = studentBatchOutput.GetRow(r);
-            Vector<T> teacherOutput = teacherBatchOutput.GetRow(r);
-            Vector<T>? trueLabels = trueLabelsBatch?.GetRow(r);
-
-            // Standard distillation loss
-            var studentSoft = DistillationHelper<T>.Softmax(studentOutput, Temperature);
-            var teacherSoft = DistillationHelper<T>.Softmax(teacherOutput, Temperature);
-            var softLoss = DistillationHelper<T>.KLDivergence(teacherSoft, studentSoft);
-            softLoss = NumOps.Multiply(softLoss, NumOps.FromDouble(Temperature * Temperature));
-
-            T sampleLoss;
-            if (trueLabels != null)
-            {
-                var studentProbs = DistillationHelper<T>.Softmax(studentOutput, 1.0);
-                var hardLoss = DistillationHelper<T>.CrossEntropy(studentProbs, trueLabels);
-                sampleLoss = NumOps.Add(
-                    NumOps.Multiply(NumOps.FromDouble(Alpha), hardLoss),
-                    NumOps.Multiply(NumOps.FromDouble(1.0 - Alpha), softLoss));
-            }
-            else
-            {
-                sampleLoss = softLoss;
-            }
-
-            totalLoss = NumOps.Add(totalLoss, sampleLoss);
-        }
+        T totalLoss = Engine.Sum(DistillationHelper<T>.StandardSampleLosses(
+            studentBatchOutput, teacherBatchOutput, trueLabelsBatch, Temperature, Alpha));
 
         return NumOps.Divide(totalLoss, NumOps.FromDouble(batchSize));
     }
@@ -155,63 +128,16 @@ public class NeuronSelectivityDistillationStrategy<T> : DistillationStrategyBase
         ValidateLabelDimensions(studentBatchOutput, trueLabelsBatch);
 
         int batchSize = studentBatchOutput.Rows;
-        int outputDim = studentBatchOutput.Columns;
-        var gradientBatch = new Matrix<T>(batchSize, outputDim);
 
-        // Standard distillation gradient on final outputs
+        // Standard distillation gradient on final outputs:
+        // Alpha * hardGrad + (1 - Alpha) * softGrad with labels, the temperature-scaled soft gradient without
         // Selectivity gradients require intermediate activations and must be backpropagated separately
-        for (int r = 0; r < batchSize; r++)
-        {
-            Vector<T> studentOutput = studentBatchOutput.GetRow(r);
-            Vector<T> teacherOutput = teacherBatchOutput.GetRow(r);
-            Vector<T>? trueLabels = trueLabelsBatch?.GetRow(r);
-
-            var gradient = new Vector<T>(outputDim);
-
-            var studentSoft = DistillationHelper<T>.Softmax(studentOutput, Temperature);
-            var teacherSoft = DistillationHelper<T>.Softmax(teacherOutput, Temperature);
-
-            if (trueLabels != null)
-            {
-                var studentProbs = DistillationHelper<T>.Softmax(studentOutput, 1.0);
-
-                for (int i = 0; i < outputDim; i++)
-                {
-                    // Soft gradient (temperature-scaled)
-                    var softGrad = NumOps.Subtract(studentSoft[i], teacherSoft[i]);
-                    softGrad = NumOps.Multiply(softGrad, NumOps.FromDouble(Temperature));
-
-                    // Hard gradient
-                    var hardGrad = NumOps.Subtract(studentProbs[i], trueLabels[i]);
-
-                    // Combined gradient: Alpha * hardGrad + (1 - Alpha) * softGrad
-                    var combined = NumOps.Add(
-                        NumOps.Multiply(NumOps.FromDouble(Alpha), hardGrad),
-                        NumOps.Multiply(NumOps.FromDouble(1.0 - Alpha), softGrad));
-
-                    gradient[i] = combined;
-                }
-            }
-            else
-            {
-                for (int i = 0; i < outputDim; i++)
-                {
-                    // Soft gradient (temperature-scaled)
-                    var softGrad = NumOps.Subtract(studentSoft[i], teacherSoft[i]);
-                    softGrad = NumOps.Multiply(softGrad, NumOps.FromDouble(Temperature));
-
-                    gradient[i] = softGrad;
-                }
-            }
-
-            gradientBatch.SetRow(r, gradient);
-        }
+        var gradientBatch = DistillationHelper<T>.StandardSampleGradients(
+            studentBatchOutput, teacherBatchOutput, trueLabelsBatch, Temperature, Alpha);
 
         // Average gradients over the batch
         T oneOverBatch = NumOps.Divide(NumOps.One, NumOps.FromDouble(batchSize));
-        for (int r2 = 0; r2 < batchSize; r2++)
-            for (int c = 0; c < outputDim; c++)
-                gradientBatch[r2, c] = NumOps.Multiply(gradientBatch[r2, c], oneOverBatch);
+        gradientBatch = Engine.MatrixMultiplyScalar(gradientBatch, oneOverBatch);
 
         return gradientBatch;
     }
@@ -263,62 +189,56 @@ public class NeuronSelectivityDistillationStrategy<T> : DistillationStrategyBase
         var teacherSelectivity = ComputeSelectivityScores(teacherActivations, numNeurons);
 
         // MSE between selectivity scores
-        T loss = NumOps.Zero;
-        for (int i = 0; i < numNeurons; i++)
-        {
-            var diff = studentSelectivity[i] - teacherSelectivity[i];
-            loss = NumOps.Add(loss, NumOps.FromDouble(diff * diff));
-        }
+        var diff = Engine.Subtract(studentSelectivity, teacherSelectivity);
+        T loss = Engine.DotProduct(diff, diff);
 
         loss = NumOps.Divide(loss, NumOps.FromDouble(numNeurons));
         return NumOps.Multiply(loss, NumOps.FromDouble(_selectivityWeight));
     }
 
-    private double[] ComputeSelectivityScores(Vector<T>[] activations, int numNeurons)
+    private Vector<T> ComputeSelectivityScores(Vector<T>[] activations, int numNeurons)
     {
-        int batchSize = activations.Length;
-        var scores = new double[numNeurons];
+        // Activations for each neuron across all samples are the columns of a [batchSize, numNeurons] tensor
+        var values = DistillationHelper<T>.StackRows(activations);
 
-        for (int neuronIdx = 0; neuronIdx < numNeurons; neuronIdx++)
+        var scores = _metric switch
         {
-            // Collect activations for this neuron across all samples
-            var neuronActivations = new double[batchSize];
-            for (int sampleIdx = 0; sampleIdx < batchSize; sampleIdx++)
-            {
-                neuronActivations[sampleIdx] = Convert.ToDouble(activations[sampleIdx][neuronIdx]);
-            }
+            SelectivityMetric.Variance => ComputeVariance(values),
+            SelectivityMetric.Sparsity => ComputeSparsity(values),
+            SelectivityMetric.PeakToAverage => ComputePeakToAverage(values),
+            _ => throw new ArgumentOutOfRangeException(nameof(_metric), _metric, $"Unrecognised SelectivityMetric '{_metric}'. Valid metrics: Variance, Sparsity, PeakToAverage.")
+        };
 
-            scores[neuronIdx] = _metric switch
-            {
-                SelectivityMetric.Variance => ComputeVariance(neuronActivations),
-                SelectivityMetric.Sparsity => ComputeSparsity(neuronActivations),
-                SelectivityMetric.PeakToAverage => ComputePeakToAverage(neuronActivations),
-                _ => throw new ArgumentOutOfRangeException(nameof(_metric), _metric, $"Unrecognised SelectivityMetric '{_metric}'. Valid metrics: Variance, Sparsity, PeakToAverage.")
-            };
-        }
-
-        return scores;
+        return Engine.Reshape(scores, [numNeurons]).ToVector();
     }
 
-    private double ComputeVariance(double[] values)
+    /// <summary>
+    /// Per-neuron (population) variance over the batch: [batch, neurons] -> [1, neurons].
+    /// </summary>
+    private Tensor<T> ComputeVariance(Tensor<T> values)
     {
-        double mean = values.Average();
-        double sumSquaredDiff = values.Sum(v => (v - mean) * (v - mean));
-        return sumSquaredDiff / values.Length;
+        var mean = Engine.ReduceMean(values, [0], keepDims: true);
+        var centered = Engine.TensorSubtract(values, Engine.TensorBroadcastTo(mean, values.Shape.ToArray()));
+        return Engine.ReduceMean(Engine.TensorMultiply(centered, centered), [0], keepDims: true);
     }
 
-    private double ComputeSparsity(double[] values)
+    /// <summary>
+    /// Per-neuron fraction of near-zero activations (|a| &lt; 0.01): [batch, neurons] -> [1, neurons].
+    /// </summary>
+    private Tensor<T> ComputeSparsity(Tensor<T> values)
     {
-        // Percentage of near-zero activations (< 0.01)
-        int nearZeroCount = values.Count(v => Math.Abs(v) < 0.01);
-        return (double)nearZeroCount / values.Length;
+        var nearZero = Engine.TensorLessThan(Engine.TensorAbs(values), NumOps.FromDouble(0.01));
+        return Engine.ReduceMean(nearZero, [0], keepDims: true);
     }
 
-    private double ComputePeakToAverage(double[] values)
+    /// <summary>
+    /// Per-neuron peak-to-average ratio max / (mean + 1e-10): [batch, neurons] -> [1, neurons].
+    /// </summary>
+    private Tensor<T> ComputePeakToAverage(Tensor<T> values)
     {
-        double avg = values.Average();
-        double max = values.Max();
-        return max / (avg + 1e-10);
+        var avg = Engine.ReduceMean(values, [0], keepDims: true);
+        var max = Engine.ReduceMax(values, [0], keepDims: true);
+        return Engine.TensorDivide(max, Engine.TensorAddScalar(avg, NumOps.FromDouble(1e-10)));
     }
 
     /// <summary>
@@ -439,36 +359,22 @@ public class NeuronSelectivityDistillationStrategy<T> : DistillationStrategyBase
         var teacherSelectivity = ComputeSelectivityScores(teacherActivations, numNeurons);
 
         // Compute gradients based on metric
-        var gradientMatrix = new Matrix<T>(batchSize, numNeurons);
+        var activations = DistillationHelper<T>.StackRows(studentActivations);
+        var selectivityDiff = Engine.Reshape(
+            Tensor<T>.FromVector(Engine.Subtract(studentSelectivity, teacherSelectivity)), [1, numNeurons]);
 
-        switch (_metric)
+        Tensor<T> gradientMatrix = _metric switch
         {
-            case SelectivityMetric.Variance:
-                ComputeVarianceGradient(studentActivations, studentSelectivity, teacherSelectivity, gradientMatrix);
-                break;
-
-            case SelectivityMetric.Sparsity:
-                ComputeSparsityGradient(studentActivations, studentSelectivity, teacherSelectivity, gradientMatrix);
-                break;
-
-            case SelectivityMetric.PeakToAverage:
-                ComputePeakToAverageGradient(studentActivations, studentSelectivity, teacherSelectivity, gradientMatrix);
-                break;
-
-            default:
-                throw new ArgumentOutOfRangeException(nameof(_metric), _metric, $"Gradient is not defined for SelectivityMetric '{_metric}'. Valid metrics: Variance, Sparsity, PeakToAverage.");
-        }
+            SelectivityMetric.Variance => ComputeVarianceGradient(activations, selectivityDiff),
+            SelectivityMetric.Sparsity => ComputeSparsityGradient(activations, selectivityDiff),
+            SelectivityMetric.PeakToAverage => ComputePeakToAverageGradient(activations, selectivityDiff),
+            _ => throw new ArgumentOutOfRangeException(nameof(_metric), _metric, $"Gradient is not defined for SelectivityMetric '{_metric}'. Valid metrics: Variance, Sparsity, PeakToAverage.")
+        };
 
         // Scale by selectivity weight
-        for (int r = 0; r < batchSize; r++)
-        {
-            for (int c = 0; c < numNeurons; c++)
-            {
-                gradientMatrix[r, c] = NumOps.Multiply(gradientMatrix[r, c], NumOps.FromDouble(_selectivityWeight));
-            }
-        }
+        gradientMatrix = Engine.TensorMultiplyScalar(gradientMatrix, NumOps.FromDouble(_selectivityWeight));
 
-        gradients.Add(_targetLayerName, gradientMatrix);
+        gradients.Add(_targetLayerName, gradientMatrix.ToMatrix());
         return gradients;
     }
 
@@ -480,40 +386,22 @@ public class NeuronSelectivityDistillationStrategy<T> : DistillationStrategyBase
     /// Gradient: ∂L/∂a_ji = (2/N) * (studentVar_i - teacherVar_i) * (2/B) * (a_ji - μ_i)
     /// where N = numNeurons, B = batchSize
     /// </remarks>
-    private void ComputeVarianceGradient(
-        Vector<T>[] studentActivations,
-        double[] studentSelectivity,
-        double[] teacherSelectivity,
-        Matrix<T> gradientMatrix)
+    private Tensor<T> ComputeVarianceGradient(Tensor<T> activations, Tensor<T> selectivityDiff)
     {
-        int batchSize = studentActivations.Length;
-        int numNeurons = studentActivations[0].Length;
+        int batchSize = activations.Shape[0];
+        int numNeurons = activations.Shape[1];
+        int[] shape = activations.Shape.ToArray();
 
-        // For each neuron, compute mean and gradient contribution
-        for (int neuronIdx = 0; neuronIdx < numNeurons; neuronIdx++)
-        {
-            // Compute mean activation for this neuron
-            double mean = 0;
-            for (int sampleIdx = 0; sampleIdx < batchSize; sampleIdx++)
-            {
-                mean += Convert.ToDouble(studentActivations[sampleIdx][neuronIdx]);
-            }
-            mean /= batchSize;
+        // Mean activation for each neuron
+        var mean = Engine.ReduceMean(activations, [0], keepDims: true);
 
-            // Selectivity difference for this neuron
-            double selectivityDiff = studentSelectivity[neuronIdx] - teacherSelectivity[neuronIdx];
+        // Gradient scale: (2/N) * selectivityDiff * (2/B) = (4 / (N*B)) * selectivityDiff
+        var gradScale = Engine.TensorMultiplyScalar(selectivityDiff, NumOps.FromDouble(4.0 / (numNeurons * batchSize)));
 
-            // Gradient scale: (2/N) * selectivityDiff * (2/B) = (4 / (N*B)) * selectivityDiff
-            double gradScale = (4.0 / (numNeurons * batchSize)) * selectivityDiff;
-
-            // For each sample, compute gradient contribution
-            for (int sampleIdx = 0; sampleIdx < batchSize; sampleIdx++)
-            {
-                double activation = Convert.ToDouble(studentActivations[sampleIdx][neuronIdx]);
-                double grad = gradScale * (activation - mean);
-                gradientMatrix[sampleIdx, neuronIdx] = NumOps.FromDouble(grad);
-            }
-        }
+        // grad[j, i] = gradScale[i] * (a[j, i] - mean[i])
+        return Engine.TensorMultiply(
+            Engine.TensorBroadcastTo(gradScale, shape),
+            Engine.TensorSubtract(activations, Engine.TensorBroadcastTo(mean, shape)));
     }
 
     /// <summary>
@@ -524,37 +412,32 @@ public class NeuronSelectivityDistillationStrategy<T> : DistillationStrategyBase
     /// Uses smooth approximation: sigmoid(-k * (|a| - threshold)) where k controls steepness.
     /// This makes activations near threshold contribute more to sparsity gradient.
     /// </remarks>
-    private void ComputeSparsityGradient(
-        Vector<T>[] studentActivations,
-        double[] studentSelectivity,
-        double[] teacherSelectivity,
-        Matrix<T> gradientMatrix)
+    private Tensor<T> ComputeSparsityGradient(Tensor<T> activations, Tensor<T> selectivityDiff)
     {
-        int batchSize = studentActivations.Length;
-        int numNeurons = studentActivations[0].Length;
+        int batchSize = activations.Shape[0];
+        int numNeurons = activations.Shape[1];
+        int[] shape = activations.Shape.ToArray();
         double threshold = 0.01;
         double k = 100.0; // Steepness of sigmoid approximation
 
-        for (int neuronIdx = 0; neuronIdx < numNeurons; neuronIdx++)
-        {
-            double selectivityDiff = studentSelectivity[neuronIdx] - teacherSelectivity[neuronIdx];
-            double gradScale = (2.0 / numNeurons) * selectivityDiff;
+        var gradScale = Engine.TensorMultiplyScalar(selectivityDiff, NumOps.FromDouble(2.0 / numNeurons));
 
-            for (int sampleIdx = 0; sampleIdx < batchSize; sampleIdx++)
-            {
-                double activation = Convert.ToDouble(studentActivations[sampleIdx][neuronIdx]);
-                double absActivation = Math.Abs(activation);
+        // Gradient of sigmoid approximation: k * σ * (1 - σ) with σ = sigmoid(-k * (|a| - threshold))
+        var sigmoidArg = Engine.TensorMultiplyScalar(
+            Engine.TensorSubtractScalar(Engine.TensorAbs(activations), NumOps.FromDouble(threshold)), NumOps.FromDouble(-k));
+        var sigmoidVal = Engine.TensorSigmoid(sigmoidArg);
+        var sigmoidGrad = Engine.TensorMultiplyScalar(
+            Engine.TensorMultiply(sigmoidVal, Engine.TensorSubtract(Tensor<T>.CreateDefault(shape, NumOps.One), sigmoidVal)),
+            NumOps.FromDouble(k));
 
-                // Gradient of sigmoid approximation
-                double sigmoidArg = -k * (absActivation - threshold);
-                double sigmoidVal = 1.0 / (1.0 + Math.Exp(-sigmoidArg));
-                double sigmoidGrad = k * sigmoidVal * (1.0 - sigmoidVal);
+        // Gradient w.r.t. activation (chain rule through abs; a >= 0 counts as +1)
+        var negative = Engine.TensorLessThan(activations, NumOps.Zero);
+        var sign = Engine.TensorSubtract(
+            Tensor<T>.CreateDefault(shape, NumOps.One), Engine.TensorMultiplyScalar(negative, NumOps.FromDouble(2.0)));
 
-                // Gradient w.r.t. activation (chain rule through abs)
-                double grad = gradScale * sigmoidGrad * (activation >= 0 ? 1.0 : -1.0) / batchSize;
-                gradientMatrix[sampleIdx, neuronIdx] = NumOps.FromDouble(grad);
-            }
-        }
+        return Engine.TensorDivideScalar(
+            Engine.TensorMultiply(Engine.TensorMultiply(Engine.TensorBroadcastTo(gradScale, shape), sigmoidGrad), sign),
+            NumOps.FromDouble(batchSize));
     }
 
     /// <summary>
@@ -562,61 +445,39 @@ public class NeuronSelectivityDistillationStrategy<T> : DistillationStrategyBase
     /// </summary>
     /// <remarks>
     /// PeakToAverage: r_i = max_j(a_ji) / (avg_j(a_ji) + ε)
-    /// For the max element: ∂r_i/∂a_ji = 1 / (avg + ε)
-    /// For non-max elements: ∂r_i/∂a_ji = -max / ((avg + ε)² * B)
+    /// Every element moves the average: ∂r_i/∂a_ji ⊇ -max / ((avg + ε)² * B)
+    /// The max element (first index on ties) also moves the peak: + 1 / (avg + ε)
     /// </remarks>
-    private void ComputePeakToAverageGradient(
-        Vector<T>[] studentActivations,
-        double[] studentSelectivity,
-        double[] teacherSelectivity,
-        Matrix<T> gradientMatrix)
+    private Tensor<T> ComputePeakToAverageGradient(Tensor<T> activations, Tensor<T> selectivityDiff)
     {
-        int batchSize = studentActivations.Length;
-        int numNeurons = studentActivations[0].Length;
+        int batchSize = activations.Shape[0];
+        int numNeurons = activations.Shape[1];
+        int[] shape = activations.Shape.ToArray();
         double epsilon = 1e-10;
 
-        for (int neuronIdx = 0; neuronIdx < numNeurons; neuronIdx++)
-        {
-            // Find max and average for this neuron
-            double maxVal = double.MinValue;
-            int maxIdx = 0;
-            double sum = 0;
+        // Max and average for each neuron
+        var maxVal = Engine.ReduceMax(activations, [0], keepDims: true);
+        var avgPlusEps = Engine.TensorAddScalar(Engine.ReduceMean(activations, [0], keepDims: true), NumOps.FromDouble(epsilon));
 
-            for (int sampleIdx = 0; sampleIdx < batchSize; sampleIdx++)
-            {
-                double activation = Convert.ToDouble(studentActivations[sampleIdx][neuronIdx]);
-                sum += activation;
-                if (activation > maxVal)
-                {
-                    maxVal = activation;
-                    maxIdx = sampleIdx;
-                }
-            }
+        // One-hot of the first sample attaining each neuron's max
+        var positions = Engine.TensorBroadcastTo(
+            Engine.Reshape(Engine.TensorArange<T>(0, batchSize, 1), [batchSize, 1]), shape);
+        var candidate = Engine.TensorWhere(
+            Engine.TensorEquals(activations, Engine.TensorBroadcastTo(maxVal, shape)),
+            positions,
+            Tensor<T>.CreateDefault(shape, NumOps.FromDouble(batchSize)));
+        var firstMax = Engine.TensorNegate(Engine.ReduceMax(Engine.TensorNegate(candidate), [0], keepDims: true));
+        var isMax = Engine.TensorEquals(positions, Engine.TensorBroadcastTo(firstMax, shape));
 
-            double avg = sum / batchSize;
-            double avgPlusEps = avg + epsilon;
+        var gradScale = Engine.TensorMultiplyScalar(selectivityDiff, NumOps.FromDouble(2.0 / numNeurons));
 
-            double selectivityDiff = studentSelectivity[neuronIdx] - teacherSelectivity[neuronIdx];
-            double gradScale = (2.0 / numNeurons) * selectivityDiff;
+        // ∂(max/avg)/∂max = 1/avg for the peak; every element (peak included) also gets -max / (avg² * B)
+        var peakTerm = Engine.TensorDivide(isMax, Engine.TensorBroadcastTo(avgPlusEps, shape));
+        var averageTerm = Engine.TensorDivideScalar(
+            Engine.TensorDivide(maxVal, Engine.TensorMultiply(avgPlusEps, avgPlusEps)), NumOps.FromDouble(batchSize));
+        var ratioGrad = Engine.TensorSubtract(peakTerm, Engine.TensorBroadcastTo(averageTerm, shape));
 
-            // Gradient for each sample
-            for (int sampleIdx = 0; sampleIdx < batchSize; sampleIdx++)
-            {
-                double grad;
-                if (sampleIdx == maxIdx)
-                {
-                    // Gradient for max element: ∂(max/avg)/∂max = 1/avg
-                    grad = gradScale * (1.0 / avgPlusEps);
-                }
-                else
-                {
-                    // Gradient for non-max: ∂(max/avg)/∂a = -max / (avg² * B)
-                    grad = gradScale * (-maxVal / (avgPlusEps * avgPlusEps * batchSize));
-                }
-
-                gradientMatrix[sampleIdx, neuronIdx] = NumOps.FromDouble(grad);
-            }
-        }
+        return Engine.TensorMultiply(Engine.TensorBroadcastTo(gradScale, shape), ratioGrad);
     }
 }
 
