@@ -2,6 +2,7 @@ using AiDotNet.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Enums;
 using AiDotNet.Attributes;
+using AiDotNet.Preprocessing.FeatureSelection.Helpers;
 
 namespace AiDotNet.Preprocessing.FeatureSelection.Projection;
 
@@ -27,13 +28,13 @@ public class NMFBasedSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IFi
     private readonly int _nComponents;
     private readonly int _nIterations;
 
-    private double[]? _featureScores;
+    private Vector<T>? _featureScores;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
-    public double[]? FeatureScores => _featureScores;
+    public Vector<T>? FeatureScores => _featureScores;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -60,93 +61,42 @@ public class NMFBasedSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IFi
         _nInputFeatures = data.Columns;
         int n = data.Rows;
         int p = data.Columns;
+        var engine = Engine;
 
-        var X = new double[n, p];
-        for (int i = 0; i < n; i++)
-            for (int j = 0; j < p; j++)
-            {
-                double val = NumOps.ToDouble(data[i, j]);
-                X[i, j] = Math.Max(0, val); // Ensure non-negative
-            }
+        // Ensure non-negative
+        var x = engine.TensorMax(Tensor<T>.FromMatrix(data), NumOps.Zero);
 
         int k = Math.Min(_nComponents, Math.Min(n, p));
         var rand = RandomHelper.CreateSecureRandom();
 
         // Initialize W (n x k) and H (k x p) with random non-negative values
-        var W = new double[n, k];
-        var H = new double[k, p];
-        for (int i = 0; i < n; i++)
-            for (int j = 0; j < k; j++)
-                W[i, j] = rand.NextDouble() + 0.01;
-        for (int i = 0; i < k; i++)
-            for (int j = 0; j < p; j++)
-                H[i, j] = rand.NextDouble() + 0.01;
+        T offset = NumOps.FromDouble(0.01);
+        var w = engine.TensorAddScalar(PopulationSearchOps.Uniform<T>(rand, n, k), offset);
+        var h = engine.TensorAddScalar(PopulationSearchOps.Uniform<T>(rand, k, p), offset);
+        T eps = NumOps.FromDouble(1e-10);
 
-        // Multiplicative update rules
+        // Multiplicative update rules (Lee and Seung 2001)
         for (int iter = 0; iter < _nIterations; iter++)
         {
             // Update H: H = H .* (W'X) ./ (W'WH + eps)
-            var WtX = new double[k, p];
-            var WtW = new double[k, k];
-            var WtWH = new double[k, p];
-
-            for (int i = 0; i < k; i++)
-            {
-                for (int j = 0; j < p; j++)
-                    for (int r = 0; r < n; r++)
-                        WtX[i, j] += W[r, i] * X[r, j];
-
-                for (int j = 0; j < k; j++)
-                    for (int r = 0; r < n; r++)
-                        WtW[i, j] += W[r, i] * W[r, j];
-            }
-
-            for (int i = 0; i < k; i++)
-                for (int j = 0; j < p; j++)
-                    for (int r = 0; r < k; r++)
-                        WtWH[i, j] += WtW[i, r] * H[r, j];
-
-            for (int i = 0; i < k; i++)
-                for (int j = 0; j < p; j++)
-                    H[i, j] *= WtX[i, j] / (WtWH[i, j] + 1e-10);
+            var wt = engine.TensorTranspose(w);
+            var wtx = engine.TensorMatMul(wt, x);
+            var wtwh = engine.TensorMatMul(engine.TensorMatMul(wt, w), h);
+            h = engine.TensorMultiply(h, engine.TensorDivide(wtx, engine.TensorAddScalar(wtwh, eps)));
 
             // Update W: W = W .* (XH') ./ (WHH' + eps)
-            var XHt = new double[n, k];
-            var HHt = new double[k, k];
-            var WHHt = new double[n, k];
-
-            for (int i = 0; i < n; i++)
-                for (int j = 0; j < k; j++)
-                    for (int r = 0; r < p; r++)
-                        XHt[i, j] += X[i, r] * H[j, r];
-
-            for (int i = 0; i < k; i++)
-                for (int j = 0; j < k; j++)
-                    for (int r = 0; r < p; r++)
-                        HHt[i, j] += H[i, r] * H[j, r];
-
-            for (int i = 0; i < n; i++)
-                for (int j = 0; j < k; j++)
-                    for (int r = 0; r < k; r++)
-                        WHHt[i, j] += W[i, r] * HHt[r, j];
-
-            for (int i = 0; i < n; i++)
-                for (int j = 0; j < k; j++)
-                    W[i, j] *= XHt[i, j] / (WHHt[i, j] + 1e-10);
+            var ht = engine.TensorTranspose(h);
+            var xht = engine.TensorMatMul(x, ht);
+            var whht = engine.TensorMatMul(w, engine.TensorMatMul(h, ht));
+            w = engine.TensorMultiply(w, engine.TensorDivide(xht, engine.TensorAddScalar(whht, eps)));
         }
 
         // Feature scores = sum of squared H values across components
-        _featureScores = new double[p];
-        for (int j = 0; j < p; j++)
-            for (int c = 0; c < k; c++)
-                _featureScores[j] += H[c, j] * H[c, j];
+        var scores = engine.ReduceSum(engine.TensorSquare(h), new[] { 0 }, false);
+        _featureScores = scores.ToVector();
 
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = Enumerable.Range(0, p)
-            .OrderByDescending(j => _featureScores[j])
-            .Take(numToSelect)
-            .OrderBy(x => x)
-            .ToArray();
+        _selectedIndices = FeatureSelectionTensorOps.TopKIndicesSorted(scores, numToSelect);
 
         IsFitted = true;
     }
@@ -157,15 +107,7 @@ public class NMFBasedSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IFi
         if (_selectedIndices is null)
             throw new InvalidOperationException("NMFBasedSelector has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return FeatureSelectionTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

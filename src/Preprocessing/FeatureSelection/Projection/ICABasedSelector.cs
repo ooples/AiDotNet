@@ -2,6 +2,7 @@ using AiDotNet.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Enums;
 using AiDotNet.Attributes;
+using AiDotNet.Preprocessing.FeatureSelection.Helpers;
 
 namespace AiDotNet.Preprocessing.FeatureSelection.Projection;
 
@@ -27,13 +28,13 @@ public class ICABasedSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IFi
     private readonly int _nComponents;
     private readonly int _nIterations;
 
-    private double[]? _featureScores;
+    private Vector<T>? _featureScores;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
-    public double[]? FeatureScores => _featureScores;
+    public Vector<T>? FeatureScores => _featureScores;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -60,111 +61,30 @@ public class ICABasedSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IFi
         _nInputFeatures = data.Columns;
         int n = data.Rows;
         int p = data.Columns;
-
-        var X = new double[n, p];
-        for (int i = 0; i < n; i++)
-            for (int j = 0; j < p; j++)
-                X[i, j] = NumOps.ToDouble(data[i, j]);
+        var engine = Engine;
 
         // Center data
-        var means = new double[p];
-        for (int j = 0; j < p; j++)
-        {
-            for (int i = 0; i < n; i++) means[j] += X[i, j];
-            means[j] /= n;
-            for (int i = 0; i < n; i++) X[i, j] -= means[j];
-        }
+        var raw = Tensor<T>.FromMatrix(data);
+        var x = engine.TensorSubtract(raw, engine.TensorBroadcastTo(engine.ReduceMean(raw, new[] { 0 }, true), new[] { n, p }));
 
         int k = Math.Min(_nComponents, Math.Min(n, p));
         var rand = RandomHelper.CreateSecureRandom();
 
-        // Whitening using simple covariance-based approach
-        var cov = new double[p, p];
-        for (int j1 = 0; j1 < p; j1++)
-            for (int j2 = j1; j2 < p; j2++)
-            {
-                double sum = 0;
-                for (int i = 0; i < n; i++)
-                    sum += X[i, j1] * X[i, j2];
-                cov[j1, j2] = sum / n;
-                cov[j2, j1] = cov[j1, j2];
-            }
+        // Whitening: FastICA (Hyvarinen 1999) runs on PCA-whitened data
+        var z = FastIcaOps.Whiten(x, k, out var whitening);
 
-        // FastICA algorithm (simplified)
-        var W = new double[p, k];
-        for (int c = 0; c < k; c++)
-        {
-            // Initialize weight vector
-            var w = new double[p];
-            for (int j = 0; j < p; j++) w[j] = rand.NextDouble() - 0.5;
-            Normalize(w);
+        // Deflationary FastICA; component c starts from uniform draws in [-0.5, 0.5)
+        var initial = engine.TensorTranspose(PopulationSearchOps.Affine(PopulationSearchOps.Uniform<T>(rand, k, k), 1, -0.5));
+        var unmixing = engine.TensorMatMul(whitening, FastIcaOps.Deflation(z, initial, _nIterations, 0));
 
-            for (int iter = 0; iter < _nIterations; iter++)
-            {
-                // Compute w'X for all samples
-                var wx = new double[n];
-                for (int i = 0; i < n; i++)
-                    for (int j = 0; j < p; j++)
-                        wx[i] += w[j] * X[i, j];
-
-                // Non-linearity g(u) = tanh(u), g'(u) = 1 - tanh(u)^2
-                var gWx = new double[n];
-                var gPrimeWx = new double[n];
-                for (int i = 0; i < n; i++)
-                {
-                    gWx[i] = Math.Tanh(wx[i]);
-                    gPrimeWx[i] = 1 - gWx[i] * gWx[i];
-                }
-
-                // Update: w = E[X * g(w'X)] - E[g'(w'X)] * w
-                var newW = new double[p];
-                double meanGPrime = gPrimeWx.Average();
-
-                for (int j = 0; j < p; j++)
-                {
-                    double sum = 0;
-                    for (int i = 0; i < n; i++)
-                        sum += X[i, j] * gWx[i];
-                    newW[j] = sum / n - meanGPrime * w[j];
-                }
-
-                // Orthogonalize against previous components
-                for (int prev = 0; prev < c; prev++)
-                {
-                    double dot = 0;
-                    for (int j = 0; j < p; j++) dot += newW[j] * W[j, prev];
-                    for (int j = 0; j < p; j++) newW[j] -= dot * W[j, prev];
-                }
-
-                Normalize(newW);
-                Array.Copy(newW, w, p);
-            }
-
-            for (int j = 0; j < p; j++)
-                W[j, c] = w[j];
-        }
-
-        // Feature scores = sum of absolute weights across components
-        _featureScores = new double[p];
-        for (int j = 0; j < p; j++)
-            for (int c = 0; c < k; c++)
-                _featureScores[j] += Math.Abs(W[j, c]);
+        // Feature scores = sum of absolute unmixing weights (in the original feature space) across components
+        var scores = engine.ReduceSum(engine.TensorAbs(unmixing), new[] { 1 }, false);
+        _featureScores = scores.ToVector();
 
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = Enumerable.Range(0, p)
-            .OrderByDescending(j => _featureScores[j])
-            .Take(numToSelect)
-            .OrderBy(x => x)
-            .ToArray();
+        _selectedIndices = FeatureSelectionTensorOps.TopKIndicesSorted(scores, numToSelect);
 
         IsFitted = true;
-    }
-
-    private void Normalize(double[] v)
-    {
-        double norm = Math.Sqrt(v.Sum(x => x * x)) + 1e-10;
-        for (int i = 0; i < v.Length; i++)
-            v[i] /= norm;
     }
 
     /// <inheritdoc />
@@ -173,15 +93,7 @@ public class ICABasedSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IFi
         if (_selectedIndices is null)
             throw new InvalidOperationException("ICABasedSelector has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return FeatureSelectionTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

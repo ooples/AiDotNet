@@ -1431,4 +1431,68 @@ public class FeatureSelectionPopulationReferenceTests
         for (int j = 0; j < p; j++)
             Assert.Equal(accum[j] / 2, importances[j], 6);
     }
+
+    // ---------------------------------------------------------------- FastICA (projection selectors)
+
+    [Fact]
+    public void FastIca_WhitensAndSeparatesIndependentSources()
+    {
+        // Two independent uniform sources mixed into three features
+        var rng = new System.Random(61);
+        int n = 2000;
+        var s = new double[n, 2];
+        var x = new double[n, 3];
+        for (int i = 0; i < n; i++)
+        {
+            s[i, 0] = rng.NextDouble() * 2 - 1;
+            s[i, 1] = rng.NextDouble() < 0.5 ? -1 : 1;
+            x[i, 0] = s[i, 0] + 0.5 * s[i, 1];
+            x[i, 1] = 0.3 * s[i, 0] - s[i, 1];
+            x[i, 2] = s[i, 0] + s[i, 1];
+        }
+
+        for (int j = 0; j < 3; j++)
+        {
+            double mean = 0;
+            for (int i = 0; i < n; i++) mean += x[i, j];
+            mean /= n;
+            for (int i = 0; i < n; i++) x[i, j] -= mean;
+        }
+
+        var z = AiDotNet.Preprocessing.FeatureSelection.Helpers.FastIcaOps.Whiten(Tensor2D(x), 2, out var whitening);
+        var zz = ToArray(z);
+        for (int a = 0; a < 2; a++)
+            for (int b = 0; b < 2; b++)
+            {
+                double c = 0;
+                for (int i = 0; i < n; i++) c += zz[i * 2 + a] * zz[i * 2 + b];
+                Assert.Equal(a == b ? 1.0 : 0.0, c / n, 6);
+            }
+
+        var w = AiDotNet.Preprocessing.FeatureSelection.Helpers.FastIcaOps.Deflation(
+            z, Tensor2D(new double[,] { { 0.3, -0.2 }, { 0.1, 0.4 } }), 200, 1e-9);
+        var unmixing = ToArray(w);
+        for (int c = 0; c < 2; c++)
+        {
+            var y = new double[n];
+            for (int i = 0; i < n; i++) y[i] = zz[i * 2] * unmixing[c] + zz[i * 2 + 1] * unmixing[2 + c];
+
+            // Each recovered component matches one source up to sign and scale
+            double best = 0;
+            for (int src = 0; src < 2; src++)
+            {
+                double sy = 0, ss = 0, yy = 0;
+                for (int i = 0; i < n; i++)
+                {
+                    sy += s[i, src] * y[i];
+                    ss += s[i, src] * s[i, src];
+                    yy += y[i] * y[i];
+                }
+
+                best = System.Math.Max(best, System.Math.Abs(sy / System.Math.Sqrt(ss * yy)));
+            }
+
+            Assert.True(best > 0.99, $"component {c} correlates at most {best} with a source");
+        }
+    }
 }
