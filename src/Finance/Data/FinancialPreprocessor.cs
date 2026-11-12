@@ -83,11 +83,7 @@ public sealed class FinancialPreprocessor<T>
         for (int i = 0; i < points.Count; i++)
         {
             var features = BuildFeatureVector(points, i, includeVolume, includeReturns);
-            int offset = i * featureCount;
-            for (int f = 0; f < featureCount; f++)
-            {
-                data[offset + f] = features[f];
-            }
+            features.AsSpan().Slice(0, featureCount).CopyTo(data.AsSpan(i * featureCount, featureCount));
         }
 
         return new Tensor<T>(new[] { points.Count, featureCount }, new Vector<T>(data));
@@ -136,10 +132,7 @@ public sealed class FinancialPreprocessor<T>
             {
                 var features = BuildFeatureVector(points, sample + t, includeVolume, includeReturns);
                 int baseOffset = (sample * sequenceLength + t) * featureCount;
-                for (int f = 0; f < featureCount; f++)
-                {
-                    featureData[baseOffset + f] = features[f];
-                }
+                features.AsSpan().Slice(0, featureCount).CopyTo(featureData.AsSpan(baseOffset, featureCount));
             }
 
             for (int h = 0; h < predictionHorizon; h++)
@@ -183,36 +176,20 @@ public sealed class FinancialPreprocessor<T>
         }
 
         int featureCount = input.Shape[^1];
-        var min = new T[featureCount];
-        var max = new T[featureCount];
+        var engine = AiDotNetEngine.Current;
 
-        InitializeMinMax(input, min, max, featureCount);
+        // A fresh, detached result, as before.
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        var rows = engine.Reshape(input, new[] { input.Length / featureCount, featureCount });
+        var min = engine.TensorAmin(rows, new[] { 0 }, true);                       // [1, features]
+        var max = engine.ReduceMax(rows, new[] { 0 }, true);                        // [1, features]
+        var range = engine.TensorSubtract(max, min);
+        var safeRange = engine.TensorWhere(
+            engine.TensorEquals(range, _numOps.Zero), engine.TensorFullLike(range, _numOps.One), range);
+        var normalized = engine.TensorDivide(engine.TensorSubtract(rows, min), safeRange);
 
-        for (int i = 0; i < input.Length; i++)
-        {
-            int feature = i % featureCount;
-            T value = input.Data.Span[i];
-            if (_numOps.Compare(value, min[feature]) < 0)
-            {
-                min[feature] = value;
-            }
-            if (_numOps.Compare(value, max[feature]) > 0)
-            {
-                max[feature] = value;
-            }
-        }
-
-        var normalized = new T[input.Length];
-        for (int i = 0; i < input.Length; i++)
-        {
-            int feature = i % featureCount;
-            T range = _numOps.Subtract(max[feature], min[feature]);
-            T safeRange = _numOps.Compare(range, _numOps.Zero) == 0 ? _numOps.One : range;
-            normalized[i] = _numOps.Divide(_numOps.Subtract(input.Data.Span[i], min[feature]), safeRange);
-        }
-
-        stats = (new Vector<T>(min), new Vector<T>(max));
-        return new Tensor<T>(input._shape, new Vector<T>(normalized));
+        stats = (min.ToVector(), max.ToVector());
+        return engine.Reshape(normalized, (int[])input._shape.Clone());
     }
 
     /// <summary>
@@ -241,46 +218,24 @@ public sealed class FinancialPreprocessor<T>
 
         int featureCount = input.Shape[^1];
         int sampleCount = input.Length / featureCount;
-        var mean = new T[featureCount];
-        var std = new T[featureCount];
+        var engine = AiDotNetEngine.Current;
 
-        for (int i = 0; i < input.Length; i++)
-        {
-            int feature = i % featureCount;
-            mean[feature] = _numOps.Add(mean[feature], input.Data.Span[i]);
-        }
-
-        for (int f = 0; f < featureCount; f++)
-        {
-            mean[f] = _numOps.Divide(mean[f], _numOps.FromDouble(sampleCount));
-        }
-
-        for (int i = 0; i < input.Length; i++)
-        {
-            int feature = i % featureCount;
-            T diff = _numOps.Subtract(input.Data.Span[i], mean[feature]);
-            std[feature] = _numOps.Add(std[feature], _numOps.Multiply(diff, diff));
-        }
+        // A fresh, detached result, as before.
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        var rows = engine.Reshape(input, new[] { sampleCount, featureCount });
+        var mean = engine.TensorDivideScalar(
+            engine.ReduceSum(rows, new[] { 0 }, true), _numOps.FromDouble(sampleCount));      // [1, features]
+        var centered = engine.TensorSubtract(rows, mean);
 
         double denom = Math.Max(1, sampleCount - 1);
-        for (int f = 0; f < featureCount; f++)
-        {
-            std[f] = _numOps.Sqrt(_numOps.Divide(std[f], _numOps.FromDouble(denom)));
-            if (_numOps.Compare(std[f], _numOps.Zero) == 0)
-            {
-                std[f] = _numOps.One;
-            }
-        }
+        var std = engine.TensorSqrt(engine.TensorDivideScalar(
+            engine.ReduceSum(engine.TensorMultiply(centered, centered), new[] { 0 }, true), _numOps.FromDouble(denom)));
+        std = engine.TensorWhere(engine.TensorEquals(std, _numOps.Zero), engine.TensorFullLike(std, _numOps.One), std);
 
-        var normalized = new T[input.Length];
-        for (int i = 0; i < input.Length; i++)
-        {
-            int feature = i % featureCount;
-            normalized[i] = _numOps.Divide(_numOps.Subtract(input.Data.Span[i], mean[feature]), std[feature]);
-        }
+        var normalized = engine.TensorDivide(centered, std);
 
-        stats = (new Vector<T>(mean), new Vector<T>(std));
-        return new Tensor<T>(input._shape, new Vector<T>(normalized));
+        stats = (mean.ToVector(), std.ToVector());
+        return engine.Reshape(normalized, (int[])input._shape.Clone());
     }
 
     /// <summary>
@@ -386,20 +341,5 @@ public sealed class FinancialPreprocessor<T>
         {
             throw new ArgumentOutOfRangeException(nameof(predictionHorizon));
         }
-    }
-
-    /// <summary>
-    /// Initializes min/max arrays from the first feature row.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> We need a starting value for each feature before
-    /// we scan the data to find true minima and maxima.
-    /// </para>
-    /// </remarks>
-    private void InitializeMinMax(Tensor<T> input, T[] min, T[] max, int featureCount)
-    {
-        input.Data.Span.Slice(0, featureCount).CopyTo(min.AsSpan());
-        input.Data.Span.Slice(0, featureCount).CopyTo(max.AsSpan());
     }
 }
