@@ -102,6 +102,7 @@ public static class MatrixSolutionHelper
         }
 
         // Batch i is A with column i replaced by b: select b[j] where column k == i, else A[j, k].
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
         var engine = AiDotNetEngine.Current;
         var shape = new[] { n, n, n };
         var aBatch = engine.TensorBroadcastTo(Tensor<T>.FromMatrix(A).Reshape(new[] { 1, n, n }), shape);
