@@ -229,68 +229,80 @@ public partial class KimiVL<T> : VisionLanguageModelBase<T>, IReasoningVLM<T>
         int qLen = questionTokens.Length;
 
         // Step 3: Multi-step MoE reasoning with expert specialization per step
-        var reasoningState = new double[dim];
+        var engine = Engine;
+        var reasoningState = new Tensor<T>([dim]);
+        int numSamples = Math.Min(32, visDim);
+        int patchCount = Math.Min(48, visDim);
+
+        // Per-step coefficients for all steps: stepDecay = 1 / (step + 1), the router frequency
+        // (step + 1) * 0.4 and the expert focus frequency (step + 1) * 0.008.
+        var stepNumber = engine.TensorArange<T>(1, numReasoningSteps + 1, 1);
+        var stepDecay = engine.TensorDivide(Tensor<T>.CreateDefault([numReasoningSteps], NumOps.One), stepNumber);
+        var stateKeep = engine.ScalarMinusTensor(NumOps.One, engine.TensorMultiplyScalar(stepDecay, NumOps.FromDouble(0.25)));
+        var routerFrequency = engine.TensorMultiplyScalar(stepNumber, NumOps.FromDouble(0.4));
+        var focusFrequency = engine.TensorMultiplyScalar(stepNumber, NumOps.FromDouble(0.008));
+        var expertNumber = engine.TensorArange<T>(1, numExperts + 1, 1);
+        var patchNumber = engine.TensorArange<T>(1, patchCount + 1, 1);
+        T questionScale = NumOps.FromDouble(0.3 / _options.VocabSize);
+        T sampleCount = NumOps.FromDouble(numSamples);
+        T patchTotal = NumOps.FromDouble(patchCount);
+        T half = NumOps.FromDouble(0.5);
+        T focusAmplitude = NumOps.FromDouble(0.3);
+        T questionWeight = NumOps.FromDouble(0.2);
+        // Question conditioning: q[d % qLen] / vocab (the same every step).
+        var qEmb = engine.TensorMultiplyScalar(CyclicTake(questionTokens, dim), NumOps.FromDouble(1.0 / _options.VocabSize));
 
         for (int step = 0; step < numReasoningSteps; step++)
         {
-            double stepDecay = 1.0 / (step + 1);
-
-            for (int d = 0; d < dim; d++)
+            // Step-dependent expert routing: different steps activate different experts.
+            // routerScore[d, e] = cos((e + 1)(step + 1) 0.4) * mean_s(vis[(d ns + s + 13 step) % visDim]
+            //                     + 0.3 q[(s + step) % qLen] / vocab); the first expert with the highest
+            // exp(0.5 routerScore) wins. With no visual features every score is NaN and no expert wins.
+            Tensor<T> bestExpertOut;
+            if (numSamples == 0)
             {
-                // Step-dependent expert routing: different steps activate different experts
-                double bestExpertOut = 0;
-                double bestExpertWeight = 0;
-
-                for (int e = 0; e < numExperts; e++)
-                {
-                    // Router score depends on step (expert specialization)
-                    double routerScore = 0;
-                    int numSamples = Math.Min(32, visDim);
-                    for (int s = 0; s < numSamples; s++)
-                    {
-                        int vIdx = (d * numSamples + s + step * 13) % visDim;
-                        double visVal = NumOps.ToDouble(visualFeatures[vIdx]);
-                        double qVal =
-                            NumOps.ToDouble(questionTokens[(s + step) % qLen]) / _options.VocabSize;
-                        // Step-biased routing: each step prefers different experts
-                        routerScore += (visVal + qVal * 0.3) * Math.Cos((e + 1.0) * (step + 1) * 0.4);
-                    }
-                    routerScore /= numSamples;
-                    double expertProb = Math.Exp(routerScore * 0.5);
-
-                    // Expert processes visual features with step-specific focus
-                    double expertVal = 0;
-                    int patchCount = Math.Min(48, visDim);
-                    for (int v = 0; v < patchCount; v++)
-                    {
-                        int vIdx = (v + e * 11 + step * 17) % visDim;
-                        double visVal = NumOps.ToDouble(visualFeatures[vIdx]);
-                        double stepBias = Math.Sin((step + 1.0) * (v + 1) * 0.008) * 0.3;
-                        expertVal += visVal * (1.0 + stepBias);
-                    }
-                    expertVal /= patchCount;
-
-                    if (expertProb > bestExpertWeight)
-                    {
-                        bestExpertWeight = expertProb;
-                        bestExpertOut = expertVal;
-                    }
-                }
-
-                // Question conditioning
-                double qEmb = NumOps.ToDouble(questionTokens[d % qLen]) / _options.VocabSize;
-
-                // Residual reasoning accumulation with long-context decay
-                double prevState = reasoningState[d];
-                reasoningState[d] =
-                    prevState * (1.0 - stepDecay * 0.25) + (bestExpertOut + qEmb * 0.2) * stepDecay;
+                bestExpertOut = new Tensor<T>([dim]);
             }
+            else
+            {
+                var visSamples = AffineModGather(visualFeatures, [dim, numSamples], [numSamples, 1], step * 13);
+                var qSamples = engine.TensorMultiplyScalar(AffineModGather(questionTokens, [numSamples], [1], step), questionScale);
+                var sampleMean = engine.TensorDivideScalar(
+                    engine.ReduceSum(
+                        engine.TensorAdd(visSamples, engine.TensorBroadcastTo(qSamples.Reshape([1, numSamples]), [dim, numSamples])),
+                        [1], false),
+                    sampleCount);
+                var stepBias = engine.TensorCos(engine.TensorMultiply(expertNumber, Pick(routerFrequency, step)));
+                var routerScore = engine.TensorOuter(sampleMean, stepBias);
+                var expertProb = engine.TensorExp(engine.TensorMultiplyScalar(routerScore, half));
+                var bestExpert = RowFirstArgMaxMask(expertProb, NumOps.Zero);
+
+                // Expert processes visual features with step-specific focus:
+                // expertVal[e] = mean_v vis[(v + 11 e + 17 step) % visDim] * (1 + 0.3 sin((step + 1)(v + 1) 0.008))
+                var focus = engine.TensorAddScalar(
+                    engine.TensorMultiplyScalar(
+                        engine.TensorSin(engine.TensorMultiply(patchNumber, Pick(focusFrequency, step))), focusAmplitude),
+                    NumOps.One);
+                var expertPatches = AffineModGather(visualFeatures, [numExperts, patchCount], [11, 1], step * 17);
+                var expertVal = engine.TensorDivideScalar(
+                    engine.ReduceSum(
+                        engine.TensorMultiply(expertPatches, engine.TensorBroadcastTo(focus.Reshape([1, patchCount]), [numExperts, patchCount])),
+                        [1], false),
+                    patchTotal);
+                bestExpertOut = MaskedRowSum(
+                    engine.TensorBroadcastTo(expertVal.Reshape([1, numExperts]), [dim, numExperts]), bestExpert);
+            }
+
+            // Residual reasoning accumulation with long-context decay
+            reasoningState = engine.TensorAdd(
+                engine.TensorMultiply(reasoningState, Pick(stateKeep, step)),
+                engine.TensorMultiply(
+                    engine.TensorAdd(bestExpertOut, engine.TensorMultiplyScalar(qEmb, questionWeight)),
+                    Pick(stepDecay, step)));
         }
 
         // Step 4: Final answer from reasoning chain
-        var chainInput = new Tensor<T>([dim]);
-        for (int d = 0; d < dim; d++)
-            chainInput[d] = NumOps.FromDouble(reasoningState[d]);
+        var chainInput = reasoningState;
 
         var output = chainInput;
         for (int i = _encoderLayerEnd; i < Layers.Count; i++)

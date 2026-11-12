@@ -234,6 +234,9 @@ public partial class Chameleon<T> : VisionLanguageModelBase<T>, IUnifiedVisionMo
                 engine.TensorSlice(textContext.Reshape([contextDim]), [0], [inputLen]), NumOps.FromDouble(0.7))
             : new Tensor<T>([0]);
         T visTokenScale = NumOps.FromDouble(0.3 / numVisTokens);
+        // Per-step phase scale t * 0.001 of the position-dependent token bias.
+        var biasPhaseScale = engine.TensorMultiplyScalar(engine.TensorArange<T>(0, numGenTokens, 1), NumOps.FromDouble(0.001));
+        T biasAmplitude = NumOps.FromDouble(0.1);
 
         for (int t = 0; t < numGenTokens; t++)
         {
@@ -264,9 +267,9 @@ public partial class Chameleon<T> : VisionLanguageModelBase<T>, IUnifiedVisionMo
             if (checkRange > 0)
             {
                 var tokenBias = engine.TensorMultiplyScalar(
-                    engine.TensorSin(engine.TensorMultiplyScalar(
-                        engine.TensorArange<T>(0, checkRange, 1), NumOps.FromDouble((double)t * 0.001))),
-                    NumOps.FromDouble(0.1));
+                    engine.TensorSin(engine.TensorMultiply(
+                        engine.TensorArange<T>(0, checkRange, 1), Pick(biasPhaseScale, t))),
+                    biasAmplitude);
                 var scores = engine.TensorAdd(
                     engine.TensorSlice(logits.Reshape([logitDim]), [0], [checkRange]), tokenBias);
                 bestToken = Math.Max(0, FirstArgMax(scores));

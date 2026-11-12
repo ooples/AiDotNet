@@ -473,6 +473,84 @@ public abstract partial class VisionLanguageModelBase<T> : NeuralNetworkBase<T>,
     }
 
     /// <summary>
+    /// Gathers <c>source[(offset + sum_k coefficients[k] * i_k) % source.Length]</c> over an index grid of
+    /// <paramref name="shape"/> (source read flattened; coefficients and offset are non-negative).
+    /// </summary>
+    /// <param name="source">Values to read.</param>
+    /// <param name="shape">Grid shape.</param>
+    /// <param name="coefficients">Per-axis index multipliers.</param>
+    /// <param name="offset">Constant index offset.</param>
+    /// <returns>A tensor of <paramref name="shape"/>.</returns>
+    /// <exception cref="DivideByZeroException">The source is empty.</exception>
+    protected Tensor<T> AffineModGather(Tensor<T> source, int[] shape, int[] coefficients, int offset)
+    {
+        int n = source.Length;
+        if (n == 0)
+            throw new DivideByZeroException();
+        var index = Tensor<int>.CreateDefault(shape, offset);
+        for (int axis = 0; axis < shape.Length; axis++)
+        {
+            if (coefficients[axis] == 0)
+                continue;
+            var axisShape = new int[shape.Length];
+            for (int k = 0; k < shape.Length; k++)
+                axisShape[k] = k == axis ? shape[axis] : 1;
+            var step = Engine.TensorMultiplyScalar(Engine.TensorArange<int>(0, shape[axis], 1), coefficients[axis]);
+            index = Engine.TensorAdd(index, Engine.TensorBroadcastTo(step.Reshape(axisShape), shape));
+        }
+        index = Engine.TensorRemainder(index, Tensor<int>.CreateDefault(shape, n));
+        return Engine.TensorTake(source.Reshape([n]), index);
+    }
+
+    /// <summary>
+    /// For each row of a [rows, cols] score matrix, marks the first column holding the row maximum among the
+    /// values strictly greater than <paramref name="floor"/> (a scan that keeps the best only on a strictly
+    /// greater score). NaN never qualifies; a row with no qualifying value is all zero.
+    /// </summary>
+    /// <param name="scores">Scores, shape [rows, cols].</param>
+    /// <param name="floor">Initial best value of the scan.</param>
+    /// <returns>A [rows, cols] 1/0 mask with at most one 1 per row.</returns>
+    protected Tensor<T> RowFirstArgMaxMask(Tensor<T> scores, T floor)
+    {
+        int rows = scores.Shape[0], cols = scores.Shape[1];
+        var qualifies = Engine.TensorGreaterThan(scores, floor);
+        var negInf = Tensor<T>.CreateDefault([rows, cols], NumOps.FromDouble(double.NegativeInfinity));
+        var comparable = Engine.TensorWhere(qualifies, scores, negInf);
+        var rowMax = Engine.TensorBroadcastTo(Engine.ReduceMax(comparable, [1], true), [rows, cols]);
+        var isBest = Engine.TensorMultiply(Engine.TensorEquals(comparable, rowMax), qualifies);
+        var positions = Engine.TensorBroadcastTo(Engine.TensorArange<T>(0, cols, 1).Reshape([1, cols]), [rows, cols]);
+        var candidate = Engine.TensorWhere(isBest, positions, Tensor<T>.CreateDefault([rows, cols], NumOps.FromDouble(cols)));
+        // Row minimum of the candidate positions, as -max(-x).
+        T minusOne = NumOps.FromDouble(-1.0);
+        var first = Engine.TensorMultiplyScalar(
+            Engine.ReduceMax(Engine.TensorMultiplyScalar(candidate, minusOne), [1], true), minusOne);
+        return Engine.TensorEquals(positions, Engine.TensorBroadcastTo(first, [rows, cols]));
+    }
+
+    /// <summary>
+    /// Sums <paramref name="values"/> along the last axis of a [rows, cols] matrix where <paramref name="mask"/>
+    /// is non-zero (masked-out entries contribute nothing, even when they are NaN or infinite).
+    /// </summary>
+    /// <param name="values">Values, shape [rows, cols].</param>
+    /// <param name="mask">Selection mask, shape [rows, cols].</param>
+    /// <returns>A [rows] tensor.</returns>
+    protected Tensor<T> MaskedRowSum(Tensor<T> values, Tensor<T> mask)
+    {
+        var zeros = new Tensor<T>(values._shape);
+        return Engine.ReduceSum(Engine.TensorWhere(mask, values, zeros), [1], false);
+    }
+
+    /// <summary>
+    /// Returns element <paramref name="index"/> of a sequence as a [1] tensor, so a per-step coefficient
+    /// computed for all steps up front can scale a tensor through a broadcast multiply.
+    /// </summary>
+    /// <param name="values">Per-step values (read flattened).</param>
+    /// <param name="index">Step index.</param>
+    /// <returns>A [1] tensor.</returns>
+    protected Tensor<T> Pick(Tensor<T> values, int index) =>
+        Engine.TensorSlice(values.Reshape([values.Length]), [index], [1]);
+
+    /// <summary>
     /// Shifts a flat sequence: result[t] = values[t + offset] when 0 &lt;= t + offset &lt; n, otherwise 0.
     /// </summary>
     /// <param name="values">Values to shift (read flattened).</param>

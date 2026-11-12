@@ -244,11 +244,17 @@ public partial class ShowO<T> : VisionLanguageModelBase<T>, IUnifiedVisionModel<
         if (numDiffusionSteps <= 0)
             throw new InvalidOperationException("DiffusionSteps must be positive.");
         int tokensPerStep = Math.Max(1, numGenTokens / numDiffusionSteps);
+        // Per-step phase scale step * 0.01 of the step bias sin(t * step * 0.01) * 0.1.
+        var stepPhaseScale = engine.TensorMultiplyScalar(engine.TensorArange<T>(0, numDiffusionSteps, 1), NumOps.FromDouble(0.01));
+        T biasAmplitude = NumOps.FromDouble(0.1);
+        T contextWeight = NumOps.FromDouble(0.6);
+        T textWeight = NumOps.FromDouble(0.4);
+        T neighborConfidence = NumOps.FromDouble(0.2);
 
         for (int step = 0; step < numDiffusionSteps; step++)
         {
             // Count remaining masked tokens
-            int maskedCount = NumOps.ToInt(engine.TensorSum(isMasked));
+            int maskedCount = engine.TensorSum(isMasked.Cast<int>());
             if (maskedCount == 0)
                 break;
 
@@ -266,17 +272,16 @@ public partial class ShowO<T> : VisionLanguageModelBase<T>, IUnifiedVisionModel<
 
             // Combined prediction
             var stepBias = engine.TensorMultiplyScalar(
-                engine.TensorSin(engine.TensorMultiplyScalar(positions, NumOps.FromDouble(step * 0.01))),
-                NumOps.FromDouble(0.1));
+                engine.TensorSin(engine.TensorMultiply(positions, Pick(stepPhaseScale, step))), biasAmplitude);
             var logit = engine.TensorAdd(
                 engine.TensorAdd(
-                    engine.TensorMultiplyScalar(contextVal, NumOps.FromDouble(0.6)),
-                    engine.TensorMultiplyScalar(textCond, NumOps.FromDouble(0.4))),
+                    engine.TensorMultiplyScalar(contextVal, contextWeight),
+                    engine.TensorMultiplyScalar(textCond, textWeight)),
                 stepBias);
             var predictedIds = QuantizeTanhTokens(logit, numVisTokens);
             // More context = more confident
             var confidences = engine.TensorAdd(
-                engine.TensorAbs(logit), engine.TensorMultiplyScalar(neighborCount, NumOps.FromDouble(0.2)));
+                engine.TensorAbs(logit), engine.TensorMultiplyScalar(neighborCount, neighborConfidence));
 
             // Unmask the most confident positions
             int toUnmask = Math.Min(tokensPerStep, maskedCount);
@@ -286,7 +291,7 @@ public partial class ShowO<T> : VisionLanguageModelBase<T>, IUnifiedVisionModel<
         }
 
         // Fill any remaining masked tokens with t % numVisTokens
-        if (NumOps.GreaterThan(engine.TensorSum(isMasked), NumOps.Zero))
+        if (engine.TensorSum(isMasked.Cast<int>()) > 0)
         {
             if (numVisTokens == 0)
                 throw new DivideByZeroException();

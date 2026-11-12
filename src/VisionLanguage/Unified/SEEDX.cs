@@ -243,25 +243,32 @@ public partial class SEEDX<T> : VisionLanguageModelBase<T>, IUnifiedVisionModel<
             engine.TensorMultiplyScalar(CyclicTake(detailCond, dim), NumOps.FromDouble(0.4)));
 
         int numDiffSteps = 30;
+        // Per-step schedule: t = 1 - step / numDiffSteps, alpha = cos(t pi / 2), sigma = sin(t pi / 2).
+        var halfPiT = engine.TensorMultiplyScalar(
+            engine.ScalarMinusTensor(NumOps.One, engine.TensorDivideScalar(
+                engine.TensorArange<T>(0, numDiffSteps, 1), NumOps.FromDouble(numDiffSteps))),
+            NumOps.FromDouble(Math.PI / 2.0));
+        var alphas = engine.TensorCos(halfPiT);
+        var sigmas = engine.TensorSin(halfPiT);
+        var condScales = engine.TensorMultiplyScalar(sigmas, NumOps.FromDouble(0.2));
+        var safeAlphas = engine.TensorMax(alphas, NumOps.FromDouble(1e-8));
+
         for (int step = 0; step < numDiffSteps; step++)
         {
-            double t = 1.0 - (double)step / numDiffSteps;
-            double alpha = Math.Cos(t * Math.PI / 2.0);
-            double sigma = Math.Sin(t * Math.PI / 2.0);
 
             // stepInput[d] = latent[d % outPixels] * alpha + cond[d] * sigma * 0.2
             var stepInput = engine.TensorAdd(
-                engine.TensorMultiplyScalar(CyclicTake(latent, dim), NumOps.FromDouble(alpha)),
-                engine.TensorMultiplyScalar(fusedCond, NumOps.FromDouble(sigma * 0.2)));
+                engine.TensorMultiply(CyclicTake(latent, dim), Pick(alphas, step)),
+                engine.TensorMultiply(fusedCond, Pick(condScales, step)));
 
             var noisePred = stepInput;
             for (int i = _encoderLayerEnd; i < Layers.Count; i++)
                 noisePred = Layers[i].Forward(noisePred);
 
             // latent = (latent - sigma * pred[i % predDim]) / max(alpha, 1e-8)
-            latent = engine.TensorDivideScalar(
-                engine.TensorSubtract(latent, engine.TensorMultiplyScalar(CyclicTake(noisePred, outPixels), NumOps.FromDouble(sigma))),
-                NumOps.FromDouble(Math.Max(alpha, 1e-8)));
+            latent = engine.TensorDivide(
+                engine.TensorSubtract(latent, engine.TensorMultiply(CyclicTake(noisePred, outPixels), Pick(sigmas, step))),
+                engine.TensorBroadcastTo(Pick(safeAlphas, step), [outPixels]));
         }
 
         var result = engine.TensorSigmoid(latent);

@@ -231,6 +231,7 @@ public partial class SlowFastLLaVA<T> : VisionLanguageModelBase<T>, IVideoLangua
         // Uniformly sample fastCount frames and apply 2x spatial pooling (halve feature dim)
         int fastDim = dim / 2; // Aggressive spatial pooling reduces dimensionality
         var fastOutput = new Tensor<T>([fastDim]);
+        T half = NumOps.FromDouble(0.5);
 
         for (int f = 0; f < fastCount; f++)
         {
@@ -241,7 +242,7 @@ public partial class SlowFastLLaVA<T> : VisionLanguageModelBase<T>, IVideoLangua
 
             // Spatial pooling: average adjacent pairs of features (2x reduction); missing values read as 0.
             var pairs = FitLength(enc, fastDim * 2).Reshape([fastDim, 2]);
-            var pooled = engine.TensorMultiplyScalar(engine.ReduceSum(pairs, [1], false), NumOps.FromDouble(0.5));
+            var pooled = engine.TensorMultiplyScalar(engine.ReduceSum(pairs, [1], false), half);
             fastOutput = engine.TensorAdd(fastOutput, pooled);
         }
 
