@@ -13,7 +13,7 @@ public sealed class TrpoTopologyOptionsTests
 {
     [Theory]
     [InlineData(false, 67)]
-    [InlineData(true, 75)]
+    [InlineData(true, 67)]
     public void EachHiddenWidthReachesThePolicyAndValueNetworks(bool continuous, int policyParameters)
     {
         using var agent = new TRPOAgent<double>(new TRPOOptions<double>
@@ -25,6 +25,10 @@ public sealed class TrpoTopologyOptionsTests
         var state = new Vector<double>(new[] { 0.1, 0.2, 0.3, 0.4 });
         Assert.Equal(2, agent.SelectAction(state, training: false).Length);
         Assert.Equal(policyParameters, Network(agent, "_policyNetwork").GetParameters().Length);
+        // A Gaussian policy predicts means; its state-independent log standard deviations are
+        // separate trainable parameters, rather than a second state-dependent network output.
+        Assert.Equal(continuous ? 2 : 0, agent.LogStandardDeviations.Length);
+        Assert.Equal(policyParameters + (continuous ? 2 : 0), agent.PolicyParameterCount);
         var value = Network(agent, "_valueNetwork");
         value.Predict(new Tensor<double>(state.ToArray(), new[] { 1, 4 }));
         Assert.Equal(40, value.GetParameters().Length);

@@ -42,6 +42,7 @@ public abstract class DetectionBackboneOptions : ModelHyperparameterOptions
     /// property of the data alone: change it and the stem layer changes with it.
     /// </para>
     /// </remarks>
+    [AiDotNet.Attributes.PaperDefault(3, Source = "Simonyan and Zisserman 2014, Sec. 2.1: RGB image input.") ]
     public int InChannels { get; set; } = 3;
 
     /// <summary>

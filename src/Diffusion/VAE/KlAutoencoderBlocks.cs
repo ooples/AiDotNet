@@ -32,13 +32,19 @@ internal abstract class KlModule<T> : LazyWeightModule<T>
     public static IReadOnlyCollection<string> Load(IEnumerable<(string Name, Tensor<T> Tensor)> named, Func<string, int[], double[]> read)
     {
         if (read is null) throw new ArgumentNullException(nameof(read));
+        return Load(named, AiDotNet.ModelLoading.TorchTensorSource.From(read));
+    }
+
+    /// <summary>Copies each named weight straight from <paramref name="source"/> into its tensor.</summary>
+    /// <returns>The names read, in order.</returns>
+    internal static IReadOnlyCollection<string> Load(IEnumerable<(string Name, Tensor<T> Tensor)> named, AiDotNet.ModelLoading.TorchTensorSource source)
+    {
+        if (source is null) throw new ArgumentNullException(nameof(source));
         var names = new List<string>();
         foreach (var (name, tensor) in named)
         {
-            var values = read(name, tensor.Shape.ToArray());
-            if (values is null || values.Length != tensor.Length)
-                throw new ArgumentException($"'{name}' needs {tensor.Length} values; {values?.Length ?? 0} were given.", nameof(read));
-            for (int i = 0; i < values.Length; i++) tensor[i] = NumOps.FromDouble(values[i]);
+            source.CopyTo(name, tensor.Shape.ToArray(), tensor);
+            Engine.InvalidatePersistentTensor(tensor);
             names.Add(name);
         }
         return names;
@@ -313,12 +319,17 @@ internal sealed class KlEncoder<T> : KlModule<T>
         _convOut = new KlConv2d<T>(previous, 2 * latentChannels, 3, padding: 1);
     }
 
-    public Tensor<T> Forward(Tensor<T> x)
+    public Tensor<T> Forward(Tensor<T> x) => Forward(x, null);
+
+    /// <summary>The posterior's moments, with each stage's output before its downsampling added to <paramref name="stageOutputs"/>.</summary>
+    /// <remarks>StableSR's CFW modules read the outputs of the second and third stages (the release's <c>return_fea</c>).</remarks>
+    public Tensor<T> Forward(Tensor<T> x, List<Tensor<T>>? stageOutputs)
     {
         x = _convIn.Forward(x);
         foreach (var (resnets, down) in _stages)
         {
             foreach (var resnet in resnets) x = resnet.Forward(x);
+            stageOutputs?.Add(x);
             // Downsample2D pads (0, 1, 0, 1) and convolves with stride 2 and no padding.
             if (down is not null) x = down.Forward(Engine.PadNd(x, new[] { 0, 1, 0, 1 }, PadMode.Constant, NumOps.Zero));
         }

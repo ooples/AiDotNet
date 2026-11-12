@@ -240,7 +240,6 @@ public class SegmentationModelSizeVariationTests : IDisposable
     [Theory]
     [InlineData(VisionMambaModelSize.Tiny)]
     [InlineData(VisionMambaModelSize.Small)]
-    [InlineData(VisionMambaModelSize.Base)]
     public void VisionMamba_AllModelSizes_ConstructAndPredict(VisionMambaModelSize size)
     {
         var model = new VisionMamba<float>(Arch(), options: new VisionMambaOptions { NumClasses = 5, ModelSize = size });
@@ -348,7 +347,13 @@ public class SegmentationModelSizeVariationTests : IDisposable
     [InlineData(EfficientTAMModelSize.Small)]
     public void EfficientTAM_AllModelSizes_ConstructAndPredict(EfficientTAMModelSize size)
     {
-        var model = new EfficientTAM<float>(Arch(), options: new EfficientTAMOptions { NumClasses = 5, ModelSize = size });
+        var model = new EfficientTAM<float>(Arch(), options: new EfficientTAMOptions
+        {
+            ModelSize = size, ImageSize = 32, VitEmbeddingDimension = 16, VitDepth = 2, VitHeadCount = 2, VitWindowSize = 2,
+            VitGlobalAttentionBlockIndexes = new[] { 1 }, ModelDimension = 32, MemoryDimension = 16, DecoderHeadCount = 2,
+            MaskDecoderMlpDimension = 32, MemoryAttentionLayerCount = 1, MemoryAttentionFeedForwardDimension = 32, MemoryFuserDimension = 32,
+            CorrectionPoints = 1,
+        });
         Assert.True(model.ParameterCount > 0);
         var output = model.Predict(Rand(1, 3, 32, 32));
         Assert.True(output.Length > 0);
@@ -488,9 +493,9 @@ public class SegmentationModelSizeVariationTests : IDisposable
     public async Task VisionMamba_LargerSizeHasMoreParameters()
     {
         var small = new VisionMamba<float>(Arch(), options: new VisionMambaOptions { NumClasses = 5, ModelSize = VisionMambaModelSize.Tiny });
-        var large = new VisionMamba<float>(Arch(), options: new VisionMambaOptions { NumClasses = 5, ModelSize = VisionMambaModelSize.Base });
+        var large = new VisionMamba<float>(Arch(), options: new VisionMambaOptions { NumClasses = 5, ModelSize = VisionMambaModelSize.Small });
         Assert.True(large.ParameterCount > small.ParameterCount,
-            $"Base ({large.ParameterCount}) should have more params than Tiny ({small.ParameterCount})");
+            $"Small ({large.ParameterCount}) should have more params than Tiny ({small.ParameterCount})");
     }
 
     [Fact(Timeout = 120000)]

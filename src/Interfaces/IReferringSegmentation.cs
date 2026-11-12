@@ -28,7 +28,6 @@ namespace AiDotNet.Interfaces;
 /// Models implementing this interface:
 /// - LISA (CVPR 2024 Oral, LLaVA + SAM reasoning segmentation)
 /// - VideoLISA (NeurIPS 2024, video reasoning segmentation)
-/// - GLaMM (CVPR 2024, grounded language model)
 /// - OMG-LLaVA (NeurIPS 2024, pixel-level reasoning)
 /// - PixelLM (CVPR 2024, segmentation codebook)
 /// </para>

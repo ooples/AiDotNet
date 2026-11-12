@@ -46,9 +46,11 @@ public sealed class FinancialSacLearnsFromRewardTests
     /// A one-state bandit: action +1 pays +1, action -1 pays -1. Terminal transitions, so the TD target is
     /// exactly the reward and the correct Q-ordering is unambiguous and bootstrap-free.
     /// </summary>
-    private static FinancialSACAgent<double> CreateAgent(int seed, out Vector<double> state)
+    private static FinancialSACAgent<double> CreateAgent(int seed, out Vector<double> state,
+        AiDotNet.Enums.SacVariant variant = AiDotNet.Enums.SacVariant.ValueNetwork)
     {
         var options = (FinancialSACAgentOptions<double>)Options(Sac, StateSize, ActionSize, seed);
+        options.Variant = variant;
         options.BatchSize = 8;
         options.WarmupSteps = 0;
         options.LearningRate = 0.01;
@@ -137,7 +139,8 @@ public sealed class FinancialSacLearnsFromRewardTests
     [Trait("category", "unit")]
     public void Twin_critics_are_four_independently_initialised_networks()
     {
-        using var agent = CreateAgent(seed: 32, out var state);
+        // The 2018b variant, whose Q-functions have target clones.
+        using var agent = CreateAgent(seed: 32, out var state, AiDotNet.Enums.SacVariant.AutomaticTemperature);
         var critic1 = Network(agent, "_critic1");
         var critic2 = Network(agent, "_critic2");
         var target1 = Network(agent, "_targetCritic1");
@@ -254,7 +257,7 @@ public sealed class FinancialSacLearnsFromRewardTests
     [Trait("category", "unit")]
     public void Target_critics_follow_the_online_critics_through_tau()
     {
-        using var agent = CreateAgent(seed: 35, out var state);
+        using var agent = CreateAgent(seed: 35, out var state, AiDotNet.Enums.SacVariant.AutomaticTemperature);
         var critic1 = Network(agent, "_critic1");
         var target1 = Network(agent, "_targetCritic1");
 

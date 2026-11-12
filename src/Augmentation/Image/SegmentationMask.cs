@@ -292,19 +292,8 @@ public class SegmentationMask<T>
             return area;
         }
 
-        var dense = ToDense();
-        int count = 0;
-        for (int y = 0; y < Height; y++)
-        {
-            for (int x = 0; x < Width; x++)
-            {
-                if (NumOps.GreaterThan(dense[y, x], NumOps.Zero))
-                {
-                    count++;
-                }
-            }
-        }
-        return count;
+        var engine = AiDotNetEngine.Current;
+        return (int)NumOps.ToDouble(engine.TensorSum(Foreground(ToDense())));
     }
 
     /// <summary>
@@ -314,26 +303,20 @@ public class SegmentationMask<T>
     public (int xMin, int yMin, int xMax, int yMax) GetBoundingBox()
     {
         var dense = ToDense();
-        int xMin = Width, yMin = Height, xMax = -1, yMax = -1;
-
-        for (int y = 0; y < Height; y++)
-        {
-            for (int x = 0; x < Width; x++)
-            {
-                if (NumOps.GreaterThan(dense[y, x], NumOps.Zero))
-                {
-                    xMin = Math.Min(xMin, x);
-                    yMin = Math.Min(yMin, y);
-                    xMax = Math.Max(xMax, x);
-                    yMax = Math.Max(yMax, y);
-                }
-            }
-        }
-
-        if (xMax < 0)
+        var engine = AiDotNetEngine.Current;
+        var foreground = Foreground(dense);
+        if (!NumOps.GreaterThan(engine.TensorMaxValue(foreground), NumOps.Zero))
         {
             return (0, 0, 0, 0); // Empty mask
         }
+
+        // First/last row and column that contain a foreground pixel
+        var rows = engine.ReduceMax(foreground, [1], false);
+        var cols = engine.ReduceMax(foreground, [0], false);
+        int yMin = engine.TensorArgMax(rows, 0).GetFlat(0);
+        int xMin = engine.TensorArgMax(cols, 0).GetFlat(0);
+        int yMax = rows.Length - 1 - engine.TensorArgMax(engine.TensorFlip(rows, [0]), 0).GetFlat(0);
+        int xMax = cols.Length - 1 - engine.TensorArgMax(engine.TensorFlip(cols, [0]), 0).GetFlat(0);
 
         return (xMin, yMin, xMax + 1, yMax + 1);
     }
@@ -353,20 +336,11 @@ public class SegmentationMask<T>
             throw new ArgumentException("Masks must have the same dimensions.");
         }
 
-        int intersection = 0;
-        int union = 0;
-
-        for (int y = 0; y < Height; y++)
-        {
-            for (int x = 0; x < Width; x++)
-            {
-                bool m1 = NumOps.GreaterThan(mask1[y, x], NumOps.Zero);
-                bool m2 = NumOps.GreaterThan(mask2[y, x], NumOps.Zero);
-
-                if (m1 && m2) intersection++;
-                if (m1 || m2) union++;
-            }
-        }
+        var engine = AiDotNetEngine.Current;
+        var m1 = Foreground(mask1);
+        var m2 = Foreground(mask2);
+        int intersection = (int)NumOps.ToDouble(engine.TensorSum(engine.TensorMultiply(m1, m2)));
+        int union = (int)NumOps.ToDouble(engine.TensorSum(engine.TensorMax(m1, m2)));
 
         return union > 0 ? (double)intersection / union : 0;
     }
@@ -386,21 +360,11 @@ public class SegmentationMask<T>
             throw new ArgumentException("Masks must have the same dimensions.");
         }
 
-        int intersection = 0;
-        int sum = 0;
-
-        for (int y = 0; y < Height; y++)
-        {
-            for (int x = 0; x < Width; x++)
-            {
-                bool m1 = NumOps.GreaterThan(mask1[y, x], NumOps.Zero);
-                bool m2 = NumOps.GreaterThan(mask2[y, x], NumOps.Zero);
-
-                if (m1 && m2) intersection++;
-                if (m1) sum++;
-                if (m2) sum++;
-            }
-        }
+        var engine = AiDotNetEngine.Current;
+        var m1 = Foreground(mask1);
+        var m2 = Foreground(mask2);
+        int intersection = (int)NumOps.ToDouble(engine.TensorSum(engine.TensorMultiply(m1, m2)));
+        int sum = (int)NumOps.ToDouble(engine.TensorSum(m1)) + (int)NumOps.ToDouble(engine.TensorSum(m2));
 
         return sum > 0 ? 2.0 * intersection / sum : 0;
     }
@@ -415,28 +379,21 @@ public class SegmentationMask<T>
             throw new InvalidOperationException("RLE counts are not set.");
         }
 
-        var result = new T[Height, Width];
-        int position = 0;
-        bool isForeground = false;
-
-        foreach (int count in RLECounts)
+        // Runs alternate background/foreground starting with background; pixel p lies in the first
+        // run whose cumulative end exceeds p, and is foreground when that run's index is odd
+        var engine = AiDotNetEngine.Current;
+        int total = Width * Height;
+        if (total == 0 || RLECounts.Length == 0)
         {
-            for (int i = 0; i < count && position < Width * Height; i++)
-            {
-                int y = position / Width;
-                int x = position % Width;
-
-                if (isForeground)
-                {
-                    result[y, x] = NumOps.FromDouble(1);
-                }
-
-                position++;
-            }
-            isForeground = !isForeground;
+            return new T[Height, Width];
         }
 
-        return result;
+        var ends = engine.TensorCumSum(new Tensor<int>((int[])RLECounts.Clone(), [RLECounts.Length]), 0);
+        var positions = engine.TensorArange<int>(0, total, 1);
+        var run = engine.TensorSearchSorted(ends, positions, true);
+        var odd = engine.TensorSubtract(run, engine.TensorMultiplyScalar(engine.TensorDivideScalar(run, 2), 2));
+        var foreground = engine.TensorMultiply(odd, engine.TensorLessThan(run, RLECounts.Length));
+        return ToArray2D(foreground.Cast<T>(), Height, Width);
     }
 
     /// <summary>
@@ -444,31 +401,58 @@ public class SegmentationMask<T>
     /// </summary>
     private int[] EncodeRLE(T[,] dense)
     {
-        var counts = new List<int>();
-        bool currentValue = false;
-        int currentCount = 0;
-
-        for (int y = 0; y < Height; y++)
+        // Runs of equal foreground/background values in row-major order; RLE starts with a
+        // background run, so a leading foreground run gets a zero-length background run first
+        var engine = AiDotNetEngine.Current;
+        var foreground = Foreground(dense);
+        if (foreground.Length == 0)
         {
-            for (int x = 0; x < Width; x++)
-            {
-                bool pixelValue = NumOps.GreaterThan(dense[y, x], NumOps.Zero);
-
-                if (pixelValue == currentValue)
-                {
-                    currentCount++;
-                }
-                else
-                {
-                    counts.Add(currentCount);
-                    currentValue = pixelValue;
-                    currentCount = 1;
-                }
-            }
+            return [0];
         }
 
-        counts.Add(currentCount);
-        return counts.ToArray();
+        var flat = engine.Reshape(foreground, [foreground.Length]);
+        var (values, _, runCounts) = engine.TensorUniqueConsecutiveWithInfo(flat, false, true);
+        int[] counts = runCounts is null ? [foreground.Length] : runCounts.ToArray();
+        bool startsWithForeground = NumOps.GreaterThan(values.GetFlat(0), NumOps.Zero);
+        return startsWithForeground ? [0, .. counts] : counts;
+    }
+
+    /// <summary>
+    /// Copies a dense mask into a tensor (row-major) of the same shape.
+    /// </summary>
+    private static Tensor<T> ToTensor(T[,] dense)
+    {
+        return new Tensor<T>(dense.Cast<T>().ToArray(), [dense.GetLength(0), dense.GetLength(1)]);
+    }
+
+    /// <summary>
+    /// 1 where the dense mask is greater than zero, 0 elsewhere.
+    /// </summary>
+    private static Tensor<T> Foreground(T[,] dense)
+    {
+        return AiDotNetEngine.Current.TensorGreaterThan(ToTensor(dense), NumOps.Zero);
+    }
+
+    /// <summary>
+    /// Copies a row-major tensor into a new [rows, columns] array in one block copy (an element copy
+    /// for non-primitive element types, which block copies do not support).
+    /// </summary>
+    private static T[,] ToArray2D(Tensor<T> values, int rows, int columns)
+    {
+        var flat = values.Contiguous().ToArray();
+        var result = new T[rows, columns];
+        if (typeof(T).IsPrimitive)
+        {
+            Buffer.BlockCopy(flat, 0, result, 0, Buffer.ByteLength(flat));
+            return result;
+        }
+
+        for (int i = 0; i < flat.Length; i++)
+        {
+            result[i / columns, i % columns] = flat[i];
+        }
+
+        return result;
     }
 
     /// <summary>

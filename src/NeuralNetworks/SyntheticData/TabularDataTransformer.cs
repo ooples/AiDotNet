@@ -632,12 +632,27 @@ public class TabularDataTransformer<T> : IModelSerializer
     {
         var info = _categoricalColumnInfos[transform.Index];
         double value = NumOps.ToDouble(data[row, col]);
-        string key = value.ToString(CultureInfo.InvariantCulture);
-
         int offset = transform.StartOffset;
 
+        // A categorical cell holds its category's index, as CTGANDataSampler groups the rows and the inverse transform
+        // writes them. Looking the value up by name alone encoded every row of a column declared with label categories
+        // ("A", "B", "C") over index data as all zeros, so the critic never saw a real row's category. A value that is
+        // not an index of the declared categories is still matched by name.
+        double rounded = Math.Round(value);
+        int catIdx;
+        bool known;
+        if (Math.Abs(rounded - value) < 1e-9 && rounded >= 0 && rounded < info.NumCategories)
+        {
+            catIdx = (int)rounded;
+            known = true;
+        }
+        else
+        {
+            known = info.CategoryToIndex.TryGetValue(value.ToString(CultureInfo.InvariantCulture), out catIdx);
+        }
+
         // One-hot encode
-        if (info.CategoryToIndex.TryGetValue(key, out int catIdx))
+        if (known)
         {
             for (int c = 0; c < info.NumCategories; c++)
             {
