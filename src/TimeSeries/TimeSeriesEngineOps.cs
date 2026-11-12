@@ -455,6 +455,7 @@ internal static class TimeSeriesEngineOps<T>
             : stacked;
         var (sorted, _) = Engine.TensorSort(ranked, 0);
         var flatSorted = sorted.Reshape(new[] { count * horizon });
+        T nan = anyNaN ? NumOps.FromDouble(double.NaN) : NumOps.Zero;
         foreach (var q in quantiles)
         {
             int idx = Math.Max(0, Math.Min((int)(q * count), count - 1));
@@ -472,7 +473,7 @@ internal static class TimeSeriesEngineOps<T>
             int[] pickNaN = Enumerable.Range(0, horizon).Select(h => idx < nanCounts[h] ? 1 : 0).ToArray();
             var pickNaNMask = Engine.TensorEqScalar(new Tensor<int>(new[] { horizon }, new Vector<int>(pickNaN)), 1);
             result[q] = Engine.TensorWhere(
-                pickNaNMask, Engine.TensorFullLike(picked, NumOps.FromDouble(double.NaN)), picked).ToVector();
+                pickNaNMask, Engine.TensorFullLike(picked, nan), picked).ToVector();
         }
 
         return result;
