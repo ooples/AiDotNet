@@ -77,7 +77,8 @@ public partial class COPODDetector<T> : AnomalyDetectorBase<T>
         }
 
         // Calculate scores for training data to set threshold
-        var trainingScores = ScoreAnomaliesInternal(X);
+        // PyOD scores the training data against the training sample alone
+        var trainingScores = ScoreAnomaliesInternal(X, false);
         SetThresholdFromContamination(trainingScores);
 
         _isFitted = true;
@@ -87,39 +88,30 @@ public partial class COPODDetector<T> : AnomalyDetectorBase<T>
     public override Vector<T> ScoreAnomalies(Matrix<T> X)
     {
         EnsureFitted();
-        return ScoreAnomaliesInternal(X);
+        // PyOD decision_function: the empirical distributions are taken over X_train and X together
+        return ScoreAnomaliesInternal(X, true);
     }
 
-    private Vector<T> ScoreAnomaliesInternal(Matrix<T> X)
+    private Vector<T> ScoreAnomaliesInternal(Matrix<T> X, bool includeQuery)
     {
         ValidateInput(X);
 
-        T eps = NumOps.FromDouble(1e-10);
-        var sortedValues = _sortedFeatureValues;
-        if (sortedValues == null)
+        var sortedValues = _sortedFeatureValues ?? throw new InvalidOperationException("Model not properly fitted.");
+        if (X.Columns != _nFeatures)
         {
-            throw new InvalidOperationException("Model not properly fitted.");
+            throw new ArgumentException(
+                $"Input has {X.Columns} features, but model was fitted with {_nFeatures} features.",
+                nameof(X));
         }
 
+        // Tail terms U_left = -log F_left, U_right = -log F_right, and the skewness-selected tail
+        // U_skew = U_left where the feature is left-skewed, U_right where right-skewed (both when unskewed)
         var engine = Engine;
-        var data = AnomalyTensorOps.ToTensor(X);
-        var scores = Tensor<T>.CreateZeros(new[] { X.Rows });
-        T half = NumOps.FromDouble(0.5);
-        T denominator = NumOps.FromDouble(_nSamples + 1);
-
-        // For each feature, compute the empirical tail probability
-        for (int j = 0; j < _nFeatures; j++)
-        {
-            // Empirical CDF (left tail), adjusted to avoid 0 and 1: (count(values <= x) + 0.5) / (n + 1)
-            var atOrBelow = engine.TensorSearchSorted(sortedValues[j].AsTensor(), engine.TensorSliceAxis(data, 1, j), true);
-            var leftTailProb = engine.TensorDivideScalar(engine.TensorAddScalar(atOrBelow.Cast<T>(), half), denominator);
-            var rightTailProb = engine.ScalarMinusTensor(NumOps.One, leftTailProb);
-
-            // Add negative log of minimum tail probability, clamped away from 0 to avoid log(0)
-            var minTailProb = engine.TensorMax(engine.TensorMin(leftTailProb, rightTailProb), eps);
-            scores = engine.TensorSubtract(scores, engine.TensorLog(minTailProb));
-        }
-
-        return scores.ToVector();
+        var (left, right, skewLeft, skewRight) = AnomalyTensorOps.EcdfTails(sortedValues, AnomalyTensorOps.ToTensor(X), includeQuery);
+        var skew = engine.TensorAdd(AnomalyTensorOps.MultiplyRow(left, skewLeft), AnomalyTensorOps.MultiplyRow(right, skewRight));
+        // O = max(U_skew, (U_left + U_right) / 2) per feature, summed over the features (PyOD COPOD)
+        var outlyingness = engine.TensorMax(skew,
+            engine.TensorMultiplyScalar(engine.TensorAdd(left, right), NumOps.FromDouble(0.5)));
+        return engine.ReduceSum(outlyingness, new[] { 1 }, false).ToVector();
     }
 }

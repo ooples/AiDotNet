@@ -188,4 +188,67 @@ public class ProbabilisticAnomalyDetectionTests
     }
 
     #endregion
+
+    #region ECOD / COPOD Reference Value Tests
+
+    // Data 1, 2, 3, 4, 10 (n = 5). F_left = #{v <= x} / 5 = .2, .4, .6, .8, 1 and F_right = #{v >= x} / 5
+    // = 1, .8, .6, .4, .2, so U_left = ln 5, ln 2.5, ln(5/3), ln 1.25, 0 and U_right = 0, ln 1.25, ln(5/3),
+    // ln 2.5, ln 5. Deviations from the mean 4 are -3, -2, -1, 0, 6, so m3 = 36 / 5 > 0: right-skewed, and
+    // PyOD's U_skew = U_right. Scoring the training rows after Fit uses X_train and X together (PyOD
+    // decision_function), which here is every value twice: the same fractions and the same skewness.
+    private static Matrix<double> EcdfReferenceData()
+        => new Matrix<double>(new double[,] { { 1 }, { 2 }, { 3 }, { 4 }, { 10 } });
+
+    [Fact(Timeout = 120000)]
+    public async Task ECOD_MatchesPyodTailAndSkewnessRule()
+    {
+        // PyOD ECOD: O = max(U_left, U_right, U_skew) per feature, summed
+        var data = EcdfReferenceData();
+        var detector = new ECODDetector<double>();
+        detector.Fit(data);
+        var scores = detector.ScoreAnomalies(data);
+
+        double[] expected = { Math.Log(5), Math.Log(2.5), Math.Log(5.0 / 3.0), Math.Log(2.5), Math.Log(5) };
+        for (int i = 0; i < expected.Length; i++)
+        {
+            Assert.Equal(expected[i], scores[i], 1e-9);
+        }
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task COPOD_MatchesPyodTailAndSkewnessRule()
+    {
+        // PyOD COPOD: O = max(U_skew, (U_left + U_right) / 2) per feature, summed
+        var data = EcdfReferenceData();
+        var detector = new COPODDetector<double>();
+        detector.Fit(data);
+        var scores = detector.ScoreAnomalies(data);
+
+        double[] expected =
+        {
+            Math.Log(5) / 2, (Math.Log(2.5) + Math.Log(1.25)) / 2, Math.Log(5.0 / 3.0), Math.Log(2.5), Math.Log(5)
+        };
+        for (int i = 0; i < expected.Length; i++)
+        {
+            Assert.Equal(expected[i], scores[i], 1e-9);
+        }
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task COPOD_LeftSkewedFeatureUsesTheLeftTail()
+    {
+        // Mirror image -1, -2, -3, -4, -10: m3 < 0 (left-skewed), U_skew = U_left, and the max per point is
+        // the mirror of the right-skewed case: ln 5, ln 2.5, ln(5/3), ln 2.5, ln 5 for -10, -4, -3, -2, -1.
+        var data = new Matrix<double>(new double[,] { { -1 }, { -2 }, { -3 }, { -4 }, { -10 } });
+        var detector = new COPODDetector<double>();
+        detector.Fit(data);
+        var scores = detector.ScoreAnomalies(data);
+
+        // COPOD with U_skew = U_left: max(U_left, (U_left + U_right) / 2)
+        Assert.Equal(Math.Log(5), scores[4], 1e-9);
+        Assert.Equal(Math.Log(2.5), scores[3], 1e-9);
+        Assert.Equal(Math.Log(5) / 2, scores[0], 1e-9);
+    }
+
+    #endregion
 }

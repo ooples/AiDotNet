@@ -857,4 +857,50 @@ internal static class AnomalyTensorOps
     /// </summary>
     internal static int FirstArgMax<T>(Tensor<T> values)
         => FirstArgMaxRows(Engine.Reshape(values, new[] { 1, values.Length })).ToArray()[0];
+
+    /// <summary>
+    /// The per-feature tail terms of ECOD / COPOD as the PyOD reference implementation computes them, for
+    /// the rows of <paramref name="query"/> ([q, d]) against the empirical distribution of the reference
+    /// sample (the training columns, plus the query rows when <paramref name="includeQuery"/>, as PyOD's
+    /// decision_function concatenates X_train and X):
+    /// left = -log(#{v &lt;= x} / N), right = -log(#{v &gt;= x} / N) ([q, d]) and the skewness weights
+    /// skewLeft = -sign(s - 1), skewRight = sign(s + 1) ([d]) with s the sign of the sample skewness, so that
+    /// U_skew = skewLeft * left + skewRight * right.
+    /// </summary>
+    internal static (Tensor<T> Left, Tensor<T> Right, Tensor<T> SkewLeft, Tensor<T> SkewRight) EcdfTails<T>(
+        Vector<T>[] trainingColumns, Tensor<T> query, bool includeQuery)
+    {
+        var engine = Engine;
+        var numOps = MathHelper.GetNumericOperations<T>();
+        int q = query.Shape[0];
+        int d = trainingColumns.Length;
+        T eps = numOps.FromDouble(1e-10);
+        var lefts = new Tensor<T>[d];
+        var rights = new Tensor<T>[d];
+        var thirdMoments = new Tensor<T>[d];
+
+        for (int j = 0; j < d; j++)
+        {
+            var column = engine.TensorSliceAxis(query, 1, j);
+            var reference = includeQuery
+                ? engine.TensorSort(engine.TensorConcatenate(new[] { trainingColumns[j].AsTensor(), column }, 0), 0, false).Item1
+                : trainingColumns[j].AsTensor();
+            T count = numOps.FromDouble(reference.Length);
+            var atMost = engine.TensorDivideScalar(engine.TensorSearchSorted(reference, column, true).Cast<T>(), count);
+            var below = engine.TensorDivideScalar(engine.TensorSearchSorted(reference, column, false).Cast<T>(), count);
+            var atLeast = engine.ScalarMinusTensor(numOps.One, below);
+            lefts[j] = engine.Reshape(engine.TensorNegate(engine.TensorLog(engine.TensorMax(atMost, eps))), new[] { q, 1 });
+            rights[j] = engine.Reshape(engine.TensorNegate(engine.TensorLog(engine.TensorMax(atLeast, eps))), new[] { q, 1 });
+
+            // The skewness m3 / m2^1.5 has the sign of the third central moment m3
+            var deviations = engine.TensorSubtractScalar(reference, engine.TensorMean(reference));
+            thirdMoments[j] = engine.ReduceMean(engine.TensorMultiply(engine.TensorSquare(deviations), deviations), new[] { 0 }, true);
+        }
+
+        // -sign(s - 1) is 1 unless s = 1; sign(s + 1) is 1 unless s = -1
+        var m3 = engine.TensorConcatenate(thirdMoments, 0);
+        var skewLeft = engine.ScalarMinusTensor(numOps.One, engine.TensorGreaterThan(m3, numOps.Zero));
+        var skewRight = engine.ScalarMinusTensor(numOps.One, engine.TensorLessThan(m3, numOps.Zero));
+        return (engine.TensorConcatenate(lefts, 1), engine.TensorConcatenate(rights, 1), skewLeft, skewRight);
+    }
 }

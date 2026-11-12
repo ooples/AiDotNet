@@ -80,7 +80,8 @@ public partial class ECODDetector<T> : AnomalyDetectorBase<T>
         }
 
         // Calculate scores for training data to set threshold
-        var trainingScores = ScoreAnomaliesInternal(X);
+        // PyOD scores the training data against the training sample alone
+        var trainingScores = ScoreAnomaliesInternal(X, false);
         SetThresholdFromContamination(trainingScores);
 
         _isFitted = true;
@@ -90,36 +91,29 @@ public partial class ECODDetector<T> : AnomalyDetectorBase<T>
     public override Vector<T> ScoreAnomalies(Matrix<T> X)
     {
         EnsureFitted();
-        return ScoreAnomaliesInternal(X);
+        // PyOD decision_function: the empirical distributions are taken over X_train and X together
+        return ScoreAnomaliesInternal(X, true);
     }
 
-    private Vector<T> ScoreAnomaliesInternal(Matrix<T> X)
+    private Vector<T> ScoreAnomaliesInternal(Matrix<T> X, bool includeQuery)
     {
         ValidateInput(X);
 
-        T eps = NumOps.FromDouble(1e-10);
-        var sortedVals = _sortedFeatureValues ?? throw new InvalidOperationException("_sortedFeatureValues has not been initialized.");
-
-        var engine = Engine;
-        var data = AnomalyTensorOps.ToTensor(X);
-        var scores = Tensor<T>.CreateZeros(new[] { X.Rows });
-
-        for (int j = 0; j < _nFeatures; j++)
+        var sortedValues = _sortedFeatureValues ?? throw new InvalidOperationException("Model not properly fitted.");
+        if (X.Columns != _nFeatures)
         {
-            var sortedValues = sortedVals[j];
-
-            // Empirical CDF: F(x) = (number of training values <= x) / n
-            var atOrBelow = engine.TensorSearchSorted(sortedValues.AsTensor(), engine.TensorSliceAxis(data, 1, j), true);
-            var leftCdf = engine.TensorDivideScalar(atOrBelow.Cast<T>(), NumOps.FromDouble(sortedValues.Length));
-            var rightCdf = engine.ScalarMinusTensor(NumOps.One, leftCdf);
-
-            // Minimum of the left and right tail probabilities, clamped away from 0 to avoid log(0)
-            var tailProb = engine.TensorMax(engine.TensorMin(leftCdf, rightCdf), eps);
-
-            // Negative log probability (higher = more anomalous)
-            scores = engine.TensorSubtract(scores, engine.TensorLog(tailProb));
+            throw new ArgumentException(
+                $"Input has {X.Columns} features, but model was fitted with {_nFeatures} features.",
+                nameof(X));
         }
 
-        return scores.ToVector();
+        // Tail terms U_left = -log F_left, U_right = -log F_right, and the skewness-selected tail
+        // U_skew = U_left where the feature is left-skewed, U_right where right-skewed (both when unskewed)
+        var engine = Engine;
+        var (left, right, skewLeft, skewRight) = AnomalyTensorOps.EcdfTails(sortedValues, AnomalyTensorOps.ToTensor(X), includeQuery);
+        var skew = engine.TensorAdd(AnomalyTensorOps.MultiplyRow(left, skewLeft), AnomalyTensorOps.MultiplyRow(right, skewRight));
+        // O = max(U_left, U_right, U_skew) per feature, summed over the features (PyOD ECOD)
+        var outlyingness = engine.TensorMax(engine.TensorMax(left, right), skew);
+        return engine.ReduceSum(outlyingness, new[] { 1 }, false).ToVector();
     }
 }
