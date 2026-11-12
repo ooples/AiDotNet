@@ -396,6 +396,7 @@ public partial class CUPS<T> : Common.PanopticSegmentationBase<T>
         var masks = new List<Tensor<int>>();
         var scores = new List<Tensor<T>>();
         var classes = new List<int>();
+        var one = NumOps.One;
         for (int cls = 0; cls < k; cls++)
         {
             if (!_isThingClass[cls]) continue;
@@ -408,7 +409,7 @@ public partial class CUPS<T> : Common.PanopticSegmentationBase<T>
             var classProbability = Engine.Reshape(Engine.TensorSlice(probabilities, new[] { cls, 0 }, new[] { 1, hw }), new[] { hw });
             var sums = Engine.TensorScatterAdd(new Tensor<T>(new[] { count + 1 }), components, classProbability, 0);
             var areas = Engine.TensorBinCount(components, count + 1).Cast<T>();
-            scores.Add(Engine.TensorSlice(Engine.TensorDivide(sums, Engine.TensorClampMin(areas, NumOps.One)), new[] { 1 }, new[] { count }));
+            scores.Add(Engine.TensorSlice(Engine.TensorDivide(sums, Engine.TensorClampMin(areas, one)), new[] { 1 }, new[] { count }));
             for (int c = 0; c < count; c++) classes.Add(cls);
         }
 

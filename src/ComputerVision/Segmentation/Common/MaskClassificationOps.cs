@@ -113,16 +113,18 @@ internal static class MaskClassificationOps
         var embeddingT = engine.TensorPermute(embedding, new[] { 0, 2, 1 });
         var voidT = engine.TensorPermute(voidScore, new[] { 0, 2, 1 });
         var blocked = Tensor<T>.CreateDefault(new[] { b, numQueries, hw }, ops.FromDouble(-1e9));
+        var zeros = Tensor<T>.CreateDefault(new[] { b, numQueries, hw }, ops.Zero);
+        var one = ops.One;
 
         Tensor<T>? queryEmbeddings = null;
         Tensor<T>? voidLogits = null;
         for (int t = 0; t < iterations; t++)
         {
             // 1 where the query may not attend: background of a non-empty previous mask.
-            var foreground = engine.TensorGreaterEqual(logits, Tensor<T>.CreateDefault(logits.Shape.ToArray(), ops.Zero));
+            var foreground = engine.TensorGreaterEqual(logits, zeros);
             var anyForeground = engine.ReduceMax(foreground, new[] { 2 }, true);
             var masked = engine.TensorMultiply(
-                engine.ScalarMinusTensor(ops.One, foreground),
+                engine.ScalarMinusTensor(one, foreground),
                 engine.TensorBroadcastTo(anyForeground, foreground.Shape.ToArray()));
 
             var weights = engine.TensorSoftmax(engine.TensorWhere(masked, blocked, logits), 2); // [B, N, HW]
