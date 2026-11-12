@@ -140,7 +140,8 @@ public class PaulWavelet<T> : WaveletFunctionBase<T>
         // Calculate (1 - ix)^(-m-1)
         Complex<T> base_term = new Complex<T>(NumOps.One, NumOps.Zero) - i * xComplex;
         T exponentT = NumOps.FromDouble(-m - 1);
-        Complex<T> denominator_term = complexOps.Power(base_term, new Complex<T>(exponentT, exponentT));
+        // (1 - i x)^-(m + 1): the exponent is real.
+        Complex<T> denominator_term = complexOps.Power(base_term, new Complex<T>(exponentT, NumOps.Zero));
         Complex<T> result = factor * denominator_term;
 
         return result.ToRealOrComplex();
