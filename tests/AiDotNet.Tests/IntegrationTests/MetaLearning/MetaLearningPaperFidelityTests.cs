@@ -175,4 +175,18 @@ public class MetaLearningPaperFidelityTests
             Assert.Equal(phi0[i] + 0.75 * 0.5 * (w[i] - phi0[i]), actual[i], Tolerance);
         }
     }
+
+    [Fact]
+    public void ProtoNets_Defaults_MatchSnellEtAl2017()
+    {
+        // Snell, Swersky and Zemel (2017), Section 3: one gradient step per training episode, squared Euclidean
+        // distance, and no gradient clipping.
+        var options = new ProtoNetsOptions<double, Matrix<double>, Vector<double>>(new LinearVectorModel(3));
+
+        Assert.Equal(1, options.MetaBatchSize);
+        Assert.Null(options.GradientClipThreshold);
+        Assert.Equal(ProtoNetsDistanceFunction.Euclidean, options.DistanceFunction);
+        Assert.Equal(1.0, options.Temperature);
+        Assert.False(options.NormalizeFeatures);
+    }
 }
