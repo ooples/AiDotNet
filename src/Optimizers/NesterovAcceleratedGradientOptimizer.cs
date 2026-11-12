@@ -81,6 +81,13 @@ public partial class NesterovAcceleratedGradientOptimizer<T, TInput, TOutput> : 
     private Vector<T>? _velocity;
 
     /// <summary>
+    /// The parameter delta subtracted by the most recent flat-vector update (lr * (g + momentum * v) in
+    /// <see cref="UpdateParameters"/>, the velocity in the legacy non-network path), so
+    /// <see cref="ReverseUpdate"/> can add exactly that delta back.
+    /// </summary>
+    private Vector<T>? _lastAppliedStep;
+
+    /// <summary>
     /// Initializes a new instance of the NesterovAcceleratedGradientOptimizer class.
     /// </summary>
     /// <remarks>
@@ -223,6 +230,7 @@ public partial class NesterovAcceleratedGradientOptimizer<T, TInput, TOutput> : 
                     // _velocity here and subtract from params in
                     // UpdateSolution.
                     _velocity = UpdateVelocity(gradient);
+                    _lastAppliedStep = _velocity.Clone();
                     newSolution = UpdateSolution(currentSolution, _velocity);
                 }
                 currentSolution = newSolution;
@@ -395,7 +403,9 @@ public partial class NesterovAcceleratedGradientOptimizer<T, TInput, TOutput> : 
         var velocity = engine.TensorAdd(engine.TensorMultiplyScalar(velocityState, CurrentMomentum), g);
         engine.TensorCopy(velocity, velocityState);
         var update = engine.TensorAdd(g, engine.TensorMultiplyScalar(velocity, CurrentMomentum));
-        return engine.TensorSubtract(parameters.AsTensor(), engine.TensorMultiplyScalar(update, CurrentLearningRate)).AsVector();
+        var step = engine.TensorMultiplyScalar(update, CurrentLearningRate);
+        _lastAppliedStep = step.AsVector();
+        return engine.TensorSubtract(parameters.AsTensor(), step).AsVector();
     }
 
     // Per-parameter velocity for tape-based NAG training
@@ -447,13 +457,12 @@ public partial class NesterovAcceleratedGradientOptimizer<T, TInput, TOutput> : 
     /// <returns>Original parameters before the update</returns>
     /// <remarks>
     /// <para>
-    /// NAG's reverse update requires the optimizer's internal velocity state from the forward pass.
-    /// This method must be called immediately after UpdateParameters while the velocity is fresh.
-    /// NAG evaluates gradients at a lookahead position, but the reversal only needs the final velocity.
+    /// The forward step subtracts lr * (g + momentum * v), with v the velocity after this step, so the
+    /// reverse adds back exactly the delta the most recent update applied. This method must be called
+    /// immediately after UpdateParameters, before another update replaces that delta.
     /// </para>
-    /// <para><b>For Beginners:</b> This calculates where parameters were before a NAG update.
-    /// NAG uses velocity (built from lookahead gradients) to update parameters. To reverse,
-    /// we just need to know what velocity was used to take the step.
+    /// <para><b>For Beginners:</b> This calculates where parameters were before a NAG update by adding
+    /// back the exact step the update took.
     /// </para>
     /// </remarks>
     public override Vector<T> ReverseUpdate(Vector<T> updatedParameters, Vector<T> appliedGradients)
@@ -470,15 +479,14 @@ public partial class NesterovAcceleratedGradientOptimizer<T, TInput, TOutput> : 
                 nameof(appliedGradients));
         }
 
-        if (_velocity == null || _velocity.Length != updatedParameters.Length)
+        if (_lastAppliedStep is null || _lastAppliedStep.Length != updatedParameters.Length)
         {
             throw new InvalidOperationException(
-                "NAG optimizer velocity is not initialized. ReverseUpdate must be called after UpdateParameters.");
+                "NAG optimizer has no recorded step. ReverseUpdate must be called after UpdateParameters.");
         }
 
-        // === Vectorized Reverse NAG Update (Phase B: US-GPU-015) ===
-        // Reverse the update: original = updated + velocity
-        return (Vector<T>)Engine.Add(updatedParameters, _velocity);
+        // original = updated + the delta the last update subtracted
+        return (Vector<T>)Engine.Add(updatedParameters, _lastAppliedStep);
     }
 
     /// <summary>
