@@ -165,14 +165,14 @@ public class ProtoNetsOptions<T, TInput, TOutput> : ModelOptions, IMetaLearnerOp
     /// <summary>
     /// Gets or sets the number of tasks to sample per meta-training iteration.
     /// </summary>
-    /// <value>The meta-batch size. Default is 4.</value>
+    /// <value>The meta-batch size. Default is 1, as in Snell et al. (2017), who take one gradient step per episode.</value>
     /// <remarks>
     /// <para>
     /// Each training step samples this many tasks (episodes), computes loss on each,
     /// and averages the gradients before updating the encoder.
     /// </para>
     /// </remarks>
-    public int MetaBatchSize { get; set; } = 4;
+    public int MetaBatchSize { get; set; } = 1;
 
     /// <summary>
     /// Gets or sets the total number of meta-training iterations.
@@ -183,8 +183,8 @@ public class ProtoNetsOptions<T, TInput, TOutput> : ModelOptions, IMetaLearnerOp
     /// <summary>
     /// Gets or sets the maximum gradient norm for gradient clipping.
     /// </summary>
-    /// <value>The gradient clip threshold, or null to disable. Default is 10.0.</value>
-    public double? GradientClipThreshold { get; set; } = 10.0;
+    /// <value>The gradient clip threshold, or null to disable. Default is null: Snell et al. (2017) do not clip.</value>
+    public double? GradientClipThreshold { get; set; } = null;
 
     /// <summary>
     /// Gets or sets the random seed for reproducibility.
