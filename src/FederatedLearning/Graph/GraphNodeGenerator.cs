@@ -86,45 +86,42 @@ public partial class GraphNodeGenerator<T> : FederatedLearningComponentBase<T>
     {
         if (adjacency is null) throw new ArgumentNullException(nameof(adjacency));
         if (nodeFeatures is null) throw new ArgumentNullException(nameof(nodeFeatures));
+        if (featureDim <= 0) throw new ArgumentOutOfRangeException(nameof(featureDim), "Feature dimension must be positive.");
 
         int numNodes = (int)Math.Sqrt(adjacency.Shape[0]);
 
-        for (int epoch = 0; epoch < epochs; epoch++)
+        // Training pairs: (mean features of a node's neighbors, the node's own features) for every node with
+        // at least one neighbor.
+        var (inputs, targets, targetMask) = BuildTrainingPairs(adjacency, nodeFeatures, numNodes, featureDim);
+        if (inputs is not null && targets is not null && targetMask is not null)
         {
-            double totalLoss = 0;
-            int sampleCount = 0;
+            int batch = inputs.Shape[0];
 
-            for (int i = 0; i < numNodes; i++)
+            // MSE per node is (1/F) Σ_d (pred_d - target_d)^2; full-batch gradient descent on its mean.
+            var gradScale = NumOps.FromDouble(2.0 / ((double)featureDim * batch));
+            var learningRate = NumOps.FromDouble(_learningRate);
+            for (int epoch = 0; epoch < epochs; epoch++)
             {
-                // Compute mean neighbor features as input
-                var meanNeighborFeatures = ComputeMeanNeighborFeatures(
-                    adjacency, nodeFeatures, i, numNodes, featureDim);
-
-                if (meanNeighborFeatures is null) continue;
-
-                // Forward pass: predict node i's features from its neighbors
-                var predicted = Forward(meanNeighborFeatures);
-
-                // Compute MSE loss
-                double loss = 0;
-                var gradOutput = new double[_outputDim];
-
-                for (int d = 0; d < featureDim && d < _outputDim; d++)
-                {
-                    int targetIdx = i * featureDim + d;
-                    if (targetIdx >= nodeFeatures.Shape[0]) break;
-
-                    double target = NumOps.ToDouble(nodeFeatures[targetIdx]);
-                    double pred = NumOps.ToDouble(predicted[d]);
-                    double diff = pred - target;
-                    loss += diff * diff;
-                    gradOutput[d] = 2.0 * diff / featureDim;
-                }
-
-                totalLoss += loss / featureDim;
-                sampleCount++;
+                // Forward pass: predict each node's features from its neighbors
+                var (hidden, predicted) = ForwardBatch(inputs);
 
                 // Backward pass and update
+                var gradOutput = Engine.TensorMultiplyScalar(
+                    Engine.TensorMultiply(Engine.TensorSubtract(predicted, targets), targetMask), gradScale);
+                var weightsOutput = _weightsOutput.Reshape(new[] { _hiddenDim, _outputDim });
+                var gradWeightsOutput = Engine.TensorMatMul(Engine.TensorTranspose(hidden), gradOutput);
+                var gradBiasOutput = Engine.ReduceSum(gradOutput, new[] { 0 }, false);
+
+                var gradHidden = Engine.TensorMultiply(
+                    Engine.TensorMatMul(gradOutput, Engine.TensorTranspose(weightsOutput)),
+                    Engine.TensorGreaterThan(hidden, NumOps.Zero));
+                var gradWeightsHidden = Engine.TensorMatMul(Engine.TensorTranspose(inputs), gradHidden);
+                var gradBiasHidden = Engine.ReduceSum(gradHidden, new[] { 0 }, false);
+
+                _weightsOutput = Step(_weightsOutput, gradWeightsOutput, learningRate);
+                _biasOutput = Step(_biasOutput, gradBiasOutput, learningRate);
+                _weightsHidden = Step(_weightsHidden, gradWeightsHidden, learningRate);
+                _biasHidden = Step(_biasHidden, gradBiasHidden, learningRate);
             }
         }
 
@@ -145,96 +142,144 @@ public partial class GraphNodeGenerator<T> : FederatedLearningComponentBase<T>
 
     private Tensor<T> Forward(Tensor<T> input)
     {
-        // Hidden layer: ReLU(input * W_h + b_h)
-        var hidden = new Tensor<T>(new[] { _hiddenDim });
-        for (int h = 0; h < _hiddenDim; h++)
-        {
-            double sum = NumOps.ToDouble(_biasHidden[h]);
-            for (int i = 0; i < _inputDim && i < input.Shape[0]; i++)
-            {
-                int wIdx = i * _hiddenDim + h;
-                if (wIdx < _weightsHidden.Shape[0])
-                {
-                    sum += NumOps.ToDouble(input[i]) * NumOps.ToDouble(_weightsHidden[wIdx]);
-                }
-            }
-
-            hidden[h] = NumOps.FromDouble(Math.Max(0, sum)); // ReLU
-        }
-
-        // Output layer: hidden * W_o + b_o
-        var output = new Tensor<T>(new[] { _outputDim });
-        for (int o = 0; o < _outputDim; o++)
-        {
-            double sum = NumOps.ToDouble(_biasOutput[o]);
-            for (int h = 0; h < _hiddenDim; h++)
-            {
-                int wIdx = h * _outputDim + o;
-                if (wIdx < _weightsOutput.Shape[0])
-                {
-                    sum += NumOps.ToDouble(hidden[h]) * NumOps.ToDouble(_weightsOutput[wIdx]);
-                }
-            }
-
-            output[o] = NumOps.FromDouble(sum);
-        }
-
-        return output;
+        var row = FitWidth(input.Reshape(new[] { 1, input.Length }), _inputDim);
+        return ForwardBatch(row).Output.Reshape(new[] { _outputDim });
     }
 
-    private Tensor<T>? ComputeMeanNeighborFeatures(
-        Tensor<T> adjacency, Tensor<T> nodeFeatures,
-        int nodeIdx, int numNodes, int featureDim)
+    /// <summary>
+    /// Hidden layer ReLU(X W_h + b_h) and output layer H W_o + b_o for a batch of rows.
+    /// </summary>
+    private (Tensor<T> Hidden, Tensor<T> Output) ForwardBatch(Tensor<T> inputs)
     {
-        var mean = new double[featureDim];
-        int neighborCount = 0;
+        int batch = inputs.Shape[0];
+        var hidden = Engine.TensorReLU(Engine.TensorAdd(
+            Engine.TensorMatMul(inputs, _weightsHidden.Reshape(new[] { _inputDim, _hiddenDim })),
+            Engine.TensorBroadcastTo(_biasHidden.Reshape(new[] { 1, _hiddenDim }), new[] { batch, _hiddenDim })));
+        var output = Engine.TensorAdd(
+            Engine.TensorMatMul(hidden, _weightsOutput.Reshape(new[] { _hiddenDim, _outputDim })),
+            Engine.TensorBroadcastTo(_biasOutput.Reshape(new[] { 1, _outputDim }), new[] { batch, _outputDim }));
+        return (hidden, output);
+    }
 
-        for (int j = 0; j < numNodes; j++)
+    private Tensor<T> Step(Tensor<T> parameter, Tensor<T> gradient, T learningRate)
+    {
+        return Engine.TensorSubtract(parameter,
+            Engine.TensorMultiplyScalar(gradient.Reshape(parameter.Shape.ToArray()), learningRate));
+    }
+
+    /// <summary>
+    /// Truncates or zero-pads the columns of a [rows, width] tensor to <paramref name="width"/>.
+    /// </summary>
+    private Tensor<T> FitWidth(Tensor<T> rows, int width)
+    {
+        int count = rows.Shape[0];
+        int current = rows.Shape[1];
+        if (current == width)
         {
-            if (j == nodeIdx) continue;
+            return rows;
+        }
 
-            int adjIdx = nodeIdx * numNodes + j;
-            if (adjIdx < adjacency.Shape[0] && NumOps.GreaterThan(adjacency[adjIdx], NumOps.Zero))
+        if (current > width)
+        {
+            return Engine.TensorSlice(rows, new[] { 0, 0 }, new[] { count, width });
+        }
+
+        return Engine.TensorConcatenate(new[] { rows, new Tensor<T>(new[] { count, width - current }) }, 1);
+    }
+
+    private (Tensor<T>? Inputs, Tensor<T>? Targets, Tensor<T>? TargetMask) BuildTrainingPairs(
+        Tensor<T> adjacency, Tensor<T> nodeFeatures, int numNodes, int featureDim)
+    {
+        if (numNodes == 0)
+        {
+            return (null, null, null);
+        }
+
+        // Feature matrix [N, F]; entries past the end of the feature tensor are zero and masked out as targets.
+        int featureCells = numNodes * featureDim;
+        int available = Math.Min(featureCells, nodeFeatures.Shape[0]);
+        var flatFeatures = nodeFeatures.Reshape(new[] { nodeFeatures.Length });
+        var features = available == featureCells
+            ? Engine.TensorSlice(flatFeatures, new[] { 0 }, new[] { featureCells })
+            : Engine.TensorConcatenate(new[]
             {
-                neighborCount++;
-                for (int d = 0; d < featureDim; d++)
-                {
-                    int fIdx = j * featureDim + d;
-                    if (fIdx < nodeFeatures.Shape[0])
-                    {
-                        mean[d] += NumOps.ToDouble(nodeFeatures[fIdx]);
-                    }
-                }
+                Engine.TensorSlice(flatFeatures, new[] { 0 }, new[] { available }),
+                new Tensor<T>(new[] { featureCells - available }),
+            }, 0);
+        features = features.Reshape(new[] { numNodes, featureDim });
+
+        // Neighbor indicator without self loops; mean neighbor features = (A F) / degree.
+        var offDiagonal = new int[numNodes * numNodes];
+        for (int i = 0; i < numNodes; i++)
+        {
+            for (int j = 0; j < numNodes; j++)
+            {
+                offDiagonal[i * numNodes + j] = i == j ? 0 : 1;
             }
         }
 
-        if (neighborCount == 0) return null;
+        var adjacencyCells = Engine.TensorSlice(adjacency.Reshape(new[] { adjacency.Length }), new[] { 0 }, new[] { numNodes * numNodes })
+            .Reshape(new[] { numNodes, numNodes });
+        var neighborMask = Engine.TensorMultiply(
+            Engine.TensorGreaterThan(adjacencyCells, NumOps.Zero),
+            new Tensor<int>(offDiagonal, new[] { numNodes, numNodes }).Cast<T>());
+        var degrees = Engine.ReduceSum(neighborMask, new[] { 1 }, true); // [N, 1]
 
-        for (int d = 0; d < featureDim; d++)
+        var degreeCounts = new int[numNodes];
+        var degreeValues = degrees.Cast<double>().ToArray();
+        var withNeighbors = new List<int>();
+        for (int i = 0; i < numNodes; i++)
         {
-            mean[d] /= neighborCount;
+            degreeCounts[i] = (int)Math.Round(degreeValues[i]);
+            if (degreeCounts[i] > 0)
+            {
+                withNeighbors.Add(i);
+            }
         }
 
-        var result = new Tensor<T>(new[] { featureDim });
-        for (int d = 0; d < featureDim; d++)
+        if (withNeighbors.Count == 0)
         {
-            result[d] = NumOps.FromDouble(mean[d]);
+            return (null, null, null);
         }
 
-        return result;
+        var selected = new Tensor<int>(withNeighbors.ToArray(), new[] { withNeighbors.Count });
+        var sums = Engine.TensorGather(Engine.TensorMatMul(neighborMask, features), selected, 0);
+        var counts = new double[withNeighbors.Count];
+        for (int k = 0; k < counts.Length; k++)
+        {
+            counts[k] = degreeCounts[withNeighbors[k]];
+        }
+
+        var countTensor = new Tensor<double>(counts, new[] { counts.Length, 1 }).Cast<T>();
+        var means = Engine.TensorDivide(sums, Engine.TensorBroadcastTo(countTensor, new[] { counts.Length, featureDim }));
+
+        // Targets: the node's own first min(F, outputDim) features, masked where the feature tensor ended.
+        int targetWidth = Math.Min(featureDim, _outputDim);
+        var cellValid = new int[withNeighbors.Count * _outputDim];
+        for (int k = 0; k < withNeighbors.Count; k++)
+        {
+            for (int d = 0; d < targetWidth; d++)
+            {
+                cellValid[k * _outputDim + d] = withNeighbors[k] * featureDim + d < nodeFeatures.Shape[0] ? 1 : 0;
+            }
+        }
+
+        var targets = FitWidth(Engine.TensorGather(features, selected, 0), _outputDim);
+        var targetMask = new Tensor<int>(cellValid, new[] { withNeighbors.Count, _outputDim }).Cast<T>();
+        return (FitWidth(means, _inputDim), targets, targetMask);
     }
 
     private Tensor<T> InitializeWeights(Random rng, int inputSize, int outputSize)
     {
         int size = inputSize * outputSize;
-        var weights = new Tensor<T>(new[] { size });
         double scale = Math.Sqrt(2.0 / (inputSize + outputSize));
 
+        var values = new double[size];
         for (int i = 0; i < size; i++)
         {
-            weights[i] = NumOps.FromDouble((rng.NextDouble() * 2 - 1) * scale);
+            values[i] = (rng.NextDouble() * 2 - 1) * scale;
         }
 
-        return weights;
+        return new Tensor<double>(values, new[] { size }).Cast<T>();
     }
 }

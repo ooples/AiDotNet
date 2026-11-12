@@ -641,4 +641,26 @@ public class FederatedElementwiseSweep29bReferenceTests
         Assert.Equal(1, scores.Count(s => Math.Abs(s - 1.0) < 1e-12));
         Assert.Equal(15, scores.Count(s => Math.Abs(s) < 1e-12));
     }
+
+    [Fact(Timeout = 60000)]
+    public async Task GraphNodeGenerator_TrainingFitsNodesFromTheirNeighbors()
+    {
+        await Task.Yield();
+
+        // FedSage+ NeighGen: the generator learns node features from mean neighbor features. Two connected
+        // nodes with features [1, 0] and [0, 1]: the generator must map [0, 1] -> [1, 0] and [1, 0] -> [0, 1].
+        // Training used to compute the loss gradient without ever applying it, so the output never changed.
+        var generator = new AiDotNet.FederatedLearning.Graph.GraphNodeGenerator<double>(featureDim: 2, hiddenDim: 16, learningRate: 0.1);
+        var adjacency = new Tensor<double>(new[] { 0.0, 1.0, 1.0, 0.0 }, new[] { 4 });
+        var features = new Tensor<double>(new[] { 1.0, 0.0, 0.0, 1.0 }, new[] { 4 });
+
+        generator.Train(adjacency, features, featureDim: 2, epochs: 3000);
+
+        var fromNode1 = generator.Generate(new Tensor<double>(new[] { 0.0, 1.0 }, new[] { 2 }));
+        var fromNode0 = generator.Generate(new Tensor<double>(new[] { 1.0, 0.0 }, new[] { 2 }));
+        Assert.Equal(1.0, fromNode1[0], 2);
+        Assert.Equal(0.0, fromNode1[1], 2);
+        Assert.Equal(0.0, fromNode0[0], 2);
+        Assert.Equal(1.0, fromNode0[1], 2);
+    }
 }
