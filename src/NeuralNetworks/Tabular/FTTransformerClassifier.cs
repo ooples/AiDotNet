@@ -177,27 +177,9 @@ public class FTTransformerClassifier<T> : FTTransformerBase<T>
     {
         var probabilities = PredictProbabilities(numericalFeatures, categoricalIndices);
         int batchSize = probabilities.Shape[0];
-        var predictions = new int[batchSize];
 
-        for (int b = 0; b < batchSize; b++)
-        {
-            int maxIdx = 0;
-            var maxProb = probabilities[b * _numClasses + 0];
-
-            for (int c = 1; c < _numClasses; c++)
-            {
-                var prob = probabilities[b * _numClasses + c];
-                if (NumOps.Compare(prob, maxProb) > 0)
-                {
-                    maxProb = prob;
-                    maxIdx = c;
-                }
-            }
-
-            predictions[b] = maxIdx;
-        }
-
-        return predictions;
+        // Per-row argmax over the classes (first index wins ties, as before).
+        return Engine.TensorArgMax(Engine.Reshape(probabilities, new[] { batchSize, _numClasses }), 1).ToArray();
     }
 
     /// <summary>
@@ -227,18 +209,13 @@ public class FTTransformerClassifier<T> : FTTransformerBase<T>
     public T ComputeCrossEntropyLoss(Tensor<T> probabilities, int[] targets)
     {
         int batchSize = probabilities.Shape[0];
-        var totalLoss = NumOps.Zero;
         var epsilon = NumOps.FromDouble(1e-15);  // Numerical stability
 
-        for (int b = 0; b < batchSize; b++)
-        {
-            int targetClass = targets[b];
-            var prob = probabilities[b * _numClasses + targetClass];
-            var safeProp = NumOps.Add(prob, epsilon);  // Avoid log(0)
-            var loss = NumOps.Negate(NumOps.Log(safeProp));
-            totalLoss = NumOps.Add(totalLoss, loss);
-        }
-
+        // -mean_b log(p[b, target_b] + eps): gather each row's target probability, then reduce.
+        var targetIndex = Tensor<int>.FromVector(new Vector<int>(targets).GetSubVector(0, batchSize), new[] { batchSize, 1 });
+        var targetProb = Engine.TensorTakeAlongDim(
+            Engine.Reshape(probabilities, new[] { batchSize, _numClasses }), targetIndex, 1);
+        var totalLoss = NumOps.Negate(Engine.TensorSum(Engine.TensorLog(Engine.TensorAddScalar(targetProb, epsilon))));
         return NumOps.Divide(totalLoss, NumOps.FromDouble(batchSize));
     }
 
@@ -309,10 +286,8 @@ public class FTTransformerClassifier<T> : FTTransformerBase<T>
     // The class targets as a one-hot [batch, classes] tensor: data the step carries, not a closure.
     private Tensor<T> OneHot(int[] targets, int batch)
     {
-        var onehot = new Tensor<T>([batch, _numClasses]);
-        for (int b = 0; b < batch; b++)
-            onehot[b * _numClasses + targets[b]] = NumOps.One;
-        return onehot;
+        var targetIndex = Tensor<int>.FromVector(new Vector<int>(targets).GetSubVector(0, batch), new[] { batch });
+        return Engine.TensorOneHot<T>(targetIndex, _numClasses);
     }
 
     private AiDotNet.Training.TapeTrainingStepper<T>? _tapeStepper;
@@ -404,34 +379,29 @@ public class FTTransformerClassifier<T> : FTTransformerBase<T>
     public T ComputeF1Score(Tensor<T> numericalFeatures, int[] targets, Matrix<int>? categoricalIndices = null)
     {
         var predictions = Predict(numericalFeatures, categoricalIndices);
-        var totalF1 = NumOps.Zero;
+        int n = predictions.Length;
 
-        for (int c = 0; c < _numClasses; c++)
-        {
-            int truePositives = 0;
-            int falsePositives = 0;
-            int falseNegatives = 0;
+        // Macro F1 from one-hot count tables: per class, TP = sum(pred & target),
+        // TP + FP = predicted count, TP + FN = target count; empty denominators give 0.
+        var predicted = Engine.TensorOneHot<T>(Tensor<int>.FromVector(new Vector<int>(predictions), new[] { n }), _numClasses);
+        var actual = Engine.TensorOneHot<T>(
+            Tensor<int>.FromVector(new Vector<int>(targets).GetSubVector(0, n), new[] { n }), _numClasses);
+        var truePositives = Engine.ReduceSum(Engine.TensorMultiply(predicted, actual), new[] { 0 }, false);
+        var predictedCount = Engine.ReduceSum(predicted, new[] { 0 }, false);
+        var actualCount = Engine.ReduceSum(actual, new[] { 0 }, false);
+        var zeros = new Tensor<T>(new[] { _numClasses });
 
-            for (int i = 0; i < predictions.Length; i++)
-            {
-                if (predictions[i] == c && targets[i] == c)
-                    truePositives++;
-                else if (predictions[i] == c && targets[i] != c)
-                    falsePositives++;
-                else if (predictions[i] != c && targets[i] == c)
-                    falseNegatives++;
-            }
+        var precision = Engine.TensorWhere(Engine.TensorGreaterThan(predictedCount, NumOps.Zero),
+            Engine.TensorDivide(truePositives, predictedCount), zeros);
+        var recall = Engine.TensorWhere(Engine.TensorGreaterThan(actualCount, NumOps.Zero),
+            Engine.TensorDivide(truePositives, actualCount), zeros);
+        var precisionPlusRecall = Engine.TensorAdd(precision, recall);
+        var f1 = Engine.TensorWhere(Engine.TensorGreaterThan(precisionPlusRecall, NumOps.Zero),
+            Engine.TensorDivide(Engine.TensorMultiplyScalar(Engine.TensorMultiply(precision, recall), NumOps.FromDouble(2.0)),
+                precisionPlusRecall),
+            zeros);
 
-            double precision = truePositives + falsePositives > 0
-                ? (double)truePositives / (truePositives + falsePositives) : 0.0;
-            double recall = truePositives + falseNegatives > 0
-                ? (double)truePositives / (truePositives + falseNegatives) : 0.0;
-            double f1 = precision + recall > 0 ? 2 * precision * recall / (precision + recall) : 0.0;
-
-            totalF1 = NumOps.Add(totalF1, NumOps.FromDouble(f1));
-        }
-
-        return NumOps.Divide(totalF1, NumOps.FromDouble(_numClasses));
+        return NumOps.Divide(Engine.TensorSum(f1), NumOps.FromDouble(_numClasses));
     }
 
     /// <summary>
