@@ -122,8 +122,7 @@ public class ClusterSeparabilitySelector<T> : TransformerBase<T, Matrix<T>, Matr
             engine.TensorDivide(ssb, ssw), new Tensor<T>(new[] { p }));
     }
 
-    public new Matrix<T> FitTransform(Matrix<T> data)        int numToSelect = Math.Min(_nFeaturesToSelect, p);
-
+    public new Matrix<T> FitTransform(Matrix<T> data)
     {
         Fit(data);
         return Transform(data);
