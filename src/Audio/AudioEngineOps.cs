@@ -140,4 +140,46 @@ internal static class AudioEngineOps
         var prev = engine.TensorSlice(x, new[] { 0, 0 }, new[] { rows - 1, cols });
         return engine.ReduceSum(engine.TensorAbs(engine.TensorSubtract(next, prev)), new[] { 0 }, keepDims: false);
     }
+
+    /// <summary>
+    /// Softmax over the first <c>min(classCount, logits.Length)</c> logits (row-major), returned as
+    /// <paramref name="classCount"/> probabilities with zeros past the logits. When the exponentials do
+    /// not sum to a positive number (no logits, or a NaN logit) every class gets <c>1 / classCount</c>.
+    /// </summary>
+    /// <remarks>
+    /// The maximum is subtracted before exponentiating, which leaves every finite result unchanged
+    /// (softmax is shift-invariant) and keeps large logits from overflowing.
+    /// </remarks>
+    internal static T[] SoftmaxOrUniform<T>(IEngine engine, Tensor<T> logits, int classCount)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var result = new T[Math.Max(classCount, 0)];
+        int n = Math.Min(classCount, logits.Length);
+        if (n > 0)
+        {
+            var flat = Flatten(engine, logits);
+            var head = n == flat.Length ? flat : engine.TensorSlice(flat, new[] { 0 }, new[] { n });
+            var exp = engine.TensorExp(engine.TensorSubtractScalar(head, engine.TensorMaxValue(head)));
+            T sum = engine.TensorSum(exp);
+            if (numOps.ToDouble(sum) > 0)
+            {
+                engine.TensorDivideScalar(exp, sum).CopyTo(result.AsSpan(0, n));
+                return result;
+            }
+        }
+        T uniform = numOps.FromDouble(1.0 / classCount);
+        result.AsSpan().Fill(uniform);
+        return result;
+    }
+
+    /// <summary>The first <paramref name="count"/> elements (row-major) of <paramref name="x"/>.</summary>
+    internal static T[] Head<T>(IEngine engine, Tensor<T> x, int count)
+    {
+        int n = Math.Min(Math.Max(count, 0), x.Length);
+        var result = new T[n];
+        if (n == 0) return result;
+        var flat = Flatten(engine, x);
+        (n == flat.Length ? flat : engine.TensorSlice(flat, new[] { 0 }, new[] { n })).CopyTo(result.AsSpan());
+        return result;
+    }
 }
