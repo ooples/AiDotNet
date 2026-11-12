@@ -2855,6 +2855,7 @@
 1	ADNELEM001|AiDotNet.Deployment.Optimization.Quantization.Training.QATTrainingHook<T>.UpdateActivationStatistics(AiDotNet.Tensors.LinearAlgebra.Vector<T>, AiDotNet.Deployment.Optimization.Quantization.Training.QuantizationState)
 3	ADNELEM001|AiDotNet.Diffusion.Acceleration.FreeNoiseModule<T>.GenerateRescheduledNoise(int, int[])
 2	ADNELEM001|AiDotNet.Diffusion.Audio.ProjectionLayer<T>.ProjectionLayer(int, int, int?)
+1	ADNELEM001|AiDotNet.Diffusion.Control.IPAdapterFaceIDPlusModel<T>.AddParams(System.Collections.Generic.List<T>, AiDotNet.Tensors.LinearAlgebra.Vector<T>)
 1	ADNELEM001|AiDotNet.Diffusion.DDPMModel<T>.PredictTrainingNoise(AiDotNet.Tensors.LinearAlgebra.Tensor<T>, AiDotNet.Tensors.LinearAlgebra.Tensor<T>, AiDotNet.Tensors.LinearAlgebra.Tensor<T>, AiDotNet.Tensors.LinearAlgebra.Tensor<T>)
 1	ADNELEM001|AiDotNet.Diffusion.DiffusionModelBase<T>.FlattenGradients(AiDotNet.Tensors.LinearAlgebra.Tensor<T>[], System.Collections.Generic.IReadOnlyDictionary<AiDotNet.Tensors.LinearAlgebra.Tensor<T>, AiDotNet.Tensors.LinearAlgebra.Tensor<T>>)
 1	ADNELEM001|AiDotNet.Diffusion.DiffusionModelBase<T>.GenerateAsyncCore(int[], int, int?, AiDotNet.Tensors.LinearAlgebra.Vector<T>?, System.Threading.CancellationToken)
