@@ -14,6 +14,16 @@ namespace AiDotNet.Tests.UnitTests.NeuralNetworks;
 
 public class Elementwise03bNumericalRegressionTests
 {
+    [Fact]
+    public void MotionModule_ParameterSlicesRestoreEveryChildExactly()
+    {
+        var module = new AiDotNet.Diffusion.Attention.MotionModule<double>(4, 2, 2, 1, 2);
+        var parameters = module.GetParameters();
+        for (int i = 0; i < parameters.Length; i++) parameters[i] = (i % 17 - 8) * 0.01;
+        module.SetParameters(parameters);
+        Assert.Equal(parameters.ToArray(), module.GetParameters().ToArray());
+    }
+
     private const BindingFlags PrivateInstance = BindingFlags.Instance | BindingFlags.NonPublic;
 
     [Fact]
