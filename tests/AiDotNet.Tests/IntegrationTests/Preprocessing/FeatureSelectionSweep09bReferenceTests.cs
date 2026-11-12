@@ -494,12 +494,18 @@ public class FeatureSelectionSweep09bReferenceTests
     public async Task RandomizedLasso_DominantFeature_IsAlwaysSelected()
     {
         // Meinshausen and Buhlmann (2010): the reweighted lasso keeps the dominant feature 0 (lasso coefficient 1.16
-        // on the standardized data) in every subsample, so its selection probability is 1
-        var selector = new RandomizedLasso(nFeaturesToSelect: 1, nIterations: 30, alpha: 0.01);
+        // on the standardized data) in every subsample, so its selection probability is exactly 30 / 30 = 1. The
+        // selector is seeded, so the subsamples and weights, and hence every probability, are reproducible.
+        var selector = new RandomizedLasso(nFeaturesToSelect: 1, nIterations: 30, alpha: 0.01, randomState: 42);
         selector.Fit(RegressionData(), RegressionTarget());
+        var repeat = new RandomizedLasso(nFeaturesToSelect: 1, nIterations: 30, alpha: 0.01, randomState: 42);
+        repeat.Fit(RegressionData(), RegressionTarget());
 
         Assert.NotNull(selector.SelectionProbabilities);
-        Assert.Equal(1.0, selector.SelectionProbabilities[0], Tolerance);
+        Assert.NotNull(repeat.SelectionProbabilities);
+        Assert.Equal(1.0, selector.SelectionProbabilities[0]);
         Assert.Equal(new[] { 0 }, selector.SelectedIndices);
+        Assert.Equal(selector.SelectionProbabilities.ToArray(), repeat.SelectionProbabilities.ToArray());
+        Assert.Equal(selector.SelectedIndices, repeat.SelectedIndices);
     }
 }

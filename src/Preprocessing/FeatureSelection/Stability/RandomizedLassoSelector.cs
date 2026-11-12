@@ -29,6 +29,7 @@ public class RandomizedLassoSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T
     private readonly double _alpha;
     private readonly double _sampleFraction;
     private readonly double _weaknessRange;
+    private readonly int? _randomState;
 
     private Vector<T>? _selectionProbabilities;
     private int[]? _selectedIndices;
@@ -48,6 +49,7 @@ public class RandomizedLassoSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T
         double alpha = 0.01,
         double sampleFraction = 0.75,
         double weaknessRange = 0.5,
+        int? randomState = null,
         int[]? columnIndices = null)
         : base(columnIndices)
     {
@@ -59,6 +61,7 @@ public class RandomizedLassoSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T
         _alpha = alpha;
         _sampleFraction = sampleFraction;
         _weaknessRange = weaknessRange;
+        _randomState = randomState;
     }
 
     /// <inheritdoc />
@@ -78,7 +81,10 @@ public class RandomizedLassoSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T
         int n = data.Rows;
         int p = data.Columns;
 
-        var rand = RandomHelper.CreateSecureRandom();
+        // Seeded when a random state is given, so subsamples and weights are reproducible
+        var rand = _randomState.HasValue
+            ? RandomHelper.CreateSeededRandom(_randomState.Value)
+            : RandomHelper.CreateSecureRandom();
 
         // Normalize features: centre and divide by the sample standard deviation plus 1e-10; centre the target
         var centered = SelectorTensorOps.CenterColumns(Tensor<T>.FromMatrix(data));
