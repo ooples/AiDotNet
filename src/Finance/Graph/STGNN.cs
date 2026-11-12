@@ -112,7 +112,9 @@ public partial class STGNN<T> : ForecastingModelBase<T>
     #endregion
 
     #region Graph Fields
-    private readonly Tensor<T>? _adjacencyMatrix;
+    // Not readonly: a checkpoint restore replaces the graph (and what is derived from it) rather than
+    // copying into a constructor-built tensor that may be absent or shaped for a different NumNodes.
+    private Tensor<T>? _adjacencyMatrix;
     private readonly Random _random;
     #endregion
 

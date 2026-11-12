@@ -173,9 +173,10 @@ public class GIFTEvalBenchmark<T>
             }
         }
 
-        return NumOps.Divide(
-            NumOps.Multiply(NumOps.FromDouble(2.0), totalLoss),
-            NumOps.Multiply(NumOps.FromDouble(quantileForecasts.Count), absoluteTarget));
+        // Divide by sum|y| before applying 2 / Q: Q * sum|y| can overflow T (float targets near 1e38) while the
+        // loss ratio itself is finite.
+        return NumOps.Multiply(
+            NumOps.Divide(totalLoss, absoluteTarget), NumOps.FromDouble(2.0 / quantileForecasts.Count));
     }
 
     /// <summary>
@@ -295,8 +296,14 @@ public class GIFTEvalBenchmark<T>
                 var pinball = Engine.TensorAdd(
                     Engine.TensorMultiply(Engine.TensorBroadcastTo(levelRow, gridShape), error),
                     Engine.TensorReLU(Engine.TensorNegate(error)));
-                levelLosses.Add(Engine.ReduceSum(pinball, new[] { 0 }, false));
-                absoluteTargets.Add(Engine.TensorSum(Engine.TensorAbs(actualSlice)));
+                var losses = Engine.ReduceSum(pinball, new[] { 0 }, false);
+                var absoluteTarget = Engine.TensorAbs(actualSlice);
+                // A forecast or target holding NaN or infinity would turn the whole dataset's CRPS into NaN;
+                // it is left out, as the per-series finite filter did, and not counted in NumCRPSEvaluated.
+                if (!AllFinite(losses) || !AllFinite(absoluteTarget))
+                    continue;
+                levelLosses.Add(losses);
+                absoluteTargets.Add(Engine.TensorSum(absoluteTarget));
             }
         }
 
@@ -322,10 +329,14 @@ public class GIFTEvalBenchmark<T>
         var perLevel = Engine.ReduceSum(Engine.TensorStack(levelLosses.ToArray(), 0), new[] { 0 }, false);
         T absoluteTotal = Engine.TensorSum(
             new Tensor<T>(new[] { absoluteTargets.Count }, new Vector<T>(absoluteTargets.ToArray())));
-        return NumOps.Divide(
-            NumOps.Multiply(NumOps.FromDouble(2.0), Engine.TensorSum(perLevel)),
-            NumOps.Multiply(NumOps.FromDouble(numQ), absoluteTotal));
+        // Divide by sum|y| before applying 2 / Q, so Q * sum|y| cannot overflow T while the ratio is finite.
+        return NumOps.Multiply(
+            NumOps.Divide(Engine.TensorSum(perLevel), absoluteTotal), NumOps.FromDouble(2.0 / numQ));
     }
+
+    /// <summary>True when every value is finite (x - x is 0 exactly for finite x; NaN and +/-infinity give NaN).</summary>
+    private static bool AllFinite(Tensor<T> values)
+        => Engine.TensorCountNonzero(Engine.TensorEquals(Engine.TensorSubtract(values, values), NumOps.Zero)) == values.Length;
 
     /// <summary>
     /// Mean of the finite scores (NaN and infinite ones are skipped) and how many were finite;

@@ -116,7 +116,9 @@ public partial class MTGNN<T> : ForecastingModelBase<T>
     /// <summary>Node embedding E2, trained through the adaptive adjacency.</summary>
     [TrainableParameter]
     private Tensor<T>? _nodeEmbedding2;
-    private readonly Tensor<T>? _predefinedAdjacency;
+    // Not readonly: a checkpoint restore replaces the graph (and what is derived from it) rather than
+    // copying into a constructor-built tensor that may be absent or shaped for a different NumNodes.
+    private Tensor<T>? _predefinedAdjacency;
     private readonly Random _random;
     #endregion
 
