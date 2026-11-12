@@ -298,8 +298,9 @@ internal static class PreprocessingTensorOps
         T count = ops.FromDouble(n);
 
         var joint = engine.TensorMatMul(engine.TensorTranspose(oneHotA), oneHotB);
-        var marginalA = engine.ReduceSum(oneHotA, new[] { 0 }, false);
-        var marginalB = engine.ReduceSum(oneHotB, new[] { 0 }, false);
+        // Bin occupancies counted in int: 0/1 sums in a narrow T (Half) stop growing at 2048
+        var marginalA = engine.ReduceSum(oneHotA.Cast<int>(), new[] { 0 }, false).Cast<T>();
+        var marginalB = engine.ReduceSum(oneHotB.Cast<int>(), new[] { 0 }, false).Cast<T>();
         var pxy = engine.TensorDivideScalar(joint, count);
         var pxpy = engine.TensorDivideScalar(engine.TensorOuter(marginalA, marginalB), ops.Multiply(count, count));
         var ratio = engine.TensorDivide(pxy, pxpy);
@@ -420,13 +421,20 @@ internal static class PreprocessingTensorOps
             engine.TensorMatMul(engine.Reshape(values, new[] { 1, values.Length }), oneHot), new[] { categories });
     }
 
-    /// <summary>Per-category row counts for category positions <paramref name="index"/>.</summary>
+    /// <summary>
+    /// Per-category row counts for category positions <paramref name="index"/> (positions outside
+    /// [0, <paramref name="categories"/>) are not counted). Counted in int and converted to T at the end, so a narrow
+    /// T such as Half does not stop counting at 2048.
+    /// </summary>
     public static Tensor<T> CategoryCounts<T>(Tensor<int> index, int categories)
     {
         var engine = AiDotNetEngine.Current;
         if (index.Length == 0)
             return new Tensor<T>(new[] { categories });
-        return engine.ReduceSum(engine.TensorOneHot<T>(index, categories), new[] { 0 }, false);
+        var flat = index.Rank == 1 ? index : engine.Reshape(index, new[] { index.Length });
+        var valid = engine.TensorMultiply(engine.TensorGreaterThan(flat, -1), engine.TensorLessThan(flat, categories));
+        var binned = engine.TensorWhere(valid, flat, Filled(new[] { flat.Length }, categories));
+        return engine.TensorNarrow(engine.TensorBinCount(binned, categories + 1), 0, 0, categories).Cast<T>();
     }
 
     /// <summary>Stacks [n] column tensors into an [n, columns] matrix.</summary>
