@@ -2,6 +2,7 @@ using AiDotNet.Evaluation.Enums;
 using AiDotNet.Evaluation.Results.Core;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.Tensors.Engines.Autodiff;
 
 namespace AiDotNet.Evaluation.Metrics.TimeSeries;
 
@@ -51,25 +52,28 @@ public class MASEMetric<T> : ITimeSeriesMetric<T>
             throw new ArgumentException("Seasonal period must be at least 1.", nameof(seasonalPeriod));
         int n = predictions.Length;
 
-        // Calculate MAE of predictions
-        double mae = 0;
-        for (int i = 0; i < n; i++)
-            mae += Math.Abs(NumOps.ToDouble(actuals[i]) - NumOps.ToDouble(predictions[i]));
-        mae /= n;
+        var engine = AiDotNetEngine.Current;
+        using var noGrad = new NoGradScope<T>();
+        var pred = EvaluationTensorOps<T>.ToTensor(predictions);
+        var actual = EvaluationTensorOps<T>.ToTensor(actuals);
+        var tolerance = NumOps.FromDouble(1e-10);
 
-        // Calculate MAE of naive forecast (y[t-period])
-        double maeNaive = 0;
-        int naiveCount = 0;
-        for (int i = period; i < n; i++)
+        // Calculate MAE of predictions
+        T mae = engine.TensorMean(engine.TensorAbs(engine.TensorSubtract(actual, pred)));
+
+        // Calculate MAE of the naive forecast y[t - period] over t = period .. n - 1
+        int naiveCount = Math.Max(0, n - period);
+        T maeNaive = NumOps.Zero;
+        if (naiveCount > 0)
         {
-            maeNaive += Math.Abs(NumOps.ToDouble(actuals[i]) - NumOps.ToDouble(actuals[i - period]));
-            naiveCount++;
+            var current = engine.TensorSlice(actual, new[] { period }, new[] { naiveCount });
+            var lagged = engine.TensorSlice(actual, new[] { 0 }, new[] { naiveCount });
+            maeNaive = engine.TensorSum(engine.TensorAbs(engine.TensorSubtract(current, lagged)));
         }
 
-        if (naiveCount == 0 || maeNaive < 1e-10)
-            return mae < 1e-10 ? NumOps.Zero : NumOps.MaxValue;
+        if (naiveCount == 0 || NumOps.LessThan(maeNaive, tolerance))
+            return NumOps.LessThan(mae, tolerance) ? NumOps.Zero : NumOps.MaxValue;
 
-        maeNaive /= naiveCount;
-        return NumOps.FromDouble(mae / maeNaive);
+        return NumOps.Divide(mae, NumOps.Divide(maeNaive, NumOps.FromDouble(naiveCount)));
     }
 }

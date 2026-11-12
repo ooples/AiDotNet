@@ -2,6 +2,7 @@ using AiDotNet.Evaluation.Enums;
 using AiDotNet.Evaluation.Results.Core;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.Tensors.Engines.Autodiff;
 
 namespace AiDotNet.Evaluation.Metrics.TimeSeries;
 
@@ -61,25 +62,28 @@ public class MASESeasonalMetric<T> : ITimeSeriesMetric<T>
 
         if (n <= period) return NumOps.Zero; // Not enough data for seasonal comparison
 
-        // Calculate MAE of predictions
-        double mae = 0;
-        for (int i = 0; i < n; i++)
-            mae += Math.Abs(NumOps.ToDouble(actuals[i]) - NumOps.ToDouble(predictions[i]));
-        mae /= n;
+        var engine = AiDotNetEngine.Current;
+        using var noGrad = new NoGradScope<T>();
+        var pred = EvaluationTensorOps<T>.ToTensor(predictions);
+        var actual = EvaluationTensorOps<T>.ToTensor(actuals);
+        var tolerance = NumOps.FromDouble(1e-10);
 
-        // Calculate MAE of seasonal naive forecast (y[t-period])
-        double maeSeasonalNaive = 0;
-        int naiveCount = 0;
-        for (int i = period; i < n; i++)
+        // Calculate MAE of predictions
+        T mae = engine.TensorMean(engine.TensorAbs(engine.TensorSubtract(actual, pred)));
+
+        // Calculate MAE of the naive forecast y[t - period] over t = period .. n - 1
+        int naiveCount = Math.Max(0, n - period);
+        T maeSeasonalNaive = NumOps.Zero;
+        if (naiveCount > 0)
         {
-            maeSeasonalNaive += Math.Abs(NumOps.ToDouble(actuals[i]) - NumOps.ToDouble(actuals[i - period]));
-            naiveCount++;
+            var current = engine.TensorSlice(actual, new[] { period }, new[] { naiveCount });
+            var lagged = engine.TensorSlice(actual, new[] { 0 }, new[] { naiveCount });
+            maeSeasonalNaive = engine.TensorSum(engine.TensorAbs(engine.TensorSubtract(current, lagged)));
         }
 
-        if (naiveCount == 0 || maeSeasonalNaive < 1e-10)
-            return mae < 1e-10 ? NumOps.Zero : NumOps.MaxValue;
+        if (naiveCount == 0 || NumOps.LessThan(maeSeasonalNaive, tolerance))
+            return NumOps.LessThan(mae, tolerance) ? NumOps.Zero : NumOps.MaxValue;
 
-        maeSeasonalNaive /= naiveCount;
-        return NumOps.FromDouble(mae / maeSeasonalNaive);
+        return NumOps.Divide(mae, NumOps.Divide(maeSeasonalNaive, NumOps.FromDouble(naiveCount)));
     }
 }

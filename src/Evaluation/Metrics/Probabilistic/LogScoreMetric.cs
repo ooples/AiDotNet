@@ -3,6 +3,7 @@ using AiDotNet.Evaluation.Enums;
 using AiDotNet.Evaluation.Results.Core;
 using AiDotNet.Helpers;
 using AiDotNet.Scoring;
+using AiDotNet.Tensors.Engines.Autodiff;
 
 namespace AiDotNet.Evaluation.Metrics.Probabilistic;
 
@@ -75,22 +76,23 @@ public class LogScoreMetric<T> : IRegressionMetric<T>
         // For point predictions, compute Gaussian negative log-likelihood:
         // NLL = 0.5 * log(2π * σ²) + (y - ŷ)² / (2σ²)
         // First estimate σ² from residuals, then compute mean NLL
-        double sumSqErr = 0;
-        for (int i = 0; i < predictions.Length; i++)
-        {
-            double diff = NumOps.ToDouble(predictions[i]) - NumOps.ToDouble(actuals[i]);
-            sumSqErr += diff * diff;
-        }
+        var engine = AiDotNetEngine.Current;
+        using var noGrad = new NoGradScope<T>();
+        var pred = EvaluationTensorOps<T>.ToTensor(predictions);
+        var actual = EvaluationTensorOps<T>.ToTensor(actuals);
+        T sumSqErr = engine.TensorSumOfSquares(engine.TensorSubtract(pred, actual));
 
         int n = predictions.Length;
-        double variance = sumSqErr / n;
-        if (variance < 1e-15) variance = 1e-15;
+        T count = NumOps.FromDouble(n);
+        T variance = NumOps.Divide(sumSqErr, count);
+        T varianceFloor = NumOps.FromDouble(1e-15);
+        if (NumOps.LessThan(variance, varianceFloor)) variance = varianceFloor;
 
         // Full mean NLL under Gaussian with estimated variance:
         // mean_NLL = 0.5 * log(2π * σ²) + sumSqErr / (2 * n * σ²)
-        double meanNll = 0.5 * Math.Log(2 * Math.PI * variance) + sumSqErr / (2.0 * n * variance);
-
-        return NumOps.FromDouble(meanNll);
+        T logTerm = NumOps.Multiply(NumOps.FromDouble(0.5), NumOps.Log(NumOps.Multiply(NumOps.FromDouble(2 * Math.PI), variance)));
+        T fitTerm = NumOps.Divide(sumSqErr, NumOps.Multiply(NumOps.Multiply(NumOps.FromDouble(2.0), count), variance));
+        return NumOps.Add(logTerm, fitTerm);
     }
 
     /// <inheritdoc/>

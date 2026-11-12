@@ -2,6 +2,7 @@ using AiDotNet.Evaluation.Enums;
 using AiDotNet.Evaluation.Results.Core;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.Tensors.Engines.Autodiff;
 
 namespace AiDotNet.Evaluation.Metrics.TimeSeries;
 
@@ -46,17 +47,16 @@ public class WAPEMetric<T> : ITimeSeriesMetric<T>
             throw new ArgumentException("Predictions and actuals must have the same length.");
         if (predictions.Length == 0) return NumOps.Zero;
 
-        double totalAbsError = 0;
-        double totalAbsActual = 0;
-        for (int i = 0; i < predictions.Length; i++)
-        {
-            double actual = NumOps.ToDouble(actuals[i]);
-            double pred = NumOps.ToDouble(predictions[i]);
-            totalAbsError += Math.Abs(actual - pred);
-            totalAbsActual += Math.Abs(actual);
-        }
+        var engine = AiDotNetEngine.Current;
+        using var noGrad = new NoGradScope<T>();
+        var pred = EvaluationTensorOps<T>.ToTensor(predictions);
+        var actual = EvaluationTensorOps<T>.ToTensor(actuals);
+        var tolerance = NumOps.FromDouble(1e-10);
 
-        if (totalAbsActual < 1e-10) return NumOps.Zero;
-        return NumOps.FromDouble(totalAbsError / totalAbsActual);
+        T totalAbsError = engine.TensorSum(engine.TensorAbs(engine.TensorSubtract(actual, pred)));
+        T totalAbsActual = engine.TensorSum(engine.TensorAbs(actual));
+
+        if (NumOps.LessThan(totalAbsActual, tolerance)) return NumOps.Zero;
+        return NumOps.Divide(totalAbsError, totalAbsActual);
     }
 }

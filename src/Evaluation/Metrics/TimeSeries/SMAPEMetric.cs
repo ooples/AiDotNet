@@ -2,6 +2,7 @@ using AiDotNet.Evaluation.Enums;
 using AiDotNet.Evaluation.Results.Core;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.Tensors.Engines.Autodiff;
 
 namespace AiDotNet.Evaluation.Metrics.TimeSeries;
 
@@ -46,21 +47,21 @@ public class SMAPEMetric<T> : ITimeSeriesMetric<T>
             throw new ArgumentException("Predictions and actuals must have the same length.");
         if (predictions.Length == 0) return NumOps.Zero;
 
-        double sum = 0;
-        int validCount = 0;
-        for (int i = 0; i < predictions.Length; i++)
-        {
-            double actual = NumOps.ToDouble(actuals[i]);
-            double pred = NumOps.ToDouble(predictions[i]);
-            double denominator = (Math.Abs(actual) + Math.Abs(pred)) / 2.0;
+        var engine = AiDotNetEngine.Current;
+        using var noGrad = new NoGradScope<T>();
+        var pred = EvaluationTensorOps<T>.ToTensor(predictions);
+        var actual = EvaluationTensorOps<T>.ToTensor(actuals);
+        var tolerance = NumOps.FromDouble(1e-10);
 
-            if (denominator > 1e-10)
-            {
-                sum += Math.Abs(actual - pred) / denominator;
-                validCount++;
-            }
-        }
+        // |actual - pred| / ((|actual| + |pred|) / 2) over the samples whose denominator exceeds 1e-10
+        var denominator = engine.TensorMultiplyScalar(
+            engine.TensorAdd(engine.TensorAbs(actual), engine.TensorAbs(pred)), NumOps.FromDouble(0.5));
+        var valid = engine.TensorGreaterThan(denominator, tolerance);
+        int validCount = EvaluationTensorOps<T>.Count(valid);
+        if (validCount == 0) return NumOps.Zero;
 
-        return validCount > 0 ? NumOps.FromDouble(100.0 * sum / validCount) : NumOps.Zero;
+        var relative = engine.TensorDivide(engine.TensorAbs(engine.TensorSubtract(actual, pred)), denominator);
+        T sum = engine.TensorSum(engine.TensorWhere(valid, relative, engine.TensorZerosLike(relative)));
+        return NumOps.Divide(NumOps.Multiply(NumOps.FromDouble(100.0), sum), NumOps.FromDouble(validCount));
     }
 }

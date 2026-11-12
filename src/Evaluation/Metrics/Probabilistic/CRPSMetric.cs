@@ -3,6 +3,7 @@ using AiDotNet.Evaluation.Enums;
 using AiDotNet.Evaluation.Results.Core;
 using AiDotNet.Helpers;
 using AiDotNet.Scoring;
+using AiDotNet.Tensors.Engines.Autodiff;
 
 namespace AiDotNet.Evaluation.Metrics.Probabilistic;
 
@@ -76,14 +77,11 @@ public class CRPSMetric<T> : IRegressionMetric<T>
             throw new ArgumentException("Predictions and actuals must have the same length.");
         if (predictions.Length == 0) return NumOps.Zero;
 
-        double sum = 0;
-        for (int i = 0; i < predictions.Length; i++)
-        {
-            double diff = NumOps.ToDouble(predictions[i]) - NumOps.ToDouble(actuals[i]);
-            sum += Math.Abs(diff);
-        }
-
-        return NumOps.FromDouble(sum / predictions.Length);
+        var engine = AiDotNetEngine.Current;
+        using var noGrad = new NoGradScope<T>();
+        var pred = EvaluationTensorOps<T>.ToTensor(predictions);
+        var actual = EvaluationTensorOps<T>.ToTensor(actuals);
+        return engine.TensorMean(engine.TensorAbs(engine.TensorSubtract(pred, actual)));
     }
 
     /// <inheritdoc/>
