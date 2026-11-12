@@ -341,11 +341,7 @@ public partial class MoRAAdapter<T> : LoRAAdapterBase<T>
             }
         }
 
-        Tensor<T> result = new Tensor<T>(baseOutput._shape);
-        for (int i = 0; i < baseOutput.Length; i++)
-        {
-            result[i] = NumOps.Add(baseOutput[i], moraOutput[i]);
-        }
+        Tensor<T> result = Engine.TensorAdd(baseOutput, moraOutput);
 
         return result;
     }

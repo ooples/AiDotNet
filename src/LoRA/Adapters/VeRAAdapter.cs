@@ -368,11 +368,7 @@ public partial class VeRAAdapter<T> : LoRAAdapterBase<T>
         Tensor<T> veraOutput = new Tensor<T>(new[] { batchSize, outputSize }, veraOutputData);
 
         // Sum base output and VeRA output
-        Tensor<T> result = new Tensor<T>(baseOutput._shape);
-        for (int i = 0; i < baseOutput.Length; i++)
-        {
-            result[i] = NumOps.Add(baseOutput[i], veraOutput[i]);
-        }
+        Tensor<T> result = Engine.TensorAdd(baseOutput, veraOutput);
 
         return result;
     }

@@ -118,11 +118,13 @@ public partial class StandardLoRAAdapter<T> : LoRAAdapterBase<T>
         int outputSize = GetOutputLayerShape().RequireConcrete("Sizing a LoRA adapter's low-rank factors")[0];
         int weightCount = inputSize * outputSize;
 
-        // Merge weights
-        // baseParams is stored as [outputSize][inputSize] (row-major, output-major)
-        // loraWeights from MergeWeights() is [inputSize, outputSize], so the transpose's
-        // row-major flattening lines up with the weight block. Biases are kept unchanged.
-        Vector<T> mergedParams = AddFlatWeightsToParameters(baseParams, loraWeights.Transpose(), weightCount);
+        // Merge weights. loraWeights from MergeWeights() is [inputSize, outputSize]; DenseLayer
+        // stores its weights input-major ([inputSize, outputSize]) and FullyConnectedLayer
+        // output-major ([outputSize, inputSize]), so the latter uses the transpose.
+        // Biases are kept unchanged.
+        bool isOutputMajor = _baseLayer is FullyConnectedLayer<T>;
+        Vector<T> mergedParams = AddFlatWeightsToParameters(
+            baseParams, isOutputMajor ? loraWeights.Transpose() : loraWeights, weightCount);
 
         // Use helper method to clone base layer and preserve activation function
         return CreateMergedLayerWithClone(mergedParams);

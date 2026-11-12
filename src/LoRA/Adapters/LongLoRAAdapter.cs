@@ -336,7 +336,8 @@ public partial class LongLoRAAdapter<T> : LoRAAdapterBase<T>
             int groupEnd = Math.Min(groupStart + groupSize, sequenceLength);
 
             // Circular shift within this group
-            ShiftGroup(shifted, groupStart, groupEnd, _attentionShiftSize);
+            shifted = ShiftGroup(shifted, groupStart, groupEnd, _attentionShiftSize);
+
         }
 
         return shifted;
@@ -372,7 +373,8 @@ public partial class LongLoRAAdapter<T> : LoRAAdapterBase<T>
             int groupEnd = Math.Min(groupStart + groupSize, sequenceLength);
 
             // Reverse circular shift within this group
-            ShiftGroup(unshifted, groupStart, groupEnd, -_attentionShiftSize);
+            unshifted = ShiftGroup(unshifted, groupStart, groupEnd, -_attentionShiftSize);
+
         }
 
         return unshifted;
@@ -398,12 +400,12 @@ public partial class LongLoRAAdapter<T> : LoRAAdapterBase<T>
     /// For multi-dimensional tensors, we apply this shift to every batch and every feature.
     /// </para>
     /// </remarks>
-    private void ShiftGroup(Tensor<T> tensor, int groupStart, int groupEnd, int shiftAmount)
+    private Tensor<T> ShiftGroup(Tensor<T> tensor, int groupStart, int groupEnd, int shiftAmount)
     {
         int groupSize = groupEnd - groupStart;
         if (groupSize <= 0)
         {
-            return;
+            return tensor;
         }
 
         // Normalize shift amount to be within group size
@@ -415,162 +417,20 @@ public partial class LongLoRAAdapter<T> : LoRAAdapterBase<T>
 
         if (shiftAmount == 0)
         {
-            return;
+            return tensor;
         }
 
-        // Determine tensor dimensions
-        int[] shape = tensor._shape;
-
-        if (shape.Length == 1)
-        {
-            // 1D tensor: simple shift
-            T[] buffer = new T[groupSize];
-            for (int i = 0; i < groupSize; i++)
-            {
-                buffer[i] = tensor[groupStart + i];
-            }
-            for (int i = 0; i < groupSize; i++)
-            {
-                int newPos = (i + shiftAmount) % groupSize;
-                tensor[groupStart + newPos] = buffer[i];
-            }
-        }
-        else if (shape.Length == 2)
-        {
-            // 2D tensor [batchSize, sequenceLength]: shift along sequence axis for each batch
-            // featureDim = 1 (each position is a scalar token)
-            int batchSize = shape[0];
-            int sequenceLength = shape[1];
-            int featureDim = 1;
-
-            T[] buffer = new T[groupSize * featureDim];
-            int actualGroupSize = Math.Min(groupSize, sequenceLength - groupStart);
-
-            // Process per batch to avoid cross-batch mixing
-            for (int b = 0; b < batchSize; b++)
-            {
-                int batchOffset = b * sequenceLength;
-
-                // Copy token blocks (scalars) to buffer
-                for (int tokenIdx = 0; tokenIdx < actualGroupSize; tokenIdx++)
-                {
-                    int seqIdx = groupStart + tokenIdx;
-                    if (seqIdx < sequenceLength)
-                    {
-                        buffer[tokenIdx] = tensor[batchOffset + seqIdx];
-                    }
-                }
-
-                // Write back shifted token blocks
-                for (int tokenIdx = 0; tokenIdx < actualGroupSize; tokenIdx++)
-                {
-                    int newTokenIdx = (tokenIdx + shiftAmount) % actualGroupSize;
-                    int seqIdx = groupStart + newTokenIdx;
-                    if (seqIdx < sequenceLength)
-                    {
-                        tensor[batchOffset + seqIdx] = buffer[tokenIdx];
-                    }
-                }
-            }
-        }
-        else if (shape.Length == 3)
-        {
-            // 3D tensor [batchSize, sequenceLength, featureDim]: shift whole tokens (not scalars)
-            int batchSize = shape[0];
-            int sequenceLength = shape[1];
-            int featureDim = shape[2];
-
-            // CRITICAL: Allocate buffer for whole tokens (groupSize tokens * featureDim per token)
-            // This ensures we shift entire feature vectors together, not individual scalars
-            T[] buffer = new T[groupSize * featureDim];
-            int actualGroupSize = Math.Min(groupSize, sequenceLength - groupStart);
-
-            // Process per batch to avoid cross-batch mixing
-            for (int b = 0; b < batchSize; b++)
-            {
-                int batchOffset = b * sequenceLength * featureDim;
-
-                // Copy whole token blocks into buffer
-                for (int tokenIdx = 0; tokenIdx < actualGroupSize; tokenIdx++)
-                {
-                    int seqIdx = groupStart + tokenIdx;
-                    if (seqIdx < sequenceLength)
-                    {
-                        int tokenOffset = seqIdx * featureDim;
-                        // Copy entire feature vector (token) at once
-                        for (int f = 0; f < featureDim; f++)
-                        {
-                            buffer[tokenIdx * featureDim + f] = tensor[batchOffset + tokenOffset + f];
-                        }
-                    }
-                }
-
-                // Write back shifted token blocks
-                for (int tokenIdx = 0; tokenIdx < actualGroupSize; tokenIdx++)
-                {
-                    int newTokenIdx = (tokenIdx + shiftAmount) % actualGroupSize;
-                    int seqIdx = groupStart + newTokenIdx;
-                    if (seqIdx < sequenceLength)
-                    {
-                        int tokenOffset = seqIdx * featureDim;
-                        // Write entire feature vector (token) at once
-                        for (int f = 0; f < featureDim; f++)
-                        {
-                            tensor[batchOffset + tokenOffset + f] = buffer[tokenIdx * featureDim + f];
-                        }
-                    }
-                }
-            }
-        }
-        else
-        {
-            // For higher-dimensional tensors, shift along second dimension (sequence axis)
-            // Flatten other dimensions and treat as batch×feature
-            int sequenceLength = shape[1];
-            int batchStride = 1;
-            for (int i = 0; i < shape.Length; i++)
-            {
-                batchStride *= shape[i];
-            }
-            batchStride /= sequenceLength;
-
-            T[] buffer = new T[groupSize];
-
-            for (int idx = 0; idx < batchStride; idx++)
-            {
-                // Calculate base offset for this batch/feature combination
-                int batchIdx = idx / (shape.Length > 2 ? shape[2] : 1);
-                int featureIdx = idx % (shape.Length > 2 ? shape[2] : 1);
-
-                // Copy group to buffer
-                for (int i = 0; i < groupSize; i++)
-                {
-                    int seqIdx = groupStart + i;
-                    if (seqIdx < sequenceLength)
-                    {
-                        int tensorIdx = batchIdx * sequenceLength * (shape.Length > 2 ? shape[2] : 1) + seqIdx * (shape.Length > 2 ? shape[2] : 1) + featureIdx;
-                        if (tensorIdx < tensor.Length)
-                        {
-                            buffer[i] = tensor[tensorIdx];
-                        }
-                    }
-                }
-
-                // Write back with shift
-                for (int i = 0; i < groupSize; i++)
-                {
-                    int seqIdx = groupStart + ((i + shiftAmount) % groupSize);
-                    if (seqIdx < sequenceLength)
-                    {
-                        int tensorIdx = batchIdx * sequenceLength * (shape.Length > 2 ? shape[2] : 1) + seqIdx * (shape.Length > 2 ? shape[2] : 1) + featureIdx;
-                        if (tensorIdx < tensor.Length)
-                        {
-                            tensor[tensorIdx] = buffer[i];
-                        }
-                    }
-                }
-            }
-        }
+        // View the tensor as [batch, sequence, features]: a 1D tensor is one sequence of scalars,
+        // a 2D tensor is [batch, sequence] with scalar tokens, and higher ranks shift whole tokens
+        // (every trailing feature moves with its sequence position). Rolling the group slice along
+        // the sequence axis gives new[(i + shift) % groupSize] = old[i] per batch.
+        int[] shape = tensor.Shape.ToArray();
+        int batchSize = shape.Length == 1 ? 1 : shape[0];
+        int sequenceLength = shape.Length == 1 ? shape[0] : shape[1];
+        int featureDim = tensor.Length / (batchSize * sequenceLength);
+        Tensor<T> view = Engine.Reshape(tensor, [batchSize, sequenceLength, featureDim]);
+        Tensor<T> rolled = Engine.TensorRoll(Engine.TensorNarrow(view, 1, groupStart, groupSize), [shiftAmount], [1]);
+        return Engine.Reshape(Engine.TensorSliceScatter(view, rolled, 1, groupStart, groupSize), shape);
     }
 
     /// <summary>
@@ -612,22 +472,12 @@ public partial class LongLoRAAdapter<T> : LoRAAdapterBase<T>
         int outputSize = GetOutputLayerShape().RequireConcrete("Sizing a LoRA adapter's low-rank factors")[0];
         int weightCount = inputSize * outputSize;
 
-        // Create new parameters with merged weights
-        Vector<T> mergedParams = new Vector<T>(baseParams.Length);
-
-        // Merge weights
-        for (int i = 0; i < weightCount; i++)
-        {
-            int row = i / inputSize;
-            int col = i % inputSize;
-            mergedParams[i] = NumOps.Add(baseParams[i], loraWeights[row, col]);
-        }
-
-        // Copy biases unchanged
-        for (int i = weightCount; i < baseParams.Length; i++)
-        {
-            mergedParams[i] = baseParams[i];
-        }
+        // Merge weights. loraWeights is [inputSize, outputSize]; DenseLayer stores its weights
+        // input-major and FullyConnectedLayer output-major, so the latter uses the transpose.
+        // Biases are kept unchanged.
+        bool isOutputMajor = _baseLayer is FullyConnectedLayer<T>;
+        Vector<T> mergedParams = AddFlatWeightsToParameters(
+            baseParams, isOutputMajor ? loraWeights.Transpose() : loraWeights, weightCount);
 
         // Use helper method to clone base layer and preserve activation function
         return CreateMergedLayerWithClone(mergedParams);

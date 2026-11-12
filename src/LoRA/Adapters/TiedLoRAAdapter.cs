@@ -477,11 +477,7 @@ public partial class TiedLoRAAdapter<T> : LoRAAdapterBase<T>
             Tensor<T> tiedLoraOutput = new Tensor<T>(new[] { batchSize, outputSize }, tiedLoraOutputData);
 
             // Sum base output and Tied-LoRA output
-            Tensor<T> result = new Tensor<T>(baseOutput._shape);
-            for (int i = 0; i < baseOutput.Length; i++)
-            {
-                result[i] = NumOps.Add(baseOutput[i], tiedLoraOutput[i]);
-            }
+            Tensor<T> result = Engine.TensorAdd(baseOutput, tiedLoraOutput);
 
             return result;
         }

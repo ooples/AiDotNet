@@ -187,11 +187,8 @@ public partial class GraphConvolutionalLoRAAdapter<T> : LoRAAdapterBase<T>, IGra
         Tensor<T> loraOutput = _loraLayer.Forward(input);
 
         // Sum the outputs
-        Tensor<T> result = new Tensor<T>(baseOutput._shape);
-        for (int i = 0; i < baseOutput.Length; i++)
-        {
-            result[i] = NumOps.Add(baseOutput[i], loraOutput[i]);
-        }
+        Tensor<T> result = Engine.TensorAdd(baseOutput, loraOutput);
+
 
         return result;
     }
@@ -223,31 +220,10 @@ public partial class GraphConvolutionalLoRAAdapter<T> : LoRAAdapterBase<T>, IGra
         int outputSize = OutputFeatures;
         int weightCount = inputSize * outputSize;
 
-        // Create merged parameters
-        Vector<T> mergedParams = new Vector<T>(baseParams.Length);
-
-        // Merge the main weight matrix (first weightCount parameters)
-        for (int i = 0; i < Math.Min(weightCount, baseParams.Length); i++)
-        {
-            int row = i / inputSize;
-            int col = i % inputSize;
-
-            // Handle potential dimension mismatch
-            if (row < loraWeights.Rows && col < loraWeights.Columns)
-            {
-                mergedParams[i] = NumOps.Add(baseParams[i], loraWeights[row, col]);
-            }
-            else
-            {
-                mergedParams[i] = baseParams[i];
-            }
-        }
-
-        // Copy remaining parameters unchanged (biases, etc.)
-        for (int i = weightCount; i < baseParams.Length; i++)
-        {
-            mergedParams[i] = baseParams[i];
-        }
+        // Merge the main weight matrix (first weightCount parameters). Graph layers store their
+        // weights as [inputFeatures, outputFeatures] row-major, the same layout as loraWeights,
+        // so the row-major flattening lines up. Remaining parameters (biases, etc.) are unchanged.
+        Vector<T> mergedParams = AddFlatWeightsToParameters(baseParams, loraWeights, weightCount);
 
         // Clone the appropriate layer type
         return CloneGraphLayerWithParameters(mergedParams);

@@ -696,11 +696,7 @@ public partial class QLoRAAdapter<T> : LoRAAdapterBase<T>
         Tensor<T> loraOutput = _loraLayer.Forward(input);
 
         // Sum the outputs
-        Tensor<T> result = new Tensor<T>(baseOutput._shape);
-        for (int i = 0; i < baseOutput.Length; i++)
-        {
-            result[i] = NumOps.Add(baseOutput[i], loraOutput[i]);
-        }
+        Tensor<T> result = Engine.TensorAdd(baseOutput, loraOutput);
 
         return result;
     }

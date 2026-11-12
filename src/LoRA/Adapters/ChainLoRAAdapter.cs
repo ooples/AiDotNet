@@ -355,10 +355,8 @@ public partial class ChainLoRAAdapter<T> : LoRAAdapterBase<T>
             Tensor<T> adapterOutput = adapter.Forward(input);
 
             // Add adapter contribution to result
-            for (int i = 0; i < result.Length; i++)
-            {
-                result[i] = NumOps.Add(result[i], adapterOutput[i]);
-            }
+            result = Engine.TensorAdd(result, adapterOutput);
+
         }
 
         return result;
@@ -433,13 +431,9 @@ public partial class ChainLoRAAdapter<T> : LoRAAdapterBase<T>
 
             // Add this adapter's contribution to the merged weights
             // DenseLayer uses [inputSize, outputSize] convention
-            for (int i = 0; i < weightCount; i++)
-            {
-                int row = i / outputSize;
-                int col = i % outputSize;
-                mergedParams[i] = NumOps.Add(mergedParams[i], adapterWeights[row, col]);
-            }
             // Note: Biases remain unchanged (indices weightCount to end)
+            mergedParams = AddFlatWeightsToParameters(mergedParams, adapterWeights, weightCount);
+
         }
 
         // Use helper method to clone base layer and preserve activation function
