@@ -24,10 +24,11 @@ namespace AiDotNet.Audio.Classification;
 /// Based on AudioSet ontology with 527+ event classes organized hierarchically.
 /// </para>
 /// <para>
-/// <b>Architecture:</b> This model extends <see cref="AudioClassifierBase{T}"/>
-/// and implements <see cref="IAudioEventDetector{T}"/> for multi-label event detection.
-/// Unlike single-label classification, event detection identifies multiple overlapping
-/// events with their temporal boundaries.
+/// <b>Architecture:</b> Hershey et al. 2017's best classifier, ResNet-50 adapted to audio (section 3.3.5): the
+/// stride of 2 is removed from the first 7x7 convolution and the final average pool covers the 6 x 4 activations of a
+/// 96 x 64 log-mel patch (960 ms of 25 ms windows every 10 ms, 64 mel bins, log after a small offset). Batch
+/// normalization follows every convolution and one sigmoid unit per label replaces the softmax, trained with
+/// cross-entropy and Adam (section 3.1). Audio is classified in non-overlapping 960 ms windows.
 /// </para>
 /// <para><b>For Beginners:</b> Audio event detection answers "What sounds are in this audio?":
 /// <list type="bullet">
@@ -50,7 +51,8 @@ namespace AiDotNet.Audio.Classification;
 ///
 /// Usage with training:
 /// <code>
-/// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(inputFeatures: 64, outputSize: 50);
+/// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(InputType.TwoDimensional,
+///     NeuralNetworkTaskType.MultiLabelClassification, inputHeight: 96, inputWidth: 64, outputSize: 50);
 /// var detector = new AudioEventDetector&lt;float&gt;(architecture, new AudioEventDetectorOptions());
 /// detector.Train(features, labels);
 /// </code>
@@ -74,6 +76,10 @@ public partial class AudioEventDetector<T> : AudioClassifierBase<T>, IAudioEvent
 
     private MelSpectrogram<T>? _melSpectrogram;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
+    // The stem's 3x3 max pooling pads by one on each side (ResNet's stem), and the global average pooling ends the
+    // convolutional trunk; both -1 with custom layers.
+    private int _stemPoolIndex = -1;
+    private int _globalPoolIndex = -1;
     private bool _useNativeMode;
     private bool _disposed;
 
@@ -138,7 +144,10 @@ public partial class AudioEventDetector<T> : AudioClassifierBase<T>, IAudioEvent
             hopLength: _options.HopLength,
             fMin: _options.FMin,
             fMax: _options.FMax,
-            logMel: true);
+            logMel: true,
+            // Section 3.1: "the magnitude of each bin is log-transformed after adding a small offset"; 0.01 in the
+            // authors' released front end.
+            logOffset: 0.01);
 
         // Load ONNX model
         OnnxEncoder = new OnnxModel<T>(modelPath, _options.OnnxOptions);
@@ -171,7 +180,7 @@ public partial class AudioEventDetector<T> : AudioClassifierBase<T>, IAudioEvent
     /// </summary>
     /// <param name="architecture">The neural network architecture.</param>
     /// <param name="options">Detection options.</param>
-    /// <param name="optimizer">Optional custom optimizer (defaults to AdamW).</param>
+    /// <param name="optimizer">Optional custom optimizer (defaults to Adam, the paper's optimizer).</param>
     /// <param name="lossFunction">
     /// Optional custom training loss; defaults to binary cross-entropy with logits for multi-label detection.
     /// </param>
@@ -185,7 +194,8 @@ public partial class AudioEventDetector<T> : AudioClassifierBase<T>, IAudioEvent
         _options = options ?? new AudioEventDetectorOptions();
         Options = _options;
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        // Section 3.1: trained with Adam (learning rate by grid search), no dropout or weight decay.
+        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
 
         base.SampleRate = _options.SampleRate;
 
@@ -200,7 +210,10 @@ public partial class AudioEventDetector<T> : AudioClassifierBase<T>, IAudioEvent
             hopLength: _options.HopLength,
             fMin: _options.FMin,
             fMax: _options.FMax,
-            logMel: true);
+            logMel: true,
+            // Section 3.1: "the magnitude of each bin is log-transformed after adding a small offset"; 0.01 in the
+            // authors' released front end.
+            logOffset: 0.01);
 
         // Create feature extractors
 
@@ -226,7 +239,10 @@ public partial class AudioEventDetector<T> : AudioClassifierBase<T>, IAudioEvent
     public AudioEventDetector(AudioEventDetectorOptions? options = null)
         : this(
             new NeuralNetworkArchitecture<T>(
-                inputFeatures: (options ?? new AudioEventDetectorOptions()).NumMels,
+                inputType: InputType.TwoDimensional,
+                taskType: NeuralNetworkTaskType.MultiLabelClassification,
+                inputHeight: (options ?? new AudioEventDetectorOptions()).PatchFrames,
+                inputWidth: (options ?? new AudioEventDetectorOptions()).NumMels,
                 outputSize: (options?.CustomLabels ?? CommonEventLabels).Length),
             options)
     {
@@ -529,18 +545,32 @@ public partial class AudioEventDetector<T> : AudioClassifierBase<T>, IAudioEvent
     {
         if (!_useNativeMode) return;
 
+        _stemPoolIndex = -1;
+        _globalPoolIndex = -1;
         if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
         {
             Layers.AddRange(Architecture.Layers);
         }
         else
         {
-            // Use same architecture as genre classifier for event detection
-            Layers.AddRange(LayerHelper<T>.CreateDefaultGenreClassifierLayers(
-                numMels: _options.NumMels,
-                numClasses: ClassLabels.Count,
-                hiddenDim: 256,
-                dropoutRate: 0.3));
+            // Hershey et al.'s audio ResNet-50 (section 3.3.5): ResNet-50 with the stride of 2 removed from the first
+            // 7x7 convolution, batch normalization after every convolution, and an average pool over the 6 x 4 final
+            // activations of a 96 x 64 patch, under one sigmoid unit per label (section 3.1).
+            Layers.Add(new ConvolutionalLayer<T>(_options.BaseChannels, kernelSize: 7, stride: 1, padding: 3,
+                activationFunction: new IdentityActivation<T>()));
+            Layers.Add(new BatchNormalizationLayer<T>());
+            Layers.Add(new ActivationLayer<T>((IActivationFunction<T>)new ReLUActivation<T>()));
+            _stemPoolIndex = Layers.Count;
+            Layers.Add(new MaxPoolingLayer<T>(poolSize: 3, stride: 2));
+            for (int stage = 0; stage < _options.StageDepths.Length; stage++)
+            {
+                for (int block = 0; block < _options.StageDepths[stage]; block++)
+                    Layers.Add(new BottleneckBlock<T>(_options.BaseChannels << stage, stride: stage > 0 && block == 0 ? 2 : 1));
+            }
+            _globalPoolIndex = Layers.Count;
+            Layers.Add(AdaptiveAveragePoolingLayer<T>.GlobalPool());
+            Layers.Add(new FlattenLayer<T>());
+            Layers.Add(new DenseLayer<T>(ClassLabels.Count, (IActivationFunction<T>)new IdentityActivation<T>()));
         }
     }
 
@@ -556,19 +586,59 @@ public partial class AudioEventDetector<T> : AudioClassifierBase<T>, IAudioEvent
             return OnnxEncoder.Run(input);
         }
 
-        // Native mode: run through layers to per-class logits, then apply a per-class SIGMOID.
-        // Sound event detection is a MULTI-LABEL task (Kong et al. 2020, "PANNs": each of the N
-        // events is independently present/absent), so the inference output is a per-class presence
-        // PROBABILITY in [0, 1] — not raw logits and not a softmax over mutually-exclusive classes.
-        // Training runs on the raw logits (ForwardForTraining walks the same layers WITHOUT this
-        // sigmoid, and the loss is applied to logits), the standard train-on-logits / predict-with-
-        // sigmoid pattern; this keeps the class scores non-negative and bounded at inference.
-        var current = input;
-        foreach (var layer in Layers)
+        // Native mode: per-label logits, then a per-label SIGMOID. The paper's examples carry several labels at once,
+        // so "all models used a final sigmoid layer rather than a softmax layer" (section 3.1). Training runs on the
+        // raw logits (ForwardForTraining) with cross-entropy, the standard train-on-logits / predict-with-sigmoid
+        // pattern.
+        return Engine.Sigmoid(Logits(input));
+    }
+
+    /// <inheritdoc />
+    public override Tensor<T> ForwardForTraining(Tensor<T> input) => Logits(input);
+
+    /// <summary>
+    /// Per-label logits of log-mel patches: <c>[frames, mels]</c> gives <c>[labels]</c>, <c>[batch, frames, mels]</c> gives
+    /// <c>[batch, labels]</c>.
+    /// </summary>
+    private Tensor<T> Logits(Tensor<T> input)
+    {
+        var current = Run(input, Layers.Count);
+        return input.Rank == 2 && current.Rank == 2 && current.Shape[0] == 1 ? Engine.Reshape(current, new[] { current.Shape[1] }) : current;
+    }
+
+    /// <summary>The convolutional trunk's output <c>[batch, channels, height, width]</c> for log-mel patches, the
+    /// activations the global average pooling reduces (6 x 4 for a 96 x 64 patch).</summary>
+    internal Tensor<T> TrunkActivations(Tensor<T> input) =>
+        Run(input, _globalPoolIndex >= 0 ? _globalPoolIndex : Layers.Count);
+
+    private Tensor<T> Run(Tensor<T> input, int end)
+    {
+        var current = input.Rank switch
         {
-            current = layer.Forward(current);
+            2 => Engine.Reshape(input, new[] { 1, 1, input.Shape[0], input.Shape[1] }),
+            3 => Engine.Reshape(input, new[] { input.Shape[0], 1, input.Shape[1], input.Shape[2] }),
+            _ => input,
+        };
+        for (int i = 0; i < end; i++)
+        {
+            // The stem pooling pads by one; after the ReLU every value is non-negative, so zeros never win a maximum.
+            if (i == _stemPoolIndex) current = Engine.TensorConstantPad(current, new[] { 1, 1, 1, 1 }, NumOps.Zero);
+            current = Layers[i].Forward(current);
         }
-        return Engine.Sigmoid(current);
+        return current;
+    }
+
+    /// <summary>
+    /// The classifier input of one window's log-mel spectrogram: its first <see cref="AudioEventDetectorOptions.PatchFrames"/>
+    /// frames, zero-padded when shorter (a 960 ms window gives 97 frames with centred framing).
+    /// </summary>
+    internal Tensor<T> Patch(Tensor<T> melSpec)
+    {
+        int frames = _options.PatchFrames, bins = melSpec.Shape[melSpec.Rank - 1], available = melSpec.Length / bins;
+        var patch = new Tensor<T>(new[] { frames, bins });
+        int copy = Math.Min(frames, available) * bins;
+        melSpec.Data.Span.Slice(0, copy).CopyTo(patch.Data.Span);
+        return patch;
     }
 
     /// <inheritdoc />
@@ -605,7 +675,7 @@ public partial class AudioEventDetector<T> : AudioClassifierBase<T>, IAudioEvent
         var metadata = new ModelMetadata<T>
         {
             Name = _useNativeMode ? "AudioEventDetector-Native" : "AudioEventDetector-ONNX",
-            Description = "Audio event detection model for identifying sounds (AudioSet-style)",
+            Description = "Audio event detection with the audio ResNet-50 of Hershey et al. 2017",
             FeatureCount = ClassLabels.Count,
             Complexity = 1
         };
@@ -668,14 +738,8 @@ public partial class AudioEventDetector<T> : AudioClassifierBase<T>, IAudioEvent
             throw new InvalidOperationException("Model not loaded.");
 
         // Prepare input (add batch and channel dimensions)
-        var input = new Tensor<T>([1, 1, melSpec.Shape[0], melSpec.Shape[1]]);
-        for (int t = 0; t < melSpec.Shape[0]; t++)
-        {
-            for (int f = 0; f < melSpec.Shape[1]; f++)
-            {
-                input[0, 0, t, f] = melSpec[t, f];
-            }
-        }
+        var patch = Patch(melSpec);
+        var input = Engine.Reshape(patch, new[] { 1, 1, patch.Shape[0], patch.Shape[1] });
 
         var output = OnnxEncoder.Run(input);
 
@@ -690,63 +754,11 @@ public partial class AudioEventDetector<T> : AudioClassifierBase<T>, IAudioEvent
         return scores;
     }
 
-    /// <summary>
-    /// Reduces per-frame class scores to one score per class by taking each class's maximum over
-    /// the frame axis.
-    /// </summary>
-    /// <param name="framewise">Either <c>[frames, numClasses]</c> or an already-pooled vector.</param>
-    /// <param name="numClasses">Number of classes to emit.</param>
-    private Tensor<T> MaxPoolOverFrames(Tensor<T> framewise, int numClasses)
-    {
-        if (framewise.Shape.Length < 2) return framewise;
-
-        int frames = framewise.Shape[0];
-        int classes = Math.Min(numClasses, framewise.Shape[framewise.Shape.Length - 1]);
-        var pooled = new Tensor<T>(new[] { classes });
-
-        for (int c = 0; c < classes; c++)
-        {
-            var best = framewise[0, c];
-            for (int f = 1; f < frames; f++)
-            {
-                var v = framewise[f, c];
-                if (NumOps.GreaterThan(v, best)) best = v;
-            }
-
-            pooled[c] = best;
-        }
-
-        return pooled;
-    }
-
     private T[] ClassifyWithNative(Tensor<T> melSpec)
     {
-        // Pass the spectrogram through as a SEQUENCE, [frames, mels]. This used to flatten it into
-        // one long vector, which destroyed the time axis the stack is built around: the layer chain
-        // is Dense -> LayerNorm -> PositionalEncoding(maxFrames, hiddenDim) -> MultiHeadAttention xN,
-        // and positional encoding and attention are meaningless without frames to order and attend
-        // over. MultiHeadAttentionLayer rejected the rank-1 input outright, which is how this
-        // surfaced; had it not, the model would have been silently attending over nothing.
-        var input = melSpec;
-
-        // Run through network. PredictCore already applies the per-class SIGMOID for this
-        // MULTI-LABEL task (each event is independently present/absent), so `output` is already
-        // per-class presence PROBABILITIES in [0, 1]. Copy them directly — re-applying a sigmoid
-        // here would compute sigmoid(sigmoid(x)) and flatten every native-mode / Detect* score.
-        var framewise = Predict(input);
-
-        // Temporal MAX pooling over frames. The stack emits per-frame class scores and the caller
-        // wants one score per class for the window, so the frame axis has to be reduced.
-        //
-        // Max is the multiple-instance-learning aggregation standard for weakly-labelled sound
-        // event detection -- frame-level predictions are pooled by temporal max to match clip-level
-        // targets (Wang et al., "A Comparison of Five Multiple Instance Learning Pooling Functions
-        // for Sound Event Detection with Weak Labeling", 2018). It also states the right thing for
-        // THIS model, whose scores are independent per-class presence probabilities: an event is
-        // present in the window if it is present in ANY frame. Mean pooling would dilute a short
-        // event across a long window, which is the opposite of what a detector wants.
-        var output = MaxPoolOverFrames(framewise, ClassLabels.Count);
-
+        // One 96 x 64 patch per 960 ms window; PredictCore already applies the per-label sigmoid, so these are the
+        // presence probabilities.
+        var output = Predict(Patch(melSpec));
         var scores = new T[ClassLabels.Count];
         for (int i = 0; i < Math.Min(output.Length, scores.Length); i++)
         {

@@ -13,6 +13,94 @@ namespace AiDotNet.Tests.ModelFamilyTests.Base;
 /// </summary>
 public abstract class VisionLanguageTestBase<T> : NeuralNetworkModelTestBase<T>
 {
+    /// <summary>The caption the grounding supervision below names boxes for.</summary>
+    protected const string GroundingCaption = "cat . remote control .";
+
+    /// <summary>
+    /// Synthetic grounding supervision for a model that trains on grounded phrases (<see cref="AiDotNet.VisionLanguage.Interfaces.IGroundingTrainable{T}"/>):
+    /// the input image, <see cref="GroundingCaption"/>, and one box per phrase placed and sized by the target's first eight
+    /// values (through tanh, so any target gives a box inside the image). A different target moves the boxes, and the same
+    /// target gives the same supervision, so the memorization and target-dependence invariants have something to learn.
+    /// </summary>
+    protected static (Tensor<T> Image, IReadOnlyList<AiDotNet.VisionLanguage.Grounding.GroundingBox> Boxes) GroundingSupervision(
+        Tensor<T> input, Tensor<T> target)
+    {
+        var ops = MathHelper.GetNumericOperations<T>();
+        double U(int i) => target.Length == 0 ? 0.5 : 0.5 + 0.5 * Math.Tanh(ops.ToDouble(target[i % target.Length]));
+        AiDotNet.VisionLanguage.Grounding.GroundingBox Box(string phrase, int at)
+        {
+            double cx = 0.25 + 0.5 * U(at), cy = 0.25 + 0.5 * U(at + 1), w = 0.1 + 0.3 * U(at + 2), h = 0.1 + 0.3 * U(at + 3);
+            return new AiDotNet.VisionLanguage.Grounding.GroundingBox(phrase, cx - w / 2, cy - h / 2, cx + w / 2, cy + h / 2);
+        }
+        var image = input.Rank == 4 && input.Shape[0] == 1 ? new Tensor<T>(input.Shape.ToArray().Skip(1).ToArray(), input.ToVector()) : input;
+        return (image, new[] { Box("cat", 0), Box("remote control", 4) });
+    }
+
+    /// <summary>
+    /// Synthetic grounded-conversation supervision for a model like GLaMM (<see cref="AiDotNet.VisionLanguage.Interfaces.IGroundedConversationTrainable{T}"/>):
+    /// the input image, the official referring question about a dog with the answer "Sure, it is [SEG].", and the [SEG]'s
+    /// mask set where the target's values (through tanh) exceed one half, so a different target asks for a different mask.
+    /// </summary>
+    protected static AiDotNet.VisionLanguage.Grounding.GlammSample<T> ConversationSupervision(Tensor<T> input, Tensor<T> target)
+    {
+        var ops = MathHelper.GetNumericOperations<T>();
+        var (image, _) = GroundingSupervision(input, target);
+        int h = image.Shape[image.Rank - 2], w = image.Shape[image.Rank - 1];
+        var mask = new Tensor<T>(new[] { h, w });
+        for (int i = 0; i < h * w; i++)
+            mask[i] = target.Length > 0 && 0.5 + 0.5 * Math.Tanh(ops.ToDouble(target[i % target.Length])) > 0.5 ? ops.One : ops.Zero;
+        return new AiDotNet.VisionLanguage.Grounding.GlammSample<T>(image,
+            new[] { new AiDotNet.VisionLanguage.Grounding.GlammTurn("Can you segment the dog in this image?", "Sure, it is [SEG].") },
+            null, new[] { mask });
+    }
+
+    /// <summary>A grounding model trains on grounded phrases; every invariant's step goes through its typed entry point.</summary>
+    protected override void TrainOn(INeuralNetworkModel<T> network, Tensor<T> input, Tensor<T> target)
+    {
+        if (network is AiDotNet.VisionLanguage.Interfaces.IGroundedConversationTrainable<T> conversation)
+        {
+            conversation.TrainConversation(ConversationSupervision(input, target));
+            return;
+        }
+        if (network is AiDotNet.VisionLanguage.Interfaces.IGroundingTrainable<T> grounding)
+        {
+            var (image, boxes) = GroundingSupervision(input, target);
+            grounding.TrainGrounding(image, GroundingCaption, boxes);
+            return;
+        }
+        base.TrainOn(network, input, target);
+    }
+
+    /// <summary>A grounding model is measured on the loss it trains, with the same synthetic supervision.</summary>
+    protected override double MeasureLoss(INeuralNetworkModel<T> network, Tensor<T> input, Tensor<T> output, Tensor<T> target)
+    {
+        if (network is AiDotNet.VisionLanguage.Interfaces.IGroundedConversationTrainable<T> conversation)
+            return ConvertToDouble(conversation.EvaluateConversationLoss(ConversationSupervision(input, target)));
+        if (network is AiDotNet.VisionLanguage.Interfaces.IGroundingTrainable<T> grounding)
+        {
+            var (image, boxes) = GroundingSupervision(input, target);
+            return ConvertToDouble(grounding.EvaluateGroundingLoss(image, GroundingCaption, boxes));
+        }
+        return base.MeasureLoss(network, input, output, target);
+    }
+
+    /// <inheritdoc />
+    protected override void RunRecalibrationPass(AiDotNet.NeuralNetworks.NeuralNetworkBase<T> network, Tensor<T> input, Tensor<T>? target)
+    {
+        if (target is not null && network is AiDotNet.VisionLanguage.Interfaces.IGroundedConversationTrainable<T> conversation)
+        {
+            conversation.EvaluateConversationLoss(ConversationSupervision(input, target));
+            return;
+        }
+        if (target is not null && network is AiDotNet.VisionLanguage.Interfaces.IGroundingTrainable<T> grounding)
+        {
+            var (image, boxes) = GroundingSupervision(input, target);
+            grounding.EvaluateGroundingLoss(image, GroundingCaption, boxes);
+            return;
+        }
+        base.RunRecalibrationPass(network, input, target);
+    }
+
     // =====================================================
     // VISION-LANGUAGE INVARIANT: Image Input → Finite Output
     // The model should produce finite output from image-only input.

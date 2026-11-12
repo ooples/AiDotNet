@@ -12,9 +12,9 @@ public class DeepARModelTests : TimeSeriesModelTestBase
         {
             LookbackWindow = 20,
             ForecastHorizon = 5,
-            HiddenSize = 8,
+            HiddenSize = 16,
             NumLayers = 1,
-            Epochs = 3,
-            BatchSize = 16
+            Epochs = 40,
+            BatchSize = 8
         });
 }

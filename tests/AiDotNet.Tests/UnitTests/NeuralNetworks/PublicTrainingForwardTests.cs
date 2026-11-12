@@ -13,7 +13,7 @@ namespace AiDotNet.Tests.UnitTests.NeuralNetworks;
 
 /// <summary>
 /// ForwardForTraining is public, and the tape-based paths (BuildTrainingObjective, gradient checks, the census'
-/// objective phases) feed it the same public input that Predict takes. These four models own their Train step, so
+/// objective phases) feed it the same public input that Predict takes. These three models own their Train step, so
 /// the census stopped probing their training forward (#2414); the forward itself still walked the composite
 /// <c>Layers</c> list as one chain and threw on every public input (#2387). Each case builds the model exactly as its
 /// generated model-family fixture does, then requires the training forward to accept the fixture's input, to keep
@@ -27,9 +27,6 @@ public class PublicTrainingForwardTests
     [InlineData("WGANGP", new[] { 7, 8, 10 })]
     [InlineData("GOTOCR2", new int[0])]
     [InlineData("CLAPModel", new int[0])]
-    // OpenSora: 113 is the text projection (no text condition here) and 116-123 the VAE decoder and encoder, which
-    // the latent denoiser does not use. Every DiT QKV, attention-projection and FFN layer must be reached.
-    [InlineData("OpenSora", new[] { 113, 116, 117, 118, 119, 120, 121, 122, 123 })]
     public async Task ForwardForTraining_AcceptsThePublicInputAndReachesParameters(string model, int[] notRun)
     {
         await Task.Yield();

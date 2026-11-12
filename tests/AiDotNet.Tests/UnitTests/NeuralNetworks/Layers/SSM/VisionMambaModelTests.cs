@@ -53,7 +53,6 @@ public class VisionMambaModelTests
         Assert.Equal(2, model.NumLayers);
         Assert.Equal(10, model.NumClasses);
         Assert.Equal(16, model.NumPatches); // (32/8) * (32/8) = 4*4 = 16
-        Assert.Equal(VisionScanPattern.Bidirectional, model.ScanPattern);
     }
 
     [Fact(Timeout = 120000)]
@@ -83,10 +82,9 @@ public class VisionMambaModelTests
     }
 
     [Theory]
-    [InlineData(VisionScanPattern.Bidirectional)]
-    [InlineData(VisionScanPattern.CrossScan)]
-    [InlineData(VisionScanPattern.Continuous)]
-    public void Predict_4D_AllScanPatterns_ProduceValidOutput(VisionScanPattern pattern)
+    [InlineData(4)] // non-overlapping patches
+    [InlineData(2)] // overlapping patches, as the stride-8 Vim models use them
+    public void Predict_4D_ProducesValidOutput(int stride)
     {
         int batchSize = 2;
         int height = 16;
@@ -95,7 +93,7 @@ public class VisionMambaModelTests
         int patchSize = 4;
         int numClasses = 5;
 
-        var model = new VisionMambaModel<float>(CreateArch(height, width, channels, numClasses), options: new VisionMambaOptions { ImageHeight = height, ImageWidth = width, PatchSize = patchSize, Channels = channels, ModelDimension = 16, NumLayers = 2, NumClasses = numClasses, StateDimension = 4, ScanPattern = pattern });
+        var model = new VisionMambaModel<float>(CreateArch(height, width, channels, numClasses), options: new VisionMambaOptions { ImageHeight = height, ImageWidth = width, PatchSize = patchSize, Channels = channels, ModelDimension = 16, NumLayers = 2, NumClasses = numClasses, StateDimension = 4, Stride = stride });
 
         var input = CreateRandomTensor(new[] { batchSize, channels, height, width });
         var output = model.Predict(input);
@@ -183,7 +181,7 @@ public class VisionMambaModelTests
     [Fact(Timeout = 120000)]
     public async Task GetModelMetadata_ContainsExpectedKeys()
     {
-        var model = new VisionMambaModel<float>(CreateArch(32, 32, 3, 10), options: new VisionMambaOptions { ImageHeight = 32, ImageWidth = 32, PatchSize = 8, Channels = 3, ModelDimension = 64, NumLayers = 4, NumClasses = 10, ScanPattern = VisionScanPattern.CrossScan });
+        var model = new VisionMambaModel<float>(CreateArch(32, 32, 3, 10), options: new VisionMambaOptions { ImageHeight = 32, ImageWidth = 32, PatchSize = 8, Channels = 3, ModelDimension = 64, NumLayers = 4, NumClasses = 10, Stride = 4 });
 
         var metadata = model.GetModelMetadata();
 
@@ -192,9 +190,9 @@ public class VisionMambaModelTests
         Assert.True(metadata.AdditionalInfo.ContainsKey("ImageWidth"));
         Assert.True(metadata.AdditionalInfo.ContainsKey("PatchSize"));
         Assert.True(metadata.AdditionalInfo.ContainsKey("NumClasses"));
-        Assert.True(metadata.AdditionalInfo.ContainsKey("ScanPattern"));
+        Assert.True(metadata.AdditionalInfo.ContainsKey("Stride"));
         Assert.Equal(32, metadata.AdditionalInfo["ImageHeight"]);
-        Assert.Equal("CrossScan", metadata.AdditionalInfo["ScanPattern"]);
+        Assert.Equal(4, metadata.AdditionalInfo["Stride"]);
     }
 
     [Fact(Timeout = 120000)]
@@ -224,7 +222,7 @@ public class VisionMambaModelTests
     public async Task DifferentImageSizes_Work()
     {
         // Rectangular image
-        var model = new VisionMambaModel<float>(CreateArch(32, 16, 1, 5), options: new VisionMambaOptions { ImageHeight = 32, ImageWidth = 16, PatchSize = 8, Channels = 1, ModelDimension = 16, NumLayers = 2, NumClasses = 5, StateDimension = 4, ScanPattern = VisionScanPattern.Continuous });
+        var model = new VisionMambaModel<float>(CreateArch(32, 16, 1, 5), options: new VisionMambaOptions { ImageHeight = 32, ImageWidth = 16, PatchSize = 8, Channels = 1, ModelDimension = 16, NumLayers = 2, NumClasses = 5, StateDimension = 4 });
 
         Assert.Equal(8, model.NumPatches); // (32/8) * (16/8) = 4*2 = 8
 

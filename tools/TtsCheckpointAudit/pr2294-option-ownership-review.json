@@ -1,0 +1,80 @@
+{
+  "date": "2026-11-06",
+  "status": "scoped validation complete; full integration pending",
+  "authorization": "Owner permits breaking changes, conditional on verifying actual paper-model consumers.",
+  "consumerAudit": {
+    "assemblySha256": "535825093A0D243423D2C6276057A4D3508F6281EB6A2B3DCBFE6ADD3E97304E",
+    "methodsScanned": 252235,
+    "unresolvedMethodTokens": 0,
+    "method": "Resolve compiled call tokens against the declaring options getter, then inspect source consumers and the reference generator. Copy constructors are recorded separately from runtime reads. This is a direct-call inventory, not proof of arbitrary reflection reachability.",
+    "upsampleKernelSizesRuntimeReaders": [
+      "AiDotNet.TextToSpeech.Vocoders.BigVGAN<T>.CreateGenerator",
+      "AiDotNet.TextToSpeech.Vocoders.HiFiGAN<T>.CreateGenerator",
+      "AiDotNet.TextToSpeech.Vocoders.ISTFTNet<T>.CreateGenerator"
+    ],
+    "upsampleKernelSizesConfigurationReader": "AiDotNet.TextToSpeech.Vocoders.VocoderOptions copy constructor",
+    "kaniInheritedRuntimeReadsRetained": [
+      "SampleRate", "HiddenDim", "VocabSize", "MaxTextLength", "OnnxOptions", "LearningRate", "WeightDecay"
+    ],
+    "kaniModelPathWriteRetained": "KaniTTSBase<T> ONNX constructor",
+    "sharedNumHeads": "Retained in TtsModelOptions: many other paper models read it. KaniTTSBase<T>.InitializeLayers instead reads KaniTTSOptions.Heads and KeyValueHeads."
+  },
+  "reference": {
+    "apnet2Generator": "https://github.com/redmist328/APNet2/blob/e2d13ebeaafb38800c80a06eb092928e5ea4dc20/models.py",
+    "finding": "Generator.forward predicts frame-level amplitude and phase and calls torch.istft. ConvTranspose1d is imported but not instantiated by Generator. Its convolution kernels and ConvNeXt depthwise kernels remain configurable through their actual options."
+  },
+  "changes": [
+    {
+      "setting": "UpsampleKernelSizes",
+      "action": "Move from VocoderOptions to BigVGANOptions, HiFiGANOptions and ISTFTNetOptions, retaining the same concrete-model property name, type and defaults.",
+      "copySemantics": "Each consuming options copy constructor independently clones the kernel array.",
+      "migration": "Configure this setting through the concrete consuming options type. Other vocoders no longer expose a setting they did not read. Recompile callers that previously accessed the base-class member."
+    },
+    {
+      "setting": "KaniTTSOptions inheritance",
+      "action": "Derive from ModelOptions and explicitly retain KaniTTS settings rather than inheriting unrelated generic acoustic-model knobs.",
+      "removedProperties": [
+        "MelChannels", "FftSize", "NumEncoderLayers", "NumDecoderLayers", "NumHeads", "MaxMelLength", "DropoutRate"
+      ],
+      "migration": "Use Heads/KeyValueHeads and AttentionLayers for LFM2 topology; retain LoraDropout for LoRA. Generic mel, FFT and encoder/decoder settings had no KaniTTS behavior. KaniTTSOptions is no longer assignable to TtsModelOptions."
+    },
+    {
+      "setting": "KaniTTSOptions.HopSize",
+      "action": "Replace the ignored independent setter with a getter derived from CodecDownsampleRates.",
+      "migration": "Configure matching CodecDownsampleRates and CodecUpsampleRates; their product defines the actual codec hop."
+    }
+  ],
+  "validation": {
+    "retainedDefaults": "All retained public-property defaults match the original compiled assembly for KaniTTSOptions, KaniTTS2Options, APNetOptions, APNet2Options, BigVGANOptions, HiFiGANOptions and ISTFTNetOptions.",
+    "ownershipRegressionCases": 8,
+    "fittedAssetProbeRepair": {
+      "method": "Record the two controls' parameter counts before checkpoint/fitted-asset installation. A changed count establishes structural sensitivity before an incompatible fixed checkpoint is loaded. Unchanged counts continue through normal asset, output and training checks. Dispose rebuilt models when preparation fails.",
+      "scope": "KaniTTS, KaniTTS2, MetaVoice1B and the TTS/ASR AudioPaLM adapters that replay fitted assets.",
+      "sensitiveForBothKaniModels": ["HiddenDim", "Heads", "KeyValueHeads", "AttentionLayers", "CodecEncoderChannels", "VocabSize"],
+      "parameterPerturbationRegressionsPassed": 22,
+      "negativeControl": "With a fixed reported count, incompatible checkpoint preparation remains NoValidPerturbation. Rejected rebuilt models are disposed.",
+      "cloneFallbackControl": "A narrower constructor may recover from rejected auxiliary state only while retaining the supplied options; parameterless/default reconstruction cannot discard those options."
+    },
+    "vocoderBeforeAfterComparison": {
+      "method": "Same compact architecture, fixed construction seed 2294, same input, same explicit Adam optimizer and one training step. Compare every initial and trained parameter and waveform element for exact equality, and require training to change parameters.",
+      "passedModelsAndParameterCounts": {
+        "APNet2": 22752,
+        "APNet": 55890,
+        "BigVGAN": 19581,
+        "HiFiGAN": 52310,
+        "ISTFTNet": 52599
+      },
+      "harnessBoundary": "Models and changed options compile from source against the existing core helpers. Five temporary harness-only Tensor._shape reads are adapted to the public Shape.ToArray accessor because the standalone assembly lacks the tensor library's AiDotNet-only friend access. Repository model arithmetic is unchanged."
+    },
+    "kaniReferenceCases": {
+      "existingFullAssembly": "All five checked prompt/audio/training/gradient methods pass.",
+      "sourceFragment": "Five of seven cases pass; two fail with the same values both before and after the ownership cleanup.",
+      "identicalBeforeAfterFailures": [
+        "SpanAndStreamedAudio_MatchTheRelease: expected 0.5674027338987471, actual 0.5674026608467102",
+        "SpeakerLogitsLossAndGradients_MatchThePretraining: expected 0.07037263447792183, actual 0.07037265598773956"
+      ],
+      "interpretation": "The paired fragment results do not identify an ownership-cleanup regression. They do not replace a passing full-assembly reference run for the changed source; that remains pending."
+    },
+    "fullBuildAndPackageCompatibility": "Pending hosted validation. No blanket compatibility suppression is authorized by this review."
+  }
+}
