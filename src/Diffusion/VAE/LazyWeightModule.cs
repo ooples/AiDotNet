@@ -152,7 +152,10 @@ internal abstract class LazyWeightModule<T> : IParameterSource<T>, IParameterChu
         var result = new Vector<T>(checked((int)ParameterCount));
         int offset = 0;
         foreach (var tensor in LiveTensors())
-            for (int i = 0; i < tensor.Length; i++) result[offset++] = tensor[i];
+        {
+            tensor.AsSpan().CopyTo(result.AsWritableSpan().Slice(offset, tensor.Length));
+            offset += tensor.Length;
+        }
         return result;
     }
 
@@ -165,7 +168,10 @@ internal abstract class LazyWeightModule<T> : IParameterSource<T>, IParameterChu
         int offset = 0;
         // Written through, never replaced: the forward pass keeps reading these instances.
         foreach (var tensor in LiveTensors())
-            for (int i = 0; i < tensor.Length; i++) tensor[i] = parameters[offset++];
+        {
+            parameters.AsSpan().Slice(offset, tensor.Length).CopyTo(tensor.AsWritableSpan());
+            offset += tensor.Length;
+        }
     }
 
     /// <inheritdoc />

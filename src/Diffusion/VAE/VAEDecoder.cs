@@ -456,32 +456,18 @@ public partial class VAEDecoder<T> : LayerBase<T>, IShapeContract
 
     private Tensor<T> ApplySiLUDerivative(Tensor<T> input, Tensor<T> gradient)
     {
-        var output = new Tensor<T>(input._shape);
-        var inputSpan = input.AsSpan();
-        var gradSpan = gradient.AsSpan();
-        var outputSpan = output.AsWritableSpan();
-
-        for (int i = 0; i < inputSpan.Length; i++)
-        {
-            outputSpan[i] = NumOps.Multiply(_silu.Derivative(inputSpan[i]), gradSpan[i]);
-        }
-
-        return output;
+        // d/dx [x * sigmoid(x)] = sigmoid(x) * (1 + x * (1 - sigmoid(x))).
+        var sigmoid = Engine.TensorSigmoid(input);
+        var slope = Engine.TensorMultiply(sigmoid,
+            Engine.TensorAddScalar(Engine.TensorMultiply(input, Engine.ScalarMinusTensor(NumOps.One, sigmoid)), NumOps.One));
+        return Engine.TensorMultiply(slope, gradient);
     }
 
     private Tensor<T> ApplyTanhDerivative(Tensor<T> input, Tensor<T> gradient)
     {
-        var output = new Tensor<T>(input._shape);
-        var inputSpan = input.AsSpan();
-        var gradSpan = gradient.AsSpan();
-        var outputSpan = output.AsWritableSpan();
-
-        for (int i = 0; i < inputSpan.Length; i++)
-        {
-            outputSpan[i] = NumOps.Multiply(_tanh.Derivative(inputSpan[i]), gradSpan[i]);
-        }
-
-        return output;
+        // d/dx tanh(x) = 1 - tanh(x)^2.
+        var slope = Engine.ScalarMinusTensor(NumOps.One, Engine.TensorSquare(Engine.TensorTanh(input)));
+        return Engine.TensorMultiply(slope, gradient);
     }
 
     /// <summary>
@@ -516,10 +502,7 @@ public partial class VAEDecoder<T> : LayerBase<T>, IShapeContract
 
     private static void AddParameters(List<T> list, Vector<T> parameters)
     {
-        for (int i = 0; i < parameters.Length; i++)
-        {
-            list.Add(parameters[i]);
-        }
+        list.AddRange(parameters);
     }
 
 
@@ -530,10 +513,8 @@ public partial class VAEDecoder<T> : LayerBase<T>, IShapeContract
 
         // Caller (SetParameters above) has already validated the total length, so
         // each layer's slice is guaranteed to fit.
-        for (int i = 0; i < layerParams.Length; i++)
-        {
-            newParams[i] = parameters[index++];
-        }
+        parameters.AsSpan().Slice(index, layerParams.Length).CopyTo(newParams.AsWritableSpan());
+        index += layerParams.Length;
 
         layer.SetParameters(newParams);
     }

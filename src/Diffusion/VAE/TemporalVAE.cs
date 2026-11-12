@@ -790,10 +790,7 @@ public partial class TemporalVAE<T> : VAEModelBase<T>
     {
         if (layer == null) return;
         var layerParams = layer.GetParameters();
-        for (int i = 0; i < layerParams.Length; i++)
-        {
-            parameters.Add(layerParams[i]);
-        }
+        parameters.AddRange(layerParams);
     }
 
     private IEnumerable<ILayer<T>?> EnumerateAllLayers()
@@ -844,10 +841,9 @@ public partial class TemporalVAE<T> : VAEModelBase<T>
         if (layer == null) return;
         var layerParams = layer.GetParameters();
         var newParams = new Vector<T>(layerParams.Length);
-        for (int i = 0; i < layerParams.Length && index < parameters.Length; i++)
-        {
-            newParams[i] = parameters[index++];
-        }
+        int copyCount = Math.Max(0, Math.Min(layerParams.Length, parameters.Length - index));
+        parameters.AsSpan().Slice(index, copyCount).CopyTo(newParams.AsWritableSpan());
+        index += copyCount;
         layer.SetParameters(newParams);
     }
 
@@ -944,8 +940,7 @@ public partial class TemporalVAE<T> : VAEModelBase<T>
     {
         if (layer == null) return;
         var g = layer.GetParameterGradients();
-        for (int i = 0; i < g.Length; i++) gradients.Add(g[i]);
-    }
+        gradients.AddRange(g);
     /// <inheritdoc />
     /// <remarks>
     /// This concrete VAE does not implement layer-level backprop yet, so the
