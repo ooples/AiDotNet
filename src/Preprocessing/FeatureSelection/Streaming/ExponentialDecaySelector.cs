@@ -104,9 +104,9 @@ public class ExponentialDecaySelector<T> : TransformerBase<T, Matrix<T>, Matrix<
             ewmaCovariances = updated.Covariances;
         }
 
-        _ewmaMeans = ewmaMeans;
-        _ewmaVars = ewmaVars;
-        _ewmaCovariances = ewmaCovariances;
+        _ewmaMeans = Owned(ewmaMeans);
+        _ewmaVars = Owned(ewmaVars);
+        _ewmaCovariances = Owned(ewmaCovariances);
 
         // Update effective sample count: n steps of N <- decay N + 1
         double decayN = Math.Pow(_decayFactor, n);
@@ -130,6 +130,12 @@ public class ExponentialDecaySelector<T> : TransformerBase<T, Matrix<T>, Matrix<
 
         IsFitted = true;
     }
+
+    /// <summary>
+    /// A garbage-collected copy of <paramref name="value"/> for state kept across fits: an engine result (or a
+    /// slice view of one) may live in a tensor arena buffer that is handed out again after this fit returns.
+    /// </summary>
+    private static Tensor<T> Owned(Tensor<T> value) => new Tensor<T>(value.Shape.ToArray(), value.ToVector());
 
     /// <summary>
     /// Applies the EWMA recurrences to a block of rows ([rows, p + 1], target last) in closed form:

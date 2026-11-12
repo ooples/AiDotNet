@@ -140,10 +140,10 @@ public class OnlineFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             covariances = Engine.TensorSlice(comoments, new[] { n - 1, 0 }, new[] { 1, p });
         }
 
-        _runningScores = runningScores;
-        _runningMeans = runningMeans;
-        _runningVars = runningVars;
-        _covariances = covariances;
+        _runningScores = Owned(runningScores);
+        _runningMeans = Owned(runningMeans);
+        _runningVars = Owned(runningVars);
+        _covariances = Owned(covariances);
         _runningScoreValues = Engine.Reshape(runningScores, new[] { p }).ToVector();
 
         // Select top features
@@ -152,6 +152,12 @@ public class OnlineFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
 
         IsFitted = true;
     }
+
+    /// <summary>
+    /// A garbage-collected copy of <paramref name="value"/> for state kept across fits: an engine result (or a
+    /// slice view of one) may live in a tensor arena buffer that is handed out again after this fit returns.
+    /// </summary>
+    private static Tensor<T> Owned(Tensor<T> value) => new Tensor<T>(value.Shape.ToArray(), value.ToVector());
 
     private Tensor<T>? _covariances;
 

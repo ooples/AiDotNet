@@ -82,7 +82,7 @@ public class SlidingWindowSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         int count = window.Shape[0];
         if (count > _windowSize)
             window = Engine.TensorSlice(window, new[] { count - _windowSize, 0 }, new[] { _windowSize, p + 1 });
-        _window = window;
+        _window = Owned(window);
 
         // Compute feature scores from window
         ComputeScoresFromWindow(p);
@@ -110,6 +110,12 @@ public class SlidingWindowSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     {
         Fit(data, target);
     }
+
+    /// <summary>
+    /// A garbage-collected copy of <paramref name="value"/> for state kept across fits: an engine result (or a
+    /// slice view of one) may live in a tensor arena buffer that is handed out again after this fit returns.
+    /// </summary>
+    private static Tensor<T> Owned(Tensor<T> value) => new Tensor<T>(value.Shape.ToArray(), value.ToVector());
 
     /// <inheritdoc />
     public Matrix<T> FitTransform(Matrix<T> data, Vector<T> target)
