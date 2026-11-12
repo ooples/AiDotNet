@@ -466,10 +466,9 @@ public partial class GraphIsomorphismNetwork<T> : GraphModelLayoutBase<T>
         {
             for (int g = 0; g < graphs.Count; g++)
             {
-                // Slice this graph's label row out as [1, numClasses].
-                var graphLabel = new Tensor<T>([1, graphLabelClasses]);
-                for (int c = 0; c < graphLabelClasses; c++)
-                    graphLabel[0, c] = graphLabels[g, c];
+                // Slice this graph's label row out as a fresh [1, numClasses] copy.
+                var graphLabel = new Tensor<T>(
+                    graphLabels.ToArray().AsSpan(g * graphLabelClasses, graphLabelClasses).ToArray(), [1, graphLabelClasses]);
 
                 TrainStepWithAdjacency(graphs[g], adjacencyMatrices[g], graphLabel);
             }
@@ -716,15 +715,15 @@ public partial class GraphIsomorphismNetwork<T> : GraphModelLayoutBase<T>
             totalFeatures += rep.Shape[1];
         }
 
+        // Each layer's first row, in layer order
         var graphRep = new Tensor<T>([1, totalFeatures]);
+        var graphRepSpan = graphRep.AsWritableSpan();
         int offset = 0;
         foreach (var rep in layerRepresentations)
         {
-            for (int f = 0; f < rep.Shape[1]; f++)
-            {
-                graphRep[0, offset + f] = rep[0, f];
-            }
-            offset += rep.Shape[1];
+            int width = rep.Shape[1];
+            rep.ToArray().AsSpan(0, width).CopyTo(graphRepSpan.Slice(offset, width));
+            offset += width;
         }
 
         return graphRep;
@@ -882,10 +881,7 @@ public partial class GraphIsomorphismNetwork<T> : GraphModelLayoutBase<T>
             return _cachedAdjacencyMatrix;
         }
 
-        var adj = new Tensor<T>([numNodes, numNodes]);
-        for (int i = 0; i < numNodes; i++)
-            for (int j = 0; j < numNodes; j++)
-                adj[i, j] = NumOps.One;
+        var adj = Tensor<T>.CreateDefault([numNodes, numNodes], NumOps.One);
 
         _cachedAdjacencyMatrix = adj;
         return adj;
