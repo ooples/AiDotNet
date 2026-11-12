@@ -162,16 +162,7 @@ public partial class DeepEMDAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, T
             // Per paper: EMD-based similarity drives classification, so it must affect training loss
             if (supportFeatures != null && queryFeatures != null)
             {
-                T emdScore = ComputeEMDScore(supportFeatures, queryFeatures);
-
-                // EMD-derived modulation: low EMD (similar) → modulation near 1.0,
-                // high EMD (dissimilar) → modulation < 1.0 (shrink features)
-                T modFactor = NumOps.Divide(NumOps.One,
-                    NumOps.Add(NumOps.One, NumOps.Multiply(emdScore, NumOps.FromDouble(_deepEmdOptions.Temperature))));
-                var factor = Engine.Clamp(
-                    new Vector<T>(new[] { NumOps.Add(NumOps.FromDouble(MinModulationFactor), modFactor) }),
-                    NumOps.FromDouble(MinModulationFactor), NumOps.FromDouble(MaxModulationFactor));
-
+                var factor = EmdModulationFactor(ComputeEMDScore(supportFeatures, queryFeatures));
                 ParamModel.SetParameters(ParameterModulation.Apply(Engine, ParamModel.GetParameters(), factor));
             }
 
@@ -252,6 +243,19 @@ public partial class DeepEMDAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, T
     /// alternating row and column normalization of a "soft" matching matrix.
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// EMD-derived modulation as a one-element factor: low EMD (similar) gives a factor near 1.0, high EMD
+    /// (dissimilar) a smaller one; clamp(min + 1 / (1 + emd * temperature), min, max).
+    /// </summary>
+    private Vector<T> EmdModulationFactor(T emdScore)
+    {
+        T modFactor = NumOps.Divide(NumOps.One,
+            NumOps.Add(NumOps.One, NumOps.Multiply(emdScore, NumOps.FromDouble(_deepEmdOptions.Temperature))));
+        return Engine.Clamp(
+            new Vector<T>(new[] { NumOps.Add(NumOps.FromDouble(MinModulationFactor), modFactor) }),
+            NumOps.FromDouble(MinModulationFactor), NumOps.FromDouble(MaxModulationFactor));
+    }
+
     private T ComputeEMDScore(Vector<T> features1, Vector<T> features2)
     {
         int numNodes = _deepEmdOptions.NumNodes;
@@ -347,7 +351,9 @@ internal class DeepEMDModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelM
     private readonly double _temperature;
     private readonly int _sinkhornIterations;
     private readonly double _sinkhornRegularization;
-    private readonly Vector<T>? _modulationFactors;
+    // Not readonly: a readonly Vector<T> field is not persisted by the generated model state, and these
+    // factors belong in the adapted model's checkpoint as the double[] they replace did.
+    private Vector<T>? _modulationFactors;
 
     /// <inheritdoc/>
     public Vector<T>? AdaptedSupportFeatures => _supportFeatures;
