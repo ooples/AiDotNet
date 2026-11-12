@@ -3,6 +3,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Finance.Interfaces;
@@ -100,32 +101,37 @@ public partial class RelationalGCN<T> : ForecastingModelBase<T>
     #endregion
 
     
-    #region Native Mode Fields
-    private DenseLayer<T>? _inputProjection;
-    private List<DenseLayer<T>>? _basisLayers;
-    private DenseLayer<T>? _relationCoefficientLayer;
-    private List<DenseLayer<T>>? _rgcnLayers;
-    private List<DenseLayer<T>>? _selfLoopLayers;
-    private List<DropoutLayer<T>>? _dropoutLayers;
-    private DenseLayer<T>? _outputLayer;
-    #endregion
-
     #region Relational Graph Fields
     /// <summary>
-    /// Adjacency matrices for each relation type.
-    /// Index is [relation][nodeFrom, nodeTo].
+    /// The adjacency of every relation type, shaped [numRelations, numNodes, numNodes]. Entry [r, i, j] is the
+    /// weight of the edge of type r along which node i receives a message from node j. A buffer: saved with the
+    /// model (the default graph is drawn at random) but never trained.
     /// </summary>
-    private readonly double[][,]? _relationAdjacencies;
+    [Buffer]
+    private Tensor<T>? _relationAdjacencies;
 
     /// <summary>
-    /// Learned basis matrices for basis decomposition.
+    /// Per R-GCN layer: the shared bases V_b [numBases, hidden, hidden] under basis decomposition, otherwise the
+    /// relation weights W_r [numRelations, hidden, hidden] (masked to blocks under block decomposition).
     /// </summary>
-    private double[,][]? _basisMatrices;
+    private readonly List<Tensor<T>> _relationBases = new List<Tensor<T>>();
 
-    /// <summary>
-    /// Learned coefficients for combining basis matrices per relation.
-    /// </summary>
-    private double[,]? _relationCoefficients;
+    /// <summary>Per R-GCN layer under basis decomposition: the coefficients a_rb, [numRelations, numBases].</summary>
+    private readonly List<Tensor<T>> _relationCoefficients = new List<Tensor<T>>();
+
+    /// <summary>Per R-GCN layer when self-loops are on: the self-connection weight W_0, [hidden, hidden].</summary>
+    private readonly List<Tensor<T>> _selfLoopWeights = new List<Tensor<T>>();
+
+    /// <summary>Per R-GCN layer: the dropout applied to its output.</summary>
+    private readonly List<DropoutLayer<T>> _relationDropouts = new List<DropoutLayer<T>>();
+
+    /// <summary>The block-diagonal mask [hidden, hidden] of block decomposition, or null.</summary>
+    private Tensor<T>? _blockMask;
+
+    /// <summary>The L2 penalty of the most recent training forward, handed to the objective once.</summary>
+    private Tensor<T>? _pendingRegularization;
+
+    private readonly bool _meanAggregation;
 
     private readonly Random _random;
     #endregion
@@ -255,7 +261,8 @@ public partial class RelationalGCN<T> : ForecastingModelBase<T>
     /// <param name="architecture">The neural network architecture configuration.</param>
     /// <param name="onnxModelPath">Path to a pretrained ONNX model file.</param>
     /// <param name="options">RelationalGCN-specific options.</param>
-    /// <param name="relationAdjacencies">Adjacency matrices for each relation type.</param>
+    /// <param name="relationAdjacencies">The adjacency of every relation type, shaped [numRelations, numNodes, numNodes];
+    /// entry [r, i, j] weights the edge of type r along which node i receives from node j.</param>
     /// <param name="optimizer">Optional optimizer for fine-tuning.</param>
     /// <param name="lossFunction">Optional loss function.</param>
     /// <remarks>
@@ -268,7 +275,7 @@ public partial class RelationalGCN<T> : ForecastingModelBase<T>
         NeuralNetworkArchitecture<T> architecture,
         string onnxModelPath,
         RelationalGCNOptions<T>? options = null,
-        double[][,]? relationAdjacencies = null,
+        Tensor<T>? relationAdjacencies = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null)
         : base(architecture, lossFunction ?? new MeanSquaredErrorLoss<T>(), 1.0)
@@ -305,10 +312,9 @@ public partial class RelationalGCN<T> : ForecastingModelBase<T>
         _aggregation = _options.Aggregation;
         _numSamples = _options.NumSamples;
 
-        _relationAdjacencies = relationAdjacencies;
+        _meanAggregation = UsesMeanAggregation(_aggregation);
+        _relationAdjacencies = relationAdjacencies is null ? null : ValidatedAdjacency(relationAdjacencies);
         _random = LayerInitializationSeedScope.CreateComponentRandom(_options.Seed);
-
-        InitializeBasisDecomposition();
     }
 
     /// <summary>
@@ -316,7 +322,8 @@ public partial class RelationalGCN<T> : ForecastingModelBase<T>
     /// </summary>
     /// <param name="architecture">The neural network architecture configuration.</param>
     /// <param name="options">RelationalGCN-specific options.</param>
-    /// <param name="relationAdjacencies">Adjacency matrices for each relation type.</param>
+    /// <param name="relationAdjacencies">The adjacency of every relation type, shaped [numRelations, numNodes, numNodes];
+    /// entry [r, i, j] weights the edge of type r along which node i receives from node j.</param>
     /// <param name="optimizer">Optional optimizer for training.</param>
     /// <param name="lossFunction">Optional loss function.</param>
     /// <remarks>
@@ -328,7 +335,7 @@ public partial class RelationalGCN<T> : ForecastingModelBase<T>
     public RelationalGCN(
         NeuralNetworkArchitecture<T> architecture,
         RelationalGCNOptions<T>? options = null,
-        double[][,]? relationAdjacencies = null,
+        Tensor<T>? relationAdjacencies = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null)
         : base(architecture, lossFunction ?? new MeanSquaredErrorLoss<T>(), 1.0)
@@ -358,11 +365,16 @@ public partial class RelationalGCN<T> : ForecastingModelBase<T>
         _aggregation = _options.Aggregation;
         _numSamples = _options.NumSamples;
 
+        ValidateRelationalOptions();
+        _meanAggregation = UsesMeanAggregation(_aggregation);
+
         // Initialize random before CreateDefaultRelationAdjacencies which uses it
         _random = LayerInitializationSeedScope.CreateComponentRandom(_options.Seed);
-        _relationAdjacencies = relationAdjacencies ?? CreateDefaultRelationAdjacencies();
+        _relationAdjacencies = relationAdjacencies is null
+            ? CreateDefaultRelationAdjacencies()
+            : ValidatedAdjacency(relationAdjacencies);
 
-        InitializeBasisDecomposition();
+        InitializeRelationalWeights();
         InitializeLayers();
     }
 
@@ -371,12 +383,14 @@ public partial class RelationalGCN<T> : ForecastingModelBase<T>
     #region Initialization
 
     /// <summary>
-    /// Initializes the neural network layers for RelationalGCN.
+    /// Initializes the per-node layers around the R-GCN propagation.
     /// </summary>
     /// <remarks>
-    /// <para><b>For Beginners:</b> Sets up the layers needed for relational graph convolution:
-    /// input projection, basis matrices (if using basis decomposition), R-GCN layers,
-    /// self-loop transformations, and output projection.
+    /// <para><b>For Beginners:</b> Every layer but the last is a per-node encoder that turns a node's history
+    /// window into its hidden state h_i^(0); the last layer is the per-node head that turns the final hidden
+    /// state into the forecast. The relational graph convolutions run between the two (see
+    /// <see cref="ApplyRelationalLayer"/>). By default the encoder is one dense layer to the hidden dimension
+    /// and the head one dense layer to the forecast horizon.
     /// </para>
     /// </remarks>
     protected override void InitializeLayers()
@@ -388,143 +402,172 @@ public partial class RelationalGCN<T> : ForecastingModelBase<T>
         }
         else if (_useNativeMode)
         {
-            Layers.AddRange(LayerHelper<T>.CreateDefaultRelationalGCNLayers(
-                _numNodes,
-                _numFeatures,
-                _numRelations,
-                _hiddenDimension,
-                _numLayers,
-                _numBases,
-                _forecastHorizon));
+            Layers.Add(new DenseLayer<T>(outputSize: _hiddenDimension, activationFunction: new ReLUActivation<T>()));
+            Layers.Add(new DenseLayer<T>(outputSize: _forecastHorizon, activationFunction: null));
         }
-
-        ExtractLayerReferences();
     }
 
     /// <summary>
-    /// Extracts references to specific layer types for direct access.
+    /// Rejects option combinations the R-GCN layers cannot be built from.
     /// </summary>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> After creating layers, we store references to specific
-    /// layers for easier access during forward/backward passes. This enables efficient
-    /// application of relation-specific transformations.
-    /// </para>
-    /// </remarks>
-    private void ExtractLayerReferences()
+    private void ValidateRelationalOptions()
     {
-        _inputProjection = Layers.OfType<DenseLayer<T>>().FirstOrDefault();
-        _basisLayers = Layers.OfType<DenseLayer<T>>().Skip(1).Take(_numBases).ToList();
-        _relationCoefficientLayer = Layers.OfType<DenseLayer<T>>().Skip(1 + _numBases).FirstOrDefault();
-        _rgcnLayers = Layers.OfType<DenseLayer<T>>().Skip(2 + _numBases).ToList();
-        _selfLoopLayers = _rgcnLayers.Where((_, i) => i % 2 == 1).Take(_numLayers).ToList();
-        _dropoutLayers = Layers.OfType<DropoutLayer<T>>().ToList();
-        _outputLayer = Layers.OfType<DenseLayer<T>>().LastOrDefault();
+        if (_numNodes < 1)
+            throw new ArgumentException("RelationalGCN needs at least one node.", "options");
+        if (_numRelations < 1)
+            throw new ArgumentException("RelationalGCN needs at least one relation type.", "options");
+        if (_hiddenDimension < 1)
+            throw new ArgumentException("RelationalGCN needs a positive hidden dimension.", "options");
+        if (_numLayers < 1)
+            throw new ArgumentException("RelationalGCN needs at least one R-GCN layer.", "options");
+        if (_useBlockDecomposition && (_numBlocks < 1 || _hiddenDimension % _numBlocks != 0))
+            throw new ArgumentException(
+                $"Block decomposition splits the hidden dimension ({_hiddenDimension}) into NumBlocks ({_numBlocks}) equal blocks, so NumBlocks must divide it.",
+                "options");
+        if (!_useBlockDecomposition && _useBasisDecomposition && _numBases < 1)
+            throw new ArgumentException("Basis decomposition needs at least one basis.", "options");
     }
 
     /// <summary>
-    /// Initializes the basis decomposition matrices.
+    /// Reads the aggregation option: "sum" keeps c_{i,r} = 1, "mean" sets c_{i,r} to the node's in-degree under r.
+    /// </summary>
+    /// <param name="aggregation">The configured aggregation.</param>
+    /// <returns>True for mean aggregation, false for sum.</returns>
+    private static bool UsesMeanAggregation(string aggregation)
+    {
+        if (string.Equals(aggregation, "mean", StringComparison.OrdinalIgnoreCase))
+            return true;
+        if (string.Equals(aggregation, "sum", StringComparison.OrdinalIgnoreCase))
+            return false;
+        throw new ArgumentException(
+            $"RelationalGCN aggregates each relation's messages as a normalized sum (Schlichtkrull et al. 2018, Eq. 2), so Aggregation must be \"sum\" or \"mean\"; got \"{aggregation}\".",
+            "options");
+    }
+
+    /// <summary>
+    /// Initializes the trainable R-GCN weights of every layer.
     /// </summary>
     /// <remarks>
-    /// <para><b>For Beginners:</b> For basis decomposition, we initialize:
-    /// - B_b: Shared basis matrices (numBases of them)
-    /// - a_rb: Coefficients for each relation to combine basis matrices
-    ///
-    /// The relation-specific weight is: W_r = sum_b (a_rb * B_b)
-    /// This dramatically reduces parameters when you have many relation types.
+    /// <para><b>For Beginners:</b> Under basis decomposition (Schlichtkrull et al. 2018, Eq. 3) each layer holds
+    /// shared bases V_b and per-relation coefficients a_rb, and the relation weight is W_r = sum_b a_rb V_b.
+    /// Under block decomposition (Eq. 4) each W_r is block-diagonal with NumBlocks blocks, and block decomposition
+    /// takes precedence when both are switched on. With neither, each relation has its own full W_r. Self-loops
+    /// add the self-connection weight W_0. All of them are trained by backpropagation through
+    /// <see cref="ApplyRelationalLayer"/>.
     /// </para>
     /// </remarks>
-    private void InitializeBasisDecomposition()
+    private void InitializeRelationalWeights()
     {
-        if (!_useBasisDecomposition)
-            return;
+        bool useBlocks = _useBlockDecomposition;
+        bool useBases = !useBlocks && _useBasisDecomposition;
+        double scale = Math.Sqrt(2.0 / _hiddenDimension);
+        int weightCount = useBases ? _numBases : _numRelations;
+        if (useBlocks)
+            _blockMask = BlockDiagonalMask(_hiddenDimension, _numBlocks);
 
-        // Initialize basis matrices
-        _basisMatrices = new double[_numBases, _hiddenDimension][];
-        for (int b = 0; b < _numBases; b++)
+        for (int layer = 0; layer < _numLayers; layer++)
         {
-            for (int i = 0; i < _hiddenDimension; i++)
-            {
-                _basisMatrices[b, i] = new double[_hiddenDimension];
-                double scale = Math.Sqrt(2.0 / _hiddenDimension);
-                for (int j = 0; j < _hiddenDimension; j++)
-                {
-                    _basisMatrices[b, i][j] = (_random.NextDouble() - 0.5) * 2.0 * scale;
-                }
-            }
+            _relationBases.Add(UniformTensor(new[] { weightCount, _hiddenDimension, _hiddenDimension }, scale));
+            if (useBases)
+                _relationCoefficients.Add(UniformTensor(new[] { _numRelations, _numBases }, 0.05));
+            if (_useSelfLoop)
+                _selfLoopWeights.Add(UniformTensor(new[] { _hiddenDimension, _hiddenDimension }, scale));
+            _relationDropouts.Add(new DropoutLayer<T>(_dropoutRate));
         }
+    }
 
-        // Initialize relation coefficients
-        _relationCoefficients = new double[_numRelations, _numBases];
-        for (int r = 0; r < _numRelations; r++)
-        {
-            for (int b = 0; b < _numBases; b++)
-            {
-                _relationCoefficients[r, b] = (_random.NextDouble() - 0.5) * 0.1;
-            }
-        }
+    /// <summary>
+    /// Draws a tensor of independent uniform values in [-limit, limit] from the model's random stream.
+    /// </summary>
+    private Tensor<T> UniformTensor(int[] shape, double limit)
+    {
+        int count = shape.Aggregate(1, (product, dimension) => product * dimension);
+        var values = Enumerable.Range(0, count)
+            .Select(_ => NumOps.FromDouble((_random.NextDouble() - 0.5) * 2.0 * limit))
+            .ToArray();
+        return new Tensor<T>(shape, new Vector<T>(values));
+    }
+
+    /// <summary>
+    /// The [size, size] mask that keeps the <paramref name="blocks"/> equal diagonal blocks of a weight matrix.
+    /// </summary>
+    private static Tensor<T> BlockDiagonalMask(int size, int blocks)
+    {
+        int blockSize = size / blocks;
+        var values = Enumerable.Range(0, size * size)
+            .Select(index => index / size / blockSize == index % size / blockSize ? NumOps.One : NumOps.Zero)
+            .ToArray();
+        return new Tensor<T>(new[] { size, size }, new Vector<T>(values));
     }
 
     /// <summary>
     /// Creates default relation adjacencies when none provided.
     /// </summary>
-    /// <returns>Array of identity-like adjacency matrices.</returns>
+    /// <returns>A [numRelations, numNodes, numNodes] tensor of row-normalized random adjacencies.</returns>
     /// <remarks>
     /// <para><b>For Beginners:</b> If no relation adjacencies are provided, we create
-    /// sparse random adjacencies as defaults. In practice, you should always provide
-    /// actual relation adjacencies from your knowledge graph.
+    /// sparse random adjacencies (10% density, each row scaled to sum to 1) as defaults. In practice, you should
+    /// always provide actual relation adjacencies from your knowledge graph.
     /// </para>
     /// </remarks>
-    private double[][,] CreateDefaultRelationAdjacencies()
+    private Tensor<T> CreateDefaultRelationAdjacencies()
     {
-        var adjacencies = new double[_numRelations][,];
-        for (int r = 0; r < _numRelations; r++)
-        {
-            adjacencies[r] = new double[_numNodes, _numNodes];
-            // Create sparse random adjacency (10% density)
-            for (int i = 0; i < _numNodes; i++)
-            {
-                for (int j = 0; j < _numNodes; j++)
-                {
-                    if (_random.NextDouble() < 0.1)
-                    {
-                        adjacencies[r][i, j] = 1.0;
-                    }
-                }
-            }
-            // Normalize by degree
-            NormalizeAdjacency(adjacencies[r]);
-        }
-        return adjacencies;
+        var edges = Enumerable.Range(0, _numRelations * _numNodes * _numNodes)
+            .Select(_ => _random.NextDouble() < 0.1 ? NumOps.One : NumOps.Zero)
+            .ToArray();
+        var adjacency = new Tensor<T>(new[] { _numRelations, _numNodes, _numNodes }, new Vector<T>(edges));
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        return DivideByRowSums(adjacency);
     }
 
     /// <summary>
-    /// Normalizes an adjacency matrix by row sum.
+    /// Divides every row of a [numRelations, numNodes, numNodes] adjacency by its sum; empty rows stay zero.
     /// </summary>
-    /// <param name="adjacency">The adjacency matrix to normalize.</param>
+    private Tensor<T> DivideByRowSums(Tensor<T> adjacency)
+    {
+        var rowSums = Engine.ReduceSum(adjacency, new[] { 2 }, true);
+        var divisors = Engine.TensorWhere(
+            Engine.TensorEquals(rowSums, NumOps.Zero), Engine.TensorFullLike(rowSums, NumOps.One), rowSums);
+        return Engine.TensorDivide(adjacency, Engine.TensorBroadcastTo(divisors, adjacency._shape));
+    }
+
+    /// <summary>
+    /// Checks the relation adjacencies' shape and takes a private copy, so restoring the model's saved state never
+    /// writes into the caller's tensor.
+    /// </summary>
+    /// <param name="adjacency">The [numRelations, numNodes, numNodes] adjacencies.</param>
+    /// <returns>The model's own copy.</returns>
+    private Tensor<T> ValidatedAdjacency(Tensor<T> adjacency)
+    {
+        if (adjacency.Rank != 3 || adjacency._shape[0] != _numRelations
+            || adjacency._shape[1] != _numNodes || adjacency._shape[2] != _numNodes)
+        {
+            throw new ArgumentException(
+                $"Relation adjacencies must be shaped [{_numRelations}, {_numNodes}, {_numNodes}] (relations, nodes, nodes); got [{string.Join(", ", adjacency._shape)}].",
+                "relationAdjacencies");
+        }
+
+        return adjacency.Clone();
+    }
+
+    /// <summary>
+    /// The relation adjacencies with the 1/c_{i,r} normalization applied, stacked for propagation.
+    /// </summary>
+    /// <returns>The normalized adjacencies as [numRelations * numNodes, numNodes].</returns>
     /// <remarks>
-    /// <para><b>For Beginners:</b> Row normalization ensures that when we aggregate
-    /// messages from neighbors, we take the average rather than the sum. This prevents
-    /// nodes with many neighbors from dominating those with few.
+    /// <para><b>For Beginners:</b> Row (r, i) of the result holds A_r[i, j] / c_{i,r}, so multiplying it by the node
+    /// states gives sum_{j in N_i^r} h_j / c_{i,r}. Under "sum" aggregation c_{i,r} = 1 and the adjacency weights
+    /// are used as given; under "mean" c_{i,r} is the node's weighted in-degree under relation r, which for a 0/1
+    /// adjacency is the |N_i^r| the paper uses.
     /// </para>
     /// </remarks>
-    private void NormalizeAdjacency(double[,] adjacency)
+    private Tensor<T> Propagation()
     {
-        int n = adjacency.GetLength(0);
-        for (int i = 0; i < n; i++)
-        {
-            double rowSum = 0;
-            for (int j = 0; j < n; j++)
-            {
-                rowSum += adjacency[i, j];
-            }
-            if (rowSum > 0)
-            {
-                for (int j = 0; j < n; j++)
-                {
-                    adjacency[i, j] /= rowSum;
-                }
-            }
-        }
+        var adjacency = _relationAdjacencies
+            ?? throw new InvalidOperationException("RelationalGCN has no relation adjacencies to propagate over.");
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        var normalized = _meanAggregation ? DivideByRowSums(adjacency) : adjacency.Contiguous();
+        return Engine.Reshape(normalized, new[] { _numRelations * _numNodes, _numNodes });
     }
 
     /// <summary>
@@ -532,16 +575,17 @@ public partial class RelationalGCN<T> : ForecastingModelBase<T>
     /// </summary>
     /// <param name="layers">The list of custom layers.</param>
     /// <remarks>
-    /// <para><b>For Beginners:</b> Ensures custom layers form a valid R-GCN architecture
-    /// with sufficient depth for multi-relational message passing.
+    /// <para><b>For Beginners:</b> Custom layers must hold at least a per-node encoder and a per-node head: every
+    /// layer but the last encodes a node's history into its hidden state, and the last maps the final hidden
+    /// state to the forecast.
     /// </para>
     /// </remarks>
     protected override void ValidateCustomLayers(List<ILayer<T>> layers)
     {
         base.ValidateCustomLayers(layers);
 
-        if (layers.Count < 3)
-            throw new ArgumentException("RelationalGCN requires at least 3 layers (input, processing, output).");
+        if (layers.Count < 2)
+            throw new ArgumentException("RelationalGCN requires at least 2 layers (a per-node encoder and a per-node head).");
     }
 
     #endregion
@@ -566,60 +610,75 @@ public partial class RelationalGCN<T> : ForecastingModelBase<T>
         return _useNativeMode ? ForecastNative(input) : ForecastOnnx(input);
     }
 
-    /// <inheritdoc/>
-    /// <remarks>After a step, the basis decomposition is refreshed.</remarks>
-    protected override void OnTrainingStepEnded(bool succeeded)
-    {
-        if (!succeeded || !_useBasisDecomposition) return;
-        var lossVec = new Vector<T>(new[] { LastLoss is not null ? LastLoss : NumOps.FromDouble(1e-3) });
-        UpdateBasisDecompositionFromGradient(lossVec);
-    }
     /// <summary>
-    /// Updates basis decomposition parameters based on loss gradient.
+    /// The R-GCN weights are trainable: the bases V_b and coefficients a_rb (or the full or block relation
+    /// weights) and the self-connection weights W_0 of every layer. The optimizer updates them from the gradients
+    /// that reach them through <see cref="ApplyRelationalLayer"/> on the training tape.
     /// </summary>
-    /// <param name="gradient">Loss gradient.</param>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Adjusts the basis matrices and relation coefficients
-    /// to improve the relation-specific transformations. This is a simplified update;
-    /// full R-GCN would backprop through the basis combination.
-    /// </para>
-    /// </remarks>
-    private void UpdateBasisDecompositionFromGradient(Vector<T> gradient)
+    protected override IEnumerable<Tensor<T>> GetExtraTrainableTensors()
     {
-        if (_basisMatrices is null || _relationCoefficients is null)
-            return;
-
-        double lr = 0.001;
-        double gradNorm = 0;
-        for (int i = 0; i < gradient.Length; i++)
+        for (int layer = 0; layer < _relationBases.Count; layer++)
         {
-            double val = NumOps.ToDouble(gradient[i]);
-            gradNorm += val * val;
+            yield return _relationBases[layer];
+            if (layer < _relationCoefficients.Count)
+                yield return _relationCoefficients[layer];
+            if (layer < _selfLoopWeights.Count)
+                yield return _selfLoopWeights[layer];
         }
-        gradNorm = Math.Sqrt(gradNorm + 1e-8);
+    }
 
-        // Update basis matrices
-        for (int b = 0; b < _numBases; b++)
+    /// <summary>
+    /// The trainable R-GCN weight tensors, in the order <see cref="GetExtraTrainableTensors"/> yields them.
+    /// </summary>
+    internal IReadOnlyList<Tensor<T>> RelationalWeightTensors => GetExtraTrainableTensors().ToList();
+
+    /// <inheritdoc/>
+    /// <remarks>The R-GCN dropout layers sit outside <c>Layers</c>, so they are switched here too.</remarks>
+    public override void SetTrainingMode(bool isTraining)
+    {
+        base.SetTrainingMode(isTraining);
+        foreach (var dropout in _relationDropouts)
+            dropout.SetTrainingMode(isTraining);
+    }
+
+    /// <summary>
+    /// Training-mode forward: the same computation as <see cref="Forward"/>, kept in training mode so dropout is
+    /// active, which also records the L2 penalty on the R-GCN weights for the objective.
+    /// </summary>
+    protected override Tensor<T> ForwardNativeForTraining(Tensor<T> input)
+    {
+        var output = Forward(input);
+        _pendingRegularization = _useNativeMode ? RegularizationPenalty() : null;
+        return output;
+    }
+
+    /// <inheritdoc/>
+    protected override Tensor<T>? ConsumeAuxiliaryTapeLoss()
+    {
+        var penalty = _pendingRegularization;
+        _pendingRegularization = null;
+        return penalty;
+    }
+
+    /// <summary>
+    /// Regularization * (sum of the squared R-GCN weights), as a tape-connected scalar, or null when the
+    /// regularization strength is zero.
+    /// </summary>
+    private Tensor<T>? RegularizationPenalty()
+    {
+        if (_regularization <= 0)
+            return null;
+
+        Tensor<T>? total = null;
+        foreach (var weight in GetExtraTrainableTensors())
         {
-            for (int i = 0; i < _hiddenDimension; i++)
-            {
-                for (int j = 0; j < _hiddenDimension; j++)
-                {
-                    double noise = (_random.NextDouble() - 0.5) * lr / gradNorm;
-                    _basisMatrices[b, i][j] += noise;
-                }
-            }
+            var squares = Engine.Reshape(
+                Engine.ReduceSum(Engine.TensorSquare(weight), Enumerable.Range(0, weight.Rank).ToArray(), false),
+                new[] { 1 });
+            total = total is null ? squares : Engine.TensorAdd(total, squares);
         }
 
-        // Update relation coefficients with L2 regularization
-        for (int r = 0; r < _numRelations; r++)
-        {
-            for (int b = 0; b < _numBases; b++)
-            {
-                double noise = (_random.NextDouble() - 0.5) * lr / gradNorm;
-                _relationCoefficients[r, b] += noise - _regularization * _relationCoefficients[r, b];
-            }
-        }
+        return total is null ? null : Engine.TensorMultiplyScalar(total, NumOps.FromDouble(_regularization));
     }
 
     // UpdateParameters was an empty override, silently dropping every restore. The base
@@ -840,45 +899,46 @@ public partial class RelationalGCN<T> : ForecastingModelBase<T>
     #region Forward/Backward Pass
 
     /// <summary>
-    /// Performs the forward pass through all layers.
+    /// Performs the forward pass: per-node encoder, R-GCN layers, per-node head.
     /// </summary>
-    /// <param name="input">Input tensor.</param>
-    /// <returns>Output tensor.</returns>
+    /// <param name="input">Input tensor holding numNodes x sequenceLength x numFeatures values, node-major
+    /// (for example [numNodes, sequenceLength, numFeatures]).</param>
+    /// <returns>The forecast, shaped [numNodes, forecastHorizon].</returns>
     /// <remarks>
     /// <para><b>For Beginners:</b> The forward pass:
-    /// 1. Projects input features to hidden dimension
-    /// 2. For each R-GCN layer: applies relation-specific graph convolution
-    /// 3. Adds self-loop contribution if enabled
-    /// 4. Projects to output dimension
+    /// 1. Encodes each node's history window into its hidden state h_i^(0)
+    /// 2. Applies each R-GCN layer, h_i' = ReLU(W_0 h_i + sum_r sum_{j in N_i^r} (1/c_{i,r}) W_r h_j), then dropout
+    /// 3. Projects each node's final hidden state to its forecast
     /// </para>
     /// </remarks>
     public Tensor<T> Forward(Tensor<T> input)
     {
-        var current = FlattenInput(input);
+        if (!_useNativeMode)
+            return ForecastOnnx(input);
 
-        // Track shape before last layer for backward pass
-        _preOutputShape = null;
+        var current = NodeFeatures(input);
+        int headIndex = Layers.Count - 1;
+        for (int i = 0; i < headIndex; i++)
+            current = Layers[i].Forward(current);
 
-        // Apply layers with shape handling for GRU/Dense transitions
-        for (int i = 0; i < Layers.Count; i++)
+        if (current.Rank != 2 || current._shape[0] != _numNodes || current._shape[1] != _hiddenDimension)
         {
-            var layer = Layers[i];
-
-            // Before final Dense layer, flatten if needed (GRU outputs 3D)
-            if (i == Layers.Count - 1 && layer is DenseLayer<T> && current.Rank > 2)
-            {
-                _preOutputShape = current._shape;
-                current = current.Reshape(new[] { current.Length });
-            }
-
-            current = layer.Forward(current);
+            throw new InvalidOperationException(
+                $"The RelationalGCN encoder layers must map the [{_numNodes}, {_sequenceLength * _numFeatures}] node histories to [{_numNodes}, {_hiddenDimension}] hidden states; they produced [{string.Join(", ", current._shape)}].");
         }
 
-        return ReshapeOutput(current);
-    }
+        for (int layer = 0; layer < _relationBases.Count; layer++)
+            current = _relationDropouts[layer].Forward(ApplyRelationalLayer(current, layer));
 
-    // Store shape before output layer for backward pass
-    private int[]? _preOutputShape;
+        var output = Layers[headIndex].Forward(current);
+        if (output.Length != _numNodes * _forecastHorizon)
+        {
+            throw new InvalidOperationException(
+                $"The RelationalGCN head layer must produce {_forecastHorizon} values per node ({_numNodes * _forecastHorizon} in all); it produced [{string.Join(", ", output._shape)}].");
+        }
+
+        return Engine.Reshape(output, new[] { _numNodes, _forecastHorizon });
+    }
 
     /// <summary>
     /// Performs native mode forecasting.
@@ -944,144 +1004,78 @@ public partial class RelationalGCN<T> : ForecastingModelBase<T>
     #region Relational Graph Convolution
 
     /// <summary>
-    /// Computes relation-specific weight matrix using basis decomposition.
+    /// Applies one R-GCN layer (Schlichtkrull et al. 2018, Eq. 2).
     /// </summary>
-    /// <param name="relationIndex">Index of the relation type.</param>
-    /// <returns>The weight matrix for this relation.</returns>
+    /// <param name="nodeStates">The node states h^(l), shaped [numNodes, hidden].</param>
+    /// <param name="layer">The index of the R-GCN layer.</param>
+    /// <returns>h^(l+1) with h_i^(l+1) = ReLU(W_0 h_i + sum_r sum_{j in N_i^r} (1/c_{i,r}) W_r h_j).</returns>
     /// <remarks>
-    /// <para><b>For Beginners:</b> Combines the shared basis matrices using
-    /// relation-specific coefficients: W_r = sum_b (a_rb * B_b).
-    /// This is the key insight of R-GCN: share parameters across relations
-    /// while still allowing relation-specific transformations.
+    /// <para><b>For Beginners:</b> One matrix product gathers, for every relation r and node i, the normalized
+    /// neighbour sum sum_j A_r[i, j] / c_{i,r} h_j. Laying those sums side by side per node and multiplying by the
+    /// relation weights stacked vertically sums (A_r H) W_r over all relations at once. Everything is an engine
+    /// operation, so the gradient reaches the relation weights, the bases and coefficients they are built from,
+    /// W_0, and the encoder below.
     /// </para>
     /// </remarks>
-    private double[,] GetRelationWeight(int relationIndex)
+    internal Tensor<T> ApplyRelationalLayer(Tensor<T> nodeStates, int layer)
     {
-        if (!_useBasisDecomposition || _basisMatrices is null || _relationCoefficients is null)
-        {
-            // Return identity-like weight if not using basis decomposition
-            var identity = new double[_hiddenDimension, _hiddenDimension];
-            for (int i = 0; i < _hiddenDimension; i++)
-            {
-                identity[i, i] = 1.0;
-            }
-            return identity;
-        }
+        var neighbourSums = Engine.TensorMatMul(Propagation(), nodeStates);
+        var perNode = Engine.Reshape(
+            Engine.TensorPermute(
+                Engine.Reshape(neighbourSums, new[] { _numRelations, _numNodes, _hiddenDimension }),
+                new[] { 1, 0, 2 }),
+            new[] { _numNodes, _numRelations * _hiddenDimension });
+        var messages = Engine.TensorMatMul(perNode, RelationWeights(layer));
+        if (layer < _selfLoopWeights.Count)
+            messages = Engine.TensorAdd(messages, Engine.TensorMatMul(nodeStates, _selfLoopWeights[layer]));
 
-        var weight = new double[_hiddenDimension, _hiddenDimension];
-
-        // W_r = sum_b (a_rb * B_b)
-        for (int b = 0; b < _numBases; b++)
-        {
-            double coeff = _relationCoefficients[relationIndex, b];
-            for (int i = 0; i < _hiddenDimension; i++)
-            {
-                for (int j = 0; j < _hiddenDimension; j++)
-                {
-                    weight[i, j] += coeff * _basisMatrices[b, i][j];
-                }
-            }
-        }
-
-        return weight;
+        return Engine.TensorReLU(messages);
     }
 
     /// <summary>
-    /// Applies relational graph convolution for one relation type.
+    /// The relation weights W_r of one layer, stacked vertically as [numRelations * hidden, hidden].
     /// </summary>
-    /// <param name="nodeFeatures">Current node features [nodes, hidden].</param>
-    /// <param name="relationIndex">Index of the relation type.</param>
-    /// <returns>Aggregated messages for this relation.</returns>
+    /// <param name="layer">The index of the R-GCN layer.</param>
+    /// <returns>The stacked relation weights.</returns>
     /// <remarks>
-    /// <para><b>For Beginners:</b> For one relation type r:
-    /// 1. Get the relation-specific weight W_r (from basis decomposition)
-    /// 2. For each node i, aggregate messages from neighbors: sum_j A_r[i,j] * h_j * W_r
-    /// 3. The aggregation can be sum, mean, or max depending on configuration
+    /// <para><b>For Beginners:</b> Under basis decomposition W_r = sum_b a_rb V_b, computed for every relation as
+    /// one product of the coefficients with the flattened bases. Under block decomposition W_r is its full matrix
+    /// with everything off the diagonal blocks masked to zero.
     /// </para>
     /// </remarks>
-    private double[,] ApplyRelationalConvolution(double[,] nodeFeatures, int relationIndex)
+    internal Tensor<T> RelationWeights(int layer)
     {
-        if (_relationAdjacencies is null || relationIndex >= _relationAdjacencies.Length)
-            return nodeFeatures;
-
-        var adjacency = _relationAdjacencies[relationIndex];
-        var weight = GetRelationWeight(relationIndex);
-
-        int numNodes = nodeFeatures.GetLength(0);
-        int hiddenDim = nodeFeatures.GetLength(1);
-
-        var output = new double[numNodes, hiddenDim];
-
-        // For each node, aggregate messages from neighbors
-        for (int i = 0; i < numNodes; i++)
+        var weights = _relationBases[layer];
+        int squared = _hiddenDimension * _hiddenDimension;
+        if (layer < _relationCoefficients.Count)
         {
-            for (int j = 0; j < numNodes; j++)
-            {
-                double edgeWeight = adjacency[i, j];
-                if (Math.Abs(edgeWeight) < 1e-8)
-                    continue;
-
-                // Transform neighbor features: h_j * W_r
-                for (int k = 0; k < hiddenDim; k++)
-                {
-                    double transformed = 0;
-                    for (int l = 0; l < hiddenDim; l++)
-                    {
-                        transformed += nodeFeatures[j, l] * weight[l, k];
-                    }
-                    output[i, k] += edgeWeight * transformed;
-                }
-            }
+            weights = Engine.TensorMatMul(
+                _relationCoefficients[layer], Engine.Reshape(weights, new[] { weights._shape[0], squared }));
+        }
+        else if (_blockMask is not null)
+        {
+            weights = Engine.TensorMultiply(weights, Engine.TensorBroadcastTo(_blockMask, weights._shape));
         }
 
-        return output;
+        return Engine.Reshape(weights, new[] { _numRelations * _hiddenDimension, _hiddenDimension });
     }
 
     /// <summary>
-    /// Aggregates messages across all relation types.
+    /// Views the input as one history row per node, [numNodes, sequenceLength * numFeatures].
     /// </summary>
-    /// <param name="nodeFeatures">Current node features.</param>
-    /// <returns>Aggregated features from all relations.</returns>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> R-GCN aggregates messages from each relation type
-    /// separately, then combines them. The formula is:
-    /// h_i^(l+1) = sigma(sum_r [per-relation aggregation] + W_0 * h_i^(l))
-    /// where r loops over all relation types and W_0 handles self-connections.
-    /// </para>
-    /// </remarks>
-    private double[,] AggregateAcrossRelations(double[,] nodeFeatures)
+    /// <param name="input">The node-major input.</param>
+    /// <returns>The per-node history rows.</returns>
+    private Tensor<T> NodeFeatures(Tensor<T> input)
     {
-        int numNodes = nodeFeatures.GetLength(0);
-        int hiddenDim = nodeFeatures.GetLength(1);
-
-        var aggregated = new double[numNodes, hiddenDim];
-
-        // Sum contributions from all relations
-        for (int r = 0; r < _numRelations; r++)
+        int width = _sequenceLength * _numFeatures;
+        if (input.Length != _numNodes * width)
         {
-            var relationOutput = ApplyRelationalConvolution(nodeFeatures, r);
-            for (int i = 0; i < numNodes; i++)
-            {
-                for (int j = 0; j < hiddenDim; j++)
-                {
-                    aggregated[i, j] += relationOutput[i, j];
-                }
-            }
+            throw new ArgumentException(
+                $"RelationalGCN expects {_numNodes} nodes x {_sequenceLength} steps x {_numFeatures} features ({_numNodes * width} values, node-major); got shape [{string.Join(", ", input._shape)}].",
+                nameof(input));
         }
 
-        // Normalize if using mean aggregation
-        if (_aggregation == "mean" && _numRelations > 0)
-        {
-            for (int i = 0; i < numNodes; i++)
-            {
-                for (int j = 0; j < hiddenDim; j++)
-                {
-                    aggregated[i, j] /= _numRelations;
-                }
-            }
-        }
-
-        return aggregated;
+        return Engine.Reshape(input.Contiguous(), new[] { _numNodes, width });
     }
 
     #endregion
@@ -1113,39 +1107,6 @@ public partial class RelationalGCN<T> : ForecastingModelBase<T>
         }
 
         return flattened;
-    }
-
-    /// <summary>
-    /// Reshapes output to forecast format.
-    /// </summary>
-    /// <param name="output">Layer output tensor.</param>
-    /// <returns>Reshaped forecast tensor.</returns>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Converts layer output back to the expected
-    /// forecast format [nodes, horizon].
-    /// </para>
-    /// </remarks>
-    private Tensor<T> ReshapeOutput(Tensor<T> output)
-    {
-        // Tape-aware reshape to [numNodes, forecastHorizon]. The previous
-        // implementation copied element-by-element into a fresh Tensor<T>, which
-        // detached the autodiff graph right before the loss and zeroed every
-        // gradient. Reshape / Narrow / Concat keep the output connected to the
-        // layer stack so gradients flow back on backward.
-        int target = _numNodes * _forecastHorizon;
-        var flat = Engine.Reshape(output, new[] { output.Length });
-        if (output.Length > target)
-        {
-            flat = Engine.TensorNarrow(flat, 0, 0, target);
-        }
-        else if (output.Length < target)
-        {
-            // Pad with zeros to reach the target length, matching the prior
-            // truncation-copy semantics where unfilled entries stayed at zero.
-            var pad = new Tensor<T>(new[] { target - output.Length });
-            flat = Engine.Concat(new[] { flat, pad }, 0);
-        }
-        return Engine.Reshape(flat, new[] { _numNodes, _forecastHorizon });
     }
 
     /// <summary>
@@ -1253,38 +1214,28 @@ public partial class RelationalGCN<T> : ForecastingModelBase<T>
     /// Shifts the input window by appending a prediction.
     /// </summary>
     /// <param name="input">Current input.</param>
-    /// <param name="prediction">Prediction to append.</param>
+    /// <param name="prediction">Prediction to append, [numNodes, forecastHorizon].</param>
     /// <returns>Shifted input tensor.</returns>
     /// <remarks>
-    /// <para><b>For Beginners:</b> For autoregressive forecasting, removes the oldest
-    /// time step and appends the newest prediction.
+    /// <para><b>For Beginners:</b> For autoregressive forecasting, drops each node's oldest forecastHorizon
+    /// steps and appends its newest predictions. The input is node-major, so the shift runs along each node's
+    /// time axis. Only a single-feature graph can be rolled forward this way, because a forecast supplies no
+    /// future values for any other input feature.
     /// </para>
     /// </remarks>
     private Tensor<T> ShiftInputWindow(Tensor<T> input, Tensor<T> prediction)
     {
-        var newData = new T[input.Data.Length];
-        // Guard against shiftAmount larger than input length
-        int shiftAmount = Math.Min(_numNodes * _numFeatures, input.Data.Length);
-
-        // Shift existing data left (avoiding index out of range)
-        int copyLen = Math.Max(0, input.Data.Length - shiftAmount);
-        for (int i = 0; i < copyLen; i++)
+        if (_numFeatures != 1)
         {
-            int srcIdx = i + shiftAmount;
-            if (srcIdx < input.Data.Length)
-                newData[i] = input.Data.Span[srcIdx];
+            throw new NotSupportedException(
+                $"Autoregressive RelationalGCN forecasting feeds forecasts back as inputs, which needs future values of every input feature; it is only defined for NumFeatures = 1 (got {_numFeatures}).");
         }
 
-        // Append prediction
-        int predLength = Math.Min(shiftAmount, prediction.Data.Length);
-        for (int i = 0; i < predLength; i++)
-        {
-            int dstIdx = input.Data.Length - shiftAmount + i;
-            if (dstIdx >= 0 && dstIdx < input.Data.Length)
-                newData[dstIdx] = prediction.Data.Span[i];
-        }
-
-        return new Tensor<T>(input._shape, new Vector<T>(newData));
+        var history = NodeFeatures(input);
+        var predicted = Engine.Reshape(prediction.Contiguous(), new[] { _numNodes, _forecastHorizon });
+        var extended = Engine.Concat(new[] { history, predicted }, 1);
+        var window = Engine.TensorNarrow(extended, 1, _forecastHorizon, _sequenceLength);
+        return Engine.Reshape(window.Contiguous(), input._shape);
     }
 
     /// <summary>
@@ -1294,26 +1245,18 @@ public partial class RelationalGCN<T> : ForecastingModelBase<T>
     /// <returns>Concatenated tensor.</returns>
     /// <remarks>
     /// <para><b>For Beginners:</b> Combines multiple forecast steps into a single
-    /// extended forecast tensor.
+    /// extended forecast tensor, joining each node's steps along its time axis.
     /// </para>
     /// </remarks>
-        protected Tensor<T> ConcatenatePredictions(List<Tensor<T>> predictions)
+    protected Tensor<T> ConcatenatePredictions(List<Tensor<T>> predictions)
     {
         if (predictions.Count == 0)
             return new Tensor<T>(new[] { _numNodes, 0 });
 
-        int totalLength = predictions.Sum(p => p.Data.Length);
-        var combined = new T[totalLength];
-
-        int offset = 0;
-        foreach (var pred in predictions)
-        {
-            pred.Data.Span.CopyTo(combined.AsSpan(offset));
-            offset += pred.Data.Length;
-        }
-
-        return new Tensor<T>(new[] { _numNodes, predictions.Count * _forecastHorizon },
-            new Vector<T>(combined));
+        var perNode = predictions
+            .Select(prediction => Engine.Reshape(prediction.Contiguous(), new[] { _numNodes, _forecastHorizon }))
+            .ToArray();
+        return Engine.Concat(perNode, 1);
     }
 
     #endregion
