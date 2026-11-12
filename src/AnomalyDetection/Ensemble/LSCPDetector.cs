@@ -170,7 +170,6 @@ public partial class LSCPDetector<T> : AnomalyDetectorBase<T>
             throw new InvalidOperationException("Model not properly fitted.");
         }
 
-        var scores = new Vector<T>(X.Rows);
         int effectiveRegionSize = Math.Min(_localRegionSize, trainingData.Rows);
 
         // Get scores from all detectors for test data
@@ -182,88 +181,34 @@ public partial class LSCPDetector<T> : AnomalyDetectorBase<T>
 
         var detScores = _detectorScores ?? throw new InvalidOperationException("Model not properly fitted.");
 
-        for (int i = 0; i < X.Rows; i++)
+        var engine = Engine;
+        int m = X.Rows;
+
+        // Local region of every test point: its effectiveRegionSize nearest training points
+        var distances = AnomalyTensorOps.PairwiseDistances(
+            AnomalyTensorOps.ToTensor(X), AnomalyTensorOps.ToTensor(trainingData));
+        var (sortedDistances, order) = engine.TensorSort(distances, 1, false);
+        var localDistances = engine.TensorSlice(sortedDistances, new[] { 0, 0 }, new[] { m, effectiveRegionSize });
+        var localRegion = engine.Reshape(
+            engine.TensorSlice(order, new[] { 0, 0 }, new[] { m, effectiveRegionSize }), new[] { m * effectiveRegionSize });
+
+        // Evaluate detector competence in local region
+        // Use Pearson correlation between scores and distance rank as competence
+        var competence = new Tensor<T>[_nEstimators];
+        for (int e = 0; e < _nEstimators; e++)
         {
-            var point = new Vector<T>(X.GetRowReadOnlySpan(i).ToArray());
+            var localScores = engine.Reshape(
+                engine.TensorGather(detScores[e].AsTensor(), localRegion, 0), new[] { m, effectiveRegionSize });
 
-            // Find local region (nearest neighbors in training data)
-            var distancesWithIdx = new (T dist, int idx)[trainingData.Rows];
-            for (int t = 0; t < trainingData.Rows; t++)
-            {
-                var trainPoint = new Vector<T>(trainingData.GetRowReadOnlySpan(t).ToArray());
-                var diff = Engine.Subtract(point, trainPoint);
-                T dist = NumOps.Sqrt(Engine.DotProduct(diff, diff));
-                distancesWithIdx[t] = (dist, t);
-            }
-
-            var localRegion = distancesWithIdx
-                .OrderBy(d => NumOps.ToDouble(d.dist))
-                .Take(effectiveRegionSize)
-                .Select(d => d.idx)
-                .ToArray();
-
-            // Evaluate detector competence in local region
-            // Use Pearson correlation between scores and distance rank as competence
-            var competence = new T[_nEstimators];
-
-            for (int e = 0; e < _nEstimators; e++)
-            {
-                var localScores = localRegion.Select(idx => detScores[e][idx]).ToArray();
-                var localDistances = localRegion.Select(idx => distancesWithIdx[idx].dist).ToArray();
-
-                // Higher scores should correlate with higher distances for good detectors
-                competence[e] = ComputeCorrelation(localScores, localDistances);
-            }
-
-            // Select top detectors and combine their scores
-            int nSelect = Math.Max(1, _nEstimators / 2);
-            var selectedDetectors = competence
-                .Select((c, idx) => (c, idx))
-                .OrderByDescending(x => NumOps.ToDouble(x.c))
-                .Take(nSelect)
-                .Select(x => x.idx)
-                .ToArray();
-
-            // Average scores from selected detectors
-            T combinedScore = NumOps.Zero;
-            foreach (int e in selectedDetectors)
-            {
-                combinedScore = NumOps.Add(combinedScore, testScores[e][i]);
-            }
-            scores[i] = NumOps.Divide(combinedScore, NumOps.FromDouble(selectedDetectors.Length));
+            // Higher scores should correlate with higher distances for good detectors
+            competence[e] = AnomalyTensorOps.RowPearson(localScores, localDistances);
         }
 
-        return scores;
-    }
-
-    private T ComputeCorrelation(T[] x, T[] y)
-    {
-        int n = x.Length;
-        if (n < 2) return NumOps.Zero;
-
-        T meanX = NumOps.Zero;
-        T meanY = NumOps.Zero;
-        for (int i = 0; i < n; i++)
-        {
-            meanX = NumOps.Add(meanX, x[i]);
-            meanY = NumOps.Add(meanY, y[i]);
-        }
-        T nT = NumOps.FromDouble(n);
-        meanX = NumOps.Divide(meanX, nT);
-        meanY = NumOps.Divide(meanY, nT);
-
-        T cov = NumOps.Zero, varX = NumOps.Zero, varY = NumOps.Zero;
-        for (int i = 0; i < n; i++)
-        {
-            T dx = NumOps.Subtract(x[i], meanX);
-            T dy = NumOps.Subtract(y[i], meanY);
-            cov = NumOps.Add(cov, NumOps.Multiply(dx, dy));
-            varX = NumOps.Add(varX, NumOps.Multiply(dx, dx));
-            varY = NumOps.Add(varY, NumOps.Multiply(dy, dy));
-        }
-
-        T denom = NumOps.Sqrt(NumOps.Multiply(varX, varY));
-        T eps = NumOps.FromDouble(1e-10);
-        return NumOps.GreaterThan(denom, eps) ? NumOps.Divide(cov, denom) : NumOps.Zero;
+        // Select top detectors (ties to the lower index) and average their scores
+        int nSelect = Math.Max(1, _nEstimators / 2);
+        var selected = AnomalyTensorOps.TopCountMask(engine.TensorStack(competence, 1), nSelect);
+        var candidateScores = engine.TensorStack(testScores.Select(s => s.AsTensor()).ToArray(), 1);
+        var selectedScores = engine.TensorWhere(selected, candidateScores, Tensor<T>.CreateZeros(new[] { m, _nEstimators }));
+        return engine.TensorDivideScalar(engine.ReduceSum(selectedScores, new[] { 1 }, false), NumOps.FromDouble(nSelect)).ToVector();
     }
 }
