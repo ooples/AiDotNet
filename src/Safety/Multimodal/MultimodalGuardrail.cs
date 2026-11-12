@@ -3,6 +3,8 @@ using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.Models;
 using AiDotNet.Tensors.LinearAlgebra;
+using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Engines.Autodiff;
 
 namespace AiDotNet.Safety.Multimodal;
 
@@ -187,61 +189,55 @@ public class MultimodalGuardrail<T> : MultimodalSafetyModuleBase<T>
 
     private double DetectTextInImageAttack(string text, Tensor<T> image)
     {
-        var span = image.Data.Span;
-        if (span.Length < 64) return 0;
+        if (image.Length < 64) return 0;
 
         // Detect high-contrast regions that may contain embedded text
-        int sampleSize = Math.Min(span.Length, 4096);
-        int highContrastTransitions = 0;
-        int totalChecked = 0;
-
-        for (int i = 1; i < sampleSize; i++)
-        {
-            double prev = NumOps.ToDouble(span[i - 1]);
-            double curr = NumOps.ToDouble(span[i]);
-            double diff = Math.Abs(curr - prev);
-
-            if (prev > 1.0) prev /= 255.0;
-            if (curr > 1.0) curr /= 255.0;
-            diff = Math.Abs(curr - prev);
-
-            if (diff > 0.5) highContrastTransitions++;
-            totalChecked++;
-        }
-
+        int sampleSize = Math.Min(image.Length, 4096);
+        int totalChecked = sampleSize - 1;
         if (totalChecked < 32) return 0;
 
+        using var noGrad = new NoGradScope<T>();
+        var engine = Engine;
+        var values = NormalizedSample(image, sampleSize);
+        T highContrastTransitions = engine.TensorSum(
+            SafetyTensorOps<T>.Gt(engine.TensorAbs(engine.TensorDiff(values, 1, 0)), 0.5));
+
         // High-contrast transitions are typical of text rendered in images
-        double transitionRate = (double)highContrastTransitions / totalChecked;
+        T transitionRate = NumOps.Divide(highContrastTransitions, NumOps.FromDouble(totalChecked));
 
         // Natural images: ~5-15% high-contrast transitions
         // Text in images: >20% high-contrast transitions
-        if (transitionRate < 0.15) return 0;
-        return Math.Min(1.0, (transitionRate - 0.15) / 0.25);
+        if (NumOps.LessThan(transitionRate, NumOps.FromDouble(0.15))) return 0;
+        return NumOps.ToDouble(SafetyTensorOps<T>.MinOne(
+            NumOps.Divide(NumOps.Subtract(transitionRate, NumOps.FromDouble(0.15)), NumOps.FromDouble(0.25))));
     }
 
     private double ComputeImageUniformity(Tensor<T> image)
     {
-        var span = image.Data.Span;
-        if (span.Length < 64) return 0;
+        if (image.Length < 64) return 0;
 
         // Compute variance of a sample to detect uniform regions
-        int sampleSize = Math.Min(span.Length, 2048);
-        double sum = 0, sumSq = 0;
-
-        for (int i = 0; i < sampleSize; i++)
-        {
-            double val = NumOps.ToDouble(span[i]);
-            if (val > 1.0) val /= 255.0;
-            sum += val;
-            sumSq += val * val;
-        }
-
-        double mean = sum / sampleSize;
-        double variance = (sumSq / sampleSize) - (mean * mean);
+        int sampleSize = Math.Min(image.Length, 2048);
+        using var noGrad = new NoGradScope<T>();
+        var engine = Engine;
+        var values = NormalizedSample(image, sampleSize);
+        T n = NumOps.FromDouble(sampleSize);
+        T mean = NumOps.Divide(engine.TensorSum(values), n);
+        T variance = NumOps.Subtract(NumOps.Divide(engine.TensorSumOfSquares(values), n), NumOps.Multiply(mean, mean));
 
         // Very low variance = very uniform = possible text overlay background
-        if (variance < 0.01) return Math.Min(1.0, (0.01 - variance) / 0.01);
+        T limit = NumOps.FromDouble(0.01);
+        if (NumOps.LessThan(variance, limit))
+            return NumOps.ToDouble(SafetyTensorOps<T>.MinOne(NumOps.Divide(NumOps.Subtract(limit, variance), limit)));
         return 0;
+    }
+
+    /// <summary>The first <paramref name="count"/> values, rescaled from 0-255 to 0-1 where above 1.</summary>
+    private Tensor<T> NormalizedSample(Tensor<T> image, int count)
+    {
+        var engine = Engine;
+        var values = engine.TensorNarrow(engine.Reshape(image.Contiguous(), new[] { image.Length }), 0, 0, count);
+        return SafetyTensorOps<T>.Where(SafetyTensorOps<T>.Gt(values, 1.0),
+            engine.TensorDivideScalar(values, NumOps.FromDouble(255.0)), values);
     }
 }
