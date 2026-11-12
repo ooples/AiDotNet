@@ -27,7 +27,7 @@ public class UniformitySelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, I
     private readonly int _nBins;
     private readonly bool _preferUniform;
 
-    private double[]? _uniformityScores;
+    private Vector<T>? _uniformityScores;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
@@ -35,7 +35,7 @@ public class UniformitySelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, I
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public int NBins => _nBins;
     public bool PreferUniform => _preferUniform;
-    public double[]? UniformityScores => _uniformityScores;
+    public Vector<T>? UniformityScores => _uniformityScores;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -65,74 +65,36 @@ public class UniformitySelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, I
         int n = data.Rows;
         int p = data.Columns;
 
-        var X = new double[n, p];
-        for (int i = 0; i < n; i++)
-            for (int j = 0; j < p; j++)
-                X[i, j] = NumOps.ToDouble(data[i, j]);
-
-        _uniformityScores = new double[p];
+        var engine = Engine;
+        var X = Tensor<T>.FromMatrix(data);
 
         // Maximum entropy for uniform distribution with _nBins bins
         double maxEntropy = Math.Log(_nBins) / Math.Log(2);
 
-        for (int j = 0; j < p; j++)
-        {
-            var col = new double[n];
-            for (int i = 0; i < n; i++)
-                col[i] = X[i, j];
+        // Histogram entropy (bits) of every feature; constant features have zero uniformity
+        var binCounts = FeatureSelectionTensorOps.RangeBinCounts(X, _nBins, out var constant);
+        var entropy = FeatureSelectionTensorOps.EntropyBits(binCounts, n);
 
-            double min = col.Min();
-            double max = col.Max();
-            double range = max - min;
-
-            if (range < 1e-10)
-            {
-                // Constant feature - zero uniformity
-                _uniformityScores[j] = 0;
-                continue;
-            }
-
-            // Create histogram
-            var binCounts = new int[_nBins];
-            foreach (var val in col)
-            {
-                int bin = (int)((val - min) / range * (_nBins - 1));
-                bin = Math.Min(bin, _nBins - 1);
-                binCounts[bin]++;
-            }
-
-            // Compute entropy
-            double entropy = 0;
-            foreach (var count in binCounts)
-            {
-                if (count > 0)
-                {
-                    double p_i = (double)count / n;
-                    entropy -= p_i * Math.Log(p_i) / Math.Log(2);
-                }
-            }
-
-            // Uniformity score = entropy / max_entropy (normalized)
-            _uniformityScores[j] = maxEntropy > 0 ? entropy / maxEntropy : 0;
-        }
+        // Uniformity score = entropy / max_entropy (normalized)
+        var zeros = new Tensor<T>(new[] { p });
+        var scores = maxEntropy > 0
+            ? engine.TensorWhere(constant, zeros, engine.TensorDivideScalar(entropy, NumOps.FromDouble(maxEntropy)))
+            : zeros;
+        _uniformityScores = scores.ToVector();
 
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
 
         if (_preferUniform)
         {
             // Prefer features with high uniformity
-            _selectedIndices = Enumerable.Range(0, p)
-                .OrderByDescending(j => _uniformityScores[j])
-                .Take(numToSelect)
-                .OrderBy(x => x)
-                .ToArray();
+            _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(scores, numToSelect);
         }
         else
         {
-            // Prefer features with low uniformity (more concentrated)
-            _selectedIndices = Enumerable.Range(0, p)
-                .Where(j => _uniformityScores[j] > 0)
-                .OrderBy(j => _uniformityScores[j])
+            // Prefer features with low uniformity (more concentrated), among those with positive uniformity
+            var positive = new HashSet<int>(PreprocessingTensorOps.MaskPositions(engine.TensorGreaterThan(scores, NumOps.Zero)));
+            _selectedIndices = PreprocessingTensorOps.StableOrder(scores, descending: false)
+                .Where(j => positive.Contains(j))
                 .Take(numToSelect)
                 .OrderBy(x => x)
                 .ToArray();
