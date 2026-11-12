@@ -7,28 +7,36 @@ using AiDotNet.Tensors.LinearAlgebra;
 namespace AiDotNet.NeuralNetworks.SyntheticData;
 
 /// <summary>
-/// Bayesian Network Synthesis generator that learns a DAG structure over features,
-/// estimates conditional probability tables (CPTs), and generates synthetic data
-/// via ancestral sampling.
+/// PrivBayes synthesizer (Zhang et al., SIGMOD 2014 / TODS 2017): learns a k-degree Bayesian network
+/// under differential privacy, releases noisy conditional distributions, and generates synthetic data
+/// by ancestral sampling.
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
 /// <para>
-/// This is a classical statistical approach (no neural networks):
-/// 1. Discretize continuous features into bins
-/// 2. Learn a DAG structure using greedy hill-climbing with BIC scoring
-/// 3. Estimate CPTs using maximum likelihood with Laplace smoothing
-/// 4. Generate data by sampling from root nodes to leaf nodes in topological order
+/// With <see cref="BayesianNetworkSynthOptions{T}.EnableDifferentialPrivacy"/> on (the default) the two
+/// phases follow the paper:
 /// </para>
 /// <para>
-/// <b>For Beginners:</b> Think of this as building a probabilistic "family tree" of your features:
-///
-/// Step 1: Figure out which features depend on which others (the DAG)
-/// Step 2: For each feature, learn "if parent features have values X, this feature is Y with probability Z"
-/// Step 3: To generate a new row, start with features that have no parents and work downward
-///
-/// Advantages: Fast, interpretable, no GPU needed.
-/// Disadvantage: Less flexible than deep learning for complex distributions.
+/// 1. <b>GreedyBayes</b> (Algorithm 1 / 4): the first attribute is chosen uniformly at random. Each later
+/// attribute X is attached together with a parent set of exactly <c>min(k, |V|)</c> already-attached
+/// attributes, chosen by the exponential mechanism over the mutual information I(X; Pi). The sensitivity
+/// is Lemma 1's binary form when X or Pi has a binary domain and the general form otherwise.
+/// </para>
+/// <para>
+/// 2. <b>NoisyConditionals</b> (Algorithm 2): for i = k+1..d the full joint distribution of
+/// (X_i, Pi_i), zero cells included, receives Laplace noise of scale <c>2(d-k)/(n eps2)</c>; negatives are
+/// clipped and the table renormalized. The conditionals of the first k attributes are derived from the
+/// noisy joint of (X_{k+1}, Pi_{k+1}), so exactly d-k marginals spend the phase-2 budget.
+/// </para>
+/// <para>
+/// The degree k is the largest value up to <see cref="BayesianNetworkSynthOptions{T}.MaxParents"/> that
+/// keeps the network theta-useful (Section 4.4): <c>n eps2 / (2 (d-k) |dom(X, Pi)|) &gt;= theta</c>.
+/// </para>
+/// <para>
+/// <b>For Beginners:</b> Think of this as building a probabilistic "family tree" of your features, then
+/// adding carefully calibrated random noise so that no single person's record can be recovered from the
+/// released model.
 /// </para>
 /// </remarks>
 [ModelDomain(ModelDomain.MachineLearning)]
@@ -37,46 +45,39 @@ namespace AiDotNet.NeuralNetworks.SyntheticData;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-// Citation URL corrected. arXiv 1401.0939 is "The NINJA-2 project: Detecting and characterizing
-// gravitational waveforms modelled using numerical binary black hole simulations" — an unrelated
-// gravitational-wave paper. PrivBayes was never on arXiv; it appeared at SIGMOD 2014 with an extended
-// TODS 2017 version, so the canonical DOI is used instead of an invented preprint id.
-//
-// This class previously implemented only a GENERIC Bayesian-network synthesizer (BIC-scored structure
-// search, Laplace-SMOOTHED CPTs) with no epsilon and no privacy guarantee at all — Laplace smoothing
-// being a prior, not a privacy mechanism. Both of PrivBayes' defining phases are now implemented:
-//
-//   Phase 1 (GreedyBayes): each (attribute, parent-set) pair is chosen with the EXPONENTIAL MECHANISM
-//   over a mutual-information score, calibrated by that score's sensitivity, instead of by arg-max.
-//   Parents are drawn only from already-attached attributes, so acyclicity holds by construction.
-//
-//   Phase 2: Laplace NOISE is injected into each marginal (sensitivity 2/n per marginal, shared across
-//   d-k marginals) before conditionals are derived, then negatives are clipped and the distribution
-//   renormalized.
-//
-// The budget splits evenly between the phases per the paper, and epsilon, the split and an opt-out all
-// live in BayesianNetworkSynthOptions with the paper's defaults.
+// PrivBayes was never on arXiv; it appeared at SIGMOD 2014 with an extended TODS 2017 version, so the
+// canonical DOI is used.
 [ResearchPaper("PrivBayes: Private Data Release via Bayesian Networks",
     "https://doi.org/10.1145/3134428",
     Year = 2017,
     Authors = "Jun Zhang, Graham Cormode, Cecilia M. Procopiuc, Divesh Srivastava, Xiaokui Xiao")]
 public class BayesianNetworkSynthGenerator<T> : SyntheticTabularGeneratorBase<T>
 {
+    private const double LogTwo = 0.69314718055994530942;
+
     private readonly BayesianNetworkSynthOptions<T> _options;
 
-    // DAG structure: parents[j] = list of parent indices for feature j
+    // parents[j] = parent attributes of j, in the axis order of its conditional table.
     private List<int>[] _parents = Array.Empty<List<int>>();
 
-    // Topological ordering of features
+    // Attributes in sampling order (parents before children).
     private int[] _topoOrder = Array.Empty<int>();
 
-    // Discretization: bin edges for each feature
-    private double[][] _binEdges = Array.Empty<double[]>();
+    // Domain size of every attribute after discretization.
+    private int[] _cardinality = Array.Empty<int>();
 
-    // Conditional probability tables: _cpts[j] maps (parent_values_key) -> probability distribution over bins
-    private Dictionary<string, double[]>[] _cpts = Array.Empty<Dictionary<string, double[]>>();
+    private bool[] _isCategorical = Array.Empty<bool>();
 
-    // Number of features (original columns)
+    // Equal-width binning of the numeric columns: lower edge and bin width per column, shape [d].
+    private Tensor<T> _binLower = new Tensor<T>(new[] { 0 });
+    private Tensor<T> _binWidth = new Tensor<T>(new[] { 0 });
+
+    // Sorted category values of each categorical column (empty for numeric columns).
+    private Tensor<T>[] _categoryValues = Array.Empty<Tensor<T>>();
+
+    // Conditional distribution of every attribute: [|dom(Pi)|, |dom(X)|], rows sum to one.
+    private Tensor<T>[] _conditionals = Array.Empty<Tensor<T>>();
+
     private int _numFeatures;
 
     /// <summary>
@@ -88,343 +89,457 @@ public class BayesianNetworkSynthGenerator<T> : SyntheticTabularGeneratorBase<T>
         _options = options;
     }
 
+    /// <summary>The network degree k used by the last fit.</summary>
+    internal int Degree { get; private set; }
+
+    /// <summary>How many joint distributions received Laplace noise in the last private fit (d - k).</summary>
+    internal int NoisedMarginalCount { get; private set; }
+
+    /// <summary>Parent sets learned by the last fit, in conditional-table axis order.</summary>
+    internal IReadOnlyList<IReadOnlyList<int>> Parents => _parents;
+
+    /// <summary>Conditional tables learned by the last fit.</summary>
+    internal IReadOnlyList<Tensor<T>> Conditionals => _conditionals;
+
     /// <inheritdoc />
     protected override void FitInternal(Matrix<T> data, IReadOnlyList<ColumnMetadata> columns, int epochs)
     {
         _numFeatures = data.Columns;
+        int n = data.Rows;
 
-        // Step 1: Discretize all features
-        var discretized = DiscretizeData(data);
+        var codes = DiscretizeData(data, columns);
 
-        // Step 2: Learn DAG structure using greedy hill-climbing
-        _parents = LearnStructure(discretized);
-
-        // Step 3: Compute topological ordering
-        _topoOrder = TopologicalSort();
-
-        // Step 4: Estimate CPTs
-        _cpts = EstimateCPTs(discretized);
+        if (_options.EnableDifferentialPrivacy)
+        {
+            double eps2 = _options.PrivacyBudget * (1.0 - _options.StructureBudgetFraction);
+            Degree = SelectDegree(n, _numFeatures, _cardinality.Max(), eps2,
+                _options.UsefulnessThreshold, _options.MaxParents);
+            _topoOrder = LearnStructureGreedyBayes(codes, Degree);
+            _conditionals = NoisyConditionals(codes, Degree, eps2);
+        }
+        else
+        {
+            Degree = Math.Min(Math.Max(0, _options.MaxParents), _numFeatures - 1);
+            NoisedMarginalCount = 0;
+            _parents = LearnStructureBIC(codes);
+            _topoOrder = TopologicalSort();
+            _conditionals = SmoothedConditionals(codes);
+        }
     }
 
     /// <inheritdoc />
     protected override Matrix<T> GenerateInternal(int numSamples, Vector<T>? conditionColumn, Vector<T>? conditionValue)
     {
-        var result = new Matrix<T>(numSamples, _numFeatures);
-
-        for (int i = 0; i < numSamples; i++)
-        {
-            var sample = AncestralSample();
-            for (int j = 0; j < _numFeatures; j++)
-                result[i, j] = NumOps.FromDouble(sample[j]);
-        }
-
-        return result;
-    }
-
-    /// <summary>
-    /// Discretizes continuous data into bins using equal-width binning.
-    /// </summary>
-    private int[][] DiscretizeData(Matrix<T> data)
-    {
-        int numBins = _options.NumBins;
-        _binEdges = new double[_numFeatures][];
-        var discretized = new int[data.Rows][];
-
-        for (int j = 0; j < _numFeatures; j++)
-        {
-            double min = double.MaxValue;
-            double max = double.MinValue;
-            for (int i = 0; i < data.Rows; i++)
-            {
-                double val = NumOps.ToDouble(data[i, j]);
-                if (val < min) min = val;
-                if (val > max) max = val;
-            }
-
-            // Create bin edges
-            _binEdges[j] = new double[numBins + 1];
-            double step = (max - min) / numBins;
-            if (step < 1e-10) step = 1.0;
-            for (int b = 0; b <= numBins; b++)
-                _binEdges[j][b] = min + b * step;
-            _binEdges[j][numBins] = max + 1e-10; // Ensure max is included
-
-            // Discretize column
-            for (int i = 0; i < data.Rows; i++)
-            {
-                if (discretized[i] is null) discretized[i] = new int[_numFeatures];
-                double val = NumOps.ToDouble(data[i, j]);
-                int bin = (int)((val - min) / step);
-                if (bin >= numBins) bin = numBins - 1;
-                if (bin < 0) bin = 0;
-                discretized[i][j] = bin;
-            }
-        }
-
-        return discretized;
-    }
-
-    /// <summary>
-    /// Learns the DAG structure using greedy hill-climbing with BIC scoring.
-    /// Tries adding edges that improve BIC, respecting MaxParents and acyclicity.
-    /// </summary>
-    private List<int>[] LearnStructure(int[][] discretized)
-    {
-        if (_options.EnableDifferentialPrivacy)
-        {
-            return LearnStructureGreedyBayes(discretized);
-        }
-
-        return LearnStructureBIC(discretized);
-    }
-
-    /// <summary>
-    /// PrivBayes phase 1 (GreedyBayes): builds the k-degree Bayesian network by sampling each
-    /// (attribute, parent-set) pair with the EXPONENTIAL MECHANISM instead of taking the arg-max.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// Taking the highest-scoring parent set — as plain BIC structure learning does — leaks
-    /// information: the winning edge is a deterministic function of the data, so one individual's
-    /// record can change which edge appears and the released network reveals that. The exponential
-    /// mechanism instead samples candidate <c>c</c> with probability proportional to
-    /// <c>exp(eps' * score(c) / (2 * sensitivity))</c>, which makes high-scoring candidates likely
-    /// without making any of them certain, and that is what buys the privacy guarantee.
-    /// </para>
-    /// <para>
-    /// The score is mutual information <c>I(X; Pi)</c> between an attribute and a candidate parent
-    /// set — the paper's measure of how much a parent set explains an attribute. Its sensitivity over
-    /// a dataset of n rows is <c>(1/n)*log2(n) + ((n-1)/n)*log2(n/(n-1))</c>, which is what calibrates
-    /// the mechanism.
-    /// </para>
-    /// <para>
-    /// The structure budget is divided evenly across the d-1 selection steps, so the whole phase
-    /// consumes exactly <see cref="BayesianNetworkSynthOptions{T}.StructureBudgetFraction"/> of the
-    /// total epsilon; phase 2 spends the remainder.
-    /// </para>
-    /// </remarks>
-    private List<int>[] LearnStructureGreedyBayes(int[][] discretized)
-    {
+        var engine = AiDotNetEngine.Current;
         int d = _numFeatures;
-        int n = discretized.Length;
-        int k = Math.Max(1, _options.MaxParents);
+        var codes = new Tensor<int>[d];
 
-        var parents = new List<int>[d];
-        for (int j = 0; j < d; j++) parents[j] = new List<int>();
+        // Ancestral sampling, one attribute at a time for the whole batch: look up each row's
+        // conditional distribution from its sampled parents, then draw one category per row.
+        foreach (int j in _topoOrder)
+        {
+            var parentIndex = ParentConfigIndex(codes, _parents[j], numSamples);
+            var rows = engine.TensorIndexSelect(_conditionals[j], parentIndex, 0);
+            var oneHot = engine.TensorCategoricalSample(rows, 1, Random.Next());
+            codes[j] = engine.TensorArgMax(oneHot, 1).Reshape(new[] { numSamples });
+        }
 
-        if (d <= 1) return parents;
+        // Numeric columns: a uniform position inside the sampled bin.
+        var shape = new[] { numSamples, d };
+        var position = engine.TensorAdd(
+            engine.TensorStack(codes, 1).Cast<T>(),
+            engine.TensorRandomUniformRange(shape, NumOps.Zero, NumOps.One, Random.Next()));
+        var numeric = engine.TensorAdd(
+            engine.TensorMultiply(position, Broadcast(_binWidth, shape)),
+            Broadcast(_binLower, shape));
 
-        double structureBudget = _options.PrivacyBudget * _options.StructureBudgetFraction;
+        if (!_isCategorical.Any(c => c))
+        {
+            return numeric.ToMatrix();
+        }
 
-        // Budget per selection step: d-1 attributes are attached after the first seed node.
-        double stepBudget = structureBudget / (d - 1);
-        double sensitivity = MutualInformationSensitivity(n);
-
-        // The first node is chosen uniformly at random and has no parents; a uniform choice consumes
-        // no budget because it does not depend on the data at all.
-        var attached = new List<int> { Random.Next(d) };
-        var remaining = new List<int>();
+        // Categorical columns: the sampled category's own value.
+        var transposed = engine.TensorTranspose(numeric).Contiguous();
+        var columnsOut = new Tensor<T>[d];
         for (int j = 0; j < d; j++)
         {
-            if (j != attached[0]) remaining.Add(j);
+            columnsOut[j] = _isCategorical[j]
+                ? engine.TensorIndexSelect(_categoryValues[j], codes[j], 0)
+                : transposed.GetSlice(j);
         }
+
+        return engine.TensorStack(columnsOut, 1).ToMatrix();
+    }
+
+    /// <summary>
+    /// Maps every value to its attribute domain: equal-width bins for numeric columns, the category
+    /// index for categorical columns.
+    /// </summary>
+    /// <remarks>
+    /// PrivBayes assumes each attribute's domain is public. Supply
+    /// <see cref="BayesianNetworkSynthOptions{T}.DomainLowerBounds"/> and
+    /// <see cref="BayesianNetworkSynthOptions{T}.DomainUpperBounds"/> so the bin edges do not depend on
+    /// the private data; values outside the bounds fall into the end bins. Without bounds the observed
+    /// minimum and maximum are used, and those two numbers per column are then released without noise.
+    /// </remarks>
+    private Tensor<int>[] DiscretizeData(Matrix<T> data, IReadOnlyList<ColumnMetadata> columns)
+    {
+        var engine = AiDotNetEngine.Current;
+        int n = data.Rows;
+        int d = _numFeatures;
+        int numBins = Math.Max(1, _options.NumBins);
+
+        var x = Tensor<T>.FromMatrix(data);
+        _binLower = ResolveBound(_options.DomainLowerBounds, nameof(_options.DomainLowerBounds), d,
+            () => engine.TensorNegate(engine.ReduceMax(engine.TensorNegate(x), new[] { 0 }, false)));
+        var upper = ResolveBound(_options.DomainUpperBounds, nameof(_options.DomainUpperBounds), d,
+            () => engine.ReduceMax(x, new[] { 0 }, false));
+
+        // Width = (hi - lo) / bins, with master's 1e-10 floor replaced by 1 for a constant column.
+        var width = engine.TensorDivideScalar(engine.TensorSubtract(upper, _binLower), NumOps.FromDouble(numBins));
+        var ones = Filled(new[] { d }, NumOps.One);
+        _binWidth = engine.TensorWhere(engine.TensorGreaterThan(width, NumOps.FromDouble(1e-10)), width, ones);
+
+        var shape = new[] { n, d };
+        var scaled = engine.TensorDivide(engine.TensorSubtract(x, Broadcast(_binLower, shape)), Broadcast(_binWidth, shape));
+        var bins = engine.TensorClamp(engine.TensorFloor(scaled), NumOps.Zero, NumOps.FromDouble(numBins - 1));
+        var binsByColumn = engine.TensorTranspose(bins).Contiguous().Cast<int>();
+
+        var codes = new Tensor<int>[d];
+        _cardinality = new int[d];
+        _isCategorical = new bool[d];
+        _categoryValues = new Tensor<T>[d];
+        for (int j = 0; j < d; j++)
+        {
+            if (columns[j].IsCategorical)
+            {
+                var column = Tensor<T>.FromVector(data.GetColumn(j));
+                var values = engine.TensorUnique(column, true);
+                _isCategorical[j] = true;
+                _categoryValues[j] = values;
+                _cardinality[j] = values.Length;
+                codes[j] = engine.TensorSearchSorted(values, column, false);
+            }
+            else
+            {
+                _categoryValues[j] = new Tensor<T>(new[] { 0 });
+                _cardinality[j] = numBins;
+                codes[j] = binsByColumn.GetSlice(j);
+            }
+        }
+
+        return codes;
+    }
+
+    private static Tensor<T> ResolveBound(Vector<T>? bound, string name, int d, Func<Tensor<T>> fromData)
+    {
+        if (bound is null) return fromData();
+        if (bound.Length != d)
+        {
+            throw new ArgumentException(
+                $"{name} has {bound.Length} entries but the data has {d} columns.", name);
+        }
+
+        return Tensor<T>.FromVector(bound);
+    }
+
+    /// <summary>
+    /// Picks the network degree k: the largest k up to <paramref name="maxParents"/> (and d - 1) for which
+    /// <c>n eps2 / (2 (d - k) m^(k+1)) &gt;= theta</c>, with m the largest attribute domain. This is the
+    /// paper's theta-usefulness rule; with binary attributes it reduces to Definition 4.5,
+    /// <c>n eps / ((d - k) 2^(k+3)) &gt;= theta</c>. A non-positive theta disables the rule.
+    /// </summary>
+    internal static int SelectDegree(int n, int d, int maxCardinality, double eps2, double theta, int maxParents)
+    {
+        int cap = Math.Min(Math.Max(0, maxParents), Math.Max(0, d - 1));
+        if (theta <= 0) return cap;
+
+        for (int k = cap; k >= 1; k--)
+        {
+            double cells = Math.Pow(Math.Max(1, maxCardinality), k + 1);
+            if (n * eps2 / (2.0 * (d - k) * cells) >= theta) return k;
+        }
+
+        return 0;
+    }
+
+    /// <summary>
+    /// PrivBayes phase 1 (GreedyBayes): attaches attributes one at a time, each with a parent set of
+    /// exactly min(k, |V|) attached attributes chosen by the exponential mechanism. Returns the
+    /// attachment order, which is a topological order of the network.
+    /// </summary>
+    private int[] LearnStructureGreedyBayes(Tensor<int>[] codes, int k)
+    {
+        int d = _numFeatures;
+        int n = codes.Length == 0 ? 0 : codes[0].Length;
+
+        _parents = new List<int>[d];
+        for (int j = 0; j < d; j++) _parents[j] = new List<int>();
+
+        // The first node is chosen uniformly at random; a data-independent choice spends no budget.
+        var attached = new List<int> { Random.Next(d) };
+        var remaining = Enumerable.Range(0, d).Where(j => j != attached[0]).ToList();
+        if (d <= 1) return attached.ToArray();
+
+        double stepBudget = _options.PrivacyBudget * _options.StructureBudgetFraction / (d - 1);
 
         while (remaining.Count > 0)
         {
-            // Candidate set: every unattached attribute paired with every parent subset (size <= k)
-            // drawn from the already-attached attributes. Restricting parents to attached nodes is
-            // what keeps the result acyclic by construction, so no cycle check is needed.
-            var candidates = new List<(int Child, List<int> Parents, double Score)>();
+            int parentCount = Math.Min(k, attached.Count);
+            var candidates = new List<(int Child, List<int> Parents)>();
+            var scores = new List<Tensor<T>>();
+            double sensitivity = 0.0;
+
             foreach (int child in remaining)
             {
-                foreach (var parentSet in EnumerateParentSets(attached, k))
+                foreach (var parentSet in EnumerateParentSets(attached, parentCount))
                 {
-                    double mi = ComputeMutualInformation(discretized, child, parentSet);
-                    candidates.Add((child, parentSet, mi));
+                    candidates.Add((child, parentSet));
+                    scores.Add(MutualInformation(codes, child, parentSet, n));
+
+                    int parentDomain = parentSet.Aggregate(1, (acc, p) => acc * _cardinality[p]);
+                    bool binary = _cardinality[child] == 2 || parentDomain == 2;
+                    sensitivity = Math.Max(sensitivity, MutualInformationSensitivity(n, binary));
                 }
             }
 
-            if (candidates.Count == 0) break;
-
-            var chosen = SampleExponentialMechanism(candidates, stepBudget, sensitivity);
-            parents[chosen.Child] = chosen.Parents;
-            attached.Add(chosen.Child);
-            remaining.Remove(chosen.Child);
+            int chosen = SampleExponentialMechanism(scores, stepBudget, sensitivity);
+            _parents[candidates[chosen].Child] = candidates[chosen].Parents;
+            attached.Add(candidates[chosen].Child);
+            remaining.Remove(candidates[chosen].Child);
         }
 
-        return parents;
+        return attached.ToArray();
     }
 
     /// <summary>
-    /// Enumerates every subset of <paramref name="pool"/> with size from 0 to
-    /// <paramref name="maxSize"/>, which is the candidate parent-set space for one attribute.
+    /// Every subset of <paramref name="pool"/> with exactly <paramref name="size"/> members, in
+    /// lexicographic order of pool position (members keep the pool's order).
     /// </summary>
-    private static IEnumerable<List<int>> EnumerateParentSets(List<int> pool, int maxSize)
+    internal static IEnumerable<List<int>> EnumerateParentSets(IReadOnlyList<int> pool, int size)
     {
-        yield return new List<int>();
-
-        int limit = Math.Min(maxSize, pool.Count);
-        var current = new List<int>();
-
-        IEnumerable<List<int>> Build(int start, int depth)
+        if (size <= 0)
         {
-            for (int i = start; i < pool.Count; i++)
-            {
-                current.Add(pool[i]);
-                yield return new List<int>(current);
-                if (depth + 1 < limit)
-                {
-                    foreach (var deeper in Build(i + 1, depth + 1)) yield return deeper;
-                }
-
-                current.RemoveAt(current.Count - 1);
-            }
+            yield return new List<int>();
+            yield break;
         }
 
-        if (limit > 0)
+        if (size > pool.Count) yield break;
+
+        var picks = Enumerable.Range(0, size).ToArray();
+        while (true)
         {
-            foreach (var set in Build(0, 0)) yield return set;
+            yield return picks.Select(i => pool[i]).ToList();
+
+            int pos = size - 1;
+            while (pos >= 0 && picks[pos] == pool.Count - size + pos) pos--;
+            if (pos < 0) yield break;
+
+            picks[pos]++;
+            for (int r = pos + 1; r < size; r++) picks[r] = picks[r - 1] + 1;
         }
     }
 
     /// <summary>
-    /// Sensitivity of mutual information for a dataset of <paramref name="n"/> rows:
-    /// <c>(1/n)*log2(n) + ((n-1)/n)*log2(n/(n-1))</c>.
+    /// Sensitivity of mutual information over n rows (PrivBayes Lemma 1). Binary form, when X or Pi has
+    /// a binary domain: <c>(1/n) log2 n + ((n-1)/n) log2(n/(n-1))</c>. General form:
+    /// <c>(2/n) log2((n+1)/2) + ((n-1)/n) log2((n+1)/(n-1))</c>.
     /// </summary>
-    /// <remarks>
-    /// This is how much the score can change when one individual's record is added or removed, and it
-    /// is what the exponential mechanism must be calibrated against. It shrinks as n grows, so larger
-    /// datasets need proportionally less distortion for the same guarantee.
-    /// </remarks>
-    private static double MutualInformationSensitivity(int n)
+    internal static double MutualInformationSensitivity(int n, bool binary)
     {
         if (n <= 1) return 1.0;
 
-        double log2N = Math.Log(n, 2);
-        return (1.0 / n) * log2N + ((n - 1.0) / n) * Math.Log(n / (n - 1.0), 2);
+        double nm1 = n - 1.0;
+        return binary
+            ? (1.0 / n) * Math.Log(n, 2) + (nm1 / n) * Math.Log(n / nm1, 2)
+            : (2.0 / n) * Math.Log((n + 1.0) / 2.0, 2) + (nm1 / n) * Math.Log((n + 1.0) / nm1, 2);
     }
 
     /// <summary>
-    /// Mutual information <c>I(X; Pi)</c> in bits between attribute <paramref name="child"/> and the
-    /// joint of <paramref name="parentList"/>, estimated from the empirical distribution.
+    /// Mutual information I(X; Pi) in bits from the empirical joint distribution, as a one-element
+    /// tensor: H(X) + H(Pi) - H(X, Pi).
     /// </summary>
-    private double ComputeMutualInformation(int[][] data, int child, List<int> parentList)
+    private Tensor<T> MutualInformation(Tensor<int>[] codes, int child, IReadOnlyList<int> parents, int n)
+        => MutualInformation(JointCounts(codes, child, parents), n);
+
+    /// <summary>
+    /// Mutual information in bits of a [|dom(Pi)|, |dom(X)|] count table over n rows, as a one-element
+    /// tensor.
+    /// </summary>
+    internal static Tensor<T> MutualInformation(Tensor<T> counts, int n)
     {
-        int n = data.Length;
-        if (n == 0) return 0.0;
+        var engine = AiDotNetEngine.Current;
+        var joint = engine.TensorDivideScalar(counts, NumOps.FromDouble(Math.Max(1, n)));
+        var mi = engine.TensorSubtract(
+            engine.TensorAdd(Entropy(engine.ReduceSum(joint, new[] { 0 }, false)),
+                Entropy(engine.ReduceSum(joint, new[] { 1 }, false))),
+            Entropy(joint));
+        return engine.TensorClampMin(engine.TensorDivideScalar(mi, NumOps.FromDouble(LogTwo)), NumOps.Zero);
+    }
 
-        // An empty parent set explains nothing, so the mutual information is zero by definition.
-        if (parentList.Count == 0) return 0.0;
-
-        int numBins = _options.NumBins;
-        var joint = new Dictionary<string, int[]>();
-        var childCounts = new int[numBins];
-        var parentTotals = new Dictionary<string, int>();
-
-        for (int i = 0; i < n; i++)
-        {
-            int bin = data[i][child];
-            if (bin < 0 || bin >= numBins) continue;
-
-            string key = GetParentKey(data[i], parentList);
-            if (!joint.TryGetValue(key, out var row))
-            {
-                row = new int[numBins];
-                joint[key] = row;
-            }
-
-            row[bin]++;
-            childCounts[bin]++;
-            parentTotals[key] = parentTotals.TryGetValue(key, out int t) ? t + 1 : 1;
-        }
-
-        double mi = 0.0;
-        foreach (var kvp in joint)
-        {
-            double pParent = parentTotals[kvp.Key] / (double)n;
-            for (int b = 0; b < numBins; b++)
-            {
-                int c = kvp.Value[b];
-                if (c == 0) continue;
-
-                double pJoint = c / (double)n;
-                double pChild = childCounts[b] / (double)n;
-                if (pChild <= 0 || pParent <= 0) continue;
-
-                mi += pJoint * Math.Log(pJoint / (pParent * pChild), 2);
-            }
-        }
-
-        return mi < 0 ? 0 : mi;
+    /// <summary>Shannon entropy in nats of a distribution tensor, as a one-element tensor (0 log 0 = 0).</summary>
+    private static Tensor<T> Entropy(Tensor<T> p)
+    {
+        var engine = AiDotNetEngine.Current;
+        var flat = p.Reshape(new[] { p.Length });
+        var safe = engine.TensorWhere(engine.TensorGreaterThan(flat, NumOps.Zero), flat, Filled(new[] { p.Length }, NumOps.One));
+        return engine.TensorNegate(engine.ReduceSum(engine.TensorMultiply(flat, engine.TensorLog(safe)), new[] { 0 }, true));
     }
 
     /// <summary>
-    /// Samples one candidate with probability proportional to
-    /// <c>exp(epsilon * score / (2 * sensitivity))</c>.
+    /// Counts of every (parent configuration, child value) cell, zero cells included, shaped
+    /// [|dom(Pi)|, |dom(X)|]. Parent configurations are mixed-radix in parent-list order.
     /// </summary>
-    /// <remarks>
-    /// Weights are computed relative to the maximum score before exponentiating. Exponentiating the
-    /// raw scores directly overflows to infinity as soon as the exponent is large, which would collapse
-    /// the distribution onto a single candidate and silently destroy the privacy guarantee this
-    /// mechanism exists to provide.
-    /// </remarks>
-    private (int Child, List<int> Parents, double Score) SampleExponentialMechanism(
-        List<(int Child, List<int> Parents, double Score)> candidates,
-        double epsilon,
-        double sensitivity)
+    private Tensor<T> JointCounts(Tensor<int>[] codes, int child, IReadOnlyList<int> parents)
+        => JointCounts(codes[child], _cardinality[child], ParentConfigIndex(codes, parents, codes[child].Length),
+            parents.Aggregate(1, (acc, p) => acc * _cardinality[p]));
+
+    /// <summary>Counts of every (parent configuration, child value) cell as a [parentDomain, childDomain] table.</summary>
+    internal static Tensor<T> JointCounts(Tensor<int> childCodes, int childDomain, Tensor<int> parentIndex, int parentDomain)
     {
-        if (candidates.Count == 1 || epsilon <= 0 || sensitivity <= 0)
+        var engine = AiDotNetEngine.Current;
+        var cell = engine.TensorAdd(engine.TensorMultiplyScalar(parentIndex, childDomain), childCodes);
+        return engine.TensorBinCount(cell, parentDomain * childDomain).Cast<T>()
+            .Reshape(new[] { parentDomain, childDomain });
+    }
+
+    /// <summary>Mixed-radix index of each row's parent configuration (zero when there are no parents).</summary>
+    private Tensor<int> ParentConfigIndex(Tensor<int>[] codes, IReadOnlyList<int> parents, int rows)
+    {
+        var engine = AiDotNetEngine.Current;
+        var index = new Tensor<int>(new[] { rows });
+        foreach (int p in parents)
         {
-            // A non-positive budget cannot fund a data-dependent choice, so fall back to a uniform
-            // draw rather than leaking the arg-max.
-            return candidates[Random.Next(candidates.Count)];
+            index = engine.TensorAdd(engine.TensorMultiplyScalar(index, _cardinality[p]), codes[p]);
         }
 
-        double scale = epsilon / (2.0 * sensitivity);
+        return index;
+    }
 
-        double maxScore = double.NegativeInfinity;
-        foreach (var c in candidates)
+    /// <summary>
+    /// Exponential mechanism: draws candidate c with probability proportional to
+    /// <c>exp(epsilon * score(c) / (2 * sensitivity))</c>. Scores are shifted by their maximum first so
+    /// the exponent cannot overflow. Returns the chosen index.
+    /// </summary>
+    private int SampleExponentialMechanism(List<Tensor<T>> scores, double epsilon, double sensitivity)
+    {
+        if (scores.Count == 1 || epsilon <= 0 || sensitivity <= 0)
         {
-            if (c.Score > maxScore) maxScore = c.Score;
+            // A non-positive budget cannot fund a data-dependent choice, so draw uniformly.
+            return Random.Next(scores.Count);
         }
 
-        var weights = new double[candidates.Count];
-        double total = 0.0;
-        for (int i = 0; i < candidates.Count; i++)
+        var engine = AiDotNetEngine.Current;
+        var all = engine.TensorConcatenate(scores.ToArray(), 0);
+        var shifted = engine.TensorSubtractScalar(all, engine.TensorMaxValue(all));
+        var weights = engine.TensorExp(engine.TensorMultiplyScalar(shifted, NumOps.FromDouble(epsilon / (2.0 * sensitivity))));
+        var oneHot = engine.TensorCategoricalSample(weights, 0, Random.Next());
+        return engine.TensorArgMax(oneHot, 0).GetFlat(0);
+    }
+
+    /// <summary>
+    /// PrivBayes phase 2 (NoisyConditionals). The joints of attributes k+1..d get Laplace noise of scale
+    /// 2(d-k)/(n eps2); the first k conditionals are marginalized out of the (k+1)-th noisy joint, whose
+    /// parent set is exactly the first k attributes.
+    /// </summary>
+    private Tensor<T>[] NoisyConditionals(Tensor<int>[] codes, int k, double eps2)
+    {
+        var engine = AiDotNetEngine.Current;
+        int d = _numFeatures;
+        int n = codes[0].Length;
+        NoisedMarginalCount = d - k;
+        double scale = n > 0 && eps2 > 0 ? 2.0 * NoisedMarginalCount / (n * eps2) : 0.0;
+
+        var conditionals = new Tensor<T>[d];
+        Tensor<T>? anchor = null;
+        for (int i = k; i < d; i++)
         {
-            weights[i] = Math.Exp(scale * (candidates[i].Score - maxScore));
-            total += weights[i];
+            int x = _topoOrder[i];
+            var noisy = NoisyJoint(JointCounts(codes, x, _parents[x]), n, scale);
+            conditionals[x] = Conditional(noisy);
+            if (i == k) anchor = noisy;
         }
 
-        if (total <= 0 || double.IsNaN(total) || double.IsInfinity(total))
+        if (anchor is not null && k > 0)
         {
-            return candidates[Random.Next(candidates.Count)];
+            // Axis order of the anchor: the first k attached attributes, then X_{k+1}.
+            var full = anchor.Reshape(_topoOrder.Take(k + 1).Select(a => _cardinality[a]).ToArray());
+            for (int i = 0; i < k; i++)
+            {
+                var axes = Enumerable.Range(i + 1, k - i).ToArray();
+                var marginal = engine.ReduceSum(full, axes, false);
+                int childDomain = _cardinality[_topoOrder[i]];
+                conditionals[_topoOrder[i]] = Conditional(
+                    marginal.Reshape(new[] { marginal.Length / childDomain, childDomain }));
+            }
         }
 
-        double u = Random.NextDouble() * total;
-        double cum = 0.0;
-        for (int i = 0; i < candidates.Count; i++)
+        return conditionals;
+    }
+
+    /// <summary>
+    /// counts / n plus Laplace(scale) noise in every cell, negatives clipped, renormalized; uniform when
+    /// every cell clipped away (data-independent, so it costs no budget).
+    /// </summary>
+    private Tensor<T> NoisyJoint(Tensor<T> counts, int n, double scale)
+    {
+        var engine = AiDotNetEngine.Current;
+        var fractions = engine.TensorDivideScalar(counts, NumOps.FromDouble(Math.Max(1, n)));
+        var noisy = engine.TensorClampMin(engine.TensorAdd(fractions, LaplaceNoise(counts.Shape.ToArray(), scale)), NumOps.Zero);
+        T total = engine.TensorSum(noisy);
+        if (NumOps.GreaterThan(total, NumOps.Zero))
         {
-            cum += weights[i];
-            if (u <= cum) return candidates[i];
+            return engine.TensorDivideScalar(noisy, total);
         }
 
-        return candidates[candidates.Count - 1];
+        return Filled(counts.Shape.ToArray(), NumOps.FromDouble(1.0 / counts.Length));
+    }
+
+    /// <summary>
+    /// Zero-mean Laplace noise of scale b by inverse transform: <c>-b sign(u) ln(1 - 2|u|)</c>,
+    /// u ~ U[-0.5, 0.5), drawn by the engine with one seed from the generator's RNG.
+    /// </summary>
+    private Tensor<T> LaplaceNoise(int[] shape, double scale)
+    {
+        var engine = AiDotNetEngine.Current;
+        if (scale <= 0) return new Tensor<T>(shape);
+
+        var u = engine.TensorRandomUniformRange(shape, NumOps.FromDouble(-0.5), NumOps.FromDouble(0.5), Random.Next());
+        var magnitude = engine.TensorClampMin(
+            engine.ScalarMinusTensor(NumOps.One, engine.TensorMultiplyScalar(engine.TensorAbs(u), NumOps.FromDouble(2.0))),
+            NumOps.FromDouble(1e-30));
+        return engine.TensorMultiplyScalar(engine.TensorMultiply(engine.TensorSign(u), engine.TensorLog(magnitude)),
+            NumOps.FromDouble(-scale));
+    }
+
+    /// <summary>Normalizes each row of a [q, r] joint to a conditional; empty rows become uniform.</summary>
+    private static Tensor<T> Conditional(Tensor<T> joint)
+    {
+        var engine = AiDotNetEngine.Current;
+        int r = joint.Shape[joint.Rank - 1];
+        int q = joint.Length / r;
+        var shape = new[] { q, r };
+        var table = joint.Reshape(shape);
+        var rowTotals = engine.TensorBroadcastTo(engine.ReduceSum(table, new[] { 1 }, true), shape).Contiguous();
+        var hasMass = engine.TensorGreaterThan(rowTotals, NumOps.Zero);
+        var safe = engine.TensorWhere(hasMass, rowTotals, Filled(shape, NumOps.One));
+        return engine.TensorWhere(hasMass, engine.TensorDivide(table, safe), Filled(shape, NumOps.FromDouble(1.0 / r)));
     }
 
     /// <summary>
     /// Non-private BIC structure search, used only when
-    /// <see cref="BayesianNetworkSynthOptions{T}.EnableDifferentialPrivacy"/> is false.
+    /// <see cref="BayesianNetworkSynthOptions{T}.EnableDifferentialPrivacy"/> is false. Each pass adds,
+    /// per child, the acyclic parent with the largest positive BIC gain.
     /// </summary>
-    private List<int>[] LearnStructureBIC(int[][] discretized)
+    private List<int>[] LearnStructureBIC(Tensor<int>[] codes)
     {
+        var engine = AiDotNetEngine.Current;
         var parents = new List<int>[_numFeatures];
-        for (int j = 0; j < _numFeatures; j++)
-            parents[j] = new List<int>();
+        for (int j = 0; j < _numFeatures; j++) parents[j] = new List<int>();
 
-        int numBins = _options.NumBins;
-        int n = discretized.Length;
-        double logN = Math.Log(n);
+        int n = codes[0].Length;
+        T halfLogN = NumOps.FromDouble(0.5 * Math.Log(Math.Max(1, n)));
+        int maxParents = Math.Max(0, _options.MaxParents);
 
         for (int iter = 0; iter < _options.MaxIterations; iter++)
         {
@@ -432,35 +547,24 @@ public class BayesianNetworkSynthGenerator<T> : SyntheticTabularGeneratorBase<T>
 
             for (int child = 0; child < _numFeatures; child++)
             {
-                if (parents[child].Count >= _options.MaxParents) continue;
+                if (parents[child].Count >= maxParents) continue;
 
-                double bestGain = 0;
-                int bestParent = -1;
+                var options = Enumerable.Range(0, _numFeatures)
+                    .Where(p => p != child && !parents[child].Contains(p) && !WouldCreateCycle(parents, p, child))
+                    .ToList();
+                if (options.Count == 0) continue;
 
-                for (int parent = 0; parent < _numFeatures; parent++)
+                var current = LocalBIC(codes, child, parents[child], halfLogN);
+                var gains = engine.TensorSubtract(
+                    engine.TensorConcatenate(options
+                        .Select(p => LocalBIC(codes, child, new List<int>(parents[child]) { p }, halfLogN))
+                        .ToArray(), 0),
+                    engine.TensorBroadcastTo(current, new[] { options.Count }).Contiguous());
+
+                int best = engine.TensorArgMax(gains, 0).GetFlat(0);
+                if (IsPositive(gains.GetFlat(best)))
                 {
-                    if (parent == child) continue;
-                    if (parents[child].Contains(parent)) continue;
-
-                    // Check if adding this edge would create a cycle
-                    if (WouldCreateCycle(parents, parent, child)) continue;
-
-                    // Compute BIC gain of adding parent→child edge
-                    double bicWithout = ComputeLocalBIC(discretized, child, parents[child], numBins, n, logN);
-                    var withParent = new List<int>(parents[child]) { parent };
-                    double bicWith = ComputeLocalBIC(discretized, child, withParent, numBins, n, logN);
-                    double gain = bicWith - bicWithout;
-
-                    if (gain > bestGain)
-                    {
-                        bestGain = gain;
-                        bestParent = parent;
-                    }
-                }
-
-                if (bestParent >= 0)
-                {
-                    parents[child].Add(bestParent);
+                    parents[child].Add(options[best]);
                     improved = true;
                 }
             }
@@ -471,12 +575,13 @@ public class BayesianNetworkSynthGenerator<T> : SyntheticTabularGeneratorBase<T>
         return parents;
     }
 
+    private static bool IsPositive(T value) => NumOps.GreaterThan(value, NumOps.Zero);
+
     /// <summary>
     /// Checks if adding an edge from parent to child would create a cycle in the DAG.
     /// </summary>
-    private bool WouldCreateCycle(List<int>[] parents, int newParent, int child)
+    private static bool WouldCreateCycle(List<int>[] parents, int newParent, int child)
     {
-        // DFS from child: if we can reach newParent, adding the edge would create a cycle
         var visited = new HashSet<int>();
         var stack = new Stack<int>();
         stack.Push(newParent);
@@ -494,53 +599,22 @@ public class BayesianNetworkSynthGenerator<T> : SyntheticTabularGeneratorBase<T>
     }
 
     /// <summary>
-    /// Computes the BIC score for a node given its parent set.
-    /// BIC = log-likelihood - (k/2) * log(n), where k is number of parameters.
+    /// Local BIC score as a one-element tensor: log-likelihood minus (q (r - 1) / 2) log n, where q is
+    /// the number of parent configurations and r the child's domain size (Schwarz 1978).
     /// </summary>
-    private static double ComputeLocalBIC(int[][] data, int child, List<int> parentList, int numBins, int n, double logN)
+    private Tensor<T> LocalBIC(Tensor<int>[] codes, int child, IReadOnlyList<int> parents, T halfLogN)
     {
-        // Count joint frequencies
-        var counts = new Dictionary<string, int[]>();
-        for (int i = 0; i < n; i++)
-        {
-            string key = GetParentKey(data[i], parentList);
-            if (!counts.ContainsKey(key))
-                counts[key] = new int[numBins];
-            int bin = data[i][child];
-            if (bin >= 0 && bin < numBins)
-                counts[key][bin]++;
-        }
+        var engine = AiDotNetEngine.Current;
+        var counts = JointCounts(codes, child, parents);
+        int q = counts.Shape[0];
+        int r = counts.Shape[1];
 
-        // Compute log-likelihood
-        double ll = 0;
-        foreach (var kvp in counts)
-        {
-            int total = 0;
-            for (int b = 0; b < numBins; b++) total += kvp.Value[b];
-            if (total == 0) continue;
-            for (int b = 0; b < numBins; b++)
-            {
-                if (kvp.Value[b] > 0)
-                    ll += kvp.Value[b] * Math.Log((double)kvp.Value[b] / total);
-            }
-        }
-
-        // Penalty: number of parameters = numParentConfigs * (numBins - 1)
-        int numConfigs = Math.Max(counts.Count, 1);
-        int k = numConfigs * (numBins - 1);
-        return ll - 0.5 * k * logN;
-    }
-
-    /// <summary>
-    /// Creates a string key from the parent values of a data row.
-    /// </summary>
-    private static string GetParentKey(int[] row, List<int> parentList)
-    {
-        if (parentList.Count == 0) return "";
-        var parts = new int[parentList.Count];
-        for (int p = 0; p < parentList.Count; p++)
-            parts[p] = row[parentList[p]];
-        return string.Join(",", parts);
+        // sum c log(c / R) = sum c log c - sum R log R, with 0 log 0 = 0.
+        var logLikelihood = engine.TensorSubtract(
+            engine.TensorNegate(Entropy(counts)),
+            engine.TensorNegate(Entropy(engine.ReduceSum(counts, new[] { 1 }, false))));
+        return engine.TensorSubtractScalar(logLikelihood,
+            NumOps.Multiply(NumOps.FromDouble(q * (r - 1.0)), halfLogN));
     }
 
     /// <summary>
@@ -566,186 +640,28 @@ public class BayesianNetworkSynthGenerator<T> : SyntheticTabularGeneratorBase<T>
     }
 
     /// <summary>
-    /// Estimates conditional probability tables (CPTs) for each feature given its parents.
-    /// Uses Laplace smoothing to prevent zero probabilities.
+    /// Non-private conditionals with Laplace (additive) smoothing: (count + alpha) / (row + r alpha).
     /// </summary>
-    private Dictionary<string, double[]>[] EstimateCPTs(int[][] discretized)
+    private Tensor<T>[] SmoothedConditionals(Tensor<int>[] codes)
     {
-        int numBins = _options.NumBins;
-        double smooth = _options.LaplaceSmoothing;
-        var cpts = new Dictionary<string, double[]>[_numFeatures];
-
+        var engine = AiDotNetEngine.Current;
+        T alpha = NumOps.FromDouble(Math.Max(0.0, _options.LaplaceSmoothing));
+        var conditionals = new Tensor<T>[_numFeatures];
         for (int j = 0; j < _numFeatures; j++)
         {
-            cpts[j] = new Dictionary<string, double[]>();
-            var counts = new Dictionary<string, int[]>();
-
-            for (int i = 0; i < discretized.Length; i++)
-            {
-                string key = GetParentKey(discretized[i], _parents[j]);
-                if (!counts.ContainsKey(key))
-                    counts[key] = new int[numBins];
-                int bin = discretized[i][j];
-                if (bin >= 0 && bin < numBins)
-                    counts[key][bin]++;
-            }
-
-            // PrivBayes phase 2: inject Laplace NOISE into the marginal before deriving conditionals.
-            //
-            // This is the step that makes the released distributions differentially private, and it is
-            // distinct from LaplaceSmoothing above (a prior that merely avoids zero probabilities and
-            // provides no guarantee). The noise is added to the marginal expressed as FRACTIONS of n:
-            // one individual can move a joint cell by 1/n in each of two cells, so the per-marginal
-            // sensitivity is 2/n. The (d - k) noisy marginals share the remaining budget, giving a
-            // scale of 2*(d-k)/(n*eps2).
-            //
-            // Noise can push cells negative, which is not a distribution, so the standard
-            // post-processing applies: clamp negatives to zero and renormalize. Post-processing a
-            // differentially private release cannot weaken its guarantee.
-            if (_options.EnableDifferentialPrivacy)
-            {
-                double eps2 = _options.PrivacyBudget * (1.0 - _options.StructureBudgetFraction);
-                int marginalCount = Math.Max(1, _numFeatures - Math.Max(1, _options.MaxParents));
-                int n = discretized.Length;
-                double noiseScale = n > 0 && eps2 > 0
-                    ? 2.0 * marginalCount / (n * eps2)
-                    : 0.0;
-
-                foreach (var kvp in counts)
-                {
-                    var noisy = new double[numBins];
-                    for (int b = 0; b < numBins; b++)
-                    {
-                        double fraction = n > 0 ? kvp.Value[b] / (double)n : 0.0;
-                        double perturbed = fraction + SampleLaplace(noiseScale);
-                        noisy[b] = perturbed > 0 ? perturbed : 0.0;
-                    }
-
-                    double total = 0;
-                    for (int b = 0; b < numBins; b++) total += noisy[b];
-
-                    var probs = new double[numBins];
-                    if (total > 0)
-                    {
-                        for (int b = 0; b < numBins; b++) probs[b] = noisy[b] / total;
-                    }
-                    else
-                    {
-                        // Every cell was clipped away, which happens when the true marginal is tiny
-                        // relative to the noise. Uniform is the maximum-entropy fallback and, being
-                        // data-independent, costs no additional budget.
-                        double p = 1.0 / numBins;
-                        for (int b = 0; b < numBins; b++) probs[b] = p;
-                    }
-
-                    cpts[j][kvp.Key] = probs;
-                }
-            }
-            else
-            {
-                // Convert counts to probabilities with Laplace smoothing (no privacy guarantee).
-                foreach (var kvp in counts)
-                {
-                    double total = 0;
-                    for (int b = 0; b < numBins; b++) total += kvp.Value[b] + smooth;
-                    var probs = new double[numBins];
-                    for (int b = 0; b < numBins; b++)
-                        probs[b] = (kvp.Value[b] + smooth) / total;
-                    cpts[j][kvp.Key] = probs;
-                }
-            }
-
-            // Default CPT for unseen parent configurations
-            if (!cpts[j].ContainsKey("__default__"))
-            {
-                var defaultProbs = new double[numBins];
-                double p = 1.0 / numBins;
-                for (int b = 0; b < numBins; b++)
-                    defaultProbs[b] = p;
-                cpts[j]["__default__"] = defaultProbs;
-            }
+            conditionals[j] = Conditional(engine.TensorAddScalar(JointCounts(codes, j, _parents[j]), alpha));
         }
 
-        return cpts;
+        return conditionals;
     }
 
-    /// <summary>
-    /// Generates a single sample using ancestral sampling (topological order).
-    /// </summary>
-    private double[] AncestralSample()
+    private static Tensor<T> Broadcast(Tensor<T> row, int[] shape)
+        => AiDotNetEngine.Current.TensorBroadcastTo(row.Reshape(new[] { 1, row.Length }), shape).Contiguous();
+
+    private static Tensor<T> Filled(int[] shape, T value)
     {
-        int numBins = _options.NumBins;
-        var binValues = new int[_numFeatures];
-        var result = new double[_numFeatures];
-
-        // Sample in topological order (parents before children)
-        foreach (int j in _topoOrder)
-        {
-            // Build parent key from already-sampled parent values
-            string key = "";
-            if (_parents[j].Count > 0)
-            {
-                var parts = new int[_parents[j].Count];
-                for (int p = 0; p < _parents[j].Count; p++)
-                    parts[p] = binValues[_parents[j][p]];
-                key = string.Join(",", parts);
-            }
-
-            // Get CPT for this parent configuration
-            double[] probs;
-            if (_cpts[j].TryGetValue(key, out var found))
-                probs = found;
-            else
-                probs = _cpts[j]["__default__"];
-
-            // Sample from the distribution
-            int sampledBin = SampleFromDistribution(probs);
-            binValues[j] = sampledBin;
-
-            // Convert bin back to continuous value (sample uniformly within the bin)
-            double lo = _binEdges[j][sampledBin];
-            double hi = sampledBin + 1 < _binEdges[j].Length ? _binEdges[j][sampledBin + 1] : lo + 1.0;
-            result[j] = lo + Random.NextDouble() * (hi - lo);
-        }
-
-        return result;
-    }
-
-    /// <summary>
-    /// Draws a sample from the zero-mean Laplace distribution with the given scale <c>b</c>.
-    /// </summary>
-    /// <remarks>
-    /// Uses inverse transform sampling on <c>u ~ Uniform(-0.5, 0.5)</c>:
-    /// <c>-b * sign(u) * ln(1 - 2|u|)</c>. Drawing from the seeded <see cref="Random"/> keeps
-    /// generation reproducible for a given seed, which matters because a synthesizer whose output
-    /// cannot be reproduced cannot be tested.
-    /// </remarks>
-    private double SampleLaplace(double scale)
-    {
-        if (scale <= 0) return 0.0;
-
-        double u = Random.NextDouble() - 0.5;
-
-        // Guard the logarithm: |u| = 0.5 would give ln(0).
-        double magnitude = 1.0 - 2.0 * Math.Abs(u);
-        if (magnitude <= 0) magnitude = double.Epsilon;
-
-        return -scale * Math.Sign(u) * Math.Log(magnitude);
-    }
-
-    /// <summary>
-    /// Samples a bin index from a discrete probability distribution.
-    /// </summary>
-    private int SampleFromDistribution(double[] probs)
-    {
-        double u = Random.NextDouble();
-        double cumSum = 0;
-        for (int b = 0; b < probs.Length; b++)
-        {
-            cumSum += probs[b];
-            if (u <= cumSum) return b;
-        }
-
-        return probs.Length - 1;
+        var tensor = new Tensor<T>(shape);
+        AiDotNetEngine.Current.TensorFill(tensor, value);
+        return tensor;
     }
 }

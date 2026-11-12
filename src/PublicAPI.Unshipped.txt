@@ -22565,3 +22565,9 @@ override AiDotNet.Diffusion.LatentDiffusionModelBase<T>.IsBatchedTrainingSample(
 virtual AiDotNet.Diffusion.DiffusionModelBase<T>.IsBatchedTrainingSample(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! sample) -> bool
 *REMOVED*AiDotNet.Document.Options.DocBankOptions.LearningRate.get -> double
 AiDotNet.Document.Options.DocBankOptions.LearningRate.get -> double?
+AiDotNet.Models.Options.BayesianNetworkSynthOptions<T>.UsefulnessThreshold.get -> double
+AiDotNet.Models.Options.BayesianNetworkSynthOptions<T>.UsefulnessThreshold.set -> void
+AiDotNet.Models.Options.BayesianNetworkSynthOptions<T>.DomainLowerBounds.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
+AiDotNet.Models.Options.BayesianNetworkSynthOptions<T>.DomainLowerBounds.set -> void
+AiDotNet.Models.Options.BayesianNetworkSynthOptions<T>.DomainUpperBounds.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
+AiDotNet.Models.Options.BayesianNetworkSynthOptions<T>.DomainUpperBounds.set -> void
