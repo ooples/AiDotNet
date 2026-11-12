@@ -108,123 +108,84 @@ public partial class FastABODDetector<T> : AnomalyDetectorBase<T>
     {
         ValidateInput(X);
 
-        bool isSameAsTraining = excludeSelf;
-        var scores = new Vector<T>(X.Rows);
-
-        for (int p = 0; p < X.Rows; p++)
-        {
-            var pointP = new Vector<T>(X.GetRowReadOnlySpan(p).ToArray());
-
-            int queryIndex = isSameAsTraining ? p : -1;
-            var neighbors = GetKNearestNeighbors(pointP, queryIndex);
-
-            T abof = ComputeABOF(pointP, neighbors);
-
-            scores[p] = NumOps.GreaterThan(abof, NumOps.Zero)
-                ? NumOps.Divide(NumOps.One, abof)
-                : NumOps.MaxValue;
-        }
-
-        return scores;
-    }
-
-    private List<(int Index, Vector<T> Point, T Distance)> GetKNearestNeighbors(Vector<T> queryPoint, int queryIndex = -1)
-    {
         var trainingData = _trainingData;
         if (trainingData == null)
         {
             throw new InvalidOperationException("Model not properly fitted.");
         }
 
-        var distances = new List<(int Index, Vector<T> Point, T Distance)>();
-
-        for (int i = 0; i < trainingData.Rows; i++)
-        {
-            if (i == queryIndex) continue;
-
-            var point = new Vector<T>(trainingData.GetRowReadOnlySpan(i).ToArray());
-
-            // Euclidean distance via IEngine: sqrt(dot(diff, diff))
-            var diff = Engine.Subtract(point, queryPoint);
-            T distSq = Engine.DotProduct(diff, diff);
-            T dist = NumOps.Sqrt(distSq);
-
-            // Skip zero-distance duplicates
-            if (NumOps.GreaterThan(dist, NumOps.Zero))
-            {
-                distances.Add((i, point, dist));
-            }
-        }
-
-        return distances
-            .OrderBy(x => NumOps.ToDouble(x.Distance))
-            .Take(_k)
-            .ToList();
-    }
-
-    private T ComputeABOF(Vector<T> point, List<(int Index, Vector<T> Point, T Distance)> neighbors)
-    {
-        if (neighbors.Count < 2) return NumOps.MaxValue;
-
+        var engine = Engine;
+        int m = X.Rows;
+        int nTraining = trainingData.Rows;
+        int d = X.Columns;
+        int k = Math.Min(_k, nTraining);
         T epsilon = NumOps.FromDouble(1e-10);
-        var weightedAngles = new List<T>();
-        var weights = new List<T>();
+        var training = AnomalyTensorOps.ToTensor(trainingData);
+        var queries = AnomalyTensorOps.ToTensor(X);
 
-        for (int i = 0; i < neighbors.Count; i++)
+        // k nearest training points at a positive distance (zero-distance duplicates and, for the training
+        // scores, the point itself skipped); nearest first, by index on ties
+        var distances = AnomalyTensorOps.PairwiseDistances(queries, training);
+        if (excludeSelf)
         {
-            var pointA = neighbors[i].Point;
-            T distA = neighbors[i].Distance;
-
-            // PA = A - P via IEngine
-            var pa = Engine.Subtract(pointA, point);
-
-            for (int k = i + 1; k < neighbors.Count; k++)
-            {
-                var pointB = neighbors[k].Point;
-                T distB = neighbors[k].Distance;
-
-                // PB = B - P via IEngine
-                var pb = Engine.Subtract(pointB, point);
-
-                // cos(angle) = (PA · PB) / (|PA| * |PB|) via vectorized dot product
-                T dot = Engine.DotProduct(pa, pb);
-                T cosAngle = NumOps.Divide(dot, NumOps.Multiply(distA, distB));
-
-                T negOne = NumOps.FromDouble(-1.0);
-                if (NumOps.LessThan(cosAngle, negOne)) cosAngle = negOne;
-                if (NumOps.GreaterThan(cosAngle, NumOps.One)) cosAngle = NumOps.One;
-
-                // Weight = 1 / (distA² * distB²)
-                T distASq = NumOps.Multiply(distA, distA);
-                T distBSq = NumOps.Multiply(distB, distB);
-                T weight = NumOps.Divide(NumOps.One, NumOps.Multiply(distASq, distBSq));
-
-                weightedAngles.Add(NumOps.Multiply(cosAngle, weight));
-                weights.Add(weight);
-            }
+            distances = engine.TensorMaskedFill(distances,
+                engine.TensorEqScalar(engine.TensorEye<T>(m), NumOps.One), NumOps.Zero);
         }
 
-        if (weights.Count == 0) return NumOps.MaxValue;
+        var (sorted, order) = engine.TensorSort(distances, 1, false);
+        var zeroCount = engine.ReduceSum(engine.TensorEquals(sorted, Tensor<T>.CreateZeros(new[] { m, nTraining })), new[] { 1 }, false);
+        var slots = AnomalyTensorOps.BroadcastRow(engine.TensorArange<T>(0, k, 1), m);
+        var available = engine.TensorSubtract(engine.Fill(m, NumOps.FromDouble(nTraining)).AsTensor(), zeroCount);
+        var slotValid = engine.TensorLessThan(slots, AnomalyTensorOps.BroadcastColumn(available, k));
+        var positions = engine.TensorMin(engine.TensorAdd(slots, AnomalyTensorOps.BroadcastColumn(zeroCount, k)),
+            NumOps.FromDouble(nTraining - 1));
+        var neighborPositions = positions.Cast<int>();
+        var neighborCount = engine.ReduceSum(slotValid, new[] { 1 }, false);
 
-        // Weighted variance
-        T sumWeights = NumOps.Zero;
-        T sumWeightedAngles = NumOps.Zero;
-        foreach (var w in weights) sumWeights = NumOps.Add(sumWeights, w);
-        foreach (var wa in weightedAngles) sumWeightedAngles = NumOps.Add(sumWeightedAngles, wa);
+        // ABOF over the neighbour pairs (A, B), A before B: variance of cos(PA, PB) weighted by
+        // 1 / (|PA|^2 |PB|^2), where |PA| is the neighbour distance
+        var neighborIndex = engine.TensorTakeAlongDim(order, neighborPositions, 1);
+        var neighborDist = engine.TensorTakeAlongDim(sorted, neighborPositions, 1);
+        var neighborRows = engine.Reshape(
+            engine.TensorGather(training, engine.Reshape(neighborIndex, new[] { m * k }), 0), new[] { m, k, d });
+        var pa = engine.TensorSubtract(neighborRows,
+            engine.TensorBroadcastTo(engine.Reshape(queries, new[] { m, 1, d }), new[] { m, k, d }));
+        var dots = engine.TensorBatchMatMul(pa, engine.TensorSwapAxes(pa, 1, 2));
 
-        if (NumOps.LessThan(sumWeights, epsilon)) return NumOps.MaxValue;
+        var distA = engine.TensorBroadcastTo(engine.Reshape(neighborDist, new[] { m, k, 1 }), new[] { m, k, k });
+        var distB = engine.TensorBroadcastTo(engine.Reshape(neighborDist, new[] { m, 1, k }), new[] { m, k, k });
+        var validA = engine.TensorBroadcastTo(engine.Reshape(slotValid, new[] { m, k, 1 }), new[] { m, k, k });
+        var validB = engine.TensorBroadcastTo(engine.Reshape(slotValid, new[] { m, 1, k }), new[] { m, k, k });
+        var upper = engine.TensorBroadcastTo(engine.Reshape(
+            engine.TensorTranspose(engine.TensorTril(Tensor<T>.CreateOnes(new[] { k, k }), -1)), new[] { 1, k, k }), new[] { m, k, k });
+        var mask = engine.TensorMultiply(upper, engine.TensorMultiply(validA, validB));
+        var zeros = Tensor<T>.CreateZeros(new[] { m, k, k });
+        var onesCube = Tensor<T>.CreateOnes(new[] { m, k, k });
 
-        T mean = NumOps.Divide(sumWeightedAngles, sumWeights);
+        var distProduct = engine.TensorWhere(mask, engine.TensorMultiply(distA, distB), onesCube);
+        var cosAngle = engine.TensorClamp(engine.TensorDivide(dots, distProduct), NumOps.FromDouble(-1.0), NumOps.One);
+        var sqProduct = engine.TensorWhere(mask,
+            engine.TensorMultiply(engine.TensorMultiply(distA, distA), engine.TensorMultiply(distB, distB)), onesCube);
+        var weight = engine.TensorWhere(mask, engine.TensorReciprocal(sqProduct), zeros);
+        var weightedAngles = engine.TensorWhere(mask, engine.TensorMultiply(cosAngle, weight), zeros);
 
-        T variance = NumOps.Zero;
-        for (int i = 0; i < weightedAngles.Count; i++)
-        {
-            T angle = NumOps.Divide(weightedAngles[i], weights[i]);
-            T diff = NumOps.Subtract(angle, mean);
-            variance = NumOps.Add(variance,
-                NumOps.Multiply(weights[i], NumOps.Multiply(diff, diff)));
-        }
+        var sumWeights = engine.ReduceSum(weight, new[] { 1, 2 }, false);
+        var mean = engine.TensorDivide(engine.ReduceSum(weightedAngles, new[] { 1, 2 }, false), sumWeights);
+        var angle = engine.TensorDivide(weightedAngles, engine.TensorWhere(mask, weight, onesCube));
+        var diff = engine.TensorSubtract(angle,
+            engine.TensorBroadcastTo(engine.Reshape(mean, new[] { m, 1, 1 }), new[] { m, k, k }));
+        var variance = engine.ReduceSum(
+            engine.TensorWhere(mask, engine.TensorMultiply(weight, engine.TensorSquare(diff)), zeros), new[] { 1, 2 }, false);
 
-        return NumOps.Divide(variance, sumWeights);
+        // ABOF is MaxValue with fewer than 2 neighbours or a weight sum below epsilon; scores invert it
+        var maxValue = engine.Fill(m, NumOps.MaxValue).AsTensor();
+        var abof = engine.TensorWhere(
+            engine.TensorMultiply(engine.TensorGreaterThan(neighborCount, NumOps.FromDouble(1.5)),
+                engine.ScalarMinusTensor(NumOps.One, engine.TensorLessThan(sumWeights, epsilon))),
+            engine.TensorDivide(variance, sumWeights), maxValue);
+        var positive = engine.TensorGreaterThan(abof, NumOps.Zero);
+        return engine.TensorWhere(positive,
+            engine.TensorReciprocal(engine.TensorWhere(positive, abof, Tensor<T>.CreateOnes(new[] { m }))),
+            maxValue).ToVector();
     }
 }
