@@ -114,12 +114,15 @@ public partial class RelationalGCN<T> : ForecastingModelBase<T>
     /// Per R-GCN layer: the shared bases V_b [numBases, hidden, hidden] under basis decomposition, otherwise the
     /// relation weights W_r [numRelations, hidden, hidden] (masked to blocks under block decomposition).
     /// </summary>
+    [TrainableParameter]
     private readonly List<Tensor<T>> _relationBases = new List<Tensor<T>>();
 
     /// <summary>Per R-GCN layer under basis decomposition: the coefficients a_rb, [numRelations, numBases].</summary>
+    [TrainableParameter]
     private readonly List<Tensor<T>> _relationCoefficients = new List<Tensor<T>>();
 
     /// <summary>Per R-GCN layer when self-loops are on: the self-connection weight W_0, [hidden, hidden].</summary>
+    [TrainableParameter]
     private readonly List<Tensor<T>> _selfLoopWeights = new List<Tensor<T>>();
 
     /// <summary>Per R-GCN layer: the dropout applied to its output.</summary>
@@ -271,6 +274,7 @@ public partial class RelationalGCN<T> : ForecastingModelBase<T>
     /// You must provide the relation adjacency matrices for the knowledge graph.
     /// </para>
     /// </remarks>
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("ApiDesign", "RS0026:Do not add multiple public overloads with optional parameters", Justification = "Both constructors replace removed overloads whose adjacency parameter changed type; no old overload remains for a call to become ambiguous with.")]
     public RelationalGCN(
         NeuralNetworkArchitecture<T> architecture,
         string onnxModelPath,
@@ -332,6 +336,7 @@ public partial class RelationalGCN<T> : ForecastingModelBase<T>
     /// Each adjacency matrix represents one type of relationship between nodes.
     /// </para>
     /// </remarks>
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("ApiDesign", "RS0026:Do not add multiple public overloads with optional parameters", Justification = "Both constructors replace removed overloads whose adjacency parameter changed type; no old overload remains for a call to become ambiguous with.")]
     public RelationalGCN(
         NeuralNetworkArchitecture<T> architecture,
         RelationalGCNOptions<T>? options = null,
@@ -468,10 +473,12 @@ public partial class RelationalGCN<T> : ForecastingModelBase<T>
     private Tensor<T> UniformTensor(int[] shape, double limit)
     {
         int count = shape.Aggregate(1, (product, dimension) => product * dimension);
-        var values = Enumerable.Range(0, count)
-            .Select(_ => NumOps.FromDouble((_random.NextDouble() - 0.5) * 2.0 * limit))
-            .ToArray();
-        return new Tensor<T>(shape, new Vector<T>(values));
+        var uniforms = new double[count];
+        for (int i = 0; i < count; i++)
+            uniforms[i] = _random.NextDouble();
+        return Engine.TensorMultiplyScalar(
+            Engine.TensorAddScalar(new Tensor<double>(shape, new Vector<double>(uniforms)).Cast<T>(), NumOps.FromDouble(-0.5)),
+            NumOps.FromDouble(2.0 * limit));
     }
 
     /// <summary>
@@ -480,10 +487,10 @@ public partial class RelationalGCN<T> : ForecastingModelBase<T>
     private static Tensor<T> BlockDiagonalMask(int size, int blocks)
     {
         int blockSize = size / blocks;
-        var values = Enumerable.Range(0, size * size)
-            .Select(index => index / size / blockSize == index % size / blockSize ? NumOps.One : NumOps.Zero)
-            .ToArray();
-        return new Tensor<T>(new[] { size, size }, new Vector<T>(values));
+        var onBlock = new int[size * size];
+        for (int index = 0; index < onBlock.Length; index++)
+            onBlock[index] = index / size / blockSize == index % size / blockSize ? 1 : 0;
+        return new Tensor<int>(new[] { size, size }, new Vector<int>(onBlock)).Cast<T>();
     }
 
     /// <summary>
@@ -498,10 +505,10 @@ public partial class RelationalGCN<T> : ForecastingModelBase<T>
     /// </remarks>
     private Tensor<T> CreateDefaultRelationAdjacencies()
     {
-        var edges = Enumerable.Range(0, _numRelations * _numNodes * _numNodes)
-            .Select(_ => _random.NextDouble() < 0.1 ? NumOps.One : NumOps.Zero)
-            .ToArray();
-        var adjacency = new Tensor<T>(new[] { _numRelations, _numNodes, _numNodes }, new Vector<T>(edges));
+        var edges = new int[_numRelations * _numNodes * _numNodes];
+        for (int i = 0; i < edges.Length; i++)
+            edges[i] = _random.NextDouble() < 0.1 ? 1 : 0;
+        var adjacency = new Tensor<int>(new[] { _numRelations, _numNodes, _numNodes }, new Vector<int>(edges)).Cast<T>();
         using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
         return DivideByRowSums(adjacency);
     }
@@ -597,24 +604,9 @@ public partial class RelationalGCN<T> : ForecastingModelBase<T>
     }
 
     /// <summary>
-    /// The R-GCN weights are trainable: the bases V_b and coefficients a_rb (or the full or block relation
-    /// weights) and the self-connection weights W_0 of every layer. The optimizer updates them from the gradients
-    /// that reach them through <see cref="ApplyRelationalLayer"/> on the training tape.
-    /// </summary>
-    protected override IEnumerable<Tensor<T>> GetExtraTrainableTensors()
-    {
-        for (int layer = 0; layer < _relationBases.Count; layer++)
-        {
-            yield return _relationBases[layer];
-            if (layer < _relationCoefficients.Count)
-                yield return _relationCoefficients[layer];
-            if (layer < _selfLoopWeights.Count)
-                yield return _selfLoopWeights[layer];
-        }
-    }
-
-    /// <summary>
-    /// The trainable R-GCN weight tensors, in the order <see cref="GetExtraTrainableTensors"/> yields them.
+    /// The trainable R-GCN weight tensors in the order the generated parameter hook yields them: every layer's
+    /// bases (or relation weights), then every layer's coefficients, then every layer's self-connection weights.
+    /// The optimizer updates them from the gradients that reach them through <see cref="ApplyRelationalLayer"/>.
     /// </summary>
     internal IReadOnlyList<Tensor<T>> RelationalWeightTensors => GetExtraTrainableTensors().ToList();
 
