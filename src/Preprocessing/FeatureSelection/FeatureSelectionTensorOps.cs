@@ -987,6 +987,64 @@ internal static class FeatureSelectionTensorOps
         var eye = engine.TensorEye<T>(p);
         return engine.TensorWhere(eye, eye, engine.TensorWhere(defined, r, new Tensor<T>(new[] { p, p })));
     }
+
+    /// <summary>
+    /// Kendall rank correlation of every column of <paramref name="x"/> ([n, p]) with <paramref name="y"/> ([n]).
+    /// A pair counts as tied in a variable when its difference is below 1e-10 in magnitude. Tau-b is
+    /// <c>(C - D) / sqrt((n0 - n1)(n0 - n2))</c> with n1 / n2 the pairs tied in x / y (joint ties included in both,
+    /// as in scipy.stats.kendalltau), 0 when the denominator is 0; tau-a is <c>(C - D) / n0</c>. Returns [p].
+    /// </summary>
+    public static Tensor<T> KendallTau<T>(Tensor<T> x, Tensor<T> y, bool tauB)
+    {
+        var engine = AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<T>();
+        int n = x.Shape[0];
+        int p = x.Shape[1];
+        var zeros = new Tensor<T>(new[] { p });
+        if (p == 0)
+            return zeros;
+
+        T tolerance = ops.FromDouble(1e-10);
+        var ySigns = PairSigns(y, tolerance);
+        var signSums = new Tensor<T>[p];
+        var untied = new Tensor<T>[p];
+        for (int j = 0; j < p; j++)
+        {
+            var xSigns = PairSigns(PreprocessingTensorOps.ColumnVector(x, j), tolerance);
+            signSums[j] = engine.ReduceSum(engine.TensorMultiply(xSigns, ySigns), new[] { 0 }, true);
+            untied[j] = engine.ReduceSum(engine.TensorAbs(xSigns), new[] { 0 }, true);
+        }
+
+        // Over ordered pairs: sum(sx * sy) = 2 (C - D) and sum|sx| = 2 (n0 - n1)
+        var differences = engine.TensorConcatenate(signSums, 0);
+        if (tauB)
+        {
+            var denominators = engine.TensorSqrt(engine.TensorMultiplyScalar(
+                engine.TensorConcatenate(untied, 0), engine.TensorSum(engine.TensorAbs(ySigns))));
+            var usable = engine.TensorGreaterThan(denominators, ops.Zero);
+            return engine.TensorWhere(usable, engine.TensorDivide(differences,
+                engine.TensorWhere(usable, denominators, PreprocessingTensorOps.Filled(new[] { p }, ops.One))), zeros);
+        }
+
+        long pairs = (long)n * (n - 1) / 2;
+        return pairs > 0 ? engine.TensorDivideScalar(differences, ops.FromDouble(2.0 * pairs)) : zeros;
+    }
+
+    /// <summary>
+    /// Signs of all ordered pairwise differences <c>v_i - v_k</c> of a 1-D tensor, flattened to [s * s];
+    /// differences below <paramref name="tolerance"/> in magnitude count as ties (0).
+    /// </summary>
+    public static Tensor<T> PairSigns<T>(Tensor<T> values, T tolerance)
+    {
+        var engine = AiDotNetEngine.Current;
+        int s = values.Length;
+        var shape = new[] { s, s };
+        var differences = engine.Reshape(engine.TensorSubtract(
+            engine.TensorBroadcastTo(engine.Reshape(values, new[] { s, 1 }), shape),
+            engine.TensorBroadcastTo(engine.Reshape(values, new[] { 1, s }), shape)), new[] { s * s });
+        return engine.TensorWhere(engine.TensorLessThan(engine.TensorAbs(differences), tolerance),
+            new Tensor<T>(new[] { s * s }), engine.TensorSign(differences));
+    }
 }
 
 /// <summary>Impurity used by <see cref="FeatureSelectionTensorOps.TryBestSplit{T}"/>.</summary>
