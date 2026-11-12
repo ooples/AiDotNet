@@ -28,15 +28,15 @@ public class ANOVAFTest<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervis
     private readonly int _nFeaturesToSelect;
     private readonly double _pValueThreshold;
 
-    private double[]? _fStatistics;
-    private double[]? _pValues;
+    private Vector<T>? _fStatistics;
+    private Vector<T>? _pValues;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
-    public double[]? FStatistics => _fStatistics;
-    public double[]? PValues => _pValues;
+    public Vector<T>? FStatistics => _fStatistics;
+    public Vector<T>? PValues => _pValues;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -70,147 +70,39 @@ public class ANOVAFTest<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervis
 
         _nInputFeatures = data.Columns;
         int n = data.Rows;
-        int p = data.Columns;
+        var engine = Engine;
 
         // Group samples by class
-        var classGroups = new Dictionary<int, List<int>>();
-        for (int i = 0; i < n; i++)
-        {
-            int classLabel = (int)Math.Round(NumOps.ToDouble(target[i]));
-            if (!classGroups.ContainsKey(classLabel))
-                classGroups[classLabel] = new List<int>();
-            classGroups[classLabel].Add(i);
-        }
-
-        int k = classGroups.Count;
+        var classIndex = FeatureSelectionTensorOps.ClassIndex(target, out int k);
         if (k < 2)
             throw new ArgumentException("At least 2 classes are required for ANOVA.");
 
-        _fStatistics = new double[p];
-        _pValues = new double[p];
+        // Between- and within-group sums of squares of every feature
+        var (ssBetween, ssWithin) = FeatureSelectionTensorOps.AnovaSums(
+            FeatureSelectionTensorOps.AsTensor(data), FeatureSelectionTensorOps.ClassOneHot<T>(classIndex, k));
 
-        for (int j = 0; j < p; j++)
-        {
-            // Overall mean
-            double grandMean = 0;
-            for (int i = 0; i < n; i++)
-                grandMean += NumOps.ToDouble(data[i, j]);
-            grandMean /= n;
+        // Degrees of freedom
+        int dfBetween = k - 1;
+        int dfWithin = n - k;
 
-            // Between-group sum of squares
-            double ssBetween = 0;
-            // Within-group sum of squares
-            double ssWithin = 0;
+        // Mean squares and F-statistic
+        T epsilon = NumOps.FromDouble(1e-10);
+        var msBetween = engine.TensorDivideScalar(ssBetween, NumOps.FromDouble(dfBetween));
+        var msWithin = engine.TensorDivideScalar(ssWithin, NumOps.FromDouble(dfWithin + 1e-10));
+        var fStatistics = engine.TensorDivide(msBetween, engine.TensorAddScalar(msWithin, epsilon));
+        _fStatistics = fStatistics.ToVector();
 
-            foreach (var group in classGroups.Values)
-            {
-                double groupMean = 0;
-                foreach (int i in group)
-                    groupMean += NumOps.ToDouble(data[i, j]);
-                groupMean /= group.Count;
+        // p = P(F(k - 1, n - k) > F) from the F distribution (scipy.stats.f.sf)
+        var pValues = dfWithin > 0
+            ? FeatureSelectionTensorOps.FSurvival(fStatistics, dfBetween, dfWithin)
+            : FeatureSelectionTensorOps.FilledLike(fStatistics, NumOps.One);
+        _pValues = pValues.ToVector();
 
-                ssBetween += group.Count * Math.Pow(groupMean - grandMean, 2);
-
-                foreach (int i in group)
-                    ssWithin += Math.Pow(NumOps.ToDouble(data[i, j]) - groupMean, 2);
-            }
-
-            // Degrees of freedom
-            int dfBetween = k - 1;
-            int dfWithin = n - k;
-
-            // Mean squares
-            double msBetween = ssBetween / dfBetween;
-            double msWithin = ssWithin / (dfWithin + 1e-10);
-
-            // F-statistic
-            _fStatistics[j] = msBetween / (msWithin + 1e-10);
-            _pValues[j] = FDistributionPValue(_fStatistics[j], dfBetween, dfWithin);
-        }
-
-        // Select significant features
-        var significant = new List<int>();
-        for (int j = 0; j < p; j++)
-            if (_pValues[j] < _pValueThreshold)
-                significant.Add(j);
-
-        if (significant.Count >= _nFeaturesToSelect)
-        {
-            _selectedIndices = significant
-                .OrderBy(j => _pValues[j])
-                .Take(_nFeaturesToSelect)
-                .OrderBy(x => x)
-                .ToArray();
-        }
-        else
-        {
-            _selectedIndices = _fStatistics
-                .Select((f, idx) => (F: f, Index: idx))
-                .OrderByDescending(x => x.F)
-                .Take(_nFeaturesToSelect)
-                .Select(x => x.Index)
-                .OrderBy(x => x)
-                .ToArray();
-        }
+        // Select significant features, or the top features by F-statistic
+        _selectedIndices = FeatureSelectionTensorOps.SignificantOrTopK(
+            pValues, NumOps.FromDouble(_pValueThreshold), fStatistics, _nFeaturesToSelect);
 
         IsFitted = true;
-    }
-
-    private double FDistributionPValue(double f, int df1, int df2)
-    {
-        if (f <= 0 || df1 <= 0 || df2 <= 0) return 1;
-        double x = df2 / (df2 + df1 * f);
-        return IncompleteBeta(x, df2 / 2.0, df1 / 2.0);
-    }
-
-    private double IncompleteBeta(double x, double a, double b)
-    {
-        if (x < 0 || x > 1) return 1;
-        if (x == 0) return 0;
-        if (x == 1) return 1;
-
-        double bt = Math.Exp(a * Math.Log(x) + b * Math.Log(1 - x));
-        if (x < (a + 1) / (a + b + 2))
-            return bt * BetaCF(x, a, b) / a;
-        else
-            return 1 - bt * BetaCF(1 - x, b, a) / b;
-    }
-
-    private double BetaCF(double x, double a, double b)
-    {
-        double qab = a + b;
-        double qap = a + 1;
-        double qam = a - 1;
-        double c = 1;
-        double d = 1 - qab * x / qap;
-        if (Math.Abs(d) < 1e-30) d = 1e-30;
-        d = 1 / d;
-        double h = d;
-
-        for (int m = 1; m <= 100; m++)
-        {
-            int m2 = 2 * m;
-            double aa = m * (b - m) * x / ((qam + m2) * (a + m2));
-            d = 1 + aa * d;
-            if (Math.Abs(d) < 1e-30) d = 1e-30;
-            c = 1 + aa / c;
-            if (Math.Abs(c) < 1e-30) c = 1e-30;
-            d = 1 / d;
-            h *= d * c;
-
-            aa = -(a + m) * (qab + m) * x / ((a + m2) * (qap + m2));
-            d = 1 + aa * d;
-            if (Math.Abs(d) < 1e-30) d = 1e-30;
-            c = 1 + aa / c;
-            if (Math.Abs(c) < 1e-30) c = 1e-30;
-            d = 1 / d;
-            double del = d * c;
-            h *= del;
-
-            if (Math.Abs(del - 1) < 1e-7) break;
-        }
-
-        return h;
     }
 
     /// <inheritdoc />
@@ -226,15 +118,7 @@ public class ANOVAFTest<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervis
         if (_selectedIndices is null)
             throw new InvalidOperationException("ANOVAFTest has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return FeatureSelectionTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

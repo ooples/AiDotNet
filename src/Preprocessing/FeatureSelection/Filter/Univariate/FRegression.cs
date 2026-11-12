@@ -28,17 +28,17 @@ public class FRegression<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervi
     private readonly int _nFeaturesToSelect;
     private readonly double _pValueThreshold;
 
-    private double[]? _fStatistics;
-    private double[]? _pValues;
-    private double[]? _rSquaredValues;
+    private Vector<T>? _fStatistics;
+    private Vector<T>? _pValues;
+    private Vector<T>? _rSquaredValues;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
-    public double[]? FStatistics => _fStatistics;
-    public double[]? PValues => _pValues;
-    public double[]? RSquaredValues => _rSquaredValues;
+    public Vector<T>? FStatistics => _fStatistics;
+    public Vector<T>? PValues => _pValues;
+    public Vector<T>? RSquaredValues => _rSquaredValues;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -72,172 +72,46 @@ public class FRegression<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervi
 
         _nInputFeatures = data.Columns;
         int n = data.Rows;
-        int p = data.Columns;
+        var engine = Engine;
 
-        // Compute target mean
-        double yMean = 0;
-        for (int i = 0; i < n; i++)
-            yMean += NumOps.ToDouble(target[i]);
-        yMean /= n;
+        // Centred sums of every feature with the target (ssTotal = total sum of squares of the target)
+        var (sxx, sxy, ssTotal) = FeatureSelectionTensorOps.CenteredCrossSums(
+            FeatureSelectionTensorOps.AsTensor(data), FeatureSelectionTensorOps.AsTensor(target));
 
-        // Total sum of squares for target
-        double ssTotal = 0;
-        for (int i = 0; i < n; i++)
-        {
-            double diff = NumOps.ToDouble(target[i]) - yMean;
-            ssTotal += diff * diff;
-        }
+        // Slope beta1 = Sxy / Sxx (0 for a constant feature)
+        var beta1 = FeatureSelectionTensorOps.GuardedDivide(sxy, sxx, 1e-10, NumOps.Zero);
 
-        _fStatistics = new double[p];
-        _pValues = new double[p];
-        _rSquaredValues = new double[p];
+        // Residual sum of squares sum (y - ybar - beta1 (x - xbar))^2 = Syy - 2 beta1 Sxy + beta1^2 Sxx
+        var ssTotalTensor = FeatureSelectionTensorOps.FilledLike(sxx, ssTotal);
+        var ssResidual = engine.TensorMax(
+            engine.TensorAdd(
+                engine.TensorSubtract(ssTotalTensor, engine.TensorMultiplyScalar(engine.TensorMultiply(beta1, sxy), NumOps.FromDouble(2))),
+                engine.TensorMultiply(engine.TensorSquare(beta1), sxx)),
+            NumOps.Zero);
 
-        for (int j = 0; j < p; j++)
-        {
-            // Compute feature mean and variance
-            double xMean = 0;
-            for (int i = 0; i < n; i++)
-                xMean += NumOps.ToDouble(data[i, j]);
-            xMean /= n;
+        // Regression sum of squares
+        var ssRegression = engine.TensorSubtract(ssTotalTensor, ssResidual);
 
-            // Compute regression coefficients
-            double sxx = 0, sxy = 0;
-            for (int i = 0; i < n; i++)
-            {
-                double xDiff = NumOps.ToDouble(data[i, j]) - xMean;
-                double yDiff = NumOps.ToDouble(target[i]) - yMean;
-                sxx += xDiff * xDiff;
-                sxy += xDiff * yDiff;
-            }
+        // R-squared
+        _rSquaredValues = NumOps.GreaterThan(ssTotal, NumOps.FromDouble(1e-10))
+            ? engine.TensorMax(engine.TensorDivideScalar(ssRegression, ssTotal), NumOps.Zero).ToVector()
+            : FeatureSelectionTensorOps.FilledLike(sxx, NumOps.Zero).ToVector();
 
-            // Slope (beta1) and intercept (beta0)
-            double beta1 = sxx > 1e-10 ? sxy / sxx : 0;
+        // F-statistic: F = (SSR/1) / (SSE/(n-2)); a perfect linear fit leaves no residual and gets F = +inf
+        int dfResidual = Math.Max(1, n - 2);
+        var msResidual = engine.TensorDivideScalar(ssResidual, NumOps.FromDouble(dfResidual));
+        var fStatistics = FeatureSelectionTensorOps.SeparationAwareRatio(ssRegression, msResidual, 1e-10);
+        _fStatistics = fStatistics.ToVector();
 
-            // Compute residual sum of squares
-            double ssResidual = 0;
-            for (int i = 0; i < n; i++)
-            {
-                double predicted = yMean + beta1 * (NumOps.ToDouble(data[i, j]) - xMean);
-                double residual = NumOps.ToDouble(target[i]) - predicted;
-                ssResidual += residual * residual;
-            }
-
-            // Regression sum of squares
-            double ssRegression = ssTotal - ssResidual;
-
-            // R-squared
-            _rSquaredValues[j] = ssTotal > 1e-10 ? Math.Max(0, ssRegression / ssTotal) : 0;
-
-            // F-statistic: F = (SSR/1) / (SSE/(n-2))
-            double msRegression = ssRegression;
-            double msResidual = ssResidual / Math.Max(1, n - 2);
-
-            _fStatistics[j] = msResidual > 1e-10 ? msRegression / msResidual : 0;
-
-            // P-value from F-distribution (1, n-2 degrees of freedom)
-            _pValues[j] = FDistributionPValue(_fStatistics[j], 1, Math.Max(1, n - 2));
-        }
+        // P-value from the F-distribution (1, n-2 degrees of freedom), scipy.stats.f.sf
+        var pValues = FeatureSelectionTensorOps.FSurvival(fStatistics, 1, dfResidual);
+        _pValues = pValues.ToVector();
 
         // Select significant features or top by F-statistic
-        var significant = new List<int>();
-        for (int j = 0; j < p; j++)
-            if (_pValues[j] < _pValueThreshold)
-                significant.Add(j);
-
-        if (significant.Count >= _nFeaturesToSelect)
-        {
-            _selectedIndices = significant
-                .OrderBy(j => _pValues[j])
-                .Take(_nFeaturesToSelect)
-                .OrderBy(x => x)
-                .ToArray();
-        }
-        else
-        {
-            _selectedIndices = _fStatistics
-                .Select((f, idx) => (F: f, Index: idx))
-                .OrderByDescending(x => x.F)
-                .Take(_nFeaturesToSelect)
-                .Select(x => x.Index)
-                .OrderBy(x => x)
-                .ToArray();
-        }
+        _selectedIndices = FeatureSelectionTensorOps.SignificantOrTopK(
+            pValues, NumOps.FromDouble(_pValueThreshold), fStatistics, _nFeaturesToSelect);
 
         IsFitted = true;
-    }
-
-    private double FDistributionPValue(double f, int df1, int df2)
-    {
-        if (f <= 0 || df1 <= 0 || df2 <= 0) return 1;
-
-        // Use incomplete beta function relationship
-        double x = df2 / (df2 + df1 * f);
-        return IncompleteBeta(df2 / 2.0, df1 / 2.0, x);
-    }
-
-    private double IncompleteBeta(double a, double b, double x)
-    {
-        if (x <= 0) return 0;
-        if (x >= 1) return 1;
-
-        // Use continued fraction representation
-        double bt = Math.Exp(LogGamma(a + b) - LogGamma(a) - LogGamma(b) +
-                            a * Math.Log(x) + b * Math.Log(1 - x));
-
-        if (x < (a + 1) / (a + b + 2))
-            return bt * BetaCF(a, b, x) / a;
-        else
-            return 1 - bt * BetaCF(b, a, 1 - x) / b;
-    }
-
-    private double BetaCF(double a, double b, double x)
-    {
-        double qab = a + b;
-        double qap = a + 1;
-        double qam = a - 1;
-        double c = 1;
-        double d = 1 - qab * x / qap;
-        if (Math.Abs(d) < 1e-30) d = 1e-30;
-        d = 1 / d;
-        double h = d;
-
-        for (int m = 1; m <= 100; m++)
-        {
-            int m2 = 2 * m;
-            double aa = m * (b - m) * x / ((qam + m2) * (a + m2));
-            d = 1 + aa * d;
-            if (Math.Abs(d) < 1e-30) d = 1e-30;
-            c = 1 + aa / c;
-            if (Math.Abs(c) < 1e-30) c = 1e-30;
-            d = 1 / d;
-            h *= d * c;
-
-            aa = -(a + m) * (qab + m) * x / ((a + m2) * (qap + m2));
-            d = 1 + aa * d;
-            if (Math.Abs(d) < 1e-30) d = 1e-30;
-            c = 1 + aa / c;
-            if (Math.Abs(c) < 1e-30) c = 1e-30;
-            d = 1 / d;
-            double del = d * c;
-            h *= del;
-
-            if (Math.Abs(del - 1) < 1e-10) break;
-        }
-
-        return h;
-    }
-
-    private double LogGamma(double x)
-    {
-        double[] cof = { 76.18009172947146, -86.50532032941677, 24.01409824083091,
-                        -1.231739572450155, 0.1208650973866179e-2, -0.5395239384953e-5 };
-        double y = x;
-        double tmp = x + 5.5;
-        tmp -= (x + 0.5) * Math.Log(tmp);
-        double ser = 1.000000000190015;
-        for (int j = 0; j < 6; j++)
-            ser += cof[j] / ++y;
-        return -tmp + Math.Log(2.5066282746310005 * ser / x);
     }
 
     /// <inheritdoc />
@@ -253,15 +127,7 @@ public class FRegression<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervi
         if (_selectedIndices is null)
             throw new InvalidOperationException("FRegression has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return FeatureSelectionTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />
