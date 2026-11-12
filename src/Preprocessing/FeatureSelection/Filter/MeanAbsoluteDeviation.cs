@@ -29,13 +29,13 @@ public class MeanAbsoluteDeviation<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     private readonly double _minMAD;
     private readonly bool _useMedian;
 
-    private double[]? _madValues;
+    private Vector<T>? _madValues;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
-    public double[]? MADValues => _madValues;
+    public Vector<T>? MADValues => _madValues;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -61,64 +61,22 @@ public class MeanAbsoluteDeviation<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     {
         _nInputFeatures = data.Columns;
         int n = data.Rows;
-        int p = data.Columns;
+        var engine = Engine;
+        var x = FilterStatisticTensorOps.AsTensor(data);
 
-        _madValues = new double[p];
+        // Centre of every feature: the median (more robust; the mean of the two middle values for even n)
+        // or the mean
+        var center = _useMedian
+            ? FilterStatisticTensorOps.ColumnQuantile(x, 0.5)
+            : FilterStatisticTensorOps.ColumnMeans(x);
 
-        for (int j = 0; j < p; j++)
-        {
-            // Extract column values
-            var values = new double[n];
-            for (int i = 0; i < n; i++)
-                values[i] = NumOps.ToDouble(data[i, j]);
-
-            double center;
-            if (_useMedian)
-            {
-                // Use median as center (more robust)
-                Array.Sort(values);
-                center = n % 2 == 0
-                    ? (values[n / 2 - 1] + values[n / 2]) / 2
-                    : values[n / 2];
-            }
-            else
-            {
-                // Use mean as center
-                center = values.Average();
-            }
-
-            // Compute mean absolute deviation
-            double sumAbsDev = 0;
-            for (int i = 0; i < n; i++)
-                sumAbsDev += Math.Abs(values[i] - center);
-
-            _madValues[j] = sumAbsDev / n;
-        }
+        // Mean absolute deviation from the centre
+        var mad = engine.ReduceMean(
+            engine.TensorAbs(engine.TensorSubtract(x, FilterStatisticTensorOps.RowBroadcast(center, n))), new[] { 0 }, false);
+        _madValues = mad.ToVector();
 
         // Select features above threshold or top by MAD
-        var candidates = new List<int>();
-        for (int j = 0; j < p; j++)
-            if (_madValues[j] >= _minMAD)
-                candidates.Add(j);
-
-        if (candidates.Count >= _nFeaturesToSelect)
-        {
-            _selectedIndices = candidates
-                .OrderByDescending(j => _madValues[j])
-                .Take(_nFeaturesToSelect)
-                .OrderBy(x => x)
-                .ToArray();
-        }
-        else
-        {
-            _selectedIndices = _madValues
-                .Select((mad, idx) => (MAD: mad, Index: idx))
-                .OrderByDescending(x => x.MAD)
-                .Take(_nFeaturesToSelect)
-                .Select(x => x.Index)
-                .OrderBy(x => x)
-                .ToArray();
-        }
+        _selectedIndices = FilterStatisticTensorOps.CandidatesOrTopK(mad, NumOps.FromDouble(_minMAD), _nFeaturesToSelect);
 
         IsFitted = true;
     }
@@ -129,15 +87,7 @@ public class MeanAbsoluteDeviation<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         if (_selectedIndices is null)
             throw new InvalidOperationException("MeanAbsoluteDeviation has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return FilterStatisticTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

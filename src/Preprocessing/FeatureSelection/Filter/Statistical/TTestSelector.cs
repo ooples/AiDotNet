@@ -27,15 +27,15 @@ public class TTestSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISuper
 {
     private readonly int _nFeaturesToSelect;
 
-    private double[]? _tStatistics;
-    private double[]? _pValues;
+    private Vector<T>? _tStatistics;
+    private Vector<T>? _pValues;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
-    public double[]? TStatistics => _tStatistics;
-    public double[]? PValues => _pValues;
+    public Vector<T>? TStatistics => _tStatistics;
+    public Vector<T>? PValues => _pValues;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -68,62 +68,46 @@ public class TTestSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISuper
         _nInputFeatures = data.Columns;
         int n = data.Rows;
         int p = data.Columns;
+        var engine = Engine;
 
-        var class0 = new List<int>();
-        var class1 = new List<int>();
-        for (int i = 0; i < n; i++)
-        {
-            if (NumOps.LessThan(target[i], NumOps.FromDouble(0.5)))
-                class0.Add(i);
-            else
-                class1.Add(i);
-        }
-
-        int n0 = class0.Count;
-        int n1 = class1.Count;
-
-        _tStatistics = new double[p];
-        _pValues = new double[p];
+        var class0 = FilterStatisticTensorOps.BelowMask(target, 0.5, out int n0);
+        var class1 = FilterStatisticTensorOps.OneMinus(class0);
+        int n1 = n - n0;
 
         if (n0 < 2 || n1 < 2)
         {
+            _tStatistics = new Vector<T>(p);
+            _pValues = new Vector<T>(p);
             _selectedIndices = Enumerable.Range(0, Math.Min(_nFeaturesToSelect, p)).ToArray();
             IsFitted = true;
             return;
         }
 
-        for (int j = 0; j < p; j++)
-        {
-            double mean0 = class0.Sum(i => NumOps.ToDouble(data[i, j])) / n0;
-            double mean1 = class1.Sum(i => NumOps.ToDouble(data[i, j])) / n1;
+        // Class means and variances of every feature
+        var x = FilterStatisticTensorOps.AsTensor(data);
+        var (mean0, ss0) = FilterStatisticTensorOps.MaskedColumnMoments(x, class0, n0);
+        var (mean1, ss1) = FilterStatisticTensorOps.MaskedColumnMoments(x, class1, n1);
+        var s20 = engine.TensorDivideScalar(ss0, NumOps.FromDouble((n0 - 1.0) * n0));
+        var s21 = engine.TensorDivideScalar(ss1, NumOps.FromDouble((n1 - 1.0) * n1));
+        var sum = engine.TensorAdd(s20, s21);
 
-            double var0 = class0.Sum(i => Math.Pow(NumOps.ToDouble(data[i, j]) - mean0, 2)) / (n0 - 1);
-            double var1 = class1.Sum(i => Math.Pow(NumOps.ToDouble(data[i, j]) - mean1, 2)) / (n1 - 1);
+        // |t| with the unpooled standard error sqrt(var0 / n0 + var1 / n1); classes that do not overlap give inf
+        var tStatistics = FilterStatisticTensorOps.SeparationAwareRatio(
+            engine.TensorAbs(engine.TensorSubtract(mean0, mean1)), engine.TensorSqrt(sum), 1e-10);
+        _tStatistics = tStatistics.ToVector();
 
-            double pooledSE = Math.Sqrt(var0 / n0 + var1 / n1);
-            _tStatistics[j] = pooledSE > 1e-10 ? Math.Abs(mean0 - mean1) / pooledSE : 0;
+        // Two-sided p-value of that (Welch) statistic from the t-distribution with Welch-Satterthwaite degrees of
+        // freedom (scipy.stats.ttest_ind(equal_var=False)), n0 + n1 - 2 when both classes are constant
+        var den = engine.TensorAdd(
+            engine.TensorDivideScalar(engine.TensorSquare(s20), NumOps.FromDouble(n0 - 1)),
+            engine.TensorDivideScalar(engine.TensorSquare(s21), NumOps.FromDouble(n1 - 1)));
+        var degreesOfFreedom = FilterStatisticTensorOps.GuardedDivide(
+            engine.TensorSquare(sum), den, 0.0, NumOps.FromDouble(n0 + n1 - 2));
+        _pValues = FilterStatisticTensorOps.StudentTTwoSided(tStatistics, degreesOfFreedom).ToVector();
 
-            // Approximate p-value using normal distribution for large samples
-            double z = _tStatistics[j];
-            _pValues[j] = 2 * (1 - NormalCDF(z));
-        }
-
-        int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = Enumerable.Range(0, p)
-            .OrderByDescending(j => _tStatistics[j])
-            .Take(numToSelect)
-            .OrderBy(x => x)
-            .ToArray();
+        _selectedIndices = FilterStatisticTensorOps.TopKIndicesSorted(tStatistics, Math.Min(_nFeaturesToSelect, p));
 
         IsFitted = true;
-    }
-
-    private double NormalCDF(double x)
-    {
-        double t = 1.0 / (1.0 + 0.2316419 * Math.Abs(x));
-        double d = 0.3989423 * Math.Exp(-x * x / 2);
-        double p = d * t * (0.3193815 + t * (-0.3565638 + t * (1.781478 + t * (-1.821256 + t * 1.330274))));
-        return x > 0 ? 1 - p : p;
     }
 
     /// <inheritdoc />
@@ -139,15 +123,7 @@ public class TTestSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISuper
         if (_selectedIndices is null)
             throw new InvalidOperationException("TTestSelector has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return FilterStatisticTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />
