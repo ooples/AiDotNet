@@ -22923,3 +22923,7 @@ AiDotNet.Enums.ObliviousTreeChoiceFunction.Entmax15 = 0 -> AiDotNet.Enums.Oblivi
 AiDotNet.Enums.ObliviousTreeChoiceFunction.SoftmaxSigmoid = 1 -> AiDotNet.Enums.ObliviousTreeChoiceFunction
 *REMOVED*virtual AiDotNet.Finance.Trading.Environments.PortfolioManagerEnvironment<T>.ResolveTargetWeights(AiDotNet.Tensors.LinearAlgebra.Vector<T>! action) -> double[]!
 virtual AiDotNet.Finance.Trading.Environments.PortfolioManagerEnvironment<T>.ResolveTargetWeights(AiDotNet.Tensors.LinearAlgebra.Vector<T>! action) -> AiDotNet.Tensors.LinearAlgebra.Vector<T>!
+*REMOVED*AiDotNet.Models.Options.MiniRocketOptions<T>.NumBiasesPerDilation.get -> int
+*REMOVED*AiDotNet.Models.Options.MiniRocketOptions<T>.NumBiasesPerDilation.set -> void
+AiDotNet.Models.Options.MiniRocketOptions<T>.MaxDilationsPerKernel.get -> int
+AiDotNet.Models.Options.MiniRocketOptions<T>.MaxDilationsPerKernel.set -> void
