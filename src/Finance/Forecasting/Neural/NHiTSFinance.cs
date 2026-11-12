@@ -997,6 +997,35 @@ public partial class NHiTSFinance<T> : ForecastingModelBase<T>
         if (coeffLen == targetLength)
             return coeffs;
 
+        if (coeffLen > 0 && targetLength > 0 && batchSize > 0 && coeffs.Length >= batchSize * coeffLen)
+        {
+            // Linear interpolation at pos = t / targetLength * coeffLen between floor(pos) and the next
+            // (clamped) coefficient, for every batch row at once.
+            using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+            var lower = new int[targetLength];
+            var upper = new int[targetLength];
+            for (int t = 0; t < targetLength; t++)
+            {
+                lower[t] = (int)((double)t / targetLength * coeffLen);
+                upper[t] = Math.Min(lower[t] + 1, coeffLen - 1);
+            }
+
+            var rows = Engine.Reshape(
+                Engine.TensorNarrow(Engine.Reshape(coeffs.Contiguous(), new[] { coeffs.Length }), 0, 0, batchSize * coeffLen),
+                new[] { batchSize, coeffLen });
+            var lowerIndex = new Tensor<int>(new[] { targetLength }, new Vector<int>(lower));
+            var position = Engine.TensorMultiplyScalar(
+                Engine.TensorDivideScalar(Engine.TensorArange<T>(0, targetLength, 1), NumOps.FromDouble(targetLength)),
+                NumOps.FromDouble(coeffLen));
+            var frac = Engine.TensorSubtract(position, lowerIndex.Cast<T>());
+            var shape = new[] { batchSize, targetLength };
+            var fracGrid = Engine.TensorBroadcastTo(Engine.Reshape(frac, new[] { 1, targetLength }), shape);
+            var keepGrid = Engine.TensorSubtract(Engine.TensorFullLike(fracGrid, NumOps.One), fracGrid);
+            var val0 = Engine.TensorIndexSelect(rows, lowerIndex, 1);
+            var val1 = Engine.TensorIndexSelect(rows, new Tensor<int>(new[] { targetLength }, new Vector<int>(upper)), 1);
+            return Engine.TensorAdd(Engine.TensorMultiply(val0, keepGrid), Engine.TensorMultiply(val1, fracGrid));
+        }
+
         var result = new Tensor<T>(new[] { batchSize, targetLength });
 
         for (int b = 0; b < batchSize; b++)
