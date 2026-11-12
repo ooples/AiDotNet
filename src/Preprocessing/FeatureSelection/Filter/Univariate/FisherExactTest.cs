@@ -79,15 +79,20 @@ public class FisherExactTest<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISup
         var x = FilterStatisticTensorOps.AsTensor(data);
         var split = FeatureSelectionTensorOps.Rows(Engine.TensorSort(x, 0, false).Item1, new[] { n / 2 });
         var low = PreprocessingTensorOps.OneMinus(Engine.TensorGreaterThan(x, Engine.TensorBroadcastTo(split, new[] { n, p })));
-        var firstClass = PreprocessingTensorOps.ColumnVector(classOneHot, 0);
-        var a = Engine.Reshape(
-            Engine.TensorMatMul(Engine.TensorTranspose(low), Engine.Reshape(firstClass, new[] { n, 1 })), new[] { p });
-        var b = Engine.TensorSubtract(Engine.ReduceSum(low, new[] { 0 }, false), a);
+        // the table is counted in int and the test run in double, as master did: 0/1 sums in T stop at 2048 for
+        // Half, and neither the support k = 0..n nor its log-binomials are exact in Half
+        var lowCounts = low.Cast<int>();
+        var firstClass = PreprocessingTensorOps.ColumnVector(classOneHot, 0).Cast<int>();
+        var a = Engine.ReduceSum(
+            Engine.TensorMultiply(lowCounts, Engine.TensorBroadcastTo(Engine.Reshape(firstClass, new[] { n, 1 }), new[] { n, p })),
+            new[] { 0 }, false);
+        var b = Engine.TensorSubtract(Engine.ReduceSum(lowCounts, new[] { 0 }, false), a);
         var c = Engine.TensorNegate(Engine.TensorSubtractScalar(a, Engine.TensorSum(firstClass)));
-        var d = Engine.TensorNegate(Engine.TensorSubtractScalar(Engine.TensorAdd(Engine.TensorAdd(a, b), c), NumOps.FromDouble(n)));
-        var (pValues, oddsRatios) = FeatureSelectionTensorOps.FisherExact(a, b, c, d, n);
-        _pValues = pValues.ToVector();
-        _oddsRatios = oddsRatios.ToVector();
+        var d = Engine.TensorNegate(Engine.TensorSubtractScalar(Engine.TensorAdd(Engine.TensorAdd(a, b), c), n));
+        var (pValues, oddsRatios) = FeatureSelectionTensorOps.FisherExact(
+            a.Cast<double>(), b.Cast<double>(), c.Cast<double>(), d.Cast<double>(), n);
+        _pValues = pValues.Cast<T>().ToVector();
+        _oddsRatios = oddsRatios.Cast<T>().ToVector();
         _selectedIndices = PreprocessingTensorOps.BottomKIndicesSorted(pValues, Math.Min(_nFeaturesToSelect, p));
         IsFitted = true;
     }

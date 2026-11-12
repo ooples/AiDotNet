@@ -85,7 +85,7 @@ public class GraphBasedFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISuperv
         {
             GraphCentralityMeasure.Degree => FeatureSelectionTensorOps.Counts(Engine.TensorGreaterThan(adjacency, NumOps.Zero), 1),
             GraphCentralityMeasure.Eigenvector => ComputeEigenvectorCentrality(adjacency, p),
-            GraphCentralityMeasure.Betweenness => ComputeBetweennessCentrality(adjacency, p),
+            GraphCentralityMeasure.Betweenness => BetweennessCentrality(adjacency),
             _ => ComputePageRank(adjacency, p)
         };
 
@@ -162,48 +162,54 @@ public class GraphBasedFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISuperv
     // Betweenness centrality (Freeman 1977) of the unweighted graph: sum over pairs s < t, both other than v, of
     // the share of shortest s-t paths through v, sigma_sv sigma_vt / sigma_st when d(s, v) + d(v, t) = d(s, t)
     // (networkx.betweenness_centrality, normalized=False). Path counts and distances come from powers of the
-    // adjacency: the number of walks of length d(s, t) is the number of shortest paths.
-    private Tensor<T> ComputeBetweennessCentrality(Tensor<T> adjacency, int p)
+    // adjacency: the number of walks of length d(s, t) is the number of shortest paths. Run in double, as master
+    // did: walk counts grow like degree^length and overflow Half, and its distances are not exact past 2048.
+    internal static Tensor<T> BetweennessCentrality(Tensor<T> adjacency) =>
+        ComputeBetweennessCentrality(adjacency.Cast<double>(), adjacency.Shape[0]).Cast<T>();
+
+    private static Tensor<TN> ComputeBetweennessCentrality<TN>(Tensor<TN> adjacency, int p)
     {
-        T zero = NumOps.Zero;
-        T unreachable = NumOps.FromDouble(double.PositiveInfinity);
-        var linked = Engine.TensorGreaterThan(adjacency, zero);
-        var distance = Engine.TensorWhere(Engine.TensorEye<T>(p),
+        var engine = AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<TN>();
+        TN zero = ops.Zero;
+        TN unreachable = ops.FromDouble(double.PositiveInfinity);
+        var linked = engine.TensorGreaterThan(adjacency, zero);
+        var distance = engine.TensorWhere(engine.TensorEye<TN>(p),
             FilterStatisticTensorOps.Filled(new[] { p, p }, zero), FilterStatisticTensorOps.Filled(new[] { p, p }, unreachable));
-        var paths = Engine.TensorEye<T>(p);
-        var walks = Engine.TensorEye<T>(p);
-        var steps = Engine.TensorArange<T>(1, p, 1).ToArray();
-        foreach (T step in steps)
+        var paths = engine.TensorEye<TN>(p);
+        var walks = engine.TensorEye<TN>(p);
+        var steps = engine.TensorArange<TN>(1, p, 1).ToArray();
+        foreach (TN step in steps)
         {
-            walks = Engine.TensorMatMul(walks, linked);
-            var reachedNow = Engine.TensorMultiply(
-                Engine.TensorGreaterThan(walks, zero), Engine.TensorEquals(distance, unreachable));
-            distance = Engine.TensorWhere(reachedNow, FilterStatisticTensorOps.Filled(new[] { p, p }, step), distance);
-            paths = Engine.TensorWhere(reachedNow, walks, paths);
+            walks = engine.TensorMatMul(walks, linked);
+            var reachedNow = engine.TensorMultiply(
+                engine.TensorGreaterThan(walks, zero), engine.TensorEquals(distance, unreachable));
+            distance = engine.TensorWhere(reachedNow, FilterStatisticTensorOps.Filled(new[] { p, p }, step), distance);
+            paths = engine.TensorWhere(reachedNow, walks, paths);
         }
 
         // only pairs s < t with v different from both
-        T one = NumOps.One;
-        var upper = Engine.TensorTriu(FilterStatisticTensorOps.Filled(new[] { p, p }, one), 1);
-        var scores = new T[p];
+        TN one = ops.One;
+        var upper = engine.TensorTriu(FilterStatisticTensorOps.Filled(new[] { p, p }, one), 1);
+        var scores = new TN[p];
         for (int v = 0; v < p; v++)
         {
             var toV = FilterStatisticTensorOps.ColumnBroadcast(PreprocessingTensorOps.ColumnVector(distance, v), p);
             var fromV = FilterStatisticTensorOps.RowBroadcast(PreprocessingTensorOps.ColumnVector(distance, v), p);
-            var onPath = Engine.TensorMultiply(Engine.TensorEquals(Engine.TensorAdd(toV, fromV), distance), upper);
-            var notEnd = Engine.TensorMultiply(
+            var onPath = engine.TensorMultiply(engine.TensorEquals(engine.TensorAdd(toV, fromV), distance), upper);
+            var notEnd = engine.TensorMultiply(
                 FilterStatisticTensorOps.ColumnBroadcast(FeatureSelectionTensorOps.ScatterToFeatures(
                     FilterStatisticTensorOps.Filled(new[] { 1 }, zero), new[] { v }, p, one), p),
                 FilterStatisticTensorOps.RowBroadcast(FeatureSelectionTensorOps.ScatterToFeatures(
                     FilterStatisticTensorOps.Filled(new[] { 1 }, zero), new[] { v }, p, one), p));
-            var through = Engine.TensorMultiply(
+            var through = engine.TensorMultiply(
                 FilterStatisticTensorOps.ColumnBroadcast(PreprocessingTensorOps.ColumnVector(paths, v), p),
                 FilterStatisticTensorOps.RowBroadcast(PreprocessingTensorOps.ColumnVector(paths, v), p));
             var share = FilterStatisticTensorOps.GuardedDivide(through, paths, 0.5, zero);
-            scores[v] = Engine.TensorSum(Engine.TensorMultiply(share, Engine.TensorMultiply(onPath, notEnd)));
+            scores[v] = engine.TensorSum(engine.TensorMultiply(share, engine.TensorMultiply(onPath, notEnd)));
         }
 
-        return new Tensor<T>(scores, new[] { p });
+        return new Tensor<TN>(scores, new[] { p });
     }
 
     /// <inheritdoc />
