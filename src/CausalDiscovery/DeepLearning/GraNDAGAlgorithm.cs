@@ -36,6 +36,12 @@ namespace AiDotNet.CausalDiscovery.DeepLearning;
 [ResearchPaper("Gradient-Based Neural DAG Learning", "https://openreview.net/forum?id=rklbKA4YDS", Year = 2020, Authors = "Sebastien Lachapelle, Philippe Brouillard, Tristan Deleu, Simon Lacoste-Julien")]
 public class GraNDAGAlgorithm<T> : DeepCausalBase<T>
 {
+    /// <summary>
+    /// Maximum number of entries of one [rows, d, h] hidden-activation block in a training step; samples are
+    /// processed in blocks of at most this many entries.
+    /// </summary>
+    private const int MaxSampleBlockElements = 1 << 22;
+
     /// <inheritdoc/>
     public override string Name => "GraN-DAG";
 
@@ -117,8 +123,9 @@ public class GraNDAGAlgorithm<T> : DeepCausalBase<T>
         // All d per-variable MLPs share the input, so one [n x d] * [d x (d h)] GEMM computes every hidden layer.
         T invN = NumOps.FromDouble(1.0 / n);
         var Xt = Tensor<T>.FromMatrix(data);
-        var XtT = Engine.TensorTranspose(Xt);                 // [d,n], reused every step
-        var cube = new[] { n, d, h };
+        // Samples are processed in blocks so the [rows, d, h] hidden activations stay bounded
+        // (MaxSampleBlockElements) however large n and d are; the gradients accumulate across blocks.
+        int blockRows = Math.Max(1, Math.Min(n, MaxSampleBlockElements / Math.Max(1, d * h)));
         var offDiagonal = OffDiagonalMask(d);
         var weightMask = Engine.TensorBroadcastTo(offDiagonal.Reshape(new[] { d, d, 1 }), new[] { d, d, h });
         var zerosW1 = new Tensor<T>(new[] { d, d, h });
@@ -130,17 +137,28 @@ public class GraNDAGAlgorithm<T> : DeepCausalBase<T>
                 // Batched forward / backward over all n samples and all d variables:
                 // H_j = sigmoid(X * W1[j]), pred_j = H_j * W2[j], and the Gaussian-NLL residual
                 // (pred_j - x_j)/n backpropagated to gW1[j] = X^T * dH_j and gW2[j] = H_j^T * resid_j.
-                var H = Engine.Sigmoid(Engine.TensorMatMul(Xt, W1.Reshape(new[] { d, d * h }))).Reshape(cube); // [n,d,h]
-                var w2Spread = Engine.TensorBroadcastTo(W2.Reshape(new[] { 1, d, h }), cube);
-                var pred = Engine.ReduceSum(Engine.TensorMultiply(H, w2Spread), new[] { 2 }, false);           // [n,d]
-                var resid = Engine.TensorMultiplyScalar(Engine.TensorSubtract(pred, Xt), invN);                // [n,d]
-                var residSpread = Engine.TensorBroadcastTo(resid.Reshape(new[] { n, d, 1 }), cube);
+                var w1ByInput = W1.Reshape(new[] { d, d * h });
+                var gW2 = new Tensor<T>(new[] { d, h });
+                var gW1Flat = new Tensor<T>(new[] { d, d * h });
+                for (int b0 = 0; b0 < n; b0 += blockRows)
+                {
+                    int rows = Math.Min(blockRows, n - b0);
+                    var cube = new[] { rows, d, h };
+                    var xb = Engine.TensorSlice(Xt, new[] { b0, 0 }, new[] { rows, d });
+                    var H = Engine.Sigmoid(Engine.TensorMatMul(xb, w1ByInput)).Reshape(cube);                 // [rows,d,h]
+                    var w2Spread = Engine.TensorBroadcastTo(W2.Reshape(new[] { 1, d, h }), cube);
+                    var pred = Engine.ReduceSum(Engine.TensorMultiply(H, w2Spread), new[] { 2 }, false);       // [rows,d]
+                    var resid = Engine.TensorMultiplyScalar(Engine.TensorSubtract(pred, xb), invN);            // [rows,d]
+                    var residSpread = Engine.TensorBroadcastTo(resid.Reshape(new[] { rows, d, 1 }), cube);
 
-                var gW2 = Engine.ReduceSum(Engine.TensorMultiply(H, residSpread), new[] { 0 }, false);         // [d,h]
-                var dPred = Engine.TensorMultiply(residSpread, w2Spread);                                     // [n,d,h]
-                var oneMinusH = Engine.TensorSubtract(Engine.TensorOnesLike(H), H);
-                var dH = Engine.TensorMultiply(Engine.TensorMultiply(dPred, H), oneMinusH);                   // [n,d,h]
-                var gW1 = Engine.TensorMatMul(XtT, dH.Reshape(new[] { n, d * h })).Reshape(new[] { d, d, h }); // [i,j,h]
+                    gW2 = Engine.TensorAdd(gW2, Engine.ReduceSum(Engine.TensorMultiply(H, residSpread), new[] { 0 }, false)); // [d,h]
+                    var dPred = Engine.TensorMultiply(residSpread, w2Spread);                                 // [rows,d,h]
+                    var oneMinusH = Engine.TensorSubtract(Engine.TensorOnesLike(H), H);
+                    var dH = Engine.TensorMultiply(Engine.TensorMultiply(dPred, H), oneMinusH);               // [rows,d,h]
+                    gW1Flat = Engine.TensorAdd(gW1Flat,
+                        Engine.TensorMatMul(Engine.TensorTranspose(xb), dH.Reshape(new[] { rows, d * h })));
+                }
+                var gW1 = gW1Flat.Reshape(new[] { d, d, h });                                                 // [i,j,h]
 
                 // Acyclicity gradient on adjacency A[i,j] = Σ_k |W1[j][i,k]| |W2[j][k]|
                 var A = ExtractAdjacency(W1, W2, d, h);
