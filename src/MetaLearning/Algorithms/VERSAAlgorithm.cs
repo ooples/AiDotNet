@@ -398,7 +398,9 @@ internal class VERSAModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMet
     private readonly IFullModel<T, TInput, TOutput> _model;
     private readonly Vector<T> _backboneParams;
     private readonly Vector<T> _classifierWeights;
-    private readonly Vector<T>? _modulationFactors;
+    // Not readonly: a readonly Vector<T> field is not persisted by the generated model state, and these
+    // factors belong in the adapted model's checkpoint as the double[] they replace did.
+    private Vector<T>? _modulationFactors;
 
     /// <inheritdoc/>
     public Vector<T>? AdaptedSupportFeatures => _classifierWeights;

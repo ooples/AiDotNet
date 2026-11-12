@@ -70,7 +70,9 @@ public partial class AdaptedMetaModel<T, TInput, TOutput> : MetaLearningModelBas
     // support vector as a shape-deferred weight slot.
     [ExternalState]
     private readonly Vector<T>? _supportFeatures;
-    private readonly Vector<T>? _modulationFactors;
+    // Not readonly: a readonly Vector<T> field is not persisted by the generated model state, and these
+    // factors belong in the adapted model's checkpoint as the double[] they replace did.
+    private Vector<T>? _modulationFactors;
 
     /// <inheritdoc/>
     public Vector<T>? AdaptedSupportFeatures => _supportFeatures;

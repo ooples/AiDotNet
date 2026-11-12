@@ -121,7 +121,9 @@ internal class MetaBaselineModel<T, TInput, TOutput> : IModel<TInput, TOutput, M
     private readonly Vector<T> _params;
     private readonly Vector<T>? _supportPrototypes;
     private readonly double _temperature;
-    private readonly Vector<T>? _modulationFactors;
+    // Not readonly: a readonly Vector<T> field is not persisted by the generated model state, and these
+    // factors belong in the adapted model's checkpoint as the double[] they replace did.
+    private Vector<T>? _modulationFactors;
 
     /// <inheritdoc/>
     public Vector<T>? AdaptedSupportFeatures => _supportPrototypes;

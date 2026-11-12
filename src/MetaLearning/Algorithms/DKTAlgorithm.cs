@@ -368,7 +368,9 @@ internal class DKTModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetad
     private readonly Vector<T>? _gpWeights;
     private readonly double _lengthScale;
     private readonly double _noiseVariance;
-    private readonly Vector<T>? _modulationFactors;
+    // Not readonly: a readonly Vector<T> field is not persisted by the generated model state, and these
+    // factors belong in the adapted model's checkpoint as the double[] they replace did.
+    private Vector<T>? _modulationFactors;
 
     /// <inheritdoc/>
     public Vector<T>? AdaptedSupportFeatures => _gpWeights;

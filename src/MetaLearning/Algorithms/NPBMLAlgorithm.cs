@@ -426,7 +426,9 @@ internal class NPBMLModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMet
     private readonly Vector<T> _backboneParams;
     private readonly Vector<T>? _sampledLatent;
     private readonly int _numSamples;
-    private readonly Vector<T>? _modulationFactors;
+    // Not readonly: a readonly Vector<T> field is not persisted by the generated model state, and these
+    // factors belong in the adapted model's checkpoint as the double[] they replace did.
+    private Vector<T>? _modulationFactors;
 
     /// <inheritdoc/>
     public ModelMetadata<T> Metadata { get; } = new ModelMetadata<T>();
