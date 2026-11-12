@@ -252,13 +252,10 @@ public partial class ALiBiPositionalBiasLayer<T> : LayerBase<T>, IShapeContract
 
         var bias = ComputeBias(queryLen, keyLen);
 
-        // Add bias to scores (broadcast over the batch for 4D input). The sum is a fresh value, as the
-        // element-wise copy was, so it stays off the tape.
-        using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
-        {
-            var broadcastBias = rank == 4 ? Engine.Reshape(bias, new[] { 1, numHeads, queryLen, keyLen }) : bias;
-            return Engine.TensorAdd(input, broadcastBias);
-        }
+        // Add bias to scores (broadcast over the batch for 4D input). The add stays on the tape so the
+        // attention scores' upstream (the Q/K projections) receives the gradient; the bias is constant.
+        var broadcastBias = rank == 4 ? Engine.Reshape(bias, new[] { 1, numHeads, queryLen, keyLen }) : bias;
+        return Engine.TensorAdd(input, broadcastBias);
     }
 
 

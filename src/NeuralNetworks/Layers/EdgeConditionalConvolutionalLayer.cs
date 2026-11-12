@@ -356,22 +356,27 @@ public partial class EdgeConditionalConvolutionalLayer<T> : LayerBase<T>, IGraph
         // Reshape to [batch, numEdges, inputFeatures, outputFeatures]
         // Step 2: Aggregate neighbor features using edge-specific weights. The edges of sample b are its
         // non-zero adjacency entries in row-major order; edge e = (i, j) uses flatWeights[b, e] as an
-        // [inputFeatures, outputFeatures] map and sends x_j through it to node i. The aggregation is a
-        // plain value (off the tape), as the element-wise accumulation was.
+        // [inputFeatures, outputFeatures] map and sends x_j through it to node i (Simonovsky & Komodakis
+        // 2017, eq. 1). The messages stay on the tape so the edge network's weights receive gradient; only
+        // the discrete edge list is computed off the tape.
         Tensor<T> output;
         int edgeWidth = _inputFeatures * _outputFeatures;
-        using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
         {
             var perSample = new Tensor<T>[batchSize];
             for (int b = 0; b < batchSize; b++)
             {
-                var sampleAdjacency = Engine.Reshape(
-                    Engine.TensorSlice(normalizedAdjacency, [b, 0, 0], [1, numNodes, numNodes]), [numNodes, numNodes]);
-                var edges = Engine.TensorNonzero(Engine.TensorNotEquals(sampleAdjacency, NumOps.Zero));   // [E, 2]
+                Tensor<int> edges;
+                using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
+                {
+                    var sampleAdjacency = Engine.Reshape(
+                        Engine.TensorSlice(normalizedAdjacency, [b, 0, 0], [1, numNodes, numNodes]), [numNodes, numNodes]);
+                    edges = Engine.TensorNonzero(Engine.TensorNotEquals(sampleAdjacency, NumOps.Zero));   // [E, 2]
+                }
+
                 int edgeCount = edges.Shape[0];
                 if (edgeCount == 0 || edgeWidth == 0)
                 {
-                    perSample[b] = new Tensor<T>([numNodes, _outputFeatures]);
+                    perSample[b] = new Tensor<T>([1, numNodes, _outputFeatures]);
                     continue;
                 }
 
@@ -379,8 +384,9 @@ public partial class EdgeConditionalConvolutionalLayer<T> : LayerBase<T>, IGraph
                     throw new ArgumentOutOfRangeException(nameof(input),
                         $"Sample {b} has {edgeCount} edges in its adjacency matrix but only {flatWeights.Shape[1]} edge feature rows.");
 
-                var targets = Engine.Reshape(Engine.TensorSlice(edges, [0, 0], [edgeCount, 1]), [edgeCount]);
-                var sources = Engine.Reshape(Engine.TensorSlice(edges, [0, 1], [edgeCount, 1]), [edgeCount]);
+                var edgeList = edges.ToVector().ToArray();
+                var targets = new Tensor<int>(Enumerable.Range(0, edgeCount).Select(e => edgeList[2 * e]).ToArray(), [edgeCount]);
+                var sources = new Tensor<int>(Enumerable.Range(0, edgeCount).Select(e => edgeList[(2 * e) + 1]).ToArray(), [edgeCount]);
                 var edgeMaps = Engine.Reshape(
                     Engine.TensorSlice(flatWeights, [b, 0, 0], [1, edgeCount, edgeWidth]),
                     [edgeCount, _inputFeatures, _outputFeatures]);
@@ -390,13 +396,14 @@ public partial class EdgeConditionalConvolutionalLayer<T> : LayerBase<T>, IGraph
                     Engine.TensorGather(sampleInput, sources, axis: 0), [edgeCount, _inputFeatures, 1]);
                 var messages = Engine.ReduceSum(
                     Engine.TensorMultiply(edgeMaps, neighborFeatures), new[] { 1 }, keepDims: false);   // [E, outF]
-                perSample[b] = Engine.TensorScatterAdd(
-                    new Tensor<T>([numNodes, _outputFeatures]), targets, messages, axis: 0);
+                perSample[b] = Engine.Reshape(
+                    Engine.TensorScatterAdd(new Tensor<T>([numNodes, _outputFeatures]), targets, messages, axis: 0),
+                    [1, numNodes, _outputFeatures]);
             }
 
             output = batchSize == 0
                 ? new Tensor<T>([0, numNodes, _outputFeatures])
-                : Tensor<T>.Stack(perSample, 0);
+                : perSample.Length == 1 ? perSample[0] : Engine.TensorConcatenate(perSample, 0);
         }
 
         // Step 3: Add self-loop transformation
@@ -583,12 +590,14 @@ public partial class EdgeConditionalConvolutionalLayer<T> : LayerBase<T>, IGraph
     /// </summary>
     private Tensor<T> ApplyReLU(Tensor<T> input)
     {
-        // max(x, 0) with NaN mapped to 0, as a plain value (off the tape), as the element-wise copy was.
+        // max(x, 0) with NaN mapped to 0, on the tape so the edge network's first layer trains.
+        Tensor<T> positive;
         using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
         {
-            return Engine.TensorWhere(
-                Engine.TensorGreaterThan(input, NumOps.Zero), input, new Tensor<T>(input._shape));
+            positive = Engine.TensorGreaterThan(input, NumOps.Zero);
         }
+
+        return Engine.TensorWhere(positive, input, new Tensor<T>(input._shape));
     }
 
     /// <summary>

@@ -102,6 +102,9 @@ public partial class GraphTransformerLayer<T> : LayerBase<T>, IGraphConvolutionL
     private readonly bool _useStructuralEncoding;
     private readonly double _dropoutRate;
 
+    /// <summary>Layer-norm epsilon for the two post-residual norms.</summary>
+    private const double LayerNormEpsilon = 1e-5;
+
     /// <summary>
     /// Query transformation weights for each head: [numHeads, inputFeatures, headDim]
     /// </summary>
@@ -551,27 +554,27 @@ public partial class GraphTransformerLayer<T> : LayerBase<T>, IGraphConvolutionL
         }
         else
         {
-            // Project input to match output dimensions
-            // Truncate or zero-pad the features to the output width. The copy is a plain value, as the
-            // element-wise fill was, so it stays off the tape.
-            using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
-            {
-                int kept = Math.Min(_inputFeatures, _outputFeatures);
-                var head = Engine.TensorSlice(processInput, [0, 0, 0], [batchSize, numNodes, kept]);
-                residualInput = kept == _outputFeatures
-                    ? head.Clone()
-                    : Engine.TensorConcatenate(
-                        new[] { head, new Tensor<T>([batchSize, numNodes, _outputFeatures - kept]) }, 2);
-            }
+            // Project input to match output dimensions: truncate or zero-pad the features to the output
+            // width, on the tape so the residual carries gradient back to the input.
+            int kept = Math.Min(_inputFeatures, _outputFeatures);
+            var head = Engine.TensorSlice(processInput, [0, 0, 0], [batchSize, numNodes, kept]);
+            residualInput = kept == _outputFeatures
+                ? head
+                : Engine.TensorConcatenate(
+                    new[] { head, new Tensor<T>([batchSize, numNodes, _outputFeatures - kept]) }, 2);
         }
 
-        var normed1 = Engine.TensorAdd(attended, residualInput);
+        // Residual then layer norm (Dwivedi & Bresson 2020, eqs. 5-9: h = Norm(h + MHA(h)),
+        // h = Norm(h + FFN(h))). The two norms' scale and shift are this layer's trainable parameters.
+        var normed1 = Engine.LayerNorm(
+            Engine.TensorAdd(attended, residualInput), _layerNorm1Scale, _layerNorm1Bias, LayerNormEpsilon, out _, out _);
 
         // Feed-forward network with residual
         var ffnOutput = FeedForwardNetwork(normed1, batchSize, numNodes);
 
         // Final residual and layer norm
-        var output = Engine.TensorAdd(normed1, ffnOutput);
+        var output = Engine.LayerNorm(
+            Engine.TensorAdd(normed1, ffnOutput), _layerNorm2Scale, _layerNorm2Bias, LayerNormEpsilon, out _, out _);
 
         var result = ApplyActivation(output);
 
@@ -702,9 +705,11 @@ public partial class GraphTransformerLayer<T> : LayerBase<T>, IGraphConvolutionL
             perHeadWeights[h] = attnWeights;
         }
 
-        // Stack the heads into [B, H, ...] and copy them into the rented 4D tensors. These are plain
-        // copies, as the element-wise scatters were, so they stay off the tape.
-        Tensor<T> concatenated;
+        // Concatenate heads: [batch, numNodes, numHeads * headDim], head-major within each node. This
+        // stays on the tape so the output projection's gradient reaches every head's Q/K/V weights.
+        var concatenated = Engine.TensorConcatenate(perHeadOutputs, 2);
+
+        // Stack the heads into [B, H, ...] for the backward-only caches (plain copies, off the tape).
         using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
         {
             var stackedOutputs = Tensor<T>.Stack(perHeadOutputs, 1);
@@ -720,10 +725,6 @@ public partial class GraphTransformerLayer<T> : LayerBase<T>, IGraphConvolutionL
                 Tensor<T>.Stack(perHeadValues, 1).CopyTo(_lastValues.AsWritableSpan());
                 Tensor<T>.Stack(perHeadWeights, 1).CopyTo(_lastAttentionWeights.AsWritableSpan());
             }
-
-            // Concatenate heads: [batch, numNodes, numHeads * headDim], head-major within each node.
-            concatenated = Engine.Reshape(
-                Engine.TensorPermute(stackedOutputs, [0, 2, 1, 3]), [batchSize, numNodes, _numHeads * _headDim]).Clone();
         }
 
         _lastHeadOutputs = cacheBwd ? headOutputs : null;
@@ -743,14 +744,11 @@ public partial class GraphTransformerLayer<T> : LayerBase<T>, IGraphConvolutionL
 
     private Tensor<T> ExtractHeadWeights(Tensor<T> weights, int headIndex)
     {
-        // Extract [inputFeatures, headDim] from [numHeads, inputFeatures, headDim] as a plain copy (off the
-        // tape, as the element-wise copy was).
-        using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
-        {
-            return Engine.Reshape(
-                Engine.TensorSlice(weights, [headIndex, 0, 0], [1, _inputFeatures, _headDim]),
-                [_inputFeatures, _headDim]).Clone();
-        }
+        // Head headIndex's [inputFeatures, headDim] block of [numHeads, inputFeatures, headDim], as a slice
+        // of the parameter itself so the tape routes this head's gradient into the weight tensor.
+        return Engine.Reshape(
+            Engine.TensorSlice(weights, [headIndex, 0, 0], [1, _inputFeatures, _headDim]),
+            [_inputFeatures, _headDim]);
     }
 
     private Tensor<T> BatchedMatMul3Dx2D(Tensor<T> input3D, Tensor<T> weights2D, int batch, int rows, int cols, int outputCols)
@@ -804,12 +802,9 @@ public partial class GraphTransformerLayer<T> : LayerBase<T>, IGraphConvolutionL
     /// </remarks>
     private Tensor<T> ApplyFFNActivation(Tensor<T> input)
     {
-        var result = TensorAllocator.Rent<T>(input._shape);
-        for (int i = 0; i < input.Length; i++)
-        {
-            result[i] = _ffnActivation.Activate(input.GetFlat(i));
-        }
-        return result;
+        // Through the central dispatch so the activation runs on tape-connected engine kernels (the
+        // element-wise rebuild detached the FFN's first layer from the tape).
+        return ActivationHelper.ApplyActivation(_ffnActivation, input, Engine);
     }
 
     /// <inheritdoc/>
