@@ -507,6 +507,64 @@ internal static class AudioEngineOps
         return result;
     }
 
+    /// <summary>Block length of one level of <see cref="Mean"/>.</summary>
+    private const int MeanBlock = 64;
+
+    /// <summary>
+    /// Arithmetic mean of all elements without ever forming the element count or the full sum in
+    /// <typeparamref name="T"/>: each level averages blocks of <see cref="MeanBlock"/> values (each
+    /// value pre-scaled by <c>1 / MeanBlock</c>), and the zero padding of a partial last block is
+    /// corrected by the ratio <c>blocks * MeanBlock / n</c>, which lies in [1, 2). Every intermediate
+    /// stays within the range of the inputs, so a narrow type such as Half averages more than
+    /// 65,504 samples correctly. NaN propagates; an empty tensor has no mean.
+    /// </summary>
+    internal static T Mean<T>(IEngine engine, Tensor<T> values)
+    {
+        int n = values.Length;
+        if (n == 0) throw new ArgumentException("Cannot average an empty tensor.", nameof(values));
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var v = Flatten(engine, values);
+        if (n <= MeanBlock)
+            return engine.TensorSum(engine.TensorMultiplyScalar(v, numOps.FromDouble(1.0 / n)));
+
+        int blocks = (n + MeanBlock - 1) / MeanBlock;
+        var padded = FitLength(engine, v, blocks * MeanBlock);
+        var blockMeans = engine.ReduceSum(
+            engine.TensorMultiplyScalar(engine.Reshape(padded, new[] { blocks, MeanBlock }), numOps.FromDouble(1.0 / MeanBlock)),
+            new[] { 1 }, keepDims: false);
+        T meanOfBlocks = Mean(engine, blockMeans);
+        return numOps.Multiply(meanOfBlocks, numOps.FromDouble((double)blocks * MeanBlock / n));
+    }
+
+    /// <summary>
+    /// <c>(x - mean) / max(std, floor)</c> with the population standard deviation, as a fresh tensor.
+    /// The mean and the variance go through <see cref="Mean"/>, and the deviations are scaled by their
+    /// largest magnitude before squaring, so neither the sample count nor a sum of squares has to fit
+    /// in <typeparamref name="T"/>. An empty input gives an empty result.
+    /// </summary>
+    internal static Tensor<T> Standardize<T>(IEngine engine, Tensor<T> x, double floor)
+    {
+        if (x.Length == 0) return new Tensor<T>(x.Shape.ToArray());
+        var numOps = MathHelper.GetNumericOperations<T>();
+        T mean = Mean(engine, x);
+        var deviation = engine.TensorSubtractScalar(x, mean);
+        T std = numOps.Zero;
+        // A NaN sample makes the mean NaN; the std is then NaN too, as in the direct formula
+        T scale = numOps.IsNaN(mean) ? mean : engine.TensorMaxValue(engine.TensorAbs(deviation));
+        if (numOps.IsNaN(scale))
+        {
+            std = numOps.FromDouble(double.NaN);
+        }
+        else if (numOps.GreaterThan(scale, numOps.Zero))
+        {
+            var unit = engine.TensorDivideScalar(deviation, scale);
+            std = numOps.Multiply(scale, numOps.Sqrt(Mean(engine, engine.TensorSquare(unit))));
+        }
+        T minimum = numOps.FromDouble(floor);
+        if (numOps.LessThan(std, minimum)) std = minimum;
+        return engine.TensorDivideScalar(deviation, std);
+    }
+
     /// <summary>
     /// The value of the running pairwise average <c>c = v[0]; c = (c + v[i]) / 2</c> over
     /// <paramref name="values"/>, i.e. <c>v[0] / 2^m + sum_{i&gt;=1} v[i] / 2^(m - i + 1)</c> for

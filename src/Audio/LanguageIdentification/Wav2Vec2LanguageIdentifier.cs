@@ -414,17 +414,10 @@ public partial class Wav2Vec2LanguageIdentifier<T> : AudioNeuralNetworkBase<T>, 
     protected override Tensor<T> PreprocessAudio(Tensor<T> rawAudio)
     {
         // Wav2Vec2 works on raw waveform - just normalize: (x - mean) / max(std, 1e-7) with the
-        // population std, as a fresh tensor
+        // population std, as a fresh tensor. The sample count never enters T, so a narrow T (Half)
+        // normalizes clips longer than its largest finite value.
         using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
-        int length = rawAudio.Length;
-        T count = _numOps.FromDouble(length);
-        T mean = _numOps.Divide(Engine.TensorSum(rawAudio), count);
-        var deviation = Engine.TensorSubtractScalar(rawAudio, mean);
-        T std = _numOps.Sqrt(_numOps.Divide(Engine.TensorSum(Engine.TensorSquare(deviation)), count));
-        T floor = _numOps.FromDouble(1e-7);
-        if (_numOps.LessThan(std, floor)) std = floor;
-
-        return Engine.TensorDivideScalar(deviation, std);
+        return AudioEngineOps.Standardize(Engine, rawAudio, 1e-7);
     }
 
     /// <inheritdoc/>
