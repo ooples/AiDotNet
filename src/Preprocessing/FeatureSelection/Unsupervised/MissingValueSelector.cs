@@ -25,12 +25,12 @@ public class MissingValueSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>,
     private readonly double _threshold;
     private readonly double _missingValue;
 
-    private double[]? _missingRatios;
+    private Vector<T>? _missingRatios;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     public double Threshold => _threshold;
-    public double[]? MissingRatios => _missingRatios;
+    public Vector<T>? MissingRatios => _missingRatios;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -56,26 +56,19 @@ public class MissingValueSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>,
         int n = data.Rows;
         int p = data.Columns;
 
-        _missingRatios = new double[p];
-        var selected = new List<int>();
+        var engine = Engine;
+        var x = Tensor<T>.FromMatrix(data);
 
-        for (int j = 0; j < p; j++)
-        {
-            int missingCount = 0;
-            for (int i = 0; i < n; i++)
-            {
-                double val = NumOps.ToDouble(data[i, j]);
-                if (double.IsNaN(val) || Math.Abs(val - _missingValue) < 1e-10)
-                    missingCount++;
-            }
+        // Missing = NaN or within 1e-10 of the missing-value marker.
+        var near = engine.TensorLessThan(
+            engine.TensorAbs(engine.TensorSubtractScalar(x, NumOps.FromDouble(_missingValue))), NumOps.FromDouble(1e-10));
+        var missing = engine.TensorWhere(engine.TensorIsNan(x), PreprocessingTensorOps.Filled(new[] { n, p }, NumOps.One), near);
+        var ratios = engine.TensorDivideScalar(engine.ReduceSum(missing, new[] { 0 }, false), NumOps.FromDouble(n));
+        _missingRatios = ratios.ToVector();
 
-            _missingRatios[j] = (double)missingCount / n;
-
-            if (_missingRatios[j] <= _threshold)
-                selected.Add(j);
-        }
-
-        _selectedIndices = selected.ToArray();
+        // ratio <= threshold (a NaN ratio from zero rows selects nothing).
+        _selectedIndices = PreprocessingTensorOps.MaskPositions(
+            engine.TensorLessEqual(ratios, PreprocessingTensorOps.Filled(new[] { p }, NumOps.FromDouble(_threshold))));
         IsFitted = true;
     }
 
