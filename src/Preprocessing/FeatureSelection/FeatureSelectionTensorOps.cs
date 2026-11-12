@@ -784,6 +784,36 @@ internal static class FeatureSelectionTensorOps
         return engine.Reshape(engine.TensorMatMul(engine.TensorTranspose(featureOneHot), targetOneHot),
             new[] { p, bins, targetBins });
     }
+
+    /// <summary>
+    /// 0/1 matrix [count, count] marking the template pairs (i, k) whose length-<paramref name="m"/> windows of
+    /// <paramref name="values"/> starting at i and k differ by at most <paramref name="tolerance"/> ([1]) in every
+    /// position (Chebyshev distance), as used by approximate and sample entropy.
+    /// </summary>
+    public static Tensor<T> TemplateMatches<T>(Tensor<T> values, int m, int count, Tensor<T> tolerance)
+    {
+        var engine = AiDotNetEngine.Current;
+        var shape = new[] { count, count };
+        var distance = new Tensor<T>(shape);
+        for (int l = 0; l < m; l++)
+        {
+            var window = engine.TensorSlice(values, new[] { l }, new[] { count });
+            distance = engine.TensorMax(distance, engine.TensorAbs(engine.TensorSubtract(
+                engine.TensorBroadcastTo(engine.Reshape(window, new[] { count, 1 }), shape),
+                engine.TensorBroadcastTo(engine.Reshape(window, new[] { 1, count }), shape))));
+        }
+
+        return PreprocessingTensorOps.Not(engine.TensorGreaterThan(distance,
+            engine.TensorBroadcastTo(engine.Reshape(tolerance, new[] { 1, 1 }), shape)));
+    }
+
+    /// <summary>Population standard deviation of every column of <paramref name="x"/> ([n, p]).</summary>
+    public static Tensor<T> ColumnStd<T>(Tensor<T> x)
+    {
+        var engine = AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<T>();
+        return engine.TensorSqrt(engine.TensorDivideScalar(ColumnSumSquaredDeviations(x), ops.FromDouble(x.Shape[0])));
+    }
 }
 
 /// <summary>Impurity used by <see cref="FeatureSelectionTensorOps.TryBestSplit{T}"/>.</summary>

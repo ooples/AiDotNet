@@ -27,7 +27,7 @@ public class SampleEntropySelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     private readonly int _embeddingDimension;
     private readonly double _tolerance;
 
-    private double[]? _sampenValues;
+    private Vector<T>? _sampenValues;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
@@ -35,7 +35,7 @@ public class SampleEntropySelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public int EmbeddingDimension => _embeddingDimension;
     public double Tolerance => _tolerance;
-    public double[]? SampEnValues => _sampenValues;
+    public Vector<T>? SampEnValues => _sampenValues;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -70,82 +70,59 @@ public class SampleEntropySelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         if (n < _embeddingDimension + 2)
             throw new ArgumentException($"Need at least {_embeddingDimension + 2} samples.");
 
-        var X = new double[n, p];
-        for (int i = 0; i < n; i++)
-            for (int j = 0; j < p; j++)
-                X[i, j] = NumOps.ToDouble(data[i, j]);
+        var engine = Engine;
+        var X = Tensor<T>.FromMatrix(data);
 
-        _sampenValues = new double[p];
+        // Tolerance r = tolerance * population std per feature; features with r below 1e-10 score 0
+        var tolerances = engine.TensorMultiplyScalar(FeatureSelectionTensorOps.ColumnStd(X), NumOps.FromDouble(_tolerance));
+        var degenerate = new HashSet<int>(PreprocessingTensorOps.MaskPositions(
+            engine.TensorLessThan(tolerances, NumOps.FromDouble(1e-10))));
 
+        // Richman and Moorman (2000): B and A count the matching pairs among the same n - m templates
+        int templates = n - _embeddingDimension;
+        var bCounts = new Tensor<T>[p];
+        var aCounts = new Tensor<T>[p];
         for (int j = 0; j < p; j++)
         {
-            var col = new double[n];
-            for (int i = 0; i < n; i++)
-                col[i] = X[i, j];
-
-            // Calculate standard deviation for tolerance scaling
-            double mean = col.Average();
-            double std = Math.Sqrt(col.Select(v => (v - mean) * (v - mean)).Average());
-            double r = _tolerance * std;
-
-            if (r < 1e-10)
+            if (degenerate.Contains(j))
             {
-                _sampenValues[j] = 0;
+                bCounts[j] = new Tensor<T>(new[] { 1 });
+                aCounts[j] = new Tensor<T>(new[] { 1 });
                 continue;
             }
 
-            // Count matches for m and m+1 (excluding self-matches)
-            int bM = CountMatches(col, _embeddingDimension, r);
-            int aM = CountMatches(col, _embeddingDimension + 1, r);
+            var col = PreprocessingTensorOps.ColumnVector(X, j);
+            var r = engine.TensorSlice(tolerances, new[] { j }, new[] { 1 });
 
-            // SampEn = -ln(A/B)
-            if (bM == 0 || aM == 0)
-            {
-                _sampenValues[j] = 0;
-            }
-            else
-            {
-                _sampenValues[j] = -Math.Log((double)aM / bM);
-            }
+            // Count matches for m and m+1 (excluding self-matches)
+            bCounts[j] = CountMatches(col, _embeddingDimension, templates, r);
+            aCounts[j] = CountMatches(col, _embeddingDimension + 1, templates, r);
         }
 
+        // SampEn = -ln(A/B), 0 when either count is 0
+        var shape = new[] { p };
+        var b = p == 0 ? new Tensor<T>(shape) : engine.TensorConcatenate(bCounts, 0);
+        var a = p == 0 ? new Tensor<T>(shape) : engine.TensorConcatenate(aCounts, 0);
+        var defined = engine.TensorMultiply(engine.TensorGreaterThan(b, NumOps.Zero), engine.TensorGreaterThan(a, NumOps.Zero));
+        var ones = PreprocessingTensorOps.Filled(shape, NumOps.One);
+        var sampen = engine.TensorWhere(defined, engine.TensorNegate(engine.TensorLog(engine.TensorDivide(
+            engine.TensorWhere(defined, a, ones), engine.TensorWhere(defined, b, ones)))), new Tensor<T>(shape));
+        _sampenValues = sampen.ToVector();
+
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = Enumerable.Range(0, p)
-            .OrderByDescending(j => _sampenValues[j])
-            .Take(numToSelect)
-            .OrderBy(x => x)
-            .ToArray();
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(sampen, numToSelect);
 
         IsFitted = true;
     }
 
-    private int CountMatches(double[] data, int m, double r)
+    /// <summary>Number of template pairs i &lt; k (of the first <paramref name="count"/> templates) within r. Returns [1].</summary>
+    private Tensor<T> CountMatches(Tensor<T> data, int m, int count, Tensor<T> r)
     {
-        int n = data.Length;
-        int count = n - m;
-        int matches = 0;
-
-        for (int i = 0; i < count; i++)
-        {
-            for (int k = i + 1; k < count; k++) // Exclude self-matches
-            {
-                // Check if patterns match within tolerance
-                bool isMatch = true;
-                for (int l = 0; l < m; l++)
-                {
-                    if (Math.Abs(data[i + l] - data[k + l]) > r)
-                    {
-                        isMatch = false;
-                        break;
-                    }
-                }
-                if (isMatch) matches++;
-            }
-        }
-
-        return matches;
+        // Every template matches itself, so the pairs are (all matches - count) / 2
+        var matches = Engine.ReduceSum(Engine.Reshape(
+            FeatureSelectionTensorOps.TemplateMatches(data, m, count, r), new[] { count * count }), new[] { 0 }, true);
+        return Engine.TensorDivideScalar(Engine.TensorSubtractScalar(matches, NumOps.FromDouble(count)), NumOps.FromDouble(2));
     }
-
     public new Matrix<T> FitTransform(Matrix<T> data)
     {
         Fit(data);
