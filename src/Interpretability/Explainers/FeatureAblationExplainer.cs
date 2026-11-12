@@ -276,7 +276,7 @@ public partial class FeatureAblationExplainer<T> : ILocalExplainer<T, FeatureAbl
             var engine = AiDotNetEngine.Current;
             var stacked = ExplainerTensorOps<T>.Stack(sampleAttributions);
             var mean = engine.ReduceMean(stacked, new[] { 0 }, true);
-            var deviations = engine.TensorSubtract(stacked, engine.TensorBroadcastTo(mean, stacked.Shape));
+            var deviations = engine.TensorSubtract(stacked, engine.TensorBroadcastTo(mean, stacked.Shape.ToArray()));
             meanAttributions = mean.ToVector();
             meanAbsAttributions = engine.ReduceMean(engine.TensorAbs(stacked), new[] { 0 }, false).ToVector();
             stdAttributions = engine.TensorSqrt(engine.ReduceMean(engine.TensorSquare(deviations), new[] { 0 }, false)).ToVector();

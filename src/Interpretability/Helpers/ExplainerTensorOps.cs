@@ -76,7 +76,7 @@ internal static class ExplainerTensorOps<T>
     {
         var engine = AiDotNetEngine.Current;
         var offsets = engine.TensorOuter(alphas, engine.Subtract(input, baseline).AsTensor());
-        var baselineRows = engine.TensorBroadcastTo(baseline.AsTensor().Reshape(new[] { 1, baseline.Length }), offsets.Shape);
+        var baselineRows = engine.TensorBroadcastTo(baseline.AsTensor().Reshape(new[] { 1, baseline.Length }), offsets.Shape.ToArray());
         return engine.TensorAdd(offsets, baselineRows);
     }
 

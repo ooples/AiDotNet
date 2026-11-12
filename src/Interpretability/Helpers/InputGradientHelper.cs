@@ -429,7 +429,7 @@ public class InputGradientHelper<T>
         var engine = AiDotNetEngine.Current;
         var alphas = engine.TensorDivideScalar(engine.TensorArange<T>(0, numSteps, 1), NumOps.FromDouble(numSteps - 1));
         var offsets = engine.TensorOuter(alphas, engine.Subtract(input, baseline).AsTensor());
-        var path = engine.TensorAdd(offsets, engine.TensorBroadcastTo(baseline.AsTensor().Reshape(new[] { 1, input.Length }), offsets.Shape));
+        var path = engine.TensorAdd(offsets, engine.TensorBroadcastTo(baseline.AsTensor().Reshape(new[] { 1, input.Length }), offsets.Shape.ToArray()));
 
         for (int step = 0; step < numSteps; step++)
         {

@@ -296,7 +296,7 @@ public class NoiseTunnelExplainer<T, TExplanation>
         var engine = AiDotNetEngine.Current;
         var stacked = Stack(attributions);
         var mean = engine.ReduceMean(stacked, new[] { 0 }, true);
-        var centered = engine.TensorSubtract(stacked, engine.TensorBroadcastTo(mean, stacked.Shape));
+        var centered = engine.TensorSubtract(stacked, engine.TensorBroadcastTo(mean, stacked.Shape.ToArray()));
         var sumOfSquares = engine.ReduceSum(engine.TensorSquare(centered), new[] { 0 }, false);
         var variance = engine.TensorDivideScalar(sumOfSquares, NumOps.FromDouble(attributions.Count - 1));
         return engine.TensorSqrt(variance).ToVector();

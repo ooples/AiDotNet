@@ -248,7 +248,7 @@ public class GlobalSHAPExplanation<T>
         var engine = AiDotNetEngine.Current;
         var stacked = StackShapValues();
         var mean = engine.ReduceMean(stacked, new[] { 0 }, true);
-        var centered = engine.TensorSubtract(stacked, engine.TensorBroadcastTo(mean, stacked.Shape));
+        var centered = engine.TensorSubtract(stacked, engine.TensorBroadcastTo(mean, stacked.Shape.ToArray()));
         return engine.TensorSqrt(engine.ReduceMean(engine.TensorSquare(centered), new[] { 0 }, false)).ToVector();
     }
 

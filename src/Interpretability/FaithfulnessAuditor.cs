@@ -151,9 +151,9 @@ public sealed class FaithfulnessAuditor<T>
     /// </summary>
     private int[] DescendingAbsoluteOrder(Vector<T> attributions, int d)
     {
-        return Enumerable.Range(0, d)
-            .OrderByDescending(j => Math.Abs(_numOps.ToDouble(attributions[j])))
-            .ToArray();
+        var engine = AiDotNetEngine.Current;
+        var magnitudes = engine.TensorAbs(attributions.GetSubVector(0, d).AsTensor());
+        return engine.TensorArgsort(magnitudes, 0, true).AsSpan().ToArray();
     }
 
     private T CurveAuc(Func<Vector<T>, T> score, Tensor<T> x, Tensor<T> baseline, Tensor<T> stepMask, int[] stepShape,

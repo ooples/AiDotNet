@@ -145,9 +145,9 @@ public class AttentionVisualizationExplainer<T> : ILocalExplainer<T, AttentionEx
         else
         {
             // Create placeholder attention (uniform distribution)
+            T uniformWeight = NumOps.Divide(NumOps.One, NumOps.FromDouble(_sequenceLength));
             for (int layer = 0; layer < _numLayers; layer++)
             {
-                T uniformWeight = NumOps.Divide(NumOps.One, NumOps.FromDouble(_sequenceLength));
                 var layerAttn = AiDotNetEngine.Current.TensorFullLike(
                     new Tensor<T>(new[] { _numHeads, _sequenceLength, _sequenceLength }), uniformWeight);
                 allLayerAttention.Add(layerAttn);
@@ -310,7 +310,7 @@ public class AttentionVisualizationExplainer<T> : ILocalExplainer<T, AttentionEx
             var rowSums = engine.ReduceSum(attnWithResidual, new[] { 1 }, true);
             var positive = engine.TensorGreaterThan(rowSums, NumOps.Zero);
             var divisors = engine.TensorWhere(positive, rowSums, engine.TensorFullLike(rowSums, NumOps.One));
-            attnWithResidual = engine.TensorDivide(attnWithResidual, engine.TensorBroadcastTo(divisors, attnWithResidual.Shape));
+            attnWithResidual = engine.TensorDivide(attnWithResidual, engine.TensorBroadcastTo(divisors, attnWithResidual.Shape.ToArray()));
 
             // Matrix multiplication: rollout = attnWithResidual * rollout
             rollout = engine.TensorMatMul(attnWithResidual, rollout);

@@ -392,22 +392,26 @@ public class GradCAMExplanation<T>
     /// </summary>
     public List<(int y, int x, T importance)> GetImportantRegions(double threshold = 0.5)
     {
-        var regions = new List<(int, int, T)>();
-        int height = Heatmap.Rows;
+        var engine = AiDotNetEngine.Current;
         int width = Heatmap.Columns;
-
-        for (int i = 0; i < height; i++)
+        var values = Tensor<T>.FromMatrix(Heatmap).Reshape(new[] { Heatmap.Rows * width });
+        var above = engine.TensorGreaterEqual(values, engine.TensorFullLike(values, NumOps.FromDouble(threshold)));
+        if (engine.TensorCountNonzero(above) == 0)
         {
-            for (int j = 0; j < width; j++)
-            {
-                if (NumOps.ToDouble(Heatmap[i, j]) >= threshold)
-                {
-                    regions.Add((i, j, Heatmap[i, j]));
-                }
-            }
+            return new List<(int y, int x, T importance)>();
         }
 
-        return regions.OrderByDescending(r => NumOps.ToDouble(r.Item3)).ToList();
+        // Row-major positions at or above the threshold, then ordered by descending importance
+        // (the stable argsort keeps equal importances in row-major order, as OrderByDescending did).
+        var nonzero = engine.TensorNonzero(above);
+        var positions = nonzero.Reshape(new[] { nonzero.Shape[0] });
+        var selected = engine.TensorIndexSelect(values, positions, 0);
+        var order = engine.TensorArgsort(selected, 0, true);
+        var orderedPositions = engine.TensorIndexSelect(positions, order, 0).AsSpan().ToArray();
+        var orderedValues = engine.TensorIndexSelect(selected, order, 0).ToVector();
+        return orderedPositions
+            .Zip(orderedValues, (position, importance) => (y: position / width, x: position % width, importance))
+            .ToList();
     }
 
     /// <summary>

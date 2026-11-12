@@ -226,11 +226,12 @@ public class DiCEExplainer<T> : ILocalExplainer<T, DiCEExplanation<T>>, IGPUAcce
 
         // Create explanations
         var cfExplanations = new List<SingleCounterfactual<T>>();
-        foreach (var cf in counterfactuals)
+        if (counterfactuals.Count > 0)
         {
-            var cfMatrix = CreateSingleRowMatrix(cf);
-            var cfPred = _predictFunction(cfMatrix);
-            cfExplanations.Add(CreateSingleCounterfactual(instance, cf, cfPred[0]));
+            // The model's first output for each counterfactual (one prediction call each, in order)
+            var cfPredictions = Predict(counterfactuals).ToVector();
+            cfExplanations.AddRange(counterfactuals.Zip(cfPredictions,
+                (cf, prediction) => CreateSingleCounterfactual(instance, cf, prediction)));
         }
 
         return new DiCEExplanation<T>(
@@ -423,10 +424,10 @@ public class DiCEExplainer<T> : ILocalExplainer<T, DiCEExplanation<T>>, IGPUAcce
 
         // Fraction of the mutable features changed by more than 1e-6
         var individuals = ExplainerTensorOps<T>.Stack(population);
-        var originals = engine.TensorBroadcastTo(ExplainerTensorOps<T>.RowTensor(original.GetSubVector(0, _numFeatures)), individuals.Shape);
+        var originals = engine.TensorBroadcastTo(ExplainerTensorOps<T>.RowTensor(original.GetSubVector(0, _numFeatures)), individuals.Shape.ToArray());
         var changed = engine.TensorGreaterThan(engine.TensorAbs(engine.TensorSubtract(originals, individuals)), NumOps.FromDouble(1e-6));
         var mutableMask = engine.TensorBroadcastTo(
-            new Tensor<int>(mutable.Select(isMutable => isMutable ? 1 : 0).ToArray(), new[] { 1, _numFeatures }).Cast<T>(), individuals.Shape);
+            new Tensor<int>(mutable.Select(isMutable => isMutable ? 1 : 0).ToArray(), new[] { 1, _numFeatures }).Cast<T>(), individuals.Shape.ToArray());
         var changedCount = engine.ReduceSum(engine.TensorMultiply(changed, mutableMask), new[] { 1 }, false);
         return engine.TensorDivideScalar(changedCount, NumOps.FromDouble(mutableCount));
     }
@@ -648,12 +649,13 @@ public class DiCEExplainer<T> : ILocalExplainer<T, DiCEExplanation<T>>, IGPUAcce
         var minDistances = NanSkippingMin(
             engine.TensorFullLike(engine.TensorSliceAxis(distances, 1, 0), NumOps.MaxValue), engine.TensorSliceAxis(distances, 1, 0));
         var taken = new bool[remaining.Count];
-        var unavailable = engine.TensorFullLike(minDistances, NumOps.Negate(NumOps.One));
+        T negativeOne = NumOps.Negate(NumOps.One);
+        var unavailable = engine.TensorFullLike(minDistances, negativeOne);
         while (selected.Count < _numCounterfactuals && selected.Count < candidateList.Count)
         {
             // The farthest untaken candidate (scan seeded with -1); with none above -1, the first untaken one
             int bestIdx = ExplainerTensorOps<T>.FirstArgMaxAbove(
-                engine.TensorWhere(taken, unavailable, minDistances).ToVector(), NumOps.Negate(NumOps.One));
+                engine.TensorWhere(taken, unavailable, minDistances).ToVector(), negativeOne);
             if (bestIdx < 0)
             {
                 bestIdx = Array.IndexOf(taken, false);

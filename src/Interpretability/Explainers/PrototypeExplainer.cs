@@ -240,7 +240,7 @@ public partial class PrototypeExplainer<T> : ILocalExplainer<T, PrototypeExplana
 
         var engine = AiDotNetEngine.Current;
         var prototypes = Tensor<T>.FromMatrix(_prototypes);
-        var instanceRows = engine.TensorBroadcastTo(ExplainerTensorOps<T>.RowTensor(instance), prototypes.Shape);
+        var instanceRows = engine.TensorBroadcastTo(ExplainerTensorOps<T>.RowTensor(instance), prototypes.Shape.ToArray());
         var diff = engine.TensorSubtract(prototypes, instanceRows);
 
         switch (_distanceMetric)

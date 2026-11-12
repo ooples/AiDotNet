@@ -207,7 +207,7 @@ public class PermutationFeatureImportance<T> : IGlobalExplainer<T, FeatureImport
             var stacked = ExplainerTensorOps<T>.Stack(permutedScores);
             var drops = engine.TensorSubtract(engine.TensorFullLike(stacked, baselineScore), stacked);
             var mean = engine.ReduceMean(drops, new[] { 1 }, true);
-            var deviations = engine.TensorSubtract(drops, engine.TensorBroadcastTo(mean, drops.Shape));
+            var deviations = engine.TensorSubtract(drops, engine.TensorBroadcastTo(mean, drops.Shape.ToArray()));
             importances = mean.ToVector();
             importanceStds = engine.TensorSqrt(engine.ReduceMean(engine.TensorSquare(deviations), new[] { 1 }, false)).ToVector();
         }

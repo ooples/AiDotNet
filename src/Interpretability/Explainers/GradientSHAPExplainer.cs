@@ -204,7 +204,7 @@ public class GradientSHAPExplainer<T> : ILocalExplainer<T, GradientSHAPExplanati
         var engine = AiDotNetEngine.Current;
         var samples = ExplainerTensorOps<T>.Stack(sampleAttributions);
         var mean = engine.ReduceMean(samples, new[] { 0 }, true);
-        var centered = engine.TensorSubtract(samples, engine.TensorBroadcastTo(mean, samples.Shape));
+        var centered = engine.TensorSubtract(samples, engine.TensorBroadcastTo(mean, samples.Shape.ToArray()));
         var attributions = mean.ToVector();
         var attributionVariances = engine.ReduceMean(engine.TensorSquare(centered), new[] { 0 }, false).ToVector();
 

@@ -367,7 +367,7 @@ public class GPUExplainerHelper<T> : IDisposable
         var alphas = engine.TensorDivideScalar(engine.TensorArange<T>(0.5, numSteps, 1), NumOps.FromDouble(numSteps));
         var offsets = engine.TensorOuter(alphas, difference.AsTensor());
         var path = engine.TensorAdd(offsets,
-            engine.TensorBroadcastTo(baseline.AsTensor().Reshape(new[] { 1, input.Length }), offsets.Shape));
+            engine.TensorBroadcastTo(baseline.AsTensor().Reshape(new[] { 1, input.Length }), offsets.Shape.ToArray()));
 
         // Compute gradients in parallel
         var gradients = BatchComputeGradients(gradientFunction, path.ToMatrix(), outputIndex);
