@@ -45,6 +45,35 @@ internal static class FeatureSelectionInformationOps
         return engine.TensorMultiply(binned, spread).Cast<int>();
     }
 
+    /// <summary>
+    /// Equal-width bin index of every entry of a 2-D tensor ([n, p]), per column, with a padded bin width:
+    /// <c>min(floor((x - min) / ((max - min) / bins + 1e-10)), bins - 1)</c>.
+    /// </summary>
+    public static Tensor<int> EqualWidthBinsPaddedWidth<T>(Tensor<T> x, int bins)
+    {
+        var engine = AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<T>();
+        int p = x.Shape[1];
+        var min = engine.Reshape(FeatureSelectionTensorOps.ColumnMin(x), new[] { 1, p });
+        var max = engine.Reshape(FeatureSelectionTensorOps.ColumnMax(x), new[] { 1, p });
+        var width = engine.TensorAddScalar(
+            engine.TensorDivideScalar(engine.TensorSubtract(max, min), ops.FromDouble(bins)), ops.FromDouble(1e-10));
+        var scaled = engine.TensorDivide(engine.TensorSubtract(x, min), width);
+        return engine.TensorMin(engine.TensorFloor(scaled), ops.FromDouble(bins - 1)).Cast<int>();
+    }
+
+    /// <summary>
+    /// Mutual information in bits between every column of <paramref name="a"/> ([n, p], values in 0..aCard-1)
+    /// and the discrete variable <paramref name="b"/> ([n] or [n, 1], values in 0..bCard-1), clamped at 0. Returns [p].
+    /// </summary>
+    public static Tensor<T> MutualInformationBits<T>(Tensor<int> a, int aCard, Tensor<int> b, int bCard)
+    {
+        var engine = AiDotNetEngine.Current;
+        int n = a.Shape[0];
+        var nats = MutualInformation(JointCounts<T>(a, aCard, b, bCard), n);
+        return engine.TensorMax(ToBits(nats), MathHelper.GetNumericOperations<T>().Zero);
+    }
+
     /// <summary>Equal-width bin index of every entry of a 1-D tensor ([n] to [n, 1]), see <see cref="EqualWidthBins{T}(Tensor{T}, int)"/>.</summary>
     public static Tensor<int> EqualWidthBins<T>(Vector<T> values, int bins) =>
         EqualWidthBins(AiDotNetEngine.Current.Reshape(Tensor<T>.FromVector(values), new[] { values.Length, 1 }), bins);
