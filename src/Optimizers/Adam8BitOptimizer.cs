@@ -492,6 +492,10 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
         public IDirectGpuBackend? GpuBackend;
         public bool GpuDirty;
         public bool HostRestored;
+        // Set when a CPU step updated the host moments; the next GPU step uploads them before running. Without it a GPU
+        // step after a scheduled full-precision (CPU) step, or after a first step that ran on the CPU, reused GPU buffers
+        // holding the moments from before the CPU update.
+        public bool HostDirty;
 
         public void FreeGpuBuffers()
         {
@@ -564,8 +568,11 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
             // configuration is eligible (compressBothMoments=true,
             // percentile>=100, no stochastic rounding); other configs fall
             // through to the dense ToDense path so quantization semantics stay
-            // bit-identical with the dense code.
-            if (!_options.UseBFloat16MomentStorage && SparseEmbeddingOptimizerHelpers.HasUnprocessedSparseEmbeddingGrad(context, param))
+            // bit-identical with the dense code. Weight decay also takes the dense path: coupled decay adds
+            // WeightDecay * param to every row and decoupled decay scales the whole tensor, so neither is sparse, and the
+            // sparse helper would skip it.
+            if (!_options.UseBFloat16MomentStorage && weightDecay <= 0.0
+                && SparseEmbeddingOptimizerHelpers.HasUnprocessedSparseEmbeddingGrad(context, param))
             {
                 // Lazily allocate quantized state at the parameter's actual length —
                 // mirroring the same shape-mismatch handling as the dense path below
@@ -597,6 +604,7 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
                         _options.QuantizationPercentile,
                         _options.UseStochasticRounding))
                 {
+                    stateSp.HostDirty = true;
                     continue;
                 }
             }
@@ -649,6 +657,8 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
             {
                 SyncGpuStateToHost(state);
             }
+            // This CPU step updates the host moments below.
+            state.HostDirty = true;
 
             if (weightDecay > 0.0)
             {
@@ -831,13 +841,16 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
             {
                 if (!GpuOptimizer.TryAllocBf16MomentState(pFloat.Length, out state.GpuMBf16, out state.GpuVBf16))
                     return false;
-                if (state.HostRestored && gpuEngine.GetBackend() is { } restoreBackendBf16
-                    && state.MBf16 is not null && state.VBf16 is not null)
-                {
-                    UploadUShortMomentsToGpu(restoreBackendBf16, state.GpuMBf16!, state.MBf16);
-                    UploadUShortMomentsToGpu(restoreBackendBf16, state.GpuVBf16!, state.VBf16);
-                    state.HostRestored = false;
-                }
+            }
+
+            if ((state.HostRestored || state.HostDirty) && gpuEngine.GetBackend() is { } restoreBackendBf16
+                && state.GpuMBf16 is { } gpuMBf16 && state.GpuVBf16 is { } gpuVBf16
+                && state.MBf16 is not null && state.VBf16 is not null)
+            {
+                UploadUShortMomentsToGpu(restoreBackendBf16, gpuMBf16, state.MBf16);
+                UploadUShortMomentsToGpu(restoreBackendBf16, gpuVBf16, state.VBf16);
+                state.HostRestored = false;
+                state.HostDirty = false;
             }
 
             if (!GpuOptimizer.TryAdamBf16Step(
@@ -900,14 +913,15 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
             {
                 return false;
             }
+        }
 
-            if (state.HostRestored && gpuEngine.GetBackend() is { } restoreBackend8
-                && state.MQuantized is not null && state.VQuantized is not null
-                && state.MScales is not null && state.VScales is not null)
-            {
-                Upload8BitMomentsToGpu(restoreBackend8, state);
-                state.HostRestored = false;
-            }
+        if ((state.HostRestored || state.HostDirty) && gpuEngine.GetBackend() is { } restoreBackend8
+            && state.MQuantized is not null && state.VQuantized is not null
+            && state.MScales is not null && state.VScales is not null)
+        {
+            Upload8BitMomentsToGpu(restoreBackend8, state);
+            state.HostRestored = false;
+            state.HostDirty = false;
         }
 
         if (!GpuOptimizer.TryAdam8BitStep(

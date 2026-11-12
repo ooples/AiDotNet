@@ -207,11 +207,18 @@ public class Adam8BitOptimizerOptions<T, TInput, TOutput> : AdamOptimizerOptions
     /// <summary>
     /// Gets or sets the weight decay coefficient applied during each optimizer step. Default: 0.0 (disabled).
     /// </summary>
+    /// <value>A non-negative decay coefficient. The default, 0.0, disables weight decay.</value>
     /// <remarks>
+    /// <para>
     /// When <see cref="UseDecoupledWeightDecay"/> is <c>true</c> (default), applies AdamW decoupled weight decay
     /// (<c>param *= 1 - lr * WeightDecay</c>), matching <c>bitsandbytes.optim.AdamW8bit</c> and
     /// <c>torch.optim.AdamW</c>. When <c>false</c>, adds <c>WeightDecay * param</c> to the gradient prior to the
     /// moment update (classic L2-coupled <c>Adam8bit</c>).
+    /// </para>
+    /// <para><b>For Beginners:</b> Weight decay gently pulls every weight toward zero on each step, which discourages
+    /// the model from relying on very large weights. Leave it at 0 to turn it off; see
+    /// <see cref="UseDecoupledWeightDecay"/> for how the pull is applied.
+    /// </para>
     /// </remarks>
     public double WeightDecay { get; set; } = 0.0;
 
@@ -219,5 +226,17 @@ public class Adam8BitOptimizerOptions<T, TInput, TOutput> : AdamOptimizerOptions
     /// Gets or sets whether <see cref="WeightDecay"/> is applied as decoupled AdamW decay (<c>true</c>, default)
     /// rather than L2-coupled gradient decay (<c>false</c>).
     /// </summary>
+    /// <value><c>true</c> for decoupled decay (default); <c>false</c> for decay added to the gradient.</value>
+    /// <remarks>
+    /// <para>
+    /// Decoupled decay (Loshchilov &amp; Hutter, "Decoupled Weight Decay Regularization", ICLR 2019) shrinks the
+    /// parameters directly and leaves Adam's moments untouched. Coupled decay adds <c>WeightDecay * param</c> to the
+    /// gradient, so the decay term also passes through the moment estimates and the adaptive denominator.
+    /// </para>
+    /// <para><b>For Beginners:</b> With <c>true</c> the weights are shrunk separately from the learning update (AdamW);
+    /// with <c>false</c> the shrinking is mixed into the gradient (classic Adam with L2). This setting has no effect
+    /// when <see cref="WeightDecay"/> is 0.
+    /// </para>
+    /// </remarks>
     public bool UseDecoupledWeightDecay { get; set; } = true;
 }
