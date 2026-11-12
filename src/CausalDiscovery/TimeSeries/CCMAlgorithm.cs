@@ -89,49 +89,62 @@ public class CCMAlgorithm<T> : TimeSeriesCausalBase<T>
         if (n < minSamples)
             throw new ArgumentException($"CCM requires at least {minSamples} samples for embedding dimension {embDim}, got {n}.");
 
-        var result = new Matrix<T>(d, d);
+        int validN = n - (embDim - 1) * tau;
+        var x = Tensor<T>.FromMatrix(data);
+        // Targets aligned with the embedding rows: row t of the embedding is time t + (embDim - 1) * tau
+        var targets = Engine.TensorSlice(x, new[] { (embDim - 1) * tau, 0 }, new[] { validN, d });
+        T zero = NumOps.Zero;
+        T convergenceThreshold = NumOps.FromDouble(_convergenceThreshold);
+        T correlationThreshold = NumOps.FromDouble(_correlationThreshold);
+        T saturation = NumOps.FromDouble(0.95);
+        T degradationTolerance = NumOps.FromDouble(-1e-3);
 
-        for (int i = 0; i < d; i++)
-            for (int j = 0; j < d; j++)
-            {
-                if (i == j) continue;
+        var columns = new Tensor<T>[d];
+        for (int j = 0; j < d; j++)
+        {
+            // Build delay embedding from variable j: embeddings[t, e] = x_j(t + (embDim - 1 - e) * tau)
+            var column = Engine.TensorSliceAxis(x, 1, j);
+            var embeddings = Engine.TensorConcatenate(Enumerable.Range(0, embDim)
+                .Select(e => Engine.TensorSlice(column, new[] { (embDim - 1 - e) * tau }, new[] { validN }).Reshape(new[] { validN, 1 }))
+                .ToArray(), 1);
 
-                int validN = n - (embDim - 1) * tau;
-                if (validN < minLib) continue;
+            // CCM convergence (Sugihara et al. 2012, Science): an edge is accepted
+            // when cross-map skill ρ INCREASES as the library grows from a
+            // small size toward the full series and plateaus at a high value. The
+            // signature is measured from a SMALL fixed library (minLib) to the
+            // full library — not half-vs-full, where both endpoints scale with n and
+            // already sit on ρ's plateau, so the measured gain vanishes for large n.
+            // The manifold of j cross-maps every target i at once (ρ for each column of targets).
+            var rhoSmall = ComputeCrossMapCorrelation(targets, embeddings, minLib, embDim);
+            var rhoFull = ComputeCrossMapCorrelation(targets, embeddings, validN, embDim);
 
-                // Build delay embedding from variable j
-                var embeddings = new Matrix<T>(validN, embDim);
-                for (int t = 0; t < validN; t++)
-                    for (int e = 0; e < embDim; e++)
-                        embeddings[t, e] = data[t + (embDim - 1) * tau - e * tau, j];
+            var convergence = Engine.TensorSubtract(rhoFull, rhoSmall);
+            var convergent = Engine.TensorMultiply(Engine.TensorGreaterThan(convergence, convergenceThreshold),
+                Engine.TensorGreaterThan(rhoFull, correlationThreshold));
 
-                // CCM convergence (Sugihara et al. 2012, Science): an edge is accepted
-                // when cross-map skill ρ INCREASES as the library grows from a
-                // small size toward the full series and plateaus at a high value. The
-                // signature is measured from a SMALL fixed library (minLib) to the
-                // full library — not half-vs-full, where both endpoints scale with n and
-                // already sit on ρ's plateau, so the measured gain vanishes for large n.
-                double rhoSmall = ComputeCrossMapCorrelation(data, embeddings, i, minLib, embDim);
-                double rhoFull = ComputeCrossMapCorrelation(data, embeddings, i, validN, embDim);
+            // Already-saturated regime: on deterministic or near-deterministic
+            // systems, the cross-mapping reaches its ceiling at the minimum
+            // library size already, so ρ_full - ρ_small ≈ 0 even though the
+            // causal coupling is overwhelmingly strong. Sugihara et al. 2012
+            // §SI.2 ("Convergence with library size") explicitly notes that
+            // for highly-coupled systems ρ saturates near 1 well below the
+            // full library; the convergence test is informative for noisy
+            // partial couplings, not for already-perfect couplings. Accept
+            // the edge when both ρ_small and ρ_full are above 0.95 AND
+            // ρ_full ≥ ρ_small (no degradation from increased library size).
+            var notDegraded = Engine.TensorAdd(Engine.TensorGreaterThan(convergence, degradationTolerance),
+                Engine.TensorEquals(convergence, degradationTolerance));
+            var saturatedConvergence = Engine.TensorMultiply(Engine.TensorMultiply(
+                Engine.TensorGreaterThan(rhoSmall, saturation), Engine.TensorGreaterThan(rhoFull, saturation)), notDegraded);
 
-                double convergence = rhoFull - rhoSmall;
-                bool convergent = convergence > _convergenceThreshold && rhoFull > _correlationThreshold;
+            var accept = Engine.TensorGreaterThan(Engine.TensorAdd(convergent, saturatedConvergence), zero);
+            columns[j] = Engine.TensorWhere(accept, rhoFull, Engine.TensorZerosLike(rhoFull));
+        }
 
-                // Already-saturated regime: on deterministic or near-deterministic
-                // systems, the cross-mapping reaches its ceiling at the minimum
-                // library size already, so ρ_full - ρ_small ≈ 0 even though the
-                // causal coupling is overwhelmingly strong. Sugihara et al. 2012
-                // §SI.2 ("Convergence with library size") explicitly notes that
-                // for highly-coupled systems ρ saturates near 1 well below the
-                // full library; the convergence test is informative for noisy
-                // partial couplings, not for already-perfect couplings. Accept
-                // the edge when both ρ_small and ρ_full are above 0.95 AND
-                // ρ_full ≥ ρ_small (no degradation from increased library size).
-                bool saturatedConvergence = rhoSmall > 0.95 && rhoFull > 0.95 && convergence >= -1e-3;
-
-                if (convergent || saturatedConvergence)
-                    result[i, j] = NumOps.FromDouble(rhoFull);
-            }
+        // result[i, j] = ρ of target i cross-mapped from the manifold of j (never i == j)
+        var raw = Engine.TensorStack(columns, 1);
+        var offDiagonal = OffDiagonalMask(d);
+        var result = Engine.TensorWhere(offDiagonal, raw, Engine.TensorZerosLike(raw));
 
         // CCM directionality (Sugihara et al. 2012, Science, "Detecting Causality in Complex
         // Ecosystems"): causation is inferred from the ASYMMETRY of convergent cross-map skill — X
@@ -141,120 +154,94 @@ public class CCMAlgorithm<T> : TimeSeriesCausalBase<T>
         // (the weaker reverse mapping is a reconstruction artifact, not a second causal link). Genuine
         // bidirectional coupling — where the two skills are comparable — is left intact (the paper
         // reports mutual causation in exactly that near-symmetric regime).
-        for (int i = 0; i < d; i++)
-            for (int j = i + 1; j < d; j++)
-            {
-                double fwd = Math.Abs(NumOps.ToDouble(result[i, j]));
-                double bwd = Math.Abs(NumOps.ToDouble(result[j, i]));
-                if (fwd <= 0 || bwd <= 0) continue;
-                double asymmetry = Math.Abs(fwd - bwd) / (Math.Max(fwd, bwd) + 1e-10);
-                if (asymmetry >= _directionalityAsymmetryThreshold)
-                {
-                    if (fwd >= bwd) result[j, i] = NumOps.Zero;
-                    else result[i, j] = NumOps.Zero;
-                }
-            }
+        // For a pair i < j with forward skill |r_ij| and backward |r_ji|, both positive and asymmetry
+        // |fwd − bwd| / (max + 1e-10) at least the threshold, the backward entry is cleared when
+        // fwd ≥ bwd and the forward entry otherwise.
+        var strength = Engine.TensorAbs(result);
+        var reverse = Engine.TensorTranspose(strength);
+        var bothPositive = Engine.TensorMultiply(Engine.TensorGreaterThan(strength, zero), Engine.TensorGreaterThan(reverse, zero));
+        var asymmetry = Engine.TensorDivide(Engine.TensorAbs(Engine.TensorSubtract(strength, reverse)),
+            Engine.TensorAddScalar(Engine.TensorMax(strength, reverse), NumOps.FromDouble(1e-10)));
+        var asymmetric = Engine.TensorSubtract(Engine.TensorOnesLike(asymmetry),
+            Engine.TensorLessThan(asymmetry, NumOps.FromDouble(_directionalityAsymmetryThreshold)));
+        var upper = Engine.TensorTriu(Engine.TensorOnesLike(strength), 1);
+        var lower = Engine.TensorTranspose(upper);
+        var dominated = Engine.TensorAdd(
+            Engine.TensorMultiply(upper, Engine.TensorLessThan(strength, reverse)),
+            Engine.TensorMultiply(lower, Engine.TensorSubtract(Engine.TensorOnesLike(strength), Engine.TensorGreaterThan(strength, reverse))));
+        var clear = Engine.TensorMultiply(Engine.TensorMultiply(bothPositive, asymmetric), dominated);
 
-        return result;
+        return Engine.TensorWhere(clear, Engine.TensorZerosLike(result), result).ToMatrix();
     }
 
-    private double ComputeCrossMapCorrelation(Matrix<T> data, Matrix<T> embeddings, int targetCol, int libSize, int embDim)
+    /// <summary>
+    /// Simplex-projection cross-map skill over the first <paramref name="libSize"/> embedding rows: for each
+    /// row t its embDim + 1 nearest other rows (Euclidean; equal distances go to the lower row) predict every
+    /// target column as Σ w_k y[s_k] with w_k = exp(−d_k / max(d_1, 1e-15)) / (Σ w + 1e-15). Returns, per target
+    /// column, the Pearson correlation of prediction and actual with each sum of squares floored at 1e-15
+    /// (0 for every column when the library is smaller than embDim + 2).
+    /// </summary>
+    private Tensor<T> ComputeCrossMapCorrelation(Tensor<T> targets, Tensor<T> embeddings, int libSize, int embDim)
     {
-        if (libSize < embDim + 2) return 0;
-        int offset = embDim - 1;
+        int d = targets.Shape[1];
+        if (libSize < embDim + 2) return new Tensor<T>(new[] { d });
         int numNeighbors = embDim + 1;
 
-        var predictions = new Vector<T>(libSize);
-        var actuals = new Vector<T>(libSize);
+        var library = Engine.TensorSlice(embeddings, new[] { 0, 0 }, new[] { libSize, embDim });
+        var actuals = Engine.TensorSlice(targets, new[] { 0, 0 }, new[] { libSize, d });
+        T excluded = NumOps.MaxValue;
+        T distanceFloor = NumOps.FromDouble(1e-15);
 
-        for (int t = 0; t < libSize; t++)
+        int blockRows = Math.Max(1, Math.Min(libSize, 4_000_000 / Math.Max(1, libSize * embDim)));
+        var blocks = new List<Tensor<T>>();
+        for (int b0 = 0; b0 < libSize; b0 += blockRows)
         {
-            var queryVec = new Vector<T>(embDim);
-            for (int e = 0; e < embDim; e++)
-                queryVec[e] = embeddings[t, e];
+            int rows = Math.Min(blockRows, libSize - b0);
+            var cube = new[] { rows, libSize, embDim };
+            var query = Engine.TensorSlice(library, new[] { b0, 0 }, new[] { rows, embDim }).Reshape(new[] { rows, 1, embDim });
+            var diff = Engine.TensorSubtract(Engine.TensorBroadcastTo(query, cube), Engine.TensorBroadcastTo(library.Reshape(new[] { 1, libSize, embDim }), cube));
+            var distances = Engine.TensorSqrt(Engine.ReduceSum(Engine.TensorMultiply(diff, diff), new[] { 2 }, false));
 
-            // Find nearest neighbors using Engine-accelerated distance
-            var distances = new double[libSize];
-            for (int s = 0; s < libSize; s++)
-            {
-                if (s == t) { distances[s] = double.MaxValue; continue; }
-                var candidateVec = new Vector<T>(embDim);
-                for (int e = 0; e < embDim; e++)
-                    candidateVec[e] = embeddings[s, e];
-                distances[s] = NumOps.ToDouble(VectorHelper.EuclideanDistance(queryVec, candidateVec));
-            }
+            // A row is never its own neighbour
+            var self = Engine.TensorSlice(Engine.TensorEye<T>(libSize), new[] { b0, 0 }, new[] { rows, libSize });
+            var remaining = Engine.TensorWhere(self, Engine.TensorFullLike(distances, excluded), distances);
 
-            // Select numNeighbors nearest
-            var neighborIdx = new int[numNeighbors];
-            var neighborDist = new double[numNeighbors];
+            // Successive argmin (first index on ties), each pick removed before the next
+            var neighborIdx = new Tensor<int>[numNeighbors];
+            var neighborDist = new Tensor<T>[numNeighbors];
             for (int k = 0; k < numNeighbors; k++)
             {
-                double minDist = double.MaxValue;
-                int minIdx = 0;
-                for (int s = 0; s < libSize; s++)
-                {
-                    if (distances[s] < minDist)
-                    {
-                        bool used = false;
-                        for (int prev = 0; prev < k; prev++)
-                            if (neighborIdx[prev] == s) { used = true; break; }
-                        if (used) continue;
-                        minDist = distances[s];
-                        minIdx = s;
-                    }
-                }
-                neighborIdx[k] = minIdx;
-                neighborDist[k] = minDist;
+                var pick = Engine.TensorArgMin(remaining, 1);
+                neighborIdx[k] = pick;
+                neighborDist[k] = Engine.TensorTakeAlongDim(remaining, pick.Reshape(new[] { rows, 1 }), 1).Reshape(new[] { rows, 1 });
+                remaining = Engine.TensorWhere(Engine.TensorOneHot<T>(pick, libSize), Engine.TensorFullLike(remaining, excluded), remaining);
             }
 
             // Simplex projection weights
-            double dMin = Math.Max(neighborDist[0], 1e-15);
-            double sumW = 0;
-            var weights = new double[numNeighbors];
+            var nearest = Engine.TensorConcatenate(neighborDist, 1); // [rows, k]
+            var dMin = Engine.TensorMax(Engine.TensorSlice(nearest, new[] { 0, 0 }, new[] { rows, 1 }), distanceFloor);
+            var weights = Engine.TensorExp(Engine.TensorNegate(Engine.TensorDivide(nearest, Engine.TensorBroadcastTo(dMin, new[] { rows, numNeighbors }))));
+            var sumW = Engine.TensorAddScalar(Engine.ReduceSum(weights, new[] { 1 }, true), distanceFloor);
+            weights = Engine.TensorDivide(weights, Engine.TensorBroadcastTo(sumW, new[] { rows, numNeighbors }));
+
+            // prediction[t, :] = Σ_k w[t, k] · actuals[s_k(t), :]
+            var prediction = new Tensor<T>(new[] { rows, d });
             for (int k = 0; k < numNeighbors; k++)
             {
-                weights[k] = Math.Exp(-neighborDist[k] / dMin);
-                sumW += weights[k];
+                var neighbourTargets = Engine.TensorIndexSelect(actuals, neighborIdx[k], 0);
+                var w = Engine.TensorBroadcastTo(Engine.TensorSlice(weights, new[] { 0, k }, new[] { rows, 1 }), new[] { rows, d });
+                prediction = Engine.TensorAdd(prediction, Engine.TensorMultiply(w, neighbourTargets));
             }
-
-            T pred = NumOps.Zero;
-            for (int k = 0; k < numNeighbors; k++)
-            {
-                T w = NumOps.FromDouble(weights[k] / (sumW + 1e-15));
-                pred = NumOps.Add(pred, NumOps.Multiply(w, data[neighborIdx[k] + offset, targetCol]));
-            }
-
-            predictions[t] = pred;
-            actuals[t] = data[t + offset, targetCol];
+            blocks.Add(prediction);
         }
+        var predictions = blocks.Count == 1 ? blocks[0] : Engine.TensorConcatenate(blocks.ToArray(), 0);
 
-        // Compute Pearson correlation using Engine-accelerated dot products
-        T nT = NumOps.FromDouble(libSize);
-        T sumP = NumOps.Zero, sumA = NumOps.Zero;
-        for (int t = 0; t < libSize; t++)
-        {
-            sumP = NumOps.Add(sumP, predictions[t]);
-            sumA = NumOps.Add(sumA, actuals[t]);
-        }
-        T meanP = NumOps.Divide(sumP, nT);
-        T meanA = NumOps.Divide(sumA, nT);
-
-        // Center vectors and use Engine.DotProduct
-        var centeredP = new Vector<T>(libSize);
-        var centeredA = new Vector<T>(libSize);
-        for (int t = 0; t < libSize; t++)
-        {
-            centeredP[t] = NumOps.Subtract(predictions[t], meanP);
-            centeredA[t] = NumOps.Subtract(actuals[t], meanA);
-        }
-
-        T covPA = Engine.DotProduct(centeredP, centeredA);
-        T varP = Engine.DotProduct(centeredP, centeredP);
-        T varA = Engine.DotProduct(centeredA, centeredA);
-
-        double dVarP = NumOps.ToDouble(varP);
-        double dVarA = NumOps.ToDouble(varA);
-        double denom = Math.Sqrt(Math.Max(dVarP, 1e-15) * Math.Max(dVarA, 1e-15));
-        return NumOps.ToDouble(covPA) / denom;
+        // Pearson correlation per target column
+        var centeredP = CenterColumns(predictions);
+        var centeredA = CenterColumns(actuals);
+        var covPA = Engine.ReduceSum(Engine.TensorMultiply(centeredP, centeredA), new[] { 0 }, false);
+        var varP = Engine.TensorMax(Engine.ReduceSum(Engine.TensorMultiply(centeredP, centeredP), new[] { 0 }, false), distanceFloor);
+        var varA = Engine.TensorMax(Engine.ReduceSum(Engine.TensorMultiply(centeredA, centeredA), new[] { 0 }, false), distanceFloor);
+        return Engine.TensorDivide(covPA, Engine.TensorSqrt(Engine.TensorMultiply(varP, varA)));
     }
 }
