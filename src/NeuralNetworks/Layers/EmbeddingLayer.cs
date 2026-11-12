@@ -688,11 +688,11 @@ public partial class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, I
             var flat = Engine.Reshape(input, new[] { input.Length });
             var ones = new Tensor<T>(flat._shape);
             ones.Fill(NumOps.One);
-            var nonFinite = Engine.TensorWhere(Engine.TensorIsFinite(flat), new Tensor<T>(flat._shape), ones);
+            var nonFinite = Engine.TensorWhere(Engine.TensorIsFinite(flat.Cast<double>()), new Tensor<T>(flat._shape), ones);
             var truncated = Engine.TensorTrunc(flat);
             var fractional = Engine.TensorGreaterThan(Engine.TensorAbs(Engine.TensorSubtract(flat, truncated)), NumOps.FromDouble(1e-6));
             var negative = Engine.TensorLessThan(truncated, NumOps.Zero);
-            var tooLarge = Engine.TensorGreaterThan(truncated, NumOps.FromDouble(vocabularySize - 1));
+            var tooLarge = Engine.TensorGreaterThan(truncated.Cast<double>(), (double)(vocabularySize - 1)).Cast<T>();
             var bad = Engine.TensorMax(Engine.TensorMax(nonFinite, fractional), Engine.TensorMax(negative, tooLarge));
             badIndex = NumOps.GreaterThan(Engine.TensorMaxValue(bad), NumOps.Zero) ? Engine.TensorArgMax(bad, 0)[0] : -1;
         }

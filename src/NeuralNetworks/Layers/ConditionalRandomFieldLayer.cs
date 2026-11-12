@@ -954,9 +954,9 @@ public partial class ConditionalRandomFieldLayer<T> : LayerBase<T>, IShapeContra
         // Fractional: more than the tolerance from the rounded value (NaN is not, as before).
         var fractional = Engine.TensorGreaterThan(Engine.TensorAbs(Engine.TensorSubtract(raw, rounded)), NumOps.FromDouble(IntegerTolerance));
         // Out of range: below 0, at or above numClasses, or NaN (whose int cast is negative).
-        var nanFlags = Engine.TensorWhere(Engine.TensorIsNan(raw), Ones(seqLen), new Tensor<T>([seqLen]));
+        var nanFlags = Engine.TensorWhere(Engine.TensorIsNan(raw.Cast<double>()), Ones(seqLen), new Tensor<T>([seqLen]));
         var outOfRange = Engine.TensorMax(
-            Engine.TensorMax(Engine.TensorLessThan(rounded, NumOps.Zero), Engine.TensorGreaterThan(rounded, NumOps.FromDouble(numClasses - 1))),
+            Engine.TensorMax(Engine.TensorLessThan(rounded, NumOps.Zero), Engine.TensorGreaterThan(rounded.Cast<double>(), (double)(numClasses - 1)).Cast<T>()),
             nanFlags);
         var invalid = Engine.TensorMax(fractional, outOfRange);
         if (NumOps.GreaterThan(Engine.TensorMaxValue(invalid), NumOps.Zero))

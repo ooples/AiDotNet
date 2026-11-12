@@ -299,7 +299,7 @@ public partial class HopeNetwork<T> : VectorModelLayoutBase<T>
         if (metaState.Length == 0) return true;
         var engine = AiDotNetEngine.Current;
         var zeros = engine.TensorEquals(Tensor<T>.FromVector(metaState), _numOps.Zero);
-        return _numOps.Equals(engine.TensorSum(zeros), _numOps.FromDouble(metaState.Length));
+        return _numOps.Equals(engine.TensorMinValue(zeros), _numOps.One);
     }
 
     private Tensor<T> ApplySelfModification(Tensor<T> input, Vector<T> metaState)

@@ -340,7 +340,7 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, IShap
                 ones.Fill(NumOps.One);
                 var whole = Engine.TensorEquals(Engine.TensorFloor(flatTarget), flatTarget);
                 var nonNegative = Engine.TensorSubtract(ones, Engine.TensorLessThan(flatTarget, NumOps.Zero));
-                var belowCount = Engine.TensorLessThan(flatTarget, NumOps.FromDouble(outputSize));
+                var belowCount = Engine.TensorLessThan(flatTarget.Cast<double>(), (double)outputSize).Cast<T>();
                 var valid = Engine.TensorMultiply(Engine.TensorMultiply(whole, nonNegative), belowCount);
                 if (!NumOps.Equals(Engine.TensorMinValue(valid), NumOps.One)) return null;
             }

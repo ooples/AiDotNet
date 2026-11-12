@@ -602,8 +602,8 @@ public partial class HTMNetwork<T> : VectorModelLayoutBase<T>
                         Tensor<T>.FromVector(predictedCells.GetSubVector(0, overlap)), NumOps.Zero);
                     var actualActive = Engine.TensorNotEquals(
                         Tensor<T>.FromVector(temporalMemoryLayer2.PreviousState.GetSubVector(0, overlap)), NumOps.Zero);
-                    matches = (int)Math.Round(NumOps.ToDouble(Engine.TensorSum(Engine.TensorMin(predictedActive, actualActive))));
-                    total = (int)Math.Round(NumOps.ToDouble(Engine.TensorSum(Engine.TensorMax(predictedActive, actualActive))));
+                    matches = Engine.TensorSum(Engine.TensorMin(predictedActive, actualActive).Cast<int>());
+                    total = Engine.TensorSum(Engine.TensorMax(predictedActive, actualActive).Cast<int>());
                 }
 
                 // Calculate error rate (1.0 - match rate)

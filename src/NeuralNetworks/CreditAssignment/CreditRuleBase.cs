@@ -198,48 +198,60 @@ public abstract class CreditRuleBase<T> : IFeedbackLearningRule<T>
         return engine.TensorSubtract(engine.TensorGreaterThan(wt, ops.Zero), engine.TensorLessThan(wt, ops.Zero)).ToMatrix();
     }
 
-    /// <summary>Scales each column of <paramref name="m"/> to unit L2 norm (in place) — used by magnitude-stable variants.</summary>
+    /// <summary>Scales each column to unit L2 norm, retaining tiny columns unchanged.</summary>
     protected static void NormalizeColumns(Matrix<T> m, INumericOperations<T> ops)
     {
         if (m.Rows == 0 || m.Columns == 0) return;
 
         using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
         var engine = AiDotNetEngine.Current;
-        var mt = Tensor<T>.FromMatrix(m);
-        var norms = engine.TensorNorm(mt, 0, true); // [1, columns]
-        var scale = ScaleUnlessTiny(engine, norms, engine.TensorReciprocal(norms), ops);
-        engine.TensorMultiply(mt, scale).ToMatrix().AsSpan().CopyTo(m.AsWritableSpan());
+        var original = Tensor<T>.FromMatrix(m);
+        var values = original.Cast<double>();
+        var norms = engine.TensorNorm(values, 0, true);
+        var ones = new Tensor<double>(norms._shape);
+        ones.Fill(1.0);
+        var scale = DivideUnlessTiny(engine, ones, norms);
+        var normalized = engine.TensorMultiply(values, engine.TensorBroadcastTo(scale, values._shape)).Cast<T>();
+        var tiny = engine.TensorBroadcastTo(TinyNormMask(engine, norms).Cast<T>(), original._shape);
+        engine.TensorWhere(tiny, original, normalized).ToMatrix().AsSpan().CopyTo(m.AsWritableSpan());
     }
 
-    /// <summary>Rescales each row of <paramref name="signal"/> so its L2 norm matches the same row of <paramref name="reference"/> (in place).</summary>
+    /// <summary>Rescales each signal row to the reference row's L2 norm, retaining tiny signal rows unchanged.</summary>
     protected static void RescaleRowsToMatch(Matrix<T> signal, Matrix<T> reference, INumericOperations<T> ops)
     {
         if (signal.Rows == 0 || signal.Columns == 0) return;
 
         using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
         var engine = AiDotNetEngine.Current;
-        var st = Tensor<T>.FromMatrix(signal);
-        var sigNorms = engine.TensorNorm(st, 1, true); // [rows, 1]
-        var refNorms = reference.Columns == 0
-            ? new Tensor<T>(new[] { signal.Rows, 1 })
+        var original = Tensor<T>.FromMatrix(signal);
+        var values = original.Cast<double>();
+        var norms = engine.TensorNorm(values, 1, true);
+        var referenceNorms = reference.Columns == 0
+            ? new Tensor<double>(new[] { signal.Rows, 1 })
             : engine.TensorNorm(
-                engine.TensorSlice(Tensor<T>.FromMatrix(reference), new[] { 0, 0 }, new[] { signal.Rows, reference.Columns }),
-                1, true);
-        var scale = ScaleUnlessTiny(engine, sigNorms, engine.TensorDivide(refNorms, sigNorms), ops);
-        engine.TensorMultiply(st, scale).ToMatrix().AsSpan().CopyTo(signal.AsWritableSpan());
+                engine.TensorSlice(Tensor<T>.FromMatrix(reference).Cast<double>(), new[] { 0, 0 },
+                    new[] { signal.Rows, reference.Columns }), 1, true);
+        var scale = DivideUnlessTiny(engine, referenceNorms, norms);
+        var rescaled = engine.TensorMultiply(values, engine.TensorBroadcastTo(scale, values._shape)).Cast<T>();
+        var tiny = engine.TensorBroadcastTo(TinyNormMask(engine, norms).Cast<T>(), original._shape);
+        engine.TensorWhere(tiny, original, rescaled).ToMatrix().AsSpan().CopyTo(signal.AsWritableSpan());
     }
 
-    /// <summary>
-    /// <paramref name="scale"/> where <paramref name="norms"/> exceeds 1e-12, else 1 (the vector is left as it is).
-    /// A NaN norm is not "tiny", so its scale stays NaN as the scalar check left it.
-    /// </summary>
-    private static Tensor<T> ScaleUnlessTiny(IEngine engine, Tensor<T> norms, Tensor<T> scale, INumericOperations<T> ops)
+    /// <summary>Forms a wide ratio, selecting a safe denominator before division for tiny norms.</summary>
+    private static Tensor<double> DivideUnlessTiny(IEngine engine, Tensor<double> numerator, Tensor<double> norms)
     {
-        var tiny = new Tensor<T>(norms._shape);
-        tiny.Fill(ops.FromDouble(1e-12));
-        var ones = new Tensor<T>(norms._shape);
-        ones.Fill(ops.One);
-        return engine.TensorWhere(engine.TensorLessEqual(norms, tiny), ones, scale);
+        var tiny = TinyNormMask(engine, norms);
+        var ones = new Tensor<double>(norms._shape);
+        ones.Fill(1.0);
+        var denominator = engine.TensorWhere(tiny, ones, norms);
+        return engine.TensorWhere(tiny, ones, engine.TensorDivide(numerator, denominator));
+    }
+
+    private static Tensor<double> TinyNormMask(IEngine engine, Tensor<double> norms)
+    {
+        var threshold = new Tensor<double>(norms._shape);
+        threshold.Fill(1e-12);
+        return engine.TensorLessEqual(norms, threshold);
     }
 
     /// <summary>
