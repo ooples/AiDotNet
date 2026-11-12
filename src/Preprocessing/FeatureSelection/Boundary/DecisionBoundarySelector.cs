@@ -65,19 +65,20 @@ public class DecisionBoundarySelector<T> : TransformerBase<T, Matrix<T>, Matrix<
         int p = data.Columns;
 
         var engine = Engine;
-        var X = Tensor<T>.FromMatrix(data);
+        // Counts and class sums are taken in double: a 0/1 mask summed in a narrow T (Half stops at 2048) saturates
+        var X = Tensor<T>.FromMatrix(data).Cast<double>();
         PreprocessingTensorOps.ClassLabels(target, out var classes, out var classIndex);
         int k = classes.Length;
-        var membership = engine.TensorTranspose(PreprocessingTensorOps.ClassOneHot<T>(classIndex, k)); // [k, n]
+        var membership = engine.TensorTranspose(PreprocessingTensorOps.ClassOneHot<double>(classIndex, k)); // [k, n]
         var classCounts = engine.ReduceSum(membership, new[] { 1 }, false);                             // [k]
         var classMeans = engine.TensorDivide(
             engine.TensorMatMul(membership, X), engine.Reshape(classCounts, new[] { k, 1 }));            // [k, p]
 
         // For each pair of classes, threshold every feature at the midpoint of the class means and
         // measure the accuracy of that boundary.
-        var totalClarity = new Tensor<T>(new[] { p });
+        var totalClarity = new Tensor<double>(new[] { p });
         int pairs = 0;
-        T half = NumOps.FromDouble(0.5);
+        double half = 0.5;
         for (int ci = 0; ci < k; ci++)
         {
             for (int cj = ci + 1; cj < k; cj++)
@@ -104,9 +105,9 @@ public class DecisionBoundarySelector<T> : TransformerBase<T, Matrix<T>, Matrix<
         }
 
         var scores = pairs > 0
-            ? engine.TensorDivideScalar(totalClarity, NumOps.FromDouble(pairs))
-            : PreprocessingTensorOps.Filled(new[] { p }, NumOps.FromDouble(0.5));
-        _boundaryClarityScores = scores.ToVector();
+            ? engine.TensorDivideScalar(totalClarity, (double)pairs)
+            : PreprocessingTensorOps.Filled(new[] { p }, 0.5);
+        _boundaryClarityScores = scores.Cast<T>().ToVector();
 
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
         _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(scores, numToSelect);

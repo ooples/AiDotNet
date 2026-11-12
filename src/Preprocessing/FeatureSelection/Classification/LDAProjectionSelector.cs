@@ -65,10 +65,11 @@ public class LDAProjectionSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         int p = data.Columns;
 
         var engine = Engine;
-        var X = Tensor<T>.FromMatrix(data);
+        // Counts and class sums are taken in double: a 0/1 mask summed in a narrow T (Half stops at 2048) saturates
+        var X = Tensor<T>.FromMatrix(data).Cast<double>();
         PreprocessingTensorOps.ClassLabels(target, out var classes, out var classIndex);
         int k = classes.Length;
-        var membership = PreprocessingTensorOps.ClassOneHot<T>(classIndex, k);                 // [n, k]
+        var membership = PreprocessingTensorOps.ClassOneHot<double>(classIndex, k);                 // [n, k]
         var classCounts = engine.ReduceSum(membership, new[] { 0 }, false);                     // [k]
 
         // Global mean and class means
@@ -86,10 +87,10 @@ public class LDAProjectionSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             new[] { p });
 
         var scores = engine.TensorWhere(
-            engine.TensorGreaterThan(withinClassVar, NumOps.FromDouble(1e-10)),
+            engine.TensorGreaterThan(withinClassVar, 1e-10),
             engine.TensorDivide(betweenClassVar, withinClassVar),
-            new Tensor<T>(new[] { p }));
-        _ldaScores = scores.ToVector();
+            new Tensor<double>(new[] { p }));
+        _ldaScores = scores.Cast<T>().ToVector();
 
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
         _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(scores, numToSelect);

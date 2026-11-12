@@ -72,9 +72,11 @@ public class GiniImpuritySelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>,
         var X = Tensor<T>.FromMatrix(data);
         PreprocessingTensorOps.ClassLabels(target, out var classes, out var classIndex);
         var membership = engine.TensorTranspose(PreprocessingTensorOps.ClassOneHot<T>(classIndex, classes.Length)); // [k, n]
-        var classTotals = engine.ReduceSum(membership, new[] { 1 }, true);                                       // [k, 1]
-        T count = NumOps.FromDouble(n);
-        T parentGini = NumOps.Subtract(NumOps.One, engine.TensorSumOfSquares(engine.TensorDivideScalar(classTotals, count)));
+        // Class counts are kept in double: summed in a narrow T (Half stops counting at 2048) they saturate
+        var membershipCounts = membership.Cast<double>();
+        var classTotals = engine.ReduceSum(membershipCounts, new[] { 1 }, true);                                 // [k, 1]
+        double count = n;
+        double parentGini = 1.0 - engine.TensorSumOfSquares(engine.TensorDivideScalar(classTotals, count));
 
         // Candidate thresholds min + s * (max - min) / (nSplits + 1) for s = 1..nSplits, one row per split
         var minVal = PreprocessingTensorOps.ColumnMin(X);
@@ -88,13 +90,13 @@ public class GiniImpuritySelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>,
             engine.TensorOuter(new Tensor<int>(splitNumbers, new[] { _nSplits }).Cast<T>(), step)); // [nSplits, p]
 
         var parent = PreprocessingTensorOps.Filled(new[] { p }, parentGini);
-        var bestReduction = new Tensor<T>(new[] { p });
+        var bestReduction = new Tensor<double>(new[] { p });
         for (int s = 0; s < _nSplits; s++)
         {
             // Split data: left is x <= threshold
             var threshold = engine.TensorBroadcastTo(PreprocessingTensorOps.Row(thresholds, s), new[] { n, p });
-            var left = PreprocessingTensorOps.Not(engine.TensorGreaterThan(X, threshold));
-            var leftCounts = engine.TensorMatMul(membership, left);                                  // [k, p]
+            var left = PreprocessingTensorOps.Not(engine.TensorGreaterThan(X, threshold)).Cast<double>();
+            var leftCounts = engine.TensorMatMul(membershipCounts, left);                                // [k, p]
             var rightCounts = engine.TensorSubtract(classTotals, leftCounts);
             var leftN = engine.ReduceSum(leftCounts, new[] { 0 }, false);                           // [p]
             var rightN = engine.ReduceSum(rightCounts, new[] { 0 }, false);
@@ -110,11 +112,11 @@ public class GiniImpuritySelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>,
             var reduction = engine.TensorSubtract(parent, weightedChildGini);
 
             // Splits with an empty side are skipped
-            var valid = engine.TensorMultiply(engine.TensorGreaterThan(leftN, NumOps.Zero), engine.TensorGreaterThan(rightN, NumOps.Zero));
+            var valid = engine.TensorMultiply(engine.TensorGreaterThan(leftN, 0.0), engine.TensorGreaterThan(rightN, 0.0));
             bestReduction = engine.TensorMax(bestReduction, engine.TensorWhere(valid, reduction, bestReduction));
         }
 
-        _giniReductions = bestReduction.ToVector();
+        _giniReductions = bestReduction.Cast<T>().ToVector();
 
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
         _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(bestReduction, numToSelect);
