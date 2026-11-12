@@ -166,4 +166,41 @@ public class MANNEndToEndTrainingTests
 
         Assert.True(trained < 0.8 * initial, $"Query loss went from {initial:G6} to {trained:G6}.");
     }
+
+    [Fact]
+    public void SetParameters_OnAFreshInstance_RestoresTheTrainedOutputLayerAndWriteGate()
+    {
+        // Every episode starts from an empty memory, so the query predictions depend on the parameters alone and a
+        // fresh instance holding the restored parameters must reproduce them.
+        Action<MANNOptions<double, Matrix<double>, Tensor<double>>> configure = o =>
+        {
+            o.ClearMemoryBetweenTasks = true;
+            o.MemoryRetentionRatio = 0.0;
+        };
+        var trained = CreateLearner(configure);
+        for (int i = 0; i < 5; i++)
+        {
+            trained.MetaTrain(new TaskBatch<double, Matrix<double>, Tensor<double>>(new[] { CreateTask(30 + i, 2, 2) }));
+        }
+
+        var probe = CreateTask(41, shots: 2, queries: 2);
+        var untrained = CreateLearner(configure);
+        Assert.NotEqual(untrained.EpisodeLossForTesting(probe), trained.EpisodeLossForTesting(probe));
+
+        var parameters = trained.GetParameters();
+        int controllerCount = trained.GetMetaModel().GetParameters().Length;
+        int outputLayerCount = (Width + Classes) * Classes + Classes;
+        Assert.Equal(controllerCount + outputLayerCount + 1, parameters.Length);
+        Assert.Equal((long)parameters.Length, trained.ParameterCount);
+
+        var restored = CreateLearner(configure);
+        restored.SetParameters(parameters);
+
+        Assert.Equal(parameters.ToArray(), restored.GetParameters().ToArray());
+        Assert.Equal(trained.ParameterCount, restored.ParameterCount);
+        Assert.Equal(trained.OutputWeightsForTesting.ToArray(), restored.OutputWeightsForTesting.ToArray());
+        Assert.Equal(trained.OutputBiasForTesting.ToArray(), restored.OutputBiasForTesting.ToArray());
+        Assert.Equal(trained.GateLogitForTesting.ToArray(), restored.GateLogitForTesting.ToArray());
+        Assert.Equal(trained.EpisodeLossForTesting(probe), restored.EpisodeLossForTesting(probe), 12);
+    }
 }
