@@ -22565,3 +22565,16 @@ override AiDotNet.Diffusion.LatentDiffusionModelBase<T>.IsBatchedTrainingSample(
 virtual AiDotNet.Diffusion.DiffusionModelBase<T>.IsBatchedTrainingSample(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! sample) -> bool
 *REMOVED*AiDotNet.Document.Options.DocBankOptions.LearningRate.get -> double
 AiDotNet.Document.Options.DocBankOptions.LearningRate.get -> double?
+AiDotNet.MetaLearning.Algorithms.ExternalMemory<T>.ExternalMemory(int size, int keySize, int valueSize, AiDotNet.Tensors.Interfaces.INumericOperations<T>! numOps, double usageDecay, double writeGate, int numReads) -> void
+AiDotNet.MetaLearning.Algorithms.ExternalMemory<T>.UsageDecay.get -> double
+AiDotNet.MetaLearning.Algorithms.ExternalMemory<T>.WriteGate.get -> double
+AiDotNet.MetaLearning.Algorithms.ExternalMemory<T>.NumReads.get -> int
+AiDotNet.MetaLearning.Algorithms.ExternalMemory<T>.WriteAndRead(AiDotNet.Tensors.LinearAlgebra.Vector<T>! key, AiDotNet.Tensors.LinearAlgebra.Vector<T>! value) -> AiDotNet.Tensors.LinearAlgebra.Vector<T>!
+AiDotNet.MetaLearning.Algorithms.ExternalMemory<T>.ReadAndUpdate(AiDotNet.Tensors.LinearAlgebra.Vector<T>! key) -> AiDotNet.Tensors.LinearAlgebra.Vector<T>!
+AiDotNet.MetaLearning.Algorithms.ExternalMemory<T>.ContentWeights(AiDotNet.Tensors.LinearAlgebra.Vector<T>! key) -> AiDotNet.Tensors.LinearAlgebra.Vector<T>!
+AiDotNet.MetaLearning.Algorithms.ExternalMemory<T>.LeastUsedWeights() -> AiDotNet.Tensors.LinearAlgebra.Vector<T>!
+AiDotNet.MetaLearning.Algorithms.ExternalMemory<T>.GetUsage() -> AiDotNet.Tensors.LinearAlgebra.Vector<T>!
+AiDotNet.MetaLearning.Options.MANNOptions<T, TInput, TOutput>.UsageDecay.get -> double
+AiDotNet.MetaLearning.Options.MANNOptions<T, TInput, TOutput>.UsageDecay.set -> void
+AiDotNet.MetaLearning.Options.MANNOptions<T, TInput, TOutput>.WriteGateLogit.get -> double
+AiDotNet.MetaLearning.Options.MANNOptions<T, TInput, TOutput>.WriteGateLogit.set -> void
