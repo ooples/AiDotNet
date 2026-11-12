@@ -246,14 +246,11 @@ public partial class SamViTDetEncoderLayer<T> : LayerBase<T>, IShapeContract
         relW = Engine.TensorPermute(Engine.Reshape(relW, new[] { s, batch, s, s }), new[] { 1, 2, 0, 3 });      // [B', qh, qw, kw]
 
         // Spread each term over the other key axis with a 0/1 expansion: key k = kh * S + kw.
-        var expandRow = new Tensor<T>(new[] { s, s * s });
-        var expandColumn = new Tensor<T>(new[] { s, s * s });
-        for (int kh = 0; kh < s; kh++)
-            for (int kw = 0; kw < s; kw++)
-            {
-                expandRow[kh, (kh * s) + kw] = NumOps.One;
-                expandColumn[kw, (kh * s) + kw] = NumOps.One;
-            }
+        // expandRow[kh, kh * S + kw] = 1 repeats each identity column S times; expandColumn[kw, kh * S + kw] = 1
+        // tiles the identity S times along the key axis.
+        var identity = Engine.TensorEye<T>(s);
+        var expandRow = Engine.TensorRepeatInterleave(identity, s, 1);
+        var expandColumn = Engine.TensorTile(identity, new[] { 1, s });
         var bias = Engine.TensorAdd(
             Engine.TensorMatMul(Engine.Reshape(relH, new[] { batch * s * s, s }), expandRow),
             Engine.TensorMatMul(Engine.Reshape(relW, new[] { batch * s * s, s }), expandColumn));
