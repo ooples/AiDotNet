@@ -43,15 +43,9 @@ public partial class LogitSoftcapLayer<T> : LayerBase<T>, IShapeContract
     /// <inheritdoc/>
     protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
-        var output = new Tensor<T>(input._shape);
-        var src = input.AsSpan();
-        var dst = output.AsWritableSpan();
-        for (int i = 0; i < src.Length; i++)
-        {
-            double x = Convert.ToDouble(src[i]);
-            dst[i] = Ops.FromDouble(_cap * Math.Tanh(x / _cap));
-        }
-        return output;
+        // y = cap * tanh(x / cap), whole-tensor and generic in T (no per-element double round trip).
+        T cap = Ops.FromDouble(_cap);
+        return Engine.TensorMultiplyScalar(Engine.Tanh(Engine.TensorDivideScalar(input, cap)), cap);
     }
 
     /// <inheritdoc/>
