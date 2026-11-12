@@ -71,18 +71,18 @@ public class FTest<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFea
         var engine = Engine;
 
         // Centred sums of every feature with the target
-        var (sxx, sxy, ssTotal) = FeatureSelectionTensorOps.CenteredCrossSums(
-            FeatureSelectionTensorOps.AsTensor(data), FeatureSelectionTensorOps.AsTensor(target));
+        var (sxx, sxy, ssTotal) = FilterStatisticTensorOps.CenteredCrossSums(
+            FilterStatisticTensorOps.AsTensor(data), FilterStatisticTensorOps.AsTensor(target));
 
         // Simple linear regression y = a + b x: slope b = Sxy / Sxx (0 for a constant feature)
-        var slope = FeatureSelectionTensorOps.GuardedDivide(sxy, sxx, 1e-10, NumOps.Zero);
+        var slope = FilterStatisticTensorOps.GuardedDivide(sxy, sxx, 1e-10, NumOps.Zero);
 
         // SS regression = b^2 Sxx, SS residual = Syy - 2 b Sxy + b^2 Sxx
         var ssReg = engine.TensorMultiply(engine.TensorSquare(slope), sxx);
         var ssRes = engine.TensorMax(
             engine.TensorAdd(
                 engine.TensorSubtract(
-                    FeatureSelectionTensorOps.FilledLike(sxx, ssTotal),
+                    FilterStatisticTensorOps.FilledLike(sxx, ssTotal),
                     engine.TensorMultiplyScalar(engine.TensorMultiply(slope, sxy), NumOps.FromDouble(2))),
                 ssReg),
             NumOps.Zero);
@@ -93,17 +93,17 @@ public class FTest<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFea
         int dfRes = n - 2;
         var msRes = dfRes > 0
             ? engine.TensorDivideScalar(ssRes, NumOps.FromDouble(dfRes))
-            : FeatureSelectionTensorOps.FilledLike(ssRes, NumOps.One);
-        var fScores = FeatureSelectionTensorOps.SeparationAwareRatio(ssReg, msRes, 1e-10);
+            : FilterStatisticTensorOps.FilledLike(ssRes, NumOps.One);
+        var fScores = FilterStatisticTensorOps.SeparationAwareRatio(ssReg, msRes, 1e-10);
         _fScores = fScores.ToVector();
 
         // p = P(F(1, n - 2) > F) from the F distribution (scipy.stats.f.sf)
         _pValues = dfRes > 0
-            ? FeatureSelectionTensorOps.FSurvival(fScores, dfReg, dfRes).ToVector()
-            : FeatureSelectionTensorOps.FilledLike(fScores, NumOps.One).ToVector();
+            ? FilterStatisticTensorOps.FSurvival(fScores, dfReg, dfRes).ToVector()
+            : FilterStatisticTensorOps.FilledLike(fScores, NumOps.One).ToVector();
 
         // Select top features by F-score
-        _selectedIndices = FeatureSelectionTensorOps.TopKIndicesSorted(fScores, Math.Min(_nFeaturesToSelect, p));
+        _selectedIndices = FilterStatisticTensorOps.TopKIndicesSorted(fScores, Math.Min(_nFeaturesToSelect, p));
 
         IsFitted = true;
     }
@@ -121,7 +121,7 @@ public class FTest<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFea
         if (_selectedIndices is null)
             throw new InvalidOperationException("FTest has not been fitted.");
 
-        return FeatureSelectionTensorOps.SelectColumns(data, _selectedIndices);
+        return FilterStatisticTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

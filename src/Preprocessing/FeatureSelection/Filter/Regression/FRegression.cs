@@ -71,36 +71,36 @@ public class FRegression<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervi
         var engine = Engine;
 
         // Centred sums of every feature with the target (sst = total sum of squares of the target)
-        var (sxx, sxy, sst) = FeatureSelectionTensorOps.CenteredCrossSums(
-            FeatureSelectionTensorOps.AsTensor(data), FeatureSelectionTensorOps.AsTensor(target));
+        var (sxx, sxy, sst) = FilterStatisticTensorOps.CenteredCrossSums(
+            FilterStatisticTensorOps.AsTensor(data), FilterStatisticTensorOps.AsTensor(target));
         T epsilon = NumOps.FromDouble(1e-10);
-        var zeros = FeatureSelectionTensorOps.FilledLike(sxx, NumOps.Zero);
+        var zeros = FilterStatisticTensorOps.FilledLike(sxx, NumOps.Zero);
 
         // A constant feature or target carries no signal: F = 0, p = 1
         var informative = NumOps.LessThan(sst, epsilon)
             ? zeros
-            : FeatureSelectionTensorOps.OneMinus(engine.TensorLessThan(sxx, epsilon));
+            : FilterStatisticTensorOps.OneMinus(engine.TensorLessThan(sxx, epsilon));
 
         // Regression sum of squares SSR = beta^2 Sxx = Sxy^2 / Sxx, error sum of squares SSE = SST - SSR
-        var ssr = FeatureSelectionTensorOps.GuardedDivide(engine.TensorSquare(sxy), sxx, 0.0, NumOps.Zero);
-        var sse = engine.TensorSubtract(FeatureSelectionTensorOps.FilledLike(sxx, sst), ssr);
+        var ssr = FilterStatisticTensorOps.GuardedDivide(engine.TensorSquare(sxy), sxx, 0.0, NumOps.Zero);
+        var sse = engine.TensorSubtract(FilterStatisticTensorOps.FilledLike(sxx, sst), ssr);
 
         // F-statistic: (SSR/1) / (SSE/(n-2)); a perfect linear fit leaves no error and gets F = +inf
         var fScores = n > 2
             ? engine.TensorWhere(
                 informative,
-                FeatureSelectionTensorOps.SeparationAwareRatio(ssr, engine.TensorDivideScalar(sse, NumOps.FromDouble(n - 2)), 1e-10),
+                FilterStatisticTensorOps.SeparationAwareRatio(ssr, engine.TensorDivideScalar(sse, NumOps.FromDouble(n - 2)), 1e-10),
                 zeros)
             : zeros;
         _fScores = fScores.ToVector();
 
         // p = P(F(1, n - 2) > F) from the F distribution (scipy.stats.f.sf)
         _pValues = n > 2
-            ? FeatureSelectionTensorOps.FSurvival(fScores, 1, n - 2).ToVector()
-            : FeatureSelectionTensorOps.FilledLike(fScores, NumOps.One).ToVector();
+            ? FilterStatisticTensorOps.FSurvival(fScores, 1, n - 2).ToVector()
+            : FilterStatisticTensorOps.FilledLike(fScores, NumOps.One).ToVector();
 
         // Select top features by F-score
-        _selectedIndices = FeatureSelectionTensorOps.TopKIndicesSorted(fScores, Math.Min(_nFeaturesToSelect, p));
+        _selectedIndices = FilterStatisticTensorOps.TopKIndicesSorted(fScores, Math.Min(_nFeaturesToSelect, p));
 
         IsFitted = true;
     }
@@ -118,7 +118,7 @@ public class FRegression<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervi
         if (_selectedIndices is null)
             throw new InvalidOperationException("FRegression has not been fitted.");
 
-        return FeatureSelectionTensorOps.SelectColumns(data, _selectedIndices);
+        return FilterStatisticTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

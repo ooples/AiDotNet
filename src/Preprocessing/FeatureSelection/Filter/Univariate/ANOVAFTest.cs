@@ -73,13 +73,13 @@ public class ANOVAFTest<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervis
         var engine = Engine;
 
         // Group samples by class
-        var classIndex = FeatureSelectionTensorOps.ClassIndex(target, out int k);
+        var classIndex = FilterStatisticTensorOps.ClassIndex(target, out int k);
         if (k < 2)
             throw new ArgumentException("At least 2 classes are required for ANOVA.");
 
         // Between- and within-group sums of squares of every feature
-        var (ssBetween, ssWithin) = FeatureSelectionTensorOps.AnovaSums(
-            FeatureSelectionTensorOps.AsTensor(data), FeatureSelectionTensorOps.ClassOneHot<T>(classIndex, k));
+        var (ssBetween, ssWithin) = FilterStatisticTensorOps.AnovaSums(
+            FilterStatisticTensorOps.AsTensor(data), FilterStatisticTensorOps.ClassOneHot<T>(classIndex, k));
 
         // Degrees of freedom
         int dfBetween = k - 1;
@@ -94,12 +94,12 @@ public class ANOVAFTest<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervis
 
         // p = P(F(k - 1, n - k) > F) from the F distribution (scipy.stats.f.sf)
         var pValues = dfWithin > 0
-            ? FeatureSelectionTensorOps.FSurvival(fStatistics, dfBetween, dfWithin)
-            : FeatureSelectionTensorOps.FilledLike(fStatistics, NumOps.One);
+            ? FilterStatisticTensorOps.FSurvival(fStatistics, dfBetween, dfWithin)
+            : FilterStatisticTensorOps.FilledLike(fStatistics, NumOps.One);
         _pValues = pValues.ToVector();
 
         // Select significant features, or the top features by F-statistic
-        _selectedIndices = FeatureSelectionTensorOps.SignificantOrTopK(
+        _selectedIndices = FilterStatisticTensorOps.SignificantOrTopK(
             pValues, NumOps.FromDouble(_pValueThreshold), fStatistics, _nFeaturesToSelect);
 
         IsFitted = true;
@@ -118,7 +118,7 @@ public class ANOVAFTest<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervis
         if (_selectedIndices is null)
             throw new InvalidOperationException("ANOVAFTest has not been fitted.");
 
-        return FeatureSelectionTensorOps.SelectColumns(data, _selectedIndices);
+        return FilterStatisticTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

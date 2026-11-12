@@ -13,7 +13,7 @@ namespace AiDotNet.Preprocessing.FeatureSelection;
 /// distribution functions follow scipy.stats (<c>f.sf</c>, <c>t.sf</c>, <c>chi2.sf</c>, <c>norm.sf</c>), which
 /// is what scikit-learn's univariate scorers (<c>f_classif</c>, <c>f_regression</c>, <c>chi2</c>) use.
 /// </remarks>
-internal static class FeatureSelectionTensorOps
+internal static class FilterStatisticTensorOps
 {
     // Lentz's method replaces a vanishing denominator with this value (Numerical Recipes, betacf FPMIN).
     private const double ContinuedFractionFloor = 1e-30;

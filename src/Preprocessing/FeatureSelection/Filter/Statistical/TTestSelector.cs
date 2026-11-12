@@ -70,8 +70,8 @@ public class TTestSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISuper
         int p = data.Columns;
         var engine = Engine;
 
-        var class0 = FeatureSelectionTensorOps.BelowMask(target, 0.5, out int n0);
-        var class1 = FeatureSelectionTensorOps.OneMinus(class0);
+        var class0 = FilterStatisticTensorOps.BelowMask(target, 0.5, out int n0);
+        var class1 = FilterStatisticTensorOps.OneMinus(class0);
         int n1 = n - n0;
 
         if (n0 < 2 || n1 < 2)
@@ -84,15 +84,15 @@ public class TTestSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISuper
         }
 
         // Class means and variances of every feature
-        var x = FeatureSelectionTensorOps.AsTensor(data);
-        var (mean0, ss0) = FeatureSelectionTensorOps.MaskedColumnMoments(x, class0, n0);
-        var (mean1, ss1) = FeatureSelectionTensorOps.MaskedColumnMoments(x, class1, n1);
+        var x = FilterStatisticTensorOps.AsTensor(data);
+        var (mean0, ss0) = FilterStatisticTensorOps.MaskedColumnMoments(x, class0, n0);
+        var (mean1, ss1) = FilterStatisticTensorOps.MaskedColumnMoments(x, class1, n1);
         var s20 = engine.TensorDivideScalar(ss0, NumOps.FromDouble((n0 - 1.0) * n0));
         var s21 = engine.TensorDivideScalar(ss1, NumOps.FromDouble((n1 - 1.0) * n1));
         var sum = engine.TensorAdd(s20, s21);
 
         // |t| with the unpooled standard error sqrt(var0 / n0 + var1 / n1); classes that do not overlap give inf
-        var tStatistics = FeatureSelectionTensorOps.SeparationAwareRatio(
+        var tStatistics = FilterStatisticTensorOps.SeparationAwareRatio(
             engine.TensorAbs(engine.TensorSubtract(mean0, mean1)), engine.TensorSqrt(sum), 1e-10);
         _tStatistics = tStatistics.ToVector();
 
@@ -101,11 +101,11 @@ public class TTestSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISuper
         var den = engine.TensorAdd(
             engine.TensorDivideScalar(engine.TensorSquare(s20), NumOps.FromDouble(n0 - 1)),
             engine.TensorDivideScalar(engine.TensorSquare(s21), NumOps.FromDouble(n1 - 1)));
-        var degreesOfFreedom = FeatureSelectionTensorOps.GuardedDivide(
+        var degreesOfFreedom = FilterStatisticTensorOps.GuardedDivide(
             engine.TensorSquare(sum), den, 0.0, NumOps.FromDouble(n0 + n1 - 2));
-        _pValues = FeatureSelectionTensorOps.StudentTTwoSided(tStatistics, degreesOfFreedom).ToVector();
+        _pValues = FilterStatisticTensorOps.StudentTTwoSided(tStatistics, degreesOfFreedom).ToVector();
 
-        _selectedIndices = FeatureSelectionTensorOps.TopKIndicesSorted(tStatistics, Math.Min(_nFeaturesToSelect, p));
+        _selectedIndices = FilterStatisticTensorOps.TopKIndicesSorted(tStatistics, Math.Min(_nFeaturesToSelect, p));
 
         IsFitted = true;
     }
@@ -123,7 +123,7 @@ public class TTestSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISuper
         if (_selectedIndices is null)
             throw new InvalidOperationException("TTestSelector has not been fitted.");
 
-        return FeatureSelectionTensorOps.SelectColumns(data, _selectedIndices);
+        return FilterStatisticTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

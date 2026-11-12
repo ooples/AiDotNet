@@ -75,14 +75,14 @@ public class FRegression<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervi
         var engine = Engine;
 
         // Centred sums of every feature with the target (ssTotal = total sum of squares of the target)
-        var (sxx, sxy, ssTotal) = FeatureSelectionTensorOps.CenteredCrossSums(
-            FeatureSelectionTensorOps.AsTensor(data), FeatureSelectionTensorOps.AsTensor(target));
+        var (sxx, sxy, ssTotal) = FilterStatisticTensorOps.CenteredCrossSums(
+            FilterStatisticTensorOps.AsTensor(data), FilterStatisticTensorOps.AsTensor(target));
 
         // Slope beta1 = Sxy / Sxx (0 for a constant feature)
-        var beta1 = FeatureSelectionTensorOps.GuardedDivide(sxy, sxx, 1e-10, NumOps.Zero);
+        var beta1 = FilterStatisticTensorOps.GuardedDivide(sxy, sxx, 1e-10, NumOps.Zero);
 
         // Residual sum of squares sum (y - ybar - beta1 (x - xbar))^2 = Syy - 2 beta1 Sxy + beta1^2 Sxx
-        var ssTotalTensor = FeatureSelectionTensorOps.FilledLike(sxx, ssTotal);
+        var ssTotalTensor = FilterStatisticTensorOps.FilledLike(sxx, ssTotal);
         var ssResidual = engine.TensorMax(
             engine.TensorAdd(
                 engine.TensorSubtract(ssTotalTensor, engine.TensorMultiplyScalar(engine.TensorMultiply(beta1, sxy), NumOps.FromDouble(2))),
@@ -95,20 +95,20 @@ public class FRegression<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervi
         // R-squared
         _rSquaredValues = NumOps.GreaterThan(ssTotal, NumOps.FromDouble(1e-10))
             ? engine.TensorMax(engine.TensorDivideScalar(ssRegression, ssTotal), NumOps.Zero).ToVector()
-            : FeatureSelectionTensorOps.FilledLike(sxx, NumOps.Zero).ToVector();
+            : FilterStatisticTensorOps.FilledLike(sxx, NumOps.Zero).ToVector();
 
         // F-statistic: F = (SSR/1) / (SSE/(n-2)); a perfect linear fit leaves no residual and gets F = +inf
         int dfResidual = Math.Max(1, n - 2);
         var msResidual = engine.TensorDivideScalar(ssResidual, NumOps.FromDouble(dfResidual));
-        var fStatistics = FeatureSelectionTensorOps.SeparationAwareRatio(ssRegression, msResidual, 1e-10);
+        var fStatistics = FilterStatisticTensorOps.SeparationAwareRatio(ssRegression, msResidual, 1e-10);
         _fStatistics = fStatistics.ToVector();
 
         // P-value from the F-distribution (1, n-2 degrees of freedom), scipy.stats.f.sf
-        var pValues = FeatureSelectionTensorOps.FSurvival(fStatistics, 1, dfResidual);
+        var pValues = FilterStatisticTensorOps.FSurvival(fStatistics, 1, dfResidual);
         _pValues = pValues.ToVector();
 
         // Select significant features or top by F-statistic
-        _selectedIndices = FeatureSelectionTensorOps.SignificantOrTopK(
+        _selectedIndices = FilterStatisticTensorOps.SignificantOrTopK(
             pValues, NumOps.FromDouble(_pValueThreshold), fStatistics, _nFeaturesToSelect);
 
         IsFitted = true;
@@ -127,7 +127,7 @@ public class FRegression<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervi
         if (_selectedIndices is null)
             throw new InvalidOperationException("FRegression has not been fitted.");
 
-        return FeatureSelectionTensorOps.SelectColumns(data, _selectedIndices);
+        return FilterStatisticTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />
