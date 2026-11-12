@@ -51,7 +51,7 @@ public class GibbsKernel<T> : IKernelFunction<T>
     /// - Step: l(x) = c1 if x &lt; threshold else c2
     /// </para>
     /// </remarks>
-    private readonly Func<Vector<T>, double> _lengthScaleFunction;
+    private readonly Func<Vector<T>, T> _lengthScaleFunction;
 
     /// <summary>
     /// The signal variance (overall scale of the kernel).
@@ -83,7 +83,7 @@ public class GibbsKernel<T> : IKernelFunction<T>
     /// var kernel = new GibbsKernel&lt;double&gt;(lFunc);
     /// </para>
     /// </remarks>
-    public GibbsKernel(Func<Vector<T>, double> lengthScaleFunction, double variance = 1.0)
+    public GibbsKernel(Func<Vector<T>, T> lengthScaleFunction, double variance = 1.0)
     {
         if (lengthScaleFunction is null) throw new ArgumentNullException(nameof(lengthScaleFunction));
         if (variance <= 0)
@@ -126,32 +126,28 @@ public class GibbsKernel<T> : IKernelFunction<T>
             throw new ArgumentException("Vectors must have the same length.");
 
         // Get length scales at each point
-        double l1 = _lengthScaleFunction(x1);
-        double l2 = _lengthScaleFunction(x2);
+        T l1 = _lengthScaleFunction(x1);
+        T l2 = _lengthScaleFunction(x2);
 
-        if (l1 <= 0 || l2 <= 0)
+        if (_numOps.LessThanOrEquals(l1, _numOps.Zero) || _numOps.LessThanOrEquals(l2, _numOps.Zero))
             throw new InvalidOperationException("Length scale function must return positive values.");
 
-        double l1Sq = l1 * l1;
-        double l2Sq = l2 * l2;
-        double lEffSq = l1Sq + l2Sq;
+        T lEffSq = _numOps.Add(_numOps.Multiply(l1, l1), _numOps.Multiply(l2, l2));
 
         // Compute squared Euclidean distance
-        double r2 = 0;
-        for (int i = 0; i < x1.Length; i++)
-        {
-            double diff = _numOps.ToDouble(x1[i]) - _numOps.ToDouble(x2[i]);
-            r2 += diff * diff;
-        }
+        var engine = AiDotNetEngine.Current;
+        var diff = engine.Subtract(x1, x2);
+        T r2 = engine.DotProduct(diff, diff);
 
-        // Normalization factor: sqrt(2 * l1 * l2 / (l1^2 + l2^2))
-        double normFactor = Math.Sqrt(2.0 * l1 * l2 / lEffSq);
+        // Normalization factor (Rasmussen & Williams 2006, eq. 4.32, with the same length scale in
+        // every one of the D dimensions): prod_d sqrt(2 l1 l2 / (l1^2 + l2^2)) = (2 l1 l2 / (l1^2 + l2^2))^(D/2)
+        T ratio = _numOps.Divide(_numOps.Multiply(_numOps.FromDouble(2.0), _numOps.Multiply(l1, l2)), lEffSq);
+        T normFactor = _numOps.Power(ratio, _numOps.FromDouble(x1.Length / 2.0));
 
         // Exponential factor: exp(-r^2 / (l1^2 + l2^2))
-        double expFactor = Math.Exp(-r2 / lEffSq);
+        T expFactor = _numOps.Exp(_numOps.Negate(_numOps.Divide(r2, lEffSq)));
 
-        double result = _variance * normFactor * expFactor;
-        return _numOps.FromDouble(result);
+        return _numOps.Multiply(_numOps.FromDouble(_variance), _numOps.Multiply(normFactor, expFactor));
     }
 
     /// <summary>
@@ -165,7 +161,7 @@ public class GibbsKernel<T> : IKernelFunction<T>
     /// Useful for visualizing how the length scale varies across input space.
     /// </para>
     /// </remarks>
-    public double GetLengthScale(Vector<T> x)
+    public T GetLengthScale(Vector<T> x)
     {
         return _lengthScaleFunction(x);
     }
@@ -203,16 +199,8 @@ public class GibbsKernel<T> : IKernelFunction<T>
 
         var numOps = MathHelper.GetNumericOperations<T>();
 
-        Func<Vector<T>, double> lFunc = x =>
-        {
-            double norm = 0;
-            for (int i = 0; i < x.Length; i++)
-            {
-                double val = numOps.ToDouble(x[i]);
-                norm += val * val;
-            }
-            return baseScale + slope * Math.Sqrt(norm);
-        };
+        Func<Vector<T>, T> lFunc = x =>
+            numOps.Add(numOps.FromDouble(baseScale), numOps.Multiply(numOps.FromDouble(slope), AiDotNetEngine.Current.Norm(x)));
 
         return new GibbsKernel<T>(lFunc, variance);
     }
@@ -257,11 +245,9 @@ public class GibbsKernel<T> : IKernelFunction<T>
 
         var numOps = MathHelper.GetNumericOperations<T>();
 
-        Func<Vector<T>, double> lFunc = x =>
-        {
-            double xVal = numOps.ToDouble(x[0]);
-            return baseScale + amplitude * Math.Sin(2.0 * Math.PI * frequency * xVal);
-        };
+        Func<Vector<T>, T> lFunc = x =>
+            numOps.Add(numOps.FromDouble(baseScale),
+                numOps.Multiply(numOps.FromDouble(amplitude), numOps.Sin(numOps.Multiply(numOps.FromDouble(2.0 * Math.PI * frequency), x[0]))));
 
         return new GibbsKernel<T>(lFunc, variance);
     }
@@ -307,21 +293,25 @@ public class GibbsKernel<T> : IKernelFunction<T>
 
         var numOps = MathHelper.GetNumericOperations<T>();
 
-        Func<Vector<T>, double> lFunc = x =>
+        T scale1T = numOps.FromDouble(scale1);
+        T scale2T = numOps.FromDouble(scale2);
+        T thresholdT = numOps.FromDouble(threshold);
+
+        Func<Vector<T>, T> lFunc = x =>
         {
-            double xVal = numOps.ToDouble(x[0]);
+            T xVal = x[0];
 
             if (transitionWidth <= 0)
             {
                 // Hard step
-                return xVal < threshold ? scale1 : scale2;
+                return numOps.LessThan(xVal, thresholdT) ? scale1T : scale2T;
             }
             else
             {
                 // Smooth transition using sigmoid
-                double z = (xVal - threshold) / transitionWidth;
-                double sigmoid = 1.0 / (1.0 + Math.Exp(-z));
-                return scale1 + (scale2 - scale1) * sigmoid;
+                T z = numOps.Divide(numOps.Subtract(xVal, thresholdT), numOps.FromDouble(transitionWidth));
+                T sigmoid = numOps.Divide(numOps.One, numOps.Add(numOps.One, numOps.Exp(numOps.Negate(z))));
+                return numOps.Add(scale1T, numOps.Multiply(numOps.FromDouble(scale2 - scale1), sigmoid));
             }
         };
 
@@ -373,22 +363,26 @@ public class GibbsKernel<T> : IKernelFunction<T>
         int numPoints = values.Length;
         double gridStep = (gridMax - gridMin) / (numPoints - 1);
 
-        Func<Vector<T>, double> lFunc = x =>
+        T gridMinT = numOps.FromDouble(gridMin);
+        T gridMaxT = numOps.FromDouble(gridMax);
+
+        Func<Vector<T>, T> lFunc = x =>
         {
-            double xVal = numOps.ToDouble(x[0]);
+            T xVal = x[0];
 
             // Clamp to grid range
-            xVal = Math.Max(gridMin, Math.Min(gridMax, xVal));
+            xVal = MathHelper.Max(gridMinT, MathHelper.Min(gridMaxT, xVal));
 
             // Find interpolation position
-            double pos = (xVal - gridMin) / gridStep;
-            int i0 = (int)Math.Floor(pos);
+            T pos = numOps.Divide(numOps.Subtract(xVal, gridMinT), numOps.FromDouble(gridStep));
+            int i0 = numOps.ToInt32(numOps.Floor(pos));
             int i1 = Math.Min(i0 + 1, numPoints - 1);
             i0 = Math.Max(0, i0);
 
             // Linear interpolation
-            double t = pos - i0;
-            return values[i0] * (1 - t) + values[i1] * t;
+            T t = numOps.Subtract(pos, numOps.FromDouble(i0));
+            return numOps.Add(numOps.Multiply(numOps.FromDouble(values[i0]), numOps.Subtract(numOps.One, t)),
+                numOps.Multiply(numOps.FromDouble(values[i1]), t));
         };
 
         return new GibbsKernel<T>(lFunc, variance);
