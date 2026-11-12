@@ -50,6 +50,8 @@ public abstract class ModelHyperparameterOptions : NeuralNetworkOptions
     /// it was. Occasionally that correction is enormous and destabilises everything learned so
     /// far. Gradient clipping caps the size of a single correction. 1.0 is the usual choice.</para>
     /// </remarks>
+    [AiDotNet.Attributes.OptionBehaviourExempt("Medical SAM 2 clips at MedicalSAM2Options.MaxGradientNorm, the SAM 2 recipe's 0.1 (Ravi et al. 2024 Table 12).", ModelType = typeof(AiDotNet.ComputerVision.Segmentation.Medical.MedicalSAM2<>))]
+    [AiDotNet.Attributes.OptionBehaviourExempt("A detection backbone refuses standalone training: it trains inside its parent detector (Faster R-CNN, SSD), whose optimizer clips the joint step, so the backbone's own threshold has no step to clip.", ModelType = typeof(AiDotNet.ComputerVision.Detection.Backbones.VGG16Backbone<>))]
     public double MaxGradNorm { get; set; } = 1.0;
 
     /// <summary>

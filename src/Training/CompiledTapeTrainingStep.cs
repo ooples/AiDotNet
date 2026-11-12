@@ -106,6 +106,7 @@ public static class CompiledTapeTrainingStep<T>
         internal object? configuredPlan;
         internal (int OptType, double Lr, double B1, double B2, double Eps, double Wd)? configuredOptimizerConfig;
         internal double configuredL2;
+        internal bool configuredL2AfterClip;
         internal long fusedStepCount;
         // The configured plan's optimizer step (1-based after its first Step), counted from configuration; -1 when it
         // is unknown (an imported checkpoint set it, or the last fused step ran a different plan).
@@ -452,8 +453,11 @@ public static class CompiledTapeTrainingStep<T>
     /// </summary>
     private static (int OptType, double Lr, double B1, double B2, double Eps, double Wd)? _configuredOptimizerConfig { get => CurrentState.configuredOptimizerConfig; set => CurrentState.configuredOptimizerConfig = value; }
 
-    /// <summary>The L2 regularization strength the configured plan applies before clipping (0 = none).</summary>
+    /// <summary>The L2 regularization strength the configured plan applies (0 = none).</summary>
     private static double _configuredL2 { get => CurrentState.configuredL2; set => CurrentState.configuredL2 = value; }
+
+    /// <summary>Whether the configured plan adds its L2 term after the gradient clip (PyTorch's order) rather than before.</summary>
+    private static bool _configuredL2AfterClip { get => CurrentState.configuredL2AfterClip; set => CurrentState.configuredL2AfterClip = value; }
 
     /// <summary>
     /// Counter of successful fused-step executions on this thread. Exposed
@@ -941,6 +945,7 @@ public static class CompiledTapeTrainingStep<T>
         _configuredPlan = null;
         _configuredOptimizerConfig = null;
         _configuredL2 = 0.0;
+        _configuredL2AfterClip = false;
         // AiDotNet#1331: drop the persistent input/target tensors so the next
         // call traces a fresh plan with new captured leaves. Forgetting this
         // would re-use the old tensors with whatever shape they had — a
@@ -1081,8 +1086,8 @@ public static class CompiledTapeTrainingStep<T>
         // The model the step trains. Its compiled plan and optimizer moments are kept per owner, not per
         // thread; null uses the first layer, which belongs to exactly one model.
         object? owner = null,
-        // L2 regularization strength applied to each parameter gradient BEFORE clipping (the optimizer's configured
-        // L2Regularization; 0 = none). Declines when the linked Tensors plan cannot apply it.
+        // L2 regularization strength added to each parameter gradient (the optimizer's configured
+        // L2Regularization; 0 = none), before the clip unless l2AfterClip. Declines when the linked plan cannot.
         double l2Regularization = 0.0,
         // When set, a compiled step hands back its loss TENSOR here instead of reading the scalar (lossValue is then
         // zero). Reading the scalar waits for the device to finish the step; a caller that may never look at the
@@ -1091,7 +1096,9 @@ public static class CompiledTapeTrainingStep<T>
         // The slot that keeps this step's plan, moments and step counter, when the layer set does not identify it:
         // one model's objectives train different parameters with different optimizers over the same layers, and
         // each needs its own (see FusedTrainingSession's state key). Null keys the slot by the layer set.
-        object? stateKey = null)
+        object? stateKey = null,
+        // Add the L2 term after the gradient clip (PyTorch's order) instead of before it.
+        bool l2AfterClip = false)
     {
         if (layers is null) throw new ArgumentNullException(nameof(layers));
         // A model whose whole training surface is raw extra tensors passes no layers; its first extra tensor then
@@ -1111,7 +1118,7 @@ public static class CompiledTapeTrainingStep<T>
         try
         {
             _currentState = state;
-            return TryStepWithFusedOptimizerCore(layers: layers, input: input, target: target, forward: forward, computeLoss: computeLoss, optimizerType: optimizerType, learningRate: learningRate, beta1: beta1, beta2: beta2, epsilon: epsilon, weightDecay: weightDecay, lossValue: out lossValue, maxGradNorm: maxGradNorm, lrSchedule: lrSchedule, eagerOptimizer: eagerOptimizer, useBf16Moments: useBf16Moments, extraTensors: extraTensors, int8MomentBlockSize: int8MomentBlockSize, int8MinQuantizedLength: int8MinQuantizedLength, fusedExtras: fusedExtras, onGradients: onGradients, trainableSelection: trainableSelection, l2Regularization: l2Regularization, deferredLoss: deferredLoss);
+            return TryStepWithFusedOptimizerCore(layers: layers, input: input, target: target, forward: forward, computeLoss: computeLoss, optimizerType: optimizerType, learningRate: learningRate, beta1: beta1, beta2: beta2, epsilon: epsilon, weightDecay: weightDecay, lossValue: out lossValue, maxGradNorm: maxGradNorm, lrSchedule: lrSchedule, eagerOptimizer: eagerOptimizer, useBf16Moments: useBf16Moments, extraTensors: extraTensors, int8MomentBlockSize: int8MomentBlockSize, int8MinQuantizedLength: int8MinQuantizedLength, fusedExtras: fusedExtras, onGradients: onGradients, trainableSelection: trainableSelection, l2Regularization: l2Regularization, deferredLoss: deferredLoss, l2AfterClip: l2AfterClip);
         }
         finally
         {
@@ -1152,7 +1159,8 @@ public static class CompiledTapeTrainingStep<T>
         // everything, which is what all but the partial-freeze models want.
         IReadOnlyCollection<Tensor<T>>? trainableSelection = null,
         double l2Regularization = 0.0,
-        System.Runtime.CompilerServices.StrongBox<Tensor<T>?>? deferredLoss = null)
+        System.Runtime.CompilerServices.StrongBox<Tensor<T>?>? deferredLoss = null,
+        bool l2AfterClip = false)
     {
         lossValue = MathHelper.GetNumericOperations<T>().Zero;
         if (deferredLoss is not null) deferredLoss.Value = null;
@@ -1208,6 +1216,8 @@ public static class CompiledTapeTrainingStep<T>
             { Fd($"optimizerType {optimizerType} latched-unavailable"); return false; }
         if (l2Regularization > 0.0 && !PlanSupportsL2Regularization())
             { Fd("L2 regularization configured but the linked Tensors plan has no SetL2Regularization"); return false; }
+        // The L2 term's order relative to the clip matters only when both are on.
+        l2AfterClip = l2AfterClip && l2Regularization > 0.0 && maxGradNorm > 0.0;
 
         AiDotNet.Optimizers.GradientBasedOptimizerBase<T, Tensor<T>, Tensor<T>>? restoredStateAwaitingStep = null;
         try
@@ -1241,7 +1251,8 @@ public static class CompiledTapeTrainingStep<T>
                 if (_configuredPlan is not null && _persistentInput is not null && PlanSupportsContinueOptimizer()
                     && _configuredOptimizerConfig is not null
                     && _configuredOptimizerConfig.Value.Equals(((int)optimizerType, lrSchedule is null ? learningRate : 0f, beta1, beta2, epsilon, weightDecay))
-                    && _configuredL2.Equals(l2Regularization))
+                    && _configuredL2.Equals(l2Regularization)
+                    && _configuredL2AfterClip == l2AfterClip)
                 {
                     // A batch-shape change on a configured lifecycle - typically the short last batch of an epoch.
                     // Switch to this shape's plan and let it continue the optimizer (moments, step count) from the
@@ -1551,7 +1562,8 @@ public static class CompiledTapeTrainingStep<T>
                 && !ReferenceEquals(switchedFrom, plan)
                 && _configuredOptimizerConfig is not null
                 && _configuredOptimizerConfig.Value.Equals(currentConfig)
-                && _configuredL2.Equals(l2Regularization))
+                && _configuredL2.Equals(l2Regularization)
+                && _configuredL2AfterClip == l2AfterClip)
             {
                 // Same optimizer, new batch shape: this shape's plan takes over the optimizer state (and the clip
                 // and L2 it was configured with). A plan compiled just now used its trace's stochastic draw.
@@ -1620,9 +1632,21 @@ public static class CompiledTapeTrainingStep<T>
                 // fused. Pass 0 to disable.
                 if (maxGradNorm > 0.0)
                     TrySetPlanMaxGradNorm(plan, maxGradNorm);
-                if (l2Regularization > 0.0)
+                if (l2AfterClip)
+                {
+                    // PyTorch's order: clip the loss gradient, then add the L2 term.
+                    if (plan is not AiDotNet.Tensors.Engines.Compilation.ICompiledTrainingPlanRegularizationOrder ordered)
+                    {
+                        Fd("L2 after the clip configured but the linked plan has no regularization order");
+                        return false;
+                    }
+                    ordered.SetL2Regularization(l2Regularization,
+                        AiDotNet.Tensors.Engines.Compilation.GradientRegularizationOrder.ClipThenRegularize);
+                }
+                else if (l2Regularization > 0.0)
                     InvokePlanMethod(s_setL2Method, "SetL2Regularization", plan, l2Regularization);
                 _configuredL2 = l2Regularization;
+                _configuredL2AfterClip = l2AfterClip;
                 restoredStateAwaitingStep = LinkFusedOptimizerState(plan, eagerOptimizer);
             }
             else if (!ReferenceEquals(_configuredPlan, plan))
@@ -1636,7 +1660,8 @@ public static class CompiledTapeTrainingStep<T>
             }
             else if (_configuredOptimizerConfig is null
                 || !_configuredOptimizerConfig.Value.Equals(currentConfig)
-                || !_configuredL2.Equals(l2Regularization))
+                || !_configuredL2.Equals(l2Regularization)
+                || _configuredL2AfterClip != l2AfterClip)
             {
                 // Same plan, drifted hyperparameters between steps. Refuse
                 // to re-configure (would reset m/v) and let the caller
@@ -1731,6 +1756,7 @@ public static class CompiledTapeTrainingStep<T>
             _configuredOptimizerConfig = null;
             CurrentState.planOptimizerStep = -1;
             _configuredL2 = 0.0;
+            _configuredL2AfterClip = false;
             return false;
         }
     }

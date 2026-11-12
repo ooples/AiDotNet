@@ -93,6 +93,25 @@ public abstract class DetectionModelTestBase<T>
     /// <summary>
     /// Creates a target tensor shaped like the model output, for the training invariants.
     /// </summary>
+    /// <summary>
+    /// The model's output in training mode: the output set a raw training step regresses. A detector whose backbone
+    /// normalizes with BatchNorm picks that set (its surviving proposals) with the batch's statistics while training and
+    /// with the running statistics in inference, so the inference output can have a different length.
+    /// </summary>
+    protected static Tensor<T> TrainingModePrediction(IFullModel<T, Tensor<T>, Tensor<T>> model, Tensor<T> image)
+    {
+        if (model is not AiDotNet.ComputerVision.VisionTaskModelBase<T> vision) return model.Predict(image);
+        vision.SetTrainingMode(true);
+        try
+        {
+            return vision.Predict(image);
+        }
+        finally
+        {
+            vision.SetTrainingMode(false);
+        }
+    }
+
     protected Tensor<T> CreateTargetLike(Tensor<T> output, Random rng)
     {
         var target = new Tensor<T>(output._shape);
@@ -346,7 +365,7 @@ public abstract class DetectionModelTestBase<T>
         {
             // Re-derive the target each step: a two-stage detector's output length follows its
             // proposals, which move once its weights do.
-            model.Train(image, CreateTargetLike(model.Predict(image), rng));
+            model.Train(image, CreateTargetLike(TrainingModePrediction(model, image), rng));
         }
 
         var after = ParametersOf(model);
@@ -402,7 +421,7 @@ public abstract class DetectionModelTestBase<T>
         var lengths = new List<int>();
         for (int step = 0; step <= LossReductionIterations; step++)
         {
-            var prediction = model.Predict(image);
+            var prediction = TrainingModePrediction(model, image);
             lengths.Add(prediction.Length);
             model.Train(image, new Tensor<T>(prediction._shape));
             losses.Add(LastTrainingLoss(model));
@@ -480,7 +499,7 @@ public abstract class DetectionModelTestBase<T>
         var image = CreateRandomImage(rng);
         for (int step = 0; step < TrainingIterations; step++)
         {
-            model.Train(image, CreateTargetLike(model.Predict(image), rng));
+            model.Train(image, CreateTargetLike(TrainingModePrediction(model, image), rng));
         }
 
         var output = model.Predict(image);
@@ -554,7 +573,7 @@ public abstract class DetectionModelTestBase<T>
         using var model = CreateModel();
 
         var image = CreateRandomImage(rng);
-        var target = CreateTargetLike(model.Predict(image), rng);
+        var target = CreateTargetLike(TrainingModePrediction(model, image), rng);
 
         var chunks = ((ModelBase<T, Tensor<T>, Tensor<T>>)model).GetParameterStateChunks()
             .Where(c => c.Role == ParameterSlotRole.Trainable && c.IsWritableInPlace && c.Tensor.Length > 0)

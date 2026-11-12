@@ -153,10 +153,19 @@ public class PointCloudMedicalSegmentationIntegrationTests
 
     #region MedSAM2
 
+    // MedSAM2 is SAM2.1-Tiny at 512 px; these smoke tests scale its capacity through the public options.
+    private static MedSAM2Options SmallMedSAM2() => new MedSAM2Options
+        {
+            ImageSize = 32, HieraEmbeddingDimension = 8, HieraStageDepths = new[] { 1, 1, 1, 1 }, HieraInitialHeadCount = 1,
+            HieraWindowSizes = new[] { 4, 4, 2, 1 }, HieraGlobalAttentionBlockIndexes = new[] { 2 }, ModelDimension = 32, MemoryDimension = 16,
+            DecoderHeadCount = 2, MaskDecoderMlpDimension = 32, MemoryAttentionLayerCount = 1, MemoryAttentionFeedForwardDimension = 32,
+            MemoryFuserDimension = 32, CorrectionPoints = 1,
+        };
+
     [Fact(Timeout = 120000)]
     public async Task MedSAM2_Construction_Succeeds()
     {
-        var model = new MedSAM2<double>(Arch(), options: new MedSAM2Options { ModelSize = MedSAM2ModelSize.Tiny });
+        var model = new MedSAM2<double>(Arch(), options: SmallMedSAM2());
         Assert.NotNull(model);
         Assert.True(model.SupportsTraining);
     }
@@ -164,7 +173,7 @@ public class PointCloudMedicalSegmentationIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task MedSAM2_Predict_ReturnsOutput()
     {
-        var model = new MedSAM2<double>(Arch(), options: new MedSAM2Options { ModelSize = MedSAM2ModelSize.Tiny });
+        var model = new MedSAM2<double>(Arch(), options: SmallMedSAM2());
         var output = model.Predict(Rand(1, 3, 32, 32));
         Assert.NotNull(output);
         Assert.True(output.Length > 0);
@@ -173,7 +182,7 @@ public class PointCloudMedicalSegmentationIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task MedSAM2_Dispose_DoesNotThrow()
     {
-        var model = new MedSAM2<double>(Arch());
+        var model = new MedSAM2<double>(Arch(), options: SmallMedSAM2());
         Assert.Null(Record.Exception(() => model.Dispose()));
     }
 

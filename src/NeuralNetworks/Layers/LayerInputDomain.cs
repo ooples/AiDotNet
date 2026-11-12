@@ -143,6 +143,14 @@ public readonly struct LayerInputDomain
             ? new LayerInputDomain(LayerInputDomainKind.IntegerIndices, 0, vocabularySize)
             : Deferred($"The exclusive integer bound is {vocabularySize}; it must be positive before input can be created.");
 
+    /// <summary>Integer indices in the half-open interval <c>[minInclusive, maxExclusive)</c>.</summary>
+    /// <param name="minInclusive">The smallest legal token index, including a checkpoint's text-vocabulary offset.</param>
+    /// <param name="maxExclusive">One past the largest legal token index.</param>
+    public static LayerInputDomain Indices(int minInclusive, int maxExclusive) =>
+        minInclusive >= 0 && maxExclusive > minInclusive
+            ? new LayerInputDomain(LayerInputDomainKind.IntegerIndices, minInclusive, maxExclusive)
+            : Deferred($"The integer interval [{minInclusive}, {maxExclusive}) is empty or has a negative lower bound.");
+
     /// <summary>Creates a non-executable domain with an actionable explanation.</summary>
     public static LayerInputDomain Deferred(string reason) =>
         new(
