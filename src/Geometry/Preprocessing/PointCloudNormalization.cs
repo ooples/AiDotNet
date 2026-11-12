@@ -19,7 +19,6 @@ public static class PointCloudNormalization<T>
     public static PointCloudData<T> Center(PointCloudData<T> pointCloud)
     {
         int numPoints = pointCloud.NumPoints;
-        int numFeatures = pointCloud.NumFeatures;
 
         if (numPoints == 0)
         {
@@ -27,38 +26,14 @@ public static class PointCloudNormalization<T>
         }
 
         // Compute centroid (only for XYZ coordinates)
-        T sumX = NumOps.Zero;
-        T sumY = NumOps.Zero;
-        T sumZ = NumOps.Zero;
-
-        for (int i = 0; i < numPoints; i++)
-        {
-            sumX = NumOps.Add(sumX, pointCloud.Points[i, 0]);
-            sumY = NumOps.Add(sumY, pointCloud.Points[i, 1]);
-            sumZ = NumOps.Add(sumZ, pointCloud.Points[i, 2]);
-        }
-
-        T count = NumOps.FromDouble(numPoints);
-        T centroidX = NumOps.Divide(sumX, count);
-        T centroidY = NumOps.Divide(sumY, count);
-        T centroidZ = NumOps.Divide(sumZ, count);
+        var engine = AiDotNetEngine.Current;
+        var positions = GeometryEngineOps<T>.Positions(pointCloud.Points);
+        var centroid = engine.TensorDivideScalar(
+            engine.ReduceSum(positions, new[] { 0 }, true), NumOps.FromDouble(numPoints));
 
         // Create centered point cloud
-        var centeredData = new T[numPoints * numFeatures];
-        for (int i = 0; i < numPoints; i++)
-        {
-            int baseIdx = i * numFeatures;
-            centeredData[baseIdx] = NumOps.Subtract(pointCloud.Points[i, 0], centroidX);
-            centeredData[baseIdx + 1] = NumOps.Subtract(pointCloud.Points[i, 1], centroidY);
-            centeredData[baseIdx + 2] = NumOps.Subtract(pointCloud.Points[i, 2], centroidZ);
-
-            for (int f = 3; f < numFeatures; f++)
-            {
-                centeredData[baseIdx + f] = pointCloud.Points[i, f];
-            }
-        }
-
-        var tensor = new Tensor<T>(centeredData, [numPoints, numFeatures]);
+        var centered = engine.TensorSubtract(positions, engine.TensorBroadcastTo(centroid, positions.Shape));
+        var tensor = GeometryEngineOps<T>.WithPositions(pointCloud.Points, centered);
         return new PointCloudData<T>(tensor, pointCloud.Labels);
     }
 
@@ -69,54 +44,29 @@ public static class PointCloudNormalization<T>
     {
         var workingCloud = center ? Center(pointCloud) : pointCloud;
         int numPoints = workingCloud.NumPoints;
-        int numFeatures = workingCloud.NumFeatures;
 
         if (numPoints == 0)
         {
             return workingCloud;
         }
 
-        // Find maximum distance from origin
-        T maxDistSq = NumOps.Zero;
-        for (int i = 0; i < numPoints; i++)
-        {
-            T x = workingCloud.Points[i, 0];
-            T y = workingCloud.Points[i, 1];
-            T z = workingCloud.Points[i, 2];
-            T distSq = NumOps.Add(NumOps.Add(
-                NumOps.Multiply(x, x),
-                NumOps.Multiply(y, y)),
-                NumOps.Multiply(z, z));
+        // Find maximum distance from origin; the running maximum started at zero and skipped NaN.
+        var engine = AiDotNetEngine.Current;
+        var positions = GeometryEngineOps<T>.Positions(workingCloud.Points);
+        var distancesSq = GeometryEngineOps<T>.RowSquaredNorms(positions);
+        var finiteDistancesSq = engine.TensorWhere(
+            engine.TensorIsNan(distancesSq), engine.TensorZerosLike(distancesSq), distancesSq);
+        T maxDistSq = engine.TensorMaxValue(engine.TensorMax(finiteDistancesSq, NumOps.Zero));
 
-            if (NumOps.GreaterThan(distSq, maxDistSq))
-            {
-                maxDistSq = distSq;
-            }
-        }
-
-        double maxDist = Math.Sqrt(NumOps.ToDouble(maxDistSq));
-        if (maxDist < 1e-10)
+        T maxDist = NumOps.Sqrt(maxDistSq);
+        if (NumOps.LessThan(maxDist, NumOps.FromDouble(1e-10)))
         {
             return workingCloud;
         }
 
-        T scale = NumOps.FromDouble(1.0 / maxDist);
-
-        var scaledData = new T[numPoints * numFeatures];
-        for (int i = 0; i < numPoints; i++)
-        {
-            int baseIdx = i * numFeatures;
-            scaledData[baseIdx] = NumOps.Multiply(workingCloud.Points[i, 0], scale);
-            scaledData[baseIdx + 1] = NumOps.Multiply(workingCloud.Points[i, 1], scale);
-            scaledData[baseIdx + 2] = NumOps.Multiply(workingCloud.Points[i, 2], scale);
-
-            for (int f = 3; f < numFeatures; f++)
-            {
-                scaledData[baseIdx + f] = workingCloud.Points[i, f];
-            }
-        }
-
-        var tensor = new Tensor<T>(scaledData, [numPoints, numFeatures]);
+        T scale = NumOps.Divide(NumOps.One, maxDist);
+        var scaled = engine.TensorMultiplyScalar(positions, scale);
+        var tensor = GeometryEngineOps<T>.WithPositions(workingCloud.Points, scaled);
         return new PointCloudData<T>(tensor, workingCloud.Labels);
     }
 
@@ -127,66 +77,33 @@ public static class PointCloudNormalization<T>
     {
         var workingCloud = center ? Center(pointCloud) : pointCloud;
         int numPoints = workingCloud.NumPoints;
-        int numFeatures = workingCloud.NumFeatures;
 
         if (numPoints == 0)
         {
             return workingCloud;
         }
 
-        T minX = workingCloud.Points[0, 0];
-        T minY = workingCloud.Points[0, 1];
-        T minZ = workingCloud.Points[0, 2];
-        T maxX = minX;
-        T maxY = minY;
-        T maxZ = minZ;
+        var engine = AiDotNetEngine.Current;
+        var positions = GeometryEngineOps<T>.Positions(workingCloud.Points);
+        var (min, max) = GeometryEngineOps<T>.RunningColumnBounds(positions);
 
-        for (int i = 1; i < numPoints; i++)
-        {
-            T x = workingCloud.Points[i, 0];
-            T y = workingCloud.Points[i, 1];
-            T z = workingCloud.Points[i, 2];
+        // Math.Max propagates NaN, so a NaN range makes the largest range NaN (and the guard below false).
+        var ranges = engine.TensorSubtract(max, min);
+        T maxRange = GeometryEngineOps<T>.AnyNan(ranges) ? NumOps.FromDouble(double.NaN) : engine.TensorMaxValue(ranges);
 
-            if (NumOps.LessThan(x, minX)) minX = x;
-            if (NumOps.LessThan(y, minY)) minY = y;
-            if (NumOps.LessThan(z, minZ)) minZ = z;
-            if (NumOps.GreaterThan(x, maxX)) maxX = x;
-            if (NumOps.GreaterThan(y, maxY)) maxY = y;
-            if (NumOps.GreaterThan(z, maxZ)) maxZ = z;
-        }
-
-        double rangeX = NumOps.ToDouble(NumOps.Subtract(maxX, minX));
-        double rangeY = NumOps.ToDouble(NumOps.Subtract(maxY, minY));
-        double rangeZ = NumOps.ToDouble(NumOps.Subtract(maxZ, minZ));
-        double maxRange = Math.Max(Math.Max(rangeX, rangeY), rangeZ);
-
-        if (maxRange < 1e-10)
+        if (NumOps.LessThan(maxRange, NumOps.FromDouble(1e-10)))
         {
             return workingCloud;
         }
 
         // Re-center at bounding box midpoint so data is symmetric around 0,
         // then scale by 1/maxRange to guarantee all points fit in [-0.5, 0.5]^3
-        T midX = NumOps.FromDouble((NumOps.ToDouble(minX) + NumOps.ToDouble(maxX)) / 2.0);
-        T midY = NumOps.FromDouble((NumOps.ToDouble(minY) + NumOps.ToDouble(maxY)) / 2.0);
-        T midZ = NumOps.FromDouble((NumOps.ToDouble(minZ) + NumOps.ToDouble(maxZ)) / 2.0);
-        T scale = NumOps.FromDouble(1.0 / maxRange);
+        var mid = engine.TensorDivideScalar(engine.TensorAdd(min, max), NumOps.FromDouble(2.0)).Reshape(1, 3);
+        T scale = NumOps.Divide(NumOps.One, maxRange);
 
-        var scaledData = new T[numPoints * numFeatures];
-        for (int i = 0; i < numPoints; i++)
-        {
-            int baseIdx = i * numFeatures;
-            scaledData[baseIdx] = NumOps.Multiply(NumOps.Subtract(workingCloud.Points[i, 0], midX), scale);
-            scaledData[baseIdx + 1] = NumOps.Multiply(NumOps.Subtract(workingCloud.Points[i, 1], midY), scale);
-            scaledData[baseIdx + 2] = NumOps.Multiply(NumOps.Subtract(workingCloud.Points[i, 2], midZ), scale);
-
-            for (int f = 3; f < numFeatures; f++)
-            {
-                scaledData[baseIdx + f] = workingCloud.Points[i, f];
-            }
-        }
-
-        var tensor = new Tensor<T>(scaledData, [numPoints, numFeatures]);
+        var shifted = engine.TensorSubtract(positions, engine.TensorBroadcastTo(mid, positions.Shape));
+        var scaled = engine.TensorMultiplyScalar(shifted, scale);
+        var tensor = GeometryEngineOps<T>.WithPositions(workingCloud.Points, scaled);
         return new PointCloudData<T>(tensor, workingCloud.Labels);
     }
 
@@ -206,31 +123,30 @@ public static class PointCloudNormalization<T>
             return pointCloud;
         }
 
-        T scale = NumOps.FromDouble(1.0 / maxColorValue);
-        var normalizedData = new T[numPoints * numFeatures];
-
-        for (int i = 0; i < numPoints; i++)
+        if (numPoints == 0)
         {
-            int baseIdx = i * numFeatures;
-
-            for (int f = 0; f < colorOffset; f++)
-            {
-                normalizedData[baseIdx + f] = pointCloud.Points[i, f];
-            }
-
-            for (int c = 0; c < 3; c++)
-            {
-                T colorVal = pointCloud.Points[i, colorOffset + c];
-                normalizedData[baseIdx + colorOffset + c] = NumOps.Multiply(colorVal, scale);
-            }
-
-            for (int f = colorOffset + 3; f < numFeatures; f++)
-            {
-                normalizedData[baseIdx + f] = pointCloud.Points[i, f];
-            }
+            return new PointCloudData<T>(new Tensor<T>(new[] { 0, numFeatures }), pointCloud.Labels);
         }
 
-        var tensor = new Tensor<T>(normalizedData, [numPoints, numFeatures]);
+        var engine = AiDotNetEngine.Current;
+        T scale = NumOps.FromDouble(1.0 / maxColorValue);
+        var points = pointCloud.Points;
+        var parts = new List<Tensor<T>>();
+        if (colorOffset > 0)
+        {
+            parts.Add(engine.TensorSlice(points, new[] { 0, 0 }, new[] { numPoints, colorOffset }));
+        }
+
+        var colors = engine.TensorSlice(points, new[] { 0, colorOffset }, new[] { numPoints, 3 });
+        parts.Add(engine.TensorMultiplyScalar(colors, scale));
+
+        int trailing = numFeatures - colorOffset - 3;
+        if (trailing > 0)
+        {
+            parts.Add(engine.TensorSlice(points, new[] { 0, colorOffset + 3 }, new[] { numPoints, trailing }));
+        }
+
+        var tensor = engine.TensorConcatenate(parts.ToArray(), 1);
         return new PointCloudData<T>(tensor, pointCloud.Labels);
     }
 }

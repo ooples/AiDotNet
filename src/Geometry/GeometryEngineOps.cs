@@ -229,4 +229,46 @@ internal static class GeometryEngineOps<T>
     {
         return Engine.TensorNonzero(mask).ToArray();
     }
+
+    /// <summary>
+    /// Returns <paramref name="points"/> with its xyz columns replaced by <paramref name="positions"/>; any further
+    /// feature columns are kept unchanged.
+    /// </summary>
+    internal static Tensor<T> WithPositions(Tensor<T> points, Tensor<T> positions)
+    {
+        int count = points.Shape[0];
+        int features = points.Shape[1];
+        if (features == 3)
+        {
+            return positions;
+        }
+
+        var rest = Engine.TensorSlice(points, new[] { 0, 3 }, new[] { count, features - 3 });
+        return Engine.TensorConcatenate(new[] { positions, rest }, 1);
+    }
+
+    /// <summary>
+    /// Returns the per-column minimum and maximum the way a running comparison seeded with the first row finds
+    /// them: later NaN entries are skipped, and a column whose first entry is NaN reports NaN.
+    /// </summary>
+    internal static (Tensor<T> min, Tensor<T> max) RunningColumnBounds(Tensor<T> rows)
+    {
+        int columns = rows.Shape[1];
+        var first = Engine.TensorSlice(rows, new[] { 0, 0 }, new[] { 1, columns });
+        var masked = Engine.TensorWhere(Engine.TensorIsNan(rows), Engine.TensorBroadcastTo(first, rows.Shape), rows);
+        var min = Engine.TensorNegate(Engine.ReduceMax(Engine.TensorNegate(masked), new[] { 0 }, false));
+        var max = Engine.ReduceMax(masked, new[] { 0 }, false);
+        var firstRow = first.Reshape(columns);
+        var firstIsNan = Engine.TensorIsNan(firstRow);
+        return (Engine.TensorWhere(firstIsNan, firstRow, min), Engine.TensorWhere(firstIsNan, firstRow, max));
+    }
+
+    /// <summary>
+    /// Returns true when any entry of <paramref name="values"/> is NaN.
+    /// </summary>
+    internal static bool AnyNan(Tensor<T> values)
+    {
+        var flags = Engine.TensorWhere(Engine.TensorIsNan(values), Engine.TensorOnesLike(values), Engine.TensorZerosLike(values));
+        return Engine.TensorCountNonzero(flags) > 0;
+    }
 }
