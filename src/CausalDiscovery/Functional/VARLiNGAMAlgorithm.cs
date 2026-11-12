@@ -155,6 +155,8 @@ public class VARLiNGAMAlgorithm<T> : FunctionalBase<T>
         var isCandidate = Engine.TensorMultiply(OffDiagonalMask(dimension),
             Engine.TensorGreaterEqual(magnitude, Engine.TensorFullLike(magnitude, NumOps.FromDouble(_threshold))));
         int[] positions = Engine.TensorNonzero(isCandidate.Reshape(new[] { dimension * dimension })).ToArray();
+        if (positions.Length == 0)
+            return new Matrix<T>(dimension, dimension);
 
         // Strongest first; equal magnitudes keep (source, target) order.
         var candidateMagnitudes = Engine.TensorIndexSelect(magnitude.Reshape(new[] { dimension * dimension }),
