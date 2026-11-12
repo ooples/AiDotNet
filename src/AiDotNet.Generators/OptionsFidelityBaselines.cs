@@ -325,8 +325,6 @@ internal static class OptionsFidelityBaselines
             "AiDotNet.MetaLearning.Options.VERSAOptions<T, TInput, TOutput>.AggregationMethod",
             "AiDotNet.MetaLearning.Options.VERSAOptions<T, TInput, TOutput>.AmortizationDropout",
             "AiDotNet.MetaLearning.Options.VERSAOptions<T, TInput, TOutput>.UseProbabilistic",
-            "AiDotNet.MetaLearning.Options.iMAMLOptions<T, TInput, TOutput>.NeumannSeriesTerms",
-            "AiDotNet.MetaLearning.Options.iMAMLOptions<T, TInput, TOutput>.UseNeumannApproximation",
             "AiDotNet.Models.Options.ABCNetOptions<T>.RecognitionHiddenSize",
             "AiDotNet.Models.Options.ARIMAOptions<T>.FitIntercept",
             "AiDotNet.Models.Options.ARIMAOptions<T>.LearningRate",
