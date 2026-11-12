@@ -173,30 +173,19 @@ public sealed class LicenseService : ILicenseService
             return InvalidResponse("Invalid license key.");
         }
 
-        // Check revocation
-        if (entity.RevokedAt is not null)
+        // Revocation and expiry: checked here to answer without a lock, and again by AdmitSeatAsync under the lock.
+        if (InactiveStatus(entity) is { } inactive)
         {
-            return new LicenseValidationResponse
-            {
-                Status = LicenseKeyStatus.Revoked,
-                Tier = entity.Tier.ToString(),
-                Message = "This license key has been revoked."
-            };
+            return InactiveResponse(entity, inactive);
         }
 
-        // Check expiration
-        if (entity.ExpiresAt is not null && entity.ExpiresAt <= _clock.GetUtcNow())
+        var (admitted, seatsUsed, inactiveUnderLock) =
+            await AdmitSeatAsync(entity, request, cancellationToken).ConfigureAwait(false);
+        if (inactiveUnderLock is { } lockedStatus)
         {
-            return new LicenseValidationResponse
-            {
-                Status = LicenseKeyStatus.Expired,
-                Tier = entity.Tier.ToString(),
-                ExpiresAt = entity.ExpiresAt,
-                Message = "This license key has expired."
-            };
+            return InactiveResponse(entity, lockedStatus);
         }
 
-        var (admitted, seatsUsed) = await AdmitSeatAsync(entity, request, cancellationToken).ConfigureAwait(false);
         if (!admitted)
         {
             return new LicenseValidationResponse
@@ -221,6 +210,38 @@ public sealed class LicenseService : ILicenseService
             DecryptionToken = decryptionToken
         };
     }
+
+    /// <summary>Revoked or Expired when the key can no longer be admitted, otherwise null.</summary>
+    private LicenseKeyStatus? InactiveStatus(LicenseKeyEntity entity)
+    {
+        if (entity.RevokedAt is not null)
+        {
+            return LicenseKeyStatus.Revoked;
+        }
+
+        if (entity.ExpiresAt is not null && entity.ExpiresAt <= _clock.GetUtcNow())
+        {
+            return LicenseKeyStatus.Expired;
+        }
+
+        return null;
+    }
+
+    private static LicenseValidationResponse InactiveResponse(LicenseKeyEntity entity, LicenseKeyStatus status) =>
+        status == LicenseKeyStatus.Revoked
+            ? new LicenseValidationResponse
+            {
+                Status = LicenseKeyStatus.Revoked,
+                Tier = entity.Tier.ToString(),
+                Message = "This license key has been revoked."
+            }
+            : new LicenseValidationResponse
+            {
+                Status = LicenseKeyStatus.Expired,
+                Tier = entity.Tier.ToString(),
+                ExpiresAt = entity.ExpiresAt,
+                Message = "This license key has expired."
+            };
 
     public async Task<bool> RevokeAsync(Guid licenseId, CancellationToken cancellationToken = default)
     {
@@ -309,8 +330,9 @@ public sealed class LicenseService : ILicenseService
     /// lease: a machine over the limit (for instance after an administrator lowered MaxSeats) lapses instead of
     /// holding its seat by validating repeatedly.
     /// </remarks>
-    /// <returns>Whether a seat is held, and the leased seats counted for the response.</returns>
-    private async Task<(bool Admitted, int SeatsUsed)> AdmitSeatAsync(
+    /// <returns>Whether a seat is held, the leased seats counted for the response, and Revoked or Expired when the
+    /// key, re-read under the lock, can no longer be admitted (a revocation or expiry while this request waited).</returns>
+    private async Task<(bool Admitted, int SeatsUsed, LicenseKeyStatus? Inactive)> AdmitSeatAsync(
         LicenseKeyEntity entity,
         LicenseValidateRequest request,
         CancellationToken cancellationToken)
@@ -328,6 +350,15 @@ public sealed class LicenseService : ILicenseService
             await using var transaction = await _db.Database.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
             await LockLicenseKeyAsync(entity.Id, cancellationToken).ConfigureAwait(false);
 
+            // Decide on the key as it is now, not as read before the lock: a revocation, expiry or MaxSeats change
+            // committed while this request waited applies to it.
+            await _db.Entry(entity).ReloadAsync(cancellationToken).ConfigureAwait(false);
+            if (InactiveStatus(entity) is { } inactive)
+            {
+                await transaction.RollbackAsync(cancellationToken).ConfigureAwait(false);
+                return (false, 0, inactive);
+            }
+
             // Seats held: active activations whose lease is current (see ActivationLease). Read after the lock, so
             // a waiting request counts the lease the request ahead of it just committed.
             int seatsUsed = await CountLeasedSeatsAsync(entity.Id, cancellationToken).ConfigureAwait(false);
@@ -336,7 +367,7 @@ public sealed class LicenseService : ILicenseService
             {
                 // Nothing to renew: the request only reports whether the key is within its limit.
                 await transaction.RollbackAsync(cancellationToken).ConfigureAwait(false);
-                return (seatsUsed <= entity.MaxSeats, seatsUsed);
+                return (seatsUsed <= entity.MaxSeats, seatsUsed, null);
             }
 
             // A machine whose lease is current does not take a new seat; a lapsed or new one does.
@@ -352,13 +383,13 @@ public sealed class LicenseService : ILicenseService
             if (seatsAfter > entity.MaxSeats)
             {
                 await transaction.RollbackAsync(cancellationToken).ConfigureAwait(false);
-                return (false, seatsUsed);
+                return (false, seatsUsed, null);
             }
 
             await UpsertActivationAsync(entity.Id, request.MachineId, request.MachineName, request.Environment, cancellationToken)
                 .ConfigureAwait(false);
             await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
-            return (true, seatsAfter);
+            return (true, seatsAfter, null);
         }).ConfigureAwait(false);
     }
 

@@ -219,13 +219,17 @@ internal static class LocalObjectiveGradientComputer<T>
             }
             paramsOf[headIndex] = CollectParameters(layers[headIndex]);
 
-            Tensor<T> ReadoutLossCore(Tensor<T> h, Tensor<T> t)
+            Tensor<T> ReadoutLossCore(Tensor<T> h, Tensor<T> t) => ReadoutLossOn(h, t, ref headPreparedState);
+
+            // `state` caches the head's traced weight transpose, a node on whichever tape was active when it was made:
+            // the step-wide state is for the outer tape only, an inner tape passes its own.
+            Tensor<T> ReadoutLossOn(Tensor<T> h, Tensor<T> t, ref FusedReadoutPreparedState<T> state)
             {
                 var preHead = PreHeadReadout(h);
                 if (ReferenceEquals(t, alignedTarget) && preparedIds is not null && detachableFusedHead is not null
                     && detachableFusedHead.TryComputeFusedLossPrepared(
                         preHead, preparedIds, detachParameters: false,
-                        ref headPreparedState) is { } preparedFused)
+                        ref state) is { } preparedFused)
                 {
                     return ReduceToScalar(engine, preparedFused);
                 }
@@ -256,7 +260,10 @@ internal static class LocalObjectiveGradientComputer<T>
                 Tensor<T> gradH;
                 using (var innerTape = new GradientTape<T>())
                 {
-                    lossVal = ReadoutLossCore(hDetached, t);
+                    // A transpose traced here belongs to the inner tape and dies with it; caching it in the step-wide
+                    // state would hand later outer-tape losses a weight the outer tape never recorded.
+                    FusedReadoutPreparedState<T> innerState = default;
+                    lossVal = ReadoutLossOn(hDetached, t, ref innerState);
                     var innerGrads = innerTape.ComputeGradients(lossVal, sources: new[] { hDetached });
                     innerTape.Retain(lossVal);
                     if (innerGrads.TryGetValue(hDetached, out var gh))

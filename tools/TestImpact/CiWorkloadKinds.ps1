@@ -237,23 +237,38 @@ function Get-SelfHostedShardPlan {
 }
 
 # Counts jobs of unfinished runs that are queued for, or running on, the label. Returns 0 when the count
-# cannot be read; the online-runner check still bounds routing then.
+# cannot be read in time; the online-runner check still bounds routing then.
+# Every page of runs and of jobs is read (a busy repository has more than one page of each), within one overall
+# budget so the calling job can still write its outputs before its own timeout. -Get replaces the HTTP call in tests.
 function Get-SelfHostedPendingJobs {
-    param([string] $Repository, [string] $Token, [string] $Label)
+    param([string] $Repository, [string] $Token, [string] $Label, [int] $BudgetSeconds = 90, [scriptblock] $Get = $null)
     if ([string]::IsNullOrWhiteSpace($Token) -or [string]::IsNullOrWhiteSpace($Label)) { return 0 }
-    $headers = @{ Authorization = "Bearer $Token"; Accept = 'application/vnd.github+json'; 'X-GitHub-Api-Version' = '2022-11-28' }
-    # Pages of 30: a job list of 100 from a large run answered 502 every time. Three tries for transient errors.
-    $get = { param([string] $Uri) for ($try = 1; ; $try++) {
-        try { return Invoke-RestMethod -Uri $Uri -Headers $headers -TimeoutSec 30 -ErrorAction Stop }
-        catch { if ($try -ge 3) { throw }; Start-Sleep -Seconds (2 * $try) } } }
+    $deadline = [DateTime]::UtcNow.AddSeconds($BudgetSeconds)
+    $remaining = { [int][Math]::Floor(($deadline - [DateTime]::UtcNow).TotalSeconds) }
+    if ($null -eq $Get) {
+        $headers = @{ Authorization = "Bearer $Token"; Accept = 'application/vnd.github+json'; 'X-GitHub-Api-Version' = '2022-11-28' }
+        # Three tries for transient errors, each request capped by what is left of the budget.
+        $Get = { param([string] $Uri) for ($try = 1; ; $try++) {
+            $left = & $remaining
+            if ($left -lt 1) { throw "pending-job scan exceeded its $BudgetSeconds s budget" }
+            try { return Invoke-RestMethod -Uri $Uri -Headers $headers -TimeoutSec ([Math]::Min(30, $left)) -ErrorAction Stop }
+            catch { if ($try -ge 3 -or (& $remaining) -lt (2 * $try + 1)) { throw }; Start-Sleep -Seconds (2 * $try) } } }
+    }
     try {
         $runs = foreach ($status in 'queued', 'in_progress') {
-            (& $get "https://api.github.com/repos/$Repository/actions/runs?status=$status&per_page=100").workflow_runs
+            for ($page = 1; ; $page++) {
+                if ((& $remaining) -lt 1) { throw "pending-job scan exceeded its $BudgetSeconds s budget" }
+                $batch = @((& $Get "https://api.github.com/repos/$Repository/actions/runs?status=$status&per_page=100&page=$page").workflow_runs | Where-Object { $_ })
+                $batch
+                if ($batch.Count -lt 100) { break }
+            }
         }
         $pending = 0
         foreach ($run in @($runs | Where-Object { $_ } | Sort-Object id -Unique)) {
+            # Pages of 30: a job list of 100 from a large run answered 502 every time.
             for ($page = 1; ; $page++) {
-                $jobs = @((& $get "https://api.github.com/repos/$Repository/actions/runs/$($run.id)/jobs?filter=latest&per_page=30&page=$page").jobs)
+                if ((& $remaining) -lt 1) { throw "pending-job scan exceeded its $BudgetSeconds s budget" }
+                $jobs = @((& $Get "https://api.github.com/repos/$Repository/actions/runs/$($run.id)/jobs?filter=latest&per_page=30&page=$page").jobs | Where-Object { $_ })
                 $pending += @($jobs | Where-Object { $_.status -ne 'completed' -and @($_.labels) -ccontains $Label }).Count
                 if ($jobs.Count -lt 30) { break }
             }
