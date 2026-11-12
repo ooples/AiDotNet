@@ -362,4 +362,82 @@ internal static class AudioEngineOps
         var magnitude = engine.TensorPower(engine.TensorAbs(values), numOps.FromDouble(exponent));
         return engine.TensorWhere(engine.TensorLessThan(values, numOps.Zero), engine.TensorNegate(magnitude), magnitude);
     }
+
+    /// <summary>
+    /// <paramref name="embedding"/> divided by its L2 norm when that norm is positive (otherwise
+    /// unchanged, including a NaN norm), as a fresh detached array.
+    /// </summary>
+    internal static T[] L2NormalizedData<T>(IEngine engine, Tensor<T> embedding)
+    {
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        var numOps = MathHelper.GetNumericOperations<T>();
+        if (embedding.Length == 0) return new T[0];
+        T norm = numOps.Sqrt(engine.TensorSum(engine.TensorSquare(embedding)));
+        return numOps.GreaterThan(norm, numOps.Zero)
+            ? engine.TensorDivideScalar(embedding, norm).ToArray()
+            : embedding.ToArray();
+    }
+
+    /// <summary>
+    /// Cosine similarity of the query embedding frames against the reference frames starting at
+    /// each offset <c>rStart = 0 .. refFrames - min(queryFrames, minMatchLength)</c>, over the
+    /// <c>min(queryFrames, refFrames - rStart)</c> overlapping frames; 0 where
+    /// <c>sqrt(|q|^2) * sqrt(|r|^2)</c> is not above 1e-8. Frames are <paramref name="embDim"/>
+    /// consecutive values; a trailing partial frame is ignored.
+    /// </summary>
+    internal static double[] SlidingCosineScores<T>(IEngine engine, T[] query, T[] reference, int embDim, int minMatchLength)
+    {
+        int frameDim = Math.Max(1, embDim);
+        int queryFrames = query.Length / frameDim;
+        int refFrames = reference.Length / frameDim;
+        int starts = refFrames - Math.Min(queryFrames, minMatchLength) + 1;
+        if (queryFrames <= 0 || refFrames <= 0 || starts <= 0) return new double[0];
+        if (embDim <= 0) return new double[starts];
+
+        // Gram matrix G[f, j] = q_f . r_j and the per-frame squared norms
+        var q = engine.Reshape(engine.TensorSlice(new Tensor<T>(query, new[] { query.Length }), new[] { 0 }, new[] { queryFrames * embDim }), new[] { queryFrames, embDim });
+        var r = engine.Reshape(engine.TensorSlice(new Tensor<T>(reference, new[] { reference.Length }), new[] { 0 }, new[] { refFrames * embDim }), new[] { refFrames, embDim });
+        var gram = Flatten(engine, engine.TensorMatMul(q, engine.TensorTranspose(r)));
+        var qNorm = engine.ReduceSum(engine.TensorSquare(q), new[] { 1 }, keepDims: false);
+        var rNorm = engine.ReduceSum(engine.TensorSquare(r), new[] { 1 }, keepDims: false);
+
+        // Pair (rStart, f) covers reference frame rStart + f while that frame exists
+        var gramIndex = new int[starts * queryFrames];
+        var queryIndex = new int[starts * queryFrames];
+        var refIndex = new int[starts * queryFrames];
+        var valid = new int[starts * queryFrames];
+        for (int start = 0; start < starts; start++)
+        {
+            for (int f = 0; f < queryFrames; f++)
+            {
+                int k = start * queryFrames + f;
+                int j = start + f;
+                queryIndex[k] = f;
+                if (j < refFrames)
+                {
+                    gramIndex[k] = f * refFrames + j;
+                    refIndex[k] = j;
+                    valid[k] = 1;
+                }
+            }
+        }
+
+        var shape = new[] { starts, queryFrames };
+        var mask = new Tensor<int>(valid, shape).Cast<T>();
+        var zeros = new Tensor<T>(shape);
+        Tensor<T> Gather(Tensor<T> source, int[] index) => engine.TensorWhere(
+            mask, engine.Reshape(engine.TensorIndexSelect(source, new Tensor<int>(index, new[] { index.Length }), 0), shape), zeros);
+
+        var sim = engine.ReduceSum(Gather(gram, gramIndex), new[] { 1 }, keepDims: false);
+        var normQ = engine.ReduceSum(Gather(qNorm, queryIndex), new[] { 1 }, keepDims: false);
+        var normR = engine.ReduceSum(Gather(rNorm, refIndex), new[] { 1 }, keepDims: false);
+        var denom = engine.TensorMultiply(engine.TensorSqrt(normQ), engine.TensorSqrt(normR));
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var cosine = engine.TensorWhere(
+            engine.TensorGreaterThan(denom, numOps.FromDouble(1e-8)),
+            engine.TensorDivide(sim, denom),
+            new Tensor<T>(new[] { starts }));
+
+        return cosine.Cast<double>().ToArray();
+    }
 }
