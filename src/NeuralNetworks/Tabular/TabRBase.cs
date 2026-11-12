@@ -1,3 +1,4 @@
+using AiDotNet.Helpers;
 using AiDotNet.Models.Options;
 using AiDotNet.Attributes;
 using AiDotNet.Models.Parameters;
@@ -283,26 +284,13 @@ public abstract partial class TabRBase<T> : IParameterSource<T>
     {
         int batchSize = embeddings.Shape[0];
         int dim = embeddings.Shape[1];
-        var normalized = new Tensor<T>(embeddings._shape);
         var epsilon = NumOps.FromDouble(1e-12);
 
-        for (int b = 0; b < batchSize; b++)
-        {
-            // Compute L2 norm
-            var normSq = NumOps.Zero;
-            for (int d = 0; d < dim; d++)
-            {
-                var val = embeddings[b * dim + d];
-                normSq = NumOps.Add(normSq, NumOps.Multiply(val, val));
-            }
-            var norm = NumOps.Sqrt(NumOps.Add(normSq, epsilon));
-
-            // Normalize
-            for (int d = 0; d < dim; d++)
-            {
-                normalized[b * dim + d] = NumOps.Divide(embeddings[b * dim + d], norm);
-            }
-        }
+        // L2 norm of every row (with epsilon inside the square root), then divide the row by it
+        var rows = embeddings.Reshape(batchSize, dim);
+        var normSq = Engine.ReduceSum(Engine.TensorMultiply(rows, rows), new[] { 1 }, true);
+        var norm = Engine.TensorSqrt(TensorTapeOps.TapeAddScalar(Engine, normSq, epsilon));
+        var normalized = Engine.TensorDivide(rows, norm).Reshape(embeddings._shape);
 
         return normalized;
     }
@@ -351,52 +339,36 @@ public abstract partial class TabRBase<T> : IParameterSource<T>
         int embDim = queryEmbeddings.Shape[1];
         int k = Math.Min(Options.NumNeighbors, _numIndexedSamples);
 
-        var indices = new Matrix<int>(batchSize, k);
-        var distances = new Tensor<T>([batchSize, k]);
-        var neighborEmbeddings = new Tensor<T>([batchSize, k, embDim]);
+        var queries = queryEmbeddings.Reshape(batchSize, embDim);
+        var index = _indexEmbeddings.Reshape(_numIndexedSamples, embDim);
 
-        for (int b = 0; b < batchSize; b++)
+        // Negative similarity to every indexed sample, so smaller = more similar
+        var allDistances = Engine.TensorNegate(Engine.TensorMatMul(queries, Engine.TensorTranspose(index)));
+
+        // Skip excluded indices (for leave-one-out): row b excludes column excludeIndices[b] when b is covered
+        if (excludeIndices != null && excludeIndices.Length > 0)
         {
-            // Compute distances to all indexed samples
-            var dists = new (int Index, T Distance)[_numIndexedSamples];
-
-            for (int i = 0; i < _numIndexedSamples; i++)
+            int covered = Math.Min(batchSize, excludeIndices.Length);
+            var excluded = Tensor<int>.FromVector(excludeIndices.GetSubVector(0, covered));
+            if (covered < batchSize)
             {
-                // Skip excluded indices (for leave-one-out)
-                if (excludeIndices != null && b < excludeIndices.Length && excludeIndices[b] == i)
-                {
-                    dists[i] = (i, NumOps.MaxValue);
-                    continue;
-                }
-
-                // Compute negative cosine similarity (for normalized embeddings, this equals L2 distance)
-                var dotProduct = NumOps.Zero;
-                for (int d = 0; d < embDim; d++)
-                {
-                    dotProduct = NumOps.Add(dotProduct,
-                        NumOps.Multiply(queryEmbeddings[b * embDim + d], _indexEmbeddings[i * embDim + d]));
-                }
-                // Use negative similarity so smaller = more similar
-                dists[i] = (i, NumOps.Negate(dotProduct));
+                excluded = Engine.TensorConcatenate(
+                    new[] { excluded, Engine.TensorFullLike(new Tensor<int>(new[] { batchSize - covered }), -1) }, 0);
             }
 
-            // Sort to find k nearest
-            Array.Sort(dists, (a, b) => NumOps.Compare(a.Distance, b.Distance));
-
-            for (int j = 0; j < k; j++)
-            {
-                int neighborIdx = dists[j].Index;
-                indices[b, j] = neighborIdx;
-                distances[b * k + j] = dists[j].Distance;
-
-                // Copy neighbor embedding
-                for (int d = 0; d < embDim; d++)
-                {
-                    neighborEmbeddings[b * k * embDim + j * embDim + d] =
-                        _indexEmbeddings[neighborIdx * embDim + d];
-                }
-            }
+            var excludedMask = Engine.TensorOneHot<T>(excluded, _numIndexedSamples).Reshape(batchSize, _numIndexedSamples);
+            allDistances = Engine.TensorWhere(
+                excludedMask, Engine.TensorFullLike(allDistances, NumOps.MaxValue), allDistances);
         }
+
+        // k nearest in stable ascending order of distance
+        var nearest = TieBreakArgMax.StableSmallestK(allDistances, k);
+        var indices = nearest.ToMatrix();
+        var distances = Engine.TensorTakeAlongDim(allDistances, nearest, 1);
+
+        // Copy neighbor embeddings
+        var neighborEmbeddings = Engine.TensorIndexSelect(index, nearest.Reshape(batchSize * k), 0)
+            .Reshape(batchSize, k, embDim);
 
         return (indices, neighborEmbeddings, distances);
     }
@@ -423,66 +395,22 @@ public abstract partial class TabRBase<T> : IParameterSource<T>
         var keys = _keyProjection.Forward(neighborsFlat).Reshape(batchSize, k, embDim);
         var values = _valueProjection.Forward(neighborsFlat).Reshape(batchSize, k, embDim);
 
-        // Compute attention scores: Q @ K^T / sqrt(headDim)
-        var attentionWeights = new Tensor<T>([batchSize, k]);
+        // Compute attention scores: Q @ K^T / sqrt(headDim), divided by the retrieval temperature
         var scale = NumOps.FromDouble(1.0 / Math.Sqrt(headDim));
+        var rawScores = Engine.ReduceSum(
+            Engine.TensorMultiply(queries.Reshape(batchSize, 1, embDim), keys), new[] { 2 }, false);
+        var scores = Engine.TensorDivide(
+            TensorTapeOps.TapeMultiplyScalar(Engine, rawScores, scale),
+            Tensor<T>.CreateDefault(rawScores._shape, NumOps.FromDouble(Options.RetrievalTemperature)));
 
-        for (int b = 0; b < batchSize; b++)
-        {
-            // Find max for numerical stability
-            var maxScore = NumOps.MinValue;
-            var scores = new T[k];
-
-            for (int j = 0; j < k; j++)
-            {
-                var score = NumOps.Zero;
-                for (int d = 0; d < embDim; d++)
-                {
-                    score = NumOps.Add(score,
-                        NumOps.Multiply(queries[b * embDim + d], keys[b * k * embDim + j * embDim + d]));
-                }
-                score = NumOps.Multiply(score, scale);
-                score = NumOps.Divide(score, NumOps.FromDouble(Options.RetrievalTemperature));
-                scores[j] = score;
-
-                if (NumOps.Compare(score, maxScore) > 0)
-                {
-                    maxScore = score;
-                }
-            }
-
-            // Softmax
-            var sumExp = NumOps.Zero;
-            for (int j = 0; j < k; j++)
-            {
-                var expScore = NumOps.Exp(NumOps.Subtract(scores[j], maxScore));
-                attentionWeights[b * k + j] = expScore;
-                sumExp = NumOps.Add(sumExp, expScore);
-            }
-
-            for (int j = 0; j < k; j++)
-            {
-                attentionWeights[b * k + j] = NumOps.Divide(attentionWeights[b * k + j], sumExp);
-            }
-        }
+        // Softmax over the neighbours
+        var attentionWeights = Engine.Softmax(scores, -1);
 
         _attentionWeightsCache = attentionWeights;
 
         // Apply attention to values: softmax(scores) @ V
-        var context = new Tensor<T>([batchSize, embDim]);
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int d = 0; d < embDim; d++)
-            {
-                var weighted = NumOps.Zero;
-                for (int j = 0; j < k; j++)
-                {
-                    weighted = NumOps.Add(weighted,
-                        NumOps.Multiply(attentionWeights[b * k + j], values[b * k * embDim + j * embDim + d]));
-                }
-                context[b * embDim + d] = weighted;
-            }
-        }
+        var context = Engine.ReduceSum(
+            Engine.TensorMultiply(attentionWeights.Reshape(batchSize, k, 1), values), new[] { 1 }, false);
 
         // Project output
         return _outputProjection.Forward(context);
@@ -509,16 +437,13 @@ public abstract partial class TabRBase<T> : IParameterSource<T>
         // Combine query embedding with neighbor context
         int batchSize = features.Shape[0];
         int embDim = Options.EmbeddingDimension;
-        var combined = new Tensor<T>([batchSize, embDim * 2]);
-
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int d = 0; d < embDim; d++)
+        var combined = Engine.TensorConcatenate(
+            new[]
             {
-                combined[b * embDim * 2 + d] = queryEmbedding[b * embDim + d];
-                combined[b * embDim * 2 + embDim + d] = neighborContext[b * embDim + d];
-            }
-        }
+                TabularMetrics.Flat(queryEmbedding, batchSize * embDim).Reshape(batchSize, embDim),
+                TabularMetrics.Flat(neighborContext, batchSize * embDim).Reshape(batchSize, embDim),
+            },
+            1);
 
         // Process through context encoder
         var context = combined;
