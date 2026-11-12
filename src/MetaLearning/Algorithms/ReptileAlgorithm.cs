@@ -239,7 +239,7 @@ public partial class ReptileAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, T
         }
         else
         {
-            double annealFraction = _reptileOptions.OuterLearningRate == 0
+            double annealFraction = Math.Abs(_reptileOptions.OuterLearningRate) < double.Epsilon
                 ? 1.0
                 : outerStep / _reptileOptions.OuterLearningRate;
             var stepped = ApplyOuterGradients(currentMetaParams, direction, _reptileOptions.OuterLearningRate);

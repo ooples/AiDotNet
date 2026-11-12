@@ -269,7 +269,7 @@ namespace AiDotNet.AutoML.NAS
             var anchorProjections = new List<Tensor<T>> { engine.TensorMatMul(hidden, wAttn1) };
             var input = gEmb;
 
-            foreach (int node in Enumerable.Range(1, _numNodes))
+            for (int node = 1; node <= _numNodes; node++)
             {
                 // (1) Previous node: pointer attention over the anchors of nodes 0 .. node - 1.
                 (hidden, cell) = LstmStep(input, hidden, cell, wLstm, bLstm, h);

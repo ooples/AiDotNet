@@ -1061,7 +1061,7 @@ public class ExternalMemory<T>
             // gamma^(n-1-q) for q = 0 .. n-1.
             var steps = Engine.TensorAddScalar(Engine.TensorNegate(Engine.TensorArange<T>(0, count, 1)),
                 _numOps.FromDouble(count - 1));
-            decay = UsageDecay == 0.0
+            decay = UsageDecay <= 0.0
                 ? Engine.TensorEquals(steps, _numOps.Zero)
                 : Engine.TensorExp(Engine.TensorMultiplyScalar(steps, _numOps.FromDouble(Math.Log(UsageDecay))));
             decay = Engine.Reshape(decay, new[] { 1, count });

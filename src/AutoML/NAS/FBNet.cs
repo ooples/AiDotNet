@@ -131,7 +131,7 @@ namespace AiDotNet.AutoML.NAS
             T totalLatency = _ops.Zero;
             var operations = _nasSearchSpace.Operations;
             int pricedOps = operations == null ? 0 : Math.Min(_numOperations, operations.Count);
-            var opLatency = pricedOps == 0 || operations == null
+            var opLatency = operations == null || pricedOps == 0
                 ? new Vector<T>(0)
                 : new Vector<T>(operations.Take(pricedOps)
                     .Select(op => _hardwareCostModel.EstimateOperationCost(op, _inputChannels, _inputChannels, _spatialSize).Latency));

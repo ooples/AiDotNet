@@ -448,9 +448,6 @@ public partial class GNNMetaAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, T
     /// </summary>
     private Tensor<T> CosineMatrix(Tensor<T> queries, Tensor<T> keys)
     {
-        int m = queries._shape[0];
-        int n = keys._shape[0];
-        var shape = new[] { m, n };
         var dots = Engine.TensorMatMulTransposed(queries, keys);
         var queryNorms = Engine.ReduceSum(Engine.TensorSquare(queries), new[] { 1 }, keepDims: false);
         var keyNorms = Engine.ReduceSum(Engine.TensorSquare(keys), new[] { 1 }, keepDims: false);

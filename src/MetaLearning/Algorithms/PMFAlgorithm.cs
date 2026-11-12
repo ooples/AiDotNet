@@ -92,7 +92,7 @@ public partial class PMFAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInpu
             options, options.DataLoader, options.MetaOptimizer, options.InnerOptimizer)
     {
         _pmfOptions = options;
-        if (!(options.Temperature > 0) || double.IsInfinity(options.Temperature))
+        if (double.IsNaN(options.Temperature) || options.Temperature <= 0 || double.IsInfinity(options.Temperature))
             throw new ArgumentException("Temperature must be a positive finite number.", nameof(options));
 
         _cosineScale = new Vector<T>(new[] { NumOps.FromDouble(1.0 / options.Temperature) });
