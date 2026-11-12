@@ -117,13 +117,8 @@ public class ProductKernel<T> : IKernelFunction<T>
         if (x1.Length != x2.Length)
             throw new ArgumentException("Vectors must have the same length.");
 
-        T product = _numOps.One;
-        foreach (var kernel in _kernels)
-        {
-            product = _numOps.Multiply(product, kernel.Calculate(x1, x2));
-        }
-
-        return product;
+        var values = new Vector<T>(_kernels.Select(kernel => kernel.Calculate(x1, x2)));
+        return AiDotNetEngine.Current.Product(values);
     }
 
     /// <summary>

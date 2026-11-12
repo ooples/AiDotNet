@@ -525,20 +525,17 @@ public class StringKernel<T>
         if (strings is null) throw new ArgumentNullException(nameof(strings));
 
         int n = strings.Length;
-        var K = new Matrix<T>(n, n);
+        if (n == 0)
+            return new Matrix<T>(0, 0);
 
-        for (int i = 0; i < n; i++)
-        {
-            K[i, i] = _numOps.One; // Normalized kernel has k(x,x) = 1
+        T zero = _numOps.Zero;
 
-            for (int j = i + 1; j < n; j++)
-            {
-                T value = Calculate(strings[i], strings[j]);
-                K[i, j] = value;
-                K[j, i] = value;
-            }
-        }
+        // Each pair is evaluated once (strict upper triangle); K = U + U^T + I because the
+        // normalized kernel has k(x, x) = 1.
+        var upper = new Matrix<T>(Enumerable.Range(0, n)
+            .Select(i => Enumerable.Range(0, n).Select(j => j > i ? Calculate(strings[i], strings[j]) : zero)));
 
-        return K;
+        var engine = AiDotNetEngine.Current;
+        return engine.MatrixAdd(engine.MatrixAdd(upper, engine.MatrixTranspose(upper)), Matrix<T>.CreateIdentity(n));
     }
 }
