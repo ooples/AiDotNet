@@ -126,13 +126,9 @@ public class FedPETuning<T> : Infrastructure.FederatedLearningComponentBase<T>, 
         int adapterCount = Math.Min(AdapterParameterCount, totalParams);
         int start = totalParams - adapterCount;
 
-        var adapterParams = new T[adapterCount];
-        for (int i = 0; i < adapterCount; i++)
-        {
-            adapterParams[i] = fullModelParameters[start + i];
-        }
-
-        return new Vector<T>(adapterParams);
+        var adapterParams = new Vector<T>(adapterCount);
+        fullModelParameters.AsSpan().Slice(start, adapterCount).CopyTo(adapterParams.AsWritableSpan());
+        return adapterParams;
     }
 
     /// <inheritdoc/>
@@ -142,18 +138,9 @@ public class FedPETuning<T> : Infrastructure.FederatedLearningComponentBase<T>, 
         int adapterCount = aggregatedAdapters.Length;
         int start = totalParams - adapterCount;
 
-        var merged = new T[totalParams];
-        for (int i = 0; i < start; i++)
-        {
-            merged[i] = fullModelParameters[i];
-        }
-
-        for (int i = 0; i < adapterCount; i++)
-        {
-            merged[start + i] = aggregatedAdapters[i];
-        }
-
-        return new Vector<T>(merged);
+        var merged = fullModelParameters.Clone();
+        aggregatedAdapters.AsSpan().CopyTo(merged.AsWritableSpan().Slice(start, adapterCount));
+        return merged;
     }
 
     /// <inheritdoc/>
@@ -174,39 +161,26 @@ public class FedPETuning<T> : Infrastructure.FederatedLearningComponentBase<T>, 
                     $"Client {clientId} adapter length {adapters.Length} differs from expected {adapterLen}.");
             }
         }
-        var aggregated = new T[adapterLen];
+        var aggregated = new Vector<T>(adapterLen);
         double totalWeight = 0;
 
         foreach (var (clientId, adapters) in clientAdapters)
         {
             double w = clientWeights?.GetValueOrDefault(clientId, 1.0) ?? 1.0;
             totalWeight += w;
-
-            var wT = NumOps.FromDouble(w);
-            for (int i = 0; i < adapterLen; i++)
-            {
-                aggregated[i] = NumOps.Add(aggregated[i], NumOps.Multiply(adapters[i], wT));
-            }
+            aggregated = Engine.Add(aggregated, Engine.Multiply(adapters, NumOps.FromDouble(w)));
         }
 
-        var invTotal = NumOps.FromDouble(1.0 / totalWeight);
-        for (int i = 0; i < adapterLen; i++)
-        {
-            aggregated[i] = NumOps.Multiply(aggregated[i], invTotal);
-        }
-
-        return new Vector<T>(aggregated);
+        return Engine.Multiply(aggregated, NumOps.FromDouble(1.0 / totalWeight));
     }
 
     /// <summary>
-    /// Aggregates adapters with method-specific logic: LoRA matrices use SVD-aware averaging,
-    /// BitFit biases use straight averaging, and adapters/prefixes use weighted averaging.
+    /// Aggregates adapters for the configured PEFT method.
     /// </summary>
     /// <remarks>
-    /// <para><b>For Beginners:</b> Different PEFT methods have different parameter structures.
-    /// LoRA has low-rank matrices (B,A) where SVD structure should be preserved during aggregation.
-    /// BitFit has scalar biases that can be simply averaged. This method applies the appropriate
-    /// aggregation strategy based on the PEFT method.</para>
+    /// <para><b>For Beginners:</b> FedPETuning (Zhang et al., ACL 2023) aggregates the trainable PEFT
+    /// parameters of every method (LoRA B and A, adapters, prefixes, BitFit biases) with FedAvg, so every
+    /// method uses the sample-weighted average of all adapter parameters.</para>
     /// </remarks>
     /// <param name="clientAdapters">Adapter parameters from each client.</param>
     /// <param name="clientWeights">Optional per-client weights.</param>
@@ -240,59 +214,20 @@ public class FedPETuning<T> : Infrastructure.FederatedLearningComponentBase<T>, 
             }
         }
 
-        // B and A matrices have different gradient magnitudes and should be weighted
-        // proportionally to their Frobenius norms for better aggregation.
-        int adapterLen = clientAdapters.Values.First().Length;
-        int paramsPerLayer = 2 * _layerDim * _bottleneckDim;
-        int bSize = _layerDim * _bottleneckDim;
-
-        var aggregatedB = new double[_numAdaptedLayers * bSize];
-        var aggregatedA = new double[_numAdaptedLayers * bSize];
+        // FedPETuning aggregates the LoRA factors with FedAvg: the weighted average of every B and A entry
+        // of every layer. Entries past the per-layer layout are averaged too rather than dropped.
+        var aggregated = new Vector<T>(adapterLenLora);
         double totalWeight = 0;
 
         foreach (var (clientId, adapters) in clientAdapters)
         {
             double w = clientWeights?.GetValueOrDefault(clientId, 1.0) ?? 1.0;
             totalWeight += w;
-
-            for (int layer = 0; layer < _numAdaptedLayers; layer++)
-            {
-                int layerOffset = layer * paramsPerLayer;
-
-                // B matrix
-                for (int i = 0; i < bSize && layerOffset + i < adapters.Length; i++)
-                {
-                    aggregatedB[layer * bSize + i] += w * NumOps.ToDouble(adapters[layerOffset + i]);
-                }
-
-                // A matrix
-                for (int i = 0; i < bSize && layerOffset + bSize + i < adapters.Length; i++)
-                {
-                    aggregatedA[layer * bSize + i] += w * NumOps.ToDouble(adapters[layerOffset + bSize + i]);
-                }
-            }
+            aggregated = Engine.Add(aggregated, Engine.Multiply(adapters, NumOps.FromDouble(w)));
         }
 
-        // Normalize and interleave back.
-        var result = new T[adapterLen];
         double invTotal = totalWeight > 0 ? 1.0 / totalWeight : 0;
-
-        for (int layer = 0; layer < _numAdaptedLayers; layer++)
-        {
-            int layerOffset = layer * paramsPerLayer;
-
-            for (int i = 0; i < bSize && layerOffset + i < adapterLen; i++)
-            {
-                result[layerOffset + i] = NumOps.FromDouble(aggregatedB[layer * bSize + i] * invTotal);
-            }
-
-            for (int i = 0; i < bSize && layerOffset + bSize + i < adapterLen; i++)
-            {
-                result[layerOffset + bSize + i] = NumOps.FromDouble(aggregatedA[layer * bSize + i] * invTotal);
-            }
-        }
-
-        return new Vector<T>(result);
+        return Engine.Multiply(aggregated, NumOps.FromDouble(invTotal));
     }
 
     /// <summary>
@@ -356,13 +291,10 @@ public class FedPETuning<T> : Infrastructure.FederatedLearningComponentBase<T>, 
     {
         Guard.NotNull(adapters);
         Guard.NotNull(mask);
-        var result = new T[adapters.Length];
-        for (int i = 0; i < adapters.Length; i++)
-        {
-            result[i] = i < mask.Length && mask[i] ? adapters[i] : NumOps.Zero;
-        }
-
-        return new Vector<T>(result);
+        // Positions past the end of the mask are unselected.
+        var keep = new bool[adapters.Length];
+        Array.Copy(mask, keep, Math.Min(mask.Length, adapters.Length));
+        return Engine.TensorWhere(keep, adapters.AsTensor(), new Tensor<T>(new[] { adapters.Length })).ToVector();
     }
 
     /// <summary>Gets the PEFT method being used.</summary>

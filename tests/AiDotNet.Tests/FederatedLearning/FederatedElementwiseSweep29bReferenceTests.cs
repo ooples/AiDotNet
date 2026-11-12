@@ -91,4 +91,23 @@ public class FederatedElementwiseSweep29bReferenceTests
         Assert.Equal(0.0, aggregated[1] * aggregated[2], Precision);
         Assert.Equal(0.0, aggregated[1] * aggregated[3], Precision);
     }
+
+    [Fact(Timeout = 60000)]
+    public async Task FedPETuning_LoRAAggregationIsFedAvgOverEveryEntry()
+    {
+        await Task.Yield();
+
+        // FedPETuning (Zhang et al. 2023) aggregates PEFT parameters with FedAvg. With layerDim = 1, rank = 1
+        // and one layer the B/A layout covers 2 entries; a third entry must be averaged, not zeroed.
+        var strategy = new FedPETuning<double>(modelDim: 10, method: PEFTMethod.LoRA, bottleneckDim: 1, numAdaptedLayers: 1, layerDim: 1);
+        var clients = new Dictionary<int, Vector<double>>
+        {
+            [0] = new Vector<double>(new[] { 1.0, 2.0, 3.0 }),
+            [1] = new Vector<double>(new[] { 3.0, 4.0, 5.0 }),
+        };
+
+        var aggregated = strategy.AggregateAdaptersMethodAware(clients, null);
+
+        Assert.Equal(new[] { 2.0, 3.0, 4.0 }, aggregated.ToArray());
+    }
 }

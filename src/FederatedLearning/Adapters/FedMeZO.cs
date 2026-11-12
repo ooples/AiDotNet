@@ -185,7 +185,7 @@ public class FedMeZO<T> : Infrastructure.FederatedLearningComponentBase<T>, IFed
             throw new ArgumentException("At least one perturbation result is required.", nameof(lossResults));
         }
 
-        var avgGrad = new double[_modelDim];
+        var avgGrad = new Vector<T>(_modelDim);
         int q = lossResults.Length;
 
         foreach (var (lossPlus, lossMinus, seed) in lossResults)
@@ -194,19 +194,10 @@ public class FedMeZO<T> : Infrastructure.FederatedLearningComponentBase<T>, IFed
             double scale = lossDiff / (2.0 * _perturbationScale);
 
             var z = GeneratePerturbation(seed);
-            for (int i = 0; i < _modelDim; i++)
-            {
-                avgGrad[i] += NumOps.ToDouble(z[i]) * scale / q;
-            }
+            avgGrad = Engine.Add(avgGrad, Engine.Multiply(z, NumOps.FromDouble(scale / q)));
         }
 
-        var result = new T[_modelDim];
-        for (int i = 0; i < _modelDim; i++)
-        {
-            result[i] = NumOps.FromDouble(avgGrad[i]);
-        }
-
-        return new Vector<T>(result);
+        return avgGrad;
     }
 
     /// <summary>
@@ -251,7 +242,7 @@ public class FedMeZO<T> : Infrastructure.FederatedLearningComponentBase<T>, IFed
             throw new ArgumentException("No client messages provided.", nameof(clientMessages));
         }
 
-        var aggregated = new double[_modelDim];
+        var aggregated = new Vector<T>(_modelDim);
         double totalWeight = 0;
 
         foreach (var (clientId, messages) in clientMessages)
@@ -270,42 +261,23 @@ public class FedMeZO<T> : Infrastructure.FederatedLearningComponentBase<T>, IFed
             {
                 double scale = w * msg.LossDifference / (2.0 * _perturbationScale * q);
                 var z = GeneratePerturbation(msg.Seed);
-
-                for (int i = 0; i < _modelDim; i++)
-                {
-                    aggregated[i] += NumOps.ToDouble(z[i]) * scale;
-                }
+                aggregated = Engine.Add(aggregated, Engine.Multiply(z, NumOps.FromDouble(scale)));
             }
         }
 
         if (totalWeight > 0)
         {
-            for (int i = 0; i < _modelDim; i++)
-            {
-                aggregated[i] /= totalWeight;
-            }
+            aggregated = Engine.Divide(aggregated, NumOps.FromDouble(totalWeight));
         }
 
-        var result = new T[_modelDim];
-        for (int i = 0; i < _modelDim; i++)
-        {
-            result[i] = NumOps.FromDouble(aggregated[i]);
-        }
-
-        return new Vector<T>(result);
+        return aggregated;
     }
 
     /// <inheritdoc/>
     public Vector<T> ExtractAdapterParameters(Vector<T> fullModelParameters)
     {
         // ZO operates on the full parameter vector (no separate adapters).
-        var result = new T[fullModelParameters.Length];
-        for (int i = 0; i < fullModelParameters.Length; i++)
-        {
-            result[i] = fullModelParameters[i];
-        }
-
-        return new Vector<T>(result);
+        return fullModelParameters.Clone();
     }
 
     /// <inheritdoc/>
