@@ -21,28 +21,23 @@ public static class NeighborSearch<T>
         k = Math.Min(k, numPoints);
 
         var result = new int[numPoints, k];
-        var distances = new double[numPoints];
+        if (numPoints == 0)
+        {
+            return result;
+        }
+
+        var keys = GeometryEngineOps<T>.DenseRowRanks(
+            GeometryEngineOps<T>.PairwiseSquaredDistances(pointCloud.Points, pointCloud.Points));
+        var indices = new int[numPoints];
 
         for (int i = 0; i < numPoints; i++)
         {
-            double qx = NumOps.ToDouble(pointCloud.Points[i, 0]);
-            double qy = NumOps.ToDouble(pointCloud.Points[i, 1]);
-            double qz = NumOps.ToDouble(pointCloud.Points[i, 2]);
-
             for (int j = 0; j < numPoints; j++)
             {
-                double x = NumOps.ToDouble(pointCloud.Points[j, 0]);
-                double y = NumOps.ToDouble(pointCloud.Points[j, 1]);
-                double z = NumOps.ToDouble(pointCloud.Points[j, 2]);
-
-                double dx = x - qx;
-                double dy = y - qy;
-                double dz = z - qz;
-                distances[j] = dx * dx + dy * dy + dz * dz;
+                indices[j] = j;
             }
 
-            var indices = Enumerable.Range(0, numPoints).ToArray();
-            PartialSort(indices, distances, k);
+            PartialSort(indices, keys, i * numPoints, k);
 
             for (int n = 0; n < k; n++)
             {
@@ -56,37 +51,31 @@ public static class NeighborSearch<T>
     /// <summary>
     /// Finds all points within a given radius of each query point.
     /// </summary>
-    public static List<int>[] RadiusSearch(PointCloudData<T> pointCloud, PointCloudData<T> queryPoints, double radius)
+    public static List<int>[] RadiusSearch(PointCloudData<T> pointCloud, PointCloudData<T> queryPoints, T radius)
     {
         int numPoints = pointCloud.NumPoints;
         int numQueries = queryPoints.NumPoints;
-        double radiusSq = radius * radius;
 
         var result = new List<int>[numQueries];
-
         for (int i = 0; i < numQueries; i++)
         {
             result[i] = [];
-            double qx = NumOps.ToDouble(queryPoints.Points[i, 0]);
-            double qy = NumOps.ToDouble(queryPoints.Points[i, 1]);
-            double qz = NumOps.ToDouble(queryPoints.Points[i, 2]);
+        }
 
-            for (int j = 0; j < numPoints; j++)
-            {
-                double x = NumOps.ToDouble(pointCloud.Points[j, 0]);
-                double y = NumOps.ToDouble(pointCloud.Points[j, 1]);
-                double z = NumOps.ToDouble(pointCloud.Points[j, 2]);
+        if (numPoints == 0 || numQueries == 0)
+        {
+            return result;
+        }
 
-                double dx = x - qx;
-                double dy = y - qy;
-                double dz = z - qz;
-                double distSq = dx * dx + dy * dy + dz * dz;
+        var engine = AiDotNetEngine.Current;
+        var distancesSq = GeometryEngineOps<T>.PairwiseSquaredDistances(queryPoints.Points, pointCloud.Points);
+        var radiusSq = engine.TensorFullLike(distancesSq, NumOps.Multiply(radius, radius));
 
-                if (distSq <= radiusSq)
-                {
-                    result[i].Add(j);
-                }
-            }
+        // Nonzero pairs come back row-major, so each query's neighbours are listed in point order.
+        var pairs = GeometryEngineOps<T>.NonzeroPairs(engine.TensorLessEqual(distancesSq, radiusSq));
+        for (int p = 0; p + 1 < pairs.Length; p += 2)
+        {
+            result[pairs[p]].Add(pairs[p + 1]);
         }
 
         return result;
@@ -98,42 +87,40 @@ public static class NeighborSearch<T>
     public static int[,] BallQuery(
         PointCloudData<T> pointCloud,
         PointCloudData<T> centroids,
-        double radius,
+        T radius,
         int maxSamples)
     {
         int numPoints = pointCloud.NumPoints;
         int numCentroids = centroids.NumPoints;
-        double radiusSq = radius * radius;
 
         var result = new int[numCentroids, maxSamples];
+        var neighbors = new List<(int Index, int Key)>[numCentroids];
+        for (int i = 0; i < numCentroids; i++)
+        {
+            neighbors[i] = [];
+        }
+
+        if (numPoints > 0 && numCentroids > 0)
+        {
+            var engine = AiDotNetEngine.Current;
+            var distancesSq = GeometryEngineOps<T>.PairwiseSquaredDistances(centroids.Points, pointCloud.Points);
+            var radiusSq = engine.TensorFullLike(distancesSq, NumOps.Multiply(radius, radius));
+            var keys = GeometryEngineOps<T>.DenseRowRanks(distancesSq);
+            var pairs = GeometryEngineOps<T>.NonzeroPairs(engine.TensorLessEqual(distancesSq, radiusSq));
+            for (int p = 0; p + 1 < pairs.Length; p += 2)
+            {
+                int centroid = pairs[p];
+                int point = pairs[p + 1];
+                neighbors[centroid].Add((point, keys[centroid * numPoints + point]));
+            }
+        }
 
         for (int i = 0; i < numCentroids; i++)
         {
-            double cx = NumOps.ToDouble(centroids.Points[i, 0]);
-            double cy = NumOps.ToDouble(centroids.Points[i, 1]);
-            double cz = NumOps.ToDouble(centroids.Points[i, 2]);
-
-            var neighbors = new List<(int Index, double DistSq)>();
-
-            for (int j = 0; j < numPoints; j++)
-            {
-                double x = NumOps.ToDouble(pointCloud.Points[j, 0]);
-                double y = NumOps.ToDouble(pointCloud.Points[j, 1]);
-                double z = NumOps.ToDouble(pointCloud.Points[j, 2]);
-
-                double dx = x - cx;
-                double dy = y - cy;
-                double dz = z - cz;
-                double distSq = dx * dx + dy * dy + dz * dz;
-
-                if (distSq <= radiusSq)
-                {
-                    neighbors.Add((j, distSq));
-                }
-            }
-
-            neighbors.Sort((a, b) => a.DistSq.CompareTo(b.DistSq));
-            int count = Math.Min(neighbors.Count, maxSamples);
+            // The keys order exactly like the squared distances, so List.Sort produces the same permutation.
+            var candidates = neighbors[i];
+            candidates.Sort((a, b) => a.Key.CompareTo(b.Key));
+            int count = Math.Min(candidates.Count, maxSamples);
 
             if (count == 0)
             {
@@ -146,11 +133,11 @@ public static class NeighborSearch<T>
             {
                 for (int n = 0; n < count; n++)
                 {
-                    result[i, n] = neighbors[n].Index;
+                    result[i, n] = candidates[n].Index;
                 }
                 for (int n = count; n < maxSamples; n++)
                 {
-                    result[i, n] = neighbors[0].Index;
+                    result[i, n] = candidates[0].Index;
                 }
             }
         }
@@ -161,51 +148,38 @@ public static class NeighborSearch<T>
     /// <summary>
     /// Computes a distance matrix between all pairs of points.
     /// </summary>
-    public static double[,] ComputeDistanceMatrix(PointCloudData<T> pointCloud)
+    public static Tensor<T> ComputeDistanceMatrix(PointCloudData<T> pointCloud)
     {
         int numPoints = pointCloud.NumPoints;
-        var result = new double[numPoints, numPoints];
-
-        for (int i = 0; i < numPoints; i++)
+        if (numPoints == 0)
         {
-            double xi = NumOps.ToDouble(pointCloud.Points[i, 0]);
-            double yi = NumOps.ToDouble(pointCloud.Points[i, 1]);
-            double zi = NumOps.ToDouble(pointCloud.Points[i, 2]);
-
-            result[i, i] = 0;
-
-            for (int j = i + 1; j < numPoints; j++)
-            {
-                double xj = NumOps.ToDouble(pointCloud.Points[j, 0]);
-                double yj = NumOps.ToDouble(pointCloud.Points[j, 1]);
-                double zj = NumOps.ToDouble(pointCloud.Points[j, 2]);
-
-                double dx = xi - xj;
-                double dy = yi - yj;
-                double dz = zi - zj;
-                double dist = Math.Sqrt(dx * dx + dy * dy + dz * dz);
-
-                result[i, j] = dist;
-                result[j, i] = dist;
-            }
+            return new Tensor<T>(new[] { 0, 0 });
         }
 
-        return result;
+        var engine = AiDotNetEngine.Current;
+        var distances = engine.TensorSqrt(
+            GeometryEngineOps<T>.PairwiseSquaredDistances(pointCloud.Points, pointCloud.Points));
+
+        // The diagonal is zero by definition, even for points whose coordinates are NaN.
+        return engine.TensorWhere(engine.TensorEye<T>(numPoints), engine.TensorZerosLike(distances), distances);
     }
 
-    private static void PartialSort(int[] indices, double[] distances, int k)
+    private static void PartialSort(int[] indices, int[] keys, int keyOffset, int k)
     {
+        // Selection sort on order-preserving keys: a NaN distance (key -1) neither wins nor is beaten,
+        // exactly like the "distance < best" comparison on the values.
         for (int i = 0; i < k; i++)
         {
             int minIdx = i;
-            double minDist = distances[indices[i]];
+            int minKey = keys[keyOffset + indices[i]];
 
             for (int j = i + 1; j < indices.Length; j++)
             {
-                if (distances[indices[j]] < minDist)
+                int key = keys[keyOffset + indices[j]];
+                if (key >= 0 && minKey >= 0 && key < minKey)
                 {
                     minIdx = j;
-                    minDist = distances[indices[j]];
+                    minKey = key;
                 }
             }
 
