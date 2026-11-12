@@ -1170,6 +1170,23 @@ public class MetricsIntegrationTests
     }
 
     [Fact(Timeout = 120000)]
+    public async Task MeanIoU_ConfusionCounts_IgnoreOutOfRangeLabelsPerSide()
+    {
+        // C = 3. Pixel 4 has an out-of-range prediction (5) and pixel 5 an out-of-range target (-1): each still
+        // counts on its valid side. Class 0: 1/1; class 1: pred {1, 5}, gt {1, 2}, both at pixel 1 -> 1/3;
+        // class 2: pred {2, 3}, gt {3, 4}, both at pixel 3 -> 1/3. mIoU = 5/9.
+        var miou = new MeanIntersectionOverUnion<double>(3);
+        var predicted = new Tensor<double>(new[] { 6 }, new Vector<double>(new double[] { 0, 1, 2, 2, 5, 1 }));
+        var groundTruth = new Tensor<double>(new[] { 6 }, new Vector<double>(new double[] { 0, 1, 1, 2, 2, -1 }));
+
+        var perClass = miou.ComputePerClass(predicted, groundTruth);
+        Assert.Equal(1.0, perClass[0], 12);
+        Assert.Equal(1.0 / 3.0, perClass[1], 12);
+        Assert.Equal(1.0 / 3.0, perClass[2], 12);
+        Assert.Equal(5.0 / 9.0, miou.Compute(predicted, groundTruth), 12);
+    }
+
+    [Fact(Timeout = 120000)]
     public async Task IoU3D_NoOverlap_ReturnsZero()
     {
         var iou = new IoU3D<double>();
