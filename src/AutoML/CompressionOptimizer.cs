@@ -185,10 +185,9 @@ public class CompressionOptimizer<T>
         // If no trial met quality thresholds, return the best one anyway
         if (_bestTrial == null && _trialHistory.Any(t => t.Success))
         {
-            _bestTrial = _trialHistory
-                .Where(t => t.Success)
-                .OrderByDescending(t => NumOps.ToDouble(t.FitnessScore))
-                .First();
+            // Highest fitness, the earliest trial on a tie (OrderByDescending(...).First() is stable).
+            var successful = _trialHistory.Where(t => t.Success).ToList();
+            _bestTrial = successful[NAS.NasSamplingHelper.ArgMax(new Vector<T>(successful.Select(t => t.FitnessScore)))];
             _bestFitness = _bestTrial.FitnessScore;
         }
 

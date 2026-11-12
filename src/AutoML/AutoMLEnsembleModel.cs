@@ -317,7 +317,7 @@ public sealed partial class AutoMLEnsembleModel<T> : ModelBase<T, Matrix<T>, Vec
             return new Dictionary<string, T>(StringComparer.Ordinal);
         }
 
-        var aggregate = new Dictionary<string, (double Sum, int Count)>(StringComparer.Ordinal);
+        var entries = new List<KeyValuePair<string, T>>();
 
         foreach (var member in Members)
         {
@@ -335,24 +335,15 @@ public sealed partial class AutoMLEnsembleModel<T> : ModelBase<T, Matrix<T>, Vec
                 continue;
             }
 
-            foreach (var (key, value) in importance)
-            {
-                double numeric = NumOps.ToDouble(value);
-                if (!aggregate.TryGetValue(key, out var entry))
-                {
-                    aggregate[key] = (numeric, 1);
-                }
-                else
-                {
-                    aggregate[key] = (entry.Sum + numeric, entry.Count + 1);
-                }
-            }
+            entries.AddRange(importance);
         }
 
+        // Mean importance per feature over the members that report it, in first-seen feature order.
+        var engine = AiDotNetEngine.Current;
         var result = new Dictionary<string, T>(StringComparer.Ordinal);
-        foreach (var (key, entry) in aggregate)
+        foreach (var feature in entries.GroupBy(e => e.Key, StringComparer.Ordinal))
         {
-            result[key] = NumOps.FromDouble(entry.Sum / Math.Max(1, entry.Count));
+            result[feature.Key] = engine.TensorMean(new Vector<T>(feature.Select(e => e.Value)).AsTensor());
         }
 
         return result;
@@ -392,11 +383,7 @@ public sealed partial class AutoMLEnsembleModel<T> : ModelBase<T, Matrix<T>, Vec
         {
             var paramMember = (IParameterizable<T, Matrix<T>, Vector<T>>)member;
             int count = checked((int)paramMember.ParameterCount);
-            var segment = new Vector<T>(count);
-            for (int i = 0; i < count; i++)
-            {
-                segment[i] = gradients[offset + i];
-            }
+            var segment = gradients.GetSubVector(offset, count);
 
             ((IGradientComputable<T, Matrix<T>, Vector<T>>)member).ApplyGradients(segment, learningRate);
             offset += count;
@@ -406,23 +393,14 @@ public sealed partial class AutoMLEnsembleModel<T> : ModelBase<T, Matrix<T>, Vec
     private Vector<T> WeightedAverage(IReadOnlyList<Vector<T>> predictions)
     {
         int length = predictions[0].Length;
-        var output = new Vector<T>(length);
-
         var weightVector = GetSafeNormalizedWeights(predictions.Count);
         var weightsT = weightVector.Select(NumOps.FromDouble).ToArray();
 
-        for (int i = 0; i < length; i++)
-        {
-            T sum = NumOps.Zero;
-            for (int m = 0; m < predictions.Count; m++)
-            {
-                sum = NumOps.Add(sum, NumOps.Multiply(predictions[m][i], weightsT[m]));
-            }
-
-            output[i] = sum;
-        }
-
-        return output;
+        // output = sum_m w_m * prediction_m, as a [1, M] x [M, L] product.
+        var engine = AiDotNetEngine.Current;
+        var stacked = Tensor<T>.Stack(predictions.Select(p => p.AsTensor()).ToArray(), 0);
+        var weights = new Vector<T>(weightsT).AsTensor().Reshape(new[] { 1, predictions.Count });
+        return engine.TensorMatMul(weights, stacked).Reshape(new[] { length }).ToVector();
     }
 
     private Vector<T> Vote(IReadOnlyList<Vector<T>> predictions)
