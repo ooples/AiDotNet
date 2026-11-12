@@ -341,10 +341,9 @@ public abstract class ForecastingModelBase<T> : FinancialModelBase<T>, IForecast
     private static Vector<T> ToVectorOffTape(Tensor<T> stats, int count)
     {
         var v = new Vector<T>(count);
-        for (int i = 0; i < count && i < stats.Length; i++)
-        {
-            v[i] = stats.Data.Span[i];
-        }
+        int copied = Math.Min(count, stats.Length);
+        if (copied > 0)
+            stats.Data.Span.Slice(0, copied).CopyTo(v.AsWritableSpan());
 
         return v;
     }
