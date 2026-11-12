@@ -220,5 +220,4 @@ public sealed class VoxelGridData<T>
             throw new ArgumentOutOfRangeException(nameof(voxelSize), "VoxelSize components must be positive.");
         }
     }
-    }
 }

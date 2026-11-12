@@ -331,7 +331,7 @@ public partial class FejérKorovkinWavelet<T> : WaveletFunctionBase<T>
     /// are what make this wavelet unique compared to other types of wavelets.
     /// </para>
     /// </remarks>
-    private Vector<T> GetFejÃ©rKorovkinCoefficients(int order)
+    private Vector<T> GetFejérKorovkinCoefficients(int order)
     {
         if (order < 4 || order % 2 != 0)
         {
