@@ -329,8 +329,9 @@ public class IcaDecomposition<T> : MatrixDecompositionBase<T>
                     w = Engine.TensorDivideScalar(w, Engine.TensorSum(norm));
                 }
 
-                // Converged when |w . wOld| is within tolerance of 1.
-                var alignment = Tensor<T>.FromScalar(Engine.TensorVecDot(w, wOld));
+                // Converged when |w . wOld| is within tolerance of 1. TensorVecDot takes rank-1 operands.
+                var alignment = Tensor<T>.FromScalar(
+                    Engine.TensorVecDot(w.Reshape(new[] { n }), wOld.Reshape(new[] { n })));
                 var distance = Engine.TensorAbs(Engine.TensorSubtractScalar(Engine.TensorAbs(alignment), one));
                 if (AnyBelow(distance, toleranceT))
                 {
