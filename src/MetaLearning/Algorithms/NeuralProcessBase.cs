@@ -362,7 +362,7 @@ public partial class NeuralProcessModel<T, TInput, TOutput> : MetaLearningModelB
     /// <inheritdoc />
     public Vector<T>? AdaptedSupportFeatures => _contextRepresentation;
     /// <inheritdoc />
-    public double[]? ParameterModulationFactors => null;
+    public Vector<T>? ParameterModulationFactors => null;
 
     /// <summary>
     /// Initializes the adapted model from the meta-model and the parameters conditioned on the context set.

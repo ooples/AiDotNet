@@ -501,7 +501,7 @@ internal class MCLModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetad
     /// <remarks>
     /// None: adaptation is prototypical, so it never rescales the embedding network's parameters. It used to.
     /// </remarks>
-    public double[]? ParameterModulationFactors => null;
+    public Vector<T>? ParameterModulationFactors => null;
 
     /// <summary>Initializes the adapted model with the task's prototypes.</summary>
     /// <param name="featureEncoder">The trained feature encoder; the model keeps its own copy.</param>

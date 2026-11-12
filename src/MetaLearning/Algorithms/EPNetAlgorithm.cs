@@ -339,24 +339,12 @@ public partial class EPNetAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
 
         // Compute feature-delta modulation: how much propagation changed support features
         // Use this to create a task-specific parameter perturbation
-        double[]? modulationFactors = null;
+        Vector<T>? modulationFactors = null;
         if (propagatedSupport != null && supportFeatures != null && supportLen > 0)
         {
             // Compute relative change: propagated / raw (clamped to avoid extreme values)
-            double sumRatio = 0;
-            int count = 0;
-            for (int i = 0; i < supportLen; i++)
-            {
-                double raw = NumOps.ToDouble(supportFeatures[i]);
-                double prop = NumOps.ToDouble(propagatedSupport[i]);
-                if (Math.Abs(raw) > 1e-10)
-                {
-                    sumRatio += Math.Max(0.5, Math.Min(2.0, prop / raw));
-                    count++;
-                }
-            }
-            double avgRatio = count > 0 ? sumRatio / count : 1.0;
-            modulationFactors = [avgRatio];
+            modulationFactors = ParameterModulation.MeanClampedRatio(Engine, supportFeatures, propagatedSupport, 0.5, 2.0, 1e-10)
+                ?? new Vector<T>(new[] { NumOps.One });
         }
 
         return new EPNetModel<T, TInput, TOutput>(
@@ -374,12 +362,11 @@ public partial class EPNetAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
 /// </remarks>
 internal class EPNetModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetadata<T>>, IAdaptedMetaModel<T>
 {
-    private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
     private readonly IFullModel<T, TInput, TOutput> _model;
     private readonly Vector<T> _backboneParams;
     private readonly Vector<T>? _propagatedSupport;
     private readonly Vector<T>? _propagatedQuery;
-    private readonly double[]? _modulationFactors;
+    private readonly Vector<T>? _modulationFactors;
 
     /// <inheritdoc/>
     public ModelMetadata<T> Metadata { get; } = new ModelMetadata<T>();
@@ -388,14 +375,14 @@ internal class EPNetModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMet
     public Vector<T>? AdaptedSupportFeatures => _propagatedSupport;
 
     /// <inheritdoc/>
-    public double[]? ParameterModulationFactors => _modulationFactors;
+    public Vector<T>? ParameterModulationFactors => _modulationFactors;
 
     public EPNetModel(
         IFullModel<T, TInput, TOutput> model,
         Vector<T> backboneParams,
         Vector<T>? propagatedSupport,
         Vector<T>? propagatedQuery,
-        double[]? modulationFactors)
+        Vector<T>? modulationFactors)
     {
         // Predict pushes the adapted parameters into this model, so it is a copy: holding the meta-learner's
         // MetaModel would let every prediction overwrite the meta-model.
@@ -412,12 +399,7 @@ internal class EPNetModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMet
         if (_modulationFactors != null && _modulationFactors.Length > 0)
         {
             // Apply propagation-derived parameter modulation
-            var modulatedParams = new Vector<T>(_backboneParams.Length);
-            for (int i = 0; i < _backboneParams.Length; i++)
-            {
-                double mod = _modulationFactors[i % _modulationFactors.Length];
-                modulatedParams[i] = NumOps.Multiply(_backboneParams[i], NumOps.FromDouble(mod));
-            }
+            var modulatedParams = ParameterModulation.Apply(AiDotNetEngine.Current, _backboneParams, _modulationFactors);
             InterfaceGuard.Parameterizable(_model).SetParameters(modulatedParams);
         }
         else

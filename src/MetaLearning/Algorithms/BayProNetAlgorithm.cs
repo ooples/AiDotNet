@@ -171,13 +171,10 @@ public partial class BayProNetAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T,
         ParamModel.SetParameters(initParams);
 
         // Encode uncertainty as modulation: high-variance dims get dampened
-        var modulationFactors = new double[_paramDim];
-        for (int d = 0; d < _paramDim; d++)
-        {
-            double var_d = Math.Exp(NumOps.ToDouble(_posteriorLogVar[d]));
-            // Sigmoid-based confidence: high variance → low modulation
-            modulationFactors[d] = 1.0 / (1.0 + var_d / _algoOptions.Temperature);
-        }
+        // Sigmoid-based confidence: high variance → low modulation, 1 / (1 + exp(logVar) / temperature)
+        var logVar = _posteriorLogVar.Length == _paramDim ? _posteriorLogVar : _posteriorLogVar.GetSubVector(0, _paramDim);
+        var scaledVariance = Engine.Divide(Engine.Exp(logVar), NumOps.FromDouble(_algoOptions.Temperature));
+        var modulationFactors = Engine.Reciprocal(Engine.Add(Engine.Fill(_paramDim, NumOps.One), scaledVariance));
 
         return new AdaptedMetaModel<T, TInput, TOutput>(MetaModel, adaptedParams, modulationFactors: modulationFactors);
     }

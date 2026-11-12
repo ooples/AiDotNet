@@ -210,16 +210,17 @@ public partial class DeepEMDAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, T
         var supportFeatures = ConvertToVector(supportPred);
 
         // Compute modulation from temperature-scaled support features
-        double[]? modulationFactors = null;
+        Vector<T>? modulationFactors = null;
         if (supportFeatures != null && supportFeatures.Length > 0)
         {
-            double sumAbs = 0;
-            for (int i = 0; i < supportFeatures.Length; i++)
-                sumAbs += Math.Abs(NumOps.ToDouble(supportFeatures[i]));
-            double meanAbs = sumAbs / supportFeatures.Length;
-            double tempScale = 1.0 / Math.Max(_deepEmdOptions.Temperature, NumericalEpsilon);
-            modulationFactors = [Math.Max(MinModulationFactor, Math.Min(MaxModulationFactor,
-                MinModulationFactor + MinModulationFactor * tempScale * meanAbs / (1.0 + meanAbs)))];
+            T meanAbs = Engine.Mean(Engine.Abs(supportFeatures));
+            T tempScale = NumOps.FromDouble(1.0 / Math.Max(_deepEmdOptions.Temperature, NumericalEpsilon));
+            T minModulation = NumOps.FromDouble(MinModulationFactor);
+            T unclamped = NumOps.Add(minModulation, NumOps.Divide(
+                NumOps.Multiply(NumOps.Multiply(minModulation, tempScale), meanAbs),
+                NumOps.Add(NumOps.One, meanAbs)));
+            modulationFactors = Engine.Clamp(
+                new Vector<T>(new[] { unclamped }), minModulation, NumOps.FromDouble(MaxModulationFactor));
         }
 
         return new DeepEMDModel<T, TInput, TOutput>(
@@ -363,20 +364,19 @@ public partial class DeepEMDAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, T
 /// </remarks>
 internal class DeepEMDModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetadata<T>>, IAdaptedMetaModel<T>
 {
-    private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
     private readonly IFullModel<T, TInput, TOutput> _model;
     private readonly Vector<T> _backboneParams;
     private readonly Vector<T>? _supportFeatures;
     private readonly double _temperature;
     private readonly int _sinkhornIterations;
     private readonly double _sinkhornRegularization;
-    private readonly double[]? _modulationFactors;
+    private readonly Vector<T>? _modulationFactors;
 
     /// <inheritdoc/>
     public Vector<T>? AdaptedSupportFeatures => _supportFeatures;
 
     /// <inheritdoc/>
-    public double[]? ParameterModulationFactors => _modulationFactors;
+    public Vector<T>? ParameterModulationFactors => _modulationFactors;
 
     /// <inheritdoc/>
     public ModelMetadata<T> Metadata { get; } = new ModelMetadata<T>();
@@ -388,7 +388,7 @@ internal class DeepEMDModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelM
         double temperature,
         int sinkhornIterations,
         double sinkhornRegularization,
-        double[]? modulationFactors)
+        Vector<T>? modulationFactors)
     {
         // Predict pushes the adapted parameters into this model, so it is a copy: holding the meta-learner's
         // MetaModel would let every prediction overwrite the meta-model.
@@ -406,10 +406,7 @@ internal class DeepEMDModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelM
     {
         if (_modulationFactors != null && _modulationFactors.Length > 0)
         {
-            var modulated = new Vector<T>(_backboneParams.Length);
-            for (int i = 0; i < _backboneParams.Length; i++)
-                modulated[i] = NumOps.Multiply(_backboneParams[i],
-                    NumOps.FromDouble(_modulationFactors[i % _modulationFactors.Length]));
+            var modulated = ParameterModulation.Apply(AiDotNetEngine.Current, _backboneParams, _modulationFactors);
             InterfaceGuard.Parameterizable(_model).SetParameters(modulated);
         }
         else

@@ -343,16 +343,14 @@ public partial class DPGNAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
 
         // Compute modulation factors from distribution confidence estimates
         // The distribution graph estimates per-node confidence — use as parameter modulation
-        double[]? modulationFactors = null;
+        Vector<T>? modulationFactors = null;
         if (refinedDistributions != null && refinedDistributions.Length > 0)
         {
-            modulationFactors = new double[refinedDistributions.Length];
-            for (int i = 0; i < refinedDistributions.Length; i++)
-            {
-                // Convert distribution to confidence via sigmoid, centered around 1.0
-                double d = NumOps.ToDouble(refinedDistributions[i]);
-                modulationFactors[i] = 0.5 + 0.5 / (1.0 + Math.Exp(-d));
-            }
+            // Convert distribution to confidence via sigmoid, centered around 1.0: 0.5 + 0.5 * sigmoid(d)
+            T half = NumOps.FromDouble(0.5);
+            modulationFactors = Engine.Add(
+                Engine.Multiply(Engine.Sigmoid(refinedDistributions), half),
+                Engine.Fill(refinedDistributions.Length, half));
         }
 
         return new DPGNModel<T, TInput, TOutput>(
@@ -370,12 +368,11 @@ public partial class DPGNAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
 /// </remarks>
 internal class DPGNModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetadata<T>>, IAdaptedMetaModel<T>
 {
-    private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
     private readonly IFullModel<T, TInput, TOutput> _model;
     private readonly Vector<T> _backboneParams;
     private readonly Vector<T>? _refinedFeatures;
     private readonly Vector<T>? _refinedDistributions;
-    private readonly double[]? _modulationFactors;
+    private readonly Vector<T>? _modulationFactors;
 
     /// <inheritdoc/>
     public ModelMetadata<T> Metadata { get; } = new ModelMetadata<T>();
@@ -384,14 +381,14 @@ internal class DPGNModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMeta
     public Vector<T>? AdaptedSupportFeatures => _refinedFeatures;
 
     /// <inheritdoc/>
-    public double[]? ParameterModulationFactors => _modulationFactors;
+    public Vector<T>? ParameterModulationFactors => _modulationFactors;
 
     public DPGNModel(
         IFullModel<T, TInput, TOutput> model,
         Vector<T> backboneParams,
         Vector<T>? refinedFeatures,
         Vector<T>? refinedDistributions,
-        double[]? modulationFactors)
+        Vector<T>? modulationFactors)
     {
         // Predict pushes the adapted parameters into this model, so it is a copy: holding the meta-learner's
         // MetaModel would let every prediction overwrite the meta-model.
@@ -408,12 +405,7 @@ internal class DPGNModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMeta
         if (_modulationFactors != null && _modulationFactors.Length > 0)
         {
             // Apply distribution-confidence-based parameter modulation
-            var modulatedParams = new Vector<T>(_backboneParams.Length);
-            for (int i = 0; i < _backboneParams.Length; i++)
-            {
-                double mod = _modulationFactors[i % _modulationFactors.Length];
-                modulatedParams[i] = NumOps.Multiply(_backboneParams[i], NumOps.FromDouble(mod));
-            }
+            var modulatedParams = ParameterModulation.Apply(AiDotNetEngine.Current, _backboneParams, _modulationFactors);
             InterfaceGuard.Parameterizable(_model).SetParameters(modulatedParams);
         }
         else

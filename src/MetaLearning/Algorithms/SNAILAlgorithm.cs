@@ -415,14 +415,10 @@ public partial class SNAILAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
         var taskRepresentation = ProcessSNAILBlocks(supportPred, default);
 
         // Compute modulation from task representation magnitudes
-        double[]? modulationFactors = null;
+        Vector<T>? modulationFactors = null;
         if (taskRepresentation.Length > 0)
         {
-            double sumAbs = 0;
-            for (int i = 0; i < taskRepresentation.Length; i++)
-                sumAbs += Math.Abs(NumOps.ToDouble(taskRepresentation[i]));
-            double meanAbs = sumAbs / taskRepresentation.Length;
-            modulationFactors = [0.5 + 0.5 / (1.0 + Math.Exp(-meanAbs + 1.0))];
+            modulationFactors = ParameterModulation.MeanAbsGate(Engine, taskRepresentation);
         }
 
         return new SNAILModel<T, TInput, TOutput>(
@@ -708,19 +704,18 @@ public partial class SNAILAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
 /// </remarks>
 internal class SNAILModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetadata<T>>, IAdaptedMetaModel<T>
 {
-    private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
     private readonly IFullModel<T, TInput, TOutput> _model;
     private readonly Vector<T> _backboneParams;
     private readonly List<Vector<T>> _tcBlockParams;
     private readonly List<Vector<T>> _attentionBlockParams;
     private readonly Vector<T> _taskRepresentation;
-    private readonly double[]? _modulationFactors;
+    private readonly Vector<T>? _modulationFactors;
 
     /// <inheritdoc/>
     public Vector<T>? AdaptedSupportFeatures => _taskRepresentation;
 
     /// <inheritdoc/>
-    public double[]? ParameterModulationFactors => _modulationFactors;
+    public Vector<T>? ParameterModulationFactors => _modulationFactors;
 
     /// <inheritdoc/>
     public ModelMetadata<T> Metadata { get; } = new ModelMetadata<T>();
@@ -731,7 +726,7 @@ internal class SNAILModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMet
         List<Vector<T>> tcBlockParams,
         List<Vector<T>> attentionBlockParams,
         Vector<T> taskRepresentation,
-        double[]? modulationFactors)
+        Vector<T>? modulationFactors)
     {
         // Predict pushes the adapted parameters into this model, so it is a copy: holding the meta-learner's
         // MetaModel would let every prediction overwrite the meta-model.
@@ -748,10 +743,7 @@ internal class SNAILModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMet
     {
         if (_modulationFactors != null && _modulationFactors.Length > 0)
         {
-            var modulated = new Vector<T>(_backboneParams.Length);
-            for (int i = 0; i < _backboneParams.Length; i++)
-                modulated[i] = NumOps.Multiply(_backboneParams[i],
-                    NumOps.FromDouble(_modulationFactors[i % _modulationFactors.Length]));
+            var modulated = ParameterModulation.Apply(AiDotNetEngine.Current, _backboneParams, _modulationFactors);
             InterfaceGuard.Parameterizable(_model).SetParameters(modulated);
         }
         else

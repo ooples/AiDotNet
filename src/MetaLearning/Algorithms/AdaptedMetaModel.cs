@@ -70,19 +70,19 @@ public partial class AdaptedMetaModel<T, TInput, TOutput> : MetaLearningModelBas
     // support vector as a shape-deferred weight slot.
     [ExternalState]
     private readonly Vector<T>? _supportFeatures;
-    private readonly double[]? _modulationFactors;
+    private readonly Vector<T>? _modulationFactors;
 
     /// <inheritdoc/>
     public Vector<T>? AdaptedSupportFeatures => _supportFeatures;
 
     /// <inheritdoc/>
-    public double[]? ParameterModulationFactors => _modulationFactors;
+    public Vector<T>? ParameterModulationFactors => _modulationFactors;
 
     public AdaptedMetaModel(
         IFullModel<T, TInput, TOutput> model,
         Vector<T> adaptedParams,
         Vector<T>? supportFeatures = null,
-        double[]? modulationFactors = null)
+        Vector<T>? modulationFactors = null)
         : base(model)
     {
         _adaptedParams = adaptedParams ?? throw new ArgumentNullException(nameof(adaptedParams));
@@ -104,10 +104,7 @@ public partial class AdaptedMetaModel<T, TInput, TOutput> : MetaLearningModelBas
         {
             if (_modulationFactors is not null && _modulationFactors.Length > 0)
             {
-                var modulated = new Vector<T>(_adaptedParams.Length);
-                for (int i = 0; i < _adaptedParams.Length; i++)
-                    modulated[i] = NumOps.Multiply(_adaptedParams[i],
-                        NumOps.FromDouble(_modulationFactors[i % _modulationFactors.Length]));
+                var modulated = ParameterModulation.Apply(Engine, _adaptedParams, _modulationFactors);
                 InterfaceGuard.Parameterizable(BaseModel).SetParameters(modulated);
             }
             else

@@ -293,14 +293,10 @@ public partial class FewTUREAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, T
         var uncertaintyWeights = ComputeUncertaintyWeights(supportFeatures, queryFeatures);
 
         // Compute modulation from uncertainty weights (higher weight = more reliable)
-        double[]? modulationFactors = null;
+        Vector<T>? modulationFactors = null;
         if (uncertaintyWeights != null && uncertaintyWeights.Length > 0)
         {
-            double sumAbs = 0;
-            for (int i = 0; i < uncertaintyWeights.Length; i++)
-                sumAbs += Math.Abs(NumOps.ToDouble(uncertaintyWeights[i]));
-            double meanAbs = sumAbs / uncertaintyWeights.Length;
-            modulationFactors = [0.5 + 0.5 / (1.0 + Math.Exp(-meanAbs + 1.0))];
+            modulationFactors = ParameterModulation.MeanAbsGate(Engine, uncertaintyWeights);
         }
 
         return new FewTUREModel<T, TInput, TOutput>(
@@ -319,18 +315,17 @@ public partial class FewTUREAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, T
 /// </remarks>
 internal class FewTUREModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetadata<T>>, IAdaptedMetaModel<T>
 {
-    private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
     private readonly IFullModel<T, TInput, TOutput> _model;
     private readonly Vector<T> _backboneParams;
     private readonly Vector<T>? _uncertaintyWeights;
     private readonly double _uncertaintyThreshold;
-    private readonly double[]? _modulationFactors;
+    private readonly Vector<T>? _modulationFactors;
 
     /// <inheritdoc/>
     public Vector<T>? AdaptedSupportFeatures => _uncertaintyWeights;
 
     /// <inheritdoc/>
-    public double[]? ParameterModulationFactors => _modulationFactors;
+    public Vector<T>? ParameterModulationFactors => _modulationFactors;
 
     /// <inheritdoc/>
     public ModelMetadata<T> Metadata { get; } = new ModelMetadata<T>();
@@ -340,7 +335,7 @@ internal class FewTUREModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelM
         Vector<T> backboneParams,
         Vector<T>? uncertaintyWeights,
         double threshold,
-        double[]? modulationFactors)
+        Vector<T>? modulationFactors)
     {
         // Predict pushes the adapted parameters into this model, so it is a copy: holding the meta-learner's
         // MetaModel would let every prediction overwrite the meta-model.
@@ -356,10 +351,7 @@ internal class FewTUREModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelM
     {
         if (_modulationFactors != null && _modulationFactors.Length > 0)
         {
-            var modulated = new Vector<T>(_backboneParams.Length);
-            for (int i = 0; i < _backboneParams.Length; i++)
-                modulated[i] = NumOps.Multiply(_backboneParams[i],
-                    NumOps.FromDouble(_modulationFactors[i % _modulationFactors.Length]));
+            var modulated = ParameterModulation.Apply(AiDotNetEngine.Current, _backboneParams, _modulationFactors);
             InterfaceGuard.Parameterizable(_model).SetParameters(modulated);
         }
         else

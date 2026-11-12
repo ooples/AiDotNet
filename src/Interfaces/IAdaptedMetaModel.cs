@@ -45,8 +45,9 @@ public interface IAdaptedMetaModel<T>
     /// <remarks>
     /// <para><b>For Beginners:</b> Some algorithms (like NPBML) compute a set of numbers that
     /// scale the model's internal weights for each specific task. This property lets you
-    /// inspect those scaling factors.
+    /// inspect those scaling factors. They are stored in the model's numeric type T and
+    /// applied cyclically: weight i is scaled by factor (i mod factor count).
     /// </para>
     /// </remarks>
-    double[]? ParameterModulationFactors { get; }
+    Vector<T>? ParameterModulationFactors { get; }
 }

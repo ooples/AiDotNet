@@ -22565,3 +22565,9 @@ override AiDotNet.Diffusion.LatentDiffusionModelBase<T>.IsBatchedTrainingSample(
 virtual AiDotNet.Diffusion.DiffusionModelBase<T>.IsBatchedTrainingSample(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! sample) -> bool
 *REMOVED*AiDotNet.Document.Options.DocBankOptions.LearningRate.get -> double
 AiDotNet.Document.Options.DocBankOptions.LearningRate.get -> double?
+*REMOVED*AiDotNet.Interfaces.IAdaptedMetaModel<T>.ParameterModulationFactors.get -> double[]?
+AiDotNet.Interfaces.IAdaptedMetaModel<T>.ParameterModulationFactors.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
+*REMOVED*AiDotNet.MetaLearning.Algorithms.AdaptedMetaModel<T, TInput, TOutput>.AdaptedMetaModel(AiDotNet.Interfaces.IFullModel<T, TInput, TOutput>! model, AiDotNet.Tensors.LinearAlgebra.Vector<T>! adaptedParams, AiDotNet.Tensors.LinearAlgebra.Vector<T>? supportFeatures = null, double[]? modulationFactors = null) -> void
+AiDotNet.MetaLearning.Algorithms.AdaptedMetaModel<T, TInput, TOutput>.AdaptedMetaModel(AiDotNet.Interfaces.IFullModel<T, TInput, TOutput>! model, AiDotNet.Tensors.LinearAlgebra.Vector<T>! adaptedParams, AiDotNet.Tensors.LinearAlgebra.Vector<T>? supportFeatures = null, AiDotNet.Tensors.LinearAlgebra.Vector<T>? modulationFactors = null) -> void
+*REMOVED*AiDotNet.MetaLearning.Algorithms.AdaptedMetaModel<T, TInput, TOutput>.ParameterModulationFactors.get -> double[]?
+AiDotNet.MetaLearning.Algorithms.AdaptedMetaModel<T, TInput, TOutput>.ParameterModulationFactors.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
