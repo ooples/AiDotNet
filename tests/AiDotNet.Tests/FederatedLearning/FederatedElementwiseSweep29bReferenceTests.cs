@@ -401,4 +401,25 @@ public class FederatedElementwiseSweep29bReferenceTests
         double g1 = 2 * 3.0 * 1.0 + 1e-5 * 1.0;
         Assert.Equal((g0 * g0 + g1 * g1) / 2.0, fisher[0], 6);
     }
+
+    [Fact(Timeout = 60000)]
+    public async Task FedCIL_PrototypeEmaCopiesInputAndRejectsLengthMismatch()
+    {
+        await Task.Yield();
+
+        // EMA: p = decay * p_old + (1 - decay) * p_new. The first prototype is stored as a copy, so a later
+        // edit of the caller's array must not leak into the global prototype.
+        var fedCil = new AiDotNet.FederatedLearning.ContinualLearning.FedCILContinualLearning<double>(prototypeDecay: 0.75);
+        var first = new[] { 4.0, 8.0 };
+        fedCil.UpdatePrototype(3, first);
+        first[0] = 1000.0;
+        fedCil.UpdatePrototype(3, new[] { 0.0, 4.0 });
+
+        // Zero noise returns the prototype itself: 0.75 * [4, 8] + 0.25 * [0, 4] = [3, 7].
+        var samples = fedCil.GenerateSyntheticFeatures(3, 2, noiseScale: 0.0);
+        Assert.Equal(new[] { 3.0, 7.0 }, samples[0]);
+        Assert.Equal(new[] { 3.0, 7.0 }, samples[1]);
+
+        Assert.Throws<ArgumentException>(() => fedCil.UpdatePrototype(3, new[] { 1.0 }));
+    }
 }

@@ -67,22 +67,23 @@ public class FedCILContinualLearning<T> : Infrastructure.FederatedLearningCompon
 
         if (_globalPrototypes.TryGetValue(classLabel, out var existing))
         {
-            // EMA update.
-            var updated = new T[existing.Length];
-            var decay = NumOps.FromDouble(_prototypeDecay);
-            var oneMinusDecay = NumOps.FromDouble(1.0 - _prototypeDecay);
-            for (int i = 0; i < existing.Length; i++)
+            if (existing.Length != newPrototype.Length)
             {
-                updated[i] = NumOps.Add(
-                    NumOps.Multiply(existing[i], decay),
-                    NumOps.Multiply(newPrototype[i], oneMinusDecay));
+                throw new ArgumentException(
+                    $"Prototype length {newPrototype.Length} does not match the stored length {existing.Length} for class {classLabel}.",
+                    nameof(newPrototype));
             }
 
-            _globalPrototypes[classLabel] = updated;
+            // EMA update.
+            var updated = Engine.Add(
+                Engine.Multiply(new Vector<T>(existing), NumOps.FromDouble(_prototypeDecay)),
+                Engine.Multiply(new Vector<T>(newPrototype), NumOps.FromDouble(1.0 - _prototypeDecay)));
+            _globalPrototypes[classLabel] = updated.ToArray();
         }
         else
         {
-            _globalPrototypes[classLabel] = newPrototype;
+            // Store a copy so later caller edits cannot change the global prototype.
+            _globalPrototypes[classLabel] = (T[])newPrototype.Clone();
         }
     }
 
@@ -111,18 +112,26 @@ public class FedCILContinualLearning<T> : Infrastructure.FederatedLearningCompon
         }
 
         var rng = RandomHelper.CreateSeededRandom(_seed + classLabel);
-        var samples = new T[numSamples][];
+        int dim = prototype.Length;
 
+        // Box-Muller draws stay in the original (sample, feature) order of the seeded generator.
+        var noise = new double[numSamples * dim];
+        for (int k = 0; k < noise.Length; k++)
+        {
+            double u1 = 1.0 - rng.NextDouble();
+            double u2 = 1.0 - rng.NextDouble();
+            noise[k] = noiseScale * Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2);
+        }
+
+        var noiseTensor = new Tensor<double>(noise, new[] { numSamples, dim }).Cast<T>();
+        var prototypeRow = new Tensor<T>((T[])prototype.Clone(), new[] { 1, dim });
+        var batch = Engine.TensorAdd(noiseTensor, Engine.TensorBroadcastTo(prototypeRow, new[] { numSamples, dim })).ToArray();
+
+        var samples = new T[numSamples][];
         for (int s = 0; s < numSamples; s++)
         {
-            samples[s] = new T[prototype.Length];
-            for (int i = 0; i < prototype.Length; i++)
-            {
-                double u1 = 1.0 - rng.NextDouble();
-                double u2 = 1.0 - rng.NextDouble();
-                double noise = noiseScale * Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2);
-                samples[s][i] = NumOps.Add(prototype[i], NumOps.FromDouble(noise));
-            }
+            samples[s] = new T[dim];
+            Array.Copy(batch, s * dim, samples[s], 0, dim);
         }
 
         return samples;
@@ -138,13 +147,7 @@ public class FedCILContinualLearning<T> : Infrastructure.FederatedLearningCompon
     public Vector<T> ComputeImportance(Vector<T> modelParameters, Matrix<T> taskData)
     {
         Guard.NotNull(modelParameters);
-        var importance = new T[modelParameters.Length];
-        for (int i = 0; i < importance.Length; i++)
-        {
-            importance[i] = NumOps.FromDouble(1.0);
-        }
-
-        return new Vector<T>(importance);
+        return Engine.TensorOnesLike(modelParameters.AsTensor()).ToVector();
     }
 
     /// <inheritdoc/>
@@ -161,13 +164,16 @@ public class FedCILContinualLearning<T> : Infrastructure.FederatedLearningCompon
         Guard.NotNull(referenceParameters);
         Guard.NotNull(importanceWeights);
 
-        T penalty = NumOps.Zero;
         int len = Math.Min(currentParameters.Length, referenceParameters.Length);
-        for (int i = 0; i < len; i++)
+        if (len == 0)
         {
-            var diff = NumOps.Subtract(currentParameters[i], referenceParameters[i]);
-            penalty = NumOps.Add(penalty, NumOps.Multiply(diff, diff));
+            return NumOps.Zero;
         }
+
+        var current = currentParameters.Length == len ? currentParameters : currentParameters.GetSubVector(0, len);
+        var reference = referenceParameters.Length == len ? referenceParameters : referenceParameters.GetSubVector(0, len);
+        var diff = Engine.Subtract(current, reference);
+        T penalty = Engine.DotProduct(diff, diff);
 
         return NumOps.Multiply(penalty, NumOps.FromDouble(regularizationStrength * 0.5));
     }
@@ -195,8 +201,7 @@ public class FedCILContinualLearning<T> : Infrastructure.FederatedLearningCompon
         }
 
         int d = clientImportances.Values.First().Length;
-        var aggregated = new T[d];
-        for (int i = 0; i < d; i++) aggregated[i] = NumOps.Zero;
+        var aggregated = new Vector<T>(d);
         double totalWeight = clientWeights?.Values.Sum() ?? clientImportances.Count;
         if (totalWeight <= 0)
         {
@@ -206,14 +211,11 @@ public class FedCILContinualLearning<T> : Infrastructure.FederatedLearningCompon
         foreach (var (clientId, importance) in clientImportances)
         {
             double w = clientWeights?.GetValueOrDefault(clientId, 1.0) ?? 1.0;
-            var wT = NumOps.FromDouble(w / totalWeight);
-            for (int i = 0; i < d; i++)
-            {
-                aggregated[i] = NumOps.Add(aggregated[i], NumOps.Multiply(importance[i], wT));
-            }
+            var clientImportance = importance.Length == d ? importance : importance.GetSubVector(0, d);
+            aggregated = Engine.Add(aggregated, Engine.Multiply(clientImportance, NumOps.FromDouble(w / totalWeight)));
         }
 
-        return new Vector<T>(aggregated);
+        return aggregated;
     }
 
     /// <summary>Gets the known classes as a snapshot (not a live view).</summary>
