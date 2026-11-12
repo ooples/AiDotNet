@@ -9,6 +9,17 @@ namespace AiDotNet.Preprocessing;
 /// </summary>
 internal static class PreprocessingTensorOps
 {
+    /// <summary>The smallest positive normal Half, 2^-14.</summary>
+    private const double HalfSmallestNormal = 6.103515625e-05;
+
+    /// <summary>
+    /// <paramref name="epsilon"/> as a T, raised to the smallest positive normal value of T where it is below that. Half
+    /// cannot hold 1e-10 (it rounds to 0), which turns "below epsilon" guards off and "+ epsilon" denominators back
+    /// into divisions by zero; float, double and decimal keep <paramref name="epsilon"/> unchanged.
+    /// </summary>
+    public static T Tolerance<T>(double epsilon) =>
+        MathHelper.GetNumericOperations<T>().FromDouble(typeof(T) == typeof(Half) ? Math.Max(epsilon, HalfSmallestNormal) : epsilon);
+
     /// <summary>Gathers the given columns of <paramref name="data"/> into a new matrix, in the given order.</summary>
     public static Matrix<T> SelectColumns<T>(Matrix<T> data, int[] columns)
     {
@@ -139,8 +150,11 @@ internal static class PreprocessingTensorOps
     /// </summary>
     public static int[] TopKAtLeastSorted<T>(Tensor<T> scores, T minimum, int k)
     {
-        int below = CountNonZero(AiDotNetEngine.Current.TensorLessThan(scores, minimum));
-        return TopKIndicesSorted(scores, Math.Min(k, scores.Length - below));
+        // Only entries at least the minimum qualify; a NaN score never does (NaN >= minimum is false, as in master)
+        var qualifies = AtLeast(scores, minimum).Cast<int>().AsSpan().ToArray();
+        var selected = StableOrder(scores, descending: true).Where(i => qualifies[i] != 0).Take(Math.Max(k, 0)).ToArray();
+        Array.Sort(selected);
+        return selected;
     }
 
     /// <summary>
@@ -152,7 +166,7 @@ internal static class PreprocessingTensorOps
         var engine = AiDotNetEngine.Current;
         var ops = MathHelper.GetNumericOperations<T>();
         int n = x.Shape[0];
-        T eps = ops.FromDouble(epsilon);
+        T eps = Tolerance<T>(epsilon);
         var xc = engine.TensorSubtract(x, engine.ReduceMean(x, new[] { 0 }, true));
         var yc = engine.Reshape(engine.TensorSubtractScalar(y, engine.TensorMean(y)), new[] { n, 1 });
         var sxy = engine.Reshape(engine.TensorMatMul(engine.TensorTranspose(xc), yc), new[] { x.Shape[1] });
@@ -181,7 +195,7 @@ internal static class PreprocessingTensorOps
         var sxx = engine.ReduceSum(engine.TensorSquare(xc), new[] { 0 }, false);
         var denom = engine.TensorSqrt(engine.TensorMultiplyScalar(sxx, engine.TensorSumOfSquares(yc)));
         return engine.TensorWhere(
-            engine.TensorGreaterThan(denom, ops.FromDouble(epsilon)), engine.TensorDivide(sxy, denom), new Tensor<T>(new[] { p }));
+            engine.TensorGreaterThan(denom, Tolerance<T>(epsilon)), engine.TensorDivide(sxy, denom), new Tensor<T>(new[] { p }));
     }
 
     /// <summary>Column-wise minimum of a 2-D tensor ([n, p] to [p]).</summary>
@@ -204,7 +218,7 @@ internal static class PreprocessingTensorOps
     {
         var engine = AiDotNetEngine.Current;
         var broadcast = engine.TensorBroadcastTo(engine.Reshape(row, new[] { 1, row.Length }), x.Shape.ToArray());
-        return Not(engine.TensorLessThan(x, broadcast));
+        return engine.TensorGreaterEqual(x, broadcast); // NaN >= row is false, as in master
     }
 
     /// <summary>Column-wise maximum of a 2-D tensor ([n, p] to [p]).</summary>
@@ -225,12 +239,12 @@ internal static class PreprocessingTensorOps
         int p = x.Shape[1];
         var min = ColumnMin(x);
         var range = engine.TensorSubtract(ColumnMax(x), min);
-        var width = engine.TensorAddScalar(engine.TensorDivideScalar(range, ops.FromDouble(bins)), ops.FromDouble(1e-10));
+        var width = engine.TensorAddScalar(engine.TensorDivideScalar(range, ops.FromDouble(bins)), Tolerance<T>(1e-10));
         var scaled = engine.TensorDivide(
             engine.TensorSubtract(x, engine.Reshape(min, new[] { 1, p })), engine.Reshape(width, new[] { 1, p }));
         var binIndex = engine.TensorMin(engine.TensorFloor(scaled), ops.FromDouble(bins - 1));
         varying = engine.TensorAddScalar(
-            engine.TensorNegate(engine.TensorLessThan(range, ops.FromDouble(1e-10))), ops.One);
+            engine.TensorNegate(engine.TensorLessThan(range, Tolerance<T>(1e-10))), ops.One);
         return OneHotBins(binIndex, bins);
     }
 
@@ -249,7 +263,7 @@ internal static class PreprocessingTensorOps
         var range = engine.TensorSubtract(engine.Reshape(ColumnMax(x), new[] { 1, p }), min);
         var scaled = engine.TensorMultiplyScalar(engine.TensorDivide(engine.TensorSubtract(x, min), range), ops.FromDouble(bins - 1));
         var binIndex = engine.TensorMin(engine.TensorFloor(scaled), ops.FromDouble(bins - 1));
-        var varying = engine.TensorBroadcastTo(engine.TensorGreaterThan(range, ops.FromDouble(1e-10)), new[] { n, p });
+        var varying = engine.TensorBroadcastTo(engine.TensorGreaterThan(range, Tolerance<T>(1e-10)), new[] { n, p });
         return OneHotBins(engine.TensorWhere(varying, binIndex, new Tensor<T>(new[] { n, p })), bins);
     }
 
@@ -268,8 +282,8 @@ internal static class PreprocessingTensorOps
     /// <summary>Element-wise <c>a &gt;= b</c> as a 0/1 tensor.</summary>
     public static Tensor<T> AtLeast<T>(Tensor<T> a, T b)
     {
-        var engine = AiDotNetEngine.Current;
-        return engine.TensorAddScalar(engine.TensorNegate(engine.TensorLessThan(a, b)), MathHelper.GetNumericOperations<T>().One);
+        // Not 1 - (a < b): that is 1 for a NaN, where master's a >= b is false
+        return AiDotNetEngine.Current.TensorGreaterEqual(a, Filled(a.Shape.ToArray(), b));
     }
 
     /// <summary>Element-wise logical not of a 0/1 tensor.</summary>
@@ -624,7 +638,7 @@ internal static class PreprocessingTensorOps
         if (standardize)
         {
             var std = engine.TensorSqrt(engine.ReduceMean(engine.TensorMultiply(diff, diff), new[] { 0 }, true));
-            var tiny = engine.TensorLessThan(std, ops.FromDouble(1e-10));
+            var tiny = engine.TensorLessThan(std, Tolerance<T>(1e-10));
             std = engine.TensorWhere(tiny, Filled(std.Shape.ToArray(), ops.One), std);
             diff = engine.TensorDivide(diff, std);
         }
