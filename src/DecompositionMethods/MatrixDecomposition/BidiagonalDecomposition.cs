@@ -170,7 +170,7 @@ public class BidiagonalDecomposition<T> : MatrixDecompositionBase<T>
                 Vector<T> x = B.GetColumnSegment(k, k, m - k);
                 Vector<T> v = HouseholderVector(x);
 
-                if (AnyAbove(Tensor<T>.FromScalar(v.Norm()), tiny))
+                if (NumOps.GreaterThan(v.Norm(), tiny))
                 {
                     Matrix<T> P = Matrix<T>.CreateIdentity(m - k).Subtract(v.OuterProduct(v).Multiply(two));
                     Matrix<T> subB = B.GetSubMatrix(k, k, m - k, n - k);
@@ -187,7 +187,7 @@ public class BidiagonalDecomposition<T> : MatrixDecompositionBase<T>
                 Vector<T> x = B.GetRowSegment(k, k + 1, n - k - 1);
                 Vector<T> v = HouseholderVector(x);
 
-                if (AnyAbove(Tensor<T>.FromScalar(v.Norm()), tiny))
+                if (NumOps.GreaterThan(v.Norm(), tiny))
                 {
                     Matrix<T> P = Matrix<T>.CreateIdentity(n - k - 1).Subtract(v.OuterProduct(v).Multiply(two));
                     Matrix<T> subB = B.GetSubMatrix(k, k + 1, m - k, n - k - 1);
@@ -248,34 +248,51 @@ public class BidiagonalDecomposition<T> : MatrixDecompositionBase<T>
         U = new Matrix<T>(m, m);
         V = new Matrix<T>(n, n);
 
-        Vector<T> u = new Vector<T>(m);
-
         // Random unit starting vector from a secure source.
         var rand = RandomHelper.CreateSecureRandom();
         Vector<T> v = Matrix<T>.CreateRandom(rand, n, 1).GetColumn(0);
         v = (Vector<T>)Engine.Divide(v, v.Norm());
 
         Matrix<T> At = A.Transpose();
-        for (int j = 0; j < Math.Min(m, n); j++)
+        Vector<T> previousU = new Vector<T>(m);
+        T previousBeta = NumOps.Zero;
+        int steps = Math.Min(m, n);
+        if (steps > 0)
         {
-            // Golub-Kahan-Lanczos step: u = A v - beta_(j-1) u_(j-1), v = A^T u - alpha_j v_(j-1)
-            Vector<T> previousColumn = B.GetColumn(j - 1);
-            T previousBeta = Engine.TensorSum(Engine.TensorSlice(Tensor<T>.FromMatrix(B), new[] { j - 1, j }, new[] { 1, 1 }));
-            u = A.Multiply(v).Subtract(previousColumn.Multiply(previousBeta));
+            V.SetColumn(0, v);
+        }
+
+        for (int j = 0; j < steps; j++)
+        {
+            // Golub-Kahan-Lanczos step (Golub & Van Loan, Alg. 10.4.1):
+            //   u_j = A v_j - beta_(j-1) u_(j-1),  alpha_j = ||u_j||
+            //   v_(j+1) = A^T u_j - alpha_j v_j,   beta_j = ||v_(j+1)||
+            // with full reorthogonalisation against the vectors already accepted.
+            Vector<T> u = A.Multiply(v).Subtract(previousU.Multiply(previousBeta));
+            if (j > 0)
+            {
+                Matrix<T> acceptedU = U.GetSubMatrix(0, 0, m, j);
+                u = u.Subtract(acceptedU.Multiply(acceptedU.Transpose().Multiply(u)));
+            }
+
             T alpha = u.Norm();
-
             u = (Vector<T>)Engine.Divide(u, alpha);
-
-            v = At.Multiply(u).Subtract(B.GetRow(j).Multiply(alpha));
-            T beta = v.Norm();
-
-            v = (Vector<T>)Engine.Divide(v, beta);
-
-            B.SetSubMatrix(j, j, Tensor<T>.FromScalar(alpha).Reshape(new[] { 1, 1 }).ToMatrix());
-            if (j < n - 1) B.SetSubMatrix(j, j + 1, Tensor<T>.FromScalar(beta).Reshape(new[] { 1, 1 }).ToMatrix());
-
+            B[j, j] = alpha;
             U.SetColumn(j, u);
-            if (j < n) V.SetColumn(j, v);
+
+            if (j < n - 1)
+            {
+                Vector<T> next = At.Multiply(u).Subtract(v.Multiply(alpha));
+                Matrix<T> acceptedV = V.GetSubMatrix(0, 0, n, j + 1);
+                next = next.Subtract(acceptedV.Multiply(acceptedV.Transpose().Multiply(next)));
+                T beta = next.Norm();
+                v = (Vector<T>)Engine.Divide(next, beta);
+                B[j, j + 1] = beta;
+                V.SetColumn(j + 1, v);
+                previousBeta = beta;
+            }
+
+            previousU = u;
         }
     }
 
@@ -326,7 +343,7 @@ public class BidiagonalDecomposition<T> : MatrixDecompositionBase<T>
     {
         int n = A.Columns;
         if (A.Rows != n)
-            throw new ArgumentException("Vector b must have the same length as the number of rows in matrix A.");
+            throw new ArgumentException($"Matrix must be square to be inverted. Got {A.Rows}x{A.Columns} matrix.");
 
         if (n == 0)
         {
