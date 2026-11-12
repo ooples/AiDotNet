@@ -22684,3 +22684,15 @@ AiDotNet.AutoML.NAS.PCDARTS<T>.GetEdgeParameters() -> System.Collections.Generic
 AiDotNet.AutoML.NAS.PCDARTS<T>.GetEdgeGradients() -> System.Collections.Generic.List<AiDotNet.Tensors.LinearAlgebra.Vector<T>!>!
 AiDotNet.AutoML.NAS.PCDARTS<T>.AccumulateArchitectureGradients(int nodeIndex, AiDotNet.Tensors.LinearAlgebra.Matrix<T>! weightGradient) -> void
 AiDotNet.AutoML.NAS.PCDARTS<T>.UpdateArchitectureParameters(double learningRate = 0.0006, double beta1 = 0.5, double beta2 = 0.999, double weightDecay = 0.001, double epsilon = 1E-08) -> void
+AiDotNet.AutoML.NAS.PCDARTSOptions
+AiDotNet.AutoML.NAS.PCDARTSOptions.PCDARTSOptions() -> void
+AiDotNet.AutoML.NAS.PCDARTSOptions.Epochs.get -> int
+AiDotNet.AutoML.NAS.PCDARTSOptions.Epochs.set -> void
+AiDotNet.AutoML.NAS.PCDARTSOptions.WarmupEpochs.get -> int
+AiDotNet.AutoML.NAS.PCDARTSOptions.WarmupEpochs.set -> void
+AiDotNet.AutoML.NAS.PCDARTSOptions.BatchSize.get -> int
+AiDotNet.AutoML.NAS.PCDARTSOptions.BatchSize.set -> void
+AiDotNet.AutoML.NAS.PCDARTSOptions.PartialChannelK.get -> int
+AiDotNet.AutoML.NAS.PCDARTSOptions.PartialChannelK.set -> void
+AiDotNet.AutoML.NAS.PCDARTS<T>.PCDARTS(AiDotNet.AutoML.SearchSpace.SearchSpaceBase<T>! searchSpace, AiDotNet.AutoML.NAS.PCDARTSOptions! options, int numNodes = 4, bool useEdgeNormalization = true) -> void
+AiDotNet.AutoML.NAS.PCDARTS<T>.SearchOptions.get -> AiDotNet.AutoML.NAS.PCDARTSOptions!
