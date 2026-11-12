@@ -166,4 +166,17 @@ public class CTGANOptions<T> : SyntheticDataGeneratorOptions<T>
     /// <value>The dropout rate, defaulting to 0.5.</value>
     public double DiscriminatorDropout { get; set; } = 0.5;
 
+    /// <summary>
+    /// Gets or sets the Gumbel-softmax temperature of the generator's mode and discrete-column heads.
+    /// </summary>
+    /// <value>Defaults to 0.2, the <c>gumbel_softmax(tau=0.2)</c> of the sdv-dev/CTGAN reference code.</value>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> During training the generator's category outputs are noisy, nearly one-hot samples
+    /// instead of smooth probabilities, so the critic sees rows that look like real one-hot data. Lower values make
+    /// the samples closer to one-hot.
+    /// </para>
+    /// </remarks>
+    public double GumbelTemperature { get; set; } = 0.2;
+
 }
