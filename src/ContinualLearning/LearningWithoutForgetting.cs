@@ -41,6 +41,7 @@ namespace AiDotNet.ContinualLearning;
 public class LearningWithoutForgetting<T> : IContinualLearningStrategy<T>
 {
     private readonly INumericOperations<T> _numOps;
+    private static IEngine Engine => AiDotNetEngine.Current;
     private readonly Dictionary<int, Tensor<T>> _oldPredictions;
     [AiDotNet.Attributes.FittedParameter]
     private Tensor<T>? _currentTaskInputs;
@@ -158,12 +159,8 @@ public class LearningWithoutForgetting<T> : IContinualLearningStrategy<T>
         var currentPredictions = network.Predict(_currentTaskInputs);
 
         // Compute distillation loss for each stored task
-        var totalLoss = _numOps.Zero;
-        foreach (var (taskId, oldPreds) in _oldPredictions)
-        {
-            var distillLoss = ComputeDistillationLoss(currentPredictions, oldPreds);
-            totalLoss = _numOps.Add(totalLoss, distillLoss);
-        }
+        var taskLosses = new Vector<T>(_oldPredictions.Select(entry => ComputeDistillationLoss(currentPredictions, entry.Value)));
+        var totalLoss = Engine.Sum(taskLosses);
 
         // Scale by lambda
         var lambdaT = _numOps.FromDouble(_lambda);
@@ -184,34 +181,20 @@ public class LearningWithoutForgetting<T> : IContinualLearningStrategy<T>
         var batchSize = currentPredictions.Shape[0];
         var numClasses = currentPredictions.Length / batchSize;
 
-        var loss = _numOps.Zero;
         var tempT = _numOps.FromDouble(_temperature);
         var epsilon = _numOps.FromDouble(1e-10);
 
-        for (int b = 0; b < batchSize; b++)
-        {
-            // Apply temperature-scaled softmax to both predictions
-            var currentSoft = TemperatureSoftmax(currentPredictions, b, numClasses);
-            var oldSoft = TemperatureSoftmax(oldPredictions, b, numClasses);
+        // Apply temperature-scaled softmax to both predictions, every sample at once: [batch, classes]
+        var currentSoft = TemperatureSoftmax(currentPredictions, batchSize, numClasses);
+        var oldSoft = TemperatureSoftmax(oldPredictions, batchSize, numClasses);
 
-            // KL divergence: sum(old * log(old / current))
-            for (int c = 0; c < numClasses; c++)
-            {
-                var oldProb = oldSoft[c];
-                var currentProb = _numOps.Add(currentSoft[c], epsilon);
-
-                // old * log(old) - old * log(current)
-                var oldPlusEps = _numOps.Add(oldProb, epsilon);
-                var logOld = _numOps.FromDouble(Math.Log(_numOps.ToDouble(oldPlusEps)));
-                var logCurrent = _numOps.FromDouble(Math.Log(_numOps.ToDouble(currentProb)));
-
-                var term1 = _numOps.Multiply(oldProb, logOld);
-                var term2 = _numOps.Multiply(oldProb, logCurrent);
-                var klTerm = _numOps.Subtract(term1, term2);
-
-                loss = _numOps.Add(loss, klTerm);
-            }
-        }
+        // KL divergence: sum(old * log(old + eps) - old * log(current + eps))
+        var logOld = Engine.TensorLog(Engine.TensorAddScalar(oldSoft, epsilon));
+        var logCurrent = Engine.TensorLog(Engine.TensorAddScalar(currentSoft, epsilon));
+        var klTerms = Engine.TensorSubtract(
+            Engine.TensorMultiply(oldSoft, logOld),
+            Engine.TensorMultiply(oldSoft, logCurrent));
+        var loss = Engine.TensorSum(klTerms);
 
         // Scale by T^2 (as per Hinton et al.) and average over batch
         var tSquared = _numOps.Multiply(tempT, tempT);
@@ -235,42 +218,13 @@ public class LearningWithoutForgetting<T> : IContinualLearningStrategy<T>
     }
 
     /// <summary>
-    /// Applies temperature-scaled softmax to logits for a single sample.
+    /// Applies temperature-scaled softmax to the logits of every sample: softmax(x / T) per row of [batch, classes].
     /// </summary>
-    private Vector<T> TemperatureSoftmax(Tensor<T> logits, int batchIndex, int numClasses)
+    private Tensor<T> TemperatureSoftmax(Tensor<T> logits, int batchSize, int numClasses)
     {
-        var result = new Vector<T>(numClasses);
-        var startIdx = batchIndex * numClasses;
-        var tempInv = 1.0 / _temperature;
-
-        // Find max for numerical stability
-        var maxLogit = _numOps.MinValue;
-        for (int c = 0; c < numClasses; c++)
-        {
-            var scaledLogit = _numOps.Multiply(logits[startIdx + c], _numOps.FromDouble(tempInv));
-            if (_numOps.GreaterThan(scaledLogit, maxLogit))
-            {
-                maxLogit = scaledLogit;
-            }
-        }
-
-        // Compute exp(x/T - max) and sum
-        var expSum = _numOps.Zero;
-        for (int c = 0; c < numClasses; c++)
-        {
-            var scaledLogit = _numOps.Multiply(logits[startIdx + c], _numOps.FromDouble(tempInv));
-            var shifted = _numOps.Subtract(scaledLogit, maxLogit);
-            var expVal = _numOps.FromDouble(Math.Exp(_numOps.ToDouble(shifted)));
-            result[c] = expVal;
-            expSum = _numOps.Add(expSum, expVal);
-        }
-
-        // Normalize
-        for (int c = 0; c < numClasses; c++)
-        {
-            result[c] = _numOps.Divide(result[c], expSum);
-        }
-
-        return result;
+        var tempInv = _numOps.FromDouble(1.0 / _temperature);
+        var rows = logits.Reshape(batchSize, numClasses);
+        // The engine softmax subtracts the row max before exponentiating, as master did.
+        return Engine.TensorSoftmax(Engine.TensorMultiplyScalar(rows, tempInv), 1);
     }
 }
