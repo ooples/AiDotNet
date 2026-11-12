@@ -102,16 +102,14 @@ public class EigenDecomposition<T> : MatrixDecompositionBase<T>
     }
 
     /// <summary>
-    /// Computes eigenvalues and eigenvectors using the Power Iteration method.
+    /// Computes eigenvalues and eigenvectors in order of decreasing magnitude (the
+    /// <see cref="EigenAlgorithmType.PowerIteration"/> option).
     /// </summary>
     /// <remarks>
-    /// The Power Iteration method works by repeatedly multiplying a vector by the matrix
-    /// and normalizing the result. This process converges to the dominant eigenvector
-    /// (the one with the largest eigenvalue in absolute terms).
-    /// 
-    /// This implementation uses deflation to find multiple eigenvalues and eigenvectors.
-    /// After finding each eigenvector, we modify the matrix to remove the influence of
-    /// that eigenvector, allowing us to find the next most dominant one.
+    /// This option is an alias of <see cref="EigenAlgorithmType.QR"/>: both make one engine eigensolver
+    /// call (<c>Linalg.Eigh</c> for symmetric input, otherwise <c>Linalg.Eig</c> keeping real parts) and
+    /// sort the pairs dominant-first, the order power iteration with deflation delivers them. No power
+    /// iteration or deflation runs, so choosing this option does not change accuracy or convergence.
     /// </remarks>
     /// <param name="matrix">The matrix to decompose.</param>
     /// <returns>A tuple containing the eigenvalues and eigenvectors.</returns>
@@ -123,15 +121,14 @@ public class EigenDecomposition<T> : MatrixDecompositionBase<T>
     }
 
     /// <summary>
-    /// Computes eigenvalues and eigenvectors using the QR algorithm with Wilkinson shift.
+    /// Computes eigenvalues and eigenvectors in order of decreasing magnitude (the
+    /// <see cref="EigenAlgorithmType.QR"/> option).
     /// </summary>
     /// <remarks>
-    /// The QR algorithm is an iterative method that works by repeatedly factoring the matrix
-    /// into a product Q*R (where Q is orthogonal and R is upper triangular), and then
-    /// recombining as R*Q. This process eventually converges to a matrix where the eigenvalues
-    /// appear on the diagonal.
-    ///
-    /// This implementation uses Wilkinson shift for faster convergence on symmetric matrices.
+    /// One engine eigensolver call (<c>Linalg.Eigh</c> for symmetric input, otherwise <c>Linalg.Eig</c>
+    /// keeping real parts), with the pairs sorted dominant-first as a deflating QR iteration leaves
+    /// them. No explicit shifted QR iteration runs; <see cref="EigenAlgorithmType.PowerIteration"/> is an
+    /// alias of this option.
     /// </remarks>
     /// <param name="matrix">The matrix to decompose.</param>
     /// <returns>A tuple containing the eigenvalues and eigenvectors.</returns>
@@ -179,34 +176,15 @@ public class EigenDecomposition<T> : MatrixDecompositionBase<T>
         return (values.ToVector(), vectors.ToMatrix());
     }
 
-    /// <summary>Largest |A[i,j] - A[j,i]| over the matrix.</summary>
-    private T MaxAsymmetry(Tensor<T> a)
-    {
-        return Engine.TensorMaxValue(Engine.TensorAbs(Engine.TensorSubtract(a, Engine.TensorTranspose(a))));
-    }
-
     /// <summary>
-    /// Type-aware symmetry tolerance scaled by max(1, ‖A‖_∞ entry): float 1e-4, otherwise 1e-10.
-    /// </summary>
-    private T SymmetryTolerance(Tensor<T> a)
-    {
-        T maxAbs = Engine.TensorMaxValue(Engine.TensorAbs(a));
-        T relScale = NumOps.GreaterThan(maxAbs, NumOps.One) ? maxAbs : NumOps.One;
-        double symmetryTolBase = typeof(T) == typeof(float) ? 1e-4 : 1e-10;
-        return NumOps.Multiply(NumOps.FromDouble(symmetryTolBase), relScale);
-    }
-
-    /// <summary>
-    /// Computes eigenvalues and eigenvectors using the Jacobi method.
+    /// Computes eigenvalues and eigenvectors of a symmetric matrix (the <see cref="EigenAlgorithmType.Jacobi"/> option).
     /// </summary>
     /// <remarks>
-    /// The Jacobi method is an iterative algorithm particularly effective for symmetric matrices.
-    /// It works by performing a series of rotations (Jacobi rotations) that gradually make the
-    /// off-diagonal elements of the matrix smaller, eventually converging to a diagonal matrix
-    /// where the diagonal elements are the eigenvalues.
-    /// 
-    /// In simple terms, this method systematically eliminates the largest off-diagonal element
-    /// in each iteration until all off-diagonal elements are close to zero.
+    /// The matrix must be symmetric; other input throws <see cref="ArgumentException"/>. The result is
+    /// the symmetric eigendecomposition A = V diag(λ) V^T with orthonormal V, which is what converged
+    /// Jacobi rotations produce. It is computed with one call to the engine symmetric eigensolver
+    /// (<c>Linalg.Eigh</c>), not with explicit Jacobi rotations, and the eigenvalues keep the solver's
+    /// order. All three <see cref="EigenAlgorithmType"/> options use the engine eigensolver.
     /// </remarks>
     /// <param name="matrix">The matrix to decompose.</param>
     /// <returns>A tuple containing the eigenvalues and eigenvectors of the matrix.</returns>
@@ -222,23 +200,7 @@ public class EigenDecomposition<T> : MatrixDecompositionBase<T>
         }
 
         var a = Tensor<T>.FromMatrix(matrix);
-        T symmetryTol = SymmetryTolerance(a);
-        var asymmetry = Engine.TensorAbs(Engine.TensorSubtract(a, Engine.TensorTranspose(a)));
-        if (NumOps.GreaterThan(Engine.TensorMaxValue(asymmetry), symmetryTol))
-        {
-            // First offending (i, j), j > i, in row-major order.
-            var violations = Engine.TensorTriu(Engine.TensorGreaterThan(asymmetry, symmetryTol), 1);
-            int flat = Engine.TensorArgMax(violations.Reshape(new[] { violations.Length }), 0)[0];
-            int i = flat / n;
-            int j = flat % n;
-            T diff = asymmetry[i, j];
-            T maxAbs = Engine.TensorMaxValue(Engine.TensorAbs(a));
-            throw new ArgumentException(
-                "Jacobi eigen decomposition requires a symmetric matrix; " +
-                $"|A[{i},{j}] - A[{j},{i}]| = {diff} exceeds tolerance {symmetryTol} " +
-                $"(scaled by ‖A‖_∞ = {maxAbs}).",
-                nameof(matrix));
-        }
+        ValidateSymmetric(a, "Jacobi eigen decomposition", nameof(matrix));
 
         if (n == 1)
         {

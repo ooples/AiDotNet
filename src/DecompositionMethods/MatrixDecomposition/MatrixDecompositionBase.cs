@@ -385,10 +385,13 @@ public abstract class MatrixDecompositionBase<T> : IMatrixDecomposition<T>
         var d = Engine.Concat(
             new[] { Engine.TensorOnesLike(new Tensor<T>(new[] { 1 })), Engine.TensorCumProd(signs, 0) },
             0);
-        var scaling = Engine.TensorDiagEmbed(d);
+        // D H D and Q D are row/column sign scalings: O(n^2) broadcast products, not dense matmuls.
+        var shape = new[] { n, n };
+        var rowScale = Engine.TensorBroadcastTo(d.Reshape(new[] { n, 1 }), shape);
+        var columnScale = Engine.TensorBroadcastTo(d.Reshape(new[] { 1, n }), shape);
 
-        var scaledH = Engine.TensorMatMul(Engine.TensorMatMul(scaling, h), scaling);
-        var scaledQ = Engine.TensorMatMul(Tensor<T>.FromMatrix(qMatrix), scaling);
+        var scaledH = Engine.TensorMultiply(Engine.TensorMultiply(h, rowScale), columnScale);
+        var scaledQ = Engine.TensorMultiply(Tensor<T>.FromMatrix(qMatrix), columnScale);
         return (scaledH.ToMatrix(), scaledQ.ToMatrix());
     }
 
@@ -438,6 +441,59 @@ public abstract class MatrixDecompositionBase<T> : IMatrixDecomposition<T>
     private protected bool AnyAbove(Tensor<T> value, T threshold)
     {
         return Engine.TensorCountNonzero(Engine.TensorGreaterThan(value, threshold)) > 0;
+    }
+
+    /// <summary>Largest |A[i,j] - A[j,i]| over a square matrix.</summary>
+    private protected T MaxAsymmetry(Tensor<T> a)
+    {
+        return Engine.TensorMaxValue(Engine.TensorAbs(Engine.TensorSubtract(a, Engine.TensorTranspose(a))));
+    }
+
+    /// <summary>
+    /// Type-aware symmetry tolerance scaled by max(1, largest |A[i,j]|): float 1e-4, otherwise 1e-10.
+    /// </summary>
+    private protected T SymmetryTolerance(Tensor<T> a)
+    {
+        T maxAbs = Engine.TensorMaxValue(Engine.TensorAbs(a));
+        T relScale = NumOps.GreaterThan(maxAbs, NumOps.One) ? maxAbs : NumOps.One;
+        double symmetryTolBase = typeof(T) == typeof(float) ? 1e-4 : 1e-10;
+        return NumOps.Multiply(NumOps.FromDouble(symmetryTolBase), relScale);
+    }
+
+    /// <summary>
+    /// Throws <see cref="ArgumentException"/> when the square matrix <paramref name="a"/> is not
+    /// symmetric within <see cref="SymmetryTolerance"/>, naming the first offending (i, j), j &gt; i,
+    /// in row-major order.
+    /// </summary>
+    /// <param name="a">The square matrix to check.</param>
+    /// <param name="algorithmName">The algorithm named in the error message.</param>
+    /// <param name="parameterName">The parameter name reported by the exception.</param>
+    private protected void ValidateSymmetric(Tensor<T> a, string algorithmName, string parameterName)
+    {
+        int n = a.Shape[0];
+        if (n == 0)
+        {
+            return;
+        }
+
+        T symmetryTol = SymmetryTolerance(a);
+        if (NumOps.LessThanOrEquals(MaxAsymmetry(a), symmetryTol))
+        {
+            return;
+        }
+
+        var asymmetry = Engine.TensorAbs(Engine.TensorSubtract(a, Engine.TensorTranspose(a)));
+        var violations = Engine.TensorTriu(Engine.TensorGreaterThan(asymmetry, symmetryTol), 1);
+        int flat = Engine.TensorArgMax(violations.Reshape(new[] { violations.Length }), 0)[0];
+        int i = flat / n;
+        int j = flat % n;
+        T diff = asymmetry[i, j];
+        T maxAbs = Engine.TensorMaxValue(Engine.TensorAbs(a));
+        throw new ArgumentException(
+            $"{algorithmName} requires a symmetric matrix; " +
+            $"|A[{i},{j}] - A[{j},{i}]| = {diff} exceeds tolerance {symmetryTol} " +
+            $"(scaled by ‖A‖_∞ = {maxAbs}).",
+            parameterName);
     }
 
     /// <summary>
@@ -502,9 +558,9 @@ public abstract class MatrixDecompositionBase<T> : IMatrixDecomposition<T>
             signs = Engine.TensorSetSlice(Engine.TensorOnesLike(new Tensor<T>(new[] { qColumns })), signs, new[] { 0 });
         }
 
-        var signMatrix = Engine.TensorDiagEmbed(signs);
-        q = Engine.TensorMatMul(q, signMatrix);
-        r = Engine.TensorMatMul(signMatrix, r);
+        // Q diag(s) scales the columns of Q and diag(s) R the rows of R: broadcast products.
+        q = Engine.TensorMultiply(q, Engine.TensorBroadcastTo(signs.Reshape(new[] { 1, qColumns }), new[] { q.Shape[0], qColumns }));
+        r = Engine.TensorMultiply(r, Engine.TensorBroadcastTo(signs.Reshape(new[] { qColumns, 1 }), new[] { qColumns, r.Shape[1] }));
 
         if (complete || m >= n)
         {
