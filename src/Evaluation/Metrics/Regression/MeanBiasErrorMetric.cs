@@ -2,6 +2,7 @@ using AiDotNet.Evaluation.Enums;
 using AiDotNet.Evaluation.Results.Core;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.Tensors.Engines.Autodiff;
 
 namespace AiDotNet.Evaluation.Metrics.Regression;
 
@@ -47,13 +48,11 @@ public class MeanBiasErrorMetric<T> : IRegressionMetric<T>
             throw new ArgumentException("Predictions and actuals must have the same length.");
         if (predictions.Length == 0) return NumOps.Zero;
 
-        double sumBias = 0;
-        for (int i = 0; i < predictions.Length; i++)
-        {
-            sumBias += NumOps.ToDouble(predictions[i]) - NumOps.ToDouble(actuals[i]);
-        }
-
-        return NumOps.FromDouble(sumBias / predictions.Length);
+        var engine = AiDotNetEngine.Current;
+        using var noGrad = new NoGradScope<T>();
+        var pred = EvaluationTensorOps<T>.ToTensor(predictions);
+        var actual = EvaluationTensorOps<T>.ToTensor(actuals);
+        return engine.TensorMean(engine.TensorSubtract(pred, actual));
     }
 
     /// <inheritdoc />

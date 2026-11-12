@@ -2,6 +2,7 @@ using AiDotNet.Evaluation.Enums;
 using AiDotNet.Evaluation.Results.Core;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.Tensors.Engines.Autodiff;
 
 namespace AiDotNet.Evaluation.Metrics.Regression;
 
@@ -54,32 +55,22 @@ public class PoissonDevianceMetric<T> : IRegressionMetric<T>
             throw new ArgumentException("Predictions and actuals must have the same length.");
         if (predictions.Length == 0) return NumOps.Zero;
 
-        double totalDeviance = 0;
-        int validCount = 0;
+        var engine = AiDotNetEngine.Current;
+        using var noGrad = new NoGradScope<T>();
+        var pred = EvaluationTensorOps<T>.ToTensor(predictions);
+        var actual = EvaluationTensorOps<T>.ToTensor(actuals);
+        var y = EvaluationTensorOps<T>.MaxPreservingNaN(actual, NumOps.Zero);
+        var mu = EvaluationTensorOps<T>.MaxPreservingNaN(pred, NumOps.FromDouble(1e-10));
+        var two = NumOps.FromDouble(2.0);
 
-        for (int i = 0; i < predictions.Length; i++)
-        {
-            double y = Math.Max(0, NumOps.ToDouble(actuals[i]));
-            double mu = Math.Max(1e-10, NumOps.ToDouble(predictions[i]));
+        // 2 * (y * log(y / mu) - (y - mu)) where y > 0, else 2 * mu; only finite deviances are averaged
+        var positive = engine.TensorMultiplyScalar(
+            engine.TensorSubtract(engine.TensorMultiply(y, engine.TensorLog(engine.TensorDivide(y, mu))), engine.TensorSubtract(y, mu)),
+            two);
+        var deviance = engine.TensorWhere(engine.TensorGreaterThan(y, NumOps.Zero), positive, engine.TensorMultiplyScalar(mu, two));
 
-            double deviance;
-            if (y > 0)
-            {
-                deviance = 2 * (y * Math.Log(y / mu) - (y - mu));
-            }
-            else
-            {
-                deviance = 2 * mu;
-            }
-
-            if (!double.IsNaN(deviance) && !double.IsInfinity(deviance))
-            {
-                totalDeviance += deviance;
-                validCount++;
-            }
-        }
-
-        return validCount > 0 ? NumOps.FromDouble(totalDeviance / validCount) : NumOps.Zero;
+        var (totalDeviance, validCount) = EvaluationTensorOps<T>.FiniteSumAndCount(deviance);
+        return validCount > 0 ? NumOps.Divide(totalDeviance, NumOps.FromDouble(validCount)) : NumOps.Zero;
     }
 
     /// <inheritdoc />

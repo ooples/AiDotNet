@@ -2,6 +2,7 @@ using AiDotNet.Evaluation.Enums;
 using AiDotNet.Evaluation.Results.Core;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.Tensors.Engines.Autodiff;
 
 namespace AiDotNet.Evaluation.Metrics.Regression;
 
@@ -47,25 +48,19 @@ public class RelativeAbsoluteErrorMetric<T> : IRegressionMetric<T>
             throw new ArgumentException("Predictions and actuals must have the same length.");
         if (predictions.Length == 0) return NumOps.Zero;
 
-        // Compute mean of actuals
-        double sumActuals = 0;
-        for (int i = 0; i < actuals.Length; i++)
-            sumActuals += NumOps.ToDouble(actuals[i]);
-        double meanActual = sumActuals / actuals.Length;
+        var engine = AiDotNetEngine.Current;
+        using var noGrad = new NoGradScope<T>();
+        var pred = EvaluationTensorOps<T>.ToTensor(predictions);
+        var actual = EvaluationTensorOps<T>.ToTensor(actuals);
+        var tolerance = NumOps.FromDouble(1e-10);
 
-        // Compute sum of absolute errors
-        double sae = 0;
-        double sat = 0;
-        for (int i = 0; i < predictions.Length; i++)
-        {
-            double actual = NumOps.ToDouble(actuals[i]);
-            double pred = NumOps.ToDouble(predictions[i]);
-            sae += Math.Abs(actual - pred);
-            sat += Math.Abs(actual - meanActual);
-        }
+        // Sum of absolute errors over the sum of absolute deviations from the mean of actuals
+        T meanActual = engine.TensorMean(actual);
+        T sae = engine.TensorSum(engine.TensorAbs(engine.TensorSubtract(actual, pred)));
+        T sat = engine.TensorSum(engine.TensorAbs(engine.TensorSubtractScalar(actual, meanActual)));
 
-        if (sat < 1e-10) return NumOps.Zero;
-        return NumOps.FromDouble(sae / sat);
+        if (NumOps.LessThan(sat, tolerance)) return NumOps.Zero;
+        return NumOps.Divide(sae, sat);
     }
 
     /// <inheritdoc />

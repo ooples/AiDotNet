@@ -2,6 +2,7 @@ using AiDotNet.Evaluation.Enums;
 using AiDotNet.Evaluation.Results.Core;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.Tensors.Engines.Autodiff;
 
 namespace AiDotNet.Evaluation.Metrics.Regression;
 
@@ -47,25 +48,19 @@ public class RelativeSquaredErrorMetric<T> : IRegressionMetric<T>
             throw new ArgumentException("Predictions and actuals must have the same length.");
         if (predictions.Length == 0) return NumOps.Zero;
 
-        // Compute mean of actuals
-        double sumActuals = 0;
-        for (int i = 0; i < actuals.Length; i++)
-            sumActuals += NumOps.ToDouble(actuals[i]);
-        double meanActual = sumActuals / actuals.Length;
+        var engine = AiDotNetEngine.Current;
+        using var noGrad = new NoGradScope<T>();
+        var pred = EvaluationTensorOps<T>.ToTensor(predictions);
+        var actual = EvaluationTensorOps<T>.ToTensor(actuals);
+        var tolerance = NumOps.FromDouble(1e-10);
 
-        // Compute sum of squared errors and total sum of squares
-        double sse = 0;
-        double sst = 0;
-        for (int i = 0; i < predictions.Length; i++)
-        {
-            double actual = NumOps.ToDouble(actuals[i]);
-            double pred = NumOps.ToDouble(predictions[i]);
-            sse += (actual - pred) * (actual - pred);
-            sst += (actual - meanActual) * (actual - meanActual);
-        }
+        // Sum of squared errors over the total sum of squares around the mean of actuals
+        T meanActual = engine.TensorMean(actual);
+        T sse = engine.TensorSumOfSquares(engine.TensorSubtract(actual, pred));
+        T sst = engine.TensorSumOfSquares(engine.TensorSubtractScalar(actual, meanActual));
 
-        if (sst < 1e-10) return NumOps.Zero;
-        return NumOps.FromDouble(sse / sst);
+        if (NumOps.LessThan(sst, tolerance)) return NumOps.Zero;
+        return NumOps.Divide(sse, sst);
     }
 
     /// <inheritdoc />

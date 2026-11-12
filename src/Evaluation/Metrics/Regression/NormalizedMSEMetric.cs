@@ -2,6 +2,7 @@ using AiDotNet.Evaluation.Enums;
 using AiDotNet.Evaluation.Results.Core;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.Tensors.Engines.Autodiff;
 
 namespace AiDotNet.Evaluation.Metrics.Regression;
 
@@ -47,28 +48,19 @@ public class NormalizedMSEMetric<T> : IRegressionMetric<T>
             throw new ArgumentException("Predictions and actuals must have the same length.");
         if (predictions.Length == 0) return NumOps.Zero;
 
-        // Compute mean of actuals
-        double sumActuals = 0;
-        for (int i = 0; i < actuals.Length; i++)
-            sumActuals += NumOps.ToDouble(actuals[i]);
-        double meanActual = sumActuals / actuals.Length;
+        var engine = AiDotNetEngine.Current;
+        using var noGrad = new NoGradScope<T>();
+        var pred = EvaluationTensorOps<T>.ToTensor(predictions);
+        var actual = EvaluationTensorOps<T>.ToTensor(actuals);
+        var tolerance = NumOps.FromDouble(1e-10);
 
-        // Compute MSE and variance
-        double mse = 0;
-        double variance = 0;
-        for (int i = 0; i < predictions.Length; i++)
-        {
-            double actual = NumOps.ToDouble(actuals[i]);
-            double pred = NumOps.ToDouble(predictions[i]);
-            mse += (actual - pred) * (actual - pred);
-            variance += (actual - meanActual) * (actual - meanActual);
-        }
+        // MSE over the variance of actuals
+        T meanActual = engine.TensorMean(actual);
+        T mse = engine.TensorMean(engine.TensorSquare(engine.TensorSubtract(actual, pred)));
+        T variance = engine.TensorMean(engine.TensorSquare(engine.TensorSubtractScalar(actual, meanActual)));
 
-        mse /= predictions.Length;
-        variance /= predictions.Length;
-
-        if (variance < 1e-10) return NumOps.Zero;
-        return NumOps.FromDouble(mse / variance);
+        if (NumOps.LessThan(variance, tolerance)) return NumOps.Zero;
+        return NumOps.Divide(mse, variance);
     }
 
     /// <inheritdoc />

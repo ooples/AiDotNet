@@ -2,6 +2,7 @@ using AiDotNet.Evaluation.Enums;
 using AiDotNet.Evaluation.Results.Core;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.Tensors.Engines.Autodiff;
 
 namespace AiDotNet.Evaluation.Metrics.Regression;
 
@@ -46,19 +47,18 @@ public class MedianAbsoluteErrorMetric<T> : IRegressionMetric<T>
             throw new ArgumentException("Predictions and actuals must have the same length.");
         if (predictions.Length == 0) return NumOps.Zero;
 
-        var errors = new double[predictions.Length];
-        for (int i = 0; i < predictions.Length; i++)
-        {
-            errors[i] = Math.Abs(NumOps.ToDouble(actuals[i]) - NumOps.ToDouble(predictions[i]));
-        }
+        var engine = AiDotNetEngine.Current;
+        using var noGrad = new NoGradScope<T>();
+        var pred = EvaluationTensorOps<T>.ToTensor(predictions);
+        var actual = EvaluationTensorOps<T>.ToTensor(actuals);
+        var errors = engine.TensorAbs(engine.TensorSubtract(actual, pred));
 
-        Array.Sort(errors);
+        // Middle order statistics in Array.Sort order (NaN first)
         int n = errors.Length;
-        double median = n % 2 == 1
-            ? errors[n / 2]
-            : (errors[n / 2 - 1] + errors[n / 2]) / 2.0;
-
-        return NumOps.FromDouble(median);
+        var (lower, upper) = EvaluationTensorOps<T>.OrderStatistics(errors, (n - 1) / 2, n / 2);
+        return n % 2 == 1
+            ? upper
+            : NumOps.Divide(NumOps.Add(lower, upper), NumOps.FromDouble(2.0));
     }
 
     /// <inheritdoc />

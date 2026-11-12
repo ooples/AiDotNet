@@ -2,6 +2,7 @@ using AiDotNet.Evaluation.Enums;
 using AiDotNet.Evaluation.Results.Core;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.Tensors.Engines.Autodiff;
 
 namespace AiDotNet.Evaluation.Metrics.Regression;
 
@@ -47,28 +48,22 @@ public class R2ScoreMetric<T> : IRegressionMetric<T>
             throw new ArgumentException("Predictions and actuals must have the same length.");
         if (predictions.Length == 0) return NumOps.Zero;
 
-        // Calculate mean of actuals
-        double sumActuals = 0;
-        for (int i = 0; i < actuals.Length; i++)
-            sumActuals += NumOps.ToDouble(actuals[i]);
-        double mean = sumActuals / actuals.Length;
+        var engine = AiDotNetEngine.Current;
+        using var noGrad = new NoGradScope<T>();
+        var pred = EvaluationTensorOps<T>.ToTensor(predictions);
+        var actual = EvaluationTensorOps<T>.ToTensor(actuals);
+        var tolerance = NumOps.FromDouble(1e-10);
 
-        // Calculate SS_res and SS_tot
-        double ssRes = 0, ssTot = 0;
-        for (int i = 0; i < actuals.Length; i++)
-        {
-            double actual = NumOps.ToDouble(actuals[i]);
-            double pred = NumOps.ToDouble(predictions[i]);
-            double diffRes = actual - pred;
-            double diffTot = actual - mean;
-            ssRes += diffRes * diffRes;
-            ssTot += diffTot * diffTot;
-        }
+        // SS_res and SS_tot, the latter around the mean of actuals
+        T mean = engine.TensorMean(actual);
+        T ssRes = engine.TensorSumOfSquares(engine.TensorSubtract(actual, pred));
+        T ssTot = engine.TensorSumOfSquares(engine.TensorSubtractScalar(actual, mean));
 
         // If actuals are constant (zero variance), R² is only 1 if predictions are also perfect
-        if (Math.Abs(ssTot) < 1e-10)
-            return Math.Abs(ssRes) < 1e-10 ? NumOps.One : NumOps.Zero;
-        return NumOps.FromDouble(1 - ssRes / ssTot);
+        if (NumOps.LessThan(NumOps.Abs(ssTot), tolerance))
+            return NumOps.LessThan(NumOps.Abs(ssRes), tolerance) ? NumOps.One : NumOps.Zero;
+
+        return NumOps.Subtract(NumOps.One, NumOps.Divide(ssRes, ssTot));
     }
 
     /// <inheritdoc />

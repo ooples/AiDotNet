@@ -2,6 +2,7 @@ using AiDotNet.Evaluation.Enums;
 using AiDotNet.Evaluation.Results.Core;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.Tensors.Engines.Autodiff;
 
 namespace AiDotNet.Evaluation.Metrics.Regression;
 
@@ -61,26 +62,19 @@ public class HuberLossMetric<T> : IRegressionMetric<T>
             throw new ArgumentException("Predictions and actuals must have the same length.");
         if (predictions.Length == 0) return NumOps.Zero;
 
-        double totalLoss = 0;
-        for (int i = 0; i < predictions.Length; i++)
-        {
-            double actual = NumOps.ToDouble(actuals[i]);
-            double pred = NumOps.ToDouble(predictions[i]);
-            double error = Math.Abs(actual - pred);
+        var engine = AiDotNetEngine.Current;
+        using var noGrad = new NoGradScope<T>();
+        var pred = EvaluationTensorOps<T>.ToTensor(predictions);
+        var actual = EvaluationTensorOps<T>.ToTensor(actuals);
+        var delta = NumOps.FromDouble(_delta);
+        var error = engine.TensorAbs(engine.TensorSubtract(actual, pred));
 
-            if (error <= _delta)
-            {
-                // Quadratic region
-                totalLoss += 0.5 * error * error;
-            }
-            else
-            {
-                // Linear region
-                totalLoss += _delta * (error - 0.5 * _delta);
-            }
-        }
+        // Quadratic region 0.5 * e^2 where e <= delta, linear region delta * (e - 0.5 * delta) elsewhere (NaN included)
+        var quadratic = engine.TensorMultiplyScalar(engine.TensorSquare(error), NumOps.FromDouble(0.5));
+        var linear = engine.TensorMultiplyScalar(engine.TensorSubtractScalar(error, NumOps.FromDouble(0.5 * _delta)), delta);
+        var inQuadratic = engine.TensorLessEqual(error, engine.TensorFullLike(error, delta));
 
-        return NumOps.FromDouble(totalLoss / predictions.Length);
+        return engine.TensorMean(engine.TensorWhere(inQuadratic, quadratic, linear));
     }
 
     /// <inheritdoc />

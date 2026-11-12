@@ -2,6 +2,7 @@ using AiDotNet.Evaluation.Enums;
 using AiDotNet.Evaluation.Results.Core;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.Tensors.Engines.Autodiff;
 
 namespace AiDotNet.Evaluation.Metrics.Regression;
 
@@ -48,39 +49,23 @@ public class PearsonCorrelationMetric<T> : IRegressionMetric<T>
             throw new ArgumentException("Predictions and actuals must have the same length.");
         if (predictions.Length < 2) return NumOps.Zero;
 
-        int n = predictions.Length;
+        var engine = AiDotNetEngine.Current;
+        using var noGrad = new NoGradScope<T>();
+        var pred = EvaluationTensorOps<T>.ToTensor(predictions);
+        var actual = EvaluationTensorOps<T>.ToTensor(actuals);
+        var tolerance = NumOps.FromDouble(1e-10);
 
-        // Compute means
-        double sumPred = 0, sumActual = 0;
-        for (int i = 0; i < n; i++)
-        {
-            sumPred += NumOps.ToDouble(predictions[i]);
-            sumActual += NumOps.ToDouble(actuals[i]);
-        }
-        double meanPred = sumPred / n;
-        double meanActual = sumActual / n;
+        // Covariance and standard deviations around the means
+        var diffPred = engine.TensorSubtractScalar(pred, engine.TensorMean(pred));
+        var diffActual = engine.TensorSubtractScalar(actual, engine.TensorMean(actual));
+        T covariance = engine.TensorSum(engine.TensorMultiply(diffPred, diffActual));
+        T stdPred = NumOps.Sqrt(engine.TensorSumOfSquares(diffPred));
+        T stdActual = NumOps.Sqrt(engine.TensorSumOfSquares(diffActual));
 
-        // Compute covariance and standard deviations
-        double covariance = 0;
-        double varPred = 0;
-        double varActual = 0;
-        for (int i = 0; i < n; i++)
-        {
-            double diffPred = NumOps.ToDouble(predictions[i]) - meanPred;
-            double diffActual = NumOps.ToDouble(actuals[i]) - meanActual;
-            covariance += diffPred * diffActual;
-            varPred += diffPred * diffPred;
-            varActual += diffActual * diffActual;
-        }
-
-        double stdPred = Math.Sqrt(varPred);
-        double stdActual = Math.Sqrt(varActual);
-
-        if (stdPred < 1e-10 || stdActual < 1e-10)
+        if (NumOps.LessThan(stdPred, tolerance) || NumOps.LessThan(stdActual, tolerance))
             return NumOps.Zero;
 
-        double r = covariance / (stdPred * stdActual);
-        return NumOps.FromDouble(r);
+        return NumOps.Divide(covariance, NumOps.Multiply(stdPred, stdActual));
     }
 
     /// <inheritdoc />

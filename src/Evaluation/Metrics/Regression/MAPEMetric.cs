@@ -2,6 +2,7 @@ using AiDotNet.Evaluation.Enums;
 using AiDotNet.Evaluation.Results.Core;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.Tensors.Engines.Autodiff;
 
 namespace AiDotNet.Evaluation.Metrics.Regression;
 
@@ -50,20 +51,18 @@ public class MAPEMetric<T> : IRegressionMetric<T>
             throw new ArgumentException("Predictions and actuals must have the same length.");
         if (predictions.Length == 0) return NumOps.Zero;
 
-        double sum = 0;
-        int validCount = 0;
-        for (int i = 0; i < predictions.Length; i++)
-        {
-            double actual = NumOps.ToDouble(actuals[i]);
-            double pred = NumOps.ToDouble(predictions[i]);
-            if (Math.Abs(actual) > _epsilon)
-            {
-                sum += Math.Abs((actual - pred) / actual);
-                validCount++;
-            }
-        }
+        var engine = AiDotNetEngine.Current;
+        using var noGrad = new NoGradScope<T>();
+        var pred = EvaluationTensorOps<T>.ToTensor(predictions);
+        var actual = EvaluationTensorOps<T>.ToTensor(actuals);
+        // Only samples with |actual| > epsilon count
+        var valid = engine.TensorGreaterThan(engine.TensorAbs(actual), NumOps.FromDouble(_epsilon));
+        int validCount = EvaluationTensorOps<T>.Count(valid);
+        if (validCount == 0) return NumOps.Zero;
 
-        return validCount > 0 ? NumOps.FromDouble(100.0 * sum / validCount) : NumOps.Zero;
+        var relative = engine.TensorAbs(engine.TensorDivide(engine.TensorSubtract(actual, pred), actual));
+        T sum = engine.TensorSum(engine.TensorWhere(valid, relative, engine.TensorZerosLike(relative)));
+        return NumOps.Divide(NumOps.Multiply(NumOps.FromDouble(100.0), sum), NumOps.FromDouble(validCount));
     }
 
     /// <inheritdoc />

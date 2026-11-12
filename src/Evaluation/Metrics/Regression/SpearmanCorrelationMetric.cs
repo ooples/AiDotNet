@@ -2,6 +2,7 @@ using AiDotNet.Evaluation.Enums;
 using AiDotNet.Evaluation.Results.Core;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.Tensors.Engines.Autodiff;
 
 namespace AiDotNet.Evaluation.Metrics.Regression;
 
@@ -48,72 +49,27 @@ public class SpearmanCorrelationMetric<T> : IRegressionMetric<T>
             throw new ArgumentException("Predictions and actuals must have the same length.");
         if (predictions.Length < 2) return NumOps.Zero;
 
-        int n = predictions.Length;
+        var engine = AiDotNetEngine.Current;
+        using var noGrad = new NoGradScope<T>();
 
-        // Compute ranks
-        var predRanks = ComputeRanks(predictions);
-        var actualRanks = ComputeRanks(actuals);
+        // Compute ranks (tied values share their mean rank)
+        var predRanks = EvaluationTensorOps<T>.MidRanks(EvaluationTensorOps<T>.ToTensor(predictions));
+        var actualRanks = EvaluationTensorOps<T>.MidRanks(EvaluationTensorOps<T>.ToTensor(actuals));
 
         // Compute Spearman correlation using Pearson correlation on ranks
         // This correctly handles ties (the d² formula assumes no ties)
-        double meanPred = 0, meanActual = 0;
-        for (int i = 0; i < n; i++)
-        {
-            meanPred += predRanks[i];
-            meanActual += actualRanks[i];
-        }
-        meanPred /= n;
-        meanActual /= n;
-
-        double cov = 0, varPred = 0, varActual = 0;
-        for (int i = 0; i < n; i++)
-        {
-            double dp = predRanks[i] - meanPred;
-            double da = actualRanks[i] - meanActual;
-            cov += dp * da;
-            varPred += dp * dp;
-            varActual += da * da;
-        }
+        var dp = engine.TensorSubtractScalar(predRanks, engine.TensorMean(predRanks));
+        var da = engine.TensorSubtractScalar(actualRanks, engine.TensorMean(actualRanks));
+        T cov = engine.TensorSum(engine.TensorMultiply(dp, da));
+        T varPred = engine.TensorSumOfSquares(dp);
+        T varActual = engine.TensorSumOfSquares(da);
 
         // Guard against zero variance (constant ranks)
-        if (varPred < 1e-12 || varActual < 1e-12)
+        var tolerance = NumOps.FromDouble(1e-12);
+        if (NumOps.LessThan(varPred, tolerance) || NumOps.LessThan(varActual, tolerance))
             return NumOps.Zero;
 
-        double rho = cov / Math.Sqrt(varPred * varActual);
-
-        return NumOps.FromDouble(rho);
-    }
-
-    private double[] ComputeRanks(ReadOnlySpan<T> values)
-    {
-        int n = values.Length;
-        var indexed = new (double value, int index)[n];
-        for (int i = 0; i < n; i++)
-        {
-            indexed[i] = (NumOps.ToDouble(values[i]), i);
-        }
-        Array.Sort(indexed, (a, b) => a.value.CompareTo(b.value));
-
-        var ranks = new double[n];
-        int i2 = 0;
-        while (i2 < n)
-        {
-            int start = i2;
-            double value = indexed[start].value;
-
-            // Find all tied values
-            while (i2 < n && Math.Abs(indexed[i2].value - value) < 1e-10)
-                i2++;
-
-            // Assign average rank to all tied values
-            double avgRank = (start + 1 + i2) / 2.0;
-            for (int j = start; j < i2; j++)
-            {
-                ranks[indexed[j].index] = avgRank;
-            }
-        }
-
-        return ranks;
+        return NumOps.Divide(cov, NumOps.Sqrt(NumOps.Multiply(varPred, varActual)));
     }
 
     /// <inheritdoc />

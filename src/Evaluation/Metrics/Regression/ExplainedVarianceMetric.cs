@@ -2,6 +2,7 @@ using AiDotNet.Evaluation.Enums;
 using AiDotNet.Evaluation.Results.Core;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.Tensors.Engines.Autodiff;
 
 namespace AiDotNet.Evaluation.Metrics.Regression;
 
@@ -43,30 +44,19 @@ public class ExplainedVarianceMetric<T> : IRegressionMetric<T>
 
         int n = predictions.Length;
 
-        // Calculate means
-        double sumActuals = 0, sumResiduals = 0;
-        for (int i = 0; i < n; i++)
-        {
-            sumActuals += NumOps.ToDouble(actuals[i]);
-            sumResiduals += NumOps.ToDouble(actuals[i]) - NumOps.ToDouble(predictions[i]);
-        }
-        double meanActuals = sumActuals / n;
-        double meanResiduals = sumResiduals / n;
+        var engine = AiDotNetEngine.Current;
+        using var noGrad = new NoGradScope<T>();
+        var pred = EvaluationTensorOps<T>.ToTensor(predictions);
+        var actual = EvaluationTensorOps<T>.ToTensor(actuals);
+        var tolerance = NumOps.FromDouble(1e-10);
 
-        // Calculate variances
-        double varActuals = 0, varResiduals = 0;
-        for (int i = 0; i < n; i++)
-        {
-            double actual = NumOps.ToDouble(actuals[i]);
-            double residual = actual - NumOps.ToDouble(predictions[i]);
-            double diffActuals = actual - meanActuals;
-            double diffResiduals = residual - meanResiduals;
-            varActuals += diffActuals * diffActuals;
-            varResiduals += diffResiduals * diffResiduals;
-        }
+        // Explained variance = 1 - Var(actual - pred) / Var(actual), each as a sum of squares around its mean
+        var residuals = engine.TensorSubtract(actual, pred);
+        T varActuals = engine.TensorSumOfSquares(engine.TensorSubtractScalar(actual, engine.TensorMean(actual)));
+        T varResiduals = engine.TensorSumOfSquares(engine.TensorSubtractScalar(residuals, engine.TensorMean(residuals)));
 
-        if (Math.Abs(varActuals) < 1e-10) return NumOps.One;
-        return NumOps.FromDouble(1 - varResiduals / varActuals);
+        if (NumOps.LessThan(NumOps.Abs(varActuals), tolerance)) return NumOps.One;
+        return NumOps.Subtract(NumOps.One, NumOps.Divide(varResiduals, varActuals));
     }
 
     /// <inheritdoc />

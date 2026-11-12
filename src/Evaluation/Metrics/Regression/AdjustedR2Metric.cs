@@ -2,6 +2,7 @@ using AiDotNet.Evaluation.Enums;
 using AiDotNet.Evaluation.Results.Core;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.Tensors.Engines.Autodiff;
 
 namespace AiDotNet.Evaluation.Metrics.Regression;
 
@@ -60,31 +61,26 @@ public class AdjustedR2Metric<T> : IRegressionMetric<T>
         int n = predictions.Length;
         if (n <= _numPredictors + 1) return NumOps.Zero; // Not enough samples
 
-        // Calculate R²
-        double sumActuals = 0;
-        for (int i = 0; i < n; i++)
-            sumActuals += NumOps.ToDouble(actuals[i]);
-        double mean = sumActuals / n;
+        var engine = AiDotNetEngine.Current;
+        using var noGrad = new NoGradScope<T>();
+        var pred = EvaluationTensorOps<T>.ToTensor(predictions);
+        var actual = EvaluationTensorOps<T>.ToTensor(actuals);
+        var tolerance = NumOps.FromDouble(1e-10);
 
-        double ssRes = 0, ssTot = 0;
-        for (int i = 0; i < n; i++)
-        {
-            double actual = NumOps.ToDouble(actuals[i]);
-            double pred = NumOps.ToDouble(predictions[i]);
-            double diffRes = actual - pred;
-            double diffTot = actual - mean;
-            ssRes += diffRes * diffRes;
-            ssTot += diffTot * diffTot;
-        }
+        // Calculate R² from SS_res and SS_tot around the mean of actuals
+        T mean = engine.TensorMean(actual);
+        T ssRes = engine.TensorSumOfSquares(engine.TensorSubtract(actual, pred));
+        T ssTot = engine.TensorSumOfSquares(engine.TensorSubtractScalar(actual, mean));
 
         // If actuals are constant (zero variance), R² is only 1 if predictions are also perfect
-        if (Math.Abs(ssTot) < 1e-10)
-            return Math.Abs(ssRes) < 1e-10 ? NumOps.One : NumOps.Zero;
-        double r2 = 1 - ssRes / ssTot;
+        if (NumOps.LessThan(NumOps.Abs(ssTot), tolerance))
+            return NumOps.LessThan(NumOps.Abs(ssRes), tolerance) ? NumOps.One : NumOps.Zero;
+
+        T r2 = NumOps.Subtract(NumOps.One, NumOps.Divide(ssRes, ssTot));
 
         // Adjusted R² = 1 - (1 - R²) * (n - 1) / (n - p - 1)
-        double adjustedR2 = 1 - (1 - r2) * (n - 1.0) / (n - _numPredictors - 1.0);
-        return NumOps.FromDouble(adjustedR2);
+        T scale = NumOps.FromDouble((n - 1.0) / (n - _numPredictors - 1.0));
+        return NumOps.Subtract(NumOps.One, NumOps.Multiply(NumOps.Subtract(NumOps.One, r2), scale));
     }
 
     /// <inheritdoc />

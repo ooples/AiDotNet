@@ -2,6 +2,7 @@ using AiDotNet.Evaluation.Enums;
 using AiDotNet.Evaluation.Results.Core;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.Tensors.Engines.Autodiff;
 
 namespace AiDotNet.Evaluation.Metrics.Regression;
 
@@ -47,17 +48,15 @@ public class WeightedMAPEMetric<T> : IRegressionMetric<T>
             throw new ArgumentException("Predictions and actuals must have the same length.");
         if (predictions.Length == 0) return NumOps.Zero;
 
-        double sumAbsError = 0;
-        double sumAbsActual = 0;
-        for (int i = 0; i < predictions.Length; i++)
-        {
-            double actual = NumOps.ToDouble(actuals[i]);
-            double pred = NumOps.ToDouble(predictions[i]);
-            sumAbsError += Math.Abs(actual - pred);
-            sumAbsActual += Math.Abs(actual);
-        }
-
-        return sumAbsActual > 1e-10 ? NumOps.FromDouble(100.0 * sumAbsError / sumAbsActual) : NumOps.Zero;
+        var engine = AiDotNetEngine.Current;
+        using var noGrad = new NoGradScope<T>();
+        var pred = EvaluationTensorOps<T>.ToTensor(predictions);
+        var actual = EvaluationTensorOps<T>.ToTensor(actuals);
+        T sumAbsError = engine.TensorSum(engine.TensorAbs(engine.TensorSubtract(actual, pred)));
+        T sumAbsActual = engine.TensorSum(engine.TensorAbs(actual));
+        return NumOps.GreaterThan(sumAbsActual, NumOps.FromDouble(1e-10))
+            ? NumOps.Divide(NumOps.Multiply(NumOps.FromDouble(100.0), sumAbsError), sumAbsActual)
+            : NumOps.Zero;
     }
 
     /// <inheritdoc />

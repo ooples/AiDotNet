@@ -143,6 +143,44 @@ internal static class EvaluationTensorOps<T>
     }
 
     /// <summary>
+    /// Element-wise <c>Math.Max(value, floor)</c>, which returns NaN for a NaN value (the engine max returns the
+    /// floor).
+    /// </summary>
+    internal static Tensor<T> MaxPreservingNaN(Tensor<T> values, T floor)
+    {
+        using var noGrad = new NoGradScope<T>();
+        var engine = AiDotNetEngine.Current;
+        return engine.TensorWhere(engine.TensorIsNan(values), values, engine.TensorMax(values, floor));
+    }
+
+    /// <summary>The sum and the number of the finite entries (neither NaN nor infinite).</summary>
+    internal static (T Sum, int Count) FiniteSumAndCount(Tensor<T> values)
+    {
+        using var noGrad = new NoGradScope<T>();
+        var engine = AiDotNetEngine.Current;
+        var finite = engine.TensorIsFinite(values);
+        var finiteMask = engine.TensorWhere(finite, engine.TensorOnesLike(values), engine.TensorZerosLike(values));
+        var kept = engine.TensorWhere(finite, values, engine.TensorZerosLike(values));
+        return (engine.TensorSum(kept), Count(finiteMask));
+    }
+
+    /// <summary>
+    /// 1-based ranks with tied values sharing the mean of their positions (scipy's <c>rankdata</c>, method
+    /// "average").
+    /// </summary>
+    internal static Tensor<T> MidRanks(Tensor<T> values)
+    {
+        using var noGrad = new NoGradScope<T>();
+        var engine = AiDotNetEngine.Current;
+        var sorted = engine.TensorSort(values).Values;
+        // A value's ties occupy sorted positions [below, atOrBelow); their mean 1-based rank is (below + atOrBelow + 1) / 2.
+        var below = engine.TensorSearchSorted(sorted, values, false);
+        var atOrBelow = engine.TensorSearchSorted(sorted, values, true);
+        var doubled = engine.TensorAddScalar(engine.TensorAdd(below.Cast<T>(), atOrBelow.Cast<T>()), NumOps.One);
+        return engine.TensorMultiplyScalar(doubled, NumOps.FromDouble(0.5));
+    }
+
+    /// <summary>
     /// The distinct labels of the given tensors in ascending order, with a single NaN last when any is present
     /// (one class, as a <c>HashSet&lt;double&gt;</c> of the labels had).
     /// </summary>
@@ -230,10 +268,16 @@ internal static class EvaluationTensorOps<T>
     /// then ascending).
     /// </summary>
     internal static (T Lower, T Upper) OrderStatistics(List<T> values, int lowerIndex, int upperIndex)
+        => OrderStatistics(new Tensor<T>(values.ToArray(), new[] { values.Count }), lowerIndex, upperIndex);
+
+    /// <summary>
+    /// Returns two order statistics of a rank-1 tensor, ordered as <c>Array.Sort</c> orders doubles (NaN first,
+    /// then ascending).
+    /// </summary>
+    internal static (T Lower, T Upper) OrderStatistics(Tensor<T> tensor, int lowerIndex, int upperIndex)
     {
         using var noGrad = new NoGradScope<T>();
         var engine = AiDotNetEngine.Current;
-        var tensor = new Tensor<T>(values.ToArray(), new[] { values.Count });
         var sorted = engine.TensorSort(tensor).Values;
         int nanCount = Count(NanMask(tensor));
         return (SortedAt(sorted, nanCount, lowerIndex), SortedAt(sorted, nanCount, upperIndex));
