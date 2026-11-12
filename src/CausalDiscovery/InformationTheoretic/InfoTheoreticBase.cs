@@ -43,22 +43,8 @@ public abstract class InfoTheoreticBase<T> : CausalDiscoveryBase<T>
     /// </summary>
     protected double ComputeGaussianMI(Matrix<T> data, int col1, int col2)
     {
-        int n = data.Rows;
-        double m1 = 0, m2 = 0;
-        for (int i = 0; i < n; i++) { m1 += NumOps.ToDouble(data[i, col1]); m2 += NumOps.ToDouble(data[i, col2]); }
-        m1 /= n; m2 /= n;
-
-        double s11 = 0, s22 = 0, s12 = 0;
-        for (int i = 0; i < n; i++)
-        {
-            double d1 = NumOps.ToDouble(data[i, col1]) - m1, d2 = NumOps.ToDouble(data[i, col2]) - m2;
-            s11 += d1 * d1; s22 += d2 * d2; s12 += d1 * d2;
-        }
-
-        s11 /= n; s22 /= n; s12 /= n;
-        double corr = (s11 > 1e-15 && s22 > 1e-15) ? s12 / Math.Sqrt(s11 * s22) : 0;
-        corr = Math.Max(-0.9999, Math.Min(0.9999, corr));
-        return -0.5 * Math.Log(1 - corr * corr);
+        return NumOps.ToDouble(CausalTensorHelpers.GaussianMutualInformation(
+            Engine.GetColumn(data, col1).AsTensor(), Engine.GetColumn(data, col2).AsTensor()));
     }
 
     /// <summary>
@@ -66,16 +52,10 @@ public abstract class InfoTheoreticBase<T> : CausalDiscoveryBase<T>
     /// </summary>
     protected double ComputeEntropy(Matrix<T> data, int col)
     {
-        int n = data.Rows;
-        double mean = 0;
-        for (int i = 0; i < n; i++) mean += NumOps.ToDouble(data[i, col]);
-        mean /= n;
-
-        double variance = 0;
-        for (int i = 0; i < n; i++) { double d = NumOps.ToDouble(data[i, col]) - mean; variance += d * d; }
-        variance /= n;
-
-        return 0.5 * Math.Log(2 * Math.PI * Math.E * (variance + 1e-15));
+        T variance = NumOps.Divide(CausalTensorHelpers.CenteredSumOfSquares(data, col), NumOps.FromDouble(data.Rows));
+        T entropy = NumOps.Multiply(NumOps.FromDouble(0.5), NumOps.Log(NumOps.Multiply(
+            NumOps.FromDouble(2 * Math.PI * Math.E), NumOps.Add(variance, NumOps.FromDouble(1e-15)))));
+        return NumOps.ToDouble(entropy);
     }
 
 }

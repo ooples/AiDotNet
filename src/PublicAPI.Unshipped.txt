@@ -22631,3 +22631,12 @@ AiDotNet.Optimizers.GradientBasedOptimizerBase<T, TInput, TOutput>.CreateLineSea
 AiDotNet.Optimizers.OptimizerBase<T, TInput, TOutput>.FitnessChangeBelow(T previous, T current, double tolerance) -> bool
 *REMOVED*AiDotNet.Regression.DeepHit<T>.PredictPMF(AiDotNet.Tensors.LinearAlgebra.Matrix<T>! input) -> T[,,]!
 AiDotNet.Regression.DeepHit<T>.PredictPMF(AiDotNet.Tensors.LinearAlgebra.Matrix<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+*REMOVED*AiDotNet.CausalDiscovery.DeepLearning.DeepCausalBase<T>.BuildFinalAdjacency(double[,]! learnedP, AiDotNet.Tensors.LinearAlgebra.Matrix<T>! cov, int d) -> AiDotNet.Tensors.LinearAlgebra.Matrix<T>!
+*REMOVED*AiDotNet.CausalDiscovery.DeepLearning.DeepCausalBase<T>.BuildFinalAdjacency(double[,]! learnedP, AiDotNet.Tensors.LinearAlgebra.Matrix<T>! cov, int d, double learnedThreshold) -> AiDotNet.Tensors.LinearAlgebra.Matrix<T>!
+*REMOVED*static AiDotNet.CausalDiscovery.DeepLearning.DeepCausalBase<T>.ProjectToDag(double[,]! p, int d) -> double[,]!
+*REMOVED*static AiDotNet.CausalDiscovery.DeepLearning.DeepCausalBase<T>.ProjectToDag(double[,]! p, int d, double[]! sourceScore) -> double[,]!
+AiDotNet.CausalDiscovery.DeepLearning.DeepCausalBase<T>.BuildFinalAdjacency(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! learnedP, AiDotNet.Tensors.LinearAlgebra.Matrix<T>! cov, int d) -> AiDotNet.Tensors.LinearAlgebra.Matrix<T>!
+AiDotNet.CausalDiscovery.DeepLearning.DeepCausalBase<T>.BuildFinalAdjacency(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! learnedP, AiDotNet.Tensors.LinearAlgebra.Matrix<T>! cov, int d, double learnedThreshold) -> AiDotNet.Tensors.LinearAlgebra.Matrix<T>!
+AiDotNet.CausalDiscovery.DeepLearning.DeepCausalBase<T>.ProjectToDag(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! p, int d) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+AiDotNet.CausalDiscovery.DeepLearning.DeepCausalBase<T>.ProjectToDag(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! p, int d, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! sourceScore) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+AiDotNet.CausalDiscovery.TimeSeries.TiMINoAlgorithm<T>.ModelFitRejected.get -> bool

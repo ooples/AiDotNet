@@ -78,7 +78,7 @@ public class IterativeMCMCAlgorithm<T> : BayesianCausalBase<T>
         int samplesPerRestart = NumSamples / _numRestarts;
         int burnIn = samplesPerRestart / 5;
 
-        var edgeCounts = new Matrix<T>(d, d);
+        var edgeCounts = new int[d * d];
         int totalSamples = 0;
 
         var parentSets = new HashSet<int>[d];
@@ -164,7 +164,7 @@ public class IterativeMCMCAlgorithm<T> : BayesianCausalBase<T>
                 {
                     for (int j = 0; j < d; j++)
                         foreach (int p in parentSets[j])
-                            edgeCounts[p, j] = NumOps.Add(edgeCounts[p, j], NumOps.One);
+                            edgeCounts[p * d + j]++;
                     totalSamples++;
                 }
             }
@@ -177,26 +177,14 @@ public class IterativeMCMCAlgorithm<T> : BayesianCausalBase<T>
         }
 
         // Build result with OLS weights for edges with posterior > 0.5
-        var result = new Matrix<T>(d, d);
-        if (totalSamples > 0)
-        {
-            T sampleCountT = NumOps.FromDouble(totalSamples);
-            T halfT = NumOps.FromDouble(0.5);
-            T epsT = NumOps.FromDouble(1e-6);
-            for (int i = 0; i < d; i++)
-                for (int j = 0; j < d; j++)
-                {
-                    T freq = NumOps.Divide(edgeCounts[i, j], sampleCountT);
-                    if (NumOps.GreaterThan(freq, halfT))
-                    {
-                        T weight = ComputeOLSWeight(cov, i, j);
-                        if (NumOps.GreaterThan(NumOps.Abs(weight), epsT))
-                            result[i, j] = weight;
-                    }
-                }
-        }
+        if (totalSamples == 0)
+            return new Matrix<T>(d, d);
 
-        return result;
+        var frequency = Engine.TensorDivideScalar(new Tensor<int>(edgeCounts, new[] { d, d }).Cast<T>(),
+            NumOps.FromDouble(totalSamples));
+        var weights = ComputePairwiseOLSWeights(cov);
+        var significant = KeepWhereAbove(Engine.TensorAbs(weights), 1e-6, weights);
+        return KeepWhereAbove(frequency, 0.5, significant).ToMatrix();
     }
 
     private double ComputeDAGScore(Matrix<T> data, HashSet<int>[] parentSets, int d)
@@ -229,14 +217,5 @@ public class IterativeMCMCAlgorithm<T> : BayesianCausalBase<T>
         }
 
         return false;
-    }
-
-    private T ComputeOLSWeight(Matrix<T> cov, int from, int to)
-    {
-        T varFrom = cov[from, from];
-        T eps = NumOps.FromDouble(1e-10);
-        if (!NumOps.GreaterThan(varFrom, eps))
-            return NumOps.Zero;
-        return NumOps.Divide(cov[from, to], varFrom);
     }
 }
