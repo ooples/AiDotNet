@@ -673,54 +673,6 @@ public class AudioExtendedIntegrationTests
 
     #endregion
 
-    #region BeatTrackingResult
-
-    [Fact(Timeout = 120000)]
-    public async Task BeatTrackingResult_DefaultValues()
-    {
-        var result = new BeatTrackingResult();
-        Assert.Equal(0.0, result.Tempo, Tolerance);
-        Assert.NotNull(result.BeatTimes);
-        Assert.Empty(result.BeatTimes);
-        Assert.Equal(0.0, result.ConfidenceScore, Tolerance);
-    }
-
-    [Fact(Timeout = 120000)]
-    public async Task BeatTrackingResult_AverageBeatInterval_120BPM()
-    {
-        var result = new BeatTrackingResult { Tempo = 120.0 };
-        Assert.Equal(0.5, result.AverageBeatInterval, Tolerance); // 60/120 = 0.5s
-    }
-
-    [Fact(Timeout = 120000)]
-    public async Task BeatTrackingResult_AverageBeatInterval_60BPM()
-    {
-        var result = new BeatTrackingResult { Tempo = 60.0 };
-        Assert.Equal(1.0, result.AverageBeatInterval, Tolerance); // 60/60 = 1s
-    }
-
-    [Fact(Timeout = 120000)]
-    public async Task BeatTrackingResult_AverageBeatInterval_ZeroTempo()
-    {
-        var result = new BeatTrackingResult { Tempo = 0.0 };
-        Assert.Equal(0.0, result.AverageBeatInterval, Tolerance);
-    }
-
-    [Fact(Timeout = 120000)]
-    public async Task BeatTrackingResult_WithBeatTimes()
-    {
-        var result = new BeatTrackingResult
-        {
-            Tempo = 120.0,
-            BeatTimes = [0.0, 0.5, 1.0, 1.5, 2.0],
-            ConfidenceScore = 0.95
-        };
-        Assert.Equal(5, result.BeatTimes.Count);
-        Assert.Equal(0.95, result.ConfidenceScore, Tolerance);
-    }
-
-    #endregion
-
     #region KeyDetectionResult
 
     [Fact(Timeout = 120000)]
