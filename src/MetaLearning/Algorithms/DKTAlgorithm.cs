@@ -143,13 +143,18 @@ public partial class DKTAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInpu
     private double ComputeKernel(Vector<T> a, Vector<T> b)
     {
         double lengthScale = Math.Exp(NumOps.ToDouble(_kernelParams[0]));
-        double sqDist = 0;
+
+        // The kernel value feeds the double-precision GP solve, so the squared distance leaves T once here.
         int minLen = Math.Min(a.Length, b.Length);
-        for (int i = 0; i < minLen; i++)
+        double sqDist = 0;
+        if (minLen > 0)
         {
-            double diff = NumOps.ToDouble(a[i]) - NumOps.ToDouble(b[i]);
-            sqDist += diff * diff;
+            var diff = Engine.Subtract(
+                a.Length == minLen ? a : a.GetSubVector(0, minLen),
+                b.Length == minLen ? b : b.GetSubVector(0, minLen));
+            sqDist = NumOps.ToDouble(Engine.DotProduct(diff, diff));
         }
+
         return Math.Exp(-sqDist / (2.0 * lengthScale * lengthScale));
     }
 
@@ -175,27 +180,7 @@ public partial class DKTAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInpu
             var gpWeights = GPPredict(supportFeatures, queryFeatures);
             if (gpWeights != null && supportFeatures != null && supportFeatures.Length > 0)
             {
-                double sumRatio = 0;
-                int count = 0;
-                for (int i = 0; i < Math.Min(supportFeatures.Length, gpWeights.Length); i++)
-                {
-                    double rawVal = NumOps.ToDouble(supportFeatures[i]);
-                    double gpVal = NumOps.ToDouble(gpWeights[i]);
-                    if (Math.Abs(rawVal) > 1e-10)
-                    {
-                        sumRatio += Math.Max(0.5, Math.Min(2.0, gpVal / rawVal));
-                        count++;
-                    }
-                }
-                if (count > 0)
-                {
-                    double avgRatio = sumRatio / count;
-                    var currentParams = ParamModel.GetParameters();
-                    var modulatedParams = new Vector<T>(currentParams.Length);
-                    for (int i = 0; i < currentParams.Length; i++)
-                        modulatedParams[i] = NumOps.Multiply(currentParams[i], NumOps.FromDouble(avgRatio));
-                    ParamModel.SetParameters(modulatedParams);
-                }
+                ParameterModulation.ScaleByMeanClampedRatio(Engine, ParamModel, supportFeatures, gpWeights, 0.5, 2.0, 1e-10);
             }
 
             // GP-modulated query loss (deep kernel affects training loss)
@@ -234,27 +219,7 @@ public partial class DKTAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInpu
             var gpWeights = GPPredict(supportFeatures, queryFeatures);
             if (gpWeights != null && supportFeatures != null && supportFeatures.Length > 0)
             {
-                double sumRatio = 0;
-                int count = 0;
-                for (int i = 0; i < Math.Min(supportFeatures.Length, gpWeights.Length); i++)
-                {
-                    double rawVal = NumOps.ToDouble(supportFeatures[i]);
-                    double gpVal = NumOps.ToDouble(gpWeights[i]);
-                    if (Math.Abs(rawVal) > 1e-10)
-                    {
-                        sumRatio += Math.Max(0.5, Math.Min(2.0, gpVal / rawVal));
-                        count++;
-                    }
-                }
-                if (count > 0)
-                {
-                    double avgRatio = sumRatio / count;
-                    var currentParams = ParamModel.GetParameters();
-                    var modulatedParams = new Vector<T>(currentParams.Length);
-                    for (int i = 0; i < currentParams.Length; i++)
-                        modulatedParams[i] = NumOps.Multiply(currentParams[i], NumOps.FromDouble(avgRatio));
-                    ParamModel.SetParameters(modulatedParams);
-                }
+                ParameterModulation.ScaleByMeanClampedRatio(Engine, ParamModel, supportFeatures, gpWeights, 0.5, 2.0, 1e-10);
             }
 
             totalLoss += NumOps.ToDouble(ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput));
@@ -403,10 +368,7 @@ public partial class DKTAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInpu
             int start = i * featureDim;
             int len = Math.Min(featureDim, flat.Length - start);
             if (len <= 0) break;
-            var vec = new Vector<T>(len);
-            for (int d = 0; d < len; d++)
-                vec[d] = flat[start + d];
-            result.Add(vec);
+            result.Add(flat.GetSubVector(start, len));
         }
         return result;
     }
