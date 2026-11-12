@@ -61,6 +61,7 @@ public class TimeSeriesRegressionOptions<T> : RegressionOptions<T>
     /// (like the last three days' values). Higher values help capture longer-term patterns but require more data
     /// and can make the model more complex.</para>
     /// </remarks>
+    [AiDotNet.Attributes.OptionBehaviourExempt("RWKVForecaster is a neural RWKV-7 sequence forecaster trained by gradient steps; it reads the whole ContextLength window, not a fixed set of lagged regressors.", ModelType = typeof(AiDotNet.Finance.Forecasting.StateSpace.RWKVForecaster<>))]
     public int LagOrder { get; set; } = 1;
 
     /// <summary>
@@ -77,6 +78,7 @@ public class TimeSeriesRegressionOptions<T> : RegressionOptions<T>
     /// is generally increasing or decreasing (like a growing customer base or declining costs). If your data doesn't
     /// have a clear direction over time, you might set this to false to simplify the model.</para>
     /// </remarks>
+    [AiDotNet.Attributes.OptionBehaviourExempt("RWKVForecaster is a neural RWKV-7 sequence forecaster trained by gradient steps; it has no explicit trend term (RevIN normalizes each window's level and scale).", ModelType = typeof(AiDotNet.Finance.Forecasting.StateSpace.RWKVForecaster<>))]
     public bool IncludeTrend { get; set; } = true;
 
     /// <summary>
@@ -95,6 +97,7 @@ public class TimeSeriesRegressionOptions<T> : RegressionOptions<T>
     /// weekly patterns, you'd use 7. For quarterly data with yearly patterns, you'd use 4. This helps the model
     /// recognize and predict these recurring cycles.</para>
     /// </remarks>
+    [AiDotNet.Attributes.OptionBehaviourExempt("RWKVForecaster is a neural RWKV-7 sequence forecaster trained by gradient steps; it has no explicit seasonal term.", ModelType = typeof(AiDotNet.Finance.Forecasting.StateSpace.RWKVForecaster<>))]
     public int SeasonalPeriod { get; set; } = 0; // 0 means no seasonality
 
     /// <summary>
@@ -113,6 +116,7 @@ public class TimeSeriesRegressionOptions<T> : RegressionOptions<T>
     /// values for several days in a row, this correction helps it recognize and fix that pattern. You should
     /// generally leave this enabled unless you have a specific reason to disable it.</para>
     /// </remarks>
+    [AiDotNet.Attributes.OptionBehaviourExempt("RWKVForecaster is a neural RWKV-7 sequence forecaster trained by gradient steps; residual autocorrelation correction belongs to the regression forecasters.", ModelType = typeof(AiDotNet.Finance.Forecasting.StateSpace.RWKVForecaster<>))]
     public bool AutocorrelationCorrection { get; set; } = true;
 
     /// <summary>
@@ -131,6 +135,7 @@ public class TimeSeriesRegressionOptions<T> : RegressionOptions<T>
     /// or VAR (Vector AutoRegression, good for analyzing relationships between multiple time series).
     /// Unless you're familiar with the different methods, starting with ARIMA is usually a good choice.</para>
     /// </remarks>
+    [AiDotNet.Attributes.OptionBehaviourExempt("RWKVForecaster is a neural RWKV-7 sequence forecaster trained by gradient steps; the regression ModelType selector does not apply.", ModelType = typeof(AiDotNet.Finance.Forecasting.StateSpace.RWKVForecaster<>))]
     public TimeSeriesModelType ModelType { get; set; } = TimeSeriesModelType.ARIMA;
 
     /// <summary>
@@ -178,6 +183,7 @@ public class TimeSeriesRegressionOptions<T> : RegressionOptions<T>
     /// this if you know your predictions should stay within specific bounds (e.g., set to
     /// 100 for percentage data that should never exceed 100).</para>
     /// </remarks>
+    [AiDotNet.Attributes.OptionBehaviourExempt("RWKVForecaster is a neural RWKV-7 sequence forecaster trained by gradient steps; its forecasts are denormalized by RevIN and not clamped.", ModelType = typeof(AiDotNet.Finance.Forecasting.StateSpace.RWKVForecaster<>))]
     public double? MaxPredictionAbsValue { get; set; } = null;
 
     /// <summary>
@@ -198,6 +204,7 @@ public class TimeSeriesRegressionOptions<T> : RegressionOptions<T>
     private int _maxTrainingTimeSeconds;
 
     /// <summary>Wall-clock training budget in seconds.</summary>
+    [AiDotNet.Attributes.OptionBehaviourExempt("RWKVForecaster is a neural RWKV-7 sequence forecaster trained by gradient steps; each Train call is one optimizer step, so the regression fitting time limit does not apply.", ModelType = typeof(AiDotNet.Finance.Forecasting.StateSpace.RWKVForecaster<>))]
     public int MaxTrainingTimeSeconds
     {
         get => _maxTrainingTimeSeconds;
@@ -235,6 +242,7 @@ public class TimeSeriesRegressionOptions<T> : RegressionOptions<T>
     /// better, instead of always running a fixed number of passes, which saves time and avoids
     /// wasted work.</para>
     /// </remarks>
+    [AiDotNet.Attributes.OptionBehaviourExempt("RWKVForecaster is a neural RWKV-7 sequence forecaster trained by gradient steps; each Train call is one optimizer step, so the regression fitting loop's early stopping does not apply.", ModelType = typeof(AiDotNet.Finance.Forecasting.StateSpace.RWKVForecaster<>))]
     public bool UseEarlyStopping { get; set; } = false;
 
     /// <summary>
@@ -249,6 +257,7 @@ public class TimeSeriesRegressionOptions<T> : RegressionOptions<T>
     private int _earlyStoppingPatience = 10;
 
     /// <summary>Number of epochs without improvement after which training stops early.</summary>
+    [AiDotNet.Attributes.OptionBehaviourExempt("RWKVForecaster is a neural RWKV-7 sequence forecaster trained by gradient steps; each Train call is one optimizer step, so the regression fitting loop's early stopping does not apply.", ModelType = typeof(AiDotNet.Finance.Forecasting.StateSpace.RWKVForecaster<>))]
     public int EarlyStoppingPatience
     {
         get => _earlyStoppingPatience;
@@ -275,6 +284,7 @@ public class TimeSeriesRegressionOptions<T> : RegressionOptions<T>
     private double _earlyStoppingMinDelta = 1e-4;
 
     /// <summary>Smallest improvement in validation loss that counts as progress for early stopping.</summary>
+    [AiDotNet.Attributes.OptionBehaviourExempt("RWKVForecaster is a neural RWKV-7 sequence forecaster trained by gradient steps; each Train call is one optimizer step, so the regression fitting loop's early stopping does not apply.", ModelType = typeof(AiDotNet.Finance.Forecasting.StateSpace.RWKVForecaster<>))]
     public double EarlyStoppingMinDelta
     {
         get => _earlyStoppingMinDelta;

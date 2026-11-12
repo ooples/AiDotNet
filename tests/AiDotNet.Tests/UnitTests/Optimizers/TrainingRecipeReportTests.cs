@@ -107,6 +107,23 @@ public class TrainingRecipeReportTests
     }
 
     [Fact]
+    public void ADeclaredWeightDecayReachesAnOptimizerWithoutADecaySetting()
+    {
+        // Adam has no weight-decay property, so NodeClassification's 5e-4 (Kipf and Welling 2017) used to be dropped
+        // with no report; 43 recipes lost theirs that way. It now applies as PyTorch's weight_decay does, g + λθ,
+        // which is explicit L2 of strength λ.
+        var model = new NodeClassificationModel<double>();
+        var built = PaperOptimizerFactory.CreateFor<double, Tensor<double>, Tensor<double>>(model);
+        var options = Assert.IsType<AiDotNet.Models.Options.AdamOptimizerOptions<double, Tensor<double>, Tensor<double>>>(
+            ((AiDotNet.Interfaces.IOptimizer<double, Tensor<double>, Tensor<double>>)built!).GetOptions());
+
+        Assert.True(options.RegularizationExplicitlySet, "an implicit default L2 is not applied by Train; the decay must be explicit");
+        var l2 = Assert.IsType<AiDotNet.Regularization.L2Regularization<double, Tensor<double>, Tensor<double>>>(options.Regularization);
+        Assert.Equal(5e-4, l2.GetOptions().Strength, precision: 15);
+        Assert.Equal(RecipeFidelity.Exact, PaperOptimizerFactory.ReportsFor(model)[0].Fidelity);
+    }
+
+    [Fact]
     public void AComponentDeclarationIsSelectedOverTheModelWideOne()
     {
         // Composite models state different settings per part -- Stable Audio Open gives separate

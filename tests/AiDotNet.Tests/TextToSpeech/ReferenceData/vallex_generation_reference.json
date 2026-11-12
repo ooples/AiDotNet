@@ -1,0 +1,244 @@
+{
+  "code_revision": "3faaf8ccadb154d63b38070caf518ce9309ea0f4",
+  "source_sha256": "23fed64df2f1b27ac4ec434feb7730d5dced578b5c825cbacf4139aee80cd52f",
+  "torch_version": "2.6.0+cpu",
+  "scope": "Community reproduction, not unreleased Microsoft checkpoint; controlled neural logits and categorical draws.",
+  "controller_cases": [
+    {
+      "prepend_bos": false,
+      "text_length": 1,
+      "prompt_frames": 1,
+      "max_codes_per_text_token": 16,
+      "generated_codes": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "prepend_bos": true,
+      "text_length": 1,
+      "prompt_frames": 1,
+      "max_codes_per_text_token": 16,
+      "generated_codes": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "prepend_bos": false,
+      "text_length": 2,
+      "prompt_frames": 1,
+      "max_codes_per_text_token": 16,
+      "generated_codes": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "prepend_bos": true,
+      "text_length": 2,
+      "prompt_frames": 1,
+      "max_codes_per_text_token": 16,
+      "generated_codes": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    }
+  ],
+  "sampling_cases": [
+    {
+      "logits": [
+        0,
+        1,
+        2,
+        3,
+        4
+      ],
+      "temperature": 1.0,
+      "top_k": 1,
+      "probabilities": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "uniforms": [
+        0.0,
+        1e-06,
+        0.1,
+        0.5,
+        0.8,
+        0.999999
+      ]
+    },
+    {
+      "logits": [
+        3,
+        2,
+        2,
+        2,
+        1
+      ],
+      "temperature": 0.8,
+      "top_k": 2,
+      "probabilities": [
+        0.5377748110289073,
+        0.15407506299036422,
+        0.15407506299036422,
+        0.15407506299036422,
+        0.0
+      ],
+      "uniforms": [
+        0.0,
+        1e-06,
+        0.1,
+        0.5,
+        0.8,
+        0.999999
+      ]
+    },
+    {
+      "logits": [
+        -2,
+        -1,
+        -0.3,
+        -4,
+        -0.8
+      ],
+      "temperature": 1.7,
+      "top_k": 0,
+      "probabilities": [
+        0.12733844430266913,
+        0.229312052757986,
+        0.34614177921218975,
+        0.039266740757082044,
+        0.257940982970073
+      ],
+      "uniforms": [
+        0.0,
+        1e-06,
+        0.1,
+        0.5,
+        0.8,
+        0.999999
+      ]
+    },
+    {
+      "logits": [
+        3,
+        1,
+        0,
+        -1,
+        -2
+      ],
+      "temperature": 0.5,
+      "top_k": 3,
+      "probabilities": [
+        0.9796292071670796,
+        0.017942534803329194,
+        0.0024282580295913376,
+        0.0,
+        0.0
+      ],
+      "uniforms": [
+        0.0,
+        1e-06,
+        0.1,
+        0.5,
+        0.8,
+        0.999999
+      ]
+    }
+  ]
+}

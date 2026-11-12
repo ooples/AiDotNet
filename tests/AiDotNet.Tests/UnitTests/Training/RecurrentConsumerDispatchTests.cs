@@ -156,14 +156,17 @@ public class RecurrentConsumerDispatchTests
         }
         finally { AiDotNetEngine.Current = prior; }
     }
-    [Fact]
-    public void DeepArSingleStep_DispatchesAndPreservesStatesAndWeights()
+    [Theory]
+    [InlineData(1)]
+    [InlineData(2)]
+    [InlineData(4)]
+    public void DeepArSingleStep_DispatchesAndPreservesStatesAndWeights(int batch)
     {
         var prior = AiDotNetEngine.Current; var e = new Engine(); AiDotNetEngine.Current = e;
         try
         {
             var cell = new DeepARLstmCellTape<double>(3, 2, 42);
-            var x = Values(3, 2); var h = Values(2, 2); var c = Values(2, 2);
+            var x = Values(3, batch); var h = Values(2, batch); var c = Values(2, batch);
             var sources = new[] { x, h, c }.Concat(cell.GetTrainableParameters()).ToArray();
             Tensor<double> Forward() { var (y, state) = cell.Step(x, h, c); return e.TensorConcatenate(new[] { y, state }, 0); }
             var actual = Evaluate(Forward, sources, e); Assert.Equal(1, e.CellCalls);
