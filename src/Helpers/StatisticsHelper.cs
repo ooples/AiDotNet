@@ -119,6 +119,22 @@ public static class StatisticsHelper<T>
         return Engine.TensorMaxValue(Engine.TensorNarrow(sums, 0, start, length - start));
     }
 
+    /// <summary>Sum of x^2 over the vector (zero when it is empty).</summary>
+    private static T SumOfSquares(Vector<T> values)
+    {
+        if (values.Length == 0)
+        {
+            return _numOps.Zero;
+        }
+
+        var tensor = AsTensor(values);
+        return Engine.TensorSum(Engine.TensorMultiply(tensor, tensor));
+    }
+
+    /// <summary>|a - b| element-wise over a and the first |a| entries of b.</summary>
+    private static Tensor<T> AbsoluteErrors(Vector<T> a, Vector<T> b)
+        => Engine.TensorAbs(Engine.TensorSubtract(AsTensor(a), Prefix(b, a.Length)));
+
     /// <summary>Gathers <paramref name="values"/> at <paramref name="indices"/> into a rank-1 tensor.</summary>
     private static Tensor<T> Gather(Tensor<T> values, List<int> indices)
         => Engine.TensorIndexSelect(values, new Tensor<int>(indices.ToArray(), new[] { indices.Count }), 0);
@@ -3179,12 +3195,7 @@ public static class StatisticsHelper<T>
     public static T CalculateMedianPredictionError(Vector<T> actual, Vector<T> predicted)
     {
         int n = actual.Length;
-        var absoluteErrors = new T[n];
-
-        for (int i = 0; i < n; i++)
-        {
-            absoluteErrors[i] = _numOps.Abs(_numOps.Subtract(actual[i], predicted[i]));
-        }
+        var absoluteErrors = n == 0 ? new T[0] : AbsoluteErrors(actual, predicted).ToVector().ToArray();
 
         Array.Sort(absoluteErrors, (a, b) => _numOps.LessThan(a, b) ? -1 : _numOps.Equals(a, b) ? 0 : 1);
 
@@ -3736,8 +3747,8 @@ public static class StatisticsHelper<T>
     public static T CalculateTheilUStatistic(Vector<T> actual, Vector<T> predicted)
     {
         T numerator = _numOps.Sqrt(CalculateMeanSquaredError(actual, predicted));
-        T denominatorActual = _numOps.Sqrt(_numOps.Divide(actual.Select(x => _numOps.Square(x)).Aggregate(_numOps.Zero, _numOps.Add), _numOps.FromDouble(actual.Length)));
-        T denominatorPredicted = _numOps.Sqrt(_numOps.Divide(predicted.Select(x => _numOps.Square(x)).Aggregate(_numOps.Zero, _numOps.Add), _numOps.FromDouble(predicted.Length)));
+        T denominatorActual = _numOps.Sqrt(_numOps.Divide(SumOfSquares(actual), _numOps.FromDouble(actual.Length)));
+        T denominatorPredicted = _numOps.Sqrt(_numOps.Divide(SumOfSquares(predicted), _numOps.FromDouble(predicted.Length)));
 
         return _numOps.Divide(numerator, _numOps.Add(denominatorActual, denominatorPredicted));
     }
@@ -4764,10 +4775,12 @@ public static class StatisticsHelper<T>
     {
         T lppd = _numOps.Zero;
 
-        for (int i = 0; i < actualValues.Length; i++)
+        if (actualValues.Length > 0)
         {
-            T likelihood = CalculateLikelihood(actualValues[i], predictedValues[i]);
-            lppd = _numOps.Add(lppd, _numOps.Log(likelihood));
+            // log of CalculateLikelihood = exp(-0.5 * residual^2), kept as log(exp(.)) so underflow behaves the same.
+            var residual = Engine.TensorSubtract(AsTensor(actualValues), Prefix(predictedValues, actualValues.Length));
+            var likelihood = Engine.TensorExp(Engine.TensorMultiplyScalar(Engine.TensorMultiply(residual, residual), _numOps.FromDouble(-0.5)));
+            lppd = Engine.TensorSum(Engine.TensorLog(likelihood));
         }
 
         return lppd;
@@ -4793,12 +4806,9 @@ public static class StatisticsHelper<T>
     public static T CalculateMedianAbsoluteDeviation(Vector<T> values)
     {
         T median = CalculateMedian(values);
-        Vector<T> absoluteDeviations = new Vector<T>(values.Length);
-
-        for (int i = 0; i < values.Length; i++)
-        {
-            absoluteDeviations[i] = _numOps.Abs(_numOps.Subtract(values[i], median));
-        }
+        Vector<T> absoluteDeviations = values.Length == 0
+            ? new Vector<T>(0)
+            : Engine.TensorAbs(Engine.TensorSubtractScalar(AsTensor(values), median)).ToVector();
 
         return CalculateMedian(absoluteDeviations);
     }
@@ -4887,13 +4897,9 @@ public static class StatisticsHelper<T>
     /// </remarks>
     public static T CalculateLogLikelihood(Vector<T> actualValues, Vector<T> predictedValues)
     {
-        T logLikelihood = _numOps.Zero;
-
-        for (int i = 0; i < actualValues.Length; i++)
-        {
-            T residual = _numOps.Subtract(actualValues[i], predictedValues[i]);
-            logLikelihood = _numOps.Add(logLikelihood, _numOps.Log(_numOps.Abs(residual)));
-        }
+        T logLikelihood = actualValues.Length == 0
+            ? _numOps.Zero
+            : Engine.TensorSum(Engine.TensorLog(AbsoluteErrors(actualValues, predictedValues)));
 
         return _numOps.Multiply(_numOps.FromDouble(-0.5), logLikelihood);
     }
@@ -5963,38 +5969,27 @@ public static class StatisticsHelper<T>
         int n = matrix.Rows;
         int m = matrix.Columns;
         var covMatrix = new Matrix<T>(m, m);
-        var means = new T[m];
-
-        // Calculate means
-        for (int j = 0; j < m; j++)
+        if (m == 0)
         {
-            means[j] = _numOps.Zero;
-            for (int i = 0; i < n; i++)
-            {
-                means[j] = _numOps.Add(means[j], matrix[i, j]);
-            }
-            means[j] = _numOps.Divide(means[j], _numOps.FromDouble(n));
+            return covMatrix;
         }
 
-        // Calculate covariances
-        for (int i = 0; i < m; i++)
+        if (n == 0)
         {
-            for (int j = i; j < m; j++)
-            {
-                T covariance = _numOps.Zero;
-                for (int k = 0; k < n; k++)
-                {
-                    T diff1 = _numOps.Subtract(matrix[k, i], means[i]);
-                    T diff2 = _numOps.Subtract(matrix[k, j], means[j]);
-                    covariance = _numOps.Add(covariance, _numOps.Multiply(diff1, diff2));
-                }
-                covariance = _numOps.Divide(covariance, _numOps.FromDouble(n - 1));
-                covMatrix[i, j] = covariance;
-                covMatrix[j, i] = covariance; // Covariance matrix is symmetric
-            }
+            // No samples: every entry is an empty sum divided by n - 1.
+            T empty = _numOps.Divide(_numOps.Zero, _numOps.FromDouble(n - 1));
+            return Engine.TensorAddScalar(new Tensor<T>(new[] { m, m }), empty).ToMatrix();
         }
 
-        return covMatrix;
+        // Column means, then (X - mean)^T (X - mean) / (n - 1).
+        var x = Tensor<T>.FromMatrix(matrix);
+        var means = Engine.TensorDivideScalar(Engine.ReduceSum(x, new[] { 0 }, true), _numOps.FromDouble(n));
+        var centered = Engine.TensorSubtract(x, Engine.TensorBroadcastTo(means, x._shape));
+        var gram = Engine.TensorDivideScalar(Engine.TensorMatMul(Engine.TensorTranspose(centered), centered), _numOps.FromDouble(n - 1));
+
+        // The scalar version computes the upper triangle and mirrors it, so the result is exactly symmetric.
+        var symmetric = Engine.TensorAdd(Engine.TensorTriu(gram, 0), Engine.TensorTranspose(Engine.TensorTriu(gram, 1)));
+        return symmetric.ToMatrix();
     }
 
     /// <summary>
