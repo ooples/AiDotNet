@@ -726,9 +726,12 @@ public partial class AutoformerModel<T> : TimeSeriesModelBase<T>, ISupportsLossF
                 .SelectMany(lag => Enumerable.Range(0, corrLen - lag).Select(t => (Lag: lag, Step: t)))
                 .ToArray();
             int[] positions = cells.Select(c => c.Lag * (lq * lk) + c.Step * lk + (c.Step + c.Lag)).ToArray();
-            double[] weights = cells.Select(c => 1.0 / ((double)(corrLen - c.Lag) * d)).ToArray();
+            // Weight 1 / ((corrLen - lag) · d) per cell: integer divisors, reciprocal taken in T
+            int[] divisors = cells.Select(c => (corrLen - c.Lag) * d).ToArray();
+            var weights = Engine.TensorReciprocal(
+                new Tensor<int>(new[] { divisors.Length }, new Vector<int>(divisors)).Cast<T>());
             var data = TimeSeriesEngineOps<T>.Scatter(
-                new Vector<T>(corrLen * lq * lk), positions, new Vector<T>(Array.ConvertAll(weights, _numOps.FromDouble)));
+                new Vector<T>(corrLen * lq * lk), positions, weights.ToVector());
 
             return new Tensor<T>(new[] { corrLen, lq * lk }, data);
         });
@@ -924,8 +927,10 @@ public partial class AutoformerModel<T> : TimeSeriesModelBase<T>, ISupportsLossF
         {
             writer.Write(dim);
         }
-        foreach (double value in Array.ConvertAll(tensor.ToArray(), _numOps.ToDouble))
-            writer.Write(value);
+        for (int i = 0; i < tensor.Length; i++)
+        {
+            writer.Write(_numOps.ToDouble(tensor[i]));
+        }
     }
 
     private Tensor<T> ReadTensor(BinaryReader reader)
@@ -937,8 +942,10 @@ public partial class AutoformerModel<T> : TimeSeriesModelBase<T>, ISupportsLossF
             shape[i] = reader.ReadInt32();
         }
         var tensor = new Tensor<T>(shape);
-        double[] storedValues = Enumerable.Range(0, tensor.Length).Select(_ => reader.ReadDouble()).ToArray();
-        Array.ConvertAll(storedValues, _numOps.FromDouble).AsSpan().CopyTo(tensor.Data.Span);
+        for (int i = 0; i < tensor.Length; i++)
+        {
+            tensor[i] = _numOps.FromDouble(reader.ReadDouble());
+        }
         return tensor;
     }
 }
@@ -1110,8 +1117,10 @@ internal partial class AutoformerEncoderLayer<T> : NeuralNetworks.Layers.LayerBa
         {
             writer.Write(dim);
         }
-        foreach (double value in Array.ConvertAll(tensor.ToArray(), NumOps.ToDouble))
-            writer.Write(value);
+        for (int i = 0; i < tensor.Length; i++)
+        {
+            writer.Write(NumOps.ToDouble(tensor[i]));
+        }
     }
 
     private Tensor<T> ReadTensor(BinaryReader reader)
@@ -1123,8 +1132,10 @@ internal partial class AutoformerEncoderLayer<T> : NeuralNetworks.Layers.LayerBa
             shape[i] = reader.ReadInt32();
         }
         var tensor = new Tensor<T>(shape);
-        double[] storedValues = Enumerable.Range(0, tensor.Length).Select(_ => reader.ReadDouble()).ToArray();
-        Array.ConvertAll(storedValues, NumOps.FromDouble).AsSpan().CopyTo(tensor.Data.Span);
+        for (int i = 0; i < tensor.Length; i++)
+        {
+            tensor[i] = NumOps.FromDouble(reader.ReadDouble());
+        }
         return tensor;
     }
 }
@@ -1316,8 +1327,10 @@ internal partial class AutoformerDecoderLayer<T> : NeuralNetworks.Layers.LayerBa
         {
             writer.Write(dim);
         }
-        foreach (double value in Array.ConvertAll(tensor.ToArray(), NumOps.ToDouble))
-            writer.Write(value);
+        for (int i = 0; i < tensor.Length; i++)
+        {
+            writer.Write(NumOps.ToDouble(tensor[i]));
+        }
     }
 
     private Tensor<T> ReadTensor(BinaryReader reader)
@@ -1329,8 +1342,10 @@ internal partial class AutoformerDecoderLayer<T> : NeuralNetworks.Layers.LayerBa
             shape[i] = reader.ReadInt32();
         }
         var tensor = new Tensor<T>(shape);
-        double[] storedValues = Enumerable.Range(0, tensor.Length).Select(_ => reader.ReadDouble()).ToArray();
-        Array.ConvertAll(storedValues, NumOps.FromDouble).AsSpan().CopyTo(tensor.Data.Span);
+        for (int i = 0; i < tensor.Length; i++)
+        {
+            tensor[i] = NumOps.FromDouble(reader.ReadDouble());
+        }
         return tensor;
     }
 }
