@@ -30,8 +30,8 @@ public class TextFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, 
     private readonly double _maxDocumentFrequency;
     private readonly bool _useChiSquare;
 
-    private double[]? _featureScores;
-    private double[]? _documentFrequencies;
+    private Vector<T>? _featureScores;
+    private Vector<T>? _documentFrequencies;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
@@ -40,8 +40,8 @@ public class TextFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, 
     public double MinDocumentFrequency => _minDocumentFrequency;
     public double MaxDocumentFrequency => _maxDocumentFrequency;
     public bool UseChiSquare => _useChiSquare;
-    public double[]? FeatureScores => _featureScores;
-    public double[]? DocumentFrequencies => _documentFrequencies;
+    public Vector<T>? FeatureScores => _featureScores;
+    public Vector<T>? DocumentFrequencies => _documentFrequencies;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -87,46 +87,34 @@ public class TextFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, 
         int n = data.Rows;
         int p = data.Columns;
 
+        var engine = Engine;
+        var X = Tensor<T>.FromMatrix(data);
+        var y = Tensor<T>.FromVector(target);
+
         // Compute document frequencies
-        _documentFrequencies = new double[p];
-        for (int j = 0; j < p; j++)
-        {
-            int docCount = 0;
-            for (int i = 0; i < n; i++)
-            {
-                if (NumOps.GreaterThan(data[i, j], NumOps.Zero))
-                    docCount++;
-            }
-            _documentFrequencies[j] = (double)docCount / n;
-        }
+        var present = engine.TensorGreaterThan(X, NumOps.Zero);
+        var documentFrequencies = engine.ReduceMean(present, new[] { 0 }, false);
+        _documentFrequencies = documentFrequencies.ToVector();
 
         // Filter by document frequency
-        var candidates = new List<int>();
-        for (int j = 0; j < p; j++)
-        {
-            if (_documentFrequencies[j] >= _minDocumentFrequency &&
-                _documentFrequencies[j] <= _maxDocumentFrequency)
-            {
-                candidates.Add(j);
-            }
-        }
+        var candidateMask = engine.TensorMultiply(
+            PreprocessingTensorOps.AtLeast(documentFrequencies, NumOps.FromDouble(_minDocumentFrequency)),
+            PreprocessingTensorOps.Not(engine.TensorGreaterThan(documentFrequencies, NumOps.FromDouble(_maxDocumentFrequency))));
+        var candidates = PreprocessingTensorOps.MaskPositions(candidateMask);
+        var candidateSet = new HashSet<int>(candidates);
 
-        // Compute feature scores
-        _featureScores = new double[p];
-
-        if (_useChiSquare)
-        {
-            ComputeChiSquareScores(data, target, candidates);
-        }
-        else
-        {
-            ComputeCorrelationScores(data, target, candidates);
-        }
+        // Compute feature scores (0 for features outside the document-frequency band)
+        var scores = _useChiSquare
+            ? ComputeChiSquareScores(present, target, n, p)
+            : engine.TensorAbs(PreprocessingTensorOps.TargetCorrelations(X, y));
+        scores = engine.TensorWhere(candidateMask, scores, new Tensor<T>(new[] { p }));
+        _featureScores = scores.ToVector();
 
         // Select top features from candidates
-        int numToSelect = Math.Min(_nFeaturesToSelect, candidates.Count);
-        _selectedIndices = candidates
-            .OrderByDescending(j => _featureScores[j])
+        var order = PreprocessingTensorOps.StableOrder(scores, descending: true);
+        int numToSelect = Math.Min(_nFeaturesToSelect, candidates.Length);
+        _selectedIndices = order
+            .Where(j => candidateSet.Contains(j))
             .Take(numToSelect)
             .OrderBy(x => x)
             .ToArray();
@@ -134,9 +122,8 @@ public class TextFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, 
         // If not enough candidates, add from remaining features
         if (_selectedIndices.Length < _nFeaturesToSelect)
         {
-            var remaining = Enumerable.Range(0, p)
-                .Where(j => !candidates.Contains(j))
-                .OrderByDescending(j => _featureScores[j])
+            var remaining = order
+                .Where(j => !candidateSet.Contains(j))
                 .Take(_nFeaturesToSelect - _selectedIndices.Length);
 
             _selectedIndices = _selectedIndices.Concat(remaining).OrderBy(x => x).ToArray();
@@ -145,98 +132,39 @@ public class TextFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, 
         IsFitted = true;
     }
 
-    private void ComputeChiSquareScores(Matrix<T> data, Vector<T> target, List<int> candidates)
+    private Tensor<T> ComputeChiSquareScores(Tensor<T> present, Vector<T> target, int n, int p)
     {
-        int n = data.Rows;
+        var engine = Engine;
 
         // Get class counts
-        var classCounts = new Dictionary<int, int>();
-        for (int i = 0; i < n; i++)
-        {
-            int classLabel = (int)Math.Round(NumOps.ToDouble(target[i]));
-            if (!classCounts.ContainsKey(classLabel))
-                classCounts[classLabel] = 0;
-            classCounts[classLabel]++;
-        }
+        PreprocessingTensorOps.ClassLabels(target, out var classes, out var classIndex);
+        int k = classes.Length;
+        var membership = PreprocessingTensorOps.ClassOneHot<T>(classIndex, k);
+        var classTotals = engine.ReduceSum(membership, new[] { 0 }, false);
 
-        foreach (int j in candidates)
-        {
-            // Build contingency table
-            var featureClassCounts = new Dictionary<(int Feature, int Class), int>();
+        // Contingency table: rows with the feature present / absent in each class ([p, k] each)
+        var observedPresent = engine.TensorMatMul(engine.TensorTranspose(present), membership);
+        var observedAbsent = engine.TensorSubtract(
+            engine.TensorBroadcastTo(engine.Reshape(classTotals, new[] { 1, k }), new[] { p, k }), observedPresent);
 
-            for (int i = 0; i < n; i++)
-            {
-                int classLabel = (int)Math.Round(NumOps.ToDouble(target[i]));
-                int featurePresent = NumOps.GreaterThan(data[i, j], NumOps.Zero) ? 1 : 0;
+        // Expected counts: (feature total) * (class total) / n
+        var featureCount = engine.ReduceSum(present, new[] { 0 }, false);
+        T total = NumOps.FromDouble(n);
+        var expectedPresent = engine.TensorDivideScalar(engine.TensorOuter(featureCount, classTotals), total);
+        var expectedAbsent = engine.TensorDivideScalar(engine.TensorOuter(
+            engine.TensorSubtract(PreprocessingTensorOps.Filled(new[] { p }, total), featureCount), classTotals), total);
 
-                var key = (featurePresent, classLabel);
-                if (!featureClassCounts.ContainsKey(key))
-                    featureClassCounts[key] = 0;
-                featureClassCounts[key]++;
-            }
-
-            // Compute chi-square statistic
-            double chiSq = 0;
-            int featureCount = 0;
-            for (int i = 0; i < n; i++)
-            {
-                if (NumOps.GreaterThan(data[i, j], NumOps.Zero))
-                    featureCount++;
-            }
-
-            foreach (var classCount in classCounts)
-            {
-                int classLabel = classCount.Key;
-                int classTotal = classCount.Value;
-
-                for (int f = 0; f <= 1; f++)
-                {
-                    int fTotal = f == 1 ? featureCount : (n - featureCount);
-                    double expected = (double)fTotal * classTotal / n;
-
-                    if (expected > 0)
-                    {
-                        var key = (f, classLabel);
-                        int observed = featureClassCounts.GetValueOrDefault(key, 0);
-                        chiSq += (observed - expected) * (observed - expected) / expected;
-                    }
-                }
-            }
-
-            (_featureScores ?? throw new InvalidOperationException("Feature scores not computed."))[j] = chiSq;
-        }
+        // Compute chi-square statistic over the cells with a positive expected count
+        return engine.TensorAdd(ChiSquareTerms(observedPresent, expectedPresent), ChiSquareTerms(observedAbsent, expectedAbsent));
     }
 
-    private void ComputeCorrelationScores(Matrix<T> data, Vector<T> target, List<int> candidates)
+    private Tensor<T> ChiSquareTerms(Tensor<T> observed, Tensor<T> expected)
     {
-        int n = data.Rows;
-
-        double yMean = 0;
-        for (int i = 0; i < n; i++)
-            yMean += NumOps.ToDouble(target[i]);
-        yMean /= n;
-
-        foreach (int j in candidates)
-        {
-            double xMean = 0;
-            for (int i = 0; i < n; i++)
-                xMean += NumOps.ToDouble(data[i, j]);
-            xMean /= n;
-
-            double sxy = 0, sxx = 0, syy = 0;
-            for (int i = 0; i < n; i++)
-            {
-                double xDiff = NumOps.ToDouble(data[i, j]) - xMean;
-                double yDiff = NumOps.ToDouble(target[i]) - yMean;
-                sxy += xDiff * yDiff;
-                sxx += xDiff * xDiff;
-                syy += yDiff * yDiff;
-            }
-
-            (_featureScores ?? throw new InvalidOperationException("Feature scores not computed."))[j] = (sxx > 1e-10 && syy > 1e-10) ? Math.Abs(sxy / Math.Sqrt(sxx * syy)) : 0;
-        }
+        var engine = Engine;
+        var terms = engine.TensorDivide(engine.TensorSquare(engine.TensorSubtract(observed, expected)), expected);
+        var kept = engine.TensorWhere(engine.TensorGreaterThan(expected, NumOps.Zero), terms, new Tensor<T>(expected.Shape.ToArray()));
+        return engine.ReduceSum(kept, new[] { 1 }, false);
     }
-
     /// <inheritdoc />
     public Matrix<T> FitTransform(Matrix<T> data, Vector<T> target)
     {
