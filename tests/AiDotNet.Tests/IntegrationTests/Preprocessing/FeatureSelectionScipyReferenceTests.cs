@@ -1,3 +1,4 @@
+using AiDotNet.Preprocessing.FeatureSelection.Manifold;
 using AiDotNet.Preprocessing.FeatureSelection.Moment;
 using AiDotNet.Preprocessing.FeatureSelection.Morphological;
 using AiDotNet.Preprocessing.FeatureSelection.NLP;
@@ -133,11 +134,77 @@ public class FeatureSelectionScipyReferenceTests
         Assert.Equal(new[] { 0, 2 }, frequency.SelectedIndices);
     }
 
-    private static void AssertValues(double[] expected, Vector<double>? actual)
+    // A 2-D spiral (columns 0 and 1) plus a small noise column; geodesic distances along the spiral differ
+    // from the straight-line ones.
+    private static Matrix<double> SpiralData() => new Matrix<double>(new double[,]
+    {
+        { 0.439, 0.24, 0.3 },
+        { 0.118, 1.487, -0.2 },
+        { -1.964, 1.519, 0.5 },
+        { -3.284, -1.137, 0.1 },
+        { -1.087, -4.332, -0.4 },
+        { 3.704, -4.009, 0.2 },
+        { 6.36, 1.07, 0.0 },
+        { 2.983, 6.817, -0.1 },
+        { -4.616, 7.058, 0.4 },
+        { -9.425, 0.0, -0.3 },
+    });
+
+    [Fact]
+    public void IsomapSelectors_UseGeodesicDistancesOfTheKnnGraph()
+    {
+        // geo = scipy.sparse.csgraph.shortest_path(kneighbors_graph(X, 3, mode='distance'), directed=False)
+        // IsomapSelector: corrcoef(|x_i - x_j|, geo_ij) over i < j for each column;
+        // IsomapBasedSelector: mean(|x_i - x_j| * geo_ij) over i < j, divided by its maximum
+        var isomap = new IsomapSelector<double>(nFeaturesToSelect: 1, nNeighbors: 3);
+        isomap.Fit(SpiralData());
+        var isomapBased = new IsomapBasedSelector<double>(nFeaturesToSelect: 2, nNeighbors: 3);
+        isomapBased.Fit(SpiralData());
+
+        AssertValues(new[] { 0.7230409799705054, 0.47619987520071577, -0.08682100377897621 }, isomap.ManifoldScores, 1e-9);
+        AssertValues(new[] { 1.0, 0.7785377100203102, 0.05534937113140767 }, isomapBased.FeatureScores, 1e-9);
+        Assert.Equal(new[] { 0 }, isomap.SelectedIndices);
+        Assert.Equal(new[] { 0, 1 }, isomapBased.SelectedIndices);
+    }
+
+    [Fact]
+    public void LleSelectors_UseScikitLearnBarycenterWeights()
+    {
+        // W = sklearn.manifold._locally_linear.barycenter_kneighbors_graph(X, k, reg=1e-3).toarray()
+        // LLEBasedSelector (k = 4): mean(1 / ((X - W X)**2 + 1e-10), axis=0)
+        // LLESelector (k = 3): mean(1 / (1 + |X - W X|), axis=0)
+        var lleBased = new LLEBasedSelector<double>(nFeaturesToSelect: 1, nNeighbors: 4);
+        lleBased.Fit(SpiralData());
+        var lle = new LLESelector<double>(nFeaturesToSelect: 1, nNeighbors: 3);
+        lle.Fit(SpiralData());
+
+        var based = lleBased.FeatureScores;
+        Assert.NotNull(based);
+        var expectedBased = new[] { 2379.942822908662, 164185.0579222155, 157.612105775534 };
+        for (int i = 0; i < expectedBased.Length; i++)
+            Assert.Equal(1.0, based[i] / expectedBased[i], 1e-7);
+        AssertValues(new[] { 0.7860009082860653, 0.7460063540614652, 0.5726743102664745 }, lle.LocalLinearityScores, 1e-9);
+        Assert.Equal(new[] { 1 }, lleBased.SelectedIndices);
+        Assert.Equal(new[] { 0 }, lle.SelectedIndices);
+    }
+
+    [Fact]
+    public void LaplacianScoreSelector_MatchesHeCaiNiyogiFormula()
+    {
+        // W = A * exp(-||x_i - x_j||^2 / (2 sigma^2)), A = symmetrized kneighbors_graph(X, 3); D = W 1;
+        // f~ = f - (f'D1 / 1'D1); score = f~'(D - W)f~ / f~'D f~   (He, Cai and Niyogi 2005)
+        var laplacian = new LaplacianScoreSelector<double>(nFeaturesToSelect: 1, nNeighbors: 3, sigma: 1.0);
+        laplacian.Fit(SpiralData());
+
+        AssertValues(new[] { 0.8526099922737964, 1.6058679731353886, 1.8084026457213203 }, laplacian.LaplacianScores, 1e-9);
+        Assert.Equal(new[] { 0 }, laplacian.SelectedIndices);
+    }
+
+    private static void AssertValues(double[] expected, Vector<double>? actual, double tolerance = Tolerance)
     {
         Assert.NotNull(actual);
         Assert.Equal(expected.Length, actual.Length);
         for (int i = 0; i < expected.Length; i++)
-            Assert.Equal(expected[i], actual[i], Tolerance);
+            Assert.Equal(expected[i], actual[i], tolerance);
     }
 }

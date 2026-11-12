@@ -22589,3 +22589,19 @@ AiDotNet.Preprocessing.FeatureSelection.Morphological.ErosionDilationSelector<T>
 AiDotNet.Preprocessing.FeatureSelection.Morphological.GranulometrySelector<T>.GranulometryScores.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
 *REMOVED*AiDotNet.Preprocessing.FeatureSelection.NLP.TfIdfFS<T>.TfIdfScores.get -> double[]?
 AiDotNet.Preprocessing.FeatureSelection.NLP.TfIdfFS<T>.TfIdfScores.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
+*REMOVED*AiDotNet.Preprocessing.FeatureSelection.Manifold.LaplacianScoreSelector<T>.LaplacianScores.get -> double[]?
+AiDotNet.Preprocessing.FeatureSelection.Manifold.LaplacianScoreSelector<T>.LaplacianScores.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
+*REMOVED*AiDotNet.Preprocessing.FeatureSelection.Manifold.IsomapSelector<T>.ManifoldScores.get -> double[]?
+AiDotNet.Preprocessing.FeatureSelection.Manifold.IsomapSelector<T>.ManifoldScores.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
+*REMOVED*AiDotNet.Preprocessing.FeatureSelection.Manifold.IsomapBasedSelector<T>.FeatureScores.get -> double[]?
+AiDotNet.Preprocessing.FeatureSelection.Manifold.IsomapBasedSelector<T>.FeatureScores.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
+*REMOVED*AiDotNet.Preprocessing.FeatureSelection.Manifold.LLEBasedSelector<T>.FeatureScores.get -> double[]?
+AiDotNet.Preprocessing.FeatureSelection.Manifold.LLEBasedSelector<T>.FeatureScores.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
+*REMOVED*AiDotNet.Preprocessing.FeatureSelection.Manifold.LLESelector<T>.LocalLinearityScores.get -> double[]?
+AiDotNet.Preprocessing.FeatureSelection.Manifold.LLESelector<T>.LocalLinearityScores.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
+*REMOVED*AiDotNet.Preprocessing.FeatureSelection.Manifold.LLEBasedSelector<T>.LLEBasedSelector(int nFeaturesToSelect = 10, int nNeighbors = 10, int[]? columnIndices = null) -> void
+AiDotNet.Preprocessing.FeatureSelection.Manifold.LLEBasedSelector<T>.LLEBasedSelector(int nFeaturesToSelect = 10, int nNeighbors = 10, int[]? columnIndices = null, double regularization = 0.001) -> void
+*REMOVED*AiDotNet.Preprocessing.FeatureSelection.Manifold.LLESelector<T>.LLESelector(int nFeaturesToSelect = 10, int nNeighbors = 5, int[]? columnIndices = null) -> void
+AiDotNet.Preprocessing.FeatureSelection.Manifold.LLESelector<T>.LLESelector(int nFeaturesToSelect = 10, int nNeighbors = 5, int[]? columnIndices = null, double regularization = 0.001) -> void
+AiDotNet.Preprocessing.FeatureSelection.Manifold.LLEBasedSelector<T>.Regularization.get -> double
+AiDotNet.Preprocessing.FeatureSelection.Manifold.LLESelector<T>.Regularization.get -> double

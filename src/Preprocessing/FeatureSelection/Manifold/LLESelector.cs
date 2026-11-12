@@ -2,6 +2,7 @@ using AiDotNet.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Enums;
 using AiDotNet.Attributes;
+using AiDotNet.Preprocessing.FeatureSelection.Helpers;
 
 namespace AiDotNet.Preprocessing.FeatureSelection.Manifold;
 
@@ -24,15 +25,21 @@ public class LLESelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IFixedCo
 {
     private readonly int _nFeaturesToSelect;
     private readonly int _nNeighbors;
+    private readonly double _regularization;
 
-    private double[]? _localLinearityScores;
+    private Vector<T>? _localLinearityScores;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public int NNeighbors => _nNeighbors;
-    public double[]? LocalLinearityScores => _localLinearityScores;
+    public Vector<T>? LocalLinearityScores => _localLinearityScores;
+
+    /// <summary>
+    /// Gets the regularization of the local Gram matrices, relative to their trace (scikit-learn's <c>reg</c>).
+    /// </summary>
+    public double Regularization => _regularization;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -41,14 +48,18 @@ public class LLESelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IFixedCo
     public LLESelector(
         int nFeaturesToSelect = 10,
         int nNeighbors = 5,
-        int[]? columnIndices = null)
+        int[]? columnIndices = null,
+        double regularization = 1e-3)
         : base(columnIndices)
     {
         if (nFeaturesToSelect < 1)
             throw new ArgumentException("Number of features must be at least 1.", nameof(nFeaturesToSelect));
+        if (regularization < 0)
+            throw new ArgumentException("Regularization must be non-negative.", nameof(regularization));
 
         _nFeaturesToSelect = nFeaturesToSelect;
         _nNeighbors = nNeighbors;
+        _regularization = regularization;
     }
 
     /// <inheritdoc />
@@ -58,72 +69,32 @@ public class LLESelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IFixedCo
         int n = data.Rows;
         int p = data.Columns;
 
-        var X = new double[n, p];
-        for (int i = 0; i < n; i++)
-            for (int j = 0; j < p; j++)
-                X[i, j] = NumOps.ToDouble(data[i, j]);
+        var engine = Engine;
+        var x = Tensor<T>.FromMatrix(data);
+        int k = Math.Min(_nNeighbors, n - 1);
 
-        _localLinearityScores = new double[p];
-
-        // For each feature, measure how well it supports local linearity
-        for (int j = 0; j < p; j++)
+        // Points need at least 2 neighbours to be reconstructed; otherwise every score is 0
+        var scores = new Tensor<T>(new[] { p });
+        if (k >= 2)
         {
-            double totalScore = 0;
-            int count = 0;
+            // LLE reconstructs each point as a weighted (barycenter) combination of its k nearest neighbours
+            var neighbors = FeatureSelectionTensorOps.KNearestMask(FeatureSelectionTensorOps.PairwiseDistances(x), k);
+            var weights = FeatureSelectionTensorOps.BarycenterWeights(
+                x, FeatureSelectionTensorOps.NeighborIndices(neighbors, k), k, _regularization);
 
-            for (int i = 0; i < n; i++)
-            {
-                // Find k nearest neighbors for this point
-                var neighbors = GetNearestNeighbors(X, i, n, p);
-
-                if (neighbors.Count < 2) continue;
-
-                // Compute reconstruction error for this feature
-                double centerVal = X[i, j];
-                double avgNeighborVal = neighbors.Average(idx => X[idx, j]);
-                double error = Math.Abs(centerVal - avgNeighborVal);
-
-                // Features with low reconstruction error are more "locally linear"
-                totalScore += 1.0 / (1 + error);
-                count++;
-            }
-
-            _localLinearityScores[j] = count > 0 ? totalScore / count : 0;
+            // Features with low reconstruction error are more "locally linear": mean of 1 / (1 + |error|)
+            var error = engine.TensorAbs(engine.TensorSubtract(x, engine.TensorMatMul(weights, x)));
+            var closeness = engine.TensorDivide(
+                FeatureSelectionTensorOps.Filled(new[] { n, p }, NumOps.One), engine.TensorAddScalar(error, NumOps.One));
+            scores = engine.ReduceMean(closeness, new[] { 0 }, false);
         }
+
+        _localLinearityScores = scores.ToVector();
 
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = Enumerable.Range(0, p)
-            .OrderByDescending(j => _localLinearityScores[j])
-            .Take(numToSelect)
-            .OrderBy(x => x)
-            .ToArray();
+        _selectedIndices = FeatureSelectionTensorOps.TopKIndicesSorted(scores, numToSelect);
 
         IsFitted = true;
-    }
-
-    private List<int> GetNearestNeighbors(double[,] X, int pointIdx, int n, int p)
-    {
-        var distances = new List<(int idx, double dist)>();
-
-        for (int i = 0; i < n; i++)
-        {
-            if (i == pointIdx) continue;
-
-            double dist = 0;
-            for (int j = 0; j < p; j++)
-            {
-                double diff = X[pointIdx, j] - X[i, j];
-                dist += diff * diff;
-            }
-
-            distances.Add((i, Math.Sqrt(dist)));
-        }
-
-        return distances
-            .OrderBy(d => d.dist)
-            .Take(_nNeighbors)
-            .Select(d => d.idx)
-            .ToList();
     }
 
     public new Matrix<T> FitTransform(Matrix<T> data)
@@ -138,15 +109,7 @@ public class LLESelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IFixedCo
         if (_selectedIndices is null)
             throw new InvalidOperationException("LLESelector has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return FeatureSelectionTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />
