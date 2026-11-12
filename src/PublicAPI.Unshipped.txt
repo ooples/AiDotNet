@@ -22648,3 +22648,5 @@ AiDotNet.AnomalyDetection.TreeBased.SCiForest<T>.AttributesPerHyperplane.get -> 
 AiDotNet.AnomalyDetection.TreeBased.SCiForest<T>.HyperplanesPerNode.get -> int
 *REMOVED*AiDotNet.AnomalyDetection.NeuralNetwork.GANomalyDetector<T>.GANomalyDetector(int latentDim = 32, int hiddenDim = 64, int epochs = 100, double learningRate = 0.0002, double contamination = 0.1, int randomSeed = 42) -> void
 AiDotNet.AnomalyDetection.NeuralNetwork.GANomalyDetector<T>.GANomalyDetector(int latentDim, int hiddenDim, int epochs, double learningRate, double contamination, int randomSeed) -> void
+*REMOVED*AiDotNet.VisionLanguage.Robotics.HelixSystem2Latent<T>.L2Norm() -> double
+AiDotNet.VisionLanguage.Robotics.HelixSystem2Latent<T>.L2Norm() -> T
