@@ -653,10 +653,10 @@ public class FeatureSelectionDeepMathIntegrationTests
     }
 
     [Fact(Timeout = 120000)]
-    public async Task SelectKBest_FClassif_ZeroWithinVariance_ReturnsZeroFScore()
+    public async Task SelectKBest_FClassif_ZeroWithinVariance_ReturnsInfiniteFScore()
     {
-        // When all values in each class are identical, SSW = 0, MSW = 0
-        // The code checks MSW > 1e-10, so F should be 0
+        // When all values in each class are identical, SSW = 0 and MSW = 0 while MSB > 0.
+        // scikit-learn f_classif returns F = +inf (p = 0) for this perfect separation.
         var data = new double[,]
         {
             { 5.0 }, { 5.0 }, { 5.0 },
@@ -669,8 +669,10 @@ public class FeatureSelectionDeepMathIntegrationTests
         selector.Fit(matrix, target);
 
         Assert.NotNull(selector.Scores);
-        // SSW = 0, so MSW = 0 → F = 0 (code returns 0 when msw <= 1e-10)
-        Assert.Equal(0.0, selector.Scores[0], Tolerance);
+        // sklearn: f_classif([[5],[5],[5],[10],[10],[10]], [0,0,0,1,1,1]) -> (array([inf]), array([0.]))
+        Assert.True(double.IsPositiveInfinity(selector.Scores[0]), $"Expected F = +inf, got {selector.Scores[0]}");
+        Assert.NotNull(selector.PValues);
+        Assert.Equal(0.0, selector.PValues[0], Tolerance);
     }
 
     [Fact(Timeout = 120000)]
@@ -713,8 +715,8 @@ public class FeatureSelectionDeepMathIntegrationTests
         var target = new Vector<double>(new double[] { 0, 0, 1, 1 });
 
         // Custom score function: just return the column index as score
-        Func<Matrix<double>, Vector<double>, double[]> customScore =
-            (m, t) => Enumerable.Range(0, m.Columns).Select(i => (double)i).ToArray();
+        Func<Matrix<double>, Vector<double>, Vector<double>> customScore =
+            (m, t) => new Vector<double>(Enumerable.Range(0, m.Columns).Select(i => (double)i).ToArray());
 
         var selector = new SelectKBest<double>(k: 1, scoreFunc: customScore);
         selector.Fit(matrix, target);
