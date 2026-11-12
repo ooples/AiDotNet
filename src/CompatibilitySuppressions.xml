@@ -41100,4 +41100,35 @@
     <Target>M:AiDotNet.Preprocessing.FeatureSelection.Privacy.FederatedFSSelector`1.#ctor(System.Int32,System.Int32,System.String,System.Int32[])</Target>
     <Target>M:AiDotNet.Preprocessing.FeatureSelection.Privacy.FederatedFSSelector`1.#ctor(System.Int32,System.Int32,System.String,System.Int32[])</Target>
     <Target>M:AiDotNet.Preprocessing.FeatureSelection.Privacy.FederatedFSSelector`1.#ctor(System.Int32,System.Int32,System.String,System.Int32[])</Target>
+||||||| 0c06dc461c
+    <Target>M:AiDotNet.Preprocessing.FeatureSelection.Information.MaximalInformationCoefficientSelector`1.get_MICScores</Target>
+    <Target>M:AiDotNet.Preprocessing.FeatureSelection.Information.MaximalInformationCoefficientSelector`1.get_MICScores</Target>
+    <Target>M:AiDotNet.Preprocessing.FeatureSelection.Information.MaximalInformationCoefficientSelector`1.get_MICScores</Target>
+    <Target>M:AiDotNet.Preprocessing.FeatureSelection.Nonlinear.MaximalInformationCoefficientSelector`1.get_MICValues</Target>
+    <Target>M:AiDotNet.Preprocessing.FeatureSelection.Nonlinear.MaximalInformationCoefficientSelector`1.get_MICValues</Target>
+    <Target>M:AiDotNet.Preprocessing.FeatureSelection.Nonlinear.MaximalInformationCoefficientSelector`1.get_MICValues</Target>
+    <Target>M:AiDotNet.Preprocessing.FeatureSelection.Nonlinear.MaximalInformationCoefficientSelector`1.get_MaxBins</Target>
+    <Target>M:AiDotNet.Preprocessing.FeatureSelection.Nonlinear.MaximalInformationCoefficientSelector`1.get_MaxBins</Target>
+    <Target>M:AiDotNet.Preprocessing.FeatureSelection.Nonlinear.MaximalInformationCoefficientSelector`1.get_MaxBins</Target>
+    <Target>M:AiDotNet.Preprocessing.FeatureSelection.Nonlinear.MaximalInformationCoefficientSelector`1.#ctor(System.Int32,System.Int32,System.Int32[])</Target>
+    <Target>M:AiDotNet.Preprocessing.FeatureSelection.Nonlinear.MaximalInformationCoefficientSelector`1.#ctor(System.Int32,System.Int32,System.Int32[])</Target>
+    <Target>M:AiDotNet.Preprocessing.FeatureSelection.Nonlinear.MaximalInformationCoefficientSelector`1.#ctor(System.Int32,System.Int32,System.Int32[])</Target>
+    <Target>M:AiDotNet.Preprocessing.FeatureSelection.Nonparametric.MaximalInformationSelector`1.get_MICScores</Target>
+    <Target>M:AiDotNet.Preprocessing.FeatureSelection.Nonparametric.MaximalInformationSelector`1.get_MICScores</Target>
+    <Target>M:AiDotNet.Preprocessing.FeatureSelection.Nonparametric.MaximalInformationSelector`1.get_MICScores</Target>
+    <Target>M:AiDotNet.Preprocessing.FeatureSelection.Nonparametric.MaximalInformationSelector`1.get_MaxBins</Target>
+    <Target>M:AiDotNet.Preprocessing.FeatureSelection.Nonparametric.MaximalInformationSelector`1.get_MaxBins</Target>
+    <Target>M:AiDotNet.Preprocessing.FeatureSelection.Nonparametric.MaximalInformationSelector`1.get_MaxBins</Target>
+    <Target>M:AiDotNet.Preprocessing.FeatureSelection.Nonparametric.MaximalInformationSelector`1.#ctor(System.Int32,System.Int32,System.Int32[])</Target>
+    <Target>M:AiDotNet.Preprocessing.FeatureSelection.Nonparametric.MaximalInformationSelector`1.#ctor(System.Int32,System.Int32,System.Int32[])</Target>
+    <Target>M:AiDotNet.Preprocessing.FeatureSelection.Nonparametric.MaximalInformationSelector`1.#ctor(System.Int32,System.Int32,System.Int32[])</Target>
+    <Target>M:AiDotNet.Preprocessing.FeatureSelection.Online.OSFS`1.get_Epsilon</Target>
+    <Target>M:AiDotNet.Preprocessing.FeatureSelection.Online.OSFS`1.get_Epsilon</Target>
+    <Target>M:AiDotNet.Preprocessing.FeatureSelection.Online.OSFS`1.get_Epsilon</Target>
+    <Target>M:AiDotNet.Preprocessing.FeatureSelection.Online.OSFS`1.get_FeatureScores</Target>
+    <Target>M:AiDotNet.Preprocessing.FeatureSelection.Online.OSFS`1.get_FeatureScores</Target>
+    <Target>M:AiDotNet.Preprocessing.FeatureSelection.Online.OSFS`1.get_FeatureScores</Target>
+    <Target>M:AiDotNet.Preprocessing.FeatureSelection.Online.OSFS`1.#ctor(System.Int32,System.Double,System.Double,System.Int32[])</Target>
+    <Target>M:AiDotNet.Preprocessing.FeatureSelection.Online.OSFS`1.#ctor(System.Int32,System.Double,System.Double,System.Int32[])</Target>
+    <Target>M:AiDotNet.Preprocessing.FeatureSelection.Online.OSFS`1.#ctor(System.Int32,System.Double,System.Double,System.Int32[])</Target>
 </Suppressions>
