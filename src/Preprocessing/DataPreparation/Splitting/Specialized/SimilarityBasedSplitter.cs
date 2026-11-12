@@ -78,19 +78,21 @@ public class SimilarityBasedSplitter<T> : DataSplitterBase<T>
 
         // Compute pairwise cosine similarities (0 when either norm is 0; the diagonal is excluded below)
         var engine = AiDotNet.Tensors.Engines.AiDotNetEngine.Current;
-        var x = Tensor<T>.FromMatrix(X);
+        // In double as master did (a narrow T overflows the dot products and norm products), on unit rows; a pair
+        // with a zero or NaN norm and the diagonal are selected out (not multiplied by 0) so NaN cannot leak.
+        var x = Tensor<T>.FromMatrix(X).Cast<double>();
         var norms = engine.TensorSqrt(engine.ReduceSum(engine.TensorMultiply(x, x), new[] { 1 }, true)); // [n, 1]
-        var dots = engine.TensorMatMul(x, engine.TensorTranspose(x));
-        var normProducts = engine.TensorMatMul(norms, engine.TensorTranspose(norms));
-        var valid = engine.TensorGreaterThan(normProducts, NumOps.Zero);
-        var safeProducts = engine.TensorWhere(valid, normProducts, PreprocessingTensorOps.Filled(new[] { nSamples, nSamples }, NumOps.One));
-        var similarities = engine.TensorMultiply(engine.TensorDivide(dots, safeProducts), valid);
+        var rowValid = engine.TensorGreaterThan(norms, 0.0);
+        var safeNorms = engine.TensorWhere(rowValid, norms, PreprocessingTensorOps.Filled(new[] { nSamples, 1 }, 1.0));
+        var unit = engine.TensorDivide(x, engine.TensorBroadcastTo(safeNorms, new[] { nSamples, X.Columns }));
+        var cosines = engine.TensorMatMul(unit, engine.TensorTranspose(unit));
+        var offDiagonal = PreprocessingTensorOps.OneMinus(engine.TensorEye<double>(nSamples));
+        var keep = engine.TensorMultiply(engine.TensorMatMul(rowValid, engine.TensorTranspose(rowValid)), offDiagonal);
+        var similarities = engine.TensorWhere(keep, cosines, new Tensor<double>(new[] { nSamples, nSamples }));
 
         // Calculate average similarity to every other sample
-        var offDiagonal = PreprocessingTensorOps.OneMinus(engine.TensorEye<T>(nSamples));
         var avgSimilarity = engine.TensorDivideScalar(
-            engine.ReduceSum(engine.TensorMultiply(similarities, offDiagonal), new[] { 1 }, false),
-            NumOps.FromDouble(nSamples - 1));
+            engine.ReduceSum(similarities, new[] { 1 }, false), (double)(nSamples - 1));
 
         // Sort by similarity (most similar first when testing on similar samples)
         var sortedIndices = PreprocessingTensorOps.StableOrder(avgSimilarity, descending: _testSimilar);
