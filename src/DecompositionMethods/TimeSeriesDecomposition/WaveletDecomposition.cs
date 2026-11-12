@@ -243,6 +243,12 @@ public class WaveletDecomposition<T> : TimeSeriesDecompositionBase<T>
     /// Circular filtering of <paramref name="v"/> by two filters at once:
     /// first[t] = sum_l a[l] v[(t - l * dilation) mod N] and second[t] likewise with b.
     /// </summary>
+    /// <remarks>
+    /// Indices are taken mod N, so the dilation is reduced mod N first. The taps are then processed
+    /// in groups whose span (groupTaps - 1) * step is at most N: each group filters the signal
+    /// rotated by its first tap's shift, so the periodic extension never exceeds 2N samples however
+    /// large the dilation is at the deepest levels. Total work stays O(N * taps).
+    /// </remarks>
     private (Vector<T>, Vector<T>) CircularFilterPair(Vector<T> v, Vector<T> a, Vector<T> b, int dilation)
     {
         int n = v.Length;
@@ -252,21 +258,51 @@ public class WaveletDecomposition<T> : TimeSeriesDecompositionBase<T>
             return (new Vector<T>(n), new Vector<T>(n));
         }
 
-        // Periodically extend the signal on the left by (taps - 1) * dilation samples:
-        // extended[s] = v[(s - pad) mod N].
-        int pad = (taps - 1) * dilation;
-        var source = Engine.TensorArange<int>(-pad, n, 1);
-        var wrapped = Engine.TensorRemainder(source, Engine.TensorFullLike(source, n));
-        var extended = Engine.TensorIndexSelect(Tensor<T>.FromVector(v), wrapped, 0).Reshape(new[] { 1, 1, n + pad });
+        var signal = Tensor<T>.FromVector(v);
+        var filters = Engine.TensorStack(new[] { Tensor<T>.FromVector(a), Tensor<T>.FromVector(b) }, 0);
+        int step = dilation % n;
+        if (step == 0)
+        {
+            // Every tap reads v[t]: the filters reduce to their coefficient sums.
+            var sums = Engine.ReduceSum(filters, new[] { 1 }, false);
+            var scaled = Engine.TensorMultiply(
+                Engine.TensorBroadcastTo(sums.Reshape(new[] { 2, 1 }), new[] { 2, n }),
+                Engine.TensorBroadcastTo(signal.Reshape(new[] { 1, n }), new[] { 2, n }));
+            return SplitFilterPair(scaled, n);
+        }
 
-        // Conv1D cross-correlates, so the reversed filters give sum_l f[l] v[t - l * dilation].
-        var kernel = Engine.TensorFlip(
-            Engine.TensorStack(new[] { Tensor<T>.FromVector(a), Tensor<T>.FromVector(b) }, 0), new[] { 1 })
-            .Reshape(new[] { 2, 1, taps });
-        var filtered = Engine.Conv1D(extended, kernel, 1, 0, dilation).Reshape(new[] { 2, n });
+        int groupTaps = Math.Max(1, Math.Min(taps, n / step + 1));
+        Tensor<T>? total = null;
+        for (int start = 0; start < taps; start += groupTaps)
+        {
+            int count = Math.Min(groupTaps, taps - start);
+            int offset = (int)((long)start * step % n);
 
-        var first = Engine.TensorSlice(filtered, new[] { 0, 0 }, new[] { 1, n }).Reshape(new[] { n }).ToVector();
-        var second = Engine.TensorSlice(filtered, new[] { 1, 0 }, new[] { 1, n }).Reshape(new[] { n }).ToVector();
+            // Periodic extension on the left by (count - 1) * step samples of the signal rotated by
+            // offset: extended[s] = v[(s - pad - offset) mod N]. The source indices are shifted by a
+            // multiple of N so they are non-negative before the remainder.
+            int pad = (count - 1) * step;
+            int baseIndex = (pad + offset + n - 1) / n * n;
+            var source = Engine.TensorArange<int>(baseIndex - pad - offset, baseIndex + n - offset, 1);
+            var wrapped = Engine.TensorRemainder(source, Engine.TensorFullLike(source, n));
+            var extended = Engine.TensorIndexSelect(signal, wrapped, 0).Reshape(new[] { 1, 1, n + pad });
+
+            // Conv1D cross-correlates, so the reversed filters give sum_k f[start + k] v[t - offset - k * step].
+            var kernel = Engine.TensorFlip(
+                Engine.TensorSlice(filters, new[] { 0, start }, new[] { 2, count }), new[] { 1 })
+                .Reshape(new[] { 2, 1, count });
+            var filtered = Engine.Conv1D(extended, kernel, 1, 0, step).Reshape(new[] { 2, n });
+            total = total is null ? filtered : Engine.TensorAdd(total, filtered);
+        }
+
+        return SplitFilterPair(total ?? new Tensor<T>(new[] { 2, n }), n);
+    }
+
+    /// <summary>Splits a [2, N] result into its two rows.</summary>
+    private (Vector<T>, Vector<T>) SplitFilterPair(Tensor<T> pair, int n)
+    {
+        var first = Engine.TensorSlice(pair, new[] { 0, 0 }, new[] { 1, n }).Reshape(new[] { n }).ToVector();
+        var second = Engine.TensorSlice(pair, new[] { 1, 0 }, new[] { 1, n }).Reshape(new[] { n }).ToVector();
         return (first, second);
     }
 
