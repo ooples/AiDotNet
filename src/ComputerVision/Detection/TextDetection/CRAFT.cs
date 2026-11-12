@@ -242,17 +242,14 @@ public partial class CRAFT<T> : TextDetectorBase<T>
         // text when its region score exceeds low_text (0.4) or its affinity exceeds link (0.4); a component
         // survives only if its PEAK region score reaches the text threshold (0.7, here the caller's
         // confidence threshold). One shared threshold on both maps, as before, is none of these.
-        // The first image's two score maps, in double as before, each in one bulk conversion.
-        var regionValues = CvTensorOps<T>.ToDoubleArray(Engine.TensorSlice(regionScore, new[] { 0, 0, 0, 0 }, new[] { 1, 1, scoreH, scoreW }));
-        var affinityValues = CvTensorOps<T>.ToDoubleArray(Engine.TensorSlice(affinityScore, new[] { 0, 0, 0, 0 }, new[] { 1, 1, scoreH, scoreW }));
         var textMask = new bool[scoreH, scoreW];
         var linkOnly = new bool[scoreH, scoreW];
         for (int h = 0; h < scoreH; h++)
         {
             for (int w = 0; w < scoreW; w++)
             {
-                bool text = regionValues[(h * scoreW) + w] > LowTextThreshold;
-                bool link = affinityValues[(h * scoreW) + w] > LinkThreshold;
+                bool text = NumOps.ToDouble(regionScore[0, 0, h, w]) > LowTextThreshold;
+                bool link = NumOps.ToDouble(affinityScore[0, 0, h, w]) > LinkThreshold;
                 textMask[h, w] = text || link;
                 linkOnly[h, w] = link && !text;
             }
@@ -262,7 +259,7 @@ public partial class CRAFT<T> : TextDetectorBase<T>
         var components = FindConnectedComponents(textMask, scoreH, scoreW);
 
         // Convert components to text regions
-        var accepted = new List<(List<(double X, double Y)> Polygon, double Confidence)>();
+        var regions = new List<TextRegion<T>>();
 
         foreach (var component in components)
         {
@@ -271,9 +268,9 @@ public partial class CRAFT<T> : TextDetectorBase<T>
 
             // The reported confidence is the component's mean region score.
             var (_, _, _, _, avgConfidence) = GetComponentStats(
-                component, regionValues, scoreW, scaleX, scaleY);
+                component, regionScore, scaleX, scaleY);
 
-            double peak = component.Max(p => regionValues[(p.H * scoreW) + p.W]);
+            double peak = component.Max(p => NumOps.ToDouble(regionScore[0, 0, p.H, p.W]));
             if (peak < confidenceThreshold)
                 continue;
 
@@ -293,24 +290,20 @@ public partial class CRAFT<T> : TextDetectorBase<T>
 
             if (polygon.Count >= 4)
             {
-                accepted.Add((polygon, avgConfidence));
-            }
-        }
+                var region = TextRegion<T>.FromPolygon(
+                    polygon.Select(p => (NumOps.FromDouble(p.X), NumOps.FromDouble(p.Y))).ToList(),
+                    NumOps.FromDouble(avgConfidence));
 
-        // Every region's confidence becomes T in one bulk conversion.
-        var confidences = CvTensorOps<T>.FromDoubleArray(accepted.Select(a => a.Confidence).ToArray(), new[] { accepted.Count }).ToArray();
-        var regions = new List<TextRegion<T>>(accepted.Count);
-        for (int i = 0; i < accepted.Count; i++)
-        {
-            var region = TextRegion<T>.FromPolygon(CvTensorOps<T>.PointsFromDoubles(accepted[i].Polygon), confidences[i]);
-            region.RegionType = TextRegionType.Word;
-            regions.Add(region);
+                region.RegionType = TextRegionType.Word;
+                regions.Add(region);
+            }
         }
 
         // Limit to max detections
         if (regions.Count > Options.MaxDetections)
         {
-            regions = CvTensorOps<T>.OrderByDescending(regions, r => r.Confidence)
+            regions = regions
+                .OrderByDescending(r => NumOps.ToDouble(r.Confidence))
                 .Take(Options.MaxDetections)
                 .ToList();
         }
@@ -498,8 +491,7 @@ public partial class CRAFT<T> : TextDetectorBase<T>
 
     private (double minX, double minY, double maxX, double maxY, double avgConf) GetComponentStats(
         List<(int H, int W)> component,
-        double[] regionScore,
-        int scoreW,
+        Tensor<T> regionScore,
         double scaleX,
         double scaleY)
     {
@@ -517,7 +509,7 @@ public partial class CRAFT<T> : TextDetectorBase<T>
             maxX = Math.Max(maxX, x);
             maxY = Math.Max(maxY, y);
 
-            sumConf += regionScore[(h * scoreW) + w];
+            sumConf += NumOps.ToDouble(regionScore[0, 0, h, w]);
         }
 
         return (minX, minY, maxX, maxY, sumConf / component.Count);

@@ -43,7 +43,9 @@ public class DIoUNMS<T>
         if (detections.Count == 0) return new List<Detection<T>>();
 
         // Sort by confidence (descending)
-        var sorted = CvTensorOps<T>.OrderByDescending(detections, d => d.Confidence);
+        var sorted = detections
+            .OrderByDescending(d => _numOps.ToDouble(d.Confidence))
+            .ToList();
 
         var kept = new List<Detection<T>>();
         var suppressed = new bool[sorted.Count];
@@ -93,7 +95,7 @@ public class DIoUNMS<T>
         }
 
         // Sort final result by confidence
-        return CvTensorOps<T>.OrderByDescending(result, d => d.Confidence);
+        return result.OrderByDescending(d => _numOps.ToDouble(d.Confidence)).ToList();
     }
 
     /// <summary>
@@ -116,7 +118,9 @@ public class DIoUNMS<T>
         if (detections.Count == 0) return new List<Detection<T>>();
 
         // Sort by confidence (descending)
-        var sorted = CvTensorOps<T>.OrderByDescending(detections, d => d.Confidence);
+        var sorted = detections
+            .OrderByDescending(d => _numOps.ToDouble(d.Confidence))
+            .ToList();
 
         var kept = new List<Detection<T>>();
         var suppressed = new bool[sorted.Count];

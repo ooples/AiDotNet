@@ -62,20 +62,17 @@ internal sealed class RtdetrDecoderTransformer<T> : CvParameterModule<T>
         // denoising_class_embed: nn.Embedding(num_classes + 1, d, padding_idx=num_classes), N(0, 1), padding row 0.
         var random = AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.NextRandom();
         _labelEmbed = new Tensor<T>(new[] { numClasses + 1, dModel });
-        var labelEmbed = new double[_labelEmbed.Length];
         for (int i = 0; i < numClasses * dModel; i++)
         {
             double u1 = 1.0 - random.NextDouble(), u2 = random.NextDouble();
-            labelEmbed[i] = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2);
+            _labelEmbed[i] = _numOps.FromDouble(Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2));
         }
-        CvTensorOps<T>.AssignFromDoubles(_labelEmbed, labelEmbed);
 
-        var priorBias = _numOps.FromDouble(prior);
         for (int i = 0; i < numLayers; i++)
         {
             _layers.Add(new DeformableDecoderLayer<T>(dModel, feedForward, _numLevels, numHeads, numPoints, transformerWideXavier: false));
             var score = new DetrLinear<T>(dModel, numClasses);
-            score.Bias.Fill(priorBias);
+            score.Bias.Fill(_numOps.FromDouble(prior));
             _scoreHeads.Add(score);
             var box = new DetrMlp<T>(dModel, dModel, 4, 3);
             box.Layers[box.Layers.Count - 1].Zero();
@@ -121,8 +118,8 @@ internal sealed class RtdetrDecoderTransformer<T> : CvParameterModule<T>
 
         // _generate_anchors: grid centers with size 0.05 * 2^level, valid inside (0.01, 0.99), logit space. The
         // reference's +inf for an invalid anchor is a large finite logit here: sigmoid is exactly 1, gradient 0.
-        var anchors = new double[batch * tokens * 4];
-        var valid = new double[batch * tokens * _d];
+        var anchors = new T[batch * tokens * 4];
+        var valid = new T[batch * tokens * _d];
         for (int l = 0; l < _numLevels; l++)
         {
             int h = shapes[l][0], w = shapes[l][1];
@@ -136,18 +133,18 @@ internal sealed class RtdetrDecoderTransformer<T> : CvParameterModule<T>
                     {
                         int token = (b * tokens) + starts[l] + (y * w) + x;
                         for (int coord = 0; coord < 4; coord++)
-                            anchors[(token * 4) + coord] = isValid ? Math.Log(anchor[coord] / (1 - anchor[coord])) : 1e4;
-                        for (int c = 0; c < _d; c++) valid[(token * _d) + c] = isValid ? 1.0 : 0.0;
+                            anchors[(token * 4) + coord] = _numOps.FromDouble(isValid ? Math.Log(anchor[coord] / (1 - anchor[coord])) : 1e4);
+                        for (int c = 0; c < _d; c++) valid[(token * _d) + c] = isValid ? _numOps.One : _numOps.Zero;
                     }
                 }
         }
         var outputMemory = _encoderOutputNorm.Forward(_encoderOutput.Forward(
-            engine.TensorMultiply(memory, CvTensorOps<T>.FromDoubleArray(valid, new[] { batch, tokens, _d }))));
+            engine.TensorMultiply(memory, new Tensor<T>(valid, new[] { batch, tokens, _d }))));
         var encoderClassAll = _encoderScore.Forward(outputMemory);
-        var encoderBoxAll = engine.TensorAdd(_encoderBox.Forward(outputMemory), CvTensorOps<T>.FromDoubleArray(anchors, new[] { batch, tokens, 4 }));
+        var encoderBoxAll = engine.TensorAdd(_encoderBox.Forward(outputMemory), new Tensor<T>(anchors, new[] { batch, tokens, 4 }));
 
         int k = Math.Min(_numQueries, tokens);
-        var classValues = CvTensorOps<T>.ToDoubleArray(encoderClassAll);
+        var classValues = encoderClassAll.ToArray();
         var rows = new int[batch * k];
         for (int b = 0; b < batch; b++)
         {
@@ -155,7 +152,7 @@ internal sealed class RtdetrDecoderTransformer<T> : CvParameterModule<T>
             for (int t = 0; t < tokens; t++)
             {
                 double m = double.NegativeInfinity;
-                for (int c = 0; c < _numClasses; c++) m = Math.Max(m, classValues[(((b * tokens) + t) * _numClasses) + c]);
+                for (int c = 0; c < _numClasses; c++) m = Math.Max(m, _numOps.ToDouble(classValues[(((b * tokens) + t) * _numClasses) + c]));
                 best[t] = m;
             }
             var order = Enumerable.Range(0, tokens).OrderByDescending(t => best[t]).ThenBy(t => t).Take(k).ToArray();
@@ -175,27 +172,27 @@ internal sealed class RtdetrDecoderTransformer<T> : CvParameterModule<T>
         var content = new Tensor<T>(contentValues, new[] { batch, k, _d });
         int pad = denoising?.PadSize ?? 0;
         int total = pad + k;
-        var anchorValues = CvTensorOps<T>.ToDoubleArray(referenceUndetached);
+        var anchorValues = referenceUndetached.ToArray();
         var referenceSigmoid = new double[batch * total * 4];
         for (int b = 0; b < batch; b++)
             for (int q = 0; q < k; q++)
                 for (int c = 0; c < 4; c++)
-                    referenceSigmoid[(((b * total) + pad + q) * 4) + c] = Sigmoid(anchorValues[(((b * k) + q) * 4) + c]);
+                    referenceSigmoid[(((b * total) + pad + q) * 4) + c] = Sigmoid(_numOps.ToDouble(anchorValues[(((b * k) + q) * 4) + c]));
         var target = content;
         Tensor<bool>? mask = null;
         if (denoising is not null)
         {
             var labelRows = new int[batch * pad];
-            var occupied = new double[batch * pad * _d];
+            var occupied = new T[batch * pad * _d];
             for (int slot = 0; slot < batch * pad; slot++)
             {
                 // Padding slots use the zero padding row (padding_idx = num_classes).
                 labelRows[slot] = denoising.Occupied[slot] ? denoising.Labels[slot] : _numClasses;
-                for (int c = 0; c < _d; c++) occupied[(slot * _d) + c] = denoising.Occupied[slot] ? 1.0 : 0.0;
+                for (int c = 0; c < _d; c++) occupied[(slot * _d) + c] = denoising.Occupied[slot] ? _numOps.One : _numOps.Zero;
             }
             var labelQueries = engine.TensorMultiply(
                 engine.Reshape(CvTensorOps<T>.Select(_labelEmbed, labelRows, 0), new[] { batch, pad, _d }),
-                CvTensorOps<T>.FromDoubleArray(occupied, new[] { batch, pad, _d }));
+                new Tensor<T>(occupied, new[] { batch, pad, _d }));
             target = engine.TensorConcatenate(new[] { labelQueries, content }, 1);
             for (int b = 0; b < batch; b++)
                 for (int s = 0; s < pad; s++)
@@ -208,11 +205,16 @@ internal sealed class RtdetrDecoderTransformer<T> : CvParameterModule<T>
         Tensor<T>? previous = null;
         for (int i = 0; i < _layers.Count; i++)
         {
-            // The same reference box for every level: [batch, total, 4] tiled to [batch, total, levels, 4].
-            var referenceFlat = CvTensorOps<T>.FromDoubleArray(referenceSigmoid, new[] { batch, total, 4 });
-            var referenceBoxes = engine.TensorTile(engine.Reshape(referenceFlat, new[] { batch, total, 1, 4 }), new[] { 1, 1, _numLevels, 1 });
-            var queryPosition = _queryPosHead.Forward(referenceFlat);
-            output = _layers[i].Forward(output, queryPosition, referenceBoxes,
+            var referenceBoxes = new T[batch * total * _numLevels * 4];
+            var referenceFlat = new T[batch * total * 4];
+            for (int q = 0; q < batch * total; q++)
+                for (int c = 0; c < 4; c++)
+                {
+                    referenceFlat[(q * 4) + c] = _numOps.FromDouble(referenceSigmoid[(q * 4) + c]);
+                    for (int l = 0; l < _numLevels; l++) referenceBoxes[(((q * _numLevels) + l) * 4) + c] = referenceFlat[(q * 4) + c];
+                }
+            var queryPosition = _queryPosHead.Forward(new Tensor<T>(referenceFlat, new[] { batch, total, 4 }));
+            output = _layers[i].Forward(output, queryPosition, new Tensor<T>(referenceBoxes, new[] { batch, total, _numLevels, 4 }),
                 memory, shapes, starts, mask);
 
             var delta = _boxHeads[i].Forward(output);
@@ -234,8 +236,8 @@ internal sealed class RtdetrDecoderTransformer<T> : CvParameterModule<T>
             if (i == _layers.Count - 1) pass.FinalBoxLogits = matchingBoxLogits;
 
             previous = inter;
-            var interValues = CvTensorOps<T>.ToDoubleArray(inter);
-            Array.Copy(interValues, referenceSigmoid, referenceSigmoid.Length);
+            var interValues = inter.ToArray();
+            for (int j = 0; j < referenceSigmoid.Length; j++) referenceSigmoid[j] = _numOps.ToDouble(interValues[j]);
         }
 
         return pass;
@@ -253,7 +255,7 @@ internal sealed class RtdetrDecoderTransformer<T> : CvParameterModule<T>
         writer.Write(_d); writer.Write(_numHeads); writer.Write(_numQueries); writer.Write(_numClasses); writer.Write(_layers.Count);
         foreach (var projection in _inputProjections) projection.Write(writer);
         _encoderOutput.Write(writer); _encoderOutputNorm.WriteParameters(writer); _encoderScore.Write(writer); _encoderBox.Write(writer);
-        CvTensorOps<T>.WriteDoubles(writer, _labelEmbed);
+        for (int i = 0; i < _labelEmbed.Length; i++) writer.Write(_numOps.ToDouble(_labelEmbed[i]));
         foreach (var layer in _layers) layer.Write(writer);
         _queryPosHead.Write(writer);
         foreach (var head in _scoreHeads) head.Write(writer);
@@ -267,7 +269,7 @@ internal sealed class RtdetrDecoderTransformer<T> : CvParameterModule<T>
             throw new InvalidOperationException("RT-DETR decoder configuration mismatch in the weight file.");
         foreach (var projection in _inputProjections) projection.Read(reader);
         _encoderOutput.Read(reader); _encoderOutputNorm.ReadParameters(reader); _encoderScore.Read(reader); _encoderBox.Read(reader);
-        CvTensorOps<T>.ReadDoublesInto(reader, _labelEmbed);
+        for (int i = 0; i < _labelEmbed.Length; i++) _labelEmbed[i] = _numOps.FromDouble(reader.ReadDouble());
         foreach (var layer in _layers) layer.Read(reader);
         _queryPosHead.Read(reader);
         foreach (var head in _scoreHeads) head.Read(reader);

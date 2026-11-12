@@ -105,10 +105,8 @@ public partial class YOLOSeg<T> : InstanceSegmenterBase<T>
         // Detection forward pass
         var (bboxes, scores, labels) = DetectObjects(neckFeatures, imageHeight, imageWidth);
 
-        // Assemble instance masks; scores become T in one bulk pass after the loop, in the same order.
-        var accepted = new List<(BoundingBox<T> Box, Tensor<T> Mask, int ClassId)>();
-        var acceptedScores = new List<double>();
-        double confidenceThreshold = NumOps.ToDouble(Options.ConfidenceThreshold);
+        // Assemble instance masks
+        var instances = new List<InstanceMask<T>>();
 
         for (int i = 0; i < bboxes.Count && i < Options.MaxDetections; i++)
         {
@@ -116,7 +114,7 @@ public partial class YOLOSeg<T> : InstanceSegmenterBase<T>
             int classId = labels[i];
             double confidence = scores[i];
 
-            if (confidence < confidenceThreshold)
+            if (confidence < NumOps.ToDouble(Options.ConfidenceThreshold))
                 continue;
 
             // Get RoI features for coefficient prediction
@@ -128,26 +126,24 @@ public partial class YOLOSeg<T> : InstanceSegmenterBase<T>
             ApplySigmoid(coefficients);
 
             // Assemble mask from prototypes
-            var coefVector = Engine.Reshape(
-                Engine.TensorSlice(coefficients, new[] { 0, 0 }, new[] { 1, _numPrototypes }), new[] { _numPrototypes });
+            var coefVector = new Tensor<T>(new[] { _numPrototypes });
+            for (int p = 0; p < _numPrototypes; p++)
+            {
+                coefVector[p] = coefficients[0, p];
+            }
 
             var mask = _protoHead.AssembleMask(prototypes, coefVector);
 
             // Crop mask to bounding box and resize to image size
             var croppedMask = CropMaskToBoxProto(mask, box, protoH, protoW, imageHeight, imageWidth);
-            var fullMask = PasteMask(new Tensor<T>(new[] { imageHeight, imageWidth }), croppedMask, box, imageHeight, imageWidth);
+            var fullMask = new Tensor<T>(new[] { imageHeight, imageWidth });
+            PasteMask(fullMask, croppedMask, box, imageHeight, imageWidth);
 
             // Binarize
             var binaryMask = BinarizeMask(fullMask, Options.MaskThreshold);
 
-            accepted.Add((box, binaryMask, classId));
-            acceptedScores.Add(confidence);
+            instances.Add(new InstanceMask<T>(box, binaryMask, classId, NumOps.FromDouble(confidence)));
         }
-
-        var confidences = CvTensorOps<T>.FromDoubleArray(acceptedScores.ToArray(), new[] { acceptedScores.Count }).ToArray();
-        var instances = accepted
-            .Select((item, i) => new InstanceMask<T>(item.Box, item.Mask, item.ClassId, confidences[i]))
-            .ToList();
 
         // Apply mask NMS
         instances = ApplyMaskNMS(instances, NumOps.ToDouble(Options.NmsThreshold));
@@ -164,9 +160,7 @@ public partial class YOLOSeg<T> : InstanceSegmenterBase<T>
     private (List<BoundingBox<T>> boxes, List<double> scores, List<int> labels) DetectObjects(
         List<Tensor<T>> neckFeatures, int imageHeight, int imageWidth)
     {
-        // Candidates keep their double corners; they become T boxes in one bulk pass after decoding.
-        var candidates = new List<(double X1, double Y1, double X2, double Y2, double Score, int Label)>();
-        double confidenceThreshold = NumOps.ToDouble(Options.ConfidenceThreshold);
+        var allBoxes = new List<(BoundingBox<T> box, double score, int label)>();
 
         int[] strides = { 8, 16, 32 };
 
@@ -180,8 +174,6 @@ public partial class YOLOSeg<T> : InstanceSegmenterBase<T>
             int featH = feat.Shape[2];
             int featW = feat.Shape[3];
             int stride = strides[Math.Min(level, strides.Length - 1)];
-            var predValues = CvTensorOps<T>.ToDoubleArray(rawPreds);
-            int[] predShape = rawPreds.Shape.ToArray();
 
             // Decode predictions
             for (int y = 0; y < featH; y++)
@@ -189,7 +181,7 @@ public partial class YOLOSeg<T> : InstanceSegmenterBase<T>
                 for (int x = 0; x < featW; x++)
                 {
                     // Get objectness and class scores
-                    double objectness = Sigmoid(GetTensorValue(predValues, predShape, 0, y, x));
+                    double objectness = Sigmoid(GetTensorValue(rawPreds, 0, y, x));
 
                     if (objectness < 0.3)
                         continue;
@@ -199,7 +191,7 @@ public partial class YOLOSeg<T> : InstanceSegmenterBase<T>
                     double bestScore = 0;
                     for (int c = 0; c < Options.NumClasses; c++)
                     {
-                        double classProb = Sigmoid(GetTensorValue(predValues, predShape, 5 + c, y, x));
+                        double classProb = Sigmoid(GetTensorValue(rawPreds, 5 + c, y, x));
                         double score = objectness * classProb;
                         if (score > bestScore)
                         {
@@ -208,14 +200,14 @@ public partial class YOLOSeg<T> : InstanceSegmenterBase<T>
                         }
                     }
 
-                    if (bestScore < confidenceThreshold)
+                    if (bestScore < NumOps.ToDouble(Options.ConfidenceThreshold))
                         continue;
 
                     // Decode box
-                    double cx = (x + Sigmoid(GetTensorValue(predValues, predShape, 1, y, x))) * stride;
-                    double cy = (y + Sigmoid(GetTensorValue(predValues, predShape, 2, y, x))) * stride;
-                    double w = Math.Exp(GetTensorValue(predValues, predShape, 3, y, x)) * stride;
-                    double h = Math.Exp(GetTensorValue(predValues, predShape, 4, y, x)) * stride;
+                    double cx = (x + Sigmoid(GetTensorValue(rawPreds, 1, y, x))) * stride;
+                    double cy = (y + Sigmoid(GetTensorValue(rawPreds, 2, y, x))) * stride;
+                    double w = Math.Exp(GetTensorValue(rawPreds, 3, y, x)) * stride;
+                    double h = Math.Exp(GetTensorValue(rawPreds, 4, y, x)) * stride;
 
                     double x1 = MathHelper.Clamp(cx - w / 2, 0, imageWidth);
                     double y1 = MathHelper.Clamp(cy - h / 2, 0, imageHeight);
@@ -224,27 +216,16 @@ public partial class YOLOSeg<T> : InstanceSegmenterBase<T>
 
                     if (x2 > x1 && y2 > y1)
                     {
-                        candidates.Add((x1, y1, x2, y2, bestScore, bestClass));
+                        var box = new BoundingBox<T>(
+                            NumOps.FromDouble(x1), NumOps.FromDouble(y1),
+                            NumOps.FromDouble(x2), NumOps.FromDouble(y2),
+                            BoundingBoxFormat.XYXY);
+
+                        allBoxes.Add((box, bestScore, bestClass));
                     }
                 }
             }
         }
-
-        var corners = new double[candidates.Count * 4];
-        for (int i = 0; i < candidates.Count; i++)
-        {
-            corners[(i * 4) + 0] = candidates[i].X1;
-            corners[(i * 4) + 1] = candidates[i].Y1;
-            corners[(i * 4) + 2] = candidates[i].X2;
-            corners[(i * 4) + 3] = candidates[i].Y2;
-        }
-        var cornerValues = CvTensorOps<T>.FromDoubleArray(corners, new[] { corners.Length }).ToArray();
-        var allBoxes = candidates
-            .Select((d, i) => (box: new BoundingBox<T>(
-                cornerValues[(i * 4) + 0], cornerValues[(i * 4) + 1],
-                cornerValues[(i * 4) + 2], cornerValues[(i * 4) + 3],
-                BoundingBoxFormat.XYXY), score: d.Score, label: d.Label))
-            .ToList();
 
         // NMS
         var nmsResult = ApplyNMS(allBoxes, NumOps.ToDouble(Options.NmsThreshold));
@@ -391,30 +372,27 @@ public partial class YOLOSeg<T> : InstanceSegmenterBase<T>
         return Engine.TensorSetSlice(fullMask, resized, new[] { y1, x1 });
     }
 
-    /// <param name="values">The prediction tensor's values in row-major order.</param>
-    /// <param name="shape">The prediction tensor's shape.</param>
-    private static double GetTensorValue(double[] values, int[] shape, int channel, int y, int x)
+    private double GetTensorValue(Tensor<T> tensor, int channel, int y, int x)
     {
         // Handle different tensor shapes
-        if (shape.Length == 4)
+        if (tensor.Shape.Length == 4)
         {
-            // [batch, channels, height, width]: batch item 0
-            if (channel < shape[1] && y < shape[2] && x < shape[3])
+            // [batch, channels, height, width]
+            if (channel < tensor.Shape[1] && y < tensor.Shape[2] && x < tensor.Shape[3])
             {
-                return values[(((channel * shape[2]) + y) * shape[3]) + x];
+                return NumOps.ToDouble(tensor[0, channel, y, x]);
             }
         }
-        else if (shape.Length == 3)
+        else if (tensor.Shape.Length == 3)
         {
             // [channels, height, width]
-            if (channel < shape[0] && y < shape[1] && x < shape[2])
+            if (channel < tensor.Shape[0] && y < tensor.Shape[1] && x < tensor.Shape[2])
             {
-                return values[(((channel * shape[1]) + y) * shape[2]) + x];
+                return NumOps.ToDouble(tensor[channel, y, x]);
             }
         }
         return 0;
     }
-
     private static double Sigmoid(double x)
     {
         return 1.0 / (1.0 + Math.Exp(-x));

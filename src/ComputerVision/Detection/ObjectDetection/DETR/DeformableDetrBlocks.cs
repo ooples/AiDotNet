@@ -28,8 +28,8 @@ internal sealed class DetrLinear<T> : CvParameterModule<T>
         Bias = new Tensor<T>(new[] { outFeatures });
         var random = AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.NextRandom();
         double bound = 1.0 / Math.Sqrt(inFeatures);
-        CvTensorOps<T>.AssignFromDoubles(Weight, Enumerable.Range(0, Weight.Length).Select(_ => ((random.NextDouble() * 2) - 1) * bound).ToArray());
-        CvTensorOps<T>.AssignFromDoubles(Bias, Enumerable.Range(0, Bias.Length).Select(_ => ((random.NextDouble() * 2) - 1) * bound).ToArray());
+        for (int i = 0; i < Weight.Length; i++) Weight[i] = _numOps.FromDouble(((random.NextDouble() * 2) - 1) * bound);
+        for (int i = 0; i < Bias.Length; i++) Bias[i] = _numOps.FromDouble(((random.NextDouble() * 2) - 1) * bound);
     }
 
     public int InFeatures { get; }
@@ -42,7 +42,7 @@ internal sealed class DetrLinear<T> : CvParameterModule<T>
     {
         var random = AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.NextRandom();
         double bound = Math.Sqrt(6.0 / (InFeatures + OutFeatures));
-        CvTensorOps<T>.AssignFromDoubles(Weight, Enumerable.Range(0, Weight.Length).Select(_ => ((random.NextDouble() * 2) - 1) * bound).ToArray());
+        for (int i = 0; i < Weight.Length; i++) Weight[i] = _numOps.FromDouble(((random.NextDouble() * 2) - 1) * bound);
         Bias.Fill(_numOps.Zero);
     }
 
@@ -54,7 +54,7 @@ internal sealed class DetrLinear<T> : CvParameterModule<T>
     {
         var random = AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.NextRandom();
         double bound = Math.Sqrt(6.0 / (InFeatures + OutFeatures));
-        CvTensorOps<T>.AssignFromDoubles(Weight, Enumerable.Range(0, Weight.Length).Select(_ => ((random.NextDouble() * 2) - 1) * bound).ToArray());
+        for (int i = 0; i < Weight.Length; i++) Weight[i] = _numOps.FromDouble(((random.NextDouble() * 2) - 1) * bound);
     }
     /// <summary>Zero weight and bias.</summary>
     public void Zero()
@@ -84,13 +84,13 @@ internal sealed class DetrLinear<T> : CvParameterModule<T>
     public void Write(BinaryWriter writer)
     {
         foreach (var tensor in OwnParameterTensors())
-            CvTensorOps<T>.WriteDoubles(writer, tensor);
+            for (int i = 0; i < tensor.Length; i++) writer.Write(_numOps.ToDouble(tensor[i]));
     }
 
     public void Read(BinaryReader reader)
     {
         foreach (var tensor in OwnParameterTensors())
-            CvTensorOps<T>.ReadDoublesInto(reader, tensor);
+            for (int i = 0; i < tensor.Length; i++) tensor[i] = _numOps.FromDouble(reader.ReadDouble());
     }
 
     protected override IEnumerable<IParameterSource<T>?> ParameterChildren() => Array.Empty<IParameterSource<T>?>();
@@ -161,13 +161,13 @@ internal sealed class DinoGroupNorm<T> : CvParameterModule<T>
     public void Write(BinaryWriter writer)
     {
         foreach (var tensor in OwnParameterTensors())
-            CvTensorOps<T>.WriteDoubles(writer, tensor);
+            for (int i = 0; i < tensor.Length; i++) writer.Write(_numOps.ToDouble(tensor[i]));
     }
 
     public void Read(BinaryReader reader)
     {
         foreach (var tensor in OwnParameterTensors())
-            CvTensorOps<T>.ReadDoublesInto(reader, tensor);
+            for (int i = 0; i < tensor.Length; i++) tensor[i] = _numOps.FromDouble(reader.ReadDouble());
     }
 
     protected override IEnumerable<IParameterSource<T>?> ParameterChildren() => Array.Empty<IParameterSource<T>?>();
@@ -448,7 +448,7 @@ internal static class DetrHeads<T>
 
     /// <summary><c>inverse_sigmoid</c> of detached host values, as a constant <c>[batch, count, 4]</c> tensor.</summary>
     public static Tensor<T> InverseSigmoidConstant(double[] sigmoid, int batch, int count)
-        => CvTensorOps<T>.FromDoubleArray(Array.ConvertAll(sigmoid, v => DetrEmbeddings.InverseSigmoid(v)), new[] { batch, count, 4 });
+        => new Tensor<T>(sigmoid.Select(v => NumOps.FromDouble(DetrEmbeddings.InverseSigmoid(v))).ToArray(), new[] { batch, count, 4 });
 
     /// <summary>
     /// The reference NMS-free post-processing: every (query, class) pair is scored by its own sigmoid (a query
@@ -459,44 +459,28 @@ internal static class DetrHeads<T>
         double confidenceThreshold, IReadOnlyList<string> classNames)
     {
         static double Sigmoid(double x) => 1.0 / (1.0 + Math.Exp(-x));
-        var engine = AiDotNetEngine.Current;
-        int queries = classLogits.Shape[1], classes = classLogits.Shape[2], boxWidth = boxLogits.Shape[2];
-        // The first image of each head, in double as before, each in one bulk conversion.
-        var logits = CvTensorOps<T>.ToDoubleArray(engine.TensorSlice(classLogits, new[] { 0, 0, 0 }, new[] { 1, queries, classes }));
-        var boxValues = CvTensorOps<T>.ToDoubleArray(engine.TensorSlice(boxLogits, new[] { 0, 0, 0 }, new[] { 1, queries, boxWidth }));
+        int queries = classLogits.Shape[1], classes = classLogits.Shape[2];
         var candidates = new List<(double Score, int Query, int Class)>();
         for (int q = 0; q < queries; q++)
             for (int c = 0; c < classes; c++)
             {
-                double p = Sigmoid(logits[(q * classes) + c]);
+                double p = Sigmoid(NumOps.ToDouble(classLogits[0, q, c]));
                 if (p >= confidenceThreshold) candidates.Add((p, q, c));
             }
 
-        var ranked = candidates.OrderByDescending(x => x.Score).ThenBy(x => x.Query).ThenBy(x => x.Class).ToList();
-        // Per detection: four clipped corners and the score, each rounded through float as before.
-        var values = new double[ranked.Count * 5];
-        for (int i = 0; i < ranked.Count; i++)
+        var detections = new List<Detection<T>>();
+        foreach (var (score, q, c) in candidates.OrderByDescending(x => x.Score).ThenBy(x => x.Query).ThenBy(x => x.Class))
         {
-            var (score, q, _) = ranked[i];
-            int offset = q * boxWidth;
-            double cx = Sigmoid(boxValues[offset]) * imageWidth;
-            double cy = Sigmoid(boxValues[offset + 1]) * imageHeight;
-            double w = Sigmoid(boxValues[offset + 2]) * imageWidth;
-            double h = Sigmoid(boxValues[offset + 3]) * imageHeight;
-            values[(i * 5) + 0] = (float)Math.Max(0, cx - (w / 2));
-            values[(i * 5) + 1] = (float)Math.Max(0, cy - (h / 2));
-            values[(i * 5) + 2] = (float)Math.Min(imageWidth, cx + (w / 2));
-            values[(i * 5) + 3] = (float)Math.Min(imageHeight, cy + (h / 2));
-            values[(i * 5) + 4] = (float)score;
-        }
-
-        var converted = CvTensorOps<T>.FromDoubleArray(values, new[] { values.Length }).ToArray();
-        var detections = new List<Detection<T>>(ranked.Count);
-        for (int i = 0; i < ranked.Count; i++)
-        {
-            int c = ranked[i].Class;
-            var box = new BoundingBox<T>(converted[i * 5], converted[(i * 5) + 1], converted[(i * 5) + 2], converted[(i * 5) + 3]);
-            detections.Add(new Detection<T>(box, c, converted[(i * 5) + 4], c < classNames.Count ? classNames[c] : null));
+            double cx = Sigmoid(NumOps.ToDouble(boxLogits[0, q, 0])) * imageWidth;
+            double cy = Sigmoid(NumOps.ToDouble(boxLogits[0, q, 1])) * imageHeight;
+            double w = Sigmoid(NumOps.ToDouble(boxLogits[0, q, 2])) * imageWidth;
+            double h = Sigmoid(NumOps.ToDouble(boxLogits[0, q, 3])) * imageHeight;
+            var box = new BoundingBox<T>(
+                NumOps.FromDouble((float)Math.Max(0, cx - (w / 2))),
+                NumOps.FromDouble((float)Math.Max(0, cy - (h / 2))),
+                NumOps.FromDouble((float)Math.Min(imageWidth, cx + (w / 2))),
+                NumOps.FromDouble((float)Math.Min(imageHeight, cy + (h / 2))));
+            detections.Add(new Detection<T>(box, c, NumOps.FromDouble((float)score), c < classNames.Count ? classNames[c] : null));
         }
         return detections;
     }

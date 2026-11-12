@@ -114,11 +114,6 @@ internal partial class DETRDecoder<T> : CvParameterModule<T>
         int batch = classLogits.Shape[0];
         int numQueries = classLogits.Shape[1];
         int numClasses = classLogits.Shape[2];
-        int boxWidth = boxPreds.Shape[2];
-
-        // The decode runs in double, as before; each tensor converts in one bulk pass.
-        var logitValues = CvTensorOps<T>.ToDoubleArray(classLogits);
-        var boxValues = CvTensorOps<T>.ToDoubleArray(boxPreds);
 
         for (int b = 0; b < batch; b++)
         {
@@ -137,14 +132,14 @@ internal partial class DETRDecoder<T> : CvParameterModule<T>
                 double maxLogit = double.NegativeInfinity;
                 for (int c = 0; c < numClasses; c++)
                 {
-                    double logit = logitValues[((b * numQueries) + q) * numClasses + c];
+                    double logit = _numOps.ToDouble(classLogits[b, q, c]);
                     maxLogit = Math.Max(maxLogit, logit);
                 }
 
                 var probs = new double[numClasses];
                 for (int c = 0; c < numClasses; c++)
                 {
-                    double logit = logitValues[((b * numQueries) + q) * numClasses + c];
+                    double logit = _numOps.ToDouble(classLogits[b, q, c]);
                     probs[c] = Math.Exp(logit - maxLogit);
                     sumExp += probs[c];
                 }
@@ -161,11 +156,10 @@ internal partial class DETRDecoder<T> : CvParameterModule<T>
                 }
 
                 // Decode box (DETR outputs normalized cx, cy, w, h)
-                int boxOffset = ((b * numQueries) + q) * boxWidth;
-                double cx = Sigmoid(boxValues[boxOffset]);
-                double cy = Sigmoid(boxValues[boxOffset + 1]);
-                double w = Sigmoid(boxValues[boxOffset + 2]);
-                double h = Sigmoid(boxValues[boxOffset + 3]);
+                double cx = Sigmoid(_numOps.ToDouble(boxPreds[b, q, 0]));
+                double cy = Sigmoid(_numOps.ToDouble(boxPreds[b, q, 1]));
+                double w = Sigmoid(_numOps.ToDouble(boxPreds[b, q, 2]));
+                double h = Sigmoid(_numOps.ToDouble(boxPreds[b, q, 3]));
 
                 // Convert to absolute coordinates
                 cx *= imageWidth;
@@ -219,7 +213,10 @@ internal partial class DETRDecoder<T> : CvParameterModule<T>
         writer.Write(_numQueries);
 
         // Write query embeddings
-        CvTensorOps<T>.WriteDoubles(writer, _queryEmbed);
+        for (int i = 0; i < _queryEmbed.Length; i++)
+        {
+            writer.Write(_numOps.ToDouble(_queryEmbed[i]));
+        }
 
         // Write decoder layers
         foreach (var layer in _layers)
@@ -251,7 +248,10 @@ internal partial class DETRDecoder<T> : CvParameterModule<T>
         }
 
         // Read query embeddings
-        CvTensorOps<T>.ReadDoublesInto(reader, _queryEmbed);
+        for (int i = 0; i < _queryEmbed.Length; i++)
+        {
+            _queryEmbed[i] = _numOps.FromDouble(reader.ReadDouble());
+        }
 
         // Read decoder layers
         foreach (var layer in _layers)
@@ -273,7 +273,10 @@ internal partial class DETRDecoder<T> : CvParameterModule<T>
         // Drawn from the model's initialization scope (#2201). A fixed seed of 42 here ignored the configured seed and gave every same-shape tensor identical values.
         var random = AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.NextRandom();
 
-        CvTensorOps<T>.AssignFromDoubles(embeddings, Enumerable.Range(0, embeddings.Length).Select(i => (random.NextDouble() * 2 - 1) * scale).ToArray());
+        for (int i = 0; i < embeddings.Length; i++)
+        {
+            embeddings[i] = _numOps.FromDouble((random.NextDouble() * 2 - 1) * scale);
+        }
 
         return embeddings;
     }

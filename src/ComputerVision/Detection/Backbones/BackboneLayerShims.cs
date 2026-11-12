@@ -548,12 +548,13 @@ internal class BatchNorm2D<T> : IParameterSource<T>, IParameterChunkSource<T>, I
     public void WriteParameters(BinaryWriter writer)
     {
         BackboneSerialization.WriteLayerParameters(writer, _layer);
+        var ops = MathHelper.GetNumericOperations<T>();
         foreach (var statistic in new[] { _layer.GetRunningMean(), _layer.GetRunningVariance() })
         {
             writer.Write(statistic.Length);
-            foreach (double value in CvTensorOps<T>.ToDoubleArray(statistic.ToArray()))
+            for (int i = 0; i < statistic.Length; i++)
             {
-                writer.Write(value);
+                writer.Write(ops.ToDouble(statistic[i]));
             }
         }
     }
@@ -561,6 +562,7 @@ internal class BatchNorm2D<T> : IParameterSource<T>, IParameterChunkSource<T>, I
     public void ReadParameters(BinaryReader reader)
     {
         BackboneSerialization.ReadLayerParameters(reader, _layer);
+        var ops = MathHelper.GetNumericOperations<T>();
         foreach (var statistic in new[] { _layer.GetRunningMean(), _layer.GetRunningVariance() })
         {
             int length = reader.ReadInt32();
@@ -570,14 +572,10 @@ internal class BatchNorm2D<T> : IParameterSource<T>, IParameterChunkSource<T>, I
                     $"BatchNorm2D running statistic has {length} values on the wire; the layer has {statistic.Length}.");
             }
 
-            var wire = new double[length];
             for (int i = 0; i < length; i++)
             {
-                wire[i] = reader.ReadDouble();
+                statistic[i] = ops.FromDouble(reader.ReadDouble());
             }
-
-            // Written through: the layer keeps reading this statistic instance.
-            CvTensorOps<T>.FromDoubleArray(wire, new[] { length }).AsSpan().CopyTo(statistic.AsWritableSpan());
         }
     }
 }

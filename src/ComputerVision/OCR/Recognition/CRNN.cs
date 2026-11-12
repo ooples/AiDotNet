@@ -457,9 +457,6 @@ public partial class CRNN<T> : OCRBase<T>
         int rows = Math.Min(numRows, destRows);
         int cols = Math.Min(numCols, destCols);
 
-        // The checkpoint's floats become T in one bulk conversion; entries outside the slice keep their values.
-        var converted = FloatsToT(source);
-        var destValues = dest.ToArray();
         for (int r = 0; r < rows; r++)
         {
             for (int c = 0; c < cols; c++)
@@ -467,31 +464,25 @@ public partial class CRNN<T> : OCRBase<T>
                 int srcIdx = (startRow + r) * source.Shape[1] + c;
                 if (srcIdx < source.Length)
                 {
-                    destValues[(r * destCols) + c] = converted[srcIdx];
+                    dest[r, c] = NumOps.FromDouble(source[srcIdx]);
                 }
             }
         }
-        destValues.AsSpan().CopyTo(dest.AsWritableSpan());
     }
 
     private void CopyBiasSlice(Tensor<float> biasIh, Tensor<float> biasHh, Tensor<T> dest, int start, int length)
     {
         int count = Math.Min(length, dest.Length);
-        if (count <= 0) return;
-        var ih = biasIh.ToArray();
-        var hh = biasHh.ToArray();
-        var combined = new double[count];
         for (int i = 0; i < count; i++)
         {
             // Combine ih and hh biases (standard LSTM convention)
             double val = 0;
-            if (start + i < ih.Length)
-                val += ih[start + i];
-            if (start + i < hh.Length)
-                val += hh[start + i];
-            combined[i] = val;
+            if (start + i < biasIh.Length)
+                val += biasIh[start + i];
+            if (start + i < biasHh.Length)
+                val += biasHh[start + i];
+            dest[i] = NumOps.FromDouble(val);
         }
-        CvTensorOps<T>.FromDoubleArray(combined, new[] { count }).AsSpan().CopyTo(dest.AsWritableSpan().Slice(0, count));
     }
 
     private void MapDenseWeights(Dictionary<string, Tensor<float>> weights, string prefix, Dense<T> dense)
@@ -509,15 +500,10 @@ public partial class CRNN<T> : OCRBase<T>
     private void CopyWeights(Tensor<float> source, Tensor<T> dest)
     {
         int count = Math.Min(source.Length, dest.Length);
-        if (count <= 0) return;
-        FloatsToT(source).AsSpan(0, count).CopyTo(dest.AsWritableSpan().Slice(0, count));
-    }
-
-    /// <summary>A checkpoint tensor of floats as <typeparamref name="T"/>, via double, in one bulk conversion.</summary>
-    private static T[] FloatsToT(Tensor<float> source)
-    {
-        var values = source.ToArray();
-        return CvTensorOps<T>.FromDoubleArray(Array.ConvertAll(values, value => (double)value), new[] { values.Length }).ToArray();
+        for (int i = 0; i < count; i++)
+        {
+            dest[i] = NumOps.FromDouble(source[i]);
+        }
     }
 
     /// <inheritdoc/>
@@ -694,12 +680,11 @@ public partial class CRNN<T> : OCRBase<T>
         }
 
         var perSequence = ctc.ComputeTapeLoss(Engine.TensorLogSoftmax(logits, axis: -1), encodedTargets);  // [batch]
-        var weightValues = new double[labels.Length];
+        var weights = new Tensor<T>(new[] { labels.Length });
         for (int b = 0; b < labels.Length; b++)
         {
-            weightValues[b] = 1.0 / ((double)Math.Max(1, labels[b].Length) * labels.Length);
+            weights[b] = NumOps.FromDouble(1.0 / ((double)Math.Max(1, labels[b].Length) * labels.Length));
         }
-        var weights = CvTensorOps<T>.FromDoubleArray(weightValues, new[] { labels.Length });
 
         return Engine.ReduceSum(Engine.TensorMultiply(perSequence, weights), null);
     }
@@ -712,7 +697,6 @@ public partial class CRNN<T> : OCRBase<T>
         if (target.Rank == 3 && target.Shape[2] == VocabularySize)
         {
             int batch = target.Shape[0], columns = target.Shape[1];
-            var scores = CvTensorOps<T>.ToDoubleArray(target);
             var labels = new int[batch][];
             for (int b = 0; b < batch; b++)
             {
@@ -724,7 +708,7 @@ public partial class CRNN<T> : OCRBase<T>
                     double bestValue = double.NegativeInfinity;
                     for (int v = 0; v < VocabularySize; v++)
                     {
-                        double value = scores[(((b * columns) + t) * VocabularySize) + v];
+                        double value = NumOps.ToDouble(target[(((b * columns) + t) * VocabularySize) + v]);
                         if (value > bestValue)
                         {
                             bestValue = value;
@@ -749,14 +733,13 @@ public partial class CRNN<T> : OCRBase<T>
         if (target.Rank == 2)
         {
             int batch = target.Shape[0], length = target.Shape[1];
-            var ids = CvTensorOps<T>.ToDoubleArray(target);
             var labels = new int[batch][];
             for (int b = 0; b < batch; b++)
             {
                 var sequence = new List<int>();
                 for (int t = 0; t < length; t++)
                 {
-                    double id = Math.Round(ids[(b * length) + t]);
+                    double id = Math.Round(NumOps.ToDouble(target[(b * length) + t]));
                     if (id < 0 || id >= VocabularySize)
                     {
                         throw new ArgumentException(
@@ -786,13 +769,13 @@ public partial class CRNN<T> : OCRBase<T>
     /// </summary>
     private Tensor<T> EncodeCtcTargets(int[][] labels)
     {
-        var values = new List<double> { labels.Length };
+        var values = new List<T> { NumOps.FromDouble(labels.Length) };
         foreach (var sequence in labels)
         {
-            values.Add(sequence.Length);
-            values.AddRange(sequence.Select(label => (double)label));
+            values.Add(NumOps.FromDouble(sequence.Length));
+            values.AddRange(sequence.Select(label => NumOps.FromDouble(label)));
         }
 
-        return CvTensorOps<T>.FromDoubleArray(values.ToArray(), new[] { values.Count });
+        return new Tensor<T>(new[] { values.Count }, new Vector<T>(values.ToArray()));
     }
 }

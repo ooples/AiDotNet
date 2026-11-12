@@ -411,11 +411,15 @@ public abstract partial class InstanceSegmenterBase<T> : ModelBase<T, Tensor<T>,
     /// </summary>
     protected Tensor<T> ResizeMask(Tensor<T> mask, int targetHeight, int targetWidth)
     {
-        // Bilinear in double, src = dst / out * in with the far tap clamped to the last row/column, as before.
-        var nchw = Engine.Reshape(mask, new[] { 1, 1, mask.Shape[0], mask.Shape[1] });
-        var resized = AiDotNet.ComputerVision.CvTensorOps<T>.ResizeBilinearDouble(nchw, targetHeight, targetWidth);
+        int srcH = mask.Shape[0];
+        int srcW = mask.Shape[1];
+
+        // Bilinear with src = dst / out * in and the far tap clamped, as engine ops on a [1, 1, H, W] view.
+        var nchw = Engine.Reshape(mask, new[] { 1, 1, srcH, srcW });
+        var resized = CvTensorOps<T>.ResizeBilinearAsymmetric(nchw, targetHeight, targetWidth);
         return Engine.Reshape(resized, new[] { targetHeight, targetWidth });
     }
+
 
     /// <summary>
     /// Binarizes a mask using threshold.
@@ -464,6 +468,23 @@ public abstract partial class InstanceSegmenterBase<T> : ModelBase<T, Tensor<T>,
         if (instances.Count <= 1)
             return instances;
 
-        return Common.SegmentationTensorOps.MaskNms(instances, iouThreshold);
+        // Sort by confidence descending
+        var sorted = instances.OrderByDescending(i => NumOps.ToDouble(i.Confidence)).ToList();
+        var keep = new List<InstanceMask<T>>();
+
+        while (sorted.Count > 0)
+        {
+            var best = sorted[0];
+            keep.Add(best);
+            sorted.RemoveAt(0);
+
+            sorted = sorted.Where(inst =>
+            {
+                double iou = best.ComputeMaskIoU(inst, NumOps);
+                return iou < iouThreshold;
+            }).ToList();
+        }
+
+        return keep;
     }
 }

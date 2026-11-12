@@ -181,44 +181,39 @@ public partial class EAST<T> : TextDetectorBase<T>
         double scaleX = (double)imageWidth / scoreW;
         double scaleY = (double)imageHeight / scoreH;
 
-        // The first image's maps, in double as before, each in one bulk conversion.
-        var scoreValues = CvTensorOps<T>.ToDoubleArray(Engine.TensorSlice(score, new[] { 0, 0, 0, 0 }, new[] { 1, 1, scoreH, scoreW }));
-        var geometryMap = new GeometryMap(
-            CvTensorOps<T>.ToDoubleArray(Engine.TensorSlice(geometry, new[] { 0, 0, 0, 0 }, new[] { 1, geometry.Shape[1], geometry.Shape[2], geometry.Shape[3] })),
-            geometry.Shape[2], geometry.Shape[3]);
-        var accepted = new List<(List<(double X, double Y)> Polygon, double Score, double Angle)>();
+        var regions = new List<TextRegion<T>>();
 
         // Find text pixels and decode boxes
         for (int h = 0; h < scoreH; h++)
         {
             for (int w = 0; w < scoreW; w++)
             {
-                double scoreVal = scoreValues[(h * scoreW) + w];
+                double scoreVal = NumOps.ToDouble(score[0, 0, h, w]);
 
                 if (scoreVal < confidenceThreshold)
                     continue;
 
                 // Decode geometry
-                var polygon = DecodeGeometry(geometryMap, h, w, scaleX, scaleY);
+                var polygon = DecodeGeometry(geometry, h, w, scaleX, scaleY);
 
                 if (polygon.Count >= 4)
                 {
-                    // Rotation angle (RBOX channel 4), used only with rotated boxes.
-                    double angle = _useRotatedBoxes ? geometryMap[4, h, w] : 0.0;
-                    accepted.Add((polygon, scoreVal, angle));
+                    var region = TextRegion<T>.FromPolygon(
+                        polygon.Select(p => (NumOps.FromDouble(p.X), NumOps.FromDouble(p.Y))).ToList(),
+                        NumOps.FromDouble(scoreVal));
+
+                    region.RegionType = TextRegionType.Word;
+
+                    if (_useRotatedBoxes)
+                    {
+                        // Extract rotation angle
+                        double angle = NumOps.ToDouble(geometry[0, 4, h, w]);
+                        region.RotationAngle = angle * 180.0 / Math.PI;
+                    }
+
+                    regions.Add(region);
                 }
             }
-        }
-
-        var acceptedScores = CvTensorOps<T>.FromDoubleArray(accepted.Select(a => a.Score).ToArray(), new[] { accepted.Count }).ToArray();
-        var regions = new List<TextRegion<T>>(accepted.Count);
-        for (int i = 0; i < accepted.Count; i++)
-        {
-            var region = TextRegion<T>.FromPolygon(CvTensorOps<T>.PointsFromDoubles(accepted[i].Polygon), acceptedScores[i]);
-            region.RegionType = TextRegionType.Word;
-            if (_useRotatedBoxes)
-                region.RotationAngle = accepted[i].Angle * 180.0 / Math.PI;
-            regions.Add(region);
         }
 
         // Locality-aware NMS (Zhou et al. 2017, Algorithm 1), one of the paper's two contributions: the
@@ -229,18 +224,15 @@ public partial class EAST<T> : TextDetectorBase<T>
 
         // The merged score is a SUM (it orders the NMS above); report the box's mean score-map value, as the
         // reference does after LANMS, so confidences stay in [0, 1] and threshold like single-pixel scores.
-        var means = regions.Select(region => MeanScoreInside(region, scoreValues, scoreH, scoreW, scaleX, scaleY)).ToArray();
-        var meanScores = CvTensorOps<T>.FromDoubleArray(means, new[] { means.Length }).ToArray();
-        for (int i = 0; i < regions.Count; i++)
-            regions[i].Confidence = meanScores[i];
-        // Thresholded on the stored T confidence, read back in one bulk conversion.
-        var storedMeans = CvTensorOps<T>.ToDoubleArray(meanScores);
-        regions = regions.Where((r, i) => storedMeans[i] >= BoxScoreThreshold).ToList();
+        foreach (var region in regions)
+            region.Confidence = NumOps.FromDouble(MeanScoreInside(region, score, scaleX, scaleY));
+        regions = regions.Where(r => NumOps.ToDouble(r.Confidence) >= BoxScoreThreshold).ToList();
 
         // Limit to max detections
         if (regions.Count > Options.MaxDetections)
         {
-            regions = CvTensorOps<T>.OrderByDescending(regions, r => r.Confidence)
+            regions = regions
+                .OrderByDescending(r => NumOps.ToDouble(r.Confidence))
                 .Take(Options.MaxDetections)
                 .ToList();
         }
@@ -296,7 +288,7 @@ public partial class EAST<T> : TextDetectorBase<T>
 
         // Class-balanced cross-entropy: beta = 1 - |Y*| / |Y|.
         double positives = 0;
-        foreach (double value in CvTensorOps<T>.ToDoubleArray(y)) positives += value;
+        for (int i = 0; i < y.Length; i++) positives += NumOps.ToDouble(y[i]);
         double beta = 1.0 - (positives / y.Length);
         var p = Engine.TensorClamp(score, NumOps.FromDouble(1e-6), NumOps.FromDouble(1 - 1e-6));
         var ones = Engine.TensorAddScalar(Engine.TensorMultiplyScalar(y, NumOps.Zero), NumOps.One);
@@ -451,25 +443,8 @@ public partial class EAST<T> : TextDetectorBase<T>
             geometry[(2 * v) + 1][py, px] = vertex.Y - sy;
         }
     }
-    /// <summary>One image's geometry channels <c>[channels, h, w]</c> in double.</summary>
-    private readonly struct GeometryMap
-    {
-        private readonly double[] _values;
-        private readonly int _height;
-        private readonly int _width;
-
-        public GeometryMap(double[] values, int height, int width)
-        {
-            _values = values;
-            _height = height;
-            _width = width;
-        }
-
-        public double this[int channel, int h, int w] => _values[(((channel * _height) + h) * _width) + w];
-    }
-
     private List<(double X, double Y)> DecodeGeometry(
-        GeometryMap geometry,
+        Tensor<T> geometry,
         int h,
         int w,
         double scaleX,
@@ -481,11 +456,11 @@ public partial class EAST<T> : TextDetectorBase<T>
         if (_useRotatedBoxes)
         {
             // RBOX format: 4 distances from pixel to box edges + angle
-            double d0 = geometry[0, h, w] * scaleY; // top
-            double d1 = geometry[1, h, w] * scaleX; // right
-            double d2 = geometry[2, h, w] * scaleY; // bottom
-            double d3 = geometry[3, h, w] * scaleX; // left
-            double angle = geometry[4, h, w];
+            double d0 = NumOps.ToDouble(geometry[0, 0, h, w]) * scaleY; // top
+            double d1 = NumOps.ToDouble(geometry[0, 1, h, w]) * scaleX; // right
+            double d2 = NumOps.ToDouble(geometry[0, 2, h, w]) * scaleY; // bottom
+            double d3 = NumOps.ToDouble(geometry[0, 3, h, w]) * scaleX; // left
+            double angle = NumOps.ToDouble(geometry[0, 4, h, w]);
 
             // Compute rotated rectangle corners
             double boxHeight = d0 + d2;
@@ -519,8 +494,8 @@ public partial class EAST<T> : TextDetectorBase<T>
             var points = new List<(double X, double Y)>();
             for (int i = 0; i < 4; i++)
             {
-                double offsetX = geometry[i * 2, h, w] * scaleX;
-                double offsetY = geometry[(i * 2) + 1, h, w] * scaleY;
+                double offsetX = NumOps.ToDouble(geometry[0, i * 2, h, w]) * scaleX;
+                double offsetY = NumOps.ToDouble(geometry[0, i * 2 + 1, h, w]) * scaleY;
                 points.Add((centerX + offsetX, centerY + offsetY));
             }
             return points;
@@ -662,10 +637,7 @@ public partial class EAST<T> : TextDetectorBase<T>
     // averaged by score, and the merged score is the sum of the parts.
     private List<TextRegion<T>> LocalityAwareMerge(List<TextRegion<T>> regions, double iouThreshold)
     {
-        // Every input score and quadrilateral in double, converted in bulk up front; the merged regions'
-        // scores convert back in one bulk pass at the end.
-        var scores = CvTensorOps<T>.ToDoubleArray(regions.Select(r => r.Confidence).ToArray());
-        var flushed = new List<(List<(double X, double Y)> Polygon, double Score, double Angle)>();
+        var merged = new List<TextRegion<T>>();
         List<(double X, double Y)>? polygon = null;
         double polygonScore = 0, angleSum = 0;
         // Unweighted fallbacks for a merge whose scores sum to zero (only reachable with a 0.0 confidence
@@ -676,14 +648,19 @@ public partial class EAST<T> : TextDetectorBase<T>
         void Flush()
         {
             if (polygon is null) return;
-            flushed.Add((polygon, polygonScore, polygonScore > 0 ? angleSum / polygonScore : angleUnweightedSum / parts));
+            var region = TextRegion<T>.FromPolygon(
+                polygon.Select(p => (NumOps.FromDouble(p.X), NumOps.FromDouble(p.Y))).ToList(),
+                NumOps.FromDouble(polygonScore));
+            region.RegionType = TextRegionType.Word;
+            if (_useRotatedBoxes)
+                region.RotationAngle = polygonScore > 0 ? angleSum / polygonScore : angleUnweightedSum / parts;
+            merged.Add(region);
         }
 
-        for (int index = 0; index < regions.Count; index++)
+        foreach (var next in regions)
         {
-            var next = regions[index];
-            double s = scores[index];
-            var points = next.Polygon is null ? null : CvTensorOps<T>.PointsToDoubles(next.Polygon);
+            double s = NumOps.ToDouble(next.Confidence);
+            var points = next.Polygon?.Select(v => (X: NumOps.ToDouble(v.X), Y: NumOps.ToDouble(v.Y))).ToList();
             if (points is null || points.Count == 0) continue;
 
             // Overlap of the quadrilaterals themselves, as LANMS does: their axis-aligned boxes overlap for rotated
@@ -721,25 +698,13 @@ public partial class EAST<T> : TextDetectorBase<T>
         }
 
         Flush();
-
-        var mergedScores = CvTensorOps<T>.FromDoubleArray(flushed.Select(f => f.Score).ToArray(), new[] { flushed.Count }).ToArray();
-        var merged = new List<TextRegion<T>>(flushed.Count);
-        for (int i = 0; i < flushed.Count; i++)
-        {
-            var region = TextRegion<T>.FromPolygon(CvTensorOps<T>.PointsFromDoubles(flushed[i].Polygon), mergedScores[i]);
-            region.RegionType = TextRegionType.Word;
-            if (_useRotatedBoxes)
-                region.RotationAngle = flushed[i].Angle;
-            merged.Add(region);
-        }
-
         return merged;
     }
 
     // The decoded quadrilateral in doubles, or null when a region carries no polygon.
     private List<(double X, double Y)>? PolygonOf(TextRegion<T> region)
     {
-        var polygon = region.Polygon is null ? null : CvTensorOps<T>.PointsToDoubles(region.Polygon);
+        var polygon = region.Polygon?.Select(v => (X: NumOps.ToDouble(v.X), Y: NumOps.ToDouble(v.Y))).ToList();
         return polygon is { Count: >= 3 } ? polygon : null;
     }
 
@@ -765,7 +730,7 @@ public partial class EAST<T> : TextDetectorBase<T>
 
     // Mean score-map value over the cells whose centres fall inside the region's quadrilateral (its box when it has
     // none): averaging the whole axis-aligned box of a rotated word diluted the score with background corners.
-    private double MeanScoreInside(TextRegion<T> region, double[] score, int scoreH, int scoreW, double scaleX, double scaleY)
+    private double MeanScoreInside(TextRegion<T> region, Tensor<T> score, double scaleX, double scaleY)
     {
         var quadrilateral = PolygonOf(region);
         var (left, top, right, bottom) = region.Box.ToXYXY();
@@ -775,16 +740,16 @@ public partial class EAST<T> : TextDetectorBase<T>
         // for every region (up to 1000 regions x 6,400 cells at the default size). The inclusive centre test
         // below stays the source of truth; the bounds are widened by one cell so rounding cannot drop a cell.
         int hMin = Math.Max(0, (int)Math.Floor(top / scaleY - 0.5) - 1);
-        int hMax = Math.Min(scoreH - 1, (int)Math.Ceiling(bottom / scaleY - 0.5) + 1);
+        int hMax = Math.Min(score.Shape[2] - 1, (int)Math.Ceiling(bottom / scaleY - 0.5) + 1);
         int wMin = Math.Max(0, (int)Math.Floor(left / scaleX - 0.5) - 1);
-        int wMax = Math.Min(scoreW - 1, (int)Math.Ceiling(right / scaleX - 0.5) + 1);
+        int wMax = Math.Min(score.Shape[3] - 1, (int)Math.Ceiling(right / scaleX - 0.5) + 1);
         for (int h = hMin; h <= hMax; h++)
             for (int w = wMin; w <= wMax; w++)
             {
                 double cx = (w + 0.5) * scaleX, cy = (h + 0.5) * scaleY;
                 if (cx < left || cx > right || cy < top || cy > bottom) continue;
                 if (quadrilateral is not null && !Contains(quadrilateral, cx, cy)) continue;
-                sum += score[(h * scoreW) + w];
+                sum += NumOps.ToDouble(score[0, 0, h, w]);
                 count++;
             }
         return count > 0 ? sum / count : 0.0;
@@ -795,7 +760,7 @@ public partial class EAST<T> : TextDetectorBase<T>
         if (regions.Count == 0)
             return regions;
 
-        var sorted = CvTensorOps<T>.OrderByDescending(regions, r => r.Confidence);
+        var sorted = regions.OrderByDescending(r => NumOps.ToDouble(r.Confidence)).ToList();
         var selected = new List<TextRegion<T>>();
         var used = new bool[sorted.Count];
 

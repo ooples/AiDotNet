@@ -151,24 +151,29 @@ public abstract class MedicalSegmentationBase<T> : SegmentationModelBase<T>, IMe
                     int pD = endD - d, pH = endH - h, pW = endW - w;
 
                     // Extract patch
-                    var patch = Engine.TensorSlice(volume, new[] { 0, d, h, w }, new[] { channels, pD, pH, pW });
+                    var patch = new Tensor<T>([channels, pD, pH, pW]);
+                    for (int c = 0; c < channels; c++)
+                        for (int dd = 0; dd < pD; dd++)
+                            for (int hh = 0; hh < pH; hh++)
+                                for (int ww = 0; ww < pW; ww++)
+                                    patch[c, dd, hh, ww] = volume[c, d + dd, h + hh, w + ww];
 
                     // Segment patch
                     var patchResult = SegmentVolume(patch);
                     if (patchResult.Probabilities == null) continue;
 
-                    // Accumulate results: the patch's class planes add onto the window (T addition, as before).
-                    int classes = Math.Min(_numClasses, patchResult.Probabilities.Shape[0]);
-                    if (classes <= 0) continue;
-                    var start = new[] { 0, d, h, w };
-                    var extent = new[] { classes, pD, pH, pW };
-                    var window = Engine.TensorSlice(accumOutput, start, extent);
-                    var contribution = Engine.TensorSlice(patchResult.Probabilities, new[] { 0, 0, 0, 0 }, extent);
-                    accumOutput = Engine.TensorSetSlice(accumOutput, Engine.TensorAdd(window, contribution), start);
-                    for (int dd = 0; dd < pD; dd++)
-                        for (int hh = 0; hh < pH; hh++)
-                            for (int ww = 0; ww < pW; ww++)
-                                accumCount[(d + dd) * volH * volW + (h + hh) * volW + (w + ww)] += 1.0;
+                    // Accumulate results
+                    for (int cls = 0; cls < _numClasses && cls < patchResult.Probabilities.Shape[0]; cls++)
+                        for (int dd = 0; dd < pD; dd++)
+                            for (int hh = 0; hh < pH; hh++)
+                                for (int ww = 0; ww < pW; ww++)
+                                {
+                                    accumOutput[cls, d + dd, h + hh, w + ww] = NumOps.Add(
+                                        accumOutput[cls, d + dd, h + hh, w + ww],
+                                        patchResult.Probabilities[cls, dd, hh, ww]);
+                                    if (cls == 0)
+                                        accumCount[(d + dd) * volH * volW + (h + hh) * volW + (w + ww)] += 1.0;
+                                }
                 }
             }
         }
@@ -179,13 +184,18 @@ public abstract class MedicalSegmentationBase<T> : SegmentationModelBase<T>, IMe
         for (int i = 0; i < totalVoxels; i++)
             reciprocals[i] = accumCount[i] > 1.0 ? 1.0 / accumCount[i] : 0.0;
 
-        // Average overlapping regions, in double as before, on one bulk conversion each way.
-        var averaged = CvTensorOps<T>.ToDoubleArray(accumOutput);
+        // Average overlapping regions
         for (int cls = 0; cls < _numClasses; cls++)
-            for (int idx = 0; idx < totalVoxels; idx++)
-                if (reciprocals[idx] > 0.0)
-                    averaged[(cls * totalVoxels) + idx] *= reciprocals[idx];
+            for (int dd = 0; dd < volD; dd++)
+                for (int hh = 0; hh < volH; hh++)
+                    for (int ww = 0; ww < volW; ww++)
+                    {
+                        int idx = dd * volH * volW + hh * volW + ww;
+                        if (reciprocals[idx] > 0.0)
+                            accumOutput[cls, dd, hh, ww] = NumOps.FromDouble(
+                                NumOps.ToDouble(accumOutput[cls, dd, hh, ww]) * reciprocals[idx]);
+                    }
 
-        return new MedicalSegmentationResult<T> { Probabilities = CvTensorOps<T>.FromDoubleArray(averaged, new[] { _numClasses, volD, volH, volW }) };
+        return new MedicalSegmentationResult<T> { Probabilities = accumOutput };
     }
 }

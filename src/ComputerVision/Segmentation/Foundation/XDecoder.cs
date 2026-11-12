@@ -408,7 +408,98 @@ public partial class XDecoder<T> : Common.PanopticSegmentationBase<T>
     public override PanopticSegmentationResult<T> SegmentPanoptic(Tensor<T> image)
     {
         var logits = Common.SegmentationTensorOps.EnsureUnbatched(Predict(image));
-        return Common.SegmentationTensorOps.PanopticFromLogits(logits, _numStuffClasses, _numClasses, segmentIdIsPanopticLabel: true);
+        var probMap = Common.SegmentationTensorOps.SoftmaxAlongClassDim(logits);
+        var semanticMap = Common.SegmentationTensorOps.ArgmaxAlongClassDim(logits);
+        int h = semanticMap.Shape[0];
+        int w = semanticMap.Shape[1];
+        const int PanopticLabelDivisor = 1000;
+        int numStuff = _numStuffClasses;
+        var instanceMap = new Tensor<T>([h, w]);
+        var panopticMap = new Tensor<T>([h, w]);
+        var segments = new List<PanopticSegment<T>>();
+        int nextInstId = 1;
+
+        // Stuff classes: non-countable background regions (sky, road, etc.)
+        for (int cls = 0; cls < numStuff; cls++)
+        {
+            int area = 0;
+            double sumConf = 0;
+            int segmentId = cls * PanopticLabelDivisor;
+            for (int row = 0; row < h; row++)
+            {
+                for (int col = 0; col < w; col++)
+                {
+                    if (NumOps.Compare(semanticMap[row, col], NumOps.FromDouble(cls)) == 0)
+                    {
+                        panopticMap[row, col] = NumOps.FromDouble(segmentId);
+                        area++;
+                        sumConf += NumOps.ToDouble(probMap[cls, row, col]);
+                    }
+                }
+            }
+
+            if (area > 0)
+            {
+                segments.Add(new PanopticSegment<T>
+                {
+                    SegmentId = segmentId,
+                    ClassId = cls,
+                    IsThing = false,
+                    Confidence = sumConf / area,
+                    Area = area
+                });
+            }
+        }
+
+        // Thing classes: countable object instances (person, car, etc.)
+        for (int cls = numStuff; cls < _numClasses; cls++)
+        {
+            var (labelMap, count) = Common.SegmentationTensorOps.LabelConnectedComponents(semanticMap, cls);
+            for (int comp = 1; comp <= count; comp++)
+            {
+                int instId = nextInstId++;
+                int segmentId = cls * PanopticLabelDivisor + instId;
+                int area = 0;
+                double sumConf = 0;
+                var compMask = new Tensor<T>([h, w]);
+
+                for (int row = 0; row < h; row++)
+                {
+                    for (int col = 0; col < w; col++)
+                    {
+                        if (NumOps.Compare(labelMap[row, col], NumOps.FromDouble(comp)) == 0)
+                        {
+                            instanceMap[row, col] = NumOps.FromDouble(instId);
+                            panopticMap[row, col] = NumOps.FromDouble(segmentId);
+                            compMask[row, col] = NumOps.FromDouble(1.0);
+                            area++;
+                            sumConf += NumOps.ToDouble(probMap[cls, row, col]);
+                        }
+                    }
+                }
+
+                if (area > 0)
+                {
+                    segments.Add(new PanopticSegment<T>
+                    {
+                        SegmentId = segmentId,
+                        ClassId = cls,
+                        IsThing = true,
+                        Confidence = sumConf / area,
+                        Area = area,
+                        Mask = compMask
+                    });
+                }
+            }
+        }
+
+        return new PanopticSegmentationResult<T>
+        {
+            SemanticMap = semanticMap,
+            InstanceMap = instanceMap,
+            PanopticMap = panopticMap,
+            Segments = segments
+        };
     }
 
     #endregion

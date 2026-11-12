@@ -304,7 +304,8 @@ internal sealed class DetrTrainingRecord<T>
 
     internal static DetrTrainingRecord<T> Capture(DetrPass<T> pass, double loss)
     {
-        double[] Host(Tensor<T> t) => CvTensorOps<T>.ToDoubleArray(t);
+        var ops = MathHelper.GetNumericOperations<T>();
+        double[] Host(Tensor<T> t) => t.ToArray().Select(v => ops.ToDouble(v)).ToArray();
         return new DetrTrainingRecord<T>(loss, pass.Classes[0].Shape[1], pass.Classes[0].Shape[2],
             pass.Classes.Select(Host).ToArray(), pass.Boxes.Select(Host).ToArray(),
             pass.DenoisingClasses.Select(Host).ToArray(), pass.DenoisingBoxes.Select(Host).ToArray(),

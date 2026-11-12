@@ -27,8 +27,9 @@ internal static class BackboneSerialization
     {
         var p = layer.GetParameters();
         writer.Write(p.Length);
-        foreach (double value in CvTensorOps<T>.ToDoubleArray(p.ToArray()))
-            writer.Write(value);
+        var ops = MathHelper.GetNumericOperations<T>();
+        for (int i = 0; i < p.Length; i++)
+            writer.Write(ops.ToDouble(p[i]));
     }
 
     public static void ReadLayerParameters<T>(BinaryReader reader, LayerBase<T> layer)
@@ -38,17 +39,10 @@ internal static class BackboneSerialization
             throw new InvalidDataException(
                 $"Negative parameter length ({len}) on the wire — corrupt parameter stream.");
         if (len == 0) return;
-        var wire = new double[len];
+        var values = new T[len];
+        var ops = MathHelper.GetNumericOperations<T>();
         for (int i = 0; i < len; i++)
-            wire[i] = reader.ReadDouble();
-        layer.SetParameters(new Vector<T>(CvTensorOps<T>.FromDoubleArray(wire, new[] { len }).ToArray()));
+            values[i] = ops.FromDouble(reader.ReadDouble());
+        layer.SetParameters(new Vector<T>(values));
     }
-
-    /// <summary>Writes every value of <paramref name="tensor"/> as a <see cref="double"/>, in order.</summary>
-    public static void WriteValues<T>(BinaryWriter writer, Tensor<T> tensor)
-        => CvTensorOps<T>.WriteDoubles(writer, tensor);
-
-    /// <summary>Reads <c>tensor.Length</c> doubles and writes them through into <paramref name="tensor"/>.</summary>
-    public static void ReadValuesInto<T>(BinaryReader reader, Tensor<T> tensor)
-        => CvTensorOps<T>.ReadDoublesInto(reader, tensor);
 }

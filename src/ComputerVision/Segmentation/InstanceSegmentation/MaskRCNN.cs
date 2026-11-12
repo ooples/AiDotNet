@@ -129,9 +129,14 @@ public partial class MaskRCNN<T> : InstanceSegmenterBase<T>
         {
             // As in the paper's inference: the mask branch runs on the top detection boxes, and each
             // detection takes the mask of its predicted class.
-            var boxes = CvTensorOps<T>.FromRows(
-                detections.Select(d => new[] { d.Box.X1, d.Box.Y1, d.Box.X2, d.Box.Y2 }).ToArray(), 4);
-            var boxCoordinates = CvTensorOps<T>.ToDoubleArray(boxes);
+            var boxes = new Tensor<T>(new[] { detections.Count, 4 });
+            for (int d = 0; d < detections.Count; d++)
+            {
+                boxes[d, 0] = detections[d].Box.X1;
+                boxes[d, 1] = detections[d].Box.Y1;
+                boxes[d, 2] = detections[d].Box.X2;
+                boxes[d, 3] = detections[d].Box.Y2;
+            }
 
             var maskLogits = _maskHead.Forward(FpnRoIPooler<T>.Pool(_maskRoiAlign, fpnFeatures, _backbone.Strides, boxes));
             int side = _maskHead.MaskResolution;
@@ -141,16 +146,16 @@ public partial class MaskRCNN<T> : InstanceSegmenterBase<T>
             for (int d = 0; d < detections.Count; d++)
             {
                 var detection = detections[d];
+                var mask = new Tensor<T>(new[] { side, side });
                 int row = d * classes + detection.ClassId;
-                var mask = Engine.Reshape(Engine.TensorSlice(probabilities, new[] { row, 0 }, new[] { 1, side * side }), new[] { side, side });
+                for (int i = 0; i < side * side; i++) mask[i / side, i % side] = probabilities[row, i];
 
-                double bx1 = boxCoordinates[4 * d], by1 = boxCoordinates[4 * d + 1];
-                double bx2 = boxCoordinates[4 * d + 2], by2 = boxCoordinates[4 * d + 3];
-                int boxWidth = (int)Math.Ceiling(bx2 - bx1);
-                int boxHeight = (int)Math.Ceiling(by2 - by1);
+                int boxWidth = (int)Math.Ceiling(NumOps.ToDouble(detection.Box.X2) - NumOps.ToDouble(detection.Box.X1));
+                int boxHeight = (int)Math.Ceiling(NumOps.ToDouble(detection.Box.Y2) - NumOps.ToDouble(detection.Box.Y1));
                 if (boxWidth <= 0 || boxHeight <= 0) continue;
 
-                var fullMask = PasteMask(imageHeight, imageWidth, ResizeMask(mask, boxHeight, boxWidth), bx1, by1, bx2, by2);
+                var fullMask = new Tensor<T>(new[] { imageHeight, imageWidth });
+                PasteMask(fullMask, ResizeMask(mask, boxHeight, boxWidth), detection.Box);
                 var instance = new InstanceMask<T>(detection.Box, BinarizeMask(fullMask, Options.MaskThreshold),
                     detection.ClassId, detection.Confidence);
                 instances.Add(instance);
@@ -242,15 +247,17 @@ public partial class MaskRCNN<T> : InstanceSegmenterBase<T>
         var picked = CvTensorOps<T>.Select(perClass,
             foreground.Select((f, i) => i * classes + objects[f.Gold].ClassId).ToArray(), 0);
 
-        var boxCoordinates = CvTensorOps<T>.ToDoubleArray(boxes);
-        var targetRows = new Tensor<T>[count];
+        var targets = new Tensor<T>(new[] { count, side * side });
         for (int i = 0; i < count; i++)
         {
-            var box = new[] { boxCoordinates[4 * i], boxCoordinates[4 * i + 1], boxCoordinates[4 * i + 2], boxCoordinates[4 * i + 3] };
-            targetRows[i] = Engine.Reshape(ResampleMaskTensor(objects[foreground[i].Gold].Mask, box, side), new[] { 1, side * side });
+            var box = new[]
+            {
+                NumOps.ToDouble(boxes[i, 0]), NumOps.ToDouble(boxes[i, 1]),
+                NumOps.ToDouble(boxes[i, 2]), NumOps.ToDouble(boxes[i, 3])
+            };
+            var resampled = ResampleMask(objects[foreground[i].Gold].Mask, box, side);
+            for (int k = 0; k < resampled.Length; k++) targets[i, k] = NumOps.FromDouble(resampled[k]);
         }
-
-        var targets = Engine.Concat(targetRows, 0);
 
         var crossEntropy = Engine.TensorSubtract(Engine.Softplus(picked), Engine.TensorMultiply(picked, targets));
         return Engine.TensorMultiplyScalar(Engine.ReduceSum(crossEntropy, null),
@@ -262,74 +269,39 @@ public partial class MaskRCNN<T> : InstanceSegmenterBase<T>
     /// at +0.5), then binarized at 0.5, as detectron2 builds Mask R-CNN's mask targets.
     /// </summary>
     internal static double[] ResampleMask(Tensor<T> mask, double[] box, int side)
-        => CvTensorOps<T>.ToDoubleArray(ResampleMaskTensor(mask, box, side));
-
-    /// <summary>
-    /// <see cref="ResampleMask"/> as a <c>[side, side]</c> tensor of <typeparamref name="T"/>. The sample grid is
-    /// separable - row i sits at <c>y1 + (i + 0.5) * binHeight - 0.5</c>, column j at
-    /// <c>x1 + (j + 0.5) * binWidth - 0.5</c> - so the bilinear sample is two one-axis interpolations, each
-    /// clamping as torchvision's roi_align does: a coordinate below -1 or past the extent samples zero, one
-    /// in (-1, 0] clamps to the first cell, and the last cell has no far neighbour.
-    /// </summary>
-    internal static Tensor<T> ResampleMaskTensor(Tensor<T> mask, double[] box, int side)
     {
-        var engine = AiDotNetEngine.Current;
         var ops = Tensors.Helpers.MathHelper.GetNumericOperations<T>();
         int height = mask.Shape[0];
         int width = mask.Shape[1];
-        var (y0, y1, wy, validY) = AxisTaps(engine, ops, box[1], (box[3] - box[1]) / side, side, height);
-        var (x0, x1, wx, validX) = AxisTaps(engine, ops, box[0], (box[2] - box[0]) / side, side, width);
-
-        // Along x: [height, side]; then along y: [side, side].
-        var wxRow = engine.TensorBroadcastTo(engine.Reshape(wx, new[] { 1, side }), new[] { height, side });
-        var left = CvTensorOps<T>.Select(mask, x0, 1);
-        var right = CvTensorOps<T>.Select(mask, x1, 1);
-        var alongX = engine.TensorAdd(
-            engine.TensorMultiply(engine.ScalarMinusTensor(ops.One, wxRow), left), engine.TensorMultiply(wxRow, right));
-        var wyCol = engine.TensorBroadcastTo(engine.Reshape(wy, new[] { side, 1 }), new[] { side, side });
-        var top = CvTensorOps<T>.Select(alongX, y0, 0);
-        var bottom = CvTensorOps<T>.Select(alongX, y1, 0);
-        var sampled = engine.TensorAdd(
-            engine.TensorMultiply(engine.ScalarMinusTensor(ops.One, wyCol), top), engine.TensorMultiply(wyCol, bottom));
-
-        // Out-of-range rows or columns sample zero; the target is the sample binarized at 0.5.
-        var valid = engine.TensorMultiply(
-            engine.TensorBroadcastTo(engine.Reshape(validY, new[] { side, 1 }), new[] { side, side }),
-            engine.TensorBroadcastTo(engine.Reshape(validX, new[] { 1, side }), new[] { side, side }));
-        var binary = CvTensorOps<T>.GreaterOrEqual(sampled, ops.FromDouble(0.5));
-        return engine.TensorMultiply(binary, valid);
-    }
-
-    /// <summary>
-    /// One axis of the RoI sample grid: for sample k at <c>start + (k + 0.5) * bin - 0.5</c>, the near and far
-    /// cell, the far cell's weight and whether the sample lies inside <c>[-1, extent]</c>.
-    /// </summary>
-    private static (int[] Near, int[] Far, Tensor<T> FarWeight, Tensor<T> Valid) AxisTaps(
-        IEngine engine, INumericOperations<T> ops, double start, double bin, int side, int extent)
-    {
-        var near = new int[side];
-        var far = new int[side];
-        var interior = new int[side];
-        var inRange = new int[side];
-        for (int k = 0; k < side; k++)
+        double binWidth = (box[2] - box[0]) / side;
+        double binHeight = (box[3] - box[1]) / side;
+        var result = new double[side * side];
+        for (int i = 0; i < side; i++)
         {
-            double position = start + (k + 0.5) * bin - 0.5;
-            inRange[k] = position < -1 || position > extent ? 0 : 1;
-            double clamped = Math.Max(position, 0);
-            near[k] = Math.Min((int)Math.Floor(clamped), extent - 1);
-            far[k] = Math.Min(near[k] + 1, extent - 1);
-            interior[k] = near[k] >= extent - 1 ? 0 : 1;
+            double y = box[1] + (i + 0.5) * binHeight - 0.5;
+            for (int j = 0; j < side; j++)
+            {
+                double x = box[0] + (j + 0.5) * binWidth - 0.5;
+                result[i * side + j] = Bilinear(mask, ops, height, width, y, x) >= 0.5 ? 1.0 : 0.0;
+            }
         }
 
-        // The far weight is the clamped position minus the near cell, zero at the last cell.
-        var positions = engine.TensorAddScalar(
-            engine.TensorMultiplyScalar(engine.TensorAddScalar(engine.TensorArange<T>(0, side, 1), ops.FromDouble(0.5)), ops.FromDouble(bin)),
-            ops.FromDouble(start - 0.5));
-        var clampedPositions = engine.TensorMax(positions, ops.Zero);
-        var farWeight = engine.TensorMultiply(
-            engine.TensorSubtract(clampedPositions, CvTensorOps<T>.IndicesAsValues(near, extent)),
-            CvTensorOps<T>.IndicesAsValues(interior, 2));
-        return (near, far, farWeight, CvTensorOps<T>.IndicesAsValues(inRange, 2));
+        return result;
+    }
+
+    private static double Bilinear(Tensor<T> mask, INumericOperations<T> ops, int height, int width, double y, double x)
+    {
+        if (y < -1 || y > height || x < -1 || x > width) return 0;
+        y = Math.Max(y, 0);
+        x = Math.Max(x, 0);
+        int y0 = Math.Min((int)Math.Floor(y), height - 1);
+        int x0 = Math.Min((int)Math.Floor(x), width - 1);
+        int y1 = Math.Min(y0 + 1, height - 1);
+        int x1 = Math.Min(x0 + 1, width - 1);
+        double wy = y0 >= height - 1 ? 0 : y - y0;
+        double wx = x0 >= width - 1 ? 0 : x - x0;
+        return (1 - wy) * ((1 - wx) * ops.ToDouble(mask[y0, x0]) + wx * ops.ToDouble(mask[y0, x1]))
+             + wy * ((1 - wx) * ops.ToDouble(mask[y1, x0]) + wx * ops.ToDouble(mask[y1, x1]));
     }
 
     /// <summary>The detection forward, optionally adding boxes to the proposals the RoI heads classify.</summary>
@@ -388,50 +360,51 @@ public partial class MaskRCNN<T> : InstanceSegmenterBase<T>
         double threshold = NumOps.ToDouble(Options.ConfidenceThreshold);
 
         var candidates = new List<Detection<T>>();
-        if (count > 0 && width > 1)
+        // The detection loss multiplies the stage's regression targets by these weights, so the predicted deltas are
+        // divided by them here; unit weights (the default) leave them raw.
+        var regressionWeights = _detectionLoss.StageBoxRegressionWeights(0);
+        for (int r = 0; r < count; r++)
         {
-            // Every (RoI, foreground class) pair at once, RoI-major: pair m = r * (width - 1) + (c - 1).
-            int foreground = width - 1;
-            int pairs = count * foreground;
-            var roiOf = new int[pairs];
-            var cellOf = new int[pairs];
-            for (int m = 0; m < pairs; m++)
+            double maxLogit = double.NegativeInfinity;
+            for (int c = 0; c < width; c++) maxLogit = Math.Max(maxLogit, NumOps.ToDouble(classLogits[r, c]));
+            var probabilities = new double[width];
+            double sum = 0;
+            for (int c = 0; c < width; c++)
             {
-                roiOf[m] = m / foreground;
-                cellOf[m] = roiOf[m] * width + m % foreground + 1;
+                probabilities[c] = Math.Exp(NumOps.ToDouble(classLogits[r, c]) - maxLogit);
+                sum += probabilities[c];
             }
 
-            var probabilities = TwoStageBoxDecoding<T>.ClassProbabilities(classLogits);
-            var scores = CvTensorOps<T>.Select(Engine.Reshape(probabilities, new[] { count * width }), cellOf, 0);
-            var deltas = CvTensorOps<T>.Select(Engine.Reshape(boxDeltas, new[] { count * width, 4 }), cellOf, 0);
+            double px1 = NumOps.ToDouble(proposals[r, 0]);
+            double py1 = NumOps.ToDouble(proposals[r, 1]);
+            double pw = NumOps.ToDouble(proposals[r, 2]) - px1;
+            double ph = NumOps.ToDouble(proposals[r, 3]) - py1;
+            if (pw <= 0 || ph <= 0) continue;
 
-            // The detection loss multiplies the stage's regression targets by these weights, so the predicted deltas are
-            // divided by them here; unit weights (the default) leave them raw.
-            var regressionWeights = _detectionLoss.StageBoxRegressionWeights(0);
-            var boxes = TwoStageBoxDecoding<T>.Decode(CvTensorOps<T>.Select(proposals, roiOf, 0), deltas, regressionWeights,
-                BoxDeltaClamp, 1.0, 1.0, imageWidth, imageHeight);
-
-            var scoreValues = CvTensorOps<T>.ToDoubleArray(scores);
-            var scoreItems = scores.ToArray();
-            var proposalWidths = CvTensorOps<T>.ToDoubleArray(boxes.ProposalWidth);
-            var proposalHeights = CvTensorOps<T>.ToDoubleArray(boxes.ProposalHeight);
-            var x1 = boxes.X1.ToArray(); var y1 = boxes.Y1.ToArray(); var x2 = boxes.X2.ToArray(); var y2 = boxes.Y2.ToArray();
-            var x1d = CvTensorOps<T>.ToDoubleArray(boxes.X1); var y1d = CvTensorOps<T>.ToDoubleArray(boxes.Y1);
-            var x2d = CvTensorOps<T>.ToDoubleArray(boxes.X2); var y2d = CvTensorOps<T>.ToDoubleArray(boxes.Y2);
-            for (int m = 0; m < pairs; m++)
+            for (int c = 1; c < width; c++)
             {
-                if (proposalWidths[m] <= 0 || proposalHeights[m] <= 0) continue;
-                if (scoreValues[m] < threshold) continue;
-                if (x2d[m] <= x1d[m] || y2d[m] <= y1d[m]) continue;
+                double score = probabilities[c] / sum;
+                if (score < threshold) continue;
+
+                double cx = px1 + pw / 2 + NumOps.ToDouble(boxDeltas[r, c * 4]) / regressionWeights[0] * pw;
+                double cy = py1 + ph / 2 + NumOps.ToDouble(boxDeltas[r, c * 4 + 1]) / regressionWeights[1] * ph;
+                double w = pw * Math.Exp(Math.Min(NumOps.ToDouble(boxDeltas[r, c * 4 + 2]) / regressionWeights[2], BoxDeltaClamp));
+                double h = ph * Math.Exp(Math.Min(NumOps.ToDouble(boxDeltas[r, c * 4 + 3]) / regressionWeights[3], BoxDeltaClamp));
+                double x1 = Math.Max(0, cx - w / 2);
+                double y1 = Math.Max(0, cy - h / 2);
+                double x2 = Math.Min(imageWidth, cx + w / 2);
+                double y2 = Math.Min(imageHeight, cy + h / 2);
+                if (x2 <= x1 || y2 <= y1) continue;
 
                 candidates.Add(new Detection<T>(
-                    new BoundingBox<T>(x1[m], y1[m], x2[m], y2[m], BoundingBoxFormat.XYXY),
-                    m % foreground, scoreItems[m]));
+                    new BoundingBox<T>(NumOps.FromDouble(x1), NumOps.FromDouble(y1), NumOps.FromDouble(x2), NumOps.FromDouble(y2),
+                        BoundingBoxFormat.XYXY),
+                    c - 1, NumOps.FromDouble(score)));
             }
         }
 
         var kept = _nms.ApplyClassAware(candidates, NumOps.ToDouble(Options.NmsThreshold));
-        return CvTensorOps<T>.OrderByDescending(kept, d => d.Confidence).Take(Options.MaxDetections).ToList();
+        return kept.OrderByDescending(d => NumOps.ToDouble(d.Confidence)).Take(Options.MaxDetections).ToList();
     }
 
     // log(1000 / 16), the clamp detectron2 and torchvision apply to dw and dh before exponentiating.
@@ -483,31 +456,28 @@ public partial class MaskRCNN<T> : InstanceSegmenterBase<T>
         return (fpnFeatures, proposalBoxes, objectness, bboxDeltas, anchors, levelAnchorCounts);
     }
 
-    /// <summary>
-    /// An <c>[imageHeight, imageWidth]</c> map that is zero except inside the box, which takes the
-    /// nearest-neighbour resample of <paramref name="mask"/> (cell <c>min(offset / boxSize * maskSize, maskSize - 1)</c>).
-    /// </summary>
-    private Tensor<T> PasteMask(int imageHeight, int imageWidth, Tensor<T> mask, double boxX1, double boxY1, double boxX2, double boxY2)
+    private void PasteMask(Tensor<T> fullMask, Tensor<T> mask, BoundingBox<T> box)
     {
-        var fullMask = new Tensor<T>(new[] { imageHeight, imageWidth });
-        int x1 = Math.Max(0, (int)boxX1);
-        int y1 = Math.Max(0, (int)boxY1);
-        int x2 = Math.Min(imageWidth, (int)Math.Ceiling(boxX2));
-        int y2 = Math.Min(imageHeight, (int)Math.Ceiling(boxY2));
+        int x1 = Math.Max(0, (int)NumOps.ToDouble(box.X1));
+        int y1 = Math.Max(0, (int)NumOps.ToDouble(box.Y1));
+        int x2 = Math.Min(fullMask.Shape[1], (int)Math.Ceiling(NumOps.ToDouble(box.X2)));
+        int y2 = Math.Min(fullMask.Shape[0], (int)Math.Ceiling(NumOps.ToDouble(box.Y2)));
 
         int maskH = mask.Shape[0];
         int maskW = mask.Shape[1];
         int boxH = y2 - y1;
         int boxW = x2 - x1;
-        if (boxH <= 0 || boxW <= 0) return fullMask;
+        if (boxH <= 0 || boxW <= 0) return;
 
-        var rowIndex = new int[boxH];
-        for (int y = 0; y < boxH; y++) rowIndex[y] = Math.Min((int)((double)y / boxH * maskH), maskH - 1);
-        var colIndex = new int[boxW];
-        for (int x = 0; x < boxW; x++) colIndex[x] = Math.Min((int)((double)x / boxW * maskW), maskW - 1);
-
-        var patch = CvTensorOps<T>.Select(CvTensorOps<T>.Select(mask, rowIndex, 0), colIndex, 1);
-        return Engine.TensorSetSlice(fullMask, patch, new[] { y1, x1 });
+        for (int y = y1; y < y2; y++)
+        {
+            for (int x = x1; x < x2; x++)
+            {
+                int my = Math.Min((int)((double)(y - y1) / boxH * maskH), maskH - 1);
+                int mx = Math.Min((int)((double)(x - x1) / boxW * maskW), maskW - 1);
+                fullMask[y, x] = mask[my, mx];
+            }
+        }
     }
 
     /// <inheritdoc/>

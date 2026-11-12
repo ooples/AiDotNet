@@ -198,9 +198,6 @@ internal static class BitmapFont5x7
         var green = numOps.FromDouble(g);
         var blue = numOps.FromDouble(b);
 
-        int plane = height * width;
-        // Painted into a copy of the pixels, written back in one bulk copy.
-        var pixels = rgb.ToArray();
         int penX = originX;
         foreach (char c in text)
         {
@@ -219,17 +216,14 @@ internal static class BitmapFont5x7
                             int x = penX + col * scale + dx;
                             int y = originY + row * scale + dy;
                             if (x < 0 || x >= width || y < 0 || y >= height) continue;
-                            int pixel = (y * width) + x;
-                            pixels[pixel] = red;
-                            pixels[plane + pixel] = green;
-                            pixels[(2 * plane) + pixel] = blue;
+                            rgb[0, y, x] = red;
+                            rgb[1, y, x] = green;
+                            rgb[2, y, x] = blue;
                         }
                     }
                 }
             }
             penX += (GlyphWidth + Advance) * scale;
         }
-
-        pixels.AsSpan().CopyTo(rgb.AsWritableSpan());
     }
 }

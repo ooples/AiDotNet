@@ -160,15 +160,13 @@ public partial class DocumentReader<T> : ModelBase<T, Tensor<T>, Tensor<T>>
         int height = image.Shape[2];
         int width = image.Shape[3];
 
-        // In double as before, on one bulk conversion; NCHW flat indexing.
-        var values = CvTensorOps<T>.ToDoubleArray(image);
-        var result = new double[values.Length];
+        var result = new Tensor<T>(image._shape);
 
         // Detect pixel range by sampling a few values to determine if normalized [0,1] or [0,255]
         double maxVal = 0;
-        for (int i = 0; i < Math.Min(100, values.Length); i++)
+        for (int i = 0; i < Math.Min(100, image.Length); i++)
         {
-            maxVal = Math.Max(maxVal, Math.Abs(values[i]));
+            maxVal = Math.Max(maxVal, Math.Abs(NumOps.ToDouble(image[i])));
         }
         bool isNormalized = maxVal <= 1.0;
         double midpoint = isNormalized ? 0.5 : 128.0;
@@ -183,20 +181,19 @@ public partial class DocumentReader<T> : ModelBase<T, Tensor<T>, Tensor<T>>
                 {
                     for (int c = 0; c < channels; c++)
                     {
-                        int index = (((b * channels) + c) * height + h) * width + w;
-                        double val = values[index];
+                        double val = NumOps.ToDouble(image[b, c, h, w]);
 
                         // Simple contrast enhancement (works with both [0,1] and [0,255] ranges)
                         val = (val - midpoint) * 1.2 + midpoint;
                         val = MathHelper.Clamp(val, 0, rangeMax);
 
-                        result[index] = val;
+                        result[b, c, h, w] = NumOps.FromDouble(val);
                     }
                 }
             }
         }
 
-        return CvTensorOps<T>.FromDoubleArray(result, image.Shape.ToArray());
+        return result;
     }
 
     private DocumentLayout<T> AnalyzeLayout(
@@ -209,22 +206,16 @@ public partial class DocumentReader<T> : ModelBase<T, Tensor<T>, Tensor<T>>
         if (regions.Count == 0)
             return layout;
 
-        // Every box in double, from one bulk conversion; TextRegion has reference identity.
-        var corners = CvTensorOps<T>.ToDoubleArray(regions.SelectMany(r => new[] { r.Box.X1, r.Box.Y1, r.Box.X2, r.Box.Y2 }).ToArray());
-        var boxes = new Dictionary<TextRegion<T>, RegionBox>();
-        for (int i = 0; i < regions.Count; i++)
-            boxes[regions[i]] = new RegionBox(corners[4 * i], corners[(4 * i) + 1], corners[(4 * i) + 2], corners[(4 * i) + 3]);
-
         // Sort regions by vertical position
         var sortedRegions = regions
-            .OrderBy(r => boxes[r].Y1)
+            .OrderBy(r => NumOps.ToDouble(r.Box.Y1))
             .ToList();
 
         // Group into lines based on Y-overlap
-        var lines = GroupIntoLines(sortedRegions, boxes);
+        var lines = GroupIntoLines(sortedRegions);
 
         // Detect columns (for multi-column documents)
-        var columns = DetectColumns(lines, imageWidth, boxes);
+        var columns = DetectColumns(lines, imageWidth);
 
         // Create layout blocks
         foreach (var column in columns)
@@ -241,32 +232,15 @@ public partial class DocumentReader<T> : ModelBase<T, Tensor<T>, Tensor<T>>
         return layout;
     }
 
-    /// <summary>A region's box corners in double.</summary>
-    private readonly struct RegionBox
-    {
-        public RegionBox(double x1, double y1, double x2, double y2)
-        {
-            X1 = x1;
-            Y1 = y1;
-            X2 = x2;
-            Y2 = y2;
-        }
-
-        public double X1 { get; }
-        public double Y1 { get; }
-        public double X2 { get; }
-        public double Y2 { get; }
-    }
-
-    private List<List<TextRegion<T>>> GroupIntoLines(List<TextRegion<T>> regions, Dictionary<TextRegion<T>, RegionBox> boxes)
+    private List<List<TextRegion<T>>> GroupIntoLines(List<TextRegion<T>> regions)
     {
         var lines = new List<List<TextRegion<T>>>();
 
         foreach (var region in regions)
         {
             bool addedToLine = false;
-            double regionTop = boxes[region].Y1;
-            double regionBottom = boxes[region].Y2;
+            double regionTop = NumOps.ToDouble(region.Box.Y1);
+            double regionBottom = NumOps.ToDouble(region.Box.Y2);
             double regionHeight = regionBottom - regionTop;
 
             // Skip degenerate regions with zero height
@@ -277,8 +251,8 @@ public partial class DocumentReader<T> : ModelBase<T, Tensor<T>, Tensor<T>>
 
             foreach (var line in lines)
             {
-                double lineTop = line.Min(r => boxes[r].Y1);
-                double lineBottom = line.Max(r => boxes[r].Y2);
+                double lineTop = line.Min(r => NumOps.ToDouble(r.Box.Y1));
+                double lineBottom = line.Max(r => NumOps.ToDouble(r.Box.Y2));
 
                 // Check vertical overlap
                 double overlap = Math.Min(regionBottom, lineBottom) - Math.Max(regionTop, lineTop);
@@ -302,7 +276,7 @@ public partial class DocumentReader<T> : ModelBase<T, Tensor<T>, Tensor<T>>
         foreach (var line in lines)
         {
             line.Sort((a, b) =>
-                boxes[a].X1.CompareTo(boxes[b].X1));
+                NumOps.ToDouble(a.Box.X1).CompareTo(NumOps.ToDouble(b.Box.X1)));
         }
 
         return lines;
@@ -310,8 +284,7 @@ public partial class DocumentReader<T> : ModelBase<T, Tensor<T>, Tensor<T>>
 
     private List<List<List<TextRegion<T>>>> DetectColumns(
         List<List<TextRegion<T>>> lines,
-        int imageWidth,
-        Dictionary<TextRegion<T>, RegionBox> boxes)
+        int imageWidth)
     {
         // Simple column detection: check if there's a consistent vertical gap
         var columns = new List<List<List<TextRegion<T>>>>();
@@ -324,8 +297,8 @@ public partial class DocumentReader<T> : ModelBase<T, Tensor<T>, Tensor<T>>
         {
             foreach (var region in line)
             {
-                double x1 = boxes[region].X1;
-                double x2 = boxes[region].X2;
+                double x1 = NumOps.ToDouble(region.Box.X1);
+                double x2 = NumOps.ToDouble(region.Box.X2);
 
                 if (x2 < midPoint - imageWidth * 0.1)
                     hasLeftColumn = true;
@@ -345,13 +318,13 @@ public partial class DocumentReader<T> : ModelBase<T, Tensor<T>, Tensor<T>>
                 // Use region center to determine column assignment (prevents duplicates)
                 var leftRegions = line.Where(r =>
                 {
-                    double centerX = (boxes[r].X1 + boxes[r].X2) / 2;
+                    double centerX = (NumOps.ToDouble(r.Box.X1) + NumOps.ToDouble(r.Box.X2)) / 2;
                     return centerX < midPoint;
                 }).ToList();
 
                 var rightRegions = line.Where(r =>
                 {
-                    double centerX = (boxes[r].X1 + boxes[r].X2) / 2;
+                    double centerX = (NumOps.ToDouble(r.Box.X1) + NumOps.ToDouble(r.Box.X2)) / 2;
                     return centerX >= midPoint;
                 }).ToList();
 

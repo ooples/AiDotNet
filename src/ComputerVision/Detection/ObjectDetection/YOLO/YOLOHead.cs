@@ -152,12 +152,8 @@ internal class YOLOHead<T> : CvParameterModule<T>
             int stride = strides[levelIdx];
 
             int batch = output.Shape[0];
-            int channels = output.Shape[1];
             int featH = output.Shape[2];
             int featW = output.Shape[3];
-            // The level decodes in double, as before, from one bulk conversion; NCHW flat indexing.
-            var values = CvTensorOps<T>.ToDoubleArray(output);
-            int At(int bi, int ch, int y, int x) => (((bi * channels) + ch) * featH + y) * featW + x;
             double scaleX = imageWidth / ((double)featW * stride);
             double scaleY = imageHeight / ((double)featH * stride);
 
@@ -172,18 +168,18 @@ internal class YOLOHead<T> : CvParameterModule<T>
                             int offset = a * _outputPerAnchor;
 
                             // Get box predictions
-                            double tx = values[At(b, offset + 0, h, w)];
-                            double ty = values[At(b, offset + 1, h, w)];
-                            double tw = values[At(b, offset + 2, h, w)];
-                            double th = values[At(b, offset + 3, h, w)];
-                            double objScore = Sigmoid(values[At(b, offset + 4, h, w)]);
+                            double tx = _numOps.ToDouble(output[b, offset + 0, h, w]);
+                            double ty = _numOps.ToDouble(output[b, offset + 1, h, w]);
+                            double tw = _numOps.ToDouble(output[b, offset + 2, h, w]);
+                            double th = _numOps.ToDouble(output[b, offset + 3, h, w]);
+                            double objScore = Sigmoid(_numOps.ToDouble(output[b, offset + 4, h, w]));
 
                             // Get class predictions
                             double maxClassScore = 0;
                             int maxClassId = 0;
                             for (int c = 0; c < _numClasses; c++)
                             {
-                                double classScore = Sigmoid(values[At(b, offset + 5 + c, h, w)]);
+                                double classScore = Sigmoid(_numOps.ToDouble(output[b, offset + 5 + c, h, w]));
                                 if (classScore > maxClassScore)
                                 {
                                     maxClassScore = classScore;
@@ -513,10 +509,6 @@ internal class YOLOv8Head<T> : CvParameterModule<T>
             int batch = clsOutput.Shape[0];
             int featH = clsOutput.Shape[2];
             int featW = clsOutput.Shape[3];
-            // The level decodes in double, as before, from one bulk conversion per head; NCHW flat indexing.
-            var clsValues = CvTensorOps<T>.ToDoubleArray(clsOutput);
-            var regValues = CvTensorOps<T>.ToDoubleArray(regOutput);
-            int clsChannels = clsOutput.Shape[1];
             double scaleX = imageWidth / ((double)featW * stride);
             double scaleY = imageHeight / ((double)featH * stride);
 
@@ -531,7 +523,7 @@ internal class YOLOv8Head<T> : CvParameterModule<T>
                         int maxClassId = 0;
                         for (int c = 0; c < _numClasses; c++)
                         {
-                            double score = Sigmoid(clsValues[(((b * clsChannels) + c) * featH + h) * featW + w]);
+                            double score = Sigmoid(_numOps.ToDouble(clsOutput[b, c, h, w]));
                             if (score > maxScore)
                             {
                                 maxScore = score;
@@ -541,10 +533,10 @@ internal class YOLOv8Head<T> : CvParameterModule<T>
 
                         // Decode box using DFL (Distribution Focal Loss) approach
                         // Each side of the box has regMax distribution values
-                        double left = DecodeDistribution(regValues, regOutput.Shape[1], featH, featW, b, 0, h, w);
-                        double top = DecodeDistribution(regValues, regOutput.Shape[1], featH, featW, b, 1, h, w);
-                        double right = DecodeDistribution(regValues, regOutput.Shape[1], featH, featW, b, 2, h, w);
-                        double bottom = DecodeDistribution(regValues, regOutput.Shape[1], featH, featW, b, 3, h, w);
+                        double left = DecodeDistribution(regOutput, b, 0, h, w);
+                        double top = DecodeDistribution(regOutput, b, 1, h, w);
+                        double right = DecodeDistribution(regOutput, b, 2, h, w);
+                        double bottom = DecodeDistribution(regOutput, b, 3, h, w);
 
                         // Convert to xyxy format
                         double cx = (w + 0.5) * stride;
@@ -580,7 +572,7 @@ internal class YOLOv8Head<T> : CvParameterModule<T>
         return results;
     }
 
-    private double DecodeDistribution(double[] regValues, int channels, int featH, int featW, int b, int side, int h, int w)
+    private double DecodeDistribution(Tensor<T> regOutput, int b, int side, int h, int w)
     {
         // Apply softmax over regMax values and compute weighted sum
         double[] probs = new double[_regMax];
@@ -588,14 +580,14 @@ internal class YOLOv8Head<T> : CvParameterModule<T>
 
         for (int i = 0; i < _regMax; i++)
         {
-            double val = regValues[(((b * channels) + (side * _regMax) + i) * featH + h) * featW + w];
+            double val = _numOps.ToDouble(regOutput[b, side * _regMax + i, h, w]);
             maxVal = Math.Max(maxVal, val);
         }
 
         double sumExp = 0;
         for (int i = 0; i < _regMax; i++)
         {
-            double val = regValues[(((b * channels) + (side * _regMax) + i) * featH + h) * featW + w];
+            double val = _numOps.ToDouble(regOutput[b, side * _regMax + i, h, w]);
             probs[i] = Math.Exp(val - maxVal);
             sumExp += probs[i];
         }

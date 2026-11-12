@@ -210,25 +210,21 @@ public partial class DETR<T> : ObjectDetectorBase<T>, IDetectionTrainingModel<T>
         // Build detection list with confidence filtering
         var candidateDetections = new List<Detection<T>>();
 
-        // The decoder float outputs become T in one bulk pass each.
-        var boxValues = CvTensorOps<T>.FromDoubleArray(Array.ConvertAll(boxes, value => (double)value), new[] { boxes.Length }).ToArray();
-        var scoreValues = CvTensorOps<T>.FromDoubleArray(Array.ConvertAll(scores, value => (double)value), new[] { scores.Length }).ToArray();
-
         for (int i = 0; i < scores.Length; i++)
         {
             if (scores[i] >= confidenceThreshold)
             {
                 var box = new BoundingBox<T>(
-                    boxValues[i * 4],
-                    boxValues[i * 4 + 1],
-                    boxValues[i * 4 + 2],
-                    boxValues[i * 4 + 3]);
+                    NumOps.FromDouble(boxes[i * 4]),
+                    NumOps.FromDouble(boxes[i * 4 + 1]),
+                    NumOps.FromDouble(boxes[i * 4 + 2]),
+                    NumOps.FromDouble(boxes[i * 4 + 3]));
 
                 int classId = classIds[i];
                 candidateDetections.Add(new Detection<T>(
                     box,
                     classId,
-                    scoreValues[i],
+                    NumOps.FromDouble(scores[i]),
                     classId < ClassNames.Length ? ClassNames[classId] : null));
             }
         }
@@ -343,19 +339,22 @@ public partial class DETR<T> : ObjectDetectorBase<T>, IDetectionTrainingModel<T>
         int seqLen = shape[1];
         int hiddenDim = shape[2];
 
-        // The same table for every batch item: build [seqLen, hiddenDim] once and tile it.
-        var table = new double[seqLen * hiddenDim];
-        for (int pos = 0; pos < seqLen; pos++)
+        var encoding = new Tensor<T>(shape);
+
+        for (int b = 0; b < batch; b++)
         {
-            for (int i = 0; i < hiddenDim; i++)
+            for (int pos = 0; pos < seqLen; pos++)
             {
-                double angle = pos / Math.Pow(10000.0, (2.0 * (i / 2)) / hiddenDim);
-                table[pos * hiddenDim + i] = (i % 2 == 0) ? Math.Sin(angle) : Math.Cos(angle);
+                for (int i = 0; i < hiddenDim; i++)
+                {
+                    double angle = pos / Math.Pow(10000.0, (2.0 * (i / 2)) / hiddenDim);
+                    double value = (i % 2 == 0) ? Math.Sin(angle) : Math.Cos(angle);
+                    encoding[b, pos, i] = NumOps.FromDouble(value);
+                }
             }
         }
 
-        var encoding = CvTensorOps<T>.FromDoubleArray(table, new[] { 1, seqLen, hiddenDim });
-        return Engine.TensorTile(encoding, new[] { batch, 1, 1 });
+        return encoding;
     }
 
     /// <inheritdoc />
@@ -617,8 +616,15 @@ internal class LayerNorm<T> : CvParameterModule<T>
         writer.Write(_hiddenDim);
         writer.Write(_eps);
 
-        CvTensorOps<T>.WriteDoubles(writer, _gamma);
-        CvTensorOps<T>.WriteDoubles(writer, _beta);
+        for (int i = 0; i < _hiddenDim; i++)
+        {
+            writer.Write(_numOps.ToDouble(_gamma[i]));
+        }
+
+        for (int i = 0; i < _hiddenDim; i++)
+        {
+            writer.Write(_numOps.ToDouble(_beta[i]));
+        }
     }
 
     /// <summary>
@@ -643,8 +649,15 @@ internal class LayerNorm<T> : CvParameterModule<T>
                 $"LayerNorm configuration mismatch: expected eps={_eps}, got {eps}.");
         }
 
-        CvTensorOps<T>.ReadDoublesInto(reader, _gamma);
-        CvTensorOps<T>.ReadDoublesInto(reader, _beta);
+        for (int i = 0; i < _hiddenDim; i++)
+        {
+            _gamma[i] = _numOps.FromDouble(reader.ReadDouble());
+        }
+
+        for (int i = 0; i < _hiddenDim; i++)
+        {
+            _beta[i] = _numOps.FromDouble(reader.ReadDouble());
+        }
     }
 
     /// <inheritdoc />

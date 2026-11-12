@@ -109,7 +109,7 @@ internal sealed class DinoDetectionTransformer<T> : CvParameterModule<T>
         // tgt_embed is created with normal_ and then re-initialized by _reset_parameters (Xavier), so Xavier.
         _targetEmbed = new Tensor<T>(new[] { _numQueries, _d });
         double bound = Math.Sqrt(6.0 / (_numQueries + _d));
-        CvTensorOps<T>.AssignFromDoubles(_targetEmbed, Enumerable.Range(0, _targetEmbed.Length).Select(_ => ((random.NextDouble() * 2) - 1) * bound).ToArray());
+        for (int i = 0; i < _targetEmbed.Length; i++) _targetEmbed[i] = _numOps.FromDouble(((random.NextDouble() * 2) - 1) * bound);
         // label_enc: nn.Embedding(dn_labelbook_size + 1, d), N(0, 1).
         _labelEmbed = Normal(new[] { numClasses + 1, _d }, random);
 
@@ -182,7 +182,7 @@ internal sealed class DinoDetectionTransformer<T> : CvParameterModule<T>
         var source = engine.TensorConcatenate(flattened, 1);
 
         // Positional encoding: sine (host constant) + the level's learnable embedding.
-        var sine = new double[batch * tokens * _d];
+        var sine = new T[batch * tokens * _d];
         var levelOfToken = new int[tokens];
         for (int l = 0; l < _numLevels; l++)
         {
@@ -192,15 +192,15 @@ internal sealed class DinoDetectionTransformer<T> : CvParameterModule<T>
                 levelOfToken[starts[l] + t] = l;
                 for (int b = 0; b < batch; b++)
                     for (int c = 0; c < _d; c++)
-                        sine[(((b * tokens) + starts[l] + t) * _d) + c] = pe[(t * _d) + c];
+                        sine[(((b * tokens) + starts[l] + t) * _d) + c] = _numOps.FromDouble(pe[(t * _d) + c]);
             }
         }
         var levelEmbedding = engine.TensorBroadcastTo(
             engine.Reshape(CvTensorOps<T>.Select(_levelEmbed, levelOfToken, 0), new[] { 1, tokens, _d }), new[] { batch, tokens, _d });
-        var position = engine.TensorAdd(CvTensorOps<T>.FromDoubleArray(sine, new[] { batch, tokens, _d }), levelEmbedding);
+        var position = engine.TensorAdd(new Tensor<T>(sine, new[] { batch, tokens, _d }), levelEmbedding);
 
         // Encoder reference points: every token's pixel center, the same on every level (no padding).
-        var encoderReference = new double[batch * tokens * _numLevels * 2];
+        var encoderReference = new T[batch * tokens * _numLevels * 2];
         for (int l = 0; l < _numLevels; l++)
         {
             int h = shapes[l][0], w = shapes[l][1];
@@ -210,11 +210,11 @@ internal sealed class DinoDetectionTransformer<T> : CvParameterModule<T>
                         for (int level = 0; level < _numLevels; level++)
                         {
                             int index = ((((b * tokens) + starts[l] + (y * w) + x) * _numLevels) + level) * 2;
-                            encoderReference[index] = (x + 0.5) / w;
-                            encoderReference[index + 1] = (y + 0.5) / h;
+                            encoderReference[index] = _numOps.FromDouble((x + 0.5) / w);
+                            encoderReference[index + 1] = _numOps.FromDouble((y + 0.5) / h);
                         }
         }
-        var encoderReferenceTensor = CvTensorOps<T>.FromDoubleArray(encoderReference, new[] { batch, tokens, _numLevels, 2 });
+        var encoderReferenceTensor = new Tensor<T>(encoderReference, new[] { batch, tokens, _numLevels, 2 });
 
         var memory = source;
         foreach (var layer in _encoder) memory = layer.Forward(memory, position, encoderReferenceTensor, shapes, starts);
@@ -222,8 +222,8 @@ internal sealed class DinoDetectionTransformer<T> : CvParameterModule<T>
         // Two-stage proposals (gen_encoder_output_proposals): token-centered boxes of size 0.05 * 2^level.
         // An invalid proposal (any coordinate outside (0.01, 0.99)) has its memory zeroed and its logit set to
         // a large value standing in for the reference's +inf, so its sigmoid is exactly 1 with zero gradient.
-        var proposal = new double[batch * tokens * 4];
-        var valid = new double[batch * tokens * _d];
+        var proposal = new T[batch * tokens * 4];
+        var valid = new T[batch * tokens * _d];
         for (int l = 0; l < _numLevels; l++)
         {
             int h = shapes[l][0], w = shapes[l][1];
@@ -237,19 +237,19 @@ internal sealed class DinoDetectionTransformer<T> : CvParameterModule<T>
                     {
                         int token = (b * tokens) + starts[l] + (y * w) + x;
                         for (int coord = 0; coord < 4; coord++)
-                            proposal[(token * 4) + coord] = isValid ? Math.Log(box[coord] / (1 - box[coord])) : 1e4;
-                        for (int c = 0; c < _d; c++) valid[(token * _d) + c] = isValid ? 1.0 : 0.0;
+                            proposal[(token * 4) + coord] = _numOps.FromDouble(isValid ? Math.Log(box[coord] / (1 - box[coord])) : 1e4);
+                        for (int c = 0; c < _d; c++) valid[(token * _d) + c] = isValid ? _numOps.One : _numOps.Zero;
                     }
                 }
         }
         var outputMemory = _encoderOutputNorm.Forward(_encoderOutput.Forward(
-            engine.TensorMultiply(memory, CvTensorOps<T>.FromDoubleArray(valid, new[] { batch, tokens, _d }))));
+            engine.TensorMultiply(memory, new Tensor<T>(valid, new[] { batch, tokens, _d }))));
         var encoderClassAll = _encoderClass.Forward(outputMemory);
-        var encoderBoxAll = engine.TensorAdd(_encoderBox.Forward(outputMemory), CvTensorOps<T>.FromDoubleArray(proposal, new[] { batch, tokens, 4 }));
+        var encoderBoxAll = engine.TensorAdd(_encoderBox.Forward(outputMemory), new Tensor<T>(proposal, new[] { batch, tokens, 4 }));
 
         // Top-K tokens by their best class logit (ties keep the lower index, like a stable sort).
         int k = Math.Min(_numQueries, tokens);
-        var classValues = CvTensorOps<T>.ToDoubleArray(encoderClassAll);
+        var classValues = encoderClassAll.ToArray();
         var rows = new int[batch * k];
         for (int b = 0; b < batch; b++)
         {
@@ -257,7 +257,7 @@ internal sealed class DinoDetectionTransformer<T> : CvParameterModule<T>
             for (int t = 0; t < tokens; t++)
             {
                 double m = double.NegativeInfinity;
-                for (int c = 0; c < _numClasses; c++) m = Math.Max(m, classValues[(((b * tokens) + t) * _numClasses) + c]);
+                for (int c = 0; c < _numClasses; c++) m = Math.Max(m, _numOps.ToDouble(classValues[(((b * tokens) + t) * _numClasses) + c]));
                 best[t] = m;
             }
             var order = Enumerable.Range(0, tokens).OrderByDescending(t => best[t]).ThenBy(t => t).Take(k).ToArray();
@@ -277,26 +277,26 @@ internal sealed class DinoDetectionTransformer<T> : CvParameterModule<T>
         int total = pad + k;
         var content = engine.TensorBroadcastTo(
             engine.Reshape(engine.TensorSlice(_targetEmbed, new[] { 0, 0 }, new[] { k, _d }), new[] { 1, k, _d }), new[] { batch, k, _d });
-        var anchorValues = CvTensorOps<T>.ToDoubleArray(referenceUndetached);
+        var anchorValues = referenceUndetached.ToArray();
         var referenceSigmoid = new double[batch * total * 4];
         for (int b = 0; b < batch; b++)
             for (int q = 0; q < k; q++)
                 for (int c = 0; c < 4; c++)
-                    referenceSigmoid[(((b * total) + pad + q) * 4) + c] = Sigmoid(anchorValues[(((b * k) + q) * 4) + c]);
+                    referenceSigmoid[(((b * total) + pad + q) * 4) + c] = Sigmoid(_numOps.ToDouble(anchorValues[(((b * k) + q) * 4) + c]));
         var target = content;
         Tensor<bool>? mask = null;
         if (denoising is not null)
         {
             var labelRows = new int[batch * pad];
-            var occupied = new double[batch * pad * _d];
+            var occupied = new T[batch * pad * _d];
             for (int slot = 0; slot < batch * pad; slot++)
             {
                 labelRows[slot] = denoising.Occupied[slot] ? denoising.Labels[slot] : 0;
-                for (int c = 0; c < _d; c++) occupied[(slot * _d) + c] = denoising.Occupied[slot] ? 1.0 : 0.0;
+                for (int c = 0; c < _d; c++) occupied[(slot * _d) + c] = denoising.Occupied[slot] ? _numOps.One : _numOps.Zero;
             }
             var labelQueries = engine.TensorMultiply(
                 engine.Reshape(CvTensorOps<T>.Select(_labelEmbed, labelRows, 0), new[] { batch, pad, _d }),
-                CvTensorOps<T>.FromDoubleArray(occupied, new[] { batch, pad, _d }));
+                new Tensor<T>(occupied, new[] { batch, pad, _d }));
             target = engine.TensorConcatenate(new[] { labelQueries, content }, 1);
             for (int b = 0; b < batch; b++)
                 for (int s = 0; s < pad; s++)
@@ -313,18 +313,21 @@ internal sealed class DinoDetectionTransformer<T> : CvParameterModule<T>
         var firstReference = (double[])referenceSigmoid.Clone();
         for (int i = 0; i < _decoder.Count; i++)
         {
-            // The same reference box for every level: [batch, total, 4] tiled to [batch, total, levels, 4].
-            var referenceBoxes = engine.TensorTile(
-                CvTensorOps<T>.FromDoubleArray(referenceSigmoid, new[] { batch, total, 1, 4 }), new[] { 1, 1, _numLevels, 1 });
+            var referenceBoxes = new T[batch * total * _numLevels * 4];
+            for (int q = 0; q < batch * total; q++)
+                for (int l = 0; l < _numLevels; l++)
+                    for (int c = 0; c < 4; c++)
+                        referenceBoxes[(((q * _numLevels) + l) * 4) + c] = _numOps.FromDouble(referenceSigmoid[(q * 4) + c]);
             var sineQuery = DetrEmbeddings.BoxSineEmbedding(referenceSigmoid, batch * total);
-            var queryPosition = _refPointHead.Forward(CvTensorOps<T>.FromDoubleArray(sineQuery, new[] { batch, total, 2 * _d }));
+            var queryPosition = _refPointHead.Forward(new Tensor<T>(sineQuery.Select(v => _numOps.FromDouble(v)).ToArray(), new[] { batch, total, 2 * _d }));
 
-            output = _decoder[i].Forward(output, queryPosition, referenceBoxes,
+            output = _decoder[i].Forward(output, queryPosition, new Tensor<T>(referenceBoxes, new[] { batch, total, _numLevels, 4 }),
                 memory, shapes, starts, mask);
 
             var newReference = engine.Sigmoid(engine.TensorAdd(_boxHead.Forward(output), DetrHeads<T>.InverseSigmoidConstant(referenceSigmoid, batch, total)));
             refined.Add(newReference);
-            Array.Copy(CvTensorOps<T>.ToDoubleArray(newReference), referenceSigmoid, referenceSigmoid.Length);
+            var newValues = newReference.ToArray();
+            for (int j = 0; j < referenceSigmoid.Length; j++) referenceSigmoid[j] = _numOps.ToDouble(newValues[j]);
             hidden.Add(_decoderNorm.Forward(output));
         }
 
@@ -351,13 +354,11 @@ internal sealed class DinoDetectionTransformer<T> : CvParameterModule<T>
     private Tensor<T> Normal(int[] shape, Random random)
     {
         var tensor = new Tensor<T>(shape);
-        var values = new double[tensor.Length];
-        for (int i = 0; i < values.Length; i++)
+        for (int i = 0; i < tensor.Length; i++)
         {
             double u1 = 1.0 - random.NextDouble(), u2 = random.NextDouble();
-            values[i] = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2);
+            tensor[i] = _numOps.FromDouble(Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2));
         }
-        CvTensorOps<T>.AssignFromDoubles(tensor, values);
         return tensor;
     }
 
@@ -396,12 +397,12 @@ internal sealed class DinoDetectionTransformer<T> : CvParameterModule<T>
 
     private void WriteTensor(BinaryWriter writer, Tensor<T> tensor)
     {
-        CvTensorOps<T>.WriteDoubles(writer, tensor);
+        for (int i = 0; i < tensor.Length; i++) writer.Write(_numOps.ToDouble(tensor[i]));
     }
 
     private void ReadTensor(BinaryReader reader, Tensor<T> tensor)
     {
-        CvTensorOps<T>.ReadDoublesInto(reader, tensor);
+        for (int i = 0; i < tensor.Length; i++) tensor[i] = _numOps.FromDouble(reader.ReadDouble());
     }
 
     protected override IEnumerable<IParameterSource<T>?> ParameterChildren()

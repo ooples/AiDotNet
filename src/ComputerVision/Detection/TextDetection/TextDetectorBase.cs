@@ -88,8 +88,10 @@ public class TextRegion<T>
         double minX = double.MaxValue, minY = double.MaxValue;
         double maxX = double.MinValue, maxY = double.MinValue;
 
-        foreach (var (px, py) in CvTensorOps<T>.PointsToDoubles(polygon))
+        foreach (var (x, y) in polygon)
         {
+            double px = NumOps.ToDouble(x);
+            double py = NumOps.ToDouble(y);
             minX = Math.Min(minX, px);
             minY = Math.Min(minY, py);
             maxX = Math.Max(maxX, px);
@@ -549,14 +551,13 @@ public abstract partial class TextDetectorBase<T> : VisionTaskModelBase<T>, AiDo
     {
         int batch = perImageChannels.Count, channels = perImageChannels[0].Length;
         int height = perImageChannels[0][0].GetLength(0), width = perImageChannels[0][0].GetLength(1);
-        var values = new double[batch * channels * height * width];
-        int index = 0;
+        var tensor = new Tensor<T>(new[] { batch, channels, height, width });
         for (int b = 0; b < batch; b++)
             for (int ch = 0; ch < channels; ch++)
                 for (int y = 0; y < height; y++)
                     for (int x = 0; x < width; x++)
-                        values[index++] = perImageChannels[b][ch][y, x];
-        return CvTensorOps<T>.FromDoubleArray(values, new[] { batch, channels, height, width });
+                        tensor[b, ch, y, x] = NumOps.FromDouble(perImageChannels[b][ch][y, x]);
+        return tensor;
     }
 
     /// <summary>Elementwise binary cross-entropy of probabilities <paramref name="p"/> against <paramref name="y"/>, clamped away from 0 and 1.</summary>
@@ -576,7 +577,7 @@ public abstract partial class TextDetectorBase<T> : VisionTaskModelBase<T>, AiDo
     protected Tensor<T> WeightedMean(Tensor<T> values, Tensor<T> weights)
     {
         double total = 0;
-        foreach (double weight in CvTensorOps<T>.ToDoubleArray(weights)) total += weight;
+        for (int i = 0; i < weights.Length; i++) total += NumOps.ToDouble(weights[i]);
         var sum = Engine.ReduceSum(Engine.TensorMultiply(values, weights), null);
         return Engine.TensorMultiplyScalar(sum, NumOps.FromDouble(total > 0 ? 1.0 / total : 0.0));
     }

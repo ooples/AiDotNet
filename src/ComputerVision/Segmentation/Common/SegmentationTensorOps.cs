@@ -70,36 +70,6 @@ public static class SegmentationTensorOps
         return CvTensorOps<T>.IndicesAsValues(classIndices, numClasses);
     }
 
-    /// <summary>
-    /// Computes softmax along the class dimension, producing per-pixel probabilities.
-    /// </summary>
-    /// <typeparam name="T">The numeric type.</typeparam>
-    /// <param name="logits">Logits tensor [C, H, W] or [B, C, H, W].</param>
-    /// <returns>Probability map [C, H, W] or [B, C, H, W] with values in [0, 1].</returns>
-    /// <summary>
-    /// One structure per class present in a label map <c>[H, W]</c>: its pixel area and the mean probability
-    /// <c>[C, H, W]</c> of that class over its pixels, summed in double in row-major order. Labels truncate to
-    /// their integer class. Both maps convert in one bulk pass each.
-    /// </summary>
-    internal static List<SegmentedStructure> ClassStructures<T>(Tensor<T> labels, Tensor<T> probs)
-    {
-        int h = labels.Shape[0], w = labels.Shape[1];
-        int numC = probs.Shape[0];
-        int plane = h * w;
-        var labelValues = ToDoubleArray(labels);
-        var probValues = ToDoubleArray(probs);
-        var structures = new List<SegmentedStructure>();
-        for (int c = 0; c < numC; c++)
-        {
-            int area = 0; double confSum = 0;
-            for (int pixel = 0; pixel < plane; pixel++)
-                if ((int)labelValues[pixel] == c) { area++; confSum += probValues[(c * plane) + pixel]; }
-            if (area > 0)
-                structures.Add(new SegmentedStructure { ClassId = c, Name = $"Class_{c}", VolumeOrArea = area, MeanConfidence = confSum / area });
-        }
-        return structures;
-    }
-
     public static Tensor<T> SoftmaxAlongClassDim<T>(Tensor<T> logits)
     {
         if (logits is null) throw new ArgumentNullException(nameof(logits));
@@ -125,52 +95,51 @@ public static class SegmentationTensorOps
         if (classMap.Rank != 2)
             throw new ArgumentException("classMap must be rank 2 [H, W].", nameof(classMap));
 
-        var engine = AiDotNetEngine.Current;
         var numOps = MathHelper.GetNumericOperations<T>();
         int h = classMap.Shape[0], w = classMap.Shape[1];
-
-        // Distance of every pixel's class value from the target, computed once. A component starts at a
-        // pixel within 0.5 of the target (inclusive) and grows into neighbours strictly within 0.5, as before.
-        var distance = engine.TensorAbs(engine.TensorSubtractScalar(classMap, numOps.FromDouble(targetClass)));
-        var halfMap = CvTensorOps<T>.Fill([h, w], 0.5);
-        var canStart = CvTensorOps<T>.ToDoubleArray(engine.TensorLessEqual(distance, halfMap));
-        var canGrow = CvTensorOps<T>.ToDoubleArray(engine.TensorLessThan(distance, halfMap));
-
-        // The flood fill itself is a graph traversal over those host-side flags, labelling in raster order.
-        var labels = new int[h * w];
+        var labelMap = new Tensor<T>([h, w]);
         var visited = new bool[h * w];
         int componentCount = 0;
-        var queue = new Queue<int>();
-        for (int idx = 0; idx < h * w; idx++)
+        double targetVal = targetClass;
+
+        for (int row = 0; row < h; row++)
         {
-            if (visited[idx] || canStart[idx] == 0) continue;
-
-            componentCount++;
-            queue.Enqueue(idx);
-            visited[idx] = true;
-            while (queue.Count > 0)
+            for (int col = 0; col < w; col++)
             {
-                int cur = queue.Dequeue();
-                int r = cur / w, c = cur % w;
-                labels[cur] = componentCount;
+                int idx = row * w + col;
+                if (visited[idx]) continue;
+                if (Math.Abs(numOps.ToDouble(classMap[row, col]) - targetVal) > 0.5) continue;
 
-                // 4-connected neighbors
-                if (r > 0) Visit(cur - w);
-                if (r < h - 1) Visit(cur + w);
-                if (c > 0) Visit(cur - 1);
-                if (c < w - 1) Visit(cur + 1);
+                componentCount++;
+                var label = numOps.FromDouble(componentCount);
+                var queue = new Queue<int>();
+                queue.Enqueue(idx);
+                visited[idx] = true;
+
+                while (queue.Count > 0)
+                {
+                    int cur = queue.Dequeue();
+                    int r = cur / w, c = cur % w;
+                    labelMap[r, c] = label;
+
+                    // 4-connected neighbors
+                    if (r > 0 && !visited[(r - 1) * w + c] &&
+                        Math.Abs(numOps.ToDouble(classMap[r - 1, c]) - targetVal) < 0.5)
+                    { visited[(r - 1) * w + c] = true; queue.Enqueue((r - 1) * w + c); }
+                    if (r < h - 1 && !visited[(r + 1) * w + c] &&
+                        Math.Abs(numOps.ToDouble(classMap[r + 1, c]) - targetVal) < 0.5)
+                    { visited[(r + 1) * w + c] = true; queue.Enqueue((r + 1) * w + c); }
+                    if (c > 0 && !visited[r * w + c - 1] &&
+                        Math.Abs(numOps.ToDouble(classMap[r, c - 1]) - targetVal) < 0.5)
+                    { visited[r * w + c - 1] = true; queue.Enqueue(r * w + c - 1); }
+                    if (c < w - 1 && !visited[r * w + c + 1] &&
+                        Math.Abs(numOps.ToDouble(classMap[r, c + 1]) - targetVal) < 0.5)
+                    { visited[r * w + c + 1] = true; queue.Enqueue(r * w + c + 1); }
+                }
             }
         }
 
-        var labelMap = engine.Reshape(CvTensorOps<T>.IndicesAsValues(labels, componentCount + 1), [h, w]);
         return (labelMap, componentCount);
-
-        void Visit(int neighbor)
-        {
-            if (visited[neighbor] || canGrow[neighbor] == 0) return;
-            visited[neighbor] = true;
-            queue.Enqueue(neighbor);
-        }
     }
 
     /// <summary>
@@ -243,17 +212,38 @@ public static class SegmentationTensorOps
         if (features.Rank < 3 || features.Rank > 4)
             throw new ArgumentException("features must be rank 3 [C, H, W] or rank 4 [B, C, H, W].", nameof(features));
 
-        var engine = AiDotNetEngine.Current;
-        var chw = EnsureUnbatched(features);
-        int c = chw.Shape[0], h = chw.Shape[1], w = chw.Shape[2];
-        int numWeights = Math.Min(c, weights.Length);
-        if (numWeights == 0) return new Tensor<T>([h, w]);
+        var numOps = MathHelper.GetNumericOperations<T>();
 
-        // The first numWeights channels, each scaled by its weight, summed over the channel axis.
-        var used = engine.TensorSlice(chw, [0, 0, 0], [numWeights, h, w]);
-        var channelWeights = CvTensorOps<T>.FromDoubleArray(weights.Take(numWeights).ToArray(), [numWeights, 1, 1]);
-        var weighted = engine.TensorMultiply(used, engine.TensorBroadcastTo(channelWeights, [numWeights, h, w]));
-        return engine.ReduceSum(weighted, [0], keepDims: false);
+        if (features.Rank == 4)
+        {
+            int c = features.Shape[1], h = features.Shape[2], w = features.Shape[3];
+            int numWeights = Math.Min(c, weights.Length);
+            var result = new Tensor<T>([h, w]);
+            for (int ch = 0; ch < numWeights; ch++)
+            {
+                double wt = weights[ch];
+                for (int row = 0; row < h; row++)
+                    for (int col = 0; col < w; col++)
+                        result[row, col] = numOps.Add(result[row, col],
+                            numOps.FromDouble(numOps.ToDouble(features[0, ch, row, col]) * wt));
+            }
+            return result;
+        }
+        else
+        {
+            int c = features.Shape[0], h = features.Shape[1], w = features.Shape[2];
+            int numWeights = Math.Min(c, weights.Length);
+            var result = new Tensor<T>([h, w]);
+            for (int ch = 0; ch < numWeights; ch++)
+            {
+                double wt = weights[ch];
+                for (int row = 0; row < h; row++)
+                    for (int col = 0; col < w; col++)
+                        result[row, col] = numOps.Add(result[row, col],
+                            numOps.FromDouble(numOps.ToDouble(features[ch, row, col]) * wt));
+            }
+            return result;
+        }
     }
 
     /// <summary>
@@ -453,67 +443,6 @@ public static class SegmentationTensorOps
         return engine.TensorMultiply(ChannelMean(features), gate);
     }
 
-    /// <summary>
-    /// Turns a prompt score map into the three SAM-style candidate masks (sigmoid probability at least 0.3,
-    /// 0.5 and 0.7), each scored by its mean probability and by its stability - the ratio of the areas at the
-    /// threshold plus and minus 0.05 - with a 4x-subsampled copy of the score map as the low-resolution logits.
-    /// </summary>
-    internal static PromptedSegmentationResult<T> BuildPromptMaskResult<T>(Tensor<T> scoreMap, int h, int w)
-    {
-        var engine = AiDotNetEngine.Current;
-        var probs = engine.TensorBroadcastTo(engine.Reshape(Sigmoid(scoreMap), [1, h, w]), [3, h, w]);
-
-        Tensor<T> AtLeast(double[] thresholds)
-            => engine.TensorGreaterEqual(probs, engine.TensorBroadcastTo(CvTensorOps<T>.FromDoubleArray(thresholds, [3, 1, 1]), [3, h, w]));
-
-        var masks = AtLeast([0.3, 0.5, 0.7]);
-        var areaLo = engine.ReduceSum(AtLeast([0.3 - 0.05, 0.5 - 0.05, 0.7 - 0.05]), [1, 2], keepDims: false);
-        var areaHi = engine.ReduceSum(AtLeast([0.3 + 0.05, 0.5 + 0.05, 0.7 + 0.05]), [1, 2], keepDims: false);
-        var area = engine.ReduceSum(masks, [1, 2], keepDims: false);
-        var confSum = engine.ReduceSum(engine.TensorMultiply(masks, probs), [1, 2], keepDims: false);
-
-        var lowRes = SubsampleNearest(scoreMap, h, w, 4);
-        return new PromptedSegmentationResult<T>
-        {
-            Masks = masks,
-            Scores = CvTensorOps<T>.ToDoubleArray(SafeRatio(confSum, area)),
-            LowResLogits = engine.Reshape(lowRes, [1, lowRes.Shape[0], lowRes.Shape[1]]),
-            StabilityScores = CvTensorOps<T>.ToDoubleArray(SafeRatio(areaHi, areaLo)),
-        };
-    }
-
-    /// <summary>
-    /// One candidate per class of the argmax map (up to 100, in class order) covering at least four pixels,
-    /// scored by the mean class probability over its pixels; a single empty candidate when none qualifies.
-    /// </summary>
-    internal static List<PromptedSegmentationResult<T>> ClassMaskCandidates<T>(Tensor<T> features, Tensor<T> probs)
-    {
-        var engine = AiDotNetEngine.Current;
-        var classMap = ArgmaxAlongClassDim(features);
-        int numC = features.Shape[0], h = classMap.Shape[0], w = classMap.Shape[1];
-
-        // All class masks at once: [C, H, W] with 1 where the argmax is that class.
-        var classIds = engine.TensorBroadcastTo(engine.Reshape(engine.TensorArange<T>(0, numC, 1), [numC, 1, 1]), [numC, h, w]);
-        var classMasks = engine.TensorEquals(engine.TensorBroadcastTo(engine.Reshape(classMap, [1, h, w]), [numC, h, w]), classIds);
-        var areas = CvTensorOps<T>.ToDoubleArray(engine.ReduceSum(classMasks, [1, 2], keepDims: false));
-        var classProbs = engine.TensorSlice(probs, [0, 0, 0], [numC, h, w]);
-        var confSums = CvTensorOps<T>.ToDoubleArray(engine.ReduceSum(engine.TensorMultiply(classMasks, classProbs), [1, 2], keepDims: false));
-
-        var results = new List<PromptedSegmentationResult<T>>();
-        for (int cls = 0; cls < numC && results.Count < 100; cls++)
-        {
-            double area = areas[cls];
-            if (area < 4) continue;
-            double conf = confSums[cls] / area;
-            var mask = engine.TensorSlice(classMasks, [cls, 0, 0], [1, h, w]);
-            results.Add(new PromptedSegmentationResult<T> { Masks = mask, Scores = [conf], StabilityScores = [conf > 0.7 ? 0.95 : conf] });
-        }
-
-        if (results.Count == 0)
-            results.Add(new PromptedSegmentationResult<T> { Masks = new Tensor<T>([1, features.Shape[1], features.Shape[2]]), Scores = [0.0], StabilityScores = [0.0] });
-        return results;
-    }
-
     /// <summary><c>numerator / denominator</c> where the denominator is positive, else zero.</summary>
     internal static Tensor<T> SafeRatio<T>(Tensor<T> numerator, Tensor<T> denominator)
     {
@@ -539,148 +468,6 @@ public static class SegmentationTensorOps
     }
 
     /// <summary>
-    /// Panoptic labelling of per-pixel class logits <c>[C, H, W]</c>: classes below
-    /// <paramref name="numStuff"/> become one stuff segment each, and every 4-connected component of a thing
-    /// class becomes an instance with a running id starting at 1. Panoptic labels are <c>class * 1000</c> for
-    /// stuff and <c>class * 1000 + instance id</c> for things; each segment's confidence is its mean class
-    /// probability.
-    /// </summary>
-    /// <param name="logits">Class logits <c>[C, H, W]</c>.</param>
-    /// <param name="numStuff">Number of stuff classes (ids <c>0 .. numStuff-1</c>).</param>
-    /// <param name="numClasses">Total number of classes considered.</param>
-    /// <param name="segmentIdIsPanopticLabel">When true a segment's id is its panoptic label; otherwise
-    /// it is the class id for stuff and the instance id for things.</param>
-    internal static PanopticSegmentationResult<T> PanopticFromLogits<T>(
-        Tensor<T> logits, int numStuff, int numClasses, bool segmentIdIsPanopticLabel)
-    {
-        const int PanopticLabelDivisor = 1000;
-        var engine = AiDotNetEngine.Current;
-        var numOps = MathHelper.GetNumericOperations<T>();
-        var probMap = SoftmaxAlongClassDim(logits);
-        var semanticMap = ArgmaxAlongClassDim(logits);
-        int numC = logits.Shape[0], h = semanticMap.Shape[0], w = semanticMap.Shape[1];
-        var instanceMap = new Tensor<T>([h, w]);
-        var panopticMap = new Tensor<T>([h, w]);
-        var segments = new List<PanopticSegment<T>>();
-
-        // Stuff classes: one mask per class id (classes past the logits' channels never occur).
-        int stuffCount = Math.Min(numStuff, numC);
-        if (stuffCount > 0)
-        {
-            var stuffIds = engine.TensorBroadcastTo(engine.Reshape(engine.TensorArange<T>(0, stuffCount, 1), [stuffCount, 1, 1]), [stuffCount, h, w]);
-            var stuffMasks = engine.TensorEquals(engine.TensorBroadcastTo(engine.Reshape(semanticMap, [1, h, w]), [stuffCount, h, w]), stuffIds);
-            var stuffLabels = engine.TensorMultiplyScalar(stuffIds, numOps.FromDouble(PanopticLabelDivisor));
-            panopticMap = engine.ReduceSum(engine.TensorMultiply(stuffMasks, stuffLabels), [0], keepDims: false);
-            var stuffProbs = engine.TensorSlice(probMap, [0, 0, 0], [stuffCount, h, w]);
-            var areas = ToDoubleArray(engine.ReduceSum(stuffMasks, [1, 2], keepDims: false));
-            var confSums = ToDoubleArray(engine.ReduceSum(engine.TensorMultiply(stuffMasks, stuffProbs), [1, 2], keepDims: false));
-            for (int cls = 0; cls < stuffCount; cls++)
-            {
-                int area = (int)areas[cls];
-                if (area > 0)
-                {
-                    segments.Add(new PanopticSegment<T>
-                    {
-                        SegmentId = segmentIdIsPanopticLabel ? cls * PanopticLabelDivisor : cls,
-                        ClassId = cls,
-                        IsThing = false,
-                        Confidence = confSums[cls] / area,
-                        Area = area
-                    });
-                }
-            }
-        }
-
-        // Thing classes: one instance per connected component, numbered in raster order of discovery.
-        int nextInstId = 1;
-        for (int cls = numStuff; cls < numClasses && cls < numC; cls++)
-        {
-            var (labelMap, count) = LabelConnectedComponents(semanticMap, cls);
-            if (count == 0) continue;
-
-            // Component k (1-based) becomes instance nextInstId + k - 1.
-            var inComponent = engine.TensorGreaterThan(labelMap, numOps.Zero);
-            var instanceIds = engine.TensorMultiply(inComponent, engine.TensorAddScalar(labelMap, numOps.FromDouble(nextInstId - 1)));
-            instanceMap = engine.TensorAdd(instanceMap, instanceIds);
-            panopticMap = engine.TensorAdd(panopticMap, engine.TensorAdd(
-                instanceIds, engine.TensorMultiplyScalar(inComponent, numOps.FromDouble(cls * PanopticLabelDivisor))));
-
-            var componentIds = engine.TensorBroadcastTo(engine.Reshape(engine.TensorArange<T>(1, count + 1, 1), [count, 1, 1]), [count, h, w]);
-            var componentMasks = engine.TensorEquals(engine.TensorBroadcastTo(engine.Reshape(labelMap, [1, h, w]), [count, h, w]), componentIds);
-            var classProb = engine.TensorBroadcastTo(engine.TensorSlice(probMap, [cls, 0, 0], [1, h, w]), [count, h, w]);
-            var areas = ToDoubleArray(engine.ReduceSum(componentMasks, [1, 2], keepDims: false));
-            var confSums = ToDoubleArray(engine.ReduceSum(engine.TensorMultiply(componentMasks, classProb), [1, 2], keepDims: false));
-            for (int comp = 0; comp < count; comp++)
-            {
-                int instId = nextInstId++;
-                int area = (int)areas[comp];
-                if (area > 0)
-                {
-                    segments.Add(new PanopticSegment<T>
-                    {
-                        SegmentId = segmentIdIsPanopticLabel ? cls * PanopticLabelDivisor + instId : instId,
-                        ClassId = cls,
-                        IsThing = true,
-                        Confidence = confSums[comp] / area,
-                        Area = area,
-                        Mask = engine.Reshape(engine.TensorSlice(componentMasks, [comp, 0, 0], [1, h, w]), [h, w])
-                    });
-                }
-            }
-        }
-
-        return new PanopticSegmentationResult<T> { SemanticMap = semanticMap, InstanceMap = instanceMap, PanopticMap = panopticMap, Segments = segments };
-    }
-
-    private static double[] ToDoubleArray<T>(Tensor<T> values) => CvTensorOps<T>.ToDoubleArray(values);
-
-    /// <summary>
-    /// Instance candidates from a per-pixel class map: every 4-connected component of each non-background
-    /// class (1 .. <paramref name="numClasses"/>-1), in class then raster order, that covers at least four
-    /// pixels and whose mean class probability reaches <paramref name="confidenceThreshold"/>; at most
-    /// <paramref name="maxInstances"/>. Each carries its binary mask, its tight XYXY pixel box (exclusive
-    /// right/bottom) and its mean probability as confidence.
-    /// </summary>
-    internal static List<InstanceSegmentation.InstanceMask<T>> ComponentInstances<T>(
-        Tensor<T> classMap, Tensor<T> probMap, int numClasses, double confidenceThreshold, int maxInstances = 100)
-    {
-        var engine = AiDotNetEngine.Current;
-        var numOps = MathHelper.GetNumericOperations<T>();
-        int h = classMap.Shape[0], w = classMap.Shape[1];
-        var instances = new List<InstanceSegmentation.InstanceMask<T>>();
-        for (int cls = 1; cls < numClasses && instances.Count < maxInstances; cls++)
-        {
-            var (labelMap, count) = LabelConnectedComponents(classMap, cls);
-            if (count == 0) continue;
-
-            var componentIds = engine.TensorBroadcastTo(engine.Reshape(engine.TensorArange<T>(1, count + 1, 1), [count, 1, 1]), [count, h, w]);
-            var masks = engine.TensorEquals(engine.TensorBroadcastTo(engine.Reshape(labelMap, [1, h, w]), [count, h, w]), componentIds);
-            var classProb = engine.TensorBroadcastTo(engine.TensorSlice(probMap, [cls, 0, 0], [1, h, w]), [count, h, w]);
-            var area = engine.ReduceSum(masks, [1, 2], keepDims: false);
-            var confidence = SafeRatio(engine.ReduceSum(engine.TensorMultiply(masks, classProb), [1, 2], keepDims: false), area);
-            var (minX, minY, maxX, maxY) = MaskExtents(masks, h, w);
-
-            var areas = CvTensorOps<T>.ToDoubleArray(area);
-            var confidences = confidence.ToArray();
-            var confidenceValues = CvTensorOps<T>.ToDoubleArray(confidence);
-            var x1 = minX.ToArray();
-            var y1 = minY.ToArray();
-            var x2 = engine.TensorAddScalar(maxX, numOps.One).ToArray();
-            var y2 = engine.TensorAddScalar(maxY, numOps.One).ToArray();
-            for (int comp = 0; comp < count && instances.Count < maxInstances; comp++)
-            {
-                if (areas[comp] < 4) continue;
-                if (confidenceValues[comp] < confidenceThreshold) continue;
-                var box = new BoundingBox<T>(x1[comp], y1[comp], x2[comp], y2[comp], BoundingBoxFormat.XYXY, cls);
-                var mask = engine.Reshape(engine.TensorSlice(masks, [comp, 0, 0], [1, h, w]), [h, w]);
-                instances.Add(new InstanceSegmentation.InstanceMask<T>(box, mask, cls, confidences[comp]));
-            }
-        }
-
-        return instances;
-    }
-
-    /// <summary>
     /// Per mask of a <c>[N, H, W]</c> binary stack, the smallest and largest column and row it covers
     /// (each <c>[N]</c>). An empty mask yields <c>(W, H, 0, 0)</c>, the scan's starting values.
     /// </summary>
@@ -702,34 +489,4 @@ public static class SegmentationTensorOps
         return (minX, minY, maxX, maxY);
     }
 
-    /// <summary>
-    /// Greedy mask NMS: visits the instances by descending confidence (stable for ties) and keeps each one
-    /// whose mask IoU with every instance already kept is below <paramref name="iouThreshold"/>.
-    /// </summary>
-    internal static List<InstanceSegmentation.InstanceMask<T>> MaskNms<T>(
-        List<InstanceSegmentation.InstanceMask<T>> instances, double iouThreshold)
-    {
-        var numOps = MathHelper.GetNumericOperations<T>();
-        var sorted = SortByConfidenceDescending(instances);
-        var kept = new List<InstanceSegmentation.InstanceMask<T>>();
-        while (sorted.Count > 0)
-        {
-            var best = sorted[0];
-            kept.Add(best);
-            sorted.RemoveAt(0);
-            sorted = sorted.Where(inst => best.ComputeMaskIoU(inst, numOps) < iouThreshold).ToList();
-        }
-
-        return kept;
-    }
-
-    /// <summary>The instances ordered by descending confidence; ties keep their input order.</summary>
-    internal static List<InstanceSegmentation.InstanceMask<T>> SortByConfidenceDescending<T>(
-        List<InstanceSegmentation.InstanceMask<T>> instances)
-    {
-        if (instances.Count == 0) return new List<InstanceSegmentation.InstanceMask<T>>();
-        var confidences = new Tensor<T>([instances.Count], new Vector<T>(instances.Select(i => i.Confidence).ToArray()));
-        var keys = CvTensorOps<T>.ToDoubleArray(confidences);
-        return Enumerable.Range(0, instances.Count).OrderByDescending(i => keys[i]).Select(i => instances[i]).ToList();
-    }
 }

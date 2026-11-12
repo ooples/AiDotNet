@@ -255,7 +255,6 @@ public partial class TrOCR<T> : OCRBase<T>
 
             var logits = _outputProjection.ForwardTokens(x);                      // [batch, 1, vocab]
             steps.Add(logits);
-            var logitValues = CvTensorOps<T>.ToDoubleArray(logits);
 
             bool allFinished = true;
             for (int b = 0; b < batch; b++)
@@ -270,7 +269,7 @@ public partial class TrOCR<T> : OCRBase<T>
                 double max = double.NegativeInfinity;
                 for (int v = 0; v < vocab; v++)
                 {
-                    max = Math.Max(max, logitValues[(b * vocab) + v]);
+                    max = Math.Max(max, NumOps.ToDouble(logits[(b * vocab) + v]));
                 }
 
                 double sum = 0;
@@ -278,7 +277,7 @@ public partial class TrOCR<T> : OCRBase<T>
                 double bestValue = double.NegativeInfinity;
                 for (int v = 0; v < vocab; v++)
                 {
-                    double value = logitValues[(b * vocab) + v];
+                    double value = NumOps.ToDouble(logits[(b * vocab) + v]);
                     sum += Math.Exp(value - max);
                     if (value > bestValue)
                     {
@@ -321,16 +320,15 @@ public partial class TrOCR<T> : OCRBase<T>
         int vocabSize = VocabularySize + 2; // +2 for start/end tokens
 
         // One-hot token ids through the learned embedding projection, then positional encoding.
-        var oneHotValues = new double[batch * seqLen * vocabSize];
+        var oneHot = new Tensor<T>(new[] { batch, seqLen, vocabSize });
         for (int b = 0; b < batch; b++)
         {
             for (int t = 0; t < seqLen; t++)
             {
                 int tokenId = MathHelper.Clamp(tokens[b][t], 0, vocabSize - 1);
-                oneHotValues[(((b * seqLen) + t) * vocabSize) + tokenId] = 1.0;
+                oneHot[(((b * seqLen) + t) * vocabSize) + tokenId] = NumOps.FromDouble(1.0);
             }
         }
-        var oneHot = CvTensorOps<T>.FromDoubleArray(oneHotValues, new[] { batch, seqLen, vocabSize });
 
         return AddPositionalEncoding(_tokenEmbedding.ForwardTokens(oneHot), startPosition);
     }
@@ -342,7 +340,7 @@ public partial class TrOCR<T> : OCRBase<T>
         int hiddenDim = x.Shape[2];
 
         // The sinusoidal table is a constant; only the ADD must stay on the tape.
-        var tableValues = new double[seqLen * hiddenDim];
+        var table = new Tensor<T>(new[] { 1, seqLen, hiddenDim });
         for (int pos = 0; pos < seqLen; pos++)
         {
             for (int i = 0; i < hiddenDim; i++)
@@ -350,10 +348,9 @@ public partial class TrOCR<T> : OCRBase<T>
                 int pairIndex = i / 2;
                 double exponent = (2.0 * pairIndex) / hiddenDim;
                 double angle = (pos + startPosition) / Math.Pow(10000.0, exponent);
-                tableValues[(pos * hiddenDim) + i] = (i % 2 == 0) ? Math.Sin(angle) : Math.Cos(angle);
+                table[(pos * hiddenDim) + i] = NumOps.FromDouble((i % 2 == 0) ? Math.Sin(angle) : Math.Cos(angle));
             }
         }
-        var table = CvTensorOps<T>.FromDoubleArray(tableValues, new[] { 1, seqLen, hiddenDim });
 
         return Engine.TensorAdd(x, Engine.TensorBroadcastTo(table, new[] { batch, seqLen, hiddenDim }));
     }
@@ -523,10 +520,10 @@ public partial class TrOCR<T> : OCRBase<T>
                 $"Destination shape: [{string.Join(", ", dest._shape)}]");
         }
 
-        // The checkpoint's floats become T in one bulk conversion (via double, as before).
-        var values = source.ToArray();
-        CvTensorOps<T>.FromDoubleArray(Array.ConvertAll(values, value => (double)value), new[] { values.Length })
-            .AsSpan().CopyTo(dest.AsWritableSpan().Slice(0, values.Length));
+        for (int i = 0; i < source.Length; i++)
+        {
+            dest[i] = NumOps.FromDouble(source[i]);
+        }
     }
 
     /// <inheritdoc/>
@@ -732,7 +729,6 @@ public partial class TrOCR<T> : OCRBase<T>
         if (target.Rank == 3 && target.Shape[2] == vocab)
         {
             int batch = target.Shape[0], length = target.Shape[1];
-            var scores = CvTensorOps<T>.ToDoubleArray(target);
             var labels = new int[batch][];
             for (int b = 0; b < batch; b++)
             {
@@ -743,7 +739,7 @@ public partial class TrOCR<T> : OCRBase<T>
                     double bestValue = double.NegativeInfinity;
                     for (int v = 0; v < vocab; v++)
                     {
-                        double value = scores[(((b * length) + t) * vocab) + v];
+                        double value = NumOps.ToDouble(target[(((b * length) + t) * vocab) + v]);
                         if (value > bestValue)
                         {
                             bestValue = value;
@@ -761,14 +757,13 @@ public partial class TrOCR<T> : OCRBase<T>
         if (target.Rank == 2)
         {
             int batch = target.Shape[0], length = target.Shape[1];
-            var ids = CvTensorOps<T>.ToDoubleArray(target);
             var labels = new int[batch][];
             for (int b = 0; b < batch; b++)
             {
                 labels[b] = new int[length];
                 for (int t = 0; t < length; t++)
                 {
-                    double id = Math.Round(ids[(b * length) + t]);
+                    double id = Math.Round(NumOps.ToDouble(target[(b * length) + t]));
                     if (id < 0 || id >= vocab)
                     {
                         throw new ArgumentException(
@@ -795,12 +790,12 @@ public partial class TrOCR<T> : OCRBase<T>
     {
         int vocab = VocabularySize + 2;
         int batch = labels.Length, length = labels[0].Length;
-        var targetValues = new double[batch * length * vocab];
+        var targets = new Tensor<T>(new[] { batch, length, vocab });
         for (int b = 0; b < batch; b++)
         {
             for (int t = 0; t < length; t++)
             {
-                targetValues[(((b * length) + t) * vocab) + labels[b][t]] = 1.0;
+                targets[(((b * length) + t) * vocab) + labels[b][t]] = NumOps.One;
                 if (labels[b][t] == _endTokenId)
                 {
                     break;
@@ -808,7 +803,7 @@ public partial class TrOCR<T> : OCRBase<T>
             }
         }
 
-        return CvTensorOps<T>.FromDoubleArray(targetValues, new[] { batch, length, vocab });
+        return targets;
     }
 
     /// <summary>
@@ -820,9 +815,9 @@ public partial class TrOCR<T> : OCRBase<T>
         var ops = MathHelper.GetNumericOperations<T>();
 
         double labelled = 0;
-        foreach (double value in CvTensorOps<T>.ToDoubleArray(oneHotTargets))
+        for (int i = 0; i < oneHotTargets.Length; i++)
         {
-            labelled += value;
+            labelled += ops.ToDouble(oneHotTargets[i]);
         }
 
         var logProbabilities = engine.TensorLogSoftmax(logits, axis: -1);
@@ -1323,8 +1318,14 @@ internal class TrOCRLayerNorm<T> : CvParameterModule<T>
     public void WriteParameters(BinaryWriter writer)
     {
         writer.Write(_hiddenDim);
-        CvTensorOps<T>.WriteDoubles(writer, _gamma);
-        CvTensorOps<T>.WriteDoubles(writer, _beta);
+        for (int i = 0; i < _hiddenDim; i++)
+        {
+            writer.Write(_numOps.ToDouble(_gamma[i]));
+        }
+        for (int i = 0; i < _hiddenDim; i++)
+        {
+            writer.Write(_numOps.ToDouble(_beta[i]));
+        }
     }
 
     public void ReadParameters(BinaryReader reader)
@@ -1334,8 +1335,14 @@ internal class TrOCRLayerNorm<T> : CvParameterModule<T>
         {
             throw new InvalidOperationException($"TrOCRLayerNorm configuration mismatch. Expected hiddenDim={_hiddenDim}, got {hiddenDim}");
         }
-        CvTensorOps<T>.ReadDoublesInto(reader, _gamma);
-        CvTensorOps<T>.ReadDoublesInto(reader, _beta);
+        for (int i = 0; i < _hiddenDim; i++)
+        {
+            _gamma[i] = _numOps.FromDouble(reader.ReadDouble());
+        }
+        for (int i = 0; i < _hiddenDim; i++)
+        {
+            _beta[i] = _numOps.FromDouble(reader.ReadDouble());
+        }
     }
 
     /// <inheritdoc />

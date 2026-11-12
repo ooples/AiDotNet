@@ -40,23 +40,20 @@ public sealed class DetectionTrainingBatch<T>
     public static DetectionTrainingBatch<T> FromPaddedCoco(Tensor<T> labels)
     {
         ValidatePaddedShape(labels, exactWidth: true);
+        var ops = MathHelper.GetNumericOperations<T>();
         var images = new List<DetectionTrainingTarget<T>>[labels.Shape[0]];
-        int objects = labels.Shape[1];
-        var values = labels.ToArray();
-        // A row is padding when all five values equal zero: its count of zero entries is five.
-        var zeroCounts = CvTensorOps<T>.ToDoubleArray(AiDotNetEngine.Current.ReduceSum(
-            AiDotNetEngine.Current.TensorEquals(labels, MathHelper.GetNumericOperations<T>().Zero), new[] { 2 }, keepDims: false));
         for (int image = 0; image < images.Length; image++)
         {
             var targets = new List<DetectionTrainingTarget<T>>();
-            for (int item = 0; item < objects; item++)
+            for (int item = 0; item < labels.Shape[1]; item++)
             {
-                int row = image * objects + item;
-                if (zeroCounts[row] == 5) continue;
-                int offset = row * 5;
-                int label = ReadClass(values[offset], nameof(labels));
+                bool padding = true;
+                for (int coordinate = 0; coordinate < 5; coordinate++)
+                    padding &= ops.Equals(labels[image, item, coordinate], ops.Zero);
+                if (padding) continue;
+                int label = ReadClass(labels[image, item, 0], nameof(labels));
                 targets.Add(DetectionTrainingTarget<T>.FromNormalizedXywh(label,
-                    values[offset + 1], values[offset + 2], values[offset + 3], values[offset + 4]));
+                    labels[image, item, 1], labels[image, item, 2], labels[image, item, 3], labels[image, item, 4]));
             }
             images[image] = targets;
         }
@@ -66,31 +63,24 @@ public sealed class DetectionTrainingBatch<T>
     internal static DetectionTrainingBatch<T> FromPaddedDetr(Tensor<T> labels)
     {
         ValidatePaddedShape(labels, exactWidth: false);
+        var ops = MathHelper.GetNumericOperations<T>();
         var images = new List<DetectionTrainingTarget<T>>[labels.Shape[0]];
-        int objects = labels.Shape[1];
-        int width = labels.Shape[2];
-        var values = labels.ToArray();
-        var isPadding = CvTensorOps<T>.ToDoubleArray(AiDotNetEngine.Current.TensorEquals(
-            AiDotNetEngine.Current.TensorSlice(labels, new[] { 0, 0, 0 }, new[] { images.Length, objects, 1 }),
-            MathHelper.GetNumericOperations<T>().FromDouble(-1)));
         for (int image = 0; image < images.Length; image++)
         {
             var targets = new List<DetectionTrainingTarget<T>>();
             bool sawPadding = false;
-            for (int item = 0; item < objects; item++)
+            for (int item = 0; item < labels.Shape[1]; item++)
             {
-                int row = image * objects + item;
-                if (isPadding[row] != 0)
+                if (ops.Equals(labels[image, item, 0], ops.FromDouble(-1)))
                 {
                     sawPadding = true;
                     continue;
                 }
                 if (sawPadding)
                     throw new ArgumentException("DETR targets cannot follow a -1 padding row.", nameof(labels));
-                int offset = row * width;
-                int label = ReadClass(values[offset], nameof(labels));
+                int label = ReadClass(labels[image, item, 0], nameof(labels));
                 targets.Add(new DetectionTrainingTarget<T>(label,
-                    values[offset + 1], values[offset + 2], values[offset + 3], values[offset + 4]));
+                    labels[image, item, 1], labels[image, item, 2], labels[image, item, 3], labels[image, item, 4]));
             }
             images[image] = targets;
         }
