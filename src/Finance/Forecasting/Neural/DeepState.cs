@@ -988,14 +988,13 @@ public partial class DeepState<T> : ForecastingModelBase<T>
             {
                 for (int t = 0; t < stepsToCopy; t++)
                 {
-                    for (int f = 0; f < numFeatures; f++)
+                    // One feature row; indices grow with f, so the in-bounds part is a prefix.
+                    int srcIdx = b * predSteps * numFeatures + t * numFeatures;
+                    int dstIdx = b * totalSteps * numFeatures + (currentStep + t) * numFeatures;
+                    int rowCount = Math.Min(numFeatures, Math.Min(pred.Length - srcIdx, result.Length - dstIdx));
+                    if (rowCount > 0)
                     {
-                        int srcIdx = b * predSteps * numFeatures + t * numFeatures + f;
-                        int dstIdx = b * totalSteps * numFeatures + (currentStep + t) * numFeatures + f;
-                        if (srcIdx < pred.Length && dstIdx < result.Length)
-                        {
-                            result.Data.Span[dstIdx] = pred.Data.Span[srcIdx];
-                        }
+                        pred.Data.Span.Slice(srcIdx, rowCount).CopyTo(result.Data.Span.Slice(dstIdx, rowCount));
                     }
                 }
             }
