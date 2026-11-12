@@ -847,13 +847,18 @@ internal static class LocalObjectiveGradientComputer<T>
             Tensor<T> Readout(Tensor<T> h) => layers[headIndex].Forward(PreHeadReadout(h));
             Tensor<T> LossFn(Tensor<T> p, Tensor<T> t) => ReduceToScalar(engine, loss.ComputeTapeLoss(p, t));
 
-            Tensor<T> ReadoutLossCore(Tensor<T> h, Tensor<T> t)
+            Tensor<T> ReadoutLossCore(Tensor<T> h, Tensor<T> t) => ReadoutLossOn(h, t, ref blockHeadPreparedState);
+
+            // The prepared state is a parameter so the inner-tape fallback below can pass its own: a transpose traced on
+            // an inner tape dies with it, and caching it in the block-wide state would hand later losses on this block's
+            // tape a weight that tape never recorded (the tied head would get no gradient from them).
+            Tensor<T> ReadoutLossOn(Tensor<T> h, Tensor<T> t, ref FusedReadoutPreparedState<T> state)
             {
                 var preHead = PreHeadReadout(h);
                 if (ReferenceEquals(t, alignedTarget) && preparedIds is not null && detachableFusedHead is not null
                     && detachableFusedHead.TryComputeFusedLossPrepared(
                         preHead, preparedIds, detachParameters: false,
-                        ref blockHeadPreparedState) is { } preparedFused)
+                        ref state) is { } preparedFused)
                 {
                     return ReduceToScalar(engine, preparedFused);
                 }
@@ -881,7 +886,8 @@ internal static class LocalObjectiveGradientComputer<T>
                 Tensor<T> gradH;
                 using (var innerTape = new GradientTape<T>())
                 {
-                    lossVal = ReadoutLossCore(hDetached, t);
+                    FusedReadoutPreparedState<T> innerState = default;
+                    lossVal = ReadoutLossOn(hDetached, t, ref innerState);
                     var innerGrads = innerTape.ComputeGradients(lossVal, sources: new[] { hDetached });
                     innerTape.Retain(lossVal);
                     if (innerGrads.TryGetValue(hDetached, out var gh))
