@@ -393,17 +393,7 @@ public partial class CausalGANGenerator<T> : NeuralSyntheticTabularGeneratorBase
         _dataGram = ComputeDataGram(transformedData);
 
         // Step 2: Initialize adjacency matrix with small random values (zero diagonal)
-        _adjacency = new Matrix<T>(_dataWidth, _dataWidth);
-        for (int i = 0; i < _dataWidth; i++)
-        {
-            for (int j = 0; j < _dataWidth; j++)
-            {
-                if (i != j)
-                {
-                    _adjacency[i, j] = NumOps.FromDouble(0.01 * (_random.NextDouble() - 0.5));
-                }
-            }
-        }
+        _adjacency = InitialAdjacency(_dataWidth);
 
         // Step 3: Reset augmented Lagrangian parameters
         _lagrangeAlpha = 0.0;
@@ -458,17 +448,7 @@ public partial class CausalGANGenerator<T> : NeuralSyntheticTabularGeneratorBase
             var transformedData = _transformer.Transform(data);
             _dataGram = ComputeDataGram(transformedData);
 
-            _adjacency = new Matrix<T>(_dataWidth, _dataWidth);
-            for (int i = 0; i < _dataWidth; i++)
-            {
-                for (int j = 0; j < _dataWidth; j++)
-                {
-                    if (i != j)
-                    {
-                        _adjacency[i, j] = NumOps.FromDouble(0.01 * (_random.NextDouble() - 0.5));
-                    }
-                }
-            }
+            _adjacency = InitialAdjacency(_dataWidth);
 
             _lagrangeAlpha = 0.0;
             _lagrangeRho = 1.0;
@@ -901,6 +881,17 @@ public partial class CausalGANGenerator<T> : NeuralSyntheticTabularGeneratorBase
         var gradient = engine.TensorMultiplyScalar(
             engine.TensorMultiply(engine.TensorTranspose(expMatrix), w), NumOps.FromDouble(2.0));
         return (constraintValue, gradient);
+    }
+
+    /// <summary>
+    /// Small uniform weights in [-0.005, 0.005) off the diagonal and zero on it: no variable starts as its own
+    /// parent, as DAG-structure learning requires (Zheng et al. 2018's acyclicity term is zero on a DAG).
+    /// </summary>
+    private Matrix<T> InitialAdjacency(int width)
+    {
+        var draws = Engine.TensorRandomUniformRange<T>([width, width], NumOps.FromDouble(-0.005), NumOps.FromDouble(0.005), _random.Next());
+        var offDiagonal = Engine.ScalarMinusTensor(NumOps.One, Engine.TensorEye<T>(width));
+        return Engine.TensorMultiply(draws, offDiagonal).ToMatrix();
     }
 
     /// <summary>

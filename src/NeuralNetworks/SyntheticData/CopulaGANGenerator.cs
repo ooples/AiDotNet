@@ -124,7 +124,7 @@ public partial class CopulaGANGenerator<T> : NeuralSyntheticTabularGeneratorBase
     private readonly List<(int InputSize, int OutputSize)> _discLayerDims = new();
 
     // Copula transform state: sorted values and empirical CDF per continuous column
-    private readonly List<Vector<T>> _sortedValues = new();
+    private readonly List<T[]> _sortedValues = new();
     private readonly List<int> _continuousColumnIndices = new();
 
     // Cached pre-activations for proper backward passes
@@ -915,7 +915,7 @@ public partial class CopulaGANGenerator<T> : NeuralSyntheticTabularGeneratorBase
         foreach (int col in _continuousColumnIndices)
         {
             var (z, sorted) = SyntheticTensorOps<T>.GaussianCopulaForward(Tensor<T>.FromVector(data.GetColumn(col)));
-            _sortedValues.Add(sorted.ToVector());
+            _sortedValues.Add(sorted.ToArray());
             result.SetColumn(col, z.ToVector());
         }
 
@@ -932,7 +932,7 @@ public partial class CopulaGANGenerator<T> : NeuralSyntheticTabularGeneratorBase
         {
             int col = _continuousColumnIndices[idx];
             var original = SyntheticTensorOps<T>.GaussianCopulaInverse(
-                Tensor<T>.FromVector(data.GetColumn(col)), Tensor<T>.FromVector(_sortedValues[idx]));
+                Tensor<T>.FromVector(data.GetColumn(col)), Tensor<T>.FromVector(new Vector<T>(_sortedValues[idx])));
             result.SetColumn(col, original.ToVector());
         }
 
