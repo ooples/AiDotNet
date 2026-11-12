@@ -1241,3 +1241,45 @@ AiDotNet.ComputerVision.Detection.TextDetection.EAST<T>.BoxScoreThreshold.set ->
 override AiDotNet.ComputerVision.Detection.TextDetection.EAST<T>.RegisterGeneratedState(AiDotNet.Models.ModelStateRegistry<T>! state) -> void
 *REMOVED*AiDotNet.Document.Options.DocBankOptions.LearningRate.get -> double
 AiDotNet.Document.Options.DocBankOptions.LearningRate.get -> double?
+AiDotNet.Models.Options.Adam8BitOptimizerOptions<T, TInput, TOutput>.UseDecoupledWeightDecay.get -> bool
+AiDotNet.Models.Options.Adam8BitOptimizerOptions<T, TInput, TOutput>.UseDecoupledWeightDecay.set -> void
+AiDotNet.Models.Options.Adam8BitOptimizerOptions<T, TInput, TOutput>.WeightDecay.get -> double
+AiDotNet.Models.Options.Adam8BitOptimizerOptions<T, TInput, TOutput>.WeightDecay.set -> void
+AiDotNet.NeuralNetworks.NeuralNetworkBase<T>.DisableGradientCheckpointing() -> void
+AiDotNet.NeuralNetworks.NeuralNetworkBase<T>.EnableGradientCheckpointing(int segmentSize = 0) -> void
+AiDotNet.NeuralNetworks.Layers.HouseholderSubspaceLayer<T>
+AiDotNet.NeuralNetworks.Layers.HouseholderSubspaceLayer<T>.Dimension.get -> int
+AiDotNet.NeuralNetworks.Layers.HouseholderSubspaceLayer<T>.GetParameterRoles() -> System.Collections.Generic.Dictionary<string!, string!>!
+AiDotNet.NeuralNetworks.Layers.HouseholderSubspaceLayer<T>.HouseholderSubspaceLayer(int dimension, int numReflectors = 4, bool transpose = false) -> void
+AiDotNet.NeuralNetworks.Layers.HouseholderSubspaceLayer<T>.NumReflectors.get -> int
+AiDotNet.NeuralNetworks.Layers.HouseholderSubspaceLayer<T>.OutputAxesFor(int inputRank) -> System.Collections.Generic.IReadOnlyList<AiDotNet.Interfaces.OutputAxisContract>?
+AiDotNet.NeuralNetworks.Layers.HouseholderSubspaceLayer<T>.Reflectors.get -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+AiDotNet.NeuralNetworks.Layers.HouseholderSubspaceLayer<T>.Transpose.get -> bool
+override AiDotNet.NeuralNetworks.Layers.HouseholderSubspaceLayer<T>.GetTrainableParameters() -> System.Collections.Generic.IReadOnlyList<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>!
+override AiDotNet.NeuralNetworks.Layers.HouseholderSubspaceLayer<T>.ResetState() -> void
+override AiDotNet.NeuralNetworks.Layers.HouseholderSubspaceLayer<T>.SetTrainableParameters(System.Collections.Generic.IReadOnlyList<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>! parameters) -> void
+override AiDotNet.NeuralNetworks.Layers.HouseholderSubspaceLayer<T>.SupportsTraining.get -> bool
+override AiDotNet.NeuralNetworks.Layers.HouseholderSubspaceLayer<T>.UpdateParameters(T learningRate) -> void
+override AiDotNet.NeuralNetworks.Layers.HouseholderSubspaceLayer<T>.ZeroGrad() -> void
+static AiDotNet.NeuralNetworks.Layers.HouseholderSubspaceLayer<T>.ApplyChain(AiDotNet.Tensors.Engines.IEngine! engine, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! reflectors, bool transpose = false) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+AiDotNet.NeuralNetworks.CreditAssignment.BlockwiseAnchorLocalErrorCreditRule<T>
+AiDotNet.NeuralNetworks.CreditAssignment.BlockwiseAnchorLocalErrorCreditRule<T>.AnchorStride.get -> int
+AiDotNet.NeuralNetworks.CreditAssignment.BlockwiseAnchorLocalErrorCreditRule<T>.ApplyAuxiliaryGradients(System.Collections.Generic.IReadOnlyDictionary<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>! gradients) -> void
+AiDotNet.NeuralNetworks.CreditAssignment.BlockwiseAnchorLocalErrorCreditRule<T>.AuxiliaryParameters.get -> System.Collections.Generic.IReadOnlyList<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>!
+AiDotNet.NeuralNetworks.CreditAssignment.BlockwiseAnchorLocalErrorCreditRule<T>.BlockwiseAnchorLocalErrorCreditRule(int readoutLayerCount = 2, int anchorStride = 4, int maxCandidates = 1024, double localWeight = 1, bool detachReadoutOnHiddenBlocks = true, bool useDepthProgressiveWeight = true, bool streamBlocksSequentially = true, int? seed = null) -> void
+AiDotNet.NeuralNetworks.CreditAssignment.BlockwiseAnchorLocalErrorCreditRule<T>.BuildLocalObjective(AiDotNet.Interfaces.LocalObjectiveContext<T>! context) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>?
+AiDotNet.NeuralNetworks.CreditAssignment.BlockwiseAnchorLocalErrorCreditRule<T>.BuildOutputObjective(AiDotNet.Interfaces.LocalObjectiveStep<T>! step, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! prediction, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! defaultLoss) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>?
+AiDotNet.NeuralNetworks.CreditAssignment.BlockwiseAnchorLocalErrorCreditRule<T>.ComputeTeachingSignals(AiDotNet.Interfaces.ICreditAssignmentContext<T>! context) -> void
+AiDotNet.NeuralNetworks.CreditAssignment.BlockwiseAnchorLocalErrorCreditRule<T>.DetachReadoutOnHiddenBlocks.get -> bool
+AiDotNet.NeuralNetworks.CreditAssignment.BlockwiseAnchorLocalErrorCreditRule<T>.Initialize(AiDotNet.Interfaces.ICreditAssignmentContext<T>! context) -> void
+AiDotNet.NeuralNetworks.CreditAssignment.BlockwiseAnchorLocalErrorCreditRule<T>.IsExactBackprop.get -> bool
+AiDotNet.NeuralNetworks.CreditAssignment.BlockwiseAnchorLocalErrorCreditRule<T>.IsIntermediateAnchor(int hiddenIndex, int hiddenLayerCount) -> bool
+AiDotNet.NeuralNetworks.CreditAssignment.BlockwiseAnchorLocalErrorCreditRule<T>.MaxCandidates.get -> int
+AiDotNet.NeuralNetworks.CreditAssignment.BlockwiseAnchorLocalErrorCreditRule<T>.Name.get -> string!
+AiDotNet.NeuralNetworks.CreditAssignment.BlockwiseAnchorLocalErrorCreditRule<T>.ReadoutLayerCount.get -> int
+AiDotNet.NeuralNetworks.CreditAssignment.BlockwiseAnchorLocalErrorCreditRule<T>.StreamBlocksSequentially.get -> bool
+AiDotNet.NeuralNetworks.CreditAssignment.BlockwiseAnchorLocalErrorCreditRule<T>.UseDepthProgressiveWeight.get -> bool
+static AiDotNet.NeuralNetworks.CreditAssignment.CreditRules.BlockwiseAnchorLocalError<T>(int readoutLayerCount = 2, int anchorStride = 4, int maxCandidates = 1024, double localWeight = 1, bool detachReadoutOnHiddenBlocks = true, bool useDepthProgressiveWeight = true, bool streamBlocksSequentially = true, int? seed = null) -> AiDotNet.Interfaces.ICreditRule<T>!
+AiDotNet.Interfaces.ISharedParameterConsumerLayer<T>
+AiDotNet.Interfaces.ISharedParameterConsumerLayer<T>.GetSharedTrainableParameters() -> System.Collections.Generic.IReadOnlyList<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>!
+AiDotNet.NeuralNetworks.Layers.TiedEmbeddingHeadLayer<T>.GetSharedTrainableParameters() -> System.Collections.Generic.IReadOnlyList<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>!
