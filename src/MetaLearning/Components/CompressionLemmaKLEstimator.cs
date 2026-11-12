@@ -41,6 +41,8 @@ public class CompressionLemmaKLEstimator<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 
+    private static IEngine Engine => AiDotNetEngine.Current;
+
     /// <summary>Monte Carlo samples the paper draws when training the phi-network per task.</summary>
     /// <remarks>Alias for <see cref="SImPaPaperConstants.MonteCarloSamples"/>, where the value lives.</remarks>
     public const int PaperMonteCarloSamples = SImPaPaperConstants.MonteCarloSamples;
@@ -72,8 +74,6 @@ public class CompressionLemmaKLEstimator<T>
         _w2 = _hidden;
         _b2 = 1;
 
-        _omega = new Vector<T>(_w1 + _b1 + _w2 + _b2);
-
         // PHI STARTS AT IDENTICALLY 0, so the initial estimate is exactly 0 - ln(1) = 0: the
         // compression lemma's trivial lower bound. Starting from the trivially valid point means the
         // estimate can only be improved by training, never start out spuriously large.
@@ -86,18 +86,21 @@ public class CompressionLemmaKLEstimator<T>
         // mechanism matters because a future change to the SECOND loop would silently break the
         // invariant while the first loop still looks like the reason it holds.
         var random = rng ?? RandomHelper.CreateSeededRandom(29);
-        double scale = Math.Sqrt(1.0 / Math.Max(1, _inputDim));
+
+        // U(-scale, scale) * 1e-3: one NextDouble per first-layer weight, in order; the loop only stores the draws.
+        var draws = new Vector<T>(_w1);
         for (int i = 0; i < _w1; i++)
-            _omega[i] = NumOps.FromDouble(((random.NextDouble() * 2.0) - 1.0) * scale * 1e-3);
-        for (int i = _w1; i < _omega.Length; i++) _omega[i] = NumOps.Zero;
+            draws[i] = NumOps.FromDouble(random.NextDouble());
+        double scale = Math.Sqrt(1.0 / Math.Max(1, _inputDim)) * 1e-3;
+        var firstLayer = Engine.Subtract(
+            Engine.Multiply(draws, NumOps.FromDouble(2.0 * scale)), Engine.Fill(_w1, NumOps.FromDouble(scale)));
+        _omega = Vector<T>.Concatenate(new[] { firstLayer, new Vector<T>(_b1 + _w2 + _b2) });
     }
 
     /// <summary>Gets the flattened phi-network weights.</summary>
     public Vector<T> GetParameters()
     {
-        var copy = new Vector<T>(_omega.Length);
-        for (int i = 0; i < _omega.Length; i++) copy[i] = _omega[i];
-        return copy;
+        return _omega.Clone();
     }
 
     /// <summary>Sets the flattened phi-network weights.</summary>
@@ -106,7 +109,7 @@ public class CompressionLemmaKLEstimator<T>
         if (omega is null) throw new ArgumentNullException(nameof(omega));
         if (omega.Length != _omega.Length)
             throw new ArgumentException($"Expected {_omega.Length} phi weights; got {omega.Length}.", nameof(omega));
-        for (int i = 0; i < omega.Length; i++) _omega[i] = omega[i];
+        _omega = omega.Clone();
     }
 
     /// <summary>Evaluates the scalar <c>phi(w; omega)</c>.</summary>
@@ -115,20 +118,33 @@ public class CompressionLemmaKLEstimator<T>
         if (w is null) throw new ArgumentNullException(nameof(w));
         if (w.Length != _inputDim)
             throw new ArgumentException($"Expected an input of length {_inputDim}; got {w.Length}.", nameof(w));
-        return PhiWith(_omega, w);
+        return NumOps.ToDouble(PhiWith(_omega, Tensor<T>.FromVector(w, new[] { 1, _inputDim })).GetFlat(0));
     }
 
-    private double PhiWith(Vector<T> omega, Vector<T> w)
+    /// <summary>
+    /// phi for every row of <paramref name="samples"/> [n, inputDim]:
+    /// <c>tanh(X W1 + b1) w2 + b2</c>, W1 stored [inputDim, hidden] row-major. Returns [n].
+    /// </summary>
+    private Tensor<T> PhiWith(Vector<T> omega, Tensor<T> samples)
     {
-        double sum2 = NumOps.ToDouble(omega[_w1 + _b1 + _w2]);
-        for (int j = 0; j < _hidden; j++)
-        {
-            double sum1 = 0.0;
-            for (int i = 0; i < _inputDim; i++) sum1 += NumOps.ToDouble(w[i]) * NumOps.ToDouble(omega[(i * _hidden) + j]);
-            double h = Math.Tanh(sum1 + NumOps.ToDouble(omega[_w1 + j]));
-            sum2 += h * NumOps.ToDouble(omega[_w1 + _b1 + j]);
-        }
-        return sum2;
+        int n = samples.Shape[0];
+        var w1 = Tensor<T>.FromVector(omega.GetSubVector(0, _w1), new[] { _inputDim, _hidden });
+        var b1 = Tensor<T>.FromVector(omega.GetSubVector(_w1, _b1), new[] { 1, _hidden });
+        var w2 = Tensor<T>.FromVector(omega.GetSubVector(_w1 + _b1, _w2), new[] { _hidden, 1 });
+        var hidden = Engine.TensorTanh(Engine.TensorAdd(Engine.TensorMatMul(samples, w1), b1));
+        var phi = Engine.TensorAddScalar(Engine.TensorMatMul(hidden, w2), omega[_w1 + _b1 + _w2]);
+        return phi.Reshape(new[] { n });
+    }
+
+    /// <summary>Stacks equal-length sample vectors into an [n, inputDim] tensor.</summary>
+    private Tensor<T> Stack(IReadOnlyList<Vector<T>> samples, string paramName)
+    {
+        if (samples is null) throw new ArgumentNullException(paramName);
+        if (samples.Count == 0) throw new ArgumentException("At least one sample is required.", paramName);
+        var flat = Vector<T>.Concatenate(new List<Vector<T>>(samples));
+        if (flat.Length != samples.Count * _inputDim)
+            throw new ArgumentException($"Every sample must have length {_inputDim}.", paramName);
+        return Tensor<T>.FromVector(flat, new[] { samples.Count, _inputDim });
     }
 
     /// <summary>
@@ -138,36 +154,19 @@ public class CompressionLemmaKLEstimator<T>
     /// <param name="posteriorSamples">Samples from <c>q</c>.</param>
     /// <param name="priorSamples">Samples from <c>p</c>.</param>
     public double Objective(IReadOnlyList<Vector<T>> posteriorSamples, IReadOnlyList<Vector<T>> priorSamples)
-        => ObjectiveWith(_omega, posteriorSamples, priorSamples);
+        => ObjectiveWith(_omega, Stack(posteriorSamples, nameof(posteriorSamples)), Stack(priorSamples, nameof(priorSamples)));
 
-    private double ObjectiveWith(
-        Vector<T> omega, IReadOnlyList<Vector<T>> posteriorSamples, IReadOnlyList<Vector<T>> priorSamples)
+    /// <summary>
+    /// mean phi(q) - ln mean exp phi(p). The log-mean-exp goes through log-sum-exp, not a direct mean of
+    /// exponentials: phi is unbounded, so exp(phi) overflows for a well-trained phi and the estimate would
+    /// become NaN exactly when it started working.
+    /// </summary>
+    private double ObjectiveWith(Vector<T> omega, Tensor<T> posterior, Tensor<T> prior)
     {
-        if (posteriorSamples is null) throw new ArgumentNullException(nameof(posteriorSamples));
-        if (priorSamples is null) throw new ArgumentNullException(nameof(priorSamples));
-        if (posteriorSamples.Count == 0) throw new ArgumentException("At least one posterior sample is required.", nameof(posteriorSamples));
-        if (priorSamples.Count == 0) throw new ArgumentException("At least one prior sample is required.", nameof(priorSamples));
-
-        double meanPhiQ = 0.0;
-        for (int i = 0; i < posteriorSamples.Count; i++) meanPhiQ += PhiWith(omega, posteriorSamples[i]);
-        meanPhiQ /= posteriorSamples.Count;
-
-        // log-sum-exp, not a direct mean of exponentials. phi is unbounded, so exp(phi) overflows to
-        // infinity for a well-trained phi and the estimate would become NaN exactly when it started
-        // working. Subtracting the max first keeps every exponent at or below zero.
-        double maxPhiP = double.NegativeInfinity;
-        var phiP = new double[priorSamples.Count];
-        for (int i = 0; i < priorSamples.Count; i++)
-        {
-            phiP[i] = PhiWith(omega, priorSamples[i]);
-            if (phiP[i] > maxPhiP) maxPhiP = phiP[i];
-        }
-
-        double sumExp = 0.0;
-        for (int i = 0; i < phiP.Length; i++) sumExp += Math.Exp(phiP[i] - maxPhiP);
-        double logMeanExpP = maxPhiP + Math.Log(sumExp / phiP.Length);
-
-        return meanPhiQ - logMeanExpP;
+        T meanPhiQ = Engine.TensorMean(PhiWith(omega, posterior));
+        T logSumExpP = Engine.TensorLogSumExp(PhiWith(omega, prior), 0, keepDims: false).GetFlat(0);
+        T logMeanExpP = NumOps.Subtract(logSumExpP, NumOps.FromDouble(Math.Log(prior.Shape[0])));
+        return NumOps.ToDouble(NumOps.Subtract(meanPhiQ, logMeanExpP));
     }
 
     /// <summary>
@@ -204,37 +203,31 @@ public class CompressionLemmaKLEstimator<T>
             throw new ArgumentOutOfRangeException(nameof(learningRate), learningRate, "learningRate must be positive.");
 
         var random = rng ?? RandomHelper.CreateSeededRandom(31);
-        double best = ObjectiveWith(_omega, posteriorSamples, priorSamples);
+        var posterior = Stack(posteriorSamples, nameof(posteriorSamples));
+        var prior = Stack(priorSamples, nameof(priorSamples));
+        double best = ObjectiveWith(_omega, posterior, prior);
+        T plusOne = NumOps.One;
+        T minusOne = NumOps.Negate(NumOps.One);
 
         for (int step = 0; step < steps; step++)
         {
             double c = Math.Max(1e-4, learningRate);
 
-            var delta = new double[_omega.Length];
-            var plus = new Vector<T>(_omega.Length);
-            var minus = new Vector<T>(_omega.Length);
+            // Rademacher directions, as SPSA requires: one NextDouble per weight; the loop only stores them.
+            var delta = new Vector<T>(_omega.Length);
             for (int i = 0; i < _omega.Length; i++)
-            {
-                delta[i] = random.NextDouble() < 0.5 ? -1.0 : 1.0;   // Rademacher, as SPSA requires
-                double w = NumOps.ToDouble(_omega[i]);
-                plus[i] = NumOps.FromDouble(w + (c * delta[i]));
-                minus[i] = NumOps.FromDouble(w - (c * delta[i]));
-            }
+                delta[i] = random.NextDouble() < 0.5 ? minusOne : plusOne;
 
-            double fPlus = ObjectiveWith(plus, posteriorSamples, priorSamples);
-            double fMinus = ObjectiveWith(minus, posteriorSamples, priorSamples);
+            double fPlus = ObjectiveWith(Along(delta, c), posterior, prior);
+            double fMinus = ObjectiveWith(Along(delta, -c), posterior, prior);
             if (double.IsNaN(fPlus) || double.IsNaN(fMinus)) continue;
 
-            var candidate = new Vector<T>(_omega.Length);
+            // ASCENT: plus, because the compression lemma is maximized, not minimized. With delta_i = +/-1,
+            // the SPSA gradient scale / delta_i equals scale * delta_i.
             double scale = (fPlus - fMinus) / (2.0 * c);
-            for (int i = 0; i < _omega.Length; i++)
-            {
-                // ASCENT: plus, because the compression lemma is maximized, not minimized.
-                double g = scale / delta[i];
-                candidate[i] = NumOps.FromDouble(NumOps.ToDouble(_omega[i]) + (learningRate * g));
-            }
+            var candidate = Along(delta, learningRate * scale);
 
-            double value = ObjectiveWith(candidate, posteriorSamples, priorSamples);
+            double value = ObjectiveWith(candidate, posterior, prior);
             if (double.IsNaN(value) || value <= best) continue;
 
             _omega = candidate;
@@ -243,6 +236,10 @@ public class CompressionLemmaKLEstimator<T>
 
         return best;
     }
+
+    /// <summary>omega + coefficient * direction.</summary>
+    private Vector<T> Along(Vector<T> direction, double coefficient)
+        => Engine.Add(_omega, Engine.Multiply(direction, NumOps.FromDouble(coefficient)));
 
     /// <summary>
     /// Estimates <c>KL[q || p]</c>: maximizes the compression-lemma objective and floors the result at 0.
