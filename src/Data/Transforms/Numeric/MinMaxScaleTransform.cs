@@ -86,7 +86,7 @@ public class MinMaxScaleTransform<T> : ITransform<T[], T[]>
     /// <param name="max">The maximum for each feature.</param>
     /// <param name="targetMin">The minimum value of the target range. Default is 0.</param>
     /// <param name="targetMax">The maximum value of the target range. Default is 1.</param>
-    public MinMaxScaleTransform(double[] min, double[] max, double targetMin = 0.0, double targetMax = 1.0)
+    public MinMaxScaleTransform(T[] min, T[] max, double targetMin = 0.0, double targetMax = 1.0)
     {
         if (min is null)
         {

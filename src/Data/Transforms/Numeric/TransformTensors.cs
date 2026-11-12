@@ -33,11 +33,11 @@ internal static class TransformTensors
     }
 
     /// <summary>
-    /// Converts caller-supplied statistics (the public constructors take them as double) to a
-    /// <typeparamref name="T"/> tensor once, in bulk.
+    /// Copies caller-supplied per-feature statistics into a [length] tensor (a defensive copy, so later
+    /// changes to the caller's array do not affect the transform).
     /// </summary>
-    internal static Tensor<T> FromStatistics<T>(double[] values)
+    internal static Tensor<T> FromStatistics<T>(T[] values)
     {
-        return new Tensor<double>((double[])values.Clone(), new[] { values.Length }).Cast<T>();
+        return new Tensor<T>((T[])values.Clone(), new[] { values.Length });
     }
 }

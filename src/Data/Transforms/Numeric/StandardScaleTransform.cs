@@ -86,7 +86,7 @@ public class StandardScaleTransform<T> : ITransform<T[], T[]>
     /// </summary>
     /// <param name="mean">The mean for each feature.</param>
     /// <param name="std">The standard deviation for each feature.</param>
-    public StandardScaleTransform(double[] mean, double[] std)
+    public StandardScaleTransform(T[] mean, T[] std)
     {
         if (mean is null)
         {
