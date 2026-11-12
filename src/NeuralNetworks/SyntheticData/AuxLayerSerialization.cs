@@ -207,14 +207,23 @@ internal static class AuxLayerSerialization
     }
 
     /// <summary>
-    /// Writes <paramref name="values"/> as its element count, the element size in bytes, and the
-    /// raw element bytes of <typeparamref name="T"/>. The bytes are taken straight from the
-    /// vector's span (<c>MemoryMarshal</c> byte view), so values round-trip bit-for-bit in
-    /// <typeparamref name="T"/> without a per-element conversion.
+    /// Leading marker of the raw-element format written by <see cref="WriteElements{T}"/>
+    /// (format version 1 in the low byte). It is negative, so it can never be mistaken for the
+    /// non-negative element count that begins the legacy format (count followed by that many
+    /// doubles) written before the raw-element format existed.
+    /// </summary>
+    internal const int RawElementsFormatMarker = unchecked((int)0xA1D7E501);
+
+    /// <summary>
+    /// Writes <paramref name="values"/> as the <see cref="RawElementsFormatMarker"/>, its element
+    /// count, the element size in bytes, and the raw element bytes of <typeparamref name="T"/>.
+    /// The bytes are taken straight from the vector's span (<c>MemoryMarshal</c> byte view), so
+    /// values round-trip bit-for-bit in <typeparamref name="T"/> without a per-element conversion.
     /// </summary>
     internal static void WriteElements<T>(BinaryWriter writer, Vector<T> values)
     {
         int elementSize = GetElementSize<T>();
+        writer.Write(RawElementsFormatMarker);
         writer.Write(values.Length);
         if (values.Length == 0)
         {
@@ -236,14 +245,30 @@ internal static class AuxLayerSerialization
 
     /// <summary>
     /// Reads a vector written by <see cref="WriteElements{T}"/>, copying the raw bytes straight
-    /// into the new vector's storage.
+    /// into the new vector's storage. A vector in the legacy format (no
+    /// <see cref="RawElementsFormatMarker"/>: a non-negative count followed by that many doubles)
+    /// is read and converted to <typeparamref name="T"/>, so checkpoints saved before the
+    /// raw-element format still load.
     /// </summary>
     /// <exception cref="InvalidDataException">
-    /// The stream was written for an element type of a different size, or is truncated.
+    /// The stream was written for an element type of a different size, has an unknown format
+    /// marker, or is truncated.
     /// </exception>
     internal static Vector<T> ReadElements<T>(BinaryReader reader)
     {
         int elementSize = GetElementSize<T>();
+        int header = reader.ReadInt32();
+        if (header >= 0)
+        {
+            return ReadLegacyDoubleElements<T>(reader, header);
+        }
+
+        if (header != RawElementsFormatMarker)
+        {
+            throw new InvalidDataException(
+                $"Unknown element format marker 0x{header:X8} in auxiliary layer state.");
+        }
+
         int count = reader.ReadInt32();
         if (count < 0)
         {
@@ -277,6 +302,33 @@ internal static class AuxLayerSerialization
             ref Unsafe.As<T, byte>(ref MemoryMarshal.GetReference(target)),
             ref bytes[0],
             (uint)byteCount);
+        return values;
+    }
+
+    /// <summary>
+    /// Reads the legacy element layout (<paramref name="count"/> little-endian doubles, the count
+    /// already consumed) and converts it to <typeparamref name="T"/> in one tensor cast.
+    /// </summary>
+    private static Vector<T> ReadLegacyDoubleElements<T>(BinaryReader reader, int count)
+    {
+        var values = new Vector<T>(count);
+        if (count == 0)
+        {
+            return values;
+        }
+
+        int byteCount = checked(count * sizeof(double));
+        byte[] bytes = reader.ReadBytes(byteCount);
+        if (bytes.Length != byteCount)
+        {
+            throw new InvalidDataException(
+                $"Auxiliary layer state is truncated: expected {byteCount} bytes, read {bytes.Length}.");
+        }
+
+        var doubles = new double[count];
+        Buffer.BlockCopy(bytes, 0, doubles, 0, byteCount);
+        var converted = new Tensor<double>(doubles, new[] { count }).Cast<T>();
+        converted.AsSpan().CopyTo(values.AsWritableSpan());
         return values;
     }
 
