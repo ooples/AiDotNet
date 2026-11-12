@@ -6916,43 +6916,27 @@ public static class StatisticsHelper<T>
         var n = actual.Length;
         if (n == 0) return _numOps.Zero;
 
-        var totalCrps = _numOps.Zero;
-        // Correct constant for Gaussian CRPS: 1/sqrt(pi) (not sqrt(2/pi))
-        // Reference: Gneiting & Raftery (2007), "Strictly Proper Scoring Rules, Prediction, and Estimation"
-        var oneOverSqrtPi = _numOps.FromDouble(1.0 / Math.Sqrt(Math.PI));
+        var y = AsTensor(actual);
+        var mu = AsTensor(predictedMean);
+        var sigma = AsTensor(predictedStdDev);
+        var error = Engine.TensorSubtract(y, mu);
 
-        for (int i = 0; i < n; i++)
-        {
-            var y = actual[i];
-            var mu = predictedMean[i];
-            var sigma = predictedStdDev[i];
+        // Closed form for a Gaussian forecast:
+        // CRPS = sigma * (z * (2 * Phi(z) - 1) + 2 * phi(z) - 1 / sqrt(pi)), z = (y - mu) / sigma,
+        // with Phi(z) = (1 + erf(z / sqrt(2))) / 2 and phi(z) = exp(-z^2 / 2) / sqrt(2 * pi).
+        var z = Engine.TensorDivide(error, sigma);
+        var twoPhiMinusOne = Engine.TensorErf(Engine.TensorMultiplyScalar(z, _numOps.FromDouble(1.0 / Math.Sqrt(2.0))));
+        var pdf = Engine.TensorMultiplyScalar(
+            Engine.TensorExp(Engine.TensorMultiplyScalar(Engine.TensorMultiply(z, z), _numOps.FromDouble(-0.5))),
+            _numOps.FromDouble(1.0 / Math.Sqrt(2.0 * Math.PI)));
+        var bracket = Engine.TensorSubtractScalar(
+            Engine.TensorAdd(Engine.TensorMultiply(z, twoPhiMinusOne), Engine.TensorMultiplyScalar(pdf, _numOps.FromDouble(2.0))),
+            _numOps.FromDouble(1.0 / Math.Sqrt(Math.PI)));
+        var gaussianCrps = Engine.TensorMultiply(sigma, bracket);
 
-            // Handle case where sigma is zero or very small (deterministic prediction)
-            if (_numOps.ToDouble(sigma) < 1e-10)
-            {
-                // CRPS reduces to absolute error for deterministic predictions
-                totalCrps = _numOps.Add(totalCrps, _numOps.Abs(_numOps.Subtract(y, mu)));
-            }
-            else
-            {
-                // Standardized observation: z = (y - mu) / sigma
-                var z = _numOps.Divide(_numOps.Subtract(y, mu), sigma);
-
-                // Standard normal CDF at z: Phi(z)
-                var phi = _numOps.FromDouble(NormalCDF(_numOps.ToDouble(z)));
-
-                // Standard normal PDF at z: phi(z)
-                var pdf = _numOps.FromDouble(NormalPDF(_numOps.ToDouble(z)));
-
-                // CRPS for Gaussian: sigma * (z * (2*Phi(z) - 1) + 2*phi(z) - 1/sqrt(pi))
-                var term1 = _numOps.Multiply(z, _numOps.Subtract(_numOps.Multiply(_numOps.FromDouble(2.0), phi), _numOps.One));
-                var term2 = _numOps.Multiply(_numOps.FromDouble(2.0), pdf);
-                var term3 = oneOverSqrtPi;
-
-                var crpsSingle = _numOps.Multiply(sigma, _numOps.Subtract(_numOps.Add(term1, term2), term3));
-                totalCrps = _numOps.Add(totalCrps, crpsSingle);
-            }
-        }
+        // A (near-)deterministic forecast (sigma < 1e-10) reduces to the absolute error.
+        var degenerate = Engine.TensorLessThan(sigma, _numOps.FromDouble(1e-10));
+        var totalCrps = Engine.TensorSum(Engine.TensorWhere(degenerate, Engine.TensorAbs(error), gaussianCrps));
 
         return _numOps.Divide(totalCrps, _numOps.FromDouble(n));
     }
@@ -6975,47 +6959,6 @@ public static class StatisticsHelper<T>
     {
         // For deterministic predictions, CRPS equals MAE
         return CalculateMeanAbsoluteError(actual, predicted);
-    }
-
-    /// <summary>
-    /// Standard normal cumulative distribution function.
-    /// </summary>
-    private static double NormalCDF(double x)
-    {
-        // Approximation using error function
-        return 0.5 * (1 + Erf(x / Math.Sqrt(2)));
-    }
-
-    /// <summary>
-    /// Standard normal probability density function.
-    /// </summary>
-    private static double NormalPDF(double x)
-    {
-        return Math.Exp(-0.5 * x * x) / Math.Sqrt(2 * Math.PI);
-    }
-
-    /// <summary>
-    /// Error function approximation (Abramowitz and Stegun).
-    /// </summary>
-    private static double Erf(double x)
-    {
-        // Constants for approximation
-        double a1 = 0.254829592;
-        double a2 = -0.284496736;
-        double a3 = 1.421413741;
-        double a4 = -1.453152027;
-        double a5 = 1.061405429;
-        double p = 0.3275911;
-
-        // Save the sign of x
-        int sign = x < 0 ? -1 : 1;
-        x = Math.Abs(x);
-
-        // Abramowitz and Stegun formula 7.1.26
-        double t = 1.0 / (1.0 + p * x);
-        double y = 1.0 - (((((a5 * t + a4) * t) + a3) * t + a2) * t + a1) * t * Math.Exp(-x * x);
-
-        return sign * y;
     }
 
     /// <summary>
@@ -7115,16 +7058,11 @@ public static class StatisticsHelper<T>
                 $"Maximum lag ({maxLag}) must be less than series length ({n}).");
         }
 
-        var acf = new T[maxLag + 1];
         var mean = CalculateMean(series);
 
         // Calculate the total sum of squared deviations (denominator for normalization)
-        var totalSumSquares = _numOps.Zero;
-        for (int i = 0; i < n; i++)
-        {
-            var deviation = _numOps.Subtract(series[i], mean);
-            totalSumSquares = _numOps.Add(totalSumSquares, _numOps.Multiply(deviation, deviation));
-        }
+        var deviations = Engine.TensorSubtractScalar(AsTensor(series), mean);
+        var totalSumSquares = Engine.TensorSum(Engine.TensorMultiply(deviations, deviations));
 
         // Check for constant series (zero variance) - ACF is undefined
         if (_numOps.Equals(totalSumSquares, _numOps.Zero))
@@ -7135,19 +7073,14 @@ public static class StatisticsHelper<T>
                 nameof(series));
         }
 
-        for (int lag = 0; lag <= maxLag; lag++)
-        {
-            var sum = _numOps.Zero;
-            for (int i = 0; i < n - lag; i++)
-            {
-                sum = _numOps.Add(sum, _numOps.Multiply(
-                    _numOps.Subtract(series[i], mean),
-                    _numOps.Subtract(series[i + lag], mean)));
-            }
-            acf[lag] = _numOps.Divide(sum, totalSumSquares);
-        }
+        // Lagged sums sum_i d[i] * d[i + lag] for every lag at once: row `lag` of the window matrix is the
+        // deviations shifted left by `lag` and zero-padded, multiplied against the unshifted deviations.
+        var padded = maxLag == 0 ? deviations : Engine.TensorConcatenate(new[] { deviations, new Tensor<T>(new[] { maxLag }) }, 0);
+        var windows = Engine.TensorStack(
+            Enumerable.Range(0, maxLag + 1).Select(lag => Engine.TensorNarrow(padded, 0, lag, n)).ToArray(), 0);
+        var laggedSums = Engine.TensorMatMul(windows, deviations.Reshape(new[] { n, 1 }));
 
-        return new Vector<T>(acf);
+        return Engine.TensorDivideScalar(laggedSums.Reshape(new[] { maxLag + 1 }), totalSumSquares).ToVector();
     }
 
     /// <summary>
