@@ -183,9 +183,9 @@ public partial class SImPaAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
     {
         // Box-Muller; a uniform prior would make the log-term in the bound meaningless. Two NextDouble per
         // entry (u1 then u2), sample by sample, in order; the loop only stores the draws.
-        var draws = new Vector<T>(2 * count * _paramDim);
+        var draws = new Vector<double>(2 * count * _paramDim);
         for (int i = 0; i < draws.Length; i++)
-            draws[i] = NumOps.FromDouble(_rng.NextDouble());
+            draws[i] = _rng.NextDouble();
         var normals = Engine.Multiply(BoxMuller(draws), NumOps.FromDouble(_algoOptions.PriorStdDev));
 
         var samples = new List<Vector<T>>(count);
@@ -196,17 +196,18 @@ public partial class SImPaAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
 
     /// <summary>
     /// Box-Muller over interleaved uniform pairs (u1, u2): <c>sqrt(-2 ln max(u1, 1e-12)) cos(2 pi u2)</c>,
-    /// one standard normal per pair.
+    /// one standard normal per pair. The transform runs in double, as the draws do, and only the normals are
+    /// converted to T: in Half the 1e-12 floor rounds to 0 (ln 0 = -inf) and u1 would be quantized before the log.
     /// </summary>
-    private Vector<T> BoxMuller(Vector<T> interleavedUniforms)
+    internal Vector<T> BoxMuller(Vector<double> interleavedUniforms)
     {
         int n = interleavedUniforms.Length / 2;
-        var pairs = Tensor<T>.FromVector(interleavedUniforms, new[] { n, 2 });
-        var u1 = Engine.TensorMax(Engine.TensorSlice(pairs, new[] { 0, 0 }, new[] { n, 1 }), NumOps.FromDouble(1e-12));
+        var pairs = Tensor<double>.FromVector(interleavedUniforms, new[] { n, 2 });
+        var u1 = Engine.TensorMax(Engine.TensorSlice(pairs, new[] { 0, 0 }, new[] { n, 1 }), 1e-12);
         var u2 = Engine.TensorSlice(pairs, new[] { 0, 1 }, new[] { n, 1 });
-        var radius = Engine.TensorSqrt(Engine.TensorMultiplyScalar(Engine.TensorLog(u1), NumOps.FromDouble(-2.0)));
-        var angle = Engine.TensorCos(Engine.TensorMultiplyScalar(u2, NumOps.FromDouble(2.0 * Math.PI)));
-        return Engine.TensorMultiply(radius, angle).Reshape(new[] { n }).ToVector();
+        var radius = Engine.TensorSqrt(Engine.TensorMultiplyScalar(Engine.TensorLog(u1), -2.0));
+        var angle = Engine.TensorCos(Engine.TensorMultiplyScalar(u2, 2.0 * Math.PI));
+        return Engine.TensorMultiply(radius, angle).Reshape(new[] { n }).Cast<T>().ToVector();
     }
 
     /// <inheritdoc/>
@@ -314,9 +315,9 @@ public partial class SImPaAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
     private Vector<T> SampleMetaParameter()
     {
         // Box-Muller: two NextDouble per entry (u1 then u2), in order; the loop only stores the draws.
-        var draws = new Vector<T>(2 * _psi.Length);
+        var draws = new Vector<double>(2 * _psi.Length);
         for (int i = 0; i < draws.Length; i++)
-            draws[i] = NumOps.FromDouble(_rng.NextDouble());
+            draws[i] = _rng.NextDouble();
         return Engine.Add(_psi, Engine.Multiply(BoxMuller(draws), NumOps.FromDouble(_algoOptions.MetaPosteriorStdDev)));
     }
 

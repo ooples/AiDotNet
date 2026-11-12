@@ -14035,8 +14035,6 @@
 2	ADNELEM002|AiDotNet.MetaLearning.Algorithms.SIBAlgorithm<T, TInput, TOutput>.Adapt(AiDotNet.Interfaces.IMetaLearningTask<T, TInput, TOutput>)
 9	ADNELEM002|AiDotNet.MetaLearning.Algorithms.SIBAlgorithm<T, TInput, TOutput>.RunSIB(AiDotNet.Tensors.LinearAlgebra.Vector<T>?, AiDotNet.Tensors.LinearAlgebra.Vector<T>?)
 2	ADNELEM002|AiDotNet.MetaLearning.Algorithms.SIBModel<T, TInput, TOutput>.Predict(TInput)
-1	ADNELEM002|AiDotNet.MetaLearning.Algorithms.SImPaAlgorithm<T, TInput, TOutput>.SampleMetaParameter()
-1	ADNELEM002|AiDotNet.MetaLearning.Algorithms.SImPaAlgorithm<T, TInput, TOutput>.SamplePrior(int)
 2	ADNELEM002|AiDotNet.MetaLearning.Algorithms.SimpleShotAlgorithm<T, TInput, TOutput>.Adapt(AiDotNet.Interfaces.IMetaLearningTask<T, TInput, TOutput>)
 3	ADNELEM002|AiDotNet.MetaLearning.Algorithms.SimpleShotAlgorithm<T, TInput, TOutput>.NormalizeFeatures(AiDotNet.Tensors.LinearAlgebra.Vector<T>?)
 2	ADNELEM002|AiDotNet.MetaLearning.Algorithms.SimpleShotAlgorithm<T, TInput, TOutput>.UpdateFeatureMean(AiDotNet.Data.Structures.TaskBatch<T, TInput, TOutput>)
