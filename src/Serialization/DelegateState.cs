@@ -56,7 +56,8 @@ public static class DelegateState
 
     /// <summary>
     /// Describes <paramref name="value"/> well enough to rebuild it, or returns empty when no
-    /// description fits. Without an input shape only a named static method can be described.
+    /// description fits. Without an input shape only a named static method can be described, and only one that
+    /// AiDotNet or AiDotNet.Tensors declares: a model file may not bind a method from any other assembly.
     /// </summary>
     /// <param name="value">The delegate the layer was constructed with.</param>
     /// <returns>The saved form, or <see cref="string.Empty"/> when it cannot be saved.</returns>
@@ -76,7 +77,8 @@ public static class DelegateState
     /// The function is traced at the input shape as given and with a leading batch axis, because layers differ on
     /// whether their input shape includes it; every trace that succeeds is kept and the one matching the input's
     /// rank replays. A function that does part of its work outside the engine fails its trace's verification and
-    /// falls through to the method-reference description rather than saving a wrong program.
+    /// falls through to the method-reference description rather than saving a wrong program; that description
+    /// exists only for a named static method AiDotNet or AiDotNet.Tensors declares.
     /// </remarks>
     public static string Save(Delegate? value, int[]? inputShape)
     {
@@ -174,6 +176,9 @@ public static class DelegateState
         // An instance method would need its receiver rebuilt too, which is the whole problem again.
         if (!method.IsStatic || value.Target is not null) return null;
 
+        // Only methods AiDotNet declares can be bound back at load (LoadMethodReference), so none other is written.
+        if (Array.IndexOf(MethodReferenceAssemblies, declaring.Assembly) < 0) return null;
+
         var owner = declaring.AssemblyQualifiedName;
         if (string.IsNullOrEmpty(owner)) return null;
 
@@ -269,7 +274,31 @@ public static class DelegateState
         };
     }
 
-    /// <summary>Rebuilds a delegate from a reference to a named static method.</summary>
+    // The assemblies whose static methods a saved method reference may bind.
+    private static readonly Assembly[] MethodReferenceAssemblies =
+        { typeof(DelegateState).Assembly, typeof(AiDotNet.Tensors.LinearAlgebra.Tensor<>).Assembly };
+
+    // Names the core library has gone by: a reference saved on .NET Framework names mscorlib, one saved on .NET names
+    // System.Private.CoreLib, and either must resolve on the other.
+    private static readonly string[] CoreLibraryNames = { "mscorlib", "System.Private.CoreLib", "netstandard", "System.Runtime" };
+
+    /// <summary>
+    /// Resolves an assembly-qualified type name against AiDotNet, AiDotNet.Tensors and the core library only, matched
+    /// by simple name so a file saved by another AiDotNet version still resolves. Any other assembly is never loaded.
+    /// </summary>
+    private static Type? ResolveTrustedType(string assemblyQualifiedName) =>
+        Type.GetType(
+            assemblyQualifiedName,
+            name =>
+            {
+                foreach (var assembly in MethodReferenceAssemblies)
+                    if (string.Equals(assembly.GetName().Name, name.Name, StringComparison.Ordinal)) return assembly;
+                return Array.IndexOf(CoreLibraryNames, name.Name) >= 0 ? typeof(object).Assembly : null;
+            },
+            (assembly, typeName, ignoreCase) => assembly?.GetType(typeName, throwOnError: false, ignoreCase),
+            throwOnError: false);
+
+    /// <summary>Rebuilds a delegate from a reference to a named static method declared in AiDotNet or AiDotNet.Tensors.</summary>
     private static TDelegate LoadMethodReference<TDelegate>(string reference, string layerName, string key)
         where TDelegate : Delegate
     {
@@ -277,15 +306,19 @@ public static class DelegateState
         if (parts.Length != 3)
             throw Unsaveable(layerName, key, $"its saved method reference '{Excerpt(reference)}' is malformed.");
 
-        var declaring = Type.GetType(parts[0], throwOnError: false);
-        if (declaring is null)
-            throw Unsaveable(layerName, key, $"the type '{Excerpt(parts[0])}' that declared it could not be loaded.");
+        // A model file is data: it may name a method only in AiDotNet itself. Resolving through the trusted assemblies
+        // alone also keeps a file from making this load any other assembly (and run its initializers).
+        var declaring = ResolveTrustedType(parts[0]);
+        if (declaring is null || Array.IndexOf(MethodReferenceAssemblies, declaring.Assembly) < 0)
+            throw Unsaveable(layerName, key,
+                $"its saved method reference names '{Excerpt(parts[0])}', which is not a type in AiDotNet or AiDotNet.Tensors; "
+                + "a model file may only bind methods those libraries declare.");
 
         var parameterTypeNames = parts[2].Length == 0 ? Array.Empty<string>() : parts[2].Split(';');
         var parameterTypes = new Type[parameterTypeNames.Length];
         for (int i = 0; i < parameterTypeNames.Length; i++)
         {
-            parameterTypes[i] = Type.GetType(parameterTypeNames[i], throwOnError: false)
+            parameterTypes[i] = ResolveTrustedType(parameterTypeNames[i])
                 ?? throw Unsaveable(layerName, key, "one of its parameter types could not be loaded.");
         }
 

@@ -72,6 +72,37 @@ public class TensorProgramPersistenceTests
     }
 
     [Fact]
+    public void MethodReference_ToAnAiDotNetStaticMethod_RoundTrips()
+    {
+        Func<double, double> f = AiDotNet.Audio.Features.MelFilterbanks.HtkHzToMel;
+        string saved = DelegateState.Save(f);
+        Assert.StartsWith(DelegateState.MethodScheme, saved);
+        var restored = DelegateState.Load<Func<double, double>>(saved, "TestLayer", "map");
+        Assert.Equal(f(1000.0), restored(1000.0));
+    }
+
+    private static double DoubleIt(double x) => 2 * x;
+
+    [Fact]
+    public void MethodReference_OutsideAiDotNet_IsNeitherWrittenNorBound()
+    {
+        // A model file is data: binding any static method it names (here this test's own, or a BCL method a crafted file
+        // could name) would let the file choose code to run. Only AiDotNet's and AiDotNet.Tensors' methods bind.
+        Func<double, double> own = DoubleIt;
+        Assert.Equal(string.Empty, DelegateState.Save(own));
+
+        string crafted = DelegateState.MethodScheme + typeof(TensorProgramPersistenceTests).AssemblyQualifiedName
+            + "|" + nameof(DoubleIt) + "|" + typeof(double).AssemblyQualifiedName;
+        var error = Assert.Throws<InvalidOperationException>(
+            () => DelegateState.Load<Func<double, double>>(crafted, "TestLayer", "map"));
+        Assert.Contains("may only bind methods", error.Message);
+
+        string bcl = DelegateState.MethodScheme + typeof(System.IO.Path).AssemblyQualifiedName
+            + "|" + nameof(System.IO.Path.GetFullPath) + "|" + typeof(string).AssemblyQualifiedName;
+        Assert.Throws<InvalidOperationException>(() => DelegateState.Load<Func<string, string>>(bcl, "TestLayer", "map"));
+    }
+
+    [Fact]
     public void LambdaLayer_BuiltFromAClosure_SurvivesADurableNetworkRoundTrip()
     {
         var scale = Random(2, 6);
