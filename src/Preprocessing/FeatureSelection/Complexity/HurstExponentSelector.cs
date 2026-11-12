@@ -93,7 +93,7 @@ public class HurstExponentSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         var lagSizes = new List<int>();
         var rsValues = new List<Tensor<T>>();
         var validValues = new List<Tensor<T>>();
-        T stdFloor = NumOps.FromDouble(1e-10);
+        T stdFloor = PreprocessingTensorOps.Tolerance<T>(1e-10);
         T zero = NumOps.Zero;
 
         // Choose lag sizes from 10 to n/2

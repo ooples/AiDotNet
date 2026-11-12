@@ -92,7 +92,7 @@ public class FClassification<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISup
         var zeros = new Tensor<T>(new[] { p });
         var msBetween = dfBetween > 0 ? engine.TensorDivideScalar(ssBetween, NumOps.FromDouble(dfBetween)) : zeros;
         var msWithin = dfWithin > 0 ? engine.TensorDivideScalar(ssWithin, NumOps.FromDouble(dfWithin)) : zeros;
-        var usable = engine.TensorGreaterThan(msWithin, NumOps.FromDouble(1e-10));
+        var usable = engine.TensorGreaterThan(msWithin, PreprocessingTensorOps.Tolerance<T>(1e-10));
         var fScores = engine.TensorWhere(usable, engine.TensorDivide(msBetween,
             engine.TensorWhere(usable, msWithin, PreprocessingTensorOps.Filled(new[] { p }, NumOps.One))), zeros);
 

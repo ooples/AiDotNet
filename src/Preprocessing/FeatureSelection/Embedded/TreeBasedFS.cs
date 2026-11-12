@@ -99,7 +99,7 @@ public class TreeBasedFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervi
 
         // Normalize importances
         T totalImportance = Engine.TensorSum(featureImportances);
-        if (PreprocessingTensorOps.IsAbove(totalImportance, NumOps.FromDouble(1e-10)))
+        if (PreprocessingTensorOps.IsAbove(totalImportance, PreprocessingTensorOps.Tolerance<T>(1e-10)))
             featureImportances = Engine.TensorDivideScalar(featureImportances, totalImportance);
         _featureImportances = featureImportances.ToVector();
 

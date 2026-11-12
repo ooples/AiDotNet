@@ -100,7 +100,7 @@ public class SCAD<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFeat
         // Select features with non-zero coefficients (largest first); fall back to the top correlations
         var magnitude = engine.TensorAbs(coefficients);
         var nonZero = new HashSet<int>(PreprocessingTensorOps.MaskPositions(
-            engine.TensorGreaterThan(magnitude, NumOps.FromDouble(1e-10))));
+            engine.TensorGreaterThan(magnitude, PreprocessingTensorOps.Tolerance<T>(1e-10))));
         if (nonZero.Count == 0)
         {
             var correlations = engine.TensorAbs(PreprocessingTensorOps.TargetCorrelations(

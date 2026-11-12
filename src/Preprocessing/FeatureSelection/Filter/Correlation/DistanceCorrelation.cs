@@ -73,7 +73,7 @@ public class DistanceCorrelation<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, 
         var dcov2 = FeatureSelectionTensorOps.SquaredDistanceCovariances(
             Tensor<T>.FromMatrix(data), Tensor<T>.FromVector(target), out var xVariances, out T yVariance);
         var zeros = new Tensor<T>(new[] { p });
-        T epsilon = NumOps.FromDouble(1e-10);
+        T epsilon = PreprocessingTensorOps.Tolerance<T>(1e-10);
         var usable = NumOps.GreaterThan(yVariance, epsilon)
             ? engine.TensorGreaterThan(xVariances, epsilon)
             : zeros;

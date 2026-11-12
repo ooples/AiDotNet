@@ -94,7 +94,7 @@ public class CrossValidatedSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>
         // Evaluate each feature individually: a simple linear regression per feature and fold, all features at once
         var shape = new[] { n, p };
         var yWide = engine.TensorBroadcastTo(y, shape);
-        T floor = NumOps.FromDouble(1e-10);
+        T floor = PreprocessingTensorOps.Tolerance<T>(1e-10);
         T zero = NumOps.Zero;
         var zeros = new Tensor<T>(new[] { p });
         var totalR2 = new Tensor<T>(new[] { p });

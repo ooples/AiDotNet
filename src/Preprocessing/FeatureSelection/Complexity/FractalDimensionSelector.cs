@@ -141,7 +141,7 @@ public class FractalDimensionSelector<T> : TransformerBase<T, Matrix<T>, Matrix<
             engine.TensorNegate(engine.TensorDivide(numerator, denominator)), NumOps.One, NumOps.FromDouble(2));
         var fitted = engine.TensorMultiply(
             PreprocessingTensorOps.AtLeast(engine.Reshape(pointCount, new[] { p }), NumOps.FromDouble(2)),
-            PreprocessingTensorOps.Not(engine.TensorLessThan(denominator, NumOps.FromDouble(1e-10))));
+            PreprocessingTensorOps.Not(engine.TensorLessThan(denominator, PreprocessingTensorOps.Tolerance<T>(1e-10))));
         return engine.TensorWhere(fitted, fd, defaultDimension);
     }
     public new Matrix<T> FitTransform(Matrix<T> data)

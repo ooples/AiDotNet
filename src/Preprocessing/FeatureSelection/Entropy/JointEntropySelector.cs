@@ -86,7 +86,7 @@ public class JointEntropySelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>,
         var entropySum = engine.TensorAddScalar(hX, hY);
         var mi = engine.TensorSubtract(entropySum, hXY);
         var avgEntropy = engine.TensorDivideScalar(entropySum, NumOps.FromDouble(2));
-        var usable = engine.TensorGreaterThan(avgEntropy, NumOps.FromDouble(1e-10));
+        var usable = engine.TensorGreaterThan(avgEntropy, PreprocessingTensorOps.Tolerance<T>(1e-10));
         var normalizedMutualInfo = engine.TensorWhere(usable,
             engine.TensorDivide(mi, engine.TensorWhere(usable, avgEntropy, PreprocessingTensorOps.Filled(new[] { p }, NumOps.One))),
             new Tensor<T>(new[] { p }));

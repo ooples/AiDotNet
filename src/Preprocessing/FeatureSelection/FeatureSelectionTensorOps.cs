@@ -235,7 +235,7 @@ internal static class FeatureSelectionTensorOps
         var engine = AiDotNetEngine.Current;
         var ops = MathHelper.GetNumericOperations<T>();
         int p = matrix.Shape[0];
-        T floor = ops.FromDouble(1e-10);
+        T floor = PreprocessingTensorOps.Tolerance<T>(1e-10);
         T zero = ops.Zero;
         var one = PreprocessingTensorOps.Filled(new[] { 1, 1 }, ops.One);
         var noValue = new Tensor<T>(new[] { 1, 1 });
@@ -353,7 +353,7 @@ internal static class FeatureSelectionTensorOps
         var shape = new[] { n, p };
         var min = PreprocessingTensorOps.ColumnMin(x);
         var range = engine.TensorSubtract(PreprocessingTensorOps.ColumnMax(x), min);
-        constant = engine.TensorLessThan(range, ops.FromDouble(1e-10));
+        constant = engine.TensorLessThan(range, PreprocessingTensorOps.Tolerance<T>(1e-10));
         var safeRange = engine.TensorWhere(constant, PreprocessingTensorOps.Filled(new[] { p }, ops.One), range);
         var scaled = engine.TensorMultiplyScalar(engine.TensorDivide(
             engine.TensorSubtract(x, engine.TensorBroadcastTo(engine.Reshape(min, new[] { 1, p }), shape)),
@@ -443,7 +443,7 @@ internal static class FeatureSelectionTensorOps
         var shape = new[] { n, p };
         var centered = engine.TensorSubtract(x, engine.TensorBroadcastTo(engine.ReduceMean(x, new[] { 0 }, true), shape));
         var std = engine.TensorSqrt(engine.ReduceMean(engine.TensorSquare(centered), new[] { 0 }, false));
-        stds = engine.TensorWhere(engine.TensorLessThan(std, ops.FromDouble(1e-10)), PreprocessingTensorOps.Filled(new[] { p }, ops.One), std);
+        stds = engine.TensorWhere(engine.TensorLessThan(std, PreprocessingTensorOps.Tolerance<T>(1e-10)), PreprocessingTensorOps.Filled(new[] { p }, ops.One), std);
         return engine.TensorDivide(centered, engine.TensorBroadcastTo(engine.Reshape(stds, new[] { 1, p }), shape));
     }
 
@@ -521,7 +521,7 @@ internal static class FeatureSelectionTensorOps
         var gram = engine.TensorAdd(engine.TensorMatMul(transposed, x),
             engine.TensorMultiplyScalar(engine.TensorEye<T>(p), ops.FromDouble(alpha)));
         var rhs = engine.TensorMatMul(transposed, engine.Reshape(y, new[] { n, 1 }));
-        T tolerance = ops.FromDouble(1e-10);
+        T tolerance = PreprocessingTensorOps.Tolerance<T>(1e-10);
 
         var (lu, pivots) = AiDotNet.Helpers.LinalgDispatch<T>.LuFactor(gram);
         var pivotMagnitudes = engine.TensorAbs(AiDotNet.Helpers.LinalgDispatch<T>.Diagonal(lu));
@@ -586,7 +586,7 @@ internal static class FeatureSelectionTensorOps
         var gaps = engine.TensorAbs(engine.TensorSubtract(
             engine.TensorSlice(sortedT, new[] { 0, 1 }, new[] { q, m - 1 }),
             engine.TensorSlice(sortedT, new[] { 0, 0 }, new[] { q, m - 1 })));
-        var valid = PreprocessingTensorOps.Not(engine.TensorLessThan(gaps, ops.FromDouble(1e-10)));
+        var valid = PreprocessingTensorOps.Not(engine.TensorLessThan(gaps, PreprocessingTensorOps.Tolerance<T>(1e-10)));
         var candidates = engine.TensorWhere(valid, reduction, new Tensor<T>(sizeShape));
         return engine.TensorMax(engine.ReduceMax(candidates, new[] { 1 }, false), ops.Zero);
     }
@@ -795,7 +795,7 @@ internal static class FeatureSelectionTensorOps
         var shape = new[] { n, p };
         var min = PreprocessingTensorOps.ColumnMin(x);
         var range = engine.TensorSubtract(PreprocessingTensorOps.ColumnMax(x), min);
-        var varying = engine.TensorGreaterThan(range, ops.FromDouble(1e-10));
+        var varying = engine.TensorGreaterThan(range, PreprocessingTensorOps.Tolerance<T>(1e-10));
         var safeRange = engine.TensorWhere(varying, range, PreprocessingTensorOps.Filled(new[] { p }, ops.One));
         var scaled = engine.TensorMultiplyScalar(engine.TensorDivide(
             engine.TensorSubtract(x, engine.TensorBroadcastTo(engine.Reshape(min, new[] { 1, p }), shape)),
@@ -917,7 +917,7 @@ internal static class FeatureSelectionTensorOps
         var xc = engine.TensorSubtract(x, engine.ReduceMean(x, new[] { 0 }, true));
         var cross = engine.TensorMatMul(engine.TensorTranspose(xc), xc);
         var ss = engine.ReduceSum(engine.TensorSquare(xc), new[] { 0 }, false);
-        var varying = engine.TensorGreaterThan(ss, ops.FromDouble(epsilon));
+        var varying = engine.TensorGreaterThan(ss, PreprocessingTensorOps.Tolerance<T>(epsilon));
         var scale = engine.TensorSqrt(engine.TensorWhere(varying, ss, PreprocessingTensorOps.Filled(new[] { p }, ops.One)));
         var r = engine.TensorDivide(cross, engine.TensorOuter(scale, scale));
         var defined = engine.TensorOuter(varying, varying);
@@ -944,7 +944,7 @@ internal static class FeatureSelectionTensorOps
         if (p == 0)
             return zeros;
 
-        T tolerance = ops.FromDouble(1e-10);
+        T tolerance = PreprocessingTensorOps.Tolerance<T>(1e-10);
         var ySigns = PairSigns(y, tolerance);
         var signSums = new Tensor<T>[p];
         var untied = new Tensor<T>[p];
@@ -999,7 +999,7 @@ internal static class FeatureSelectionTensorOps
         if (p == 0)
             return new Tensor<T>(new[] { n, 0 });
 
-        T tolerance = ops.FromDouble(1e-10);
+        T tolerance = PreprocessingTensorOps.Tolerance<T>(1e-10);
         T one = ops.One;
         T half = ops.FromDouble(0.5);
         var columns = new Tensor<T>[p];

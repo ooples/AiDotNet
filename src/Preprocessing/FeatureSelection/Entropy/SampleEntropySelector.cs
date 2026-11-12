@@ -76,7 +76,7 @@ public class SampleEntropySelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         // Tolerance r = tolerance * population std per feature; features with r below 1e-10 score 0
         var tolerances = engine.TensorMultiplyScalar(FeatureSelectionTensorOps.ColumnStd(X), NumOps.FromDouble(_tolerance));
         var degenerate = new HashSet<int>(PreprocessingTensorOps.MaskPositions(
-            engine.TensorLessThan(tolerances, NumOps.FromDouble(1e-10))));
+            engine.TensorLessThan(tolerances, PreprocessingTensorOps.Tolerance<T>(1e-10))));
 
         // Richman and Moorman (2000): B and A count the matching pairs among the same n - m templates
         int templates = n - _embeddingDimension;

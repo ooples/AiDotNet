@@ -70,7 +70,7 @@ public class DifferentialEntropySelector<T> : TransformerBase<T, Matrix<T>, Matr
         // Kozachenko-Leonenko estimator for 1D differential entropy
         // H = log(n-1) - digamma(k) + log(2) + (1/n) * sum(log(2 * epsilon_i))
         T offset = NumOps.FromDouble(Math.Log(n - 1) - Digamma(_kNeighbors));
-        T floor = NumOps.FromDouble(1e-10);
+        T floor = PreprocessingTensorOps.Tolerance<T>(1e-10);
         T two = NumOps.FromDouble(2);
         var shape = new[] { n, n };
         var excludeSelf = engine.TensorMultiplyScalar(engine.TensorEye<T>(n), NumOps.MaxValue);

@@ -120,7 +120,7 @@ public class FisherScore<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervi
         var betweenClassSum = FeatureSelectionTensorOps.ClassScatter(Tensor<T>.FromMatrix(data), classIndex,
             classLabels.Length, out var withinClassSum);
         var shape = new[] { p };
-        T epsilon = NumOps.FromDouble(1e-10);
+        T epsilon = PreprocessingTensorOps.Tolerance<T>(1e-10);
         var usable = engine.TensorGreaterThan(withinClassSum, epsilon);
         var degenerate = engine.TensorWhere(engine.TensorGreaterThan(betweenClassSum, epsilon),
             PreprocessingTensorOps.Filled(shape, NumOps.MaxValue), new Tensor<T>(shape));

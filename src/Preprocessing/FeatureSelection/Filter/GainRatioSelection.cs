@@ -91,7 +91,7 @@ public class GainRatioSelection<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, I
         // IG = H(Y) - H(Y|X), split info H(X), gain ratio IG / split info (0 when split info is not above 1e-10)
         var splitInfo = FeatureSelectionTensorOps.BinEntropyNats(joint, n, out var conditionalEntropy);
         var informationGain = engine.TensorNegate(engine.TensorAddScalar(conditionalEntropy, NumOps.Negate(targetEntropy)));
-        var usable = engine.TensorGreaterThan(splitInfo, NumOps.FromDouble(1e-10));
+        var usable = engine.TensorGreaterThan(splitInfo, PreprocessingTensorOps.Tolerance<T>(1e-10));
         var gainRatioScores = engine.TensorWhere(usable, engine.TensorDivide(informationGain,
             engine.TensorWhere(usable, splitInfo, PreprocessingTensorOps.Filled(new[] { p }, NumOps.One))), new Tensor<T>(new[] { p }));
         _informationGain = informationGain.ToVector();

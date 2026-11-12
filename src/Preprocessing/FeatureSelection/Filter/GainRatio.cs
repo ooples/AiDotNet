@@ -86,7 +86,7 @@ public class GainRatio<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervise
         var intrinsicInfo = FeatureSelectionTensorOps.BinEntropyNats(joint, n, out var conditionalEntropy);
         var informationGains = engine.TensorMax(
             engine.TensorNegate(engine.TensorAddScalar(conditionalEntropy, NumOps.Negate(targetEntropy))), NumOps.Zero);
-        var usable = engine.TensorGreaterThan(intrinsicInfo, NumOps.FromDouble(1e-10));
+        var usable = engine.TensorGreaterThan(intrinsicInfo, PreprocessingTensorOps.Tolerance<T>(1e-10));
         var gainRatios = engine.TensorWhere(usable, engine.TensorDivide(informationGains,
             engine.TensorWhere(usable, intrinsicInfo, PreprocessingTensorOps.Filled(new[] { p }, NumOps.One))), new Tensor<T>(new[] { p }));
         _informationGains = informationGains.ToVector();

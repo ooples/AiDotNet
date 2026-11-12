@@ -167,7 +167,7 @@ public class EnsembleFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervis
 
         var between = engine.Reshape(engine.TensorSquare(engine.TensorSubtract(mean0, mean1)), new[] { p });
         var within = engine.TensorAdd(engine.TensorDivideScalar(var0, count0), engine.TensorDivideScalar(var1, count1));
-        var usable = engine.TensorGreaterThan(within, NumOps.FromDouble(1e-10));
+        var usable = engine.TensorGreaterThan(within, PreprocessingTensorOps.Tolerance<T>(1e-10));
         var safe = engine.TensorWhere(usable, within, PreprocessingTensorOps.Filled(new[] { p }, one));
         return engine.TensorWhere(usable, engine.TensorDivide(between, safe), new Tensor<T>(new[] { p }));
     }

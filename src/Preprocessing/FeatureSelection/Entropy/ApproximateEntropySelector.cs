@@ -76,7 +76,7 @@ public class ApproximateEntropySelector<T> : TransformerBase<T, Matrix<T>, Matri
         // Tolerance r = tolerance * population std per feature; features with r below 1e-10 score 0
         var tolerances = engine.TensorMultiplyScalar(FeatureSelectionTensorOps.ColumnStd(X), NumOps.FromDouble(_tolerance));
         var degenerate = new HashSet<int>(PreprocessingTensorOps.MaskPositions(
-            engine.TensorLessThan(tolerances, NumOps.FromDouble(1e-10))));
+            engine.TensorLessThan(tolerances, PreprocessingTensorOps.Tolerance<T>(1e-10))));
 
         var apenValues = new Tensor<T>[p];
         for (int j = 0; j < p; j++)

@@ -90,7 +90,7 @@ public class PointBiserial<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISuper
         var mean1 = engine.TensorDivideScalar(engine.Reshape(engine.TensorMatMul(
             engine.Reshape(class1, new[] { 1, n }), X), new[] { p }), NumOps.FromDouble(n1));
         var stdTotal = FeatureSelectionTensorOps.ColumnStd(X);
-        var usable = PreprocessingTensorOps.AtLeast(stdTotal, NumOps.FromDouble(1e-10));
+        var usable = PreprocessingTensorOps.AtLeast(stdTotal, PreprocessingTensorOps.Tolerance<T>(1e-10));
         var safeStd = engine.TensorWhere(usable, stdTotal, PreprocessingTensorOps.Filled(new[] { p }, NumOps.One));
         T sqrtPq = NumOps.Sqrt(NumOps.FromDouble((double)n0 * n1 / ((double)n * n)));
         var correlations = engine.TensorWhere(usable, engine.TensorAbs(engine.TensorMultiplyScalar(

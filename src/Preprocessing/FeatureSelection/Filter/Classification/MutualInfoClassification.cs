@@ -95,7 +95,7 @@ public class MutualInfoClassification<T> : TransformerBase<T, Matrix<T>, Matrix<
         var ones = PreprocessingTensorOps.Filled(cellShape, NumOps.One);
         var ratio = engine.TensorDivide(pJoint, engine.TensorWhere(occupied, engine.TensorMultiply(pFeature, pClass), ones));
         var terms = engine.TensorWhere(occupied, engine.TensorMultiply(pJoint,
-            engine.TensorLog(engine.TensorAddScalar(ratio, NumOps.FromDouble(1e-10)))), new Tensor<T>(cellShape));
+            engine.TensorLog(engine.TensorAddScalar(ratio, PreprocessingTensorOps.Tolerance<T>(1e-10)))), new Tensor<T>(cellShape));
         var miScores = engine.TensorMax(engine.ReduceSum(terms, new[] { 1, 2 }, false), NumOps.Zero);
         _miScores = miScores.ToVector();
 

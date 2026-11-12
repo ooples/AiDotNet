@@ -131,7 +131,7 @@ public class KDEBasedSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISu
         var engine = Engine;
         var sums = engine.TensorDivideScalar(
             FeatureSelectionTensorOps.GaussianKernelSums(grid, values, h), NumOps.FromDouble(Math.Sqrt(2 * Math.PI)));
-        T denominator = NumOps.Add(NumOps.Multiply(NumOps.FromDouble(values.Shape[0]), h), NumOps.FromDouble(1e-10));
+        T denominator = NumOps.Add(NumOps.Multiply(NumOps.FromDouble(values.Shape[0]), h), PreprocessingTensorOps.Tolerance<T>(1e-10));
         return engine.TensorDivideScalar(sums, denominator);
     }
     /// <inheritdoc />

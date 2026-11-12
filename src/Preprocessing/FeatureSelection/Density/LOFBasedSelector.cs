@@ -121,7 +121,7 @@ public class LOFBasedSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IFi
 
         // Compute local reachability density (LRD)
         T kScalar = NumOps.FromDouble(k);
-        T epsilon = NumOps.FromDouble(1e-10);
+        T epsilon = PreprocessingTensorOps.Tolerance<T>(1e-10);
         var reachSums = engine.ReduceSum(engine.TensorMultiply(neighbors, reachDist), new[] { 1 }, false);
         var lrd = engine.TensorDivide(
             PreprocessingTensorOps.Filled(new[] { n }, kScalar), engine.TensorAddScalar(reachSums, epsilon));

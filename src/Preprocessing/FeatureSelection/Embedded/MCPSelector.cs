@@ -99,7 +99,7 @@ public class MCPSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervi
         int nToSelect = Math.Min(_nFeaturesToSelect, p);
         var magnitude = engine.TensorAbs(coefficients);
         var nonZero = new HashSet<int>(PreprocessingTensorOps.MaskPositions(
-            engine.TensorGreaterThan(magnitude, NumOps.FromDouble(1e-10))));
+            engine.TensorGreaterThan(magnitude, PreprocessingTensorOps.Tolerance<T>(1e-10))));
         _selectedIndices = PreprocessingTensorOps.StableOrder(magnitude, descending: true)
             .Take(nToSelect)
             .Where(j => nonZero.Contains(j))

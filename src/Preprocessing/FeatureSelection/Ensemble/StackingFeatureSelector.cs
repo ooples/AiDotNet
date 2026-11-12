@@ -86,7 +86,7 @@ public class StackingFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T
         T wVar = ComputeMetaWeight(X, y, varianceScores, n, p);
         T wMI = ComputeMetaWeight(X, y, miScores, n, p);
 
-        T totalWeight = NumOps.Add(NumOps.Add(NumOps.Add(wCorr, wVar), wMI), NumOps.FromDouble(1e-10));
+        T totalWeight = NumOps.Add(NumOps.Add(NumOps.Add(wCorr, wVar), wMI), PreprocessingTensorOps.Tolerance<T>(1e-10));
 
         // Combine scores
         var stackedScores = engine.TensorAdd(engine.TensorAdd(
@@ -113,7 +113,7 @@ public class StackingFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T
     private Tensor<T> NormalizeScores(Tensor<T> scores)
     {
         var shifted = Engine.TensorSubtractScalar(scores, Engine.TensorMinValue(scores));
-        return Engine.TensorDivideScalar(shifted, NumOps.Add(Engine.TensorMaxValue(shifted), NumOps.FromDouble(1e-10)));
+        return Engine.TensorDivideScalar(shifted, NumOps.Add(Engine.TensorMaxValue(shifted), PreprocessingTensorOps.Tolerance<T>(1e-10)));
     }
 
     private T ComputeMetaWeight(Tensor<T> X, Tensor<T> y, Tensor<T> scores, int n, int p)
@@ -130,11 +130,11 @@ public class StackingFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T
         var pred = engine.Reshape(engine.TensorMatMul(engine.TensorIndexSelect(X, top, 1),
             engine.Reshape(topScores, new[] { topFeatures.Length, 1 })), new[] { n });
         T weightSum = engine.TensorSum(topScores);
-        if (PreprocessingTensorOps.IsAbove(weightSum, NumOps.FromDouble(1e-10)))
+        if (PreprocessingTensorOps.IsAbove(weightSum, PreprocessingTensorOps.Tolerance<T>(1e-10)))
             pred = engine.TensorDivideScalar(pred, weightSum);
         T ssRes = engine.TensorSumOfSquares(engine.TensorSubtract(y, pred));
 
-        return PreprocessingTensorOps.IsAbove(ssTot, NumOps.FromDouble(1e-10))
+        return PreprocessingTensorOps.IsAbove(ssTot, PreprocessingTensorOps.Tolerance<T>(1e-10))
             ? PreprocessingTensorOps.ScalarMax(NumOps.Zero, NumOps.Subtract(NumOps.One, NumOps.Divide(ssRes, ssTot)))
             : NumOps.Zero;
     }

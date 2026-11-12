@@ -135,7 +135,7 @@ public class ReliefF<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedF
         // Normalize features to [0, 1] for distance computation (0 for a column whose range is not above 1e-10)
         var minVals = PreprocessingTensorOps.ColumnMin(X);
         var range = engine.TensorSubtract(PreprocessingTensorOps.ColumnMax(X), minVals);
-        var varying = engine.TensorGreaterThan(range, NumOps.FromDouble(1e-10));
+        var varying = engine.TensorGreaterThan(range, PreprocessingTensorOps.Tolerance<T>(1e-10));
         var safeRange = engine.TensorWhere(varying, range, PreprocessingTensorOps.Filled(featureShape, NumOps.One));
         var Xnorm = engine.TensorMultiply(
             engine.TensorDivide(engine.TensorSubtract(X, engine.TensorBroadcastTo(engine.Reshape(minVals, new[] { 1, p }), new[] { n, p })),

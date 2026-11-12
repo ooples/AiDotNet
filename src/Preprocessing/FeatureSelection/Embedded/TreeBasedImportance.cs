@@ -89,7 +89,7 @@ public class TreeBasedImportance<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, 
 
         var engine = Engine;
         var X = Tensor<T>.FromMatrix(data);
-        T floor = NumOps.FromDouble(1e-10);
+        T floor = PreprocessingTensorOps.Tolerance<T>(1e-10);
 
         // Class one-hot of the rounded target for the Gini splits
         PreprocessingTensorOps.ClassLabels(target, out var classes, out var classIndex);

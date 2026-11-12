@@ -95,7 +95,7 @@ public class ElasticNetFeatureSelection<T> : TransformerBase<T, Matrix<T>, Matri
         // below 1e-10
         T l1Penalty = NumOps.FromDouble(_alpha * _l1Ratio * n);
         T l2Penalty = NumOps.FromDouble(_alpha * (1 - _l1Ratio) * n);
-        T floor = NumOps.FromDouble(1e-10);
+        T floor = PreprocessingTensorOps.Tolerance<T>(1e-10);
         var none = new Tensor<T>(new[] { 1 });
         var denominators = engine.TensorAddScalar(engine.ReduceSum(engine.TensorSquare(X), new[] { 0 }, false), l2Penalty);
         var coefficients = FeatureSelectionTensorOps.CoordinateDescent(X, y, _maxIterations, _tolerance, (rho, j) =>

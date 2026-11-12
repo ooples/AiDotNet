@@ -96,7 +96,7 @@ public class DispersionRatio<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISup
         _withinClassVariances = withinVar.ToVector();
 
         // Dispersion ratio (0 when the within-class variance is not above 1e-10)
-        var usable = engine.TensorGreaterThan(withinVar, NumOps.FromDouble(1e-10));
+        var usable = engine.TensorGreaterThan(withinVar, PreprocessingTensorOps.Tolerance<T>(1e-10));
         var dispersionRatios = engine.TensorWhere(usable, engine.TensorDivide(betweenVar,
             engine.TensorWhere(usable, withinVar, PreprocessingTensorOps.Filled(new[] { p }, NumOps.One))), new Tensor<T>(new[] { p }));
         _dispersionRatios = dispersionRatios.ToVector();

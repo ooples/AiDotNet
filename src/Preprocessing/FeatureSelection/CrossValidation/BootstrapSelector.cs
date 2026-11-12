@@ -87,7 +87,7 @@ public class BootstrapSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IS
         int sampleSize = (int)(n * _sampleRatio);
         var selectionCounts = new int[p];
         T count = NumOps.FromDouble(sampleSize);
-        T varianceFloor = NumOps.FromDouble(1e-10);
+        T varianceFloor = PreprocessingTensorOps.Tolerance<T>(1e-10);
         var zeros = new Tensor<T>(new[] { p });
 
         for (int b = 0; b < _nBootstraps; b++)

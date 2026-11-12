@@ -167,7 +167,7 @@ public class EnsembleFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T
     {
         var engine = Engine;
         int p = data.Columns;
-        T floor = NumOps.FromDouble(1e-10);
+        T floor = PreprocessingTensorOps.Tolerance<T>(1e-10);
         var x = Tensor<T>.FromMatrix(data);
         var y = Tensor<T>.FromVector(target);
         var r = PreprocessingTensorOps.TargetCorrelations(x, y);

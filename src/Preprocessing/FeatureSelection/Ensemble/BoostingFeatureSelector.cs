@@ -78,7 +78,7 @@ public class BoostingFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T
         var y = Tensor<T>.FromVector(target);
         var shape = new[] { n, p };
         var yColumn = engine.TensorBroadcastTo(engine.Reshape(y, new[] { n, 1 }), shape);
-        T floor = NumOps.FromDouble(1e-10);
+        T floor = PreprocessingTensorOps.Tolerance<T>(1e-10);
         T learningRate = NumOps.FromDouble(_learningRate);
         T offset = NumOps.FromDouble(0.01);
         T zero = NumOps.Zero;

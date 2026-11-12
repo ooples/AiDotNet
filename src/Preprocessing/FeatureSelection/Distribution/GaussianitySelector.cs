@@ -81,7 +81,7 @@ public class GaussianitySelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, 
         var jb = engine.TensorMultiplyScalar(
             engine.TensorAdd(engine.TensorSquare(skewness), engine.TensorDivideScalar(engine.TensorSquare(kurtosis), NumOps.FromDouble(4.0))),
             NumOps.FromDouble(n / 6.0));
-        var constant = engine.TensorLessThan(engine.Reshape(std, new[] { p }), NumOps.FromDouble(1e-10));
+        var constant = engine.TensorLessThan(engine.Reshape(std, new[] { p }), PreprocessingTensorOps.Tolerance<T>(1e-10));
         jb = engine.TensorWhere(constant, PreprocessingTensorOps.Filled(new[] { p }, NumOps.MaxValue), jb);
         _jbStatistics = jb.ToVector();
 

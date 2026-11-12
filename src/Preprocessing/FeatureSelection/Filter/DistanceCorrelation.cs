@@ -78,7 +78,7 @@ public class DistanceCorrelation<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, 
             Tensor<T>.FromMatrix(data), Tensor<T>.FromVector(target), out var xVariances, out T yVariance);
         var zeros = new Tensor<T>(new[] { p });
         var denominators = engine.TensorSqrt(engine.TensorMultiplyScalar(xVariances, yVariance));
-        var usable = engine.TensorGreaterThan(denominators, NumOps.FromDouble(1e-10));
+        var usable = engine.TensorGreaterThan(denominators, PreprocessingTensorOps.Tolerance<T>(1e-10));
         var safe = engine.TensorWhere(usable, denominators, PreprocessingTensorOps.Filled(new[] { p }, NumOps.One));
         var distanceCorrelations = engine.TensorWhere(usable,
             engine.TensorSqrt(engine.TensorMax(engine.TensorDivide(dcov2, safe), NumOps.Zero)), zeros);

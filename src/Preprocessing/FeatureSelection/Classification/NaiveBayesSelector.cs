@@ -83,7 +83,7 @@ public class NaiveBayesSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, I
             var centered = engine.TensorSubtract(X, engine.TensorMatMul(Y, means));
             var variances = engine.TensorMax(
                 engine.TensorDivide(engine.TensorMatMul(Yt, engine.TensorSquare(centered)), counts),
-                NumOps.FromDouble(1e-10));
+                PreprocessingTensorOps.Tolerance<T>(1e-10));
 
             // Every ordered class pair (c1, c2) as [k, k, p]; the symmetric KL is symmetric in the pair and
             // exactly 0 on the diagonal, so the sum over c1 < c2 is half the sum over all pairs.

@@ -78,7 +78,7 @@ public class LocalDensitySelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>,
         var centered = engine.TensorSubtract(X, engine.TensorBroadcastTo(mean, new[] { n, p }));
         var std = engine.TensorSqrt(engine.ReduceMean(engine.TensorSquare(centered), new[] { 0 }, true));
         var standardized = engine.TensorWhere(
-            engine.TensorBroadcastTo(engine.TensorGreaterThan(std, NumOps.FromDouble(1e-10)), new[] { n, p }),
+            engine.TensorBroadcastTo(engine.TensorGreaterThan(std, PreprocessingTensorOps.Tolerance<T>(1e-10)), new[] { n, p }),
             engine.TensorDivide(centered, engine.TensorBroadcastTo(std, new[] { n, p })), X);
 
         // Compute local density for each point (1/average distance to k nearest neighbors)
@@ -86,7 +86,7 @@ public class LocalDensitySelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>,
         var self = engine.TensorEye<T>(n);
         var excluded = PreprocessingTensorOps.Filled(pairShape, NumOps.MaxValue);
         T neighbors = NumOps.FromDouble(k);
-        T epsilon = NumOps.FromDouble(1e-10);
+        T epsilon = PreprocessingTensorOps.Tolerance<T>(1e-10);
         var ones = PreprocessingTensorOps.Filled(new[] { n }, NumOps.One);
         var densities = new Tensor<T>[p];
         for (int j = 0; j < p; j++)

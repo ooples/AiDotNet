@@ -87,7 +87,7 @@ public class GiniImpuritySelection<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         // Columns whose range is below 1e-10 score 0
         var minVal = PreprocessingTensorOps.ColumnMin(X);
         var range = engine.TensorSubtract(PreprocessingTensorOps.ColumnMax(X), minVal);
-        var varying = PreprocessingTensorOps.AtLeast(range, NumOps.FromDouble(1e-10));
+        var varying = PreprocessingTensorOps.AtLeast(range, PreprocessingTensorOps.Tolerance<T>(1e-10));
 
         // Try evenly spaced thresholds min + range * t / (nThresholds + 1); a split leaving either side empty is skipped
         var zeros = new Tensor<T>(new[] { p });

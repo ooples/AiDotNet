@@ -65,7 +65,7 @@ public class CoefficientOfVariation<T> : TransformerBase<T, Matrix<T>, Matrix<T>
 
         // Coefficient of variation std / |mean| (population std; 0 for a near-zero mean)
         var absMeans = engine.TensorAbs(engine.ReduceMean(X, new[] { 0 }, false));
-        var usable = engine.TensorGreaterThan(absMeans, NumOps.FromDouble(1e-10));
+        var usable = engine.TensorGreaterThan(absMeans, PreprocessingTensorOps.Tolerance<T>(1e-10));
         var cvValues = engine.TensorWhere(usable, engine.TensorDivide(FeatureSelectionTensorOps.ColumnStd(X),
             engine.TensorWhere(usable, absMeans, PreprocessingTensorOps.Filled(new[] { p }, NumOps.One))),
             new Tensor<T>(new[] { p }));

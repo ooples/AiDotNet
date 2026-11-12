@@ -142,7 +142,7 @@ public class PermutationImportance<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         int p = data.Columns;
         var shape = new[] { n, p };
         var featureShape = new[] { p };
-        T floor = NumOps.FromDouble(1e-10);
+        T floor = PreprocessingTensorOps.Tolerance<T>(1e-10);
         var X = Tensor<T>.FromMatrix(data);
         var y = Tensor<T>.FromVector(target);
 

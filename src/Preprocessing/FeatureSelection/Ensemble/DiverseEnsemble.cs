@@ -97,7 +97,7 @@ public class DiverseEnsemble<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISup
         allScores.Add(ComputeDistanceCorrelationScores(X, y, n, random));
 
         // Aggregate scores (normalize each method to [0, 1], 0 when its range is not above 1e-10, and average)
-        T floor = NumOps.FromDouble(1e-10);
+        T floor = PreprocessingTensorOps.Tolerance<T>(1e-10);
         var aggregatedScores = new Tensor<T>(new[] { p });
 
         foreach (var scores in allScores)
@@ -156,7 +156,7 @@ public class DiverseEnsemble<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISup
         if (dfw <= 0)
             return new Tensor<T>(new[] { p });
 
-        var usable = engine.TensorGreaterThan(ssw, NumOps.FromDouble(1e-10));
+        var usable = engine.TensorGreaterThan(ssw, PreprocessingTensorOps.Tolerance<T>(1e-10));
         var safeSsw = engine.TensorWhere(usable, ssw, PreprocessingTensorOps.Filled(new[] { p }, NumOps.One));
         return engine.TensorWhere(usable, engine.TensorDivide(
             engine.TensorDivideScalar(ssb, NumOps.FromDouble(dfb)), engine.TensorDivideScalar(safeSsw, NumOps.FromDouble(dfw))),

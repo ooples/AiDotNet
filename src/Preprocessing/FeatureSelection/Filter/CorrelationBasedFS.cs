@@ -86,7 +86,7 @@ public class CorrelationBasedFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, I
         var excluded = PreprocessingTensorOps.Filled(shape, NumOps.FromDouble(double.NegativeInfinity));
         T one = NumOps.One;
         T two = NumOps.FromDouble(2);
-        T epsilon = NumOps.FromDouble(1e-10);
+        T epsilon = PreprocessingTensorOps.Tolerance<T>(1e-10);
         var selected = new List<int>();
 
         while (selected.Count < numToSelect && selected.Count < p)

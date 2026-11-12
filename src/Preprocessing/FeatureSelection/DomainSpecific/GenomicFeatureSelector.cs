@@ -91,7 +91,7 @@ public class GenomicFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>
 
         var engine = Engine;
         var X = Tensor<T>.FromMatrix(data);
-        T epsilon = NumOps.FromDouble(1e-10);
+        T epsilon = PreprocessingTensorOps.Tolerance<T>(1e-10);
         var zeros = new Tensor<T>(new[] { p });
 
         // Split samples by class

@@ -82,7 +82,7 @@ public class MahalanobisDistanceSelector<T> : TransformerBase<T, Matrix<T>, Matr
             : PreprocessingTensorOps.Filled(new[] { p }, NumOps.One);
 
         // Compute Mahalanobis-like contribution for each feature: mean squared class-mean difference over variance
-        var variance = engine.TensorMax(pooledVariance, NumOps.FromDouble(1e-10));
+        var variance = engine.TensorMax(pooledVariance, PreprocessingTensorOps.Tolerance<T>(1e-10));
         var contributions = engine.TensorDivide(
             FeatureSelectionTensorOps.MeanPairwiseDifference(classMeans, squared: true), variance);
         _distanceContributions = contributions.ToVector();

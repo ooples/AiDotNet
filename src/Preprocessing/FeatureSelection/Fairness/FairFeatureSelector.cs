@@ -198,7 +198,7 @@ public class FairFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, 
             : NumOps.Zero;
 
         // Disparate impact ratio (closer to 1 is fairer)
-        T floor = NumOps.FromDouble(1e-10);
+        T floor = PreprocessingTensorOps.Tolerance<T>(1e-10);
         bool zero0 = NumOps.LessThan(NumOps.Abs(mean0), floor);
         bool zero1 = NumOps.LessThan(NumOps.Abs(mean1), floor);
         if (zero1 && zero0)

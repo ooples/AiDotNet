@@ -100,7 +100,7 @@ public class HierarchicalFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IFixe
         T dof = NumOps.FromDouble(n - 1);
         var stds = engine.TensorAddScalar(
             engine.TensorSqrt(engine.TensorDivideScalar(engine.ReduceSum(engine.TensorSquare(centered), new[] { 0 }, false), dof)),
-            NumOps.FromDouble(1e-10));
+            PreprocessingTensorOps.Tolerance<T>(1e-10));
 
         // Compute distance = 1 - |correlation|, 0 on the diagonal
         var corr = engine.TensorDivide(

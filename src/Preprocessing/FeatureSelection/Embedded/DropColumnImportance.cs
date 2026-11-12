@@ -143,7 +143,7 @@ public class DropColumnImportance<T> : TransformerBase<T, Matrix<T>, Matrix<T>>,
         int nTrain = trainX.Shape[0];
         int nTest = testX.Shape[0];
         int nFeatures = trainX.Shape[1];
-        T floor = NumOps.FromDouble(1e-10);
+        T floor = PreprocessingTensorOps.Tolerance<T>(1e-10);
         var featureShape = new[] { nFeatures };
         var trainShape = new[] { nTrain, nFeatures };
         var testShape = new[] { nTest, nFeatures };

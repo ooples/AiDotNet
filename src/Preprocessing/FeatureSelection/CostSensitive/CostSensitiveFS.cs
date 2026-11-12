@@ -132,7 +132,7 @@ public class CostSensitiveFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISup
         var engine = Engine;
         T min = engine.TensorMinValue(costs);
         T range = NumOps.Subtract(engine.TensorMaxValue(costs), min);
-        if (!NumOps.GreaterThan(range, NumOps.FromDouble(1e-10)))
+        if (!NumOps.GreaterThan(range, PreprocessingTensorOps.Tolerance<T>(1e-10)))
             return PreprocessingTensorOps.Filled(new[] { p }, NumOps.FromDouble(0.5));
 
         return engine.TensorDivideScalar(engine.TensorSubtractScalar(costs, min), range);

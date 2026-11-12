@@ -118,7 +118,7 @@ public class ClusterSeparabilitySelector<T> : TransformerBase<T, Matrix<T>, Matr
         var within = engine.TensorSubtract(X, engine.TensorMatMul(membership, clusterMeans));
         var ssw = engine.ReduceSum(engine.TensorSquare(within), new[] { 0 }, false);
 
-        return engine.TensorWhere(engine.TensorGreaterThan(ssw, NumOps.FromDouble(1e-10)),
+        return engine.TensorWhere(engine.TensorGreaterThan(ssw, PreprocessingTensorOps.Tolerance<T>(1e-10)),
             engine.TensorDivide(ssb, ssw), new Tensor<T>(new[] { p }));
     }
 

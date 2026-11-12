@@ -142,7 +142,7 @@ public class RandomForestImportance<T> : TransformerBase<T, Matrix<T>, Matrix<T>
         var nodeY = engine.TensorIndexSelect(y, rows, 0);
         T currentVar = FeatureSelectionTensorOps.SumSquaredDeviations(nodeY);
 
-        if (PreprocessingTensorOps.IsBelow(currentVar, NumOps.FromDouble(1e-10)))
+        if (PreprocessingTensorOps.IsBelow(currentVar, PreprocessingTensorOps.Tolerance<T>(1e-10)))
             return;
 
         // Find best split (variance reduction)

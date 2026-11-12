@@ -113,7 +113,7 @@ public class GroupLassoSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, I
         T one = NumOps.One;
         T zero = NumOps.Zero;
         T count = NumOps.FromDouble(n);
-        T epsilon = NumOps.FromDouble(1e-10);
+        T epsilon = PreprocessingTensorOps.Tolerance<T>(1e-10);
         T alpha = NumOps.FromDouble(_alpha);
         T tol = NumOps.FromDouble(_tolerance);
         var columnShape = new[] { n };

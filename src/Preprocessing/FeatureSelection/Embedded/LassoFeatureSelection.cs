@@ -89,7 +89,7 @@ public class LassoFeatureSelection<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         // (a column with ||x_j||^2 below 1e-10 gets 0)
         var squaredNorms = engine.ReduceSum(engine.TensorSquare(X), new[] { 0 }, false);
         T threshold = NumOps.FromDouble(_alpha * n);
-        T floor = NumOps.FromDouble(1e-10);
+        T floor = PreprocessingTensorOps.Tolerance<T>(1e-10);
         var none = new Tensor<T>(new[] { 1 });
         var coefficients = FeatureSelectionTensorOps.CoordinateDescent(X, y, _maxIterations, _tolerance, (rho, j) =>
         {

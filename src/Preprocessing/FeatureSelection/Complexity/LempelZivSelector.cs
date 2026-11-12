@@ -76,7 +76,7 @@ public class LempelZivSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IF
                 engine.TensorBroadcastTo(range, new[] { n, p })),
             NumOps.FromDouble(_nBins - 1));
         var bins = engine.TensorMin(engine.TensorTrunc(scaled), NumOps.FromDouble(_nBins - 1));
-        var constant = engine.TensorBroadcastTo(engine.TensorLessThan(range, NumOps.FromDouble(1e-10)), new[] { n, p });
+        var constant = engine.TensorBroadcastTo(engine.TensorLessThan(range, PreprocessingTensorOps.Tolerance<T>(1e-10)), new[] { n, p });
         var symbols = engine.TensorWhere(constant, new Tensor<T>(new[] { n, p }), bins);
 
         // Compute Lempel-Ziv complexity of each column's integer symbol sequence

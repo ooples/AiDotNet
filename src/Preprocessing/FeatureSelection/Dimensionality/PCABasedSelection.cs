@@ -79,7 +79,7 @@ public class PCABasedSelection<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IF
 
         // Compute feature importance as weighted sum of squared loadings
         var weights = engine.TensorDivideScalar(eigenvalues,
-            NumOps.Add(engine.TensorSum(eigenvalues), NumOps.FromDouble(1e-10)));
+            NumOps.Add(engine.TensorSum(eigenvalues), PreprocessingTensorOps.Tolerance<T>(1e-10)));
         var importances = FeatureSelectionTensorOps.WeightedSquaredLoadings(loadings, weights);
         _featureImportances = importances.ToVector();
 

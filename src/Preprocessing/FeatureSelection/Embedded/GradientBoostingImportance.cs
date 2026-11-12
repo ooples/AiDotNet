@@ -89,7 +89,7 @@ public class GradientBoostingImportance<T> : TransformerBase<T, Matrix<T>, Matri
         var X = Tensor<T>.FromMatrix(data);
         var y = Tensor<T>.FromVector(target);
         T learningRate = NumOps.FromDouble(_learningRate);
-        T floor = NumOps.FromDouble(1e-10);
+        T floor = PreprocessingTensorOps.Tolerance<T>(1e-10);
 
         // Initialize importances
         var importances = new Tensor<T>(new[] { p });

@@ -63,7 +63,7 @@ public class TsallisEntropySelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>
         int p = data.Columns;
 
         var engine = Engine;
-        var floor = NumOps.FromDouble(1e-10);
+        var floor = PreprocessingTensorOps.Tolerance<T>(1e-10);
 
         // Discretize: bin = min(bins - 1, trunc((v - min) / range * bins)), 0 when the column is constant
         var counts = FeatureSelectionTensorOps.BinCounts(

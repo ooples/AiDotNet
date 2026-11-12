@@ -78,7 +78,7 @@ public class KDESelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervi
         var centered = engine.TensorSubtract(X, engine.TensorBroadcastTo(mean, new[] { n, p }));
         var std = engine.TensorSqrt(engine.ReduceMean(engine.TensorSquare(centered), new[] { 0 }, true));
         var standardized = engine.TensorWhere(
-            engine.TensorBroadcastTo(engine.TensorGreaterThan(std, NumOps.FromDouble(1e-10)), new[] { n, p }),
+            engine.TensorBroadcastTo(engine.TensorGreaterThan(std, PreprocessingTensorOps.Tolerance<T>(1e-10)), new[] { n, p }),
             engine.TensorDivide(centered, engine.TensorBroadcastTo(std, new[] { n, p })), X);
 
         // Compute class-specific densities at evaluation points (50 points from each feature's min to max)
@@ -122,14 +122,14 @@ public class KDESelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervi
         var sums = FeatureSelectionTensorOps.GaussianKernelSums(evalPoints, data, NumOps.FromDouble(_bandwidth));
 
         // Add small constant to avoid log(0)
-        return engine.TensorAddScalar(engine.TensorMultiplyScalar(sums, normFactor), NumOps.FromDouble(1e-10));
+        return engine.TensorAddScalar(engine.TensorMultiplyScalar(sums, normFactor), PreprocessingTensorOps.Tolerance<T>(1e-10));
     }
 
     private Tensor<T> ComputeSymmetricKL(Tensor<T> p, Tensor<T> q)
     {
         // Sum over the evaluation points where both densities are above 1e-10
         var engine = Engine;
-        T floor = NumOps.FromDouble(1e-10);
+        T floor = PreprocessingTensorOps.Tolerance<T>(1e-10);
         var both = engine.TensorMultiply(engine.TensorGreaterThan(p, floor), engine.TensorGreaterThan(q, floor));
         var klPQ = engine.TensorMultiply(p, engine.TensorLog(engine.TensorDivide(p, q)));
         var klQP = engine.TensorMultiply(q, engine.TensorLog(engine.TensorDivide(q, p)));

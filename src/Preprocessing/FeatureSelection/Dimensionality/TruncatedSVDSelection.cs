@@ -76,7 +76,7 @@ public class TruncatedSVDSelection<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
 
         // Compute feature importance as weighted sum of squared loadings
         var squared = engine.TensorSquare(singularValues);
-        var weights = engine.TensorDivideScalar(squared, NumOps.Add(engine.TensorSum(squared), NumOps.FromDouble(1e-10)));
+        var weights = engine.TensorDivideScalar(squared, NumOps.Add(engine.TensorSum(squared), PreprocessingTensorOps.Tolerance<T>(1e-10)));
         var importances = FeatureSelectionTensorOps.WeightedSquaredLoadings(loadings, weights);
         _featureImportances = importances.ToVector();
 

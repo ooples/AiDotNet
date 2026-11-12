@@ -102,7 +102,7 @@ public class BudgetConstrainedFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, 
 
         // Compute value per cost (a (near-)free feature gets 1000x its relevance)
         var costTensor = Tensor<T>.FromVector(costs);
-        var valuePerCost = engine.TensorWhere(engine.TensorGreaterThan(costTensor, NumOps.FromDouble(1e-10)),
+        var valuePerCost = engine.TensorWhere(engine.TensorGreaterThan(costTensor, PreprocessingTensorOps.Tolerance<T>(1e-10)),
             engine.TensorDivide(relevance, costTensor), engine.TensorMultiplyScalar(relevance, NumOps.FromDouble(1000)));
         _valuePerCost = valuePerCost.ToVector();
 

@@ -99,7 +99,7 @@ public class ClusteringBasedFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IF
         T dof = NumOps.FromDouble(n - 1);
         var stds = engine.TensorAddScalar(
             engine.TensorSqrt(engine.TensorDivideScalar(engine.ReduceSum(engine.TensorSquare(centered), new[] { 0 }, false), dof)),
-            NumOps.FromDouble(1e-10));
+            PreprocessingTensorOps.Tolerance<T>(1e-10));
 
         // Compute correlations; the diagonal is exactly 1
         var cov = engine.TensorMatMul(engine.TensorTranspose(centered), centered);

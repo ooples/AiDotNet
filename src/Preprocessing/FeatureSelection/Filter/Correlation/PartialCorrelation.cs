@@ -72,7 +72,7 @@ public class PartialCorrelation<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, I
         var engine = Engine;
         var X = Tensor<T>.FromMatrix(data);
         var y = Tensor<T>.FromVector(target);
-        T tolerance = NumOps.FromDouble(1e-10);
+        T tolerance = PreprocessingTensorOps.Tolerance<T>(1e-10);
         Tensor<T> partialCorrelations;
 
         if (_controlForAllOthers && p > 1)

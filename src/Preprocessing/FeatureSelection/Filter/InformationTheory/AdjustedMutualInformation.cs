@@ -89,7 +89,7 @@ public class AdjustedMutualInformation<T> : TransformerBase<T, Matrix<T>, Matrix
         var emi = FeatureSelectionTensorOps.ExpectedMutualInformation(
             engine.Reshape(engine.ReduceSum(joint, new[] { 2 }, false), new[] { p, _nBins }), classCounts, n);
         var denominator = engine.TensorSubtract(engine.TensorMax(hX, hY), emi);
-        var usable = engine.TensorGreaterThan(engine.TensorAbs(denominator), NumOps.FromDouble(1e-10));
+        var usable = engine.TensorGreaterThan(engine.TensorAbs(denominator), PreprocessingTensorOps.Tolerance<T>(1e-10));
         var amiScores = engine.TensorWhere(usable, engine.TensorDivide(engine.TensorSubtract(mi, emi),
             engine.TensorWhere(usable, denominator, PreprocessingTensorOps.Filled(new[] { p }, NumOps.One))), new Tensor<T>(new[] { p }));
         _amiScores = amiScores.ToVector();
