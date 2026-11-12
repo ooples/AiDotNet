@@ -26,13 +26,13 @@ public class SpectralClusteringFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>,
     private readonly double _sigma;
 
     private int[]? _clusterAssignments;
-    private double[]? _featureScores;
+    private Vector<T>? _featureScores;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     public int NClusters => _nClusters;
     public int[]? ClusterAssignments => _clusterAssignments;
-    public double[]? FeatureScores => _featureScores;
+    public Vector<T>? FeatureScores => _featureScores;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -57,167 +57,65 @@ public class SpectralClusteringFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>,
         _nInputFeatures = data.Columns;
         int n = data.Rows;
         int p = data.Columns;
+        var x = FilterStatisticTensorOps.AsTensor(data);
 
-        var X = new double[n, p];
-        for (int i = 0; i < n; i++)
-            for (int j = 0; j < p; j++)
-                X[i, j] = NumOps.ToDouble(data[i, j]);
+        // Similarity between features: exp(-||x_j1 - x_j2||^2 / (2 sigma^2 n))
+        var distances = FeatureSelectionTensorOps.SquaredDistances(Engine.TensorTranspose(x));
+        var w = Engine.TensorExp(Engine.TensorMultiplyScalar(distances, NumOps.FromDouble(-1.0 / (2 * _sigma * _sigma * n))));
 
-        // Build similarity matrix between features
-        var W = new double[p, p];
-        for (int j1 = 0; j1 < p; j1++)
-        {
-            for (int j2 = j1; j2 < p; j2++)
-            {
-                double dist = 0;
-                for (int i = 0; i < n; i++)
-                {
-                    double diff = X[i, j1] - X[i, j2];
-                    dist += diff * diff;
-                }
-                double sim = Math.Exp(-dist / (2 * _sigma * _sigma * n));
-                W[j1, j2] = sim;
-                W[j2, j1] = sim;
-            }
-        }
+        // Normalized Laplacian: L = I - D^(-1/2) W D^(-1/2), the root offset by 1e-10
+        var degree = Engine.ReduceSum(w, new[] { 1 }, false);
+        var scale = Engine.TensorAddScalar(Engine.TensorSqrt(Engine.TensorOuter(degree, degree)), NumOps.FromDouble(1e-10));
+        var laplacian = Engine.TensorSubtract(Engine.TensorEye<T>(p), Engine.TensorDivide(w, scale));
 
-        // Compute degree matrix and Laplacian
-        var D = new double[p];
-        for (int j = 0; j < p; j++)
-            for (int kk = 0; kk < p; kk++)
-                D[j] += W[j, kk];
-
-        // Normalized Laplacian: L = I - D^(-1/2) W D^(-1/2)
-        var L = new double[p, p];
-        for (int j1 = 0; j1 < p; j1++)
-        {
-            for (int j2 = 0; j2 < p; j2++)
-            {
-                if (j1 == j2)
-                    L[j1, j2] = 1 - W[j1, j2] / (Math.Sqrt(D[j1] * D[j2]) + 1e-10);
-                else
-                    L[j1, j2] = -W[j1, j2] / (Math.Sqrt(D[j1] * D[j2]) + 1e-10);
-            }
-        }
-
-        // Get bottom k eigenvectors
+        // Bottom k eigenvectors (eigenvalues ascending)
         int k = Math.Min(_nClusters, p);
-        var eigenvectors = PowerIterationBottomK(L, p, k, 100);
+        var (_, vectors) = LinalgDispatch<T>.Eigh(laplacian);
+        var embedding = Engine.TensorSlice(vectors, new[] { 0, 0 }, new[] { p, k });
 
         // K-means on eigenvector embedding
-        _clusterAssignments = KMeansClustering(eigenvectors, p, k);
+        _clusterAssignments = KMeansClustering(embedding, p, k);
 
-        // Compute feature scores (variance)
-        _featureScores = new double[p];
-        for (int j = 0; j < p; j++)
-        {
-            double mean = 0;
-            for (int i = 0; i < n; i++) mean += X[i, j];
-            mean /= n;
-            for (int i = 0; i < n; i++) _featureScores[j] += (X[i, j] - mean) * (X[i, j] - mean);
-            _featureScores[j] /= (n - 1);
-        }
+        // Feature scores: sample variance
+        var variance = Engine.TensorDivideScalar(FilterStatisticTensorOps.ColumnSumOfSquaredDeviations(x), NumOps.FromDouble(n - 1));
+        _featureScores = variance.ToVector();
 
-        // Select best feature from each cluster
+        // Select the highest-variance feature from each cluster (ties to the lower index)
+        T excluded = NumOps.FromDouble(double.NegativeInfinity);
+        var members = FilterStatisticTensorOps.ClassOneHot<T>(_clusterAssignments, k);
         var selectedList = new List<int>();
         for (int c = 0; c < k; c++)
         {
-            var clusterFeatures = Enumerable.Range(0, p).Where(j => _clusterAssignments[j] == c).ToList();
-            if (clusterFeatures.Count > 0)
-                selectedList.Add(clusterFeatures.OrderByDescending(j => _featureScores[j]).First());
+            var inCluster = FeatureSelectionTensorOps.Column(members, c);
+            if (FilterStatisticTensorOps.MaskPositions(inCluster).Length > 0)
+                selectedList.Add(FilterStatisticTensorOps.FirstArgMax(FeatureSelectionTensorOps.KeepOrFill(variance, inCluster, excluded)));
         }
 
-        _selectedIndices = selectedList.OrderBy(x => x).ToArray();
+        _selectedIndices = selectedList.OrderBy(j => j).ToArray();
         IsFitted = true;
     }
 
-    private double[,] PowerIterationBottomK(double[,] L, int p, int k, int maxIter)
+    // Lloyd k-means on the rows of a [p, k] embedding: k distinct random rows start as centroids, then 50 rounds of
+    // nearest-centroid assignment (ties to the lower cluster) and centroid means (an empty cluster keeps its centroid)
+    private int[] KMeansClustering(Tensor<T> data, int p, int k)
     {
-        var result = new double[p, k];
         var rand = RandomHelper.CreateSecureRandom();
-
-        // Compute max eigenvalue for shift
-        double maxEig = 0;
-        for (int j = 0; j < p; j++) maxEig = Math.Max(maxEig, L[j, j]);
-        maxEig *= 2;
-
-        // Shift: L' = maxEig * I - L (converts smallest to largest)
-        var Lp = new double[p, p];
-        for (int j1 = 0; j1 < p; j1++)
-            for (int j2 = 0; j2 < p; j2++)
-                Lp[j1, j2] = (j1 == j2 ? maxEig : 0) - L[j1, j2];
-
-        for (int ki = 0; ki < k; ki++)
-        {
-            var v = new double[p];
-            for (int j = 0; j < p; j++) v[j] = rand.NextDouble();
-
-            for (int iter = 0; iter < maxIter; iter++)
-            {
-                // Orthogonalize against previous
-                for (int prev = 0; prev < ki; prev++)
-                {
-                    double dot = 0;
-                    for (int j = 0; j < p; j++) dot += v[j] * result[j, prev];
-                    for (int j = 0; j < p; j++) v[j] -= dot * result[j, prev];
-                }
-
-                var newV = new double[p];
-                for (int j1 = 0; j1 < p; j1++)
-                    for (int j2 = 0; j2 < p; j2++)
-                        newV[j1] += Lp[j1, j2] * v[j2];
-
-                double norm = Math.Sqrt(newV.Sum(x => x * x)) + 1e-10;
-                for (int j = 0; j < p; j++) v[j] = newV[j] / norm;
-            }
-
-            for (int j = 0; j < p; j++) result[j, ki] = v[j];
-        }
-
-        return result;
-    }
-
-    private int[] KMeansClustering(double[,] data, int p, int k)
-    {
+        var initIdx = Enumerable.Range(0, p).OrderBy(_ => rand.Next()).Take(k).ToArray();
+        var centroids = FeatureSelectionTensorOps.Rows(data, initIdx);
         var assignments = new int[p];
-        var centroids = new double[k, k];
-        var rand = RandomHelper.CreateSecureRandom();
-
-        // Initialize centroids
-        var initIdx = Enumerable.Range(0, p).OrderBy(_ => rand.Next()).Take(k).ToList();
-        for (int c = 0; c < k; c++)
-            for (int d = 0; d < k; d++)
-                centroids[c, d] = data[initIdx[c], d];
-
+        T zero = NumOps.Zero;
         for (int iter = 0; iter < 50; iter++)
         {
             // Assign
-            for (int j = 0; j < p; j++)
-            {
-                double minDist = double.MaxValue;
-                for (int c = 0; c < k; c++)
-                {
-                    double dist = 0;
-                    for (int d = 0; d < k; d++)
-                        dist += (data[j, d] - centroids[c, d]) * (data[j, d] - centroids[c, d]);
-                    if (dist < minDist) { minDist = dist; assignments[j] = c; }
-                }
-            }
+            var distances = FeatureSelectionTensorOps.SquaredDistancesBetween(data, centroids);
+            assignments = FeatureSelectionTensorOps.FirstArgMinRows(distances).Index;
 
             // Update
-            var counts = new int[k];
-            var newCentroids = new double[k, k];
-            for (int j = 0; j < p; j++)
-            {
-                int c = assignments[j];
-                counts[c]++;
-                for (int d = 0; d < k; d++)
-                    newCentroids[c, d] += data[j, d];
-            }
-            for (int c = 0; c < k; c++)
-                if (counts[c] > 0)
-                    for (int d = 0; d < k; d++)
-                        centroids[c, d] = newCentroids[c, d] / counts[c];
+            var members = FilterStatisticTensorOps.ClassOneHot<T>(assignments, k);
+            var counts = Engine.ReduceSum(members, new[] { 0 }, false);
+            var sums = Engine.TensorMatMul(Engine.TensorTranspose(members), data);
+            var means = FilterStatisticTensorOps.GuardedDivide(sums, FilterStatisticTensorOps.ColumnBroadcast(counts, k), 0.5, zero);
+            centroids = Engine.TensorWhere(FilterStatisticTensorOps.ColumnBroadcast(Engine.TensorGreaterThan(counts, zero), k), means, centroids);
         }
 
         return assignments;

@@ -266,7 +266,14 @@ internal static class FeatureSelectionTensorOps
             engine.TensorDivide(hits, FilterStatisticTensorOps.ColumnBroadcast(hitCount, n)));
     }
 
-    /// <summary>Squared Euclidean distances between every pair of rows of an [n, p] tensor ([n, n]).</summary>
+    /// <summary>Squared Euclidean distances from every row of an [m, d] tensor to every row of a [k, d] one ([m, k]).</summary>
+    public static Tensor<T> SquaredDistancesBetween<T>(Tensor<T> a, Tensor<T> b)
+    {
+        var engine = AiDotNetEngine.Current;
+        return engine.TensorSquare(engine.TensorCDist(a, b, 2.0));
+    }
+
+    /// <summary>Squared Euclidean distances between the rows of an [n, p] tensor ([n, n]).</summary>
     public static Tensor<T> SquaredDistances<T>(Tensor<T> x)
     {
         var engine = AiDotNetEngine.Current;
