@@ -97,11 +97,11 @@ internal static class FeatureSelectionTensorOps
 
         var min = PreprocessingTensorOps.ColumnMin(x);
         var range = engine.TensorSubtract(PreprocessingTensorOps.ColumnMax(x), min);
-        var scale = FilterStatisticTensorOps.GuardedDivide(
-            FilterStatisticTensorOps.FilledLike(range, ops.One), range, minimumRange, ops.Zero);
-        return engine.TensorMultiply(
+        // divided by the range (not multiplied by its reciprocal, which rounds differently and moves values that sit
+        // exactly on an equal-width bin edge into the bin below)
+        return FilterStatisticTensorOps.GuardedDivide(
             engine.TensorSubtract(x, FilterStatisticTensorOps.RowBroadcast(min, n)),
-            FilterStatisticTensorOps.RowBroadcast(scale, n));
+            FilterStatisticTensorOps.RowBroadcast(range, n), minimumRange, ops.Zero);
     }
 
     /// <summary>The given rows of an [n, p] tensor ([rows.Length, p]).</summary>
@@ -142,9 +142,10 @@ internal static class FeatureSelectionTensorOps
         var rowMin = engine.TensorNegate(engine.ReduceMax(engine.TensorNegate(values), new[] { 1 }, true));
         var isMin = engine.TensorEquals(values, engine.TensorBroadcastTo(rowMin, new[] { m, n }));
 
-        // n - column is distinct per column, so the largest masked key is the first minimum, whatever the argmax tie rule
-        var key = engine.TensorMultiply(isMin, FilterStatisticTensorOps.RowBroadcast(
-            engine.TensorArange<T>(n, 0, -1), m));
+        // n - column is distinct per column, so the largest masked key is the first minimum, whatever the argmax tie
+        // rule (kept in int: in Half the keys past 2048 are not distinct and the argmax would pick a later column)
+        var key = engine.TensorMultiply(isMin.Cast<int>(), FilterStatisticTensorOps.RowBroadcast(
+            engine.TensorArange<int>(n, 0, -1), m));
         var index = engine.TensorArgMax(key, 1).ToArray();
         var found = engine.TensorLessThan(engine.Reshape(rowMin, new[] { m }), ops.FromDouble(double.PositiveInfinity));
         return (index, found);
@@ -199,7 +200,7 @@ internal static class FeatureSelectionTensorOps
         var oneHot = FilterStatisticTensorOps.ClassOneHot<T>(classIndex, classCount);
         var sampleOneHot = Rows(oneHot, samples);
         var notSelf = PreprocessingTensorOps.OneMinus(SelfMask<T>(samples, n));
-        var priors = engine.TensorDivideScalar(engine.ReduceSum(oneHot, new[] { 0 }, false), ops.FromDouble(n));
+        var priors = engine.TensorDivideScalar(Counts(oneHot, 0), ops.FromDouble(n));
         var otherMass = PreprocessingTensorOps.OneMinus(
             engine.Reshape(engine.TensorMatMul(sampleOneHot, engine.Reshape(priors, new[] { classCount, 1 })), new[] { m }));
 
@@ -260,11 +261,12 @@ internal static class FeatureSelectionTensorOps
         var ops = MathHelper.GetNumericOperations<T>();
         int n = hits.Shape[0];
         T scale = ops.FromDouble(n);
-        var hitCount = engine.TensorMultiplyScalar(engine.TensorMax(engine.ReduceSum(hits, new[] { 1 }, false), ops.One), scale);
-        var missCount = engine.TensorMultiplyScalar(engine.TensorMax(engine.ReduceSum(misses, new[] { 1 }, false), ops.One), scale);
-        return engine.TensorSubtract(
+        // divided by the count and then by n: the product n * count overflows Half past 65504
+        var hitCount = engine.TensorMax(Counts(hits, 1), ops.One);
+        var missCount = engine.TensorMax(Counts(misses, 1), ops.One);
+        return engine.TensorDivideScalar(engine.TensorSubtract(
             engine.TensorDivide(misses, FilterStatisticTensorOps.ColumnBroadcast(missCount, n)),
-            engine.TensorDivide(hits, FilterStatisticTensorOps.ColumnBroadcast(hitCount, n)));
+            engine.TensorDivide(hits, FilterStatisticTensorOps.ColumnBroadcast(hitCount, n))), scale);
     }
 
     /// <summary>Squared Euclidean distances from every row of an [m, d] tensor to every row of a [k, d] one ([m, k]).</summary>
@@ -461,8 +463,7 @@ internal static class FeatureSelectionTensorOps
 
         // one-hot of (feature, code) in a single axis: [n, p * aLevels]
         var aOneHot = engine.Reshape(OneHot<T>(a, aLevels), new[] { n, p * aLevels });
-        var counts = engine.TensorMatMul(engine.TensorTranspose(aOneHot), bOneHot);
-        return engine.Reshape(counts, new[] { p, aLevels, bLevels });
+        return engine.Reshape(CountProduct(aOneHot, bOneHot), new[] { p, aLevels, bLevels });
     }
 
     /// <summary>
@@ -479,8 +480,7 @@ internal static class FeatureSelectionTensorOps
 
         // one code per (row, feature): a * bLevels + b, counted per feature with a feature-major one-hot
         var combined = engine.TensorAdd(engine.TensorMultiplyScalar(a, bLevels), b);
-        var counts = engine.ReduceSum(OneHot<T>(combined, aLevels * bLevels), new[] { 0 }, false);
-        return engine.Reshape(counts, new[] { p, aLevels, bLevels });
+        return engine.Reshape(Counts(OneHot<T>(combined, aLevels * bLevels), 0), new[] { p, aLevels, bLevels });
     }
 
     /// <summary>Counts of each code per feature: [n, p] int codes in <c>[0, levels)</c> to [p, levels] counts.</summary>
@@ -491,7 +491,40 @@ internal static class FeatureSelectionTensorOps
         int p = codes.Shape[1];
         if (n == 0 || p == 0)
             return new Tensor<T>(new[] { p, levels });
-        return engine.ReduceSum(OneHot<T>(codes, levels), new[] { 0 }, false);
+        return Counts(OneHot<T>(codes, levels), 0);
+    }
+
+    /// <summary>
+    /// The number of nonzero entries of a 0/1 tensor along <paramref name="axis"/>, counted in int and returned in T
+    /// (a 0/1 sum in T stops counting at 2048 for Half).
+    /// </summary>
+    public static Tensor<T> Counts<T>(Tensor<T> mask, int axis) =>
+        AiDotNetEngine.Current.ReduceSum(mask.Cast<int>(), new[] { axis }, false).Cast<T>();
+
+    /// <summary>
+    /// <c>a^T b</c> of two 0/1 tensors [n, r] and [n, c] ([r, c]): how many rows have both a[., i] and b[., j] set,
+    /// counted in int and returned in T (a matmul in T stops counting at 2048 for Half).
+    /// </summary>
+    public static Tensor<T> CountProduct<T>(Tensor<T> a, Tensor<T> b)
+    {
+        var engine = AiDotNetEngine.Current;
+        int n = a.Shape[0];
+        int r = a.Shape[1];
+        int c = b.Shape[1];
+        if (c == 0)
+            return new Tensor<T>(new[] { r, 0 });
+
+        var aCounts = a.Cast<int>();
+        var bCounts = b.Cast<int>();
+        var columns = new Tensor<int>[c];
+        for (int j = 0; j < c; j++)
+        {
+            var bColumn = engine.TensorBroadcastTo(engine.TensorSlice(bCounts, new[] { 0, j }, new[] { n, 1 }), new[] { n, r });
+            columns[j] = engine.Reshape(
+                engine.ReduceSum(engine.TensorMultiply(aCounts, bColumn), new[] { 0 }, false), new[] { r, 1 });
+        }
+
+        return engine.TensorConcatenate(columns, 1).Cast<T>();
     }
 
     /// <summary>One-hot of an [n, p] int code tensor: [n, p, levels] in T.</summary>
@@ -605,7 +638,7 @@ internal static class FeatureSelectionTensorOps
 
         var ranks = ColumnAverageRanks(x);
         var rankSums = engine.TensorMatMul(engine.TensorTranspose(classOneHot), ranks);
-        var counts = engine.ReduceSum(classOneHot, new[] { 0 }, false);
+        var counts = Counts(classOneHot, 0);
         var weighted = engine.ReduceSum(
             engine.TensorDivide(engine.TensorSquare(rankSums), FilterStatisticTensorOps.ColumnBroadcast(counts, p)),
             new[] { 0 }, false);
@@ -686,8 +719,12 @@ internal static class FeatureSelectionTensorOps
 
         var difference = engine.TensorSubtract(x, FilterStatisticTensorOps.ColumnBroadcast(y, p));
         var nonZero = engine.TensorGreaterThan(engine.TensorAbs(difference), ops.FromDouble(zeroTolerance));
-        var magnitude = engine.TensorMultiply(engine.TensorAbs(difference), nonZero);
-        var zeros = engine.ReduceSum(PreprocessingTensorOps.OneMinus(nonZero), new[] { 0 }, false);
+        // the dropped differences become distinct negative placeholders -(i + 1): they still take the lowest ranks
+        // 1..zeros, but form no tie group, so the tie term needs no (zeros^3 - zeros) taken back out (that
+        // subtraction of two huge, rounded numbers loses the real tie term in float once ~250 differences are zero)
+        var placeholder = FilterStatisticTensorOps.ColumnBroadcast(engine.TensorArange<T>(-1, -n - 1, -1), p);
+        var magnitude = engine.TensorWhere(nonZero, engine.TensorAbs(difference), placeholder);
+        var zeros = Counts(PreprocessingTensorOps.OneMinus(nonZero), 0);
         var m = engine.TensorAddScalar(engine.TensorNegate(zeros), ops.FromDouble(n));
 
         // the dropped zeros take the lowest ranks 1..zeros, so a non-zero difference ranks (overall rank - zeros)
@@ -698,9 +735,8 @@ internal static class FeatureSelectionTensorOps
         var wMinus = engine.ReduceSum(engine.TensorMultiply(ranks, negative), new[] { 0 }, false);
         var w = engine.TensorMin(wPlus, wMinus);
 
-        // tie term over the non-zero magnitudes: the zeros form one group of size `zeros` in the column tie sum
-        var zeroGroup = engine.TensorSubtract(engine.TensorMultiply(engine.TensorSquare(zeros), zeros), zeros);
-        var ties = engine.TensorSubtract(ColumnTieCubeSums(magnitude), zeroGroup);
+        // tie term over the non-zero magnitudes (the placeholders are all distinct and add nothing)
+        var ties = ColumnTieCubeSums(magnitude);
         var mean = engine.TensorMultiplyScalar(engine.TensorMultiply(m, engine.TensorAddScalar(m, ops.One)), ops.FromDouble(0.25));
         var variance = engine.TensorSubtract(
             engine.TensorDivideScalar(
@@ -750,7 +786,8 @@ internal static class FeatureSelectionTensorOps
         var rows = engine.TensorBroadcastTo(engine.ReduceSum(observed, new[] { 2 }, true), shape);
         var columns = engine.TensorBroadcastTo(engine.ReduceSum(observed, new[] { 1 }, true), shape);
         var total = engine.TensorBroadcastTo(engine.ReduceSum(observed, new[] { 1, 2 }, true), shape);
-        var expected = FilterStatisticTensorOps.GuardedDivide(engine.TensorMultiply(rows, columns), total, 0, ops.Zero);
+        // row * (column / n): the product row * column overflows Half past 65504
+        var expected = engine.TensorMultiply(rows, FilterStatisticTensorOps.GuardedDivide(columns, total, 0, ops.Zero));
         var cells = FilterStatisticTensorOps.GuardedDivide(
             engine.TensorSquare(engine.TensorSubtract(observed, expected)), expected, 0, ops.Zero);
         return engine.ReduceSum(cells, new[] { 1, 2 }, false);
@@ -872,7 +909,7 @@ internal static class FeatureSelectionTensorOps
             return best;
 
         // parent Gini impurity 1 - sum q_c^2
-        var classCounts = engine.ReduceSum(classOneHot, new[] { 0 }, false);
+        var classCounts = Counts(classOneHot, 0);
         T parentGini = ops.Subtract(ops.One, engine.TensorSumOfSquares(engine.TensorDivideScalar(classCounts, total)));
         var allCounts = FilterStatisticTensorOps.RowBroadcast(classCounts, p);
 
@@ -885,7 +922,7 @@ internal static class FeatureSelectionTensorOps
             var threshold = engine.TensorAdd(min, engine.TensorDivideScalar(engine.TensorMultiplyScalar(range, step), binCount));
             var left = PreprocessingTensorOps.OneMinus(
                 engine.TensorGreaterThan(x, FilterStatisticTensorOps.RowBroadcast(threshold, n)));
-            var leftCounts = engine.TensorMatMul(engine.TensorTranspose(left), classOneHot);
+            var leftCounts = CountProduct(left, classOneHot);
             var rightCounts = engine.TensorSubtract(allCounts, leftCounts);
             var leftTotal = engine.ReduceSum(leftCounts, new[] { 1 }, false);
             var rightTotal = engine.ReduceSum(rightCounts, new[] { 1 }, false);
@@ -939,7 +976,7 @@ internal static class FeatureSelectionTensorOps
         int m = masks.Shape[0];
         int p = masks.Shape[1];
         var sums = engine.Reshape(engine.TensorMatMul(masks, engine.Reshape(values, new[] { p, 1 })), new[] { m });
-        var counts = engine.ReduceSum(masks, new[] { 1 }, false);
+        var counts = Counts(masks, 1);
         return FilterStatisticTensorOps.GuardedDivide(sums, counts, 0.5, ops.Zero);
     }
 
