@@ -433,6 +433,51 @@ public partial class WGAN<T> : ImageGeneratorModelLayoutBase<T>
         return objectives;
     }
     /// <summary>
+    /// Mean, min, max and sample standard deviation of the first critic output of each sample, computed in T.
+    /// </summary>
+    /// <remarks>
+    /// Matches the LINQ statistics on the scores: no samples throws, the minimum is NaN when any score is NaN,
+    /// and the maximum ignores NaN unless every score is NaN.
+    /// </remarks>
+    private void AddCriticScoreMetrics(Dictionary<string, double> metrics, Tensor<T> criticScores, int sampleSize)
+    {
+        if (sampleSize <= 0)
+        {
+            throw new InvalidOperationException("Sequence contains no elements");
+        }
+
+        var scores = Engine.TensorNarrow(Engine.TensorNarrow(criticScores, 0, 0, sampleSize), 1, 0, 1).Reshape(sampleSize);
+        var isNaN = Engine.TensorIsNan(scores);
+        int nanCount = Engine.TensorCountNonzero(
+            Engine.TensorWhere(isNaN, Engine.TensorOnesLike(scores), Engine.TensorZerosLike(scores)));
+
+        T mean = NumOps.Divide(Engine.TensorSum(scores), NumOps.FromDouble(sampleSize));
+        metrics["AverageCriticScore"] = NumOps.ToDouble(mean);
+
+        if (nanCount > 0)
+        {
+            metrics["MinCriticScore"] = double.NaN;
+        }
+        else
+        {
+            metrics["MinCriticScore"] = NumOps.ToDouble(Engine.TensorMinValue(scores));
+        }
+
+        if (nanCount == sampleSize)
+        {
+            metrics["MaxCriticScore"] = double.NaN;
+        }
+        else
+        {
+            T smallest = Engine.TensorMinValue(Engine.TensorWhere(isNaN, Engine.TensorFullLike(scores, NumOps.MaxValue), scores));
+            var numbers = Engine.TensorWhere(isNaN, Engine.TensorFullLike(scores, smallest), scores);
+            metrics["MaxCriticScore"] = NumOps.ToDouble(Engine.TensorMaxValue(numbers));
+        }
+
+        metrics["CriticScoreStdDev"] = NumOps.ToDouble(StatisticsHelper<T>.CalculateStandardDeviation(scores.Contiguous().ToArray()));
+    }
+
+    /// <summary>
     /// Clips the critic's weights to enforce the Lipschitz constraint.
     /// </summary>
     /// <remarks>
@@ -527,14 +572,7 @@ public partial class WGAN<T> : ImageGeneratorModelLayoutBase<T>
         Critic.SetTrainingMode(false);
         var criticScores = Critic.Predict(generatedImages);
 
-        // First critic output of each sample, as the doubles the metrics report
-        var firstScores = Engine.TensorNarrow(Engine.TensorNarrow(criticScores, 0, 0, sampleSize), 1, 0, 1).Contiguous();
-        var scoresList = new List<double>(firstScores.Cast<double>().ToArray());
-
-        metrics["AverageCriticScore"] = scoresList.Average();
-        metrics["MinCriticScore"] = scoresList.Min();
-        metrics["MaxCriticScore"] = scoresList.Max();
-        metrics["CriticScoreStdDev"] = StatisticsHelper<double>.CalculateStandardDeviation(scoresList);
+        AddCriticScoreMetrics(metrics, criticScores, sampleSize);
 
         if (_generatorLosses.Count > 0)
         {
