@@ -182,6 +182,40 @@ internal static class AnomalyTensorOps
         return engine.ReduceMax(ratio, new[] { 1 }, false).ToVector();
     }
 
+    /// <summary>A 1-D pattern repeated end to end and cut to length n (element i is pattern[i % period]).</summary>
+    internal static Tensor<T> TileToLength<T>(Tensor<T> pattern, int n)
+    {
+        var engine = Engine;
+        int period = pattern.Length;
+        int repeats = (n + period - 1) / period;
+        var tiled = repeats > 1 ? engine.TensorTile(pattern, new[] { repeats }) : pattern;
+        return tiled.Length == n ? tiled : engine.TensorSlice(tiled, new[] { 0 }, new[] { n });
+    }
+
+    /// <summary>
+    /// Per-phase means of a 1-D series: element s is the mean of series[i] over the i with i % period == s
+    /// (0 for a phase with no samples).
+    /// </summary>
+    internal static Tensor<T> PhaseMeans<T>(Tensor<T> series, int period)
+    {
+        var engine = Engine;
+        int n = series.Length;
+        int rows = (n + period - 1) / period;
+        int padding = rows * period - n;
+        var values = series;
+        var mask = Tensor<T>.CreateOnes(new[] { n });
+        if (padding > 0)
+        {
+            values = engine.TensorConcatenate(new[] { series, Tensor<T>.CreateZeros(new[] { padding }) }, 0);
+            mask = engine.TensorConcatenate(new[] { mask, Tensor<T>.CreateZeros(new[] { padding }) }, 0);
+        }
+
+        var sums = engine.ReduceSum(engine.Reshape(values, new[] { rows, period }), new[] { 0 }, false);
+        var counts = engine.ReduceSum(engine.Reshape(mask, new[] { rows, period }), new[] { 0 }, false);
+        var numOps = MathHelper.GetNumericOperations<T>();
+        return engine.TensorDivide(sums, engine.TensorMax(counts, numOps.One));
+    }
+
     /// <summary>The positions of the non-zero entries of a 1-D tensor, ascending.</summary>
     internal static int[] NonzeroIndices<T>(Tensor<T> values)
     {
