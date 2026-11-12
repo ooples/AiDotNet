@@ -102,66 +102,33 @@ public class GraphAttentionLayerCore<T>
         // Split a into its source and target halves once: e_uv = aSrc . Wx_u + aTgt . Wx_v, which is
         // the concatenated inner product written out, and avoids materializing the concatenation for
         // every pair.
-        var sourceScore = new double[nodes];
-        var targetScore = new double[nodes];
-        for (int u = 0; u < nodes; u++)
-        {
-            double s = 0.0, t = 0.0;
-            for (int f = 0; f < features; f++)
-            {
-                double x = NumOps.ToDouble(projected[(u * features) + f]);
-                s += NumOps.ToDouble(attentionVector[f]) * x;
-                t += NumOps.ToDouble(attentionVector[features + f]) * x;
-            }
-            sourceScore[u] = s;
-            targetScore[u] = t;
-        }
+        var engine = AiDotNetEngine.Current;
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        var a = Tensor<T>.FromVector(attentionVector);
+        var sourceHalf = engine.Reshape(engine.TensorNarrow(a, 0, 0, features), new[] { features, 1 });
+        var targetHalf = engine.Reshape(engine.TensorNarrow(a, 0, features, features), new[] { 1, features });
+        var sourceScore = engine.TensorMatMul(projected, sourceHalf);                              // [nodes, 1]
+        var targetScore = engine.TensorTranspose(
+            engine.TensorMatMul(projected, engine.TensorTranspose(targetHalf)));                   // [1, nodes]
+        var scores = engine.TensorLeakyReLU(engine.TensorAdd(sourceScore, targetScore), NumOps.FromDouble(_slope));
 
-        var result = new Tensor<T>(new[] { nodes, nodes });
+        // Max-subtracted softmax over each row's neighbourhood only (adjacency != 0).
+        var isNeighbour = engine.TensorNotEquals(adjacency, NumOps.Zero);
+        // Non-neighbours are masked to the smallest score rather than -infinity (which decimal cannot
+        // represent): that is still at or below every neighbour, so each row's maximum is unchanged, and
+        // isolated rows are zeroed below whatever their maximum is.
+        var floor = engine.TensorFullLike(scores, scores.Length > 0 ? engine.TensorMinValue(scores) : NumOps.Zero);
+        var rowMax = engine.ReduceMax(engine.TensorWhere(isNeighbour, scores, floor), new[] { 1 }, true);
+        var zeros = engine.TensorZerosLike(scores);
+        var exps = engine.TensorWhere(isNeighbour, engine.TensorExp(engine.TensorSubtract(scores, rowMax)), zeros);
+        var rowSum = engine.ReduceSum(exps, new[] { 1 }, true);
 
-        // Each pair's score and adjacency lookup are computed ONCE per row and reused by both passes.
-        // The two loops previously read adjacency[(u * nodes) + v] through NumOps.ToDouble and
-        // re-evaluated LeakyReLU(sourceScore[u] + targetScore[v]) for every pair twice over, which
-        // doubles the conversion cost of the hot inner loop on a dense adjacency.
-        var scores = new double[nodes];
-        var isNeighbour = new bool[nodes];
-
-        for (int u = 0; u < nodes; u++)
-        {
-            // Max-subtracted softmax over the neighbourhood only.
-            double max = double.NegativeInfinity;
-            for (int v = 0; v < nodes; v++)
-            {
-                bool neighbour = NumOps.ToDouble(adjacency[(u * nodes) + v]) != 0.0;
-                isNeighbour[v] = neighbour;
-                if (!neighbour) continue;
-
-                scores[v] = LeakyReLU(sourceScore[u] + targetScore[v]);
-                max = Math.Max(max, scores[v]);
-            }
-
-            // An isolated node has no neighbours to normalize over. Leaving its row at zero is the
-            // honest result: it aggregates nothing, rather than inventing a uniform distribution over
-            // assets it has no established relationship with.
-            if (double.IsNegativeInfinity(max)) continue;
-
-            double sum = 0.0;
-            var exps = new double[nodes];
-            for (int v = 0; v < nodes; v++)
-            {
-                if (!isNeighbour[v]) continue;
-                exps[v] = Math.Exp(scores[v] - max);
-                sum += exps[v];
-            }
-
-            for (int v = 0; v < nodes; v++)
-            {
-                if (!isNeighbour[v]) continue;
-                result[(u * nodes) + v] = NumOps.FromDouble(exps[v] / sum);
-            }
-        }
-
-        return result;
+        // An isolated node has no neighbours to normalize over. Leaving its row at zero is the
+        // honest result: it aggregates nothing, rather than inventing a uniform distribution over
+        // assets it has no established relationship with.
+        var safeSum = engine.TensorWhere(
+            engine.TensorEquals(rowSum, NumOps.Zero), engine.TensorFullLike(rowSum, NumOps.One), rowSum);
+        return engine.TensorWhere(isNeighbour, engine.TensorDivide(exps, safeSum), zeros);
     }
 
     /// <summary>
@@ -180,25 +147,10 @@ public class GraphAttentionLayerCore<T>
         if (coefficients.Shape.Length != 2 || coefficients.Shape[0] != nodes || coefficients.Shape[1] != nodes)
             throw new ArgumentException($"coefficients must be [{nodes}, {nodes}].", nameof(coefficients));
 
-        var result = new Tensor<T>(new[] { nodes, features });
-        for (int u = 0; u < nodes; u++)
-        {
-            for (int f = 0; f < features; f++)
-            {
-                double sum = 0.0;
-                for (int v = 0; v < nodes; v++)
-                {
-                    double alpha = NumOps.ToDouble(coefficients[(u * nodes) + v]);
-                    if (alpha == 0.0) continue;
-                    sum += alpha * NumOps.ToDouble(projected[(v * features) + f]);
-                }
-
-                // F(.) = ReLU, per the paper.
-                result[(u * features) + f] = NumOps.FromDouble(Math.Max(0.0, sum));
-            }
-        }
-
-        return result;
+        // F(.) = ReLU, per the paper.
+        var engine = AiDotNetEngine.Current;
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        return engine.TensorReLU(engine.TensorMatMul(coefficients, projected));
     }
 
     /// <summary>
@@ -237,13 +189,10 @@ public class GraphAttentionLayerCore<T>
                     $"expected [{nodes}, {features}].", nameof(headOutputs));
         }
 
-        int heads = headOutputs.Count;
-        var result = new Tensor<T>(new[] { nodes, heads * features });
-        for (int u = 0; u < nodes; u++)
-            for (int h = 0; h < heads; h++)
-                for (int f = 0; f < features; f++)
-                    result[(u * heads * features) + (h * features) + f] = headOutputs[h][(u * features) + f];
-
-        return result;
+        var engine = AiDotNetEngine.Current;
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        var heads = new Tensor<T>[headOutputs.Count];
+        for (int h = 0; h < heads.Length; h++) heads[h] = headOutputs[h];
+        return engine.TensorConcatenate(heads, 1);
     }
 }

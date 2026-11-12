@@ -1,6 +1,7 @@
 using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Engines.Autodiff;
 using AiDotNet.Tensors.Engines.Gpu;
 
 namespace AiDotNet.NeuralNetworks.Layers;
@@ -175,82 +176,54 @@ public partial class PositionalEncodingLayer<T> : LayerBase<T>, IShapeContract
     /// </remarks>
     private void InitializeEncodings()
     {
-        // Vectorized positional encoding computation using IEngine
         // Formula: PE(pos, 2i) = sin(pos / 10000^(2i/d_model))
         //          PE(pos, 2i+1) = cos(pos / 10000^(2i/d_model))
+        encodings = BuildSinusoidRows(0, maxSequenceLength, embeddingSize);
+    }
 
-        // Pre-compute division terms: 1 / 10000^(2i/d_model) for each dimension pair
-        int halfEmbedding = embeddingSize / 2;
-        var divTerms = new Tensor<T>(new[] { halfEmbedding });
-        for (int i = 0; i < halfEmbedding; i++)
+    /// <summary>
+    /// Builds rows <paramref name="startPosition"/> .. <paramref name="startPosition"/> + <paramref name="count"/> - 1
+    /// of the sinusoidal table as whole-tensor engine ops.
+    /// </summary>
+    /// <remarks>
+    /// Even columns hold sin(pos / 10000^(2i/d)) and odd columns cos(pos / 10000^(2i/d)); an odd embedding size
+    /// gets a last column sin(pos / 10000^((d-1)/d)). The table is a constant, so it is built off the tape.
+    /// </remarks>
+    private Tensor<T> BuildSinusoidRows(int startPosition, int count, int embedding)
+    {
+        if (count <= 0)
         {
-            double exponent = NumericalStabilityHelper.SafeDiv(2.0 * i, embeddingSize);
-            divTerms[i] = NumOps.FromDouble(1.0 / Math.Pow(10000, exponent));
+            return new Tensor<T>([0, embedding]);
         }
 
-        // Create position tensor [maxSequenceLength]
-        var positions = new Tensor<T>(new[] { maxSequenceLength });
-        var positionSpan = positions.AsWritableSpan();
-        for (int pos = 0; pos < maxSequenceLength; pos++)
+        using var noGrad = new NoGradScope<T>();
+        int halfEmbedding = embedding / 2;
+        var positions = Engine.TensorArange<T>(startPosition, startPosition + count, 1.0);   // [count]
+        var columns = new List<Tensor<T>>(2);
+
+        if (halfEmbedding > 0)
         {
-            positionSpan[pos] = NumOps.FromDouble(pos);
+            // divTerms[i] = 10000^(-2i/d) for i = 0 .. halfEmbedding - 1
+            double lastExponent = -NumericalStabilityHelper.SafeDiv(2.0 * (halfEmbedding - 1), embedding);
+            var divTerms = Engine.TensorLogspace<T>(0.0, lastExponent, halfEmbedding, 10000.0);
+            var angles = Engine.TensorOuter(positions, divTerms);                            // [count, half]
+
+            // Stacking sin and cos on a trailing axis interleaves them: [sin0, cos0, sin1, cos1, ...]
+            var interleaved = Engine.TensorStack(new[] { Engine.TensorSin(angles), Engine.TensorCos(angles) }, 2);
+            columns.Add(Engine.Reshape(interleaved, new[] { count, 2 * halfEmbedding }));
         }
 
-        // All angles: angles[pos, i] = pos * divTerms[i], the outer product [maxSequenceLength] x [halfEmbedding],
-        // written through spans. The indexer bumps the tensor's version on every write, and with the engine's outer
-        // product it made a 1000 x 256 table cost ~65 ms, which a FastSpeech-style stack paid twice per construction.
-        var angles = new Tensor<T>(new[] { maxSequenceLength, halfEmbedding });
-        var angleSpan = angles.AsWritableSpan();
-        var divSpan = divTerms.AsSpan();
-        for (int pos = 0; pos < maxSequenceLength; pos++)
+        // Handle odd embedding size (last dimension uses sin)
+        if (embedding % 2 == 1)
         {
-            T position = positionSpan[pos];
-            int row = pos * halfEmbedding;
-            for (int i = 0; i < halfEmbedding; i++)
-            {
-                angleSpan[row + i] = NumOps.Multiply(position, divSpan[i]);
-            }
-        }
-
-        // Apply vectorized sin and cos using IEngine
-        var sinValues = Engine.TensorSin(angles);
-        var cosValues = Engine.TensorCos(angles);
-
-        // Interleave sin and cos values into encodings tensor
-        // Even indices get sin, odd indices get cos
-        var encodingSpan = encodings.AsWritableSpan();
-        var sinSpan = sinValues.AsSpan();
-        var cosSpan = cosValues.AsSpan();
-        for (int pos = 0; pos < maxSequenceLength; pos++)
-        {
-            int source = pos * halfEmbedding;
-            int target = pos * embeddingSize;
-            for (int i = 0; i < halfEmbedding; i++)
-            {
-                encodingSpan[target + 2 * i] = sinSpan[source + i];         // Even: sin
-                encodingSpan[target + 2 * i + 1] = cosSpan[source + i];     // Odd: cos
-            }
-        }
-
-        // Handle odd embeddingSize (last dimension uses sin if odd) - vectorized
-        if (embeddingSize % 2 == 1)
-        {
-            int lastDimIdx = embeddingSize - 1;
-            double exponent = NumericalStabilityHelper.SafeDiv(2.0 * (lastDimIdx / 2.0), embeddingSize);
+            int lastDimIdx = embedding - 1;
+            double exponent = NumericalStabilityHelper.SafeDiv(2.0 * (lastDimIdx / 2.0), embedding);
             T divTerm = NumOps.FromDouble(1.0 / Math.Pow(10000, exponent));
-
-            // Vectorized: angles = positions * divTerm, then sin(angles)
-            var lastAngles = Engine.TensorMultiplyScalar(positions, divTerm);
-            var lastSinValues = Engine.TensorSin(lastAngles);
-
-            // Copy vectorized results to encodings
-            var lastEncodingSpan = encodings.AsWritableSpan();
-            var lastSinSpan = lastSinValues.AsSpan();
-            for (int pos = 0; pos < maxSequenceLength; pos++)
-            {
-                lastEncodingSpan[pos * embeddingSize + lastDimIdx] = lastSinSpan[pos];
-            }
+            var lastColumn = Engine.TensorSin(Engine.TensorMultiplyScalar(positions, divTerm));
+            columns.Add(Engine.Reshape(lastColumn, new[] { count, 1 }));
         }
+
+        return columns.Count == 1 ? columns[0] : Engine.TensorConcatenate(columns.ToArray(), 1);
     }
 
     /// <summary>
@@ -322,25 +295,7 @@ public partial class PositionalEncodingLayer<T> : LayerBase<T>, IShapeContract
             if (inputEmbedDim != embeddingSize)
             {
                 embeddingSize = inputEmbedDim;
-                encodings = new Tensor<T>([maxSequenceLength, embeddingSize]);
-
-                for (int pos = 0; pos < maxSequenceLength; pos++)
-                {
-                    for (int i = 0; i < embeddingSize / 2; i++)
-                    {
-                        double exponent = NumericalStabilityHelper.SafeDiv(2.0 * i, embeddingSize);
-                        double divTerm = 1.0 / Math.Pow(10000, exponent);
-                        encodings[pos, 2 * i] = NumOps.FromDouble(Math.Sin(pos * divTerm));
-                        encodings[pos, 2 * i + 1] = NumOps.FromDouble(Math.Cos(pos * divTerm));
-                    }
-                    if (embeddingSize % 2 == 1)
-                    {
-                        int lastDimIdx = embeddingSize - 1;
-                        double exponent = NumericalStabilityHelper.SafeDiv(2.0 * (lastDimIdx / 2.0), embeddingSize);
-                        double divTerm = 1.0 / Math.Pow(10000, exponent);
-                        encodings[pos, lastDimIdx] = NumOps.FromDouble(Math.Sin(pos * divTerm));
-                    }
-                }
+                encodings = BuildSinusoidRows(0, maxSequenceLength, embeddingSize);
             }
 
             // Dynamically extend encodings if needed (support any sequence length)
@@ -348,35 +303,12 @@ public partial class PositionalEncodingLayer<T> : LayerBase<T>, IShapeContract
             {
                 int oldMaxSeq = maxSequenceLength;
                 maxSequenceLength = seqLength;
-                var newEncodings = new Tensor<T>([maxSequenceLength, embeddingSize]);
-
-                for (int pos = 0; pos < oldMaxSeq; pos++)
+                var extraRows = BuildSinusoidRows(oldMaxSeq, maxSequenceLength - oldMaxSeq, embeddingSize);
+                using (new NoGradScope<T>())
                 {
-                    for (int e = 0; e < embeddingSize; e++)
-                    {
-                        newEncodings[pos, e] = encodings[pos, e];
-                    }
+                    // Keep the existing rows and append the new positions.
+                    encodings = Engine.TensorConcatenate(new[] { encodings, extraRows }, 0);
                 }
-
-                for (int pos = oldMaxSeq; pos < maxSequenceLength; pos++)
-                {
-                    for (int i = 0; i < embeddingSize / 2; i++)
-                    {
-                        double exponent = NumericalStabilityHelper.SafeDiv(2.0 * i, embeddingSize);
-                        double divTerm = 1.0 / Math.Pow(10000, exponent);
-                        newEncodings[pos, 2 * i] = NumOps.FromDouble(Math.Sin(pos * divTerm));
-                        newEncodings[pos, 2 * i + 1] = NumOps.FromDouble(Math.Cos(pos * divTerm));
-                    }
-                    if (embeddingSize % 2 == 1)
-                    {
-                        int lastDimIdx = embeddingSize - 1;
-                        double exponent = NumericalStabilityHelper.SafeDiv(2.0 * (lastDimIdx / 2.0), embeddingSize);
-                        double divTerm = 1.0 / Math.Pow(10000, exponent);
-                        newEncodings[pos, lastDimIdx] = NumOps.FromDouble(Math.Sin(pos * divTerm));
-                    }
-                }
-
-                encodings = newEncodings;
             }
 
             currentEncodings = encodings;

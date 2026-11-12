@@ -297,9 +297,7 @@ public partial class LinearMixedModel<T> : RegressionBase<T>
         {
             Intercept = fitted[0];
 
-            var slopes = new Vector<T>(fitted.Length - 1);
-            for (int j = 1; j < fitted.Length; j++) slopes[j - 1] = fitted[j];
-            Coefficients = slopes;
+            Coefficients = fitted.GetSubVector(1, fitted.Length - 1);
         }
         else
         {
@@ -327,57 +325,151 @@ public partial class LinearMixedModel<T> : RegressionBase<T>
         }
 
         int n = input.Rows;
-        var predictions = new Vector<T>(n);
         var fixedX = ExtractFixedEffectsMatrix(input);
 
-        for (int i = 0; i < n; i++)
+        // Fixed effects contribution
+        var predictions = FixedPredictions(fixedX, _fixedEffects);
+
+        // Add random effects (BLUPs) if available
+        foreach (var re in _randomEffects)
         {
-            // Fixed effects contribution
-            T pred = NumOps.Zero;
-            for (int j = 0; j < _nFixedParams; j++)
+            if (re.GroupColumnIndex < input.Columns)
             {
-                pred = NumOps.Add(pred, NumOps.Multiply(fixedX[i, j], _fixedEffects[j]));
+                predictions = Engine.Add(predictions, RandomEffectContributions(input, fixedX, re));
             }
-
-            // Add random effects (BLUPs) if available
-            foreach (var re in _randomEffects)
-            {
-                int groupCol = re.GroupColumnIndex;
-                if (groupCol < input.Columns)
-                {
-                    double groupId = NumOps.ToDouble(input[i, groupCol]);
-                    var groupEffect = re.GetGroupEffect(groupId);
-
-                    // Random intercept
-                    if (re.IsRandomIntercept && groupEffect.Length > 0)
-                    {
-                        pred = NumOps.Add(pred, groupEffect[0]);
-                    }
-
-                    // Random slopes
-                    if (re.RandomSlopeColumns != null)
-                    {
-                        int offset = re.IsRandomIntercept ? 1 : 0;
-                        for (int s = 0; s < re.RandomSlopeColumns.Length; s++)
-                        {
-                            if (offset + s < groupEffect.Length)
-                            {
-                                int slopeCol = re.RandomSlopeColumns[s];
-                                if (slopeCol < fixedX.Columns)
-                                {
-                                    pred = NumOps.Add(pred,
-                                        NumOps.Multiply(fixedX[i, slopeCol], groupEffect[offset + s]));
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-
-            predictions[i] = pred;
         }
 
         return predictions;
+    }
+
+    /// <summary>
+    /// fixedX * fixedEffects over the first _nFixedParams columns.
+    /// </summary>
+    private Vector<T> FixedPredictions(Matrix<T> fixedX, Vector<T> fixedEffects)
+    {
+        if (fixedX.Rows == 0 || _nFixedParams == 0)
+        {
+            return new Vector<T>(fixedX.Rows);
+        }
+
+        var design = fixedX.Columns == _nFixedParams ? fixedX : fixedX.GetSubMatrix(0, 0, fixedX.Rows, _nFixedParams);
+        return Engine.MatrixVectorMultiply(design, fixedEffects.GetSubVector(0, _nFixedParams));
+    }
+
+    /// <summary>
+    /// Per-row contribution of one random effect: the group's intercept plus its slopes times the
+    /// matching fixed-design columns (0 for rows whose group has no effect).
+    /// </summary>
+    private Vector<T> RandomEffectContributions(Matrix<T> input, Matrix<T> fixedX, RandomEffect<T> re)
+    {
+        int n = input.Rows;
+        var allRows = new List<int>(n);
+        var contributions = new List<Vector<T>>();
+        foreach (var kvp in GroupObservations(input, re.GroupColumnIndex))
+        {
+            int[] rows = kvp.Value.ToArray();
+            var groupEffect = re.GetGroupEffect(kvp.Key);
+            var contribution = Engine.FillZero<T>(rows.Length);
+
+            // Random intercept
+            if (re.IsRandomIntercept && groupEffect.Length > 0)
+            {
+                contribution = Engine.Add(contribution, Engine.Fill(rows.Length, FirstElement(groupEffect)));
+            }
+
+            // Random slopes
+            if (re.RandomSlopeColumns != null)
+            {
+                int offset = re.IsRandomIntercept ? 1 : 0;
+                var effectIndices = new List<int>();
+                var slopeColumns = new List<Vector<T>>();
+                var groupRows = fixedX.GetRows(rows);
+                for (int s = 0; s < re.RandomSlopeColumns.Length; s++)
+                {
+                    int slopeCol = re.RandomSlopeColumns[s];
+                    if (offset + s < groupEffect.Length && slopeCol < fixedX.Columns)
+                    {
+                        effectIndices.Add(offset + s);
+                        slopeColumns.Add(Engine.GetColumn(groupRows, slopeCol));
+                    }
+                }
+
+                if (effectIndices.Count > 0 && rows.Length > 0)
+                {
+                    var slopeDesign = Engine.TensorConcatenate(
+                        slopeColumns.Select(column => new Tensor<T>(new[] { rows.Length, 1 }, column)).ToArray(), 1).ToMatrix();
+                    contribution = Engine.Add(contribution, Engine.MatrixVectorMultiply(
+                        slopeDesign, RegressionEngineOps.Gather(groupEffect, effectIndices.ToArray())));
+                }
+            }
+
+            allRows.AddRange(rows);
+            contributions.Add(contribution);
+        }
+
+        return ScatterRows(n, allRows, contributions);
+    }
+
+    /// <summary>
+    /// A length-<paramref name="n"/> vector holding each block of values at its rows (0 elsewhere).
+    /// </summary>
+    private Vector<T> ScatterRows(int n, List<int> rows, List<Vector<T>> values)
+    {
+        var result = Engine.FillZero<T>(n);
+        if (rows.Count == 0)
+        {
+            return result;
+        }
+
+        return Engine.TensorScatterAdd(
+            Tensor<T>.FromVector(result),
+            new Tensor<int>(rows.ToArray(), new[] { rows.Count }),
+            Tensor<T>.FromVector(Vector<T>.Concatenate(values)),
+            0).ToVector();
+    }
+
+    /// <summary>
+    /// Per-row random intercept (first effect component) of one random effect.
+    /// </summary>
+    private Vector<T> RowInterceptEffects(Matrix<T> fullX, RandomEffect<T> re)
+    {
+        var allRows = new List<int>(fullX.Rows);
+        var values = new List<Vector<T>>();
+        foreach (var kvp in GroupObservations(fullX, re.GroupColumnIndex))
+        {
+            var blup = re.GetGroupEffect(kvp.Key);
+            if (blup.Length > 0)
+            {
+                allRows.AddRange(kvp.Value);
+                values.Add(Engine.Fill(kvp.Value.Count, FirstElement(blup)));
+            }
+        }
+
+        return ScatterRows(fullX.Rows, allRows, values);
+    }
+
+    /// <summary>
+    /// The first component of an effect vector.
+    /// </summary>
+    private static T FirstElement(Vector<T> values)
+    {
+        return values[0];
+    }
+
+    /// <summary>
+    /// The [0, 0] entry of a covariance matrix.
+    /// </summary>
+    private static T FirstDiagonal(Matrix<T> covariance)
+    {
+        return covariance[0, 0];
+    }
+
+    /// <summary>
+    /// Sets the [0, 0] entry of a covariance matrix.
+    /// </summary>
+    private static void SetFirstDiagonal(Matrix<T> covariance, T value)
+    {
+        covariance[0, 0] = value;
     }
 
     /// <summary>
@@ -421,36 +513,30 @@ public partial class LinearMixedModel<T> : RegressionBase<T>
             groupCols.Add(re.GroupColumnIndex);
         }
 
-        // The leading column of ones is the FIXED intercept. Laird and Ware's formulation
-        // y = X b + Z u + e puts it in X and makes the random effects u mean-zero deviations
-        // around it. Without it the overall level of the response has nowhere to live except the
-        // random effects, which are shrunk toward zero and contribute nothing at all for a group
-        // the model has never seen - so predictions for a new group lose the entire baseline.
-        int interceptColumns = _options.UseIntercept ? 1 : 0;
-        int nCols = x.Columns - groupCols.Count + interceptColumns;
-        var fixedX = new Matrix<T>(x.Rows, nCols);
-
-        int colIdx = 0;
-
+        // The leading column of ones is the FIXED intercept (Laird and Ware: y = X b + Z u + e puts it
+        // in X and makes the random effects mean-zero deviations around it); the non-group feature
+        // columns follow in order.
+        var columns = new List<Vector<T>>();
         if (_options.UseIntercept)
         {
-            for (int i = 0; i < x.Rows; i++) fixedX[i, 0] = NumOps.One;
-            colIdx = 1;
+            columns.Add(Engine.Fill(x.Rows, NumOps.One));
         }
 
         for (int j = 0; j < x.Columns; j++)
         {
             if (!groupCols.Contains(j))
             {
-                for (int i = 0; i < x.Rows; i++)
-                {
-                    fixedX[i, colIdx] = x[i, j];
-                }
-                colIdx++;
+                columns.Add(Engine.GetColumn(x, j));
             }
         }
 
-        return fixedX;
+        if (columns.Count == 0 || x.Rows == 0)
+        {
+            return new Matrix<T>(x.Rows, columns.Count);
+        }
+
+        return Engine.TensorConcatenate(
+            columns.Select(column => new Tensor<T>(new[] { x.Rows, 1 }, column)).ToArray(), 1).ToMatrix();
     }
 
     /// <summary>
@@ -460,24 +546,20 @@ public partial class LinearMixedModel<T> : RegressionBase<T>
     {
         _nFixedParams = fixedX.Columns;
 
-        // Initialize fixed effects using OLS
+        // Initial fixed effects from OLS
         _fixedEffects = SolveOLS(fixedX, y);
 
-        // Initialize variance components
+        // Initial variance components: half the residual variance to the residual, the other half
+        // split evenly over the random effects
         var residuals = ComputeResiduals(fixedX, y, _fixedEffects);
-        double totalVar = ComputeVariance(residuals);
+        T halfVariance = NumOps.Multiply(ComputeVariance(residuals), NumOps.FromDouble(0.5));
+        _residualVariance = halfVariance;
 
-        // Start with equal variance split
-        _residualVariance = NumOps.FromDouble(totalVar * 0.5);
-
+        T componentVariance = NumOps.Divide(halfVariance, NumOps.FromDouble(_randomEffects.Count));
         foreach (var re in _randomEffects)
         {
             int dim = re.Dimension;
-            re.CovarianceMatrix = new Matrix<T>(dim, dim);
-            for (int d = 0; d < dim; d++)
-            {
-                re.CovarianceMatrix[d, d] = NumOps.FromDouble(totalVar * 0.5 / _randomEffects.Count);
-            }
+            re.CovarianceMatrix = Matrix<T>.CreateDiagonal(Engine.Fill(dim, componentVariance));
         }
     }
 
@@ -486,33 +568,44 @@ public partial class LinearMixedModel<T> : RegressionBase<T>
     /// </summary>
     private void FitEM(Matrix<T> fixedX, Matrix<T> fullX, Vector<T> y)
     {
-        double prevLogLik = double.NegativeInfinity;
+        T prevLogLik = NumOps.FromDouble(double.NegativeInfinity);
+        T tolerance = NumOps.FromDouble(_options.Tolerance);
 
         for (int iter = 0; iter < _options.MaxIterations; iter++)
         {
-            // E-step: Compute expected random effects (BLUPs)
+            // E-step: Compute BLUPs of random effects
             ComputeBLUPs(fixedX, fullX, y);
 
-            // M-step: Update fixed effects and variance components
+            // M-step: Update fixed effects
             UpdateFixedEffects(fixedX, fullX, y);
+
+            // M-step: Update variance components
             UpdateVarianceComponents(fixedX, fullX, y);
 
             // Compute log-likelihood
-            _logLikelihood = NumOps.FromDouble(ComputeLogLikelihood(fixedX, fullX, y));
+            _logLikelihood = ComputeLogLikelihood(fixedX, fullX, y);
 
             if (_options.Verbose)
             {
-                Console.WriteLine($"Iteration {iter + 1}: Log-likelihood = {NumOps.ToDouble(_logLikelihood):F4}");
+                Console.WriteLine($"Iteration {iter + 1}: Log-likelihood = {_logLikelihood}");
             }
 
             // Check convergence
-            if (Math.Abs(NumOps.ToDouble(_logLikelihood) - prevLogLik) < _options.Tolerance)
+            if (ChangedLessThan(_logLikelihood, prevLogLik, tolerance))
             {
                 break;
             }
 
-            prevLogLik = NumOps.ToDouble(_logLikelihood);
+            prevLogLik = _logLikelihood;
         }
+    }
+
+    /// <summary>
+    /// Whether |current - previous| is below the tolerance.
+    /// </summary>
+    private bool ChangedLessThan(T current, T previous, T tolerance)
+    {
+        return NumOps.LessThan(NumOps.Abs(NumOps.Subtract(current, previous)), tolerance);
     }
 
     /// <summary>
@@ -520,42 +613,53 @@ public partial class LinearMixedModel<T> : RegressionBase<T>
     /// </summary>
     private void ComputeBLUPs(Matrix<T> fixedX, Matrix<T> fullX, Vector<T> y)
     {
-        // Compute residuals from fixed effects
         if (_fixedEffects == null) return;
+
+        // Compute residuals from fixed effects
         var residuals = ComputeResiduals(fixedX, y, _fixedEffects);
 
         foreach (var re in _randomEffects)
         {
-            // Group observations
             var groups = GroupObservations(fullX, re.GroupColumnIndex);
+            T sigmaE = _residualVariance;
+            T sigmaU = re.CovarianceMatrix != null ? FirstDiagonal(re.CovarianceMatrix) : NumOps.One;
 
-            double sigmaE = NumOps.ToDouble(_residualVariance);
-            double sigmaU = re.CovarianceMatrix != null ? NumOps.ToDouble(re.CovarianceMatrix[0, 0]) : 1.0;
-
-            foreach (var kvp in groups)
+            if (groups.Count == 0)
             {
-                double groupId = kvp.Key;
-                var indices = kvp.Value;
-                int ni = indices.Count;
+                continue;
+            }
 
-                // Simple random intercept BLUP: u_i = (sigma_u^2 / (sigma_u^2 + sigma_e^2/n_i)) * mean(residuals_i)
-                double sumResid = 0;
-                foreach (int idx in indices)
-                {
-                    sumResid += NumOps.ToDouble(residuals[idx]);
-                }
-                double meanResid = sumResid / ni;
+            // Per-group residual sums and sizes n_i, gathered into vectors so the BLUP arithmetic
+            // below runs once over all groups.
+            var groupList = groups.ToList();
+            var sumParts = new List<Vector<T>>(groupList.Count);
+            var sizeParts = new List<Vector<T>>(groupList.Count);
+            foreach (var kvp in groupList)
+            {
+                sumParts.Add(Engine.Fill(1, Engine.Sum(RegressionEngineOps.Gather(residuals, kvp.Value.ToArray()))));
+                sizeParts.Add(Engine.Fill(1, Engine.Sum(Engine.Fill(kvp.Value.Count, NumOps.One))));
+            }
 
-                double shrinkage = sigmaU / (sigmaU + sigmaE / ni);
-                double blup = shrinkage * meanResid;
+            var sizes = Vector<T>.Concatenate(sizeParts);
+            int groupCount = groupList.Count;
 
+            // BLUP of the random intercept: shrinkage * mean residual,
+            // shrinkage = sigmaU / (sigmaU + sigmaE / n_i)
+            var meanResid = Engine.Divide(Vector<T>.Concatenate(sumParts), sizes);
+            var shrinkageDenominator = RegressionEngineOps2.AddScalar(
+                Engine.Divide(Engine.Fill(groupCount, sigmaE), sizes), sigmaU);
+            var shrinkage = Engine.Divide(Engine.Fill(groupCount, sigmaU), shrinkageDenominator);
+            var blups = Engine.Multiply(shrinkage, meanResid);
+
+            for (int g = 0; g < groupCount; g++)
+            {
                 var blupVector = new Vector<T>(re.Dimension);
-                if (re.IsRandomIntercept)
+                if (re.IsRandomIntercept && re.Dimension > 0)
                 {
-                    blupVector[0] = NumOps.FromDouble(blup);
+                    blupVector = Vector<T>.Concatenate(new[] { blups.GetSubVector(g, 1), new Vector<T>(re.Dimension - 1) });
                 }
 
-                re.SetGroupEffect(groupId, blupVector);
+                re.SetGroupEffect(groupList[g].Key, blupVector);
             }
         }
     }
@@ -566,23 +670,13 @@ public partial class LinearMixedModel<T> : RegressionBase<T>
     private void UpdateFixedEffects(Matrix<T> fixedX, Matrix<T> fullX, Vector<T> y)
     {
         // Adjust y for random effects
-        var adjustedY = new Vector<T>(y.Length);
-        for (int i = 0; i < y.Length; i++)
+        var adjustedY = new Vector<T>(y);
+        foreach (var re in _randomEffects)
         {
-            adjustedY[i] = y[i];
-
-            foreach (var re in _randomEffects)
-            {
-                double groupId = NumOps.ToDouble(fullX[i, re.GroupColumnIndex]);
-                var blup = re.GetGroupEffect(groupId);
-                if (blup.Length > 0)
-                {
-                    adjustedY[i] = NumOps.Subtract(adjustedY[i], blup[0]);
-                }
-            }
+            adjustedY = Engine.Subtract(adjustedY, RowInterceptEffects(fullX, re));
         }
 
-        // Update fixed effects using OLS on adjusted response
+        // Solve for fixed effects
         _fixedEffects = SolveOLS(fixedX, adjustedY);
     }
 
@@ -593,58 +687,42 @@ public partial class LinearMixedModel<T> : RegressionBase<T>
     {
         if (_fixedEffects == null) return;
 
-        // Compute residuals
+        // Update residual variance from the residuals after fixed and random intercepts
         var residuals = ComputeResiduals(fixedX, y, _fixedEffects);
-
-        // Update residual variance
-        double ssResid = 0;
-        int dfResid = _nObservations - _nFixedParams;
-        for (int i = 0; i < residuals.Length; i++)
+        foreach (var re in _randomEffects)
         {
-            double r = NumOps.ToDouble(residuals[i]);
-
-            // Subtract random effects
-            foreach (var re in _randomEffects)
-            {
-                double groupId = NumOps.ToDouble(fullX[i, re.GroupColumnIndex]);
-                var blup = re.GetGroupEffect(groupId);
-                if (blup.Length > 0)
-                {
-                    r -= NumOps.ToDouble(blup[0]);
-                }
-            }
-
-            ssResid += r * r;
+            residuals = Engine.Subtract(residuals, RowInterceptEffects(fullX, re));
         }
-        _residualVariance = NumOps.FromDouble(ssResid / dfResid);
 
-        // Update random effect variances
+        T ssResid = residuals.Length == 0 ? NumOps.Zero : Engine.DotProduct(residuals, residuals);
+        int dfResid = _nObservations - _nFixedParams;
+        _residualVariance = NumOps.Divide(ssResid, NumOps.FromDouble(dfResid));
+
+        // Update random effect variances: mean squared random intercept over the groups
         foreach (var re in _randomEffects)
         {
             var groups = GroupObservations(fullX, re.GroupColumnIndex);
-            double sumSqBlup = 0;
-
-            foreach (var kvp in groups)
+            var intercepts = groups.Keys
+                .Select(key => re.GetGroupEffect(key))
+                .Where(blup => blup.Length > 0)
+                .Select(blup => blup.GetSubVector(0, 1))
+                .ToList();
+            T sumSqBlup = NumOps.Zero;
+            if (intercepts.Count > 0)
             {
-                var blup = re.GetGroupEffect(kvp.Key);
-                if (blup.Length > 0)
-                {
-                    double b = NumOps.ToDouble(blup[0]);
-                    sumSqBlup += b * b;
-                }
+                var interceptVector = Vector<T>.Concatenate(intercepts);
+                sumSqBlup = Engine.DotProduct(interceptVector, interceptVector);
             }
 
-            double newVar = sumSqBlup / groups.Count;
-
-            // Bound variance to be non-negative
-            if (_options.BoundVarianceComponents && newVar < 0)
+            T newVar = NumOps.Divide(sumSqBlup, NumOps.FromDouble(groups.Count));
+            if (_options.BoundVarianceComponents && NumOps.LessThan(newVar, NumOps.Zero))
             {
-                newVar = 0;
+                newVar = NumOps.Zero;
             }
 
             if (re.CovarianceMatrix != null && re.CovarianceMatrix.Rows > 0)
             {
-                re.CovarianceMatrix[0, 0] = NumOps.FromDouble(newVar);
+                SetFirstDiagonal(re.CovarianceMatrix, newVar);
             }
         }
     }
@@ -652,26 +730,21 @@ public partial class LinearMixedModel<T> : RegressionBase<T>
     /// <summary>
     /// Computes the log-likelihood.
     /// </summary>
-    private double ComputeLogLikelihood(Matrix<T> fixedX, Matrix<T> fullX, Vector<T> y)
+    private T ComputeLogLikelihood(Matrix<T> fixedX, Matrix<T> fullX, Vector<T> y)
     {
-        if (_fixedEffects == null) return double.NegativeInfinity;
+        if (_fixedEffects == null) return NumOps.FromDouble(double.NegativeInfinity);
 
-        double sigmaE = NumOps.ToDouble(_residualVariance);
+        T sigmaE = _residualVariance;
         int n = _nObservations;
-
-        // Compute residual sum of squares
         var predictions = Predict(fullX);
-        double ssResid = 0;
-        for (int i = 0; i < n; i++)
-        {
-            double r = NumOps.ToDouble(y[i]) - NumOps.ToDouble(predictions[i]);
-            ssResid += r * r;
-        }
 
-        // Log-likelihood for normal model
-        double logLik = -0.5 * n * Math.Log(2 * Math.PI * sigmaE) - ssResid / (2 * sigmaE);
+        var residual = Engine.Subtract(y.GetSubVector(0, n), predictions.GetSubVector(0, n));
+        T ssResid = n == 0 ? NumOps.Zero : Engine.DotProduct(residual, residual);
 
-        return logLik;
+        // -0.5 n log(2 pi sigmaE) - ssResid / (2 sigmaE)
+        T twoPi = NumOps.FromDouble(2 * Math.PI);
+        T first = NumOps.Multiply(NumOps.Multiply(NumOps.FromDouble(-0.5), NumOps.FromDouble(n)), NumOps.Log(NumOps.Multiply(twoPi, sigmaE)));
+        return NumOps.Subtract(first, NumOps.Divide(ssResid, NumOps.Multiply(NumOps.FromDouble(2), sigmaE)));
     }
 
     /// <summary>
@@ -691,7 +764,7 @@ public partial class LinearMixedModel<T> : RegressionBase<T>
         {
             var vc = new VarianceComponent<T>(re.Name)
             {
-                Variance = re.CovarianceMatrix != null ? re.CovarianceMatrix[0, 0] : NumOps.Zero,
+                Variance = re.CovarianceMatrix != null ? FirstDiagonal(re.CovarianceMatrix) : NumOps.Zero,
                 CovarianceMatrix = re.CovarianceMatrix
             };
             decomp.RandomEffectVariances.Add(vc);
@@ -707,52 +780,34 @@ public partial class LinearMixedModel<T> : RegressionBase<T>
     {
         if (_fixedEffects == null) return;
 
-        // Total variance
-        double yMean = 0;
-        for (int i = 0; i < y.Length; i++)
-        {
-            yMean += NumOps.ToDouble(y[i]);
-        }
-        yMean /= y.Length;
+        int n = y.Length;
+        T yMean = NumOps.Divide(n == 0 ? NumOps.Zero : Engine.Sum(y), NumOps.FromDouble(n));
+        var meanVector = Engine.Fill(n, yMean);
 
-        double ssTot = 0;
-        for (int i = 0; i < y.Length; i++)
-        {
-            double d = NumOps.ToDouble(y[i]) - yMean;
-            ssTot += d * d;
-        }
+        // Total sum of squares
+        T ssTot = SumOfSquaredDeviations(y, meanVector);
 
-        // Marginal: variance explained by fixed effects
-        var fixedPred = new Vector<T>(y.Length);
-        for (int i = 0; i < y.Length; i++)
-        {
-            T pred = NumOps.Zero;
-            for (int j = 0; j < _nFixedParams; j++)
-            {
-                pred = NumOps.Add(pred, NumOps.Multiply(fixedX[i, j], _fixedEffects[j]));
-            }
-            fixedPred[i] = pred;
-        }
+        // Marginal R^2: variance explained by the fixed effects
+        var fixedPred = FixedPredictions(fixedX, _fixedEffects).GetSubVector(0, n);
+        MarginalRSquared = NumOps.Divide(SumOfSquaredDeviations(fixedPred, meanVector), ssTot);
 
-        double ssFixed = 0;
-        for (int i = 0; i < y.Length; i++)
+        // Conditional R^2: variance explained by fixed + random effects
+        var fullPred = Predict(fullX).GetSubVector(0, n);
+        ConditionalRSquared = NumOps.Divide(SumOfSquaredDeviations(fullPred, meanVector), ssTot);
+    }
+
+    /// <summary>
+    /// sum_i (values[i] - reference[i])^2.
+    /// </summary>
+    private T SumOfSquaredDeviations(Vector<T> values, Vector<T> reference)
+    {
+        if (values.Length == 0)
         {
-            double d = NumOps.ToDouble(fixedPred[i]) - yMean;
-            ssFixed += d * d;
+            return NumOps.Zero;
         }
 
-        MarginalRSquared = NumOps.FromDouble(ssFixed / ssTot);
-
-        // Conditional: variance explained by fixed + random effects
-        var fullPred = Predict(fullX);
-        double ssFull = 0;
-        for (int i = 0; i < y.Length; i++)
-        {
-            double d = NumOps.ToDouble(fullPred[i]) - yMean;
-            ssFull += d * d;
-        }
-
-        ConditionalRSquared = NumOps.FromDouble(ssFull / ssTot);
+        var deviations = Engine.Subtract(values, reference);
+        return Engine.DotProduct(deviations, deviations);
     }
 
     /// <summary>
@@ -793,35 +848,21 @@ public partial class LinearMixedModel<T> : RegressionBase<T>
     /// <summary>
     /// Computes residuals.
     /// </summary>
-    private static Vector<T> ComputeResiduals(Matrix<T> x, Vector<T> y, Vector<T> beta)
+    private Vector<T> ComputeResiduals(Matrix<T> x, Vector<T> y, Vector<T> beta)
     {
         var pred = x.Multiply(beta);
-        var residuals = new Vector<T>(y.Length);
-        for (int i = 0; i < y.Length; i++)
-        {
-            residuals[i] = NumOps.Subtract(y[i], pred[i]);
-        }
-        return residuals;
+        return Engine.Subtract(y, pred);
     }
 
     /// <summary>
     /// Computes variance of a vector.
     /// </summary>
-    private static double ComputeVariance(Vector<T> v)
+    private T ComputeVariance(Vector<T> v)
     {
-        double mean = 0;
-        for (int i = 0; i < v.Length; i++)
-        {
-            mean += NumOps.ToDouble(v[i]);
-        }
-        mean /= v.Length;
-
-        double variance = 0;
-        for (int i = 0; i < v.Length; i++)
-        {
-            double d = NumOps.ToDouble(v[i]) - mean;
-            variance += d * d;
-        }
-        return variance / (v.Length - 1);
+        // Sample variance (two-pass: mean, then deviations), divided by n - 1
+        int n = v.Length;
+        T mean = NumOps.Divide(n == 0 ? NumOps.Zero : Engine.Sum(v), NumOps.FromDouble(n));
+        T variance = SumOfSquaredDeviations(v, Engine.Fill(n, mean));
+        return NumOps.Divide(variance, NumOps.FromDouble(n - 1));
     }
 }

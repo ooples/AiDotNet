@@ -133,15 +133,8 @@ public partial class SeasonalHybridESDDetector<T> : AnomalyDetectorBase<T>
                 nameof(X));
         }
 
-        // Extract time series values
-        var values = new double[n];
-        for (int i = 0; i < n; i++)
-        {
-            values[i] = NumOps.ToDouble(X[i, 0]);
-        }
-
         // Compute seasonal decomposition
-        DecomposeTimeSeries(values);
+        DecomposeTimeSeries(X.GetColumn(0).AsTensor());
 
         // ESD critical value computed but not stored — scoring uses its own threshold
 
@@ -225,71 +218,46 @@ public partial class SeasonalHybridESDDetector<T> : AnomalyDetectorBase<T>
                 nameof(X));
         }
 
-        var scores = new Vector<T>(X.Rows);
+        var seasonalPattern = _seasonalPattern ?? throw new InvalidOperationException("_seasonalPattern has not been initialized.");
+        var engine = Engine;
 
-        for (int i = 0; i < X.Rows; i++)
+        // Score is the standardized residual |x - seasonal - trend| / residual std (0 for a non-positive std)
+        if (!NumOps.GreaterThan(_residualStd, NumOps.Zero))
         {
-            double value = NumOps.ToDouble(X[i, 0]);
-
-            // Remove seasonal component
-            double seasonal = NumOps.ToDouble((_seasonalPattern ?? throw new InvalidOperationException("_seasonalPattern has not been initialized."))[i % _seasonLength]);
-            double deseasonalized = value - seasonal - NumOps.ToDouble(_trend);
-
-            // Score is the standardized residual
-            double rStd = NumOps.ToDouble(_residualStd);
-            double score = rStd > 0 ? Math.Abs(deseasonalized) / rStd : 0;
-            scores[i] = NumOps.FromDouble(score);
+            return new Vector<T>(X.Rows);
         }
 
-        return scores;
+        var seasonal = AnomalyTensorOps.TileToLength(seasonalPattern.AsTensor(), X.Rows);
+        var deseasonalized = engine.TensorSubtractScalar(
+            engine.TensorSubtract(X.GetColumn(0).AsTensor(), seasonal), _trend);
+        return engine.TensorDivideScalar(engine.TensorAbs(deseasonalized), _residualStd).ToVector();
     }
 
-    private void DecomposeTimeSeries(double[] values)
+    private void DecomposeTimeSeries(Tensor<T> values)
     {
         int n = values.Length;
+        var engine = Engine;
 
-        // Compute trend using simple moving average
-        double trendD = values.Average();
-        _trend = NumOps.FromDouble(trendD);
+        // Trend: the overall mean
+        _trend = engine.TensorMean(values);
 
-        // Compute seasonal pattern (average for each season position)
-        var seasonalPatternD = new double[_seasonLength];
-        var seasonCounts = new int[_seasonLength];
+        // Seasonal pattern: the mean detrended value at each season position
+        var detrended = engine.TensorSubtractScalar(values, _trend);
+        var seasonalPattern = AnomalyTensorOps.PhaseMeans(detrended, _seasonLength);
+        _seasonalPattern = seasonalPattern.ToVector();
 
-        for (int i = 0; i < n; i++)
+        // Residuals and their robust (MAD-based) standard deviation
+        var residuals = engine.TensorSubtract(detrended, AnomalyTensorOps.TileToLength(seasonalPattern, n));
+        var (sortedResiduals, _) = engine.TensorSort(engine.TensorAbs(residuals), 0, false);
+        T mad = sortedResiduals[n / 2];
+        T residualStd = NumOps.Multiply(NumOps.FromDouble(1.4826), mad);
+
+        T floor = NumOps.FromDouble(1e-10);
+        if (NumOps.LessThan(residualStd, floor))
         {
-            int seasonPos = i % _seasonLength;
-            seasonalPatternD[seasonPos] += values[i] - trendD;
-            seasonCounts[seasonPos]++;
+            residualStd = NumOps.Sqrt(NumOps.Divide(engine.TensorSumOfSquares(residuals), NumOps.FromDouble(n)));
         }
-
-        for (int s = 0; s < _seasonLength; s++)
-        {
-            if (seasonCounts[s] > 0)
-            {
-                seasonalPatternD[s] /= seasonCounts[s];
-            }
-        }
-        _seasonalPattern = new Vector<T>(seasonalPatternD.Select(v => NumOps.FromDouble(v)));
-
-        // Compute residuals and their standard deviation
-        var residuals = new double[n];
-        for (int i = 0; i < n; i++)
-        {
-            residuals[i] = values[i] - trendD - seasonalPatternD[i % _seasonLength];
-        }
-
-        // MAD-based robust standard deviation
-        var sortedResiduals = residuals.Select(Math.Abs).OrderBy(x => x).ToArray();
-        double mad = sortedResiduals[sortedResiduals.Length / 2];
-        double residualStdD = 1.4826 * mad;
-
-        if (residualStdD < 1e-10)
-        {
-            residualStdD = residuals.Select(r => r * r).Sum() / n;
-            residualStdD = Math.Sqrt(residualStdD);
-        }
-        if (residualStdD < 1e-10) residualStdD = 1e-10;
-        _residualStd = NumOps.FromDouble(residualStdD);
+        if (NumOps.LessThan(residualStd, floor)) residualStd = floor;
+        _residualStd = residualStd;
     }
 }

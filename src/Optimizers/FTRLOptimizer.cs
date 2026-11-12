@@ -239,52 +239,22 @@ public partial class FTRLOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
         var beta = NumOps.FromDouble(_options.Beta);
         var lambda1 = NumOps.FromDouble(_options.Lambda1);
         var lambda2 = NumOps.FromDouble(_options.Lambda2);
-        var newParameters = new Vector<T>(parameters.Length, skipZeroInit: true);
+        var engine = Engine;
+        var p = parameters.AsTensor();
+        var g = gradient.AsTensor();
+        var zState = _z.AsTensor();
+        var nState = _n.AsTensor();
+
+        // n' = n + g^2 ; sigma = (sqrt(n') - sqrt(n)) / alpha ; z' = z + (g - sigma * w)
+        var newN = engine.TensorAdd(nState, engine.TensorMultiply(g, g));
+        var sigma = engine.TensorDivideScalar(
+            engine.TensorSubtract(engine.TensorSqrt(newN), engine.TensorSqrt(nState)), alpha);
+        var newZ = engine.TensorAdd(zState, engine.TensorSubtract(g, engine.TensorMultiply(sigma, p)));
+        engine.TensorCopy(newN, nState);
+        engine.TensorCopy(newZ, zState);
+
+        var newParameters = FtrlProximalWeights(newZ, newN, alpha, beta, lambda1, lambda2).AsVector();
         var parameterSpan = parameters.AsSpan();
-        var gradientSpan = gradient.AsSpan();
-        var zSpan = _z.AsWritableSpan();
-        var nSpan = _n.AsWritableSpan();
-        var newParameterSpan = newParameters.AsWritableSpan();
-
-        for (int i = 0; i < parameters.Length; i++)
-        {
-            T g = gradientSpan[i];
-            T oldN = nSpan[i];
-            T newN = NumOps.Add(oldN, NumOps.Multiply(g, g));
-            T sigma = NumOps.Divide(
-                NumOps.Subtract(NumOps.Sqrt(newN), NumOps.Sqrt(oldN)),
-                alpha);
-            T newZ = NumOps.Add(
-                zSpan[i],
-                NumOps.Subtract(g, NumOps.Multiply(sigma, parameterSpan[i])));
-
-            nSpan[i] = newN;
-            zSpan[i] = newZ;
-
-            var absZ = NumOps.Abs(newZ);
-            var signZ = NumOps.GreaterThan(newZ, NumOps.Zero) ? NumOps.One :
-                        (NumOps.LessThan(newZ, NumOps.Zero) ? NumOps.Negate(NumOps.One) : NumOps.Zero);
-
-            // L1 proximal operator: sparse solution via thresholding
-            // If |z| <= lambda1, parameter is set to zero (sparsity)
-            if (NumOps.LessThanOrEquals(absZ, lambda1))
-            {
-                newParameterSpan[i] = NumOps.Zero;
-            }
-            else
-            {
-                // FTRL proximal: w = -sign(z) * (|z| - lambda1) / (lambda2 + (sqrt(n) + beta) / alpha)
-                var absZMinusLambda1 = NumOps.Subtract(absZ, lambda1);
-                var sqrtNi = NumOps.Sqrt(newN);
-                var sqrtNPlusBeta = NumOps.Add(sqrtNi, beta);
-                var sqrtNPlusBetaOverAlpha = NumOps.Divide(sqrtNPlusBeta, alpha);
-                var denominator = NumOps.Add(lambda2, sqrtNPlusBetaOverAlpha);
-
-                // w = -sign(z) * (|z| - lambda1) / denominator
-                var numeratorValue = NumOps.Multiply(NumOps.Negate(signZ), absZMinusLambda1);
-                newParameterSpan[i] = NumOps.Divide(numeratorValue, denominator);
-            }
-        }
 
         // Save for reverse updates
         if (_previousParameters is null || _previousParameters.Length != parameters.Length)
@@ -520,33 +490,27 @@ public partial class FTRLOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
         // Update n state
         _n = nPlusGradSq;
 
-        // L1 thresholding requires per-element conditional logic
-        var newCoefficients = new Vector<T>(parameters.Length);
-        var absZ = (Vector<T>)Engine.Abs(_z);
-        var signZ = (Vector<T>)Engine.Sign(_z);
-
-        for (int i = 0; i < parameters.Length; i++)
-        {
-            // L1 proximal operator: sparse solution via thresholding
-            if (NumOps.GreaterThan(absZ[i], lambda1))
-            {
-                // FTRL proximal formula (aligned with UpdateParameters):
-                // w = -sign(z) * (|z| - lambda1) / (lambda2 + (sqrt(n) + beta) / alpha)
-                var absZMinusLambda1 = NumOps.Subtract(absZ[i], lambda1);
-                var sqrtNi = NumOps.Sqrt(nPlusGradSq[i]);
-                var sqrtNPlusBeta = NumOps.Add(sqrtNi, beta);
-                var sqrtNPlusBetaOverAlpha = NumOps.Divide(sqrtNPlusBeta, alpha);
-                var denominatorValue = NumOps.Add(lambda2, sqrtNPlusBetaOverAlpha);
-                var numeratorValue = NumOps.Multiply(NumOps.Negate(signZ[i]), absZMinusLambda1);
-                newCoefficients[i] = NumOps.Divide(numeratorValue, denominatorValue);
-            }
-            else
-            {
-                newCoefficients[i] = NumOps.Zero;
-            }
-        }
+        // L1 thresholding as an engine select: zero where |z| <= lambda1.
+        var newCoefficients = FtrlProximalWeights(_z.AsTensor(), nPlusGradSq.AsTensor(), alpha, beta, lambda1, lambda2)
+            .AsVector();
 
         return InterfaceGuard.Parameterizable(currentSolution).WithParameters(newCoefficients);
+    }
+
+    /// <summary>
+    /// The FTRL-Proximal closed-form weights from the accumulators:
+    /// w = -sign(z) * (|z| - lambda1) / (lambda2 + (sqrt(n) + beta) / alpha) where |z| > lambda1, and 0 (the L1
+    /// sparsity threshold) elsewhere.
+    /// </summary>
+    private Tensor<T> FtrlProximalWeights(Tensor<T> z, Tensor<T> n, T alpha, T beta, T lambda1, T lambda2)
+    {
+        var engine = Engine;
+        var absZ = engine.TensorAbs(z);
+        var numerator = engine.TensorMultiply(engine.TensorNegate(engine.TensorSign(z)), engine.TensorSubtractScalar(absZ, lambda1));
+        var denominator = engine.TensorAddScalar(
+            engine.TensorDivideScalar(engine.TensorAddScalar(engine.TensorSqrt(n), beta), alpha), lambda2);
+        var weights = engine.TensorDivide(numerator, denominator);
+        return engine.TensorWhere(engine.TensorGreaterThan(absZ, lambda1), weights, new Tensor<T>(z._shape));
     }
 
     /// <summary>

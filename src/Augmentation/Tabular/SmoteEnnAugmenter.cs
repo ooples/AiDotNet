@@ -138,7 +138,6 @@ public class SmoteEnnAugmenter<T> : TabularAugmenterBase<T>
     private (Matrix<T> Data, Vector<T> Labels) ApplyEnnCleaning(Matrix<T> data, Vector<T> labels)
     {
         int n = data.Rows;
-        int cols = data.Columns;
         int k = Math.Min(_ennKNeighbors, n - 1);
 
         // Compute distance matrix
@@ -148,23 +147,7 @@ public class SmoteEnnAugmenter<T> : TabularAugmenterBase<T>
         var keepIndices = new List<int>();
 
         // Build class index lookup
-        var classLabelsLocal = new List<T>();
-        for (int i = 0; i < n; i++)
-        {
-            bool found = false;
-            for (int c = 0; c < classLabelsLocal.Count; c++)
-            {
-                if (NumOps.Compare(classLabelsLocal[c], labels[i]) == 0)
-                {
-                    found = true;
-                    break;
-                }
-            }
-            if (!found)
-            {
-                classLabelsLocal.Add(labels[i]);
-            }
-        }
+        var classOf = TabularEngineOps<T>.ClassIndices(labels, out _, out _);
 
         for (int i = 0; i < n; i++)
         {
@@ -175,7 +158,7 @@ public class SmoteEnnAugmenter<T> : TabularAugmenterBase<T>
             var voteCounts = new Dictionary<int, int>();
             foreach (int neighborIdx in neighbors)
             {
-                int classIdx = GetClassIndex(labels[neighborIdx], classLabelsLocal);
+                int classIdx = classOf[neighborIdx];
                 if (!voteCounts.ContainsKey(classIdx))
                 {
                     voteCounts[classIdx] = 0;
@@ -194,7 +177,7 @@ public class SmoteEnnAugmenter<T> : TabularAugmenterBase<T>
                     majorityClassIdx = kv.Key;
                 }
             }
-            int sampleClassIdx = GetClassIndex(labels[i], classLabelsLocal);
+            int sampleClassIdx = classOf[i];
 
             // Keep sample if its class matches majority of neighbors
             if (sampleClassIdx == majorityClassIdx)
@@ -211,102 +194,28 @@ public class SmoteEnnAugmenter<T> : TabularAugmenterBase<T>
         }
 
         // Create cleaned dataset
-        var cleanedData = new Matrix<T>(keepIndices.Count, cols);
-        var cleanedLabels = new Vector<T>(keepIndices.Count);
-
-        for (int i = 0; i < keepIndices.Count; i++)
-        {
-            for (int j = 0; j < cols; j++)
-            {
-                cleanedData[i, j] = data[keepIndices[i], j];
-            }
-            cleanedLabels[i] = labels[keepIndices[i]];
-        }
+        var (cleanedData, cleanedLabels) = TabularEngineOps<T>.SelectRows(data, labels, keepIndices.ToArray());
 
         return (cleanedData, cleanedLabels);
     }
 
-    private double[,] ComputeDistanceMatrix(Matrix<T> data)
+    private static Tensor<T> ComputeDistanceMatrix(Matrix<T> data)
     {
-        int n = data.Rows;
-        int cols = data.Columns;
-        var distances = new double[n, n];
-
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = i + 1; j < n; j++)
-            {
-                double dist = 0;
-                for (int c = 0; c < cols; c++)
-                {
-                    double diff = NumOps.ToDouble(data[i, c]) - NumOps.ToDouble(data[j, c]);
-                    dist += diff * diff;
-                }
-                dist = Math.Sqrt(dist);
-                distances[i, j] = dist;
-                distances[j, i] = dist;
-            }
-        }
-
-        return distances;
+        return TabularEngineOps<T>.PairwiseDistances(data);
     }
 
-    private int[] GetKNearestNeighbors(double[,] distances, int sampleIdx, int k)
+    private static int[] GetKNearestNeighbors(Tensor<T> distances, int sampleIdx, int k)
     {
-        int n = distances.GetLength(0);
-        var indexedDistances = new List<(int Index, double Distance)>();
-
-        for (int i = 0; i < n; i++)
-        {
-            if (i != sampleIdx)
-            {
-                indexedDistances.Add((i, distances[sampleIdx, i]));
-            }
-        }
-
-        return indexedDistances
-            .OrderBy(x => x.Distance)
-            .Take(k)
-            .Select(x => x.Index)
-            .ToArray();
-    }
-
-    private int GetClassIndex(T label, List<T> classLabels)
-    {
-        for (int i = 0; i < classLabels.Count; i++)
-        {
-            if (NumOps.Compare(classLabels[i], label) == 0)
-            {
-                return i;
-            }
-        }
-        return -1;
+        return TabularEngineOps<T>.NearestNeighbors(distances, sampleIdx, k);
     }
 
     private Dictionary<int, int> GetClassCounts(Vector<T> labels, out List<T> classLabels)
     {
+        TabularEngineOps<T>.ClassIndices(labels, out classLabels, out var perClass);
         var counts = new Dictionary<int, int>();
-        classLabels = new List<T>();
-
-        for (int i = 0; i < labels.Length; i++)
+        for (int c = 0; c < perClass.Length; c++)
         {
-            int classIdx = -1;
-            for (int c = 0; c < classLabels.Count; c++)
-            {
-                if (NumOps.Compare(classLabels[c], labels[i]) == 0)
-                {
-                    classIdx = c;
-                    break;
-                }
-            }
-
-            if (classIdx < 0)
-            {
-                classIdx = classLabels.Count;
-                classLabels.Add(labels[i]);
-                counts[classIdx] = 0;
-            }
-            counts[classIdx]++;
+            counts[c] = perClass[c];
         }
         return counts;
     }
@@ -370,28 +279,8 @@ public class SmoteEnnAugmenter<T> : TabularAugmenterBase<T>
 
     private (Matrix<T>, Vector<T>) ExtractClassSamples(Matrix<T> data, Vector<T> labels, T targetClass)
     {
-        var indices = new List<int>();
-        for (int i = 0; i < labels.Length; i++)
-        {
-            if (NumOps.Compare(labels[i], targetClass) == 0)
-            {
-                indices.Add(i);
-            }
-        }
-
-        var extractedData = new Matrix<T>(indices.Count, data.Columns);
-        var extractedLabels = new Vector<T>(indices.Count);
-
-        for (int i = 0; i < indices.Count; i++)
-        {
-            for (int j = 0; j < data.Columns; j++)
-            {
-                extractedData[i, j] = data[indices[i], j];
-            }
-            extractedLabels[i] = labels[indices[i]];
-        }
-
-        return (extractedData, extractedLabels);
+        var indices = TabularEngineOps<T>.IndicesEqualTo(labels, targetClass);
+        return TabularEngineOps<T>.SelectRows(data, labels, indices);
     }
 
     private (Matrix<T>, Vector<T>) CombineDatasets(
@@ -404,29 +293,8 @@ public class SmoteEnnAugmenter<T> : TabularAugmenterBase<T>
                 $"Cannot combine datasets with different column counts: {data1.Columns} vs {data2.Columns}.");
         }
 
-        int totalRows = data1.Rows + data2.Rows;
-        int cols = data1.Columns;
-
-        var combined = new Matrix<T>(totalRows, cols);
-        var labels = new Vector<T>(totalRows);
-
-        for (int i = 0; i < data1.Rows; i++)
-        {
-            for (int j = 0; j < cols; j++)
-            {
-                combined[i, j] = data1[i, j];
-            }
-            labels[i] = labels1[i];
-        }
-
-        for (int i = 0; i < data2.Rows; i++)
-        {
-            for (int j = 0; j < cols; j++)
-            {
-                combined[data1.Rows + i, j] = data2[i, j];
-            }
-            labels[data1.Rows + i] = labels2[i];
-        }
+        var combined = TabularEngineOps<T>.ConcatenateRows(data1, data2);
+        var labels = TabularEngineOps<T>.ConcatenateLabels(labels1, data1.Rows, labels2, data2.Rows);
 
         return (combined, labels);
     }

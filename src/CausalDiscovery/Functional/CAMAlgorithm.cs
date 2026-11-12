@@ -143,7 +143,7 @@ public class CAMAlgorithm<T> : FunctionalBase<T>
                 var reducedPredecessors = predecessors.Where(p => p != parent).ToList();
                 double reducedResidVar = reducedPredecessors.Count > 0
                     ? ComputeAdditiveResidualVariance(data, n, target, reducedPredecessors)
-                    : NumOps.ToDouble(ComputeColumnVariance(data, target));
+                    : ComputeAdditiveResidualVariance(data, n, target, new List<int>());
 
                 double varianceReduction = reducedResidVar - fullResidVar;
                 double llRatio = (fullResidVar > 1e-15 && reducedResidVar > 1e-15)
@@ -173,53 +173,35 @@ public class CAMAlgorithm<T> : FunctionalBase<T>
             return NumOps.ToDouble(ComputeColumnVariance(data, target));
 
         // Backfitting algorithm for additive model
-        var components = new Vector<T>[parents.Count];
+        var components = new Tensor<T>[parents.Count];
         for (int k = 0; k < parents.Count; k++)
-            components[k] = new Vector<T>(n);
+            components[k] = new Tensor<T>(new[] { n });
 
-        T nT = NumOps.FromDouble(n);
-        T targetMean = NumOps.Zero;
-        for (int i = 0; i < n; i++)
-            targetMean = NumOps.Add(targetMean, data[i, target]);
-        targetMean = NumOps.Divide(targetMean, nT);
+        var y = Engine.GetColumn(data, target).AsTensor();
+        T targetMean = Engine.TensorMean(y);
+        var centeredTarget = Engine.TensorSubtractScalar(y, targetMean);
 
         // Backfitting iterations
         for (int iter = 0; iter < _backfittingIterations; iter++)
         {
             for (int k = 0; k < parents.Count; k++)
             {
-                var partialResid = new Vector<T>(n);
-                for (int i = 0; i < n; i++)
+                var partialResid = centeredTarget;
+                for (int j = 0; j < parents.Count; j++)
                 {
-                    T val = NumOps.Subtract(data[i, target], targetMean);
-                    for (int j = 0; j < parents.Count; j++)
-                    {
-                        if (j != k) val = NumOps.Subtract(val, components[j][i]);
-                    }
-                    partialResid[i] = val;
+                    if (j != k) partialResid = Engine.TensorSubtract(partialResid, components[j]);
                 }
 
-                components[k] = KernelSmooth(data, parents[k], partialResid);
-
-                // Center the component
-                T compMean = NumOps.Zero;
-                for (int i = 0; i < n; i++) compMean = NumOps.Add(compMean, components[k][i]);
-                compMean = NumOps.Divide(compMean, nT);
-                for (int i = 0; i < n; i++)
-                    components[k][i] = NumOps.Subtract(components[k][i], compMean);
+                // Smooth, then center the component
+                components[k] = CenterVector(KernelSmooth(data, parents[k], partialResid.ToVector()).AsTensor());
             }
         }
 
         // Compute residual variance
-        T residVar = NumOps.Zero;
-        for (int i = 0; i < n; i++)
-        {
-            T fit = targetMean;
-            for (int k = 0; k < parents.Count; k++) fit = NumOps.Add(fit, components[k][i]);
-            T resid = NumOps.Subtract(data[i, target], fit);
-            residVar = NumOps.Add(residVar, NumOps.Multiply(resid, resid));
-        }
+        var fit = Engine.TensorFullLike(y, targetMean);
+        for (int k = 0; k < parents.Count; k++) fit = Engine.TensorAdd(fit, components[k]);
+        T residVar = Engine.TensorMean(Engine.TensorSquare(Engine.TensorSubtract(y, fit)));
 
-        return NumOps.ToDouble(NumOps.Divide(residVar, nT));
+        return NumOps.ToDouble(residVar);
     }
 }

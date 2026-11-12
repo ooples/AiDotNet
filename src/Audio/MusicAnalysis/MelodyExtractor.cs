@@ -146,26 +146,16 @@ public partial class MelodyExtractor<T> : AudioNeuralNetworkBase<T>, IPitchDetec
         var features = PreprocessAudio(audioFrame);
         Tensor<T> logits = IsOnnxMode && OnnxEncoder is not null ? OnnxEncoder.Run(features) : Predict(features);
 
-        int bestBin = 0;
-        double bestVal = double.NegativeInfinity;
-        for (int i = 0; i < Math.Min(_options.NumPitchBins, logits.Length); i++)
-        {
-            double v = NumOps.ToDouble(logits[i]);
-            if (v > bestVal) { bestVal = v; bestBin = i; }
-        }
-
-        // Confidence via softmax
-        double sumExp = 0;
-        for (int i = 0; i < Math.Min(_options.NumPitchBins, logits.Length); i++)
-            sumExp += Math.Exp(NumOps.ToDouble(logits[i]) - bestVal);
-        double confidence = 1.0 / sumExp;
+        // Peak bin; confidence via softmax
+        var (bestBin, confidenceT) = AudioEngineOps.PeakBinWithSoftmaxConfidence(Engine, logits, _options.NumPitchBins);
+        double confidence = NumOps.ToDouble(confidenceT);
 
         if (confidence < _options.VoicingThreshold) return null;
 
         double pitchHz = BinToFrequency(bestBin);
         if (pitchHz < MinPitch || pitchHz > MaxPitch) return null;
 
-        return (NumOps.FromDouble(pitchHz), NumOps.FromDouble(confidence));
+        return (NumOps.FromDouble(pitchHz), confidenceT);
     }
 
     /// <inheritdoc />
@@ -187,10 +177,11 @@ public partial class MelodyExtractor<T> : AudioNeuralNetworkBase<T>, IPitchDetec
         int frameSize = _options.FftSize;
         int hopSamples = _options.SampleRate * hopSizeMs / 1000;
 
+        var samples = AudioEngineOps.Flatten(Engine, audio);
+        T zero = NumOps.Zero;
         for (int start = 0; start + frameSize <= audio.Length; start += hopSamples)
         {
-            var frame = new Tensor<T>([frameSize]);
-            for (int i = 0; i < frameSize; i++) frame[i] = audio[start + i];
+            var frame = Engine.TensorSlice(samples, [start], [frameSize]);
 
             var detection = DetectPitchWithConfidence(frame);
             double time = start / (double)_options.SampleRate;
@@ -210,8 +201,8 @@ public partial class MelodyExtractor<T> : AudioNeuralNetworkBase<T>, IPitchDetec
                 results.Add(new PitchFrame<T>
                 {
                     Time = time,
-                    Pitch = NumOps.Zero,
-                    Confidence = NumOps.Zero,
+                    Pitch = zero,
+                    Confidence = zero,
                     IsVoiced = false
                 });
             }

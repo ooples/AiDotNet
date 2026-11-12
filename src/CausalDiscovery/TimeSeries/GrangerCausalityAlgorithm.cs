@@ -154,39 +154,34 @@ public class GrangerCausalityAlgorithm<T> : TimeSeriesCausalBase<T>
 
     private double ComputeARModelRSS(Matrix<T> data, int target, int lag, int effectiveN)
     {
-        // Design: [effectiveN x (lag + 1)] — lag columns + intercept
-        var design = new Matrix<T>(effectiveN, lag + 1);
-        var y = new Vector<T>(effectiveN);
+        // Design: [effectiveN x (lag + 1)] — lag columns (column l = target[t + lag - l - 1]) + intercept
+        var targetColumn = Engine.GetColumn(data, target).AsTensor().Reshape(new[] { data.Rows, 1 });
+        var y = Engine.TensorSlice(targetColumn, new[] { lag, 0 }, new[] { effectiveN, 1 });
+        var columns = new Tensor<T>[lag + 1];
+        for (int l = 0; l < lag; l++)
+            columns[l] = Engine.TensorSlice(targetColumn, new[] { lag - l - 1, 0 }, new[] { effectiveN, 1 });
+        columns[lag] = Engine.TensorOnesLike(y); // intercept
+        var design = Engine.TensorConcatenate(columns, 1);
 
-        for (int t = 0; t < effectiveN; t++)
-        {
-            y[t] = data[t + lag, target];
-            for (int l = 0; l < lag; l++)
-                design[t, l] = data[t + lag - l - 1, target];
-            design[t, lag] = NumOps.One; // intercept
-        }
-
-        return ComputeRSS(design, y, effectiveN, lag + 1);
+        return ComputeRSS(design.ToMatrix(), y.Reshape(new[] { effectiveN }).ToVector(), effectiveN, lag + 1);
     }
 
     private double ComputeGrangerRSS(Matrix<T> data, int target, int cause, int lag, int effectiveN)
     {
         // Design: [effectiveN x (2*lag + 1)] — target lags + cause lags + intercept
-        var design = new Matrix<T>(effectiveN, 2 * lag + 1);
-        var y = new Vector<T>(effectiveN);
-
-        for (int t = 0; t < effectiveN; t++)
+        var targetColumn = Engine.GetColumn(data, target).AsTensor().Reshape(new[] { data.Rows, 1 });
+        var causeColumn = Engine.GetColumn(data, cause).AsTensor().Reshape(new[] { data.Rows, 1 });
+        var y = Engine.TensorSlice(targetColumn, new[] { lag, 0 }, new[] { effectiveN, 1 });
+        var columns = new Tensor<T>[2 * lag + 1];
+        for (int l = 0; l < lag; l++)
         {
-            y[t] = data[t + lag, target];
-            for (int l = 0; l < lag; l++)
-            {
-                design[t, l] = data[t + lag - l - 1, target];
-                design[t, lag + l] = data[t + lag - l - 1, cause];
-            }
-            design[t, 2 * lag] = NumOps.One; // intercept
+            columns[l] = Engine.TensorSlice(targetColumn, new[] { lag - l - 1, 0 }, new[] { effectiveN, 1 });
+            columns[lag + l] = Engine.TensorSlice(causeColumn, new[] { lag - l - 1, 0 }, new[] { effectiveN, 1 });
         }
+        columns[2 * lag] = Engine.TensorOnesLike(y); // intercept
+        var design = Engine.TensorConcatenate(columns, 1);
 
-        return ComputeRSS(design, y, effectiveN, 2 * lag + 1);
+        return ComputeRSS(design.ToMatrix(), y.Reshape(new[] { effectiveN }).ToVector(), effectiveN, 2 * lag + 1);
     }
 
     /// <summary>
@@ -289,42 +284,35 @@ public class GrangerCausalityAlgorithm<T> : TimeSeriesCausalBase<T>
     private double ComputeLaggedCrossCorrelation(Matrix<T> data, int cause, int target, int maxLag)
     {
         int n = data.Rows;
-        double maxCorr = 0;
+        var causeColumn = Engine.GetColumn(data, cause).AsTensor();
+        var targetColumn = Engine.GetColumn(data, target).AsTensor();
+        T tiny = NumOps.FromDouble(1e-15);
 
+        // |corr| per usable lag; a lag whose denominator is not above 1e-15 (or whose correlation is
+        // NaN) contributes 0, and the result is the maximum, starting from 0.
+        var correlations = new List<Tensor<T>> { new Tensor<T>(new[] { 1 }) };
         for (int lag = 1; lag <= maxLag && lag < n; lag++)
         {
             int effectiveN = n - lag;
             if (effectiveN < 3) continue;
 
             // Compute correlation between cause[0..effectiveN-1] and target[lag..n-1]
-            double sumC = 0, sumT = 0;
-            for (int t = 0; t < effectiveN; t++)
-            {
-                sumC += NumOps.ToDouble(data[t, cause]);
-                sumT += NumOps.ToDouble(data[t + lag, target]);
-            }
-            double meanC = sumC / effectiveN;
-            double meanT = sumT / effectiveN;
-
-            double sxy = 0, sxx = 0, syy = 0;
-            for (int t = 0; t < effectiveN; t++)
-            {
-                double dx = NumOps.ToDouble(data[t, cause]) - meanC;
-                double dy = NumOps.ToDouble(data[t + lag, target]) - meanT;
-                sxy += dx * dy;
-                sxx += dx * dx;
-                syy += dy * dy;
-            }
-
-            double denom = Math.Sqrt(sxx * syy);
-            if (denom > 1e-15)
-            {
-                double corr = Math.Abs(sxy / denom);
-                if (corr > maxCorr) maxCorr = corr;
-            }
+            var c = Engine.TensorSlice(causeColumn, new[] { 0 }, new[] { effectiveN });
+            var t = Engine.TensorSlice(targetColumn, new[] { lag }, new[] { effectiveN });
+            var dx = Engine.TensorSubtractScalar(c, Engine.TensorMean(c));
+            var dy = Engine.TensorSubtractScalar(t, Engine.TensorMean(t));
+            var sxy = Engine.ReduceSum(Engine.TensorMultiply(dx, dy), new[] { 0 }, true);
+            var denom = Engine.TensorSqrt(Engine.TensorMultiply(
+                Engine.ReduceSum(Engine.TensorSquare(dx), new[] { 0 }, true),
+                Engine.ReduceSum(Engine.TensorSquare(dy), new[] { 0 }, true)));
+            var usable = Engine.TensorGreaterThan(denom, tiny);
+            var corr = Engine.TensorAbs(Engine.TensorDivide(sxy,
+                Engine.TensorWhere(usable, denom, Engine.TensorOnesLike(denom))));
+            correlations.Add(Engine.TensorWhere(Engine.TensorMultiply(usable, Engine.TensorGreaterThan(corr, NumOps.Zero)),
+                corr, Engine.TensorZerosLike(corr)));
         }
 
-        return maxCorr;
+        return NumOps.ToDouble(Engine.TensorMaxValue(Engine.TensorConcatenate(correlations.ToArray(), 0)));
     }
 
     /// <summary>

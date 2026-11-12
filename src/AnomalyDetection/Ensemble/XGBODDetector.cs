@@ -172,55 +172,16 @@ public partial class XGBODDetector<T> : AnomalyDetectorBase<T>
 
         // Create enhanced feature matrix [original features | TOS]
         int nEnhancedFeatures = _nOriginalFeatures + _nEstimators;
-        var enhancedData = new Matrix<T>(n, nEnhancedFeatures);
+        var engine = Engine;
+        var enhanced = BuildEnhancedFeatures(X, tosScores);
 
-        for (int i = 0; i < n; i++)
-        {
-            // Original features
-            for (int j = 0; j < _nOriginalFeatures; j++)
-            {
-                enhancedData[i, j] = X[i, j];
-            }
-
-            // TOS features
-            for (int e = 0; e < _nEstimators; e++)
-            {
-                enhancedData[i, _nOriginalFeatures + e] = tosScores[e][i];
-            }
-        }
-
-        // Normalize enhanced features
-        _featureMean = new Vector<T>(nEnhancedFeatures);
-        _featureStd = new Vector<T>(nEnhancedFeatures);
-        T nT = NumOps.FromDouble(n);
+        // Normalize enhanced features: population mean and std per feature (a std below eps becomes 1)
         T eps = NumOps.FromDouble(1e-10);
-
-        for (int j = 0; j < nEnhancedFeatures; j++)
-        {
-            T sum = NumOps.Zero;
-            for (int i = 0; i < n; i++)
-            {
-                sum = NumOps.Add(sum, enhancedData[i, j]);
-            }
-            _featureMean[j] = NumOps.Divide(sum, nT);
-
-            T varSum = NumOps.Zero;
-            for (int i = 0; i < n; i++)
-            {
-                T diff = NumOps.Subtract(enhancedData[i, j], _featureMean[j]);
-                varSum = NumOps.Add(varSum, NumOps.Multiply(diff, diff));
-            }
-            _featureStd[j] = NumOps.Sqrt(NumOps.Divide(varSum, nT));
-            if (NumOps.LessThan(_featureStd[j], eps)) _featureStd[j] = NumOps.One;
-        }
-
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < nEnhancedFeatures; j++)
-            {
-                enhancedData[i, j] = NumOps.Divide(NumOps.Subtract(enhancedData[i, j], _featureMean[j]), _featureStd[j]);
-            }
-        }
+        var (std, mean) = engine.TensorStdMean(enhanced, new[] { 0 }, 0, false);
+        std = engine.TensorWhere(engine.TensorLessThan(std, eps), Tensor<T>.CreateOnes(new[] { nEnhancedFeatures }), std);
+        _featureMean = mean.ToVector();
+        _featureStd = std.ToVector();
+        var enhancedData = AnomalyTensorOps.DivideRow(AnomalyTensorOps.SubtractRow(enhanced, mean), std).ToMatrix();
 
         // Train simple gradient boosting on enhanced features
         _weights = TrainSimplifiedBoosting(enhancedData);
@@ -237,117 +198,71 @@ public partial class XGBODDetector<T> : AnomalyDetectorBase<T>
         int n = data.Rows;
         int d = data.Columns;
 
-        // Initialize weights (uniform)
-        var weights = new Vector<T>(d);
-        T initW = NumOps.Divide(NumOps.One, NumOps.FromDouble(d));
-        for (int j = 0; j < d; j++)
-        {
-            weights[j] = initW;
-        }
+        var engine = Engine;
+        var dataTensor = AnomalyTensorOps.ToTensor(data);
 
-        // Sample weights (start uniform)
-        var sampleWeights = new Vector<T>(n);
-        T initSW = NumOps.Divide(NumOps.One, NumOps.FromDouble(n));
-        for (int i = 0; i < n; i++)
-        {
-            sampleWeights[i] = initSW;
-        }
+        // Initialize weights and sample weights (uniform)
+        var weights = engine.Fill(d, NumOps.Divide(NumOps.One, NumOps.FromDouble(d))).AsTensor();
+        var sampleWeights = engine.Fill(n, NumOps.Divide(NumOps.One, NumOps.FromDouble(n))).AsTensor();
 
-        // Create pseudo-labels based on TOS majority vote
-        var pseudoLabels = new int[n];
+        // Create pseudo-labels based on TOS majority vote: the nAnomaly highest average TOS are anomalies (1)
         int nAnomaly = (int)(n * _contamination);
-        T nEstT = NumOps.FromDouble(_nEstimators);
-
-        var avgTos = new Vector<T>(n);
-        for (int i = 0; i < n; i++)
+        var tos = engine.TensorSlice(dataTensor, new[] { 0, _nOriginalFeatures }, new[] { n, _nEstimators });
+        var avgTos = engine.TensorDivideScalar(engine.ReduceSum(tos, new[] { 1 }, false), NumOps.FromDouble(_nEstimators));
+        var pseudoLabels = Tensor<T>.CreateZeros(new[] { n });
+        if (nAnomaly > 0)
         {
-            avgTos[i] = NumOps.Zero;
-            for (int e = 0; e < _nEstimators; e++)
-            {
-                avgTos[i] = NumOps.Add(avgTos[i], data[i, _nOriginalFeatures + e]);
-            }
-            avgTos[i] = NumOps.Divide(avgTos[i], nEstT);
-        }
-
-        var sortedIndices = Enumerable.Range(0, n)
-            .OrderByDescending(i => NumOps.ToDouble(avgTos[i]))
-            .ToArray();
-
-        for (int i = 0; i < nAnomaly; i++)
-        {
-            pseudoLabels[sortedIndices[i]] = 1; // Anomaly
+            var ranked = AnomalyTensorOps.StableOrder(avgTos, descending: true);
+            var anomalies = engine.TensorSlice(ranked, new[] { 0 }, new[] { nAnomaly });
+            pseudoLabels = engine.TensorIndexFill(pseudoLabels, 0, anomalies, NumOps.One);
         }
 
         T half = NumOps.FromDouble(0.5);
         T eps = NumOps.FromDouble(1e-10);
 
+        // The median threshold of every feature, the stump predictions [x > threshold] and where they
+        // disagree with the pseudo-labels depend only on the data, so they are computed once.
+        var (sortedColumns, _) = engine.TensorSort(dataTensor, 0, false);
+        var thresholds = engine.TensorSliceAxis(sortedColumns, 0, n / 2);
+        var predicted = engine.TensorGreaterThan(dataTensor, AnomalyTensorOps.BroadcastRow(thresholds, n));
+        var mismatch = engine.TensorAbs(engine.TensorSubtract(predicted, AnomalyTensorOps.BroadcastColumn(pseudoLabels, d)));
+        var mismatchByFeature = engine.TensorTranspose(mismatch);
+        var identity = engine.TensorEye<T>(d);
+
         // Boosting iterations
         for (int round = 0; round < _boostingRounds; round++)
         {
-            // Find best feature to split on
-            T bestGain = NumOps.MinValue;
-            int bestFeature = 0;
-            T bestThreshold = NumOps.Zero;
-
-            for (int j = 0; j < d; j++)
-            {
-                // Try median as threshold
-                var colValues = new T[n];
-                for (int i = 0; i < n; i++) colValues[i] = data[i, j];
-                var sorted = colValues.OrderBy(v => NumOps.ToDouble(v)).ToArray();
-                T threshold = sorted[n / 2];
-
-                // Compute weighted error
-                T error = NumOps.Zero;
-                for (int i = 0; i < n; i++)
-                {
-                    int predicted = NumOps.GreaterThan(data[i, j], threshold) ? 1 : 0;
-                    if (predicted != pseudoLabels[i])
-                    {
-                        error = NumOps.Add(error, sampleWeights[i]);
-                    }
-                }
-
-                // Information gain proxy
-                T gain = NumOps.Subtract(half, error);
-                if (NumOps.GreaterThan(gain, bestGain))
-                {
-                    bestGain = gain;
-                    bestFeature = j;
-                    bestThreshold = threshold;
-                }
-            }
+            // Weighted error of every feature's median stump; the best feature has the largest gain
+            // 0.5 - error (the first one on ties)
+            var error = engine.Reshape(
+                engine.TensorMatMul(mismatchByFeature, engine.Reshape(sampleWeights, new[] { n, 1 })), new[] { d });
+            var gain = engine.ScalarMinusTensor(half, error);
+            int bestFeature = AnomalyTensorOps.FirstArgMax(gain);
+            T bestGain = engine.TensorMaxValue(gain);
 
             // Update weights
             T numerator = NumOps.Add(NumOps.Subtract(NumOps.One, bestGain), half);
             T denominator = NumOps.Add(NumOps.Add(bestGain, half), eps);
             T alpha = NumOps.Multiply(half, NumOps.Log(NumOps.Divide(numerator, denominator)));
-            weights[bestFeature] = NumOps.Add(weights[bestFeature], alpha);
+            weights = engine.TensorAdd(weights, engine.TensorMultiplyScalar(engine.TensorSliceAxis(identity, 0, bestFeature), alpha));
 
-            // Update sample weights
-            T absAlpha = NumOps.Abs(alpha);
-            T expAlpha = NumOps.Exp(absAlpha);
-            for (int i = 0; i < n; i++)
-            {
-                int predicted = NumOps.GreaterThan(data[i, bestFeature], bestThreshold) ? 1 : 0;
-                if (predicted != pseudoLabels[i])
-                {
-                    sampleWeights[i] = NumOps.Multiply(sampleWeights[i], expAlpha);
-                }
-            }
-
-            // Normalize sample weights
-            T sumWeights = NumOps.Zero;
-            for (int i = 0; i < n; i++) sumWeights = NumOps.Add(sumWeights, sampleWeights[i]);
-            for (int i = 0; i < n; i++) sampleWeights[i] = NumOps.Divide(sampleWeights[i], sumWeights);
+            // Update sample weights: misclassified samples are scaled by exp(|alpha|), then normalized
+            T expAlpha = NumOps.Exp(NumOps.Abs(alpha));
+            var misclassified = engine.TensorSliceAxis(mismatchByFeature, 0, bestFeature);
+            sampleWeights = engine.TensorWhere(misclassified, engine.TensorMultiplyScalar(sampleWeights, expAlpha), sampleWeights);
+            sampleWeights = engine.TensorDivideScalar(sampleWeights, engine.TensorSum(sampleWeights));
         }
 
         // Normalize feature weights
-        T sumW = NumOps.Zero;
-        for (int j = 0; j < d; j++) sumW = NumOps.Add(sumW, weights[j]);
-        for (int j = 0; j < d; j++) weights[j] = NumOps.Divide(weights[j], sumW);
+        return engine.TensorDivideScalar(weights, engine.TensorSum(weights)).ToVector();
+    }
 
-        return weights;
+    // [original features | transformed outlier scores of every base detector] as one [n, d + e] tensor.
+    private Tensor<T> BuildEnhancedFeatures(Matrix<T> X, List<Vector<T>> tosScores)
+    {
+        var engine = Engine;
+        var tos = engine.TensorStack(tosScores.Select(s => s.AsTensor()).ToArray(), 1);
+        return engine.TensorConcatenate(new[] { AnomalyTensorOps.ToTensor(X), tos }, 1);
     }
 
     /// <inheritdoc/>
@@ -382,32 +297,9 @@ public partial class XGBODDetector<T> : AnomalyDetectorBase<T>
             tosScores.Add(detector.ScoreAnomalies(X));
         }
 
-        var resultScores = new Vector<T>(n);
-
-        for (int i = 0; i < n; i++)
-        {
-            // Build enhanced feature vector
-            var enhanced = new Vector<T>(nEnhancedFeatures);
-
-            // Original features (normalized)
-            for (int j = 0; j < _nOriginalFeatures; j++)
-            {
-                enhanced[j] = NumOps.Divide(NumOps.Subtract(X[i, j], featureMean[j]), featureStd[j]);
-            }
-
-            // TOS features (normalized)
-            for (int e = 0; e < _nEstimators; e++)
-            {
-                int j = _nOriginalFeatures + e;
-                enhanced[j] = NumOps.Divide(NumOps.Subtract(tosScores[e][i], featureMean[j]), featureStd[j]);
-            }
-
-            // Weighted sum as final score using Engine.DotProduct
-            T score = Engine.DotProduct(weights, enhanced);
-
-            resultScores[i] = score;
-        }
-
-        return resultScores;
+        // Normalized enhanced features, scored by the weighted sum with the boosting weights
+        var enhanced = AnomalyTensorOps.DivideRow(
+            AnomalyTensorOps.SubtractRow(BuildEnhancedFeatures(X, tosScores), featureMean.AsTensor()), featureStd.AsTensor());
+        return Engine.MatrixVectorMultiply(enhanced.ToMatrix(), weights);
     }
 }
