@@ -301,9 +301,7 @@ public partial class DeCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionL
             throw new InvalidOperationException("Tokenizer not initialized.");
         var enc = _tokenizer.Encode(text);
         int sl = Math.Min(enc.TokenIds.Count, _options.MaxSequenceLength);
-        var tk = new Tensor<T>([sl]);
-        for (int i = 0; i < sl; i++)
-            tk[i] = NumOps.FromDouble(enc.TokenIds[i]);
+        var tk = TokenIdsToTensor(enc.TokenIds, sl);
         return tk;
     }
 

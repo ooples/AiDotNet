@@ -629,9 +629,7 @@ public partial class SigLIP2<T> : VisionLanguageModelBase<T>, IContrastiveVision
 
         var encoding = _tokenizer.Encode(text);
         int seqLen = Math.Min(encoding.TokenIds.Count, _options.MaxSequenceLength);
-        var tokens = new Tensor<T>([seqLen]);
-        for (int i = 0; i < seqLen; i++)
-            tokens[i] = NumOps.FromDouble(encoding.TokenIds[i]);
+        var tokens = TokenIdsToTensor(encoding.TokenIds, seqLen);
         return tokens;
     }
 
