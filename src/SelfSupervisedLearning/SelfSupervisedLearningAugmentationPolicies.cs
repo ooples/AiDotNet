@@ -1,4 +1,5 @@
 ﻿using AiDotNet.Helpers;
+using AiDotNet.Tensors.Engines;
 
 namespace AiDotNet.SelfSupervisedLearning;
 
@@ -32,6 +33,7 @@ namespace AiDotNet.SelfSupervisedLearning;
 public class SelfSupervisedLearningAugmentationPolicies<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
+    private static IEngine Engine => AiDotNetEngine.Current;
 
     private readonly Random _random;
 
@@ -328,13 +330,9 @@ public class SelfSupervisedLearningAugmentationPolicies<T>
         var scale = scaleMin + _random.NextDouble() * (scaleMax - scaleMin);
         var aspectRatio = 0.75 + _random.NextDouble() * 0.5; // Random aspect ratio 0.75 to 1.25
 
-        var result = new T[image.Length];
-
         // For [batch, channels, height, width] or [batch, height, width, channels] tensors
         if (image.Shape.Length >= 4)
         {
-            var batch = image.Shape[0];
-            var channels = image.Shape[1];
             var height = image.Shape[2];
             var width = image.Shape[3];
 
@@ -349,55 +347,72 @@ public class SelfSupervisedLearningAugmentationPolicies<T>
             var top = _random.Next(0, Math.Max(1, height - cropHeight));
             var left = _random.Next(0, Math.Max(1, width - cropWidth));
 
-            // Perform crop and resize via bilinear interpolation
-            for (int b = 0; b < batch; b++)
-            {
-                for (int c = 0; c < channels; c++)
-                {
-                    for (int h = 0; h < height; h++)
-                    {
-                        for (int w = 0; w < width; w++)
-                        {
-                            // Map output position to crop region
-                            var srcH = top + (double)h / height * cropHeight;
-                            var srcW = left + (double)w / width * cropWidth;
-
-                            // Bilinear interpolation
-                            var h0 = (int)Math.Floor(srcH);
-                            var h1 = Math.Min(h0 + 1, height - 1);
-                            var w0 = (int)Math.Floor(srcW);
-                            var w1 = Math.Min(w0 + 1, width - 1);
-
-                            var hFrac = srcH - h0;
-                            var wFrac = srcW - w0;
-
-                            var v00 = NumOps.ToDouble(image[b, c, h0, w0]);
-                            var v01 = NumOps.ToDouble(image[b, c, h0, w1]);
-                            var v10 = NumOps.ToDouble(image[b, c, h1, w0]);
-                            var v11 = NumOps.ToDouble(image[b, c, h1, w1]);
-
-                            var interpolated = v00 * (1 - hFrac) * (1 - wFrac) +
-                                             v01 * (1 - hFrac) * wFrac +
-                                             v10 * hFrac * (1 - wFrac) +
-                                             v11 * hFrac * wFrac;
-
-                            result[b * channels * height * width + c * height * width + h * width + w] =
-                                NumOps.FromDouble(interpolated);
-                        }
-                    }
-                }
-            }
-        }
-        else
-        {
-            // For 2D tensors, apply scaling transform
-            for (int i = 0; i < image.Length; i++)
-            {
-                result[i] = NumOps.Multiply(image.Data.Span[i], NumOps.FromDouble(scale));
-            }
+            // Perform crop and resize via bilinear interpolation, which is separable: rows then columns
+            return ApplySeparable(image,
+                BilinearCropMatrix(height, cropHeight, top),
+                BilinearCropMatrix(width, cropWidth, left));
         }
 
-        return new Tensor<T>(result, image._shape);
+        // For 2D tensors, apply scaling transform
+        return Engine.TensorMultiplyScalar(image, NumOps.FromDouble(scale));
+    }
+
+    /// <summary>
+    /// [size, size] bilinear resampling matrix: output o reads source position
+    /// offset + o / size * cropSize, weighting floor(pos) by 1 - frac and min(floor(pos) + 1, size - 1) by frac.
+    /// </summary>
+    private static Tensor<T> BilinearCropMatrix(int size, int cropSize, int offset)
+    {
+        var positions = Arange(size);
+        var source = Engine.TensorAddScalar(
+            Engine.TensorMultiplyScalar(
+                Engine.TensorDivideScalar(positions, NumOps.FromDouble(size)), NumOps.FromDouble(cropSize)),
+            NumOps.FromDouble(offset));
+        var lower = Engine.TensorFloor(source);
+        var frac = Engine.TensorSubtract(source, lower).Reshape(size, 1);
+        var upper = Engine.TensorClampMax(Engine.TensorAddScalar(lower, NumOps.One), NumOps.FromDouble(size - 1));
+
+        var lowerHit = IndexHits(lower.Reshape(size, 1), positions.Reshape(1, size));
+        var upperHit = IndexHits(upper.Reshape(size, 1), positions.Reshape(1, size));
+        return Engine.TensorAdd(
+            Engine.TensorMultiply(lowerHit, Engine.ScalarMinusTensor(NumOps.One, frac)),
+            Engine.TensorMultiply(upperHit, frac));
+    }
+
+    /// <summary>
+    /// 1 where an integer-valued index equals a candidate position (|index - position| &lt; 0.5), else 0; broadcasts.
+    /// </summary>
+    private static Tensor<T> IndexHits(Tensor<T> indices, Tensor<T> positions)
+    {
+        return Engine.TensorLessThan(
+            Engine.TensorAbs(Engine.TensorSubtract(indices, positions)), NumOps.FromDouble(0.5));
+    }
+
+    /// <summary>[0, 1, ..., count - 1] as T, built from a cumulative sum of ones.</summary>
+    private static Tensor<T> Arange(int count)
+    {
+        var ones = Engine.TensorAddScalar(new Tensor<T>(new[] { count }), NumOps.One);
+        return Engine.TensorAddScalar(Engine.TensorCumSum(ones, 0), NumOps.Negate(NumOps.One));
+    }
+
+    /// <summary>
+    /// out[b, c] = rows @ image[b, c] @ columns^T for a [B, C, H, W] image: columns act along the width first,
+    /// then rows along the height.
+    /// </summary>
+    private static Tensor<T> ApplySeparable(Tensor<T> image, Tensor<T> rows, Tensor<T> columns)
+    {
+        int batch = image.Shape[0], channels = image.Shape[1], height = image.Shape[2], width = image.Shape[3];
+
+        var alongWidth = Engine.TensorMatMul(
+                image.Contiguous().Reshape(batch * channels * height, width), Engine.TensorTranspose(columns))
+            .Reshape(batch, channels, height, width);
+
+        var heightLast = Engine.TensorPermute(alongWidth, new[] { 0, 1, 3, 2 }).Contiguous()
+            .Reshape(batch * channels * width, height);
+        var alongHeight = Engine.TensorMatMul(heightLast, Engine.TensorTranspose(rows))
+            .Reshape(batch, channels, width, height);
+
+        return Engine.TensorPermute(alongHeight, new[] { 0, 1, 3, 2 }).Contiguous();
     }
 
     private Tensor<T> HorizontalFlip(Tensor<T> image)
@@ -441,28 +456,20 @@ public class SelfSupervisedLearningAugmentationPolicies<T>
     private Tensor<T> ColorJitter(Tensor<T> image,
         double brightnessRange, double contrastRange, double saturationRange, double hueRange)
     {
-        var result = new T[image.Length];
-
         // Apply random brightness/contrast adjustments
         var brightness = 1.0 + (_random.NextDouble() * 2 - 1) * brightnessRange;
         var contrast = 1.0 + (_random.NextDouble() * 2 - 1) * contrastRange;
 
-        for (int i = 0; i < image.Length; i++)
-        {
-            var val = NumOps.ToDouble(image.Data.Span[i]);
-            val = (val - 0.5) * contrast + 0.5;  // Contrast
-            val = val * brightness;               // Brightness
-            val = Math.Max(0, Math.Min(1, val)); // Clamp
-            result[i] = NumOps.FromDouble(val);
-        }
-
-        return new Tensor<T>(result, image._shape);
+        var half = NumOps.FromDouble(0.5);
+        var contrasted = Engine.TensorAddScalar(
+            Engine.TensorMultiplyScalar(Engine.TensorAddScalar(image, NumOps.Negate(half)), NumOps.FromDouble(contrast)),
+            half);                                                                       // Contrast
+        var brightened = Engine.TensorMultiplyScalar(contrasted, NumOps.FromDouble(brightness)); // Brightness
+        return Engine.TensorClamp(brightened, NumOps.Zero, NumOps.One);                  // Clamp
     }
 
     private Tensor<T> ToGrayscale(Tensor<T> image)
     {
-        var result = new T[image.Length];
-
         // For [batch, channels, height, width] tensors
         if (image.Shape.Length >= 4)
         {
@@ -477,43 +484,25 @@ public class SelfSupervisedLearningAugmentationPolicies<T>
             const double gWeight = 0.587;
             const double bWeight = 0.114;
 
-            for (int b = 0; b < batch; b++)
-            {
-                for (int h = 0; h < height; h++)
-                {
-                    for (int w = 0; w < width; w++)
-                    {
-                        // Compute grayscale value from RGB channels
-                        double gray;
-                        if (channels >= 3)
-                        {
-                            var r = NumOps.ToDouble(image[b, 0, h, w]);
-                            var g = NumOps.ToDouble(image[b, 1, h, w]);
-                            var bVal = NumOps.ToDouble(image[b, 2, h, w]);
-                            gray = rWeight * r + gWeight * g + bWeight * bVal;
-                        }
-                        else
-                        {
-                            // Single channel - already grayscale
-                            gray = NumOps.ToDouble(image[b, 0, h, w]);
-                        }
+            Tensor<T> Channel(int c) =>
+                Engine.TensorSlice(image, new[] { 0, c, 0, 0 }, new[] { batch, 1, height, width });
 
-                        // Set all channels to the grayscale value (maintains tensor shape)
-                        for (int c = 0; c < channels; c++)
-                        {
-                            var idx = b * channels * height * width + c * height * width + h * width + w;
-                            result[idx] = NumOps.FromDouble(gray);
-                        }
-                    }
-                }
-            }
-        }
-        else
-        {
-            // For 2D tensors, just copy (no channel dimension)
-            Array.Copy(image.Data.ToArray(), result, image.Length);
+            // Compute grayscale value from RGB channels; a single channel is already grayscale
+            var gray = channels >= 3
+                ? Engine.TensorAdd(
+                    Engine.TensorAdd(
+                        Engine.TensorMultiplyScalar(Channel(0), NumOps.FromDouble(rWeight)),
+                        Engine.TensorMultiplyScalar(Channel(1), NumOps.FromDouble(gWeight))),
+                    Engine.TensorMultiplyScalar(Channel(2), NumOps.FromDouble(bWeight)))
+                : Channel(0);
+
+            // Set all channels to the grayscale value (maintains tensor shape)
+            return Engine.TensorTile(gray, new[] { 1, channels, 1, 1 });
         }
 
+        // For 2D tensors, just copy (no channel dimension)
+        var result = new T[image.Length];
+        Array.Copy(image.Data.ToArray(), result, image.Length);
         return new Tensor<T>(result, image._shape);
     }
 
@@ -524,8 +513,6 @@ public class SelfSupervisedLearningAugmentationPolicies<T>
         // For [batch, channels, height, width] tensors
         if (image.Shape.Length >= 4)
         {
-            var batch = image.Shape[0];
-            var channels = image.Shape[1];
             var height = image.Shape[2];
             var width = image.Shape[3];
 
@@ -534,67 +521,17 @@ public class SelfSupervisedLearningAugmentationPolicies<T>
             var kernelSize = Math.Max(3, (int)Math.Ceiling(sigma * 6) | 1);
             var radius = kernelSize / 2;
 
-            // Generate 1D Gaussian kernel
-            var kernel = new double[kernelSize];
-            double kernelSum = 0;
-            for (int i = 0; i < kernelSize; i++)
-            {
-                var x = i - radius;
-                kernel[i] = Math.Exp(-0.5 * x * x / (sigma * sigma));
-                kernelSum += kernel[i];
-            }
-            // Normalize kernel
-            for (int i = 0; i < kernelSize; i++)
-            {
-                kernel[i] /= kernelSum;
-            }
+            // Generate the normalized 1D Gaussian kernel: exp(-0.5 x^2 / sigma^2), x = -radius..radius
+            var offsets = Engine.TensorAddScalar(Arange(kernelSize), NumOps.FromDouble(-radius));
+            var kernel = Engine.TensorExp(Engine.TensorDivideScalar(
+                Engine.TensorMultiplyScalar(Engine.TensorSquare(offsets), NumOps.FromDouble(-0.5)),
+                NumOps.FromDouble(sigma * sigma)));
+            kernel = Engine.TensorDivideScalar(kernel, Engine.TensorSum(kernel));
 
-            // Apply separable convolution (horizontal then vertical) for efficiency
-            // First pass: horizontal blur
-            var temp = new double[batch * channels * height * width];
-            for (int b = 0; b < batch; b++)
-            {
-                for (int c = 0; c < channels; c++)
-                {
-                    for (int h = 0; h < height; h++)
-                    {
-                        for (int w = 0; w < width; w++)
-                        {
-                            double sum = 0;
-                            for (int k = 0; k < kernelSize; k++)
-                            {
-                                var srcW = Math.Max(0, Math.Min(w + k - radius, width - 1));
-                                sum += NumOps.ToDouble(image[b, c, h, srcW]) * kernel[k];
-                            }
-                            temp[b * channels * height * width + c * height * width + h * width + w] = sum;
-                        }
-                    }
-                }
-            }
-
-            // Second pass: vertical blur
-            var result = new T[image.Length];
-            for (int b = 0; b < batch; b++)
-            {
-                for (int c = 0; c < channels; c++)
-                {
-                    for (int h = 0; h < height; h++)
-                    {
-                        for (int w = 0; w < width; w++)
-                        {
-                            double sum = 0;
-                            for (int k = 0; k < kernelSize; k++)
-                            {
-                                var srcH = Math.Max(0, Math.Min(h + k - radius, height - 1));
-                                sum += temp[b * channels * height * width + c * height * width + srcH * width + w] * kernel[k];
-                            }
-                            result[b * channels * height * width + c * height * width + h * width + w] = NumOps.FromDouble(sum);
-                        }
-                    }
-                }
-            }
-
-            return new Tensor<T>(result, image._shape);
+            // Apply separable convolution (horizontal then vertical) with edge clamping
+            return ApplySeparable(image,
+                ClampedBlurMatrix(height, offsets, kernel),
+                ClampedBlurMatrix(width, offsets, kernel));
         }
         else
         {
@@ -605,21 +542,30 @@ public class SelfSupervisedLearningAugmentationPolicies<T>
         }
     }
 
+    /// <summary>
+    /// [size, size] blur matrix: M[o, s] = sum_k kernel[k] where clamp(o + offset[k], 0, size - 1) == s.
+    /// </summary>
+    private static Tensor<T> ClampedBlurMatrix(int size, Tensor<T> offsets, Tensor<T> kernel)
+    {
+        var kernelSize = offsets.Shape[0];
+        var positions = Arange(size);
+
+        // Source index of tap k for output o: [K, size, 1]
+        var taps = Engine.TensorClamp(
+            Engine.TensorAdd(positions.Reshape(1, size), offsets.Reshape(kernelSize, 1)),
+            NumOps.Zero, NumOps.FromDouble(size - 1)).Reshape(kernelSize, size, 1);
+
+        // Weighted one-hots over the source axis, summed over taps
+        var hits = IndexHits(taps, positions.Reshape(1, 1, size));
+        var weighted = Engine.TensorMultiply(hits, kernel.Reshape(kernelSize, 1, 1));
+        return Engine.ReduceSum(weighted, new[] { 0 }, keepDims: false);
+    }
+
     private Tensor<T> Solarize(Tensor<T> image, double threshold)
     {
-        var result = new T[image.Length];
-
-        for (int i = 0; i < image.Length; i++)
-        {
-            var val = NumOps.ToDouble(image.Data.Span[i]);
-            if (val > threshold)
-            {
-                val = 1.0 - val;  // Invert values above threshold
-            }
-            result[i] = NumOps.FromDouble(val);
-        }
-
-        return new Tensor<T>(result, image._shape);
+        // Invert values above threshold
+        var above = Engine.TensorGreaterThan(image, NumOps.FromDouble(threshold));
+        return Engine.TensorWhere(above, Engine.ScalarMinusTensor(NumOps.One, image), image);
     }
 
     #endregion
