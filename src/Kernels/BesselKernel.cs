@@ -169,8 +169,9 @@ public class BesselKernel<T> : IKernelFunction<T>
     /// "series expansion," which is like breaking down a complex calculation into a sum of simpler terms.
     /// </para>
     /// <para>
-    /// The series expansion is particularly accurate for smaller input values. The method adds up terms
-    /// until the result is precise enough (when additional terms become extremely small).
+    /// The series expansion is particularly accurate for smaller input values. The method sums a
+    /// fixed-length series of floor(|x|) + 31 terms (at most 99 after the first): once k exceeds x
+    /// each term is at least 4 times smaller than the one before, so the remaining terms are negligible.
     /// </para>
     /// <para>
     /// This approach is similar to how you might approximate p by adding more and more decimal places.
@@ -185,10 +186,11 @@ public class BesselKernel<T> : IKernelFunction<T>
         var engine = AiDotNetEngine.Current;
         T xSquaredOver4 = _numOps.Divide(_numOps.Square(x), _numOps.FromDouble(4));
 
-        var k = engine.TensorLinspace(_numOps.One, _numOps.FromDouble(maxIterations - 1), maxIterations - 1);
+        int termCount = Math.Min(maxIterations - 1, _numOps.ToInt32(_numOps.Floor(_numOps.Abs(x))) + 31);
+        var k = engine.TensorLinspace(_numOps.One, _numOps.FromDouble(termCount), termCount);
         var denominators = engine.TensorMultiply(k, engine.TensorAddScalar(k, order));
         var ratios = engine.TensorDivide(
-            Tensor<T>.CreateDefault(new[] { maxIterations - 1 }, _numOps.Negate(xSquaredOver4)), denominators);
+            Tensor<T>.CreateDefault(new[] { termCount }, _numOps.Negate(xSquaredOver4)), denominators);
         T relativeSum = _numOps.Add(_numOps.One, engine.TensorSum(engine.TensorCumProd(ratios, 0)));
 
         T logGamma = engine.TensorLgamma(Tensor<T>.FromScalar(_numOps.Add(order, _numOps.One))).GetFlatIndexValue(0);

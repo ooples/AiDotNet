@@ -87,7 +87,7 @@ public class RFFKernel<T> : IKernelFunction<T>
         RBF,
         /// <summary>Laplacian (Exponential) kernel.</summary>
         Laplacian,
-        /// <summary>Matern 1/2 kernel (same as Laplacian).</summary>
+        /// <summary>Matern 1/2 kernel: exp(-||x - x'||₂ / l), the L2 exponential (Laplacian is the L1 form).</summary>
         Matern12,
         /// <summary>Matern 3/2 kernel.</summary>
         Matern32,
@@ -162,9 +162,10 @@ public class RFFKernel<T> : IKernelFunction<T>
     /// </summary>
     /// <remarks>
     /// <para>
-    /// Spectral densities: RBF → Gaussian (Box-Muller), Laplacian/Matern12 → Cauchy (inverse CDF),
-    /// Matern32 → Student-t with 3 degrees of freedom, Matern52 → Student-t with 5 degrees of freedom
-    /// (a Gaussian over the root of a chi-squared built from df squared Gaussians).
+    /// Spectral densities: RBF → Gaussian (Box-Muller); Laplacian (the L1 kernel) → independent Cauchy
+    /// per coordinate (inverse CDF); Matérn-ν (L2) → multivariate Student-t with 2ν degrees of freedom:
+    /// Matern12 → df 1, Matern32 → df 3, Matern52 → df 5. A multivariate t shares one chi-squared value
+    /// across all coordinates of a frequency row (a Gaussian vector over the root of chi-squared / df).
     /// </para>
     /// </remarks>
     private (Tensor<T> Frequencies, Tensor<T> Phases) SampleFrequenciesAndPhases(int seed)
@@ -173,7 +174,8 @@ public class RFFKernel<T> : IKernelFunction<T>
         var shape = new[] { _numFeatures, _inputDim };
         int perFrequency = _kernelType switch
         {
-            RFFKernelType.Laplacian or RFFKernelType.Matern12 => 1,
+            RFFKernelType.Laplacian => 1,
+            RFFKernelType.Matern12 => 2 * (1 + 1),
             RFFKernelType.Matern32 => 2 * (1 + 3),
             RFFKernelType.Matern52 => 2 * (1 + 5),
             _ => 2
@@ -187,7 +189,8 @@ public class RFFKernel<T> : IKernelFunction<T>
 
         Tensor<T> frequencies = _kernelType switch
         {
-            RFFKernelType.Laplacian or RFFKernelType.Matern12 => SampleCauchy(Plane(0)),
+            RFFKernelType.Laplacian => SampleCauchy(Plane(0)),
+            RFFKernelType.Matern12 => SampleStudentT(Plane, 1),
             RFFKernelType.Matern32 => SampleStudentT(Plane, 3),
             RFFKernelType.Matern52 => SampleStudentT(Plane, 5),
             _ => SampleGaussian(Plane(0), Plane(1))
@@ -231,18 +234,23 @@ public class RFFKernel<T> : IKernelFunction<T>
     }
 
     /// <summary>
-    /// Student-t with df degrees of freedom: z / sqrt(chi2 / df), chi2 the sum of df squared Gaussians.
+    /// Multivariate Student-t with df degrees of freedom per frequency row: z / sqrt(chi2 / df), with z a
+    /// Gaussian per coordinate and chi2 (the sum of df squared Gaussians) drawn once per row.
     /// </summary>
     private Tensor<T> SampleStudentT(Func<int, Tensor<T>> plane, int df)
     {
         var engine = AiDotNetEngine.Current;
         var z = SampleGaussian(plane(0), plane(1));
+        int rows = z.Shape[0];
+        int columns = z.Shape[1];
         var squares = Enumerable.Range(1, df).Select(k =>
         {
-            var g = SampleGaussian(plane(2 * k), plane(2 * k + 1));
+            // One Gaussian per row: the first coordinate's draw of this plane pair.
+            var g = engine.TensorSlice(SampleGaussian(plane(2 * k), plane(2 * k + 1)), new[] { 0, 0 }, new[] { rows, 1 });
             return engine.TensorMultiply(g, g);
         });
-        var chi2 = squares.Aggregate((sum, square) => engine.TensorAdd(sum, square));
+        var chi2 = engine.TensorBroadcastTo(squares.Aggregate((sum, square) => engine.TensorAdd(sum, square)),
+            new[] { rows, columns });
 
         return engine.TensorDivide(z, engine.TensorSqrt(engine.TensorMultiplyScalar(chi2, _numOps.FromDouble(1.0 / df))));
     }
@@ -354,6 +362,10 @@ public class RFFKernel<T> : IKernelFunction<T>
     /// </remarks>
     public Matrix<T> GetFeatureMatrix(Matrix<T> X)
     {
+        if (X is null)
+            throw new ArgumentNullException(nameof(X));
+        if (X.Columns != _inputDim)
+            throw new ArgumentException($"Expected input dimension {_inputDim}, got {X.Columns}.", nameof(X));
         if (X.Rows == 0)
             return new Matrix<T>(0, _numFeatures);
 
@@ -377,7 +389,8 @@ public class RFFKernel<T> : IKernelFunction<T>
     public T EstimateApproximationError(Matrix<T> X, IKernelFunction<T> exactKernel)
     {
         int n = X.Rows;
-        int numPairs = Math.Min(n * (n + 1) / 2, 1000); // Sample at most 1000 pairs
+        // Sample at most 1000 pairs; the pair count is formed in long so large n cannot overflow int.
+        int numPairs = (int)Math.Min((long)n * (n + 1) / 2, 1000L);
 
         // Draw every pair first, in the same order as before (i then j per trial)
         var rand = RandomHelper.CreateSecureRandom();

@@ -104,7 +104,11 @@ public class BSplineKernel<T> : IKernelFunction<T>
         var engine = AiDotNetEngine.Current;
         var diff = engine.Divide(engine.Subtract(x1, x2), _knotSpacing).AsTensor();
 
-        return engine.Product(BSplineBasis(_degree, diff).AsVector());
+        // Centered cardinal B-spline B(u + (degree + 1) / 2): the uncentered basis has support
+        // [0, degree + 1], which gave k(x, x) = 0 and k(x1, x2) != k(x2, x1).
+        var centered = engine.TensorAddScalar(diff, _numOps.FromDouble((_degree + 1) / 2.0));
+
+        return engine.Product(BSplineBasis(_degree, centered).AsVector());
     }
 
     /// <summary>

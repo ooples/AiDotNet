@@ -77,7 +77,7 @@ public class CylindricalKernel<T> : IKernelFunction<T>
     ///     rbf,
     ///     regularDims: new[] { 0, 1 },
     ///     angularDims: new[] { 2, 3 },
-    ///     periods: new[] { 2 * Math.PI, 24.0 }  // Angles in radians, hours in day
+    ///     periods: new Vector&lt;double&gt;(new[] { 2 * Math.PI, 24.0 })  // Angles in radians, hours in day
     /// );
     /// </para>
     /// </remarks>

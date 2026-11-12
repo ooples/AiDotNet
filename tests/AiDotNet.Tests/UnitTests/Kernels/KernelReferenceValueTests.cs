@@ -67,4 +67,17 @@ public class KernelReferenceValueTests
 
         Assert.Equal(2.5, kernel.Calculate(x, x), Tolerance);
     }
+
+    [Fact]
+    public void BSpline_Cubic_IsCenteredAndSymmetric()
+    {
+        // Centered cubic B-spline: B3(0) = 2/3 and B3(+-0.5) = 23/48.
+        var kernel = new BSplineKernel<double>(3, 1.0);
+        var origin = new Vector<double>(new[] { 0.0, 0.0 });
+        var shifted = new Vector<double>(new[] { 0.5, 0.0 });
+
+        Assert.Equal(4.0 / 9.0, kernel.Calculate(origin, origin), 12);
+        Assert.Equal(23.0 / 48.0 * 2.0 / 3.0, kernel.Calculate(origin, shifted), 12);
+        Assert.Equal(kernel.Calculate(origin, shifted), kernel.Calculate(shifted, origin), 15);
+    }
 }
