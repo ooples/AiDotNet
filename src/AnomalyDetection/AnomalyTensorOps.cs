@@ -549,57 +549,6 @@ internal static class AnomalyTensorOps
     }
 
     /// <summary>
-    /// Pearson correlation of each row of a with the same row of b ([m, r] each): cov / sqrt(varA * varB),
-    /// or 0 when that denominator is not above 1e-10 or r &lt; 2.
-    /// </summary>
-    internal static Tensor<T> RowPearson<T>(Tensor<T> a, Tensor<T> b)
-    {
-        var engine = Engine;
-        var numOps = MathHelper.GetNumericOperations<T>();
-        int m = a.Shape[0];
-        int r = a.Shape[1];
-        if (r < 2)
-        {
-            return Tensor<T>.CreateZeros(new[] { m });
-        }
-
-        var da = engine.TensorSubtract(a, BroadcastColumn(engine.ReduceMean(a, new[] { 1 }, false), r));
-        var db = engine.TensorSubtract(b, BroadcastColumn(engine.ReduceMean(b, new[] { 1 }, false), r));
-        var cov = engine.ReduceSum(engine.TensorMultiply(da, db), new[] { 1 }, false);
-        var varA = engine.ReduceSum(engine.TensorSquare(da), new[] { 1 }, false);
-        var varB = engine.ReduceSum(engine.TensorSquare(db), new[] { 1 }, false);
-        var denom = engine.TensorSqrt(engine.TensorMultiply(varA, varB));
-        var usable = engine.TensorGreaterThan(denom, numOps.FromDouble(1e-10));
-        return engine.TensorWhere(usable, engine.TensorDivide(cov, denom), Tensor<T>.CreateZeros(new[] { m }));
-    }
-
-    /// <summary>
-    /// For each row of values ([m, e]) a 0/1 mask of the <paramref name="count"/> largest entries, ties
-    /// going to the lower column index (the order a stable descending sort gives).
-    /// </summary>
-    internal static Tensor<T> TopCountMask<T>(Tensor<T> values, int count)
-    {
-        var engine = Engine;
-        var numOps = MathHelper.GetNumericOperations<T>();
-        int m = values.Shape[0];
-        int e = values.Shape[1];
-        var shape = new[] { m, e, e };
-
-        // own[i, a, b] = values[i, a]; other[i, a, b] = values[i, b]
-        var own = engine.TensorBroadcastTo(engine.Reshape(values, new[] { m, e, 1 }), shape);
-        var other = engine.TensorBroadcastTo(engine.Reshape(values, new[] { m, 1, e }), shape);
-
-        // rank(a) = #{b : v_b > v_a} + #{b < a : v_b == v_a}
-        var earlier = engine.TensorBroadcastTo(
-            engine.Reshape(engine.TensorTril(Tensor<T>.CreateOnes(new[] { e, e }), -1), new[] { 1, e, e }), shape);
-        var beats = engine.TensorAdd(
-            engine.TensorGreaterThan(other, own),
-            engine.TensorMultiply(engine.TensorEquals(other, own), earlier));
-        var rank = engine.ReduceSum(beats, new[] { 2 }, false);
-        return engine.TensorLessThan(rank, numOps.FromDouble(count));
-    }
-
-    /// <summary>
     /// The k nearest reference rows of every query row: their Euclidean distances ([m, k], ascending) and,
     /// in <paramref name="indices"/>, their row indices. With <paramref name="excludeSelf"/> (query and
     /// reference are the same rows) each row's own entry is pushed past every real distance first.
@@ -844,6 +793,21 @@ internal static class AnomalyTensorOps
         int k = values.Shape[1];
         var rowMax = engine.TensorBroadcastTo(engine.ReduceMax(values, new[] { 1 }, true), new[] { m, k });
         var weights = BroadcastRow(engine.ScalarMinusTensor(numOps.FromDouble(k), Range(k).Cast<T>()), m);
+        return engine.TensorArgMax(engine.TensorMultiply(engine.TensorEquals(values, rowMax), weights), 1);
+    }
+
+    /// <summary>
+    /// The index of the last (highest-index) largest entry of every row of a [m, k] tensor, as a loop that
+    /// replaces its best on a value at least as large does (weights j + 1 on the maximal positions).
+    /// </summary>
+    internal static Tensor<int> LastArgMaxRows<T>(Tensor<T> values)
+    {
+        var engine = Engine;
+        var numOps = MathHelper.GetNumericOperations<T>();
+        int m = values.Shape[0];
+        int k = values.Shape[1];
+        var rowMax = engine.TensorBroadcastTo(engine.ReduceMax(values, new[] { 1 }, true), new[] { m, k });
+        var weights = BroadcastRow(engine.TensorAddScalar(Range(k).Cast<T>(), numOps.One), m);
         return engine.TensorArgMax(engine.TensorMultiply(engine.TensorEquals(values, rowMax), weights), 1);
     }
 
