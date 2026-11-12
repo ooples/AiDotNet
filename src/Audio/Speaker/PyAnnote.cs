@@ -445,6 +445,8 @@ public partial class PyAnnote<T> : SpeakerRecognitionBase<T>, ISpeakerDiarizer<T
         // For PyAnnote, this is shape [batch=1, chunkFrames, numSpeakers].
         // We map each local chunk frame to its global frame index and
         // accumulate per-speaker scores there.
+        var chunkScores = new List<Tensor<T>>();
+        var chunkFrameIndex = new List<int>();
         for (int ci = 0; ci < chunks.Count && ci < activations.Count; ci++)
         {
             var act = activations[ci];
@@ -471,12 +473,19 @@ public partial class PyAnnote<T> : SpeakerRecognitionBase<T>, ISpeakerDiarizer<T
             int chunkFrames = rank >= 2 + batchOffset ? act.Shape[batchOffset] : 1;
             int speakerAxis = rank - 1;
             int chunkSpk = act.Shape[speakerAxis];
+            if (chunkFrames <= 0 || chunkSpk <= 0 || Math.Min(maxSpk, chunkSpk) <= 0)
+            {
+                // Without frames or speakers there is no evidence to attribute; reject the output
+                // instead of letting the empty score matrix name Speaker_0.
+                throw new InvalidOperationException(
+                    $"PyAnnote activation must contain at least one frame and one speaker; got {chunkFrames} frame(s) and {chunkSpk} speaker(s).");
+            }
 
             double chunkDuration = chunks[ci].EndTime - chunks[ci].StartTime;
             double chunkFrameStep = chunkDuration / Math.Max(1, chunkFrames);
 
             // Global frame of each local chunk frame
-            var globalFrames = new int[Math.Max(0, chunkFrames)];
+            var globalFrames = new int[chunkFrames];
             for (int f = 0; f < chunkFrames; f++)
             {
                 double globalTime = chunks[ci].StartTime + f * chunkFrameStep;
@@ -487,19 +496,25 @@ public partial class PyAnnote<T> : SpeakerRecognitionBase<T>, ISpeakerDiarizer<T
                 frameCounts[globalFrameIdx]++;
             }
 
-            // Add the chunk's [chunkFrames, speakers] scores (the first maxSpk speakers) to their global frames
+            // Collect the chunk's [chunkFrames, speakers] scores (the first maxSpk speakers) and their
+            // global frames; all chunks are added to the global frames in one scatter below
             int usedSpk = Math.Min(maxSpk, chunkSpk);
-            if (chunkFrames > 0 && usedSpk > 0)
-            {
-                var scores = Engine.Reshape(
-                    AudioEngineOps.FitLength(Engine, act, chunkFrames * chunkSpk), [chunkFrames, chunkSpk]);
-                if (usedSpk < chunkSpk)
-                    scores = Engine.TensorSlice(scores, [0, 0], [chunkFrames, usedSpk]);
-                if (usedSpk < maxSpk)
-                    scores = Engine.Concat(new[] { scores, new Tensor<T>([chunkFrames, maxSpk - usedSpk]) }, 1);
-                frameScores = Engine.TensorAdd(
-                    frameScores, Engine.ScatterAdd(scores, new Tensor<int>(globalFrames, [chunkFrames]), 0, numFrames));
-            }
+            var scores = Engine.Reshape(
+                AudioEngineOps.FitLength(Engine, act, chunkFrames * chunkSpk), [chunkFrames, chunkSpk]);
+            if (usedSpk < chunkSpk)
+                scores = Engine.TensorSlice(scores, [0, 0], [chunkFrames, usedSpk]);
+            if (usedSpk < maxSpk)
+                scores = Engine.Concat(new[] { scores, new Tensor<T>([chunkFrames, maxSpk - usedSpk]) }, 1);
+            chunkScores.Add(scores);
+            chunkFrameIndex.AddRange(globalFrames);
+        }
+
+        if (chunkScores.Count > 0)
+        {
+            var allScores = chunkScores.Count == 1 ? chunkScores[0] : Engine.Concat(chunkScores.ToArray(), 0);
+            frameScores = Engine.TensorAdd(
+                frameScores,
+                Engine.ScatterAdd(allScores, new Tensor<int>(chunkFrameIndex.ToArray(), [chunkFrameIndex.Count]), 0, numFrames));
         }
 
         // Normalize and find dominant speaker per frame (the first speaker with the largest mean score)
