@@ -193,6 +193,58 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
         }
 
         [Fact]
+        public void ENAS_UpdateController_UsesReinforceScoreFunctionAndEntropyShapedReward()
+        {
+            // ENAS (Pham et al. 2018): R' = R + lambda * H, b <- decay * b + (1 - decay) * R', and the controller
+            // gradient is -(R' - b) * d log pi(a) / dW, with d log softmax(Wh)_a / dW_c = (1[c = a] - p_c) h.
+            // Over the choices c that score function sums to zero for every hidden unit; master stored
+            // loss * W instead.
+            const int hidden = 8;
+            const double decay = 0.9, lambda = 0.1;
+            var space = new SearchSpaceBase<double>();
+            var enas = new ENAS<double>(space, numNodes: 3, controllerHiddenSize: hidden, baselineDecay: decay, entropyWeight: lambda);
+            var (_, logProb, entropy) = enas.SampleArchitecture();
+            enas.UpdateController(2.0, logProb, entropy);
+
+            double shaped = 2.0 + lambda * entropy;
+            Assert.Equal((1 - decay) * shaped, enas.GetBaseline(), 1e-12);
+
+            var gradients = enas.GetControllerGradients();
+            int maxChoices = Math.Max(3, space.Operations.Count);
+            bool anyNonZero = false;
+            foreach (var g in gradients)
+            {
+                for (int j = 0; j < hidden; j++)
+                {
+                    double columnSum = 0;
+                    for (int c = 0; c < maxChoices; c++)
+                    {
+                        columnSum += g[c * hidden + j];
+                        anyNonZero |= Math.Abs(g[c * hidden + j]) > 1e-12;
+                    }
+
+                    Assert.Equal(0.0, columnSum, 1e-12);
+                }
+            }
+
+            Assert.True(anyNonZero);
+
+            // Same seed, same sample: the gradient scales with the advantage R' - b = decay * R'.
+            var other = new ENAS<double>(space, numNodes: 3, controllerHiddenSize: hidden, baselineDecay: decay, entropyWeight: lambda);
+            var (_, logProb2, entropy2) = other.SampleArchitecture();
+            other.UpdateController(5.0, logProb2, entropy2);
+            double ratio = (5.0 + lambda * entropy2) / shaped;
+            var otherGradients = other.GetControllerGradients();
+            for (int i = 0; i < gradients.Count; i++)
+            {
+                for (int k = 0; k < gradients[i].Length; k++)
+                {
+                    Assert.Equal(gradients[i][k] * ratio, otherGradients[i][k], 1e-12);
+                }
+            }
+        }
+
+        [Fact]
         public void HardwareCostModel_ArchitectureCost_SumsOperationCosts()
         {
             var model = new HardwareCostModel<double>(HardwarePlatform.Mobile);
