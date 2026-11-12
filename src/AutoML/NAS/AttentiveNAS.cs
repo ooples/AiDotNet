@@ -145,18 +145,15 @@ namespace AiDotNet.AutoML.NAS
         /// </summary>
         private Vector<T> ComputeAttentionScores(Vector<T> contextVector)
         {
-            // Linear attention projection: scores = W * context (no softmax needed for NAS scoring)
-            var scores = new Vector<T>(_attentionWeights.Shape[1]);
-
-            for (int j = 0; j < _attentionWeights.Shape[1]; j++)
-            {
-                T score = _ops.Zero;
-                for (int i = 0; i < Math.Min(_attentionWeights.Shape[0], contextVector.Length); i++)
-                {
-                    score = _ops.Add(score, _ops.Multiply(_attentionWeights[i, j], contextVector[i]));
-                }
-                scores[j] = score;
-            }
+            // Linear attention projection: scores_j = sum_i W[i, j] * context[i] over the shared hidden units
+            var engine = AiDotNetEngine.Current;
+            int numChoices = _attentionWeights.Shape[1];
+            int shared = Math.Min(_attentionWeights.Shape[0], contextVector.Length);
+            var scores = shared == 0
+                ? new Vector<T>(numChoices)
+                : engine.TensorMatMul(
+                    contextVector.GetSubVector(0, shared).AsTensor().Reshape(new[] { 1, shared }),
+                    _attentionWeights.Slice(0, 0, shared)).Reshape(new[] { numChoices }).ToVector();
 
             // Apply softmax to get probability distribution
             return Softmax(scores);
@@ -174,11 +171,7 @@ namespace AiDotNet.AutoML.NAS
             embedding[1] = _ops.FromDouble(config.WidthMultiplier);
             embedding[2] = _ops.FromDouble(config.KernelSize / 10.0);
 
-            // Pad with zeros
-            for (int i = 3; i < embedding.Length; i++)
-            {
-                embedding[i] = _ops.Zero;
-            }
+            // The remaining entries stay zero (new vectors are zero-filled).
 
             return embedding;
         }
@@ -188,34 +181,30 @@ namespace AiDotNet.AutoML.NAS
         /// </summary>
         private List<T> ExtractScores(Vector<T> allScores, int startIdx, int endIdx)
         {
-            var scores = new List<T>();
-            for (int i = startIdx; i < Math.Min(endIdx, allScores.Length); i++)
+            int count = endIdx - startIdx;
+            if (count <= 0)
             {
-                scores.Add(allScores[i]);
+                return new List<T>();
             }
 
-            // If we don't have enough scores, pad with equal probabilities
-            while (scores.Count < (endIdx - startIdx))
+            // Missing scores are padded with equal probabilities 1 / count.
+            var scores = new Vector<T>(count);
+            scores.Fill(_ops.FromDouble(1.0 / count));
+            int available = Math.Max(0, Math.Min(endIdx, allScores.Length) - startIdx);
+            if (available > 0)
             {
-                scores.Add(_ops.FromDouble(1.0 / (endIdx - startIdx)));
+                allScores.GetSubVector(startIdx, available).AsSpan().CopyTo(scores.AsWritableSpan());
             }
 
             // Normalize to sum to 1
-            T sum = _ops.Zero;
-            foreach (var score in scores)
-            {
-                sum = _ops.Add(sum, score);
-            }
-
+            var engine = AiDotNetEngine.Current;
+            T sum = engine.Sum(scores);
             if (_ops.GreaterThan(sum, _ops.Zero))
             {
-                for (int i = 0; i < scores.Count; i++)
-                {
-                    scores[i] = _ops.Divide(scores[i], sum);
-                }
+                scores = engine.Divide(scores, sum);
             }
 
-            return scores;
+            return new List<T>(scores.ToArray());
         }
 
         /// <summary>
@@ -223,29 +212,7 @@ namespace AiDotNet.AutoML.NAS
         /// </summary>
         private Vector<T> Softmax(Vector<T> logits)
         {
-            var result = new Vector<T>(logits.Length);
-
-            T maxLogit = logits[0];
-            for (int i = 1; i < logits.Length; i++)
-            {
-                if (_ops.GreaterThan(logits[i], maxLogit))
-                    maxLogit = logits[i];
-            }
-
-            T sumExp = _ops.Zero;
-            var expValues = new T[logits.Length];
-            for (int i = 0; i < logits.Length; i++)
-            {
-                expValues[i] = _ops.Exp(_ops.Subtract(logits[i], maxLogit));
-                sumExp = _ops.Add(sumExp, expValues[i]);
-            }
-
-            for (int i = 0; i < logits.Length; i++)
-            {
-                result[i] = _ops.Divide(expValues[i], sumExp);
-            }
-
-            return result;
+            return AiDotNetEngine.Current.Softmax(logits);
         }
 
         /// <summary>
@@ -294,16 +261,26 @@ namespace AiDotNet.AutoML.NAS
             var embedding = config.Embedding
                 ?? throw new InvalidOperationException("Config embedding must not be null when updating attention weights.");
 
-            for (int i = 0; i < Math.Min(_attentionWeights.Shape[0], embedding.Length); i++)
+            int hiddenRows = _attentionWeights.Shape[0];
+            int shared = Math.Min(hiddenRows, embedding.Length);
+            if (shared == 0)
             {
-                // Gradient approximation: performance * embedding
-                T gradient = _ops.Multiply(performance, embedding[i]);
-                T update = _ops.Multiply(learningRate, gradient);
-
-                _attentionWeights[i, depthCol] = _ops.Add(_attentionWeights[i, depthCol], update);
-                _attentionWeights[i, widthCol] = _ops.Add(_attentionWeights[i, widthCol], update);
-                _attentionWeights[i, kernelCol] = _ops.Add(_attentionWeights[i, kernelCol], update);
+                return;
             }
+
+            // Gradient approximation: update_i = learningRate * (performance * embedding_i), added to the three
+            // chosen columns of every shared hidden row.
+            var engine = AiDotNetEngine.Current;
+            var update = new Tensor<T>(new[] { hiddenRows });
+            update.SetSubTensor(new[] { 0 }, engine.TensorMultiplyScalar(
+                engine.TensorMultiplyScalar(embedding.GetSubVector(0, shared).AsTensor(), performance), learningRate));
+            var chosenColumns = new Tensor<int>(new[] { 3 });
+            chosenColumns[0] = depthCol;
+            chosenColumns[1] = widthCol;
+            chosenColumns[2] = kernelCol;
+            var columnMask = engine.ReduceSum(
+                engine.TensorOneHot<T>(chosenColumns, _attentionWeights.Shape[1]), new[] { 0 }, false);
+            engine.TensorAddInPlace(_attentionWeights, engine.TensorOuter(update, columnMask));
         }
 
         /// <summary>
