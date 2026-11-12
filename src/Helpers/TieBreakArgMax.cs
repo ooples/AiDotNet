@@ -191,15 +191,10 @@ internal static class TieBreakArgMax
 
     /// <summary>
     /// Returns, for each row of a [rows, cols] tensor, the first <paramref name="k"/> columns of a STABLE
-    /// ascending sort, i.e. the k smallest values with ties kept in column order, listed smallest first.
-    /// NaN is treated as <c>MinValue</c>, so it sorts first as it does under <c>NumOps.Compare</c>.
+    /// ascending sort under <c>NumOps.Compare</c> ordering, smallest first: NaN ranks below every number
+    /// (including negative infinity), so NaN entries come first, then the numbers, ties in column order. This is
+    /// the order <c>Array.Sort</c> with <c>NumOps.Compare</c> gives, made stable.
     /// </summary>
-    /// <remarks>
-    /// Works in O(rows * cols * log cols + rows * k^2): the k-th smallest VALUE (well defined whatever the
-    /// sort's tie order) is the cut-off; everything below it is kept, and entries equal to it are kept in
-    /// column order until k are chosen. The k chosen columns are then put in stable order with
-    /// <see cref="StableOrder{T}(Tensor{T}, bool)"/>.
-    /// </remarks>
     public static Tensor<int> StableSmallestK<T>(Tensor<T> values, int k)
     {
         if (values is null)
@@ -219,31 +214,7 @@ internal static class TieBreakArgMax
             return new Tensor<int>(new[] { rows, k });
         }
 
-        var engine = AiDotNetEngine.Current;
-        var ops = MathHelper.GetNumericOperations<T>();
-        var clean = engine.TensorWhere(engine.TensorIsNan(values), engine.TensorFullLike(values, ops.MinValue), values);
-
-        // Cut-off: the k-th smallest value of each row.
-        var sorted = engine.TensorSort(clean, 1, false).Values;
-        var cutoff = engine.TensorBroadcastTo(engine.TensorNarrow(sorted, 1, k - 1, 1), new[] { rows, cols });
-        var below = engine.TensorLessThan(clean, cutoff);
-        var atCutoff = engine.TensorEquals(clean, cutoff);
-
-        // Entries at the cut-off are taken in column order until k entries are chosen.
-        var room = engine.ScalarMinusTensor(ops.FromDouble(k), engine.ReduceSum(below, new[] { 1 }, true));
-        var ordinal = engine.TensorCumSum(atCutoff, 1);
-        var takenAtCutoff = engine.TensorMultiply(
-            atCutoff, engine.TensorLessEqual(ordinal, engine.TensorBroadcastTo(room, new[] { rows, cols })));
-        var chosen = engine.TensorAdd(below, takenAtCutoff).Cast<int>();
-
-        // Chosen columns in column order: the key (1 - chosen) * cols + column is unique within a row.
-        var columns = engine.TensorBroadcastTo(engine.TensorArange<int>(0, cols).Reshape(1, cols), new[] { rows, cols });
-        var key = engine.TensorAdd(
-            engine.TensorMultiplyScalar(engine.ScalarMinusTensor(1, chosen), cols), columns);
-        var chosenColumns = engine.TensorNarrow(engine.TensorArgsort(key, 1, false), 1, 0, k);
-
-        var order = StableOrder(engine.TensorTakeAlongDim(clean, chosenColumns, 1), descending: false);
-        return engine.TensorTakeAlongDim(chosenColumns, order, 1);
+        return AiDotNetEngine.Current.TensorNarrow(StableOrderRows(values, descending: false), 1, 0, k);
     }
 
     /// <summary>
@@ -251,12 +222,6 @@ internal static class TieBreakArgMax
     /// ordering (NaN ranks below every number, so it comes last), in O(n log n). This is the order
     /// <c>OrderByDescending</c> gives on the values.
     /// </summary>
-    /// <remarks>
-    /// The engine sort puts equal values next to each other in some order. Each element's group rank (0 for
-    /// the largest value), its NaN flag and its index then form the unique 64-bit key
-    /// <c>rank * 2n + nan * n + index</c>, so arg-sorting the key is unambiguous. NaN joins the group of the
-    /// smallest number with its flag set, which places it after every number.
-    /// </remarks>
     /// <param name="values">Values of any shape; they are ordered as one flat vector.</param>
     /// <returns>Flat indices of shape [n], largest value first.</returns>
     public static Tensor<int> StableDescendingOrder1D<T>(Tensor<T> values)
@@ -272,38 +237,62 @@ internal static class TieBreakArgMax
             return new Tensor<int>(new[] { 0 });
         }
 
+        return StableOrderRows(values.Reshape(1, n), descending: true).Reshape(n);
+    }
+
+    /// <summary>
+    /// Stable per-row sort order of a [rows, cols] tensor under <c>NumOps.Compare</c> ordering, in
+    /// O(rows * cols * log cols). NaN ranks below every number: it comes first ascending and last descending.
+    /// </summary>
+    /// <remarks>
+    /// NaN is first replaced by the row's smallest number, which merges it into the lowest value group. The engine
+    /// sort then puts equal values next to each other in some order; each element's dense group rank, a NaN tier
+    /// inside the group and its column form the unique 64-bit key <c>rank * 2c + tier * c + column</c>, so
+    /// arg-sorting the key is unambiguous. The tier is the NaN flag descending (NaN after the numbers it joined) and
+    /// its complement ascending (NaN before them).
+    /// </remarks>
+    private static Tensor<int> StableOrderRows<T>(Tensor<T> values, bool descending)
+    {
         var engine = AiDotNetEngine.Current;
         var ops = MathHelper.GetNumericOperations<T>();
-        var flat = values.Reshape(n);
-        var isNaN = engine.TensorIsNan(flat);
-        T smallest = engine.TensorMinValue(engine.TensorWhere(isNaN, engine.TensorFullLike(flat, ops.MaxValue), flat));
-        var clean = engine.TensorWhere(isNaN, engine.TensorFullLike(flat, smallest), flat);
+        int rows = values.Shape[0];
+        int cols = values.Shape[1];
+        var shape = new[] { rows, cols };
 
-        // Dense rank of every value, counted from the largest
-        var sortedIndices = engine.TensorArgsort(clean, 0, true);
-        var sorted = engine.TensorTake(clean, sortedIndices);
-        var startsGroup = n == 1
-            ? new Tensor<int>(new[] { 1 })
+        var isNaN = engine.TensorIsNan(values);
+        var numbersOnly = engine.TensorWhere(isNaN, engine.TensorFullLike(values, ops.MaxValue), values);
+        var rowMin = engine.TensorNarrow(engine.TensorSort(numbersOnly, 1, false).Values, 1, 0, 1);
+        var clean = engine.TensorWhere(isNaN, engine.TensorBroadcastTo(rowMin, shape), values);
+
+        // Dense rank of every value within its row, counted from the first in sort order
+        var sorted = engine.TensorSort(clean, 1, descending);
+        var startsGroup = cols == 1
+            ? new Tensor<int>(new[] { rows, 1 })
             : engine.TensorConcatenate(
                 new[]
                 {
-                    new Tensor<int>(new[] { 1 }),
+                    new Tensor<int>(new[] { rows, 1 }),
                     engine.TensorNotEquals(
-                        engine.TensorNarrow(sorted, 0, 1, n - 1), engine.TensorNarrow(sorted, 0, 0, n - 1)).Cast<int>(),
+                        engine.TensorNarrow(sorted.Values, 1, 1, cols - 1),
+                        engine.TensorNarrow(sorted.Values, 1, 0, cols - 1)).Cast<int>(),
                 },
-                0);
-        var sortedRank = engine.TensorCumSum(startsGroup, 0);
-        var rank = engine.TensorIndexAdd(new Tensor<int>(new[] { n }), 0, sortedIndices, sortedRank);
+                1);
+        var sortedRank = engine.TensorCumSum(startsGroup, 1);
 
-        long count = n;
-        var nanFlag = engine.TensorWhere(isNaN, Tensor<long>.CreateDefault(new[] { n }, 1L), new Tensor<long>(new[] { n }));
-        var index = engine.TensorArange<int>(0, n).Cast<long>();
+        // Back to the original columns: the sort indices are a permutation, so their argsort is unambiguous
+        var inverse = engine.TensorArgsort(sorted.Indices, 1, false);
+        var rank = engine.TensorTakeAlongDim(sortedRank, inverse, 1);
+
+        long width = cols;
+        var nanFlag = engine.TensorWhere(isNaN, Tensor<long>.CreateDefault(shape, 1L), new Tensor<long>(shape));
+        var tier = descending ? nanFlag : engine.ScalarMinusTensor(1L, nanFlag);
+        var columns = engine.TensorBroadcastTo(engine.TensorArange<int>(0, cols).Reshape(1, cols), shape).Cast<long>();
         var key = engine.TensorAdd(
             engine.TensorAdd(
-                engine.TensorMultiplyScalar(rank.Cast<long>(), 2L * count),
-                engine.TensorMultiplyScalar(nanFlag, count)),
-            index);
-        return engine.TensorArgsort(key, 0, false);
+                engine.TensorMultiplyScalar(rank.Cast<long>(), 2L * width),
+                engine.TensorMultiplyScalar(tier, width)),
+            columns);
+        return engine.TensorArgsort(key, 1, false);
     }
 
     /// <summary>
