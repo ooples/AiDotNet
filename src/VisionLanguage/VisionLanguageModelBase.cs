@@ -312,6 +312,69 @@ public abstract partial class VisionLanguageModelBase<T> : NeuralNetworkBase<T>,
     }
 
     /// <summary>
+    /// Paints a grid of per-cell colours into a square HWC image, one <c>patch x patch</c> block per cell:
+    /// pixel (gy * patch + py, gx * patch + px) = colors[gy, gx, :] * patchWeights[py, px]. Blocks that run
+    /// past the image edge are cropped and pixels no block reaches stay zero.
+    /// </summary>
+    /// <param name="colors">Cell colours, shape [gridHeight, gridWidth, channels].</param>
+    /// <param name="patchWeights">Per-position weights inside a block, shape [patch, patch].</param>
+    /// <param name="outSize">Output image side length.</param>
+    /// <returns>The image flattened as [outSize * outSize * channels] in row-major HWC order.</returns>
+    protected Tensor<T> PaintPatchGrid(Tensor<T> colors, Tensor<T> patchWeights, int outSize)
+    {
+        int gridH = colors.Shape[0], gridW = colors.Shape[1], channels = colors.Shape[2];
+        int patch = patchWeights.Shape[0];
+        var blocks = Engine.TensorMultiply(
+            Engine.TensorBroadcastTo(colors.Reshape([gridH, 1, gridW, 1, channels]), [gridH, patch, gridW, patch, channels]),
+            Engine.TensorBroadcastTo(patchWeights.Reshape([1, patch, 1, patch, 1]), [gridH, patch, gridW, patch, channels]));
+        int coveredH = gridH * patch, coveredW = gridW * patch;
+        var image = blocks.Reshape([coveredH, coveredW, channels]);
+
+        int keptH = Math.Min(coveredH, outSize), keptW = Math.Min(coveredW, outSize);
+        if (keptH < coveredH || keptW < coveredW)
+            image = Engine.TensorSlice(image, [0, 0, 0], [keptH, keptW, channels]);
+        if (keptW < outSize)
+            image = Engine.TensorConcatenate([image, new Tensor<T>([keptH, outSize - keptW, channels])], 1);
+        if (keptH < outSize)
+            image = Engine.TensorConcatenate([image, new Tensor<T>([outSize - keptH, outSize, channels])], 0);
+
+        return image.Reshape([outSize * outSize * channels]);
+    }
+
+    /// <summary>
+    /// Placeholder VQ palette: maps each token id to RGB ((id * 7 + 13) % 256, (id * 11 + 37) % 256,
+    /// (id * 17 + 61) % 256) / 255.
+    /// </summary>
+    /// <param name="tokenIds">Token ids (non-negative).</param>
+    /// <returns>Colours of shape [tokenIds.Length, 3].</returns>
+    protected Tensor<T> HashTokenColors(int[] tokenIds)
+    {
+        int count = tokenIds.Length;
+        var ids = new Tensor<int>(new[] { count }, Vector<int>.FromArray(tokenIds)).Cast<T>();
+        var modulus = Tensor<T>.CreateDefault([count], NumOps.FromDouble(256));
+        T inv255 = NumOps.FromDouble(1.0 / 255.0);
+        Tensor<T> Channel(double multiplier, double offset) => Engine.TensorMultiplyScalar(
+            Engine.TensorRemainder(
+                Engine.TensorAddScalar(Engine.TensorMultiplyScalar(ids, NumOps.FromDouble(multiplier)), NumOps.FromDouble(offset)),
+                modulus),
+            inv255).Reshape([count, 1]);
+        return Engine.TensorConcatenate([Channel(7, 13), Channel(11, 37), Channel(17, 61)], 1);
+    }
+
+    /// <summary>
+    /// Patch weights 0.9 + 0.1 * sin(pi * px / patch) * sin(pi * py / patch) for a <c>patch x patch</c> block.
+    /// </summary>
+    /// <param name="patchSize">Block side length.</param>
+    /// <returns>Weights of shape [patchSize, patchSize] indexed [py, px].</returns>
+    protected Tensor<T> SinePatchWeights(int patchSize)
+    {
+        var wave = Engine.TensorSin(Engine.TensorMultiplyScalar(
+            Engine.TensorArange<T>(0, patchSize, 1), NumOps.FromDouble(Math.PI / patchSize)));
+        return Engine.TensorAddScalar(
+            Engine.TensorMultiplyScalar(Engine.TensorOuter(wave, wave), NumOps.FromDouble(0.1)), NumOps.FromDouble(0.9));
+    }
+
+    /// <summary>
     /// Validates image/token settings used to derive patch sizes for native VLM layer factories.
     /// </summary>
     private protected static void ValidateVisualPatchOptions(int imageSize, int maxVisualTokens)

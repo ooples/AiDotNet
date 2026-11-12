@@ -209,7 +209,6 @@ public partial class Chameleon<T> : VisionLanguageModelBase<T>, IUnifiedVisionMo
             return OnnxModel.Run(tokens);
 
         int outSize = _options.OutputImageSize;
-        int outPixels = outSize * outSize * 3;
         int numVisTokens = _options.NumVisualTokens;
         int dim = _options.DecoderDim;
         int textLen = tokens.Length;
@@ -227,22 +226,29 @@ public partial class Chameleon<T> : VisionLanguageModelBase<T>, IUnifiedVisionMo
         int numGenTokens = 256;
         var visualTokenIds = new int[numGenTokens];
 
+        var engine = Engine;
+        int inputLen = Math.Min(contextDim, dim);
+        // Every step reads the first inputLen context values (inputLen <= contextDim, so d % contextDim = d).
+        var contextPart = inputLen > 0
+            ? engine.TensorMultiplyScalar(
+                engine.TensorSlice(textContext.Reshape([contextDim]), [0], [inputLen]), NumOps.FromDouble(0.7))
+            : new Tensor<T>([0]);
+        T visTokenScale = NumOps.FromDouble(0.3 / numVisTokens);
+
         for (int t = 0; t < numGenTokens; t++)
         {
             // Create input: context + previously generated tokens
-            int inputLen = Math.Min(contextDim, dim);
-            var stepInput = new Tensor<T>([inputLen]);
-            for (int d = 0; d < inputLen; d++)
+            // stepInput[d] = 0.7 * context[d] + 0.3 * visualTokenIds[(t - 1 + d) % t] / numVisTokens.
+            var stepInput = contextPart;
+            if (t > 0 && inputLen > 0)
             {
-                double contextVal = NumOps.ToDouble(textContext[d % contextDim]);
-                // Incorporate previously generated tokens as conditioning
-                double prevTokenCond = 0;
-                if (t > 0)
-                {
-                    int prevIdx = (t - 1 + d) % t;
-                    prevTokenCond = (double)visualTokenIds[prevIdx] / numVisTokens;
-                }
-                stepInput[d] = NumOps.FromDouble(contextVal * 0.7 + prevTokenCond * 0.3);
+                var prevIdx = engine.TensorRemainder(
+                    engine.TensorArange<int>(t - 1, t - 1 + inputLen, 1),
+                    Tensor<int>.CreateDefault([inputLen], t));
+                // Only positions < t are read, and those are final.
+                var generated = new Tensor<int>(new[] { numGenTokens }, Vector<int>.Wrap(visualTokenIds));
+                var prevTokens = engine.TensorTake(generated, prevIdx).Cast<T>();
+                stepInput = engine.TensorAdd(contextPart, engine.TensorMultiplyScalar(prevTokens, visTokenScale));
             }
 
             // Run through transformer to predict next visual token logits
@@ -250,72 +256,35 @@ public partial class Chameleon<T> : VisionLanguageModelBase<T>, IUnifiedVisionMo
             for (int i = _encoderLayerEnd; i < Layers.Count; i++)
                 logits = Layers[i].Forward(logits);
 
-            // Sample token from logits via argmax over codebook
+            // Sample token from logits via argmax over codebook, with a position-dependent
+            // bias sin(v * t * 0.001) * 0.1 (checkRange <= logitDim, so v % logitDim = v).
             int logitDim = logits.Length;
-            double maxLogit = double.MinValue;
             int bestToken = 0;
             int checkRange = Math.Min(numVisTokens, logitDim);
-            for (int v = 0; v < checkRange; v++)
+            if (checkRange > 0)
             {
-                double lv = NumOps.ToDouble(logits[v % logitDim]);
-                double tokenBias = Math.Sin((double)v * t * 0.001) * 0.1; // Position-dependent bias
-                double score = lv + tokenBias;
-                if (score > maxLogit)
-                {
-                    maxLogit = score;
-                    bestToken = v;
-                }
+                var tokenBias = engine.TensorMultiplyScalar(
+                    engine.TensorSin(engine.TensorMultiplyScalar(
+                        engine.TensorArange<T>(0, checkRange, 1), NumOps.FromDouble((double)t * 0.001))),
+                    NumOps.FromDouble(0.1));
+                var scores = engine.TensorAdd(
+                    engine.TensorSlice(logits.Reshape([logitDim]), [0], [checkRange]), tokenBias);
+                bestToken = Math.Max(0, FirstArgMax(scores));
             }
             visualTokenIds[t] = bestToken;
         }
 
         // Step 3: VQ-VAE decode visual tokens to pixel space
-        // Each codebook entry maps to a patch of the output image
-        int patchSize = outSize / 16; // 16x16 grid of patches
+        // Each codebook entry maps to a patch of the output image (16x16 grid of patches).
+        int patchSize = outSize / 16;
         if (patchSize < 1)
             patchSize = 1;
-        var result = new Tensor<T>([outPixels]);
 
-        for (int ty = 0; ty < 16; ty++)
-        {
-            for (int tx = 0; tx < 16; tx++)
-            {
-                int tokenIdx = ty * 16 + tx;
-                if (tokenIdx >= numGenTokens)
-                    break;
+        // Decode codebook entry to RGB patch values; smooth interpolation within each patch.
+        var colors = HashTokenColors(visualTokenIds).Reshape([16, 16, 3]);
+        var smooth = SinePatchWeights(patchSize);
 
-                int tokenId = visualTokenIds[tokenIdx];
-                // Decode codebook entry to RGB patch values
-                double baseR = ((tokenId * 7 + 13) % 256) / 255.0;
-                double baseG = ((tokenId * 11 + 37) % 256) / 255.0;
-                double baseB = ((tokenId * 17 + 61) % 256) / 255.0;
-
-                // Fill patch pixels
-                for (int py = 0; py < patchSize; py++)
-                {
-                    for (int px = 0; px < patchSize; px++)
-                    {
-                        int imgY = ty * patchSize + py;
-                        int imgX = tx * patchSize + px;
-                        if (imgY >= outSize || imgX >= outSize)
-                            continue;
-
-                        int pixelIdx = (imgY * outSize + imgX) * 3;
-                        if (pixelIdx + 2 >= outPixels)
-                            continue;
-
-                        // Smooth interpolation within patch
-                        double sx = (double)px / patchSize;
-                        double sy = (double)py / patchSize;
-                        double smooth = 0.9 + 0.1 * Math.Sin(sx * Math.PI) * Math.Sin(sy * Math.PI);
-
-                        result[pixelIdx] = NumOps.FromDouble(baseR * smooth);
-                        result[pixelIdx + 1] = NumOps.FromDouble(baseG * smooth);
-                        result[pixelIdx + 2] = NumOps.FromDouble(baseB * smooth);
-                    }
-                }
-            }
-        }
+        var result = PaintPatchGrid(colors, smooth, outSize);
         return result;
     }
 
