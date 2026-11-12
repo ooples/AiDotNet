@@ -148,37 +148,49 @@ public sealed class QuadraticProgram<T>
 
         var numOps = MathHelper.GetNumericOperations<T>();
         double symmetryTolerance = GetSymmetryTolerance(numOps);
-        for (int i = 0; i < quadratic.Rows; i++)
+        // One row-major pass in the scalar code stopped at the first (i, j) that is non-finite or, above the
+        // diagonal, differs from (j, i) by more than the tolerance; a non-finite (j, i) never trips the symmetry test
+        // (its scale is infinite or NaN), so the two flags combine without changing which entry is reported first.
+        if (quadratic.Rows > 0)
         {
-            for (int j = 0; j < quadratic.Columns; j++)
+            var engine = SolverTensorOps<T>.Engine;
+            var left = SolverTensorOps<T>.AsTensor(quadratic);
+            var right = engine.TensorTranspose(left);
+            var nonFinite = SolverTensorOps<T>.NonFinite(left);
+            var leftMagnitude = engine.TensorAbs(left);
+            var rightMagnitude = engine.TensorAbs(right);
+            var scale = engine.TensorMax(engine.TensorMax(leftMagnitude, rightMagnitude), numOps.One);
+            var asymmetric = engine.TensorGreaterThan(
+                engine.TensorAbs(engine.TensorSubtract(left, right)),
+                engine.TensorMultiplyScalar(scale, numOps.FromDouble(symmetryTolerance)));
+            var index = engine.TensorArange<T>(0, quadratic.Rows, 1);
+            var aboveDiagonal = engine.TensorGreaterThan(
+                engine.TensorSubtract(
+                    engine.Reshape(index, new[] { 1, quadratic.Rows }),
+                    engine.Reshape(index, new[] { quadratic.Rows, 1 })),
+                numOps.Zero);
+            var first = SolverTensorOps<T>.First(
+                SolverTensorOps<T>.Or(nonFinite, engine.TensorMultiply(asymmetric, aboveDiagonal)));
+            if (first is not null)
             {
-                double left = numOps.ToDouble(quadratic[i, j]);
-                if (double.IsNaN(left) || double.IsInfinity(left))
+                int i = first[0], j = first[1];
+                double entry = numOps.ToDouble(quadratic[i, j]);
+                if (double.IsNaN(entry) || double.IsInfinity(entry))
                 {
                     throw new ArgumentException(
                         $"The quadratic term entry ({i}, {j}) must be finite.", nameof(quadratic));
                 }
 
-                if (j <= i) continue;
-
-                double right = numOps.ToDouble(quadratic[j, i]);
-                double scale = Math.Max(1.0, Math.Max(Math.Abs(left), Math.Abs(right)));
-                if (Math.Abs(left - right) > symmetryTolerance * scale)
-                {
-                    throw new ArgumentException(
-                        $"The quadratic term must be symmetric; entries ({i}, {j}) and ({j}, {i}) differ.",
-                        nameof(quadratic));
-                }
+                throw new ArgumentException(
+                    $"The quadratic term must be symmetric; entries ({i}, {j}) and ({j}, {i}) differ.",
+                    nameof(quadratic));
             }
         }
 
-        for (int i = 0; i < linear.Length; i++)
+        var linearFirst = SolverTensorOps<T>.First(SolverTensorOps<T>.NonFinite(SolverTensorOps<T>.AsTensor(linear)));
+        if (linearFirst is not null)
         {
-            double value = numOps.ToDouble(linear[i]);
-            if (double.IsNaN(value) || double.IsInfinity(value))
-            {
-                throw new ArgumentException($"The linear objective entry {i} must be finite.", nameof(linear));
-            }
+            throw new ArgumentException($"The linear objective entry {linearFirst[0]} must be finite.", nameof(linear));
         }
 
         ValidateConstraintBlock(
@@ -197,16 +209,15 @@ public sealed class QuadraticProgram<T>
         ValidateFiniteVector(upperBounds, nameof(upperBounds), allowInfinity: true, numOps);
         ValidateDirectionalInfinity(lowerBounds, nameof(lowerBounds), rejectPositiveInfinity: true, numOps);
         ValidateDirectionalInfinity(upperBounds, nameof(upperBounds), rejectPositiveInfinity: false, numOps);
-        if (lowerBounds is not null && upperBounds is not null)
+        if (lowerBounds is not null && upperBounds is not null && linear.Length > 0)
         {
-            for (int i = 0; i < linear.Length; i++)
+            var crossed = SolverTensorOps<T>.First(SolverTensorOps<T>.Engine.TensorGreaterThan(
+                SolverTensorOps<T>.AsTensor(lowerBounds), SolverTensorOps<T>.AsTensor(upperBounds)));
+            if (crossed is not null)
             {
-                if (numOps.GreaterThan(lowerBounds[i], upperBounds[i]))
-                {
-                    throw new ArgumentException(
-                        $"Lower bound at index {i} exceeds the corresponding upper bound.",
-                        nameof(lowerBounds));
-                }
+                throw new ArgumentException(
+                    $"Lower bound at index {crossed[0]} exceeds the corresponding upper bound.",
+                    nameof(lowerBounds));
             }
         }
 
@@ -298,19 +309,13 @@ public sealed class QuadraticProgram<T>
         string boundsName,
         INumericOperations<T> numOps)
     {
-        if (matrix is not null)
+        if (matrix is not null && matrix.Rows > 0 && matrix.Columns > 0)
         {
-            for (int row = 0; row < matrix.Rows; row++)
+            var first = SolverTensorOps<T>.First(SolverTensorOps<T>.NonFinite(SolverTensorOps<T>.AsTensor(matrix)));
+            if (first is not null)
             {
-                for (int column = 0; column < matrix.Columns; column++)
-                {
-                    double value = numOps.ToDouble(matrix[row, column]);
-                    if (double.IsNaN(value) || double.IsInfinity(value))
-                    {
-                        throw new ArgumentException(
-                            $"{matrixName}[{row}, {column}] must be finite.", matrixName);
-                    }
-                }
+                throw new ArgumentException(
+                    $"{matrixName}[{first[0]}, {first[1]}] must be finite.", matrixName);
             }
         }
 
@@ -323,14 +328,15 @@ public sealed class QuadraticProgram<T>
         bool allowInfinity,
         INumericOperations<T> numOps)
     {
-        if (vector is null) return;
-        for (int i = 0; i < vector.Length; i++)
+        if (vector is null || vector.Length == 0) return;
+        var values = SolverTensorOps<T>.AsTensor(vector);
+        var first = SolverTensorOps<T>.First(
+            allowInfinity ? SolverTensorOps<T>.NaN(values) : SolverTensorOps<T>.NonFinite(values));
+        if (first is not null)
         {
+            int i = first[0];
             double value = numOps.ToDouble(vector[i]);
-            if (double.IsNaN(value) || (!allowInfinity && double.IsInfinity(value)))
-            {
-                throw new ArgumentException($"{name}[{i}] has an invalid value {value}.", name);
-            }
+            throw new ArgumentException($"{name}[{i}] has an invalid value {value}.", name);
         }
     }
 
@@ -340,18 +346,17 @@ public sealed class QuadraticProgram<T>
         bool rejectPositiveInfinity,
         INumericOperations<T> numOps)
     {
-        if (vector is null) return;
-        for (int i = 0; i < vector.Length; i++)
+        if (vector is null || vector.Length == 0) return;
+        var values = SolverTensorOps<T>.AsTensor(vector);
+        var engine = SolverTensorOps<T>.Engine;
+        var first = SolverTensorOps<T>.First(
+            rejectPositiveInfinity ? engine.TensorIsPosInf(values) : engine.TensorIsNegInf(values));
+        if (first is not null)
         {
-            double value = numOps.ToDouble(vector[i]);
-            if ((rejectPositiveInfinity && double.IsPositiveInfinity(value)) ||
-                (!rejectPositiveInfinity && double.IsNegativeInfinity(value)))
-            {
-                string direction = rejectPositiveInfinity ? "positive" : "negative";
-                throw new ArgumentException(
-                    $"{name}[{i}] cannot be {direction} infinity because it makes the bound infeasible.",
-                    name);
-            }
+            string direction = rejectPositiveInfinity ? "positive" : "negative";
+            throw new ArgumentException(
+                $"{name}[{first[0]}] cannot be {direction} infinity because it makes the bound infeasible.",
+                name);
         }
     }
 }
