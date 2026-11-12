@@ -52,7 +52,8 @@ internal static class FeatureSelectionTensorOps
         var ops = MathHelper.GetNumericOperations<T>();
         int n = x.Shape[0];
         var squared = engine.TensorMax(engine.PairwiseDistanceSquared(x, x), ops.Zero);
-        return engine.TensorMultiply(squared, PreprocessingTensorOps.OneMinus(engine.TensorEye<T>(n)));
+        // the diagonal is set, not masked by a multiply: 0 * infinity (|a|^2 overflows Half past 256) is NaN
+        return engine.TensorWhere(engine.TensorEye<T>(n), PreprocessingTensorOps.Filled(new[] { n, n }, ops.Zero), squared);
     }
 
     /// <summary>
@@ -68,28 +69,32 @@ internal static class FeatureSelectionTensorOps
         if (k <= 0 || n == 0)
             return new Tensor<T>(new[] { n, n });
 
-        // Push the diagonal past every real distance so a row never picks itself
+        // The diagonal goes to +infinity (set, not added: max + 1 is max itself in Half past 2048, and a mask
+        // multiply of an infinite distance is NaN) and is kept out of the ties, so a row never picks itself
         var eye = engine.TensorEye<T>(n);
-        T beyond = ops.Add(engine.TensorMaxValue(distances), ops.One);
-        var d = engine.TensorAdd(engine.TensorMultiply(distances, PreprocessingTensorOps.OneMinus(eye)), engine.TensorMultiplyScalar(eye, beyond));
+        var d = engine.TensorWhere(eye, PreprocessingTensorOps.Filled(new[] { n, n }, ops.FromDouble(double.PositiveInfinity)), distances);
+        var offDiagonal = engine.TensorSubtract(PreprocessingTensorOps.Filled(new[] { n, n }, 1), engine.TensorEye<int>(n));
 
         var sorted = engine.TensorSort(d, 1, false).Item1;
         var kth = engine.TensorBroadcastTo(engine.TensorSlice(sorted, new[] { 0, k - 1 }, new[] { n, 1 }), new[] { n, n });
-        var less = engine.TensorLessThan(d, kth);
+
+        // counted in int: a 0/1 sum or running count in T stops at 2048 for Half
+        var less = engine.TensorLessThan(d, kth).Cast<int>();
         var lessCount = engine.TensorBroadcastTo(engine.ReduceSum(less, new[] { 1 }, true), new[] { n, n });
-        var tie = engine.TensorEquals(d, kth);
+        var tie = engine.TensorMultiply(engine.TensorEquals(d, kth).Cast<int>(), offDiagonal);
         var tieRank = engine.TensorCumSum(tie, 1);
 
         // Ties at the k-th distance fill the remaining k - lessCount places in index order
-        var remaining = engine.TensorSubtract(PreprocessingTensorOps.Filled(new[] { n, n }, ops.FromDouble(k)), lessCount);
-        var takeTie = engine.TensorMultiply(tie, PreprocessingTensorOps.OneMinus(engine.TensorGreaterThan(tieRank, remaining)));
-        return engine.TensorAdd(less, takeTie);
+        var remaining = engine.TensorSubtract(PreprocessingTensorOps.Filled(new[] { n, n }, k), lessCount);
+        var takeTie = engine.TensorMultiply(
+            tie, engine.TensorSubtract(PreprocessingTensorOps.Filled(new[] { n, n }, 1), engine.TensorGreaterThan(tieRank, remaining)));
+        return engine.TensorAdd(less, takeTie).Cast<T>();
     }
 
     /// <summary>
     /// All-pairs shortest path lengths (Floyd-Warshall) over a weighted graph ([n, n] edge lengths where
-    /// <paramref name="edges"/> is 1, no edge elsewhere). Returns the path lengths and, in
-    /// <paramref name="reachable"/>, the 0/1 mask of the connected pairs (the diagonal included).
+    /// <paramref name="edges"/> is 1, no edge elsewhere). Returns the path lengths (+infinity for a pair with no
+    /// path) and, in <paramref name="reachable"/>, the 0/1 mask of the connected pairs (the diagonal included).
     /// </summary>
     public static Tensor<T> ShortestPaths<T>(Tensor<T> lengths, Tensor<T> edges, out Tensor<T> reachable)
     {
@@ -98,11 +103,13 @@ internal static class FeatureSelectionTensorOps
         int n = lengths.Shape[0];
         var eye = engine.TensorEye<T>(n);
 
-        // Unreachable pairs hold a sentinel longer than any simple path (the sum of all edge lengths, plus 1)
-        var edgeLengths = engine.TensorMultiply(lengths, engine.TensorMultiply(edges, PreprocessingTensorOps.OneMinus(eye)));
-        T unreachable = ops.Add(engine.TensorSum(edgeLengths), ops.One);
-        var noEdge = PreprocessingTensorOps.OneMinus(engine.TensorMax(edges, eye));
-        var graph = engine.TensorAdd(edgeLengths, engine.TensorMultiplyScalar(noEdge, unreachable));
+        // An edge keeps its length, the diagonal is 0 and every other pair starts at +infinity (exact under min and
+        // +). The former sentinel, the sum of all edge lengths plus 1, overflowed Half to infinity, and the mask
+        // multiply 0 * infinity then turned every edge NaN.
+        T unreachable = ops.FromDouble(double.PositiveInfinity);
+        var isEdge = engine.TensorMultiply(edges, PreprocessingTensorOps.OneMinus(eye));
+        var graph = engine.TensorWhere(isEdge, lengths, engine.TensorWhere(
+            eye, PreprocessingTensorOps.Filled(new[] { n, n }, ops.Zero), PreprocessingTensorOps.Filled(new[] { n, n }, unreachable)));
 
         for (int via = 0; via < n; via++)
         {
