@@ -28,13 +28,13 @@ public class SpearmanCorrelation<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, 
 {
     private readonly int _nFeaturesToSelect;
 
-    private double[]? _correlationScores;
+    private Vector<T>? _correlationScores;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
-    public double[]? CorrelationScores => _correlationScores;
+    public Vector<T>? CorrelationScores => _correlationScores;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -68,106 +68,21 @@ public class SpearmanCorrelation<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, 
         int n = data.Rows;
         int p = data.Columns;
 
-        _correlationScores = new double[p];
+        var engine = Engine;
 
-        // Compute target ranks
-        var targetRanks = ComputeRanks(target, n);
-
-        for (int j = 0; j < p; j++)
-        {
-            // Compute feature ranks
-            var featureRanks = ComputeFeatureRanks(data, j, n);
-
-            // Compute Pearson correlation on ranks
-            double xMean = 0, yMean = 0;
-            for (int i = 0; i < n; i++)
-            {
-                xMean += featureRanks[i];
-                yMean += targetRanks[i];
-            }
-            xMean /= n;
-            yMean /= n;
-
-            double sxy = 0, sxx = 0, syy = 0;
-            for (int i = 0; i < n; i++)
-            {
-                double xDiff = featureRanks[i] - xMean;
-                double yDiff = targetRanks[i] - yMean;
-                sxy += xDiff * yDiff;
-                sxx += xDiff * xDiff;
-                syy += yDiff * yDiff;
-            }
-
-            _correlationScores[j] = (sxx > 1e-10 && syy > 1e-10)
-                ? Math.Abs(sxy / Math.Sqrt(sxx * syy))
-                : 0;
-        }
+        // Absolute Pearson correlation of the average ranks (0 when either rank vector is constant)
+        var targetRanks = engine.Reshape(FeatureSelectionTensorOps.AverageRanks(
+            engine.Reshape(Tensor<T>.FromVector(target), new[] { n, 1 })), new[] { n });
+        var featureRanks = FeatureSelectionTensorOps.AverageRanks(Tensor<T>.FromMatrix(data));
+        var correlationScores = engine.TensorAbs(PreprocessingTensorOps.TargetCorrelations(featureRanks, targetRanks));
+        _correlationScores = correlationScores.ToVector();
 
         // Select top features
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = Enumerable.Range(0, p)
-            .OrderByDescending(j => _correlationScores[j])
-            .Take(numToSelect)
-            .OrderBy(x => x)
-            .ToArray();
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(correlationScores, numToSelect);
 
         IsFitted = true;
     }
-
-    private double[] ComputeRanks(Vector<T> values, int n)
-    {
-        var indexed = new (double Value, int Index)[n];
-        for (int i = 0; i < n; i++)
-            indexed[i] = (NumOps.ToDouble(values[i]), i);
-
-        Array.Sort(indexed, (a, b) => a.Value.CompareTo(b.Value));
-
-        var ranks = new double[n];
-        int i2 = 0;
-        while (i2 < n)
-        {
-            int j = i2;
-            // Find all equal values
-            while (j < n - 1 && Math.Abs(indexed[j + 1].Value - indexed[i2].Value) < 1e-10)
-                j++;
-
-            // Assign average rank to all equal values
-            double avgRank = (i2 + j) / 2.0 + 1;
-            for (int k = i2; k <= j; k++)
-                ranks[indexed[k].Index] = avgRank;
-
-            i2 = j + 1;
-        }
-
-        return ranks;
-    }
-
-    private double[] ComputeFeatureRanks(Matrix<T> data, int featureIdx, int n)
-    {
-        var indexed = new (double Value, int Index)[n];
-        for (int i = 0; i < n; i++)
-            indexed[i] = (NumOps.ToDouble(data[i, featureIdx]), i);
-
-        Array.Sort(indexed, (a, b) => a.Value.CompareTo(b.Value));
-
-        var ranks = new double[n];
-        int i2 = 0;
-        while (i2 < n)
-        {
-            int j = i2;
-            while (j < n - 1 && Math.Abs(indexed[j + 1].Value - indexed[i2].Value) < 1e-10)
-                j++;
-
-            double avgRank = (i2 + j) / 2.0 + 1;
-            for (int k = i2; k <= j; k++)
-                ranks[indexed[k].Index] = avgRank;
-
-            i2 = j + 1;
-        }
-
-        return ranks;
-    }
-
     /// <inheritdoc />
     public Matrix<T> FitTransform(Matrix<T> data, Vector<T> target)
     {

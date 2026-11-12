@@ -1045,6 +1045,38 @@ internal static class FeatureSelectionTensorOps
         return engine.TensorWhere(engine.TensorLessThan(engine.TensorAbs(differences), tolerance),
             new Tensor<T>(new[] { s * s }), engine.TensorSign(differences));
     }
+
+    /// <summary>
+    /// Average (fractional, 1-based) ranks of every column of <paramref name="x"/> ([n, p]), as in
+    /// scipy.stats.rankdata(method='average'); values closer than 1e-10 count as tied. Returns [n, p].
+    /// </summary>
+    public static Tensor<T> AverageRanks<T>(Tensor<T> x)
+    {
+        var engine = AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<T>();
+        int n = x.Shape[0];
+        int p = x.Shape[1];
+        if (p == 0)
+            return new Tensor<T>(new[] { n, 0 });
+
+        T tolerance = ops.FromDouble(1e-10);
+        T one = ops.One;
+        T half = ops.FromDouble(0.5);
+        var columns = new Tensor<T>[p];
+        for (int j = 0; j < p; j++)
+        {
+            var column = PreprocessingTensorOps.ColumnVector(x, j);
+            var sorted = engine.TensorSort(column, 0, false).Item1;
+
+            // below = #{v < x_i - tol (inclusive)}, upTo = #{v < x_i + tol}; average rank = (below + upTo + 1) / 2
+            var below = engine.TensorSearchSorted(sorted, engine.TensorSubtractScalar(column, tolerance), true);
+            var upTo = engine.TensorSearchSorted(sorted, engine.TensorAddScalar(column, tolerance), false);
+            columns[j] = engine.Reshape(engine.TensorMultiplyScalar(
+                engine.TensorAddScalar(engine.TensorAdd(below, upTo), one), half), new[] { n, 1 });
+        }
+
+        return engine.TensorConcatenate(columns, 1);
+    }
 }
 
 /// <summary>Impurity used by <see cref="FeatureSelectionTensorOps.TryBestSplit{T}"/>.</summary>

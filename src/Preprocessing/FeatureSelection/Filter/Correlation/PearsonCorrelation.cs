@@ -28,14 +28,14 @@ public class PearsonCorrelation<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, I
     private readonly int _nFeaturesToSelect;
     private readonly bool _useAbsoluteValue;
 
-    private double[]? _correlationScores;
+    private Vector<T>? _correlationScores;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public bool UseAbsoluteValue => _useAbsoluteValue;
-    public double[]? CorrelationScores => _correlationScores;
+    public Vector<T>? CorrelationScores => _correlationScores;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -71,55 +71,17 @@ public class PearsonCorrelation<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, I
         int n = data.Rows;
         int p = data.Columns;
 
-        _correlationScores = new double[p];
+        // Pearson correlation of every feature with the target (0 when either sum of squares is not above 1e-10)
+        var correlations = PreprocessingTensorOps.TargetCorrelations(Tensor<T>.FromMatrix(data), Tensor<T>.FromVector(target));
+        var absolute = Engine.TensorAbs(correlations);
+        _correlationScores = (_useAbsoluteValue ? absolute : correlations).ToVector();
 
-        // Compute target statistics
-        double yMean = 0;
-        for (int i = 0; i < n; i++)
-            yMean += NumOps.ToDouble(target[i]);
-        yMean /= n;
-
-        double syy = 0;
-        for (int i = 0; i < n; i++)
-        {
-            double yDiff = NumOps.ToDouble(target[i]) - yMean;
-            syy += yDiff * yDiff;
-        }
-
-        for (int j = 0; j < p; j++)
-        {
-            double xMean = 0;
-            for (int i = 0; i < n; i++)
-                xMean += NumOps.ToDouble(data[i, j]);
-            xMean /= n;
-
-            double sxy = 0, sxx = 0;
-            for (int i = 0; i < n; i++)
-            {
-                double xDiff = NumOps.ToDouble(data[i, j]) - xMean;
-                double yDiff = NumOps.ToDouble(target[i]) - yMean;
-                sxy += xDiff * yDiff;
-                sxx += xDiff * xDiff;
-            }
-
-            double correlation = (sxx > 1e-10 && syy > 1e-10)
-                ? sxy / Math.Sqrt(sxx * syy)
-                : 0;
-
-            _correlationScores[j] = _useAbsoluteValue ? Math.Abs(correlation) : correlation;
-        }
-
-        // Select top features
+        // Select top features by absolute correlation
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = Enumerable.Range(0, p)
-            .OrderByDescending(j => _useAbsoluteValue ? _correlationScores[j] : Math.Abs(_correlationScores[j]))
-            .Take(numToSelect)
-            .OrderBy(x => x)
-            .ToArray();
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(absolute, numToSelect);
 
         IsFitted = true;
     }
-
     /// <inheritdoc />
     public Matrix<T> FitTransform(Matrix<T> data, Vector<T> target)
     {
