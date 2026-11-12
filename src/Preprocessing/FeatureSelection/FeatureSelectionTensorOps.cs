@@ -344,4 +344,94 @@ internal static class FeatureSelectionTensorOps
             new Tensor<T>(shape), binIndex);
         return BinCounts(PreprocessingTensorOps.OneHotBins(binIndex, bins), bins);
     }
+
+    /// <summary>
+    /// Cyclic coordinate descent on a linear model: for every iteration and every column j in order,
+    /// <c>rho = x_j . (residual + beta_j x_j)</c> (the unnormalized partial-residual correlation, as a [1] tensor) is
+    /// passed to <paramref name="update"/> together with j, the returned [1] value becomes <c>beta_j</c> and the
+    /// residual is updated. Stops after an iteration whose largest coefficient change is below
+    /// <paramref name="tolerance"/>. <paramref name="target"/> ([n]) is the starting residual (the centred target);
+    /// <paramref name="residual"/> receives the final residual. Returns the coefficients ([p]).
+    /// </summary>
+    public static Tensor<T> CoordinateDescent<T>(
+        Tensor<T> x, Tensor<T> target, int maxIterations, double tolerance,
+        Func<Tensor<T>, int, Tensor<T>> update, out Tensor<T> residual)
+    {
+        var engine = AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<T>();
+        int n = x.Shape[0];
+        int p = x.Shape[1];
+        var columns = new Tensor<T>[p];
+        var selectors = new Tensor<T>[p];
+        var identity = engine.TensorEye<T>(p);
+        for (int j = 0; j < p; j++)
+        {
+            columns[j] = PreprocessingTensorOps.ColumnVector(x, j);
+            selectors[j] = PreprocessingTensorOps.RowVector(identity, j);
+        }
+
+        var squaredNorms = engine.ReduceSum(engine.TensorSquare(x), new[] { 0 }, false);
+        var beta = new Tensor<T>(new[] { p });
+        var current = target;
+        T tol = ops.FromDouble(tolerance);
+        var columnShape = new[] { n };
+        var betaShape = new[] { p };
+
+        for (int iter = 0; iter < maxIterations; iter++)
+        {
+            var maxChange = new Tensor<T>(new[] { 1 });
+            for (int j = 0; j < p; j++)
+            {
+                var old = engine.TensorSlice(beta, new[] { j }, new[] { 1 });
+                var rho = engine.TensorAdd(
+                    engine.ReduceSum(engine.TensorMultiply(columns[j], current), new[] { 0 }, true),
+                    engine.TensorMultiply(old, engine.TensorSlice(squaredNorms, new[] { j }, new[] { 1 })));
+                var updated = update(rho, j);
+                var delta = engine.TensorSubtract(updated, old);
+                current = engine.TensorSubtract(current,
+                    engine.TensorMultiply(columns[j], engine.TensorBroadcastTo(delta, columnShape)));
+                beta = engine.TensorWhere(selectors[j], engine.TensorBroadcastTo(updated, betaShape), beta);
+                maxChange = engine.TensorMax(maxChange, engine.TensorAbs(delta));
+            }
+
+            if (PreprocessingTensorOps.IsBelow(engine.TensorMaxValue(maxChange), tol))
+                break;
+        }
+
+        residual = current;
+        return beta;
+    }
+
+    /// <summary>Element-wise soft thresholding: <c>sign(z) * max(|z| - threshold, 0)</c>.</summary>
+    public static Tensor<T> SoftThreshold<T>(Tensor<T> z, T threshold)
+    {
+        var engine = AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<T>();
+        return engine.TensorMultiply(engine.TensorSign(z),
+            engine.TensorMax(engine.TensorSubtractScalar(engine.TensorAbs(z), threshold), ops.Zero));
+    }
+
+    /// <summary>
+    /// Population standardization of every column: <c>(x - mean) / std</c>, with a std below 1e-10 replaced by 1.
+    /// <paramref name="stds"/> receives the (replaced) [p] standard deviations.
+    /// </summary>
+    public static Tensor<T> Standardize<T>(Tensor<T> x, out Tensor<T> stds)
+    {
+        var engine = AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<T>();
+        int n = x.Shape[0];
+        int p = x.Shape[1];
+        var shape = new[] { n, p };
+        var centered = engine.TensorSubtract(x, engine.TensorBroadcastTo(engine.ReduceMean(x, new[] { 0 }, true), shape));
+        var std = engine.TensorSqrt(engine.ReduceMean(engine.TensorSquare(centered), new[] { 0 }, false));
+        stds = engine.TensorWhere(engine.TensorLessThan(std, ops.FromDouble(1e-10)), PreprocessingTensorOps.Filled(new[] { p }, ops.One), std);
+        return engine.TensorDivide(centered, engine.TensorBroadcastTo(engine.Reshape(stds, new[] { 1, p }), shape));
+    }
+
+    /// <summary><c>y - mean(y)</c>.</summary>
+    public static Tensor<T> Center<T>(Tensor<T> y)
+    {
+        var engine = AiDotNetEngine.Current;
+        return engine.TensorSubtractScalar(y, engine.TensorMean(y));
+    }
 }
