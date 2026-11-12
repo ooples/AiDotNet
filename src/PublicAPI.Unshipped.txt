@@ -22680,3 +22680,7 @@ AiDotNet.AutoML.DartsOptimizerOptions.GradientClipNorm.get -> double
 AiDotNet.AutoML.DartsOptimizerOptions.GradientClipNorm.set -> void
 AiDotNet.AutoML.NeuralArchitectureSearch<T>.NeuralArchitectureSearch(AiDotNet.Enums.NeuralArchitectureSearchStrategy strategy, int maxEpochs, AiDotNet.AutoML.DartsOptimizerOptions! optimizerOptions) -> void
 AiDotNet.AutoML.NeuralArchitectureSearch<T>.OptimizerOptions.get -> AiDotNet.AutoML.DartsOptimizerOptions!
+AiDotNet.AutoML.NAS.PCDARTS<T>.GetEdgeParameters() -> System.Collections.Generic.List<AiDotNet.Tensors.LinearAlgebra.Vector<T>!>!
+AiDotNet.AutoML.NAS.PCDARTS<T>.GetEdgeGradients() -> System.Collections.Generic.List<AiDotNet.Tensors.LinearAlgebra.Vector<T>!>!
+AiDotNet.AutoML.NAS.PCDARTS<T>.AccumulateArchitectureGradients(int nodeIndex, AiDotNet.Tensors.LinearAlgebra.Matrix<T>! weightGradient) -> void
+AiDotNet.AutoML.NAS.PCDARTS<T>.UpdateArchitectureParameters(double learningRate = 0.0006, double beta1 = 0.5, double beta2 = 0.999, double weightDecay = 0.001, double epsilon = 1E-08) -> void

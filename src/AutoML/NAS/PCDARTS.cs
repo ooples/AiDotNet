@@ -7,6 +7,7 @@ using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
+using AiDotNet.Tensors.Engines.Autodiff;
 
 namespace AiDotNet.AutoML.NAS
 {
@@ -59,8 +60,17 @@ namespace AiDotNet.AutoML.NAS
         private readonly List<Matrix<T>> _architectureParams;
         private readonly List<Matrix<T>> _architectureGradients;
 
-        // Edge-normalization parameters beta: one per incoming edge of each node (PC-DARTS Sec. 3.3)
+        // Edge-normalization parameters beta: one per incoming edge of each node (PC-DARTS Sec. 3.3), trained
+        // jointly with alpha by the same optimizer.
         private readonly List<Vector<T>> _edgeParams;
+        private readonly List<Vector<T>> _edgeGradients;
+
+        // Adam state of the architecture step, for alpha and beta.
+        private readonly List<Matrix<T>> _alphaMomentum;
+        private readonly List<Matrix<T>> _alphaVelocity;
+        private readonly List<Vector<T>> _edgeMomentum;
+        private readonly List<Vector<T>> _edgeVelocity;
+        private int _architectureStep;
 
         // PC-DARTS specific: channel sampling ratio
         private readonly double _channelSamplingRatio;
@@ -113,6 +123,12 @@ namespace AiDotNet.AutoML.NAS
                 engine.TensorNormalInPlace(beta, 0.0, 1e-3, _random.Next());
                 _edgeParams.Add(beta.ToVector());
             }
+
+            _edgeGradients = _edgeParams.Select(beta => new Vector<T>(beta.Length)).ToList();
+            _alphaMomentum = _architectureParams.Select(alpha => new Matrix<T>(alpha.Rows, alpha.Columns)).ToList();
+            _alphaVelocity = _architectureParams.Select(alpha => new Matrix<T>(alpha.Rows, alpha.Columns)).ToList();
+            _edgeMomentum = _edgeParams.Select(beta => new Vector<T>(beta.Length)).ToList();
+            _edgeVelocity = _edgeParams.Select(beta => new Vector<T>(beta.Length)).ToList();
         }
 
         /// <summary>
@@ -231,6 +247,100 @@ namespace AiDotNet.AutoML.NAS
         /// Gets architecture gradients
         /// </summary>
         public List<Matrix<T>> GetArchitectureGradients() => _architectureGradients;
+
+        /// <summary>
+        /// Gets the edge-normalization parameters beta (one vector per node, one entry per incoming edge). They are
+        /// architecture parameters: <see cref="UpdateArchitectureParameters"/> trains them together with alpha.
+        /// </summary>
+        public List<Vector<T>> GetEdgeParameters() => _edgeParams;
+
+        /// <summary>
+        /// Gets the accumulated gradients of the edge-normalization parameters beta.
+        /// </summary>
+        public List<Vector<T>> GetEdgeGradients() => _edgeGradients;
+
+        /// <summary>
+        /// Back-propagates dL/dW, the loss gradient with respect to the operation weights of one node, through the
+        /// edge normalization W = softmax(beta)_i * softmax(alpha_i)_o (PC-DARTS Eq. 4; plain softmax(alpha_i)_o
+        /// without edge normalization), and adds the result to the alpha and beta gradients of that node.
+        /// </summary>
+        /// <param name="nodeIndex">The node (0-based); its alpha has nodeIndex + 1 rows, one per incoming edge.</param>
+        /// <param name="weightGradient">dL/dW, with the shape of that node's alpha.</param>
+        public void AccumulateArchitectureGradients(int nodeIndex, Matrix<T> weightGradient)
+        {
+            if (nodeIndex < 0 || nodeIndex >= _numNodes)
+                throw new ArgumentOutOfRangeException(nameof(nodeIndex));
+            if (weightGradient is null)
+                throw new ArgumentNullException(nameof(weightGradient));
+
+            var alphaMatrix = _architectureParams[nodeIndex];
+            if (weightGradient.Rows != alphaMatrix.Rows || weightGradient.Columns != alphaMatrix.Columns)
+                throw new ArgumentException("The weight gradient must have the shape of the node's alpha.", nameof(weightGradient));
+
+            var engine = AiDotNetEngine.Current;
+            var alpha = Tensor<T>.FromMatrix(alphaMatrix);
+            var beta = _edgeParams[nodeIndex].AsTensor().Reshape(new[] { alphaMatrix.Rows, 1 });
+            var upstream = Tensor<T>.FromMatrix(weightGradient);
+            var sources = new List<Tensor<T>> { alpha, beta };
+
+            Dictionary<Tensor<T>, Tensor<T>> gradients;
+            using (var tape = new GradientTape<T>())
+            {
+                var weights = engine.TensorSoftmax(alpha, 1);
+                if (_useEdgeNormalization)
+                {
+                    weights = engine.TensorMultiply(weights, engine.TensorBroadcastTo(engine.TensorSoftmax(beta, 0),
+                        new[] { alphaMatrix.Rows, alphaMatrix.Columns }));
+                }
+
+                var surrogate = engine.ReduceSum(engine.TensorMultiply(weights, upstream), new[] { 0, 1 }, true);
+                gradients = tape.ComputeGradients(surrogate, sources, false);
+            }
+
+            if (gradients.TryGetValue(alpha, out var alphaGradient))
+            {
+                var accumulated = engine.TensorAdd(Tensor<T>.FromMatrix(_architectureGradients[nodeIndex]),
+                    alphaGradient.Reshape(new[] { alphaMatrix.Rows, alphaMatrix.Columns }));
+                accumulated.ToVector().AsSpan().CopyTo(_architectureGradients[nodeIndex].AsWritableSpan());
+            }
+
+            if (_useEdgeNormalization && gradients.TryGetValue(beta, out var betaGradient))
+            {
+                var accumulated = engine.TensorAdd(_edgeGradients[nodeIndex].AsTensor(),
+                    betaGradient.Reshape(new[] { alphaMatrix.Rows }));
+                accumulated.ToVector().AsSpan().CopyTo(_edgeGradients[nodeIndex].AsWritableSpan());
+            }
+        }
+
+        /// <summary>
+        /// One architecture step: Adam on alpha and beta together with their accumulated gradients, which are then
+        /// cleared. The defaults are PC-DARTS' architecture optimizer (Xu et al. 2020, Sec. 4.2): Adam with
+        /// learning rate 6e-4, betas (0.5, 0.999) and weight decay 1e-3.
+        /// </summary>
+        public void UpdateArchitectureParameters(double learningRate = 6e-4, double beta1 = 0.5, double beta2 = 0.999,
+            double weightDecay = 1e-3, double epsilon = 1e-8)
+        {
+            _architectureStep++;
+            T lr = _ops.FromDouble(learningRate);
+            T b1 = _ops.FromDouble(beta1);
+            T b2 = _ops.FromDouble(beta2);
+            T eps = _ops.FromDouble(epsilon);
+            T wd = _ops.FromDouble(weightDecay);
+            for (int i = 0; i < _numNodes; i++)
+            {
+                NeuralArchitectureSearch<T>.AdamStep(_architectureParams[i], _architectureGradients[i],
+                    _alphaMomentum[i], _alphaVelocity[i], lr, b1, b2, eps, wd, _architectureStep);
+                _architectureGradients[i].AsWritableSpan().Clear();
+
+                if (_useEdgeNormalization)
+                {
+                    NeuralArchitectureSearch<T>.AdamStep(_edgeParams[i], _edgeGradients[i],
+                        _edgeMomentum[i], _edgeVelocity[i], lr, b1, b2, eps, wd, _architectureStep);
+                }
+
+                _edgeGradients[i].AsWritableSpan().Clear();
+            }
+        }
 
         /// <summary>
         /// Gets the channel sampling ratio
