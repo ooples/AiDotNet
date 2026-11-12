@@ -76,6 +76,13 @@ public class X11Decomposition<T> : TimeSeriesDecompositionBase<T>
         {
             throw new ArgumentException("Trend-cycle moving average window must be a positive odd integer.", nameof(trendCycleMovingAverageWindow));
         }
+        if (timeSeries.Length < seasonalPeriod)
+        {
+            // Seasonal-factor normalisation averages over one full cycle; a partial cycle is undefined.
+            throw new ArgumentException(
+                $"Time series must contain at least one full seasonal period ({seasonalPeriod} values); got {timeSeries.Length}.",
+                nameof(timeSeries));
+        }
 
         _seasonalPeriod = seasonalPeriod;
         _trendCycleMovingAverageWindow = trendCycleMovingAverageWindow;
