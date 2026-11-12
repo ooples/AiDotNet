@@ -508,4 +508,287 @@ public class FeatureSelectionSweep09bReferenceTests
         Assert.Equal(selector.SelectionProbabilities.ToArray(), repeat.SelectionProbabilities.ToArray());
         Assert.Equal(selector.SelectedIndices, repeat.SelectedIndices);
     }
+    // scipy.stats.ttest_ind(equal_var=False) on two classes of 46342 samples (0, 1, 0, 1, ... and 1, 2, 1, 2, ...):
+    // var_c / n_c = 0.25 / (n - 1), so |t| = 1 / sqrt(0.5 / (n - 1)) = sqrt(2 (n - 1)). The product (n - 1) n
+    // overflows int for n >= 46342, which made the standard error NaN and the score 0.
+    [Fact(Timeout = 120000)]
+    public async Task StatisticalTTest_LargeClasses_DoNotOverflowTheStandardError()
+    {
+        await Task.CompletedTask;
+        const int perClass = 46342;
+        var data = new double[2 * perClass, 1];
+        var labels = new double[2 * perClass];
+        for (int i = 0; i < perClass; i++)
+        {
+            data[i, 0] = i % 2;
+            data[perClass + i, 0] = 1 + i % 2;
+            labels[perClass + i] = 1;
+        }
+
+        var selector = new StatisticalTTest(nFeaturesToSelect: 1);
+        selector.Fit(new Matrix<double>(data), new Vector<double>(labels));
+
+        AssertValues(new[] { Math.Sqrt(2.0 * (perClass - 1)) }, selector.TStatistics, 1e-6);
+    }
+
+    // The same test in Half with 300 samples per class: (n - 1) n = 89700 overflows Half (max 65504).
+    [Fact(Timeout = 120000)]
+    public async Task StatisticalTTest_Half_DoesNotOverflowTheStandardError()
+    {
+        await Task.CompletedTask;
+        const int perClass = 300;
+        var data = new Half[2 * perClass, 1];
+        var labels = new Half[2 * perClass];
+        for (int i = 0; i < perClass; i++)
+        {
+            data[i, 0] = (Half)(i % 2);
+            data[perClass + i, 0] = (Half)(1 + i % 2);
+            labels[perClass + i] = (Half)1;
+        }
+
+        var selector = new AiDotNet.Preprocessing.FeatureSelection.Statistical.TTestSelector<Half>(nFeaturesToSelect: 1);
+        selector.Fit(new Matrix<Half>(data), new Vector<Half>(labels));
+
+        Assert.NotNull(selector.TStatistics);
+        Assert.Equal(Math.Sqrt(2.0 * (perClass - 1)), (double)selector.TStatistics[0], 0.1);
+    }
+
+    // The covariate is excluded by position. Compared as Half, column index 2049 rounds to 2048 and was zeroed with
+    // a covariate at 2048, so the only informative feature could never be selected.
+    [Fact(Timeout = 120000)]
+    public async Task ANCOVA_Half_ExcludesOnlyTheCovariateColumn()
+    {
+        await Task.CompletedTask;
+        const int features = 2050;
+        var informative = new[] { 0.1, 0.3, 0.2, 0.4, 10.2, 10.1, 10.4, 10.3 };
+        var data = new Half[8, features];
+        var labels = new Half[8];
+        for (int i = 0; i < 8; i++)
+        {
+            data[i, 2048] = (Half)(i + 1);
+            data[i, 2049] = (Half)informative[i];
+            labels[i] = (Half)(i < 4 ? 0 : 1);
+        }
+
+        var selector = new AiDotNet.Preprocessing.FeatureSelection.Statistical.ANCOVASelector<Half>(
+            nFeaturesToSelect: 1, covariateIndex: 2048);
+        selector.Fit(new Matrix<Half>(data), new Vector<Half>(labels));
+
+        Assert.Equal(new[] { 2049 }, selector.SelectedIndices);
+    }
+
+    // sklearn-style smoothed idf = ln((n + 1) / (df + 1)) + 1 with df counted exactly: 3000 of 4000 documents
+    // (df / n = 0.75, kept by minDF = 0.6). Counted in Half the document frequency stopped at 2048 (0.512), so
+    // the term was filtered out.
+    [Fact(Timeout = 120000)]
+    public async Task TFIDF_Half_CountsDocumentFrequenciesPast2048()
+    {
+        await Task.CompletedTask;
+        var data = new Half[4000, 1];
+        for (int i = 0; i < 3000; i++)
+        {
+            data[i, 0] = (Half)1;
+        }
+
+        var selector = new AiDotNet.Preprocessing.FeatureSelection.Text.TFIDFSelector<Half>(
+            nFeaturesToSelect: 1, minDF: 0.6, maxDF: 0.95);
+        selector.Fit(new Matrix<Half>(data));
+
+        Assert.NotNull(selector.IDFScores);
+        Assert.Equal(Math.Log(4001.0 / 3001.0) + 1, (double)selector.IDFScores[0], 5e-3);
+    }
+
+    // numpy.histogram(x, bins=2) of 3000 zeros and 1096 ones gives counts [3000, 1096], entropy
+    // -(p ln p + q ln q) with p = 3000 / 4096. Counted in Half the first bin stopped at 2048.
+    [Fact(Timeout = 120000)]
+    public async Task MaximalInformation_Half_CountsBinsPast2048()
+    {
+        await Task.CompletedTask;
+        var data = new Half[4096, 1];
+        for (int i = 3000; i < 4096; i++)
+        {
+            data[i, 0] = (Half)1;
+        }
+
+        var selector = new AiDotNet.Preprocessing.FeatureSelection.Unsupervised.MaximalInformation<Half>(
+            nFeaturesToSelect: 1, nBins: 2);
+        selector.Fit(new Matrix<Half>(data));
+
+        double p = 3000.0 / 4096;
+        double q = 1096.0 / 4096;
+        Assert.NotNull(selector.Entropies);
+        Assert.Equal(-(p * Math.Log(p) + q * Math.Log(q)), (double)selector.Entropies[0], 5e-3);
+    }
+
+    // Streaming state carried between PartialFit calls must not alias engine scratch that a tensor arena hands out
+    // again after the call: a selector updated inside an arena must match one updated without.
+    [Fact(Timeout = 120000)]
+    public async Task StreamingSelectors_StateFittedInArena_SurvivesTheArena()
+    {
+        await Task.CompletedTask;
+        var data = RegressionData();
+        var target = RegressionTarget();
+
+        var expectedOnline = new OnlineSelector(nFeaturesToSelect: 2, learningRate: 0.3);
+        var online = new OnlineSelector(nFeaturesToSelect: 2, learningRate: 0.3);
+        var expectedDecay = new AiDotNet.Preprocessing.FeatureSelection.Streaming.ExponentialDecaySelector<double>(2, 0.9);
+        var decay = new AiDotNet.Preprocessing.FeatureSelection.Streaming.ExponentialDecaySelector<double>(2, 0.9);
+        var expectedWindow = new AiDotNet.Preprocessing.FeatureSelection.Streaming.SlidingWindowSelector<double>(2, 12);
+        var window = new AiDotNet.Preprocessing.FeatureSelection.Streaming.SlidingWindowSelector<double>(2, 12);
+
+        expectedOnline.PartialFit(data, target);
+        expectedDecay.PartialFit(data, target);
+        expectedWindow.PartialFit(data, target);
+        using (AiDotNet.Tensors.Helpers.TensorArena.Create())
+        {
+            online.PartialFit(data, target);
+            decay.PartialFit(data, target);
+            window.PartialFit(data, target);
+        }
+
+        using (AiDotNet.Tensors.Helpers.TensorArena.Create())
+        {
+            var engine = AiDotNet.Tensors.Engines.AiDotNetEngine.Current;
+            for (int i = 0; i < 64; i++)
+            {
+                _ = engine.TensorAddScalar(new Tensor<double>(new[] { 1, 5 }), 1e6 + i);
+                _ = engine.TensorAddScalar(new Tensor<double>(new[] { 1, 4 }), -1e6 - i);
+                _ = engine.TensorAddScalar(new Tensor<double>(new[] { 8, 5 }), 1e6 + i);
+            }
+        }
+
+        expectedOnline.PartialFit(data, target);
+        online.PartialFit(data, target);
+        expectedDecay.PartialFit(data, target);
+        decay.PartialFit(data, target);
+        expectedWindow.PartialFit(data, target);
+        window.PartialFit(data, target);
+
+        Assert.NotNull(expectedOnline.RunningScores);
+        Assert.NotNull(expectedDecay.FeatureScores);
+        Assert.NotNull(expectedWindow.FeatureScores);
+        AssertValues(expectedOnline.RunningScores.ToArray(), online.RunningScores, Tolerance);
+        AssertValues(expectedDecay.FeatureScores.ToArray(), decay.FeatureScores, Tolerance);
+        AssertValues(expectedWindow.FeatureScores.ToArray(), window.FeatureScores, Tolerance);
+    }
+
+    private static Matrix<double> SearchData()
+    {
+        var data = new double[12, 8];
+        for (int i = 0; i < 12; i++)
+            for (int j = 0; j < 8; j++)
+                data[i, j] = Math.Sin(1.3 * i + 0.7 * j) + 0.1 * j;
+        return new Matrix<double>(data);
+    }
+
+    private static Vector<double> SearchTarget() =>
+        new Vector<double>(Enumerable.Range(0, 12).Select(i => Math.Cos(0.9 * i)).ToArray());
+
+    private static int[] Above(double[] draws, Func<int, int> index, int p) =>
+        Enumerable.Range(0, p).Where(j => draws[index(j)] > 0.5).ToArray();
+
+    // The metaheuristic selectors keep master's draw order, so a seeded run reproduces master's search: the
+    // initial positions are the generator's NextDouble() values in master's loop order (per individual, per
+    // dimension; position then velocity per dimension for particle swarm), read back here from the subsets the
+    // first fitness evaluations receive.
+    [Fact(Timeout = 120000)]
+    public async Task Metaheuristics_InitialPositions_KeepMastersDrawOrder()
+    {
+        await Task.CompletedTask;
+        const int p = 8;
+        const int population = 5;
+        const int seed = 2024;
+        var data = SearchData();
+        var target = SearchTarget();
+
+        // Bat, firefly and differential evolution: p sequential draws per individual
+        var expected = new List<int[]>();
+        var deExpected = new List<int[]>();
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
+        for (int i = 0; i < population; i++)
+        {
+            var draws = Enumerable.Range(0, p).Select(_ => rng.NextDouble()).ToArray();
+            var above = Above(draws, j => j, p);
+            expected.Add(above);
+
+            // differential evolution falls back to the 2 largest positions when none is above 0.5
+            deExpected.Add(above.Length > 0
+                ? above
+                : Enumerable.Range(0, p).OrderByDescending(j => draws[j]).Take(2).ToArray());
+        }
+
+        var batCalls = new List<int[]>();
+        new AiDotNet.Preprocessing.FeatureSelection.Wrapper.BatAlgorithmFS<double>(
+            nFeaturesToSelect: 2, populationSize: population, maxIterations: 1,
+            fitnessFunction: (_, _, features) => { batCalls.Add(features); return 0.0; }, randomState: seed)
+            .Fit(data, target);
+        var nonEmpty = expected.Where(s => s.Length > 0).ToList();
+        Assert.Equal(nonEmpty, batCalls.Take(nonEmpty.Count).ToList());
+
+        var fireflyCalls = new List<int[]>();
+        new AiDotNet.Preprocessing.FeatureSelection.Wrapper.FireflyFS<double>(
+            nFeaturesToSelect: 2, populationSize: population, maxIterations: 1,
+            fitnessFunction: (_, _, features) => { fireflyCalls.Add(features); return 0.0; }, randomState: seed)
+            .Fit(data, target);
+        Assert.Equal(nonEmpty, fireflyCalls.Take(nonEmpty.Count).ToList());
+
+        var deCalls = new List<int[]>();
+        new AiDotNet.Preprocessing.FeatureSelection.Wrapper.DifferentialEvolutionFS<double>(
+            nFeaturesToSelect: 2, populationSize: population, nGenerations: 1,
+            scorer: (_, _, features) => { deCalls.Add(features); return 0.0; }, randomState: seed)
+            .Fit(data, target);
+        Assert.Equal(deExpected, deCalls.Take(population).ToList());
+
+        // Particle swarm: per dimension the position draw, then the velocity draw
+        var swarmExpected = new List<int[]>();
+        rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
+        for (int i = 0; i < population; i++)
+        {
+            var draws = Enumerable.Range(0, 2 * p).Select(_ => rng.NextDouble()).ToArray();
+            var above = Above(draws, j => 2 * j, p);
+
+            // particle swarm falls back to the (first) largest position when none is above 0.5
+            swarmExpected.Add(above.Length > 0
+                ? above
+                : new[] { Enumerable.Range(0, p).OrderByDescending(j => draws[2 * j]).First() });
+        }
+
+        var swarmCalls = new List<int[]>();
+        new AiDotNet.Preprocessing.FeatureSelection.Wrapper.ParticleSwarmFS<double>(
+            nFeaturesToSelect: 2, nParticles: population, nIterations: 1,
+            scorer: (_, _, features) => { swarmCalls.Add(features); return 0.0; }, randomState: seed)
+            .Fit(data, target);
+        Assert.Equal(swarmExpected, swarmCalls.Take(population).ToList());
+
+        // Grey wolf: p sequential draws per wolf; the solution takes, by decreasing value, every position above 0.5
+        // and at least nFeaturesToSelect, at most nFeaturesToSelect + 3
+        var wolfExpected = new List<bool[]>();
+        rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
+        for (int i = 0; i < population; i++)
+        {
+            var draws = Enumerable.Range(0, p).Select(_ => rng.NextDouble()).ToArray();
+            var solution = new bool[p];
+            int count = 0;
+            foreach (int j in Enumerable.Range(0, p).OrderByDescending(k => draws[k]))
+            {
+                if (draws[j] > 0.5 || count < 2)
+                {
+                    solution[j] = true;
+                    count++;
+                }
+
+                if (count >= 5)
+                    break;
+            }
+
+            wolfExpected.Add(solution);
+        }
+
+        var wolfCalls = new List<bool[]>();
+        new AiDotNet.Preprocessing.FeatureSelection.Wrapper.GreyWolfFS<double>(
+            nFeaturesToSelect: 2, populationSize: population, nIterations: 1,
+            fitnessFunc: (_, _, solution) => { wolfCalls.Add((bool[])solution.Clone()); return 0.0; }, randomState: seed)
+            .Fit(data, target);
+        Assert.Equal(wolfExpected, wolfCalls.Take(population).ToList());
+    }
 }
