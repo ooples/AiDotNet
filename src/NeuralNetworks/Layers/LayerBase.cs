@@ -332,10 +332,9 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     private bool _scatterVectorHandedOut;
 
     // On a GPU engine a training step's gradients live on the device. Publishing them used to download every one,
-    // every step (one sync per tensor: 35 per LSTM step, 65 per Transformer step). The layer now keeps OWNED device
-    // copies (an async device-to-device copy each, no sync) and downloads only if something reads the gradients.
-    // Owned, not referenced: the step's own gradient buffers are reclaimed when it returns. A compiled plan's buffers,
-    // device or host, persist until its next step republishes them, so those are referenced instead
+    // every step (one sync per tensor: 35 per LSTM step, 65 per Transformer step). The layer now references the
+    // step's device gradients (a tape keeps its gradients alive after it ends; a compiled plan's buffers persist until
+    // its next step republishes them) and downloads only if something reads them
     // (TryPublishDeviceGradients, TryReferenceHostGradients).
     private Dictionary<Tensor<T>, Tensor<T>>? _pendingDeviceGradients;
 
@@ -7662,15 +7661,15 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
             _pendingDeviceGradients = owned;
             return true;
         }
-        // A device copy made inside a tape step is one of the step's intermediates, which the tape frees on the device
-        // when it ends; the published gradient is read after that, so the tape must keep it.
+        // A tape step's gradients outlive the tape (only the step's other intermediates are released when it ends), so
+        // they are referenced like a compiled plan's; Retain makes that explicit. An owned copy per parameter per step
+        // cost a device-to-device copy plus a host array for every parameter (the copy's Tensor constructor allocates
+        // one): ~83 MB of host allocation per step on a 74M-parameter MoE LM, read by nothing.
         var tape = AiDotNet.Tensors.Engines.Autodiff.GradientTape<T>.Current;
         foreach (var (parameter, gradient) in sources)
         {
-            var copy = new Tensor<T>(gradient._shape);
-            Engine.TensorCopy(gradient, copy);
-            tape?.Retain(copy);
-            owned[parameter] = copy;
+            tape?.Retain(gradient);
+            owned[parameter] = gradient;
             matched += gradient.Length;
         }
 
