@@ -89,36 +89,16 @@ public class BYOLLoss<T> : ContrastiveLossBase<T>
         if (targetProjection is null) throw new ArgumentNullException(nameof(targetProjection));
 
         var batchSize = onlinePrediction.Shape[0];
-        var dim = onlinePrediction.Shape[1];
 
         var p = _normalize ? L2Normalize(onlinePrediction) : onlinePrediction;
         var z = _normalize ? L2Normalize(targetProjection) : targetProjection;
 
-        // Compute negative cosine similarity: 2 - 2 * cos(p, z)
-        // This is equivalent to ||p - z||^2 when both are normalized
-        T totalLoss = NumOps.Zero;
+        // Per-sample loss = 2 - 2 * cos(p, z), averaged over the batch
+        var cosineSim = Engine.ReduceSum(Engine.TensorMultiply(p, z), new[] { 1 }, keepDims: false);
+        var losses = Engine.TensorAddScalar(
+            Engine.TensorMultiplyScalar(cosineSim, NumOps.FromDouble(-2.0)), NumOps.FromDouble(2.0));
 
-        for (int i = 0; i < batchSize; i++)
-        {
-            // Extract rows as Vector<T> for Engine.DotProduct
-            var pRow = new Vector<T>(dim);
-            var zRow = new Vector<T>(dim);
-            for (int d = 0; d < dim; d++)
-            {
-                pRow[d] = p[i, d];
-                zRow[d] = z[i, d];
-            }
-            T cosineSim = Engine.DotProduct(pRow, zRow);
-
-            // Loss = 2 - 2 * cosine_similarity
-            var loss = NumOps.Subtract(
-                NumOps.FromDouble(2.0),
-                NumOps.Multiply(NumOps.FromDouble(2.0), cosineSim));
-
-            totalLoss = NumOps.Add(totalLoss, loss);
-        }
-
-        return NumOps.Divide(totalLoss, NumOps.FromDouble(batchSize));
+        return NumOps.Divide(Engine.TensorSum(losses), NumOps.FromDouble(batchSize));
     }
 
     /// <summary>
@@ -151,66 +131,31 @@ public class BYOLLoss<T> : ContrastiveLossBase<T>
         Tensor<T> onlinePrediction, Tensor<T> targetProjection)
     {
         var batchSize = onlinePrediction.Shape[0];
-        var dim = onlinePrediction.Shape[1];
 
         var p = _normalize ? L2Normalize(onlinePrediction) : onlinePrediction;
         var z = _normalize ? L2Normalize(targetProjection) : targetProjection;
 
-        var gradP = new T[batchSize * dim];
-        T totalLoss = NumOps.Zero;
+        // Per-sample cosine similarity of the normalized rows, [batch, 1]
+        var cosineSim = Engine.ReduceSum(Engine.TensorMultiply(p, z), new[] { 1 }, keepDims: true);
 
-        for (int i = 0; i < batchSize; i++)
-        {
-            // Extract rows as Vector<T> for Engine.DotProduct
-            var pRow = new Vector<T>(dim);
-            var zRow = new Vector<T>(dim);
-            var origRow = new Vector<T>(dim);
-            for (int d = 0; d < dim; d++)
-            {
-                pRow[d] = p[i, d];
-                zRow[d] = z[i, d];
-                origRow[d] = onlinePrediction[i, d];
-            }
+        // Norm of the ORIGINAL (unnormalized) input for the chain rule, [batch, 1]
+        var origNormSq = Engine.ReduceSum(Engine.TensorSquare(onlinePrediction), new[] { 1 }, keepDims: true);
+        var origNorm = Engine.TensorSqrt(Engine.TensorAddScalar(origNormSq, NumOps.FromDouble(1e-8)));
 
-            // Compute cosine similarity using normalized vectors
-            T cosineSim = Engine.DotProduct(pRow, zRow);
+        // Loss = 2 - 2 * cos_sim, averaged over the batch
+        var losses = Engine.TensorAddScalar(
+            Engine.TensorMultiplyScalar(cosineSim, NumOps.FromDouble(-2.0)), NumOps.FromDouble(2.0));
+        var avgLoss = NumOps.Divide(Engine.TensorSum(losses), NumOps.FromDouble(batchSize));
 
-            // Compute norm of the ORIGINAL (unnormalized) input for chain rule
-            T origNormSq = Engine.DotProduct(origRow, origRow);
-            T origNorm = NumOps.Sqrt(NumOps.Add(origNormSq, NumOps.FromDouble(1e-8)));
-
-            // Loss = 2 - 2 * cos_sim
-            var loss = NumOps.Subtract(
-                NumOps.FromDouble(2.0),
-                NumOps.Multiply(NumOps.FromDouble(2.0), cosineSim));
-
-            totalLoss = NumOps.Add(totalLoss, loss);
-
-            // Gradient w.r.t. unnormalized onlinePrediction:
-            // d/da_d [cos(a,b)] = (z_d - cos_sim * p_d) / ||a||
-            // where p = a/||a||, z = b/||b||
-            // So dL/da_d = -2 * (z_d - cos_sim * p_d) / ||a||
-            for (int d = 0; d < dim; d++)
-            {
-                var grad = NumOps.Divide(
-                    NumOps.Multiply(
-                        NumOps.FromDouble(-2.0),
-                        NumOps.Subtract(z[i, d], NumOps.Multiply(cosineSim, p[i, d]))),
-                    origNorm);
-
-                gradP[i * dim + d] = grad;
-            }
-        }
-
-        var avgLoss = NumOps.Divide(totalLoss, NumOps.FromDouble(batchSize));
+        // Gradient w.r.t. unnormalized onlinePrediction:
+        // d/da_d [cos(a,b)] = (z_d - cos_sim * p_d) / ||a||
+        // where p = a/||a||, z = b/||b||
+        // So dL/da_d = -2 * (z_d - cos_sim * p_d) / ||a||, then scaled by 1/batchSize
+        var direction = Engine.TensorSubtract(z, Engine.TensorMultiply(cosineSim, p));
+        var gradP = Engine.TensorDivide(Engine.TensorMultiplyScalar(direction, NumOps.FromDouble(-2.0)), origNorm);
         var scale = NumOps.FromDouble(1.0 / batchSize);
 
-        for (int i = 0; i < gradP.Length; i++)
-        {
-            gradP[i] = NumOps.Multiply(gradP[i], scale);
-        }
-
-        return (avgLoss, new Tensor<T>(gradP, [batchSize, dim]));
+        return (avgLoss, Engine.TensorMultiplyScalar(gradP, scale));
     }
 
     /// <summary>
@@ -227,47 +172,17 @@ public class BYOLLoss<T> : ContrastiveLossBase<T>
         var p = _normalize ? L2Normalize(prediction) : prediction;
         var z = _normalize ? L2Normalize(target) : target;
 
-        T totalLoss = NumOps.Zero;
-
-        for (int i = 0; i < batchSize; i++)
-        {
-            // Extract difference row as Vector<T>
-            var diff = new Vector<T>(dim);
-            for (int d = 0; d < dim; d++)
-            {
-                diff[d] = NumOps.Subtract(p[i, d], z[i, d]);
-            }
-            totalLoss = NumOps.Add(totalLoss, Engine.DotProduct(diff, diff));
-        }
-
+        // Mean squared difference over every element
+        T totalLoss = Engine.TensorSumOfSquares(Engine.TensorSubtract(p, z));
         return NumOps.Divide(totalLoss, NumOps.FromDouble(batchSize * dim));
     }
 
     private Tensor<T> L2Normalize(Tensor<T> tensor)
     {
-        var batchSize = tensor.Shape[0];
-        var dim = tensor.Shape[1];
-        var result = new T[batchSize * dim];
-
-        for (int i = 0; i < batchSize; i++)
-        {
-            // Extract row as Vector<T> for Engine.DotProduct
-            var row = new Vector<T>(dim);
-            for (int j = 0; j < dim; j++)
-            {
-                row[j] = tensor[i, j];
-            }
-
-            var sumSquared = Engine.DotProduct(row, row);
-            var norm = NumOps.Sqrt(NumOps.Add(sumSquared, NumOps.FromDouble(1e-8)));
-
-            for (int j = 0; j < dim; j++)
-            {
-                result[i * dim + j] = NumOps.Divide(row[j], norm);
-            }
-        }
-
-        return new Tensor<T>(result, [batchSize, dim]);
+        // x / sqrt(sum(x^2) + 1e-8) per row
+        var sumSquared = Engine.ReduceSum(Engine.TensorSquare(tensor), new[] { 1 }, keepDims: true);
+        var norm = Engine.TensorSqrt(Engine.TensorAddScalar(sumSquared, NumOps.FromDouble(1e-8)));
+        return Engine.TensorDivide(tensor, norm);
     }
 
     /// <summary>Row-wise L2 normalization on the tape.</summary>
