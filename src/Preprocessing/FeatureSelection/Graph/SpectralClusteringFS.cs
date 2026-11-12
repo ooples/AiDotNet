@@ -112,7 +112,7 @@ public class SpectralClusteringFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>,
 
             // Update
             var members = FilterStatisticTensorOps.ClassOneHot<T>(assignments, k);
-            var counts = Engine.ReduceSum(members, new[] { 0 }, false);
+            var counts = FeatureSelectionTensorOps.Counts(members, 0);
             var sums = Engine.TensorMatMul(Engine.TensorTranspose(members), data);
             var means = FilterStatisticTensorOps.GuardedDivide(sums, FilterStatisticTensorOps.ColumnBroadcast(counts, k), 0.5, zero);
             centroids = Engine.TensorWhere(FilterStatisticTensorOps.ColumnBroadcast(Engine.TensorGreaterThan(counts, zero), k), means, centroids);

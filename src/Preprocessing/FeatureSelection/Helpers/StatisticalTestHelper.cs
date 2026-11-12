@@ -169,7 +169,7 @@ internal static class StatisticalTestHelper
 
         // observed[c, j] = sum of feature j over class c; expected = P(class c) * total of feature j
         var observed = engine.TensorMatMul(engine.TensorTranspose(oneHot), x);
-        var classProbability = engine.TensorDivideScalar(engine.ReduceSum(oneHot, new[] { 0 }, false), ops.FromDouble(n));
+        var classProbability = engine.TensorDivideScalar(FeatureSelectionTensorOps.Counts(oneHot, 0), ops.FromDouble(n));
         var featureTotal = engine.ReduceSum(x, new[] { 0 }, false);
         var expected = engine.TensorOuter(classProbability, featureTotal);
 
@@ -221,11 +221,12 @@ internal static class StatisticalTestHelper
                 engine.TensorSort(joint, 1, false).Item1, new Tensor<int>(new[] { neighbors - 1 }, new[] { 1 }), 1);
             var radiusGrid = engine.TensorBroadcastTo(radius, new[] { n, n });
 
-            // neighbours strictly inside that radius in each marginal space
-            var nx = engine.ReduceSum(engine.TensorLessThan(dx, radiusGrid), new[] { 1 }, false);
-            var ny = engine.ReduceSum(engine.TensorLessThan(dy, radiusGrid), new[] { 1 }, false);
-            var psiX = engine.TensorGather(digammaTable, engine.TensorRound(nx).Cast<int>(), 0);
-            var psiY = engine.TensorGather(digammaTable, engine.TensorRound(ny).Cast<int>(), 0);
+            // neighbours strictly inside that radius in each marginal space, counted in int (a 0/1 sum in T stops
+            // counting at 2048 for Half)
+            var nx = engine.ReduceSum(engine.TensorLessThan(dx, radiusGrid).Cast<int>(), new[] { 1 }, false);
+            var ny = engine.ReduceSum(engine.TensorLessThan(dy, radiusGrid).Cast<int>(), new[] { 1 }, false);
+            var psiX = engine.TensorGather(digammaTable, nx, 0);
+            var psiY = engine.TensorGather(digammaTable, ny, 0);
             scores.Add(engine.TensorAdd(
                 engine.ReduceMean(psiX, new[] { 0 }, true), engine.ReduceMean(psiY, new[] { 0 }, true)));
         }

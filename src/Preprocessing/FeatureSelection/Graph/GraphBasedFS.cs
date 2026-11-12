@@ -83,7 +83,7 @@ public class GraphBasedFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISuperv
         // Compute centrality scores
         var centrality = _centralityMeasure switch
         {
-            GraphCentralityMeasure.Degree => Engine.ReduceSum(Engine.TensorGreaterThan(adjacency, NumOps.Zero), new[] { 1 }, false),
+            GraphCentralityMeasure.Degree => FeatureSelectionTensorOps.Counts(Engine.TensorGreaterThan(adjacency, NumOps.Zero), 1),
             GraphCentralityMeasure.Eigenvector => ComputeEigenvectorCentrality(adjacency, p),
             GraphCentralityMeasure.Betweenness => ComputeBetweennessCentrality(adjacency, p),
             _ => ComputePageRank(adjacency, p)

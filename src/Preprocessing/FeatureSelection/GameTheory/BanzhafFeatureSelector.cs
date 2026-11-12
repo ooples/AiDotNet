@@ -86,11 +86,13 @@ public class BanzhafFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>
 
         // a coalition scores the mean absolute correlation of its features with the target (0 when empty)
         var correlation = AbsoluteCorrelation(FilterStatisticTensorOps.AsTensor(data), FilterStatisticTensorOps.AsTensor(target));
-        var inCoalition = new Tensor<int>(membership, new[] { _nSamples, p }).Cast<T>();
+        var memberCodes = new Tensor<int>(membership, new[] { _nSamples, p });
+        var inCoalition = memberCodes.Cast<T>();
         var shape = new[] { _nSamples, p };
         var sums = Engine.TensorBroadcastTo(
             Engine.TensorMatMul(inCoalition, Engine.Reshape(correlation, new[] { p, 1 })), shape);
-        var counts = Engine.TensorBroadcastTo(Engine.ReduceSum(inCoalition, new[] { 1 }, true), shape);
+        // coalition sizes counted in int (a 0/1 sum in T stops counting at 2048 for Half)
+        var counts = Engine.TensorBroadcastTo(Engine.ReduceSum(memberCodes, new[] { 1 }, true).Cast<T>(), shape);
         T threshold = NumOps.FromDouble(_threshold);
         var wins = OneMinusBelow(CoalitionScore(sums, counts), threshold);
 

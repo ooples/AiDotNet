@@ -33,7 +33,7 @@ internal sealed class DiscreteInformation<T>
         _p = codes.Shape[1];
         _total = _ops.FromDouble(Math.Max(_n, 1));
         TargetEntropy = _engine.TensorSum(FeatureSelectionTensorOps.Entropy(
-            _engine.Reshape(_engine.ReduceSum(targetOneHot, new[] { 0 }, false), new[] { 1, targetOneHot.Shape[1] }), _total, 1));
+            _engine.Reshape(FeatureSelectionTensorOps.Counts(targetOneHot, 0), new[] { 1, targetOneHot.Shape[1] }), _total, 1));
     }
 
     /// <summary>
