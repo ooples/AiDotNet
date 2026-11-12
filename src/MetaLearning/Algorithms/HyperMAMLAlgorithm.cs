@@ -139,43 +139,27 @@ public partial class HyperMAMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T,
         if (supportFeatures == null || supportFeatures.Length == 0)
             return sharedInit;
 
-        // Compute support set statistics
-        T mean = NumOps.Zero;
-        T variance = NumOps.Zero;
-        for (int i = 0; i < supportFeatures.Length; i++)
-            mean = NumOps.Add(mean, supportFeatures[i]);
-        mean = NumOps.Divide(mean, NumOps.FromDouble(Math.Max(supportFeatures.Length, 1)));
+        // Compute support set statistics (mean and population variance)
+        T mean = Engine.Mean(supportFeatures);
+        var centered = Engine.Subtract(supportFeatures, Engine.Fill(supportFeatures.Length, mean));
+        T variance = NumOps.Divide(Engine.DotProduct(centered, centered), NumOps.FromDouble(supportFeatures.Length));
 
-        for (int i = 0; i < supportFeatures.Length; i++)
-        {
-            T diff = NumOps.Subtract(supportFeatures[i], mean);
-            variance = NumOps.Add(variance, NumOps.Multiply(diff, diff));
-        }
-        variance = NumOps.Divide(variance, NumOps.FromDouble(Math.Max(supportFeatures.Length, 1)));
+        // Hypernetwork: MLP(stats) -> per-parameter offset. Parameter i reads the hypernetwork entries
+        // 3i, 3i + 1 and 3i + 2 (cyclic reuse via modulo) as w1, w2 and b.
+        var table = ParameterModulation.Table(Engine, _hypernetParams, sharedInit.Length, 3);
+        var preActivation = Engine.Add(
+            Engine.Add(
+                Engine.Multiply(ParameterModulation.Column(Engine, table, 0), mean),
+                Engine.Multiply(ParameterModulation.Column(Engine, table, 1), variance)),
+            ParameterModulation.Column(Engine, table, 2));
+        var offset = Engine.Multiply(Engine.Tanh(preActivation), NumOps.FromDouble(0.1));
 
-        double meanVal = NumOps.ToDouble(mean);
-        double varVal = NumOps.ToDouble(variance);
-
-        // Generate per-parameter modulations via hypernetwork
-        double blendAlpha = _hyperMAMLOptions.BlendFactor;
-        var blended = new Vector<T>(sharedInit.Length);
-        int paramIdx = 0;
-
-        for (int i = 0; i < sharedInit.Length; i++)
-        {
-            // Hypernetwork: MLP(stats) -> per-parameter offset (cyclic reuse via modulo)
-            double w1 = NumOps.ToDouble(_hypernetParams[paramIdx++ % _hypernetParams.Length]);
-            double w2 = NumOps.ToDouble(_hypernetParams[paramIdx++ % _hypernetParams.Length]);
-            double b = NumOps.ToDouble(_hypernetParams[paramIdx++ % _hypernetParams.Length]);
-            double offset = Math.Tanh(w1 * meanVal + w2 * varVal + b) * 0.1;
-
-            // Blend: alpha * (shared + offset) + (1-alpha) * shared
-            double sharedVal = NumOps.ToDouble(sharedInit[i]);
-            double taskVal = sharedVal + offset;
-            blended[i] = NumOps.FromDouble(blendAlpha * taskVal + (1.0 - blendAlpha) * sharedVal);
-        }
-
-        return blended;
+        // Blend: alpha * (shared + offset) + (1-alpha) * shared
+        T blendAlpha = NumOps.FromDouble(_hyperMAMLOptions.BlendFactor);
+        T keep = NumOps.FromDouble(1.0 - _hyperMAMLOptions.BlendFactor);
+        return Engine.Add(
+            Engine.Multiply(Engine.Add(sharedInit, offset), blendAlpha),
+            Engine.Multiply(sharedInit, keep));
     }
 
     /// <inheritdoc/>
@@ -224,7 +208,7 @@ public partial class HyperMAMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T,
     private double ComputeAuxLoss(TaskBatch<T, TInput, TOutput> taskBatch)
     {
         var initParams = ParamModel.GetParameters();
-        double totalLoss = 0;
+        var losses = new List<T>(taskBatch.Tasks.Length);
 
         foreach (var task in taskBatch.Tasks)
         {
@@ -241,11 +225,13 @@ public partial class HyperMAMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T,
                 ParamModel.SetParameters(adapted);
             }
 
-            totalLoss += NumOps.ToDouble(ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput));
+            losses.Add(ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput));
         }
 
         ParamModel.SetParameters(initParams);
-        return totalLoss / Math.Max(taskBatch.Tasks.Length, 1);
+
+        // The SPSA callback contract is a double; the batch mean is reduced in T and converted once.
+        return NumOps.ToDouble(ComputeMean(losses));
     }
 
     /// <inheritdoc/>
