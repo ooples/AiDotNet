@@ -204,7 +204,7 @@ public partial class LionOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
             // would always be 0 < tolerance and the optimiser would exit after
             // the first epoch. Issue #1340 / PR #1351 fix swept across the
             // optimizer suite.
-            if (NumOps.LessThan(NumOps.Abs(NumOps.Subtract(previousStepData.FitnessScore, currentStepData.FitnessScore)), NumOps.FromDouble(_options.Tolerance)))
+            if (FitnessChangeBelow(previousStepData.FitnessScore, currentStepData.FitnessScore, _options.Tolerance))
             {
                 break;
             }
@@ -361,15 +361,11 @@ public partial class LionOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
         var weightDecay = NumOps.FromDouble(_options.WeightDecay);
 
         // Interpolate: c_t = beta1 * m_{t-1} + (1 - beta1) * g_t
-        // ONE FUSED IN-PLACE PASS -- same rewrite as Adam/AdamW/Adagrad, same reason.
-        //
-        // Replaces up to 11 Engine calls that each RETURNED a fresh full-length vector. Measured on
-        // Adam's near-identical chain at 2,000,000 double parameters: 701.9 MB/step and ~290 ms/step
-        // before, 15.3 MB and 17.0 ms after.
+        // Whole-vector engine ops with scalar operands.
         //
         // ORDER MATTERS HERE and is preserved exactly (Chen et al. 2023): the interpolation AND the
-        // momentum update both read the PREVIOUS m, so m is read once per element before being
-        // overwritten -- interpolating against an already-updated m would be a different algorithm.
+        // momentum update both read the PREVIOUS m, so the new m is computed from the old m before it
+        // is overwritten -- interpolating against an already-updated m would be a different algorithm.
         //   c = sign(b1*m + (1-b1)*g)                      [+ wd*p when weight decay is on]
         //   out = p - c*lr
         //   m   = b2*m + (1-b2)*g                          [uses the SAME old m]
@@ -377,38 +373,20 @@ public partial class LionOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
         var oneMinusBeta2 = NumOps.Subtract(NumOps.One, _currentBeta2);
         bool hasWeightDecay = !NumOps.Equals(weightDecay, NumOps.Zero);
 
-        var updatedParams = new Vector<T>(parameters.Length, skipZeroInit: true);
-        var pSpan = parameters.AsSpan();
-        var gSpan = gradient.AsSpan();
-        var mSpan = _m.AsWritableSpan();
-        var outSpan = updatedParams.AsWritableSpan();
-        T learningRate = CurrentLearningRate;
+        var engine = Engine;
+        var p = parameters.AsTensor();
+        var g = gradient.AsTensor();
+        var mState = _m.AsTensor();
 
-        for (int i = 0; i < pSpan.Length; i++)
-        {
-            T g = gSpan[i];
-            T p = pSpan[i];
-            T mOld = mSpan[i];
+        var interpolated = engine.TensorAddScaled(mState, g, _currentBeta1, oneMinusBeta1);
+        var update = engine.TensorSign(interpolated);
+        if (hasWeightDecay)
+            update = engine.TensorAdd(update, engine.TensorMultiplyScalar(p, weightDecay));
 
-            T interpolated = NumOps.Add(
-                NumOps.Multiply(mOld, _currentBeta1),
-                NumOps.Multiply(g, oneMinusBeta1));
+        var updatedParams = engine.TensorSubtract(p, engine.TensorMultiplyScalar(update, CurrentLearningRate));
+        engine.TensorCopy(engine.TensorAddScaled(mState, g, _currentBeta2, oneMinusBeta2), mState);
 
-            T update = NumOps.GreaterThan(interpolated, NumOps.Zero) ? NumOps.One
-                     : NumOps.LessThan(interpolated, NumOps.Zero) ? NumOps.Negate(NumOps.One)
-                     : NumOps.Zero;
-
-            if (hasWeightDecay)
-                update = NumOps.Add(update, NumOps.Multiply(p, weightDecay));
-
-            outSpan[i] = NumOps.Subtract(p, NumOps.Multiply(update, learningRate));
-
-            mSpan[i] = NumOps.Add(
-                NumOps.Multiply(mOld, _currentBeta2),
-                NumOps.Multiply(g, oneMinusBeta2));
-        }
-
-        return updatedParams;
+        return updatedParams.AsVector();
     }
 
     // Per-parameter momentum for tape-based Lion training
@@ -428,6 +406,10 @@ public partial class LionOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
         bool gpuAdam = typeof(T) == typeof(float)
             && AiDotNet.Tensors.Engines.AiDotNetEngine.Current is AiDotNet.Tensors.Engines.DirectGpuTensorEngine;
 
+        double learningRateValue = NumOps.ToDouble(CurrentLearningRate);
+        double beta1Value = NumOps.ToDouble(_currentBeta1);
+        double beta2Value = NumOps.ToDouble(_currentBeta2);
+        bool hasWeightDecay = !NumOps.Equals(weightDecay, NumOps.Zero);
         foreach (var param in context.Parameters)
         {
             // True sparse scatter Lion: m + param at touched indices only.
@@ -437,8 +419,8 @@ public partial class LionOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
                 if (!_tapeMomentum.TryGetValue(param, out var mSp)) { mSp = new Tensor<T>(param._shape); _tapeMomentum[param] = mSp; }
                 if (SparseEmbeddingOptimizerHelpers.TryApplyLionSparse(
                         param, mSp,
-                        NumOps.ToDouble(CurrentLearningRate),
-                        NumOps.ToDouble(_currentBeta1), NumOps.ToDouble(_currentBeta2),
+                        learningRateValue,
+                        beta1Value, beta2Value,
                         _options.WeightDecay))
                 {
                     continue;
@@ -452,7 +434,7 @@ public partial class LionOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
 
             if (gpuAdam && param.Length == grad.Length
                 && AiDotNet.Tensors.Engines.Gpu.GpuOptimizer.TryLionStep((Tensor<float>)(object)param, (Tensor<float>)(object)grad, (Tensor<float>)(object)m,
-                    (float)NumOps.ToDouble(CurrentLearningRate), (float)NumOps.ToDouble(_currentBeta1), (float)NumOps.ToDouble(_currentBeta2), (float)_options.WeightDecay))
+                    (float)learningRateValue, (float)beta1Value, (float)beta2Value, (float)_options.WeightDecay))
                 continue;
 
             // Interpolate: c = beta1 * m + (1 - beta1) * grad
@@ -462,7 +444,7 @@ public partial class LionOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
             var signUpdate = Engine.TensorSign(interpolated);
 
             // Weight decay: update += weightDecay * param
-            if (!NumOps.Equals(weightDecay, NumOps.Zero))
+            if (hasWeightDecay)
             {
                 var decayTerm = Engine.TensorMultiplyScalar(param, weightDecay);
                 Engine.TensorAddInPlace(signUpdate, decayTerm);

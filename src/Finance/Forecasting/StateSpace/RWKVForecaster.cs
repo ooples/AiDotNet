@@ -511,7 +511,15 @@ public partial class RWKVForecaster<T> : ForecastingModelBase<T>
         // One call: the stack threads v_first across its blocks internally. Looping the blocks here
         // would bypass that and silently drop the value residual.
         if (_rwkvStack is not null)
+        {
+            // Each forecast is an independent context window. In inference the RWKV-7 blocks carry their final WKV
+            // state and token-shift caches into the next call (the token-by-token streaming contract), so without a
+            // reset a forecast depended on whatever window was predicted before it: the first call after training
+            // started from a clean state and the next one from that call's leftovers. Training clears it itself.
+            if (!IsTrainingMode)
+                _rwkvStack.ResetState();
             current = _rwkvStack.Forward(current);
+        }
 
         // Output projection: take the last timestep's hidden state instead of flattening
         // [seqLen × modelDim]. RWKV is a causal recurrence whose final state has

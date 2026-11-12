@@ -46,4 +46,37 @@ public abstract class BayesianCausalBase<T> : CausalDiscoveryBase<T>
         if (options.Seed.HasValue) Seed = options.Seed.Value;
     }
 
+    /// <summary>
+    /// Pairwise OLS slopes W[i, j] = Cov(i, j) / Var(i), zero where Var(i) is not above 1e-10.
+    /// </summary>
+    private protected Tensor<T> ComputePairwiseOLSWeights(Matrix<T> cov)
+    {
+        int d = cov.Rows;
+        var c = Tensor<T>.FromMatrix(cov);
+        var variance = Engine.TensorBroadcastTo(Engine.TensorDiagonal(c).Reshape(new[] { d, 1 }), new[] { d, d });
+        var usable = Engine.TensorGreaterThan(variance, NumOps.FromDouble(1e-10));
+        var safeVariance = Engine.TensorWhere(usable, variance, Engine.TensorOnesLike(variance));
+        return Engine.TensorWhere(usable, Engine.TensorDivide(c, safeVariance), Engine.TensorZerosLike(c));
+    }
+
+    /// <summary>Entries of <paramref name="values"/> where <paramref name="criterion"/> &gt; threshold, else zero.</summary>
+    private protected Tensor<T> KeepWhereAbove(Tensor<T> criterion, double threshold, Tensor<T> values)
+    {
+        return Engine.TensorWhere(Engine.TensorGreaterThan(criterion, NumOps.FromDouble(threshold)),
+            values, Engine.TensorZerosLike(values));
+    }
+
+    /// <summary>Adds 1 to every entry of <paramref name="edgeCounts"/> where <paramref name="dag"/> is nonzero.</summary>
+    private protected Tensor<T> AccumulateEdgeCounts(Tensor<T> edgeCounts, Matrix<T> dag)
+    {
+        return Engine.TensorAdd(edgeCounts, Engine.TensorNotEquals(Tensor<T>.FromMatrix(dag), NumOps.Zero));
+    }
+
+    /// <summary>Posterior edge frequencies counts / samples, keeping only those above 0.5.</summary>
+    private protected Matrix<T> MajorityEdgeFrequencies(Tensor<T> edgeCounts, int sampleCount)
+    {
+        var frequency = Engine.TensorDivideScalar(edgeCounts, NumOps.FromDouble(sampleCount));
+        return KeepWhereAbove(frequency, 0.5, frequency).ToMatrix();
+    }
+
 }

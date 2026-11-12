@@ -283,7 +283,7 @@ public partial class RootMeanSquarePropagationOptimizer<T, TInput, TOutput> : Gr
             // would always be 0 < tolerance and the optimiser would exit after
             // the first epoch. Issue #1340 / PR #1351 fix swept across the
             // optimizer suite.
-            if (epoch > 0 && NumOps.LessThan(NumOps.Abs(NumOps.Subtract(previousStepData.FitnessScore, currentStepData.FitnessScore)), NumOps.FromDouble(_options.Tolerance)))
+            if (epoch > 0 && FitnessChangeBelow(previousStepData.FitnessScore, currentStepData.FitnessScore, _options.Tolerance))
             {
                 break;
             }
@@ -331,8 +331,8 @@ public partial class RootMeanSquarePropagationOptimizer<T, TInput, TOutput> : Gr
         }
 
         if (_squaredGradient.Length != parameters.Length
-            || (_options.Centered
-                && (_meanGradient.Length != parameters.Length || _velocity.Length != parameters.Length)))
+            || (_options.Centered && _meanGradient.Length != parameters.Length)
+            || (RequiresExtendedState && _velocity.Length != parameters.Length))
         {
             _squaredGradient = NewMeanSquare(parameters.Length);
             _meanGradient = _options.Centered ? new Vector<T>(parameters.Length) : Vector<T>.Empty();
@@ -345,53 +345,49 @@ public partial class RootMeanSquarePropagationOptimizer<T, TInput, TOutput> : Gr
         T momentum = ActiveMomentum;
         T learningRate = CurrentLearningRate;
 
-        var updatedParams = new Vector<T>(parameters.Length, skipZeroInit: true);
-        var pSpan = parameters.AsSpan();
-        var gSpan = gradient.AsSpan();
-        var sqGradSpan = _squaredGradient.AsWritableSpan();
-        var meanGradSpan = _meanGradient.AsWritableSpan();
-        var velocitySpan = _velocity.AsWritableSpan();
-        var outSpan = updatedParams.AsWritableSpan();
+        var engine = Engine;
+        var p = parameters.AsTensor();
+        var g = gradient.AsTensor();
+        var denominator = UpdateSecondMomentsAndDenominator(
+            g, _squaredGradient.AsTensor(), _options.Centered ? _meanGradient.AsTensor() : null,
+            decay, oneMinusDecay, epsilon);
+        var normalizedStep = engine.TensorDivide(engine.TensorMultiplyScalar(g, learningRate), denominator);
 
-        for (int i = 0; i < pSpan.Length; i++)
+        if (RequiresExtendedState)
         {
-            T g = gSpan[i];
-            T squaredGradient = NumOps.Add(
-                NumOps.Multiply(sqGradSpan[i], decay),
-                NumOps.Multiply(NumOps.Multiply(g, g), oneMinusDecay));
-            sqGradSpan[i] = squaredGradient;
-
-            if (RequiresExtendedState)
-            {
-                T denominator;
-                if (_options.Centered)
-                {
-                    T meanGradient = NumOps.Add(
-                        NumOps.Multiply(meanGradSpan[i], decay),
-                        NumOps.Multiply(g, oneMinusDecay));
-                    meanGradSpan[i] = meanGradient;
-                    T variance = NumOps.Subtract(squaredGradient, NumOps.Multiply(meanGradient, meanGradient));
-                    variance = MathHelper.Max(variance, NumOps.Zero);
-                    denominator = NumOps.Sqrt(NumOps.Add(variance, epsilon));
-                }
-                else
-                {
-                    denominator = Denominator(squaredGradient, epsilon);
-                }
-                T normalizedStep = NumOps.Divide(NumOps.Multiply(g, learningRate), denominator);
-                T velocity = NumOps.Add(NumOps.Multiply(velocitySpan[i], momentum), normalizedStep);
-                velocitySpan[i] = velocity;
-                outSpan[i] = NumOps.Subtract(pSpan[i], velocity);
-            }
-            else
-            {
-                T denominator = NumOps.Add(NumOps.Sqrt(squaredGradient), epsilon);
-                T update = NumOps.Divide(NumOps.Multiply(g, learningRate), denominator);
-                outSpan[i] = NumOps.Subtract(pSpan[i], update);
-            }
+            var velocityState = _velocity.AsTensor();
+            var velocity = engine.TensorAdd(engine.TensorMultiplyScalar(velocityState, momentum), normalizedStep);
+            engine.TensorCopy(velocity, velocityState);
+            return engine.TensorSubtract(p, velocity).AsVector();
         }
 
-        return updatedParams;
+        return engine.TensorSubtract(p, normalizedStep).AsVector();
+    }
+
+    /// <summary>
+    /// Updates the squared-gradient average (and, when <paramref name="meanGradient"/> is given, the centered mean
+    /// gradient) in place and returns the RMSProp denominator: sqrt(max(E[g^2] - E[g]^2, 0) + eps) when centered,
+    /// sqrt(E[g^2]) + eps otherwise.
+    /// </summary>
+    private Tensor<T> UpdateSecondMomentsAndDenominator(
+        Tensor<T> gradient, Tensor<T> squaredGradient, Tensor<T>? meanGradient, T decay, T oneMinusDecay, T epsilon)
+    {
+        var engine = Engine;
+        var squared = engine.TensorAddScaled(
+            squaredGradient, engine.TensorMultiply(gradient, gradient), decay, oneMinusDecay);
+        engine.TensorCopy(squared, squaredGradient);
+
+        if (meanGradient is null)
+        {
+            return _options.EpsilonInsideRoot
+                ? engine.TensorSqrt(engine.TensorAddScalar(squared, epsilon))
+                : engine.TensorAddScalar(engine.TensorSqrt(squared), epsilon);
+        }
+
+        var mean = engine.TensorAddScaled(meanGradient, gradient, decay, oneMinusDecay);
+        engine.TensorCopy(mean, meanGradient);
+        var variance = engine.TensorMax(engine.TensorSubtract(squared, engine.TensorMultiply(mean, mean)), NumOps.Zero);
+        return engine.TensorSqrt(engine.TensorAddScalar(variance, epsilon));
     }
 
     /// <summary>Centering, momentum or the TensorFlow epsilon need the explicit per-parameter update; the GPU and
@@ -402,10 +398,6 @@ public partial class RootMeanSquarePropagationOptimizer<T, TInput, TOutput> : Gr
     /// <summary>The centered update's momentum is the optimizer's InitialMomentum (its historical behaviour); the
     /// uncentered update's is <see cref="RootMeanSquarePropagationOptimizerOptions{T, TInput, TOutput}.Momentum"/>.</summary>
     private T ActiveMomentum => _options.Centered ? CurrentMomentum : NumOps.FromDouble(_options.Momentum);
-
-    private T Denominator(T squaredGradient, T epsilon) => _options.EpsilonInsideRoot
-        ? NumOps.Sqrt(NumOps.Add(squaredGradient, epsilon))
-        : NumOps.Add(NumOps.Sqrt(squaredGradient), epsilon);
 
     // Per-parameter state for tape-based training. These dictionaries are also
     // captured by the optimizer's tape-state serializer.
@@ -429,6 +421,7 @@ public partial class RootMeanSquarePropagationOptimizer<T, TInput, TOutput> : Gr
             && typeof(T) == typeof(float)
             && AiDotNet.Tensors.Engines.AiDotNetEngine.Current is AiDotNet.Tensors.Engines.DirectGpuTensorEngine;
 
+        double learningRateValue = NumOps.ToDouble(CurrentLearningRate);
         foreach (var param in context.Parameters)
         {
             if (!requiresExtendedState
@@ -443,7 +436,7 @@ public partial class RootMeanSquarePropagationOptimizer<T, TInput, TOutput> : Gr
 
                 if (SparseEmbeddingOptimizerHelpers.TryApplyRmspropSparse(
                         param, sqGradSp,
-                        NumOps.ToDouble(CurrentLearningRate),
+                        learningRateValue,
                         _options.Decay, _options.Epsilon, weightDecay: 0.0))
                 {
                     continue;
@@ -464,7 +457,7 @@ public partial class RootMeanSquarePropagationOptimizer<T, TInput, TOutput> : Gr
                     (Tensor<float>)(object)param,
                     (Tensor<float>)(object)grad,
                     (Tensor<float>)(object)sqGrad,
-                    (float)NumOps.ToDouble(CurrentLearningRate),
+                    (float)learningRateValue,
                     (float)_options.Decay,
                     (float)_options.Epsilon,
                     0f))
@@ -486,41 +479,12 @@ public partial class RootMeanSquarePropagationOptimizer<T, TInput, TOutput> : Gr
                     _tapeVelocity[param] = velocity;
                 }
 
-                var paramSpan = param.AsWritableSpan();
-                var gradSpan = grad.Data.Span;
-                var sqGradSpan = sqGrad.AsWritableSpan();
-                var meanGradSpan = meanGrad.AsWritableSpan();
-                var velocitySpan = velocity.AsWritableSpan();
-
-                for (int i = 0; i < param.Length; i++)
-                {
-                    T g = gradSpan[i];
-                    T squaredGradient = NumOps.Add(
-                        NumOps.Multiply(sqGradSpan[i], decay),
-                        NumOps.Multiply(NumOps.Multiply(g, g), oneMinusDecay));
-                    sqGradSpan[i] = squaredGradient;
-
-                    T denominator;
-                    if (_options.Centered)
-                    {
-                        T meanGradient = NumOps.Add(
-                            NumOps.Multiply(meanGradSpan[i], decay),
-                            NumOps.Multiply(g, oneMinusDecay));
-                        meanGradSpan[i] = meanGradient;
-                        T variance = NumOps.Subtract(squaredGradient, NumOps.Multiply(meanGradient, meanGradient));
-                        variance = MathHelper.Max(variance, NumOps.Zero);
-                        denominator = NumOps.Sqrt(NumOps.Add(variance, epsilon));
-                    }
-                    else
-                    {
-                        denominator = Denominator(squaredGradient, epsilon);
-                    }
-
-                    T normalizedStep = NumOps.Divide(NumOps.Multiply(g, CurrentLearningRate), denominator);
-                    T nextVelocity = NumOps.Add(NumOps.Multiply(velocitySpan[i], momentum), normalizedStep);
-                    velocitySpan[i] = nextVelocity;
-                    paramSpan[i] = NumOps.Subtract(paramSpan[i], nextVelocity);
-                }
+                var denominator = UpdateSecondMomentsAndDenominator(
+                    grad, sqGrad, _options.Centered ? meanGrad : null, decay, oneMinusDecay, epsilon);
+                var normalizedStep = Engine.TensorDivide(Engine.TensorMultiplyScalar(grad, CurrentLearningRate), denominator);
+                var nextVelocity = Engine.TensorAdd(Engine.TensorMultiplyScalar(velocity, momentum), normalizedStep);
+                Engine.TensorCopy(nextVelocity, velocity);
+                Engine.TensorSubtractInPlace(param, velocity);
 
                 continue;
             }

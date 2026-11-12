@@ -44,28 +44,21 @@ public class ScaleInvariantDepthLoss<T> : LossFunctionBase<T>
         ValidateVectorLengths(predicted, actual);
 
         int n = predicted.Length;
-        T sum = NumOps.Zero;
-        T sumDiff = NumOps.Zero;
+        // Log difference
+        T logOffset = NumOps.FromDouble(1e-8);
+        var predLog = Engine.TensorLog(Engine.TensorAddScalar(predicted.AsTensor(), logOffset));
+        var actLog = Engine.TensorLog(Engine.TensorAddScalar(actual.AsTensor(), logOffset));
+        var diff = Engine.TensorSubtract(predLog, actLog);
 
-        for (int i = 0; i < n; i++)
-        {
-            // Log difference
-            double predLog = Math.Log(Convert.ToDouble(predicted[i]) + 1e-8);
-            double actLog = Math.Log(Convert.ToDouble(actual[i]) + 1e-8);
-            double diff = predLog - actLog;
-
-            sum = NumOps.Add(sum, NumOps.FromDouble(diff * diff));
-            sumDiff = NumOps.Add(sumDiff, NumOps.FromDouble(diff));
-        }
+        T sum = Engine.TensorSum(Engine.TensorMultiply(diff, diff));
+        T sumDiff = Engine.TensorSum(diff);
 
         // Scale-invariant loss: (1/n) * sum(d^2) - (lambda/n^2) * sum(d)^2
-        double nDouble = n;
-        double sumDouble = Convert.ToDouble(sum);
-        double sumDiffDouble = Convert.ToDouble(sumDiff);
+        T count = NumOps.FromDouble(n);
+        T meanSquared = NumOps.Divide(sum, count);
+        T meanDiff = NumOps.Divide(sumDiff, count);
 
-        double loss = (1.0 / nDouble) * sumDouble - (_lambda / (nDouble * nDouble)) * (sumDiffDouble * sumDiffDouble);
-
-        return NumOps.FromDouble(loss);
+        return NumOps.Subtract(meanSquared, NumOps.Multiply(NumOps.FromDouble(_lambda), NumOps.Multiply(meanDiff, meanDiff)));
     }
 
     /// <inheritdoc />

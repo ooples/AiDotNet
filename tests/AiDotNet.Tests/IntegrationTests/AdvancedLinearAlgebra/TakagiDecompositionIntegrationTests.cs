@@ -490,6 +490,65 @@ public class TakagiDecompositionIntegrationTests
 
     #endregion
 
+    #region Takagi Factor Reference Tests
+
+    [Theory]
+    [InlineData(TakagiAlgorithmType.Jacobi)]
+    [InlineData(TakagiAlgorithmType.QR)]
+    [InlineData(TakagiAlgorithmType.EigenDecomposition)]
+    [InlineData(TakagiAlgorithmType.PowerIteration)]
+    [InlineData(TakagiAlgorithmType.LanczosIteration)]
+    public void TakagiDecomposition_AllAlgorithms_SigmaIsAbsEigenvalue_InvertIsExact(TakagiAlgorithmType algorithm)
+    {
+        // A = diag(4, 9): Takagi gives Sigma = |lambda| = {4, 9}, so A^-1 = diag(1/4, 1/9).
+        var A = new Matrix<double>(2, 2);
+        A[0, 0] = 4; A[1, 1] = 9;
+
+        var takagi = new TakagiDecomposition<double>(A, algorithm);
+        var inverse = takagi.Invert();
+
+        Assert.Equal(0.25, inverse[0, 0], 1e-10);
+        Assert.Equal(1.0 / 9.0, inverse[1, 1], 1e-10);
+        Assert.Equal(0.0, inverse[0, 1], 1e-10);
+        Assert.Equal(0.0, inverse[1, 0], 1e-10);
+    }
+
+    [Theory]
+    [InlineData(TakagiAlgorithmType.Jacobi)]
+    [InlineData(TakagiAlgorithmType.QR)]
+    [InlineData(TakagiAlgorithmType.EigenDecomposition)]
+    [InlineData(TakagiAlgorithmType.PowerIteration)]
+    [InlineData(TakagiAlgorithmType.LanczosIteration)]
+    public void TakagiDecomposition_AllAlgorithms_NegativeEigenvalue_SolveIsExact(TakagiAlgorithmType algorithm)
+    {
+        // A = diag(2, -3): the column of the negative eigenvalue must be i*v so that U Sigma U^T = A;
+        // A x = [2, 3] has x = [1, -1].
+        var A = new Matrix<double>(2, 2);
+        A[0, 0] = 2; A[1, 1] = -3;
+
+        var takagi = new TakagiDecomposition<double>(A, algorithm);
+        var x = takagi.Solve(new Vector<double>(new[] { 2.0, 3.0 }));
+
+        Assert.Equal(1.0, x[0], 1e-10);
+        Assert.Equal(-1.0, x[1], 1e-10);
+    }
+
+    [Theory]
+    [InlineData(TakagiAlgorithmType.QR)]
+    [InlineData(TakagiAlgorithmType.EigenDecomposition)]
+    [InlineData(TakagiAlgorithmType.PowerIteration)]
+    [InlineData(TakagiAlgorithmType.LanczosIteration)]
+    public void TakagiDecomposition_NonSymmetricInput_Throws(TakagiAlgorithmType algorithm)
+    {
+        var A = new Matrix<double>(2, 2);
+        A[0, 0] = 1; A[0, 1] = 2;
+        A[1, 0] = 0; A[1, 1] = 1;
+
+        Assert.Throws<ArgumentException>(() => new TakagiDecomposition<double>(A, algorithm));
+    }
+
+    #endregion
+
     #region Consistency Tests
 
     [Fact(Timeout = 120000)]
