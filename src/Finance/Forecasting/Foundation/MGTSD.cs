@@ -729,10 +729,17 @@ public partial class MGTSD<T> : TimeSeriesFoundationModelBase<T>
             {
                 T guidanceWeightT = NumOps.FromDouble(_guidanceWeight);
                 int guideFill = Math.Min(granLen, segLen);
-                for (int i = 0; i < guideFill; i++)
+                if (guideFill > 0)
                 {
-                    int coarseIdx = Math.Min(i * coarseGuidance.Length / Math.Max(1, granLen), coarseGuidance.Length - 1);
-                    denoiseSpan[guideOffset + i] = NumOps.Multiply(coarseGuidance[coarseIdx], guidanceWeightT);
+                    // Nearest-index upsample of the coarse level, weighted, written into its segment.
+                    var coarseIndex = new int[guideFill];
+                    for (int i = 0; i < guideFill; i++)
+                        coarseIndex[i] = Math.Min(i * coarseGuidance.Length / Math.Max(1, granLen), coarseGuidance.Length - 1);
+                    var coarseFlat = Engine.Reshape(coarseGuidance.Contiguous(), new[] { coarseGuidance.Length });
+                    var weighted = Engine.TensorMultiplyScalar(
+                        Engine.TensorIndexSelect(coarseFlat, new Tensor<int>(new[] { guideFill }, new Vector<int>(coarseIndex)), 0),
+                        guidanceWeightT);
+                    weighted.AsSpan().CopyTo(denoiseSpan.Slice(guideOffset, guideFill));
                 }
             }
 
@@ -809,8 +816,11 @@ public partial class MGTSD<T> : TimeSeriesFoundationModelBase<T>
         // Final output from finest granularity (in normalized space) — de-normalize via RevIN so
         // the forecast carries the input series' scale/offset.
         var result = coarseGuidance ?? new Tensor<T>(new[] { 1, outputLen });
-        for (int i = 0; i < result.Length; i++)
-            result.Data.Span[i] = NumOps.Add(NumOps.Multiply(result[i], inStd), inMean);
+        using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
+        {
+            // x * std + mean over the whole forecast.
+            result = Engine.TensorAddScalar(Engine.TensorMultiplyScalar(result, inStd), inMean);
+        }
 
         if (addedBatchDim && result.Rank == 2 && result.Shape[0] == 1) result = result.Reshape(new[] { result.Shape[1] });
         return result;
