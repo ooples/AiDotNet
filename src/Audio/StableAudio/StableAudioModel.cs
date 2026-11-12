@@ -527,34 +527,57 @@ public partial class StableAudioModel<T> : AudioNeuralNetworkBase<T>, IAudioGene
         double duration = audio.Length / (double)_options.SampleRate;
         var timingConditioning = CreateTimingConditioning(duration);
 
-        // Initialize with noise where mask is 1
-        var noisyLatents = inputLatents.Clone();
-        for (int i = 0; i < noisyLatents.Length && i < mask.Length; i++)
-        {
-            if (NumOps.ToDouble(mask.GetFlat(i)) > 0.5)
-            {
-                noisyLatents.SetFlat(i, NumOps.FromDouble(random.NextGaussian()));
-            }
-        }
+        // The mask is over waveform samples; the diffusion runs on the VAE latents (Evans et al. 2024), so the
+        // mask is downsampled to the latent time grid and applied there.
+        var latentMask = LatentMask(Engine, mask, inputLatents.Shape.ToArray());
+        var keep = Engine.ScalarMinusTensor(NumOps.One, latentMask);
+
+        // Masked latent frames start from noise, the rest from the encoded input.
+        var noise = new Tensor<T>(inputLatents.Shape.ToArray());
+        Engine.TensorNormalInPlace(noise, 0.0, 1.0, random.Next());
+        var noisyLatents = Engine.TensorAdd(Engine.TensorMultiply(inputLatents, keep), Engine.TensorMultiply(noise, latentMask));
 
         // Run diffusion
         var denoised = RunDiffusionLoop(noisyLatents, conditioning, timingConditioning, null, numInferenceSteps, _options.GuidanceScale, random);
 
-        // Blend based on mask: input * (1 - m) + denoised * m over the leading elements the mask covers.
-        var blendedLatents = inputLatents.Clone();
-        int blendCount = Math.Min(blendedLatents.Length, mask.Length);
-        if (blendCount > 0)
-        {
-            var m = new Tensor<T>(mask.AsSpan().Slice(0, blendCount).ToArray(), [blendCount]);
-            var kept = new Tensor<T>(inputLatents.AsSpan().Slice(0, blendCount).ToArray(), [blendCount]);
-            var generated = new Tensor<T>(denoised.AsSpan().Slice(0, blendCount).ToArray(), [blendCount]);
-            var blended = Engine.TensorAdd(
-                Engine.TensorMultiply(kept, Engine.ScalarMinusTensor(NumOps.One, m)),
-                Engine.TensorMultiply(generated, m));
-            blended.AsSpan().CopyTo(blendedLatents.AsWritableSpan());
-        }
+        // Keep the input's latents outside the mask and the generated ones inside it.
+        var blendedLatents = Engine.TensorAdd(Engine.TensorMultiply(inputLatents, keep), Engine.TensorMultiply(denoised, latentMask));
 
         return DecodeLatentsToAudio(blendedLatents);
+    }
+
+    /// <summary>
+    /// A waveform mask (1 = regenerate) on the latent grid: the last latent axis is time, latent frame f covers
+    /// samples [f N / L, (f + 1) N / L), and it is masked when any of its samples is (mask value above 0.5). When
+    /// there are more latent frames than samples each frame reads its nearest sample. The result has the latent
+    /// shape, the same time mask in every channel.
+    /// </summary>
+    internal static Tensor<T> LatentMask(IEngine engine, Tensor<T> mask, int[] latentShape)
+    {
+        if (latentShape.Length == 0) throw new ArgumentException("The latents need a time axis.", nameof(latentShape));
+        int frames = latentShape[latentShape.Length - 1];
+        int samples = mask.Length;
+        if (samples == 0 || frames == 0) return new Tensor<T>(latentShape);
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var masked = engine.TensorGreaterThan(mask.Reshape(new[] { samples }), numOps.FromDouble(0.5));
+
+        var group = new int[Math.Max(samples, frames)];
+        Tensor<T> perFrame;
+        if (frames <= samples)
+        {
+            for (int i = 0; i < samples; i++) group[i] = (int)((long)i * frames / samples);
+            perFrame = engine.ScatterMax(masked, new Tensor<int>(group, new[] { samples }), out _, 0, frames);
+        }
+        else
+        {
+            for (int f = 0; f < frames; f++) group[f] = (int)(((2L * f + 1) * samples) / (2L * frames));
+            perFrame = engine.TensorIndexSelect(masked, new Tensor<int>(group, new[] { frames }), 0);
+        }
+
+        var shape = new int[latentShape.Length];
+        for (int i = 0; i < shape.Length; i++) shape[i] = 1;
+        shape[shape.Length - 1] = frames;
+        return engine.TensorBroadcastTo(perFrame.Reshape(shape), latentShape);
     }
 
     /// <summary>
