@@ -234,7 +234,8 @@ public partial class ShowO2<T> : VisionLanguageModelBase<T>, IUnifiedVisionModel
         var textCond = WaveProjection(textHidden, numGenTokens, Math.Min(8, hiddenDim), 0.015, useCosine: false, divisor: 8.0);
         T invVisTokens = NumOps.FromDouble(1.0 / numVisTokens);
         // 8-connected neighbours in flat order, range-checked only.
-        int[] neighborOffsets = [-1, 1, -gridSize, gridSize, -gridSize - 1, -gridSize + 1, gridSize - 1, gridSize + 1];
+        // 8-connected grid neighbours (row offset, column offset); a neighbour never crosses a row edge.
+        (int Row, int Col)[] neighborOffsets = [(0, -1), (0, 1), (-1, 0), (1, 0), (-1, -1), (-1, 1), (1, -1), (1, 1)];
 
         int numSteps = 20;
         T half = NumOps.FromDouble(0.5);
@@ -257,10 +258,10 @@ public partial class ShowO2<T> : VisionLanguageModelBase<T>, IUnifiedVisionModel
             var knownValues = engine.TensorMultiply(engine.TensorMultiplyScalar(visualTokenIds, invVisTokens), unmasked);
             var contextSum = new Tensor<T>([numGenTokens]);
             var neighborCount = new Tensor<T>([numGenTokens]);
-            foreach (int offset in neighborOffsets)
+            foreach (var offset in neighborOffsets)
             {
-                contextSum = engine.TensorAdd(contextSum, ShiftFlat(knownValues, offset));
-                neighborCount = engine.TensorAdd(neighborCount, ShiftFlat(unmasked, offset));
+                contextSum = engine.TensorAdd(contextSum, TokenGridNeighbors<T>.Shift(engine, knownValues, gridSize, offset.Row, offset.Col));
+                neighborCount = engine.TensorAdd(neighborCount, TokenGridNeighbors<T>.Shift(engine, unmasked, gridSize, offset.Row, offset.Col));
             }
             var contextVal = engine.TensorDivide(contextSum, engine.TensorMax(neighborCount, NumOps.One));
 
