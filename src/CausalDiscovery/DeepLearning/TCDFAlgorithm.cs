@@ -48,6 +48,12 @@ namespace AiDotNet.CausalDiscovery.DeepLearning;
 [ResearchPaper("Causal Discovery with Attention-Based Convolutional Neural Networks", "https://doi.org/10.3390/make1010019", Year = 2019, Authors = "Meike Nauta, Doina Bucur, Christin Seifert")]
 public class TCDFAlgorithm<T> : DeepCausalBase<T>
 {
+    /// <summary>
+    /// Maximum number of entries of one [rows, d, d, kernelSize] convolution-product block in a training
+    /// epoch; training samples are processed in blocks of at most this many entries.
+    /// </summary>
+    private const int MaxSampleBlockElements = 1 << 22;
+
     /// <inheritdoc/>
     public override string Name => "TCDF";
 
@@ -144,28 +150,52 @@ public class TCDFAlgorithm<T> : DeepCausalBase<T>
         var windows = Engine.TensorStack(Enumerable.Range(0, kernelSize)
             .Select(k => Engine.TensorSlice(x, new[] { k, 0 }, new[] { trainSamples, d }))
             .ToArray(), 2);                                                                   // [N, d, K]
-        var windowsFlat = windows.Reshape(new[] { trainSamples, d * kernelSize });
         var targets = Engine.TensorSlice(x, new[] { kernelSize, 0 }, new[] { trainSamples, d }); // [N, d]
-        var convShape = new[] { trainSamples, d, d, kernelSize };
-        var windowsSpread = Engine.TensorBroadcastTo(windows.Reshape(new[] { trainSamples, 1, d, kernelSize }), convShape);
-        var tji = new[] { trainSamples, d, d };
+
+        // Training samples are processed in blocks so the [rows, d, d, K] convolution product stays bounded
+        // (MaxSampleBlockElements); the gradients accumulate across blocks with the full-sample 1/N scale.
+        int blockRows = Math.Max(1, Math.Min(trainSamples, MaxSampleBlockElements / Math.Max(1, d * d * kernelSize)));
 
         for (int epoch = 0; epoch < MaxEpochs; epoch++)
         {
             // Compute attention weights via softmax of sigmoid(logits)
             var attn = AttentionWeights(attnLogits, eps);
             var attnT = Engine.TensorTranspose(attn);                                         // [j, i]
-            var attnSpread = Engine.TensorBroadcastTo(attnT.Reshape(new[] { 1, d, d }), tji);
+            var filtersRow = filters.Reshape(new[] { 1, d, d, kernelSize });
 
-            // Forward through causal convolution: conv[t, j, i] = Σ_k filters[j, i, k] · x_i(t + k)
-            var filtersSpread = Engine.TensorBroadcastTo(filters.Reshape(new[] { 1, d, d, kernelSize }), convShape);
-            var conv = Engine.ReduceSum(Engine.TensorMultiply(filtersSpread, windowsSpread), new[] { 3 }, false); // [N, j, i]
-            var pred = Engine.ReduceSum(Engine.TensorMultiply(attnSpread, conv), new[] { 2 }, false);           // [N, j]
-            var residual = Engine.TensorMultiplyScalar(Engine.TensorSubtract(pred, targets), invN);              // [N, j]
+            var residualWindowsFlat = new Tensor<T>(new[] { d, d * kernelSize });
+            var jacobianTimesDAttnSum = new Tensor<T>(new[] { d, d });                         // [j, i]
+            for (int b0 = 0; b0 < trainSamples; b0 += blockRows)
+            {
+                int rows = Math.Min(blockRows, trainSamples - b0);
+                var convShape = new[] { rows, d, d, kernelSize };
+                var tji = new[] { rows, d, d };
+                var windowBlock = Engine.TensorSlice(windows, new[] { b0, 0, 0 }, new[] { rows, d, kernelSize });
+                var targetBlock = Engine.TensorSlice(targets, new[] { b0, 0 }, new[] { rows, d });
+                var attnSpread = Engine.TensorBroadcastTo(attnT.Reshape(new[] { 1, d, d }), tji);
+
+                // Forward through causal convolution: conv[t, j, i] = Σ_k filters[j, i, k] · x_i(t + k)
+                var windowsSpread = Engine.TensorBroadcastTo(windowBlock.Reshape(new[] { rows, 1, d, kernelSize }), convShape);
+                var filtersSpread = Engine.TensorBroadcastTo(filtersRow, convShape);
+                var conv = Engine.ReduceSum(Engine.TensorMultiply(filtersSpread, windowsSpread), new[] { 3 }, false); // [rows, j, i]
+                var pred = Engine.ReduceSum(Engine.TensorMultiply(attnSpread, conv), new[] { 2 }, false);           // [rows, j]
+                var residual = Engine.TensorMultiplyScalar(Engine.TensorSubtract(pred, targetBlock), invN);          // [rows, j]
+
+                // Σ_t residual[t, j] · x_i(t + k), the filter-gradient sum
+                residualWindowsFlat = Engine.TensorAdd(residualWindowsFlat, Engine.TensorMatMul(
+                    Engine.TensorTranspose(residual), windowBlock.Reshape(new[] { rows, d * kernelSize })));
+
+                // Attention-logit gradients via the FULL softmax Jacobian (see below), summed over samples.
+                var dAttn = Engine.TensorMultiply(Engine.TensorBroadcastTo(residual.Reshape(new[] { rows, d, 1 }), tji), conv);
+                var weightedMeanDAttn = Engine.ReduceSum(Engine.TensorMultiply(attnSpread, dAttn), new[] { 2 }, true);
+                var jacobianTimesDAttn = Engine.TensorMultiply(attnSpread,
+                    Engine.TensorSubtract(dAttn, Engine.TensorBroadcastTo(weightedMeanDAttn, tji)));
+                jacobianTimesDAttnSum = Engine.TensorAdd(jacobianTimesDAttnSum,
+                    Engine.ReduceSum(jacobianTimesDAttn, new[] { 0 }, false));
+            }
 
             // Filter gradients: gFilters[j, i, k] = attn[i, j] · Σ_t residual[t, j] · x_i(t + k)
-            var residualWindows = Engine.TensorMatMul(Engine.TensorTranspose(residual), windowsFlat)
-                .Reshape(new[] { d, d, kernelSize });
+            var residualWindows = residualWindowsFlat.Reshape(new[] { d, d, kernelSize });
             var gFilters = Engine.TensorMultiply(residualWindows,
                 Engine.TensorBroadcastTo(attnT.Reshape(new[] { d, d, 1 }), new[] { d, d, kernelSize }));
 
@@ -192,14 +222,10 @@ public class TCDFAlgorithm<T> : DeepCausalBase<T>
             // identity (see Bishop 2006 §4.3.4) — gives each parent
             // attention a gradient relative to the WEIGHTED-MEAN dLoss
             // across parents, the actual competition signal.
-            var dAttn = Engine.TensorMultiply(Engine.TensorBroadcastTo(residual.Reshape(new[] { trainSamples, d, 1 }), tji), conv);
-            var weightedMeanDAttn = Engine.ReduceSum(Engine.TensorMultiply(attnSpread, dAttn), new[] { 2 }, true);
-            var jacobianTimesDAttn = Engine.TensorMultiply(attnSpread,
-                Engine.TensorSubtract(dAttn, Engine.TensorBroadcastTo(weightedMeanDAttn, tji)));
+            // (computed per sample block above as jacobianTimesDAttnSum)
             var sig = ClampedSigmoid(attnLogits, 1.0);
             var sigDeriv = Engine.TensorMultiply(sig, Engine.TensorSubtract(Engine.TensorOnesLike(sig), sig));
-            var gAttnLogits = Engine.TensorMultiply(
-                Engine.TensorTranspose(Engine.ReduceSum(jacobianTimesDAttn, new[] { 0 }, false)), sigDeriv);
+            var gAttnLogits = Engine.TensorMultiply(Engine.TensorTranspose(jacobianTimesDAttnSum), sigDeriv);
 
             // Apply gradients — use the dampening-compensated LR for the
             // attention logits, default LR for the convolution filters.
