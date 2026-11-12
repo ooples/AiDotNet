@@ -904,4 +904,26 @@ public class FeatureSelectionPopulationReferenceTests
 
         Assert.Equal(Enumerable.Range(0, p).Where(j => best[j]).ToArray(), selector.SelectedIndices);
     }
+
+    // ---------------------------------------------------------------- Quantum-inspired evolutionary algorithm
+
+    [Fact]
+    public void QuantumInspired_RotationTurnsEachDifferingQubitTowardsTheBestBit()
+    {
+        double q = System.Math.PI / 4, a = 0.05;
+        var theta = Tensor1D(q, q, q, q, 0, System.Math.PI / 2);
+        var solution = Tensor1D(0, 1, 1, 0, 1, 0);
+        var best = Tensor1D(1, 0, 1, 0, 0, 1);
+        var rotated = ToArray(AiDotNet.Preprocessing.FeatureSelection.Quantum.QuantumInspiredSelector<double>.Rotate(
+            theta, solution, best, a));
+
+        // Han and Kim (2002): best bit 1 raises P(1) = sin^2(theta), best bit 0 lowers it; equal bits stay;
+        // a qubit already at 0 (best 0) or pi / 2 (best 1) does not turn further
+        Assert.Equal(q + a, rotated[0], 12);
+        Assert.Equal(q - a, rotated[1], 12);
+        Assert.Equal(q, rotated[2], 12);
+        Assert.Equal(q, rotated[3], 12);
+        Assert.Equal(0, rotated[4], 12);
+        Assert.Equal(System.Math.PI / 2, rotated[5], 12);
+    }
 }

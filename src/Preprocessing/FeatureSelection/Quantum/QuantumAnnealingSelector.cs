@@ -2,6 +2,7 @@ using AiDotNet.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Enums;
 using AiDotNet.Attributes;
+using AiDotNet.Preprocessing.FeatureSelection.Helpers;
 
 namespace AiDotNet.Preprocessing.FeatureSelection.Quantum;
 
@@ -28,13 +29,13 @@ public class QuantumAnnealingSelector<T> : TransformerBase<T, Matrix<T>, Matrix<
     private readonly double _initialGamma;
     private readonly double _finalGamma;
 
-    private double[]? _featureScores;
+    private Vector<T>? _featureScores;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
-    public double[]? FeatureScores => _featureScores;
+    public Vector<T>? FeatureScores => _featureScores;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -71,53 +72,24 @@ public class QuantumAnnealingSelector<T> : TransformerBase<T, Matrix<T>, Matrix<
             throw new ArgumentException("Target length must match rows in data.");
 
         _nInputFeatures = data.Columns;
-        int n = data.Rows;
         int p = data.Columns;
+        var engine = Engine;
 
         var rand = RandomHelper.CreateSecureRandom();
-        var X = new double[n, p];
-        var y = new double[n];
-        for (int i = 0; i < n; i++)
-        {
-            y[i] = NumOps.ToDouble(target[i]);
-            for (int j = 0; j < p; j++)
-                X[i, j] = NumOps.ToDouble(data[i, j]);
-        }
 
         // Precompute feature correlations with target
-        var correlations = new double[p];
-        double yMean = y.Average();
-        for (int j = 0; j < p; j++)
-        {
-            double xMean = 0;
-            for (int i = 0; i < n; i++) xMean += X[i, j];
-            xMean /= n;
-
-            double sxy = 0, sxx = 0, syy = 0;
-            for (int i = 0; i < n; i++)
-            {
-                double xd = X[i, j] - xMean;
-                double yd = y[i] - yMean;
-                sxy += xd * yd;
-                sxx += xd * xd;
-                syy += yd * yd;
-            }
-            correlations[j] = (sxx > 1e-10 && syy > 1e-10) ? Math.Abs(sxy / Math.Sqrt(sxx * syy)) : 0;
-        }
+        var correlations = PopulationSearchOps.AbsTargetCorrelations(data, target, NumOps.Zero);
 
         // Initialize current solution
-        var current = new bool[p];
-        var indices = Enumerable.Range(0, p)
-            .OrderByDescending(j => correlations[j])
-            .Take(_nFeaturesToSelect)
-            .ToList();
-        foreach (int j in indices) current[j] = true;
+        var current = PopulationSearchOps.IndexMask<T>(
+            FeatureSelectionTensorOps.TopKIndicesSorted(correlations, Math.Min(_nFeaturesToSelect, p)), p);
 
-        double currentEnergy = ComputeEnergy(correlations, current, p);
-        var best = (bool[])current.Clone();
-        double bestEnergy = currentEnergy;
+        var currentEnergy = ComputeEnergy(correlations, current);
+        var best = current;
+        var bestEnergy = currentEnergy;
 
-        var selectionCounts = new double[p];
+        var selectionCounts = new Tensor<T>(new[] { p });
+        var zero = new Tensor<T>(new[] { 1 });
 
         for (int step = 0; step < _nSteps; step++)
         {
@@ -129,82 +101,61 @@ public class QuantumAnnealingSelector<T> : TransformerBase<T, Matrix<T>, Matrix<
             double temp = (1 - progress) + 0.01;
 
             // Propose a move (flip a random bit)
-            int flipIdx = rand.Next(p);
-            current[flipIdx] = !current[flipIdx];
+            var flip = FeatureSelectionTensorOps.OneHot<T>(rand.Next(p), p);
+            var proposal = engine.TensorWhere(flip, FeatureSelectionTensorOps.OneMinus(current), current);
 
             // Ensure valid solution
-            int selectedCount = current.Count(s => s);
-            if (selectedCount == 0)
-            {
-                current[flipIdx] = !current[flipIdx];
+            if (!PopulationSearchOps.Any(proposal))
                 continue;
-            }
 
-            double newEnergy = ComputeEnergy(correlations, current, p);
+            var newEnergy = ComputeEnergy(correlations, proposal);
 
-            // Accept or reject with quantum tunneling probability
-            double delta = newEnergy - currentEnergy;
-            double tunnelProb = Math.Exp(-Math.Abs(delta) / gamma);
-            double thermalProb = Math.Exp(-delta / temp);
-            double acceptProb = (delta <= 0) ? 1.0 : Math.Max(tunnelProb, thermalProb);
+            // Accept or reject with quantum tunneling probability: 1 downhill, else max(exp(-|d| / gamma), exp(-d / temp))
+            var delta = engine.TensorSubtract(newEnergy, currentEnergy);
+            var tunnelProb = engine.TensorExp(PopulationSearchOps.Affine(engine.TensorAbs(delta), -1 / gamma, 0));
+            var thermalProb = engine.TensorExp(PopulationSearchOps.Affine(delta, -1 / temp, 0));
+            var draw = PopulationSearchOps.Uniform<T>(rand, 1);
+            bool accept = !PopulationSearchOps.Greater(delta, zero)
+                || PopulationSearchOps.Greater(engine.TensorMax(tunnelProb, thermalProb), draw);
 
-            if (rand.NextDouble() < acceptProb)
+            if (accept)
             {
+                current = proposal;
                 currentEnergy = newEnergy;
-                if (currentEnergy < bestEnergy)
+                if (PopulationSearchOps.Greater(bestEnergy, currentEnergy))
                 {
                     bestEnergy = currentEnergy;
-                    Array.Copy(current, best, p);
+                    best = current;
                 }
-            }
-            else
-            {
-                current[flipIdx] = !current[flipIdx]; // Revert
             }
 
             // Track selection frequency
-            for (int j = 0; j < p; j++)
-                if (current[j])
-                    selectionCounts[j]++;
+            selectionCounts = engine.TensorAdd(selectionCounts, current);
         }
 
-        // Compute feature scores
-        _featureScores = new double[p];
-        for (int j = 0; j < p; j++)
-        {
-            _featureScores[j] = correlations[j] + selectionCounts[j] / _nSteps;
-            if (best[j])
-                _featureScores[j] += 1.0;
-        }
+        // Compute feature scores: correlation + selection frequency + 1 for the best solution's features
+        var featureScores = engine.TensorAdd(
+            engine.TensorAdd(correlations, engine.TensorDivideScalar(selectionCounts, NumOps.FromDouble(_nSteps))), best);
+        _featureScores = featureScores.ToVector();
 
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = Enumerable.Range(0, p)
-            .OrderByDescending(j => _featureScores[j])
-            .Take(numToSelect)
-            .OrderBy(x => x)
-            .ToArray();
+        _selectedIndices = FeatureSelectionTensorOps.TopKIndicesSorted(featureScores, numToSelect);
 
         IsFitted = true;
     }
 
-    private double ComputeEnergy(double[] correlations, bool[] solution, int p)
+    /// <summary>
+    /// Energy of a 0/1 mask [p]: minus the summed correlations of its features plus 0.1 |count - target count|.
+    /// Returns [1].
+    /// </summary>
+    private Tensor<T> ComputeEnergy(Tensor<T> correlations, Tensor<T> solution)
     {
-        // Energy = negative sum of correlations (we minimize energy)
-        double energy = 0;
-        int count = 0;
-        for (int j = 0; j < p; j++)
-        {
-            if (solution[j])
-            {
-                energy -= correlations[j];
-                count++;
-            }
-        }
-
-        // Penalty for deviation from target count
-        energy += 0.1 * Math.Abs(count - _nFeaturesToSelect);
-
-        return energy;
+        var engine = Engine;
+        var gain = engine.ReduceSum(engine.TensorMultiply(solution, correlations), new[] { 0 }, true);
+        var count = engine.ReduceSum(solution, new[] { 0 }, true);
+        var penalty = engine.TensorMultiplyScalar(
+            engine.TensorAbs(engine.TensorAddScalar(count, NumOps.FromDouble(-_nFeaturesToSelect))), NumOps.FromDouble(0.1));
+        return engine.TensorSubtract(penalty, gain);
     }
 
     /// <inheritdoc />
@@ -220,15 +171,7 @@ public class QuantumAnnealingSelector<T> : TransformerBase<T, Matrix<T>, Matrix<
         if (_selectedIndices is null)
             throw new InvalidOperationException("QuantumAnnealingSelector has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return FeatureSelectionTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />
