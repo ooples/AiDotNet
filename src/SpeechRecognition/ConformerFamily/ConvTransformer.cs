@@ -151,7 +151,7 @@ public partial class ConvTransformer<T> : AudioNeuralNetworkBase<T>, ISpeechReco
     public override ModelMetadata<T> GetModelMetadata() => new() { Name = _useNativeMode ? "ConvTransformer-Native" : "ConvTransformer-ONNX", Description = "Convolution-Augmented Transformer for ASR (2019)", FeatureCount = _options.NumMels, Complexity = _options.NumEncoderLayers, AdditionalInfo = BaseAudioMetadataInfo() };
 
 
-    private (List<int> tokens, double confidence) CTCGreedyDecodeWithConfidence(Tensor<T> logits) { var tokens = new List<int>(); double totalConf = 0; int confCount = 0; int prevToken = -1; int numFrames = logits.Rank >= 2 ? logits.Shape[0] : 1; int vocabSize = logits.Rank >= 2 ? logits.Shape[^1] : logits.Shape[0]; for (int t = 0; t < numFrames; t++) { int maxIdx = 0; double maxVal = double.NegativeInfinity; for (int v = 0; v < vocabSize; v++) { double val = logits.Rank >= 2 ? NumOps.ToDouble(logits[t, v]) : NumOps.ToDouble(logits[v]); if (val > maxVal) { maxVal = val; maxIdx = v; } } double sumExp = 0; for (int v = 0; v < vocabSize; v++) { double val = logits.Rank >= 2 ? NumOps.ToDouble(logits[t, v]) : NumOps.ToDouble(logits[v]); sumExp += Math.Exp(val - maxVal); } double frameConf = 1.0 / sumExp; if (maxIdx != prevToken && maxIdx > 0) { tokens.Add(maxIdx); totalConf += frameConf; confCount++; } prevToken = maxIdx; } return (tokens, confCount > 0 ? totalConf / confCount : 0.0); }
+    private (List<int> tokens, double confidence) CTCGreedyDecodeWithConfidence(Tensor<T> logits) => CtcGreedyDecoding.Decode(logits, int.MaxValue);
     /// <summary>Renders CTC token ids as text through the configured vocabulary.</summary>
     /// <remarks>
     /// Each id indexes <c>ConvTransformerOptions.Vocabulary</c>; casting ids to characters instead turned

@@ -606,35 +606,7 @@ public partial class CodeSwitchingASR<T> : AudioNeuralNetworkBase<T>, ISpeechRec
     #region Decoding helpers
 
     private (List<int> tokens, double confidence) CTCGreedyDecodeWithConfidence(Tensor<T> logits)
-    {
-        var tokens = new List<int>();
-        double totalConf = 0; int confCount = 0; int prevToken = -1;
-        int numFrames = logits.Rank >= 2 ? logits.Shape[0] : 1;
-        int vocabSize = logits.Rank >= 2 ? logits.Shape[^1] : logits.Shape[0];
-
-        for (int t = 0; t < numFrames && tokens.Count < _options.MaxTextLength; t++)
-        {
-            int maxIdx = 0; double maxVal = double.NegativeInfinity;
-            for (int v = 0; v < vocabSize; v++)
-            {
-                int flat = t * vocabSize + v;
-                double val = flat < logits.Length ? NumOps.ToDouble(logits[flat]) : double.NegativeInfinity;
-                if (val > maxVal) { maxVal = val; maxIdx = v; }
-            }
-            double sumExp = 0;
-            for (int v = 0; v < vocabSize; v++)
-            {
-                int flat = t * vocabSize + v;
-                double val = flat < logits.Length ? NumOps.ToDouble(logits[flat]) : double.NegativeInfinity;
-                sumExp += Math.Exp(val - maxVal);
-            }
-            double frameConf = 1.0 / sumExp;
-            // Collapse repeats and drop the blank (id 0) — the CTC decoding rule.
-            if (maxIdx != prevToken && maxIdx > 0) { tokens.Add(maxIdx); totalConf += frameConf; confCount++; }
-            prevToken = maxIdx;
-        }
-        return (tokens, confCount > 0 ? totalConf / confCount : 0.0);
-    }
+        => CtcGreedyDecoding.DecodeFlat(logits, _options.MaxTextLength);
 
     private static string TokensToText(List<int> tokens)
     {

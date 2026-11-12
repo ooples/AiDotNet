@@ -101,7 +101,7 @@ public partial class KeywordSpotting<T> : AudioNeuralNetworkBase<T>, ISpeechReco
     /// <inheritdoc />
     public string DetectLanguage(Tensor<T> audio) { ThrowIfDisposed(); if (audio is null) throw new ArgumentNullException(nameof(audio)); return _options.Language; }
     /// <inheritdoc />
-    public IReadOnlyDictionary<string, T> DetectLanguageProbabilities(Tensor<T> audio) { var detected = DetectLanguage(audio); var result = new Dictionary<string, T>(); double primaryProb = 0.85; double otherProb = SupportedLanguages.Count > 1 ? (1.0 - primaryProb) / (SupportedLanguages.Count - 1) : 0.0; foreach (var lang in SupportedLanguages) result[lang] = NumOps.FromDouble(lang == detected ? primaryProb : otherProb); return result; }
+    public IReadOnlyDictionary<string, T> DetectLanguageProbabilities(Tensor<T> audio) { var detected = DetectLanguage(audio); var result = new Dictionary<string, T>(); double primaryProb = 0.85; double otherProb = SupportedLanguages.Count > 1 ? (1.0 - primaryProb) / (SupportedLanguages.Count - 1) : 0.0; T primaryValue = NumOps.FromDouble(primaryProb); T otherValue = NumOps.FromDouble(otherProb); foreach (var lang in SupportedLanguages) result[lang] = lang == detected ? primaryValue : otherValue; return result; }
     /// <inheritdoc />
     public IStreamingTranscriptionSession<T> StartStreamingSession(string? language = null) => new KeywordSpottingStreamingSession(this, language ?? _options.Language);
 
