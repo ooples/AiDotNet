@@ -49,6 +49,8 @@ public class Adam8BitOptimizerOptions<T, TInput, TOutput> : AdamOptimizerOptions
         CompressBothMoments = other.CompressBothMoments;
         UseBFloat16MomentStorage = other.UseBFloat16MomentStorage;
         Min8BitSize = other.Min8BitSize;
+        WeightDecay = other.WeightDecay;
+        UseDecoupledWeightDecay = other.UseDecoupledWeightDecay;
     }
 
     /// <summary>
@@ -201,4 +203,21 @@ public class Adam8BitOptimizerOptions<T, TInput, TOutput> : AdamOptimizerOptions
     /// </para>
     /// </remarks>
     public int Min8BitSize { get; set; } = 4096;
+
+    /// <summary>
+    /// Gets or sets the weight decay coefficient applied during each optimizer step. Default: 0.0 (disabled).
+    /// </summary>
+    /// <remarks>
+    /// When <see cref="UseDecoupledWeightDecay"/> is <c>true</c> (default), applies AdamW decoupled weight decay
+    /// (<c>param *= 1 - lr * WeightDecay</c>), matching <c>bitsandbytes.optim.AdamW8bit</c> and
+    /// <c>torch.optim.AdamW</c>. When <c>false</c>, adds <c>WeightDecay * param</c> to the gradient prior to the
+    /// moment update (classic L2-coupled <c>Adam8bit</c>).
+    /// </remarks>
+    public double WeightDecay { get; set; } = 0.0;
+
+    /// <summary>
+    /// Gets or sets whether <see cref="WeightDecay"/> is applied as decoupled AdamW decay (<c>true</c>, default)
+    /// rather than L2-coupled gradient decay (<c>false</c>).
+    /// </summary>
+    public bool UseDecoupledWeightDecay { get; set; } = true;
 }

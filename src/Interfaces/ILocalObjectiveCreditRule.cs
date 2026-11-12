@@ -91,6 +91,26 @@ internal interface IBatchedLocalReadoutRule
     double BaseLocalWeight { get; }
     int SampledMaxCandidates { get; }
     int AdvanceAndGetStepSeed(object stepToken);
+    bool IsSelectedIntermediateHidden(int hiddenIndex, int hiddenLayerCount);
+}
+
+/// <summary>
+/// Internal contract allowing a block-local credit rule to insert <c>StopGradient</c> boundaries only at configured
+/// block boundaries rather than before every trainable hidden layer.
+/// </summary>
+internal interface ILocalBoundaryCreditRule
+{
+    bool ShouldDetachBeforeHiddenLayer(int hiddenIndex, int hiddenLayerCount);
+}
+
+/// <summary>
+/// Internal contract allowing a block-decoupled local credit rule to execute one isolated <c>GradientTape</c> and
+/// <c>TensorScope</c> per block sequentially so peak activation memory scales as <c>O(AnchorStride)</c> instead of
+/// <c>O(L)</c>, with zero forward recomputation.
+/// </summary>
+internal interface ISequentialBlockLocalCreditRule : ILocalBoundaryCreditRule
+{
+    bool StreamBlocksSequentially { get; }
 }
 
 /// <summary>State shared by every local objective of one training step.</summary>

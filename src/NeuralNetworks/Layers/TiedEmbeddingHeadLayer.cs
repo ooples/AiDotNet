@@ -34,7 +34,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [TensorLayout(TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
 [TensorLayout(TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
 [AutoParameters]
-public partial class TiedEmbeddingHeadLayer<T> : LayerBase<T>, ILayerGraphBinding<T>, IShapeContract, IDetachableFusedReadoutLossLayer<T>
+public partial class TiedEmbeddingHeadLayer<T> : LayerBase<T>, ILayerGraphBinding<T>, IShapeContract, IDetachableFusedReadoutLossLayer<T>, ISharedParameterConsumerLayer<T>
 {
     private int _sourceLayerIndex;
     private readonly int _vocabularySize;
@@ -126,6 +126,12 @@ public partial class TiedEmbeddingHeadLayer<T> : LayerBase<T>, ILayerGraphBindin
 
     /// <summary>The embedding layer this head reads, or <c>null</c> while unbound.</summary>
     internal EmbeddingLayer<T>? Embedding => _embedding;
+
+    /// <inheritdoc/>
+    public IReadOnlyList<Tensor<T>> GetSharedTrainableParameters()
+        => _embedding is ITrainableLayer<T> trainable
+            ? trainable.GetTrainableParameters()
+            : Array.Empty<Tensor<T>>();
 
     /// <inheritdoc/>
     void ILayerGraphBinding<T>.BindToLayerGraph(IReadOnlyList<ILayer<T>> layers)

@@ -141,4 +141,28 @@ public static class CreditRules
         int? seed = null)
         => new SampledTiedReadoutLocalErrorCreditRule<T>(
             readoutLayerCount, maxCandidates, localWeight, detachReadoutOnHiddenLayers, layerStride, useDepthProgressiveWeight, seed);
+
+    /// <summary>
+    /// <b>Blockwise Anchor Local Error</b>: zero-extra-parameter decoupled block-local sequence credit assignment that
+    /// detaches activations only at <paramref name="anchorStride"/> block boundaries and optionally executes blocks
+    /// sequentially with <c>O(anchorStride)</c> activation memory and zero forward recomputation.
+    /// </summary>
+    public static ICreditRule<T> BlockwiseAnchorLocalError<T>(
+        int readoutLayerCount = 2,
+        int anchorStride = 4,
+        int maxCandidates = 1024,
+        double localWeight = 1.0,
+        bool detachReadoutOnHiddenBlocks = true,
+        bool useDepthProgressiveWeight = true,
+        bool streamBlocksSequentially = true,
+        int? seed = null)
+        => new BlockwiseAnchorLocalErrorCreditRule<T>(
+            readoutLayerCount,
+            anchorStride,
+            maxCandidates,
+            localWeight,
+            detachReadoutOnHiddenBlocks,
+            useDepthProgressiveWeight,
+            streamBlocksSequentially,
+            seed);
 }

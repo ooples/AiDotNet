@@ -18,6 +18,7 @@ internal static class StreamingOptimizerResolver<T>
         bool useStreamingDefaults)
     {
         if (useStreamingDefaults) return true; // streaming default is Adam
+        if (optimizer is Adam8BitOptimizer<T, Tensor<T>, Tensor<T>>) return false; // preserve requested 8-bit / BF16 compressed moments
         return Resolve(optimizer, 0.0).Kind == StreamingKind.Adam;
     }
 
@@ -37,7 +38,8 @@ internal static class StreamingOptimizerResolver<T>
             c.Kind,
             c.Beta1, c.Beta2, c.Epsilon, c.Decay, c.Rho, c.Momentum, c.WeightDecay,
             c.TrustCoefficient, c.FtrlAlpha, c.FtrlBeta, c.Lambda1, c.Lambda2, c.MaxTrustRatio,
-            c.UseAMSGrad, c.UseNesterov, c.ClipTrustRatio, c.UseBiasCorrection, c.MemorySize);
+            c.UseAMSGrad, c.UseNesterov, c.ClipTrustRatio, c.UseBiasCorrection, c.MemorySize,
+            c.BlockSize, c.UseBf16Moments, c.Min8BitSize);
     }
 
     public static IStreamingOptimizer<T> Create(
@@ -66,7 +68,11 @@ internal static class StreamingOptimizerResolver<T>
         switch (c.Kind)
         {
             case StreamingKind.AdamW:
-                return new StreamingAdamW8Bit<T>(lr, c.Beta1, c.Beta2, c.Epsilon, c.WeightDecay);
+                return new StreamingAdamW8Bit<T>(
+                    lr, c.Beta1, c.Beta2, c.Epsilon, c.WeightDecay,
+                    blockSize: c.BlockSize > 0 ? c.BlockSize : 2048,
+                    useBf16Moments: c.UseBf16Moments,
+                    min8BitSize: c.Min8BitSize);
             case StreamingKind.AmsGrad:
                 return new StreamingAMSGrad8Bit<T>(lr, c.Beta1, c.Beta2, c.Epsilon, c.WeightDecay);
             case StreamingKind.Nadam:
@@ -101,7 +107,11 @@ internal static class StreamingOptimizerResolver<T>
                 return new StreamingSgd8Bit<T>(lr);
             case StreamingKind.Adam:
             default:
-                return new StreamingAdam8Bit<T>(lr, c.Beta1, c.Beta2, c.Epsilon, c.WeightDecay);
+                return new StreamingAdam8Bit<T>(
+                    lr, c.Beta1, c.Beta2, c.Epsilon, c.WeightDecay,
+                    blockSize: c.BlockSize > 0 ? c.BlockSize : 2048,
+                    useBf16Moments: c.UseBf16Moments,
+                    min8BitSize: c.Min8BitSize);
         }
     }
 
@@ -140,6 +150,9 @@ internal static class StreamingOptimizerResolver<T>
         public bool ClipTrustRatio;
         public bool UseBiasCorrection;
         public int MemorySize;
+        public int BlockSize;
+        public bool UseBf16Moments;
+        public int Min8BitSize;
     }
 
     /// <summary>
@@ -235,12 +248,19 @@ internal static class StreamingOptimizerResolver<T>
             }
             case Adam8BitOptimizer<T, Tensor<T>, Tensor<T>> o:
             {
-                // Adam8Bit IS an 8-bit Adam — its streaming form is the 8-bit-state streaming Adam.
+                // Adam8Bit IS an 8-bit (or BF16-moment) Adam/AdamW — preserve its compressed-moment config and weight decay.
                 var opt = (Adam8BitOptimizerOptions<T, Tensor<T>, Tensor<T>>)o.GetOptions();
+                double wd = opt.WeightDecay != 0.0 ? opt.WeightDecay : defaultWeightDecay;
                 return new StreamingConfig
                 {
-                    Kind = StreamingKind.Adam,
-                    Beta1 = opt.Beta1, Beta2 = opt.Beta2, Epsilon = opt.Epsilon, WeightDecay = defaultWeightDecay,
+                    Kind = opt.UseAMSGrad
+                        ? StreamingKind.AmsGrad
+                        : (opt.UseDecoupledWeightDecay && wd != 0.0 ? StreamingKind.AdamW : StreamingKind.Adam),
+                    Beta1 = opt.Beta1, Beta2 = opt.Beta2, Epsilon = opt.Epsilon, WeightDecay = wd,
+                    UseAMSGrad = opt.UseAMSGrad,
+                    BlockSize = opt.BlockSize,
+                    UseBf16Moments = opt.UseBFloat16MomentStorage,
+                    Min8BitSize = opt.Min8BitSize,
                 };
             }
             case ConjugateGradientOptimizer<T, Tensor<T>, Tensor<T>>:

@@ -89,6 +89,12 @@ public sealed class TiedReadoutLocalErrorCreditRule<T>
     double IBatchedLocalReadoutRule.BaseLocalWeight => _localWeight;
     int IBatchedLocalReadoutRule.SampledMaxCandidates => int.MaxValue;
     int IBatchedLocalReadoutRule.AdvanceAndGetStepSeed(object stepToken) => 0;
+    bool IBatchedLocalReadoutRule.IsSelectedIntermediateHidden(int hiddenIndex, int hiddenLayerCount)
+    {
+        int lastHidden = hiddenLayerCount - 1;
+        if (hiddenIndex < 0 || hiddenIndex >= lastHidden) return false;
+        return LayerStride <= 1 || ((lastHidden - 1 - hiddenIndex) % LayerStride) == 0;
+    }
 
     /// <inheritdoc />
     public IReadOnlyList<Tensor<T>> AuxiliaryParameters => Array.Empty<Tensor<T>>();

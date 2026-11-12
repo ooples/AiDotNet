@@ -94,6 +94,13 @@ public sealed class SampledTiedReadoutLocalErrorCreditRule<T>
 
     int IBatchedLocalReadoutRule.AdvanceAndGetStepSeed(object stepToken) => AdvanceStepSeedCore(stepToken);
 
+    bool IBatchedLocalReadoutRule.IsSelectedIntermediateHidden(int hiddenIndex, int hiddenLayerCount)
+    {
+        int lastHidden = hiddenLayerCount - 1;
+        if (hiddenIndex < 0 || hiddenIndex >= lastHidden) return false;
+        return LayerStride <= 1 || ((lastHidden - 1 - hiddenIndex) % LayerStride) == 0;
+    }
+
     private int AdvanceStepSeedCore(object stepToken)
     {
         if (!ReferenceEquals(stepToken, _lastStepInput))
