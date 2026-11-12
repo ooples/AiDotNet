@@ -278,7 +278,7 @@ public abstract partial class VisionLanguageModelBase<T> : NeuralNetworkBase<T>,
     /// <param name="tokenIds">Token ids produced by the tokenizer.</param>
     /// <param name="length">Number of leading ids to keep.</param>
     /// <returns>A [length] tensor holding the ids converted to <typeparamref name="T"/>.</returns>
-    protected static Tensor<T> TokenIdsToTensor(List<int> tokenIds, int length)
+    private protected static Tensor<T> TokenIdsToTensor(List<int> tokenIds, int length)
     {
         if (tokenIds is null) throw new ArgumentNullException(nameof(tokenIds));
         if (length <= 0)
@@ -294,7 +294,7 @@ public abstract partial class VisionLanguageModelBase<T> : NeuralNetworkBase<T>,
     /// </summary>
     /// <param name="values">Scores to search.</param>
     /// <returns>The first position holding the maximum, or -1 when there is none.</returns>
-    protected int FirstArgMax(Tensor<T> values)
+    private protected int FirstArgMax(Tensor<T> values)
     {
         int n = values.Length;
         if (n == 0)
@@ -320,7 +320,7 @@ public abstract partial class VisionLanguageModelBase<T> : NeuralNetworkBase<T>,
     /// <param name="patchWeights">Per-position weights inside a block, shape [patch, patch].</param>
     /// <param name="outSize">Output image side length.</param>
     /// <returns>The image flattened as [outSize * outSize * channels] in row-major HWC order.</returns>
-    protected Tensor<T> PaintPatchGrid(Tensor<T> colors, Tensor<T> patchWeights, int outSize)
+    private protected Tensor<T> PaintPatchGrid(Tensor<T> colors, Tensor<T> patchWeights, int outSize)
     {
         int gridH = colors.Shape[0], gridW = colors.Shape[1], channels = colors.Shape[2];
         int patch = patchWeights.Shape[0];
@@ -347,7 +347,7 @@ public abstract partial class VisionLanguageModelBase<T> : NeuralNetworkBase<T>,
     /// </summary>
     /// <param name="tokenIds">Token ids (non-negative).</param>
     /// <returns>Colours of shape [tokenIds.Length, 3].</returns>
-    protected Tensor<T> HashTokenColors(int[] tokenIds) =>
+    private protected Tensor<T> HashTokenColors(int[] tokenIds) =>
         HashTokenColors(new Tensor<int>(new[] { tokenIds.Length }, Vector<int>.FromArray(tokenIds)).Cast<T>());
 
     /// <summary>
@@ -355,7 +355,7 @@ public abstract partial class VisionLanguageModelBase<T> : NeuralNetworkBase<T>,
     /// </summary>
     /// <param name="tokenIds">Integer-valued, non-negative token ids.</param>
     /// <returns>Colours of shape [tokenIds.Length, 3].</returns>
-    protected Tensor<T> HashTokenColors(Tensor<T> tokenIds)
+    private protected Tensor<T> HashTokenColors(Tensor<T> tokenIds)
     {
         int count = tokenIds.Length;
         var ids = tokenIds.Reshape([count]);
@@ -374,7 +374,7 @@ public abstract partial class VisionLanguageModelBase<T> : NeuralNetworkBase<T>,
     /// </summary>
     /// <param name="patchSize">Block side length.</param>
     /// <returns>Weights of shape [patchSize, patchSize] indexed [py, px].</returns>
-    protected Tensor<T> SinePatchWeights(int patchSize)
+    private protected Tensor<T> SinePatchWeights(int patchSize)
     {
         var wave = Engine.TensorSin(Engine.TensorMultiplyScalar(
             Engine.TensorArange<T>(0, patchSize, 1), NumOps.FromDouble(Math.PI / patchSize)));
@@ -389,7 +389,7 @@ public abstract partial class VisionLanguageModelBase<T> : NeuralNetworkBase<T>,
     /// <param name="count">Number of values to produce.</param>
     /// <returns>A [count] tensor.</returns>
     /// <exception cref="DivideByZeroException">The source is empty and <paramref name="count"/> is positive.</exception>
-    protected Tensor<T> CyclicTake(Tensor<T> source, int count)
+    private protected Tensor<T> CyclicTake(Tensor<T> source, int count)
     {
         if (count <= 0)
             return new Tensor<T>([count]);
@@ -578,7 +578,7 @@ public abstract partial class VisionLanguageModelBase<T> : NeuralNetworkBase<T>,
     /// <param name="count">Number of leading items to stack.</param>
     /// <param name="width">Number of leading values taken from each item.</param>
     /// <returns>A [count, width] tensor.</returns>
-    protected Tensor<T> StackLeading(IReadOnlyList<Tensor<T>> features, int count, int width)
+    private protected Tensor<T> StackLeading(IReadOnlyList<Tensor<T>> features, int count, int width)
     {
         var rows = new Tensor<T>[count];
         for (int f = 0; f < count; f++)
@@ -595,7 +595,7 @@ public abstract partial class VisionLanguageModelBase<T> : NeuralNetworkBase<T>,
     /// <param name="values">Values to fit.</param>
     /// <param name="length">Required length.</param>
     /// <returns>A [length] tensor.</returns>
-    protected Tensor<T> FitLength(Tensor<T> values, int length)
+    private protected Tensor<T> FitLength(Tensor<T> values, int length)
     {
         int n = values.Length;
         var flat = values.Reshape([n]);
@@ -616,7 +616,7 @@ public abstract partial class VisionLanguageModelBase<T> : NeuralNetworkBase<T>,
     /// <param name="dim">Decoder input width.</param>
     /// <param name="vocabSize">Vocabulary size used to scale token ids.</param>
     /// <returns>The [dim] decoder input.</returns>
-    protected Tensor<T> GatedConnectorInput(Tensor<T> visual, Tensor<T>? promptTokens, int dim, int vocabSize)
+    private protected Tensor<T> GatedConnectorInput(Tensor<T> visual, Tensor<T>? promptTokens, int dim, int vocabSize)
     {
         var x = visual.Reshape([visual.Length]);
         var h = Engine.TensorMultiplyScalar(x, NumOps.FromDouble(0.8));
@@ -648,7 +648,7 @@ public abstract partial class VisionLanguageModelBase<T> : NeuralNetworkBase<T>,
     /// <param name="offset">Constant index offset.</param>
     /// <returns>A tensor of <paramref name="shape"/>.</returns>
     /// <exception cref="DivideByZeroException">The source is empty.</exception>
-    protected Tensor<T> AffineModGather(Tensor<T> source, int[] shape, int[] coefficients, int offset)
+    private protected Tensor<T> AffineModGather(Tensor<T> source, int[] shape, int[] coefficients, int offset)
     {
         int n = source.Length;
         if (n == 0)
@@ -676,7 +676,7 @@ public abstract partial class VisionLanguageModelBase<T> : NeuralNetworkBase<T>,
     /// <param name="scores">Scores, shape [rows, cols].</param>
     /// <param name="floor">Initial best value of the scan.</param>
     /// <returns>A [rows, cols] 1/0 mask with at most one 1 per row.</returns>
-    protected Tensor<T> RowFirstArgMaxMask(Tensor<T> scores, T floor)
+    private protected Tensor<T> RowFirstArgMaxMask(Tensor<T> scores, T floor)
     {
         int rows = scores.Shape[0], cols = scores.Shape[1];
         var qualifies = Engine.TensorGreaterThan(scores, floor);
@@ -700,7 +700,7 @@ public abstract partial class VisionLanguageModelBase<T> : NeuralNetworkBase<T>,
     /// <param name="values">Values, shape [rows, cols].</param>
     /// <param name="mask">Selection mask, shape [rows, cols].</param>
     /// <returns>A [rows] tensor.</returns>
-    protected Tensor<T> MaskedRowSum(Tensor<T> values, Tensor<T> mask)
+    private protected Tensor<T> MaskedRowSum(Tensor<T> values, Tensor<T> mask)
     {
         var zeros = new Tensor<T>(values._shape);
         return Engine.ReduceSum(Engine.TensorWhere(mask, values, zeros), [1], false);
@@ -712,7 +712,7 @@ public abstract partial class VisionLanguageModelBase<T> : NeuralNetworkBase<T>,
     /// <param name="weights">Non-negative weights, shape [rows, n].</param>
     /// <param name="values">Values, shape [n] (read flattened).</param>
     /// <returns>A [rows] tensor (zeros when n is 0).</returns>
-    protected Tensor<T> WeightedAverage(Tensor<T> weights, Tensor<T> values)
+    private protected Tensor<T> WeightedAverage(Tensor<T> weights, Tensor<T> values)
     {
         int rows = weights.Shape[0], n = weights.Shape[1];
         if (n == 0)
@@ -729,7 +729,7 @@ public abstract partial class VisionLanguageModelBase<T> : NeuralNetworkBase<T>,
     /// <param name="values">Per-step values (read flattened).</param>
     /// <param name="index">Step index.</param>
     /// <returns>A [1] tensor.</returns>
-    protected Tensor<T> Pick(Tensor<T> values, int index) =>
+    private protected Tensor<T> Pick(Tensor<T> values, int index) =>
         Engine.TensorSlice(values.Reshape([values.Length]), [index], [1]);
 
     /// <summary>
@@ -738,7 +738,7 @@ public abstract partial class VisionLanguageModelBase<T> : NeuralNetworkBase<T>,
     /// <param name="values">Values to shift (read flattened).</param>
     /// <param name="offset">Position offset to read from.</param>
     /// <returns>The shifted sequence of shape [n].</returns>
-    protected Tensor<T> ShiftFlat(Tensor<T> values, int offset)
+    private protected Tensor<T> ShiftFlat(Tensor<T> values, int offset)
     {
         int n = values.Length;
         var flat = values.Reshape([n]);
@@ -760,7 +760,7 @@ public abstract partial class VisionLanguageModelBase<T> : NeuralNetworkBase<T>,
     /// <param name="eligible">Non-zero where a position may be selected, shape [n].</param>
     /// <param name="k">Maximum number of positions to select.</param>
     /// <returns>A [n] mask with 1 at selected positions.</returns>
-    protected Tensor<T> SelectTopKFirstIndex(Tensor<T> scores, Tensor<T> eligible, int k)
+    private protected Tensor<T> SelectTopKFirstIndex(Tensor<T> scores, Tensor<T> eligible, int k)
     {
         int n = scores.Length;
         var flat = scores.Reshape([n]);
@@ -791,7 +791,7 @@ public abstract partial class VisionLanguageModelBase<T> : NeuralNetworkBase<T>,
     /// <param name="logits">Logits.</param>
     /// <param name="vocabularySize">Number of visual tokens V.</param>
     /// <returns>Integer-valued token ids held as <typeparamref name="T"/>.</returns>
-    protected Tensor<T> QuantizeTanhTokens(Tensor<T> logits, int vocabularySize)
+    private protected Tensor<T> QuantizeTanhTokens(Tensor<T> logits, int vocabularySize)
     {
         T half = NumOps.FromDouble(0.5);
         var unit = Engine.TensorAddScalar(Engine.TensorMultiplyScalar(Engine.TensorTanh(logits), half), half);
@@ -812,7 +812,7 @@ public abstract partial class VisionLanguageModelBase<T> : NeuralNetworkBase<T>,
     /// <param name="useCosine">True for cosine waves, false for sine waves.</param>
     /// <param name="divisor">Normaliser applied to every output.</param>
     /// <returns>Projection of shape [outputs] (zeros when <paramref name="taps"/> is 0).</returns>
-    protected Tensor<T> WaveProjection(Tensor<T> hidden, int outputs, int taps, double frequency, bool useCosine, double divisor)
+    private protected Tensor<T> WaveProjection(Tensor<T> hidden, int outputs, int taps, double frequency, bool useCosine, double divisor)
     {
         if (taps <= 0 || outputs <= 0)
             return new Tensor<T>([Math.Max(0, outputs)]);
