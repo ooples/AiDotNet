@@ -57,19 +57,7 @@ public class NPVMetric<T> : IClassificationMetric<T>
             throw new ArgumentException("Predictions and actuals must have the same length.");
         if (predictions.Length == 0) return NumOps.Zero;
 
-        double positiveLabelValue = NumOps.ToDouble(_positiveLabel);
-        int tn = 0, fn = 0;
-        for (int i = 0; i < predictions.Length; i++)
-        {
-            bool isActualPositive = NumOps.Compare(actuals[i], NumOps.FromDouble(positiveLabelValue)) == 0;
-            bool isPredictedPositive = NumOps.Compare(predictions[i], NumOps.FromDouble(positiveLabelValue)) == 0;
-
-            if (!isPredictedPositive)
-            {
-                if (!isActualPositive) tn++;
-                else fn++;
-            }
-        }
+        var (_, tn, _, fn) = EvaluationTensorOps<T>.BinaryConfusion(predictions, actuals, _positiveLabel);
 
         // If no negative predictions were made, NPV is undefined - return 0 to not overstate performance
         int denominator = tn + fn;

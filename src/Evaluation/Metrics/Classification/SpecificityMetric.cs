@@ -59,21 +59,8 @@ public class SpecificityMetric<T> : IClassificationMetric<T>
 
         if (predictions.Length == 0) return NumOps.Zero;
 
-        double positiveLabelValue = NumOps.ToDouble(_positiveLabel);
-        int trueNegatives = 0;
-        int actualNegatives = 0;
-
-        for (int i = 0; i < actuals.Length; i++)
-        {
-            bool isActualPositive = NumOps.Compare(actuals[i], NumOps.FromDouble(positiveLabelValue)) == 0;
-            bool isPredictedPositive = NumOps.Compare(predictions[i], NumOps.FromDouble(positiveLabelValue)) == 0;
-
-            if (!isActualPositive)
-            {
-                actualNegatives++;
-                if (!isPredictedPositive) trueNegatives++;
-            }
-        }
+        var (_, trueNegatives, fp, _) = EvaluationTensorOps<T>.BinaryConfusion(predictions, actuals, _positiveLabel);
+        int actualNegatives = trueNegatives + fp;
 
         return actualNegatives > 0 ? NumOps.FromDouble((double)trueNegatives / actualNegatives) : NumOps.One;
     }

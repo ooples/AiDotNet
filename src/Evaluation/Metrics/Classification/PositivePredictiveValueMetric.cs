@@ -47,15 +47,7 @@ public class PositivePredictiveValueMetric<T> : IClassificationMetric<T>
             throw new ArgumentException("Predictions and actuals must have the same length.");
         if (predictions.Length == 0) return NumOps.Zero;
 
-        int tp = 0, fp = 0;
-        for (int i = 0; i < predictions.Length; i++)
-        {
-            bool pred = NumOps.GreaterThanOrEquals(predictions[i], NumOps.FromDouble(0.5));
-            bool actual = NumOps.GreaterThanOrEquals(actuals[i], NumOps.FromDouble(0.5));
-
-            if (pred && actual) tp++;
-            else if (pred && !actual) fp++;
-        }
+        var (tp, _, fp, _) = EvaluationTensorOps<T>.ThresholdConfusion(predictions, actuals, NumOps.FromDouble(0.5));
 
         return (tp + fp) > 0 ? NumOps.FromDouble((double)tp / (tp + fp)) : NumOps.Zero;
     }

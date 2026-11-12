@@ -68,13 +68,11 @@ public class BalancedAccuracyMetric<T> : IClassificationMetric<T>
         }
 
         // Get unique classes
-        var classes = new HashSet<double>();
-        for (int i = 0; i < actuals.Length; i++)
-        {
-            classes.Add(NumOps.ToDouble(actuals[i]));
-        }
+        var predictionTensor = EvaluationTensorOps<T>.ToTensor(predictions);
+        var actualTensor = EvaluationTensorOps<T>.ToTensor(actuals);
+        var classes = EvaluationTensorOps<T>.UniqueLabels(actualTensor);
 
-        if (classes.Count == 0)
+        if (classes.Length == 0)
         {
             return NumOps.Zero;
         }
@@ -83,22 +81,9 @@ public class BalancedAccuracyMetric<T> : IClassificationMetric<T>
         double sumRecall = 0;
         int validClasses = 0;
 
-        foreach (var cls in classes)
+        foreach (T cls in classes)
         {
-            int truePositives = 0;
-            int actualPositives = 0;
-
-            for (int i = 0; i < actuals.Length; i++)
-            {
-                if (NumOps.Compare(actuals[i], NumOps.FromDouble(cls)) == 0)
-                {
-                    actualPositives++;
-                    if (NumOps.Compare(predictions[i], NumOps.FromDouble(cls)) == 0)
-                    {
-                        truePositives++;
-                    }
-                }
-            }
+            var (truePositives, _, actualPositives) = EvaluationTensorOps<T>.LabelCounts(predictionTensor, actualTensor, cls);
 
             if (actualPositives > 0)
             {

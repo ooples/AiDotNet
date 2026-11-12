@@ -47,11 +47,7 @@ public class PrevalenceMetric<T> : IClassificationMetric<T>
             throw new ArgumentException("Predictions and actuals must have the same length.");
         if (actuals.Length == 0) return NumOps.Zero;
 
-        int positives = 0;
-        for (int i = 0; i < actuals.Length; i++)
-        {
-            if (NumOps.Compare(actuals[i], NumOps.One) == 0) positives++;
-        }
+        int positives = EvaluationTensorOps<T>.Count(EvaluationTensorOps<T>.EqualMask(EvaluationTensorOps<T>.ToTensor(actuals), NumOps.One));
 
         return NumOps.FromDouble((double)positives / actuals.Length);
     }

@@ -58,19 +58,7 @@ public class FalseNegativeRateMetric<T> : IClassificationMetric<T>
             throw new ArgumentException("Predictions and actuals must have the same length.");
         if (predictions.Length == 0) return NumOps.Zero;
 
-        double positiveLabelValue = NumOps.ToDouble(_positiveLabel);
-        int fn = 0, tp = 0;
-        for (int i = 0; i < predictions.Length; i++)
-        {
-            bool isActualPositive = NumOps.Compare(actuals[i], NumOps.FromDouble(positiveLabelValue)) == 0;
-            bool isPredictedPositive = NumOps.Compare(predictions[i], NumOps.FromDouble(positiveLabelValue)) == 0;
-
-            if (isActualPositive)
-            {
-                if (isPredictedPositive) tp++;
-                else fn++;
-            }
-        }
+        var (tp, _, _, fn) = EvaluationTensorOps<T>.BinaryConfusion(predictions, actuals, _positiveLabel);
 
         int denominator = fn + tp;
         return denominator == 0 ? NumOps.Zero : NumOps.FromDouble((double)fn / denominator);

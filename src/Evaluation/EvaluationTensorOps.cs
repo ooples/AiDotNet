@@ -98,6 +98,35 @@ internal static class EvaluationTensorOps<T>
     }
 
     /// <summary>
+    /// The binary confusion counts when "positive" means comparing equal to <paramref name="positiveLabel"/>.
+    /// </summary>
+    internal static (int Tp, int Tn, int Fp, int Fn) BinaryConfusion(
+        ReadOnlySpan<T> predictions, ReadOnlySpan<T> actuals, T positiveLabel)
+    {
+        var counts = LabelCounts(ToTensor(predictions), ToTensor(actuals), positiveLabel);
+        return FromCounts(predictions.Length, counts.TruePositives, counts.PredictedPositives, counts.ActualPositives);
+    }
+
+    /// <summary>
+    /// The binary confusion counts when "positive" means being greater than or equal to
+    /// <paramref name="threshold"/>.
+    /// </summary>
+    internal static (int Tp, int Tn, int Fp, int Fn) ThresholdConfusion(
+        ReadOnlySpan<T> predictions, ReadOnlySpan<T> actuals, T threshold)
+    {
+        var predicted = GreaterOrEqualMask(ToTensor(predictions), threshold);
+        var actual = GreaterOrEqualMask(ToTensor(actuals), threshold);
+        return FromCounts(predictions.Length, Count(And(predicted, actual)), Count(predicted), Count(actual));
+    }
+
+    private static (int Tp, int Tn, int Fp, int Fn) FromCounts(int n, int tp, int predictedPositives, int actualPositives)
+    {
+        int fp = predictedPositives - tp;
+        int fn = actualPositives - tp;
+        return (tp, n - tp - fp - fn, fp, fn);
+    }
+
+    /// <summary>
     /// The distinct labels of the given tensors in ascending order, with a single NaN last when any is present
     /// (one class, as a <c>HashSet&lt;double&gt;</c> of the labels had).
     /// </summary>

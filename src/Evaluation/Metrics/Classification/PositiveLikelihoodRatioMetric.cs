@@ -49,17 +49,7 @@ public class PositiveLikelihoodRatioMetric<T> : IClassificationMetric<T>
             throw new ArgumentException("Predictions and actuals must have the same length.");
         if (predictions.Length == 0) return NumOps.One;
 
-        int tp = 0, tn = 0, fp = 0, fn = 0;
-        for (int i = 0; i < predictions.Length; i++)
-        {
-            bool pred = NumOps.GreaterThanOrEquals(predictions[i], NumOps.FromDouble(0.5));
-            bool actual = NumOps.GreaterThanOrEquals(actuals[i], NumOps.FromDouble(0.5));
-
-            if (pred && actual) tp++;
-            else if (!pred && !actual) tn++;
-            else if (pred && !actual) fp++;
-            else fn++;
-        }
+        var (tp, tn, fp, fn) = EvaluationTensorOps<T>.ThresholdConfusion(predictions, actuals, NumOps.FromDouble(0.5));
 
         double sensitivity = (tp + fn) > 0 ? (double)tp / (tp + fn) : 0;
         double specificity = (tn + fp) > 0 ? (double)tn / (tn + fp) : 0;

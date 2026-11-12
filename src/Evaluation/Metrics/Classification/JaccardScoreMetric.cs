@@ -42,15 +42,7 @@ public class JaccardScoreMetric<T> : IClassificationMetric<T>
             throw new ArgumentException("Predictions and actuals must have the same length.");
         if (predictions.Length == 0) return NumOps.Zero;
 
-        int tp = 0, fp = 0, fn = 0;
-        for (int i = 0; i < predictions.Length; i++)
-        {
-            bool pred = NumOps.GreaterThanOrEquals(predictions[i], NumOps.FromDouble(0.5));
-            bool actual = NumOps.GreaterThanOrEquals(actuals[i], NumOps.FromDouble(0.5));
-            if (pred && actual) tp++;
-            else if (pred && !actual) fp++;
-            else if (!pred && actual) fn++;
-        }
+        var (tp, _, fp, fn) = EvaluationTensorOps<T>.ThresholdConfusion(predictions, actuals, NumOps.FromDouble(0.5));
 
         int denominator = tp + fp + fn;
         return denominator == 0 ? NumOps.One : NumOps.FromDouble((double)tp / denominator);

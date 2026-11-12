@@ -47,17 +47,7 @@ public class BalancedErrorRateMetric<T> : IClassificationMetric<T>
             throw new ArgumentException("Predictions and actuals must have the same length.");
         if (predictions.Length == 0) return NumOps.FromDouble(0.5);
 
-        int tp = 0, tn = 0, fp = 0, fn = 0;
-        for (int i = 0; i < predictions.Length; i++)
-        {
-            bool pred = NumOps.Compare(predictions[i], NumOps.One) == 0;
-            bool actual = NumOps.Compare(actuals[i], NumOps.One) == 0;
-
-            if (pred && actual) tp++;
-            else if (!pred && !actual) tn++;
-            else if (pred && !actual) fp++;
-            else fn++;
-        }
+        var (tp, tn, fp, fn) = EvaluationTensorOps<T>.BinaryConfusion(predictions, actuals, NumOps.One);
 
         double fnr = (tp + fn) > 0 ? (double)fn / (tp + fn) : 0;
         double fpr = (tn + fp) > 0 ? (double)fp / (tn + fp) : 0;

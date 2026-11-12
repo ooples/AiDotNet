@@ -46,15 +46,7 @@ public class TrueNegativeRateMetric<T> : IClassificationMetric<T>
             throw new ArgumentException("Predictions and actuals must have the same length.");
         if (predictions.Length == 0) return NumOps.Zero;
 
-        int tn = 0, fp = 0;
-        for (int i = 0; i < predictions.Length; i++)
-        {
-            bool pred = NumOps.Compare(predictions[i], NumOps.One) == 0;
-            bool actual = NumOps.Compare(actuals[i], NumOps.One) == 0;
-
-            if (!pred && !actual) tn++;
-            else if (pred && !actual) fp++;
-        }
+        var (_, tn, fp, _) = EvaluationTensorOps<T>.BinaryConfusion(predictions, actuals, NumOps.One);
 
         int denominator = tn + fp;
         return denominator == 0 ? NumOps.One : NumOps.FromDouble((double)tn / denominator);

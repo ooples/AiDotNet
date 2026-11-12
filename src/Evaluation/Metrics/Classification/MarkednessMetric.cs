@@ -47,17 +47,7 @@ public class MarkednessMetric<T> : IClassificationMetric<T>
             throw new ArgumentException("Predictions and actuals must have the same length.");
         if (predictions.Length == 0) return NumOps.Zero;
 
-        int tp = 0, tn = 0, fp = 0, fn = 0;
-        for (int i = 0; i < predictions.Length; i++)
-        {
-            bool pred = NumOps.Compare(predictions[i], NumOps.One) == 0;
-            bool actual = NumOps.Compare(actuals[i], NumOps.One) == 0;
-
-            if (pred && actual) tp++;
-            else if (!pred && !actual) tn++;
-            else if (pred && !actual) fp++;
-            else fn++;
-        }
+        var (tp, tn, fp, fn) = EvaluationTensorOps<T>.BinaryConfusion(predictions, actuals, NumOps.One);
 
         double ppv = (tp + fp) > 0 ? (double)tp / (tp + fp) : 0; // Precision
         double npv = (tn + fn) > 0 ? (double)tn / (tn + fn) : 0; // NPV

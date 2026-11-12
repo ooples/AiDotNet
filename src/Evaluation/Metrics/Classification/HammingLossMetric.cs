@@ -2,6 +2,7 @@ using AiDotNet.Evaluation.Enums;
 using AiDotNet.Evaluation.Results.Core;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.Tensors.Engines.Autodiff;
 
 namespace AiDotNet.Evaluation.Metrics.Classification;
 
@@ -47,13 +48,15 @@ public class HammingLossMetric<T> : IClassificationMetric<T>
             throw new ArgumentException("Predictions and actuals must have the same length.");
         if (predictions.Length == 0) return NumOps.Zero;
 
-        int incorrect = 0;
-        for (int i = 0; i < predictions.Length; i++)
+        // Compare the rounded labels (round half to even, as Math.Round)
+        var engine = AiDotNetEngine.Current;
+        int incorrect;
+        using (new NoGradScope<T>())
         {
-            // For binary: compare rounded values
-            int pred = (int)Math.Round(NumOps.ToDouble(predictions[i]));
-            int actual = (int)Math.Round(NumOps.ToDouble(actuals[i]));
-            if (pred != actual) incorrect++;
+            var rounded = EvaluationTensorOps<T>.PairEqualMask(
+                engine.TensorRound(EvaluationTensorOps<T>.ToTensor(predictions)),
+                engine.TensorRound(EvaluationTensorOps<T>.ToTensor(actuals)));
+            incorrect = predictions.Length - EvaluationTensorOps<T>.Count(rounded);
         }
 
         return NumOps.FromDouble((double)incorrect / predictions.Length);

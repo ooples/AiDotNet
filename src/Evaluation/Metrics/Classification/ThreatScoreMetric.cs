@@ -54,16 +54,7 @@ public class ThreatScoreMetric<T> : IClassificationMetric<T>
             throw new ArgumentException("Predictions and actuals must have the same length.");
         if (predictions.Length == 0) return NumOps.Zero;
 
-        int tp = 0, fp = 0, fn = 0;
-        for (int i = 0; i < predictions.Length; i++)
-        {
-            bool pred = NumOps.Compare(predictions[i], NumOps.One) == 0;
-            bool actual = NumOps.Compare(actuals[i], NumOps.One) == 0;
-
-            if (pred && actual) tp++;
-            else if (pred && !actual) fp++;
-            else if (!pred && actual) fn++;
-        }
+        var (tp, _, fp, fn) = EvaluationTensorOps<T>.BinaryConfusion(predictions, actuals, NumOps.One);
 
         int denominator = tp + fn + fp;
         return denominator > 0 ? NumOps.FromDouble((double)tp / denominator) : NumOps.Zero;
