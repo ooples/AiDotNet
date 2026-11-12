@@ -47,8 +47,10 @@ public partial class GMMDetector<T> : AnomalyDetectorBase<T>
 {
     private readonly int _nComponents;
     private readonly int _maxIterations;
-    private Vector<T>[] _means = Array.Empty<Vector<T>>();
-    private Matrix<T>[] _covariances = Array.Empty<Matrix<T>>();
+    // Component means and (diagonal) variances, [nComponents, nFeatures]; the densities use the
+    // diagonal approximation only
+    private Tensor<T> _means = Tensor<T>.CreateZeros(new[] { 0, 0 });
+    private Tensor<T> _variances = Tensor<T>.CreateZeros(new[] { 0, 0 });
     [AiDotNet.Attributes.TrainableParameter]
     private Vector<T> _weights = new Vector<T>(0);
     private int _nFeatures;
@@ -133,65 +135,37 @@ public partial class GMMDetector<T> : AnomalyDetectorBase<T>
                 nameof(X));
         }
 
-        var scores = new Vector<T>(X.Rows);
-
-        for (int i = 0; i < X.Rows; i++)
-        {
-            var point = new Vector<T>(X.Columns);
-            for (int j = 0; j < X.Columns; j++)
-            {
-                point[j] = X[i, j];
-            }
-
-            // Compute log-likelihood under mixture model
-            T logLikelihood = ComputeLogLikelihood(point);
-
-            // Convert to anomaly score (negative log-likelihood)
-            scores[i] = NumOps.Negate(logLikelihood);
-        }
-
-        return scores;
+        // Anomaly score = negative log-likelihood under the mixture model (log-likelihood -1000 where the
+        // likelihood underflows to 0)
+        var engine = Engine;
+        var likelihood = engine.ReduceSum(WeightedDensities(AnomalyTensorOps.ToTensor(X)), new[] { 1 }, false);
+        var positive = engine.TensorGreaterThan(likelihood, NumOps.Zero);
+        var logLikelihood = engine.TensorWhere(positive,
+            engine.TensorLog(engine.TensorWhere(positive, likelihood, Tensor<T>.CreateOnes(new[] { X.Rows }))),
+            engine.Fill(X.Rows, NumOps.FromDouble(-1000)).AsTensor());
+        return engine.TensorNegate(logLikelihood).ToVector();
     }
 
     private void InitializeParameters(Matrix<T> X)
     {
+        var engine = Engine;
         int n = X.Rows;
         int d = X.Columns;
         var random = RandomHelper.CreateSeededRandom(_randomSeed);
+        var data = AnomalyTensorOps.ToTensor(X);
 
-        // Compute global variance per feature for use as a covariance floor.
+        // Compute global (population) variance per feature, at least 1e-6, for use as a covariance floor.
         // This prevents components with very few points (e.g., a singleton outlier)
         // from collapsing to a tiny covariance that produces astronomically high density.
-        _globalVariance = new Vector<T>(d);
-        var featureMeans = new Vector<T>(d);
-        T nT = NumOps.FromDouble(n);
-        T minVariance = NumOps.FromDouble(1e-6);
-        for (int j = 0; j < d; j++)
-        {
-            T sum = NumOps.Zero;
-            for (int i = 0; i < n; i++)
-            {
-                sum = NumOps.Add(sum, X[i, j]);
-            }
-            featureMeans[j] = NumOps.Divide(sum, nT);
+        var featureMeans = engine.ReduceMean(data, new[] { 0 }, false);
+        var variance = engine.ReduceMean(engine.TensorSquare(AnomalyTensorOps.SubtractRow(data, featureMeans)), new[] { 0 }, false);
+        var minVariance = NumOps.FromDouble(1e-6);
+        _globalVariance = engine.TensorWhere(engine.TensorGreaterThan(variance, minVariance), variance,
+            engine.Fill(d, minVariance).AsTensor()).ToVector();
 
-            T varSum = NumOps.Zero;
-            for (int i = 0; i < n; i++)
-            {
-                T diff = NumOps.Subtract(X[i, j], featureMeans[j]);
-                varSum = NumOps.Add(varSum, NumOps.Multiply(diff, diff));
-            }
-            T variance = NumOps.Divide(varSum, nT);
-            _globalVariance[j] = NumOps.GreaterThan(variance, minVariance) ? variance : minVariance;
-        }
-
-        // Initialize means using k-means++ style
-        _means = new Vector<T>[_nComponents];
-        _covariances = new Matrix<T>[_nComponents];
-        _weights = new Vector<T>(_nComponents);
-
-        // Select initial means randomly
+        // Select initial means randomly (distinct points)
         var selectedIndices = new HashSet<int>();
+        var initial = new int[_nComponents];
         for (int c = 0; c < _nComponents; c++)
         {
             int idx;
@@ -199,191 +173,104 @@ public partial class GMMDetector<T> : AnomalyDetectorBase<T>
             {
                 idx = random.Next(n);
             } while (selectedIndices.Contains(idx));
+
             selectedIndices.Add(idx);
-
-            _means[c] = new Vector<T>(d);
-            for (int j = 0; j < d; j++)
-            {
-                _means[c][j] = X[idx, j];
-            }
-
-            // Initialize covariance as identity
-            _covariances[c] = new Matrix<T>(d, d);
-            for (int j = 0; j < d; j++)
-            {
-                _covariances[c][j, j] = NumOps.FromDouble(1.0);
-            }
-
-            // Initialize equal weights
-            _weights[c] = NumOps.FromDouble(1.0 / _nComponents);
+            initial[c] = idx;
         }
+
+        _means = AnomalyTensorOps.SelectRows(data, initial);
+
+        // Initialize covariance as identity and equal weights
+        _variances = Tensor<T>.CreateOnes(new[] { _nComponents, d });
+        _weights = engine.Fill(_nComponents, NumOps.FromDouble(1.0 / _nComponents));
     }
 
     private void RunEM(Matrix<T> X)
     {
+        var engine = Engine;
         int n = X.Rows;
-        int d = X.Columns;
-
-        // Responsibilities matrix (n x k)
-        var responsibilities = new Matrix<T>(n, _nComponents);
-        T uniformResp = NumOps.Divide(NumOps.One, NumOps.FromDouble(_nComponents));
+        int k = _nComponents;
+        var data = AnomalyTensorOps.ToTensor(X);
+        var uniform = Tensor<T>.CreateOnes(new[] { n, k });
+        T uniformResp = NumOps.Divide(NumOps.One, NumOps.FromDouble(k));
+        T ncEps = NumOps.FromDouble(1e-6);
+        var minVar = VarianceFloor();
 
         for (int iter = 0; iter < _maxIterations; iter++)
         {
-            // E-step: Compute responsibilities
-            for (int i = 0; i < n; i++)
-            {
-                var point = new Vector<T>(X.GetRowReadOnlySpan(i).ToArray());
+            // E-step: Compute responsibilities (uniform where the total probability is not positive)
+            var probs = WeightedDensities(data);
+            var totalProb = engine.ReduceSum(probs, new[] { 1 }, false);
+            var positive = engine.TensorGreaterThan(totalProb, NumOps.Zero);
+            var safeTotal = engine.TensorWhere(positive, totalProb, Tensor<T>.CreateOnes(new[] { n }));
+            var responsibilities = engine.TensorWhere(AnomalyTensorOps.BroadcastColumn(positive, k),
+                AnomalyTensorOps.DivideColumn(probs, safeTotal), engine.TensorMultiplyScalar(uniform, uniformResp));
 
-                T totalProb = NumOps.Zero;
-                var probs = new Vector<T>(_nComponents);
+            // M-step: Update parameters. Weights Nc / n; means (where Nc > 0) the responsibility-weighted
+            // averages; then, where Nc > 1e-6, the responsibility-weighted variances around the new means,
+            // floored at a fraction of the global variance. This prevents components with very few points
+            // from having extremely small variance, which would cause astronomically high density and
+            // break anomaly scoring.
+            var resT = engine.TensorTranspose(responsibilities);
+            var Nc = engine.ReduceSum(responsibilities, new[] { 0 }, false);
+            _weights = engine.TensorDivideScalar(Nc, NumOps.FromDouble(n)).ToVector();
 
-                for (int c = 0; c < _nComponents; c++)
-                {
-                    T density = GaussianDensity(point, _means[c], _covariances[c]);
-                    probs[c] = NumOps.Multiply(_weights[c], density);
-                    totalProb = NumOps.Add(totalProb, probs[c]);
-                }
+            var hasMass = engine.TensorGreaterThan(Nc, NumOps.Zero);
+            var safeNc = engine.TensorWhere(hasMass, Nc, Tensor<T>.CreateOnes(new[] { k }));
+            var newMeans = AnomalyTensorOps.DivideColumn(engine.TensorMatMul(resT, data), safeNc);
+            _means = engine.TensorWhere(AnomalyTensorOps.BroadcastColumn(hasMass, _nFeatures), newMeans, _means);
 
-                for (int c = 0; c < _nComponents; c++)
-                {
-                    responsibilities[i, c] = NumOps.GreaterThan(totalProb, NumOps.Zero)
-                        ? NumOps.Divide(probs[c], totalProb)
-                        : uniformResp;
-                }
-            }
-
-            // M-step: Update parameters
-            for (int c = 0; c < _nComponents; c++)
-            {
-                T Nc = NumOps.Zero;
-                for (int i = 0; i < n; i++)
-                {
-                    Nc = NumOps.Add(Nc, responsibilities[i, c]);
-                }
-
-                // Update weight
-                _weights[c] = NumOps.Divide(Nc, NumOps.FromDouble(n));
-
-                // Update mean
-                var newMean = new Vector<T>(d);
-                for (int i = 0; i < n; i++)
-                {
-                    for (int j = 0; j < d; j++)
-                    {
-                        newMean[j] = NumOps.Add(newMean[j],
-                            NumOps.Multiply(responsibilities[i, c], X[i, j]));
-                    }
-                }
-                T ncEps = NumOps.FromDouble(1e-6);
-                for (int j = 0; j < d; j++)
-                {
-                    _means[c][j] = NumOps.GreaterThan(Nc, NumOps.Zero) ? NumOps.Divide(newMean[j], Nc) : _means[c][j];
-                }
-
-                // Update covariance
-                var newCov = new Matrix<T>(d, d);
-                for (int i = 0; i < n; i++)
-                {
-                    for (int j1 = 0; j1 < d; j1++)
-                    {
-                        T diff1 = NumOps.Subtract(X[i, j1], _means[c][j1]);
-                        for (int j2 = j1; j2 < d; j2++)
-                        {
-                            T diff2 = NumOps.Subtract(X[i, j2], _means[c][j2]);
-                            T contrib = NumOps.Multiply(responsibilities[i, c],
-                                NumOps.Multiply(diff1, diff2));
-                            newCov[j1, j2] = NumOps.Add(newCov[j1, j2], contrib);
-                            if (j1 != j2)
-                            {
-                                newCov[j2, j1] = newCov[j1, j2];
-                            }
-                        }
-                    }
-                }
-
-                // Normalize covariance first, then apply regularization
-                if (NumOps.GreaterThan(Nc, ncEps))
-                {
-                    for (int j1 = 0; j1 < d; j1++)
-                    {
-                        for (int j2 = 0; j2 < d; j2++)
-                        {
-                            _covariances[c][j1, j2] = NumOps.Divide(newCov[j1, j2], Nc);
-                        }
-                    }
-
-                    // Apply regularization: floor the diagonal at a fraction of the global variance.
-                    // This prevents components with very few points from having extremely small
-                    // variance, which would cause astronomically high density and break anomaly scoring.
-                    for (int j = 0; j < d; j++)
-                    {
-                        T currentVar = _covariances[c][j, j];
-                        T floorFraction = NumOps.FromDouble(0.01);
-                        T minFloor = NumOps.FromDouble(1e-6);
-                        T varFloor = NumOps.Multiply(_globalVariance[j], floorFraction);
-                        T minVar = NumOps.GreaterThan(varFloor, minFloor) ? varFloor : minFloor;
-                        if (NumOps.LessThan(currentVar, minVar))
-                        {
-                            _covariances[c][j, j] = minVar;
-                        }
-                    }
-                }
-            }
+            var squaredDiff = engine.TensorSquare(Differences(data));
+            var weighted = engine.TensorMultiply(squaredDiff,
+                engine.TensorBroadcastTo(engine.Reshape(responsibilities, new[] { n, k, 1 }), new[] { n, k, _nFeatures }));
+            var newVariances = AnomalyTensorOps.DivideColumn(engine.ReduceSum(weighted, new[] { 0 }, false), safeNc);
+            newVariances = engine.TensorWhere(engine.TensorLessThan(newVariances, minVar), minVar, newVariances);
+            var enoughMass = engine.TensorGreaterThan(Nc, ncEps);
+            _variances = engine.TensorWhere(AnomalyTensorOps.BroadcastColumn(enoughMass, _nFeatures), newVariances, _variances);
         }
     }
 
-    private T ComputeLogLikelihood(Vector<T> point)
+    // x_i - mean_c for every point and component, [n, nComponents, nFeatures].
+    private Tensor<T> Differences(Tensor<T> data)
     {
-        if (point.Length != _nFeatures)
-        {
-            throw new ArgumentException(
-                $"Point has {point.Length} features, but model was fitted with {_nFeatures} features.",
-                nameof(point));
-        }
-
-        T likelihood = NumOps.Zero;
-
-        for (int c = 0; c < _nComponents; c++)
-        {
-            T density = GaussianDensity(point, _means[c], _covariances[c]);
-            likelihood = NumOps.Add(likelihood, NumOps.Multiply(_weights[c], density));
-        }
-
-        return NumOps.GreaterThan(likelihood, NumOps.Zero)
-            ? NumOps.Log(likelihood)
-            : NumOps.FromDouble(-1000);
+        var engine = Engine;
+        int n = data.Shape[0];
+        int k = _nComponents;
+        int d = _nFeatures;
+        return engine.TensorSubtract(
+            engine.TensorBroadcastTo(engine.Reshape(data, new[] { n, 1, d }), new[] { n, k, d }),
+            engine.TensorBroadcastTo(engine.Reshape(_means, new[] { 1, k, d }), new[] { n, k, d }));
     }
 
-    private T GaussianDensity(Vector<T> point, Vector<T> mean, Matrix<T> covariance)
+    // Variance floor per component and feature: max(0.01 * global variance, 1e-6), [nComponents, nFeatures].
+    private Tensor<T> VarianceFloor()
     {
-        int d = point.Length;
-        T half = NumOps.FromDouble(0.5);
-        T log2Pi = NumOps.FromDouble(Math.Log(2 * Math.PI));
-        T floorFraction = NumOps.FromDouble(0.01);
+        var engine = Engine;
         T minFloor = NumOps.FromDouble(1e-6);
+        var varFloor = engine.TensorMultiplyScalar(_globalVariance.AsTensor(), NumOps.FromDouble(0.01));
+        var floor = engine.TensorWhere(engine.TensorGreaterThan(varFloor, minFloor), varFloor,
+            engine.Fill(_nFeatures, minFloor).AsTensor());
+        return AnomalyTensorOps.BroadcastRow(floor, _nComponents);
+    }
 
-        // Simplified: Use diagonal approximation for stability
-        T mahalanobis = NumOps.Zero;
-        T logDet = NumOps.Zero;
+    // weight_c * N(x_i | mean_c, diag(variance_c)) for every point and component ([n, nComponents]), with the
+    // variances floored at the global-variance floor (diagonal approximation for stability).
+    private Tensor<T> WeightedDensities(Tensor<T> data)
+    {
+        var engine = Engine;
+        int n = data.Shape[0];
+        int k = _nComponents;
+        int d = _nFeatures;
+        T half = NumOps.FromDouble(0.5);
+        T constant = NumOps.Multiply(NumOps.FromDouble(d), NumOps.FromDouble(Math.Log(2 * Math.PI)));
 
-        for (int i = 0; i < d; i++)
-        {
-            T diffI = NumOps.Subtract(point[i], mean[i]);
-            T variance = covariance[i, i];
-            // Use global variance floor to prevent density explosion for singleton components
-            T globalVar = _globalVariance.Length > i ? _globalVariance[i] : NumOps.Zero;
-            T varFloor = NumOps.Multiply(globalVar, floorFraction);
-            T minVar = NumOps.GreaterThan(varFloor, minFloor) ? varFloor : minFloor;
-            if (NumOps.LessThan(variance, minVar)) variance = minVar;
-
-            mahalanobis = NumOps.Add(mahalanobis, NumOps.Divide(NumOps.Multiply(diffI, diffI), variance));
-            logDet = NumOps.Add(logDet, NumOps.Log(variance));
-        }
-
-        T logDensity = NumOps.Negate(NumOps.Multiply(half,
-            NumOps.Add(NumOps.Add(NumOps.Multiply(NumOps.FromDouble(d), log2Pi), logDet), mahalanobis)));
-
-        return NumOps.Exp(logDensity);
+        var minVar = VarianceFloor();
+        var variances = engine.TensorWhere(engine.TensorLessThan(_variances, minVar), minVar, _variances);
+        var logDet = engine.ReduceSum(engine.TensorLog(variances), new[] { 1 }, false);
+        var mahalanobis = engine.ReduceSum(engine.TensorDivide(engine.TensorSquare(Differences(data)),
+            engine.TensorBroadcastTo(engine.Reshape(variances, new[] { 1, k, d }), new[] { n, k, d })), new[] { 2 }, false);
+        var logDensity = engine.TensorNegate(engine.TensorMultiplyScalar(
+            engine.TensorAdd(AnomalyTensorOps.BroadcastRow(engine.TensorAddScalar(logDet, constant), n), mahalanobis), half));
+        return AnomalyTensorOps.MultiplyRow(engine.TensorExp(logDensity), _weights.AsTensor());
     }
 }
