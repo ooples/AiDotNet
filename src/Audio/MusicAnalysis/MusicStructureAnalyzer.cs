@@ -173,28 +173,23 @@ public partial class MusicStructureAnalyzer<T> : AudioNeuralNetworkBase<T>
         var features = PreprocessAudio(audio);
         Tensor<T> output = IsOnnxMode && OnnxEncoder is not null ? OnnxEncoder.Run(features) : Predict(features);
 
-        // Apply softmax over section dimension
-        var probs = new Tensor<T>([output.Length]);
+        // Apply softmax over section dimension (the max skips NaN); a trailing partial frame stays 0
         int numSections = _options.NumSections;
         int numFrames = output.Length / numSections;
-        for (int f = 0; f < numFrames; f++)
-        {
-            double maxVal = double.NegativeInfinity;
-            for (int s = 0; s < numSections && (f * numSections + s) < output.Length; s++)
-            {
-                double v = NumOps.ToDouble(output[f * numSections + s]);
-                if (v > maxVal) maxVal = v;
-            }
-            double sumExp = 0;
-            for (int s = 0; s < numSections && (f * numSections + s) < output.Length; s++)
-                sumExp += Math.Exp(NumOps.ToDouble(output[f * numSections + s]) - maxVal);
-            for (int s = 0; s < numSections && (f * numSections + s) < output.Length; s++)
-            {
-                double v = Math.Exp(NumOps.ToDouble(output[f * numSections + s]) - maxVal) / sumExp;
-                probs[f * numSections + s] = NumOps.FromDouble(v);
-            }
-        }
-        return probs;
+        if (numFrames <= 0)
+            return new Tensor<T>([output.Length]);
+
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        int used = numFrames * numSections;
+        var shape = new[] { numFrames, numSections };
+        var logits = Engine.Reshape(Engine.TensorSlice(AudioEngineOps.Flatten(Engine, output), [0], [used]), shape);
+        var ranked = Engine.TensorWhere(
+            Engine.TensorIsNan(logits), Tensor<T>.CreateDefault(shape, NumOps.FromDouble(double.NegativeInfinity)), logits);
+        var maxVal = Engine.TensorBroadcastTo(Engine.ReduceMax(ranked, [1], keepDims: true), shape);
+        var exp = Engine.TensorExp(Engine.TensorSubtract(logits, maxVal));
+        var sumExp = Engine.TensorBroadcastTo(Engine.ReduceSum(exp, [1], keepDims: true), shape);
+        var probs = Engine.Reshape(Engine.TensorDivide(exp, sumExp), [used]);
+        return AudioEngineOps.FitLength(Engine, probs, output.Length);
     }
 
     /// <summary>
@@ -267,20 +262,17 @@ public partial class MusicStructureAnalyzer<T> : AudioNeuralNetworkBase<T>
         int numFrames = Math.Max(1, output.Length / numSections);
         double frameTimeSec = (double)_options.HopLength / _options.SampleRate;
         double duration = (double)audioLength / _options.SampleRate;
+        T confidence = NumOps.FromDouble(0.8);
+
+        // Best section for each frame
+        int[] bestSections = FrameBestSections(output, numSections, numFrames);
 
         int currentLabel = -1;
         double segmentStart = 0;
 
         for (int f = 0; f < numFrames; f++)
         {
-            // Find best section for this frame
-            int bestSection = 0;
-            double bestVal = double.NegativeInfinity;
-            for (int s = 0; s < numSections && (f * numSections + s) < output.Length; s++)
-            {
-                double v = NumOps.ToDouble(output[f * numSections + s]);
-                if (v > bestVal) { bestVal = v; bestSection = s; }
-            }
+            int bestSection = bestSections[f];
 
             if (bestSection != currentLabel)
             {
@@ -294,7 +286,7 @@ public partial class MusicStructureAnalyzer<T> : AudioNeuralNetworkBase<T>
                         SectionIndex = currentLabel,
                         StartTime = segmentStart,
                         EndTime = endTime,
-                        Confidence = NumOps.FromDouble(0.8)
+                        Confidence = confidence
                     });
                 }
                 currentLabel = bestSection;
@@ -312,11 +304,29 @@ public partial class MusicStructureAnalyzer<T> : AudioNeuralNetworkBase<T>
                 SectionIndex = currentLabel,
                 StartTime = segmentStart,
                 EndTime = duration,
-                Confidence = NumOps.FromDouble(0.8)
+                Confidence = confidence
             });
         }
 
         return segments;
+    }
+
+    /// <summary>
+    /// For each frame, the first section holding the frame's largest score (scores
+    /// <c>output[f * numSections + s]</c> that exist; NaN never wins; section 0 when none beats -inf).
+    /// </summary>
+    private int[] FrameBestSections(Tensor<T> output, int numSections, int numFrames)
+    {
+        if (numSections <= 0) return new int[numFrames];
+        int total = numFrames * numSections;
+        int available = Math.Min(output.Length, total);
+        T negativeInfinity = NumOps.FromDouble(double.NegativeInfinity);
+        var scores = available == 0
+            ? Tensor<T>.CreateDefault([total], negativeInfinity)
+            : Engine.TensorSlice(AudioEngineOps.Flatten(Engine, output), [0], [available]);
+        if (available > 0 && available < total)
+            scores = Engine.Concat(new[] { scores, Tensor<T>.CreateDefault([total - available], negativeInfinity) }, 0);
+        return AudioEngineOps.RowFirstArgMax(Engine, Engine.Reshape(scores, [numFrames, numSections]));
     }
 
     #endregion
