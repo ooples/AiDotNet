@@ -125,103 +125,50 @@ public partial class EPNetAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
         if (n < 2) return features;
 
         int k = Math.Min(_epnetOptions.NumNeighbors, n - 1);
-        double alpha = _epnetOptions.PropagationAlpha;
+        T alpha = NumOps.FromDouble(_epnetOptions.PropagationAlpha);
+        var square = new[] { n, n };
 
         // Step 1: Compute pairwise squared distances between all feature elements
-        var distances = new double[n * n];
-        for (int i = 0; i < n; i++)
-        {
-            double fi = NumOps.ToDouble(features[i]);
-            for (int j = i + 1; j < n; j++)
-            {
-                double fj = NumOps.ToDouble(features[j]);
-                double diff = fi - fj;
-                double dist = diff * diff;
-                distances[i * n + j] = dist;
-                distances[j * n + i] = dist;
-            }
-        }
+        var column = Engine.Reshape(Tensor<T>.FromVector(features), new[] { n, 1 });
+        var distances = Engine.TensorSquare(Engine.TensorSubtract(
+            Engine.TensorBroadcastTo(column, square),
+            Engine.TensorBroadcastTo(Engine.Reshape(column, new[] { 1, n }), square)));
 
-        // Step 2: Build kNN adjacency matrix W using feature similarity
-        // For each node, find k nearest neighbors by distance and compute RBF weights
-        var W = new double[n * n];
-
-        // Compute median distance for adaptive RBF bandwidth
-        var allDists = new List<double>(n * (n - 1) / 2);
+        // Step 2: Build kNN adjacency matrix W using feature similarity, with the median distance over distinct
+        // pairs (i < j) as the adaptive RBF bandwidth
+        var upper = new List<int>(n * (n - 1) / 2);
         for (int i = 0; i < n; i++)
             for (int j = i + 1; j < n; j++)
-                allDists.Add(distances[i * n + j]);
-        allDists.Sort();
-        double medianDist = allDists.Count > 0 ? allDists[allDists.Count / 2] : 1.0;
-        double sigma2 = Math.Max(medianDist, 1e-10); // RBF bandwidth = median distance
+                upper.Add(i * n + j);
+        var pairDistances = Engine.TensorIndexSelect(
+            Engine.Reshape(distances, new[] { n * n }), new Tensor<int>(upper.ToArray(), new[] { upper.Count }), 0);
+        T medianDist = Engine.TensorSort(pairDistances, 0, false).Values[upper.Count / 2];
+        T sigma2 = NumOps.GreaterThan(medianDist, NumOps.FromDouble(1e-10)) ? medianDist : NumOps.FromDouble(1e-10);
 
-        for (int i = 0; i < n; i++)
-        {
-            // Collect distances to all other nodes
-            var neighborDists = new (int idx, double dist)[n - 1];
-            int count = 0;
-            for (int j = 0; j < n; j++)
-            {
-                if (j == i) continue;
-                neighborDists[count++] = (j, distances[i * n + j]);
-            }
-
-            // Partial sort: find k smallest distances
-            Array.Sort(neighborDists, 0, count, Comparer<(int idx, double dist)>.Create(
-                (a, b) => a.dist.CompareTo(b.dist)));
-
-            // Set RBF weights for k nearest neighbors (symmetric)
-            int numNeighbors = Math.Min(k, count);
-            for (int ni = 0; ni < numNeighbors; ni++)
-            {
-                int j = neighborDists[ni].idx;
-                double rbfWeight = Math.Exp(-neighborDists[ni].dist / (2.0 * sigma2));
-                W[i * n + j] = rbfWeight;
-                W[j * n + i] = rbfWeight; // Symmetrize
-            }
-        }
+        // Each node links to its k nearest other nodes (distance, then index), symmetrized, with RBF weights
+        var rbf = Engine.TensorExp(Engine.TensorMultiplyScalar(
+            distances, NumOps.Negate(NumOps.Divide(NumOps.One, NumOps.Multiply(NumOps.FromDouble(2.0), sigma2)))));
+        var W = Engine.TensorMultiply(NearestNeighborGraph.SymmetricNearestMask(Engine, distances, k), rbf);
 
         // Step 3: Compute degree matrix D and normalized adjacency S = D^(-1/2) W D^(-1/2)
-        var degree = new double[n];
-        for (int i = 0; i < n; i++)
-        {
-            double d = 0;
-            for (int j = 0; j < n; j++)
-                d += W[i * n + j];
-            degree[i] = d;
-        }
-
-        var S = new double[n * n];
-        for (int i = 0; i < n; i++)
-        {
-            double di = degree[i] > 1e-10 ? 1.0 / Math.Sqrt(degree[i]) : 0;
-            for (int j = 0; j < n; j++)
-            {
-                double dj = degree[j] > 1e-10 ? 1.0 / Math.Sqrt(degree[j]) : 0;
-                S[i * n + j] = di * W[i * n + j] * dj;
-            }
-        }
+        var degree = Engine.ReduceSum(W, new[] { 1 }, true);
+        var connected = Engine.TensorGreaterThan(degree, NumOps.FromDouble(1e-10));
+        var invSqrtDegree = Engine.TensorWhere(connected,
+            Engine.TensorDivide(Engine.TensorOnesLike(degree),
+                Engine.TensorSqrt(Engine.TensorWhere(connected, degree, Engine.TensorOnesLike(degree)))),
+            Engine.TensorZerosLike(degree));
+        var S = Engine.TensorMultiply(Engine.TensorMultiply(
+            Engine.TensorBroadcastTo(invSqrtDegree, square), W),
+            Engine.TensorBroadcastTo(Engine.Reshape(invSqrtDegree, new[] { 1, n }), square));
 
         // Step 4: Iterative feature propagation: z_prop = alpha * S @ z_prop + (1-alpha) * z_original
-        var propagated = new Vector<T>(n);
-        for (int i = 0; i < n; i++)
-            propagated[i] = features[i];
-
+        var anchor = Engine.Multiply(features, NumOps.Subtract(NumOps.One, alpha));
+        var propagated = features.Clone();
         for (int iter = 0; iter < _epnetOptions.PropagationIterations; iter++)
         {
-            var next = new Vector<T>(n);
-            for (int i = 0; i < n; i++)
-            {
-                // Weighted neighbor aggregation: sum_j S[i,j] * z_prop[j]
-                double aggregated = 0;
-                for (int j = 0; j < n; j++)
-                    aggregated += S[i * n + j] * NumOps.ToDouble(propagated[j]);
-
-                // Diffusion with anchor to original features
-                next[i] = NumOps.FromDouble(
-                    alpha * aggregated + (1.0 - alpha) * NumOps.ToDouble(features[i]));
-            }
-            propagated = next;
+            var aggregated = Engine.Reshape(
+                Engine.TensorMatMul(S, Engine.Reshape(Tensor<T>.FromVector(propagated), new[] { n, 1 })), new[] { n });
+            propagated = Engine.Add(Engine.Multiply(aggregated.ToVector(), alpha), anchor);
         }
 
         return propagated;
