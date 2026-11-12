@@ -90,13 +90,9 @@ public sealed class FeatureWiseTransformation<T>
         }
 
         _random = random ?? throw new ArgumentNullException(nameof(random));
-        ScaleHyperparameters = new Vector<T>(featureDimension);
-        BiasHyperparameters = new Vector<T>(featureDimension);
-        for (int c = 0; c < featureDimension; c++)
-        {
-            ScaleHyperparameters[c] = Ops.FromDouble(initialScale);
-            BiasHyperparameters[c] = Ops.FromDouble(initialBias);
-        }
+        var engine = AiDotNetEngine.Current;
+        ScaleHyperparameters = engine.Fill(featureDimension, Ops.FromDouble(initialScale));
+        BiasHyperparameters = engine.Fill(featureDimension, Ops.FromDouble(initialBias));
     }
 
     /// <summary>
