@@ -948,6 +948,18 @@ public partial class NHiTSFinance<T> : ForecastingModelBase<T>
         int seqLen = input.Shape.Length > 1 ? input.Shape[1] : input.Length / batchSize;
         int pooledLen = Math.Max(1, seqLen / kernelSize);
 
+        if (batchSize > 0 && seqLen >= kernelSize && batchSize * seqLen <= input.Length)
+        {
+            // Every window is full here: the mean of each kernelSize run along the sequence (detached).
+            using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+            var rows = Engine.Reshape(
+                Engine.TensorNarrow(Engine.Reshape(input.Contiguous(), new[] { input.Length }), 0, 0, batchSize * seqLen).Contiguous(),
+                new[] { batchSize, seqLen });
+            var windows = Engine.Reshape(
+                Engine.TensorNarrow(rows, 1, 0, pooledLen * kernelSize).Contiguous(), new[] { batchSize, pooledLen, kernelSize });
+            return Engine.TensorDivideScalar(Engine.ReduceSum(windows, new[] { 2 }, false), NumOps.FromDouble(kernelSize));
+        }
+
         var pooled = new Tensor<T>(new[] { batchSize, pooledLen });
 
         for (int b = 0; b < batchSize; b++)
