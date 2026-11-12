@@ -252,6 +252,15 @@ public class SpectralFeatureExtractor<T> : AudioFeatureExtractorBase<T>
 
         int freqsPerBand = numFreqs / numBands;
 
+        // Per-band peak/valley size (a quarter of the band, at least one bin), converted to T in bulk
+        var peakCounts = new int[numBands];
+        for (int band = 0; band < numBands; band++)
+        {
+            int bandCount = Math.Min((band + 1) * freqsPerBand, numFreqs) - band * freqsPerBand;
+            peakCounts[band] = Math.Max(1, bandCount / 4);
+        }
+        T[] divisors = new Tensor<int>(peakCounts, [numBands]).Cast<T>().ToArray();
+
         for (int band = 0; band < numBands; band++)
         {
             int startFreq = band * freqsPerBand;
@@ -267,8 +276,8 @@ public class SpectralFeatureExtractor<T> : AudioFeatureExtractorBase<T>
             // Sorted band magnitudes; contrast = mean of the top 25% - mean of the bottom 25%
             var (sorted, _) = Engine.TensorSort(
                 Engine.TensorSlice(magnitude, [0, startFreq], [numFrames, count]), axis: 1);
-            int peakCount = Math.Max(1, count / 4);
-            T divisor = NumOps.FromDouble(peakCount);
+            int peakCount = peakCounts[band];
+            T divisor = divisors[band];
 
             var peakMean = Engine.TensorDivideScalar(
                 Engine.ReduceSum(Engine.TensorSlice(sorted, [0, count - peakCount], [numFrames, peakCount]), [1], keepDims: false), divisor);
