@@ -328,82 +328,9 @@ public partial class QMIXAgent<T> : DeepReinforcementLearningAgentBase<T>, IGrad
             return NumOps.Zero;
         }
 
-        foreach (var experience in validBatch)
-        {
-            // Decompose joint experience
-            var (agentStates, globalState, agentActions) = DecomposeJointState(experience.State, experience.Action);
-            var (nextAgentStates, nextGlobalState, _) = DecomposeJointState(experience.NextState, experience.Action);
-
-            // Compute individual agent Q-values
-            var agentQValues = new List<T>();
-            for (int i = 0; i < _options.NumAgents; i++)
-            {
-                var stateTensor = Tensor<T>.FromVector(agentStates[i]);
-                var qValuesTensor = _agentNetworks[i].Predict(stateTensor);
-                var qValues = qValuesTensor.ToVector();
-                int actionIdx = ArgMax(agentActions[i]);
-                agentQValues.Add(qValues[actionIdx]);
-            }
-
-            // Mix agent Q-values to get team Q-value
-            var mixingInput = ConcatenateMixingInput(agentQValues, globalState);
-            var mixingInputTensor = Tensor<T>.FromVector(mixingInput);
-            var teamQTensor = _mixingNetwork.Predict(mixingInputTensor);
-            var teamQ = teamQTensor.ToVector()[0];
-
-            // Compute target team Q-value
-            var nextAgentQValues = new List<T>();
-            for (int i = 0; i < _options.NumAgents; i++)
-            {
-                var nextStateTensor = Tensor<T>.FromVector(nextAgentStates[i]);
-                var nextQValuesTensor = _targetAgentNetworks[i].Predict(nextStateTensor);
-                var nextQValues = nextQValuesTensor.ToVector();
-                nextAgentQValues.Add(MaxValue(nextQValues));
-            }
-
-            var targetMixingInput = ConcatenateMixingInput(nextAgentQValues, nextGlobalState);
-            var targetMixingInputTensor = Tensor<T>.FromVector(targetMixingInput);
-            var targetTeamQTensor = _targetMixingNetwork.Predict(targetMixingInputTensor);
-            var targetTeamQ = targetTeamQTensor.ToVector()[0];
-
-            T target;
-            if (experience.Done)
-            {
-                target = experience.Reward;
-            }
-            else
-            {
-                target = NumOps.Add(experience.Reward, NumOps.Multiply(DiscountFactor, targetTeamQ));
-            }
-
-            // TD error for monitoring
-            var tdError = NumOps.Subtract(target, teamQ);
-            var loss = NumOps.Multiply(tdError, tdError);
-            totalLoss = NumOps.Add(totalLoss, loss);
-
-            // --- End-to-end training: agents → mixing → loss (Rashid et al. 2018) ---
-            // One step over the agent networks and the mixing network together, on the shared training step (plain SGD
-            // at the agent's learning rate, as before). Each agent's chosen Q-value is selected with a one-hot dot
-            // product and the mixing input is a recorded concatenation, so the TD error reaches the agents: the chosen
-            // value used to be copied by host indexing into a fresh tensor, which cut the agents off and left only the
-            // mixing network training. The states, the one-hot actions, the global state and the detached TD target
-            // travel in the step's data.
-            var stepData = new List<Tensor<T>>();
-            for (int i = 0; i < _options.NumAgents; i++)
-            {
-                stepData.Add(Tensor<T>.FromVector(agentStates[i], [1, _options.StateSize]));
-                stepData.Add(Tensor<T>.FromVector(OneHotAction(agentActions[i]), [1, _options.ActionSize]));
-            }
-            stepData.Add(Tensor<T>.FromVector(globalState, [1, globalState.Length]));
-            var targetScalar = new Tensor<T>([1, 1]);
-            targetScalar[0] = target;
-            stepData.Add(targetScalar);
-            var packed = Training.StepInputPacking<T>.Pack(stepData.ToArray());
-            TrainJointStep(packed, globalState.Length);
-
-            // Enforce QMIX monotonicity: the mixing weights stay non-negative. Clamped in place, in the live tensors,
-            // so the optimizer and any compiled plan keep training the same ones.
-            ClampMixingWeightsNonNegative();        }
+        // Each transition takes its own end-to-end step, in batch order (the networks change between them).
+        var losses = validBatch.Select(TrainOnTransition).ToList();
+        totalLoss = AiDotNetEngine.Current.Sum(Vector<T>.FromEnumerable(losses));
 
         // Update target networks
         if (_stepCount % _options.TargetUpdateFrequency == 0)
@@ -500,68 +427,114 @@ public partial class QMIXAgent<T> : DeepReinforcementLearningAgentBase<T>, IGrad
         return oneHot;
     }
 
+    /// <summary>One transition's QMIX update (Rashid et al. 2018); returns its squared TD error.</summary>
+    private T TrainOnTransition(Experience<T, Vector<T>, Vector<T>> experience)
+    {
+        // Decompose joint experience
+        var (agentStates, globalState, agentActions) = DecomposeJointState(experience.State, experience.Action);
+        var (nextAgentStates, nextGlobalState, _) = DecomposeJointState(experience.NextState, experience.Action);
+
+        // Compute individual agent Q-values
+        var agentQValues = Enumerable.Range(0, _options.NumAgents)
+            .Select(agent => ChosenAgentQ(agent, agentStates[agent], agentActions[agent])).ToList();
+
+        // Mix agent Q-values to get team Q-value
+        var mixingInput = ConcatenateMixingInput(agentQValues, globalState);
+        var mixingInputTensor = Tensor<T>.FromVector(mixingInput);
+        var teamQTensor = _mixingNetwork.Predict(mixingInputTensor);
+        var teamQ = teamQTensor.ToVector()[0];
+
+        // Compute target team Q-value
+        var nextAgentQValues = Enumerable.Range(0, _options.NumAgents)
+            .Select(agent => MaxValue(_targetAgentNetworks[agent].Predict(Tensor<T>.FromVector(nextAgentStates[agent])).ToVector())).ToList();
+
+        var targetMixingInput = ConcatenateMixingInput(nextAgentQValues, nextGlobalState);
+        var targetMixingInputTensor = Tensor<T>.FromVector(targetMixingInput);
+        var targetTeamQTensor = _targetMixingNetwork.Predict(targetMixingInputTensor);
+        var targetTeamQ = targetTeamQTensor.ToVector()[0];
+
+        T target;
+        if (experience.Done)
+        {
+            target = experience.Reward;
+        }
+        else
+        {
+            target = NumOps.Add(experience.Reward, NumOps.Multiply(DiscountFactor, targetTeamQ));
+        }
+
+        // TD error for monitoring
+        var tdError = NumOps.Subtract(target, teamQ);
+        var loss = NumOps.Multiply(tdError, tdError);
+
+        // --- End-to-end training: agents → mixing → loss (Rashid et al. 2018) ---
+        // One step over the agent networks and the mixing network together, on the shared training step (plain SGD
+        // at the agent's learning rate, as before). Each agent's chosen Q-value is selected with a one-hot dot
+        // product and the mixing input is a recorded concatenation, so the TD error reaches the agents: the chosen
+        // value used to be copied by host indexing into a fresh tensor, which cut the agents off and left only the
+        // mixing network training. The states, the one-hot actions, the global state and the detached TD target
+        // travel in the step's data.
+        var stepData = new List<Tensor<T>>();
+        for (int i = 0; i < _options.NumAgents; i++)
+        {
+            stepData.Add(Tensor<T>.FromVector(agentStates[i], [1, _options.StateSize]));
+            stepData.Add(Tensor<T>.FromVector(OneHotAction(agentActions[i]), [1, _options.ActionSize]));
+        }
+        stepData.Add(Tensor<T>.FromVector(globalState, [1, globalState.Length]));
+        var targetScalar = new Tensor<T>([1, 1]);
+        targetScalar[0] = target;
+        stepData.Add(targetScalar);
+        var packed = Training.StepInputPacking<T>.Pack(stepData.ToArray());
+        TrainJointStep(packed, globalState.Length);
+
+        // Enforce QMIX monotonicity: the mixing weights stay non-negative. Clamped in place, in the live tensors,
+        // so the optimizer and any compiled plan keep training the same ones.
+        ClampMixingWeightsNonNegative();
+        return loss;
+    }
+
+    /// <summary>Agent <paramref name="agent"/>'s Q-value for the action it took.</summary>
+    private T ChosenAgentQ(int agent, Vector<T> agentState, Vector<T> agentAction)
+    {
+        var qValues = _agentNetworks[agent].Predict(Tensor<T>.FromVector(agentState)).ToVector();
+        return qValues[ArgMax(agentAction)];
+    }
+
     /// <summary>Clamps the mixing network's trainable weights to be non-negative, in place.</summary>
     private void ClampMixingWeightsNonNegative()
     {
         var mixBase = (NeuralNetworkBase<T>)_mixingNetwork;
         foreach (var parameter in Training.TapeTrainingStep<T>.CollectParameters(mixBase.Layers))
         {
-            for (int j = 0; j < parameter.Length; j++)
-            {
-                if (NumOps.LessThan(parameter.GetFlat(j), NumOps.Zero))
-                    parameter.SetFlat(j, NumOps.Zero);
-            }
+            // w < 0 -> 0 (a NaN is left as it is), written back into the live tensor
+            var engine = AiDotNetEngine.Current;
+            var clamped = engine.TensorWhere(
+                engine.TensorLessThan(parameter, NumOps.Zero), engine.TensorFullLike(parameter, NumOps.Zero), parameter);
+            clamped.AsSpan().CopyTo(parameter.AsWritableSpan());
         }
     }
     private (List<Vector<T>> agentStates, Vector<T> globalState, List<Vector<T>> agentActions) DecomposeJointState(
         Vector<T> jointState, Vector<T> jointAction)
     {
-        var agentStates = new List<Vector<T>>();
-        for (int i = 0; i < _options.NumAgents; i++)
-        {
-            var state = new Vector<T>(_options.StateSize);
-            for (int j = 0; j < _options.StateSize; j++)
-            {
-                state[j] = jointState[i * _options.StateSize + j];
-            }
-            agentStates.Add(state);
-        }
+        int stateSize = _options.StateSize;
+        int actionSize = _options.ActionSize;
+        var agentStates = Enumerable.Range(0, _options.NumAgents)
+            .Select(agent => jointState.GetSubVector(agent * stateSize, stateSize)).ToList();
 
         // Extract global state
-        int globalOffset = _options.NumAgents * _options.StateSize;
-        var globalState = new Vector<T>(_options.GlobalStateSize);
-        for (int i = 0; i < _options.GlobalStateSize; i++)
-        {
-            globalState[i] = jointState[globalOffset + i];
-        }
+        int globalOffset = _options.NumAgents * stateSize;
+        var globalState = jointState.GetSubVector(globalOffset, _options.GlobalStateSize);
 
         // Decompose actions
-        var agentActions = new List<Vector<T>>();
-        for (int i = 0; i < _options.NumAgents; i++)
-        {
-            var action = new Vector<T>(_options.ActionSize);
-            for (int j = 0; j < _options.ActionSize; j++)
-            {
-                action[j] = jointAction[i * _options.ActionSize + j];
-            }
-            agentActions.Add(action);
-        }
+        var agentActions = Enumerable.Range(0, _options.NumAgents)
+            .Select(agent => jointAction.GetSubVector(agent * actionSize, actionSize)).ToList();
 
         return (agentStates, globalState, agentActions);
     }
 
     private Vector<T> ConcatenateMixingInput(List<T> agentQValues, Vector<T> globalState)
     {
-        var input = new Vector<T>(agentQValues.Count + globalState.Length);
-        for (int i = 0; i < agentQValues.Count; i++)
-        {
-            input[i] = agentQValues[i];
-        }
-        for (int i = 0; i < globalState.Length; i++)
-        {
-            input[agentQValues.Count + i] = globalState[i];
-        }
-        return input;
+        return RLTensorOps.Concat(Vector<T>.FromEnumerable(agentQValues), globalState);
     }
 
     private Vector<T> ComputeMixingInputGradient(Vector<T> mixingInput, T tdError)
@@ -571,16 +544,9 @@ public partial class QMIXAgent<T> : DeepReinforcementLearningAgentBase<T>, IGrad
         // Approximate: each agent gets gradient proportional to TD error
         // Better approach would use actual backprop through mixing network layers
 
-        var gradient = new Vector<T>(_options.NumAgents);
         T baseGradient = NumOps.Multiply(NumOps.FromDouble(-2.0), tdError);
         T perAgentGradient = NumOps.Divide(baseGradient, NumOps.FromDouble(_options.NumAgents));
-
-        for (int i = 0; i < _options.NumAgents; i++)
-        {
-            gradient[i] = perAgentGradient;
-        }
-
-        return gradient;
+        return Vector<T>.CreateDefault(_options.NumAgents, perAgentGradient);
     }
 
     private Vector<T> ConcatenateWithGlobal(List<Vector<T>> agentVectors, Vector<T> globalVector)
@@ -611,48 +577,12 @@ public partial class QMIXAgent<T> : DeepReinforcementLearningAgentBase<T>, IGrad
             }
         }
 
-        int totalSize = agentVectors.Count * vectorLength + globalVector.Length;
-        var result = new Vector<T>(totalSize);
-        int offset = 0;
-
-        foreach (var vec in agentVectors)
-        {
-            for (int i = 0; i < vec.Length; i++)
-            {
-                result[offset + i] = vec[i];
-            }
-            offset += vec.Length;
-        }
-
-        for (int i = 0; i < globalVector.Length; i++)
-        {
-            result[offset + i] = globalVector[i];
-        }
-
-        return result;
+        return RLTensorOps.Concat(agentVectors.Concat(new[] { globalVector }).ToArray());
     }
 
     private Vector<T> ConcatenateVectors(List<Vector<T>> vectors)
     {
-        int totalSize = 0;
-        foreach (var vec in vectors)
-        {
-            totalSize += vec.Length;
-        }
-
-        var result = new Vector<T>(totalSize);
-        int offset = 0;
-
-        foreach (var vec in vectors)
-        {
-            for (int i = 0; i < vec.Length; i++)
-            {
-                result[offset + i] = vec[i];
-            }
-            offset += vec.Length;
-        }
-
-        return result;
+        return RLTensorOps.Concat(vectors.ToArray());
     }
 
     private int ArgMax(Vector<T> values)
