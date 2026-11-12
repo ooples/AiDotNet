@@ -28,13 +28,13 @@ public class GiniImpuritySelection<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     private readonly int _nFeaturesToSelect;
     private readonly int _nThresholds;
 
-    private double[]? _giniReductionScores;
+    private Vector<T>? _giniReductionScores;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
-    public double[]? GiniReductionScores => _giniReductionScores;
+    public Vector<T>? GiniReductionScores => _giniReductionScores;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -72,103 +72,59 @@ public class GiniImpuritySelection<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         int n = data.Rows;
         int p = data.Columns;
 
-        _giniReductionScores = new double[p];
+        var engine = Engine;
+        var X = Tensor<T>.FromMatrix(data);
+        var shape = new[] { n, p };
 
-        // Compute parent Gini
-        var classCounts = new Dictionary<int, int>();
-        for (int i = 0; i < n; i++)
+        // Parent Gini over the rounded class labels
+        PreprocessingTensorOps.ClassLabels(target, out var classes, out var classIndex);
+        int k = classes.Length;
+        var classOneHot = PreprocessingTensorOps.ClassOneHot<T>(classIndex, k);
+        T parentGini = FeatureSelectionTensorOps.GiniImpurity(classOneHot);
+        var classTotals = engine.TensorBroadcastTo(
+            engine.Reshape(engine.ReduceSum(classOneHot, new[] { 0 }, false), new[] { 1, k }), new[] { p, k });
+
+        // Columns whose range is below 1e-10 score 0
+        var minVal = PreprocessingTensorOps.ColumnMin(X);
+        var range = engine.TensorSubtract(PreprocessingTensorOps.ColumnMax(X), minVal);
+        var varying = PreprocessingTensorOps.AtLeast(range, NumOps.FromDouble(1e-10));
+
+        // Try evenly spaced thresholds min + range * t / (nThresholds + 1); a split leaving either side empty is skipped
+        var zeros = new Tensor<T>(new[] { p });
+        var bestReduction = zeros;
+        T divisor = NumOps.FromDouble(_nThresholds + 1);
+        T zero = NumOps.Zero;
+        T sampleCount = NumOps.FromDouble(n);
+        T negatedParent = NumOps.Negate(parentGini);
+        for (int t = 1; t <= _nThresholds; t++)
         {
-            int label = (int)Math.Round(NumOps.ToDouble(target[i]));
-            classCounts[label] = classCounts.GetValueOrDefault(label) + 1;
-        }
-
-        double parentGini = 1.0;
-        foreach (int count in classCounts.Values)
-        {
-            double prob = (double)count / n;
-            parentGini -= prob * prob;
-        }
-
-        for (int j = 0; j < p; j++)
-        {
-            // Get feature values
-            var values = new (double value, int label)[n];
-            for (int i = 0; i < n; i++)
-                values[i] = (NumOps.ToDouble(data[i, j]), (int)Math.Round(NumOps.ToDouble(target[i])));
-
-            var sorted = values.OrderBy(v => v.value).ToArray();
-
-            // Try multiple thresholds
-            double minVal = sorted[0].value;
-            double maxVal = sorted[n - 1].value;
-            double range = maxVal - minVal;
-
-            if (range < 1e-10)
+            var threshold = engine.TensorAdd(minVal,
+                engine.TensorDivideScalar(engine.TensorMultiplyScalar(range, PreprocessingTensorOps.CountAsScalar<T>(t)), divisor));
+            var left = PreprocessingTensorOps.Not(engine.TensorGreaterThan(X,
+                engine.TensorBroadcastTo(engine.Reshape(threshold, new[] { 1, p }), shape)));
+            var leftCounts = engine.TensorMatMul(engine.TensorTranspose(left), classOneHot);
+            var sides = engine.TensorConcatenate(new[]
             {
-                _giniReductionScores[j] = 0;
-                continue;
-            }
-
-            double bestReduction = 0;
-
-            for (int t = 1; t <= _nThresholds; t++)
-            {
-                double threshold = minVal + (range * t) / (_nThresholds + 1);
-
-                var leftCounts = new Dictionary<int, int>();
-                var rightCounts = new Dictionary<int, int>();
-                int nLeft = 0, nRight = 0;
-
-                foreach (var (value, label) in sorted)
-                {
-                    if (value <= threshold)
-                    {
-                        leftCounts[label] = leftCounts.GetValueOrDefault(label) + 1;
-                        nLeft++;
-                    }
-                    else
-                    {
-                        rightCounts[label] = rightCounts.GetValueOrDefault(label) + 1;
-                        nRight++;
-                    }
-                }
-
-                if (nLeft == 0 || nRight == 0)
-                    continue;
-
-                double leftGini = 1.0;
-                foreach (int count in leftCounts.Values)
-                {
-                    double prob = (double)count / nLeft;
-                    leftGini -= prob * prob;
-                }
-
-                double rightGini = 1.0;
-                foreach (int count in rightCounts.Values)
-                {
-                    double prob = (double)count / nRight;
-                    rightGini -= prob * prob;
-                }
-
-                double weightedGini = ((double)nLeft / n) * leftGini + ((double)nRight / n) * rightGini;
-                double reduction = parentGini - weightedGini;
-
-                bestReduction = Math.Max(bestReduction, reduction);
-            }
-
-            _giniReductionScores[j] = bestReduction;
+                engine.Reshape(leftCounts, new[] { p, 1, k }),
+                engine.Reshape(engine.TensorSubtract(classTotals, leftCounts), new[] { p, 1, k })
+            }, 1);
+            var weightedGini = FeatureSelectionTensorOps.WeightedBinGini(sides, n);
+            var nLeft = engine.ReduceSum(left, new[] { 0 }, false);
+            var bothSides = engine.TensorMultiply(engine.TensorGreaterThan(nLeft, zero),
+                engine.TensorLessThan(nLeft, sampleCount));
+            var reduction = engine.TensorWhere(bothSides,
+                engine.TensorNegate(engine.TensorAddScalar(weightedGini, negatedParent)), zeros);
+            bestReduction = engine.TensorMax(bestReduction, reduction);
         }
+
+        var giniReductionScores = engine.TensorWhere(varying, bestReduction, zeros);
+        _giniReductionScores = giniReductionScores.ToVector();
 
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = Enumerable.Range(0, p)
-            .OrderByDescending(j => _giniReductionScores[j])
-            .Take(numToSelect)
-            .OrderBy(x => x)
-            .ToArray();
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(giniReductionScores, numToSelect);
 
         IsFitted = true;
     }
-
     /// <inheritdoc />
     public Matrix<T> FitTransform(Matrix<T> data, Vector<T> target)
     {
