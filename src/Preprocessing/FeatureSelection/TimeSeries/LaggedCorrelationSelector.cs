@@ -27,14 +27,14 @@ public class LaggedCorrelationSelector<T> : TransformerBase<T, Matrix<T>, Matrix
     private readonly int _minLag;
     private readonly int _maxLag;
 
-    private double[]? _correlationScores;
+    private Vector<T>? _correlationScores;
     private int[]? _bestLags;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
-    public double[]? CorrelationScores => _correlationScores;
+    public Vector<T>? CorrelationScores => _correlationScores;
     public int[]? BestLags => _bestLags;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
@@ -78,72 +78,29 @@ public class LaggedCorrelationSelector<T> : TransformerBase<T, Matrix<T>, Matrix
         int p = data.Columns;
         int maxLag = Math.Min(_maxLag, n / 3);
 
-        _correlationScores = new double[p];
-        _bestLags = new int[p];
+        var x = Tensor<T>.FromMatrix(data);
+        var y = Tensor<T>.FromVector(target);
+        var maxCorr = PreprocessingTensorOps.Filled(new[] { p }, NumOps.Zero);
+        var bestLag = PreprocessingTensorOps.Filled(new[] { p }, NumOps.Zero);
 
-        // Extract target values
-        var y = new double[n];
-        for (int i = 0; i < n; i++)
-            y[i] = NumOps.ToDouble(target[i]);
-
-        for (int j = 0; j < p; j++)
+        for (int lag = _minLag; lag <= maxLag; lag++)
         {
-            var x = new double[n];
-            for (int i = 0; i < n; i++)
-                x[i] = NumOps.ToDouble(data[i, j]);
+            // Correlate x[0:n-lag] with y[lag:n] (0 for a constant feature or target)
+            int nValid = n - lag;
+            if (nValid < 3) continue;
 
-            double maxCorr = 0;
-            int bestLag = 0;
-
-            for (int lag = _minLag; lag <= maxLag; lag++)
-            {
-                // Correlate x[0:n-lag] with y[lag:n]
-                int nValid = n - lag;
-                if (nValid < 3) continue;
-
-                double xMean = 0, yMean = 0;
-                for (int i = 0; i < nValid; i++)
-                {
-                    xMean += x[i];
-                    yMean += y[i + lag];
-                }
-                xMean /= nValid;
-                yMean /= nValid;
-
-                double ssXY = 0, ssXX = 0, ssYY = 0;
-                for (int i = 0; i < nValid; i++)
-                {
-                    double dx = x[i] - xMean;
-                    double dy = y[i + lag] - yMean;
-                    ssXY += dx * dy;
-                    ssXX += dx * dx;
-                    ssYY += dy * dy;
-                }
-
-                if (ssXX > 1e-10 && ssYY > 1e-10)
-                {
-                    double corr = Math.Abs(ssXY / Math.Sqrt(ssXX * ssYY));
-                    if (corr > maxCorr)
-                    {
-                        maxCorr = corr;
-                        bestLag = lag;
-                    }
-                }
-            }
-
-            _correlationScores[j] = maxCorr;
-            _bestLags[j] = bestLag;
+            var corr = Engine.TensorAbs(PreprocessingTensorOps.TargetCorrelations(
+                Engine.TensorSlice(x, new[] { 0, 0 }, new[] { nValid, p }),
+                Engine.TensorSlice(y, new[] { lag }, new[] { nValid })));
+            var better = Engine.TensorGreaterThan(corr, maxCorr);
+            maxCorr = Engine.TensorWhere(better, corr, maxCorr);
+            bestLag = Engine.TensorWhere(better,
+                PreprocessingTensorOps.Filled(new[] { p }, PreprocessingTensorOps.CountAsScalar<T>(lag)), bestLag);
         }
 
-        int nToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = _correlationScores
-            .Select((s, idx) => (Score: s, Index: idx))
-            .OrderByDescending(x => x.Score)
-            .Take(nToSelect)
-            .Select(x => x.Index)
-            .OrderBy(x => x)
-            .ToArray();
-
+        _correlationScores = maxCorr.ToVector();
+        _bestLags = bestLag.Cast<int>().AsSpan().ToArray();
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(maxCorr, Math.Min(_nFeaturesToSelect, p));
         IsFitted = true;
     }
 
@@ -160,15 +117,7 @@ public class LaggedCorrelationSelector<T> : TransformerBase<T, Matrix<T>, Matrix
         if (_selectedIndices is null)
             throw new InvalidOperationException("LaggedCorrelationSelector has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

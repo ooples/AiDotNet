@@ -28,14 +28,14 @@ public class TrendFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IFixedCountF
     private readonly int _nFeaturesToSelect;
     private readonly bool _absoluteTrend;
 
-    private double[]? _trendScores;
+    private Vector<T>? _trendScores;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public bool AbsoluteTrend => _absoluteTrend;
-    public double[]? TrendScores => _trendScores;
+    public Vector<T>? TrendScores => _trendScores;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -63,69 +63,41 @@ public class TrendFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IFixedCountF
 
         if (n < 2)
         {
-            _trendScores = new double[p];
+            _trendScores = new Vector<T>(p);
             _selectedIndices = Enumerable.Range(0, Math.Min(_nFeaturesToSelect, p)).ToArray();
             IsFitted = true;
             return;
         }
 
-        _trendScores = new double[p];
-
-        // Time variable (0, 1, 2, ..., n-1)
+        // Time variable (0, 1, 2, ..., n-1), centred
         double tMean = (n - 1) / 2.0;
-        double tVar = 0;
-        for (int i = 0; i < n; i++)
-            tVar += (i - tMean) * (i - tMean);
+        var time = Engine.Reshape(Engine.TensorSubtractScalar(Engine.TensorArange<T>(0, n, 1), NumOps.FromDouble(tMean)), new[] { n, 1 });
+        T tVar = Engine.TensorSumOfSquares(time);
 
-        for (int j = 0; j < p; j++)
-        {
-            // Compute feature mean
-            double yMean = 0;
-            for (int i = 0; i < n; i++)
-                yMean += NumOps.ToDouble(data[i, j]);
-            yMean /= n;
+        // Compute linear regression slope (trend) of every feature on time
+        var centered = SelectorTensorOps.CenterColumns(Tensor<T>.FromMatrix(data));
+        var covariance = Engine.ReduceSum(Engine.TensorMultiply(centered, Engine.TensorBroadcastTo(time, new[] { n, p })), new[] { 0 }, false);
+        var slope = NumOps.GreaterThan(tVar, NumOps.FromDouble(1e-10))
+            ? Engine.TensorDivideScalar(covariance, tVar)
+            : PreprocessingTensorOps.Filled(new[] { p }, NumOps.Zero);
 
-            // Compute linear regression slope (trend)
-            double covariance = 0;
-            for (int i = 0; i < n; i++)
-            {
-                double yDiff = NumOps.ToDouble(data[i, j]) - yMean;
-                covariance += (i - tMean) * yDiff;
-            }
+        // Compute R-squared to measure trend strength
+        var residual = Engine.TensorSubtract(centered, Engine.TensorMultiply(
+            Engine.TensorBroadcastTo(time, new[] { n, p }), Engine.TensorBroadcastTo(Engine.Reshape(slope, new[] { 1, p }), new[] { n, p })));
+        var ssTotal = SelectorTensorOps.ColumnSumOfSquares(centered);
+        var ssResidual = SelectorTensorOps.ColumnSumOfSquares(residual);
+        var fitted = Engine.TensorGreaterThan(ssTotal, NumOps.FromDouble(1e-10));
+        var safeTotal = Engine.TensorWhere(fitted, ssTotal, PreprocessingTensorOps.Filled(new[] { p }, NumOps.One));
+        var rSquared = SelectorTensorOps.ZeroUnless(fitted, PreprocessingTensorOps.OneMinus(Engine.TensorDivide(ssResidual, safeTotal)));
 
-            double slope = tVar > 1e-10 ? covariance / tVar : 0;
+        // Score combines trend magnitude and fit quality
+        var trendMagnitude = _absoluteTrend ? Engine.TensorAbs(slope) : slope;
+        var scores = Engine.TensorMultiply(trendMagnitude, Engine.TensorSqrt(rSquared));
+        _trendScores = scores.ToVector();
 
-            // Compute R-squared to measure trend strength
-            double ssTotal = 0;
-            double ssResidual = 0;
-            double intercept = yMean - slope * tMean;
-
-            for (int i = 0; i < n; i++)
-            {
-                double actual = NumOps.ToDouble(data[i, j]);
-                double predicted = intercept + slope * i;
-                double diff = actual - yMean;
-                ssTotal += diff * diff;
-                ssResidual += (actual - predicted) * (actual - predicted);
-            }
-
-            double rSquared = ssTotal > 1e-10 ? 1 - (ssResidual / ssTotal) : 0;
-
-            // Score combines trend magnitude and fit quality
-            double trendMagnitude = _absoluteTrend ? Math.Abs(slope) : slope;
-            _trendScores[j] = trendMagnitude * Math.Sqrt(rSquared);
-        }
-
-        // Select top features by trend score
-        int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = _trendScores
-            .Select((s, idx) => (Score: _absoluteTrend ? s : Math.Abs(s), Index: idx))
-            .OrderByDescending(x => x.Score)
-            .Take(numToSelect)
-            .Select(x => x.Index)
-            .OrderBy(x => x)
-            .ToArray();
-
+        // Select top features by trend score (by magnitude)
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(
+            _absoluteTrend ? scores : Engine.TensorAbs(scores), Math.Min(_nFeaturesToSelect, p));
         IsFitted = true;
     }
 
@@ -135,15 +107,7 @@ public class TrendFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IFixedCountF
         if (_selectedIndices is null)
             throw new InvalidOperationException("TrendFS has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />
