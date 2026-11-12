@@ -73,7 +73,7 @@ public partial class FreqPromptAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T
     private Vector<T> _promptCoeffsInit;
 
     /// <summary>Per-frequency regularization weights (higher for high-freq).</summary>
-    private readonly double[] _freqWeights;
+    private readonly Vector<T> _freqWeights;
 
     private const double SpsaBasisLearningRateMultiplier = 0.1;
     private const double SpsaCoeffsLearningRateMultiplier = 0.5;
@@ -98,23 +98,21 @@ public partial class FreqPromptAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T
         _numComponents = options.NumFreqComponents;
 
         // Initialize basis vectors using DCT-like cosine basis
-        _promptBasis = new Vector<T>(_numComponents * _paramDim);
-        for (int k = 0; k < _numComponents; k++)
-            for (int d = 0; d < _paramDim; d++)
-            {
-                double basis = Math.Cos(Math.PI * (k + 1.0) * (2.0 * d + 1.0) / (2.0 * _paramDim));
-                _promptBasis[k * _paramDim + d] = NumOps.FromDouble(options.PromptInitScale * basis);
-            }
+        // B[k, d] = scale * cos(pi * (k + 1) * (2d + 1) / (2D))
+        var engine = AiDotNetEngine.Current;
+        var frequencies = engine.TensorArange<T>(1, _numComponents + 1, 1);
+        var positions = engine.TensorArange<T>(1, 2 * _paramDim + 1, 2);
+        var phase = engine.TensorMultiplyScalar(engine.TensorOuter(frequencies, positions),
+            NumOps.FromDouble(Math.PI / (2.0 * _paramDim)));
+        _promptBasis = engine.TensorMultiplyScalar(engine.TensorCos(phase), NumOps.FromDouble(options.PromptInitScale)).ToVector();
 
         // Initialize prompt coefficients to small values
-        _promptCoeffsInit = new Vector<T>(_numComponents);
-        for (int k = 0; k < _numComponents; k++)
-            _promptCoeffsInit[k] = NumOps.FromDouble(options.PromptInitScale * CoeffInitScaleFactor);
+        _promptCoeffsInit = engine.Fill(_numComponents, NumOps.FromDouble(options.PromptInitScale * CoeffInitScaleFactor));
 
-        // Frequency-dependent regularization: low freq (k=0) gets least penalty
-        _freqWeights = new double[_numComponents];
-        for (int k = 0; k < _numComponents; k++)
-            _freqWeights[k] = 1.0 + k * options.HighFreqPenalty;
+        // Frequency-dependent regularization: low freq (k=0) gets least penalty, w_k = 1 + k * penalty
+        _freqWeights = engine.TensorAddScalar(
+            engine.TensorMultiplyScalar(engine.TensorArange<T>(0, _numComponents, 1), NumOps.FromDouble(options.HighFreqPenalty)),
+            NumOps.One).ToVector();
     }
 
     /// <inheritdoc/>
@@ -126,32 +124,8 @@ public partial class FreqPromptAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T
 
         foreach (var task in taskBatch.Tasks)
         {
-            // Initialize task-specific coefficients from meta-learned init
-            var coeffs = new double[_numComponents];
-            for (int k = 0; k < _numComponents; k++)
-                coeffs[k] = NumOps.ToDouble(_promptCoeffsInit[k]);
-
             // Inner loop: only adapt coefficients (backbone frozen)
-            for (int step = 0; step < _algoOptions.AdaptationSteps; step++)
-            {
-                var effectiveParams = ComputeEffectiveParams(baseParams, coeffs);
-                ParamModel.SetParameters(effectiveParams);
-                var grad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
-
-                // Project gradient onto basis vectors to get coefficient gradients
-                var stepGradient = new double[coeffs.Length];
-                for (int k = 0; k < _numComponents; k++)
-                {
-                    double gradC = 0;
-                    for (int d = 0; d < _paramDim; d++)
-                        gradC += NumOps.ToDouble(grad[d]) * NumOps.ToDouble(_promptBasis[k * _paramDim + d]);
-
-                    // Add frequency-dependent regularization (_freqWeights already encodes HighFreqPenalty)
-                    double reg = _freqWeights[k] * coeffs[k];
-                    stepGradient[k] = gradC + reg;
-                }
-                ApplyInnerGradientsInPlace(coeffs, stepGradient, _algoOptions.InnerLearningRate, step == 0);
-            }
+            var coeffs = AdaptCoefficients(task, baseParams);
 
             // Evaluate with adapted prompt
             var finalParams = ComputeEffectiveParams(baseParams, coeffs);
@@ -182,27 +156,7 @@ public partial class FreqPromptAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T
     {
         var baseParams = ParamModel.GetParameters();
 
-        var coeffs = new double[_numComponents];
-        for (int k = 0; k < _numComponents; k++)
-            coeffs[k] = NumOps.ToDouble(_promptCoeffsInit[k]);
-
-        for (int step = 0; step < _algoOptions.AdaptationSteps; step++)
-        {
-            var effectiveParams = ComputeEffectiveParams(baseParams, coeffs);
-            ParamModel.SetParameters(effectiveParams);
-            var grad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
-
-            var stepGradient = new double[coeffs.Length];
-            for (int k = 0; k < _numComponents; k++)
-            {
-                double gradC = 0;
-                for (int d = 0; d < _paramDim; d++)
-                    gradC += NumOps.ToDouble(grad[d]) * NumOps.ToDouble(_promptBasis[k * _paramDim + d]);
-                double reg = _freqWeights[k] * coeffs[k];
-                stepGradient[k] = gradC + reg;
-            }
-            ApplyInnerGradientsInPlace(coeffs, stepGradient, _algoOptions.InnerLearningRate, step == 0);
-        }
+        var coeffs = AdaptCoefficients(task, baseParams);
 
         var adaptedParams = ComputeEffectiveParams(baseParams, coeffs);
         ParamModel.SetParameters(baseParams);
@@ -210,62 +164,59 @@ public partial class FreqPromptAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T
     }
 
     /// <summary>
-    /// Computes effective parameters: θ = θ_base + Σ_k c_k * B_k.
+    /// Inner loop on the support set: the coefficients start at their meta-learned init and step along
+    /// B g + w * c, the gradient projected onto the prompt basis plus the frequency-dependent regularization.
     /// </summary>
-    private Vector<T> ComputeEffectiveParams(Vector<T> baseParams, double[] coeffs)
+    private Vector<T> AdaptCoefficients(IMetaLearningTask<T, TInput, TOutput> task, Vector<T> baseParams)
     {
-        var result = new Vector<T>(_paramDim);
-        for (int d = 0; d < _paramDim; d++) result[d] = baseParams[d];
-
-        for (int k = 0; k < _numComponents; k++)
+        var coeffs = _promptCoeffsInit.Clone();
+        for (int step = 0; step < _algoOptions.AdaptationSteps; step++)
         {
-            for (int d = 0; d < _paramDim; d++)
-            {
-                double basisVal = NumOps.ToDouble(_promptBasis[k * _paramDim + d]);
-                result[d] = NumOps.Add(result[d], NumOps.FromDouble(coeffs[k] * basisVal));
-            }
+            var effectiveParams = ComputeEffectiveParams(baseParams, coeffs);
+            ParamModel.SetParameters(effectiveParams);
+            var grad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
+
+            // Project gradient onto basis vectors to get coefficient gradients, then add the
+            // frequency-dependent regularization (_freqWeights already encodes HighFreqPenalty)
+            var projected = Engine.TensorMatMul(BasisMatrix(),
+                Tensor<T>.FromVector(grad.Length == _paramDim ? grad : grad.GetSubVector(0, _paramDim), new[] { _paramDim, 1 })).ToVector();
+            var stepGradient = Engine.Add(projected, Engine.Multiply(_freqWeights, coeffs));
+            coeffs = ApplyInnerGradients(coeffs, stepGradient, _algoOptions.InnerLearningRate, step == 0);
         }
 
-        return result;
+        return coeffs;
+    }
+
+    /// <summary>The prompt basis as a [K, paramDim] matrix, one basis vector per row.</summary>
+    private Tensor<T> BasisMatrix() => Engine.Reshape(Tensor<T>.FromVector(_promptBasis), new[] { _numComponents, _paramDim });
+
+    /// <summary>
+    /// Computes effective parameters: theta = theta_base + sum_k c_k * B_k.
+    /// </summary>
+    private Vector<T> ComputeEffectiveParams(Vector<T> baseParams, Vector<T> coeffs)
+    {
+        var offset = Engine.TensorMatMul(Tensor<T>.FromVector(coeffs, new[] { 1, _numComponents }), BasisMatrix()).ToVector();
+        return Engine.Add(baseParams.Length == _paramDim ? baseParams : baseParams.GetSubVector(0, _paramDim), offset);
     }
 
     private double ComputeFreqPromptLoss(TaskBatch<T, TInput, TOutput> taskBatch)
     {
-        double totalLoss = 0;
+        var losses = new List<T>(taskBatch.Tasks.Length);
         var baseParams = ParamModel.GetParameters();
 
         foreach (var task in taskBatch.Tasks)
         {
-            var coeffs = new double[_numComponents];
-            for (int k = 0; k < _numComponents; k++)
-                coeffs[k] = NumOps.ToDouble(_promptCoeffsInit[k]);
-
-            for (int step = 0; step < _algoOptions.AdaptationSteps; step++)
-            {
-                var effectiveParams = ComputeEffectiveParams(baseParams, coeffs);
-                ParamModel.SetParameters(effectiveParams);
-                var grad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
-
-                var stepGradient = new double[coeffs.Length];
-                for (int k = 0; k < _numComponents; k++)
-                {
-                    double gradC = 0;
-                    for (int d = 0; d < _paramDim; d++)
-                        gradC += NumOps.ToDouble(grad[d]) * NumOps.ToDouble(_promptBasis[k * _paramDim + d]);
-
-                    // Match MetaTrain: include frequency-dependent regularization
-                    double reg = _freqWeights[k] * coeffs[k];
-                    stepGradient[k] = gradC + reg;
-                }
-                ApplyInnerGradientsInPlace(coeffs, stepGradient, _algoOptions.InnerLearningRate, step == 0);
-            }
+            // Match MetaTrain: include frequency-dependent regularization
+            var coeffs = AdaptCoefficients(task, baseParams);
 
             var finalParams = ComputeEffectiveParams(baseParams, coeffs);
             ParamModel.SetParameters(finalParams);
-            totalLoss += NumOps.ToDouble(ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput));
+            losses.Add(ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput));
         }
 
         ParamModel.SetParameters(baseParams);
-        return totalLoss / Math.Max(taskBatch.Tasks.Length, 1);
+
+        // The SPSA callback contract is a double; the batch mean is reduced in T and converted once.
+        return NumOps.ToDouble(ComputeMean(losses));
     }
 }

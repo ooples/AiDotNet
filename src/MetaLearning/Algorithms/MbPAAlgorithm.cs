@@ -181,14 +181,13 @@ public partial class MbPAAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
             // cumulative; only the transient adaptation in Adapt() is allowed to be fast.
             var supportKeys = EmbedBatch(task.SupportInput);
             var supportTargets = ExtractTargets(task.SupportOutput, supportKeys.Count);
+            T innerRate = NumOps.FromDouble(_algoOptions.InnerLearningRate);
             for (int i = 0; i < supportKeys.Count; i++)
             {
                 var grad = OutputNetworkGradient(_outputParams, supportKeys[i], supportTargets[i], weight: 1.0);
-                for (int d = 0; d < _outputParams.Length; d++)
-                {
-                    _outputParams[d] = NumOps.Subtract(_outputParams[d],
-                        NumOps.FromDouble(_algoOptions.InnerLearningRate * NumOps.ToDouble(grad[d])));
-                }
+
+                // Written back in place: OutputParameters exposes this live vector.
+                Engine.Subtract(_outputParams, Engine.Multiply(grad, innerRate)).CopyTo(_outputParams.AsWritableSpan());
             }
 
             // THE QUERY LOSS GOES THROUGH THE HEAD, and this is the whole invariant of the method.
