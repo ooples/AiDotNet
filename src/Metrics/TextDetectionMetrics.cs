@@ -63,14 +63,13 @@ public class TextDetectionMetrics<T> where T : struct
     /// <summary>
     /// The numeric operations provider for type <typeparamref name="T"/>.
     /// </summary>
-    private readonly INumericOperations<T> _numOps;
+    private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 
     /// <summary>
     /// Initializes a new instance of the <see cref="TextDetectionMetrics{T}"/> class.
     /// </summary>
     public TextDetectionMetrics()
     {
-        _numOps = MathHelper.GetNumericOperations<T>();
     }
 
     /// <summary>
@@ -78,8 +77,8 @@ public class TextDetectionMetrics<T> where T : struct
     /// </summary>
     /// <param name="polygon">The polygon vertices, in order. Fewer than three vertices enclose no area.</param>
     /// <returns>The absolute area, so the result does not depend on winding direction.</returns>
-    public static double PolygonArea(IReadOnlyList<(double X, double Y)> polygon)
-        => Math.Abs(SignedArea(polygon));
+    public static T PolygonArea(IReadOnlyList<(T X, T Y)> polygon)
+        => NumOps.Abs(SignedArea(polygon));
 
     /// <summary>
     /// Computes intersection-over-union between two polygons.
@@ -89,9 +88,9 @@ public class TextDetectionMetrics<T> where T : struct
     /// polygon, so the result is exact when it is convex (see the class remarks).</param>
     /// <returns>IoU in [0, 1]. Returns 0 when either polygon is degenerate or they do not overlap.</returns>
     /// <exception cref="ArgumentNullException">A required argument is null.</exception>
-    public static double PolygonIoU(
-        IReadOnlyList<(double X, double Y)> first,
-        IReadOnlyList<(double X, double Y)> second)
+    public static T PolygonIoU(
+        IReadOnlyList<(T X, T Y)> first,
+        IReadOnlyList<(T X, T Y)> second)
     {
         if (first is null)
         {
@@ -103,11 +102,11 @@ public class TextDetectionMetrics<T> where T : struct
             throw new ArgumentNullException(nameof(second));
         }
 
-        double areaFirst = PolygonArea(first);
-        double areaSecond = PolygonArea(second);
-        if (areaFirst <= 0.0 || areaSecond <= 0.0)
+        T areaFirst = PolygonArea(first);
+        T areaSecond = PolygonArea(second);
+        if (NumOps.LessThanOrEquals(areaFirst, NumOps.Zero) || NumOps.LessThanOrEquals(areaSecond, NumOps.Zero))
         {
-            return 0.0;
+            return NumOps.Zero;
         }
 
         // Sutherland-Hodgman requires both polygons wound the same way and the clip polygon
@@ -115,10 +114,10 @@ public class TextDetectionMetrics<T> where T : struct
         var subject = EnsureCounterClockwise(first);
         var clip = EnsureCounterClockwise(second);
 
-        double intersection = PolygonArea(ClipToConvex(subject, clip));
-        double union = areaFirst + areaSecond - intersection;
+        T intersection = PolygonArea(ClipToConvex(subject, clip));
+        T union = NumOps.Subtract(NumOps.Add(areaFirst, areaSecond), intersection);
 
-        return union > 0.0 ? intersection / union : 0.0;
+        return NumOps.GreaterThan(union, NumOps.Zero) ? NumOps.Divide(intersection, union) : NumOps.Zero;
     }
 
     /// <summary>
@@ -134,7 +133,7 @@ public class TextDetectionMetrics<T> where T : struct
     /// recall are both 0.</returns>
     /// <exception cref="ArgumentNullException">A required argument is null.</exception>
     /// <exception cref="ArgumentException">The two lists describe a different number of images.</exception>
-    public (double Precision, double Recall, double HMean) Evaluate(
+    public (T Precision, T Recall, T HMean) Evaluate(
         IReadOnlyList<IReadOnlyList<TextRegion<T>>> predictions,
         IReadOnlyList<IReadOnlyList<TextRegion<T>>> groundTruth,
         double iouThreshold = 0.5)
@@ -160,6 +159,7 @@ public class TextDetectionMetrics<T> where T : struct
         int matched = 0;
         int predictedCount = 0;
         int truthCount = 0;
+        T threshold = NumOps.FromDouble(iouThreshold);
 
         for (int i = 0; i < predictions.Count; i++)
         {
@@ -180,79 +180,109 @@ public class TextDetectionMetrics<T> where T : struct
                     continue; // Degenerate prediction: counted against precision, can match nothing.
                 }
 
-                double bestIoU = 0.0;
-                int bestCandidate = -1;
-                for (int c = 0; c < truthPolygons.Count; c++)
+                if (TryMatch(polygon, truthPolygons, claimed, threshold))
                 {
-                    if (claimed[c])
-                    {
-                        continue;
-                    }
-
-                    double iou = PolygonIoU(polygon, truthPolygons[c]);
-                    if (iou > bestIoU)
-                    {
-                        bestIoU = iou;
-                        bestCandidate = c;
-                    }
-                }
-
-                if (bestCandidate >= 0 && bestIoU >= iouThreshold)
-                {
-                    claimed[bestCandidate] = true;
                     matched++;
                 }
             }
         }
 
-        double precision = predictedCount > 0 ? matched / (double)predictedCount : 1.0;
-        double recall = truthCount > 0 ? matched / (double)truthCount : 1.0;
-        double hmean = (precision + recall) > 0.0
-            ? 2.0 * precision * recall / (precision + recall)
-            : 0.0;
+        return Summarize(matched, predictedCount, truthCount);
+    }
+
+    /// <summary>
+    /// Claims the unclaimed ground-truth polygon with the highest IoU against
+    /// <paramref name="polygon"/> (first one on ties) when that IoU reaches the threshold.
+    /// </summary>
+    private static bool TryMatch(
+        List<(T X, T Y)> polygon, List<List<(T X, T Y)>> truthPolygons, bool[] claimed, T threshold)
+    {
+        T bestIoU = NumOps.Zero;
+        int bestCandidate = -1;
+        for (int c = 0; c < truthPolygons.Count; c++)
+        {
+            if (claimed[c])
+            {
+                continue;
+            }
+
+            T iou = PolygonIoU(polygon, truthPolygons[c]);
+            if (IsGreater(iou, bestIoU))
+            {
+                bestIoU = iou;
+                bestCandidate = c;
+            }
+        }
+
+        if (bestCandidate >= 0 && NumOps.GreaterThanOrEquals(bestIoU, threshold))
+        {
+            claimed[bestCandidate] = true;
+            return true;
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// a &gt; b in <typeparamref name="T"/>.
+    /// </summary>
+    private static bool IsGreater(T a, T b) => NumOps.GreaterThan(a, b);
+
+    /// <summary>
+    /// Precision (1 when nothing was predicted), recall (1 when nothing was to be found) and their
+    /// harmonic mean (0 when both are 0).
+    /// </summary>
+    private static (T Precision, T Recall, T HMean) Summarize(int matched, int predictedCount, int truthCount)
+    {
+        T matchedT = NumOps.FromDouble(matched);
+        T precision = predictedCount > 0 ? NumOps.Divide(matchedT, NumOps.FromDouble(predictedCount)) : NumOps.One;
+        T recall = truthCount > 0 ? NumOps.Divide(matchedT, NumOps.FromDouble(truthCount)) : NumOps.One;
+        T sum = NumOps.Add(precision, recall);
+        T hmean = NumOps.GreaterThan(sum, NumOps.Zero)
+            ? NumOps.Divide(NumOps.Multiply(NumOps.FromDouble(2.0), NumOps.Multiply(precision, recall)), sum)
+            : NumOps.Zero;
 
         return (precision, recall, hmean);
     }
 
     /// <summary>
-    /// Converts a detected region to a double-precision polygon, falling back to the corners of its
-    /// bounding box when no polygon was supplied.
+    /// Converts a detected region to a polygon, falling back to the corners of its bounding box when no
+    /// polygon was supplied.
     /// </summary>
     /// <param name="region">The region to convert.</param>
     /// <returns>The polygon vertices, or an empty list when the region carries neither polygon nor box.</returns>
-    internal List<(double X, double Y)> ToPolygon(TextRegion<T> region)
+    internal List<(T X, T Y)> ToPolygon(TextRegion<T> region)
     {
-        var polygon = new List<(double X, double Y)>();
         if (region is null)
         {
-            return polygon;
+            return new List<(T X, T Y)>();
         }
 
         if (region.Polygon is not null && region.Polygon.Count >= 3)
         {
-            foreach (var vertex in region.Polygon)
-            {
-                polygon.Add((_numOps.ToDouble(vertex.X), _numOps.ToDouble(vertex.Y)));
-            }
-
-            return polygon;
+            return new List<(T X, T Y)>(region.Polygon);
         }
 
+        var polygon = new List<(T X, T Y)>();
         if (region.Box is not null)
         {
             var (xMin, yMin, xMax, yMax) = region.Box.ToXYXY();
-            polygon.Add((xMin, yMin));
-            polygon.Add((xMax, yMin));
-            polygon.Add((xMax, yMax));
-            polygon.Add((xMin, yMax));
+            T left = NumOps.FromDouble(xMin);
+            T top = NumOps.FromDouble(yMin);
+            T right = NumOps.FromDouble(xMax);
+            T bottom = NumOps.FromDouble(yMax);
+            polygon.Add((left, top));
+            polygon.Add((right, top));
+            polygon.Add((right, bottom));
+            polygon.Add((left, bottom));
         }
 
         return polygon;
     }
 
-    private List<List<(double X, double Y)>> ToPolygons(IReadOnlyList<TextRegion<T>>? regions)
+    private List<List<(T X, T Y)>> ToPolygons(IReadOnlyList<TextRegion<T>>? regions)
     {
-        var polygons = new List<List<(double X, double Y)>>();
+        var polygons = new List<List<(T X, T Y)>>();
         if (regions is null)
         {
             return polygons;
@@ -286,31 +316,34 @@ public class TextDetectionMetrics<T> where T : struct
             }
         }
 
-        return kept.OrderByDescending(r => r.Confidence, Comparer<T>.Create(_numOps.Compare)).ToList();
+        return kept.OrderByDescending(r => r.Confidence, Comparer<T>.Create(NumOps.Compare)).ToList();
     }
 
-    private static double SignedArea(IReadOnlyList<(double X, double Y)> polygon)
+    /// <summary>
+    /// Shoelace sum over consecutive vertex pairs: (Σ x_i y_(i+1) - x_(i+1) y_i) / 2.
+    /// </summary>
+    private static T SignedArea(IReadOnlyList<(T X, T Y)> polygon)
     {
         if (polygon is null || polygon.Count < 3)
         {
-            return 0.0;
+            return NumOps.Zero;
         }
 
-        double sum = 0.0;
-        for (int i = 0; i < polygon.Count; i++)
-        {
-            var current = polygon[i];
-            var next = polygon[(i + 1) % polygon.Count];
-            sum += (current.X * next.Y) - (next.X * current.Y);
-        }
+        var engine = AiDotNetEngine.Current;
+        var next = polygon.Skip(1).Concat(polygon.Take(1)).ToList();
+        var x = new Vector<T>(polygon.Select(p => p.X));
+        var y = new Vector<T>(polygon.Select(p => p.Y));
+        var nextX = new Vector<T>(next.Select(p => p.X));
+        var nextY = new Vector<T>(next.Select(p => p.Y));
+        var cross = engine.Subtract(engine.Multiply(x, nextY), engine.Multiply(nextX, y));
 
-        return sum / 2.0;
+        return NumOps.Divide(engine.Sum(cross), NumOps.FromDouble(2.0));
     }
 
-    private static List<(double X, double Y)> EnsureCounterClockwise(IReadOnlyList<(double X, double Y)> polygon)
+    private static List<(T X, T Y)> EnsureCounterClockwise(IReadOnlyList<(T X, T Y)> polygon)
     {
-        var ordered = new List<(double X, double Y)>(polygon);
-        if (SignedArea(ordered) < 0.0)
+        var ordered = new List<(T X, T Y)>(polygon);
+        if (NumOps.LessThan(SignedArea(ordered), NumOps.Zero))
         {
             ordered.Reverse();
         }
@@ -322,11 +355,11 @@ public class TextDetectionMetrics<T> where T : struct
     /// Sutherland-Hodgman polygon clipping: successively clips the subject polygon against each
     /// directed edge of the (convex, counter-clockwise) clip polygon.
     /// </summary>
-    private static List<(double X, double Y)> ClipToConvex(
-        List<(double X, double Y)> subject,
-        List<(double X, double Y)> clip)
+    private static List<(T X, T Y)> ClipToConvex(
+        List<(T X, T Y)> subject,
+        List<(T X, T Y)> clip)
     {
-        var output = new List<(double X, double Y)>(subject);
+        var output = new List<(T X, T Y)>(subject);
 
         for (int edge = 0; edge < clip.Count && output.Count > 0; edge++)
         {
@@ -334,7 +367,7 @@ public class TextDetectionMetrics<T> where T : struct
             var edgeEnd = clip[(edge + 1) % clip.Count];
 
             var input = output;
-            output = new List<(double X, double Y)>(input.Count + 2);
+            output = new List<(T X, T Y)>(input.Count + 2);
 
             for (int i = 0; i < input.Count; i++)
             {
@@ -369,36 +402,40 @@ public class TextDetectionMetrics<T> where T : struct
     /// that is the inside half-plane.
     /// </summary>
     private static bool IsLeftOfOrOn(
-        (double X, double Y) edgeStart,
-        (double X, double Y) edgeEnd,
-        (double X, double Y) point)
-        => (((edgeEnd.X - edgeStart.X) * (point.Y - edgeStart.Y))
-            - ((edgeEnd.Y - edgeStart.Y) * (point.X - edgeStart.X))) >= 0.0;
-
-    private static (double X, double Y) LineIntersection(
-        (double X, double Y) firstStart,
-        (double X, double Y) firstEnd,
-        (double X, double Y) secondStart,
-        (double X, double Y) secondEnd)
+        (T X, T Y) edgeStart,
+        (T X, T Y) edgeEnd,
+        (T X, T Y) point)
     {
-        double firstCross = (firstStart.X * firstEnd.Y) - (firstStart.Y * firstEnd.X);
-        double secondCross = (secondStart.X * secondEnd.Y) - (secondStart.Y * secondEnd.X);
+        T cross = NumOps.Subtract(
+            NumOps.Multiply(NumOps.Subtract(edgeEnd.X, edgeStart.X), NumOps.Subtract(point.Y, edgeStart.Y)),
+            NumOps.Multiply(NumOps.Subtract(edgeEnd.Y, edgeStart.Y), NumOps.Subtract(point.X, edgeStart.X)));
+        return NumOps.GreaterThanOrEquals(cross, NumOps.Zero);
+    }
 
-        double firstDx = firstStart.X - firstEnd.X;
-        double firstDy = firstStart.Y - firstEnd.Y;
-        double secondDx = secondStart.X - secondEnd.X;
-        double secondDy = secondStart.Y - secondEnd.Y;
+    private static (T X, T Y) LineIntersection(
+        (T X, T Y) firstStart,
+        (T X, T Y) firstEnd,
+        (T X, T Y) secondStart,
+        (T X, T Y) secondEnd)
+    {
+        T firstCross = NumOps.Subtract(NumOps.Multiply(firstStart.X, firstEnd.Y), NumOps.Multiply(firstStart.Y, firstEnd.X));
+        T secondCross = NumOps.Subtract(NumOps.Multiply(secondStart.X, secondEnd.Y), NumOps.Multiply(secondStart.Y, secondEnd.X));
 
-        double denominator = (firstDx * secondDy) - (firstDy * secondDx);
-        if (Math.Abs(denominator) < GeometricTolerance)
+        T firstDx = NumOps.Subtract(firstStart.X, firstEnd.X);
+        T firstDy = NumOps.Subtract(firstStart.Y, firstEnd.Y);
+        T secondDx = NumOps.Subtract(secondStart.X, secondEnd.X);
+        T secondDy = NumOps.Subtract(secondStart.Y, secondEnd.Y);
+
+        T denominator = NumOps.Subtract(NumOps.Multiply(firstDx, secondDy), NumOps.Multiply(firstDy, secondDx));
+        if (NumOps.LessThan(NumOps.Abs(denominator), NumOps.FromDouble(GeometricTolerance)))
         {
             // Parallel or coincident edges: the crossing is degenerate, so fall back to the endpoint
             // that the caller was about to emit anyway.
             return firstEnd;
         }
 
-        double x = ((firstCross * secondDx) - (firstDx * secondCross)) / denominator;
-        double y = ((firstCross * secondDy) - (firstDy * secondCross)) / denominator;
+        T x = NumOps.Divide(NumOps.Subtract(NumOps.Multiply(firstCross, secondDx), NumOps.Multiply(firstDx, secondCross)), denominator);
+        T y = NumOps.Divide(NumOps.Subtract(NumOps.Multiply(firstCross, secondDy), NumOps.Multiply(firstDy, secondCross)), denominator);
         return (x, y);
     }
 }
