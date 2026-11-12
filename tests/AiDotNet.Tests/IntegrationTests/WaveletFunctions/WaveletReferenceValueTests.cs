@@ -75,7 +75,7 @@ public class WaveletReferenceValueTests
     {
         // m = 4: factor = 16 * 24 / sqrt(pi * 40320) = 1.0789368501515768 and i^4 = 1.
         // (1 - i)^-5 = 2^-2.5 * e^(i 5 pi / 4) = -0.125 - 0.125i, so Re psi(1) = -0.1348671062689471.
-        // (1 - 2i)^-5 = (41 + 38i) / 3125, giving Re psi(2) = 1.0789368501515768 * 41 / 3125.
+        // (1 - 2i)^-5 = (41 - 38i) / 3125, giving Re psi(2) = 1.0789368501515768 * 41 / 3125.
         var wavelet = new PaulWavelet<double>(order: 4);
         Assert.Equal(1.0789368501515768, wavelet.Calculate(0.0), 1e-9);
         Assert.Equal(-0.1348671062689471, wavelet.Calculate(1.0), 1e-9);
