@@ -112,8 +112,6 @@ public partial class MultiquadricInterpolation<T> : I2DInterpolation<T>
     /// </remarks>
     private void CalculateCoefficients()
     {
-        var engine = AiDotNetEngine.Current;
-        int n = _x.Length;
         Tensor<T> xs = _x.AsTensor();
         Tensor<T> ys = _y.AsTensor();
 

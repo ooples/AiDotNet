@@ -102,14 +102,15 @@ public class PairwiseRankingLoss<T> : LossFunctionBase<T>
 
     /// <summary>
     /// Computes a per-item extremity weight in [0, 1] for tail weighting: 0 at the median target,
-    /// 1 at the most extreme top/bottom target. Returns all-ones when tail weighting is disabled
-    /// or the spread is degenerate, so the loss reduces exactly to standard RankNet.
+    /// 1 at the most extreme top/bottom target. Returns all-zeros (every pair weight is then
+    /// (1 + 0)^power = 1) when tail weighting is disabled or the spread is degenerate, so the loss
+    /// reduces exactly to standard RankNet.
     /// </summary>
     private Tensor<T> ComputeExtremities(Tensor<T> actual)
     {
         int n = actual.Length;
 
-        if (_tailWeightPower == 0.0 || n == 0)
+        if (_tailWeightPower <= 0.0 || n == 0)
         {
             return new Tensor<T>(new[] { n });
         }
@@ -160,7 +161,7 @@ public class PairwiseRankingLoss<T> : LossFunctionBase<T>
             Engine.TensorBroadcastTo(Engine.Reshape(blockActual, columnShape), pairShape),
             Engine.TensorBroadcastTo(Engine.Reshape(actual, rowShape), pairShape));
 
-        if (_tailWeightPower == 0.0)
+        if (_tailWeightPower <= 0.0)
         {
             return winner;
         }
