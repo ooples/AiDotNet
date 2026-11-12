@@ -194,12 +194,15 @@ public partial class MbPAAdaptedModel<T, TInput, TOutput> : MetaLearningModelBas
     private static bool SameParameters(Vector<T> a, Vector<T> b)
     {
         if (a.Length != b.Length) return false;
-        var comparer = EqualityComparer<T>.Default;
-        for (int i = 0; i < a.Length; i++)
-        {
-            if (!comparer.Equals(a[i], b[i])) return false;
-        }
-        return true;
+        if (a.Length == 0) return true;
+
+        // Element-wise equality, with NaN matching NaN as EqualityComparer<T>.Default treats it.
+        var engine = AiDotNetEngine.Current;
+        var left = Tensor<T>.FromVector(a);
+        var right = Tensor<T>.FromVector(b);
+        var bothNaN = engine.TensorMultiply(engine.TensorNotEquals(left, left), engine.TensorNotEquals(right, right));
+        var same = engine.TensorMax(engine.TensorEquals(left, right), bothNaN);
+        return NumOps.Equals(engine.TensorSum(same), NumOps.FromDouble(a.Length));
     }
 
     /// <summary>q = f_gamma(x), sized to the head's feature dimension.</summary>
@@ -250,19 +253,10 @@ public partial class MbPAAdaptedModel<T, TInput, TOutput> : MetaLearningModelBas
         _ => null,
     };
 
-    private static Vector<T> TensorToVector(Tensor<T> tensor)
-    {
-        var result = new Vector<T>(tensor.Length);
-        for (int i = 0; i < tensor.Length; i++) result[i] = tensor[i];
-        return result;
-    }
+    private static Vector<T> TensorToVector(Tensor<T> tensor) => tensor.ToVector().Clone();
 
     private static Vector<T> MatrixFirstRow(Matrix<T> matrix)
-    {
-        var result = new Vector<T>(matrix.Columns);
-        for (int j = 0; j < matrix.Columns && matrix.Rows > 0; j++) result[j] = matrix[0, j];
-        return result;
-    }
+        => matrix.Rows > 0 ? matrix.GetRow(0) : new Vector<T>(matrix.Columns);
 
     /// <summary>
     /// Packs per-example predictions back into the caller's <c>TOutput</c> shape.
@@ -285,8 +279,7 @@ public partial class MbPAAdaptedModel<T, TInput, TOutput> : MetaLearningModelBas
             // batch at all, so that combination is refused rather than silently truncated.
             if (outputDim <= 1)
             {
-                var packed = new Vector<T>(rows.Count);
-                for (int i = 0; i < rows.Count; i++) packed[i] = rows[i].Length > 0 ? rows[i][0] : NumOps.Zero;
+                var packed = PackRows(rows, 1).ToVector();
                 return (TOutput)(object)packed;
             }
 
@@ -304,21 +297,13 @@ public partial class MbPAAdaptedModel<T, TInput, TOutput> : MetaLearningModelBas
 
         if (typeof(TOutput) == typeof(Matrix<T>))
         {
-            var packed = new Matrix<T>(rows.Count, outputDim);
-            for (int i = 0; i < rows.Count; i++)
-            {
-                for (int j = 0; j < outputDim && j < rows[i].Length; j++) packed[i, j] = rows[i][j];
-            }
+            var packed = PackRows(rows, outputDim).ToMatrix();
             return (TOutput)(object)packed;
         }
 
         if (typeof(TOutput) == typeof(Tensor<T>))
         {
-            var packed = new Tensor<T>([rows.Count, outputDim]);
-            for (int i = 0; i < rows.Count; i++)
-            {
-                for (int j = 0; j < outputDim && j < rows[i].Length; j++) packed[i, j] = rows[i][j];
-            }
+            var packed = PackRows(rows, outputDim);
             return (TOutput)(object)packed;
         }
 
@@ -328,6 +313,15 @@ public partial class MbPAAdaptedModel<T, TInput, TOutput> : MetaLearningModelBas
         throw new NotSupportedException(
             $"MbPA cannot assemble predictions into {typeof(TOutput).Name}. " +
             "Use Vector<T>, Matrix<T> or Tensor<T> as the meta-learning output type.");
+    }
+
+    /// <summary>Stacks the rows into [rows, width], each cut or zero-padded to the width.</summary>
+    private static Tensor<T> PackRows(List<Vector<T>> rows, int width)
+    {
+        if (rows.Count == 0 || width == 0) return new Tensor<T>(new[] { rows.Count, width });
+        var resized = new List<Vector<T>>(rows.Count);
+        foreach (var row in rows) resized.Add(MbPAConversions<T>.ResizeTo(row, width));
+        return Tensor<T>.FromVector(Vector<T>.Concatenate(resized), new[] { rows.Count, width });
     }
 
     // GetParameters restated a fold the base now derives from generated component registration.
