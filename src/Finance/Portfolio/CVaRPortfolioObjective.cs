@@ -37,6 +37,12 @@ public class CVaRPortfolioObjective<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 
+    private static IEngine Engine => AiDotNetEngine.Current;
+
+    /// <summary>The loss samples sorted ascending.</summary>
+    private static Tensor<T> SortedLosses(Vector<T> losses)
+        => Engine.TensorSort(Tensor<T>.FromVector(losses), 0, false).Values;
+
     /// <summary>
     /// Conventional CVaR confidence level, used as the default.
     /// </summary>
@@ -72,7 +78,7 @@ public class CVaRPortfolioObjective<T>
     /// taken over. Feeding returns directly would put CVaR on the profitable tail and train the model
     /// to avoid gains.
     /// </remarks>
-    public double Loss(Vector<T> weights, Vector<T> returns)
+    public T Loss(Vector<T> weights, Vector<T> returns)
     {
         if (weights == null) throw new ArgumentNullException(nameof(weights));
         if (returns == null) throw new ArgumentNullException(nameof(returns));
@@ -81,11 +87,8 @@ public class CVaRPortfolioObjective<T>
                 $"Weights and returns must align; got {weights.Length} and {returns.Length}.",
                 nameof(returns));
 
-        double portfolioReturn = 0.0;
-        for (int i = 0; i < weights.Length; i++)
-            portfolioReturn += NumOps.ToDouble(weights[i]) * NumOps.ToDouble(returns[i]);
-
-        return -portfolioReturn;
+        if (weights.Length == 0) return NumOps.Negate(NumOps.Zero);
+        return NumOps.Negate(Engine.DotProduct(weights, returns));
     }
 
     /// <summary>
@@ -96,14 +99,13 @@ public class CVaRPortfolioObjective<T>
     /// which is the convention the Rockafellar-Uryasev dual is stated against, so
     /// <see cref="ConditionalValueAtRisk"/> and this function agree on where the tail starts.
     /// </remarks>
-    public double ValueAtRisk(double[] losses)
+    public T ValueAtRisk(Vector<T> losses)
     {
         if (losses == null) throw new ArgumentNullException(nameof(losses));
         if (losses.Length == 0)
             throw new ArgumentException("At least one loss sample is required.", nameof(losses));
 
-        var sorted = (double[])losses.Clone();
-        Array.Sort(sorted);
+        var sorted = SortedLosses(losses).AsSpan();
 
         int index = (int)Math.Ceiling(_alpha * sorted.Length) - 1;
         if (index < 0) index = 0;
@@ -134,35 +136,37 @@ public class CVaRPortfolioObjective<T>
     /// boundary.
     /// </para>
     /// </remarks>
-    public double ConditionalValueAtRisk(double[] losses)
+    public T ConditionalValueAtRisk(Vector<T> losses)
     {
         if (losses == null) throw new ArgumentNullException(nameof(losses));
         if (losses.Length == 0)
             throw new ArgumentException("At least one loss sample is required.", nameof(losses));
 
-        var sorted = (double[])losses.Clone();
-        Array.Sort(sorted);
+        var sortedTensor = SortedLosses(losses);
+        int count = sortedTensor.Length;
 
         // The tail size is fractional in general. Averaging over ceil(tailSize) whole observations
         // dilutes the boundary loss by counting it as a full observation, which is exactly where this
         // used to disagree with DualObjective. Weighting it by its fractional share reproduces the
         // dual at every sample size.
-        double tailSize = (1.0 - _alpha) * sorted.Length;
+        double tailSize = (1.0 - _alpha) * count;
         if (tailSize < 1.0) tailSize = 1.0;
-        if (tailSize > sorted.Length) tailSize = sorted.Length;
+        if (tailSize > count) tailSize = count;
 
         int wholeCount = (int)Math.Floor(tailSize);
         double boundaryWeight = tailSize - wholeCount;
 
-        double sum = 0.0;
-        for (int i = sorted.Length - wholeCount; i < sorted.Length; i++) sum += sorted[i];
+        T sum = wholeCount > 0
+            ? Engine.TensorSum(Engine.TensorNarrow(sortedTensor, 0, count - wholeCount, wholeCount))
+            : NumOps.Zero;
 
         // The observation just inside the tail boundary, counted for the fraction of it that the tail
         // actually covers.
-        int boundaryIndex = sorted.Length - wholeCount - 1;
-        if (boundaryWeight > 0.0 && boundaryIndex >= 0) sum += boundaryWeight * sorted[boundaryIndex];
+        int boundaryIndex = count - wholeCount - 1;
+        if (boundaryWeight > 0.0 && boundaryIndex >= 0)
+            sum = NumOps.Add(sum, NumOps.Multiply(NumOps.FromDouble(boundaryWeight), sortedTensor.AsSpan()[boundaryIndex]));
 
-        return sum / tailSize;
+        return NumOps.Divide(sum, NumOps.FromDouble(tailSize));
     }
 
     /// <summary>
@@ -173,26 +177,24 @@ public class CVaRPortfolioObjective<T>
     /// This is the form that makes CVaR trainable by gradient descent: it is convex in nu and its
     /// hinge is differentiable almost everywhere, whereas sorting to find a quantile is not.
     /// </remarks>
-    public double DualObjective(double[] losses, double nu)
+    public T DualObjective(Vector<T> losses, T nu)
     {
         if (losses == null) throw new ArgumentNullException(nameof(losses));
         if (losses.Length == 0)
             throw new ArgumentException("At least one loss sample is required.", nameof(losses));
 
-        double excess = 0.0;
-        for (int i = 0; i < losses.Length; i++)
-        {
-            double d = losses[i] - nu;
-            if (d > 0.0) excess += d;
-        }
+        // Only the positive part of each excess counts (a NaN excess counts as nothing, as before).
+        var d = Engine.TensorSubtractScalar(Tensor<T>.FromVector(losses), nu);
+        T excess = Engine.TensorSum(Engine.TensorWhere(
+            Engine.TensorGreaterThan(d, NumOps.Zero), d, Engine.TensorZerosLike(d)));
 
-        return nu + (excess / (losses.Length * (1.0 - _alpha)));
+        return NumOps.Add(nu, NumOps.Divide(excess, NumOps.FromDouble(losses.Length * (1.0 - _alpha))));
     }
 
     /// <summary>
     /// The nu minimizing <see cref="DualObjective"/>, which is the VaR of the sample.
     /// </summary>
-    public double OptimalNu(double[] losses) => ValueAtRisk(losses);
+    public T OptimalNu(Vector<T> losses) => ValueAtRisk(losses);
 
     /// <summary>
     /// Long-only, fully invested weights: <c>softmax(scores / tau)</c>.
@@ -223,21 +225,10 @@ public class CVaRPortfolioObjective<T>
             throw new ArgumentOutOfRangeException(nameof(temperature), temperature,
                 "temperature must be finite and positive.");
 
-        double max = double.NegativeInfinity;
-        for (int i = 0; i < scores.Length; i++)
-            max = Math.Max(max, NumOps.ToDouble(scores[i]) / temperature);
-
-        double sum = 0.0;
-        var exps = new double[scores.Length];
-        for (int i = 0; i < scores.Length; i++)
-        {
-            exps[i] = Math.Exp((NumOps.ToDouble(scores[i]) / temperature) - max);
-            sum += exps[i];
-        }
-
-        var result = new Vector<T>(scores.Length);
-        for (int i = 0; i < scores.Length; i++) result[i] = NumOps.FromDouble(exps[i] / sum);
-        return result;
+        // Max-subtracted tempered softmax, so a tiny temperature cannot overflow exp.
+        var scaled = Engine.TensorDivideScalar(Tensor<T>.FromVector(scores), NumOps.FromDouble(temperature));
+        var exps = Engine.TensorExp(Engine.TensorSubtractScalar(scaled, Engine.TensorMaxValue(scaled)));
+        return Engine.TensorDivideScalar(exps, Engine.TensorSum(exps)).ToVector();
     }
 
     /// <summary>
@@ -248,7 +239,7 @@ public class CVaRPortfolioObjective<T>
     /// Halved because a rebalance both sells and buys, so summing the absolute differences would
     /// count each trade twice.
     /// </remarks>
-    public double Turnover(Vector<T> previousWeights, Vector<T> newWeights)
+    public T Turnover(Vector<T> previousWeights, Vector<T> newWeights)
     {
         if (previousWeights == null) throw new ArgumentNullException(nameof(previousWeights));
         if (newWeights == null) throw new ArgumentNullException(nameof(newWeights));
@@ -257,18 +248,18 @@ public class CVaRPortfolioObjective<T>
                 $"Allocations must align; got {previousWeights.Length} and {newWeights.Length}.",
                 nameof(newWeights));
 
-        double sum = 0.0;
-        for (int i = 0; i < newWeights.Length; i++)
-            sum += Math.Abs(NumOps.ToDouble(newWeights[i]) - NumOps.ToDouble(previousWeights[i]));
+        if (newWeights.Length == 0) return NumOps.Zero;
+        T sum = Engine.TensorSum(Engine.TensorAbs(
+            Engine.TensorSubtract(Tensor<T>.FromVector(newWeights), Tensor<T>.FromVector(previousWeights))));
 
-        return 0.5 * sum;
+        return NumOps.Multiply(NumOps.FromDouble(0.5), sum);
     }
 
     /// <summary>
     /// Transaction cost of a rebalance, in return units, at the given cost in basis points.
     /// For evaluation only; the reference implementation trains with 0 bps.
     /// </summary>
-    public double TransactionCost(Vector<T> previousWeights, Vector<T> newWeights, double basisPoints)
+    public T TransactionCost(Vector<T> previousWeights, Vector<T> newWeights, double basisPoints)
     {
         // Non-finite is rejected, not just NaN (net471-safe: no double.IsFinite). PositiveInfinity
         // passed the old guard and propagated infinity into the cost for any non-zero turnover, and
@@ -278,6 +269,6 @@ public class CVaRPortfolioObjective<T>
             throw new ArgumentOutOfRangeException(nameof(basisPoints), basisPoints,
                 "basisPoints must be a finite, non-negative value.");
 
-        return Turnover(previousWeights, newWeights) * (basisPoints / 10000.0);
+        return NumOps.Multiply(Turnover(previousWeights, newWeights), NumOps.FromDouble(basisPoints / 10000.0));
     }
 }
