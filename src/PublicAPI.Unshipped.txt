@@ -22565,3 +22565,27 @@ override AiDotNet.Diffusion.LatentDiffusionModelBase<T>.IsBatchedTrainingSample(
 virtual AiDotNet.Diffusion.DiffusionModelBase<T>.IsBatchedTrainingSample(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! sample) -> bool
 *REMOVED*AiDotNet.Document.Options.DocBankOptions.LearningRate.get -> double
 AiDotNet.Document.Options.DocBankOptions.LearningRate.get -> double?
+*REMOVED*AiDotNet.Preprocessing.FeatureSelection.Information.MaximalInformationCoefficientSelector<T>.MICScores.get -> double[]?
+AiDotNet.Preprocessing.FeatureSelection.Information.MaximalInformationCoefficientSelector<T>.MICScores.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
+AiDotNet.Preprocessing.FeatureSelection.Information.MaximalInformationCoefficientSelector<T>.Alpha.get -> double
+AiDotNet.Preprocessing.FeatureSelection.Information.MaximalInformationCoefficientSelector<T>.C.get -> double
+*REMOVED*AiDotNet.Preprocessing.FeatureSelection.Nonlinear.MaximalInformationCoefficientSelector<T>.MICValues.get -> double[]?
+AiDotNet.Preprocessing.FeatureSelection.Nonlinear.MaximalInformationCoefficientSelector<T>.MICValues.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
+*REMOVED*AiDotNet.Preprocessing.FeatureSelection.Nonlinear.MaximalInformationCoefficientSelector<T>.MaxBins.get -> int
+*REMOVED*AiDotNet.Preprocessing.FeatureSelection.Nonlinear.MaximalInformationCoefficientSelector<T>.MaximalInformationCoefficientSelector(int nFeaturesToSelect = 10, int maxBins = 15, int[]? columnIndices = null) -> void
+AiDotNet.Preprocessing.FeatureSelection.Nonlinear.MaximalInformationCoefficientSelector<T>.MaximalInformationCoefficientSelector(int nFeaturesToSelect = 10, double alpha = 0.6, double c = 15, int[]? columnIndices = null) -> void
+AiDotNet.Preprocessing.FeatureSelection.Nonlinear.MaximalInformationCoefficientSelector<T>.Alpha.get -> double
+AiDotNet.Preprocessing.FeatureSelection.Nonlinear.MaximalInformationCoefficientSelector<T>.C.get -> double
+*REMOVED*AiDotNet.Preprocessing.FeatureSelection.Nonparametric.MaximalInformationSelector<T>.MICScores.get -> double[]?
+AiDotNet.Preprocessing.FeatureSelection.Nonparametric.MaximalInformationSelector<T>.MICScores.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
+*REMOVED*AiDotNet.Preprocessing.FeatureSelection.Nonparametric.MaximalInformationSelector<T>.MaxBins.get -> int
+*REMOVED*AiDotNet.Preprocessing.FeatureSelection.Nonparametric.MaximalInformationSelector<T>.MaximalInformationSelector(int nFeaturesToSelect = 10, int maxBins = 15, int[]? columnIndices = null) -> void
+AiDotNet.Preprocessing.FeatureSelection.Nonparametric.MaximalInformationSelector<T>.MaximalInformationSelector(int nFeaturesToSelect = 10, double alpha = 0.6, double c = 15, int[]? columnIndices = null) -> void
+AiDotNet.Preprocessing.FeatureSelection.Nonparametric.MaximalInformationSelector<T>.Alpha.get -> double
+AiDotNet.Preprocessing.FeatureSelection.Nonparametric.MaximalInformationSelector<T>.C.get -> double
+*REMOVED*AiDotNet.Preprocessing.FeatureSelection.Online.OSFS<T>.Epsilon.get -> double
+*REMOVED*AiDotNet.Preprocessing.FeatureSelection.Online.OSFS<T>.FeatureScores.get -> double[]?
+AiDotNet.Preprocessing.FeatureSelection.Online.OSFS<T>.FeatureScores.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
+*REMOVED*AiDotNet.Preprocessing.FeatureSelection.Online.OSFS<T>.OSFS(int nFeaturesToSelect = 10, double alpha = 0.05, double epsilon = 0.01, int[]? columnIndices = null) -> void
+AiDotNet.Preprocessing.FeatureSelection.Online.OSFS<T>.OSFS(int nFeaturesToSelect = 10, double alpha = 0.05, int maxConditioningSetSize = 3, int[]? columnIndices = null) -> void
+AiDotNet.Preprocessing.FeatureSelection.Online.OSFS<T>.MaxConditioningSetSize.get -> int
