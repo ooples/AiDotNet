@@ -130,27 +130,7 @@ public class TabRClassifier<T> : TabRBase<T>
     {
         var probabilities = PredictProbabilities(features);
         int batchSize = probabilities.Shape[0];
-        var predictions = new int[batchSize];
-
-        for (int b = 0; b < batchSize; b++)
-        {
-            int maxIdx = 0;
-            var maxProb = probabilities[b * _numClasses + 0];
-
-            for (int c = 1; c < _numClasses; c++)
-            {
-                var prob = probabilities[b * _numClasses + c];
-                if (NumOps.Compare(prob, maxProb) > 0)
-                {
-                    maxProb = prob;
-                    maxIdx = c;
-                }
-            }
-
-            predictions[b] = maxIdx;
-        }
-
-        return predictions;
+        return TabularMetrics.ArgMaxRows(probabilities, batchSize, _numClasses).ToArray();
     }
 
     /// <summary>
@@ -159,19 +139,8 @@ public class TabRClassifier<T> : TabRBase<T>
     public T ComputeCrossEntropyLoss(Tensor<T> probabilities, int[] targets)
     {
         int batchSize = probabilities.Shape[0];
-        var totalLoss = NumOps.Zero;
         var epsilon = NumOps.FromDouble(1e-15);
-
-        for (int b = 0; b < batchSize; b++)
-        {
-            int targetClass = targets[b];
-            var prob = probabilities[b * _numClasses + targetClass];
-            var safeProb = NumOps.Add(prob, epsilon);
-            var loss = NumOps.Negate(NumOps.Log(safeProb));
-            totalLoss = NumOps.Add(totalLoss, loss);
-        }
-
-        return NumOps.Divide(totalLoss, NumOps.FromDouble(batchSize));
+        return TabularMetrics.MeanNegativeLogLikelihood(probabilities, Vector<int>.Wrap(targets), batchSize, _numClasses, epsilon);
     }
 
     /// <summary>
@@ -243,15 +212,24 @@ public class TabRClassifier<T> : TabRBase<T>
         int batchSize = features.Shape[0];
         int k = Options.NumNeighbors;
 
+        // Sort each sample's neighbors by attention weight (descending). The order is computed as a stable
+        // sort, which is what List.Sort's insertion-sort path produced for the usual k <= 16 neighbors.
+        var weights = TabularMetrics.Flat(attentionWeights, batchSize * k).Reshape(batchSize, k);
+        var order = TieBreakArgMax.StableDescendingOrder(weights);
+        var sortedWeights = Engine.TensorTakeAlongDim(weights, order, 1).ToArray();
+        var neighbors = Tensor<int>.FromMatrix(neighborIndices);
+        neighbors = Engine.TensorNarrow(Engine.TensorNarrow(neighbors, 0, 0, batchSize), 1, 0, k);
+        var sortedNeighbors = Engine.TensorTakeAlongDim(neighbors, order, 1).ToArray();
+
+        // Packing into the (index, weight) tuples of the public return type is pure data movement.
         for (int b = 0; b < batchSize; b++)
         {
-            var sampleExplanation = new List<(int, T)>();
+            var sampleExplanation = new List<(int, T)>(k);
             for (int j = 0; j < k; j++)
             {
-                sampleExplanation.Add((neighborIndices[b, j], attentionWeights[b * k + j]));
+                sampleExplanation.Add((sortedNeighbors[b * k + j], sortedWeights[b * k + j]));
             }
-            // Sort by attention weight (descending)
-            sampleExplanation.Sort((a, b) => NumOps.Compare(b.Item2, a.Item2));
+
             explanations.Add(sampleExplanation);
         }
 

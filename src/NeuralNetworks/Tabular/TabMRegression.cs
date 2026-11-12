@@ -229,33 +229,7 @@ public class TabMRegression<T> : TabMBase<T>
     {
         var predictions = Predict(features);
 
-        // Compute target mean
-        var targetMean = NumOps.Zero;
-        for (int i = 0; i < targets.Length; i++)
-        {
-            targetMean = NumOps.Add(targetMean, targets[i]);
-        }
-        targetMean = NumOps.Divide(targetMean, NumOps.FromDouble(targets.Length));
-
-        // Compute SS_res and SS_tot
-        var ssRes = NumOps.Zero;
-        var ssTot = NumOps.Zero;
-
-        for (int i = 0; i < targets.Length; i++)
-        {
-            var residual = NumOps.Subtract(targets[i], predictions[i]);
-            ssRes = NumOps.Add(ssRes, NumOps.Multiply(residual, residual));
-
-            var deviation = NumOps.Subtract(targets[i], targetMean);
-            ssTot = NumOps.Add(ssTot, NumOps.Multiply(deviation, deviation));
-        }
-
-        if (NumOps.Compare(ssTot, NumOps.Zero) == 0)
-        {
-            return NumOps.Compare(ssRes, NumOps.Zero) == 0 ? NumOps.One : NumOps.Zero;
-        }
-
-        return NumOps.Subtract(NumOps.One, NumOps.Divide(ssRes, ssTot));
+        return TabularMetrics.R2Score(predictions, targets);
     }
 
     /// <summary>
@@ -288,28 +262,25 @@ public class TabMRegression<T> : TabMBase<T>
     public T ComputeNLL(Tensor<T> features, Tensor<T> targets)
     {
         var (predictions, uncertainty) = PredictWithUncertainty(features);
-        var totalNLL = NumOps.Zero;
+        var engine = Engine;
+        int n = predictions.Length;
         var epsilon = NumOps.FromDouble(1e-6);  // Minimum variance
         var logTwoPi = NumOps.FromDouble(Math.Log(2 * Math.PI));
         var half = NumOps.FromDouble(0.5);
 
-        for (int i = 0; i < predictions.Length; i++)
-        {
-            var variance = NumOps.Multiply(uncertainty[i], uncertainty[i]);
-            variance = NumOps.Add(variance, epsilon);  // Add small value for stability
+        var sigma = TabularMetrics.Flat(uncertainty, n);
+        var variance = engine.TensorAddScalar(engine.TensorMultiply(sigma, sigma), epsilon);  // Add small value for stability
 
-            var diff = NumOps.Subtract(targets[i], predictions[i]);
-            var squaredDiff = NumOps.Multiply(diff, diff);
+        var diff = engine.TensorSubtract(TabularMetrics.Flat(targets, n), TabularMetrics.Flat(predictions, n));
+        var squaredDiff = engine.TensorMultiply(diff, diff);
 
-            // NLL = 0.5 * (log(2π) + log(var) + (y - μ)² / var)
-            var term1 = NumOps.Multiply(half, logTwoPi);
-            var term2 = NumOps.Multiply(half, NumOps.Log(variance));
-            var term3 = NumOps.Multiply(half, NumOps.Divide(squaredDiff, variance));
+        // NLL = 0.5 * (log(2π) + log(var) + (y - μ)² / var)
+        var term1 = NumOps.Multiply(half, logTwoPi);
+        var term2 = engine.TensorMultiplyScalar(engine.TensorLog(variance), half);
+        var term3 = engine.TensorMultiplyScalar(engine.TensorDivide(squaredDiff, variance), half);
+        var perSample = engine.TensorAddScalar(engine.TensorAdd(term2, term3), term1);
 
-            totalNLL = NumOps.Add(totalNLL, NumOps.Add(NumOps.Add(term1, term2), term3));
-        }
-
-        return NumOps.Divide(totalNLL, NumOps.FromDouble(predictions.Length));
+        return NumOps.Divide(engine.TensorSum(perSample), NumOps.FromDouble(n));
     }
 
     /// <summary>
@@ -337,23 +308,14 @@ public class TabMRegression<T> : TabMBase<T>
     {
         var (predictions, uncertainty) = PredictWithUncertainty(features);
         int n = predictions.Length;
+        var engine = Engine;
 
-        int withinOneSigma = 0;
-        int withinTwoSigma = 0;
+        var error = engine.TensorAbs(engine.TensorSubtract(
+            TabularMetrics.Flat(predictions, n), TabularMetrics.Flat(targets, n)));
+        var sigma = TabularMetrics.Flat(uncertainty, n);
 
-        for (int i = 0; i < n; i++)
-        {
-            var error = NumOps.Abs(NumOps.Subtract(predictions[i], targets[i]));
-
-            if (NumOps.Compare(error, uncertainty[i]) <= 0)
-            {
-                withinOneSigma++;
-            }
-            if (NumOps.Compare(error, NumOps.Multiply(uncertainty[i], NumOps.FromDouble(2.0))) <= 0)
-            {
-                withinTwoSigma++;
-            }
-        }
+        int withinOneSigma = TabularMetrics.CountCompareAtMost(error, sigma);
+        int withinTwoSigma = TabularMetrics.CountCompareAtMost(error, engine.TensorMultiplyScalar(sigma, NumOps.FromDouble(2.0)));
 
         return new Dictionary<string, T>
         {

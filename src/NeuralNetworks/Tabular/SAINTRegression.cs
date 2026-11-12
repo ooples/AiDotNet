@@ -116,15 +116,7 @@ public class SAINTRegression<T> : SAINTBase<T>
             throw new ArgumentException("Predictions and targets must have the same size");
         }
 
-        var totalLoss = NumOps.Zero;
-
-        for (int i = 0; i < predictions.Length; i++)
-        {
-            var diff = NumOps.Subtract(predictions[i], targets[i]);
-            totalLoss = NumOps.Add(totalLoss, NumOps.Multiply(diff, diff));
-        }
-
-        return NumOps.Divide(totalLoss, NumOps.FromDouble(predictions.Length));
+        return TabularMetrics.MeanSquaredError(predictions, targets);
     }
 
     /// <summary>
@@ -137,15 +129,7 @@ public class SAINTRegression<T> : SAINTBase<T>
             throw new ArgumentException("Predictions and targets must have the same size");
         }
 
-        var totalLoss = NumOps.Zero;
-
-        for (int i = 0; i < predictions.Length; i++)
-        {
-            var diff = NumOps.Subtract(predictions[i], targets[i]);
-            totalLoss = NumOps.Add(totalLoss, NumOps.Abs(diff));
-        }
-
-        return NumOps.Divide(totalLoss, NumOps.FromDouble(predictions.Length));
+        return TabularMetrics.MeanAbsoluteError(predictions, targets);
     }
 
     /// <summary>
@@ -168,33 +152,7 @@ public class SAINTRegression<T> : SAINTBase<T>
     {
         var predictions = Predict(numericalFeatures, categoricalIndices);
 
-        // Compute target mean
-        var targetMean = NumOps.Zero;
-        for (int i = 0; i < targets.Length; i++)
-        {
-            targetMean = NumOps.Add(targetMean, targets[i]);
-        }
-        targetMean = NumOps.Divide(targetMean, NumOps.FromDouble(targets.Length));
-
-        // Compute SS_res and SS_tot
-        var ssRes = NumOps.Zero;
-        var ssTot = NumOps.Zero;
-
-        for (int i = 0; i < targets.Length; i++)
-        {
-            var residual = NumOps.Subtract(targets[i], predictions[i]);
-            ssRes = NumOps.Add(ssRes, NumOps.Multiply(residual, residual));
-
-            var deviation = NumOps.Subtract(targets[i], targetMean);
-            ssTot = NumOps.Add(ssTot, NumOps.Multiply(deviation, deviation));
-        }
-
-        if (NumOps.Compare(ssTot, NumOps.Zero) == 0)
-        {
-            return NumOps.Compare(ssRes, NumOps.Zero) == 0 ? NumOps.One : NumOps.Zero;
-        }
-
-        return NumOps.Subtract(NumOps.One, NumOps.Divide(ssRes, ssTot));
+        return TabularMetrics.R2Score(predictions, targets);
     }
 
     /// <summary>

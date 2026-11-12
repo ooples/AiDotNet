@@ -122,15 +122,7 @@ public class TabRRegression<T> : TabRBase<T>
             throw new ArgumentException("Predictions and targets must have the same size");
         }
 
-        var totalLoss = NumOps.Zero;
-
-        for (int i = 0; i < predictions.Length; i++)
-        {
-            var diff = NumOps.Subtract(predictions[i], targets[i]);
-            totalLoss = NumOps.Add(totalLoss, NumOps.Multiply(diff, diff));
-        }
-
-        return NumOps.Divide(totalLoss, NumOps.FromDouble(predictions.Length));
+        return TabularMetrics.MeanSquaredError(predictions, targets);
     }
 
     /// <summary>
@@ -143,15 +135,7 @@ public class TabRRegression<T> : TabRBase<T>
             throw new ArgumentException("Predictions and targets must have the same size");
         }
 
-        var totalLoss = NumOps.Zero;
-
-        for (int i = 0; i < predictions.Length; i++)
-        {
-            var diff = NumOps.Subtract(predictions[i], targets[i]);
-            totalLoss = NumOps.Add(totalLoss, NumOps.Abs(diff));
-        }
-
-        return NumOps.Divide(totalLoss, NumOps.FromDouble(predictions.Length));
+        return TabularMetrics.MeanAbsoluteError(predictions, targets);
     }
 
     /// <summary>
@@ -179,33 +163,7 @@ public class TabRRegression<T> : TabRBase<T>
     {
         var predictions = Predict(features);
 
-        // Compute target mean
-        var targetMean = NumOps.Zero;
-        for (int i = 0; i < targets.Length; i++)
-        {
-            targetMean = NumOps.Add(targetMean, targets[i]);
-        }
-        targetMean = NumOps.Divide(targetMean, NumOps.FromDouble(targets.Length));
-
-        // Compute SS_res and SS_tot
-        var ssRes = NumOps.Zero;
-        var ssTot = NumOps.Zero;
-
-        for (int i = 0; i < targets.Length; i++)
-        {
-            var residual = NumOps.Subtract(targets[i], predictions[i]);
-            ssRes = NumOps.Add(ssRes, NumOps.Multiply(residual, residual));
-
-            var deviation = NumOps.Subtract(targets[i], targetMean);
-            ssTot = NumOps.Add(ssTot, NumOps.Multiply(deviation, deviation));
-        }
-
-        if (NumOps.Compare(ssTot, NumOps.Zero) == 0)
-        {
-            return NumOps.Compare(ssRes, NumOps.Zero) == 0 ? NumOps.One : NumOps.Zero;
-        }
-
-        return NumOps.Subtract(NumOps.One, NumOps.Divide(ssRes, ssTot));
+        return TabularMetrics.R2Score(predictions, targets);
     }
 
     /// <summary>
@@ -252,15 +210,24 @@ public class TabRRegression<T> : TabRBase<T>
         int batchSize = features.Shape[0];
         int k = Options.NumNeighbors;
 
+        // Sort each sample's neighbors by attention weight (descending). The order is computed as a stable
+        // sort, which is what List.Sort's insertion-sort path produced for the usual k <= 16 neighbors.
+        var weights = TabularMetrics.Flat(attentionWeights, batchSize * k).Reshape(batchSize, k);
+        var order = TieBreakArgMax.StableDescendingOrder(weights);
+        var sortedWeights = Engine.TensorTakeAlongDim(weights, order, 1).ToArray();
+        var neighbors = Tensor<int>.FromMatrix(neighborIndices);
+        neighbors = Engine.TensorNarrow(Engine.TensorNarrow(neighbors, 0, 0, batchSize), 1, 0, k);
+        var sortedNeighbors = Engine.TensorTakeAlongDim(neighbors, order, 1).ToArray();
+
+        // Packing into the (index, weight) tuples of the public return type is pure data movement.
         for (int b = 0; b < batchSize; b++)
         {
-            var sampleExplanation = new List<(int, T)>();
+            var sampleExplanation = new List<(int, T)>(k);
             for (int j = 0; j < k; j++)
             {
-                sampleExplanation.Add((neighborIndices[b, j], attentionWeights[b * k + j]));
+                sampleExplanation.Add((sortedNeighbors[b * k + j], sortedWeights[b * k + j]));
             }
-            // Sort by attention weight (descending)
-            sampleExplanation.Sort((a, b) => NumOps.Compare(b.Item2, a.Item2));
+
             explanations.Add(sampleExplanation);
         }
 
@@ -295,19 +262,12 @@ public class TabRRegression<T> : TabRBase<T>
 
         // For now, use a simple heuristic based on attention weight concentration
         // A proper implementation would use neighbor target variance
-        var lower = new Tensor<T>([batchSize, outputDim]);
-        var upper = new Tensor<T>([batchSize, outputDim]);
-
         // Simple placeholder: ±10% of prediction value
         var margin = NumOps.FromDouble(0.1);
 
-        for (int i = 0; i < predictions.Length; i++)
-        {
-            var pred = predictions[i];
-            var delta = NumOps.Multiply(NumOps.Abs(pred), margin);
-            lower[i] = NumOps.Subtract(pred, delta);
-            upper[i] = NumOps.Add(pred, delta);
-        }
+        var delta = Engine.TensorMultiplyScalar(Engine.TensorAbs(predictions), margin);
+        var lower = Engine.TensorSubtract(predictions, delta).Reshape(batchSize, outputDim);
+        var upper = Engine.TensorAdd(predictions, delta).Reshape(batchSize, outputDim);
 
         return (predictions, lower, upper);
     }

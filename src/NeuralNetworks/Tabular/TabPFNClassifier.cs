@@ -98,18 +98,10 @@ public class TabPFNClassifier<T> : TabPFNBase<T>
     /// <param name="labels">Training labels as class indices.</param>
     public void SetContext(Tensor<T> features, Vector<int> labels)
     {
-        // Convert integer labels to one-hot encoded tensor
+        // Convert integer labels to one-hot encoded tensor (labels outside [0, numClasses) stay all-zero rows)
         int numSamples = features.Shape[0];
-        var labelTensor = new Tensor<T>([numSamples, _numClasses]);
-
-        for (int i = 0; i < numSamples; i++)
-        {
-            int classIdx = labels[i];
-            if (classIdx >= 0 && classIdx < _numClasses)
-            {
-                labelTensor[i * _numClasses + classIdx] = NumOps.One;
-            }
-        }
+        var labelTensor = Engine.TensorOneHot<T>(
+            Tensor<int>.FromVector(labels.GetSubVector(0, numSamples)), _numClasses).Reshape(numSamples, _numClasses);
 
         base.SetContext(features, labelTensor);
     }
@@ -143,27 +135,7 @@ public class TabPFNClassifier<T> : TabPFNBase<T>
     {
         var probabilities = PredictProbabilities(numericalFeatures, categoricalIndices);
         int batchSize = probabilities.Shape[0];
-        var predictions = new Vector<int>(batchSize);
-
-        for (int b = 0; b < batchSize; b++)
-        {
-            int maxIdx = 0;
-            var maxProb = probabilities[b * _numClasses + 0];
-
-            for (int c = 1; c < _numClasses; c++)
-            {
-                var prob = probabilities[b * _numClasses + c];
-                if (NumOps.Compare(prob, maxProb) > 0)
-                {
-                    maxProb = prob;
-                    maxIdx = c;
-                }
-            }
-
-            predictions[b] = maxIdx;
-        }
-
-        return predictions;
+        return TabularMetrics.ArgMaxRows(probabilities, batchSize, _numClasses);
     }
 
     /// <summary>
@@ -186,40 +158,15 @@ public class TabPFNClassifier<T> : TabPFNBase<T>
             var probs = PredictProbabilities(numericalFeatures, categoricalIndices);
 
             // Accumulate probabilities
-            for (int i = 0; i < probs.Length; i++)
-            {
-                aggregatedProbs[i] = NumOps.Add(aggregatedProbs[i], probs[i]);
-            }
+            aggregatedProbs = Engine.TensorAdd(aggregatedProbs, probs.Reshape(batchSize, _numClasses));
         }
 
         // Average
         var scale = NumOps.FromDouble(1.0 / numEnsembles);
-        for (int i = 0; i < aggregatedProbs.Length; i++)
-        {
-            aggregatedProbs[i] = NumOps.Multiply(aggregatedProbs[i], scale);
-        }
+        aggregatedProbs = Engine.TensorMultiplyScalar(aggregatedProbs, scale);
 
         // Get predictions
-        var predictions = new Vector<int>(batchSize);
-        for (int b = 0; b < batchSize; b++)
-        {
-            int maxIdx = 0;
-            var maxProb = aggregatedProbs[b * _numClasses + 0];
-
-            for (int c = 1; c < _numClasses; c++)
-            {
-                var prob = aggregatedProbs[b * _numClasses + c];
-                if (NumOps.Compare(prob, maxProb) > 0)
-                {
-                    maxProb = prob;
-                    maxIdx = c;
-                }
-            }
-
-            predictions[b] = maxIdx;
-        }
-
-        return predictions;
+        return TabularMetrics.ArgMaxRows(aggregatedProbs, batchSize, _numClasses);
     }
 
     /// <summary>
@@ -228,19 +175,8 @@ public class TabPFNClassifier<T> : TabPFNBase<T>
     public T ComputeCrossEntropyLoss(Tensor<T> probabilities, Vector<int> targets)
     {
         int batchSize = probabilities.Shape[0];
-        var totalLoss = NumOps.Zero;
         var epsilon = NumOps.FromDouble(1e-15);
-
-        for (int b = 0; b < batchSize; b++)
-        {
-            int targetClass = targets[b];
-            var prob = probabilities[b * _numClasses + targetClass];
-            var safeProb = NumOps.Add(prob, epsilon);
-            var loss = NumOps.Negate(NumOps.Log(safeProb));
-            totalLoss = NumOps.Add(totalLoss, loss);
-        }
-
-        return NumOps.Divide(totalLoss, NumOps.FromDouble(batchSize));
+        return TabularMetrics.MeanNegativeLogLikelihood(probabilities, targets, batchSize, _numClasses, epsilon);
     }
 
     /// <summary>
@@ -268,14 +204,7 @@ public class TabPFNClassifier<T> : TabPFNBase<T>
     public T ComputeAccuracy(Tensor<T> numericalFeatures, Vector<int> targets, Matrix<int>? categoricalIndices = null)
     {
         var predictions = Predict(numericalFeatures, categoricalIndices);
-        int correct = 0;
-
-        for (int i = 0; i < predictions.Length; i++)
-        {
-            if (predictions[i] == targets[i])
-                correct++;
-        }
-
+        int correct = TabularMetrics.CountMatches(predictions, targets);
         return NumOps.FromDouble((double)correct / predictions.Length);
     }
 

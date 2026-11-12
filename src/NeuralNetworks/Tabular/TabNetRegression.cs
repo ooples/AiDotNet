@@ -161,17 +161,7 @@ public class TabNetRegression<T> : TabNetBase<T>
     /// </remarks>
     public T ComputeMSELoss(Tensor<T> predictions, Tensor<T> targets)
     {
-        var sumSquaredError = NumOps.Zero;
-        int count = predictions.Length;
-
-        for (int i = 0; i < count; i++)
-        {
-            var diff = NumOps.Subtract(predictions[i], targets[i]);
-            var squaredDiff = NumOps.Multiply(diff, diff);
-            sumSquaredError = NumOps.Add(sumSquaredError, squaredDiff);
-        }
-
-        return NumOps.Divide(sumSquaredError, NumOps.FromDouble(count));
+        return TabularMetrics.MeanSquaredError(predictions, targets);
     }
 
     /// <summary>
@@ -194,16 +184,11 @@ public class TabNetRegression<T> : TabNetBase<T>
     /// </remarks>
     public Tensor<T> ComputeMSEGradient(Tensor<T> predictions, Tensor<T> targets)
     {
-        var gradient = new Tensor<T>(predictions._shape);
         var scale = NumOps.FromDouble(2.0 / predictions.Length);
 
-        for (int i = 0; i < predictions.Length; i++)
-        {
-            var diff = NumOps.Subtract(predictions[i], targets[i]);
-            gradient[i] = NumOps.Multiply(diff, scale);
-        }
-
-        return gradient;
+        var diff = Engine.TensorSubtract(
+            TabularMetrics.Flat(predictions, predictions.Length), TabularMetrics.Flat(targets, predictions.Length));
+        return Engine.TensorMultiplyScalar(diff, scale).Reshape(predictions._shape);
     }
 
     /// <summary>
@@ -227,17 +212,7 @@ public class TabNetRegression<T> : TabNetBase<T>
     /// </remarks>
     public T ComputeMAELoss(Tensor<T> predictions, Tensor<T> targets)
     {
-        var sumAbsoluteError = NumOps.Zero;
-        int count = predictions.Length;
-
-        for (int i = 0; i < count; i++)
-        {
-            var diff = NumOps.Subtract(predictions[i], targets[i]);
-            var absDiff = NumOps.Abs(diff);
-            sumAbsoluteError = NumOps.Add(sumAbsoluteError, absDiff);
-        }
-
-        return NumOps.Divide(sumAbsoluteError, NumOps.FromDouble(count));
+        return TabularMetrics.MeanAbsoluteError(predictions, targets);
     }
 
     /// <summary>
@@ -324,29 +299,20 @@ public class TabNetRegression<T> : TabNetBase<T>
     /// </remarks>
     public T ComputeR2Score(Tensor<T> predictions, Tensor<T> targets)
     {
+        var engine = Engine;
+        var y = TabularMetrics.Flat(targets, targets.Length);
+
         // Compute mean of targets
-        var targetMean = NumOps.Zero;
-        for (int i = 0; i < targets.Length; i++)
-        {
-            targetMean = NumOps.Add(targetMean, targets[i]);
-        }
-        targetMean = NumOps.Divide(targetMean, NumOps.FromDouble(targets.Length));
+        var targetMean = NumOps.Divide(engine.TensorSum(y), NumOps.FromDouble(targets.Length));
 
         // Compute SS_res (residual sum of squares)
-        var ssRes = NumOps.Zero;
-        for (int i = 0; i < predictions.Length; i++)
-        {
-            var diff = NumOps.Subtract(predictions[i], targets[i]);
-            ssRes = NumOps.Add(ssRes, NumOps.Multiply(diff, diff));
-        }
+        var residual = engine.TensorSubtract(
+            TabularMetrics.Flat(predictions, predictions.Length), TabularMetrics.Flat(targets, predictions.Length));
+        var ssRes = engine.TensorSum(engine.TensorMultiply(residual, residual));
 
         // Compute SS_tot (total sum of squares)
-        var ssTot = NumOps.Zero;
-        for (int i = 0; i < targets.Length; i++)
-        {
-            var diff = NumOps.Subtract(targets[i], targetMean);
-            ssTot = NumOps.Add(ssTot, NumOps.Multiply(diff, diff));
-        }
+        var deviation = engine.TensorSubtract(y, engine.TensorFullLike(y, targetMean));
+        var ssTot = engine.TensorSum(engine.TensorMultiply(deviation, deviation));
 
         // R² = 1 - SS_res / SS_tot
         var ratio = NumOps.Divide(ssRes, ssTot);

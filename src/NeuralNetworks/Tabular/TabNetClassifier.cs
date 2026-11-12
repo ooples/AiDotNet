@@ -1,3 +1,4 @@
+using AiDotNet.Helpers;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Models.Options;
@@ -166,27 +167,8 @@ public class TabNetClassifier<T> : TabNetBase<T>
     {
         var probabilities = Forward(input);
         int batchSize = probabilities.Shape[0];
-        var predictions = new int[batchSize];
-
-        for (int b = 0; b < batchSize; b++)
-        {
-            var maxProb = NumOps.MinValue;
-            int maxIdx = 0;
-
-            for (int c = 0; c < _numClasses; c++)
-            {
-                var prob = probabilities[b * _numClasses + c];
-                if (NumOps.GreaterThan(prob, maxProb))
-                {
-                    maxProb = prob;
-                    maxIdx = c;
-                }
-            }
-
-            predictions[b] = maxIdx;
-        }
-
-        return predictions;
+        return TabularMetrics.ArgMaxRows(
+            probabilities, batchSize, _numClasses, ArgMaxScan.GreaterThanFromMinValue).ToArray();
     }
 
     /// <summary>
@@ -242,26 +224,11 @@ public class TabNetClassifier<T> : TabNetBase<T>
     public T ComputeCrossEntropyLoss(Tensor<T> probabilities, Tensor<T> targets)
     {
         int batchSize = probabilities.Shape[0];
-        var totalLoss = NumOps.Zero;
         var epsilon = NumOps.FromDouble(1e-15); // For numerical stability
 
-        for (int b = 0; b < batchSize; b++)
-        {
-            // Get the true class index
-            int trueClass = (int)NumOps.ToDouble(targets[b]);
-
-            // Get the probability of the true class
-            var prob = probabilities[b * _numClasses + trueClass];
-
-            // Add epsilon for numerical stability
-            prob = NumOps.Add(prob, epsilon);
-
-            // Cross-entropy: -log(prob of true class)
-            var loss = NumOps.Negate(NumOps.Log(prob));
-            totalLoss = NumOps.Add(totalLoss, loss);
-        }
-
-        return NumOps.Divide(totalLoss, NumOps.FromDouble(batchSize));
+        // -log(p[true class] + epsilon), averaged over the batch
+        var trueClasses = TabularMetrics.ClassIndices(targets, batchSize);
+        return TabularMetrics.MeanNegativeLogLikelihood(probabilities, trueClasses, batchSize, _numClasses, epsilon);
     }
 
     /// <summary>
@@ -286,22 +253,15 @@ public class TabNetClassifier<T> : TabNetBase<T>
     public T ComputeCrossEntropyLossOneHot(Tensor<T> probabilities, Tensor<T> oneHotTargets)
     {
         int batchSize = probabilities.Shape[0];
-        var totalLoss = NumOps.Zero;
         var epsilon = NumOps.FromDouble(1e-15);
+        int count = batchSize * _numClasses;
 
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int c = 0; c < _numClasses; c++)
-            {
-                var target = oneHotTargets[b * _numClasses + c];
-                var prob = NumOps.Add(probabilities[b * _numClasses + c], epsilon);
-                // -target * log(prob)
-                var term = NumOps.Multiply(NumOps.Negate(target), NumOps.Log(prob));
-                totalLoss = NumOps.Add(totalLoss, term);
-            }
-        }
+        // -target * log(prob + epsilon), summed over every class of every sample
+        var target = TabularMetrics.Flat(oneHotTargets, count);
+        var prob = Engine.TensorAddScalar(TabularMetrics.Flat(probabilities, count), epsilon);
+        var terms = Engine.TensorMultiply(Engine.TensorNegate(target), Engine.TensorLog(prob));
 
-        return NumOps.Divide(totalLoss, NumOps.FromDouble(batchSize));
+        return NumOps.Divide(Engine.TensorSum(terms), NumOps.FromDouble(batchSize));
     }
 
     /// <summary>
@@ -325,25 +285,15 @@ public class TabNetClassifier<T> : TabNetBase<T>
     public Tensor<T> ComputeCrossEntropyGradient(Tensor<T> probabilities, Tensor<T> targets)
     {
         int batchSize = probabilities.Shape[0];
-        var gradient = new Tensor<T>(probabilities._shape);
         var scale = NumOps.FromDouble(1.0 / batchSize);
 
-        for (int b = 0; b < batchSize; b++)
-        {
-            int trueClass = (int)NumOps.ToDouble(targets[b]);
+        // gradient = (prob - one_hot(true class)) / batch_size; out-of-range classes give an all-zero target row
+        var trueClasses = TabularMetrics.ClassIndices(targets, batchSize);
+        var oneHot = Engine.TensorOneHot<T>(Tensor<int>.FromVector(trueClasses), _numClasses);
+        var prob = TabularMetrics.Flat(probabilities, batchSize * _numClasses).Reshape(batchSize, _numClasses);
+        var gradient = Engine.TensorMultiplyScalar(Engine.TensorSubtract(prob, oneHot.Reshape(batchSize, _numClasses)), scale);
 
-            for (int c = 0; c < _numClasses; c++)
-            {
-                var prob = probabilities[b * _numClasses + c];
-                var target = (c == trueClass) ? NumOps.One : NumOps.Zero;
-
-                // gradient = (prob - target) / batch_size
-                gradient[b * _numClasses + c] = NumOps.Multiply(
-                    NumOps.Subtract(prob, target), scale);
-            }
-        }
-
-        return gradient;
+        return gradient.Reshape(probabilities._shape);
     }
 
     /// <summary>
@@ -352,16 +302,12 @@ public class TabNetClassifier<T> : TabNetBase<T>
     public Tensor<T> ComputeCrossEntropyGradientOneHot(Tensor<T> probabilities, Tensor<T> oneHotTargets)
     {
         int batchSize = probabilities.Shape[0];
-        var gradient = new Tensor<T>(probabilities._shape);
         var scale = NumOps.FromDouble(1.0 / batchSize);
 
-        for (int i = 0; i < probabilities.Length; i++)
-        {
-            gradient[i] = NumOps.Multiply(
-                NumOps.Subtract(probabilities[i], oneHotTargets[i]), scale);
-        }
-
-        return gradient;
+        var difference = Engine.TensorSubtract(
+            TabularMetrics.Flat(probabilities, probabilities.Length),
+            TabularMetrics.Flat(oneHotTargets, probabilities.Length));
+        return Engine.TensorMultiplyScalar(difference, scale).Reshape(probabilities._shape);
     }
 
     /// <summary>
@@ -435,17 +381,9 @@ public class TabNetClassifier<T> : TabNetBase<T>
     /// </remarks>
     public T ComputeAccuracy(int[] predictions, Tensor<T> targets)
     {
-        int correct = 0;
         int total = predictions.Length;
-
-        for (int i = 0; i < total; i++)
-        {
-            int trueClass = (int)NumOps.ToDouble(targets[i]);
-            if (predictions[i] == trueClass)
-            {
-                correct++;
-            }
-        }
+        var trueClasses = TabularMetrics.ClassIndices(targets, total);
+        int correct = TabularMetrics.CountMatches(Vector<int>.Wrap(predictions), trueClasses);
 
         return NumOps.FromDouble((double)correct / total);
     }
@@ -472,28 +410,15 @@ public class TabNetClassifier<T> : TabNetBase<T>
     /// </remarks>
     public T ComputeF1Score(int[] predictions, Tensor<T> targets, int positiveClass = 1)
     {
-        int truePositive = 0;
-        int falsePositive = 0;
-        int falseNegative = 0;
+        var engine = Engine;
+        var predicted = Tensor<int>.FromVector(Vector<int>.Wrap(predictions));
+        var actual = Tensor<int>.FromVector(TabularMetrics.ClassIndices(targets, predictions.Length));
+        var predictedPositive = engine.TensorEquals(predicted, positiveClass);
+        var actualPositive = engine.TensorEquals(actual, positiveClass);
 
-        for (int i = 0; i < predictions.Length; i++)
-        {
-            int trueClass = (int)NumOps.ToDouble(targets[i]);
-            int predClass = predictions[i];
-
-            if (predClass == positiveClass && trueClass == positiveClass)
-            {
-                truePositive++;
-            }
-            else if (predClass == positiveClass && trueClass != positiveClass)
-            {
-                falsePositive++;
-            }
-            else if (predClass != positiveClass && trueClass == positiveClass)
-            {
-                falseNegative++;
-            }
-        }
+        int truePositive = engine.TensorSum(engine.TensorMultiply(predictedPositive, actualPositive));
+        int falsePositive = engine.TensorSum(predictedPositive) - truePositive;
+        int falseNegative = engine.TensorSum(actualPositive) - truePositive;
 
         if (truePositive == 0)
         {
