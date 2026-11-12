@@ -77,7 +77,9 @@ public class MaximalInformation<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, I
         binIndex = Engine.TensorMultiply(binIndex, Engine.TensorBroadcastTo(varying, new[] { n, p }));
 
         // Compute entropy -sum p_b ln p_b over the non-empty bins
-        var counts = Engine.ReduceSum(PreprocessingTensorOps.OneHotBins(binIndex, _nBins), new[] { 0 }, false);
+        // (bin counts summed as int: a 0/1 sum in T stops counting at 2048 for Half)
+        var counts = Engine.ReduceSum(
+            PreprocessingTensorOps.OneHotBins(binIndex, _nBins).Cast<int>(), new[] { 0 }, false).Cast<T>();
         var probabilities = Engine.TensorDivideScalar(counts, NumOps.FromDouble(n));
         var occupied = Engine.TensorGreaterThan(counts, NumOps.Zero);
         var safeProbabilities = Engine.TensorWhere(occupied, probabilities,

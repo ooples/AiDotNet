@@ -74,7 +74,9 @@ public class KruskalWallisSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         var ranks = RankTestOps.AverageRanksWithTies(Tensor<T>.FromMatrix(data), out var tieTerm);
         var membership = PreprocessingTensorOps.ClassOneHot<T>(classIndex, k);
         var rankSums = Engine.TensorMatMul(Engine.TensorTranspose(membership), ranks);
-        var classCounts = Engine.Reshape(Engine.ReduceSum(membership, new[] { 0 }, false), new[] { k, 1 });
+        // (class sizes counted as int: a 0/1 sum in T stops counting at 2048 for Half)
+        var classCounts = Engine.Reshape(Engine.ReduceSum(
+            membership.Cast<int>(), new[] { 0 }, false).Cast<T>(), new[] { k, 1 });
 
         // Kruskal-Wallis H = 12 / (n (n + 1)) sum_c R_c^2 / n_c - 3 (n + 1), divided by the tie correction
         // 1 - sum (t^3 - t) / (n^3 - n) as scipy.stats.kruskal (left as is when every value is tied)

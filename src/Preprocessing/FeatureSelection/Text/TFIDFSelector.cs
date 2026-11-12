@@ -69,7 +69,9 @@ public class TFIDFSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IFixed
 
         // Compute document frequency for each term
         var x = Tensor<T>.FromMatrix(data);
-        var documentFrequency = Engine.ReduceSum(Engine.TensorGreaterThan(x, NumOps.Zero), new[] { 0 }, false);
+        // (counted as int: a 0/1 sum in T stops counting at 2048 for Half)
+        var documentFrequency = Engine.ReduceSum(
+            Engine.TensorGreaterThan(x, NumOps.Zero).Cast<int>(), new[] { 0 }, false).Cast<T>();
 
         // Filter by document frequency
         var df = Engine.TensorDivideScalar(documentFrequency, NumOps.FromDouble(n));

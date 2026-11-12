@@ -81,9 +81,10 @@ public class ChiSquareText<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISuper
         var shape = new[] { nClasses, p };
         T total = NumOps.FromDouble(n);
         var a = Engine.TensorMatMul(Engine.TensorTranspose(membership), present);
-        var termCount = Engine.TensorBroadcastTo(Engine.ReduceSum(present, new[] { 0 }, true), shape);
-        var classCount = Engine.TensorBroadcastTo(
-            Engine.Reshape(Engine.ReduceSum(membership, new[] { 0 }, false), new[] { nClasses, 1 }), shape);
+        // (document counts summed as int: a 0/1 sum in T stops counting at 2048 for Half)
+        var termCount = Engine.TensorBroadcastTo(Engine.ReduceSum(present.Cast<int>(), new[] { 0 }, true).Cast<T>(), shape);
+        var classCount = Engine.TensorBroadcastTo(Engine.Reshape(
+            Engine.ReduceSum(membership.Cast<int>(), new[] { 0 }, false).Cast<T>(), new[] { nClasses, 1 }), shape);
         var absentCount = Engine.TensorAddScalar(Engine.TensorNegate(termCount), total);
         var otherCount = Engine.TensorAddScalar(Engine.TensorNegate(classCount), total);
         var b = Engine.TensorSubtract(termCount, a);

@@ -44,8 +44,9 @@ internal static class SparseRegressionOps
         int m = labels.Length;
         var membership = engine.TensorOneHot<T>(new Tensor<int>(position, new[] { p }), m);
         var membershipT = engine.TensorTranspose(membership);
-        var groupWeights = engine.Reshape(
-            engine.TensorSqrt(engine.ReduceSum(membership, new[] { 0 }, false)), new[] { m, 1 });
+        // (group sizes counted as int: a 0/1 sum in T stops counting at 2048 for Half)
+        var groupSizes = engine.ReduceSum(membership.Cast<int>(), new[] { 0 }, false).Cast<T>();
+        var groupWeights = engine.Reshape(engine.TensorSqrt(groupSizes), new[] { m, 1 });
 
         // Smooth part: gradient H b - X'y / n with H = X'X / n + l2 I
         T count = ops.FromDouble(n);
