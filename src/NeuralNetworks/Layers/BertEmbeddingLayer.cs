@@ -195,16 +195,16 @@ public partial class BertEmbeddingLayer<T> : LayerBase<T>, IShapeContract
             {
                 // create_position_ids_from_input_ids: count the non-padding tokens of each row.
                 // A token is padding when its id rounds (half to even) to the padding id; NaN never does.
-                var ids = Engine.Reshape(inputIds, new[] { rows, sequenceLength });
-                T pad = NumOps.FromDouble(_paddingTokenId);
+                var ids = Engine.Reshape(inputIds, new[] { rows, sequenceLength }).Cast<double>();
+                double pad = _paddingTokenId;
                 var isPadding = Engine.TensorEquals(Engine.TensorRound(ids), pad);
-                var ones = new Tensor<T>(new[] { rows, sequenceLength });
-                ones.Fill(NumOps.One);
+                var ones = new Tensor<double>(new[] { rows, sequenceLength });
+                ones.Fill(1.0);
                 var counted = Engine.TensorCumSum(Engine.TensorSubtract(ones, isPadding), 1);
-                var padIds = new Tensor<T>(new[] { rows, sequenceLength });
+                var padIds = new Tensor<double>(new[] { rows, sequenceLength });
                 padIds.Fill(pad);
                 positionIds = Engine.Reshape(
-                    Engine.TensorWhere(isPadding, padIds, Engine.TensorAddScalar(counted, pad)), inputIds._shape);
+                    Engine.TensorWhere(isPadding, padIds, Engine.TensorAddScalar(counted, pad)), inputIds._shape).Cast<T>();
             }
         }
 
