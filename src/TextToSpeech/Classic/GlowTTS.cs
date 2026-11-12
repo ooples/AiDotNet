@@ -239,26 +239,16 @@ public partial class GlowTTS<T> : TtsModelBase<T>, IAcousticModel<T>, ITrainingO
         int batch = input.Shape[0], tokens = input.Shape[1];
         var outputs = new List<Tensor<T>>(batch);
         for (int b = 0; b < batch; b++)
-        {
-            var row = new Tensor<T>(new[] { tokens });
-            for (int i = 0; i < tokens; i++) row[i] = input[b, i];
-            outputs.Add(SynthesizeOne(row));
-        }
-        int longest = outputs.Max(o => o.Shape[0]);
-        var result = new Tensor<T>(new[] { batch, longest, _options.MelChannels });
-        for (int b = 0; b < batch; b++)
-            for (int f = 0; f < outputs[b].Shape[0]; f++)
-                for (int m = 0; m < _options.MelChannels; m++) result[b, f, m] = outputs[b][f, m];
-        return result;
+            outputs.Add(SynthesizeOne(BatchRow(input, b)));
+        return PadAndStack(outputs, _options.MelChannels);
     }
 
     private Tensor<T> SynthesizeOne(Tensor<T> tokens)
     {
         var (hidden, means) = Encode(tokens);
         var logDurations = LogDurations(hidden);
-        var durations = new int[logDurations.Length];
-        for (int i = 0; i < durations.Length; i++)
-            durations[i] = (int)Math.Ceiling(Math.Exp(NumOps.ToDouble(logDurations[i])) * _options.LengthScale);
+        var durations = Engine.TensorCeiling(Engine.TensorMultiplyScalar(Engine.TensorExp(logDurations),
+            NumOps.FromDouble(_options.LengthScale))).Cast<int>().ToArray();
         int sqz = _options.SqueezeFactor;
         int total = durations.Sum();
         // The decoder squeezes frame pairs: the reference implementation floors the length to a multiple of the factor.
@@ -378,8 +368,8 @@ public partial class GlowTTS<T> : TtsModelBase<T>, IAcousticModel<T>, ITrainingO
             Engine.TensorMultiplyScalar(negLogLikelihood, NumOps.FromDouble(1.0 / ((double)frames * channels))),
             NumOps.FromDouble(0.5 * Math.Log(2 * Math.PI)));
 
-        var target = new Tensor<T>(new[] { tokenCount });
-        for (int i = 0; i < tokenCount; i++) target[i] = NumOps.FromDouble(Math.Log(1e-8 + durations[i]));
+        var target = LogDurationTarget(durations, 1e-8);
+
         var durationError = Engine.TensorSubtract(LogDurations(hidden), target);
         var durationLoss = Engine.TensorMultiplyScalar(
             Engine.ReduceSum(Engine.TensorMultiply(durationError, durationError), new[] { 0 }, keepDims: false),
