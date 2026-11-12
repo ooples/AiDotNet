@@ -63,6 +63,9 @@ internal class StreamingAdam8Bit<T> : BlockQuantizedStreamingOptimizer<T>, IDisp
         int min8BitSize = 0)
         : base(nameof(StreamingAdam8Bit<T>), learningRate, new[] { true, false }, blockSize, maxUpdateRatio)
     {
+        if (double.IsNaN(weightDecay) || double.IsInfinity(weightDecay) || weightDecay < 0.0)
+            throw new ArgumentOutOfRangeException(nameof(weightDecay), weightDecay,
+                "Weight decay must be a finite, non-negative value.");
         _beta1 = beta1;
         _beta2 = beta2;
         _epsilon = epsilon;
@@ -115,24 +118,24 @@ internal class StreamingAdam8Bit<T> : BlockQuantizedStreamingOptimizer<T>, IDisp
                 : GpuOptimizer.TryAdamStep(pFloat, gFloat, fp.M, fp.V, lr, b1, b2, eps, wd, step);
         }
 
-        if (!_gpuState.TryGetValue(param, out var state) || state.Length != length)
+        if (!_gpuState.TryGetValue(param, out var state) || state is null || state.Length != length)
         {
+            // Unmap the stale state before freeing it, so a failed allocation below never leaves a disposed
+            // state mapped to this parameter, and free a partial allocation instead of leaking it.
+            _gpuState.Remove(param);
             state?.Dispose();
-            state = new GpuMomentState { Length = length };
-            if (_useBf16Moments)
+            var fresh = new GpuMomentState { Length = length };
+            bool allocated = _useBf16Moments
+                ? GpuOptimizer.TryAllocBf16MomentState(length, out fresh.MBf16, out fresh.VBf16)
+                : GpuOptimizer.TryAllocAdam8BitState(
+                    length, BlockSize, out fresh.MQuant, out fresh.VQuant, out fresh.MScales, out fresh.VScales);
+            if (!allocated)
             {
-                if (!GpuOptimizer.TryAllocBf16MomentState(length, out state.MBf16, out state.VBf16))
-                    return false;
+                fresh.Dispose();
+                return false;
             }
-            else
-            {
-                if (!GpuOptimizer.TryAllocAdam8BitState(
-                    length, BlockSize, out state.MQuant, out state.VQuant, out state.MScales, out state.VScales))
-                {
-                    return false;
-                }
-            }
-            _gpuState[param] = state;
+            _gpuState[param] = fresh;
+            state = fresh;
         }
 
         if (_useBf16Moments)
@@ -155,7 +158,7 @@ internal class StreamingAdam8Bit<T> : BlockQuantizedStreamingOptimizer<T>, IDisp
 
     protected override double UpdateElement(double parameter, double gradient, ReadOnlySpan<double> moments, Span<double> nextMoments, int index)
     {
-        double effectiveGrad = _decoupledWeightDecay || _weightDecay == 0.0
+        double effectiveGrad = _decoupledWeightDecay || _weightDecay <= 0.0
             ? gradient
             : gradient + _weightDecay * parameter;
 

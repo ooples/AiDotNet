@@ -217,7 +217,8 @@ internal static class LocalObjectiveGradientComputer<T>
                     defaultLoss = LossFn(prediction, alignedTarget);
                 }
             }
-            else if (canTryFuseTerminal && fusedHead!.TryComputeFusedLoss(preHeadFinal, target, loss) is { } genericFusedOut)
+            else if (fusedHead is not null && canTryFuseTerminal
+                && fusedHead.TryComputeFusedLoss(preHeadFinal, target, loss) is { } genericFusedOut)
             {
                 prediction = preHeadFinal;
                 alignedTarget = target;
@@ -451,7 +452,6 @@ internal static class LocalObjectiveGradientComputer<T>
                 var mode = batchedRule.BatchedReadoutMode;
                 bool detach = batchedRule.DetachReadoutOnHiddenLayers;
                 bool progressive = batchedRule.UseDepthProgressiveWeight;
-                int stride = batchedRule.LayerStride;
                 double baseWeight = batchedRule.BaseLocalWeight;
 
                 if (CanBatchReadout(mode, preHeadBatchIndependent, detach, preHeadAllDetachable, progressive))
@@ -722,7 +722,7 @@ internal static class LocalObjectiveGradientComputer<T>
                 }
             }
 
-            if (canTryFuseTerminal && fusedHead is not null && fusedHead.TryComputeFusedLoss(r, target, loss) is not null)
+            if (fusedHead is not null && canTryFuseTerminal && fusedHead.TryComputeFusedLoss(r, target, loss) is not null)
             {
                 alignedTarget = target;
                 targetPrepared = true;
@@ -1040,7 +1040,7 @@ internal static class LocalObjectiveGradientComputer<T>
                     prediction = preHeadFinal;
                     defaultLoss = ReduceToScalar(engine, fusedOut);
                 }
-                else if (canTryFuseTerminal && fusedHead is not null
+                else if (fusedHead is not null && canTryFuseTerminal
                     && fusedHead.TryComputeFusedLoss(preHeadFinal, alignedTarget, loss) is { } genericFusedOut)
                 {
                     prediction = preHeadFinal;

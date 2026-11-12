@@ -250,12 +250,13 @@ internal static class StreamingOptimizerResolver<T>
             {
                 // Adam8Bit IS an 8-bit (or BF16-moment) Adam/AdamW — preserve its compressed-moment config and weight decay.
                 var opt = (Adam8BitOptimizerOptions<T, Tensor<T>, Tensor<T>>)o.GetOptions();
-                double wd = opt.WeightDecay != 0.0 ? opt.WeightDecay : defaultWeightDecay;
+                // The options reject a negative or non-finite decay, so "> 0" means "set".
+                double wd = opt.WeightDecay > 0.0 ? opt.WeightDecay : defaultWeightDecay;
                 return new StreamingConfig
                 {
                     Kind = opt.UseAMSGrad
                         ? StreamingKind.AmsGrad
-                        : (opt.UseDecoupledWeightDecay && wd != 0.0 ? StreamingKind.AdamW : StreamingKind.Adam),
+                        : (opt.UseDecoupledWeightDecay && wd > 0.0 ? StreamingKind.AdamW : StreamingKind.Adam),
                     Beta1 = opt.Beta1, Beta2 = opt.Beta2, Epsilon = opt.Epsilon, WeightDecay = wd,
                     UseAMSGrad = opt.UseAMSGrad,
                     BlockSize = opt.BlockSize,
