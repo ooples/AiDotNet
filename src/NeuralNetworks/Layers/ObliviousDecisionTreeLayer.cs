@@ -126,10 +126,15 @@ public partial class ObliviousDecisionTreeLayer<T> : LayerBase<T>, IShapeContrac
     /// <remarks>
     /// Uses NODE's 1.5-entmax feature choice and 1.5-entmoid splits.
     /// </remarks>
+    // Retain the shipped optional-argument constructor alongside the explicit-choice overload.
+#pragma warning disable RS0027
+
     public ObliviousDecisionTreeLayer(int inputDim, int depth = 6, int outputDim = 1, double initScale = 0.01)
         : this(inputDim, depth, outputDim, initScale, ObliviousTreeChoiceFunction.Entmax15)
     {
     }
+#pragma warning restore RS0027
+
 
     /// <summary>
     /// Initializes an oblivious decision tree with explicit choice functions.
@@ -209,10 +214,15 @@ public partial class ObliviousDecisionTreeLayer<T> : LayerBase<T>, IShapeContrac
     /// Uses NODE's 1.5-entmax feature choice and 1.5-entmoid splits. Not marked <c>[LayerState]</c>; the
     /// overload below carries the annotation so the choice functions round-trip.
     /// </remarks>
+    // Retain the shipped optional-argument constructor alongside the explicit-choice overload.
+#pragma warning disable RS0027
+
     public ObliviousDecisionTreeLayer(int depth = 6, int outputDim = 1, double initScale = 0.01)
         : this(depth, outputDim, initScale, ObliviousTreeChoiceFunction.Entmax15)
     {
     }
+#pragma warning restore RS0027
+
 
     /// <summary>
     /// Lazy constructor with explicit choice functions: resolves <c>inputDim</c> from

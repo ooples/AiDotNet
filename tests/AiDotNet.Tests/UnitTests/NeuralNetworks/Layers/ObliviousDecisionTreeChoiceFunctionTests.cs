@@ -15,6 +15,39 @@ namespace AiDotNet.Tests.UnitTests.NeuralNetworks.Layers;
 public sealed class ObliviousDecisionTreeChoiceFunctionTests
 {
     [Theory]
+    [InlineData(0.0)]
+    [InlineData(1e16)]
+    public void Entmax15_EqualLogitsRemainNormalizedAtALargeCommonOffset(double offset)
+    {
+        var logits = new Tensor<double>(new[] { offset, offset }, new[] { 1, 2 });
+        var probabilities = Entmax15<double>.Forward(AiDotNetEngine.Current, logits).ToArray();
+        Assert.All(probabilities, probability => Assert.Equal(0.5, probability, 12));
+    }
+
+    [Fact]
+    public void Entmax15_HalfLargeEqualLogitsRemainFiniteAndNormalized()
+    {
+        var logits = new Tensor<Half>(new Half[] { (Half)10000, (Half)10000 }, new[] { 1, 2 });
+        var probabilities = Entmax15<Half>.Forward(AiDotNetEngine.Current, logits).ToArray();
+        Assert.Equal(new Half[] { (Half)0.5, (Half)0.5 }, probabilities);
+    }
+
+    [Fact]
+    public void Entmax15_LargeCommonOffsetPreservesTheReferenceJacobian()
+    {
+        var logits = new Tensor<double>(new[] { 1e16, 1e16, 1e16, 1e16 }, new[] { 1, 4 });
+        var coefficients = new Tensor<double>(new[] { 1.0, -1.0, 2.0, -2.0 }, new[] { 1, 4 });
+        var engine = AiDotNetEngine.Current;
+        using var tape = new GradientTape<double>();
+        var probabilities = Entmax15<double>.Forward(engine, logits);
+        var loss = engine.ReduceSum(engine.TensorMultiply(probabilities, coefficients), new[] { 0, 1 });
+        var gradients = tape.ComputeGradients(loss, new[] { logits });
+        Assert.True(gradients.TryGetValue(logits, out var gradient));
+        var expected = new[] { 0.5, -0.5, 1.0, -1.0 }; // sqrt(p)=0.5 and sum(coefficients)=0.
+        for (int i = 0; i < expected.Length; i++) Assert.Equal(expected[i], gradient!.GetFlat(i), 12);
+    }
+
+    [Theory]
     [InlineData(1.0, 0.8307189138830738)]
     [InlineData(-1.0, 0.1692810861169262)]
     [InlineData(0.5, 0.6739926363384383)]

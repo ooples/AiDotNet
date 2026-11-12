@@ -514,8 +514,8 @@ public partial class HippoMemoryCellLayer<T> : LayerBase<T>, IShapeContract
         // The linalg kernels read raw storage, so hand them contiguous operands.
         var rhsColumns = Engine.TensorTranspose(rhs).Contiguous();
         var solved = transpose
-            ? LinalgDispatch<T>.SolveTriangular(Engine.TensorTranspose(system).Contiguous(), rhsColumns, upper: true)
-            : LinalgDispatch<T>.SolveTriangular(system.Contiguous(), rhsColumns, upper: false);
+            ? SolveTriangularWide(Engine.TensorTranspose(system).Contiguous(), rhsColumns, upper: true)
+            : SolveTriangularWide(system.Contiguous(), rhsColumns, upper: false);
         return Engine.TensorTranspose(solved).Contiguous();
     }
 
@@ -547,7 +547,7 @@ public partial class HippoMemoryCellLayer<T> : LayerBase<T>, IShapeContract
             var stateRhs = _discretization == "bilinear" ? Engine.TensorAdd(identity, scaledA) : identity;
             var rhs = Engine.TensorConcatenate(
                 new[] { stateRhs, Engine.TensorMultiplyScalar(bColumn, NumOps.FromDouble(step)) }, axis: 1);
-            var (solution, info) = LinalgDispatch<T>.SolveEx(system.Contiguous(), rhs.Contiguous());
+            var (solution, info) = SolveSystemWide(system.Contiguous(), rhs.Contiguous());
             if (Engine.TensorCountNonzero(info) > 0)
                 throw new InvalidOperationException("HiPPO discretization matrix is singular.");
             transition = Engine.TensorNarrow(solution, 1, 0, n);
@@ -555,6 +555,24 @@ public partial class HippoMemoryCellLayer<T> : LayerBase<T>, IShapeContract
         }
 
         return (Engine.TensorTranspose(transition).Contiguous(), Engine.TensorTranspose(inputTransition).Contiguous());
+    }
+
+    private static (Tensor<T> Solution, Tensor<int> Info) SolveSystemWide(Tensor<T> system, Tensor<T> rhs)
+    {
+        if (typeof(T) == typeof(float) || typeof(T) == typeof(double))
+            return LinalgDispatch<T>.SolveEx(system, rhs);
+        // The installed linalg kernels support float/double; retain low-precision layer support.
+        using var noGrad = new NoGradScope<double>();
+        var (solution, info) = LinalgDispatch<double>.SolveEx(system.Cast<double>(), rhs.Cast<double>());
+        return (solution.Cast<T>(), info);
+    }
+
+    private static Tensor<T> SolveTriangularWide(Tensor<T> system, Tensor<T> rhs, bool upper)
+    {
+        if (typeof(T) == typeof(float) || typeof(T) == typeof(double))
+            return LinalgDispatch<T>.SolveTriangular(system, rhs, upper);
+        using var noGrad = new NoGradScope<double>();
+        return LinalgDispatch<double>.SolveTriangular(system.Cast<double>(), rhs.Cast<double>(), upper).Cast<T>();
     }
 
     private (Tensor<T> A, Tensor<T> B) BuildZohTransition(double interval)
