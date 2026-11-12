@@ -8404,6 +8404,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     private int _checkpointCachedLayerCount = -1;
     private int _checkpointCachedSegmentSize = -1;
     private bool _checkpointCachedParamsResolved;
+    private int _checkpointParameterSurfaceEpoch = -1;
     private Func<Tensor<T>, Tensor<T>, bool>? _activeCheckpointGradientConsumer;
 
     private void InvalidateCheckpointParameterCache()
@@ -8443,6 +8444,11 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     public void DisableGradientCheckpointing()
     {
         GradientCheckpointingSegmentSize = 0;
+        // EnableMemoryManagement can turn checkpointing on through the memory manager's configuration, which
+        // IsGradientCheckpointingEnabled also reads; clearing only the segment size would leave it on. Activation pooling
+        // and the manager's other settings stay as configured.
+        if (_memoryManager is not null)
+            _memoryManager.Config.UseGradientCheckpointing = false;
     }
 
     internal void SetGradientCheckpointingSegmentSize(int segmentSize)
@@ -8466,6 +8472,38 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         return segmentSize;
     }
 
+    /// <summary>
+    /// Sets every gradient index assigned on a tensor the tape recorded to -1 and returns the previous values, so a nested
+    /// backward over that tape starts from unindexed tensors and the caller can restore the outer pass's indices.
+    /// </summary>
+    private static List<(Tensor<T> Tensor, int Index)> SuspendCheckpointGradIndices(
+        AiDotNet.Tensors.Engines.Autodiff.GradientTape<T> tape)
+    {
+        var saved = new List<(Tensor<T>, int)>();
+        var entries = tape.Entries;
+        for (int i = 0; i < entries.Count; i++)
+        {
+            ref var entry = ref entries[i];
+            Suspend(entry.Output, saved);
+            Suspend(entry.Input0, saved);
+            if (entry.InputCount >= 2) Suspend(entry.Input1, saved);
+            if (entry.InputCount >= 3) Suspend(entry.Input2, saved);
+            if (entry.InputsOverflow is not null)
+            {
+                foreach (var extra in entry.InputsOverflow)
+                    Suspend(extra, saved);
+            }
+        }
+        return saved;
+
+        static void Suspend(Tensor<T>? tensor, List<(Tensor<T>, int)> into)
+        {
+            if (tensor is null || tensor._gradIndex < 0) return;
+            into.Add((tensor, tensor._gradIndex));
+            tensor._gradIndex = -1;
+        }
+    }
+
     private Tensor<T> RunCheckpointedForward(int layerCount, int segmentSize, Tensor<T> input)
     {
         bool paramsResolved = !AnyLayerNeedsShapeResolution() && !AnyLayerHasUnmaterializedParameters();
@@ -8476,7 +8514,10 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             || _checkpointFunctionsVersion != _layerStructureVersion
             || _checkpointCachedLayerCount != layerCount
             || _checkpointCachedSegmentSize != segmentSize
-            || (_checkpointCachedParamsResolved != paramsResolved && paramsResolved))
+            || (_checkpointCachedParamsResolved != paramsResolved && paramsResolved)
+            // A parameter-buffer swap replaces layer tensors with buffer views without changing the layer structure;
+            // the cached segment lists would still name the replaced tensors, which the forward no longer reads.
+            || _checkpointParameterSurfaceEpoch != LayerBase<T>.ParameterSurfaceEpoch)
         {
             var fns = new Func<Tensor<T>, Tensor<T>>[layerCount];
             for (int i = 0; i < layerCount; i++)
@@ -8554,6 +8595,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             _checkpointCachedLayerCount = layerCount;
             _checkpointCachedSegmentSize = segmentSize;
             _checkpointCachedParamsResolved = paramsResolved;
+            _checkpointParameterSurfaceEpoch = LayerBase<T>.ParameterSurfaceEpoch;
         }
 
         Func<Tensor<T>, Tensor<T>, bool>? consumer = null;
@@ -8706,6 +8748,12 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
 
                     var savedIndexedGrads = AiDotNet.Tensors.Engines.Autodiff.DifferentiableOps._indexedGrads;
                     var savedSparseGrads = AiDotNet.Tensors.Engines.Autodiff.DifferentiableOps._indexedSparseGrads;
+                    // The tables are addressed by each tensor's _gradIndex, so those are suspended too. A parameter shared
+                    // with the outer pass keeps the index that pass assigned: the nested walk would not reassign it (a new
+                    // nested tensor could take the same slot and the two would accumulate into one), and its cleanup sets
+                    // every index it touched to -1 (the outer pass would lose the parameter's indexed and sparse
+                    // gradients). Clear them for the nested pass and restore them afterwards.
+                    var savedGradIndices = SuspendCheckpointGradIndices(recomputeTape);
                     AiDotNet.Tensors.Engines.Autodiff.DifferentiableOps.ClearIndexedGrads();
                     AiDotNet.Tensors.Engines.Autodiff.DifferentiableOps.ClearIndexedSparseGrads();
                     Dictionary<Tensor<T>, Tensor<T>> segGrads;
@@ -8717,6 +8765,8 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                     {
                         AiDotNet.Tensors.Engines.Autodiff.DifferentiableOps._indexedGrads = savedIndexedGrads;
                         AiDotNet.Tensors.Engines.Autodiff.DifferentiableOps._indexedSparseGrads = savedSparseGrads;
+                        foreach (var (tensor, index) in savedGradIndices)
+                            tensor._gradIndex = index;
                     }
 
                     detachedGradients = new List<(Tensor<T>, Tensor<T>)>(segGrads.Count);
@@ -12290,11 +12340,22 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             var sq = Engine.TensorMultiply(grad, grad);
             var axes = Enumerable.Range(0, sq.Rank).ToArray();
             var sum = Engine.ReduceSum(sq, axes, keepDims: false);
-            return NumOps.ToDouble(sum[0]);
+            double deviceNormSq = NumOps.ToDouble(sum[0]);
+            if (!double.IsNaN(deviceNormSq) && !double.IsInfinity(deviceNormSq))
+                return deviceNormSq;
+            // A finite float gradient (2e19f) squares past float.MaxValue on the device; recompute it in double below, so
+            // exact clipping scales it down instead of computing a zero scale from an infinite norm.
         }
 
+        // Accumulated in double: a T-typed dot product overflows for float the same way.
         ReadOnlySpan<T> span = grad.Data.Span.Slice(0, grad.Length);
-        return NumOps.ToDouble(NumOps.Dot(span, span));
+        double total = 0.0;
+        for (int i = 0; i < span.Length; i++)
+        {
+            double v = NumOps.ToDouble(span[i]);
+            total += v * v;
+        }
+        return total;
     }
 
     private void ScaleStreamingGradInPlace(Tensor<T> grad, T scale)
@@ -12571,9 +12632,15 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                 gpuNormSqAcc?.Dispose();
             }
             double curNorm = Math.Sqrt(curNormSq);
-            _fastClipEmaNorm = haveEma
-                ? FastClipEmaBeta * emaNorm + (1.0 - FastClipEmaBeta) * curNorm
-                : curNorm;
+            // The device accumulator sums squares in T, which overflows for finite float gradients near 1.8e19. This
+            // step's updates are already applied; an infinite (or NaN) norm folded into the EMA would pin every later
+            // bound at zero scale, so a non-finite step leaves the EMA as it was.
+            if (!double.IsNaN(curNorm) && !double.IsInfinity(curNorm))
+            {
+                _fastClipEmaNorm = haveEma
+                    ? FastClipEmaBeta * emaNorm + (1.0 - FastClipEmaBeta) * curNorm
+                    : curNorm;
+            }
         }
 
         // Post-step hook: first-order optimizers already updated each parameter in place during
@@ -14291,7 +14358,16 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             return EmitFusedMissAndFallback(
                 "model opts out of fused compiled training (dynamic/stateful forward)");
         if (IsGradientCheckpointingEnabled)
+        {
+            // Same rule as the configuration gate below: a committed plan's optimizer moments cannot move to the eager
+            // optimizer, so turning checkpointing on after the fused step committed would silently change the trajectory.
+            if (FusedSession.IsCommitted)
+                throw new InvalidOperationException(
+                    $"Gradient checkpointing was enabled on {GetType().Name} after fused training had committed. The " +
+                    "compiled plan's optimizer moments cannot move to the eager optimizer, so the switch would change the " +
+                    "training trajectory. Enable checkpointing before the first Train call.");
             return EmitFusedMissAndFallback("gradient checkpointing enabled (requires eager/streaming tape)");
+        }
         if (FusedTrainingDisabledByConfiguration)
         {
             // A committed plan owns the optimizer moments, which cannot move to the eager optimizer: turning the fused step
