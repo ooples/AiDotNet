@@ -360,6 +360,13 @@ public partial class DaubechiesWavelet<T> : WaveletFunctionBase<T>
     /// mathematical conditions:
     /// 
     /// 1. Orthogonality: The wavelet transform preserves energy
+    /// 2. Vanishing moments: The wavelet ignores polynomial trends up to a certain order
+    /// 3. Compact support: The wavelet affects only a limited region
+    /// 
+    /// For a complete implementation, this method would need to be extended to
+    /// calculate coefficients for other orders of Daubechies wavelets.
+    /// </para>
+    /// </remarks>
     private Vector<T> ComputeScalingCoefficients()
     {
         // Coefficients for Daubechies-4 wavelet

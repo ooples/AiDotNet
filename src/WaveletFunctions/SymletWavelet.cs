@@ -137,21 +137,16 @@ public class SymletWavelet<T> : WaveletFunctionBase<T>
         int points = 1024; // Number of points to evaluate
 
         var phi = new Vector<T>(points);
+        phi.Fill(NumOps.Zero);
         phi[points / 2] = NumOps.One; // Initial delta function
 
+        int filterLength = _lowRecon.Length;
         for (int i = 0; i < iterations; i++)
         {
-            var newPhi = new Vector<T>(points * 2);
-            for (int j = 0; j < points; j++)
-            {
-                for (int k = 0; k < _lowRecon.Length; k++)
-                {
-                    int ind = (2 * j + k) % (points * 2);
-                    newPhi[ind] = NumOps.Add(newPhi[ind], NumOps.Multiply(_lowRecon[k], phi[j]));
-                }
-            }
-
-            phi = new Vector<T>(newPhi.Take(points));
+            // new[(2j + k) mod 2p] += h[k] * phi[j]: upsample by two, then convolve periodically with h (a
+            // correlation over a window starting L-1 samples earlier), keeping the first p samples.
+            phi = WaveletEngineOps<T>.PeriodicCorrelate(
+                WaveletEngineOps<T>.Upsample(phi, 2), _lowRecon, 1, points, -(filterLength - 1));
         }
 
         // Interpolate to find the value at x
@@ -198,25 +193,10 @@ public class SymletWavelet<T> : WaveletFunctionBase<T>
     public override (Vector<T> approximation, Vector<T> detail) Decompose(Vector<T> input)
     {
         int n = input.Length;
-        var approximation = new Vector<T>(n / 2);
-        var detail = new Vector<T>(n / 2);
 
-        for (int i = 0; i < n / 2; i++)
-        {
-            T approx = NumOps.Zero;
-            T det = NumOps.Zero;
-
-            for (int j = 0; j < _lowDecomp.Length; j++)
-            {
-                int index = (2 * i + j) % n;
-                approx = NumOps.Add(approx, NumOps.Multiply(_lowDecomp[j], input[index]));
-                det = NumOps.Add(det, NumOps.Multiply(_highDecomp[j], input[index]));
-            }
-
-            approximation[i] = approx;
-            detail[i] = det;
-        }
-
+        // a[i] = sum_j h[j] * x[(2i + j) mod n], d[i] = sum_j g[j] * x[(2i + j) mod n]
+        var approximation = WaveletEngineOps<T>.PeriodicCorrelate(input, _lowDecomp, 2, n / 2);
+        var detail = WaveletEngineOps<T>.PeriodicCorrelate(input, _highDecomp, 2, n / 2);
         return (approximation, detail);
     }
 
@@ -247,40 +227,49 @@ public class SymletWavelet<T> : WaveletFunctionBase<T>
     public Vector<T> Reconstruct(Vector<T> approximation, Vector<T> detail)
     {
         int outputLength = approximation.Length * 2;
-        var reconstructed = new Vector<T>(outputLength);
+        if (outputLength == 0)
+        {
+            return new Vector<T>(0);
+        }
+
+        var engine = AiDotNetEngine.Current;
         int filterLength = _lowRecon.Length;
 
-        for (int i = 0; i < outputLength; i++)
+        // x[i] = sum_j f[j] * c[(i - j) / 2] over even, in-range i - j: zero-insertion upsampling followed by a
+        // zero-padded linear convolution, keeping the first 2 * n outputs.
+        var lowBranch = WaveletEngineOps<T>.FullConvolve(WaveletEngineOps<T>.Upsample(approximation, 2), _lowRecon)
+            .GetSubVector(0, outputLength);
+        var highBranch = WaveletEngineOps<T>.FullConvolve(WaveletEngineOps<T>.Upsample(detail, 2), _highRecon)
+            .GetSubVector(0, outputLength);
+        var reconstructed = Tensor<T>.FromVector(engine.Add(lowBranch, highBranch));
+
+        // Handle circular boundary: for i = 0 .. m - 1 in order, x[(i + s) mod n] += x[i], with m = min(L - 1, n)
+        // and s = (n - L + 1) mod n. Each index receives at most one contribution, from j = (i - s) mod n, and the
+        // value it passes on already includes that contribution when j < i. So the passed values v satisfy
+        // v[i] = x[i] + (j < i ? v[j] : 0) for i < m; iterating that rule m times reaches its fixed point exactly.
+        int boundaryCount = Math.Min(filterLength - 1, outputLength);
+        if (boundaryCount <= 0)
         {
-            T sum = NumOps.Zero;
-
-            for (int j = 0; j < filterLength; j++)
-            {
-                int k = i - j;
-                if (k >= 0 && k % 2 == 0)
-                {
-                    int coeffIndex = k / 2;
-                    if (coeffIndex < approximation.Length)
-                    {
-                        sum = NumOps.Add(sum, NumOps.Multiply(_lowRecon[j], approximation[coeffIndex]));
-                        sum = NumOps.Add(sum, NumOps.Multiply(_highRecon[j], detail[coeffIndex]));
-                    }
-                }
-            }
-
-            reconstructed[i] = sum;
+            return reconstructed.ToVector();
         }
 
-        // Handle circular boundary - cap loop to avoid accessing beyond array bounds
-        int maxBoundaryIndex = Math.Min(filterLength - 1, outputLength);
-        for (int i = 0; i < maxBoundaryIndex; i++)
+        int shift = ((outputLength - filterLength + 1) % outputLength + outputLength) % outputLength;
+        var positions = engine.TensorArange<T>(0, outputLength, 1);
+        var sources = engine.TensorRoll(positions, new[] { shift }, new[] { 0 });
+        var fromEarlier = engine.TensorLessThan(sources, positions);
+        var isBoundary = engine.TensorLessThan(positions, NumOps.FromDouble(boundaryCount));
+        var zeros = engine.TensorZerosLike(reconstructed);
+
+        var passed = engine.TensorWhere(isBoundary, reconstructed, zeros);
+        for (int round = 0; round < boundaryCount; round++)
         {
-            int wrapIndex = (outputLength + i - filterLength + 1) % outputLength;
-            if (wrapIndex < 0) wrapIndex += outputLength;
-            reconstructed[wrapIndex] = NumOps.Add(reconstructed[wrapIndex], reconstructed[i]);
+            var received = engine.TensorWhere(fromEarlier, engine.TensorRoll(passed, new[] { shift }, new[] { 0 }), zeros);
+            passed = engine.TensorWhere(isBoundary, engine.TensorAdd(reconstructed, received), zeros);
         }
 
-        return reconstructed;
+        // Every target adds the value passed by its source exactly once.
+        var contribution = engine.TensorRoll(passed, new[] { shift }, new[] { 0 });
+        return engine.TensorAdd(reconstructed, contribution).ToVector();
     }
 
     /// <summary>
