@@ -162,18 +162,17 @@ public partial class DeepEMDAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, T
             // Per paper: EMD-based similarity drives classification, so it must affect training loss
             if (supportFeatures != null && queryFeatures != null)
             {
-                double emdScore = ComputeEMDScore(supportFeatures, queryFeatures);
+                T emdScore = ComputeEMDScore(supportFeatures, queryFeatures);
 
                 // EMD-derived modulation: low EMD (similar) → modulation near 1.0,
                 // high EMD (dissimilar) → modulation < 1.0 (shrink features)
-                double modFactor = 1.0 / (1.0 + emdScore * _deepEmdOptions.Temperature);
-                modFactor = Math.Max(MinModulationFactor, Math.Min(MaxModulationFactor, MinModulationFactor + modFactor));
+                T modFactor = NumOps.Divide(NumOps.One,
+                    NumOps.Add(NumOps.One, NumOps.Multiply(emdScore, NumOps.FromDouble(_deepEmdOptions.Temperature))));
+                var factor = Engine.Clamp(
+                    new Vector<T>(new[] { NumOps.Add(NumOps.FromDouble(MinModulationFactor), modFactor) }),
+                    NumOps.FromDouble(MinModulationFactor), NumOps.FromDouble(MaxModulationFactor));
 
-                var currentParams = ParamModel.GetParameters();
-                var modulatedParams = new Vector<T>(currentParams.Length);
-                for (int i = 0; i < currentParams.Length; i++)
-                    modulatedParams[i] = NumOps.Multiply(currentParams[i], NumOps.FromDouble(modFactor));
-                ParamModel.SetParameters(modulatedParams);
+                ParamModel.SetParameters(ParameterModulation.Apply(Engine, ParamModel.GetParameters(), factor));
             }
 
             var queryPred2 = MetaModel.Predict(task.QueryInput);
@@ -253,7 +252,7 @@ public partial class DeepEMDAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, T
     /// alternating row and column normalization of a "soft" matching matrix.
     /// </para>
     /// </remarks>
-    private double ComputeEMDScore(Vector<T> features1, Vector<T> features2)
+    private T ComputeEMDScore(Vector<T> features1, Vector<T> features2)
     {
         int numNodes = _deepEmdOptions.NumNodes;
 
@@ -264,91 +263,69 @@ public partial class DeepEMDAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, T
         int featureDim1 = Math.Max(features1.Length / Math.Max(n1, 1), 1);
         int featureDim2 = Math.Max(features2.Length / Math.Max(n2, 1), 1);
         int featureDim = Math.Min(featureDim1, featureDim2);
-
-        // Compute cost matrix using squared Euclidean distance between node feature vectors
-        var costMatrix = new double[n1, n2];
-
-        for (int i = 0; i < n1; i++)
+        if (n1 == 0 || n2 == 0)
         {
-            for (int j = 0; j < n2; j++)
-            {
-                double sqDist = 0;
-                for (int d = 0; d < featureDim; d++)
-                {
-                    int idx1 = i * featureDim1 + d;
-                    int idx2 = j * featureDim2 + d;
-                    if (idx1 < features1.Length && idx2 < features2.Length)
-                    {
-                        double diff = NumOps.ToDouble(features1[idx1]) - NumOps.ToDouble(features2[idx2]);
-                        sqDist += diff * diff;
-                    }
-                }
-                costMatrix[i, j] = sqDist;
-            }
+            return NumOps.Zero;
         }
 
-        // Sinkhorn iterations
-        double epsilon = _deepEmdOptions.SinkhornRegularization;
-        var K = new double[n1, n2];
+        // Node i of each set is the first featureDim entries of its featureDimK-wide block (always in range,
+        // since nK * featureDimK <= length).
+        var nodes1 = NodeRows(features1, n1, featureDim1, featureDim);
+        var nodes2 = NodeRows(features2, n2, featureDim2, featureDim);
+
+        // Cost matrix: squared Euclidean distance between node feature vectors
+        var shape = new[] { n1, n2, featureDim };
+        var diff = Engine.TensorSubtract(
+            Engine.TensorBroadcastTo(Engine.Reshape(nodes1, new[] { n1, 1, featureDim }), shape),
+            Engine.TensorBroadcastTo(Engine.Reshape(nodes2, new[] { 1, n2, featureDim }), shape));
+        var costMatrix = Engine.ReduceSum(Engine.TensorSquare(diff), new[] { 2 }, false);
 
         // K = exp(-C / epsilon)
-        for (int i = 0; i < n1; i++)
-        {
-            for (int j = 0; j < n2; j++)
-            {
-                K[i, j] = Math.Exp(-costMatrix[i, j] / Math.Max(epsilon, SinkhornStabilityEpsilon));
-            }
-        }
+        double epsilon = _deepEmdOptions.SinkhornRegularization;
+        var K = Engine.TensorExp(
+            Engine.TensorMultiplyScalar(costMatrix, NumOps.FromDouble(-1.0 / Math.Max(epsilon, SinkhornStabilityEpsilon))));
+        var kT = Engine.TensorTranspose(K);
 
-        // Uniform marginals
-        var u = new double[n1];
-        var v = new double[n2];
-        for (int i = 0; i < n1; i++) u[i] = 1.0 / n1;
-        for (int j = 0; j < n2; j++) v[j] = 1.0 / n2;
+        // Uniform marginals and unit initial scalings
+        var u = Tensor<T>.FromVector(Engine.Fill(n1, NumOps.FromDouble(1.0 / n1)));
+        var v = Tensor<T>.FromVector(Engine.Fill(n2, NumOps.FromDouble(1.0 / n2)));
+        var scalingU = Engine.TensorOnesLike(u);
+        var scalingV = Engine.TensorOnesLike(v);
 
-        // Sinkhorn iterations
-        var scalingU = new double[n1];
-        var scalingV = new double[n2];
-        for (int i = 0; i < n1; i++) scalingU[i] = 1.0;
-        for (int j = 0; j < n2; j++) scalingV[j] = 1.0;
-
+        // Sinkhorn iterations: u = a / (K v), then v = b / (K^T u); a sum at or below the stability epsilon
+        // keeps the marginal itself.
         for (int iter = 0; iter < _deepEmdOptions.SinkhornIterations; iter++)
         {
-            // Update u: u = a / (K * v)
-            for (int i = 0; i < n1; i++)
-            {
-                double sum = 0;
-                for (int j = 0; j < n2; j++)
-                {
-                    sum += K[i, j] * scalingV[j];
-                }
-                scalingU[i] = sum > SinkhornStabilityEpsilon ? u[i] / sum : u[i];
-            }
-
-            // Update v: v = b / (K^T * u)
-            for (int j = 0; j < n2; j++)
-            {
-                double sum = 0;
-                for (int i = 0; i < n1; i++)
-                {
-                    sum += K[i, j] * scalingU[i];
-                }
-                scalingV[j] = sum > SinkhornStabilityEpsilon ? v[j] / sum : v[j];
-            }
+            scalingU = SinkhornScaling(u, MatVec(K, scalingV, n1, n2));
+            scalingV = SinkhornScaling(v, MatVec(kT, scalingU, n2, n1));
         }
 
-        // Compute EMD = sum(T .* C) where T = diag(u) * K * diag(v)
-        double emd = 0;
-        for (int i = 0; i < n1; i++)
-        {
-            for (int j = 0; j < n2; j++)
-            {
-                double transport = scalingU[i] * K[i, j] * scalingV[j];
-                emd += transport * costMatrix[i, j];
-            }
-        }
+        // EMD = sum(T .* C) where T = diag(u) * K * diag(v)
+        var transport = Engine.TensorMultiply(
+            Engine.TensorMultiply(K, Engine.TensorBroadcastTo(Engine.Reshape(scalingU, new[] { n1, 1 }), new[] { n1, n2 })),
+            Engine.TensorBroadcastTo(Engine.Reshape(scalingV, new[] { 1, n2 }), new[] { n1, n2 }));
+        return Engine.TensorSum(Engine.TensorMultiply(transport, costMatrix));
+    }
 
-        return emd;
+    /// <summary>The [count, width] node rows: row i is features[i * stride .. i * stride + width).</summary>
+    private Tensor<T> NodeRows(Vector<T> features, int count, int stride, int width)
+    {
+        var blocks = Engine.Reshape(Tensor<T>.FromVector(features.GetSubVector(0, count * stride)), new[] { count, stride });
+        return width == stride ? blocks : Engine.TensorSlice(blocks, new[] { 0, 0 }, new[] { count, width });
+    }
+
+    /// <summary>The [rows] product of a [rows, columns] matrix and a [columns] vector.</summary>
+    private Tensor<T> MatVec(Tensor<T> matrix, Tensor<T> vector, int rows, int columns)
+    {
+        return Engine.Reshape(Engine.TensorMatMul(matrix, Engine.Reshape(vector, new[] { columns, 1 })), new[] { rows });
+    }
+
+    /// <summary>marginal / sum where sum exceeds the stability epsilon, the marginal itself elsewhere.</summary>
+    private Tensor<T> SinkhornScaling(Tensor<T> marginal, Tensor<T> sum)
+    {
+        var stable = Engine.TensorGreaterThan(sum, NumOps.FromDouble(SinkhornStabilityEpsilon));
+        var safeSum = Engine.TensorWhere(stable, sum, Engine.TensorOnesLike(sum));
+        return Engine.TensorWhere(stable, Engine.TensorDivide(marginal, safeSum), marginal);
     }
 
 }
