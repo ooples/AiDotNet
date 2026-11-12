@@ -498,11 +498,14 @@ public partial class GraphNeuralNetwork<T> : GraphModelLayoutBase<T>, IAuxiliary
             var strength = NumOps.FromDouble(Options.Strength);
             var (start, end) = ClampedRange(gradient.Length);
 
-            for (int i = 0; i < gradient.Length; i++)
+            // gradient + strength * coefficients inside [start, end), the gradient unchanged elsewhere
+            gradient.AsSpan().CopyTo(result.AsWritableSpan());
+            if (end > start)
             {
-                result[i] = i >= start && i < end
-                    ? NumOps.Add(gradient[i], NumOps.Multiply(strength, coefficients[i]))
-                    : gradient[i];
+                var regularized = (Vector<T>)AiDotNetEngine.Current.Add(
+                    gradient.GetSubVector(start, end - start),
+                    (Vector<T>)AiDotNetEngine.Current.Multiply(coefficients.GetSubVector(start, end - start), strength));
+                regularized.AsSpan().CopyTo(result.AsWritableSpan().Slice(start));
             }
 
             return result;
@@ -528,8 +531,13 @@ public partial class GraphNeuralNetwork<T> : GraphModelLayoutBase<T>, IAuxiliary
             var shrinkage = NumOps.Subtract(NumOps.One, NumOps.FromDouble(Options.Strength));
             var (start, end) = ClampedRange(data.Length);
 
-            for (int i = 0; i < data.Length; i++)
-                result[i] = i >= start && i < end ? NumOps.Multiply(data[i], shrinkage) : data[i];
+            // data * shrinkage inside [start, end), unchanged elsewhere
+            data.AsSpan().CopyTo(result.AsWritableSpan());
+            if (end > start)
+            {
+                var shrunk = (Vector<T>)AiDotNetEngine.Current.Multiply(data.GetSubVector(start, end - start), shrinkage);
+                shrunk.AsSpan().CopyTo(result.AsWritableSpan().Slice(start));
+            }
 
             return result;
         }
@@ -539,16 +547,12 @@ public partial class GraphNeuralNetwork<T> : GraphModelLayoutBase<T>, IAuxiliary
             var result = new Matrix<T>(data.Rows, data.Columns);
             var shrinkage = NumOps.Subtract(NumOps.One, NumOps.FromDouble(Options.Strength));
             var (start, end) = ClampedRange(data.Rows * data.Columns);
-            int flatIndex = 0;
-
-            for (int row = 0; row < data.Rows; row++)
+            // Row-major flat range [start, end) is scaled by shrinkage, the rest copied unchanged
+            data.AsSpan().CopyTo(result.AsWritableSpan());
+            if (end > start)
             {
-                for (int column = 0; column < data.Columns; column++, flatIndex++)
-                {
-                    result[row, column] = flatIndex >= start && flatIndex < end
-                        ? NumOps.Multiply(data[row, column], shrinkage)
-                        : data[row, column];
-                }
+                var shrunk = (Vector<T>)AiDotNetEngine.Current.Multiply(new Vector<T>(data.AsSpan().Slice(start, end - start).ToArray()), shrinkage);
+                shrunk.AsSpan().CopyTo(result.AsWritableSpan().Slice(start));
             }
 
             return result;
