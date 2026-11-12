@@ -1038,48 +1038,25 @@ public partial class SDXLModel<T> : LatentDiffusionModelBase<T>
     private Tensor<T> ApplyMicroCondition(Tensor<T> embedding, Tensor<T> microCond)
     {
         // SDXL uses micro-conditioning (original_size, crop_coords, target_size) to improve
-        // generation quality at different resolutions. The 6 values are projected through
-        // a learned embedding and added to influence the diffusion process.
+        // generation quality at different resolutions. Each embedding dimension d is modulated by
+        // 0.1 * sin(d * (micro[d % 6] / 1024) * 0.01), the same value for every token of the sequence.
         var shape = embedding._shape;
         var batch = shape[0];
         var seqLen = shape[1];
         var embedDim = shape[2];
-
-        var result = new Tensor<T>(new[] { batch, seqLen, embedDim });
-        var resultSpan = result.AsWritableSpan();
-        var embSpan = embedding.AsSpan();
-        var microSpan = microCond.AsSpan();
-
-        // Project micro-conditioning values (6 values) to embedding dimension
-        // Each micro-cond value is scaled and used as a modulation factor
         int microLen = microCond.Shape[1]; // Should be 6
 
-        for (int b = 0; b < batch; b++)
-        {
-            for (int s = 0; s < seqLen; s++)
-            {
-                for (int d = 0; d < embedDim; d++)
-                {
-                    int embIdx = b * seqLen * embedDim + s * embedDim + d;
-                    T embVal = embSpan[embIdx];
-
-                    // Apply micro-conditioning as sinusoidal modulation
-                    // Similar to how timestep embedding works in diffusion models
-                    int microIdx = d % microLen;
-                    T microVal = microSpan[b * microLen + microIdx];
-
-                    // Scale micro-conditioning (normalized to prevent explosion)
-                    double microDouble = NumOps.ToDouble(microVal);
-                    double normalizedMicro = microDouble / 1024.0; // Normalize by typical image size
-                    double modulation = Math.Sin(d * normalizedMicro * 0.01);
-
-                    // Apply additive modulation
-                    resultSpan[embIdx] = NumOps.Add(embVal, NumOps.FromDouble(modulation * 0.1));
-                }
-            }
-        }
-
-        return result;
+        // micro[b, d % microLen] for every dimension d, by tiling the micro values across the embedding width.
+        int repeats = (embedDim + microLen - 1) / microLen;
+        var micro = Engine.TensorSlice(
+            Engine.TensorTile(microCond.Reshape(new[] { batch, microLen }), new[] { 1, repeats }),
+            new[] { 0, 0 }, new[] { batch, embedDim });
+        var dimensions = Engine.TensorBroadcastTo(
+            Engine.TensorArange<T>(0.0, embedDim, 1.0).Reshape(new[] { 1, embedDim }), new[] { batch, embedDim });
+        var phase = Engine.TensorMultiplyScalar(Engine.TensorMultiply(dimensions, micro), NumOps.FromDouble(0.01 / 1024.0));
+        var modulation = Engine.TensorMultiplyScalar(Engine.TensorSin(phase), NumOps.FromDouble(0.1));
+        var perToken = Engine.TensorBroadcastTo(modulation.Reshape(new[] { batch, 1, embedDim }), new[] { batch, seqLen, embedDim });
+        return Engine.TensorAdd(embedding.Reshape(new[] { batch, seqLen, embedDim }), perToken);
     }
 
     #endregion

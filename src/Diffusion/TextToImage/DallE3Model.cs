@@ -650,7 +650,7 @@ public partial class DallE3Model<T> : LatentDiffusionModelBase<T>, IDallE3Model<
         };
     }
 
-    private Tensor<T> BilinearUpscale(Tensor<T> image, int newHeight, int newWidth)
+    internal static Tensor<T> BilinearUpscale(Tensor<T> image, int newHeight, int newWidth)
     {
         var shape = image._shape;
         var channels = shape[^3];
@@ -662,43 +662,13 @@ public partial class DallE3Model<T> : LatentDiffusionModelBase<T>, IDallE3Model<
         newShape[^2] = newHeight;
         newShape[^1] = newWidth;
 
-        var result = new Tensor<T>(newShape);
-        var scaleY = (double)oldHeight / newHeight;
-        var scaleX = (double)oldWidth / newWidth;
-
-        for (int c = 0; c < channels; c++)
-        {
-            for (int y = 0; y < newHeight; y++)
-            {
-                for (int x = 0; x < newWidth; x++)
-                {
-                    var srcY = y * scaleY;
-                    var srcX = x * scaleX;
-                    var y0 = (int)Math.Floor(srcY);
-                    var x0 = (int)Math.Floor(srcX);
-                    var y1 = Math.Min(y0 + 1, oldHeight - 1);
-                    var x1 = Math.Min(x0 + 1, oldWidth - 1);
-                    var fy = srcY - y0;
-                    var fx = srcX - x0;
-
-                    // Get the four corner values
-                    var v00 = NumOps.ToDouble(image.Data.Span[c * oldHeight * oldWidth + y0 * oldWidth + x0]);
-                    var v01 = NumOps.ToDouble(image.Data.Span[c * oldHeight * oldWidth + y0 * oldWidth + x1]);
-                    var v10 = NumOps.ToDouble(image.Data.Span[c * oldHeight * oldWidth + y1 * oldWidth + x0]);
-                    var v11 = NumOps.ToDouble(image.Data.Span[c * oldHeight * oldWidth + y1 * oldWidth + x1]);
-
-                    // Bilinear interpolation
-                    var interpolated = v00 * (1 - fx) * (1 - fy) +
-                                       v01 * fx * (1 - fy) +
-                                       v10 * (1 - fx) * fy +
-                                       v11 * fx * fy;
-
-                    result.Data.Span[c * newHeight * newWidth + y * newWidth + x] = NumOps.FromDouble(interpolated);
-                }
-            }
-        }
-
-        return result;
+        // torch.nn.functional.interpolate(mode="bilinear", align_corners=False) over every image of the
+        // batch: half-pixel sample centres, edges clamped.
+        int images = image.Length / (channels * oldHeight * oldWidth);
+        var batched = image.Reshape(new[] { images, channels, oldHeight, oldWidth });
+        var resized = AiDotNetEngine.Current.Interpolate(
+            batched, new[] { newHeight, newWidth }, InterpolateMode.Bilinear, false);
+        return resized.Reshape(newShape);
     }
 
     private Tensor<T> CreateExpandedCanvas(Tensor<T> image, int newWidth, int newHeight, int offsetX, int offsetY)
