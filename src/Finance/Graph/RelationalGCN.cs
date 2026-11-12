@@ -266,23 +266,20 @@ public partial class RelationalGCN<T> : ForecastingModelBase<T>
     /// <param name="options">RelationalGCN-specific options.</param>
     /// <param name="relationAdjacencies">The adjacency of every relation type, shaped [numRelations, numNodes, numNodes];
     /// entry [r, i, j] weights the edge of type r along which node i receives from node j.</param>
-    /// <param name="optimizer">Optional optimizer for fine-tuning.</param>
-    /// <param name="lossFunction">Optional loss function.</param>
     /// <remarks>
+    /// <para>Every parameter is required: an ONNX model is inference-only, so it takes no optimizer or loss
+    /// function, and the native constructor is the one overload with optional parameters.</para>
     /// <para><b>For Beginners:</b> Use this constructor to load a pretrained RelationalGCN model.
     /// The ONNX model includes learned basis matrices and relation coefficients.
     /// You must provide the relation adjacency matrices for the knowledge graph.
     /// </para>
     /// </remarks>
-    [System.Diagnostics.CodeAnalysis.SuppressMessage("ApiDesign", "RS0026:Do not add multiple public overloads with optional parameters", Justification = "Both constructors replace removed overloads whose adjacency parameter changed type; no old overload remains for a call to become ambiguous with.")]
     public RelationalGCN(
         NeuralNetworkArchitecture<T> architecture,
         string onnxModelPath,
-        RelationalGCNOptions<T>? options = null,
-        Tensor<T>? relationAdjacencies = null,
-        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null)
-        : base(architecture, lossFunction ?? new MeanSquaredErrorLoss<T>(), 1.0)
+        RelationalGCNOptions<T>? options,
+        Tensor<T>? relationAdjacencies)
+        : base(architecture, new MeanSquaredErrorLoss<T>(), 1.0)
     {
         if (string.IsNullOrWhiteSpace(onnxModelPath))
             throw new ArgumentNullException(nameof(onnxModelPath));
@@ -294,9 +291,8 @@ public partial class RelationalGCN<T> : ForecastingModelBase<T>
         OnnxSession = new InferenceSession(onnxModelPath);
         _options = options ?? new RelationalGCNOptions<T>();
         Options = _options;
-        _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
-        _optimizer = optimizer
-    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+        _lossFunction = new MeanSquaredErrorLoss<T>();
+        _optimizer = PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
     ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
 
         _sequenceLength = _options.SequenceLength;
@@ -336,7 +332,6 @@ public partial class RelationalGCN<T> : ForecastingModelBase<T>
     /// Each adjacency matrix represents one type of relationship between nodes.
     /// </para>
     /// </remarks>
-    [System.Diagnostics.CodeAnalysis.SuppressMessage("ApiDesign", "RS0026:Do not add multiple public overloads with optional parameters", Justification = "Both constructors replace removed overloads whose adjacency parameter changed type; no old overload remains for a call to become ambiguous with.")]
     public RelationalGCN(
         NeuralNetworkArchitecture<T> architecture,
         RelationalGCNOptions<T>? options = null,
@@ -468,18 +463,11 @@ public partial class RelationalGCN<T> : ForecastingModelBase<T>
     }
 
     /// <summary>
-    /// Draws a tensor of independent uniform values in [-limit, limit] from the model's random stream.
+    /// Samples a tensor of independent uniform values in [-limit, limit] with the engine, in T, seeded from the
+    /// model's random stream so a fixed Seed reproduces it.
     /// </summary>
     private Tensor<T> UniformTensor(int[] shape, double limit)
-    {
-        int count = shape.Aggregate(1, (product, dimension) => product * dimension);
-        var uniforms = new double[count];
-        for (int i = 0; i < count; i++)
-            uniforms[i] = _random.NextDouble();
-        return Engine.TensorMultiplyScalar(
-            Engine.TensorAddScalar(new Tensor<double>(shape, new Vector<double>(uniforms)).Cast<T>(), NumOps.FromDouble(-0.5)),
-            NumOps.FromDouble(2.0 * limit));
-    }
+        => Engine.TensorRandomUniformRange(shape, NumOps.FromDouble(-limit), NumOps.FromDouble(limit), _random.Next());
 
     /// <summary>
     /// The [size, size] mask that keeps the <paramref name="blocks"/> equal diagonal blocks of a weight matrix.
