@@ -123,11 +123,7 @@ public class BeatTracker<T> : MusicAnalysisBase<T>
     /// <returns>Beat tracking result.</returns>
     public BeatTrackingResult Track(Vector<T> audio)
     {
-        var tensor = new Tensor<T>([audio.Length]);
-        for (int i = 0; i < audio.Length; i++)
-        {
-            tensor[i] = audio[i];
-        }
+        var tensor = new Tensor<T>([audio.Length], audio);
         return Track(tensor);
     }
 
@@ -138,33 +134,33 @@ public class BeatTracker<T> : MusicAnalysisBase<T>
 
         // Features shape: [numFrames, numFeatures]
         int numFrames = features.Shape[0];
-        var onsetEnvelope = new double[numFrames];
+        if (numFrames == 0)
+            return new double[0];
 
-        // Get spectral flux using the dynamically determined index
-        // Flux measures spectral change between frames - high values indicate onsets
-        for (int f = 0; f < numFrames; f++)
-        {
-            // Use spectral flux as onset strength (half-wave rectified to only keep increases)
-            onsetEnvelope[f] = Math.Max(0, NumOps.ToDouble(features[f, _fluxIndex]));
-        }
+        // Spectral flux (dynamically determined column), half-wave rectified to only keep increases:
+        // max(0, flux), NaN propagating as Math.Max does
+        var zeros = new Tensor<T>([numFrames]);
+        var flux = Engine.Reshape(Engine.TensorSlice(features, [0, _fluxIndex], [numFrames, 1]), [numFrames]);
+        var onsetEnvelope = Engine.TensorWhere(Engine.TensorLessThan(flux, NumOps.Zero), zeros, flux);
 
-        // Apply half-wave rectification and smoothing
-        var smoothed = new double[numFrames];
+        // Smoothing: mean over the frames i - w .. i + w that exist
         int smoothWindow = _options.SmoothingWindow;
-
+        var sum = zeros;
+        var count = new int[numFrames];
         for (int i = 0; i < numFrames; i++)
+            count[i] = Math.Max(0, Math.Min(numFrames - 1, i + smoothWindow) - Math.Max(0, i - smoothWindow) + 1);
+        for (int k = -smoothWindow; k <= smoothWindow; k++)
         {
-            double sum = 0;
-            int count = 0;
-            for (int j = Math.Max(0, i - smoothWindow); j <= Math.Min(numFrames - 1, i + smoothWindow); j++)
-            {
-                sum += onsetEnvelope[j];
-                count++;
-            }
-            smoothed[i] = sum / count;
+            if (Math.Abs(k) >= numFrames) continue;
+            var shifted = k >= 0
+                ? Engine.Concat(new[] { Engine.TensorSlice(onsetEnvelope, [k], [numFrames - k]), new Tensor<T>([k]) }, 0)
+                : Engine.Concat(new[] { new Tensor<T>([-k]), Engine.TensorSlice(onsetEnvelope, [0], [numFrames + k]) }, 0);
+            sum = Engine.TensorAdd(sum, shifted);
         }
+        var smoothed = Engine.TensorDivide(sum, new Tensor<int>(count, [numFrames]).Cast<T>());
 
-        return smoothed;
+        // The beat tracker works on the double envelope
+        return smoothed.Cast<double>().ToArray();
     }
 
     private double EstimateTempoFromEnvelope(double[] onsetEnvelope)

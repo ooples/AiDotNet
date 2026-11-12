@@ -104,14 +104,10 @@ public abstract class MusicAnalysisBase<T>
 
         // Convert the flux feature (first column) to array
         int numFrames = features.Shape[0];
-        T[] onsetStrength = new T[numFrames];
+        if (numFrames == 0)
+            return new T[0];
 
-        for (int i = 0; i < numFrames; i++)
-        {
-            onsetStrength[i] = features[i, 0];
-        }
-
-        return onsetStrength;
+        return Engine.TensorSlice(features, [0, 0], [numFrames, 1]).ToArray();
     }
 
     /// <summary>
@@ -132,38 +128,37 @@ public abstract class MusicAnalysisBase<T>
         // Autocorrelation-based tempogram
         int numBins = (int)(maxBpm - minBpm) + 1;
         T[] tempogram = new T[numBins];
+        var counts = new int[numBins];
 
         double hopTime = (double)HopLength / SampleRate;
+        int n = onsetStrength.Length;
+        var x = new Tensor<T>(onsetStrength, [n]);
+        T zero = NumOps.Zero;
 
         for (int i = 0; i < numBins; i++)
         {
             double bpm = minBpm + i;
             double period = 60.0 / bpm; // Period in seconds
             int lag = (int)(period / hopTime);
+            counts[i] = 1;
 
-            if (lag >= onsetStrength.Length)
+            if (lag >= n)
             {
-                tempogram[i] = NumOps.Zero;
+                tempogram[i] = zero;
                 continue;
             }
+            if (lag < 0)
+                throw new IndexOutOfRangeException("The tempo lag must be non-negative.");
 
-            // Compute autocorrelation at this lag
-            T correlation = NumOps.Zero;
-            int count = 0;
-            for (int j = 0; j < onsetStrength.Length - lag; j++)
-            {
-                correlation = NumOps.Add(correlation,
-                    NumOps.Multiply(onsetStrength[j], onsetStrength[j + lag]));
-                count++;
-            }
-
-            if (count > 0)
-            {
-                tempogram[i] = NumOps.Divide(correlation, NumOps.FromDouble(count));
-            }
+            // Autocorrelation sum at this lag (averaged below)
+            int count = n - lag;
+            tempogram[i] = Engine.TensorSum(Engine.TensorMultiply(
+                Engine.TensorSlice(x, [0], [count]), Engine.TensorSlice(x, [lag], [count])));
+            counts[i] = count;
         }
 
-        return tempogram;
+        if (numBins == 0) return tempogram;
+        return Engine.TensorDivide(new Tensor<T>(tempogram, [numBins]), new Tensor<int>(counts, [numBins]).Cast<T>()).ToArray();
     }
 
     /// <summary>
@@ -207,35 +202,49 @@ public abstract class MusicAnalysisBase<T>
 
         if (signal.Length == 0) return peaks.ToArray();
 
-        // Find global max for threshold
-        T maxVal = signal[0];
-        for (int i = 1; i < signal.Length; i++)
-        {
-            if (NumOps.GreaterThan(signal[i], maxVal))
-            {
-                maxVal = signal[i];
-            }
-        }
+        // Find global max for threshold (first value, replaced only by a strictly greater one)
+        int n = signal.Length;
+        var x = new Tensor<T>(signal, [n]);
+        T maxVal = signal[AudioEngineOps.FirstArgMaxSequential(Engine, x)];
 
         T absThreshold = NumOps.Multiply(maxVal, NumOps.FromDouble(threshold));
+        if (n < 3) return peaks.ToArray();
 
-        for (int i = 1; i < signal.Length - 1; i++)
+        // Local maxima above threshold (strictly greater than both neighbours)
+        var center = Engine.TensorSlice(x, [1], [n - 2]);
+        var isPeak = Engine.TensorMultiply(
+            Engine.TensorMultiply(
+                Engine.TensorGreaterThan(center, Engine.TensorSlice(x, [0], [n - 2])),
+                Engine.TensorGreaterThan(center, Engine.TensorSlice(x, [2], [n - 2]))),
+            Engine.TensorGreaterThan(center, absThreshold));
+        int[] candidates = Engine.TensorNonzero(isPeak).ToArray();
+        int m = candidates.Length;
+        if (m == 0) return peaks.ToArray();
+        for (int k = 0; k < m; k++) candidates[k] += 1;
+
+        // Candidates are never NaN, so v[a] > v[b] exactly when fewer candidates exceed v[a] than v[b]
+        var values = Engine.TensorIndexSelect(x, new Tensor<int>(candidates, [m]), 0);
+        var square = new[] { m, m };
+        var others = Engine.TensorBroadcastTo(Engine.Reshape(values, [1, m]), square);
+        var self = Engine.TensorBroadcastTo(Engine.Reshape(values, [m, 1]), square);
+        int[] exceededBy = Engine.ReduceSum(Engine.TensorGreaterThan(others, self), [1], keepDims: false).Cast<int>().ToArray();
+
+        int lastCandidate = -1;
+        for (int k = 0; k < m; k++)
         {
-            // Check if this is a local maximum above threshold
-            if (NumOps.GreaterThan(signal[i], signal[i - 1]) &&
-                NumOps.GreaterThan(signal[i], signal[i + 1]) &&
-                NumOps.GreaterThan(signal[i], absThreshold))
+            int i = candidates[k];
+
+            // Check minimum distance from previous peak
+            if (peaks.Count == 0 || (i - peaks[^1]) >= minDistance)
             {
-                // Check minimum distance from previous peak
-                if (peaks.Count == 0 || (i - peaks[^1]) >= minDistance)
-                {
-                    peaks.Add(i);
-                }
-                else if (NumOps.GreaterThan(signal[i], signal[peaks[^1]]))
-                {
-                    // Replace previous peak if this one is higher
-                    peaks[^1] = i;
-                }
+                peaks.Add(i);
+                lastCandidate = k;
+            }
+            else if (exceededBy[k] < exceededBy[lastCandidate])
+            {
+                // Replace previous peak if this one is higher
+                peaks[^1] = i;
+                lastCandidate = k;
             }
         }
 

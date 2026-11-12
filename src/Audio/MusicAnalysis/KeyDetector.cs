@@ -113,11 +113,7 @@ public class KeyDetector<T> : MusicAnalysisBase<T>
     /// <returns>Key detection result.</returns>
     public KeyDetectionResult Detect(Vector<T> audio)
     {
-        var tensor = new Tensor<T>([audio.Length]);
-        for (int i = 0; i < audio.Length; i++)
-        {
-            tensor[i] = audio[i];
-        }
+        var tensor = new Tensor<T>([audio.Length], audio);
         return Detect(tensor);
     }
 
@@ -157,27 +153,17 @@ public class KeyDetector<T> : MusicAnalysisBase<T>
     private double[] ComputeAverageChroma(Tensor<T> chroma)
     {
         int numFrames = chroma.Shape[0];
-        var avgChroma = new double[12];
+        if (numFrames == 0)
+            return new double[12];
 
-        for (int f = 0; f < numFrames; f++)
-        {
-            for (int c = 0; c < 12; c++)
-            {
-                avgChroma[c] += NumOps.ToDouble(chroma[f, c]);
-            }
-        }
+        // Sum over frames, then normalize to a distribution when the total is positive
+        var avgChroma = Engine.ReduceSum(Engine.TensorSlice(chroma, [0, 0], [numFrames, 12]), [0], keepDims: false);
+        T sum = Engine.TensorSum(avgChroma);
+        if (NumOps.GreaterThan(sum, NumOps.Zero))
+            avgChroma = Engine.TensorDivideScalar(avgChroma, sum);
 
-        // Normalize
-        double sum = avgChroma.Sum();
-        if (sum > 0)
-        {
-            for (int c = 0; c < 12; c++)
-            {
-                avgChroma[c] /= sum;
-            }
-        }
-
-        return avgChroma;
+        // Key-profile matching works on the double chroma profile
+        return avgChroma.Cast<double>().ToArray();
     }
 
     private List<KeyDetectionResult> MatchKeyProfiles(double[] chroma)

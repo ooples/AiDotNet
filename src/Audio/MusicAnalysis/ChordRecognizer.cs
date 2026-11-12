@@ -45,6 +45,7 @@ public class ChordRecognizer<T> : MusicAnalysisBase<T>
     private readonly ChromaExtractor<T> _chromaExtractor;
     private readonly ChordRecognizerOptions _options;
     private readonly Dictionary<string, double[]> _chordTemplates;
+    private Tensor<T>? _chordTemplateTensor;
 
     // Chord quality names
     private static readonly string[] NoteNames = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
@@ -98,11 +99,7 @@ public class ChordRecognizer<T> : MusicAnalysisBase<T>
     /// <returns>List of recognized chord segments.</returns>
     public List<ChordSegment> Recognize(Vector<T> audio)
     {
-        var tensor = new Tensor<T>([audio.Length]);
-        for (int i = 0; i < audio.Length; i++)
-        {
-            tensor[i] = audio[i];
-        }
+        var tensor = new Tensor<T>([audio.Length], audio);
         return Recognize(tensor);
     }
 
@@ -177,68 +174,108 @@ public class ChordRecognizer<T> : MusicAnalysisBase<T>
     {
         int numFrames = chroma.Shape[0];
         var frameChords = new List<(string chord, double confidence)>();
+        if (numFrames == 0)
+            return frameChords;
+
+        var templates = _chordTemplates.ToList();
+        int numChords = templates.Count;
+        var frameShape = new[] { numFrames, 1 };
+
+        // Chroma vectors [frames, 12]; frames whose max(0, max chroma) is below MinChromaEnergy are
+        // "no chord" (a NaN chroma value never counts as low energy)
+        var chromaVectors = Engine.TensorSlice(chroma, [0, 0], [numFrames, 12]);
+        var hasNaN = Engine.ReduceSum(
+            Engine.TensorWhere(Engine.TensorIsNan(chromaVectors), Tensor<T>.CreateDefault([numFrames, 12], NumOps.One), new Tensor<T>([numFrames, 12])),
+            [1], keepDims: true);
+        var rowMax = Engine.ReduceMax(chromaVectors, [1], keepDims: true);
+        var lowEnergy = _options.MinChromaEnergy > 0
+            ? Engine.TensorMultiply(
+                Engine.TensorLessThan(rowMax, NumOps.FromDouble(_options.MinChromaEnergy)),
+                Engine.TensorEquals(hasNaN, NumOps.Zero))
+            : new Tensor<T>(frameShape);
+
+        // Normalize each frame by its sum when that sum is positive
+        var rowSum = Engine.ReduceSum(chromaVectors, [1], keepDims: true);
+        var divisor = Engine.TensorWhere(
+            Engine.TensorGreaterThan(rowSum, NumOps.Zero), rowSum, Tensor<T>.CreateDefault(frameShape, NumOps.One));
+        var normalized = Engine.TensorDivide(chromaVectors, Engine.TensorBroadcastTo(divisor, [numFrames, 12]));
+
+        // Cosine similarity with every chord template (0 where the norms' product is not above
+        // CosineEpsilon); the best chord is the first holding the largest score above MinConfidence
+        double[] bestScores;
+        int[] bestChords = new int[numFrames];
+        if (numChords == 0)
+        {
+            bestScores = new double[numFrames];
+            for (int f = 0; f < numFrames; f++)
+            {
+                bestScores[f] = _options.MinConfidence;
+                bestChords[f] = -1;
+            }
+        }
+        else
+        {
+            var scoreShape = new[] { numFrames, numChords };
+            var templateMatrix = ChordTemplateTensor(templates);
+            var dot = Engine.TensorMatMul(normalized, Engine.TensorTranspose(templateMatrix));
+            var normA = Engine.TensorSqrt(Engine.ReduceSum(Engine.TensorSquare(normalized), [1], keepDims: true));
+            var normB = Engine.TensorSqrt(Engine.ReduceSum(Engine.TensorSquare(templateMatrix), [1], keepDims: true));
+            var denom = Engine.TensorMultiply(
+                Engine.TensorBroadcastTo(normA, scoreShape),
+                Engine.TensorBroadcastTo(Engine.Reshape(normB, [1, numChords]), scoreShape));
+            var scores = Engine.TensorWhere(
+                Engine.TensorGreaterThan(denom, NumOps.FromDouble(CosineEpsilon)),
+                Engine.TensorDivide(dot, denom),
+                new Tensor<T>(scoreShape));
+
+            // NaN scores never win: rank them below every number
+            var ranked = Engine.TensorWhere(
+                Engine.TensorIsNan(scores), Tensor<T>.CreateDefault(scoreShape, NumOps.FromDouble(double.NegativeInfinity)), scores);
+            var best = Engine.ReduceMax(ranked, [1], keepDims: true);
+            var chordIndex = Engine.TensorBroadcastTo(Engine.Reshape(Engine.TensorArange<T>(0, numChords, 1), [1, numChords]), scoreShape);
+            var firstBest = Engine.TensorAmin(
+                Engine.TensorWhere(
+                    Engine.TensorEquals(ranked, Engine.TensorBroadcastTo(best, scoreShape)),
+                    chordIndex,
+                    Tensor<T>.CreateDefault(scoreShape, NumOps.FromDouble(numChords))),
+                [1], keepDims: true);
+            var wins = Engine.TensorGreaterThan(best, NumOps.FromDouble(_options.MinConfidence));
+            var winner = Engine.TensorWhere(wins, firstBest, Tensor<T>.CreateDefault(frameShape, NumOps.FromDouble(-1)));
+            bestScores = Engine.TensorWhere(wins, best, Tensor<T>.CreateDefault(frameShape, NumOps.FromDouble(_options.MinConfidence)))
+                .Cast<double>().ToArray();
+            bestChords = winner.Cast<int>().ToArray();
+        }
+
+        var noChord = Engine.TensorNonzero(lowEnergy).ToArray();
+        var isLow = new bool[numFrames];
+        for (int k = 0; k < noChord.Length; k += 2) isLow[noChord[k]] = true;
 
         for (int f = 0; f < numFrames; f++)
         {
-            // Extract chroma vector for this frame
-            var chromaVector = new double[12];
-            double maxChroma = 0;
-
-            for (int c = 0; c < 12; c++)
-            {
-                chromaVector[c] = NumOps.ToDouble(chroma[f, c]);
-                maxChroma = Math.Max(maxChroma, chromaVector[c]);
-            }
-
-            // Check if frame has enough energy
-            if (maxChroma < _options.MinChromaEnergy)
+            if (isLow[f])
             {
                 frameChords.Add(("N", 1.0)); // No chord
                 continue;
             }
 
-            // Normalize
-            double sum = chromaVector.Sum();
-            if (sum > 0)
-            {
-                for (int c = 0; c < 12; c++)
-                {
-                    chromaVector[c] /= sum;
-                }
-            }
-
-            // Find best matching template
-            string bestChord = "N";
-            double bestScore = _options.MinConfidence;
-
-            foreach (var (chordName, template) in _chordTemplates)
-            {
-                double score = CosineSimilarity(chromaVector, template);
-
-                if (score > bestScore)
-                {
-                    bestScore = score;
-                    bestChord = chordName;
-                }
-            }
-
-            frameChords.Add((bestChord, bestScore));
+            int chord = bestChords[f];
+            frameChords.Add((chord >= 0 ? templates[chord].Key : "N", bestScores[f]));
         }
 
         return frameChords;
     }
 
-    private static double CosineSimilarity(double[] a, double[] b)
+    /// <summary>The fixed chord templates as a <c>[chords, 12]</c> tensor, converted to T once, in bulk.</summary>
+    private Tensor<T> ChordTemplateTensor(List<KeyValuePair<string, double[]>> templates)
     {
-        double dot = 0, normA = 0, normB = 0;
-        for (int i = 0; i < a.Length; i++)
+        if (_chordTemplateTensor is null)
         {
-            dot += a[i] * b[i];
-            normA += a[i] * a[i];
-            normB += b[i] * b[i];
+            var values = new double[templates.Count * 12];
+            for (int k = 0; k < templates.Count; k++)
+                Array.Copy(templates[k].Value, 0, values, k * 12, 12);
+            _chordTemplateTensor = new Tensor<double>(values, [templates.Count, 12]).Cast<T>();
         }
-        double denom = Math.Sqrt(normA) * Math.Sqrt(normB);
-        return denom > CosineEpsilon ? dot / denom : 0;
+        return _chordTemplateTensor;
     }
 
     private List<ChordSegment> MergeIntoSegments(List<(string chord, double confidence)> frameChords)
