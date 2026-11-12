@@ -152,7 +152,7 @@ public class DINOLoss<T> : ContrastiveLossBase<T>
         if (teacherOutputs.Count == 0)
             throw new ArgumentException("Must provide at least one teacher output", nameof(teacherOutputs));
 
-        T totalLoss = NumOps.Zero;
+        var pairLosses = new List<T>();
         int pairCount = 0;
 
         // For each teacher output (global views)
@@ -171,7 +171,7 @@ public class DINOLoss<T> : ContrastiveLossBase<T>
                 var studentProbs = Softmax(studentOut, _studentTemperature);
                 var batchSize = studentProbs.Shape[0];
 
-                totalLoss = NumOps.Add(totalLoss, CrossEntropySum(teacherProbs, studentProbs));
+                pairLosses.Add(CrossEntropySum(teacherProbs, studentProbs));
 
                 pairCount += batchSize;
             }
@@ -180,7 +180,11 @@ public class DINOLoss<T> : ContrastiveLossBase<T>
         // Update center with mean of all teacher outputs
         UpdateCenterFromMultiple(teacherOutputs);
 
-        return pairCount > 0 ? NumOps.Divide(totalLoss, NumOps.FromDouble(pairCount)) : NumOps.Zero;
+        if (pairCount == 0)
+            return NumOps.Zero;
+
+        T totalLoss = Engine.TensorSum(new Tensor<T>(pairLosses.ToArray(), new[] { pairLosses.Count }));
+        return NumOps.Divide(totalLoss, NumOps.FromDouble(pairCount));
     }
 
     /// <summary>
