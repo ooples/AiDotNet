@@ -87,7 +87,7 @@ public class TiMINoAlgorithm<T> : TimeSeriesCausalBase<T>
         int effectiveN = n - MaxLag;
         if (effectiveN < 2 * MaxLag + 3 || d < 2) return new Matrix<T>(d, d);
 
-        var result = new Matrix<T>(d, d);
+        var result = new Dictionary<int, double>();
 
         for (int i = 0; i < d; i++)
             for (int j = 0; j < d; j++)
@@ -104,11 +104,11 @@ public class TiMINoAlgorithm<T> : TimeSeriesCausalBase<T>
                 {
                     // Use the fitted lag coefficient as the edge weight
                     if (Math.Abs(betaIJ) > EdgeCoefficientThreshold)
-                        result[i, j] = NumOps.FromDouble(betaIJ);
+                        result[i * d + j] = betaIJ;
                 }
             }
 
-        return result;
+        return CausalTensorHelpers.FromStatistics<T>(d, d, result);
     }
 
     private (double hsic, double beta) FitAndComputeHSIC(Matrix<T> data, int cause, int target, int n)
@@ -122,42 +122,22 @@ public class TiMINoAlgorithm<T> : TimeSeriesCausalBase<T>
         // Fit OLS and get residuals
         double rss = ComputeRSS(laggedX, y, effectiveN, laggedX.Columns);
 
-        // Compute residuals
-        var residuals = new Vector<T>(effectiveN);
         // Simple residual estimation: use RSS to approximate HSIC
         // HSIC ∝ mean(K_residual * K_input) where K is a kernel matrix
         // Simplified: use squared correlation between residuals and cause's lags as HSIC proxy
 
         // Recompute residuals from a simpler bivariate model
-        var causeVec = new Vector<T>(effectiveN);
-        var targetVec = new Vector<T>(effectiveN);
-        for (int t = 0; t < effectiveN; t++)
-        {
-            causeVec[t] = data[t, cause];
-            targetVec[t] = data[t + MaxLag, target];
-        }
+        // cause(t) and target(t + MaxLag), t = 0..effectiveN-1
+        var x = Tensor<T>.FromMatrix(data);
+        var causeVec = LaggedSeries(x, cause, MaxLag, MaxLag, effectiveN);
+        var targetVec = LaggedSeries(x, target, 0, MaxLag, effectiveN);
 
         // OLS: beta = cov(cause, target) / var(cause)
-        T sumC = NumOps.Zero, sumT = NumOps.Zero;
-        T nT = NumOps.FromDouble(effectiveN);
-        for (int t = 0; t < effectiveN; t++)
-        {
-            sumC = NumOps.Add(sumC, causeVec[t]);
-            sumT = NumOps.Add(sumT, targetVec[t]);
-        }
-        T meanC = NumOps.Divide(sumC, nT);
-        T meanT = NumOps.Divide(sumT, nT);
+        var centC = Engine.TensorSubtractScalar(causeVec, Engine.TensorMean(causeVec));
+        var centT = Engine.TensorSubtractScalar(targetVec, Engine.TensorMean(targetVec));
 
-        var centC = new Vector<T>(effectiveN);
-        var centT = new Vector<T>(effectiveN);
-        for (int t = 0; t < effectiveN; t++)
-        {
-            centC[t] = NumOps.Subtract(causeVec[t], meanC);
-            centT[t] = NumOps.Subtract(targetVec[t], meanT);
-        }
-
-        T varC = Engine.DotProduct(centC, centC);
-        T covCT = Engine.DotProduct(centC, centT);
+        T varC = Engine.TensorSum(Engine.TensorMultiply(centC, centC));
+        T covCT = Engine.TensorSum(Engine.TensorMultiply(centC, centT));
 
         if (!NumOps.GreaterThan(varC, NumOps.FromDouble(NumericalStabilityEpsilon)))
             return (1.0, 0.0); // Can't fit model
@@ -165,12 +145,11 @@ public class TiMINoAlgorithm<T> : TimeSeriesCausalBase<T>
         T beta = NumOps.Divide(covCT, varC);
 
         // Compute residuals: e = target - beta * cause (centered)
-        for (int t = 0; t < effectiveN; t++)
-            residuals[t] = NumOps.Subtract(centT[t], NumOps.Multiply(beta, centC[t]));
+        var residuals = Engine.TensorSubtract(centT, Engine.TensorMultiplyScalar(centC, beta));
 
         // HSIC proxy: squared correlation between residuals and cause
-        T covResiC = Engine.DotProduct(residuals, centC);
-        T varR = Engine.DotProduct(residuals, residuals);
+        T covResiC = Engine.TensorSum(Engine.TensorMultiply(residuals, centC));
+        T varR = Engine.TensorSum(Engine.TensorMultiply(residuals, residuals));
 
         double dVarR = NumOps.ToDouble(varR);
         double dVarC = NumOps.ToDouble(varC);
@@ -180,7 +159,7 @@ public class TiMINoAlgorithm<T> : TimeSeriesCausalBase<T>
 
         // Return standardized beta (scale-invariant): beta_std = beta * std(cause) / std(target)
         double stdC = Math.Sqrt(Math.Max(dVarC / effectiveN, NumericalStabilityEpsilon));
-        double dVarT = NumOps.ToDouble(Engine.DotProduct(centT, centT));
+        double dVarT = NumOps.ToDouble(Engine.TensorSum(Engine.TensorMultiply(centT, centT)));
         double stdT = Math.Sqrt(Math.Max(dVarT / effectiveN, NumericalStabilityEpsilon));
         double betaStd = stdT > 1e-15 ? NumOps.ToDouble(beta) * stdC / stdT : 0;
 
