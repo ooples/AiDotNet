@@ -246,38 +246,14 @@ public partial class EPNetAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
             int queryLen = queryFeatures?.Length ?? 0;
 
             // Run embedding propagation to compute modulation factor
-            if (supportLen > 0 && queryLen > 0)
+            if (supportFeatures is not null && queryFeatures is not null && supportLen > 0 && queryLen > 0)
             {
-                var combined = new Vector<T>(supportLen + queryLen);
-                for (int i = 0; i < supportLen; i++)
-                    combined[i] = supportFeatures is not null ? supportFeatures[i] : NumOps.Zero;
-                for (int i = 0; i < queryLen; i++)
-                    combined[supportLen + i] = queryFeatures is not null ? queryFeatures[i] : NumOps.Zero;
+                var combined = Vector<T>.Concatenate(supportFeatures, queryFeatures);
 
                 var propagated = PropagateEmbeddings(combined);
 
                 // Compute modulation from propagation effect on features
-                double sumRatio = 0;
-                int count = 0;
-                for (int i = 0; i < combined.Length; i++)
-                {
-                    double raw = NumOps.ToDouble(combined[i]);
-                    double prop = NumOps.ToDouble(propagated[i]);
-                    if (Math.Abs(raw) > 1e-10)
-                    {
-                        sumRatio += Math.Max(0.5, Math.Min(2.0, prop / raw));
-                        count++;
-                    }
-                }
-                if (count > 0)
-                {
-                    double avgRatio = sumRatio / count;
-                    var currentParams = ParamModel.GetParameters();
-                    var modulatedParams = new Vector<T>(currentParams.Length);
-                    for (int i = 0; i < currentParams.Length; i++)
-                        modulatedParams[i] = NumOps.Multiply(currentParams[i], NumOps.FromDouble(avgRatio));
-                    ParamModel.SetParameters(modulatedParams);
-                }
+                ParameterModulation.ScaleByMeanClampedRatio(Engine, ParamModel, combined, propagated, 0.5, 2.0, 1e-10);
             }
 
             var queryLoss = ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput);
@@ -312,12 +288,9 @@ public partial class EPNetAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
 
         if (supportLen > 0 || queryLen > 0)
         {
-            // Concatenate support + query into a single feature vector
-            var combined = new Vector<T>(supportLen + queryLen);
-            for (int i = 0; i < supportLen; i++)
-                combined[i] = supportFeatures is not null ? supportFeatures[i] : NumOps.Zero;
-            for (int i = 0; i < queryLen; i++)
-                combined[supportLen + i] = queryFeatures is not null ? queryFeatures[i] : NumOps.Zero;
+            // Concatenate support + query into a single feature vector (a missing set contributes nothing)
+            var combined = Vector<T>.Concatenate(
+                supportFeatures ?? new Vector<T>(0), queryFeatures ?? new Vector<T>(0));
 
             // Propagate on the joint graph
             var propagated = PropagateEmbeddings(combined);
@@ -325,15 +298,11 @@ public partial class EPNetAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
             // Split back into support and query portions
             if (supportLen > 0)
             {
-                propagatedSupport = new Vector<T>(supportLen);
-                for (int i = 0; i < supportLen; i++)
-                    propagatedSupport[i] = propagated[i];
+                propagatedSupport = propagated.GetSubVector(0, supportLen);
             }
             if (queryLen > 0)
             {
-                propagatedQuery = new Vector<T>(queryLen);
-                for (int i = 0; i < queryLen; i++)
-                    propagatedQuery[i] = propagated[supportLen + i];
+                propagatedQuery = propagated.GetSubVector(supportLen, queryLen);
             }
         }
 
