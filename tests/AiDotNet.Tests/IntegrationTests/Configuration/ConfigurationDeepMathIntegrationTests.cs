@@ -343,8 +343,7 @@ public class ConfigurationDeepMathIntegrationTests
         var config = new ResNetConfiguration(ResNetVariant.ResNet50, 10);
 
         Assert.True(config.IncludeClassifier);
-        // He et al. 2016 / torchvision (zero_init_residual=False): the zero-init trick is opt-in.
-        Assert.False(config.ZeroInitResidual);
+        Assert.False(config.ZeroInitResidual); // off in the paper and torchvision
         Assert.False(config.UseAutodiff);
     }
 

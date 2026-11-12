@@ -1,0 +1,782 @@
+using AiDotNet.Helpers;
+using AiDotNet.TextToSpeech.CodecBased;
+using AiDotNet.NeuralNetworks.Layers;
+
+namespace AiDotNet.NeuralNetworks;
+
+/// <summary>The projections of a <see cref="LlamaNetwork{T}"/> layer that carry LoRA branches (peft's
+/// <c>target_modules</c>).</summary>
+[Flags]
+internal enum LlamaLoraTargets
+{
+    /// <summary>No projection.</summary>
+    None = 0,
+    /// <summary><c>q_proj</c>.</summary>
+    Query = 1,
+    /// <summary><c>k_proj</c>.</summary>
+    Key = 2,
+    /// <summary><c>v_proj</c>.</summary>
+    Value = 4,
+    /// <summary><c>o_proj</c>.</summary>
+    Output = 8,
+    /// <summary><c>gate_proj</c>.</summary>
+    Gate = 16,
+    /// <summary><c>up_proj</c>.</summary>
+    Up = 32,
+    /// <summary><c>down_proj</c>.</summary>
+    Down = 64,
+    /// <summary>Every attention and feed-forward projection.</summary>
+    All = Query | Key | Value | Output | Gate | Up | Down,
+}
+
+/// <summary>The shape of a LLaMA decoder; the defaults are LLaMA 2 7B (Vicuna-7B v1.5).</summary>
+internal sealed record LlamaConfiguration
+{
+    /// <summary>Token vocabulary; 0 builds no token table and no <c>lm_head</c>, a bare <c>LlamaModel</c> whose input
+    /// embeddings come from elsewhere.</summary>
+    public int VocabSize { get; init; } = 32000;
+
+    public int Hidden { get; init; } = 4096;
+
+    public int Layers { get; init; } = 32;
+
+    public int Heads { get; init; } = 32;
+
+    /// <summary>Key and value heads; fewer than <see cref="Heads"/> is grouped-query attention.</summary>
+    public int KeyValueHeads { get; init; } = 32;
+
+    public int Intermediate { get; init; } = 11008;
+
+    public double RmsEpsilon { get; init; } = 1e-5;
+
+    public double RopeTheta { get; init; } = 10000;
+
+    /// <summary>Biases on the query, key and value projections (Qwen2's <c>q_proj</c>, <c>k_proj</c>, <c>v_proj</c>;
+    /// LLaMA has none).</summary>
+    public bool AttentionBias { get; init; }
+
+    /// <summary>Whether a token table comes with a language-model head; false for a decoder whose output hidden
+    /// states another head reads (CosyVoice 2's Qwen2 reads text through the table and speaks through its own head).</summary>
+    public bool IncludeHead { get; init; } = true;
+
+    /// <summary>LoRA rank on the <see cref="LoraTargets"/> projections (Hu et al. 2022); 0 for none.</summary>
+    public int LoraRank { get; init; }
+
+    /// <summary>The projections that carry LoRA branches; the query and value projections by default.</summary>
+    public LlamaLoraTargets LoraTargets { get; init; } = LlamaLoraTargets.Query | LlamaLoraTargets.Value;
+
+    /// <summary>LoRA alpha; the update is scaled by alpha / rank.</summary>
+    public double LoraAlpha { get; init; } = 16;
+
+    /// <summary>Dropout on the LoRA branch's input.</summary>
+    public double LoraDropout { get; init; } = 0.05;
+
+    /// <summary>Llama attention-probability dropout (Hugging Face attention_dropout); zero for the released Llama checkpoints.</summary>
+    public double AttentionDropout { get; init; }
+
+    /// <summary>The width of one attention head; 0 for <see cref="Hidden"/> / <see cref="Heads"/> (Qwen3-0.6B sets 128
+    /// with 16 heads over a width of 1024).</summary>
+    public int HeadDim { get; init; }
+
+    /// <summary>Whether the language-model head is the token table (<c>tie_word_embeddings</c>); the head then has no
+    /// weights of its own.</summary>
+    public bool TieWordEmbeddings { get; init; }
+
+    /// <summary>Qwen3's RMSNorm on each query and key head (<c>q_norm</c>, <c>k_norm</c>) before the rotary embedding.</summary>
+    public bool QueryKeyNorm { get; init; }
+
+    /// <summary>Whether the decoder ends in its RMSNorm (<c>model.norm</c>); false for a stack of bare
+    /// <c>LlamaDecoderLayer</c>s, as LLaMA-Omni's CTC speech decoder is.</summary>
+    public bool IncludeFinalNorm { get; init; } = true;
+
+    /// <summary>Megatron GPT's LayerNorm (centred on the mean, with a bias) in place of RMSNorm before each block and at
+    /// the end; <see cref="RmsEpsilon"/> is its epsilon.</summary>
+    public bool LayerNorm { get; init; }
+
+    /// <summary>Llama 3's rotary frequency scaling (<c>rope_type = "llama3"</c>): the factor, 0 for none.</summary>
+    public double RopeScalingFactor { get; init; }
+
+    /// <summary>Llama 3's low-frequency factor (1).</summary>
+    public double RopeLowFrequencyFactor { get; init; } = 1;
+
+    /// <summary>Llama 3's high-frequency factor (4).</summary>
+    public double RopeHighFrequencyFactor { get; init; } = 4;
+
+    /// <summary>Llama 3's original context length (8192).</summary>
+    public int RopeOriginalMaxPositions { get; init; } = 8192;
+
+    /// <summary>Step-1's ALiBi in place of rotary positions (StepFun's <c>modeling_step1.build_alibi_cache</c>): each
+    /// head adds <c>−m_h · √(i − j)</c> to the score of query position i on key j, the slopes m_h those of Press et al.
+    /// (2022) for the nearest power of two of heads, interleaved for the rest.</summary>
+    public bool SqrtAlibi { get; init; }
+
+    /// <summary>Granite's scale on the input embeddings (<c>embedding_multiplier</c>; 1 for LLaMA).</summary>
+    public double EmbeddingMultiplier { get; init; } = 1;
+
+    /// <summary>Granite's scale on each block's output before the residual sum (<c>residual_multiplier</c>; 1 for LLaMA).</summary>
+    public double ResidualMultiplier { get; init; } = 1;
+
+    /// <summary>Granite's attention score scale (<c>attention_multiplier</c>); 0 for LLaMA's 1/√(head width).</summary>
+    public double AttentionMultiplier { get; init; }
+
+    /// <summary>Granite's divisor of the logits (<c>logits_scaling</c>; 1 for LLaMA).</summary>
+    public double LogitsScaling { get; init; } = 1;
+
+    /// <summary>Phi-3's <c>partial_rotary_factor</c>: the share of each head's leading dimensions the rotary embedding
+    /// turns (1 for LLaMA); the rest pass through.</summary>
+    public double PartialRotaryFactor { get; init; } = 1;
+
+    /// <summary>Phi-3's LongRoPE (<c>rope_scaling.type = "longrope"</c>): per-frequency divisors of the inverse
+    /// frequencies for sequences up to <see cref="RopeOriginalMaxPositions"/>; null for none.</summary>
+    public double[]? LongRopeShortFactors { get; init; }
+
+    /// <summary>LongRoPE's divisors for sequences longer than <see cref="RopeOriginalMaxPositions"/>.</summary>
+    public double[]? LongRopeLongFactors { get; init; }
+
+    /// <summary>LongRoPE's extended context (<c>max_position_embeddings</c>), which sets its scale on cos and sin,
+    /// √(1 + ln(max / original) / ln(original)).</summary>
+    public int LongRopeMaxPositions { get; init; }
+
+    /// <summary>Phi-3's fused projections under LoRA (peft on <c>qkv_proj</c> and <c>gate_up_proj</c>): one adapter
+    /// whose A is shared by the query, key and value (and one by the gate and up projections), instead of one adapter
+    /// each.</summary>
+    public bool FusedLora { get; init; }
+
+    /// <summary>The rotary dimensions of each head.</summary>
+    internal int RotaryDim => (int)(ResolvedHeadDim * PartialRotaryFactor);
+
+    /// <summary>The resolved head width.</summary>
+    internal int ResolvedHeadDim => HeadDim > 0 ? HeadDim : Hidden / Heads;
+}
+
+/// <summary>The keys and values of the positions a <see cref="LlamaNetwork{T}"/> has already read, per layer
+/// (<c>[B, key-value heads, positions, head width]</c>, after the rotary embedding), for generating one token at a time.</summary>
+internal sealed class LlamaCache<T>
+{
+    internal readonly List<(Tensor<T> Keys, Tensor<T> Values)?> Layers = new();
+
+    /// <summary>Positions read so far.</summary>
+    public int Length { get; internal set; }
+}
+
+/// <summary>
+/// LLaMA (Touvron et al. 2023) as Hugging Face's <c>LlamaForCausalLM</c> computes it: token embeddings, pre-norm decoder
+/// layers of RMSNorm, causal self-attention with rotary position embeddings (no biases) and a SwiGLU feed-forward block,
+/// a final RMSNorm and an untied language-model head. With <see cref="LlamaConfiguration.AttentionBias"/> it is Qwen2
+/// (<c>Qwen2ForCausalLM</c>), which adds biases to the query, key and value projections.
+/// </summary>
+/// <remarks>Parameter names follow the Hugging Face checkpoints (<c>model.embed_tokens</c>, <c>model.layers.{i}.*</c>,
+/// <c>model.norm</c>, <c>lm_head</c>).</remarks>
+internal sealed class LlamaNetwork<T>
+{
+    private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
+    private readonly IEngine _engine;
+
+    internal sealed record Layer(BiasFreeLinearLayer<T> InputNorm, BiasFreeLinearLayer<T> Query, BiasFreeLinearLayer<T> Key,
+        BiasFreeLinearLayer<T> Value, BiasFreeLinearLayer<T> Output, BiasFreeLinearLayer<T> PostNorm, BiasFreeLinearLayer<T> Gate,
+        BiasFreeLinearLayer<T> Up, BiasFreeLinearLayer<T> Down, Lora? QueryLora, Lora? ValueLora)
+    {
+        /// <summary>Dropout on the softmax attention probabilities; null at the released zero rate.</summary>
+        public DropoutLayer<T>? AttentionDropout { get; init; }
+
+        /// <summary>The query, key and value biases, null without <see cref="LlamaConfiguration.AttentionBias"/>.</summary>
+        public BiasFreeLinearLayer<T>? QueryBias { get; init; }
+        public BiasFreeLinearLayer<T>? KeyBias { get; init; }
+        public BiasFreeLinearLayer<T>? ValueBias { get; init; }
+
+        /// <summary>Qwen3's per-head query and key RMSNorm weights, null without <see cref="LlamaConfiguration.QueryKeyNorm"/>.</summary>
+        public BiasFreeLinearLayer<T>? QueryNorm { get; init; }
+        public BiasFreeLinearLayer<T>? KeyNorm { get; init; }
+
+        /// <summary>The block LayerNorms' biases, null without <see cref="LlamaConfiguration.LayerNorm"/>.</summary>
+        public BiasFreeLinearLayer<T>? InputNormBias { get; init; }
+        public BiasFreeLinearLayer<T>? PostNormBias { get; init; }
+
+        /// <summary>The LoRA branches on the other projections, null unless <see cref="LlamaConfiguration.LoraTargets"/>
+        /// names them.</summary>
+        public Lora? KeyLora { get; init; }
+        public Lora? OutputLora { get; init; }
+        public Lora? GateLora { get; init; }
+        public Lora? UpLora { get; init; }
+        public Lora? DownLora { get; init; }
+
+        /// <summary>Every LoRA branch of the layer.</summary>
+        /// <summary>The fused query-key-value adapter of <see cref="LlamaConfiguration.FusedLora"/>; its B rows are the
+        /// query's, then the key's, then the value's.</summary>
+        public Lora? QkvLora { get; init; }
+        /// <summary>The fused gate-up adapter of <see cref="LlamaConfiguration.FusedLora"/>; gate rows, then up rows.</summary>
+        public Lora? GateUpLora { get; init; }
+        public IEnumerable<Lora> Loras => new[] { QueryLora, KeyLora, ValueLora, QkvLora, OutputLora, GateLora, UpLora, GateUpLora, DownLora }.OfType<Lora>();
+    }
+
+    /// <summary>A LoRA branch: down projection A, up projection B, and dropout on its input.</summary>
+    internal sealed record Lora(BiasFreeLinearLayer<T> A, BiasFreeLinearLayer<T> B, DropoutLayer<T>? Dropout);
+
+    public LlamaNetwork(IEngine engine, List<LayerBase<T>> layers, LlamaConfiguration configuration)
+    {
+        _engine = engine;
+        Configuration = configuration;
+        var c = configuration;
+        if (double.IsNaN(c.AttentionDropout) || double.IsInfinity(c.AttentionDropout)
+            || c.AttentionDropout < 0 || c.AttentionDropout >= 1)
+            throw new ArgumentOutOfRangeException(nameof(configuration), "AttentionDropout must be finite and in [0, 1).");
+        if ((c.HeadDim <= 0 && c.Hidden % c.Heads != 0) || c.Heads % c.KeyValueHeads != 0)
+            throw new ArgumentException("The width must divide by the heads, and the heads by the key-value heads.", nameof(configuration));
+        if (!c.SqrtAlibi && (c.RotaryDim % 2 != 0 || c.RotaryDim <= 0 || c.RotaryDim > c.ResolvedHeadDim))
+            throw new ArgumentException("Rotary embeddings need an even number of the head's dimensions.", nameof(configuration));
+        if ((c.LongRopeShortFactors is not null && c.LongRopeShortFactors.Length != c.RotaryDim / 2)
+            || (c.LongRopeLongFactors is not null && c.LongRopeLongFactors.Length != c.RotaryDim / 2))
+            throw new ArgumentException("LongRoPE needs one factor per rotary frequency.", nameof(configuration));
+        if (c.TieWordEmbeddings && (c.VocabSize <= 0 || !c.IncludeHead))
+            throw new ArgumentException("A tied head needs a token table and a head.", nameof(configuration));
+        TLayer Add<TLayer>(TLayer layer) where TLayer : LayerBase<T>
+        {
+            layers.Add(layer);
+            return layer;
+        }
+        BiasFreeLinearLayer<T> Linear(int inputs, int outputs) => Add(new BiasFreeLinearLayer<T>(inputs, outputs));
+        BiasFreeLinearLayer<T> Values(int count) => Add(new BiasFreeLinearLayer<T>(1, count));
+        int hd = c.ResolvedHeadDim, kv = c.KeyValueHeads * hd, qd = c.Heads * hd;
+        Lora? Adapter(LlamaLoraTargets target, int outputs, int inputs = -1)
+        {
+            if (c.LoraRank <= 0 || (c.LoraTargets & target) == 0) return null;
+            DropoutLayer<T>? dropout = null;
+            if (c.LoraDropout > 0)
+            {
+                dropout = Add(new DropoutLayer<T>(c.LoraDropout));
+                dropout.SetTrainingMode(false);
+                _dropouts.Add(dropout);
+            }
+            return new Lora(Linear(inputs < 0 ? c.Hidden : inputs, c.LoraRank), Linear(c.LoraRank, outputs), dropout);
+        }
+        if (c.VocabSize < 0) throw new ArgumentOutOfRangeException(nameof(configuration), "The vocabulary is 0 (none) or positive.");
+        Embeddings = c.VocabSize > 0 ? Values(c.VocabSize * c.Hidden) : null;
+        if (c.FusedLora && (c.LoraTargets & (LlamaLoraTargets.Query | LlamaLoraTargets.Key | LlamaLoraTargets.Value)) is not
+                (LlamaLoraTargets.None or (LlamaLoraTargets.Query | LlamaLoraTargets.Key | LlamaLoraTargets.Value)))
+            throw new ArgumentException("A fused qkv adapter covers the query, key and value together.", nameof(configuration));
+        if (c.FusedLora && (c.LoraTargets & (LlamaLoraTargets.Gate | LlamaLoraTargets.Up)) is not
+                (LlamaLoraTargets.None or (LlamaLoraTargets.Gate | LlamaLoraTargets.Up)))
+            throw new ArgumentException("A fused gate_up adapter covers the gate and up projections together.", nameof(configuration));
+        for (int i = 0; i < c.Layers; i++)
+        {
+            var input = Values(c.Hidden);
+            var inputBias = c.LayerNorm ? Values(c.Hidden) : null;
+            var query = Linear(c.Hidden, qd);
+            var key = Linear(c.Hidden, kv);
+            var value = Linear(c.Hidden, kv);
+            var qkvLora = c.FusedLora ? Adapter(LlamaLoraTargets.Query, qd + 2 * kv) : null;
+            var queryLora = c.FusedLora ? null : Adapter(LlamaLoraTargets.Query, qd);
+            var keyLora = c.FusedLora ? null : Adapter(LlamaLoraTargets.Key, kv);
+            var valueLora = c.FusedLora ? null : Adapter(LlamaLoraTargets.Value, kv);
+            var queryBias = c.AttentionBias ? Values(qd) : null;
+            var keyBias = c.AttentionBias ? Values(kv) : null;
+            var valueBias = c.AttentionBias ? Values(kv) : null;
+            var output = Linear(qd, c.Hidden);
+            var outputLora = Adapter(LlamaLoraTargets.Output, c.Hidden, qd);
+            var queryNorm = c.QueryKeyNorm ? Values(hd) : null;
+            var keyNorm = c.QueryKeyNorm ? Values(hd) : null;
+            var postNorm = Values(c.Hidden);
+            var postBias = c.LayerNorm ? Values(c.Hidden) : null;
+            var gate = Linear(c.Hidden, c.Intermediate);
+            var up = Linear(c.Hidden, c.Intermediate);
+            var gateUpLora = c.FusedLora ? Adapter(LlamaLoraTargets.Gate, 2 * c.Intermediate) : null;
+            var gateLora = c.FusedLora ? null : Adapter(LlamaLoraTargets.Gate, c.Intermediate);
+            var upLora = c.FusedLora ? null : Adapter(LlamaLoraTargets.Up, c.Intermediate);
+            var down = Linear(c.Intermediate, c.Hidden);
+            var downLora = Adapter(LlamaLoraTargets.Down, c.Hidden, c.Intermediate);
+            Layers.Add(new Layer(input, query, key, value, output, postNorm, gate, up, down, queryLora, valueLora)
+            {
+                QueryBias = queryBias, KeyBias = keyBias, ValueBias = valueBias, QueryNorm = queryNorm, KeyNorm = keyNorm,
+                KeyLora = keyLora, OutputLora = outputLora, GateLora = gateLora, UpLora = upLora, DownLora = downLora,
+                QkvLora = qkvLora, GateUpLora = gateUpLora, InputNormBias = inputBias, PostNormBias = postBias,
+            });
+        }
+        FinalNorm = c.IncludeFinalNorm ? Values(c.Hidden) : null;
+        FinalNormBias = c.IncludeFinalNorm && c.LayerNorm ? Values(c.Hidden) : null;
+        LmHead = c.VocabSize > 0 && c.IncludeHead && !c.TieWordEmbeddings ? Linear(c.Hidden, c.VocabSize) : null;
+        // Register parameter-free dropout after all projections so enabling it does not reorder
+        // initialization of the existing trainable tensors or their checkpoint parameter sequence.
+        if (c.AttentionDropout > 0)
+            for (int i = 0; i < Layers.Count; i++)
+            {
+                // A parameter-free regularizer must not consume the enclosing model's initialization sequence:
+                // otherwise enabling attention dropout changes the weights of a codec constructed after this LM.
+                var enclosing = LayerInitializationSeedScope.CaptureScope();
+                LayerInitializationSeedScope.ResumeSequence(Layers[i].Query.RandomSeed is int seed
+                    ? AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(unchecked(seed ^ 0x4c4d4452)) : null);
+                try
+                {
+                    var dropout = Add(new DropoutLayer<T>(c.AttentionDropout));
+                    dropout.SetTrainingMode(false);
+                    _dropouts.Add(dropout);
+                    Layers[i] = Layers[i] with { AttentionDropout = dropout };
+                }
+                finally { LayerInitializationSeedScope.RestoreScope(enclosing); }
+            }
+    }
+
+    public LlamaConfiguration Configuration { get; }
+
+    private readonly List<DropoutLayer<T>> _dropouts = new();
+
+    /// <summary>Whether attention and LoRA dropout are active. A new network starts in inference mode.</summary>
+    public bool Training
+    {
+        get => _training;
+        set
+        {
+            _training = value;
+            foreach (var dropout in _dropouts) dropout.SetTrainingMode(value);
+        }
+    }
+
+    private bool _training;
+
+    /// <summary>The token table; null for a bare decoder (<see cref="LlamaConfiguration.VocabSize"/> 0).</summary>
+    public BiasFreeLinearLayer<T>? Embeddings { get; }
+
+    public List<Layer> Layers { get; } = new();
+
+    /// <summary>The final RMSNorm; null without <see cref="LlamaConfiguration.IncludeFinalNorm"/>.</summary>
+    public BiasFreeLinearLayer<T>? FinalNorm { get; }
+
+    /// <summary>The final LayerNorm's bias; null without <see cref="LlamaConfiguration.LayerNorm"/>.</summary>
+    public BiasFreeLinearLayer<T>? FinalNormBias { get; }
+
+    /// <summary>The language-model head's own weights; null for a bare decoder or a head tied to the token table.</summary>
+    public BiasFreeLinearLayer<T>? LmHead { get; }
+
+    /// <summary>Whether the decoder produces logits (its own head, or one tied to the token table).</summary>
+    public bool HasHead => LmHead is not null || Configuration.TieWordEmbeddings;
+
+    /// <summary>The layers of every LoRA branch (A and B of each), the parameters LoRA fine-tuning updates.</summary>
+    public IEnumerable<LayerBase<T>> LoraLayers => Layers.SelectMany(l => l.Loras).SelectMany(a => new LayerBase<T>[] { a.A, a.B });
+
+    // The logits of hidden states: the head, or the token table transposed.
+    private Tensor<T>? Head(Tensor<T> hidden)
+    {
+        var c = Configuration;
+        Tensor<T> Scaled(Tensor<T> logits) => c.LogitsScaling == 1 ? logits : _engine.TensorMultiplyScalar(logits, NumOps.FromDouble(1.0 / c.LogitsScaling));
+        if (LmHead is not null) return Scaled(Rows(LmHead, hidden));
+        if (!c.TieWordEmbeddings) return null;
+        var embeddings = Embeddings ?? throw new InvalidOperationException("A tied head needs the token table.");
+        var table = _engine.Reshape(Value(embeddings), new[] { c.VocabSize, c.Hidden });
+        var shape = hidden.Shape.ToArray();
+        int rows = hidden.Length / c.Hidden;
+        var logits = _engine.TensorMatMulTransposed(_engine.Reshape(hidden, new[] { rows, c.Hidden }), table);
+        shape[^1] = c.VocabSize;
+        return Scaled(_engine.Reshape(logits, shape));
+    }
+
+    // A value holder's parameter [1, N], read directly (the gradient tape records it as the layer's own forward does)
+    // rather than as a product with a one, which copies the whole token table on every call.
+    private static Tensor<T> Value(BiasFreeLinearLayer<T> holder) => Paged(holder.Weights);
+
+    // A streamed weight has its shape but no storage until paged in; compute ops page it in, view ops do not.
+    internal static Tensor<T> Paged(Tensor<T> weight)
+    {
+        if (weight.Lifetime == WeightLifetime.Streaming) WeightRegistry.Materialize(weight);
+        return weight;
+    }
+
+    private Tensor<T> Rows(LayerBase<T> layer, Tensor<T> x)
+    {
+        var shape = x.Shape.ToArray();
+        int last = shape[^1], rows = x.Length / last;
+        var y = layer.Forward(_engine.Reshape(x, new[] { rows, last }));
+        shape[^1] = y.Shape[1];
+        return _engine.Reshape(y, shape);
+    }
+
+    /// <summary>The token embeddings <c>[B, L, Hidden]</c> of ids <c>[B, L]</c>.</summary>
+    public Tensor<T> Embed(int[,] ids)
+    {
+        var c = Configuration;
+        int b = ids.GetLength(0), l = ids.GetLength(1);
+        var index = new Tensor<int>(new[] { b * l });
+        for (int i = 0; i < b; i++)
+            for (int j = 0; j < l; j++)
+            {
+                int id = ids[i, j];
+                if (id < 0 || id >= c.VocabSize) throw new ArgumentOutOfRangeException(nameof(ids), $"Id {id} is outside [0, {c.VocabSize}).");
+                index[i * l + j] = id;
+            }
+        var embeddings = Embeddings ?? throw new InvalidOperationException("This decoder has no token table; pass input embeddings to Forward.");
+        var table = _engine.Reshape(Value(embeddings), new[] { c.VocabSize, c.Hidden });
+        return _engine.Reshape(_engine.TensorIndexSelect(table, index, 0), new[] { b, l, c.Hidden });
+    }
+
+    /// <summary>RMSNorm: <c>w · x / sqrt(mean(x²) + ε)</c> over the last axis.</summary>
+    // A block or final norm: RMSNorm, or LayerNorm when it has a bias.
+    private Tensor<T> Norm(BiasFreeLinearLayer<T> weight, BiasFreeLinearLayer<T>? bias, Tensor<T> x)
+    {
+        if (bias is null) return RmsNorm(weight, x);
+        var shape = x._shape;
+        int rank = shape.Length;
+        var centred = _engine.TensorSubtract(x, _engine.TensorBroadcastTo(_engine.ReduceMean(x, new[] { rank - 1 }, true), shape));
+        var variance = _engine.ReduceMean(_engine.TensorMultiply(centred, centred), new[] { rank - 1 }, true);
+        var inverse = _engine.TensorPower(_engine.TensorAddScalar(variance, NumOps.FromDouble(Configuration.RmsEpsilon)), NumOps.FromDouble(-0.5));
+        var row = Enumerable.Repeat(1, rank - 1).Concat(new[] { shape[rank - 1] }).ToArray();
+        var w = _engine.TensorBroadcastTo(_engine.Reshape(Value(weight), row), shape);
+        var b = _engine.TensorBroadcastTo(_engine.Reshape(Value(bias), row), shape);
+        return _engine.TensorAdd(_engine.TensorMultiply(_engine.TensorMultiply(centred, _engine.TensorBroadcastTo(inverse, shape)), w), b);
+    }
+
+    private Tensor<T> RmsNorm(BiasFreeLinearLayer<T> weight, Tensor<T> x)
+    {
+        var shape = x._shape;
+        int rank = shape.Length;
+        var meanSquare = _engine.ReduceMean(_engine.TensorMultiply(x, x), new[] { rank - 1 }, true);
+        var inverse = _engine.TensorPower(_engine.TensorAddScalar(meanSquare, NumOps.FromDouble(Configuration.RmsEpsilon)), NumOps.FromDouble(-0.5));
+        var w = _engine.Reshape(Value(weight), Enumerable.Repeat(1, rank - 1).Concat(new[] { shape[rank - 1] }).ToArray());
+        return _engine.TensorMultiply(_engine.TensorMultiply(x, _engine.TensorBroadcastTo(inverse, shape)), _engine.TensorBroadcastTo(w, shape));
+    }
+
+    /// <summary>
+    /// The decoder on input embeddings <c>[B, L, Hidden]</c>: the final normalized hidden states <c>[B, L, Hidden]</c>
+    /// (Hugging Face's last <c>hidden_states</c> entry) and the logits <c>[B, L, VocabSize]</c>, null for a bare decoder.
+    /// </summary>
+    /// <param name="embeddings">The input embeddings (token embeddings, or a multimodal sequence built from them).</param>
+    /// <param name="attentionMask">False for padding keys, <c>[B, L]</c>; null attends to every earlier position.</param>
+    /// <param name="positionIds">Rotary positions <c>[B, L]</c>; null for 0..L-1.</param>
+    public (Tensor<T> Hidden, Tensor<T>? Logits) Forward(Tensor<T> embeddings, bool[,]? attentionMask = null, int[,]? positionIds = null)
+        => Forward(embeddings, attentionMask, positionIds, cache: null, lastLogitsOnly: false);
+
+    /// <summary>
+    /// The decoder on the next positions of a sequence whose earlier positions <paramref name="cache"/> holds (empty for
+    /// a new one): their hidden states and logits, as the full forward computes them for the whole sequence. The cache
+    /// takes their keys and values. With <paramref name="lastLogitsOnly"/> only the last position's logits are computed
+    /// (<c>[B, 1, VocabSize]</c>), as generation reads them.
+    /// </summary>
+    /// <param name="attentionMask">False for padding keys over every position read so far and these, <c>[B, past + L]</c>.</param>
+    public (Tensor<T> Hidden, Tensor<T>? Logits) Forward(Tensor<T> embeddings, bool[,]? attentionMask, int[,]? positionIds, LlamaCache<T>? cache,
+        bool lastLogitsOnly)
+    {
+        var c = Configuration;
+        int b = embeddings.Shape[0], l = embeddings.Shape[1], rd = c.RotaryDim, half = rd / 2;
+        int past = cache?.Length ?? 0, total = past + l;
+        if (positionIds is null)
+        {
+            positionIds = new int[b, l];
+            for (int i = 0; i < b; i++) for (int j = 0; j < l; j++) positionIds[i, j] = past + j;
+        }
+
+        // Rotary tables per (batch, position): cos and sin of position times the inverse frequencies, repeated for both halves.
+        var frequencies = InverseFrequencies(total);
+        double attentionScale = LongRopeScale();
+        var cos = new Tensor<T>(new[] { b, 1, l, rd });
+        var sin = new Tensor<T>(new[] { b, 1, l, rd });
+        for (int i = 0; i < b; i++)
+            for (int j = 0; j < l; j++)
+                for (int k = 0; k < half; k++)
+                {
+                    double angle = positionIds[i, j] * frequencies[k];
+                    cos[i, 0, j, k] = cos[i, 0, j, k + half] = NumOps.FromDouble(attentionScale * Math.Cos(angle));
+                    sin[i, 0, j, k] = sin[i, 0, j, k + half] = NumOps.FromDouble(attentionScale * Math.Sin(angle));
+                }
+
+        // Causal mask plus key padding, as torch.finfo(dtype).min added to the scores; with ALiBi, per head.
+        var slopes = c.SqrtAlibi ? AlibiSlopes(c.Heads) : null;
+        int biasHeads = slopes?.Length ?? 1;
+        var bias = new Tensor<T>(new[] { b, biasHeads, l, total });
+        var blocked = NumOps.FromDouble(typeof(T) == typeof(float) ? float.MinValue : double.MinValue);
+        for (int i = 0; i < b; i++)
+            for (int h = 0; h < biasHeads; h++)
+                for (int q = 0; q < l; q++)
+                    for (int k = 0; k < total; k++)
+                    {
+                        if (k > past + q || (attentionMask is not null && !attentionMask[i, k])) bias[i, h, q, k] = blocked;
+                        else if (slopes is not null) bias[i, h, q, k] = NumOps.FromDouble(-slopes[h] * Math.Sqrt(past + q - k));
+                    }
+
+        if (cache is not null)
+            while (cache.Layers.Count < Layers.Count) cache.Layers.Add(null);
+        // GraniteModel scales whatever embeddings it is given, the multimodal sequence included.
+        var x = c.EmbeddingMultiplier == 1 ? embeddings : _engine.TensorMultiplyScalar(embeddings, NumOps.FromDouble(c.EmbeddingMultiplier));
+        for (int i = 0; i < Layers.Count; i++) x = Run(Layers[i], x, cos, sin, bias, cache, i);
+        if (cache is not null) cache.Length = total;
+        var hidden = FinalNorm is null ? x : Norm(FinalNorm, FinalNormBias, x);
+        var read = lastLogitsOnly ? _engine.TensorSlice(hidden, new[] { 0, l - 1, 0 }, new[] { b, 1, c.Hidden }) : hidden;
+        return (hidden, Head(read));
+    }
+
+    /// <summary>The rotary inverse frequencies, with Llama 3's scaling when it is set (Hugging Face's
+    /// <c>_compute_llama3_parameters</c>: long wavelengths divided by the factor, short ones kept, the band between
+    /// interpolated).</summary>
+    /// <param name="sequenceLength">Positions in the sequence; LongRoPE switches to its long factors past the original
+    /// context.</param>
+    internal double[] InverseFrequencies(int sequenceLength = 0)
+    {
+        var c = Configuration;
+        int rd = c.RotaryDim, half = rd / 2;
+        var frequencies = new double[half];
+        var factors = sequenceLength > c.RopeOriginalMaxPositions && c.LongRopeLongFactors is not null ? c.LongRopeLongFactors : c.LongRopeShortFactors;
+        for (int k = 0; k < half; k++) frequencies[k] = 1.0 / ((factors?[k] ?? 1.0) * Math.Pow(c.RopeTheta, 2.0 * k / rd));
+        if (c.RopeScalingFactor <= 0) return frequencies;
+        // Transformers 4.48.3 _compute_default_rope_parameters explicitly constructs float32 frequencies,
+        // even for a double or bfloat16 model. Retain the author's intermediate rounding through Llama-3 smoothing.
+        float lowWavelength = (float)(c.RopeOriginalMaxPositions / c.RopeLowFrequencyFactor);
+        float highWavelength = (float)(c.RopeOriginalMaxPositions / c.RopeHighFrequencyFactor);
+        for (int k = 0; k < half; k++)
+        {
+            float power = (float)Math.Pow((float)c.RopeTheta, (float)(2.0 * k / rd));
+            float f = 1f / ((float)(factors?[k] ?? 1.0) * power);
+            float wavelength = (float)(2 * Math.PI) / f;
+            float scaled = wavelength > lowWavelength ? f / (float)c.RopeScalingFactor : f;
+            if (!(wavelength < highWavelength) && !(wavelength > lowWavelength))
+            {
+                float smooth = (c.RopeOriginalMaxPositions / wavelength - (float)c.RopeLowFrequencyFactor)
+                    / (float)(c.RopeHighFrequencyFactor - c.RopeLowFrequencyFactor);
+                scaled = (1f - smooth) * scaled / (float)c.RopeScalingFactor + smooth * scaled;
+            }
+            frequencies[k] = scaled;
+        }
+        return frequencies;
+    }
+
+    // LongRoPE's scale on cos and sin: √(1 + ln(s) / ln(original)) for the context extension s, 1 without one.
+    private double LongRopeScale()
+    {
+        var c = Configuration;
+        if (c.LongRopeShortFactors is null && c.LongRopeLongFactors is null) return 1.0;
+        double scale = (double)c.LongRopeMaxPositions / c.RopeOriginalMaxPositions;
+        return scale <= 1.0 ? 1.0 : Math.Sqrt(1 + Math.Log(scale) / Math.Log(c.RopeOriginalMaxPositions));
+    }
+
+    /// <summary><see cref="Forward"/> for a decoder with a head: the hidden states and the logits, never null.</summary>
+    public (Tensor<T> Hidden, Tensor<T> Logits) ForwardWithLogits(Tensor<T> embeddings, bool[,]? attentionMask = null, int[,]? positionIds = null)
+    {
+        if (!HasHead) throw new InvalidOperationException("This decoder has no language-model head.");
+        var (hidden, logits) = Forward(embeddings, attentionMask, positionIds);
+        return (hidden, logits ?? throw new InvalidOperationException("The head produced no logits."));
+    }
+
+    // build_alibi_cache's slopes: 2^(−8k/n) for k = 1 … n, n the largest power of two ≤ heads, then 2^(−4(2k−1)/n) for
+    // the remaining heads.
+    internal static double[] AlibiSlopes(int heads)
+    {
+        int n = 1 << (int)Math.Floor(Math.Log(heads, 2) + 1e-9);
+        var slopes = new double[heads];
+        double m0 = Math.Pow(2.0, -8.0 / n);
+        for (int k = 1; k <= n; k++) slopes[k - 1] = Math.Pow(m0, k);
+        double m1 = Math.Pow(2.0, -4.0 / n);
+        for (int k = 0; k < heads - n; k++) slopes[n + k] = Math.Pow(m1, 2.0 * k + 1);
+        return slopes;
+    }
+
+    private Tensor<T> Rotate(Tensor<T> x, Tensor<T> cos, Tensor<T> sin)
+    {
+        if (Configuration.SqrtAlibi) return x;
+        var shape = x.Shape;
+        int hd = shape[3], rd = cos.Shape[3], half = rd / 2;
+        // Phi-3's partial rotary embedding turns the leading rd dimensions and passes the rest.
+        var turned = rd == hd ? x : _engine.TensorSlice(x, new[] { 0, 0, 0, 0 }, new[] { shape[0], shape[1], shape[2], rd });
+        var turnedShape = new[] { shape[0], shape[1], shape[2], rd };
+        var first = _engine.TensorSlice(turned, new[] { 0, 0, 0, 0 }, new[] { shape[0], shape[1], shape[2], half });
+        var second = _engine.TensorSlice(turned, new[] { 0, 0, 0, half }, new[] { shape[0], shape[1], shape[2], half });
+        var rotated = _engine.TensorConcatenate(new[] { _engine.TensorNegate(second), first }, 3);
+        var result = _engine.TensorAdd(_engine.TensorMultiply(turned, _engine.TensorBroadcastTo(cos, turnedShape)),
+            _engine.TensorMultiply(rotated, _engine.TensorBroadcastTo(sin, turnedShape)));
+        if (rd == hd) return result;
+        return _engine.TensorConcatenate(new[] { result, _engine.TensorSlice(x, new[] { 0, 0, 0, rd }, new[] { shape[0], shape[1], shape[2], hd - rd }) }, 3);
+    }
+
+    private Tensor<T> Run(Layer layer, Tensor<T> x, Tensor<T> cos, Tensor<T> sin, Tensor<T> bias, LlamaCache<T>? cache, int index)
+    {
+        var c = Configuration;
+        int b = x.Shape[0], l = x.Shape[1], hd = c.ResolvedHeadDim, groups = c.Heads / c.KeyValueHeads;
+        var normed = Norm(layer.InputNorm, layer.InputNormBias, x);
+        // A projection of `input` plus peft's LoRA update: W x + (alpha / r) B A dropout(x).
+        Tensor<T> Adapted(BiasFreeLinearLayer<T> projection, Lora? lora, Tensor<T> input)
+        {
+            var y = Rows(projection, input);
+            if (lora is null) return y;
+            var dropped = lora.Dropout is null ? input : lora.Dropout.Forward(input);
+            return _engine.TensorAdd(y, _engine.TensorMultiplyScalar(Rows(lora.B, Rows(lora.A, dropped)), NumOps.FromDouble(c.LoraAlpha / c.LoraRank)));
+        }
+        Tensor<T> Project(BiasFreeLinearLayer<T> projection, Lora? lora, BiasFreeLinearLayer<T>? projectionBias)
+        {
+            var y = Adapted(projection, lora, normed);
+            if (projectionBias is not null)
+            {
+                var shape = y.Shape.ToArray();
+                var row = _engine.Reshape(Value(projectionBias), Enumerable.Repeat(1, shape.Length - 1).Concat(new[] { shape[^1] }).ToArray());
+                y = _engine.TensorAdd(y, _engine.TensorBroadcastTo(row, shape));
+            }
+            return y;
+        }
+        // Heads [B, heads, L, hd]; Qwen3 normalizes each query and key head (q_norm, k_norm) before the rotary embedding.
+        Tensor<T> Heads(Tensor<T> projected, int heads, BiasFreeLinearLayer<T>? norm)
+        {
+            var split = _engine.Reshape(projected, new[] { b, l, heads, hd });
+            if (norm is not null) split = RmsNorm(norm, split);
+            return _engine.TensorPermute(split, new[] { 0, 2, 1, 3 });
+        }
+        // A fused adapter's update, split along its output rows: (alpha / r) B A dropout(input), rows [offset, offset + count).
+        Tensor<T>[]? Fused(Lora? lora, Tensor<T> input, params int[] widths)
+        {
+            if (lora is null) return null;
+            var dropped = lora.Dropout is null ? input : lora.Dropout.Forward(input);
+            var update = _engine.TensorMultiplyScalar(Rows(lora.B, Rows(lora.A, dropped)), NumOps.FromDouble(c.LoraAlpha / c.LoraRank));
+            var shape = update.Shape.ToArray();
+            var parts = new Tensor<T>[widths.Length];
+            for (int p = 0, offset = 0; p < widths.Length; offset += widths[p], p++)
+            {
+                var start = new int[shape.Length];
+                start[^1] = offset;
+                var size = (int[])shape.Clone();
+                size[^1] = widths[p];
+                parts[p] = _engine.TensorSlice(update, start, size);
+            }
+            return parts;
+        }
+        int qWidth = c.Heads * hd, kvWidth = c.KeyValueHeads * hd;
+        var qkv = Fused(layer.QkvLora, normed, qWidth, kvWidth, kvWidth);
+        Tensor<T> WithFused(Tensor<T> y, int part) => qkv is null ? y : _engine.TensorAdd(y, qkv[part]);
+        var q = Rotate(Heads(WithFused(Project(layer.Query, layer.QueryLora, layer.QueryBias), 0), c.Heads, layer.QueryNorm), cos, sin);
+        var k = Rotate(Heads(WithFused(Project(layer.Key, layer.KeyLora, layer.KeyBias), 1), c.KeyValueHeads, layer.KeyNorm), cos, sin);
+        var v = Heads(WithFused(Project(layer.Value, layer.ValueLora, layer.ValueBias), 2), c.KeyValueHeads, null);
+        if (cache is not null)
+        {
+            if (cache.Layers[index] is { } held)
+            {
+                k = _engine.TensorConcatenate(new[] { held.Keys, k }, 2);
+                v = _engine.TensorConcatenate(new[] { held.Values, v }, 2);
+            }
+            cache.Layers[index] = (k, v);
+        }
+        int keys = k.Shape[2];
+        if (groups > 1)
+        {
+            // repeat_kv: each key-value head serves `groups` consecutive query heads.
+            Tensor<T> Repeat(Tensor<T> t) => _engine.Reshape(_engine.TensorBroadcastTo(
+                _engine.Reshape(t, new[] { b, c.KeyValueHeads, 1, keys, hd }), new[] { b, c.KeyValueHeads, groups, keys, hd }), new[] { b, c.Heads, keys, hd });
+            k = Repeat(k);
+            v = Repeat(v);
+        }
+        var scores = _engine.TensorMultiplyScalar(
+            _engine.BatchMatMul(_engine.Reshape(q, new[] { b * c.Heads, l, hd }), _engine.TensorPermute(_engine.Reshape(k, new[] { b * c.Heads, keys, hd }), new[] { 0, 2, 1 })),
+            NumOps.FromDouble(c.AttentionMultiplier > 0 ? c.AttentionMultiplier : 1.0 / Math.Sqrt(hd)));
+        scores = _engine.TensorAdd(_engine.Reshape(scores, new[] { b, c.Heads, l, keys }), _engine.TensorBroadcastTo(bias, new[] { b, c.Heads, l, keys }));
+        var probabilities = _engine.Reshape(_engine.Softmax(scores, axis: 3), new[] { b * c.Heads, l, keys });
+        // Hugging Face eager_attention_forward drops softmax weights before the value product.
+        // Dropping the context/residual instead would implement a different attention operation.
+        if (layer.AttentionDropout is { } attentionDropout) probabilities = attentionDropout.Forward(probabilities);
+        var context = _engine.Reshape(_engine.TensorPermute(
+            _engine.Reshape(_engine.BatchMatMul(probabilities, _engine.Reshape(v, new[] { b * c.Heads, keys, hd })), new[] { b, c.Heads, l, hd }),
+            new[] { 0, 2, 1, 3 }), new[] { b, l, c.Heads * hd });
+        Tensor<T> Residual(Tensor<T> block) => c.ResidualMultiplier == 1 ? block : _engine.TensorMultiplyScalar(block, NumOps.FromDouble(c.ResidualMultiplier));
+        x = _engine.TensorAdd(x, Residual(Adapted(layer.Output, layer.OutputLora, context)));
+        var post = Norm(layer.PostNorm, layer.PostNormBias, x);
+        var gateUp = Fused(layer.GateUpLora, post, c.Intermediate, c.Intermediate);
+        var gatePath = Adapted(layer.Gate, layer.GateLora, post);
+        var upPath = Adapted(layer.Up, layer.UpLora, post);
+        if (gateUp is not null)
+        {
+            gatePath = _engine.TensorAdd(gatePath, gateUp[0]);
+            upPath = _engine.TensorAdd(upPath, gateUp[1]);
+        }
+        var gated = _engine.TensorMultiply(_engine.Swish(gatePath), upPath);
+        return _engine.TensorAdd(x, Residual(Adapted(layer.Down, layer.DownLora, gated)));
+    }
+
+    /// <summary>
+    /// The causal language-model loss (Hugging Face's <c>ForCausalLMLoss</c>): each position predicts the next label,
+    /// cross-entropy averaged over the labels that are not <paramref name="ignoreIndex"/>.
+    /// </summary>
+    /// <param name="logits">Logits <c>[B, L, V]</c>.</param>
+    /// <param name="labels">Labels <c>[B, L]</c>, aligned with the inputs (position t's logits score label t + 1).</param>
+    /// <param name="ignoreIndex">The label that is not scored (-100).</param>
+    public Tensor<T> CausalLmLoss(Tensor<T> logits, int[,] labels, int ignoreIndex = -100) =>
+        CausalLanguageModelLoss.Compute(_engine, logits, labels, ignoreIndex);
+
+    /// <summary>Loads a Hugging Face <c>LlamaForCausalLM</c> state dict (names after an optional <paramref name="prefix"/>
+    /// for the decoder; the head is read as <paramref name="headName"/>).</summary>
+    public void LoadTorchWeights(Func<string, int[], double[]> read, string prefix = "model.", string headName = "lm_head.weight")
+        => LoadTorchWeights(AiDotNet.ModelLoading.TorchTensorSource.From(read), prefix, headName);
+
+    /// <summary>Loads a Hugging Face state dict from <paramref name="source"/>, each tensor copied straight into its layer.</summary>
+    public void LoadTorchWeights(AiDotNet.ModelLoading.TorchTensorSource source, string prefix = "model.", string headName = "lm_head.weight")
+    {
+        var c = Configuration;
+        int h = c.Hidden, hd = c.ResolvedHeadDim, kv = c.KeyValueHeads * hd, qd = c.Heads * hd;
+        void Linear(BiasFreeLinearLayer<T> layer, string name, int inputs, int outputs)
+            => TorchParameters.Linear(layer, inputs, outputs, source, name);
+        void Vector(BiasFreeLinearLayer<T> holder, string name, int[] shape)
+            => TorchParameters.Linear(holder, 1, shape.Aggregate(1, (a, s) => a * s), source, name, shape);
+        if (Embeddings is not null) Vector(Embeddings, $"{prefix}embed_tokens.weight", new[] { c.VocabSize, h });
+        for (int i = 0; i < Layers.Count; i++)
+        {
+            var layer = Layers[i];
+            string n = $"{prefix}layers.{i}";
+            Vector(layer.InputNorm, $"{n}.input_layernorm.weight", new[] { h });
+            Linear(layer.Query, $"{n}.self_attn.q_proj.weight", h, qd);
+            Linear(layer.Key, $"{n}.self_attn.k_proj.weight", h, kv);
+            Linear(layer.Value, $"{n}.self_attn.v_proj.weight", h, kv);
+            Linear(layer.Output, $"{n}.self_attn.o_proj.weight", qd, h);
+            if (layer.QueryBias is not null) Vector(layer.QueryBias, $"{n}.self_attn.q_proj.bias", new[] { qd });
+            if (layer.QueryNorm is not null) Vector(layer.QueryNorm, $"{n}.self_attn.q_norm.weight", new[] { hd });
+            if (layer.KeyNorm is not null) Vector(layer.KeyNorm, $"{n}.self_attn.k_norm.weight", new[] { hd });
+            if (layer.KeyBias is not null) Vector(layer.KeyBias, $"{n}.self_attn.k_proj.bias", new[] { kv });
+            if (layer.ValueBias is not null) Vector(layer.ValueBias, $"{n}.self_attn.v_proj.bias", new[] { kv });
+            Vector(layer.PostNorm, $"{n}.post_attention_layernorm.weight", new[] { h });
+            if (layer.InputNormBias is not null) Vector(layer.InputNormBias, $"{n}.input_layernorm.bias", new[] { h });
+            if (layer.PostNormBias is not null) Vector(layer.PostNormBias, $"{n}.post_attention_layernorm.bias", new[] { h });
+            Linear(layer.Gate, $"{n}.mlp.gate_proj.weight", h, c.Intermediate);
+            Linear(layer.Up, $"{n}.mlp.up_proj.weight", h, c.Intermediate);
+            Linear(layer.Down, $"{n}.mlp.down_proj.weight", c.Intermediate, h);
+            if (layer.QueryLora is not null)
+            {
+                Linear(layer.QueryLora.A, $"{n}.self_attn.q_proj.lora_A.weight", h, c.LoraRank);
+                Linear(layer.QueryLora.B, $"{n}.self_attn.q_proj.lora_B.weight", c.LoraRank, qd);
+            }
+            if (layer.ValueLora is not null)
+            {
+                Linear(layer.ValueLora.A, $"{n}.self_attn.v_proj.lora_A.weight", h, c.LoraRank);
+                Linear(layer.ValueLora.B, $"{n}.self_attn.v_proj.lora_B.weight", c.LoraRank, kv);
+            }
+            void Branch(Lora? lora, string module, int inputs, int outputs)
+            {
+                if (lora is null) return;
+                Linear(lora.A, $"{n}.{module}.lora_A.weight", inputs, c.LoraRank);
+                Linear(lora.B, $"{n}.{module}.lora_B.weight", c.LoraRank, outputs);
+            }
+            Branch(layer.KeyLora, "self_attn.k_proj", h, kv);
+            Branch(layer.OutputLora, "self_attn.o_proj", qd, h);
+            Branch(layer.GateLora, "mlp.gate_proj", h, c.Intermediate);
+            Branch(layer.UpLora, "mlp.up_proj", h, c.Intermediate);
+            Branch(layer.DownLora, "mlp.down_proj", c.Intermediate, h);
+            Branch(layer.QkvLora, "self_attn.qkv_proj", h, qd + 2 * kv);
+            Branch(layer.GateUpLora, "mlp.gate_up_proj", h, 2 * c.Intermediate);
+        }
+        if (FinalNorm is not null) Vector(FinalNorm, $"{prefix}norm.weight", new[] { h });
+        if (FinalNormBias is not null) Vector(FinalNormBias, $"{prefix}norm.bias", new[] { h });
+        if (LmHead is not null) Linear(LmHead, headName, h, c.VocabSize);
+    }
+
+    /// <summary>The reference initialization (Hugging Face <c>LlamaPreTrainedModel._init_weights</c>): linear weights and
+    /// embeddings N(0, 0.02²), RMSNorm weights 1; and peft's for LoRA: A uniform in ±1/√Hidden (Kaiming with a = √5), B
+    /// zero, so a new adapter leaves the model unchanged.</summary>
+    public void InitializeLikeReference(Random random)
+    {
+        double Normal() => Math.Sqrt(-2.0 * Math.Log(1.0 - random.NextDouble())) * Math.Cos(2.0 * Math.PI * random.NextDouble());
+        // Generated run by run straight into the layers, in the order the reference draws them.
+        LoadTorchWeights(AiDotNet.ModelLoading.TorchTensorSource.Generated((name, shape, offset, values) =>
+        {
+            // lora_B and the projections' biases start at zero.
+            if (name.EndsWith("lora_B.weight", StringComparison.Ordinal) || name.EndsWith(".bias", StringComparison.Ordinal))
+            {
+                values.Clear();
+                return;
+            }
+            if (name.EndsWith("lora_A.weight", StringComparison.Ordinal))
+            {
+                double bound = 1.0 / Math.Sqrt(shape[1]);
+                for (int i = 0; i < values.Length; i++) values[i] = bound * (2 * random.NextDouble() - 1);
+                return;
+            }
+            bool norm = name.EndsWith("layernorm.weight", StringComparison.Ordinal) || name.EndsWith("norm.weight", StringComparison.Ordinal);
+            for (int i = 0; i < values.Length; i++) values[i] = norm ? 1.0 : 0.02 * Normal();
+        }));
+    }
+}

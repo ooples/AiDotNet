@@ -52,11 +52,12 @@ public sealed class TradingAgentWarmupAndHiddenLayersTests
     {
         var options = Options(kind, StateSize, ActionSize, seed: 9);
         options.HiddenLayers = new[] { 7, 5 };
-        var architecture = Arch(StateSize, ActionSize);
+        int actorOutputs = ActorOutputs(kind, options);
+        var architecture = Arch(StateSize, actorOutputs);
         using var agent = Create(kind, options, architecture);
 
         var widths = architecture.Layers.Select(layer => layer.GetOutputShape()[0]).ToArray();
-        Assert.Equal(new[] { 7, 5, ActionSize }, widths);
+        Assert.Equal(new[] { 7, 5, actorOutputs }, widths);
         var networks = Networks(agent, kind, StateSize, ActionSize);
         Assert.Equal(kind switch { Sac => 5, MarketMaking => 1, _ => 2 }, networks.Count);
         foreach (var entry in networks)

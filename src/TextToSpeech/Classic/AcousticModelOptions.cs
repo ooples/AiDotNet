@@ -26,23 +26,35 @@ public class AcousticModelOptions : TtsModelOptions
         UsePostnet = other.UsePostnet;
         PostnetDim = other.PostnetDim;
         PostnetLayers = other.PostnetLayers;
+        TextSymbols = other.TextSymbols is null ? null : (string[])other.TextSymbols.Clone();
     }
 
     /// <summary>Gets or sets the encoder embedding dimension.</summary>
-    public int EncoderDim { get; set; } = 256;
+    [AiDotNet.Attributes.OptionBehaviourExempt("Tacotron (Wang et al. 2017) sizes its parts with TacotronOptions' own fields (EmbeddingDim, CbhgChannels); the inherited encoder width has no part to size.", ModelType = typeof(Tacotron<>))]
+    [AiDotNet.Attributes.OptionBehaviourExempt("SpeedySpeech's encoder and decoder share one channel width, HiddenDim (Vainer and Dusek 2020, section 3.2).", ModelType = typeof(SpeedySpeech<>))]
+    public virtual int EncoderDim { get; set; } = 256;
+
+    /// <summary>Ordered symbol inventory used to train the text embedding. Null selects this model's English inventory.</summary>
+    public string[]? TextSymbols { get; set; }
 
     /// <summary>Gets or sets the decoder output dimension (mel channels).</summary>
-    public int DecoderDim { get; set; } = 80;
+    [AiDotNet.Attributes.OptionBehaviourExempt("Tacotron (Wang et al. 2017) sizes its parts with TacotronOptions' own fields (DecoderRnnDim, AttentionDim); the inherited decoder width has no part to size.", ModelType = typeof(Tacotron<>))]
+    [AiDotNet.Attributes.OptionBehaviourExempt("SpeedySpeech's encoder and decoder share one channel width, HiddenDim, and project to MelChannels (Vainer and Dusek 2020, section 3.2).", ModelType = typeof(SpeedySpeech<>))]
+    [AiDotNet.Attributes.OptionBehaviourExempt("ProDiff's decoder is its diffusion denoiser, whose width is DenoiserChannels (Huang et al. 2022, section 3.3).", ModelType = typeof(ProDiff<>))]
+    public virtual int DecoderDim { get; set; } = 80;
 
     /// <summary>Gets or sets the number of mel frames generated per decoder step (reduction factor).</summary>
+    [AiDotNet.Attributes.OptionBehaviourExempt("PromptTTS's acoustic model is FastSpeech 2's (Guo et al. 2023): non-autoregressive, it emits every frame at once, so there is no reduction factor.", ModelType = typeof(DescriptionBased.PromptTTS<>))]
     public int OutputsPerStep { get; set; } = 1;
 
     /// <summary>Gets or sets whether to use a postnet for mel refinement.</summary>
     public bool UsePostnet { get; set; } = true;
 
     /// <summary>Gets or sets the postnet embedding dimension.</summary>
+    [AiDotNet.Attributes.OptionBehaviourExempt("PromptTTS's acoustic model is FastSpeech 2's (Guo et al. 2023), which has no post-net (FastSpeech2Options sets UsePostnet = false).", ModelType = typeof(DescriptionBased.PromptTTS<>))]
     public int PostnetDim { get; set; } = 512;
 
     /// <summary>Gets or sets the number of postnet convolution layers.</summary>
+    [AiDotNet.Attributes.OptionBehaviourExempt("PromptTTS's acoustic model is FastSpeech 2's (Guo et al. 2023), which has no post-net (FastSpeech2Options sets UsePostnet = false).", ModelType = typeof(DescriptionBased.PromptTTS<>))]
     public int PostnetLayers { get; set; } = 5;
 }

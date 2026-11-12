@@ -182,6 +182,7 @@ public class PaperOptimizerDefaultsTests
     [InlineData(OptimizerKind.Lamb)]
     [InlineData(OptimizerKind.Lion)]
     [InlineData(OptimizerKind.LBfgs)]
+    [InlineData(OptimizerKind.ScaledAdam)]
     public void EveryDeclaredOptimizerKind_ConstructsItsRealImplementation(OptimizerKind kind)
     {
         var recipe = new PaperOptimizerAttribute(kind) { Source = "Synthetic fixture" };
@@ -201,6 +202,7 @@ public class PaperOptimizerDefaultsTests
             OptimizerKind.Lamb => typeof(LAMBOptimizer<double, object, object>),
             OptimizerKind.Lion => typeof(LionOptimizer<double, object, object>),
             OptimizerKind.LBfgs => typeof(LBFGSOptimizer<double, object, object>),
+            OptimizerKind.ScaledAdam => typeof(ScaledAdamOptimizer<double, object, object>),
             _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, null),
         };
 
