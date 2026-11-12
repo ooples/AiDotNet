@@ -2,6 +2,7 @@ using AiDotNet.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Enums;
 using AiDotNet.Attributes;
+using AiDotNet.Preprocessing.FeatureSelection.Helpers;
 
 namespace AiDotNet.Preprocessing.FeatureSelection.Range;
 
@@ -26,7 +27,7 @@ public class PercentileRangeSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T
     private readonly double _lowerPercentile;
     private readonly double _upperPercentile;
 
-    private double[]? _rangeValues;
+    private Vector<T>? _rangeValues;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
@@ -34,7 +35,7 @@ public class PercentileRangeSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public double LowerPercentile => _lowerPercentile;
     public double UpperPercentile => _upperPercentile;
-    public double[]? RangeValues => _rangeValues;
+    public Vector<T>? RangeValues => _rangeValues;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -65,50 +66,19 @@ public class PercentileRangeSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T
     protected override void FitCore(Matrix<T> data)
     {
         _nInputFeatures = data.Columns;
-        int n = data.Rows;
         int p = data.Columns;
 
-        var X = new double[n, p];
-        for (int i = 0; i < n; i++)
-            for (int j = 0; j < p; j++)
-                X[i, j] = NumOps.ToDouble(data[i, j]);
-
-        _rangeValues = new double[p];
-
-        for (int j = 0; j < p; j++)
-        {
-            var col = new double[n];
-            for (int i = 0; i < n; i++)
-                col[i] = X[i, j];
-
-            var sorted = col.OrderBy(v => v).ToArray();
-            double lower = GetPercentile(sorted, _lowerPercentile);
-            double upper = GetPercentile(sorted, _upperPercentile);
-            _rangeValues[j] = upper - lower;
-        }
+        // Range between the configured percentiles per column (linear interpolation, as numpy does by default)
+        var x = Tensor<T>.FromMatrix(data);
+        var range = Engine.TensorSubtract(
+            FeatureSelectionTensorOps.ColumnQuantile(x, _upperPercentile),
+            FeatureSelectionTensorOps.ColumnQuantile(x, _lowerPercentile));
+        _rangeValues = range.ToVector();
 
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = Enumerable.Range(0, p)
-            .OrderByDescending(j => _rangeValues[j])
-            .Take(numToSelect)
-            .OrderBy(x => x)
-            .ToArray();
+        _selectedIndices = FeatureSelectionTensorOps.TopKIndicesSorted(range, numToSelect);
 
         IsFitted = true;
-    }
-
-    private double GetPercentile(double[] sortedData, double percentile)
-    {
-        int n = sortedData.Length;
-        double index = percentile * (n - 1);
-        int lower = (int)Math.Floor(index);
-        int upper = (int)Math.Ceiling(index);
-
-        if (lower == upper)
-            return sortedData[lower];
-
-        double fraction = index - lower;
-        return sortedData[lower] * (1 - fraction) + sortedData[upper] * fraction;
     }
 
     public new Matrix<T> FitTransform(Matrix<T> data)
@@ -123,15 +93,7 @@ public class PercentileRangeSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T
         if (_selectedIndices is null)
             throw new InvalidOperationException("PercentileRangeSelector has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return FeatureSelectionTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

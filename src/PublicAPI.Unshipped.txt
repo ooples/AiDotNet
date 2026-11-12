@@ -22573,3 +22573,13 @@ AiDotNet.Preprocessing.FeatureSelection.Moment.SkewnessSelector<T>.SkewnessValue
 AiDotNet.Preprocessing.FeatureSelection.Moment.CoefOfVariationSelector<T>.CVValues.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
 *REMOVED*AiDotNet.Preprocessing.FeatureSelection.Moment.BimodalitySelector<T>.BimodalityValues.get -> double[]?
 AiDotNet.Preprocessing.FeatureSelection.Moment.BimodalitySelector<T>.BimodalityValues.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
+*REMOVED*AiDotNet.Preprocessing.FeatureSelection.Range.IQRSelector<T>.IQRValues.get -> double[]?
+AiDotNet.Preprocessing.FeatureSelection.Range.IQRSelector<T>.IQRValues.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
+*REMOVED*AiDotNet.Preprocessing.FeatureSelection.Range.MADSelector<T>.MADValues.get -> double[]?
+AiDotNet.Preprocessing.FeatureSelection.Range.MADSelector<T>.MADValues.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
+*REMOVED*AiDotNet.Preprocessing.FeatureSelection.Range.PercentileRangeSelector<T>.RangeValues.get -> double[]?
+AiDotNet.Preprocessing.FeatureSelection.Range.PercentileRangeSelector<T>.RangeValues.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
+*REMOVED*AiDotNet.Preprocessing.FeatureSelection.Quantile.QuantileDispersionSelector<T>.QCDValues.get -> double[]?
+AiDotNet.Preprocessing.FeatureSelection.Quantile.QuantileDispersionSelector<T>.QCDValues.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
+*REMOVED*AiDotNet.Preprocessing.FeatureSelection.Quantile.QuantileRatioSelector<T>.RatioValues.get -> double[]?
+AiDotNet.Preprocessing.FeatureSelection.Quantile.QuantileRatioSelector<T>.RatioValues.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?

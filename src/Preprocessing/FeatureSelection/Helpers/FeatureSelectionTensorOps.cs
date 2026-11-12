@@ -58,6 +58,13 @@ internal static class FeatureSelectionTensorOps
     }
 
     /// <summary>
+    /// The <paramref name="quantile"/>-th quantile of every column of a 2-D tensor ([n, p] to [p]), interpolating
+    /// linearly between order statistics at position <c>quantile * (n - 1)</c> (numpy's default method).
+    /// </summary>
+    public static Tensor<T> ColumnQuantile<T>(Tensor<T> x, double quantile) =>
+        AiDotNetEngine.Current.TensorQuantile(x, quantile, 0, false, QuantileInterpolation.Linear);
+
+    /// <summary>
     /// The positions of the <paramref name="k"/> largest entries of a 1-D score tensor, returned in ascending
     /// index order; ties keep the lower index first (LINQ <c>OrderByDescending(...).Take(k).OrderBy(i)</c>).
     /// </summary>

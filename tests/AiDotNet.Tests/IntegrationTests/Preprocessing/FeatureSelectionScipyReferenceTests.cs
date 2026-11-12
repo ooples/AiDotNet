@@ -1,4 +1,6 @@
 using AiDotNet.Preprocessing.FeatureSelection.Moment;
+using AiDotNet.Preprocessing.FeatureSelection.Quantile;
+using AiDotNet.Preprocessing.FeatureSelection.Range;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
 
@@ -61,5 +63,39 @@ public class FeatureSelectionScipyReferenceTests
         Assert.Equal(1.986214288094205, skewness.SkewnessValues[1], Tolerance);
         Assert.Equal(-0.23713871415241208, skewness.SkewnessValues[2], Tolerance);
         Assert.Equal(new[] { 0 }, skewness.SelectedIndices);
+    }
+
+    [Fact]
+    public void QuantileBasedSelectors_MatchNumpyLinearPercentiles()
+    {
+        // scipy.stats.iqr(X, axis=0); scipy.stats.median_abs_deviation(X, axis=0)
+        // q1, q3 = np.percentile(X, [25, 75], axis=0); qcd = (q3 - q1) / abs(q3 + q1)
+        // lo, hi = np.percentile(X, [10, 90], axis=0); range = hi - lo; ratio = abs(hi) / abs(lo)
+        var iqr = new IQRSelector<double>(nFeaturesToSelect: 1);
+        iqr.Fit(MomentData());
+        var mad = new MADSelector<double>(nFeaturesToSelect: 1);
+        mad.Fit(MomentData());
+        var qcd = new QuantileDispersionSelector<double>(nFeaturesToSelect: 1);
+        qcd.Fit(MomentData());
+        var range = new PercentileRangeSelector<double>(nFeaturesToSelect: 1);
+        range.Fit(MomentData());
+        var ratio = new QuantileRatioSelector<double>(nFeaturesToSelect: 1);
+        ratio.Fit(MomentData());
+
+        AssertValues(new[] { 7.1499999999999995, 0.8499999999999996, 1.75 }, iqr.IQRValues);
+        AssertValues(new[] { 3.65, 0.3999999999999999, 1.0 }, mad.MADValues);
+        AssertValues(new[] { 0.715, 0.17525773195876282, 0.3181818181818182 }, qcd.QCDValues);
+        AssertValues(new[] { 7.7200000000000015, 3.0999999999999988, 2.95 }, range.RangeValues);
+        AssertValues(new[] { 7.771929824561405, 2.823529411764705, 3.458333333333333 }, ratio.RatioValues);
+        Assert.Equal(new[] { 0 }, iqr.SelectedIndices);
+        Assert.Equal(new[] { 0 }, ratio.SelectedIndices);
+    }
+
+    private static void AssertValues(double[] expected, Vector<double>? actual)
+    {
+        Assert.NotNull(actual);
+        Assert.Equal(expected.Length, actual.Length);
+        for (int i = 0; i < expected.Length; i++)
+            Assert.Equal(expected[i], actual[i], Tolerance);
     }
 }
