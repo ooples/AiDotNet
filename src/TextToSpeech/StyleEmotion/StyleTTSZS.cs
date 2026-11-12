@@ -326,17 +326,14 @@ public partial class StyleTTSZS<T> : TtsModelBase<T>, IEndToEndTts<T>
 
     private Tensor<T> ToTensor(IReadOnlyList<int> ids)
     {
-        var tensor = new Tensor<T>(new[] { ids.Count });
-        for (int i = 0; i < ids.Count; i++) tensor[i] = NumOps.FromDouble(ids[i]);
-        return tensor;
+        return IdTensor(ids);
     }
 
     private int[] ToIds(Tensor<T> tensor, string name)
     {
-        var ids = new int[tensor.Length];
+        var ids = RoundedIds(tensor);
         for (int i = 0; i < ids.Length; i++)
         {
-            ids[i] = (int)Math.Round(NumOps.ToDouble(tensor[i]));
             if (ids[i] < 0 || ids[i] >= _options.VocabSize)
                 throw new ArgumentOutOfRangeException(name, $"{GetType().Name}'s symbol ids lie in [0, {_options.VocabSize}).");
         }
@@ -384,17 +381,13 @@ public partial class StyleTTSZS<T> : TtsModelBase<T>, IEndToEndTts<T>
     /// <summary>The 0/1 alignment <c>[phonemes, frames]</c> of whole-frame durations.</summary>
     private Tensor<T> AlignmentOf(int[] durations)
     {
-        var alignment = new Tensor<T>(new[] { durations.Length, durations.Sum() });
-        int frame = 0;
-        for (int i = 0; i < durations.Length; i++)
-            for (int f = 0; f < durations[i]; f++) alignment[i, frame++] = NumOps.One;
-        return alignment;
+        return DurationAlignment(durations);
     }
 
     internal int[] FramesOf(Tensor<T> durations)
     {
-        var frames = new int[durations.Length];
-        for (int i = 0; i < frames.Length; i++) frames[i] = Math.Max(1, (int)Math.Round(NumOps.ToDouble(durations[i]), MidpointRounding.ToEven));
+        var frames = RoundedIds(durations);
+        for (int i = 0; i < frames.Length; i++) frames[i] = Math.Max(1, frames[i]);
         return frames;
     }
 
@@ -410,17 +403,21 @@ public partial class StyleTTSZS<T> : TtsModelBase<T>, IEndToEndTts<T>
     internal Tensor<T> TeacherSample(Tensor<T> noise, Tensor<T> text, Tensor<T> promptMel, double guidance, bool training, Random random)
     {
         int steps = _options.SamplingSteps;
+        if (steps < 1) return noise;
+        // Î±_n = cos(Ï€Ï„_n/2) and Ïƒ_n = sin(Ï€Ï„_n/2) at Ï„_n = n / L, n = 0 â€¦ L, as T.
+        var angle = Engine.TensorMultiplyScalar(Engine.TensorArange<T>(0, steps + 1), NumOps.FromDouble(Math.PI / (2.0 * steps)));
+        var alphas = Engine.TensorCos(angle).ToArray();
+        var sigmas = Engine.TensorSin(angle).ToArray();
         var h = noise;
         for (int n = steps; n >= 1; n--)
         {
-            var (alpha, sigma) = Schedule((double)n / steps);
-            var (alphaNext, sigmaNext) = Schedule((double)(n - 1) / steps);
-            var v = TeacherNetwork.Guided(h, sigma, text, promptMel, guidance, training, random);
-            var x0 = Engine.TensorSubtract(Engine.TensorMultiplyScalar(h, NumOps.FromDouble(alpha)), Engine.TensorMultiplyScalar(v, NumOps.FromDouble(sigma)));
-            var eps = Engine.TensorAdd(Engine.TensorMultiplyScalar(h, NumOps.FromDouble(sigma)), Engine.TensorMultiplyScalar(v, NumOps.FromDouble(alpha)));
-            h = Engine.TensorAdd(Engine.TensorMultiplyScalar(x0, NumOps.FromDouble(alphaNext)), Engine.TensorMultiplyScalar(eps, NumOps.FromDouble(sigmaNext)));
+            var v = TeacherNetwork.Guided(h, Schedule((double)n / steps).Sigma, text, promptMel, guidance, training, random);
+            var x0 = Engine.TensorSubtract(Engine.TensorMultiplyScalar(h, alphas[n]), Engine.TensorMultiplyScalar(v, sigmas[n]));
+            var eps = Engine.TensorAdd(Engine.TensorMultiplyScalar(h, sigmas[n]), Engine.TensorMultiplyScalar(v, alphas[n]));
+            h = Engine.TensorAdd(Engine.TensorMultiplyScalar(x0, alphas[n - 1]), Engine.TensorMultiplyScalar(eps, sigmas[n - 1]));
         }
         return h;
+
     }
 
     /// <summary>The distilled student's one-step map H(ξ; ω, x′, t) (its level input is the guidance scale).</summary>

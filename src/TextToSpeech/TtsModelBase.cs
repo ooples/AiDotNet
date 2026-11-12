@@ -620,6 +620,39 @@ public abstract partial class TtsModelBase<T> : NeuralNetworkBase<T>, IShapeCont
         return Engine.Reshape(Engine.TensorSoftmax(flat, axis: 0), logits._shape);
     }
 
+    /// <summary>Token or symbol ids as a <c>[count]</c> tensor of T.</summary>
+    protected static Tensor<T> IdTensor(IReadOnlyList<int> ids)
+    {
+        Guard.NotNull(ids);
+        var values = ids as int[] ?? ids.ToArray();
+        return new Tensor<int>(values, new[] { values.Length }).Cast<T>();
+    }
+
+    /// <summary>Each element rounded half to even (as <see cref="Math.Round(double)"/>), as ints: ids carried in T.</summary>
+    protected int[] RoundedIds(Tensor<T> tensor)
+    {
+        Guard.NotNull(tensor);
+        return Engine.TensorRound(tensor).Cast<int>().ToArray();
+    }
+
+    /// <summary>
+    /// The hard monotonic alignment <c>[durations.Length, sum(durations)]</c> that expands phoneme i over its
+    /// durations[i] frames: row i is 1 on those frames and 0 elsewhere.
+    /// </summary>
+    protected Tensor<T> DurationAlignment(int[] durations)
+    {
+        Guard.NotNull(durations);
+        int total = durations.Sum();
+        var owner = new int[total];
+        int frame = 0;
+        for (int i = 0; i < durations.Length; i++)
+            for (int f = 0; f < durations[i]; f++) owner[frame++] = i;
+        if (total == 0 || durations.Length == 0)
+            return new Tensor<T>(new[] { durations.Length, total });
+        var frameToPhoneme = Engine.TensorOneHot<T>(new Tensor<int>(owner, new[] { total }), durations.Length);
+        return Engine.TensorTranspose(frameToPhoneme);
+    }
+
     /// <summary>
     /// L2-normalizes a tensor.
     /// </summary>

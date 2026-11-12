@@ -298,17 +298,14 @@ public partial class StyleTTS<T> : TtsModelBase<T>, IAcousticModel<T>
 
     private Tensor<T> ToTensor(IReadOnlyList<int> ids)
     {
-        var tensor = new Tensor<T>(new[] { ids.Count });
-        for (int i = 0; i < ids.Count; i++) tensor[i] = NumOps.FromDouble(ids[i]);
-        return tensor;
+        return IdTensor(ids);
     }
 
     private int[] ToIds(Tensor<T> tensor, string name)
     {
-        var ids = new int[tensor.Length];
+        var ids = RoundedIds(tensor);
         for (int i = 0; i < ids.Length; i++)
         {
-            ids[i] = (int)Math.Round(NumOps.ToDouble(tensor[i]));
             if (ids[i] < 0 || ids[i] >= _options.VocabSize)
                 throw new ArgumentOutOfRangeException(name, $"{GetType().Name}'s symbol ids lie in [0, {_options.VocabSize}).");
         }
@@ -357,12 +354,7 @@ public partial class StyleTTS<T> : TtsModelBase<T>, IAcousticModel<T>
     /// <summary>The 0/1 alignment <c>[phonemes, frames]</c> of whole-frame durations.</summary>
     private Tensor<T> AlignmentOf(int[] durations)
     {
-        int total = durations.Sum();
-        var alignment = new Tensor<T>(new[] { durations.Length, total });
-        int frame = 0;
-        for (int i = 0; i < durations.Length; i++)
-            for (int f = 0; f < durations[i]; f++) alignment[i, frame++] = NumOps.One;
-        return alignment;
+        return DurationAlignment(durations);
     }
 
     /// <summary>The mel spectrogram <c>[1, mels, 2F]</c> of phonemes in a style, with durations from the duration
@@ -373,8 +365,9 @@ public partial class StyleTTS<T> : TtsModelBase<T>, IAcousticModel<T>
         var text = TextEncoderModule.Forward(ToTensor(ids), false, random);                                   // [1, C, L]
         var encoded = PredictorModule.EncodeText(text, style, false, random);                                // [L, C + S]
         var durations = PredictorModule.Durations(encoded, false, random);
-        var frames = new int[ids.Length];
-        for (int i = 0; i < frames.Length; i++) frames[i] = Math.Max(1, (int)Math.Round(NumOps.ToDouble(durations[i]), MidpointRounding.ToEven));
+        var frames = RoundedIds(Engine.TensorSlice(Engine.Reshape(durations, new[] { durations.Length }), new[] { 0 }, new[] { ids.Length }));
+        for (int i = 0; i < frames.Length; i++) frames[i] = Math.Max(1, frames[i]);
+
         var alignment = AlignmentOf(frames);                                                                 // [L, F]
         int width = _options.HiddenDim + _options.StyleDim, total = frames.Sum();
         var aligned = Engine.Reshape(Engine.TensorMatMul(Engine.TensorTranspose(encoded), alignment), new[] { 1, width, total });
