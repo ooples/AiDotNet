@@ -22565,3 +22565,11 @@ override AiDotNet.Diffusion.LatentDiffusionModelBase<T>.IsBatchedTrainingSample(
 virtual AiDotNet.Diffusion.DiffusionModelBase<T>.IsBatchedTrainingSample(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! sample) -> bool
 *REMOVED*AiDotNet.Document.Options.DocBankOptions.LearningRate.get -> double
 AiDotNet.Document.Options.DocBankOptions.LearningRate.get -> double?
+*REMOVED*AiDotNet.Preprocessing.FeatureSelection.Moment.KurtosisSelector<T>.KurtosisValues.get -> double[]?
+AiDotNet.Preprocessing.FeatureSelection.Moment.KurtosisSelector<T>.KurtosisValues.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
+*REMOVED*AiDotNet.Preprocessing.FeatureSelection.Moment.SkewnessSelector<T>.SkewnessValues.get -> double[]?
+AiDotNet.Preprocessing.FeatureSelection.Moment.SkewnessSelector<T>.SkewnessValues.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
+*REMOVED*AiDotNet.Preprocessing.FeatureSelection.Moment.CoefOfVariationSelector<T>.CVValues.get -> double[]?
+AiDotNet.Preprocessing.FeatureSelection.Moment.CoefOfVariationSelector<T>.CVValues.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
+*REMOVED*AiDotNet.Preprocessing.FeatureSelection.Moment.BimodalitySelector<T>.BimodalityValues.get -> double[]?
+AiDotNet.Preprocessing.FeatureSelection.Moment.BimodalitySelector<T>.BimodalityValues.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
