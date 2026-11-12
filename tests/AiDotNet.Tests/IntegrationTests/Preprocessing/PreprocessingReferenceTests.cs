@@ -1,3 +1,4 @@
+using AiDotNet.Preprocessing.Imputers;
 using AiDotNet.AnomalyDetection.Statistical;
 using AiDotNet.Preprocessing.OutlierHandling;
 using AiDotNet.Preprocessing.Scalers;
@@ -289,5 +290,93 @@ public class PreprocessingReferenceTests
         var restored = filter.InverseTransform(flagged);
         Assert.Equal(2, restored.Columns);
         Assert.Equal(1000.0, restored[8, 1], Tolerance);
+    }
+
+    // sklearn SimpleImputer(strategy="most_frequent"): "If there is more than one such value, only the smallest
+    // is returned." Column [3, 1, 3, 1, nan] -> 1.
+    [Fact(Timeout = 120000)]
+    public async Task SimpleImputer_MostFrequentTie_ReturnsSmallest()
+    {
+        await Task.CompletedTask;
+        var imputer = new SimpleImputer<double>(ImputationStrategy.MostFrequent);
+        var result = imputer.FitTransform(M(new double[,] { { 3 }, { 1 }, { 3 }, { 1 }, { double.NaN } }));
+
+        Assert.Equal(1.0, result[4, 0], Tolerance);
+        Assert.Equal(3.0, result[0, 0], Tolerance);
+    }
+
+    // sklearn SimpleImputer(strategy="median") ignores NaN: median of [1, 2, 10] = 2.
+    [Fact(Timeout = 120000)]
+    public async Task SimpleImputer_Median_IgnoresNaN()
+    {
+        await Task.CompletedTask;
+        var imputer = new SimpleImputer<double>(ImputationStrategy.Median);
+        var result = imputer.FitTransform(M(new double[,] { { 1 }, { double.NaN }, { 2 }, { 10 } }));
+
+        Assert.Equal(2.0, result[1, 0], Tolerance);
+    }
+
+    // sklearn MissingIndicator compares X == missing_values exactly; 1e-12 is not the missing value 0.
+    [Fact(Timeout = 120000)]
+    public async Task MissingIndicator_UsesExactMissingValueMatch()
+    {
+        await Task.CompletedTask;
+        var indicator = new MissingIndicator<double>(MissingIndicatorFeatures.All, missingValue: 0.0);
+        var result = indicator.FitTransform(M(new double[,] { { 0.0, 1 }, { 1e-12, 0 } }));
+
+        Assert.Equal(1.0, result[0, 0], Tolerance);
+        Assert.Equal(0.0, result[1, 0], Tolerance);
+        Assert.Equal(0.0, result[0, 1], Tolerance);
+        Assert.Equal(1.0, result[1, 1], Tolerance);
+    }
+
+    // sklearn KNNImputer only takes donors that have the column being imputed. Training rows
+    // [0, nan], [1, 10], [2, 20], [100, 30]; query [0, nan], k = 2: nan_euclidean distances to the donors are
+    // sqrt(2), 2 sqrt(2), 100 sqrt(2) -> uniform mean of 10 and 20 = 15; inverse-distance (2*10 + 1*20) / 3.
+    [Fact(Timeout = 120000)]
+    public async Task KNNImputer_UsesDonorsThatHaveTheColumn()
+    {
+        await Task.CompletedTask;
+        var train = M(new double[,] { { 0, double.NaN }, { 1, 10 }, { 2, 20 }, { 100, 30 } });
+        var query = M(new double[,] { { 0, double.NaN } });
+
+        var uniform = new KNNImputer<double>(nNeighbors: 2);
+        uniform.Fit(train);
+        Assert.Equal(15.0, uniform.Transform(query)[0, 1], Tolerance);
+
+        var weighted = new KNNImputer<double>(nNeighbors: 2, weights: KNNWeights.Distance);
+        weighted.Fit(train);
+        Assert.Equal(40.0 / 3.0, weighted.Transform(query)[0, 1], Tolerance);
+    }
+
+    // sklearn KNNImputer(weights="distance") gives donors at distance 0 weight 1 and the others weight 0.
+    [Fact(Timeout = 120000)]
+    public async Task KNNImputer_ZeroDistanceDonors_TakeAllTheWeight()
+    {
+        await Task.CompletedTask;
+        var imputer = new KNNImputer<double>(nNeighbors: 3, weights: KNNWeights.Distance);
+        imputer.Fit(M(new double[,] { { 0, 10 }, { 0, 30 }, { 1, 1000 } }));
+
+        Assert.Equal(20.0, imputer.Transform(M(new double[,] { { 0, double.NaN } }))[0, 1], Tolerance);
+    }
+
+    // sklearn IterativeImputer honours the estimator: with LinearRegression an exactly linear column
+    // (y = 2x) is imputed exactly; with Ridge(alpha=1) the closed form on rows x = [1, 2, 4], y = [2, 4, 8]
+    // gives coef 28/17 and intercept 42/51, so x = 3 -> 98/17.
+    [Fact(Timeout = 120000)]
+    public async Task IterativeImputer_HonoursTheEstimator()
+    {
+        await Task.CompletedTask;
+        var data = M(new double[,] { { 1, 2 }, { 2, 4 }, { 3, double.NaN }, { 4, 8 } });
+
+        var ols = new IterativeImputer<double>(estimator: IterativeImputerEstimator.LinearRegression);
+        Assert.Equal(6.0, ols.FitTransform(data)[2, 1], 1e-8);
+
+        var ridge = new IterativeImputer<double>(estimator: IterativeImputerEstimator.Ridge);
+        Assert.Equal(98.0 / 17.0, ridge.FitTransform(data)[2, 1], 1e-8);
+
+        // transform replays the fitted models on new rows
+        Assert.Equal(28.0 / 17.0 * 5 + 42.0 / 51.0,
+            ridge.Transform(M(new double[,] { { 5, double.NaN } }))[0, 1], 1e-8);
     }
 }

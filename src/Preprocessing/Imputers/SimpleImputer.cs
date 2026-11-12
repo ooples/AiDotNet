@@ -3,6 +3,8 @@ using AiDotNet.Tensors.LinearAlgebra;
 using Newtonsoft.Json;
 using AiDotNet.Enums;
 using AiDotNet.Attributes;
+using AiDotNet.Preprocessing.Scalers;
+using AiDotNet.Tensors.Engines;
 
 namespace AiDotNet.Preprocessing.Imputers;
 
@@ -131,114 +133,65 @@ public class SimpleImputer<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     {
         int numColumns = data.Columns;
         var columnsToProcess = GetColumnsToProcess(numColumns);
-        var stats = new T[numColumns];
-
-        // Default value for columns not processed
-        for (int i = 0; i < numColumns; i++)
+        var mask = ScalerTensorOps.ColumnMask<T>(numColumns, columnsToProcess);
+        T emptyValue = _strategy == ImputationStrategy.Constant && _fillValue is not null ? _fillValue : NumOps.Zero;
+        if (data.Rows == 0 || numColumns == 0)
         {
-            stats[i] = NumOps.Zero;
+            _statistics = ScalerTensorOps.MaskedParameters(
+                mask, PreprocessingTensorOps.Filled(new[] { numColumns }, emptyValue), NumOps.Zero);
+            return;
         }
 
-        foreach (var col in columnsToProcess)
-        {
-            var column = data.GetColumn(col);
-            stats[col] = ComputeStatistic(column);
-        }
-
-        _statistics = new Vector<T>(stats);
-    }
-
-    private T ComputeStatistic(Vector<T> column)
-    {
-        // Filter out missing values
-        var validValues = new List<T>();
-        for (int i = 0; i < column.Length; i++)
-        {
-            if (!IsMissing(column[i]))
-            {
-                validValues.Add(column[i]);
-            }
-        }
-
-        if (validValues.Count == 0)
-        {
-            // All values are missing, return default
-            return _strategy == ImputationStrategy.Constant && _fillValue is not null
-                ? _fillValue
-                : NumOps.Zero;
-        }
-
+        // Statistics of the non-missing (non-NaN) values; a column with no observed value gets 0 (the fill
+        // value for the constant strategy), like scikit-learn with keep_empty_features=True.
+        var x = Tensor<T>.FromMatrix(data);
+        Tensor<T> stats;
         switch (_strategy)
         {
             case ImputationStrategy.Mean:
-                return ComputeMean(validValues);
+                stats = ScalerTensorOps.NanColumnMean(x);
+                break;
             case ImputationStrategy.Median:
-                return ComputeMedian(validValues);
+                stats = Engine.TensorNanQuantile(x, 0.5, 0, false, QuantileInterpolation.Linear);
+                break;
             case ImputationStrategy.MostFrequent:
-                return ComputeMostFrequent(validValues);
+                stats = ComputeMostFrequent(data, columnsToProcess);
+                break;
             case ImputationStrategy.Constant:
-                return _fillValue ?? NumOps.Zero;
+                stats = PreprocessingTensorOps.Filled(new[] { numColumns }, _fillValue ?? NumOps.Zero);
+                break;
             default:
                 throw new ArgumentException($"Unknown imputation strategy: {_strategy}");
         }
+
+        var empty = Engine.TensorEquals(ScalerTensorOps.NanColumnCount(x), NumOps.Zero);
+        stats = Engine.TensorWhere(empty, PreprocessingTensorOps.Filled(new[] { numColumns }, emptyValue), stats);
+        _statistics = ScalerTensorOps.MaskedParameters(mask, stats, NumOps.Zero);
     }
 
-    private T ComputeMean(List<T> values)
+    /// <summary>
+    /// The most frequent non-missing value of each processed column; ties go to the smallest value, as in
+    /// scikit-learn's SimpleImputer(strategy="most_frequent"). Columns with no observed value get 0.
+    /// </summary>
+    private Tensor<T> ComputeMostFrequent(Matrix<T> data, int[] columnsToProcess)
     {
-        T sum = NumOps.Zero;
-        foreach (var value in values)
+        var modes = new Tensor<T>(new[] { data.Columns });
+        foreach (var col in columnsToProcess)
         {
-            sum = NumOps.Add(sum, value);
-        }
-        return NumOps.Divide(sum, NumOps.FromDouble(values.Count));
-    }
-
-    private T ComputeMedian(List<T> values)
-    {
-        var sorted = values.ToArray();
-        Array.Sort(sorted, (a, b) => NumOps.Compare(a, b));
-
-        int mid = sorted.Length / 2;
-        if (sorted.Length % 2 == 0)
-        {
-            return NumOps.Divide(NumOps.Add(sorted[mid - 1], sorted[mid]), NumOps.FromDouble(2.0));
-        }
-        return sorted[mid];
-    }
-
-    private T ComputeMostFrequent(List<T> values)
-    {
-        var counts = new Dictionary<double, int>();
-        foreach (var value in values)
-        {
-            double key = NumOps.ToDouble(value);
-            if (counts.ContainsKey(key))
+            var column = PreprocessingTensorOps.Column(data, col);
+            var observed = PreprocessingTensorOps.MaskPositions(PreprocessingTensorOps.Not(ScalerTensorOps.NanMask(column)));
+            if (observed.Length == 0)
             {
-                counts[key]++;
+                continue;
             }
-            else
-            {
-                counts[key] = 1;
-            }
+
+            var values = Engine.TensorIndexSelect(column, new Tensor<int>(observed, new[] { observed.Length }), 0);
+            var (mode, _) = Engine.TensorMode(values);
+            var single = PreprocessingTensorOps.Filled(new[] { 1 }, mode);
+            modes = Engine.TensorSetSlice(modes, single, new[] { col });
         }
 
-        double mostFrequent = 0;
-        int maxCount = 0;
-        foreach (var kvp in counts)
-        {
-            if (kvp.Value > maxCount)
-            {
-                maxCount = kvp.Value;
-                mostFrequent = kvp.Key;
-            }
-        }
-
-        return NumOps.FromDouble(mostFrequent);
-    }
-
-    private bool IsMissing(T value)
-    {
-        return NumOps.IsNaN(value);
+        return modes;
     }
 
     /// <summary>
@@ -253,28 +206,19 @@ public class SimpleImputer<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             throw new InvalidOperationException("Imputer has not been fitted.");
         }
 
+        ScalerTensorOps.EnsureColumnCount(data, _statistics.Length);
         int numRows = data.Rows;
         int numColumns = data.Columns;
-        var result = new T[numRows, numColumns];
-        var columnsToProcess = GetColumnsToProcess(numColumns);
-        var processSet = new HashSet<int>(columnsToProcess);
-
-        for (int i = 0; i < numRows; i++)
+        if (numRows == 0 || numColumns == 0)
         {
-            for (int j = 0; j < numColumns; j++)
-            {
-                T value = data[i, j];
-
-                if (processSet.Contains(j) && IsMissing(value))
-                {
-                    value = _statistics[j];
-                }
-
-                result[i, j] = value;
-            }
+            return new Matrix<T>(numRows, numColumns);
         }
 
-        return new Matrix<T>(result);
+        // Missing (NaN) entries of the processed columns take the column statistic.
+        var x = Tensor<T>.FromMatrix(data);
+        var mask = ScalerTensorOps.ColumnMask<T>(numColumns, GetColumnsToProcess(numColumns));
+        var fill = Engine.TensorMultiply(ScalerTensorOps.NanMask(x), ScalerTensorOps.BroadcastRow(mask, numRows));
+        return Engine.TensorWhere(fill, ScalerTensorOps.BroadcastRow(_statistics, numRows), x).ToMatrix();
     }
 
     /// <summary>
