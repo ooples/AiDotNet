@@ -20,9 +20,9 @@ public class FinRLAgentOptions<T> : TradingAgentOptions<T>
     /// <summary>Creates a copy of another options instance.</summary>
     /// <param name="other">The options to copy.</param>
     [System.Diagnostics.CodeAnalysis.SetsRequiredMembers]
-    public FinRLAgentOptions(FinRLAgentOptions<T> other) : this()
+    public FinRLAgentOptions(FinRLAgentOptions<T> other) : base(other ?? throw new ArgumentNullException(nameof(other)))
     {
-        if (other is null) throw new ArgumentNullException(nameof(other));
+        // Chaining to this() copied only the two FinRL properties and lost every trading option on a copy.
         AutoSelectAlgorithm = other.AutoSelectAlgorithm;
         UseEnsemble = other.UseEnsemble;
     }

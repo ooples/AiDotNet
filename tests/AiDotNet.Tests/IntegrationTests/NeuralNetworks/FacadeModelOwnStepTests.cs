@@ -79,6 +79,10 @@ public class FacadeModelOwnStepTests
                 new AdamOptimizerOptions<float, Tensor<float>, Tensor<float>>
                 {
                     MaxIterations = Epochs, BatchSize = Batch, UseEarlyStopping = false, InitialLearningRate = 1e-2,
+                    // Both runs must see the same batches: without a seed every epoch is shuffled from a secure
+                    // random source, so the two paths stepped different batch orders and differed by up to 3e-4
+                    // run to run (the epoch-offset shuffle is reproducible once a seed is set).
+                    Seed = 20260927,
                     // Explicit, so both paths apply it: the model's own step applies only a regularization the
                     // caller chose (the implicit default L2 is the flat path's alone), and this compares the paths
                     // under the same optimizer - including the regularization reaching the fused step.
@@ -185,6 +189,7 @@ public class FacadeModelOwnStepTests
                     new AdamOptimizerOptions<float, Tensor<float>, Tensor<float>>
                     {
                         MaxIterations = Epochs, BatchSize = Batch, UseEarlyStopping = false, InitialLearningRate = 1e-2,
+                        Seed = 20260927,   // the same batch order on both paths (see TrainAsync)
                         Regularization = new AiDotNet.Regularization.NoRegularization<float, Tensor<float>, Tensor<float>>(),
                     });
                 optimizer.Optimize(new AiDotNet.Models.Inputs.OptimizationInputData<float, Tensor<float>, Tensor<float>>

@@ -191,12 +191,20 @@ public partial class TemporalInterpolationVAE<T> : VAEModelBase<T>, IVideoVAEMod
     /// </summary>
     /// <param name="read">Returns the values of the named tensor, row-major, given its name and this model's shape.</param>
     /// <returns>The names read: every weight of the model.</returns>
-    public IReadOnlyCollection<string> LoadDiffusersWeights(Func<string, int[], double[]> read) =>
+    public IReadOnlyCollection<string> LoadDiffusersWeights(Func<string, int[], double[]> read)
+    {
+        if (read is null) throw new ArgumentNullException(nameof(read));
+        return LoadDiffusersWeights(AiDotNet.ModelLoading.TorchTensorSource.From(read));
+    }
+
+    /// <summary>Loads a diffusers <c>AutoencoderKLTemporalDecoder</c> state dict straight from <paramref name="source"/>
+    /// into the weights.</summary>
+    internal IReadOnlyCollection<string> LoadDiffusersWeights(AiDotNet.ModelLoading.TorchTensorSource source) =>
         KlModule<T>.Load(
             _encoder.NamedTensors("encoder")
                 .Concat(_quantConv.NamedTensors("quant_conv"))
                 .Concat(_decoder.NamedTensors("decoder")),
-            read);
+            source);
 
     private static bool RequireVideoOrImage(Tensor<T> x, int channels, string name)
     {

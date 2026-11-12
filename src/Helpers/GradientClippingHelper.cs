@@ -84,6 +84,24 @@ public static class GradientClippingHelper
         return engine.TensorWhere(engine.TensorIsNan(values), values, engine.TensorClamp(values, min, max));
     }
 
+    /// <summary>
+    /// Clips by global L2 norm with PyTorch's <c>clip_grad_norm_</c> coefficient, <c>maxNorm / (norm + 1e-6)</c>.
+    /// </summary>
+    /// <remarks>
+    /// The optimizer's vector step uses this rather than <see cref="ClipByNorm{T}(Vector{T}?, double)"/> so it
+    /// scales exactly as the tape step and the fused compiled plan do: the textbook <c>maxNorm / norm</c> differs from
+    /// them by <c>1e-6 / norm</c>, a 1e-4 relative gap on a gradient of norm 0.01, so the same options trained
+    /// different weights through Optimize than through Train.
+    /// </remarks>
+    internal static Vector<T> ClipByNormPyTorchCoefficient<T>(Vector<T> gradients, double maxNorm)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        double norm = Math.Sqrt(SumSquares(gradients, numOps));
+        if (IsUnusableNorm(norm, nameof(ClipByNormPyTorchCoefficient)) || norm <= maxNorm || norm <= 0.0)
+            return gradients;
+        return gradients.Multiply(numOps.FromDouble(maxNorm / (norm + 1e-6)));
+    }
+
     /// <summary>True when a norm cannot be used to scale, having reported why.</summary>
     /// <remarks>
     /// The non-finite branch used to return the gradients untouched and say nothing. Its caller in

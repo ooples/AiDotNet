@@ -26,14 +26,12 @@ public class Solarize<T> : ImageAugmenterBase<T>
         double maxVal = data.IsNormalized ? 1.0 : 255.0;
         double thresh = Threshold * maxVal;
 
-        for (int y = 0; y < data.Height; y++)
-            for (int x = 0; x < data.Width; x++)
-                for (int c = 0; c < data.Channels; c++)
-                {
-                    double val = NumOps.ToDouble(data.GetPixel(y, x, c));
-                    if (val > thresh)
-                        result.SetPixel(y, x, c, NumOps.FromDouble(maxVal - val));
-                }
+        // Pixels above the threshold are inverted; the rest are kept
+        var engine = Engine;
+        var image = data.ToPlanarTensor();
+        var above = engine.TensorGreaterThan(image, NumOps.FromDouble(thresh));
+        var inverted = engine.ScalarMinusTensor(NumOps.FromDouble(maxVal), image);
+        result.SetFromPlanarTensor(engine.TensorWhere(above, inverted, image));
 
         return result;
     }

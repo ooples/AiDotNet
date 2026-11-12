@@ -34,6 +34,7 @@ public class CoarseDropout<T> : ImageAugmenterBase<T>
         double maxVal = data.IsNormalized ? 1.0 : 255.0;
         int numHoles = context.GetRandomInt(MinHoles, MaxHoles + 1);
 
+        var image = data.ToPlanarTensor();
         for (int h = 0; h < numHoles; h++)
         {
             int holeH = Math.Max(1, Math.Min(data.Height, (int)(data.Height * context.GetRandomDouble(MinHoleHeight, MaxHoleHeight))));
@@ -41,16 +42,10 @@ public class CoarseDropout<T> : ImageAugmenterBase<T>
             int y1 = context.GetRandomInt(0, Math.Max(1, data.Height - holeH + 1));
             int x1 = context.GetRandomInt(0, Math.Max(1, data.Width - holeW + 1));
 
-            for (int y = y1; y < y1 + holeH; y++)
-                for (int x = x1; x < x1 + holeW; x++)
-                    for (int c = 0; c < data.Channels; c++)
-                    {
-                        double val = FillWithNoise
-                            ? context.GetRandomDouble(0, maxVal)
-                            : FillValue;
-                        result.SetPixel(y, x, c, NumOps.FromDouble(val));
-                    }
+            image = ImageTensor<T>.EraseRect(image, y1, x1, holeH, holeW, FillWithNoise, FillValue, maxVal, context);
         }
+
+        result.SetFromPlanarTensor(image);
 
         return result;
     }
