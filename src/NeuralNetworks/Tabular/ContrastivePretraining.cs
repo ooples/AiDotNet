@@ -98,10 +98,8 @@ public partial class ContrastivePretraining<T>
     {
         double scale = Math.Sqrt(2.0 / (_projectionWeights.Shape[0] + _projectionWeights.Shape[1]));
 
-        for (int i = 0; i < _projectionWeights.Length; i++)
-        {
-            _projectionWeights[i] = NumOps.FromDouble(_random.NextGaussian() * scale);
-        }
+        // N(0, scale^2) in one engine call, seeded from this module's (secure) Random.
+        Engine.TensorNormalInPlace(_projectionWeights, 0.0, scale, _random.Next());
 
         _projectionBias.Fill(NumOps.Zero);
     }
@@ -122,41 +120,35 @@ public partial class ContrastivePretraining<T>
                 $"Input has {numFeatures} features but expected {_numFeatures}.");
         }
 
-        var corrupted = new Tensor<T>(input._shape);
-        var corruptedIndices = new List<int>();
-
-        // Copy original values
-        for (int i = 0; i < input.Length; i++)
-        {
-            corrupted[i] = input[i];
-        }
-
         // Corrupt features by swapping with values from other samples
         // Note: When batchSize == 1, swapping from the same sample produces no real corruption
         if (batchSize <= 1)
         {
             _corruptedIndicesCache = [];
+            return input.Clone();
+        }
+
+        // Fresh, detached output as before. Each cell is corrupted with probability _corruptionRate,
+        // taking the same feature from a uniformly chosen different sample.
+        using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
+        {
+            var shape = new[] { batchSize, numFeatures };
+            var corruptMask = new Tensor<T>(shape);
+            Engine.TensorBernoulliInPlace(corruptMask, _corruptionRate, _random.Next());
+
+            // Draw from the batchSize - 1 other rows: r in [0, batchSize - 1), shifted past the row itself.
+            var draw = Engine.TensorRandint<int>(0, batchSize - 1, shape, _random.Next());
+            var rowIndex = Engine.TensorBroadcastTo(
+                Engine.Reshape(Engine.TensorArange<int>(0, batchSize, 1), new[] { batchSize, 1 }), shape);
+            var otherSample = Engine.TensorAdd(draw, Engine.TensorGreaterEqual(draw, rowIndex));
+
+            var swapped = Engine.TensorTakeAlongDim(input, otherSample, 0);
+            var corrupted = Engine.TensorWhere(corruptMask, swapped, input);
+
+            // Flat positions of the corrupted cells, in row-major order.
+            _corruptedIndicesCache = Engine.TensorNonzero(Engine.Reshape(corruptMask, new[] { batchSize * numFeatures })).ToArray();
             return corrupted;
         }
-
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int f = 0; f < numFeatures; f++)
-            {
-                if (_random.NextDouble() < _corruptionRate)
-                {
-                    // Pick a different sample to swap from
-                    int otherSample = _random.Next(batchSize - 1);
-                    if (otherSample >= b) otherSample++;
-
-                    corrupted[b * numFeatures + f] = input[otherSample * numFeatures + f];
-                    corruptedIndices.Add(b * numFeatures + f);
-                }
-            }
-        }
-
-        _corruptedIndicesCache = corruptedIndices.ToArray();
-        return corrupted;
     }
 
     /// <summary>
@@ -203,118 +195,66 @@ public partial class ContrastivePretraining<T>
 
     private Tensor<T> ProjectEmbeddings(Tensor<T> embeddings, int batchSize, int embDim)
     {
-        var projected = new Tensor<T>([batchSize, _projectionDim]);
-
-        for (int b = 0; b < batchSize; b++)
+        // Fresh, detached output as before: x @ W + b.
+        using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
         {
-            for (int p = 0; p < _projectionDim; p++)
-            {
-                var sum = _projectionBias[p];
-                for (int d = 0; d < embDim; d++)
-                {
-                    sum = NumOps.Add(sum, NumOps.Multiply(
-                        embeddings[b * embDim + d],
-                        _projectionWeights[d * _projectionDim + p]));
-                }
-                projected[b * _projectionDim + p] = sum;
-            }
+            var projected = Engine.TensorMatMul(
+                Engine.Reshape(embeddings, new[] { batchSize, embDim }),
+                Engine.Reshape(_projectionWeights, new[] { embDim, _projectionDim }));
+            return Engine.TensorAdd(projected, Engine.TensorBroadcastTo(
+                Engine.Reshape(_projectionBias, new[] { 1, _projectionDim }), new[] { batchSize, _projectionDim }));
         }
-
-        return projected;
     }
 
     private Tensor<T> L2Normalize(Tensor<T> embeddings, int batchSize, int dim)
     {
-        var normalized = new Tensor<T>(embeddings._shape);
         var epsilon = NumOps.FromDouble(1e-8);
 
-        for (int b = 0; b < batchSize; b++)
+        // Fresh, detached output as before: x / sqrt(sum x^2 + eps) per row.
+        using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
         {
-            // Compute L2 norm
-            var norm = NumOps.Zero;
-            for (int d = 0; d < dim; d++)
-            {
-                var val = embeddings[b * dim + d];
-                norm = NumOps.Add(norm, NumOps.Multiply(val, val));
-            }
-            norm = NumOps.Sqrt(NumOps.Add(norm, epsilon));
-
-            // Normalize
-            for (int d = 0; d < dim; d++)
-            {
-                normalized[b * dim + d] = NumOps.Divide(embeddings[b * dim + d], norm);
-            }
+            var rows = Engine.Reshape(embeddings, new[] { batchSize, dim });
+            var norm = Engine.TensorSqrt(Engine.TensorAddScalar(
+                Engine.ReduceSum(Engine.TensorMultiply(rows, rows), new[] { 1 }, true), epsilon));
+            var normalized = Engine.TensorDivide(rows, Engine.TensorBroadcastTo(norm, new[] { batchSize, dim }));
+            return Engine.Reshape(normalized, embeddings._shape);
         }
-
-        return normalized;
     }
 
     private T ComputeInfoNCELoss(Tensor<T> original, Tensor<T> corrupted, int batchSize)
     {
-        // Compute similarity matrix
-        var similarities = new T[batchSize, batchSize * 2];
         var tempScale = NumOps.FromDouble(1.0 / _temperature);
+        var rowShape = new[] { batchSize, 2 * batchSize };
 
-        for (int i = 0; i < batchSize; i++)
+        // Similarity matrix [anchor, (original | corrupted)] scaled by 1 / temperature.
+        var o = Engine.Reshape(original, new[] { batchSize, _projectionDim });
+        var c = Engine.Reshape(corrupted, new[] { batchSize, _projectionDim });
+        var similarities = Engine.TensorConcatenate(new[]
         {
-            // Similarities with original samples
-            for (int j = 0; j < batchSize; j++)
-            {
-                var sim = NumOps.Zero;
-                for (int d = 0; d < _projectionDim; d++)
-                {
-                    sim = NumOps.Add(sim, NumOps.Multiply(
-                        original[i * _projectionDim + d],
-                        original[j * _projectionDim + d]));
-                }
-                similarities[i, j] = NumOps.Multiply(sim, tempScale);
-            }
+            Engine.TensorMultiplyScalar(Engine.TensorMatMul(o, Engine.TensorTranspose(o)), tempScale),
+            Engine.TensorMultiplyScalar(Engine.TensorMatMul(o, Engine.TensorTranspose(c)), tempScale),
+        }, 1);
 
-            // Similarities with corrupted samples
-            for (int j = 0; j < batchSize; j++)
-            {
-                var sim = NumOps.Zero;
-                for (int d = 0; d < _projectionDim; d++)
-                {
-                    sim = NumOps.Add(sim, NumOps.Multiply(
-                        original[i * _projectionDim + d],
-                        corrupted[j * _projectionDim + d]));
-                }
-                similarities[i, batchSize + j] = NumOps.Multiply(sim, tempScale);
-            }
-        }
+        // Self-similarity (column i of row i) is excluded from the max and the denominator. Filling
+        // it with the row's first corrupted entry keeps the max the one over the other columns.
+        var self = Engine.TensorOneHot<T>(Engine.TensorArange<int>(0, batchSize, 1), 2 * batchSize);
+        var firstCorrupted = Engine.TensorBroadcastTo(
+            Engine.TensorSlice(similarities, new[] { 0, batchSize }, new[] { batchSize, 1 }), rowShape);
+        var maxSim = Engine.ReduceMax(Engine.TensorWhere(self, firstCorrupted, similarities), new[] { 1 }, true);
 
-        // Compute cross-entropy loss (positive pairs are original vs. corrupted)
-        // Exclude self-similarity (anchor vs. anchor) from the denominator
-        var totalLoss = NumOps.Zero;
-        for (int i = 0; i < batchSize; i++)
-        {
-            // Find max for numerical stability (excluding self-similarity at j == i)
-            var maxSim = similarities[i, batchSize]; // Start with first corrupted entry
-            for (int j = 0; j < batchSize * 2; j++)
-            {
-                if (j == i) continue; // Skip self-similarity
-                if (NumOps.Compare(similarities[i, j], maxSim) > 0)
-                    maxSim = similarities[i, j];
-            }
+        // Compute log-sum-exp (excluding self-similarity)
+        var shifted = Engine.TensorExp(Engine.TensorSubtract(similarities, Engine.TensorBroadcastTo(maxSim, rowShape)));
+        var keep = Engine.TensorAddScalar(Engine.TensorNegate(self), NumOps.One);
+        var sumExp = Engine.ReduceSum(Engine.TensorMultiply(shifted, keep), new[] { 1 }, true);
 
-            // Compute log-sum-exp (excluding self-similarity)
-            var sumExp = NumOps.Zero;
-            for (int j = 0; j < batchSize * 2; j++)
-            {
-                if (j == i) continue; // Skip self-similarity
-                sumExp = NumOps.Add(sumExp, NumOps.Exp(NumOps.Subtract(similarities[i, j], maxSim)));
-            }
+        // Loss = -log(exp(pos) / sum(exp)) = -pos + log(sum(exp)); the positive is (i, batchSize + i).
+        var positiveIndex = Engine.Reshape(Engine.TensorArange<int>(batchSize, 2 * batchSize, 1), new[] { batchSize, 1 });
+        var posScore = Engine.TensorSubtract(Engine.TensorTakeAlongDim(similarities, positiveIndex, 1), maxSim);
+        var loss = Engine.TensorSubtract(
+            Engine.TensorAdd(Engine.TensorLog(sumExp), maxSim),
+            Engine.TensorAdd(posScore, maxSim));
 
-            // Loss = -log(exp(pos) / sum(exp)) = -pos + log(sum(exp))
-            var posScore = NumOps.Subtract(similarities[i, batchSize + i], maxSim);
-            var loss = NumOps.Subtract(
-                NumOps.Add(NumOps.Log(sumExp), maxSim),
-                NumOps.Add(posScore, maxSim));
-            totalLoss = NumOps.Add(totalLoss, loss);
-        }
-
-        return NumOps.Divide(totalLoss, NumOps.FromDouble(batchSize));
+        return NumOps.Divide(Engine.TensorSum(loss), NumOps.FromDouble(batchSize));
     }
 
     /// <summary>
@@ -345,12 +285,10 @@ public partial class ContrastivePretraining<T>
                 $"Cached corruption index ({maxIdx}) exceeds tensor length ({reconstructed.Length}).");
         }
 
-        var loss = NumOps.Zero;
-        foreach (var idx in _corruptedIndicesCache)
-        {
-            var diff = NumOps.Subtract(reconstructed[idx], original[idx]);
-            loss = NumOps.Add(loss, NumOps.Multiply(diff, diff));
-        }
+        // Squared error over the corrupted cells only.
+        var positions = Tensor<int>.FromVector(new Vector<int>(_corruptedIndicesCache));
+        var diff = Engine.TensorSubtract(Engine.TensorTake(reconstructed, positions), Engine.TensorTake(original, positions));
+        var loss = Engine.TensorSum(Engine.TensorMultiply(diff, diff));
 
         return NumOps.Divide(loss, NumOps.FromDouble(_corruptedIndicesCache.Length));
     }
@@ -362,21 +300,21 @@ public partial class ContrastivePretraining<T>
     /// <returns>Mask tensor [batchSize, numFeatures] with 1 for corrupted, 0 for original.</returns>
     public Tensor<T> GetCorruptionMask(int batchSize)
     {
-        var mask = new Tensor<T>([batchSize, _numFeatures]);
         int maskLength = batchSize * _numFeatures;
+        var mask = new Tensor<T>([batchSize, _numFeatures]);
 
-        if (_corruptedIndicesCache != null)
+        var inRange = _corruptedIndicesCache?.Where(idx => idx >= 0 && idx < maskLength).ToArray() ?? Array.Empty<int>();
+        if (inRange.Length == 0)
         {
-            foreach (var idx in _corruptedIndicesCache)
-            {
-                if (idx >= 0 && idx < maskLength)
-                {
-                    mask[idx] = NumOps.One;
-                }
-            }
+            return mask;
         }
 
-        return mask;
+        // Ones at the corrupted positions (they are distinct, so index-add sets them to exactly 1).
+        var ones = new Tensor<T>(new[] { inRange.Length });
+        ones.Fill(NumOps.One);
+        var flat = Engine.TensorScatterAdd(
+            new Tensor<T>(new[] { maskLength }), Tensor<int>.FromVector(new Vector<int>(inRange)), ones, 0);
+        return Engine.Reshape(flat, new[] { batchSize, _numFeatures });
     }
 
     /// <summary>
