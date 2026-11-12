@@ -156,6 +156,12 @@ public partial class RandomForestRegression<T> : AsyncDecisionTreeRegressionBase
     /// </remarks>
     public override async Task TrainAsync(Matrix<T> x, Vector<T> y)
     {
+        if (x.Rows != y.Length)
+        {
+            throw new ArgumentException(
+                $"Target count ({y.Length}) must match the number of feature rows ({x.Rows}).", nameof(y));
+        }
+
         _trees.Clear();
         var numFeatures = x.Columns;
         var numSamples = x.Rows;
@@ -166,11 +172,14 @@ public partial class RandomForestRegression<T> : AsyncDecisionTreeRegressionBase
         var bootstrapSamples = Enumerable.Range(0, _options.NumberOfTrees)
             .Select(_ => GetBootstrapSampleIndices(numSamples)).ToArray();
 
+        // The variance-reduction trees train on the forest's own double columns over their bootstrap rows,
+        // converted once here: copying a bootstrap matrix per tree and converting it again inside the tree
+        // was most of the forest's allocation, and its contention on the allocator most of its stall.
+        var columns = _options.SplitCriterion == SplitCriterion.VarianceReduction ? DecisionTreeRegression<T>.ToColumns(x) : null;
+        var target = columns is null ? null : DecisionTreeRegression<T>.ToDoubles(y);
+
         var treeTasks = Enumerable.Range(0, _options.NumberOfTrees).Select(i => Task.Run(() =>
         {
-            var bootstrapX = x.GetRows(bootstrapSamples[i]);
-            var bootstrapY = y.GetElements(bootstrapSamples[i]);
-
             var treeOptions = new DecisionTreeOptions
             {
                 MaxDepth = _options.MaxDepth,
@@ -180,7 +189,15 @@ public partial class RandomForestRegression<T> : AsyncDecisionTreeRegressionBase
                 SplitCriterion = _options.SplitCriterion
             };
             var tree = new DecisionTreeRegression<T>(treeOptions, Regularization);
-            tree.Train(bootstrapX, bootstrapY);
+            if (columns is not null && target is not null)
+            {
+                tree.TrainOnColumns(columns, target, bootstrapSamples[i]);
+            }
+            else
+            {
+                tree.Train(x.GetRows(bootstrapSamples[i]), y.GetElements(bootstrapSamples[i]));
+            }
+
             return tree;
         }));
 
@@ -215,19 +232,41 @@ public partial class RandomForestRegression<T> : AsyncDecisionTreeRegressionBase
     {
         // Note: Tree-based methods handle regularization through tree structure parameters
         // (MaxDepth, MinSamplesSplit, etc.), not through data transformation
-        var predictionTasks = _trees.Select(tree => Task.Run(() => tree.Predict(input)));
-        var predictions = await ParallelProcessingHelper.ProcessTasksInParallel(predictionTasks).ConfigureAwait(false);
-
+        //
+        // Each row walks every tree and sums their outputs in tree order, so the result is the same as the
+        // per-tree prediction vectors added up row by row. A task and a prediction vector per tree per call
+        // were most of the cost when a permutation-importance loop predicts a small test block once per
+        // feature; rows are split into blocks across threads only when there is enough work to pay for it.
         var result = new T[input.Rows];
-        for (int i = 0; i < input.Rows; i++)
+        var divisor = NumOps.FromDouble(_trees.Count);
+        const int RowsPerBlock = 64;
+        int blocks = (input.Rows + RowsPerBlock - 1) / RowsPerBlock;
+        if (blocks > 1 && (long)input.Rows * _trees.Count >= ParallelPredictionWork)
         {
-            result[i] = NumOps.Divide(
-                predictions.Aggregate(NumOps.Zero, (acc, p) => NumOps.Add(acc, p[i])),
-                NumOps.FromDouble(_trees.Count)
-            );
+            await Task.Run(() => System.Threading.Tasks.Parallel.For(0, blocks, b =>
+                PredictRows(input, result, b * RowsPerBlock, Math.Min(input.Rows, (b + 1) * RowsPerBlock), divisor)))
+                .ConfigureAwait(false);
+        }
+        else
+        {
+            PredictRows(input, result, 0, input.Rows, divisor);
         }
 
         return new Vector<T>(result);
+    }
+
+    /// <summary>Rows times trees below which a prediction runs on the calling thread.</summary>
+    private const long ParallelPredictionWork = 1 << 16;
+
+    [AiDotNet.Attributes.ScalarKernel("Each row walks every tree, one feature comparison per level; the per-tree outputs are summed in tree order.")]
+    private void PredictRows(Matrix<T> input, T[] result, int start, int end, T divisor)
+    {
+        for (int i = start; i < end; i++)
+        {
+            var sum = NumOps.Zero;
+            foreach (var tree in _trees) sum = NumOps.Add(sum, tree.PredictRowOf(input, i));
+            result[i] = NumOps.Divide(sum, divisor);
+        }
     }
 
     /// <summary>
