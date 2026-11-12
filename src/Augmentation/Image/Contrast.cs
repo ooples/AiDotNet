@@ -102,43 +102,21 @@ public class Contrast<T> : AugmentationBase<T, ImageTensor<T>>
         int channels = result.Channels;
 
         // Calculate the mean of the image (for each channel or overall)
-        double[] channelMeans = new double[channels];
-        int totalPixels = height * width;
-
-        for (int c = 0; c < channels; c++)
-        {
-            double sum = 0;
-            for (int y = 0; y < height; y++)
-            {
-                for (int x = 0; x < width; x++)
-                {
-                    sum += NumOps.ToDouble(data.GetPixel(y, x, c));
-                }
-            }
-            channelMeans[c] = sum / totalPixels;
-        }
+        var engine = Engine;
+        var image = data.ToPlanarTensor();
+        var channelMeans = engine.ReduceMean(image, [1, 2], true);
 
         // Clamp range based on whether image is normalized
         double minValue = data.IsNormalized ? 0.0 : 0.0;
         double maxValue = data.IsNormalized ? 1.0 : 255.0;
 
         // Apply contrast adjustment: new_pixel = mean + (pixel - mean) * factor
-        for (int y = 0; y < height; y++)
-        {
-            for (int x = 0; x < width; x++)
-            {
-                for (int c = 0; c < channels; c++)
-                {
-                    double value = NumOps.ToDouble(data.GetPixel(y, x, c));
-                    double adjusted = channelMeans[c] + (value - channelMeans[c]) * factor;
+        var adjusted = engine.TensorAdd(
+            engine.TensorMultiplyScalar(engine.TensorSubtract(image, channelMeans), NumOps.FromDouble(factor)),
+            channelMeans);
 
-                    // Clamp to valid range
-                    adjusted = Math.Max(minValue, Math.Min(maxValue, adjusted));
-
-                    result.SetPixel(y, x, c, NumOps.FromDouble(adjusted));
-                }
-            }
-        }
+        // Clamp to valid range
+        result.SetFromPlanarTensor(engine.TensorClamp(adjusted, NumOps.FromDouble(minValue), NumOps.FromDouble(maxValue)));
 
         return result;
     }

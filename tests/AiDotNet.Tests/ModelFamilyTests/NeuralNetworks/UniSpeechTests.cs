@@ -12,8 +12,8 @@ namespace AiDotNet.Tests.ModelFamilyTests.NeuralNetworks;
 /// (<c>ExcludedClassNames</c>) so this hand-written scaffold is authoritative.
 /// </summary>
 /// <remarks>
-/// <b>Why a reduced-scale config:</b> UniSpeech's production defaults are a
-/// 12-layer / 768-dim / 12-head transformer encoder feeding a 5000-token CTC head —
+/// <b>Why a reduced-scale config:</b> UniSpeech's production defaults are the
+/// wav2vec 2.0 LARGE encoder (24 layers, 1024 wide, 16 heads) feeding a 5000-token CTC head —
 /// a foundation-scale ASR model whose forward+backward, times the training
 /// invariants' iterations, overruns the 120/180s per-test CPU budget (verified:
 /// LossStrictlyDecreasesOnMemorizationTask times out). These invariants validate
@@ -36,16 +36,28 @@ public class UniSpeechTests : AudioNNModelTestBase
 
     protected override INeuralNetworkModel<double> CreateNetwork()
     {
+        // The regularizers are off so the invariants see a deterministic objective (the paper's values stay defaults).
         var options = new UniSpeechOptions
         {
+            MaxAudioLengthSeconds = 2,
             EncoderDim = 64,
             NumEncoderLayers = 2,
             NumAttentionHeads = 4,
+            FeedForwardDim = 128,
             VocabSize = 64,
             MaxTextLength = 32,
+            DropoutRate = 0.0,
+            ActivationDropout = 0.0,
+            FeatureProjectionDropout = 0.0,
+            FinalDropout = 0.0,
+            LayerDrop = 0.0,
+            MaskTimeProbability = 0.0,
         };
+        // UniSpeech reads the raw waveform; the [1, 64, 32] input is read as 2048 samples.
         var architecture = new NeuralNetworkArchitecture<double>(
-            inputFeatures: options.NumMels, outputSize: options.VocabSize);
+            inputType: AiDotNet.Enums.InputType.TwoDimensional,
+            taskType: AiDotNet.Enums.NeuralNetworkTaskType.SequenceToSequence,
+            inputHeight: 64, inputWidth: 32, inputDepth: 1, outputSize: options.VocabSize);
         return new UniSpeech<double>(architecture, options);
     }
 }

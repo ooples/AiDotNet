@@ -10,7 +10,7 @@ using AiDotNet.NeuralNetworks;
 namespace AiDotNet.Tests.UnitTests.Finance;
 
 public enum FinancialAgentKind { Dqn, A2C, Ppo, Sac, MarketMaking }
-internal enum FinancialNetworkRole { Policy, Critic, SecondCritic, TargetCritic, SecondTargetCritic }
+internal enum FinancialNetworkRole { Policy, Critic, SecondCritic, TargetCritic, SecondTargetCritic, Value, TargetValue }
 
 /// <summary>
 /// Shared construction helpers for the financial RL agent regression tests: one place that knows how each
@@ -63,7 +63,16 @@ internal static class FinancialAgentTestKit
     }
 
     internal static TradingAgentBase<double> Create(FinancialAgentKind kind, TradingAgentOptions<double> options) =>
-        Create(kind, options, Arch(options.StateSize, options.ActionSize));
+        Create(kind, options, Arch(options.StateSize, ActorOutputs(kind, options)));
+
+    // SAC's paper head predicts a mean and a log standard deviation per action dimension.
+    internal static int ActorOutputs(FinancialAgentKind kind, TradingAgentOptions<double> options) =>
+        ActorOutputs(kind, options, options.ActionSize);
+
+    internal static int ActorOutputs(FinancialAgentKind kind, TradingAgentOptions<double> options, int actionSize) =>
+        kind == Sac && options is FinancialSACAgentOptions<double> { ActorHead: AiDotNet.Enums.SacActorHead.StateConditionedGaussian }
+            ? 2 * actionSize
+            : actionSize;
 
     internal static TradingAgentBase<double> Create(
         FinancialAgentKind kind,
@@ -110,11 +119,23 @@ internal static class FinancialAgentTestKit
                 Add(FinancialNetworkRole.Critic, "_critic", stateSize, 1);
                 break;
             case Sac:
-                Add(FinancialNetworkRole.Policy, "_actor", stateSize, actionSize);
+                // The paper's head emits a mean and a log standard deviation per action dimension.
+                Add(FinancialNetworkRole.Policy, "_actor", stateSize, ActorOutputs(Sac, agent.GetOptions() as TradingAgentOptions<double>
+                    ?? throw new InvalidOperationException("SAC options expected."), actionSize));
                 Add(FinancialNetworkRole.Critic, "_critic1", stateSize + actionSize, 1);
                 Add(FinancialNetworkRole.SecondCritic, "_critic2", stateSize + actionSize, 1);
-                Add(FinancialNetworkRole.TargetCritic, "_targetCritic1", stateSize + actionSize, 1);
-                Add(FinancialNetworkRole.SecondTargetCritic, "_targetCritic2", stateSize + actionSize, 1);
+                if (agent.GetOptions() is FinancialSACAgentOptions<double> { Variant: AiDotNet.Enums.SacVariant.AutomaticTemperature })
+                {
+                    // Haarnoja et al. 2018b: target Q-functions.
+                    Add(FinancialNetworkRole.TargetCritic, "_targetCritic1", stateSize + actionSize, 1);
+                    Add(FinancialNetworkRole.SecondTargetCritic, "_targetCritic2", stateSize + actionSize, 1);
+                }
+                else
+                {
+                    // Haarnoja et al. 2018a: a state-value network and its target.
+                    Add(FinancialNetworkRole.Value, "_value", stateSize, 1);
+                    Add(FinancialNetworkRole.TargetValue, "_targetValue", stateSize, 1);
+                }
                 break;
             case MarketMaking:
                 Add(FinancialNetworkRole.Policy, "_policyNetwork", stateSize, actionSize);

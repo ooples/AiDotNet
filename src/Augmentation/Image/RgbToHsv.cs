@@ -53,65 +53,23 @@ public class RgbToHsv<T> : ImageAugmenterBase<T>
             OriginalRange = data.OriginalRange
         };
 
-        for (int y = 0; y < data.Height; y++)
-        {
-            for (int x = 0; x < data.Width; x++)
-            {
-                double r = NumOps.ToDouble(data.GetPixel(y, x, 0));
-                double g = NumOps.ToDouble(data.GetPixel(y, x, 1));
-                double b = NumOps.ToDouble(data.GetPixel(y, x, 2));
+        var engine = Engine;
+        var image = data.ToPlanarTensor();
 
-                // Ensure values are in [0, 1]
-                if (!data.IsNormalized)
-                {
-                    r /= 255.0;
-                    g /= 255.0;
-                    b /= 255.0;
-                }
+        // Ensure values are in [0, 1]
+        var (r, g, b) = ImageTensor<T>.UnitRgbPlanes(image, data.IsNormalized);
+        var max = engine.TensorMax(r, engine.TensorMax(g, b));
+        var min = engine.TensorMin(r, engine.TensorMin(g, b));
+        var delta = engine.TensorSubtract(max, min);
 
-                double max = Math.Max(r, Math.Max(g, b));
-                double min = Math.Min(r, Math.Min(g, b));
-                double delta = max - min;
+        var h = ImageTensor<T>.HexconeHue(r, g, b, max, delta);
 
-                // Hue calculation
-                double h;
-                if (delta < 1e-10)
-                {
-                    h = 0;
-                }
-                else if (Math.Abs(max - r) < 1e-10)
-                {
-                    h = 60.0 * (((g - b) / delta) % 6.0);
-                }
-                else if (Math.Abs(max - g) < 1e-10)
-                {
-                    h = 60.0 * (((b - r) / delta) + 2.0);
-                }
-                else
-                {
-                    h = 60.0 * (((r - g) / delta) + 4.0);
-                }
+        // Saturation: 0 for black, otherwise delta / max
+        var black = engine.TensorLessThan(max, NumOps.FromDouble(1e-10));
+        var s = engine.TensorWhere(black, new Tensor<T>(max._shape), engine.TensorDivide(delta, max));
 
-                if (h < 0) h += 360.0;
-                h /= 360.0; // Normalize to [0, 1]
-
-                // Saturation
-                double s = max < 1e-10 ? 0 : delta / max;
-
-                // Value
-                double v = max;
-
-                result.SetPixel(y, x, 0, NumOps.FromDouble(h));
-                result.SetPixel(y, x, 1, NumOps.FromDouble(s));
-                result.SetPixel(y, x, 2, NumOps.FromDouble(v));
-
-                // Preserve alpha if present
-                for (int c = 3; c < data.Channels; c++)
-                {
-                    result.SetPixel(y, x, c, data.GetPixel(y, x, c));
-                }
-            }
-        }
+        // Value is max; alpha is preserved if present
+        result.SetFromPlanarTensor(ImageTensor<T>.ReplaceLeadingChannels(image, h, s, max));
 
         return result;
     }
