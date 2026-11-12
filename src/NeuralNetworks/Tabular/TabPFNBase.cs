@@ -760,6 +760,13 @@ public abstract partial class TabPFNBase<T> : IParameterSource<T>
             double initScale,
             Random random)
         {
+            if (numHeads < 1 || embeddingDim % numHeads != 0)
+            {
+                throw new ArgumentException(
+                    $"EmbeddingDimension ({embeddingDim}) must be a positive multiple of NumHeads ({numHeads}).",
+                    nameof(numHeads));
+            }
+
             _embeddingDim = embeddingDim;
             _numHeads = numHeads;
             _headDim = embeddingDim / numHeads;
@@ -867,8 +874,9 @@ public abstract partial class TabPFNBase<T> : IParameterSource<T>
         }
 
         /// <summary>
-        /// Attention under the TabPFN mask (Hollmann et al. 2023): every token, context or query, attends only
-        /// to the context tokens, so queries neither see each other nor themselves.
+        /// Multi-head attention under the TabPFN mask (Hollmann et al. 2023): every token, context or query,
+        /// attends only to the context tokens, so queries neither see each other nor themselves. Each of the
+        /// <c>NumHeads</c> heads attends over its own <c>EmbeddingDimension / NumHeads</c> slice.
         /// </summary>
         private Tensor<TBlock> ComputeCausalAttention(
             Tensor<TBlock> query, Tensor<TBlock> key, Tensor<TBlock> value, int seqLen, int contextSize)
@@ -881,22 +889,32 @@ public abstract partial class TabPFNBase<T> : IParameterSource<T>
             var k = TabularMetrics.Flat(key, count).Reshape(seqLen, _embeddingDim);
             var v = TabularMetrics.Flat(value, count).Reshape(seqLen, _embeddingDim);
 
-            // Compute attention scores: Q * K^T / sqrt(d_k)
-            var scores = TensorTapeOps.TapeMultiplyScalar(eng, eng.TensorMatMul(q, eng.TensorTranspose(k)), scale);
+            // Split into heads: [seq, embedding] -> [heads, seq, headDim]
+            Tensor<TBlock> Split(Tensor<TBlock> x) => eng.TensorPermute(
+                eng.Reshape(x, new[] { seqLen, _numHeads, _headDim }), new[] { 1, 0, 2 });
+            var qh = Split(q);
+            var kh = Split(k);
+            var vh = Split(v);
 
-            // Mask every key column past the context, then softmax row-wise
+            // Per-head scores Q_h K_h^T / sqrt(d_head): [heads, seq, seq]
+            var scores = TensorTapeOps.TapeMultiplyScalar(
+                eng, eng.TensorBatchMatMul(qh, eng.TensorPermute(kh, new[] { 0, 2, 1 })), scale);
+
+            // Mask every key column past the context (additive -1e9, broadcast over heads and rows)
             if (contextSize > 0 && contextSize < seqLen)
             {
                 var isContextKey = eng.TensorLessThan(
-                    eng.TensorArange<TBlock>(0, seqLen).Reshape(1, seqLen), NumOps.FromDouble(contextSize));
-                var mask = eng.TensorTile(isContextKey, new[] { seqLen, 1 });
-                scores = eng.TensorWhere(mask, scores, eng.TensorFullLike(scores, NumOps.MinValue));
+                    eng.TensorArange<TBlock>(0, seqLen).Reshape(1, 1, seqLen), NumOps.FromDouble(contextSize));
+                var blocked = TensorTapeOps.TapeMultiplyScalar(
+                    eng, TensorTapeOps.TapeAddScalar(eng, isContextKey, NumOps.FromDouble(-1.0)), NumOps.FromDouble(1e9));
+                scores = eng.TensorAdd(scores, blocked);
             }
 
-            scores = eng.Softmax(scores, -1);
+            var weights = eng.Softmax(scores, -1);
 
-            // Compute output: softmax(scores) * V
-            return eng.TensorMatMul(scores, v);
+            // softmax(scores) V per head, then the heads concatenated back to [seq, embedding]
+            var attended = eng.TensorBatchMatMul(weights, vh);
+            return eng.Reshape(eng.TensorPermute(attended, new[] { 1, 0, 2 }), new[] { seqLen, _embeddingDim });
         }
 
         private static Tensor<TBlock> MatMul(Tensor<TBlock> input, Tensor<TBlock> weights)

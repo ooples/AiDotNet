@@ -164,8 +164,12 @@ public class TabPFNOptions<T> : RiskModelOptions<T>
     /// <summary>
     /// Gets or sets whether to use positional encoding.
     /// </summary>
-    /// <value>True to use positional encoding; false otherwise. Defaults to true.</value>
-    public bool UsePositionalEncoding { get; set; } = true;
+    /// <value>True to use positional encoding; false otherwise. Defaults to false.</value>
+    /// <remarks>
+    /// Hollmann et al. (2023) use no positional encoding: the training and test samples form a set, so the
+    /// prediction is invariant to their order. Turning this on adds a sinusoidal encoding per position.
+    /// </remarks>
+    public bool UsePositionalEncoding { get; set; } = false;
 
     /// <summary>
     /// Gets or sets whether to use pre-norm (norm before attention).
