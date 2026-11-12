@@ -778,8 +778,8 @@ public partial class InformerModel<T> : TimeSeriesModelBase<T>, ISupportsLossFun
 
         // Write training series for Clone support
         writer.Write(_trainingSeries.Length);
-        foreach (double value in Array.ConvertAll(_trainingSeries.ToArray(), v => Convert.ToDouble(v)))
-            writer.Write(value);
+        for (int i = 0; i < _trainingSeries.Length; i++)
+            writer.Write(Convert.ToDouble(_trainingSeries[i]));
 
         // Normalization statistics (appended; older files without them fall back to 0/1).
         writer.Write(Convert.ToDouble(_normMean));
@@ -875,10 +875,10 @@ public partial class InformerModel<T> : TimeSeriesModelBase<T>, ISupportsLossFun
         if (reader.BaseStream.Position < reader.BaseStream.Length)
         {
             int tsLen = reader.ReadInt32();
-            var numOps = MathHelper.GetNumericOperations<T>();
-            double[] storedSeries = Enumerable.Range(0, Math.Max(tsLen, 0)).Select(_ => reader.ReadDouble()).ToArray();
             _trainingSeries = new Vector<T>(tsLen);
-            Array.ConvertAll(storedSeries, numOps.FromDouble).AsSpan().CopyTo(_trainingSeries.AsWritableSpan());
+            var numOps = MathHelper.GetNumericOperations<T>();
+            for (int i = 0; i < tsLen; i++)
+                _trainingSeries[i] = numOps.FromDouble(reader.ReadDouble());
         }
 
         // Normalization statistics (present in models serialized after the tape rewrite).
@@ -895,8 +895,8 @@ public partial class InformerModel<T> : TimeSeriesModelBase<T>, ISupportsLossFun
         foreach (int dim in tensor._shape)
             writer.Write(dim);
         writer.Write(tensor.Length);
-        foreach (double value in Array.ConvertAll(tensor.ToArray(), _numOps.ToDouble))
-            writer.Write(value);
+        for (int i = 0; i < tensor.Length; i++)
+            writer.Write(_numOps.ToDouble(tensor[i]));
     }
 
     private Tensor<T> ReadTensor(BinaryReader reader)
@@ -907,8 +907,8 @@ public partial class InformerModel<T> : TimeSeriesModelBase<T>, ISupportsLossFun
             shape[i] = reader.ReadInt32();
         int length = reader.ReadInt32();
         var tensor = new Tensor<T>(shape);
-        double[] storedValues = Enumerable.Range(0, Math.Max(length, 0)).Select(_ => reader.ReadDouble()).ToArray();
-        Array.ConvertAll(storedValues, _numOps.FromDouble).AsSpan().CopyTo(tensor.Data.Span);
+        for (int i = 0; i < length; i++)
+            tensor[i] = _numOps.FromDouble(reader.ReadDouble());
         return tensor;
     }
 }

@@ -568,8 +568,8 @@ public partial class TemporalFusionTransformer<T> : TimeSeriesModelBase<T>
         writer.Write(_options.NumLayers);
 
         writer.Write(_trainingSeries.Length);
-        foreach (double value in Array.ConvertAll(_trainingSeries.ToArray(), NumOps.ToDouble))
-            writer.Write(value);
+        for (int i = 0; i < _trainingSeries.Length; i++)
+            writer.Write(NumOps.ToDouble(_trainingSeries[i]));
 
         writer.Write(NumOps.ToDouble(_normMean));
         writer.Write(NumOps.ToDouble(_normStd));
@@ -588,9 +588,9 @@ public partial class TemporalFusionTransformer<T> : TimeSeriesModelBase<T>
         _options.NumLayers = reader.ReadInt32();
 
         int seriesLen = reader.ReadInt32();
-        double[] storedSeries = Enumerable.Range(0, Math.Max(seriesLen, 0)).Select(_ => reader.ReadDouble()).ToArray();
         _trainingSeries = new Vector<T>(seriesLen);
-        Array.ConvertAll(storedSeries, NumOps.FromDouble).AsSpan().CopyTo(_trainingSeries.AsWritableSpan());
+        for (int i = 0; i < seriesLen; i++)
+            _trainingSeries[i] = NumOps.FromDouble(reader.ReadDouble());
 
         _normMean = NumOps.FromDouble(reader.ReadDouble());
         _normStd = NumOps.FromDouble(reader.ReadDouble());
@@ -599,8 +599,7 @@ public partial class TemporalFusionTransformer<T> : TimeSeriesModelBase<T>
         foreach (var p in CollectAllTrainableParameters())
         {
             var loaded = DeserializeTensor(reader);
-            int count = Math.Min(loaded.Length, p.Length);
-            loaded.Data.Span.Slice(0, count).CopyTo(p.Data.Span);
+            for (int k = 0; k < Math.Min(loaded.Length, p.Length); k++) p[k] = loaded[k];
         }
     }
 
@@ -609,8 +608,7 @@ public partial class TemporalFusionTransformer<T> : TimeSeriesModelBase<T>
         writer.Write(tensor._shape.Length);
         foreach (var dim in tensor._shape) writer.Write(dim);
         var span = tensor.Data.Span;
-        foreach (double value in Array.ConvertAll(span.ToArray(), NumOps.ToDouble))
-            writer.Write(value);
+        for (int i = 0; i < span.Length; i++) writer.Write(NumOps.ToDouble(span[i]));
     }
 
     private Tensor<T> DeserializeTensor(BinaryReader reader)
@@ -620,8 +618,8 @@ public partial class TemporalFusionTransformer<T> : TimeSeriesModelBase<T>
         for (int i = 0; i < rank; i++) shape[i] = reader.ReadInt32();
         int size = 1;
         foreach (var s in shape) size *= s;
-        double[] storedValues = Enumerable.Range(0, Math.Max(size, 0)).Select(_ => reader.ReadDouble()).ToArray();
-        T[] data = Array.ConvertAll(storedValues, NumOps.FromDouble);
+        var data = new T[size];
+        for (int i = 0; i < size; i++) data[i] = NumOps.FromDouble(reader.ReadDouble());
         return new Tensor<T>(shape, new Vector<T>(data));
     }
 
