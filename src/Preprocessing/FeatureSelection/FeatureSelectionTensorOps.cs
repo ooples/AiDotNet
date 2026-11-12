@@ -511,6 +511,103 @@ internal static class FeatureSelectionTensorOps
     }
 
     /// <summary>
+    /// The Mann-Whitney U of the rows in <paramref name="groupMask"/> (0/1 [n], <paramref name="n0"/> rows) against
+    /// the other <paramref name="n1"/> rows, for every column of <paramref name="x"/>: <c>U0 = R0 - n0 (n0 + 1) / 2</c>
+    /// from tie-averaged ranks ([p]).
+    /// </summary>
+    public static Tensor<T> RankSumU<T>(Tensor<T> x, Tensor<T> groupMask, int n0)
+    {
+        var engine = AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<T>();
+        var rankSum = WeightedRowSum(groupMask, ColumnAverageRanks(x));
+        return engine.TensorAddScalar(rankSum, ops.FromDouble(-(double)n0 * (n0 + 1) / 2.0));
+    }
+
+    /// <summary>
+    /// The two-sided Mann-Whitney U test of every column (scipy.stats.mannwhitneyu, method="asymptotic",
+    /// use_continuity=True): the smaller of U0 and U1 = n0 n1 - U0, and the p-value
+    /// <c>2 P(Z &gt; (max(U0, U1) - n0 n1 / 2 - 1/2) / s)</c> with the tie-corrected
+    /// <c>s^2 = n0 n1 / 12 ((n + 1) - sum (t^3 - t) / (n (n - 1)))</c>, at most 1. Without spread (every value tied)
+    /// the p-value is 1.
+    /// </summary>
+    public static (Tensor<T> U, Tensor<T> PValues) MannWhitney<T>(Tensor<T> x, Tensor<T> groupMask, int n0, int n1)
+    {
+        var engine = AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<T>();
+        int p = x.Shape[1];
+        double n = n0 + n1;
+        double product = (double)n0 * n1;
+        var u0 = RankSumU(x, groupMask, n0);
+        var u1 = engine.TensorAddScalar(engine.TensorNegate(u0), ops.FromDouble(product));
+        var uMin = engine.TensorMin(u0, u1);
+        var uMax = engine.TensorMax(u0, u1);
+
+        var variance = engine.TensorMultiplyScalar(
+            engine.TensorAddScalar(
+                engine.TensorDivideScalar(engine.TensorNegate(ColumnTieCubeSums(x)), ops.FromDouble(n * (n - 1))),
+                ops.FromDouble(n + 1)),
+            ops.FromDouble(product / 12.0));
+        var z = FilterStatisticTensorOps.GuardedDivide(
+            engine.TensorAddScalar(uMax, ops.FromDouble(-product / 2.0 - 0.5)), engine.TensorSqrt(variance), 0.0, ops.Zero);
+        var spread = engine.TensorGreaterThan(variance, ops.Zero);
+        var pValues = engine.TensorMin(
+            engine.TensorMultiplyScalar(FilterStatisticTensorOps.NormalSurvival(z), ops.FromDouble(2.0)), ops.One);
+        pValues = engine.TensorWhere(spread, pValues, FilterStatisticTensorOps.Filled(new[] { p }, ops.One));
+        return (uMin, pValues);
+    }
+
+    /// <summary>
+    /// The Wilcoxon signed-rank test of every column of <paramref name="x"/> ([n, p]) against the paired values
+    /// <paramref name="y"/> ([n]) (scipy.stats.wilcoxon, zero_method="wilcox", method="approx", no continuity
+    /// correction): differences within <paramref name="zeroTolerance"/> of 0 are dropped, the rest ranked by
+    /// magnitude with ties averaged; <c>W = min(W+, W-)</c>, <c>z = (W - m (m + 1) / 4) / s</c> with
+    /// <c>s^2 = m (m + 1)(2m + 1) / 24 - sum (t^3 - t) / 48</c> over the m non-zero differences, and the two-sided
+    /// normal p-value. Returns W, the p-values and m, all [p]; a column with no spread has p = 1.
+    /// </summary>
+    public static (Tensor<T> W, Tensor<T> PValues, Tensor<T> NonZero) WilcoxonSignedRank<T>(
+        Tensor<T> x, Tensor<T> y, double zeroTolerance)
+    {
+        var engine = AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<T>();
+        int n = x.Shape[0];
+        int p = x.Shape[1];
+        if (n == 0 || p == 0)
+            return (new Tensor<T>(new[] { p }), FilterStatisticTensorOps.Filled(new[] { p }, ops.One), new Tensor<T>(new[] { p }));
+
+        var difference = engine.TensorSubtract(x, FilterStatisticTensorOps.ColumnBroadcast(y, p));
+        var nonZero = engine.TensorGreaterThan(engine.TensorAbs(difference), ops.FromDouble(zeroTolerance));
+        var magnitude = engine.TensorMultiply(engine.TensorAbs(difference), nonZero);
+        var zeros = engine.ReduceSum(FilterStatisticTensorOps.OneMinus(nonZero), new[] { 0 }, false);
+        var m = engine.TensorAddScalar(engine.TensorNegate(zeros), ops.FromDouble(n));
+
+        // the dropped zeros take the lowest ranks 1..zeros, so a non-zero difference ranks (overall rank - zeros)
+        var ranks = engine.TensorSubtract(ColumnAverageRanks(magnitude), FilterStatisticTensorOps.RowBroadcast(zeros, n));
+        var positive = engine.TensorGreaterThan(difference, ops.FromDouble(zeroTolerance));
+        var negative = engine.TensorLessThan(difference, ops.FromDouble(-zeroTolerance));
+        var wPlus = engine.ReduceSum(engine.TensorMultiply(ranks, positive), new[] { 0 }, false);
+        var wMinus = engine.ReduceSum(engine.TensorMultiply(ranks, negative), new[] { 0 }, false);
+        var w = engine.TensorMin(wPlus, wMinus);
+
+        // tie term over the non-zero magnitudes: the zeros form one group of size `zeros` in the column tie sum
+        var zeroGroup = engine.TensorSubtract(engine.TensorMultiply(engine.TensorSquare(zeros), zeros), zeros);
+        var ties = engine.TensorSubtract(ColumnTieCubeSums(magnitude), zeroGroup);
+        var mean = engine.TensorMultiplyScalar(engine.TensorMultiply(m, engine.TensorAddScalar(m, ops.One)), ops.FromDouble(0.25));
+        var variance = engine.TensorSubtract(
+            engine.TensorDivideScalar(
+                engine.TensorMultiply(engine.TensorMultiply(m, engine.TensorAddScalar(m, ops.One)),
+                    engine.TensorAddScalar(engine.TensorMultiplyScalar(m, ops.FromDouble(2.0)), ops.One)),
+                ops.FromDouble(24.0)),
+            engine.TensorDivideScalar(ties, ops.FromDouble(48.0)));
+        var z = FilterStatisticTensorOps.GuardedDivide(
+            engine.TensorSubtract(w, mean), engine.TensorSqrt(engine.TensorMax(variance, ops.Zero)), 0.0, ops.Zero);
+        var pValues = engine.TensorWhere(
+            engine.TensorGreaterThan(variance, ops.Zero),
+            FilterStatisticTensorOps.NormalTwoSided(z),
+            FilterStatisticTensorOps.Filled(new[] { p }, ops.One));
+        return (w, pValues, m);
+    }
+
+    /// <summary>
     /// The tie correction term <c>sum (t^3 - t)</c> over the groups of tied values of a 1-D tensor (t = group size),
     /// as used by the Kruskal-Wallis and Mann-Whitney tie corrections.
     /// </summary>

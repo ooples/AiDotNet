@@ -26,13 +26,13 @@ public class WilcoxonSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISu
 {
     private readonly int _nFeaturesToSelect;
 
-    private double[]? _uStatistics;
+    private Vector<T>? _uStatistics;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
-    public double[]? UStatistics => _uStatistics;
+    public Vector<T>? UStatistics => _uStatistics;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -63,50 +63,28 @@ public class WilcoxonSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISu
             throw new ArgumentException("Target length must match rows in data.");
 
         _nInputFeatures = data.Columns;
-        int n = data.Rows;
         int p = data.Columns;
+        var engine = Engine;
 
-        var class0 = new List<int>();
-        var class1 = new List<int>();
-        for (int i = 0; i < n; i++)
+        // class 0 is target < 0.5
+        var class0 = FilterStatisticTensorOps.BelowMask(target, 0.5, out int n0);
+        int n1 = data.Rows - n0;
+
+        // U statistic for class 0 from tie-averaged ranks, normalised to [0, 1] as |U0 - maxU / 2| / (maxU / 2)
+        int maxU = n0 * n1;
+        if (maxU > 0)
         {
-            if (NumOps.LessThan(target[i], NumOps.FromDouble(0.5)))
-                class0.Add(i);
-            else
-                class1.Add(i);
+            var u0 = FeatureSelectionTensorOps.RankSumU(FilterStatisticTensorOps.AsTensor(data), class0, n0);
+            var half = NumOps.FromDouble(maxU / 2.0);
+            _uStatistics = engine.TensorDivideScalar(engine.TensorAbs(engine.TensorSubtractScalar(u0, half)), half).ToVector();
+        }
+        else
+        {
+            _uStatistics = new Vector<T>(p);
         }
 
-        int n0 = class0.Count;
-        int n1 = class1.Count;
-
-        _uStatistics = new double[p];
-
-        for (int j = 0; j < p; j++)
-        {
-            // Rank all values
-            var ranked = Enumerable.Range(0, n)
-                .Select(i => (Index: i, Value: NumOps.ToDouble(data[i, j])))
-                .OrderBy(x => x.Value)
-                .Select((x, rank) => (x.Index, Rank: rank + 1))
-                .ToDictionary(x => x.Index, x => x.Rank);
-
-            // Sum of ranks for class 0
-            double r0 = class0.Sum(i => ranked[i]);
-
-            // U statistic for class 0
-            double u0 = r0 - ((double)n0 * (n0 + 1)) / 2.0;
-
-            // Normalize U to [0, 1]
-            double maxU = (double)n0 * n1;
-            _uStatistics[j] = maxU > 0 ? Math.Abs(u0 - maxU / 2) / (maxU / 2) : 0;
-        }
-
-        int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = Enumerable.Range(0, p)
-            .OrderByDescending(j => _uStatistics[j])
-            .Take(numToSelect)
-            .OrderBy(x => x)
-            .ToArray();
+        _selectedIndices = FilterStatisticTensorOps.TopKIndicesSorted(
+            FilterStatisticTensorOps.AsTensor(_uStatistics), Math.Min(_nFeaturesToSelect, p));
 
         IsFitted = true;
     }

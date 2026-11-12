@@ -28,16 +28,16 @@ public class WilcoxonSignedRank<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, I
     private readonly int _nFeaturesToSelect;
     private readonly double _alpha;
 
-    private double[]? _wStatistics;
-    private double[]? _pValues;
+    private Vector<T>? _wStatistics;
+    private Vector<T>? _pValues;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public double Alpha => _alpha;
-    public double[]? WStatistics => _wStatistics;
-    public double[]? PValues => _pValues;
+    public Vector<T>? WStatistics => _wStatistics;
+    public Vector<T>? PValues => _pValues;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -70,95 +70,25 @@ public class WilcoxonSignedRank<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, I
             throw new ArgumentException("Target length must match rows in data.");
 
         _nInputFeatures = data.Columns;
-        int n = data.Rows;
         int p = data.Columns;
+        var engine = Engine;
 
-        // For feature selection, compare each feature to the target
-        _wStatistics = new double[p];
-        _pValues = new double[p];
+        // Signed-rank test of each feature against the target: differences within 1e-10 of 0 are dropped, the rest
+        // ranked by magnitude (ties averaged), W = min(W+, W-), tie-corrected normal p-value (scipy.stats.wilcoxon)
+        var (w, pValues, nonZero) = FeatureSelectionTensorOps.WilcoxonSignedRank(
+            FilterStatisticTensorOps.AsTensor(data), FilterStatisticTensorOps.AsTensor(target), 1e-10);
 
-        for (int j = 0; j < p; j++)
-        {
-            // Compute differences between feature and target
-            var differences = new List<(double AbsDiff, int Sign)>();
-
-            for (int i = 0; i < n; i++)
-            {
-                double diff = NumOps.ToDouble(data[i, j]) - NumOps.ToDouble(target[i]);
-                if (Math.Abs(diff) > 1e-10) // Exclude zero differences
-                {
-                    differences.Add((Math.Abs(diff), Math.Sign(diff)));
-                }
-            }
-
-            if (differences.Count < 2)
-            {
-                _wStatistics[j] = 0;
-                _pValues[j] = 1.0;
-                continue;
-            }
-
-            // Rank the absolute differences
-            var ranked = differences
-                .OrderBy(d => d.AbsDiff)
-                .Select((d, idx) => (d.AbsDiff, d.Sign, Rank: idx + 1.0))
-                .ToList();
-
-            // Handle ties (average ranks)
-            int i2 = 0;
-            while (i2 < ranked.Count)
-            {
-                int start = i2;
-                while (i2 < ranked.Count && Math.Abs(ranked[i2].AbsDiff - ranked[start].AbsDiff) < 1e-10)
-                    i2++;
-
-                double avgRank = (start + i2 + 1) / 2.0;
-                for (int k = start; k < i2; k++)
-                    ranked[k] = (ranked[k].AbsDiff, ranked[k].Sign, avgRank);
-            }
-
-            // Compute W+ (sum of positive ranks) and W- (sum of negative ranks)
-            double wPlus = ranked.Where(r => r.Sign > 0).Sum(r => r.Rank);
-            double wMinus = ranked.Where(r => r.Sign < 0).Sum(r => r.Rank);
-
-            double W = Math.Min(wPlus, wMinus);
-            _wStatistics[j] = W;
-
-            // Normal approximation for p-value
-            int nPairs = differences.Count;
-            double mean = (double)nPairs * (nPairs + 1) / 4.0;
-            double stdDev = Math.Sqrt((double)nPairs * (nPairs + 1) * (2.0 * nPairs + 1) / 24.0);
-
-            if (stdDev > 0)
-            {
-                double z = (W - mean) / stdDev;
-                _pValues[j] = 2 * NormalCDF(-Math.Abs(z));
-            }
-            else
-            {
-                _pValues[j] = 1.0;
-            }
-        }
+        // fewer than 2 non-zero differences: no evidence (W = 0, p = 1)
+        var enough = engine.TensorGreaterThan(nonZero, NumOps.FromDouble(2 - 0.5));
+        w = FeatureSelectionTensorOps.KeepOrFill(w, enough, NumOps.Zero);
+        pValues = FeatureSelectionTensorOps.KeepOrFill(pValues, enough, NumOps.One);
+        _wStatistics = w.ToVector();
+        _pValues = pValues.ToVector();
 
         // Select features with smallest p-values
-        int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = _pValues
-            .Select((pval, idx) => (PValue: pval, Index: idx))
-            .OrderBy(x => x.PValue)
-            .Take(numToSelect)
-            .Select(x => x.Index)
-            .OrderBy(x => x)
-            .ToArray();
+        _selectedIndices = FilterStatisticTensorOps.BottomKIndicesSorted(pValues, Math.Min(_nFeaturesToSelect, p));
 
         IsFitted = true;
-    }
-
-    private double NormalCDF(double x)
-    {
-        double t = 1.0 / (1.0 + 0.2316419 * Math.Abs(x));
-        double d = 0.3989423 * Math.Exp(-x * x / 2);
-        double p = d * t * (0.3193815 + t * (-0.3565638 + t * (1.781478 + t * (-1.821256 + t * 1.330274))));
-        return x > 0 ? 1 - p : p;
     }
 
     /// <inheritdoc />

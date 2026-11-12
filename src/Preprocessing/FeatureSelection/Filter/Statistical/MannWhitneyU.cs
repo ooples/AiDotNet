@@ -27,16 +27,16 @@ public class MannWhitneyU<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISuperv
     private readonly int _nFeaturesToSelect;
     private readonly double _alpha;
 
-    private double[]? _uStatistics;
-    private double[]? _pValues;
+    private Vector<T>? _uStatistics;
+    private Vector<T>? _pValues;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public double Alpha => _alpha;
-    public double[]? UStatistics => _uStatistics;
-    public double[]? PValues => _pValues;
+    public Vector<T>? UStatistics => _uStatistics;
+    public Vector<T>? PValues => _pValues;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -69,116 +69,31 @@ public class MannWhitneyU<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISuperv
             throw new ArgumentException("Target length must match rows in data.");
 
         _nInputFeatures = data.Columns;
-        int n = data.Rows;
         int p = data.Columns;
 
-        // Split into two groups based on target (binary classification)
-        var group0 = new List<int>();
-        var group1 = new List<int>();
-
-        double threshold = 0.5;
-        for (int i = 0; i < n; i++)
-        {
-            if (NumOps.ToDouble(target[i]) < threshold)
-                group0.Add(i);
-            else
-                group1.Add(i);
-        }
-
-        int n0 = group0.Count;
-        int n1 = group1.Count;
+        // Split into two groups based on target (binary classification): group 0 is target < 0.5
+        var group0 = FilterStatisticTensorOps.BelowMask(target, 0.5, out int n0);
+        int n1 = data.Rows - n0;
 
         if (n0 < 1 || n1 < 1)
         {
             // Fallback if only one class
-            _uStatistics = new double[p];
-            _pValues = Enumerable.Repeat(1.0, p).ToArray();
+            _uStatistics = new Vector<T>(p);
+            _pValues = FilterStatisticTensorOps.Filled(new[] { p }, NumOps.One).ToVector();
             _selectedIndices = Enumerable.Range(0, Math.Min(_nFeaturesToSelect, p)).ToArray();
             IsFitted = true;
             return;
         }
 
-        _uStatistics = new double[p];
-        _pValues = new double[p];
-
-        for (int j = 0; j < p; j++)
-        {
-            // Get values for each group
-            var values0 = group0.Select(i => NumOps.ToDouble(data[i, j])).ToArray();
-            var values1 = group1.Select(i => NumOps.ToDouble(data[i, j])).ToArray();
-
-            // Compute U statistic
-            double u = ComputeU(values0, values1);
-            _uStatistics[j] = u;
-
-            // Compute p-value using normal approximation
-            double mu = (double)n0 * n1 / 2;
-            double sigma = Math.Sqrt((double)n0 * n1 * (n0 + n1 + 1) / 12);
-
-            double z = (u - mu) / sigma;
-            _pValues[j] = 2 * (1 - NormalCDF(Math.Abs(z)));
-        }
+        // U statistic and tie-corrected normal p-value (scipy.stats.mannwhitneyu, asymptotic, continuity corrected)
+        var (u, pValues) = FeatureSelectionTensorOps.MannWhitney(FilterStatisticTensorOps.AsTensor(data), group0, n0, n1);
+        _uStatistics = u.ToVector();
+        _pValues = pValues.ToVector();
 
         // Select features with smallest p-values
-        int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = _pValues
-            .Select((pval, idx) => (PValue: pval, Index: idx))
-            .OrderBy(x => x.PValue)
-            .Take(numToSelect)
-            .Select(x => x.Index)
-            .OrderBy(x => x)
-            .ToArray();
+        _selectedIndices = FilterStatisticTensorOps.BottomKIndicesSorted(pValues, Math.Min(_nFeaturesToSelect, p));
 
         IsFitted = true;
-    }
-
-    private double ComputeU(double[] group0, double[] group1)
-    {
-        int n0 = group0.Length;
-        int n1 = group1.Length;
-
-        // Combine and rank all values
-        var combined = group0.Select(v => (Value: v, Group: 0))
-            .Concat(group1.Select(v => (Value: v, Group: 1)))
-            .OrderBy(x => x.Value)
-            .ToArray();
-
-        // Assign ranks (handling ties with average rank)
-        var ranks = new double[combined.Length];
-        int i = 0;
-        while (i < combined.Length)
-        {
-            int start = i;
-            while (i < combined.Length && Math.Abs(combined[i].Value - combined[start].Value) < 1e-10)
-                i++;
-
-            double avgRank = (start + i + 1) / 2.0;
-            for (int k = start; k < i; k++)
-                ranks[k] = avgRank;
-        }
-
-        // Sum ranks for group 0
-        double r0 = 0;
-        for (int k = 0; k < combined.Length; k++)
-        {
-            if (combined[k].Group == 0)
-                r0 += ranks[k];
-        }
-
-        // U statistic for group 0
-        double u0 = r0 - (double)n0 * (n0 + 1) / 2;
-
-        // Return smaller U
-        double u1 = (double)n0 * n1 - u0;
-        return Math.Min(u0, u1);
-    }
-
-    private double NormalCDF(double x)
-    {
-        double t = 1.0 / (1.0 + 0.2316419 * Math.Abs(x));
-        double d = 0.3989423 * Math.Exp(-x * x / 2);
-        double p = d * t * (0.3193815 + t * (-0.3565638 + t * (1.781478 + t * (-1.821256 + t * 1.330274))));
-        return x > 0 ? 1 - p : p;
     }
 
     /// <inheritdoc />
