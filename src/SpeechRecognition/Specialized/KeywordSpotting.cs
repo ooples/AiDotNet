@@ -101,7 +101,7 @@ public partial class KeywordSpotting<T> : AudioNeuralNetworkBase<T>, ISpeechReco
     /// <inheritdoc />
     public string DetectLanguage(Tensor<T> audio) { ThrowIfDisposed(); if (audio is null) throw new ArgumentNullException(nameof(audio)); return _options.Language; }
     /// <inheritdoc />
-    public IReadOnlyDictionary<string, T> DetectLanguageProbabilities(Tensor<T> audio) { var detected = DetectLanguage(audio); var result = new Dictionary<string, T>(); double primaryProb = 0.85; double otherProb = SupportedLanguages.Count > 1 ? (1.0 - primaryProb) / (SupportedLanguages.Count - 1) : 0.0; foreach (var lang in SupportedLanguages) result[lang] = NumOps.FromDouble(lang == detected ? primaryProb : otherProb); return result; }
+    public IReadOnlyDictionary<string, T> DetectLanguageProbabilities(Tensor<T> audio) { var detected = DetectLanguage(audio); var result = new Dictionary<string, T>(); double primaryProb = 0.85; double otherProb = SupportedLanguages.Count > 1 ? (1.0 - primaryProb) / (SupportedLanguages.Count - 1) : 0.0; T primaryValue = NumOps.FromDouble(primaryProb); T otherValue = NumOps.FromDouble(otherProb); foreach (var lang in SupportedLanguages) result[lang] = lang == detected ? primaryValue : otherValue; return result; }
     /// <inheritdoc />
     public IStreamingTranscriptionSession<T> StartStreamingSession(string? language = null) => new KeywordSpottingStreamingSession(this, language ?? _options.Language);
 
@@ -128,92 +128,95 @@ public partial class KeywordSpotting<T> : AudioNeuralNetworkBase<T>, ISpeechReco
             throw new ArgumentException("Keyword posterior tensor must have a positive trailing label axis.", nameof(logits));
 
         int frameCount = logits.Length / labelCount;
-        var probabilities = new double[frameCount, labelCount];
+        var engine = AiDotNetEngine.Current;
+        var shape = new[] { frameCount, labelCount };
 
-        for (int frame = 0; frame < frameCount; frame++)
+        // Decoding only reads the posteriors; nothing here belongs on a gradient tape.
+        using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
         {
-            double maximum = double.NegativeInfinity;
-            double rawSum = 0.0;
-            bool bounded = true;
-            for (int label = 0; label < labelCount; label++)
-            {
-                double value = NumOps.ToDouble(logits[frame * labelCount + label]);
-                probabilities[frame, label] = value;
-                maximum = Math.Max(maximum, value);
-                rawSum += value;
-                bounded &= value >= 0.0 && value <= 1.0;
-            }
+            // Frame f, label l is flat element f * labelCount + l.
+            var values = logits.Reshape(frameCount, labelCount);
+            var zeros = engine.TensorZerosLike(values);
+            var ones = engine.TensorOnesLike(values);
 
-            bool alreadyProbabilities = bounded && Math.Abs(rawSum - 1.0) <= 1e-4;
-            if (alreadyProbabilities)
-                continue;
+            // A frame that is already a distribution (every value in [0, 1], summing to 1 within 1e-4) is kept
+            // as is; any other frame is softmax-normalized. NaN is outside [0, 1].
+            var outsideUnit = engine.TensorAdd(
+                engine.TensorAdd(engine.TensorLessThan(values, NumOps.Zero), engine.TensorGreaterThan(values, NumOps.One)),
+                engine.TensorWhere(engine.TensorIsNan(values), ones, zeros));
+            var bounded = engine.TensorEquals(engine.ReduceMax(outsideUnit, new[] { 1 }, true), NumOps.Zero);
+            var rawSum = engine.ReduceSum(values, new[] { 1 }, true);
+            var sumOff = engine.TensorGreaterThan(
+                engine.TensorAbs(engine.TensorSubtractScalar(rawSum, NumOps.One)), NumOps.FromDouble(1e-4));
+            var alreadyProbabilities = engine.TensorBroadcastTo(
+                engine.TensorMultiply(bounded, engine.ScalarMinusTensor(NumOps.One, sumOff)), shape);
 
-            double exponentialSum = 0.0;
-            for (int label = 0; label < labelCount; label++)
-            {
-                double probability = Math.Exp(probabilities[frame, label] - maximum);
-                probabilities[frame, label] = probability;
-                exponentialSum += probability;
-            }
-            for (int label = 0; label < labelCount; label++)
-                probabilities[frame, label] /= exponentialSum;
-        }
+            var maximum = engine.TensorBroadcastTo(engine.ReduceMax(values, new[] { 1 }, true), shape);
+            var exponentials = engine.TensorExp(engine.TensorSubtract(values, maximum));
+            var softmax = engine.TensorDivide(
+                exponentials, engine.TensorBroadcastTo(engine.ReduceSum(exponentials, new[] { 1 }, true), shape));
+            var probabilities = engine.TensorWhere(alreadyProbabilities, values, softmax);
 
-        // Chen et al. Eq. (2): smooth each frame posterior over the latest 30 frames.
-        const int SmoothingWindow = 30;
-        var smoothed = new double[frameCount, labelCount];
-        for (int label = 0; label < labelCount; label++)
-        {
-            double runningSum = 0.0;
-            for (int frame = 0; frame < frameCount; frame++)
-            {
-                runningSum += probabilities[frame, label];
-                if (frame >= SmoothingWindow)
-                    runningSum -= probabilities[frame - SmoothingWindow, label];
-                smoothed[frame, label] = runningSum / Math.Min(frame + 1, SmoothingWindow);
-            }
-        }
+            // Chen et al. Eq. (2): smooth each frame posterior over the latest 30 frames, as a difference of
+            // running totals divided by the number of frames actually in the window.
+            const int SmoothingWindow = 30;
+            var runningTotal = engine.TensorCumSum(probabilities, 0);
+            var windowTotal = frameCount > SmoothingWindow
+                ? engine.TensorSubtract(
+                    runningTotal,
+                    engine.TensorConcatenate(
+                        new[]
+                        {
+                            new Tensor<T>(new[] { SmoothingWindow, labelCount }),
+                            engine.TensorNarrow(runningTotal, 0, 0, frameCount - SmoothingWindow),
+                        },
+                        0))
+                : runningTotal;
+            var windowLength = engine.TensorMin(engine.TensorArange<T>(1, frameCount + 1), NumOps.FromDouble(SmoothingWindow));
+            var smoothed = engine.TensorDivide(
+                windowTotal, engine.TensorBroadcastTo(windowLength.Reshape(frameCount, 1), shape));
 
-        var tokens = new List<int>();
-        int previousLabel = -1;
-        for (int frame = 0; frame < frameCount && tokens.Count < _options.MaxTextLength; frame++)
-        {
-            int bestLabel = 0;
-            double bestPosterior = smoothed[frame, 0];
-            for (int label = 1; label < labelCount; label++)
-            {
-                if (smoothed[frame, label] > bestPosterior)
-                {
-                    bestPosterior = smoothed[frame, label];
-                    bestLabel = label;
-                }
-            }
+            // Each frame's decision is its first maximal smoothed posterior, scanning from label 0; a NaN at
+            // label 0 is never beaten, and NaN elsewhere never wins.
+            var firstMax = CtcGreedyDecoding.FirstMaxIndexPerRow(smoothed);
+            var bestLabel = engine.TensorWhere(
+                engine.TensorIsNan(engine.TensorNarrow(smoothed, 1, 0, 1).Reshape(frameCount)),
+                new Tensor<int>(new[] { frameCount }),
+                firstMax);
 
             // Label zero is the paper's non-keyword/filler label. Collapse repeated frame
             // decisions only for presentation; confidence below still uses every frame.
-            if (bestLabel > 0 && bestLabel != previousLabel)
-                tokens.Add(bestLabel);
-            previousLabel = bestLabel;
+            var keywordFrames = CtcGreedyDecoding.EmittedFrames(bestLabel, _options.MaxTextLength);
+            var tokens = keywordFrames.Length == 0
+                ? new List<int>()
+                : new List<int>(engine.TensorIndexSelect(
+                    bestLabel, new Tensor<int>(keywordFrames, new[] { keywordFrames.Length }), 0).ToArray());
+
+            // Chen et al. Eq. (3): geometric mean of each keyword label's maximum
+            // smoothed posterior over the latest 100-frame confidence window.
+            if (labelCount <= 1)
+                return (tokens, 0.0);
+
+            const int ConfidenceWindow = 100;
+            int firstConfidenceFrame = Math.Max(0, frameCount - ConfidenceWindow);
+            var window = engine.TensorNarrow(
+                engine.TensorNarrow(smoothed, 0, firstConfidenceFrame, frameCount - firstConfidenceFrame),
+                1, 1, labelCount - 1);
+
+            // peak = max(0, window values), and NaN as soon as the window holds one (as Math.Max does). The
+            // smoothed posteriors are finite or NaN, so window * 0 sums to 0 or NaN and carries that NaN
+            // past the floor.
+            var isNaN = engine.TensorIsNan(window);
+            var cleanWindow = engine.TensorWhere(isNaN, engine.TensorZerosLike(window), window);
+            var nanCarrier = engine.ReduceSum(engine.TensorMultiplyScalar(window, NumOps.Zero), new[] { 0 }, false);
+            var peak = engine.TensorMax(engine.ReduceMax(cleanWindow, new[] { 0 }, false), NumOps.Zero);
+            var logPeak = engine.TensorAdd(
+                engine.TensorLog(engine.TensorMax(peak, NumOps.FromDouble(1e-300))), nanCarrier);
+            double sumLogPeak = NumOps.ToDouble(engine.TensorSum(logPeak));
+
+            double confidence = Math.Exp(sumLogPeak / (labelCount - 1));
+            return (tokens, confidence);
         }
-
-        // Chen et al. Eq. (3): geometric mean of each keyword label's maximum
-        // smoothed posterior over the latest 100-frame confidence window.
-        if (labelCount <= 1)
-            return (tokens, 0.0);
-
-        const int ConfidenceWindow = 100;
-        int firstConfidenceFrame = Math.Max(0, frameCount - ConfidenceWindow);
-        double sumLogPeak = 0.0;
-        for (int label = 1; label < labelCount; label++)
-        {
-            double peak = 0.0;
-            for (int frame = firstConfidenceFrame; frame < frameCount; frame++)
-                peak = Math.Max(peak, smoothed[frame, label]);
-            sumLogPeak += Math.Log(Math.Max(peak, 1e-300));
-        }
-
-        double confidence = Math.Exp(sumLogPeak / (labelCount - 1));
-        return (tokens, confidence);
     }
 
     private string LabelsToText(IEnumerable<int> tokens)
@@ -256,7 +259,7 @@ public partial class KeywordSpotting<T> : AudioNeuralNetworkBase<T>, ISpeechReco
         private readonly KeywordSpotting<T> _model; private readonly string _language; private readonly List<Tensor<T>> _chunks = new(); private bool _disposed;
         public KeywordSpottingStreamingSession(KeywordSpotting<T> model, string language) { _model = model; _language = language; }
         public void FeedAudio(Tensor<T> audioChunk) { if (_disposed) throw new ObjectDisposedException(nameof(KeywordSpottingStreamingSession)); _chunks.Add(audioChunk); }
-        public TranscriptionResult<T> GetPartialResult() { if (_disposed) throw new ObjectDisposedException(nameof(KeywordSpottingStreamingSession)); if (_chunks.Count == 0) return new TranscriptionResult<T> { Language = _language }; int totalLen = 0; foreach (var c in _chunks) totalLen += c.Length; var combined = new Tensor<T>(new[] { totalLen }); int offset = 0; foreach (var c in _chunks) { for (int i = 0; i < c.Length; i++) combined[offset + i] = c[i]; offset += c.Length; } return _model.Transcribe(combined, _language); }
+        public TranscriptionResult<T> GetPartialResult() { if (_disposed) throw new ObjectDisposedException(nameof(KeywordSpottingStreamingSession)); if (_chunks.Count == 0) return new TranscriptionResult<T> { Language = _language }; Tensor<T> combined; using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>()) { combined = AiDotNetEngine.Current.TensorConcatenate(_chunks.Select(c => c.Reshape(c.Length)).ToArray(), 0); } return _model.Transcribe(combined, _language); }
         public TranscriptionResult<T> Finalize() { if (_disposed) throw new ObjectDisposedException(nameof(KeywordSpottingStreamingSession)); var result = GetPartialResult(); _disposed = true; return result; }
         public void Dispose() { _disposed = true; }
     }
