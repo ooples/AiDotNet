@@ -68,8 +68,6 @@ public class KDEBasedSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISu
         int n = data.Rows;
         int p = data.Columns;
 
-    }
-@@NEW
         var engine = Engine;
         var X = Tensor<T>.FromMatrix(data);
         PreprocessingTensorOps.ClassLabels(target, out var classes, out var classIndex);
@@ -102,7 +100,6 @@ public class KDEBasedSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISu
         _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(scores, numToSelect);
 
         IsFitted = true;
-    }
     }
 
     private Tensor<T> ComputeHellingerDistance(Tensor<T> values1, Tensor<T> values2, int p)

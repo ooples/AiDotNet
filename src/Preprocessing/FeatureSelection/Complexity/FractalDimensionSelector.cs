@@ -64,8 +64,6 @@ public class FractalDimensionSelector<T> : TransformerBase<T, Matrix<T>, Matrix<
         if (n < _kMax + 1)
             throw new ArgumentException($"Need at least {_kMax + 1} samples for kMax = {_kMax}.");
 
-    }
-@@NEW
         var X = Tensor<T>.FromMatrix(data);
         var dimensions = ComputeHiguchiFD(X, n, p);
         _fractalDimensions = dimensions.ToVector();
@@ -74,7 +72,6 @@ public class FractalDimensionSelector<T> : TransformerBase<T, Matrix<T>, Matrix<
         _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(dimensions, numToSelect);
 
         IsFitted = true;
-    }
     }
 
     private Tensor<T> ComputeHiguchiFD(Tensor<T> X, int n, int p)

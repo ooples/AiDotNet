@@ -80,8 +80,6 @@ public class BootstrapSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IS
             ? RandomHelper.CreateSeededRandom(_randomState.Value)
             : RandomHelper.CreateSecureRandom();
 
-    }
-@@NEW
         var engine = Engine;
         var X = Tensor<T>.FromMatrix(data);
         var y = Tensor<T>.FromVector(target);
@@ -133,7 +131,6 @@ public class BootstrapSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IS
         _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(stability, numToSelect);
 
         IsFitted = true;
-    }
     }
 
     /// <inheritdoc />

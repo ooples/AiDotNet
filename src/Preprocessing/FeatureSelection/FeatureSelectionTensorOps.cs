@@ -280,4 +280,42 @@ internal static class FeatureSelectionTensorOps
         return engine.Reshape(engine.TensorMatMul(
             engine.Reshape(weights, new[] { 1, components }), engine.TensorSquare(loadings)), new[] { p });
     }
+
+    /// <summary>
+    /// The average over all pairs of rows (r1 &lt; r2) of <c>|rows[r1] - rows[r2]|</c> (or its square with
+    /// <paramref name="squared"/>), per column: [k, p] to [p]; 0 when there are fewer than two rows.
+    /// </summary>
+    public static Tensor<T> MeanPairwiseDifference<T>(Tensor<T> rows, bool squared)
+    {
+        var engine = AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<T>();
+        int k = rows.Shape[0];
+        int p = rows.Shape[1];
+        if (k < 2)
+            return new Tensor<T>(new[] { p });
+
+        // Every ordered pair once in each order; the diagonal is exactly 0, so the c1 &lt; c2 sum is half the total
+        var shape = new[] { k, k, p };
+        var diff = engine.TensorSubtract(
+            engine.TensorBroadcastTo(engine.Reshape(rows, new[] { k, 1, p }), shape),
+            engine.TensorBroadcastTo(engine.Reshape(rows, new[] { 1, k, p }), shape));
+        var magnitude = squared ? engine.TensorSquare(diff) : engine.TensorAbs(diff);
+        int pairCount = k * (k - 1) / 2;
+        return engine.TensorDivideScalar(engine.ReduceSum(magnitude, new[] { 0, 1 }, false), ops.FromDouble(2.0 * pairCount));
+    }
+
+    /// <summary>Column-wise median of a 2-D tensor ([m, p] to [p]); the mean of the two middle values for even m.</summary>
+    public static Tensor<T> ColumnMedian<T>(Tensor<T> x)
+    {
+        var engine = AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<T>();
+        int m = x.Shape[0];
+        int mid = m / 2;
+        if (m % 2 != 0)
+            return PreprocessingTensorOps.ColumnOrderStatistic(x, mid);
+
+        return engine.TensorDivideScalar(engine.TensorAdd(
+            PreprocessingTensorOps.ColumnOrderStatistic(x, mid - 1), PreprocessingTensorOps.ColumnOrderStatistic(x, mid)),
+            ops.FromDouble(2));
+    }
 }

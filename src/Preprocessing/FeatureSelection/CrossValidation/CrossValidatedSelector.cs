@@ -91,8 +91,6 @@ public class CrossValidatedSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>
         for (int i = 0; i < n; i++)
             folds[indices[i]] = i % _nFolds;
 
-    }
-@@NEW
         // Evaluate each feature individually: a simple linear regression per feature and fold, all features at once
         var shape = new[] { n, p };
         var yWide = engine.TensorBroadcastTo(y, shape);
@@ -148,7 +146,6 @@ public class CrossValidatedSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>
         _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(cvScores, numToSelect);
 
         IsFitted = true;
-    }
     }
 
     /// <inheritdoc />

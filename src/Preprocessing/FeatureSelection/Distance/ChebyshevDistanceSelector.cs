@@ -64,8 +64,6 @@ public class ChebyshevDistanceSelector<T> : TransformerBase<T, Matrix<T>, Matrix
         int n = data.Rows;
         int p = data.Columns;
 
-    }
-@@NEW
         var engine = Engine;
         var X = Tensor<T>.FromMatrix(data);
         PreprocessingTensorOps.ClassLabels(target, out var classes, out var classIndex);
@@ -109,7 +107,6 @@ public class ChebyshevDistanceSelector<T> : TransformerBase<T, Matrix<T>, Matrix
         _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(maxSeparation, numToSelect);
 
         IsFitted = true;
-    }
     }
 
     /// <inheritdoc />

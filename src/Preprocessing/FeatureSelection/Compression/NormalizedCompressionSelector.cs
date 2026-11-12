@@ -67,8 +67,6 @@ public class NormalizedCompressionSelector<T> : TransformerBase<T, Matrix<T>, Ma
         int n = data.Rows;
         int p = data.Columns;
 
-    public Matrix<T> FitTransform(Matrix<T> data, Vector<T> target)
-@@NEW
         var engine = Engine;
         var X = Tensor<T>.FromMatrix(data);
         var y = engine.Reshape(Tensor<T>.FromVector(target), new[] { n, 1 });

@@ -63,8 +63,6 @@ public class HurstExponentSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         if (n < 20)
             throw new ArgumentException("Need at least 20 samples for Hurst exponent estimation.");
 
-    }
-@@NEW
         var engine = Engine;
         var X = Tensor<T>.FromMatrix(data);
         var hurst = ComputeHurstRS(X, n, p);
@@ -85,7 +83,6 @@ public class HurstExponentSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         }
 
         IsFitted = true;
-    }
     }
 
     private Tensor<T> ComputeHurstRS(Tensor<T> X, int n, int p)

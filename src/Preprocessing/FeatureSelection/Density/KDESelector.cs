@@ -68,8 +68,6 @@ public class KDESelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervi
         int n = data.Rows;
         int p = data.Columns;
 
-    }
-@@NEW
         var engine = Engine;
         var X = Tensor<T>.FromMatrix(data);
         PreprocessingTensorOps.ClassLabels(target, out var classes, out var classIndex);
@@ -114,7 +112,6 @@ public class KDESelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervi
         _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(scores, numToSelect);
 
         IsFitted = true;
-    }
     }
 
     private Tensor<T> ComputeKDE(Tensor<T> data, Tensor<T> evalPoints)

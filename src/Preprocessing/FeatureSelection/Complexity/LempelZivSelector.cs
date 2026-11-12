@@ -61,8 +61,6 @@ public class LempelZivSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IF
         int n = data.Rows;
         int p = data.Columns;
 
-    }
-@@NEW
         var engine = Engine;
         var X = Tensor<T>.FromMatrix(data);
 
@@ -102,7 +100,6 @@ public class LempelZivSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IF
         _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(complexityValues, numToSelect);
 
         IsFitted = true;
-    }
     }
 
     private int ComputeLZComplexity(int[] sequence)

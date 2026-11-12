@@ -58,8 +58,6 @@ public class LOFBasedSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IFi
         int n = data.Rows;
         int p = data.Columns;
 
-    }
-@@NEW
         var engine = Engine;
         var X = Tensor<T>.FromMatrix(data);
 
@@ -139,7 +137,6 @@ public class LOFBasedSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IFi
         var deviations = engine.TensorSubtract(values, engine.TensorBroadcastTo(
             engine.ReduceMean(values, new[] { 0 }, true), values.Shape.ToArray()));
         return engine.ReduceMean(engine.TensorSquare(deviations), new[] { 0 }, true);
-    }
     }
 
     /// <inheritdoc />

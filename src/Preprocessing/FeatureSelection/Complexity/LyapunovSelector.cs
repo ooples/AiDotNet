@@ -71,8 +71,6 @@ public class LyapunovSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IFi
         if (n < minLength)
             throw new ArgumentException($"Need at least {minLength} samples.");
 
-    }
-@@NEW
         var engine = Engine;
         var X = Tensor<T>.FromMatrix(data);
 
@@ -87,7 +85,6 @@ public class LyapunovSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IFi
         _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(lyapunov, numToSelect);
 
         IsFitted = true;
-    }
     }
 
     private Tensor<T> EstimateLyapunov(Tensor<T> data)
