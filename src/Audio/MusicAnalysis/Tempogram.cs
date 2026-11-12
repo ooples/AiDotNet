@@ -165,14 +165,17 @@ public partial class Tempogram<T> : AudioNeuralNetworkBase<T>, IBeatTracker<T>
         var features = PreprocessAudio(audio);
         Tensor<T> output = IsOnnxMode && OnnxEncoder is not null ? OnnxEncoder.Run(features) : Predict(features);
 
-        // Find peak in tempogram bins
+        // Find peak in tempogram bins: the first strict maximum above -inf (NaN never wins), else bin 0
         int bestBin = 0;
-        double bestVal = double.NegativeInfinity;
         int numBins = Math.Min(_options.NumTempoBins, output.Length);
-        for (int i = 0; i < numBins; i++)
+        if (numBins > 0)
         {
-            double v = NumOps.ToDouble(output[i]);
-            if (v > bestVal) { bestVal = v; bestBin = i; }
+            var candidates = Engine.Concat(new[]
+            {
+                Tensor<T>.CreateDefault([1], NumOps.FromDouble(double.NegativeInfinity)),
+                AudioEngineOps.FitLength(Engine, output, numBins)
+            }, 0);
+            bestBin = Math.Max(0, AudioEngineOps.FirstArgMaxSequential(Engine, candidates) - 1);
         }
 
         double bpm = BinToBPM(bestBin);
@@ -186,26 +189,50 @@ public partial class Tempogram<T> : AudioNeuralNetworkBase<T>, IBeatTracker<T>
         var features = PreprocessAudio(audio);
         Tensor<T> output = IsOnnxMode && OnnxEncoder is not null ? OnnxEncoder.Run(features) : Predict(features);
 
-        // Find top peaks
+        // Find top peaks: interior bins at least as high as both neighbours
         int numBins = Math.Min(_options.NumTempoBins, output.Length);
         var peaks = new List<(int bin, double value)>();
-        for (int i = 1; i < numBins - 1; i++)
-        {
-            double v = NumOps.ToDouble(output[i]);
-            double prev = NumOps.ToDouble(output[i - 1]);
-            double next = NumOps.ToDouble(output[Math.Min(numBins - 1, i + 1)]);
-            if (v >= prev && v >= next) peaks.Add((i, v));
-        }
+        var hypotheses = new List<TempoHypothesis<T>>();
+        if (numBins < 3)
+            return hypotheses;
+
+        var bins = AudioEngineOps.FitLength(Engine, output, numBins);
+        var center = Engine.TensorSlice(bins, [1], [numBins - 2]);
+        var isPeak = Engine.TensorMultiply(
+            Engine.TensorGreaterEqual(center, Engine.TensorSlice(bins, [0], [numBins - 2])),
+            Engine.TensorGreaterEqual(center, Engine.TensorSlice(bins, [2], [numBins - 2])));
+        int[] candidates = Engine.TensorNonzero(isPeak).ToArray();
+        if (candidates.Length == 0)
+            return hypotheses;
+        double[] peakValues = Engine.TensorIndexSelect(center, new Tensor<int>(candidates, [candidates.Length]), 0)
+            .Cast<double>().ToArray();
+        for (int k = 0; k < candidates.Length; k++)
+            peaks.Add((candidates[k] + 1, peakValues[k]));
         peaks.Sort((a, b) => b.value.CompareTo(a.value));
 
-        var hypotheses = new List<TempoHypothesis<T>>();
-        double maxVal = peaks.Count > 0 ? peaks[0].value : 1.0;
-        for (int i = 0; i < Math.Min(numHypotheses, peaks.Count); i++)
+        int count = Math.Min(numHypotheses, peaks.Count);
+        if (count <= 0)
+            return hypotheses;
+
+        // Tempo (BinToBPM) and confidence (value / top value when the top value is positive) of the chosen peaks
+        var chosen = new int[count];
+        for (int i = 0; i < count; i++) chosen[i] = peaks[i].bin;
+        var chosenBins = new Tensor<int>(chosen, [count]);
+        var values = Engine.TensorIndexSelect(bins, chosenBins, 0);
+        T[] tempos = Engine.TensorAddScalar(
+            Engine.TensorMultiplyScalar(
+                Engine.TensorDivideScalar(chosenBins.Cast<T>(), NumOps.FromDouble(_options.NumTempoBins)),
+                NumOps.FromDouble(_options.MaxBPM - _options.MinBPM)),
+            NumOps.FromDouble(_options.MinBPM)).ToArray();
+        T maxVal = AudioEngineOps.Head(Engine, values, 1)[0];
+        T[] confidences = NumOps.GreaterThan(maxVal, NumOps.Zero)
+            ? Engine.TensorDivideScalar(values, maxVal).ToArray()
+            : new T[count];
+
+        for (int i = 0; i < count; i++)
         {
-            double bpm = BinToBPM(peaks[i].bin);
-            double confidence = maxVal > 0 ? peaks[i].value / maxVal : 0;
             var relation = i == 0 ? TempoRelation.Primary : TempoRelation.Alternative;
-            hypotheses.Add(new TempoHypothesis<T> { Tempo = NumOps.FromDouble(bpm), Confidence = NumOps.FromDouble(confidence), Relation = relation });
+            hypotheses.Add(new TempoHypothesis<T> { Tempo = tempos[i], Confidence = confidences[i], Relation = relation });
         }
 
         return hypotheses;
@@ -235,13 +262,8 @@ public partial class Tempogram<T> : AudioNeuralNetworkBase<T>, IBeatTracker<T>
         var features = PreprocessAudio(audio);
         Tensor<T> output = IsOnnxMode && OnnxEncoder is not null ? OnnxEncoder.Run(features) : Predict(features);
 
-        var activation = new Tensor<T>([output.Length]);
-        for (int i = 0; i < output.Length; i++)
-        {
-            double v = NumOps.ToDouble(output[i]);
-            activation[i] = NumOps.FromDouble(1.0 / (1.0 + Math.Exp(-v)));
-        }
-        return activation;
+        // Sigmoid activation (a fresh tensor)
+        return AudioEngineOps.SigmoidSegment(Engine, output, 0, output.Length);
     }
 
     #endregion
@@ -313,11 +335,12 @@ public partial class Tempogram<T> : AudioNeuralNetworkBase<T>, IBeatTracker<T>
         double duration = (double)audioLength / _options.SampleRate;
         var beatTimes = new List<double>();
         var beatConfidences = new List<T>();
+        T beatConfidence = NumOps.FromDouble(0.7);
 
         for (double t = 0; t < duration; t += beatInterval)
         {
             beatTimes.Add(t);
-            beatConfidences.Add(NumOps.FromDouble(0.7));
+            beatConfidences.Add(beatConfidence);
         }
 
         return new BeatTrackingResult<T>

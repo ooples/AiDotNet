@@ -530,4 +530,25 @@ internal static class AudioEngineOps
         T sumExp = engine.TensorSum(engine.TensorExp(engine.TensorSubtractScalar(head, bestValue)));
         return (bin, numOps.Divide(numOps.One, sumExp));
     }
+
+    /// <summary>
+    /// For each row of a <c>[rows, cols]</c> tensor, the scan <c>best = -inf; for c: if (v[c] &gt; best)
+    /// { best = v[c]; arg = c; }</c>: the first strict maximum, NaN never wins, 0 when nothing beats -inf.
+    /// </summary>
+    internal static int[] RowFirstArgMax<T>(IEngine engine, Tensor<T> matrix)
+    {
+        int rows = matrix.Shape[0];
+        int cols = matrix.Shape[1];
+        if (rows == 0) return new int[0];
+        if (cols == 0) return new int[rows];
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var shape = new[] { rows, cols };
+        var ranked = engine.TensorWhere(
+            engine.TensorIsNan(matrix), Tensor<T>.CreateDefault(shape, numOps.FromDouble(double.NegativeInfinity)), matrix);
+        var best = engine.TensorBroadcastTo(engine.ReduceMax(ranked, new[] { 1 }, keepDims: true), shape);
+        var column = engine.TensorBroadcastTo(engine.Reshape(engine.TensorArange<T>(0, cols, 1), new[] { 1, cols }), shape);
+        var firstBest = engine.TensorWhere(
+            engine.TensorEquals(ranked, best), column, Tensor<T>.CreateDefault(shape, numOps.FromDouble(cols)));
+        return engine.TensorAmin(firstBest, new[] { 1 }, keepDims: false).Cast<int>().ToArray();
+    }
 }
