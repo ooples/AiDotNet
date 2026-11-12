@@ -151,14 +151,14 @@ public class NOTEARSSobolev<T> : ContinuousOptimizationBase<T>
                 var (_, gradW1, gradB1, gradW2, gradB2) =
                     ComputeAugLagGradientWithSobolev(data, n, d, h, alpha, rho);
 
-                AdamUpdate(gradW1, gradB1, gradW2, gradB2, d, h, adamStep);
+                AdamUpdate(gradW1, gradB1, gradW2, gradB2, adamStep);
 
                 // Zero diagonal (no self-loops)
                 ZeroSelfInputs();
 
                 if (inner % 100 == 0 && inner > 0)
                 {
-                    double gradNorm = ComputeGradientNorm(gradW1, gradB1, gradW2, gradB2, d, h);
+                    double gradNorm = ComputeGradientNorm(gradW1, gradB1, gradW2, gradB2);
                     if (gradNorm < INNER_TOLERANCE) break;
                 }
             }
@@ -355,8 +355,7 @@ public class NOTEARSSobolev<T> : ContinuousOptimizationBase<T>
         return (totalLoss + _sobolevWeight * totalSobolev / n, gW1, gB1, gW2, gB2);
     }
 
-    private void AdamUpdate(Tensor<T> gW1, Tensor<T> gB1, Tensor<T> gW2, Tensor<T> gB2,
-        int d, int h, int step)
+    private void AdamUpdate(Tensor<T> gW1, Tensor<T> gB1, Tensor<T> gW2, Tensor<T> gB2, int step)
     {
         double bc1 = 1 - Math.Pow(ADAM_BETA1, step);
         double bc2 = 1 - Math.Pow(ADAM_BETA2, step);
@@ -384,7 +383,7 @@ public class NOTEARSSobolev<T> : ContinuousOptimizationBase<T>
             newM, newV);
     }
 
-    private double ComputeGradientNorm(Tensor<T> gW1, Tensor<T> gB1, Tensor<T> gW2, Tensor<T> gB2, int d, int h)
+    private double ComputeGradientNorm(Tensor<T> gW1, Tensor<T> gB1, Tensor<T> gW2, Tensor<T> gB2)
     {
         T sumOfSquares = NumOps.Add(
             NumOps.Add(Engine.TensorSum(Engine.TensorSquare(gW1)), Engine.TensorSum(Engine.TensorSquare(gB1))),
