@@ -189,45 +189,9 @@ public partial class DuelingDQNAgent<T> : DeepReinforcementLearningAgentBase<T>,
         }
 
         var batch = _replayBuffer.Sample(effectiveBatchSize);
-        T totalLoss = NumOps.Zero;
-
-        foreach (var experience in batch)
-        {
-            // Compute target using Double DQN approach with dueling architecture
-            T target;
-            if (experience.Done)
-            {
-                target = experience.Reward;
-            }
-            else
-            {
-                // Use online network to select action
-                var nextQValuesOnline = _qNetwork.Predict(experience.NextState);
-                int bestActionIndex = ArgMax(nextQValuesOnline);
-
-                // Use target network to evaluate
-                var nextQValuesTarget = _targetNetwork.Predict(experience.NextState);
-                var selectedQ = nextQValuesTarget[bestActionIndex];
-
-                target = NumOps.Add(experience.Reward,
-                    NumOps.Multiply(DiscountFactor, selectedQ));
-            }
-
-            var currentQValues = _qNetwork.Forward(experience.State);
-            int actionIndex = ArgMax(experience.Action);
-
-            var targetQValues = currentQValues.Clone();
-            targetQValues[actionIndex] = target;
-
-            var loss = LossFunction.CalculateLoss(currentQValues, targetQValues);
-            totalLoss = NumOps.Add(totalLoss, loss);
-
-            // Backward pass through dueling architecture
-            var gradients = LossFunction.ComputeGradient(currentQValues, targetQValues);
-
-            // Update parameters
-            _qNetwork.UpdateWeights(gradients, LearningRate);
-        }
+        // Each sampled transition takes its own update, in order (the online network changes between them).
+        var losses = batch.Select(TrainOnExperience).ToList();
+        T totalLoss = AiDotNetEngine.Current.Sum(Vector<T>.FromEnumerable(losses));
 
         var avgLoss = NumOps.Divide(totalLoss, NumOps.FromDouble(_options.BatchSize));
         LossHistory.Add(avgLoss);
@@ -270,6 +234,46 @@ public partial class DuelingDQNAgent<T> : DeepReinforcementLearningAgentBase<T>,
         target.EnsureInitialized();
         var sourceParams = source.GetFlattenedParameters();
         target.SetFlattenedParameters(sourceParams);
+    }
+
+    /// <summary>One transition's Double-DQN update through the dueling network; returns its loss.</summary>
+    private T TrainOnExperience(Experience<T, Vector<T>, Vector<T>> experience)
+    {
+        // Compute target using Double DQN approach with dueling architecture
+        T target;
+        if (experience.Done)
+        {
+            target = experience.Reward;
+        }
+        else
+        {
+            // Use online network to select action
+            var nextQValuesOnline = _qNetwork.Predict(experience.NextState);
+            int bestActionIndex = ArgMax(nextQValuesOnline);
+
+            // Use target network to evaluate
+            var nextQValuesTarget = _targetNetwork.Predict(experience.NextState);
+            var selectedQ = nextQValuesTarget[bestActionIndex];
+
+            target = NumOps.Add(experience.Reward,
+                NumOps.Multiply(DiscountFactor, selectedQ));
+        }
+
+        var currentQValues = _qNetwork.Forward(experience.State);
+        int actionIndex = ArgMax(experience.Action);
+
+        var targetQValues = currentQValues.Clone();
+        targetQValues[actionIndex] = target;
+
+        var loss = LossFunction.CalculateLoss(currentQValues, targetQValues);
+
+        // Backward pass through dueling architecture
+        var gradients = LossFunction.ComputeGradient(currentQValues, targetQValues);
+
+        // Update parameters
+        _qNetwork.UpdateWeights(gradients, LearningRate);
+
+        return loss;
     }
 
     private int ArgMax(Vector<T> vector)
@@ -471,22 +475,13 @@ internal class DuelingNetwork<T> : IParameterSource<T>, IDisposable
         ManualBackwardCache<T>.SaveForBackward(ref _lastAdvantageOutput, advantageOutput);
 
         // Compute mean advantage for centering
-        T meanAdvantage = _numOps.Zero;
-        for (int i = 0; i < _actionSize; i++)
-        {
-            meanAdvantage = _numOps.Add(meanAdvantage, advantageOutput[i]);
-        }
-        meanAdvantage = _numOps.Divide(meanAdvantage, _numOps.FromDouble(_actionSize));
+        var engine = AiDotNetEngine.Current;
+        var advantages = RLTensorOps.Head(advantageOutput, _actionSize);
+        T meanAdvantage = _numOps.Divide(engine.Sum(advantages), _numOps.FromDouble(_actionSize));
 
         // Combine: Q(s,a) = V(s) + (A(s,a) - mean(A(s,:)))
-        var qValues = new Vector<T>(_actionSize);
-        for (int i = 0; i < _actionSize; i++)
-        {
-            var centeredAdvantage = _numOps.Subtract(advantageOutput[i], meanAdvantage);
-            qValues[i] = _numOps.Add(value, centeredAdvantage);
-        }
-
-        return qValues;
+        var centeredAdvantage = engine.Subtract(advantages, Vector<T>.CreateDefault(_actionSize, meanAdvantage));
+        return engine.Add(Vector<T>.CreateDefault(_actionSize, value), centeredAdvantage);
     }
 
     /// <summary>
@@ -512,23 +507,12 @@ internal class DuelingNetwork<T> : IParameterSource<T>, IDisposable
         if (_lastSharedOutput is null || _lastValueOutput is null || _lastAdvantageOutput is null)
             throw new InvalidOperationException("Forward must be called before updating DuelingNetwork weights.");
 
-        T valueGradient = _numOps.Zero;
-        T meanOutputGradient = _numOps.Zero;
-        for (int i = 0; i < _actionSize; i++)
-        {
-            valueGradient = _numOps.Add(valueGradient, outputGradient[i]);
-            meanOutputGradient = _numOps.Add(meanOutputGradient, outputGradient[i]);
-        }
-        meanOutputGradient = _numOps.Divide(meanOutputGradient, _numOps.FromDouble(_actionSize));
-
-        var valueStreamGradient = new Vector<T>(1);
-        valueStreamGradient[0] = valueGradient;
-
-        var advantageStreamGradient = new Vector<T>(_actionSize);
-        for (int i = 0; i < _actionSize; i++)
-        {
-            advantageStreamGradient[i] = _numOps.Subtract(outputGradient[i], meanOutputGradient);
-        }
+        // dL/dV = sum_a dL/dQ_a; dL/dA_a = dL/dQ_a - mean_a' dL/dQ_a'
+        var engine = AiDotNetEngine.Current;
+        T valueGradient = engine.Sum(outputGradient);
+        T meanOutputGradient = _numOps.Divide(valueGradient, _numOps.FromDouble(_actionSize));
+        var valueStreamGradient = Vector<T>.CreateDefault(1, valueGradient);
+        var advantageStreamGradient = engine.Subtract(outputGradient, Vector<T>.CreateDefault(_actionSize, meanOutputGradient));
 
         var sharedGradientFromValue = BackpropagateLayers(
             _valueLayers,
@@ -606,44 +590,23 @@ internal class DuelingNetwork<T> : IParameterSource<T>, IDisposable
             throw new InvalidOperationException(
                 $"Dense layer parameter count {parameters.Length} does not match expected {expectedParameterCount}.");
 
-        var localGradient = new Vector<T>(outputSize);
-        for (int j = 0; j < outputSize; j++)
-        {
-            localGradient[j] = useReluDerivative && !_numOps.GreaterThan(output[j], _numOps.Zero)
-                ? _numOps.Zero
-                : outputGradient[j];
-        }
+        // delta = g * relu'(output) (or g for the identity head)
+        var engine = AiDotNetEngine.Current;
+        var localGradient = useReluDerivative
+            ? engine.TensorWhere(
+                engine.TensorGreaterThan(output.AsTensor(), _numOps.Zero), outputGradient.AsTensor(), engine.TensorFullLike(outputGradient.AsTensor(), _numOps.Zero)).ToVector()
+            : outputGradient;
 
-        var inputGradient = new Vector<T>(inputSize);
-        var updatedParameters = new Vector<T>(parameters.Length);
+        // W is laid out [input, output] row-major, then the output biases.
+        var weights = engine.Reshape(parameters.GetSubVector(0, weightCount).AsTensor(), [inputSize, outputSize]);
+        var deltaRows = engine.TensorTile(engine.Reshape(localGradient.AsTensor(), [1, outputSize]), [inputSize, 1]);
+        var inputColumns = engine.TensorTile(engine.Reshape(input.AsTensor(), [inputSize, 1]), [1, outputSize]);
 
-        for (int i = 0; i < inputSize; i++)
-        {
-            T accumulatedInputGradient = _numOps.Zero;
-            for (int j = 0; j < outputSize; j++)
-            {
-                int weightIndex = i * outputSize + j;
-                T weight = parameters[weightIndex];
-                accumulatedInputGradient = _numOps.Add(
-                    accumulatedInputGradient,
-                    _numOps.Multiply(weight, localGradient[j]));
-
-                T parameterGradient = _numOps.Multiply(input[i], localGradient[j]);
-                updatedParameters[weightIndex] = _numOps.Subtract(
-                    weight,
-                    _numOps.Multiply(learningRate, parameterGradient));
-            }
-
-            inputGradient[i] = accumulatedInputGradient;
-        }
-
-        for (int j = 0; j < outputSize; j++)
-        {
-            int biasIndex = weightCount + j;
-            updatedParameters[biasIndex] = _numOps.Subtract(
-                parameters[biasIndex],
-                _numOps.Multiply(learningRate, localGradient[j]));
-        }
+        // dL/dx_i = sum_j W_ij delta_j; W_ij <- W_ij - lr * x_i delta_j; b_j <- b_j - lr * delta_j
+        var inputGradient = engine.ReduceSum(engine.TensorMultiply(weights, deltaRows), [1], keepDims: false).ToVector();
+        var updatedWeights = engine.TensorSubtract(weights, engine.TensorMultiplyScalar(engine.TensorMultiply(inputColumns, deltaRows), learningRate));
+        var updatedBiases = engine.Subtract(parameters.GetSubVector(weightCount, outputSize), engine.Multiply(localGradient, learningRate));
+        var updatedParameters = RLTensorOps.Concat(updatedWeights.ToVector(), updatedBiases);
 
         layer.SetParameters(updatedParameters);
         return inputGradient;
@@ -655,13 +618,7 @@ internal class DuelingNetwork<T> : IParameterSource<T>, IDisposable
             throw new InvalidOperationException(
                 $"Cannot add gradients with lengths {left.Length} and {right.Length}.");
 
-        var result = new Vector<T>(left.Length);
-        for (int i = 0; i < left.Length; i++)
-        {
-            result[i] = _numOps.Add(left[i], right[i]);
-        }
-
-        return result;
+        return AiDotNetEngine.Current.Add(left, right);
     }
 
     /// <inheritdoc />
@@ -693,9 +650,7 @@ internal class DuelingNetwork<T> : IParameterSource<T>, IDisposable
     {
         EnsureInitialized();
         var flat = GetFlattenedParameters();
-        var result = new Vector<T>(flat.Rows);
-        for (int i = 0; i < flat.Rows; i++) result[i] = flat[i, 0];
-        return result;
+        return flat.Rows == 0 ? new Vector<T>(0) : AiDotNetEngine.Current.GetColumn(flat, 0);
     }
 
     /// <inheritdoc />
@@ -704,49 +659,17 @@ internal class DuelingNetwork<T> : IParameterSource<T>, IDisposable
         if (parameters is null) throw new ArgumentNullException(nameof(parameters));
         EnsureInitialized();
         var matrix = new Matrix<T>(parameters.Length, 1);
-        for (int i = 0; i < parameters.Length; i++) matrix[i, 0] = parameters[i];
+        parameters.AsSpan().CopyTo(matrix.AsWritableSpan());
         SetFlattenedParameters(matrix);
     }
 
     public Matrix<T> GetFlattenedParameters()
     {
-        var paramsList = new List<T>();
-
-        // Collect parameters from shared layers
-        foreach (var layer in _sharedLayers)
-        {
-            var layerParams = layer.GetParameters();
-            for (int i = 0; i < layerParams.Length; i++)
-            {
-                paramsList.Add(layerParams[i]);
-            }
-        }
-
-        // Collect parameters from value stream layers
-        foreach (var layer in _valueLayers)
-        {
-            var layerParams = layer.GetParameters();
-            for (int i = 0; i < layerParams.Length; i++)
-            {
-                paramsList.Add(layerParams[i]);
-            }
-        }
-
-        // Collect parameters from advantage stream layers
-        foreach (var layer in _advantageLayers)
-        {
-            var layerParams = layer.GetParameters();
-            for (int i = 0; i < layerParams.Length; i++)
-            {
-                paramsList.Add(layerParams[i]);
-            }
-        }
-
-        var matrix = new Matrix<T>(paramsList.Count, 1);
-        for (int i = 0; i < paramsList.Count; i++)
-        {
-            matrix[i, 0] = paramsList[i];
-        }
+        // shared -> value -> advantage, each layer's parameters in order, as one column
+        var flat = RLTensorOps.Concat(_sharedLayers.Concat(_valueLayers).Concat(_advantageLayers)
+            .Select(layer => layer.GetParameters()).ToArray());
+        var matrix = new Matrix<T>(flat.Length, 1);
+        flat.AsSpan().CopyTo(matrix.AsWritableSpan());
         return matrix;
     }
 
@@ -758,41 +681,14 @@ internal class DuelingNetwork<T> : IParameterSource<T>, IDisposable
         }
 
         int offset = 0;
+        var column = parameters.Rows == 0 ? new Vector<T>(0) : AiDotNetEngine.Current.GetColumn(parameters, 0);
 
-        // Set parameters for shared layers
-        foreach (var layer in _sharedLayers)
+        // Shared layers, then the value stream, then the advantage stream, each taking its slice of the column
+        foreach (var layer in _sharedLayers.Concat(_valueLayers).Concat(_advantageLayers))
         {
             int paramCount = checked((int)layer.ParameterCount);
-            var layerParams = new Vector<T>(paramCount);
-            for (int i = 0; i < paramCount; i++)
-            {
-                layerParams[i] = parameters[offset++, 0];
-            }
-            layer.SetParameters(layerParams);
-        }
-
-        // Set parameters for value stream layers
-        foreach (var layer in _valueLayers)
-        {
-            int paramCount = checked((int)layer.ParameterCount);
-            var layerParams = new Vector<T>(paramCount);
-            for (int i = 0; i < paramCount; i++)
-            {
-                layerParams[i] = parameters[offset++, 0];
-            }
-            layer.SetParameters(layerParams);
-        }
-
-        // Set parameters for advantage stream layers
-        foreach (var layer in _advantageLayers)
-        {
-            int paramCount = checked((int)layer.ParameterCount);
-            var layerParams = new Vector<T>(paramCount);
-            for (int i = 0; i < paramCount; i++)
-            {
-                layerParams[i] = parameters[offset++, 0];
-            }
-            layer.SetParameters(layerParams);
+            layer.SetParameters(column.GetSubVector(offset, paramCount));
+            offset += paramCount;
         }
 
         // Validate that we consumed exactly the right number of parameters
@@ -837,9 +733,12 @@ internal class DuelingNetwork<T> : IParameterSource<T>, IDisposable
         // Serialize parameters
         var parameters = GetFlattenedParameters();
         writer.Write(parameters.Rows);
-        for (int i = 0; i < parameters.Rows; i++)
+        var values = parameters.Rows == 0
+            ? new Vector<double>(0)
+            : AiDotNetEngine.Current.GetColumn(parameters, 0).AsTensor().Cast<double>().ToVector();
+        foreach (double value in values)
         {
-            writer.Write(_numOps.ToDouble(parameters[i, 0]));
+            writer.Write(value);
         }
 
         return ms.ToArray();
@@ -889,10 +788,16 @@ internal class DuelingNetwork<T> : IParameterSource<T>, IDisposable
 
         // Deserialize parameters
         int paramCount = reader.ReadInt32();
-        var parameters = new Matrix<T>(paramCount, 1);
+        var values = new double[paramCount];
         for (int i = 0; i < paramCount; i++)
         {
-            parameters[i, 0] = _numOps.FromDouble(reader.ReadDouble());
+            values[i] = reader.ReadDouble();
+        }
+
+        var parameters = new Matrix<T>(paramCount, 1);
+        if (paramCount > 0)
+        {
+            Vector<double>.FromArray(values).AsTensor().Cast<T>().ToVector().AsSpan().CopyTo(parameters.AsWritableSpan());
         }
 
         SetFlattenedParameters(parameters);
