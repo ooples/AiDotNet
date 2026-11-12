@@ -40,28 +40,36 @@ public class GridMask<T> : ImageAugmenterBase<T>
         int offsetY = context.GetRandomInt(0, d);
         int offsetX = context.GetRandomInt(0, d);
 
-        for (int y = 0; y < data.Height; y++)
-        {
-            for (int x = 0; x < data.Width; x++)
-            {
-                // Rotate coordinates around center
-                double dy = y - centerY;
-                double dx = x - centerX;
-                double ry = dy * cosA - dx * sinA + centerY;
-                double rx = dy * sinA + dx * cosA + centerX;
+        // Rotate every pixel coordinate around the center and keep the grid cell offsets
+        var engine = Engine;
+        T cos = NumOps.FromDouble(cosA);
+        T sin = NumOps.FromDouble(sinA);
+        T cy = NumOps.FromDouble(centerY);
+        T cx = NumOps.FromDouble(centerX);
+        var dy = engine.Reshape(engine.TensorSubtractScalar(engine.TensorArange<T>(0, data.Height, 1), cy), [data.Height, 1]);
+        var dx = engine.Reshape(engine.TensorSubtractScalar(engine.TensorArange<T>(0, data.Width, 1), cx), [1, data.Width]);
+        var ry = engine.TensorAddScalar(engine.TensorSubtract(engine.TensorMultiplyScalar(dy, cos), engine.TensorMultiplyScalar(dx, sin)), cy);
+        var rx = engine.TensorAddScalar(engine.TensorAdd(engine.TensorMultiplyScalar(dy, sin), engine.TensorMultiplyScalar(dx, cos)), cx);
 
-                int gridY = (int)(((ry + offsetY) % d + d) % d);
-                int gridX = (int)(((rx + offsetX) % d + d) % d);
+        // ((v + offset) % d + d) % d, compared against maskLen (truncation keeps v < maskLen equivalent)
+        var gridY = PositiveRemainder(engine, engine.TensorAddScalar(ry, NumOps.FromDouble(offsetY)), d);
+        var gridX = PositiveRemainder(engine, engine.TensorAddScalar(rx, NumOps.FromDouble(offsetX)), d);
+        T limit = NumOps.FromDouble(maskLen);
+        var masked = engine.TensorMultiply(engine.TensorLessThan(gridY, limit), engine.TensorLessThan(gridX, limit));
 
-                if (gridY < maskLen && gridX < maskLen)
-                {
-                    for (int c = 0; c < data.Channels; c++)
-                        result.SetPixel(y, x, c, NumOps.FromDouble(FillValue));
-                }
-            }
-        }
+        var image = data.ToPlanarTensor();
+        var mask = engine.TensorBroadcastTo(engine.Reshape(masked, [1, data.Height, data.Width]), image._shape);
+        var filled = ImageTensor<T>.Constant(image, FillValue);
+        result.SetFromPlanarTensor(engine.TensorWhere(mask, filled, image));
 
         return result;
+    }
+
+    private static Tensor<T> PositiveRemainder(IEngine engine, Tensor<T> values, int d)
+    {
+        var divisor = ImageTensor<T>.Constant(values, d);
+        var inner = engine.TensorAddScalar(engine.TensorFmod(values, divisor), NumOps.FromDouble(d));
+        return engine.TensorFmod(inner, divisor);
     }
 
     /// <inheritdoc />

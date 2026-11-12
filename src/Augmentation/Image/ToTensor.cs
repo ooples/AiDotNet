@@ -63,19 +63,11 @@ public class ToTensor<T> : ImageAugmenterBase<T>
         int width = data.Width;
         int channels = data.Channels;
 
-        for (int y = 0; y < height; y++)
-        {
-            for (int x = 0; x < width; x++)
-            {
-                for (int c = 0; c < channels; c++)
-                {
-                    double value = NumOps.ToDouble(data.GetPixel(y, x, c));
-                    double scaled = value / ScaleFactor;
-                    scaled = Math.Max(0.0, Math.Min(1.0, scaled));
-                    result.SetPixel(y, x, c, NumOps.FromDouble(scaled));
-                }
-            }
-        }
+        var engine = Engine;
+        var scaled = engine.TensorClamp(
+            engine.TensorDivideScalar(data.ToPlanarTensor(), NumOps.FromDouble(ScaleFactor)),
+            NumOps.Zero, NumOps.One);
+        result.SetFromPlanarTensor(scaled);
 
         result.IsNormalized = true;
 

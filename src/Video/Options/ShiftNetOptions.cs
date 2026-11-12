@@ -1,30 +1,23 @@
-using AiDotNet.Enums;
 using AiDotNet.Models.Options;
 using AiDotNet.Onnx;
 
 namespace AiDotNet.Video.Options;
 
 /// <summary>
-/// Configuration options for ShiftNet channel-shifting video denoising.
+/// Configuration options for Shift-Net, the grouped spatial-temporal shift video restorer (Li et al., CVPR 2023),
+/// in its denoising configuration.
 /// </summary>
 /// <remarks>
 /// <para>
-/// ShiftNet (Maggioni et al., 2021) uses feature-level temporal shifting for denoising:
-/// - Channel shifting: shifts feature channels along the temporal dimension (some channels
-///   come from past frames, some from future) without explicit alignment or flow, providing
-///   zero-cost temporal information exchange
-/// - Shift-and-aggregate: after shifting, local convolutions aggregate the temporally mixed
-///   features, implicitly learning to handle motion without optical flow
-/// - U-Net backbone: standard encoder-decoder with skip connections, where each conv block
-///   incorporates channel shifting for temporal awareness
-/// - Efficient design: no motion estimation or attention needed, making it faster than
-///   flow-based or attention-based temporal methods
+/// Defaults follow the authors' release (github.com/dasongli1/Shift-Net, basicsr/models/archs/gshift_denoise1.py and
+/// options/davis_denoise.yml): 24-channel full-resolution features refined by five U-Nets before and after the shift
+/// encoder, an 80-channel shift encoder at half resolution, spatial shifts of 4 and 8 pixels, and Adam at 4e-4
+/// (betas 0.9, 0.99) cosine-annealed to 1e-7 over 450k iterations on BasicSR's PSNR loss with weight 0.5.
 /// </para>
 /// <para>
-/// <b>For Beginners:</b> ShiftNet uses a clever trick to denoise video: instead of computing
-/// expensive optical flow, it simply shifts some feature channels to come from past or future
-/// frames. This free operation lets the network naturally learn to use temporal information
-/// for denoising without any extra computation cost.
+/// <b>For Beginners:</b> Shift-Net cleans a video by sliding slices of each frame's features in time (to the
+/// neighbouring frames) and in space (by a few pixels in many directions), letting the following convolutions pick
+/// whichever slide lines up. Sliding is free, so it gets the benefit of alignment without computing motion.
 /// </para>
 /// </remarks>
 public class ShiftNetOptions : NeuralNetworkOptions
@@ -41,49 +34,51 @@ public class ShiftNetOptions : NeuralNetworkOptions
     /// </summary>
     /// <param name="other">The options instance to copy from.</param>
     /// <exception cref="ArgumentNullException">Thrown when other is null.</exception>
-    public ShiftNetOptions(ShiftNetOptions other)
+    public ShiftNetOptions(ShiftNetOptions other) : base(other)
     {
         if (other == null)
             throw new ArgumentNullException(nameof(other));
 
-        Variant = other.Variant;
+        Seed = other.Seed;
         NumFeatures = other.NumFeatures;
-        NumBlocks = other.NumBlocks;
-        NumShifts = other.NumShifts;
-        ShiftRadius = other.ShiftRadius;
+        RefinementFeatures = other.RefinementFeatures;
+        UNetGrowth = other.UNetGrowth;
+        NumUNets = other.NumUNets;
+        ShiftStride = other.ShiftStride;
+        NoiseLevel = other.NoiseLevel;
         ModelPath = other.ModelPath;
         OnnxOptions = other.OnnxOptions;
         LearningRate = other.LearningRate;
-        DropoutRate = other.DropoutRate;
+        MinLearningRate = other.MinLearningRate;
+        CosineIterations = other.CosineIterations;
+        PsnrLossWeight = other.PsnrLossWeight;
     }
 
     #region Architecture
 
-    /// <summary>Gets or sets the model variant.</summary>
-    public VideoModelVariant Variant { get; set; } = VideoModelVariant.Base;
+    /// <summary>
+    /// Gets or sets the shift encoder's channels (80); a multiple of 16, since half of them are split into the eight
+    /// shift groups of the spatial shift.
+    /// </summary>
+    public int NumFeatures { get; set; } = 80;
 
-    /// <summary>Gets or sets the number of feature channels.</summary>
-    public int NumFeatures { get; set; } = 64;
+    /// <summary>Gets or sets the full-resolution channels of the feature extractor and refinement U-Nets (24).</summary>
+    public int RefinementFeatures { get; set; } = 24;
 
-    /// <summary>Gets or sets the number of encoder/decoder blocks.</summary>
-    public int NumBlocks { get; set; } = 4;
+    /// <summary>Gets or sets the channels each refinement U-Net level adds when it halves the resolution (12).</summary>
+    public int UNetGrowth { get; set; } = 12;
 
-    /// <summary>Gets or sets the number of temporal shift blocks per stage.</summary>
-    /// <remarks>
-    /// The paper alternates forward (FTS) and backward (BTS) temporal shift blocks, so an even count
-    /// gives each direction equal representation. Using only one direction leaves the first or last
-    /// frames unable to receive anything from their neighbours.
-    /// </remarks>
-    public int NumShifts { get; set; } = 4;
+    /// <summary>Gets or sets the refinement U-Nets before the shift encoder, and again after it (5).</summary>
+    public int NumUNets { get; set; } = 5;
 
-    /// <summary>Gets or sets how many neighbouring frames each frame draws from.</summary>
-    /// <remarks>
-    /// Distinct from the SPATIAL displacement set, which is fixed by the paper at M = 25 offsets over
-    /// {-9, -5, 0, 5, 9}^2 and is therefore not configurable — see
-    /// <see cref="AiDotNet.Video.Denoising.GroupedSpatialTemporalShift{T}.Displacements"/>. This knob is
-    /// the temporal reach only.
-    /// </remarks>
-    public int ShiftRadius { get; set; } = 2;
+    /// <summary>Gets or sets the spatial shift s: the shift groups move by s and 2s pixels (4).</summary>
+    public int ShiftStride { get; set; } = 4;
+
+    /// <summary>
+    /// Gets or sets the noise standard deviation (in the frames' own units) that inference's noise map carries; null
+    /// estimates it from the frames. Training uses the RMS of noisy minus clean. Default: 20/255.
+    /// </summary>
+    public double? NoiseLevel { get; set; } = 20.0 / 255.0;
 
     #endregion
 
@@ -99,11 +94,17 @@ public class ShiftNetOptions : NeuralNetworkOptions
 
     #region Training
 
-    /// <summary>Gets or sets the learning rate.</summary>
-    public double LearningRate { get; set; } = 2e-4;
+    /// <summary>Gets or sets Adam's initial learning rate (4e-4).</summary>
+    public double LearningRate { get; set; } = 4e-4;
 
-    /// <summary>Gets or sets the dropout rate.</summary>
-    public double DropoutRate { get; set; } = 0.0;
+    /// <summary>Gets or sets the learning rate the cosine schedule anneals to (1e-7).</summary>
+    public double MinLearningRate { get; set; } = 1e-7;
+
+    /// <summary>Gets or sets the iterations of the cosine schedule (450000).</summary>
+    public int CosineIterations { get; set; } = 450000;
+
+    /// <summary>Gets or sets the weight of BasicSR's PSNR loss (0.5).</summary>
+    public double PsnrLossWeight { get; set; } = 0.5;
 
     #endregion
 }

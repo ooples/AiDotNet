@@ -15,7 +15,8 @@ namespace AiDotNet.ComputerVision.Detection.Backbones;
 /// </summary>
 /// <remarks>
 /// Each helper writes <c>length</c> followed by the layer's flat parameter
-/// vector (as <c>double</c> for cross-precision portability). The reader
+/// vector (as <c>double</c> for cross-precision portability), then the same for
+/// the layer's non-trainable state (a BatchNorm's running statistics). The reader
 /// mirrors that and pushes the vector back through <c>SetParameters</c>;
 /// for lazy layers that haven't seen their first <c>Forward</c> yet, the
 /// pre-Forward Deserialize → SetParameters replay path on the layer
@@ -30,6 +31,10 @@ internal static class BackboneSerialization
         var ops = MathHelper.GetNumericOperations<T>();
         for (int i = 0; i < p.Length; i++)
             writer.Write(ops.ToDouble(p[i]));
+        var extras = layer is ILayerSerializationExtras<T> e ? e.GetExtraParameters() : new Vector<T>(0);
+        writer.Write(extras.Length);
+        for (int i = 0; i < extras.Length; i++)
+            writer.Write(ops.ToDouble(extras[i]));
     }
 
     public static void ReadLayerParameters<T>(BinaryReader reader, LayerBase<T> layer)
@@ -38,11 +43,21 @@ internal static class BackboneSerialization
         if (len < 0)
             throw new InvalidDataException(
                 $"Negative parameter length ({len}) on the wire — corrupt parameter stream.");
-        if (len == 0) return;
-        var values = new T[len];
         var ops = MathHelper.GetNumericOperations<T>();
+        var values = new T[len];
         for (int i = 0; i < len; i++)
             values[i] = ops.FromDouble(reader.ReadDouble());
-        layer.SetParameters(new Vector<T>(values));
+        if (len > 0) layer.SetParameters(new Vector<T>(values));
+        int extraLength = reader.ReadInt32();
+        if (extraLength < 0)
+            throw new InvalidDataException(
+                $"Negative state length ({extraLength}) on the wire — corrupt parameter stream.");
+        var extras = new T[extraLength];
+        for (int i = 0; i < extraLength; i++)
+            extras[i] = ops.FromDouble(reader.ReadDouble());
+        if (extraLength == 0) return;
+        if (layer is not ILayerSerializationExtras<T> e)
+            throw new InvalidDataException($"{layer.GetType().Name} carries no state, but the stream has {extraLength} values.");
+        e.SetExtraParameters(new Vector<T>(extras));
     }
 }
