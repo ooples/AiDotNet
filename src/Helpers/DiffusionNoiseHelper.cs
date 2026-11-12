@@ -130,16 +130,8 @@ public static class DiffusionNoiseHelper<T>
     public static Tensor<T> ScaleNoise(Tensor<T> noise, double scale)
     {
         var scaleT = NumOps.FromDouble(scale);
-        var result = new Tensor<T>(noise._shape);
-        var noiseSpan = noise.AsSpan();
-        var resultSpan = result.AsWritableSpan();
-
-        for (int i = 0; i < resultSpan.Length; i++)
-        {
-            resultSpan[i] = NumOps.Multiply(noiseSpan[i], scaleT);
-        }
-
-        return result;
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        return AiDotNetEngine.Current.TensorMultiplyScalar(noise, scaleT);
     }
 
     /// <summary>
@@ -160,20 +152,12 @@ public static class DiffusionNoiseHelper<T>
     /// </remarks>
     public static Tensor<T> AddNoise(Tensor<T> signal, Tensor<T> noise, T sqrtAlphaCumprod, T sqrtOneMinusAlphaCumprod)
     {
-        var result = new Tensor<T>(signal._shape);
-        var signalSpan = signal.AsSpan();
-        var noiseSpan = noise.AsSpan();
-        var resultSpan = result.AsWritableSpan();
-
-        for (int i = 0; i < resultSpan.Length; i++)
-        {
-            // noisy = sqrt(alpha_cumprod) * signal + sqrt(1 - alpha_cumprod) * noise
-            var scaledSignal = NumOps.Multiply(sqrtAlphaCumprod, signalSpan[i]);
-            var scaledNoise = NumOps.Multiply(sqrtOneMinusAlphaCumprod, noiseSpan[i]);
-            resultSpan[i] = NumOps.Add(scaledSignal, scaledNoise);
-        }
-
-        return result;
+        // noisy = sqrt(alpha_cumprod) * signal + sqrt(1 - alpha_cumprod) * noise, in the signal's shape
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        var engine = AiDotNetEngine.Current;
+        var scaledSignal = engine.TensorMultiplyScalar(signal, sqrtAlphaCumprod);
+        var scaledNoise = engine.TensorMultiplyScalar(noise.Reshape(signal._shape), sqrtOneMinusAlphaCumprod);
+        return engine.TensorAdd(scaledSignal, scaledNoise);
     }
 
     /// <summary>
@@ -196,29 +180,11 @@ public static class DiffusionNoiseHelper<T>
         if (embeddingDim <= 0 || embeddingDim % 2 != 0)
             throw new ArgumentException("Embedding dimension must be positive and even.", nameof(embeddingDim));
 
-        var batchSize = timesteps.Length;
         var halfDim = embeddingDim / 2;
-        var result = new Tensor<T>(new[] { batchSize, embeddingDim });
-        var resultSpan = result.AsWritableSpan();
+        var steps = new Tensor<int>((int[])timesteps.Clone(), new[] { timesteps.Length }).Cast<T>();
 
-        var logScale = Math.Log(10000.0) / (halfDim - 1);
-
-        for (int b = 0; b < batchSize; b++)
-        {
-            var t = timesteps[b];
-            var offset = b * embeddingDim;
-
-            for (int i = 0; i < halfDim; i++)
-            {
-                var freq = Math.Exp(-i * logScale);
-                var angle = t * freq;
-
-                resultSpan[offset + i] = NumOps.FromDouble(Math.Sin(angle));
-                resultSpan[offset + i + halfDim] = NumOps.FromDouble(Math.Cos(angle));
-            }
-        }
-
-        return result;
+        // [batch, embeddingDim] = [sin(t * freq) | cos(t * freq)]
+        return SinusoidalEmbedding(steps, halfDim);
     }
 
     /// <summary>
@@ -233,20 +199,25 @@ public static class DiffusionNoiseHelper<T>
             throw new ArgumentException("Embedding dimension must be positive and even.", nameof(embeddingDim));
 
         var halfDim = embeddingDim / 2;
-        var result = new Vector<T>(embeddingDim);
+        var step = new Tensor<T>(new[] { 1 });
+        step.SetFlat(0, NumOps.FromDouble(timestep));
 
+        return SinusoidalEmbedding(step, halfDim).ToVector();
+    }
+
+    /// <summary>
+    /// Sinusoidal embeddings of the given timesteps: row b is
+    /// [sin(t_b * f_0), ..., sin(t_b * f_{h-1}), cos(t_b * f_0), ..., cos(t_b * f_{h-1})] with
+    /// f_i = exp(-i * ln(10000) / (h - 1)).
+    /// </summary>
+    private static Tensor<T> SinusoidalEmbedding(Tensor<T> steps, int halfDim)
+    {
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        var engine = AiDotNetEngine.Current;
         var logScale = Math.Log(10000.0) / (halfDim - 1);
-
-        for (int i = 0; i < halfDim; i++)
-        {
-            var freq = Math.Exp(-i * logScale);
-            var angle = timestep * freq;
-
-            result[i] = NumOps.FromDouble(Math.Sin(angle));
-            result[i + halfDim] = NumOps.FromDouble(Math.Cos(angle));
-        }
-
-        return result;
+        var exponents = engine.TensorMultiplyScalar(engine.TensorArange<T>(0, halfDim, 1), NumOps.FromDouble(-logScale));
+        var angles = engine.TensorOuter(steps, engine.TensorExp(exponents));
+        return engine.TensorConcatenate(new[] { engine.TensorSin(angles), engine.TensorCos(angles) }, 1);
     }
 
     /// <summary>
@@ -278,20 +249,12 @@ public static class DiffusionNoiseHelper<T>
         var tVal = NumOps.FromDouble(t);
         var oneMinusT = NumOps.FromDouble(1.0 - t);
 
-        var result = new Tensor<T>(noise1._shape);
-        var span1 = noise1.AsSpan();
-        var span2 = noise2.AsSpan();
-        var resultSpan = result.AsWritableSpan();
-
-        for (int i = 0; i < resultSpan.Length; i++)
-        {
-            // result = (1 - t) * noise1 + t * noise2
-            resultSpan[i] = NumOps.Add(
-                NumOps.Multiply(oneMinusT, span1[i]),
-                NumOps.Multiply(tVal, span2[i]));
-        }
-
-        return result;
+        // result = (1 - t) * noise1 + t * noise2, in noise1's shape
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        var engine = AiDotNetEngine.Current;
+        return engine.TensorAdd(
+            engine.TensorMultiplyScalar(noise1, oneMinusT),
+            engine.TensorMultiplyScalar(noise2.Reshape(noise1._shape), tVal));
     }
 
     /// <summary>
@@ -312,22 +275,14 @@ public static class DiffusionNoiseHelper<T>
     {
         t = MathPolyfill.Clamp(t, 0.0, 1.0);
 
-        // Flatten tensors to compute dot product
-        var span1 = noise1.AsSpan();
-        var span2 = noise2.AsSpan();
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        var engine = AiDotNetEngine.Current;
 
-        // Compute norms and dot product
-        double norm1 = 0, norm2 = 0, dot = 0;
-        for (int i = 0; i < span1.Length; i++)
-        {
-            var v1 = NumOps.ToDouble(span1[i]);
-            var v2 = NumOps.ToDouble(span2[i]);
-            norm1 += v1 * v1;
-            norm2 += v2 * v2;
-            dot += v1 * v2;
-        }
-        norm1 = Math.Sqrt(norm1);
-        norm2 = Math.Sqrt(norm2);
+        // Compute norms and dot product over the flattened tensors
+        var flat2 = noise2.Reshape(noise1._shape);
+        double norm1 = Math.Sqrt(NumOps.ToDouble(engine.TensorSum(engine.TensorMultiply(noise1, noise1))));
+        double norm2 = Math.Sqrt(NumOps.ToDouble(engine.TensorSum(engine.TensorMultiply(flat2, flat2))));
+        double dot = NumOps.ToDouble(engine.TensorSum(engine.TensorMultiply(noise1, flat2)));
 
         // Normalize dot product
         dot = dot / (norm1 * norm2 + 1e-10);
@@ -346,17 +301,9 @@ public static class DiffusionNoiseHelper<T>
         var scale1 = Math.Sin((1.0 - t) * theta) / sinTheta;
         var scale2 = Math.Sin(t * theta) / sinTheta;
 
-        var result = new Tensor<T>(noise1._shape);
-        var resultSpan = result.AsWritableSpan();
-
-        for (int i = 0; i < resultSpan.Length; i++)
-        {
-            var v1 = NumOps.ToDouble(span1[i]);
-            var v2 = NumOps.ToDouble(span2[i]);
-            resultSpan[i] = NumOps.FromDouble(scale1 * v1 + scale2 * v2);
-        }
-
-        return result;
+        return engine.TensorAdd(
+            engine.TensorMultiplyScalar(noise1, NumOps.FromDouble(scale1)),
+            engine.TensorMultiplyScalar(flat2, NumOps.FromDouble(scale2)));
     }
 
     /// <summary>
