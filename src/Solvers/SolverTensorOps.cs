@@ -29,6 +29,13 @@ internal static class SolverTensorOps<T>
     /// <summary>1 where <paramref name="x"/> is NaN, 0 elsewhere.</summary>
     internal static Tensor<T> NaN(Tensor<T> x) => Select(Engine.TensorIsNan(x), 1.0, 0.0, x);
 
+    /// <summary><c>v &gt; 0 ? v : 0</c> per element: NaN fails the test and becomes zero.</summary>
+    internal static Tensor<T> PositivePart(Tensor<T> x)
+        => Engine.TensorWhere(
+            Engine.TensorGreaterThan(x, NumOps.Zero),
+            x,
+            Tensor<T>.CreateDefault(x.Shape.ToArray(), NumOps.Zero));
+
     /// <summary>The element-wise maximum of two 0/1 masks (logical or).</summary>
     internal static Tensor<T> Or(Tensor<T> a, Tensor<T> b) => Engine.TensorMax(a, b);
 
