@@ -87,7 +87,6 @@ public sealed class SeACoBiasStageTrainingTests
             NumMels = 4,
             VocabSize = 5,
             MaxTextLength = 8,
-            DropoutRate = 0,
             TrainingStage = SeACoTrainingStage.Bias,
             HotwordBatchRatio = 1,
             HotwordUtteranceRatio = 1,
@@ -97,9 +96,10 @@ public sealed class SeACoBiasStageTrainingTests
         };
 
         using var model = new SeACo<double>(architecture, options);
-        var input = new Tensor<double>([1, 8, 4]);
+        // SeACo-Paraformer reads waveforms (0.2 s here), as the released model does.
+        var input = new Tensor<double>([1, 3200]);
         for (int i = 0; i < input.Length; i++)
-            input.Data.Span[i] = ((i % 7) - 3) * 0.1;
+            input.Data.Span[i] = 0.4 * Math.Sin(2 * Math.PI * 180 * i / 16000.0);
 
         var prediction = model.Predict(input);
         var target = new Tensor<double>(prediction.Shape.ToArray());
@@ -137,7 +137,6 @@ public sealed class SeACoBiasStageTrainingTests
         NumMels = 4,
         VocabSize = 5,
         MaxTextLength = 8,
-        DropoutRate = 0,
         TrainingStage = stage,
         HotwordBatchRatio = 1,
         HotwordUtteranceRatio = 1,

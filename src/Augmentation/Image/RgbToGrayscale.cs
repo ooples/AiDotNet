@@ -88,27 +88,9 @@ public class RgbToGrayscale<T> : ImageAugmenterBase<T>
             OriginalRange = data.OriginalRange
         };
 
-        for (int y = 0; y < data.Height; y++)
-        {
-            for (int x = 0; x < data.Width; x++)
-            {
-                double r = NumOps.ToDouble(data.GetPixel(y, x, 0));
-                double g = NumOps.ToDouble(data.GetPixel(y, x, 1));
-                double b = NumOps.ToDouble(data.GetPixel(y, x, 2));
-                double gray = r * RedWeight + g * GreenWeight + b * BlueWeight;
-
-                if (OutputChannels == 1)
-                {
-                    result.SetPixel(y, x, 0, NumOps.FromDouble(gray));
-                }
-                else
-                {
-                    result.SetPixel(y, x, 0, NumOps.FromDouble(gray));
-                    result.SetPixel(y, x, 1, NumOps.FromDouble(gray));
-                    result.SetPixel(y, x, 2, NumOps.FromDouble(gray));
-                }
-            }
-        }
+        var gray = ImageTensor<T>.MixChannels(data.ToPlanarTensor(), RedWeight, GreenWeight, BlueWeight);
+        var planes = OutputChannels == 1 ? new[] { gray } : new[] { gray, gray, gray };
+        result.SetFromPlanarTensor(ImageTensor<T>.ReplaceLeadingChannels(result.ToPlanarTensor(), planes));
 
         return result;
     }

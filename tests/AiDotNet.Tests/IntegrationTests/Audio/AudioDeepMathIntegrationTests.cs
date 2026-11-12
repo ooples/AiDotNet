@@ -445,10 +445,10 @@ public class AudioDeepMathIntegrationTests
     // ============================
 
     [Fact(Timeout = 120000)]
-    public async Task WindowType_HasFourValues()
+    public async Task WindowType_HasFiveValues()
     {
         var values = (((WindowType[])Enum.GetValues(typeof(WindowType))));
-        Assert.Equal(4, values.Length);
+        Assert.Equal(5, values.Length);
     }
 
     [Theory]
@@ -456,6 +456,7 @@ public class AudioDeepMathIntegrationTests
     [InlineData(WindowType.Hann)]
     [InlineData(WindowType.Hamming)]
     [InlineData(WindowType.Blackman)]
+    [InlineData(WindowType.Povey)]
     public void WindowType_AllValuesValid(WindowType type)
     {
         Assert.True(Enum.IsDefined(typeof(WindowType), type));

@@ -4,10 +4,12 @@ using AiDotNet.Onnx;
 namespace AiDotNet.Audio.Classification;
 
 /// <summary>
-/// Options for audio event detection.
+/// Options for audio event detection with Hershey et al. 2017's audio ResNet-50: 96 x 64 log-mel patches of 960 ms
+/// (25 ms windows every 10 ms, 64 mel bins), a ResNet-50 whose first convolution has no stride, and a sigmoid output.
 /// </summary>
 /// <remarks>
-/// <para><b>For Beginners:</b> These options configure the AudioEventDetector model. Default values follow the original paper settings.</para>
+/// <para><b>For Beginners:</b> These options configure the AudioEventDetector model. Default values follow the paper
+/// (section 3).</para>
 /// </remarks>
 public class AudioEventDetectorOptions : ModelOptions
 {
@@ -35,31 +37,45 @@ public class AudioEventDetectorOptions : ModelOptions
         CustomLabels = other.CustomLabels;
         ModelPath = other.ModelPath;
         OnnxOptions = other.OnnxOptions;
+        PatchFrames = other.PatchFrames;
+        BaseChannels = other.BaseChannels;
+        StageDepths = (int[])other.StageDepths.Clone();
     }
 
     /// <summary>Audio sample rate. Default: 16000.</summary>
     public int SampleRate { get; set; } = 16000;
 
-    /// <summary>FFT size. Default: 512.</summary>
-    public int FftSize { get; set; } = 512;
+    /// <summary>STFT window in samples. Default: 400, the paper's 25 ms at 16 kHz.</summary>
+    public int FftSize { get; set; } = 400;
 
-    /// <summary>Hop length. Default: 160.</summary>
+    /// <summary>Hop length. Default: 160, every 10 ms.</summary>
     public int HopLength { get; set; } = 160;
 
     /// <summary>Number of mel bands. Default: 64.</summary>
     public int NumMels { get; set; } = 64;
 
-    /// <summary>Minimum frequency for mel filterbank. Default: 50.</summary>
-    public int FMin { get; set; } = 50;
+    /// <summary>Minimum frequency for mel filterbank. Default: 125, the band edge of the authors' released AudioSet
+    /// front end (the paper does not state it).</summary>
+    public int FMin { get; set; } = 125;
 
-    /// <summary>Maximum frequency for mel filterbank. Default: 8000.</summary>
-    public int FMax { get; set; } = 8000;
+    /// <summary>Maximum frequency for mel filterbank. Default: 7500, the released front end's upper edge.</summary>
+    public int FMax { get; set; } = 7500;
 
-    /// <summary>Window size in seconds. Default: 1.0.</summary>
-    public double WindowSize { get; set; } = 1.0;
+    /// <summary>Window size in seconds. Default: 0.96 (section 3.1: "non-overlapping 960 ms frames").</summary>
+    public double WindowSize { get; set; } = 0.96;
 
-    /// <summary>Window overlap ratio (0-1). Default: 0.5.</summary>
-    public double WindowOverlap { get; set; } = 0.5;
+    /// <summary>Window overlap ratio (0-1). Default: 0, non-overlapping.</summary>
+    public double WindowOverlap { get; set; } = 0.0;
+
+    /// <summary>Spectrogram frames per classifier input. Default: 96, giving the paper's 96 x 64 patches.</summary>
+    public int PatchFrames { get; set; } = 96;
+
+    /// <summary>Channels of the first convolution and of the first bottleneck stage; each later stage doubles them and
+    /// a bottleneck expands its stage width four times. Default: 64 (ResNet-50).</summary>
+    public int BaseChannels { get; set; } = 64;
+
+    /// <summary>Bottleneck blocks per stage. Default: { 3, 4, 6, 3 } (ResNet-50).</summary>
+    public int[] StageDepths { get; set; } = { 3, 4, 6, 3 };
 
     /// <summary>Confidence threshold for event detection. Default: 0.3.</summary>
     public double Threshold { get; set; } = 0.3;

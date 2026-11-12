@@ -229,58 +229,19 @@ public class CTCLoss<T> : LossFunctionBase<T>, ISequenceLossFunction<T>
                 totalLogProb = alpha[sequenceLength - 1, 0];
             }
 
-            // Compute gradients for this sequence
+            // d(−log p)/d(log y_t,k) = −Σ_{s: l'_s = k} γ_t(s), the occupancy γ_t(s) = α_t(s) β_t(s) / p (β here excludes
+            // y_t, which α includes). Summed in the linear domain: a clamped log would bias small occupancies.
             for (int t = 0; t < sequenceLength; t++)
             {
-                // Initialize all class gradients to zero (in log space)
-                var classGradients = new T[numClasses];
-                for (int c = 0; c < numClasses; c++)
-                {
-                    classGradients[c] = _logZero;
-                }
-
-                // For each position in the extended label sequence
+                var occupancy = new double[numClasses];
                 for (int s = 0; s < extendedLength; s++)
                 {
                     int labelIdx = extendedLabels[s];
-
-                    // Posterior probability of this path (alpha * beta / totalProb)
-                    // In log space: alpha + beta - totalLogProb
-                    T logPathProb = NumOps.Subtract(
-                        NumOps.Add(alpha[t, s], beta[t, s]),
-                        totalLogProb
-                    );
-
-                    // Add to the gradient for this class
-                    // Convert from log space to get actual gradient
-                    T expPathProb = NumOps.Exp(logPathProb);
-
-                    // Accumulate probability for this label
-                    if (labelIdx < numClasses) // Safety check
-                    {
-                        classGradients[labelIdx] = LogSumExp(
-                            classGradients[labelIdx],
-                            NumericalStabilityHelper.SafeLog(expPathProb, NumericalStabilityHelper.SmallEpsilon)
-                        );
-                    }
+                    if (labelIdx >= numClasses) continue;
+                    double logPathProb = NumOps.ToDouble(NumOps.Subtract(NumOps.Add(alpha[t, s], beta[t, s]), totalLogProb));
+                    occupancy[labelIdx] += Math.Exp(logPathProb);
                 }
-
-                // Set gradients for this time step
-                // Gradient is derivative of -log(p) which is -1/p
-                for (int c = 0; c < numClasses; c++)
-                {
-                    // Skip updating gradient for positions outside sequence length
-                    if (t >= sequenceLength)
-                    {
-                        break;
-                    }
-
-                    T expProb = NumOps.Exp(classGradients[c]);
-                    T gradValue = NumOps.Negate(expProb);
-
-                    // Add to batch element's gradient
-                    gradient[new[] { b, t, c }] = gradValue;
-                }
+                for (int c = 0; c < numClasses; c++) gradient[new[] { b, t, c }] = NumOps.FromDouble(-occupancy[c]);
             }
         }
 
@@ -319,8 +280,9 @@ public class CTCLoss<T> : LossFunctionBase<T>, ISequenceLossFunction<T>
                     logProbSum = LogSumExp(logProbSum, alpha[t - 1, s - 1]);
                 }
 
-                // Special case for label pairs like a-a, where we skip the blank between repeated labels
-                if (s > 1 && label != _blankIndex && extendedLabels[s - 2] == label)
+                // Skip the blank between two DIFFERENT labels; a repeated label needs the blank between its copies, or
+                // the collapse would merge them (Graves et al. 2006, eq. 6).
+                if (s > 1 && label != _blankIndex && extendedLabels[s - 2] != label)
                 {
                     logProbSum = LogSumExp(logProbSum, alpha[t - 1, s - 2]);
                 }
@@ -367,8 +329,8 @@ public class CTCLoss<T> : LossFunctionBase<T>, ISequenceLossFunction<T>
                     logProbSum = LogSumExp(logProbSum, nextLogProb);
                 }
 
-                // Special case for merging paths with repeated characters
-                if (s < extendedLength - 2 && extendedLabels[s] == extendedLabels[s + 2] && extendedLabels[s] != _blankIndex)
+                // The mirror of the forward skip: from a label straight to the next DIFFERENT label.
+                if (s < extendedLength - 2 && extendedLabels[s] != extendedLabels[s + 2] && extendedLabels[s] != _blankIndex)
                 {
                     T skipLogProb = NumOps.Add(
                         beta[t + 1, s + 2],
