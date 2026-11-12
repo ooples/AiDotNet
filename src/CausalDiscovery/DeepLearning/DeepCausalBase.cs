@@ -132,13 +132,11 @@ public abstract class DeepCausalBase<T> : CausalDiscoveryBase<T>
     /// <see cref="BuildFinalAdjacency"/>'s direction tie-break and do not need this; it is for the
     /// asymmetric-probability learners (e.g. DAG-GNN) where longer directed cycles can otherwise survive.
     /// </summary>
-    protected static double[,] ProjectToDag(double[,] p, int d)
+    protected Tensor<T> ProjectToDag(Tensor<T> p, int d)
     {
-        // Default source score: net out-flow Σ_j P[i,j] − P[j,i] (most edges pointing OUT ⇒ source-like).
-        var score = new double[d];
-        for (int i = 0; i < d; i++)
-            for (int j = 0; j < d; j++)
-                if (i != j) score[i] += p[i, j] - p[j, i];
+        // Default source score: net out-flow Σ_j P[i,j] − P[j,i] (most edges pointing OUT ⇒ source-like);
+        // the diagonal cancels, so it is the row sum minus the column sum.
+        var score = Engine.TensorSubtract(Engine.ReduceSum(p, new[] { 1 }, false), Engine.ReduceSum(p, new[] { 0 }, false));
         return ProjectToDag(p, d, score);
     }
 
@@ -148,18 +146,18 @@ public abstract class DeepCausalBase<T> : CausalDiscoveryBase<T>
     /// scale-invariant orientation cue — e.g. raw-data variance, which ranks an exogenous root above its
     /// attenuated descendants and is preserved (in ratio) under uniform data scaling.
     /// </summary>
-    protected static double[,] ProjectToDag(double[,] p, int d, double[] sourceScore)
+    protected Tensor<T> ProjectToDag(Tensor<T> p, int d, Tensor<T> sourceScore)
     {
         // Stable order: highest score first; ties broken by index for determinism.
-        var order = Enumerable.Range(0, d).OrderByDescending(i => sourceScore[i]).ThenBy(i => i).ToArray();
-        var position = new int[d];
-        for (int r = 0; r < d; r++) position[order[r]] = r;
+        int[] order = CausalTensorHelpers.StableArgsort(sourceScore, descending: true);
+        var rank = Engine.TensorScatter(new Tensor<int>(new[] { d }), new Tensor<int>(order, new[] { d }),
+            new Tensor<int>(Enumerable.Range(0, d).ToArray(), new[] { d }), 0).Cast<T>();
 
-        var result = new double[d, d];
-        for (int i = 0; i < d; i++)
-            for (int j = 0; j < d; j++)
-                if (i != j && position[i] < position[j]) result[i, j] = p[i, j];
-        return result;
+        // Keep i -> j only when i precedes j in the order (never on the diagonal).
+        var shape = new[] { d, d };
+        var precedes = Engine.TensorLessThan(Engine.TensorBroadcastTo(rank.Reshape(new[] { d, 1 }), shape),
+            Engine.TensorBroadcastTo(rank.Reshape(new[] { 1, d }), shape));
+        return Engine.TensorWhere(precedes, p, Engine.TensorZerosLike(p));
     }
 
     /// <summary>
@@ -190,7 +188,7 @@ public abstract class DeepCausalBase<T> : CausalDiscoveryBase<T>
     /// <param name="cov">Covariance matrix [d x d].</param>
     /// <param name="d">Number of variables.</param>
     /// <returns>Weighted adjacency matrix.</returns>
-    protected Matrix<T> BuildFinalAdjacency(double[,] learnedP, Matrix<T> cov, int d)
+    protected Matrix<T> BuildFinalAdjacency(Tensor<T> learnedP, Matrix<T> cov, int d)
     {
         if (d <= 0)
             throw new ArgumentOutOfRangeException(nameof(d), d, "The variable count must be positive.");
@@ -211,23 +209,20 @@ public abstract class DeepCausalBase<T> : CausalDiscoveryBase<T>
     /// <param name="d">Number of variables.</param>
     /// <param name="learnedThreshold">Minimum learned influence required for an edge.</param>
     /// <returns>Weighted adjacency matrix.</returns>
-    protected Matrix<T> BuildFinalAdjacency(double[,] learnedP, Matrix<T> cov, int d, double learnedThreshold)
+    protected Matrix<T> BuildFinalAdjacency(Tensor<T> learnedP, Matrix<T> cov, int d, double learnedThreshold)
     {
-        // The learned influences arrive as double; the direction tests run on them unchanged.
-        var flatP = new double[d * d];
-        Buffer.BlockCopy(learnedP, 0, flatP, 0, d * d * sizeof(double));
-        var p = new Tensor<double>(flatP, new[] { d, d });
+        var p = learnedP;
         var pT = Engine.TensorTranspose(p);
         var lowerTriangle = Engine.TensorTranspose(Engine.TensorTriu(Engine.TensorOnesLike(p), 1)); // i > j
 
         // Only add edge if learned influence reaches the threshold.
         // Direction: edge i→j only if P[i,j] >= P[j,i]; for ties (within 1e-10) only the (i,j)
         // pair with i < j is kept, to avoid 2-cycles.
-        var notBelowThreshold = Engine.ScalarMinusTensor(1.0, Engine.TensorLessThan(p, learnedThreshold));
-        var notWeaker = Engine.ScalarMinusTensor(1.0, Engine.TensorLessThan(p, pT));
-        var tie = Engine.TensorLessThan(Engine.TensorAbs(Engine.TensorSubtract(p, pT)), 1e-10);
-        var notLowerTie = Engine.ScalarMinusTensor(1.0, Engine.TensorMultiply(tie, lowerTriangle));
-        var directed = Engine.TensorMultiply(Engine.TensorMultiply(notBelowThreshold, notWeaker), notLowerTie).Cast<T>();
+        var notBelowThreshold = Engine.ScalarMinusTensor(NumOps.One, Engine.TensorLessThan(p, NumOps.FromDouble(learnedThreshold)));
+        var notWeaker = Engine.ScalarMinusTensor(NumOps.One, Engine.TensorLessThan(p, pT));
+        var tie = Engine.TensorLessThan(Engine.TensorAbs(Engine.TensorSubtract(p, pT)), NumOps.FromDouble(1e-10));
+        var notLowerTie = Engine.ScalarMinusTensor(NumOps.One, Engine.TensorMultiply(tie, lowerTriangle));
+        var directed = Engine.TensorMultiply(Engine.TensorMultiply(notBelowThreshold, notWeaker), notLowerTie);
 
         // Use covariance for edge weight cov[i,j] / cov[i,i], skipped when cov[i,i] < 1e-10 or
         // |weight| < EdgeThreshold.
@@ -240,16 +235,5 @@ public abstract class DeepCausalBase<T> : CausalDiscoveryBase<T>
                 Engine.ScalarMinusTensor(NumOps.One,
                     Engine.TensorLessThan(Engine.TensorAbs(weight), NumOps.FromDouble(EdgeThreshold)))));
         return Engine.TensorWhere(keep, weight, Engine.TensorZerosLike(weight)).ToMatrix();
-    }
-
-    /// <summary>
-    /// Copies a [d x d] tensor into the double grid that the DAG projection and adjacency helpers take.
-    /// </summary>
-    private protected static double[,] ToDoubleGrid(Tensor<T> values, int d)
-    {
-        var flat = values.Cast<double>().ToArray();
-        var grid = new double[d, d];
-        Buffer.BlockCopy(flat, 0, grid, 0, d * d * sizeof(double));
-        return grid;
     }
 }

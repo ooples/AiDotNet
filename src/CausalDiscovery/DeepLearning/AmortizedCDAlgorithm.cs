@@ -141,12 +141,11 @@ public class AmortizedCDAlgorithm<T> : DeepCausalBase<T>
 
         // Final inference pass
         var (learnedProbabilities, _) = EncodeEdges(features, W1, W2, offDiagonal, d);
-        var learnedP = ToDoubleGrid(learnedProbabilities, d);
 
         // Pairwise direction tie-breaks rule out only 2-cycles; project the asymmetric learned
         // probabilities through their net out-flow ordering to guarantee a DAG without assuming
         // that raw marginal variance determines causal direction.
-        return BuildFinalAdjacency(ProjectToDag(learnedP, d), cov, d);
+        return BuildFinalAdjacency(ProjectToDag(learnedProbabilities, d), cov, d);
     }
 
     /// <summary>

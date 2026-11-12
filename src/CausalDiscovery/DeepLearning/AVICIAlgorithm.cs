@@ -136,7 +136,7 @@ public class AVICIAlgorithm<T> : DeepCausalBase<T>
 
         // Final inference using trained parameters
         var final = AttendPairs(byTarget, Wq, Wk, Wv, Wo, offDiagonal, d, headDim);
-        return BuildFinalAdjacency(ToDoubleGrid(final.P, d), cov, d);
+        return BuildFinalAdjacency(final.P, cov, d);
     }
 
     /// <summary>Forward pass of the pair attention, with every [j, i, ·] intermediate kept for backprop.</summary>

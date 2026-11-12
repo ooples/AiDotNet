@@ -155,7 +155,10 @@ public class NOTEARSLinear<T> : ContinuousOptimizationBase<T>
             // The augmented penalty reaches 1e16; float loss/constraint arithmetic loses the
             // precision required by the 1e-8 acyclicity tolerance and destabilizes line search.
             // Keep the public float boundary while solving the small weight matrix in double.
-            var preciseData = Tensor<T>.FromMatrix(data).Cast<double>().ToMatrix();
+            var preciseData = new Matrix<double>(data.Rows, data.Columns);
+            for (int row = 0; row < data.Rows; row++)
+                for (int column = 0; column < data.Columns; column++)
+                    preciseData[row, column] = NumOps.ToDouble(data[row, column]);
             var solver = new NOTEARSLinear<double>(new CausalDiscoveryOptions
             {
                 SparsityPenalty = Lambda1, EdgeThreshold = WThreshold, MaxIterations = MaxIterations,
@@ -165,7 +168,11 @@ public class NOTEARSLinear<T> : ContinuousOptimizationBase<T>
             _lastIterations = solver._lastIterations;
             _lastH = solver._lastH;
             _lastLoss = solver._lastLoss;
-            return Tensor<double>.FromMatrix(preciseWeights).Cast<T>().ToMatrix();
+            var weights = new Matrix<T>(data.Columns, data.Columns);
+            for (int row = 0; row < weights.Rows; row++)
+                for (int column = 0; column < weights.Columns; column++)
+                    weights[row, column] = NumOps.FromDouble(preciseWeights[row, column]);
+            return weights;
         }
 
         // Standardize data for numerical stability — the NOTEARS acyclicity constraint
@@ -552,12 +559,20 @@ public class NOTEARSLinear<T> : ContinuousOptimizationBase<T>
 
     private double[] FlattenMatrix(Matrix<T> matrix, int d)
     {
-        return Tensor<T>.FromMatrix(matrix).Reshape(new[] { d * d }).Cast<double>().ToArray();
+        var result = new double[d * d];
+        for (int i = 0; i < d; i++)
+            for (int j = 0; j < d; j++)
+                result[i * d + j] = NumOps.ToDouble(matrix[i, j]);
+        return result;
     }
 
     private Matrix<T> UnflattenMatrix(double[] vector, int d)
     {
-        return new Tensor<double>((double[])vector.Clone(), new[] { d, d }).Cast<T>().ToMatrix();
+        var result = new Matrix<T>(d, d);
+        for (int i = 0; i < d; i++)
+            for (int j = 0; j < d; j++)
+                result[i, j] = NumOps.FromDouble(vector[i * d + j]);
+        return result;
     }
 
     private static double ComputeL1NormFromFlat(double[] w, int d)
