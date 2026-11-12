@@ -136,6 +136,9 @@ public partial class ARIMAXModel<T> : TimeSeriesModelBase<T>, IExogenousForecast
     /// 
     /// If all other factors were zero, the prediction would equal this intercept value.
     /// </remarks>
+    // Declared so the parameter surface carries it: the layout is [AR..., MA..., exogenous..., intercept],
+    // the declaration order of the fitted fields, and both the packed copy and ApplyParameters use it.
+    [AiDotNet.Attributes.FittedParameter]
     private T _intercept;
 
     /// <summary>
@@ -413,9 +416,9 @@ public partial class ARIMAXModel<T> : TimeSeriesModelBase<T>, IExogenousForecast
     /// </remarks>
     private void UpdateModelParameters()
     {
-        // [intercept, exogenous..., AR..., MA...]
+        // [AR..., MA..., exogenous..., intercept]: the parameter-surface order ApplyParameters reads back
         ModelParameters = Vector<T>.Concatenate(
-            new Vector<T>(new[] { _intercept }), _exogenousCoefficients, _arCoefficients, _maCoefficients);
+            _arCoefficients, _maCoefficients, _exogenousCoefficients, new Vector<T>(new[] { _intercept }));
     }
 
     /// <summary>
@@ -550,13 +553,15 @@ public partial class ARIMAXModel<T> : TimeSeriesModelBase<T>, IExogenousForecast
         base.ApplyParameters(parameters);
         index += baseParamCount;
 
-        // Apply ARIMAX-specific parameters into the existing coefficient vectors
-        _intercept = parameters[index++];
+        // Apply ARIMAX-specific parameters into the existing coefficient vectors, in the
+        // [AR..., MA..., exogenous..., intercept] order GetParameters and UpdateModelParameters use
         parameters.GetSubVector(index, _arCoefficients.Length).CopyTo(_arCoefficients.AsWritableSpan());
         index += _arCoefficients.Length;
         parameters.GetSubVector(index, _maCoefficients.Length).CopyTo(_maCoefficients.AsWritableSpan());
         index += _maCoefficients.Length;
         parameters.GetSubVector(index, _exogenousCoefficients.Length).CopyTo(_exogenousCoefficients.AsWritableSpan());
+        index += _exogenousCoefficients.Length;
+        _intercept = parameters[index];
     }
 
     /// <summary>
