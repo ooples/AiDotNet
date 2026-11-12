@@ -142,33 +142,43 @@ public partial class DREAMAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
     {
         var adaptedParams = initParams.Clone();
         shapingPenalty = NumOps.Zero;
-        T learningRate = NumOps.FromDouble(_algoOptions.InnerLearningRate);
         int K = _algoOptions.AdaptationSteps;
 
         for (int step = 0; step < K; step++)
         {
-            ParamModel.SetParameters(adaptedParams);
-            var raw = ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput);
-            var grad = (clip ? ClipGradients(raw) : raw).GetSubVector(0, _paramDim);
-            T loss = ComputeLossFromOutput(MetaModel.Predict(task.SupportInput), task.SupportOutput);
-
-            // Compute gradient norm
-            T gradNorm = NumOps.Sqrt(Engine.DotProduct(grad, grad));
-
-            // Reward shaper: scale factor
-            T progress = NumOps.FromDouble((double)step / Math.Max(K - 1, 1));
-            T scale = ComputeRewardScale(loss, gradNorm, progress);
-
-            // Apply scaled gradient
-            adaptedParams = Engine.Subtract(adaptedParams, Engine.Multiply(grad, NumOps.Multiply(learningRate, scale)));
-
-            // Shaping penalty: deviation from unit scale
-            T discountFactor = NumOps.FromDouble(Math.Pow(_algoOptions.ShapingDiscount, step));
-            shapingPenalty = NumOps.Add(shapingPenalty,
-                NumOps.Multiply(discountFactor, NumOps.Abs(NumOps.Subtract(NumOps.One, scale))));
+            adaptedParams = ShapedStep(task, adaptedParams, clip, step, K, ref shapingPenalty);
         }
 
         return adaptedParams;
+    }
+
+    /// <summary>
+    /// One shaped step: theta - lr * scale * g for the shaper's scale at (support loss, |g|, step / max(K - 1, 1)),
+    /// adding discount^step * |1 - scale| to the shaping penalty.
+    /// </summary>
+    private Vector<T> ShapedStep(
+        IMetaLearningTask<T, TInput, TOutput> task, Vector<T> adaptedParams, bool clip, int step, int K, ref T shapingPenalty)
+    {
+        ParamModel.SetParameters(adaptedParams);
+        var raw = ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput);
+        var grad = (clip ? ClipGradients(raw) : raw).GetSubVector(0, _paramDim);
+        T loss = ComputeLossFromOutput(MetaModel.Predict(task.SupportInput), task.SupportOutput);
+
+        // Compute gradient norm
+        T gradNorm = NumOps.Sqrt(Engine.DotProduct(grad, grad));
+
+        // Reward shaper: scale factor
+        T progress = NumOps.FromDouble((double)step / Math.Max(K - 1, 1));
+        T scale = ComputeRewardScale(loss, gradNorm, progress);
+
+        // Shaping penalty: deviation from unit scale
+        T discountFactor = NumOps.FromDouble(Math.Pow(_algoOptions.ShapingDiscount, step));
+        shapingPenalty = NumOps.Add(shapingPenalty,
+            NumOps.Multiply(discountFactor, NumOps.Abs(NumOps.Subtract(NumOps.One, scale))));
+
+        // Apply scaled gradient
+        T learningRate = NumOps.FromDouble(_algoOptions.InnerLearningRate);
+        return Engine.Subtract(adaptedParams, Engine.Multiply(grad, NumOps.Multiply(learningRate, scale)));
     }
 
     /// <summary>

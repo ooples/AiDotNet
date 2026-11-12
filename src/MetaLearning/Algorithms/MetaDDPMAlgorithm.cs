@@ -244,24 +244,31 @@ public partial class MetaDDPMAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, 
         {
             int t = step;
             var predictedNoise = PredictNoise(wt, condition, t, useEma: true);
-
-            // Compute posterior mean: μ_θ = (1/√α_t)(w_t - β_t/√(1-ᾱ_t) * ε_θ)
-            T sqrtAlpha = NumOps.Sqrt(_alphas[t]);
-            T betaOverSqrt = NumOps.Divide(_betas[t], NumOps.Add(_sqrtOneMinusAlphasCumprod[t], NumOps.FromDouble(1e-10)));
-
-            wt = Engine.Divide(Engine.Subtract(wt, Engine.Multiply(predictedNoise, betaOverSqrt)), sqrtAlpha);
-
-            // Add noise with posterior variance (except at t=0)
-            if (t > 0)
-            {
-                T sigma = NumOps.Sqrt(_posteriorVariance[t]);
-                var z = SampleGaussian(_compressedDim);
-                wt = Engine.Add(wt, Engine.Multiply(z, sigma));
-            }
+            wt = PosteriorStep(wt, predictedNoise, t);
         }
 
         return wt;
-        return result;
+    }
+
+    /// <summary>
+    /// The posterior mean μ_θ = (1/√α_t)(w_t - β_t/(√(1-ᾱ_t) + 1e-10) * ε_θ), plus √β̃_t z for t &gt; 0.
+    /// </summary>
+    private Vector<T> PosteriorStep(Vector<T> wt, Vector<T> predictedNoise, int t)
+    {
+        T sqrtAlpha = NumOps.Sqrt(_alphas[t]);
+        T betaOverSqrt = NumOps.Divide(_betas[t], NumOps.Add(_sqrtOneMinusAlphasCumprod[t], NumOps.FromDouble(1e-10)));
+
+        var next = Engine.Divide(Engine.Subtract(wt, Engine.Multiply(predictedNoise, betaOverSqrt)), sqrtAlpha);
+
+        // Add noise with posterior variance (except at t=0)
+        if (t > 0)
+        {
+            T sigma = NumOps.Sqrt(_posteriorVariance[t]);
+            var z = SampleGaussian(_compressedDim);
+            next = Engine.Add(next, Engine.Multiply(z, sigma));
+        }
+
+        return next;
     }
 
     private Vector<T> ComputeTargetDelta(Vector<T> baseParams, IMetaLearningTask<T, TInput, TOutput> task)
@@ -391,9 +398,9 @@ public partial class MetaDDPMAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, 
     /// <summary>Standard-normal draws, one SampleNormal per entry in order (the seeded stream is unchanged).</summary>
     private Vector<T> SampleGaussian(int length)
     {
+        // SampleNormal() * 1.0 is exactly SampleNormal(), so the draws match master's one per entry in order.
         var arr = new Vector<T>(length);
-        for (int i = 0; i < length; i++)
-            arr[i] = NumOps.FromDouble(SampleNormal());
+        InitGaussian(arr, 1.0);
         return arr;
     }
 

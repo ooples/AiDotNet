@@ -307,6 +307,8 @@ public partial class MAMLPlusPlusAlgorithm<T, TInput, TOutput> : MetaLearnerBase
     {
         var resume = ParamModel.GetParameters();
         double epsilon = 1e-3;
+        T epsT = NumOps.FromDouble(epsilon);
+        T twoEpsT = NumOps.FromDouble(2.0 * epsilon);
 
         for (int step = 0; step < _mamlOptions.AdaptationSteps; step++)
         {
@@ -314,7 +316,6 @@ public partial class MAMLPlusPlusAlgorithm<T, TInput, TOutput> : MetaLearnerBase
             T lossMinus = NumOps.Zero;
 
             // Evaluate with alpha_k + epsilon
-            T epsT = NumOps.FromDouble(epsilon);
             _perStepLearningRates[step] = NumOps.Add(_perStepLearningRates[step], epsT);
             foreach (var task in taskBatch.Tasks)
             {
@@ -322,7 +323,7 @@ public partial class MAMLPlusPlusAlgorithm<T, TInput, TOutput> : MetaLearnerBase
             }
 
             // Evaluate with alpha_k - epsilon (delta = 2*epsilon from current)
-            _perStepLearningRates[step] = NumOps.Subtract(_perStepLearningRates[step], NumOps.FromDouble(2.0 * epsilon));
+            _perStepLearningRates[step] = NumOps.Subtract(_perStepLearningRates[step], twoEpsT);
             foreach (var task in taskBatch.Tasks)
             {
                 lossMinus = NumOps.Add(lossMinus, EvaluateTaskLoss(task, initParams));
@@ -331,22 +332,30 @@ public partial class MAMLPlusPlusAlgorithm<T, TInput, TOutput> : MetaLearnerBase
             // Restore original alpha_k
             _perStepLearningRates[step] = NumOps.Add(_perStepLearningRates[step], epsT);
 
-            // Finite difference gradient: dL/d(alpha_k) ≈ (L+ - L-) / (2 * epsilon)
-            T numTasks = NumOps.FromDouble(Math.Max(taskBatch.Tasks.Length, 1));
-            T grad = NumOps.Divide(
-                NumOps.Subtract(NumOps.Divide(lossPlus, numTasks), NumOps.Divide(lossMinus, numTasks)),
-                NumOps.FromDouble(2.0 * epsilon));
-
-            // Update alpha_k, clamped to [1e-6, 1.0] for stability (NaN passes through, as Math.Min/Max do)
-            T newLR = NumOps.Subtract(_perStepLearningRates[step], NumOps.Multiply(NumOps.FromDouble(outerLR), grad));
-            T upper = NumOps.One;
-            T lower = NumOps.FromDouble(1e-6);
-            if (NumOps.GreaterThan(newLR, upper)) newLR = upper;
-            if (NumOps.LessThan(newLR, lower)) newLR = lower;
-            _perStepLearningRates[step] = newLR;
+            _perStepLearningRates[step] = UpdatedStepRate(
+                _perStepLearningRates[step], lossPlus, lossMinus, taskBatch.Tasks.Length, epsilon, outerLR);
         }
 
         ParamModel.SetParameters(resume);
+    }
+
+    /// <summary>
+    /// alpha - outerLR * dL/d(alpha), with dL/d(alpha) ≈ (L+ / n - L- / n) / (2 * epsilon) and n = max(tasks, 1),
+    /// clamped to [1e-6, 1.0] for stability (NaN passes through, as Math.Min/Max do).
+    /// </summary>
+    private T UpdatedStepRate(T current, T lossPlus, T lossMinus, int taskCount, double epsilon, double outerLR)
+    {
+        T numTasks = NumOps.FromDouble(Math.Max(taskCount, 1));
+        T grad = NumOps.Divide(
+            NumOps.Subtract(NumOps.Divide(lossPlus, numTasks), NumOps.Divide(lossMinus, numTasks)),
+            NumOps.FromDouble(2.0 * epsilon));
+
+        T newLR = NumOps.Subtract(current, NumOps.Multiply(NumOps.FromDouble(outerLR), grad));
+        T upper = NumOps.One;
+        T lower = NumOps.FromDouble(1e-6);
+        if (NumOps.GreaterThan(newLR, upper)) newLR = upper;
+        if (NumOps.LessThan(newLR, lower)) newLR = lower;
+        return newLR;
     }
 
     /// <summary>

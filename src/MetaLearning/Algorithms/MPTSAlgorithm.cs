@@ -145,16 +145,23 @@ public partial class MPTSAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
         {
             ParamModel.SetParameters(adaptedParams);
             var grad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
-            T progress = NumOps.FromDouble((double)step / Math.Max(K - 1, 1));
-
-            // Sigmoid activation: higher priority -> active earlier. progress - (1 - p) = p + (progress - 1)
-            var shift = Engine.Add(priorities, Engine.Fill(_paramDim, NumOps.Subtract(progress, NumOps.One)));
-            var activation = Engine.Sigmoid(Engine.Multiply(shift, slope));
+            var activation = StepActivation(priorities, slope, step, K);
             adaptedParams = Engine.Subtract(adaptedParams,
                 Engine.Multiply(Engine.Multiply(activation, grad.GetSubVector(0, _paramDim)), learningRate));
         }
 
         return adaptedParams;
+    }
+
+    /// <summary>
+    /// sigmoid((progress - (1 - p_d)) * slope) per parameter, progress = step / max(K - 1, 1): higher priority
+    /// activates earlier. progress - (1 - p) = p + (progress - 1).
+    /// </summary>
+    private Vector<T> StepActivation(Vector<T> priorities, T slope, int step, int K)
+    {
+        T progress = NumOps.FromDouble((double)step / Math.Max(K - 1, 1));
+        var shift = Engine.Add(priorities, Engine.Fill(_paramDim, NumOps.Subtract(progress, NumOps.One)));
+        return Engine.Sigmoid(Engine.Multiply(shift, slope));
     }
 
     /// <summary>Each parameter's group priority: group g covers [g * groupSize, (g + 1) * groupSize).</summary>
