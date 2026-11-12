@@ -2,6 +2,7 @@ using AiDotNet.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Enums;
 using AiDotNet.Attributes;
+using AiDotNet.Preprocessing.Scalers;
 
 namespace AiDotNet.Preprocessing.OutlierHandling;
 
@@ -98,28 +99,22 @@ public class ThresholdClipper<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     {
         int numRows = data.Rows;
         int numColumns = data.Columns;
-        var result = new T[numRows, numColumns];
-        var columnsToProcess = GetColumnsToProcess(numColumns);
-        var processSet = new HashSet<int>(columnsToProcess);
-
-        for (int i = 0; i < numRows; i++)
+        if (numRows == 0 || numColumns == 0)
         {
-            for (int j = 0; j < numColumns; j++)
-            {
-                double value = NumOps.ToDouble(data[i, j]);
-
-                if (processSet.Contains(j))
-                {
-                    // Clip to bounds
-                    value = Math.Max(_lowerThreshold, Math.Min(_upperThreshold, value));
-                }
-
-                result[i, j] = NumOps.FromDouble(value);
-            }
+            return new Matrix<T>(numRows, numColumns);
         }
 
-        return new Matrix<T>(result);
+        // Clip to bounds on the processed columns; the other columns pass through.
+        var (lower, upper) = Bounds(numColumns);
+        var clipped = ScalerTensorOps.ClipColumns(Tensor<T>.FromMatrix(data), lower, upper);
+        var mask = ScalerTensorOps.ColumnMask<T>(numColumns, GetColumnsToProcess(numColumns));
+        return ScalerTensorOps.MergeColumns(mask, clipped, data);
     }
+
+    /// <summary>The thresholds as per-column bound vectors.</summary>
+    private (Vector<T> Lower, Vector<T> Upper) Bounds(int numColumns) =>
+        (ScalerTensorOps.FilledVector(numColumns, NumOps.FromDouble(_lowerThreshold)),
+         ScalerTensorOps.FilledVector(numColumns, NumOps.FromDouble(_upperThreshold)));
 
     /// <summary>
     /// Inverse transformation is not supported.
@@ -146,23 +141,15 @@ public class ThresholdClipper<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     {
         int numRows = data.Rows;
         int numColumns = data.Columns;
-        var mask = new bool[numRows, numColumns];
-        var columnsToProcess = GetColumnsToProcess(numColumns);
-        var processSet = new HashSet<int>(columnsToProcess);
-
-        for (int i = 0; i < numRows; i++)
+        if (numRows == 0 || numColumns == 0)
         {
-            for (int j = 0; j < numColumns; j++)
-            {
-                if (processSet.Contains(j))
-                {
-                    double value = NumOps.ToDouble(data[i, j]);
-                    mask[i, j] = value < _lowerThreshold || value > _upperThreshold;
-                }
-            }
+            return new bool[numRows, numColumns];
         }
 
-        return mask;
+        var (lower, upper) = Bounds(numColumns);
+        var outside = ScalerTensorOps.OutsideMask(Tensor<T>.FromMatrix(data), lower, upper);
+        var mask = ScalerTensorOps.ColumnMask<T>(numColumns, GetColumnsToProcess(numColumns));
+        return ScalerTensorOps.ToBoolMatrix(Engine.TensorMultiply(outside, ScalerTensorOps.BroadcastRow(mask, numRows)));
     }
 
     /// <summary>
@@ -172,31 +159,18 @@ public class ThresholdClipper<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     /// <returns>A tuple of (belowLowerCount, aboveUpperCount) for each column.</returns>
     public (int[] BelowLower, int[] AboveUpper) CountOutliers(Matrix<T> data)
     {
+        int numRows = data.Rows;
         int numColumns = data.Columns;
-        var belowLower = new int[numColumns];
-        var aboveUpper = new int[numColumns];
-        var columnsToProcess = GetColumnsToProcess(numColumns);
-        var processSet = new HashSet<int>(columnsToProcess);
-
-        for (int i = 0; i < data.Rows; i++)
+        if (numRows == 0 || numColumns == 0)
         {
-            for (int j = 0; j < numColumns; j++)
-            {
-                if (processSet.Contains(j))
-                {
-                    double value = NumOps.ToDouble(data[i, j]);
-                    if (value < _lowerThreshold)
-                    {
-                        belowLower[j]++;
-                    }
-                    else if (value > _upperThreshold)
-                    {
-                        aboveUpper[j]++;
-                    }
-                }
-            }
+            return (new int[numColumns], new int[numColumns]);
         }
 
-        return (belowLower, aboveUpper);
+        var x = Tensor<T>.FromMatrix(data);
+        var mask = ScalerTensorOps.BroadcastRow(
+            ScalerTensorOps.ColumnMask<T>(numColumns, GetColumnsToProcess(numColumns)), numRows);
+        var below = Engine.TensorMultiply(Engine.TensorLessThan(x, NumOps.FromDouble(_lowerThreshold)), mask);
+        var above = Engine.TensorMultiply(Engine.TensorGreaterThan(x, NumOps.FromDouble(_upperThreshold)), mask);
+        return (ScalerTensorOps.CountPerColumn(below), ScalerTensorOps.CountPerColumn(above));
     }
 }

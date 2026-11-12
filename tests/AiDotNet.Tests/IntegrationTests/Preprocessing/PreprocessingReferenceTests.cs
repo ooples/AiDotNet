@@ -1,3 +1,5 @@
+using AiDotNet.AnomalyDetection.Statistical;
+using AiDotNet.Preprocessing.OutlierHandling;
 using AiDotNet.Preprocessing.Scalers;
 using Xunit;
 using System.Threading.Tasks;
@@ -178,5 +180,114 @@ public class PreprocessingReferenceTests
         Assert.Equal(1.0, scaler.Scale?[2] ?? double.NaN, Tolerance);
         Assert.Equal(10.0, scaler.Scale?[3] ?? double.NaN, Tolerance);
         Assert.Equal(1.0, scaler.Scale?[4] ?? double.NaN, Tolerance);
+    }
+
+    // numpy.percentile([1, 2, 3, 4, 100], [25, 75]) == [2, 4] -> IQR 2, bounds 2 - 3 = -1 and 4 + 3 = 7.
+    [Fact(Timeout = 120000)]
+    public async Task IQRClipper_UsesNumpyPercentiles_AndKeepsNaN()
+    {
+        await Task.CompletedTask;
+        var clipper = new IQRClipper<double>();
+        clipper.Fit(M(new double[,] { { 1 }, { 2 }, { double.NaN }, { 3 }, { 4 }, { 100 } }));
+
+        Assert.Equal(2.0, clipper.Q1Values?[0] ?? double.NaN, Tolerance);
+        Assert.Equal(4.0, clipper.Q3Values?[0] ?? double.NaN, Tolerance);
+        Assert.Equal(-1.0, clipper.LowerBounds?[0] ?? double.NaN, Tolerance);
+        Assert.Equal(7.0, clipper.UpperBounds?[0] ?? double.NaN, Tolerance);
+
+        var result = clipper.Transform(M(new double[,] { { -5 }, { double.NaN }, { 100 } }));
+        Assert.Equal(-1.0, result[0, 0], Tolerance);
+        Assert.True(double.IsNaN(result[1, 0]));
+        Assert.Equal(7.0, result[2, 0], Tolerance);
+        Assert.Equal(new[] { 2 }, clipper.CountOutliersPerFeature(M(new double[,] { { -5 }, { 0 }, { 100 } })));
+    }
+
+    // Iglewicz & Hoaglin: the clip bound is exactly where the modified Z-score 0.6745 * (x - median) / MAD
+    // reaches the threshold, so GetModifiedZScores at the bound returns the threshold.
+    [Fact(Timeout = 120000)]
+    public async Task MADClipper_BoundsAgreeWithModifiedZScore()
+    {
+        await Task.CompletedTask;
+        var clipper = new MADClipper<double>(threshold: 3.5);
+        clipper.Fit(M(new double[,] { { 1 }, { 2 }, { 3 }, { 4 }, { 100 } }));
+
+        double upper = clipper.UpperBounds?[0] ?? double.NaN;
+        double lower = clipper.LowerBounds?[0] ?? double.NaN;
+        Assert.Equal(3.0 + 3.5 / 0.6745, upper, Tolerance);
+        var z = clipper.GetModifiedZScores(M(new double[,] { { upper }, { lower } }));
+        Assert.Equal(3.5, z[0, 0], Tolerance);
+        Assert.Equal(-3.5, z[1, 0], Tolerance);
+    }
+
+    // ZScoreClipper: population std, NaN ignored by the fit and kept by transform.
+    [Fact(Timeout = 120000)]
+    public async Task ZScoreClipper_IgnoresNaNInFit()
+    {
+        await Task.CompletedTask;
+        var clipper = new ZScoreClipper<double>(threshold: 1.0);
+        clipper.Fit(M(new double[,] { { 1 }, { double.NaN }, { 3 } }));
+
+        Assert.Equal(2.0, clipper.Means?[0] ?? double.NaN, Tolerance);
+        Assert.Equal(1.0, clipper.StandardDeviations?[0] ?? double.NaN, Tolerance);
+        var result = clipper.Transform(M(new double[,] { { 10 }, { double.NaN }, { -10 } }));
+        Assert.Equal(3.0, result[0, 0], Tolerance);
+        Assert.True(double.IsNaN(result[1, 0]));
+        Assert.Equal(1.0, result[2, 0], Tolerance);
+    }
+
+    // feature-engine Winsorizer(capping_method="iqr", fold=1.5): Q1 - 1.5 IQR, Q3 + 1.5 IQR (pandas quantiles).
+    [Fact(Timeout = 120000)]
+    public async Task Winsorizer_IqrLimits_MatchFeatureEngine()
+    {
+        await Task.CompletedTask;
+        var winsorizer = new Winsorizer<double>(1.5, 1.5, WinsorizerLimitType.IQR);
+        winsorizer.Fit(M(new double[,] { { 1 }, { 2 }, { 3 }, { 4 }, { 100 } }));
+
+        Assert.Equal(-1.0, winsorizer.LowerBounds?[0] ?? double.NaN, Tolerance);
+        Assert.Equal(7.0, winsorizer.UpperBounds?[0] ?? double.NaN, Tolerance);
+    }
+
+    // OutlierClipper: numpy.percentile([0..10], [10, 90]) == [1, 9].
+    [Fact(Timeout = 120000)]
+    public async Task OutlierClipper_UsesNumpyPercentiles()
+    {
+        await Task.CompletedTask;
+        var clipper = new OutlierClipper<double>(10, 90);
+        var data = new double[11, 1];
+        for (int i = 0; i <= 10; i++)
+            data[i, 0] = i;
+        var result = clipper.FitTransform(M(data));
+
+        Assert.Equal(1.0, result[0, 0], Tolerance);
+        Assert.Equal(5.0, result[5, 0], Tolerance);
+        Assert.Equal(9.0, result[10, 0], Tolerance);
+    }
+
+    // columnIndices of DetectorBasedFilter are "the columns to consider for anomaly detection": the detector
+    // must be fitted on and score only those columns.
+    [Fact(Timeout = 120000)]
+    public async Task DetectorBasedFilter_DetectsOnSelectedColumnsOnly()
+    {
+        await Task.CompletedTask;
+        var data = M(new double[,]
+        {
+            { 1, 0 }, { 2, 0 }, { 3, 0 }, { 4, 0 }, { 50, 0 }, { 6, 0 }, { 7, 0 }, { 8, 0 }, { 9, 1000 }, { 10, 0 }
+        });
+        var filter = new DetectorBasedFilter<double>(new ZScoreDetector<double>(), FilterMode.Flag, new[] { 0 });
+        filter.Fit(data);
+
+        var reference = new ZScoreDetector<double>();
+        var column0 = M(new double[,] { { 1 }, { 2 }, { 3 }, { 4 }, { 50 }, { 6 }, { 7 }, { 8 }, { 9 }, { 10 } });
+        reference.Fit(column0);
+        var expected = reference.ScoreAnomalies(column0);
+        var actual = filter.GetAnomalyScores(data);
+        for (int i = 0; i < 10; i++)
+            Assert.Equal(expected[i], actual[i], Tolerance);
+
+        var flagged = filter.Transform(data);
+        Assert.Equal(3, flagged.Columns);
+        var restored = filter.InverseTransform(flagged);
+        Assert.Equal(2, restored.Columns);
+        Assert.Equal(1000.0, restored[8, 1], Tolerance);
     }
 }

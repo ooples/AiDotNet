@@ -153,4 +153,50 @@ internal static class ScalerTensorOps
         var result = Engine.TensorWhere(tiny, ones, scale);
         return constantMask is null ? result : Engine.TensorWhere(constantMask, ones, result);
     }
+
+    /// <summary>
+    /// Clips every column of <paramref name="x"/> ([n, p]) to [lower, upper]; NaN passes through unchanged
+    /// (like <c>Math.Max(lower, Math.Min(upper, NaN))</c>).
+    /// </summary>
+    public static Tensor<T> ClipColumns<T>(Tensor<T> x, Vector<T> lower, Vector<T> upper)
+    {
+        int rows = x.Shape[0];
+        var low = BroadcastRow(lower, rows);
+        var high = BroadcastRow(upper, rows);
+        var raised = Engine.TensorWhere(Engine.TensorGreaterThan(x, high), high, x);
+        return Engine.TensorWhere(Engine.TensorLessThan(raised, low), low, raised);
+    }
+
+    /// <summary>A 0/1 [n, p] mask of the entries below <paramref name="lower"/> or above <paramref name="upper"/>.</summary>
+    public static Tensor<T> OutsideMask<T>(Tensor<T> x, Vector<T> lower, Vector<T> upper)
+    {
+        int rows = x.Shape[0];
+        return Engine.TensorMax(
+            Engine.TensorLessThan(x, BroadcastRow(lower, rows)), Engine.TensorGreaterThan(x, BroadcastRow(upper, rows)));
+    }
+
+    /// <summary>Copies a 0/1 [n, p] mask into a <c>bool[n, p]</c>.</summary>
+    public static bool[,] ToBoolMatrix<T>(Tensor<T> mask)
+    {
+        int rows = mask.Shape[0];
+        int columns = mask.Shape[1];
+        var result = new bool[rows, columns];
+        if (rows == 0 || columns == 0)
+            return result;
+
+        var flags = mask.Cast<int>().AsSpan();
+        for (int i = 0; i < rows; i++)
+            for (int j = 0; j < columns; j++)
+                result[i, j] = flags[i * columns + j] != 0;
+        return result;
+    }
+
+    /// <summary>Number of non-zero entries in each column of a 0/1 [n, p] mask.</summary>
+    public static int[] CountPerColumn<T>(Tensor<T> mask) =>
+        mask.Shape[0] == 0
+            ? new int[mask.Shape[1]]
+            : Engine.ReduceSum(mask, new[] { 0 }, false).Cast<int>().AsSpan().ToArray();
+
+    /// <summary>Converts a double hyper-parameter to T.</summary>
+    public static T Scalar<T>(double value) => MathHelper.GetNumericOperations<T>().FromDouble(value);
 }

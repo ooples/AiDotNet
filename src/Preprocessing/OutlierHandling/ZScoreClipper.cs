@@ -2,6 +2,7 @@ using AiDotNet.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Enums;
 using AiDotNet.Attributes;
+using AiDotNet.Preprocessing.Scalers;
 
 namespace AiDotNet.Preprocessing.OutlierHandling;
 
@@ -45,10 +46,10 @@ public class ZScoreClipper<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     private readonly double _threshold;
 
     // Fitted parameters
-    private double[]? _means;
-    private double[]? _stds;
-    private double[]? _lowerBounds;
-    private double[]? _upperBounds;
+    private Vector<T>? _means;
+    private Vector<T>? _stds;
+    private Vector<T>? _lowerBounds;
+    private Vector<T>? _upperBounds;
     private int _nInputFeatures;
 
     /// <summary>
@@ -59,22 +60,22 @@ public class ZScoreClipper<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     /// <summary>
     /// Gets the computed means for each feature.
     /// </summary>
-    public double[]? Means => _means;
+    public Vector<T>? Means => _means;
 
     /// <summary>
     /// Gets the computed standard deviations for each feature.
     /// </summary>
-    public double[]? StandardDeviations => _stds;
+    public Vector<T>? StandardDeviations => _stds;
 
     /// <summary>
     /// Gets the computed lower bounds for each feature.
     /// </summary>
-    public double[]? LowerBounds => _lowerBounds;
+    public Vector<T>? LowerBounds => _lowerBounds;
 
     /// <summary>
     /// Gets the computed upper bounds for each feature.
     /// </summary>
-    public double[]? UpperBounds => _upperBounds;
+    public Vector<T>? UpperBounds => _upperBounds;
 
     /// <summary>
     /// Gets whether this transformer supports inverse transformation.
@@ -104,58 +105,32 @@ public class ZScoreClipper<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     protected override void FitCore(Matrix<T> data)
     {
         _nInputFeatures = data.Columns;
-        var columnsToProcess = GetColumnsToProcess(_nInputFeatures);
-        var processSet = new HashSet<int>(columnsToProcess);
+        var mask = ScalerTensorOps.ColumnMask<T>(_nInputFeatures, GetColumnsToProcess(_nInputFeatures));
 
-        _means = new double[_nInputFeatures];
-        _stds = new double[_nInputFeatures];
-        _lowerBounds = new double[_nInputFeatures];
-        _upperBounds = new double[_nInputFeatures];
-
-        for (int col = 0; col < _nInputFeatures; col++)
+        // Mean and population standard deviation of each column (NaN is treated as missing).
+        Tensor<T> mean;
+        Tensor<T> std;
+        if (data.Rows == 0 || _nInputFeatures == 0)
         {
-            if (!processSet.Contains(col))
-            {
-                // Pass-through columns: use extreme bounds
-                _means[col] = 0;
-                _stds[col] = 1;
-                _lowerBounds[col] = double.MinValue;
-                _upperBounds[col] = double.MaxValue;
-                continue;
-            }
-
-            // Calculate mean
-            double sum = 0;
-            for (int i = 0; i < data.Rows; i++)
-            {
-                sum += NumOps.ToDouble(data[i, col]);
-            }
-            double mean = sum / data.Rows;
-            _means[col] = mean;
-
-            // Calculate standard deviation
-            double sumSquaredDiff = 0;
-            for (int i = 0; i < data.Rows; i++)
-            {
-                double diff = NumOps.ToDouble(data[i, col]) - mean;
-                sumSquaredDiff += diff * diff;
-            }
-            double std = Math.Sqrt(sumSquaredDiff / data.Rows);
-            _stds[col] = std;
-
-            // Calculate bounds
-            if (std > 0)
-            {
-                _lowerBounds[col] = mean - _threshold * std;
-                _upperBounds[col] = mean + _threshold * std;
-            }
-            else
-            {
-                // If std is 0, all values are the same - no clipping needed
-                _lowerBounds[col] = double.MinValue;
-                _upperBounds[col] = double.MaxValue;
-            }
+            mean = new Tensor<T>(new[] { _nInputFeatures });
+            std = new Tensor<T>(new[] { _nInputFeatures });
         }
+        else
+        {
+            var x = Tensor<T>.FromMatrix(data);
+            mean = ScalerTensorOps.NanColumnMean(x);
+            std = Engine.TensorSqrt(ScalerTensorOps.NanColumnVariance(x, mean));
+        }
+
+        _means = ScalerTensorOps.MaskedParameters(mask, mean, NumOps.Zero);
+        _stds = ScalerTensorOps.MaskedParameters(mask, std, NumOps.One);
+
+        // Bounds mean -/+ threshold * std; a zero std (all values the same) and the pass-through columns get
+        // the widest bounds (no clipping).
+        var spread = Engine.TensorMultiplyScalar(std, NumOps.FromDouble(_threshold));
+        var clips = Engine.TensorMultiply(mask, Engine.TensorGreaterThan(std, NumOps.Zero));
+        _lowerBounds = ScalerTensorOps.MaskedParameters(clips, Engine.TensorSubtract(mean, spread), NumOps.MinValue);
+        _upperBounds = ScalerTensorOps.MaskedParameters(clips, Engine.TensorAdd(mean, spread), NumOps.MaxValue);
     }
 
     /// <summary>
@@ -170,29 +145,16 @@ public class ZScoreClipper<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             throw new InvalidOperationException("ZScoreClipper has not been fitted.");
         }
 
-        int numRows = data.Rows;
-        int numColumns = data.Columns;
-        var result = new T[numRows, numColumns];
-        var columnsToProcess = GetColumnsToProcess(numColumns);
-        var processSet = new HashSet<int>(columnsToProcess);
-
-        for (int i = 0; i < numRows; i++)
+        ScalerTensorOps.EnsureColumnCount(data, _lowerBounds.Length);
+        if (data.Rows == 0 || data.Columns == 0)
         {
-            for (int j = 0; j < numColumns; j++)
-            {
-                double value = NumOps.ToDouble(data[i, j]);
-
-                if (processSet.Contains(j))
-                {
-                    // Clip to bounds
-                    value = Math.Max(_lowerBounds[j], Math.Min(_upperBounds[j], value));
-                }
-
-                result[i, j] = NumOps.FromDouble(value);
-            }
+            return new Matrix<T>(data.Rows, data.Columns);
         }
 
-        return new Matrix<T>(result);
+        // Clip to bounds on the processed columns; the other columns pass through.
+        var clipped = ScalerTensorOps.ClipColumns(Tensor<T>.FromMatrix(data), _lowerBounds, _upperBounds);
+        var mask = ScalerTensorOps.ColumnMask<T>(data.Columns, GetColumnsToProcess(data.Columns));
+        return ScalerTensorOps.MergeColumns(mask, clipped, data);
     }
 
     /// <summary>
@@ -223,33 +185,23 @@ public class ZScoreClipper<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             throw new InvalidOperationException("ZScoreClipper has not been fitted.");
         }
 
+        ScalerTensorOps.EnsureColumnCount(data, _means.Length);
         int numRows = data.Rows;
         int numColumns = data.Columns;
-        var result = new T[numRows, numColumns];
-        var columnsToProcess = GetColumnsToProcess(numColumns);
-        var processSet = new HashSet<int>(columnsToProcess);
-
-        for (int i = 0; i < numRows; i++)
+        if (numRows == 0 || numColumns == 0)
         {
-            for (int j = 0; j < numColumns; j++)
-            {
-                double value = NumOps.ToDouble(data[i, j]);
-                double zScore;
-
-                if (processSet.Contains(j) && _stds[j] > 0)
-                {
-                    zScore = (value - _means[j]) / _stds[j];
-                }
-                else
-                {
-                    zScore = 0;
-                }
-
-                result[i, j] = NumOps.FromDouble(zScore);
-            }
+            return new Matrix<T>(numRows, numColumns);
         }
 
-        return new Matrix<T>(result);
+        // (x - mean) / std on processed columns with std > 0, otherwise 0.
+        var std = Tensor<T>.FromVector(_stds);
+        var positive = Engine.TensorGreaterThan(std, NumOps.Zero);
+        var scored = Engine.TensorMultiply(
+            ScalerTensorOps.ColumnMask<T>(numColumns, GetColumnsToProcess(numColumns)), positive);
+        var safeStd = Engine.TensorWhere(positive, std, PreprocessingTensorOps.Filled(std.Shape.ToArray(), NumOps.One));
+        var z = Tensor<T>.FromMatrix(ScalerTensorOps.ShiftThenScale(data, _means, safeStd.ToVector()));
+        return Engine.TensorWhere(
+            ScalerTensorOps.BroadcastRow(scored, numRows), z, new Tensor<T>(new[] { numRows, numColumns })).ToMatrix();
     }
 
     /// <summary>
@@ -264,24 +216,16 @@ public class ZScoreClipper<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             throw new InvalidOperationException("ZScoreClipper has not been fitted.");
         }
 
+        ScalerTensorOps.EnsureColumnCount(data, _lowerBounds.Length);
         int numRows = data.Rows;
         int numColumns = data.Columns;
-        var mask = new bool[numRows, numColumns];
-        var columnsToProcess = GetColumnsToProcess(numColumns);
-        var processSet = new HashSet<int>(columnsToProcess);
-
-        for (int i = 0; i < numRows; i++)
+        if (numRows == 0 || numColumns == 0)
         {
-            for (int j = 0; j < numColumns; j++)
-            {
-                if (processSet.Contains(j))
-                {
-                    double value = NumOps.ToDouble(data[i, j]);
-                    mask[i, j] = value < _lowerBounds[j] || value > _upperBounds[j];
-                }
-            }
+            return new bool[numRows, numColumns];
         }
 
-        return mask;
+        var outside = ScalerTensorOps.OutsideMask(Tensor<T>.FromMatrix(data), _lowerBounds, _upperBounds);
+        var mask = ScalerTensorOps.ColumnMask<T>(numColumns, GetColumnsToProcess(numColumns));
+        return ScalerTensorOps.ToBoolMatrix(Engine.TensorMultiply(outside, ScalerTensorOps.BroadcastRow(mask, numRows)));
     }
 }

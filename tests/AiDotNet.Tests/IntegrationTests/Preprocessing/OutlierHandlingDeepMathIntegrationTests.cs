@@ -385,10 +385,11 @@ public class OutlierHandlingDeepMathIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task MAD_Bounds_HandComputed()
     {
-        // Median=3, MAD=1, MADScaleFactor=1.4826, threshold=3.5
-        // scaledMad = 1 * 1.4826 = 1.4826
-        // Lower = 3 - 3.5 * 1.4826 = 3 - 5.1891 = -2.1891
-        // Upper = 3 + 3.5 * 1.4826 = 3 + 5.1891 = 8.1891
+        // Median=3, MAD=1, threshold=3.5
+        // Iglewicz & Hoaglin: modified Z = 0.6745 * (x - median) / MAD, so the clip bounds are where
+        // |modified Z| = threshold: x = median -/+ threshold * MAD / 0.6745 (1/0.6745 = 1.48258...)
+        // Lower = 3 - 3.5 / 0.6745 = -2.18902891...
+        // Upper = 3 + 3.5 / 0.6745 = 8.18902891...
         var data = MakeMatrix(new double[,] { { 1 }, { 2 }, { 3 }, { 4 }, { 5 } });
 
         var clipper = new MADClipper<double>(threshold: 3.5);
@@ -396,8 +397,8 @@ public class OutlierHandlingDeepMathIntegrationTests
 
         Assert.NotNull(clipper.LowerBounds);
         Assert.NotNull(clipper.UpperBounds);
-        Assert.Equal(3.0 - 3.5 * 1.4826, clipper.LowerBounds[0], Tol);
-        Assert.Equal(3.0 + 3.5 * 1.4826, clipper.UpperBounds[0], Tol);
+        Assert.Equal(3.0 - 3.5 / 0.6745, clipper.LowerBounds[0], Tol);
+        Assert.Equal(3.0 + 3.5 / 0.6745, clipper.UpperBounds[0], Tol);
     }
 
     [Fact(Timeout = 120000)]
@@ -407,8 +408,8 @@ public class OutlierHandlingDeepMathIntegrationTests
         var clipper = new MADClipper<double>(threshold: 3.5);
         clipper.Fit(data);
 
-        double lower = 3.0 - 3.5 * 1.4826;
-        double upper = 3.0 + 3.5 * 1.4826;
+        double lower = 3.0 - 3.5 / 0.6745;
+        double upper = 3.0 + 3.5 / 0.6745;
 
         var test = MakeMatrix(new double[,] { { -10 }, { 3 }, { 20 } });
         var result = clipper.Transform(test);
@@ -778,21 +779,20 @@ public class OutlierHandlingDeepMathIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task MAD_ScaleFactor_IsCorrect()
     {
-        // MADScaleFactor = 1.4826 (constant in code)
-        // This is 1/Phi^{-1}(3/4) where Phi^{-1} is the quantile function of standard normal
-        // The bounds should be: median +/- threshold * MAD * 1.4826
+        // Iglewicz & Hoaglin's modified Z-score is 0.6745 * (x - median) / MAD (0.6745 ~ Phi^{-1}(3/4)),
+        // so the bounds are where |modified Z| = threshold: median +/- threshold * MAD / 0.6745
         var data = MakeMatrix(new double[,] { { 1 }, { 2 }, { 3 }, { 4 }, { 5 } });
         var clipper = new MADClipper<double>(threshold: 2.5);
         clipper.Fit(data);
 
         // Median=3, MAD=1
-        // scaledMad = 1 * 1.4826
-        // Lower = 3 - 2.5 * 1.4826 = 3 - 3.7065 = -0.7065
-        // Upper = 3 + 2.5 * 1.4826 = 3 + 3.7065 = 6.7065
+        // scaledMad = 1 / 0.6745 = 1.48257969...
+        // Lower = 3 - 2.5 / 0.6745 = -0.70644922...
+        // Upper = 3 + 2.5 / 0.6745 = 6.70644922...
         Assert.NotNull(clipper.LowerBounds);
         Assert.NotNull(clipper.UpperBounds);
-        Assert.Equal(3.0 - 2.5 * 1.4826, clipper.LowerBounds[0], Tol);
-        Assert.Equal(3.0 + 2.5 * 1.4826, clipper.UpperBounds[0], Tol);
+        Assert.Equal(3.0 - 2.5 / 0.6745, clipper.LowerBounds[0], Tol);
+        Assert.Equal(3.0 + 2.5 / 0.6745, clipper.UpperBounds[0], Tol);
     }
 
     [Fact(Timeout = 120000)]
@@ -802,8 +802,8 @@ public class OutlierHandlingDeepMathIntegrationTests
         var clipper = new MADClipper<double>(threshold: 3.5);
         clipper.Fit(data);
 
-        double lower = 3.0 - 3.5 * 1.4826;
-        double upper = 3.0 + 3.5 * 1.4826;
+        double lower = 3.0 - 3.5 / 0.6745;
+        double upper = 3.0 + 3.5 / 0.6745;
 
         // Create test with values inside and outside bounds
         var test = MakeMatrix(new double[,] { { lower - 1 }, { 3 }, { upper + 1 } });
