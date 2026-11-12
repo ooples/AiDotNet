@@ -82,16 +82,10 @@ public class InContextLearning<T>
     public void SetClassificationContext(Tensor<T> features, Vector<int> labels, int numClasses, int maxContextSamples = 1024)
     {
         int numSamples = features.Shape[0];
-        var oneHotLabels = new Tensor<T>([numSamples, numClasses]);
 
-        for (int i = 0; i < numSamples; i++)
-        {
-            int classIdx = labels[i];
-            if (classIdx >= 0 && classIdx < numClasses)
-            {
-                oneHotLabels[i * numClasses + classIdx] = NumOps.One;
-            }
-        }
+        // Labels outside [0, numClasses) leave an all-zero row
+        var oneHotLabels = AiDotNetEngine.Current.TensorOneHot<T>(
+            Tensor<int>.FromVector(labels.GetSubVector(0, numSamples)), numClasses).Reshape(numSamples, numClasses);
 
         SetContext(features, oneHotLabels, maxContextSamples);
     }
@@ -123,20 +117,14 @@ public class InContextLearning<T>
         int numFeatures = queryFeatures.Shape.Length > 1 ? queryFeatures.Shape[1] : _numFeatures;
         int totalSize = _numContextSamples + querySize;
 
-        var combined = new Tensor<T>([totalSize, numFeatures]);
-
-        // Copy context features
-        for (int i = 0; i < _numContextSamples * numFeatures; i++)
-        {
-            combined[i] = _contextFeatures[i];
-        }
-
-        // Copy query features
-        int offset = _numContextSamples * numFeatures;
-        for (int i = 0; i < querySize * numFeatures; i++)
-        {
-            combined[offset + i] = queryFeatures[i];
-        }
+        // Context samples first, then the queries
+        var combined = AiDotNetEngine.Current.TensorConcatenate(
+            new[]
+            {
+                TabularMetrics.Flat(_contextFeatures, _numContextSamples * numFeatures).Reshape(_numContextSamples, numFeatures),
+                TabularMetrics.Flat(queryFeatures, querySize * numFeatures).Reshape(querySize, numFeatures),
+            },
+            0);
 
         return combined;
     }
@@ -175,13 +163,10 @@ public class InContextLearning<T>
         int totalSize = combinedOutput.Shape[0];
         int querySize = totalSize - _numContextSamples;
 
-        var queryOutput = new Tensor<T>([querySize, outputDim]);
         int offset = _numContextSamples * outputDim;
-
-        for (int i = 0; i < querySize * outputDim; i++)
-        {
-            queryOutput[i] = combinedOutput[offset + i];
-        }
+        var queryOutput = AiDotNetEngine.Current.TensorNarrow(
+            TabularMetrics.Flat(combinedOutput, combinedOutput.Length), 0, offset, querySize * outputDim)
+            .Reshape(querySize, outputDim);
 
         return queryOutput;
     }
@@ -201,21 +186,12 @@ public class InContextLearning<T>
         var indices = Enumerable.Range(0, numSamples).OrderBy(_ => random.Next()).Take(maxSamples).ToArray();
         Array.Sort(indices);
 
-        var subFeatures = new Tensor<T>([maxSamples, numFeatures]);
-        var subLabels = new Tensor<T>([maxSamples, labelDim]);
-
-        for (int i = 0; i < maxSamples; i++)
-        {
-            int srcIdx = indices[i];
-            for (int f = 0; f < numFeatures; f++)
-            {
-                subFeatures[i * numFeatures + f] = features[srcIdx * numFeatures + f];
-            }
-            for (int l = 0; l < labelDim; l++)
-            {
-                subLabels[i * labelDim + l] = labels[srcIdx * labelDim + l];
-            }
-        }
+        var engine = AiDotNetEngine.Current;
+        var chosen = new Tensor<int>(indices, new[] { maxSamples });
+        var subFeatures = engine.TensorIndexSelect(
+            TabularMetrics.Flat(features, numSamples * numFeatures).Reshape(numSamples, numFeatures), chosen, 0);
+        var subLabels = engine.TensorIndexSelect(
+            TabularMetrics.Flat(labels, numSamples * labelDim).Reshape(numSamples, labelDim), chosen, 0);
 
         return (subFeatures, subLabels);
     }
