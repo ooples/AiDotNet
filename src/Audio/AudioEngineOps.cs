@@ -551,4 +551,79 @@ internal static class AudioEngineOps
             engine.TensorEquals(ranked, best), column, Tensor<T>.CreateDefault(shape, numOps.FromDouble(cols)));
         return engine.TensorAmin(firstBest, new[] { 1 }, keepDims: false).Cast<int>().ToArray();
     }
+
+    /// <summary>
+    /// <c>x[i] + other[i]</c> for <c>i &lt; min(|x|, |other|)</c> (row-major); the remaining elements of
+    /// <paramref name="x"/> are unchanged.
+    /// </summary>
+    internal static Tensor<T> AddPrefix<T>(IEngine engine, Tensor<T> x, Tensor<T> other)
+    {
+        int count = Math.Min(x.Length, other.Length);
+        return MapPrefix(engine, x, count, head => engine.TensorAdd(head, FitLength(engine, other, count)));
+    }
+
+    /// <summary>
+    /// <c>x[i] + other[i] * scale</c> for <c>i &lt; min(|x|, |other|)</c> (row-major); the remaining
+    /// elements of <paramref name="x"/> are unchanged.
+    /// </summary>
+    internal static Tensor<T> AddScaledPrefix<T>(IEngine engine, Tensor<T> x, Tensor<T> other, T scale)
+    {
+        int count = Math.Min(x.Length, other.Length);
+        return MapPrefix(engine, x, count, head =>
+            engine.TensorAdd(head, engine.TensorMultiplyScalar(FitLength(engine, other, count), scale)));
+    }
+
+    /// <summary>
+    /// A fresh <c>[frames, bins]</c> tensor holding <c>source[f * stride + offset + b]</c> (row-major).
+    /// An element is read when that index is below <c>|source|</c>, or, with
+    /// <paramref name="rowZeroBound"/>, when <c>offset + b</c> is (a later row then reading past the end
+    /// throws, as the indexer does); elements not read are zero.
+    /// </summary>
+    internal static Tensor<T> GatherFrameBins<T>(IEngine engine, Tensor<T> source, int frames, int bins, int stride, int offset, bool rowZeroBound = false)
+    {
+        var result = new Tensor<T>(new[] { frames, bins });
+        int length = source.Length;
+        if (frames == 0 || bins == 0 || length == 0) return result;
+        int n = frames * bins;
+        var index = new int[n];
+        for (int f = 0; f < frames; f++)
+        {
+            for (int b = 0; b < bins; b++)
+            {
+                int mi = f * stride + offset + b;
+                bool read = rowZeroBound ? offset + b < length : mi < length;
+                if (read && (mi < 0 || mi >= length))
+                    throw new IndexOutOfRangeException("Index was outside the bounds of the array.");
+                index[f * bins + b] = read ? mi : length;
+            }
+        }
+
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        var padded = engine.Concat(new[] { Flatten(engine, source), new Tensor<T>(new[] { 1 }) }, 0);
+        return engine.Reshape(engine.TensorIndexSelect(padded, new Tensor<int>(index, new[] { n }), 0), new[] { frames, bins });
+    }
+
+    /// <summary>
+    /// A fresh tensor shaped like the <c>[frames, bins]</c> <paramref name="magnitude"/> holding
+    /// <c>magnitude[f, b] * mask</c>, where mask is <c>masks[f * bins * stems + stem * bins + b]</c>
+    /// (zero past the end), clamped to [0, 1] with NaN kept when <paramref name="clamp"/> is set.
+    /// </summary>
+    internal static Tensor<T> MaskedMagnitude<T>(IEngine engine, Tensor<T> magnitude, Tensor<T> masks, int stems, int stem, bool clamp)
+    {
+        int frames = magnitude.Shape[0];
+        int bins = magnitude.Shape[1];
+        var shape = magnitude.Shape.ToArray();
+        if (frames == 0 || bins == 0) return new Tensor<T>(shape);
+        var mask = GatherFrameBins(engine, masks, frames, bins, bins * stems, stem * bins);
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        if (clamp)
+        {
+            var numOps = MathHelper.GetNumericOperations<T>();
+            var frameBins = new[] { frames, bins };
+            mask = engine.TensorWhere(engine.TensorGreaterThan(mask, numOps.One), Tensor<T>.CreateDefault(frameBins, numOps.One), mask);
+            mask = engine.TensorWhere(engine.TensorLessThan(mask, numOps.Zero), new Tensor<T>(frameBins), mask);
+        }
+        var product = engine.TensorMultiply(engine.Reshape(magnitude, new[] { frames, bins }), mask);
+        return engine.Reshape(product, shape);
+    }
 }
