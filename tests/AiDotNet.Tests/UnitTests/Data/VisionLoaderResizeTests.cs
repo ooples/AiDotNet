@@ -28,7 +28,7 @@ public class VisionLoaderResizeTests
         string path = Path.Combine(Path.GetTempPath(), "ew57b-" + Guid.NewGuid().ToString("N") + ".ppm");
         using (var stream = File.Create(path))
         {
-            byte[] header = Encoding.ASCII.GetBytes("P6\n2 2\n255\n");
+            byte[] header = System.Text.Encoding.ASCII.GetBytes("P6\n2 2\n255\n");
             stream.Write(header, 0, header.Length);
             for (int y = 0; y < 2; y++)
             {

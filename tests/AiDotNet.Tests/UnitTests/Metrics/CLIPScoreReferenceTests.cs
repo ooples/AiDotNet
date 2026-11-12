@@ -16,6 +16,18 @@ namespace AiDotNet.Tests.UnitTests.Metrics;
 /// </summary>
 public class CLIPScoreReferenceTests
 {
+    [Fact]
+    public void NonfiniteSimilarity_PropagatesInsteadOfBecomingAValidZeroScore()
+    {
+        var model = new TableClip(new Dictionary<string, double[]> { ["text"] = new[] { 1.0, 0.0, 0.0 } },
+            _ => new[] { double.NaN, 0.0, 0.0 });
+        var score = new CLIPScore<double>(model);
+
+        Assert.True(double.IsNaN(score.ComputeTextImageScore(new[] { 1.0 }, "text")));
+        Assert.True(double.IsNaN(score.ComputeImageImageScore(new[] { 1.0 }, new[] { 1.0 })));
+        Assert.True(double.IsNaN(score.ComputeCaptionScore(new[] { 1.0 }, "text", new[] { "text" })));
+    }
+
     private const double Tolerance = 1e-10;
 
     /// <summary>

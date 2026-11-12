@@ -1,3 +1,5 @@
+using System;
+using System.Linq;
 using System.Threading.Tasks;
 using AiDotNet.Metrics;
 using AiDotNet.Tensors.LinearAlgebra;
@@ -12,6 +14,68 @@ namespace AiDotNet.Tests.UnitTests.Metrics;
 /// </summary>
 public class GeometryMetricsReferenceTests
 {
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void PointCloudBlocks_CrossBothBoundariesAndMatchScalarDistances(bool squared)
+    {
+        const int countA = 513, countB = 1025;
+        var a = Enumerable.Range(0, countA).SelectMany(i => new[] { i * 0.01, (i % 7) * 0.1, (i % 5) * 0.2 }).ToArray();
+        var b = Enumerable.Range(0, countB).SelectMany(i => new[] { i * 0.008 + 0.003, (i % 11) * 0.07, (i % 3) * 0.25 }).ToArray();
+        var aNearest = ScalarNearestSquared(a, b);
+        var bNearest = ScalarNearestSquared(b, a);
+        double expected = aNearest.Average(v => squared ? v : Math.Sqrt(v))
+            + bNearest.Average(v => squared ? v : Math.Sqrt(v));
+        var metric = new ChamferDistance<double>(squared);
+        Assert.Equal(expected, metric.Compute(Points(countA, a), Points(countB, b)), 11);
+
+        var batchA = new Tensor<double>(a.Concat(a).ToArray(), new[] { 2, countA, 3 });
+        var batchB = new Tensor<double>(b.Concat(b).ToArray(), new[] { 2, countB, 3 });
+        Assert.All(metric.ComputeBatch(batchA, batchB), value => Assert.Equal(expected, value, 11));
+
+        const double threshold = 0.15;
+        double precision = (double)aNearest.Count(value => value <= threshold * threshold) / countA;
+        double recall = (double)bNearest.Count(value => value <= threshold * threshold) / countB;
+        var fScore = new FScore<double>(threshold);
+        var actual = fScore.ComputePrecisionRecall(Points(countA, a), Points(countB, b));
+        Assert.Equal(precision, actual.precision, 12);
+        Assert.Equal(recall, actual.recall, 12);
+        Assert.Equal(2 * precision * recall / (precision + recall),
+            fScore.Compute(Points(countA, a), Points(countB, b)), 12);
+    }
+
+    private static double[] ScalarNearestSquared(double[] source, double[] target)
+    {
+        var nearest = new double[source.Length / 3];
+        for (int i = 0; i < nearest.Length; i++)
+        {
+            double minimum = double.PositiveInfinity;
+            for (int j = 0; j < target.Length / 3; j++)
+            {
+                double distance = 0;
+                for (int d = 0; d < 3; d++)
+                {
+                    double difference = source[3 * i + d] - target[3 * j + d];
+                    distance += difference * difference;
+                }
+                minimum = Math.Min(minimum, distance);
+            }
+            nearest[i] = minimum;
+        }
+        return nearest;
+    }
+
+    [Fact]
+    public void FScore_NonfinitePointsDoNotMatchFinitePoints()
+    {
+        var score = new FScore<double>(threshold: 0.1);
+        var predicted = Points(2, double.NaN, 0.0, 0.0, 0.0);
+        var target = Points(2, 0.0, 0.0, 5.0, 0.0);
+
+        Assert.Equal((0.5, 0.5), score.ComputePrecisionRecall(predicted, target));
+        Assert.Equal(0.5, score.Compute(predicted, target), 12);
+    }
+
     private static Tensor<double> Points(int count, params double[] coordinates) =>
         new Tensor<double>(new[] { count, coordinates.Length / count }, new Vector<double>(coordinates));
 

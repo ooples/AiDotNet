@@ -197,7 +197,7 @@ public class CLIPScore<T> where T : struct
         T textRefScore = _numOps.Multiply(maxTextSim, _numOps.FromDouble(100.0));
 
         // Harmonic mean of the two scores (rewards both aspects)
-        if (!_numOps.GreaterThan(imageTextScore, _numOps.Zero) || !_numOps.GreaterThan(textRefScore, _numOps.Zero))
+        if (_numOps.LessThanOrEquals(imageTextScore, _numOps.Zero) || _numOps.LessThanOrEquals(textRefScore, _numOps.Zero))
         {
             return _numOps.Zero;
         }
@@ -269,7 +269,8 @@ public class CLIPScore<T> where T : struct
     /// </summary>
     private T ScaleSimilarity(T similarity)
     {
-        return _numOps.Multiply(MathHelper.Max(similarity, _numOps.Zero), _numOps.FromDouble(100.0));
+        T nonnegative = _numOps.LessThan(similarity, _numOps.Zero) ? _numOps.Zero : similarity;
+        return _numOps.Multiply(nonnegative, _numOps.FromDouble(100.0));
     }
 
     /// <summary>

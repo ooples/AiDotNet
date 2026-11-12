@@ -98,21 +98,10 @@ public class ChamferDistance<T> where T : struct
 
         // Mean over source points of the distance to the nearest target point.
         var engine = AiDotNetEngine.Current;
-        var nearest = NearestDistances(PointCloudDistances.Squared(source, target), 1);
-        return engine.TensorMean(nearest);
+        var nearest = PointCloudDistances.NearestSquared(source, target);
+        return engine.TensorMean(_squared ? nearest : engine.TensorSqrt(nearest));
     }
 
-    /// <summary>
-    /// Minimum along an axis of a squared-distance tensor, as squared or Euclidean distances.
-    /// </summary>
-    private Tensor<T> NearestDistances(Tensor<T> squaredDistances, int axis)
-    {
-        var engine = AiDotNetEngine.Current;
-        var nearest = engine.TensorNegate(
-            engine.ReduceMax(engine.TensorNegate(squaredDistances), new[] { axis }, false));
-        // sqrt is monotone, so the nearest Euclidean distance is the root of the nearest squared one.
-        return _squared ? nearest : engine.TensorSqrt(nearest);
-    }
 
     /// <summary>
     /// Computes Chamfer Distance for batched point clouds.
@@ -155,13 +144,19 @@ public class ChamferDistance<T> where T : struct
             throw new ArgumentException("Cannot compute Chamfer Distance: target point cloud is empty but source has points", "target");
         }
 
-        // Pairwise squared distances [B, N, M]; A -> B takes the minimum over M, B -> A over N.
+        // Process batch items independently; each direction reduces bounded point-pair blocks.
+        var results = new T[batchSize];
         var engine = AiDotNetEngine.Current;
-        var squared = PointCloudDistances.Squared(batchA, batchB);
-        var aToB = engine.ReduceMean(NearestDistances(squared, 2), new[] { 1 }, false);
-        var bToA = engine.ReduceMean(NearestDistances(squared, 1), new[] { 1 }, false);
-
-        return engine.TensorAdd(aToB, bToA).ToArray();
+        int dimensions = batchA.Shape[2];
+        for (int item = 0; item < batchSize; item++)
+        {
+            var a = engine.TensorSlice(batchA, new[] { item, 0, 0 }, new[] { 1, numA, dimensions })
+                .Reshape(new[] { numA, dimensions });
+            var b = engine.TensorSlice(batchB, new[] { item, 0, 0 }, new[] { 1, numB, dimensions })
+                .Reshape(new[] { numB, dimensions });
+            results[item] = Compute(a, b);
+        }
+        return results;
     }
 }
 
@@ -170,6 +165,55 @@ public class ChamferDistance<T> where T : struct
 /// </summary>
 internal static class PointCloudDistances
 {
+    // Bound coordinate intermediates independently of the number of points and batch items.
+    private const int CoordinateBlockElements = 1 << 18;
+
+    /// <summary>Nearest squared distance for each source point, using bounded point-pair blocks.</summary>
+    internal static Tensor<T> NearestSquared<T>(Tensor<T> source, Tensor<T> target) where T : struct
+        => ReduceRows(source, target, (T?)null);
+
+    /// <summary>Whether each source point has a neighbour within the squared threshold, using bounded blocks.</summary>
+    internal static Tensor<T> WithinThreshold<T>(Tensor<T> source, Tensor<T> target, T threshold) where T : struct
+        => ReduceRows(source, target, (T?)threshold);
+
+    private static Tensor<T> ReduceRows<T>(Tensor<T> source, Tensor<T> target, T? threshold) where T : struct
+    {
+        var engine = AiDotNetEngine.Current;
+        int count = source.Shape[0], targets = target.Shape[0], dimensions = source.Shape[1];
+        int coordinateWidth = Math.Max(1, dimensions);
+        int rowBlock = Math.Min(256, Math.Max(1, CoordinateBlockElements / coordinateWidth));
+        var blocks = new List<Tensor<T>>();
+        for (int start = 0; start < count; start += rowBlock)
+        {
+            int rows = Math.Min(rowBlock, count - start);
+            var a = engine.TensorSlice(source, new[] { start, 0 }, new[] { rows, dimensions });
+            int targetBlock = Math.Max(1, CoordinateBlockElements / (rows * coordinateWidth));
+            Tensor<T>? reduced = null;
+            for (int offset = 0; offset < targets; offset += targetBlock)
+            {
+                int columns = Math.Min(targetBlock, targets - offset);
+                var b = engine.TensorSlice(target, new[] { offset, 0 }, new[] { columns, dimensions });
+                var squared = dimensions == 0 ? new Tensor<T>(new[] { rows, columns }) : Squared(a, b);
+                Tensor<T> partial;
+                if (threshold.HasValue)
+                {
+                    // NaN distances never match. Complementing a greater-than comparison would match them.
+                    var matches = engine.TensorLessEqual(squared, engine.TensorFullLike(squared, threshold.Value));
+                    partial = engine.ReduceMax(matches, new[] { 1 }, false);
+                    reduced = reduced is null ? partial : engine.TensorMax(reduced, partial);
+                }
+                else
+                {
+                    partial = engine.TensorNegate(engine.ReduceMax(engine.TensorNegate(squared), new[] { 1 }, false));
+                    reduced = reduced is null ? partial : engine.TensorMin(reduced, partial);
+                }
+            }
+            blocks.Add(reduced ?? throw new ArgumentException("Target point cloud must not be empty.", nameof(target)));
+        }
+        return blocks.Count == 0 ? new Tensor<T>(new[] { 0 }) : engine.TensorConcatenate(blocks.ToArray(), 0);
+    }
+
+
     /// <summary>
     /// Squared distances between every pair of points: [N, D] x [M, D] -> [N, M], or batched
     /// [B, N, D] x [B, M, D] -> [B, N, M]. Each entry is sum_d (a_d - b_d)^2 of the coordinate differences.
@@ -399,17 +443,12 @@ public class FScore<T> where T : struct
 
         var engine = AiDotNetEngine.Current;
 
-        // within[i, j] = 1 when ||pred_i - gt_j||^2 <= threshold^2.
-        var squared = PointCloudDistances.Squared(predicted, groundTruth);
-        var beyond = engine.TensorGreaterThan(squared, _numOps.FromDouble(_threshold * _threshold));
-        var within = engine.TensorSubtract(engine.TensorAddScalar(engine.TensorZerosLike(beyond), _numOps.One), beyond);
-
-        // Precision: fraction of predicted points close to any GT point; recall: GT points close to any prediction.
-        T precisionCount = engine.TensorSum(engine.ReduceMax(within, new[] { 1 }, false));
-        T recallCount = engine.TensorSum(engine.ReduceMax(within, new[] { 0 }, false));
-
-        T precision = _numOps.Divide(precisionCount, _numOps.FromDouble(numPred));
-        T recall = _numOps.Divide(recallCount, _numOps.FromDouble(numGT));
+        // Count points with any matching neighbour; integer counts avoid low-precision reduction overflow.
+        T thresholdSquared = _numOps.FromDouble(_threshold * _threshold);
+        var predictedMatches = PointCloudDistances.WithinThreshold(predicted, groundTruth, thresholdSquared);
+        var targetMatches = PointCloudDistances.WithinThreshold(groundTruth, predicted, thresholdSquared);
+        T precision = _numOps.FromDouble((double)engine.TensorCountNonzero(predictedMatches) / numPred);
+        T recall = _numOps.FromDouble((double)engine.TensorCountNonzero(targetMatches) / numGT);
 
         return (precision, recall);
     }

@@ -14,6 +14,18 @@ namespace AiDotNet.Tests.UnitTests.Metrics;
 /// </summary>
 public class ImageVideoQualityReferenceTests
 {
+    [Fact]
+    public void HalfSegmentationIoU_LargePerfectMaskHasUnitScore()
+    {
+        var labels = new Half[70000];
+        Array.Fill(labels, (Half)1);
+        var mask = new Tensor<Half>(labels, new[] { 280, 250 });
+        var metric = new MeanIntersectionOverUnion<Half>(2);
+
+        Assert.Equal((Half)1, metric.Compute(mask, mask));
+        Assert.Equal(new Half[] { (Half)0, (Half)1 }, metric.ComputePerClass(mask, mask));
+    }
+
     private const int Height = 14;
     private const int Width = 13;
 
