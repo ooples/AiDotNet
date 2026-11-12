@@ -34,7 +34,8 @@ namespace AiDotNet.MetaLearning.Algorithms;
 /// t / T is the fraction of <c>NumMetaIterations</c> completed. Inference-time adaptation (Algorithm 3)
 /// is the same r-step update on the task's support set.
 /// </para>
-/// </remarks>[ModelDomain(ModelDomain.MachineLearning)]
+/// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.MetaLearning)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
 [ModelTask(ModelTask.Classification)]

@@ -40,7 +40,8 @@ namespace AiDotNet.MetaLearning.Algorithms;
 /// <see cref="Matrix{T}"/> with examples on the first axis; targets may be class indices
 /// (<see cref="Vector{T}"/>, rank-1 tensor) or one-hot rows (<see cref="Matrix{T}"/>, rank-2 tensor).
 /// </para>
-/// </remarks>[ModelDomain(ModelDomain.MachineLearning)]
+/// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.MetaLearning)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
 [ModelTask(ModelTask.Classification)]

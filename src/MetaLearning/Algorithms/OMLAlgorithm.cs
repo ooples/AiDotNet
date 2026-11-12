@@ -35,7 +35,8 @@ namespace AiDotNet.MetaLearning.Algorithms;
 /// PLN indices are the last <c>PlnFraction</c> of the flat parameter vector. <c>SparsityPenalty</c> adds an
 /// optional L1 term on the RLN parameters (off by default, as in the paper).
 /// </para>
-/// </remarks>[ModelDomain(ModelDomain.MachineLearning)]
+/// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.MetaLearning)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
 [ModelTask(ModelTask.Classification)]
