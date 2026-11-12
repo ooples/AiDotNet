@@ -3,6 +3,7 @@ using AiDotNet.Preprocessing.FeatureSelection.Manifold;
 using AiDotNet.Preprocessing.FeatureSelection.Moment;
 using AiDotNet.Preprocessing.FeatureSelection.Morphological;
 using AiDotNet.Preprocessing.FeatureSelection.NLP;
+using AiDotNet.Preprocessing.FeatureSelection.Nonparametric;
 using AiDotNet.Preprocessing.FeatureSelection.Projection;
 using AiDotNet.Preprocessing.FeatureSelection.Quantile;
 using AiDotNet.Preprocessing.FeatureSelection.Range;
@@ -259,6 +260,18 @@ public class FeatureSelectionScipyReferenceTests
         Assert.Equal(new[] { 0 }, rbf.SelectedIndices);
         Assert.Equal(new[] { 2 }, poly.SelectedIndices);
         Assert.Equal(new[] { 0 }, kernelPca.SelectedIndices);
+    }
+
+    [Fact]
+    public void KendallTauSelector_UsesTieCorrectedTauB()
+    {
+        // abs(scipy.stats.kendalltau(X[:, d], y).statistic) - tau-b; the class target has many ties, so the
+        // tie-free tau-a (concordant - discordant) / (n (n - 1) / 2) would be smaller
+        var kendall = new KendallTauSelector<double>(nFeaturesToSelect: 1);
+        kendall.Fit(SpiralData(), SpiralClasses());
+
+        AssertValues(new[] { 0.0778498944161523, 0.0778498944161523, 0.18164975363768868 }, kendall.TauScores, 1e-12);
+        Assert.Equal(new[] { 2 }, kendall.SelectedIndices);
     }
 
     private static void AssertValues(double[] expected, Vector<double>? actual, double tolerance = Tolerance)

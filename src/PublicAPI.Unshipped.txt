@@ -22625,3 +22625,5 @@ AiDotNet.Preprocessing.FeatureSelection.Kernel.RBFKernelSelector<T>.KernelScores
 AiDotNet.Preprocessing.FeatureSelection.Kernel.PolynomialKernelSelector<T>.KernelScores.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
 *REMOVED*AiDotNet.Preprocessing.FeatureSelection.Kernel.KernelPCASelector<T>.FeatureImportances.get -> double[]?
 AiDotNet.Preprocessing.FeatureSelection.Kernel.KernelPCASelector<T>.FeatureImportances.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
+*REMOVED*AiDotNet.Preprocessing.FeatureSelection.Nonparametric.KendallTauSelector<T>.TauScores.get -> double[]?
+AiDotNet.Preprocessing.FeatureSelection.Nonparametric.KendallTauSelector<T>.TauScores.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
