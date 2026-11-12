@@ -128,30 +128,30 @@ public sealed class ActiveSetQuadraticProgramSolver<T> : IQuadraticProgramSolver
             if (IsEffectivelyZero(step, tolerance))
             {
                 // The point solves the equality-constrained subproblem. Check whether any working
-                // inequality wants to be released.
+                // inequality wants to be released: the most negative multiplier below -tolerance, the
+                // first on ties (as -multiplier > tolerance, strictly increasing).
                 int mostNegative = -1;
-                T mostNegativeValue = NumOps.Negate(tolerance);
-
-                for (int k = 0; k < workingSet.Count; k++)
+                Tensor<T>? workingMultipliers = null;
+                if (workingSet.Count > 0)
                 {
-                    T multiplier = multipliers[equalityCount + k];
-                    if (NumOps.LessThan(multiplier, mostNegativeValue))
-                    {
-                        mostNegativeValue = multiplier;
-                        mostNegative = k;
-                    }
+                    workingMultipliers = Engine.TensorNarrow(
+                        SolverTensorOps<T>.AsTensor(multipliers), 0, equalityCount, workingSet.Count).Contiguous();
+                    mostNegative = SolverTensorOps<T>.FirstStrictMaxIndex(Engine.TensorNegate(workingMultipliers), tolerance);
                 }
 
                 if (mostNegative < 0)
                 {
                     // Every multiplier is non-negative: the KKT conditions hold and x is optimal.
-                    for (int i = 0; i < inequalityCount; i++) inequalityMultipliers[i] = NumOps.Zero;
-                    for (int k = 0; k < workingSet.Count; k++)
+                    var released = Tensor<T>.CreateDefault(new[] { Math.Max(inequalityCount, 1) }, NumOps.Zero);
+                    if (workingMultipliers is not null)
                     {
-                        inequalityMultipliers[workingSet[k]] = multipliers[equalityCount + k];
+                        var ids = workingSet.ToArray();
+                        released = Engine.TensorIndexCopy(
+                            released, 0, new Tensor<int>(new[] { ids.Length }, new Vector<int>(ids)), workingMultipliers);
                     }
 
-                    for (int e = 0; e < equalityCount; e++) equalityMultipliers[e] = multipliers[e];
+                    released.AsSpan().Slice(0, inequalityCount).CopyTo(inequalityMultipliers.AsWritableSpan());
+                    multipliers.AsSpan().Slice(0, equalityCount).CopyTo(equalityMultipliers.AsWritableSpan());
 
                     return Success(
                         program, x, iterations, inequalityCount, equalityCount,
@@ -202,46 +202,60 @@ public sealed class ActiveSetQuadraticProgramSolver<T> : IQuadraticProgramSolver
         var origin = new List<int>();
 
         int originalCount = program.InequalityBounds?.Length ?? 0;
-        for (int r = 0; r < originalCount; r++)
+        if (originalCount > 0)
         {
-            var row = new Vector<T>(variableCount);
-            for (int c = 0; c < variableCount; c++) row[c] = (program.InequalityMatrix ?? throw new InvalidOperationException("program.InequalityMatrix is null where it is required."))[r, c];
-            rows.Add(row);
-            bounds.Add((program.InequalityBounds ?? throw new InvalidOperationException("program.InequalityBounds is null where it is required."))[r]);
-            origin.Add(r);
+            var matrix = SolverTensorOps<T>.AsTensor(program.InequalityMatrix ?? throw new InvalidOperationException("program.InequalityMatrix is null where it is required."));
+            var originalBounds = (program.InequalityBounds ?? throw new InvalidOperationException("program.InequalityBounds is null where it is required.")).ToArray();
+            for (int r = 0; r < originalCount; r++)
+            {
+                rows.Add(Engine.TensorSliceAxis(matrix, 0, r).ToVector());
+                bounds.Add(originalBounds[r]);
+                origin.Add(r);
+            }
         }
 
+        // x_i <= upper_i as the unit row e_i, and -x_i <= -lower_i as the row 0 - e_i.
+        var upperFinite = FiniteFlags(program.UpperBounds, variableCount);
+        var lowerFinite = FiniteFlags(program.LowerBounds, variableCount);
+        var identity = Engine.TensorEye<T>(variableCount);
+        var negatedIdentity = Engine.ScalarMinusTensor(NumOps.Zero, identity);
+        T[] uppers = program.UpperBounds?.ToArray() ?? Array.Empty<T>();
+        T[] negatedLowers = program.LowerBounds is null
+            ? Array.Empty<T>()
+            : Engine.TensorNegate(SolverTensorOps<T>.AsTensor(program.LowerBounds)).ToArray();
         for (int i = 0; i < variableCount; i++)
         {
-            if (program.UpperBounds is not null && IsFinite(program.UpperBounds[i]))
+            if (upperFinite[i])
             {
-                var row = new Vector<T>(variableCount);
-                row[i] = NumOps.One;                          // x_i <= upper_i
-                rows.Add(row);
-                bounds.Add(program.UpperBounds[i]);
+                rows.Add(Engine.TensorSliceAxis(identity, 0, i).ToVector());
+                bounds.Add(uppers[i]);
                 origin.Add(-1);
             }
 
-            if (program.LowerBounds is not null && IsFinite(program.LowerBounds[i]))
+            if (lowerFinite[i])
             {
-                var row = new Vector<T>(variableCount);
-                row[i] = NumOps.Negate(NumOps.One);           // -x_i <= -lower_i
-                rows.Add(row);
-                bounds.Add(NumOps.Negate(program.LowerBounds[i]));
+                rows.Add(Engine.TensorSliceAxis(negatedIdentity, 0, i).ToVector());
+                bounds.Add(negatedLowers[i]);
                 origin.Add(-1);
             }
         }
 
-        var boundsVector = new Vector<T>(bounds.Count);
-        for (int i = 0; i < bounds.Count; i++) boundsVector[i] = bounds[i];
+        var boundsVector = new Vector<T>(bounds);
 
         return (rows, boundsVector, origin.ToArray());
     }
 
-    /// <summary>
-    /// Finds any point satisfying every constraint, by solving the feasibility problem as a linear
-    /// program with a zero objective.
-    /// </summary>
+    // True where the bound vector is present and its entry is finite.
+    private static bool[] FiniteFlags(Vector<T>? bounds, int count)
+    {
+        var flags = new bool[count];
+        if (bounds is null || count == 0) return flags;
+        for (int i = 0; i < count; i++) flags[i] = true;
+        var nonFinite = SolverTensorOps<T>.NonFinite(SolverTensorOps<T>.AsTensor(bounds));
+        foreach (int i in Engine.TensorNonzero(nonFinite).ToArray()) flags[i] = false;
+        return flags;
+    }
+
     private (LinearProgramStatus Status, Vector<T>? Point) FindFeasiblePoint(
         QuadraticProgram<T> program, List<Vector<T>> inequalityRows, Vector<T> inequalityBounds)
     {
@@ -251,25 +265,16 @@ public sealed class ActiveSetQuadraticProgramSolver<T> : IQuadraticProgramSolver
         Matrix<T>? inequalityMatrix = null;
         if (inequalityRows.Count > 0)
         {
-            inequalityMatrix = new Matrix<T>(inequalityRows.Count, variableCount);
-            for (int r = 0; r < inequalityRows.Count; r++)
-            {
-                for (int c = 0; c < variableCount; c++) inequalityMatrix[r, c] = inequalityRows[r][c];
-            }
+            inequalityMatrix = StackRows(inequalityRows).ToMatrix();
         }
 
         // The bounds were already folded into the inequality rows, so the linear program itself is
         // told the variables are free; otherwise the simplex default of x >= 0 would silently add a
         // constraint the caller never asked for.
-        var freeLower = new Vector<T>(variableCount);
-        var freeUpper = new Vector<T>(variableCount);
         var negativeInfinity = NumOps.FromDouble(double.NegativeInfinity);
         var positiveInfinity = NumOps.FromDouble(double.PositiveInfinity);
-        for (int i = 0; i < variableCount; i++)
-        {
-            freeLower[i] = negativeInfinity;
-            freeUpper[i] = positiveInfinity;
-        }
+        var freeLower = Tensor<T>.CreateDefault(new[] { variableCount }, negativeInfinity).ToVector();
+        var freeUpper = Tensor<T>.CreateDefault(new[] { variableCount }, positiveInfinity).ToVector();
 
         var feasibilityProgram = new LinearProgram<T>(
             zeroObjective,
@@ -285,21 +290,9 @@ public sealed class ActiveSetQuadraticProgramSolver<T> : IQuadraticProgramSolver
             solution.Status == LinearProgramStatus.Optimal ? solution.Solution : null);
     }
 
-    /// <summary>
-    /// Solves the KKT system for the equality-constrained subproblem defined by the current working
-    /// set, returning the step and the Lagrange multipliers.
-    /// </summary>
-    /// <remarks>
-    /// The system solved is
-    /// <code>
-    ///   [ Q   Aᵀ ] [ p ]   [ -g ]
-    ///   [ A   0  ] [ λ ] = [  0 ]
-    /// </code>
-    /// where <c>A</c> stacks the equality rows and the working inequality rows, <c>g</c> is the
-    /// gradient at the current point, <c>p</c> is the step and <c>λ</c> the multipliers. Its second
-    /// block row says the step stays on every working constraint; the first says the gradient at the
-    /// new point is a combination of their normals, which is stationarity.
-    /// </remarks>
+    private static Tensor<T> StackRows(List<Vector<T>> rows)
+        => Engine.TensorStack(rows.Select(row => SolverTensorOps<T>.AsTensor(row)).ToArray(), 0);
+
     private (Vector<T> Step, Vector<T> Multipliers)? SolveEqualityConstrainedStep(
         QuadraticProgram<T> program,
         List<Vector<T>> inequalityRows,
@@ -311,38 +304,47 @@ public sealed class ActiveSetQuadraticProgramSolver<T> : IQuadraticProgramSolver
         int constraintCount = equalityCount + workingSet.Count;
         int size = variableCount + constraintCount;
 
-        var system = new Matrix<T>(size, size);
-        var rightHandSide = new Vector<T>(size);
-
+        // [[Q + rI, C^T], [C, 0]] with C the equality rows then the working inequality rows, and
+        // right-hand side [-g; 0]. The regularization only touches the diagonal.
         var regularization = NumOps.FromDouble(_options.SingularityRegularization);
-        for (int i = 0; i < variableCount; i++)
+        var quadratic = SolverTensorOps<T>.AsTensor(program.Quadratic);
+        var identity = Engine.TensorEye<T>(variableCount);
+        var topLeft = Engine.TensorWhere(identity, Engine.TensorAddScalar(quadratic, regularization), quadratic);
+        var negatedGradient = Engine.TensorNegate(SolverTensorOps<T>.AsTensor(gradient));
+
+        Tensor<T> systemTensor;
+        Tensor<T> rightHandSideTensor;
+        if (constraintCount == 0)
         {
-            for (int j = 0; j < variableCount; j++) system[i, j] = program.Quadratic[i, j];
-            system[i, i] = NumOps.Add(system[i, i], regularization);
-            rightHandSide[i] = NumOps.Negate(gradient[i]);
+            systemTensor = topLeft;
+            rightHandSideTensor = negatedGradient;
+        }
+        else
+        {
+            var blocks = new List<Tensor<T>>(2);
+            if (equalityCount > 0)
+            {
+                blocks.Add(Engine.TensorNarrow(
+                    SolverTensorOps<T>.AsTensor(program.EqualityMatrix ?? throw new InvalidOperationException("program.EqualityMatrix is null where it is required.")),
+                    0, 0, equalityCount));
+            }
+
+            if (workingSet.Count > 0)
+            {
+                blocks.Add(StackRows(workingSet.Select(k => inequalityRows[k]).ToList()));
+            }
+
+            var constraints = blocks.Count == 1 ? blocks[0] : Engine.TensorConcatenate(blocks.ToArray(), 0);
+            var top = Engine.TensorConcatenate(new[] { topLeft, Engine.TensorTranspose(constraints) }, 1);
+            var bottom = Engine.TensorConcatenate(
+                new[] { constraints, Tensor<T>.CreateDefault(new[] { constraintCount, constraintCount }, NumOps.Zero) }, 1);
+            systemTensor = Engine.TensorConcatenate(new[] { top, bottom }, 0);
+            rightHandSideTensor = Engine.TensorConcatenate(
+                new[] { negatedGradient, Tensor<T>.CreateDefault(new[] { constraintCount }, NumOps.Zero) }, 0);
         }
 
-        for (int e = 0; e < equalityCount; e++)
-        {
-            int row = variableCount + e;
-            for (int c = 0; c < variableCount; c++)
-            {
-                T coefficient = (program.EqualityMatrix ?? throw new InvalidOperationException("program.EqualityMatrix is null where it is required."))[e, c];
-                system[row, c] = coefficient;
-                system[c, row] = coefficient;
-            }
-        }
-
-        for (int k = 0; k < workingSet.Count; k++)
-        {
-            int row = variableCount + equalityCount + k;
-            var constraintRow = inequalityRows[workingSet[k]];
-            for (int c = 0; c < variableCount; c++)
-            {
-                system[row, c] = constraintRow[c];
-                system[c, row] = constraintRow[c];
-            }
-        }
+        var system = systemTensor.Contiguous().ToMatrix();
+        var rightHandSide = rightHandSideTensor.Contiguous().ToVector();
 
         Vector<T> solution;
         try
@@ -358,31 +360,20 @@ public sealed class ActiveSetQuadraticProgramSolver<T> : IQuadraticProgramSolver
             return null;
         }
 
-        var step = new Vector<T>(variableCount);
-        for (int i = 0; i < variableCount; i++)
+        var solved = SolverTensorOps<T>.AsTensor(solution);
+        var step = Engine.TensorNarrow(solved, 0, 0, variableCount).Contiguous();
+        if (SolverTensorOps<T>.First(SolverTensorOps<T>.NonFinite(step)) is not null)
         {
-            if (double.IsNaN(NumOps.ToDouble(solution[i])) || double.IsInfinity(NumOps.ToDouble(solution[i])))
-            {
-                return null;
-            }
-
-            step[i] = solution[i];
+            return null;
         }
 
-        var multipliers = new Vector<T>(Math.Max(constraintCount, 1));
-        for (int k = 0; k < constraintCount; k++) multipliers[k] = solution[variableCount + k];
+        var multipliers = constraintCount > 0
+            ? Engine.TensorNarrow(solved, 0, variableCount, constraintCount).Contiguous().ToVector()
+            : new Vector<T>(1);
 
-        return (step, multipliers);
+        return (step.ToVector(), multipliers);
     }
 
-    /// <summary>
-    /// Computes how far along the step direction the point can move before a constraint outside the
-    /// working set blocks it, and which constraint that is.
-    /// </summary>
-    /// <returns>
-    /// The step length, capped at 1 (the full subproblem step), and the index of the blocking
-    /// constraint, or -1 when nothing blocks.
-    /// </returns>
     private static (T Length, int BlockingConstraint) ComputeStepLength(
         List<Vector<T>> inequalityRows,
         Vector<T> inequalityBounds,
@@ -394,22 +385,22 @@ public sealed class ActiveSetQuadraticProgramSolver<T> : IQuadraticProgramSolver
         T best = NumOps.One;
         int blocking = -1;
 
-        for (int i = 0; i < inequalityRows.Count; i++)
+        if (inequalityRows.Count > 0)
         {
-            if (inWorkingSet[i]) continue;
-
-            // Only constraints the step moves TOWARD can block it.
-            T directionalRate = inequalityRows[i].DotProduct(step);
-            if (!NumOps.GreaterThan(directionalRate, tolerance)) continue;
-
-            T slack = NumOps.Subtract(inequalityBounds[i], inequalityRows[i].DotProduct(x));
-            T limit = NumOps.Divide(slack, directionalRate);
-
-            if (NumOps.LessThan(limit, best))
-            {
-                best = limit;
-                blocking = i;
-            }
+            // Only constraints outside the working set that the step moves TOWARD (rate > tolerance) can
+            // block it; the first strictly smallest limit below one wins, as -limit > -1.
+            var rows = StackRows(inequalityRows);
+            var rates = SolverTensorOps<T>.MatVec(rows, SolverTensorOps<T>.AsTensor(step));
+            var slack = Engine.TensorSubtract(SolverTensorOps<T>.AsTensor(inequalityBounds), SolverTensorOps<T>.MatVec(rows, SolverTensorOps<T>.AsTensor(x)));
+            var outside = Engine.ScalarMinusTensor(NumOps.One, SolverTensorOps<T>.Mask(inWorkingSet));
+            var eligible = Engine.TensorMultiply(outside, Engine.TensorGreaterThan(rates, tolerance));
+            var ones = Tensor<T>.CreateDefault(new[] { inequalityRows.Count }, NumOps.One);
+            var limits = Engine.TensorDivide(slack, Engine.TensorWhere(eligible, rates, ones));
+            T floor = NumOps.Negate(NumOps.One);
+            var candidates = Engine.TensorWhere(
+                eligible, Engine.TensorNegate(limits), Tensor<T>.CreateDefault(new[] { inequalityRows.Count }, floor));
+            blocking = SolverTensorOps<T>.FirstStrictMaxIndex(candidates, floor);
+            if (blocking >= 0) best = limits.GetFlat(blocking);
         }
 
         // Numerical drift can make the slack marginally negative; clamping keeps the iterate
@@ -428,12 +419,9 @@ public sealed class ActiveSetQuadraticProgramSolver<T> : IQuadraticProgramSolver
 
     private static bool IsEffectivelyZero(Vector<T> vector, T tolerance)
     {
-        for (int i = 0; i < vector.Length; i++)
-        {
-            if (NumOps.GreaterThan(NumOps.Abs(vector[i]), tolerance)) return false;
-        }
-
-        return true;
+        if (vector.Length == 0) return true;
+        var magnitudes = Engine.TensorAbs(SolverTensorOps<T>.AsTensor(vector));
+        return SolverTensorOps<T>.First(Engine.TensorGreaterThan(magnitudes, tolerance)) is null;
     }
 
     private QuadraticProgramSolution<T> Success(
@@ -447,17 +435,15 @@ public sealed class ActiveSetQuadraticProgramSolver<T> : IQuadraticProgramSolver
         int[] boundRowOrigin)
     {
         // Report multipliers only for the caller's own inequality rows; the extra rows synthesized
-        // from variable bounds are an implementation detail.
+        // from variable bounds are an implementation detail. FlattenConstraints lists the caller's rows
+        // first, in order (origin[i] == i), so they are the leading entries.
         int originalCount = program.InequalityBounds?.Length ?? 0;
         Vector<T>? inequalityMultipliers = null;
         if (originalCount > 0)
         {
             inequalityMultipliers = new Vector<T>(originalCount);
-            for (int i = 0; i < flattenedInequalityCount; i++)
-            {
-                int origin = boundRowOrigin[i];
-                if (origin >= 0) inequalityMultipliers[origin] = flattenedMultipliers[i];
-            }
+            int copied = Math.Min(originalCount, flattenedInequalityCount);
+            flattenedMultipliers.AsSpan().Slice(0, copied).CopyTo(inequalityMultipliers.AsWritableSpan());
         }
 
         return new QuadraticProgramSolution<T>(
@@ -477,25 +463,5 @@ public sealed class ActiveSetQuadraticProgramSolver<T> : IQuadraticProgramSolver
     }
 
     private static Vector<T> MultiplyMatrixVector(Matrix<T> matrix, Vector<T> vector)
-    {
-        var result = new Vector<T>(matrix.Rows);
-        for (int r = 0; r < matrix.Rows; r++)
-        {
-            T sum = NumOps.Zero;
-            for (int c = 0; c < matrix.Columns; c++)
-            {
-                sum = NumOps.Add(sum, NumOps.Multiply(matrix[r, c], vector[c]));
-            }
-
-            result[r] = sum;
-        }
-
-        return result;
-    }
-
-    private static bool IsFinite(T value)
-    {
-        double asDouble = NumOps.ToDouble(value);
-        return !double.IsInfinity(asDouble) && !double.IsNaN(asDouble);
-    }
+        => SolverTensorOps<T>.MatVec(SolverTensorOps<T>.AsTensor(matrix), SolverTensorOps<T>.AsTensor(vector)).ToVector();
 }
