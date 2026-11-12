@@ -37,7 +37,7 @@ public class RelationalGCNPaperTests
         int numNodes,
         int hiddenDimension,
         int numLayers,
-        string aggregation = "sum",
+        RelationalAggregation aggregation = RelationalAggregation.Sum,
         bool useBasis = true,
         bool useBlocks = false,
         int numBlocks = 1,
@@ -88,9 +88,10 @@ public class RelationalGCNPaperTests
     /// (0.5, 0.25)) = ReLU(1.5, -0.75) = (1.5, 0).
     /// </summary>
     [Theory]
-    [InlineData("mean", new[] { 1.5, 2.25, 1.0, 2.75, 1.0, 0.0 })]
-    [InlineData("sum", new[] { 2.5, 4.5, 1.0, 2.75, 1.5, 0.0 })]
-    public void Relational_layer_matches_the_hand_computed_tiny_graph(string aggregation, double[] expected)
+    [InlineData(RelationalAggregation.Mean, new[] { 1.5, 2.25, 1.0, 2.75, 1.0, 0.0 })]
+    [InlineData(RelationalAggregation.Sum, new[] { 2.5, 4.5, 1.0, 2.75, 1.5, 0.0 })]
+    public void Relational_layer_matches_the_hand_computed_tiny_graph(
+        RelationalAggregation aggregation, double[] expected)
     {
         var model = CreateModel(TinyGraph(), numNodes: 3, hiddenDimension: 2, numLayers: 1, aggregation: aggregation);
         var weights = model.RelationalWeightTensors;

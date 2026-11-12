@@ -1,4 +1,5 @@
 using System;
+using AiDotNet.Enums;
 
 namespace AiDotNet.Models.Options;
 
@@ -239,15 +240,16 @@ public class RelationalGCNOptions<T> : TimeSeriesRegressionOptions<T>
     /// <summary>
     /// Gets or sets the aggregation method for neighbor messages.
     /// </summary>
-    /// <value>The aggregation method, defaulting to "sum".</value>
+    /// <value>The aggregation method, defaulting to <see cref="RelationalAggregation.Sum"/>.</value>
     /// <remarks>
-    /// <para><b>For Beginners:</b> How to combine messages from neighbors.
-    /// - "sum": Add all neighbor messages
-    /// - "mean": Average neighbor messages (normalized)
-    /// - "max": Take element-wise maximum
+    /// <para><b>For Beginners:</b> How to combine messages from neighbors (the 1/c_{i,r} of
+    /// Schlichtkrull et al. 2018, Eq. 2).
+    /// - <see cref="RelationalAggregation.Sum"/>: Add all neighbor messages (c_{i,r} = 1)
+    /// - <see cref="RelationalAggregation.Mean"/>: Average them over the node's neighbors under each relation
+    ///   (c_{i,r} = |N_i^r|, the paper's choice)
     /// </para>
     /// </remarks>
-    public string Aggregation { get; set; } = "sum";
+    public RelationalAggregation Aggregation { get; set; } = RelationalAggregation.Sum;
 
     /// <summary>
     /// Gets or sets the number of samples for uncertainty estimation.

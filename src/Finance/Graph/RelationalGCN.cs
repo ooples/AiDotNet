@@ -155,7 +155,7 @@ public partial class RelationalGCN<T> : ForecastingModelBase<T>
     private bool _useBasisDecomposition;
     private bool _useBlockDecomposition;
     private bool _useSelfLoop;
-    private string _aggregation;
+    private RelationalAggregation _aggregation;
     private int _numSamples;
     #endregion
 
@@ -312,7 +312,7 @@ public partial class RelationalGCN<T> : ForecastingModelBase<T>
         _aggregation = _options.Aggregation;
         _numSamples = _options.NumSamples;
 
-        _meanAggregation = UsesMeanAggregation(_aggregation);
+        _meanAggregation = _aggregation == RelationalAggregation.Mean;
         _relationAdjacencies = relationAdjacencies is null ? null : ValidatedAdjacency(relationAdjacencies);
         _random = LayerInitializationSeedScope.CreateComponentRandom(_options.Seed);
     }
@@ -366,7 +366,7 @@ public partial class RelationalGCN<T> : ForecastingModelBase<T>
         _numSamples = _options.NumSamples;
 
         ValidateRelationalOptions();
-        _meanAggregation = UsesMeanAggregation(_aggregation);
+        _meanAggregation = _aggregation == RelationalAggregation.Mean;
 
         // Initialize random before CreateDefaultRelationAdjacencies which uses it
         _random = LayerInitializationSeedScope.CreateComponentRandom(_options.Seed);
@@ -424,24 +424,10 @@ public partial class RelationalGCN<T> : ForecastingModelBase<T>
             throw new ArgumentException(
                 $"Block decomposition splits the hidden dimension ({_hiddenDimension}) into NumBlocks ({_numBlocks}) equal blocks, so NumBlocks must divide it.",
                 "options");
+        if (_aggregation != RelationalAggregation.Sum && _aggregation != RelationalAggregation.Mean)
+            throw new ArgumentException($"Unknown RelationalAggregation value {(int)_aggregation}.", "options");
         if (!_useBlockDecomposition && _useBasisDecomposition && _numBases < 1)
             throw new ArgumentException("Basis decomposition needs at least one basis.", "options");
-    }
-
-    /// <summary>
-    /// Reads the aggregation option: "sum" keeps c_{i,r} = 1, "mean" sets c_{i,r} to the node's in-degree under r.
-    /// </summary>
-    /// <param name="aggregation">The configured aggregation.</param>
-    /// <returns>True for mean aggregation, false for sum.</returns>
-    private static bool UsesMeanAggregation(string aggregation)
-    {
-        if (string.Equals(aggregation, "mean", StringComparison.OrdinalIgnoreCase))
-            return true;
-        if (string.Equals(aggregation, "sum", StringComparison.OrdinalIgnoreCase))
-            return false;
-        throw new ArgumentException(
-            $"RelationalGCN aggregates each relation's messages as a normalized sum (Schlichtkrull et al. 2018, Eq. 2), so Aggregation must be \"sum\" or \"mean\"; got \"{aggregation}\".",
-            "options");
     }
 
     /// <summary>
@@ -556,8 +542,8 @@ public partial class RelationalGCN<T> : ForecastingModelBase<T>
     /// <returns>The normalized adjacencies as [numRelations * numNodes, numNodes].</returns>
     /// <remarks>
     /// <para><b>For Beginners:</b> Row (r, i) of the result holds A_r[i, j] / c_{i,r}, so multiplying it by the node
-    /// states gives sum_{j in N_i^r} h_j / c_{i,r}. Under "sum" aggregation c_{i,r} = 1 and the adjacency weights
-    /// are used as given; under "mean" c_{i,r} is the node's weighted in-degree under relation r, which for a 0/1
+    /// states gives sum_{j in N_i^r} h_j / c_{i,r}. Under <see cref="RelationalAggregation.Sum"/> c_{i,r} = 1 and
+    /// the adjacency weights are used as given; under <see cref="RelationalAggregation.Mean"/> c_{i,r} is the node's weighted in-degree under relation r, which for a 0/1
     /// adjacency is the |N_i^r| the paper uses.
     /// </para>
     /// </remarks>
