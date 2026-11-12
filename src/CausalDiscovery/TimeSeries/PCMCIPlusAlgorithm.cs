@@ -68,11 +68,16 @@ public class PCMCIPlusAlgorithm<T> : TimeSeriesCausalBase<T>
         });
         var laggedGraph = pcmci.DiscoverStructure(data);
 
-        // Copy lagged edges into result
-        var W = new Matrix<T>(d, d);
-        for (int i = 0; i < d; i++)
-            for (int j = 0; j < d; j++)
-                W[i, j] = laggedGraph.AdjacencyMatrix[i, j];
+        // Lagged edges start the result; parentsOf[v] lists (ascending) every k with a nonzero lagged edge k -> v
+        var lagged = Tensor<T>.FromMatrix(laggedGraph.AdjacencyMatrix);
+        var hasLaggedEdge = Engine.TensorGreaterThan(Engine.TensorAbs(lagged), NumOps.Zero);
+        var parentsOf = new List<int>[d];
+        for (int v = 0; v < d; v++) parentsOf[v] = new List<int>();
+        foreach (int position in Engine.TensorNonzero(Engine.TensorTranspose(hasLaggedEdge).Reshape(new[] { d * d })).ToArray())
+            parentsOf[position / d].Add(position % d);
+
+        // Contemporaneous strengths, applied where they exceed the lagged weight already there
+        var contemporaneous = new Dictionary<int, double>();
 
         // Step 2: Contemporaneous discovery via conditional independence testing
         // Condition on the lagged parents of both variables (discovered from PCMCI)
@@ -82,15 +87,7 @@ public class PCMCIPlusAlgorithm<T> : TimeSeriesCausalBase<T>
             for (int j = i + 1; j < d; j++)
             {
                 // Build conditioning set from lagged parents of both i and j
-                var condVarIndices = new List<int>();
-                for (int k = 0; k < d; k++)
-                {
-                    if (NumOps.GreaterThan(NumOps.Abs(laggedGraph.AdjacencyMatrix[k, i]), NumOps.Zero) ||
-                        NumOps.GreaterThan(NumOps.Abs(laggedGraph.AdjacencyMatrix[k, j]), NumOps.Zero))
-                    {
-                        condVarIndices.Add(k);
-                    }
-                }
+                var condVarIndices = new SortedSet<int>(parentsOf[i].Concat(parentsOf[j])).ToList();
 
                 double partCorr;
                 if (condVarIndices.Count == 0)
@@ -110,31 +107,22 @@ public class PCMCIPlusAlgorithm<T> : TimeSeriesCausalBase<T>
                 if (pValue <= _alpha)
                 {
                     // Significant contemporaneous link — orient using causal ordering heuristic
-                    int parentsOfI = 0, parentsOfJ = 0;
-                    for (int k = 0; k < d; k++)
-                    {
-                        if (NumOps.GreaterThan(NumOps.Abs(laggedGraph.AdjacencyMatrix[k, i]), NumOps.Zero)) parentsOfI++;
-                        if (NumOps.GreaterThan(NumOps.Abs(laggedGraph.AdjacencyMatrix[k, j]), NumOps.Zero)) parentsOfJ++;
-                    }
+                    int parentsOfI = parentsOf[i].Count, parentsOfJ = parentsOf[j].Count;
 
-                    T strength = NumOps.FromDouble(Math.Abs(partCorr));
+                    // Each pair is visited once, so the weight already at [i, j] / [j, i] is the lagged one.
                     if (parentsOfI <= parentsOfJ)
-                    {
-                        double current = NumOps.ToDouble(W[i, j]);
-                        if (Math.Abs(partCorr) > current)
-                            W[i, j] = strength;
-                    }
+                        contemporaneous[i * d + j] = Math.Abs(partCorr);
                     else
-                    {
-                        double current = NumOps.ToDouble(W[j, i]);
-                        if (Math.Abs(partCorr) > current)
-                            W[j, i] = strength;
-                    }
+                        contemporaneous[j * d + i] = Math.Abs(partCorr);
                 }
             }
         }
 
-        return W;
+        var strength = Tensor<T>.FromMatrix(CausalTensorHelpers.FromStatistics<T>(d, d, contemporaneous));
+        var tested = Tensor<T>.FromMatrix(CausalTensorHelpers.FromStatistics<T>(d, d,
+            contemporaneous.ToDictionary(link => link.Key, _ => 1.0)));
+        var replace = Engine.TensorMultiply(tested, Engine.TensorGreaterThan(strength, lagged));
+        return Engine.TensorWhere(replace, strength, lagged).ToMatrix();
     }
 
     /// <summary>
@@ -145,116 +133,28 @@ public class PCMCIPlusAlgorithm<T> : TimeSeriesCausalBase<T>
         Matrix<T> data, int i, int j,
         List<int> condVarIndices, int effectiveN, int offset)
     {
-        int n = data.Rows;
+        var x = Tensor<T>.FromMatrix(data);
 
-        // Build conditioning matrix from lag-1 values of conditioning variables
-        int numCond = condVarIndices.Count;
-        var condMatrix = new Matrix<T>(effectiveN, numCond);
-        for (int c = 0; c < numCond; c++)
-        {
-            int cVar = condVarIndices[c];
-            for (int t = 0; t < effectiveN; t++)
-            {
-                int tIdx = offset + t - 1;
-                condMatrix[t, c] = (tIdx >= 0 && tIdx < n) ? data[tIdx, cVar] : NumOps.Zero;
-            }
-        }
+        // Build conditioning matrix from lag-1 values of conditioning variables (rows outside the data are 0)
+        var condMatrix = Engine.TensorConcatenate(condVarIndices
+            .Select(cVar => LaggedSeries(x, cVar, 1, offset, effectiveN).Reshape(new[] { effectiveN, 1 }))
+            .ToArray(), 1);
 
         // Build target vectors at lag 0
-        var iVals = new Vector<T>(effectiveN);
-        var jVals = new Vector<T>(effectiveN);
-        for (int t = 0; t < effectiveN; t++)
-        {
-            iVals[t] = data[offset + t, i];
-            jVals[t] = data[offset + t, j];
-        }
+        var iVals = LaggedSeries(x, i, 0, offset, effectiveN);
+        var jVals = LaggedSeries(x, j, 0, offset, effectiveN);
 
-        // Residualize both on conditioning set
-        var residI = OLSResiduals(condMatrix, iVals, effectiveN, numCond);
-        var residJ = OLSResiduals(condMatrix, jVals, effectiveN, numCond);
+        // Residualize both on conditioning set (ridge 1e-10, LU)
+        var residI = OlsResidualSeries(condMatrix, iVals, false, 1e-10, MatrixDecompositionType.Lu);
+        var residJ = OlsResidualSeries(condMatrix, jVals, false, 1e-10, MatrixDecompositionType.Lu);
 
-        return PearsonCorrelation(residI, residJ, effectiveN);
-    }
-
-    private Vector<T> OLSResiduals(Matrix<T> Z, Vector<T> y, int n, int p)
-    {
-        if (p == 0)
-        {
-            T mean = NumOps.Zero;
-            for (int t = 0; t < n; t++) mean = NumOps.Add(mean, y[t]);
-            mean = NumOps.Divide(mean, NumOps.FromDouble(n));
-            var r = new Vector<T>(n);
-            for (int t = 0; t < n; t++) r[t] = NumOps.Subtract(y[t], mean);
-            return r;
-        }
-
-        // Build normal equations: ZtZ * beta = Zty
-        var ZtZ = new Matrix<T>(p, p);
-        var Zty = new Vector<T>(p);
-        for (int a = 0; a < p; a++)
-        {
-            for (int b = a; b < p; b++)
-            {
-                T sum = NumOps.Zero;
-                for (int t = 0; t < n; t++) sum = NumOps.Add(sum, NumOps.Multiply(Z[t, a], Z[t, b]));
-                ZtZ[a, b] = sum;
-                ZtZ[b, a] = sum;
-            }
-            T s = NumOps.Zero;
-            for (int t = 0; t < n; t++) s = NumOps.Add(s, NumOps.Multiply(Z[t, a], y[t]));
-            Zty[a] = s;
-        }
-
-        // Ridge for stability
-        T ridge = NumOps.FromDouble(1e-10);
-        for (int a = 0; a < p; a++) ZtZ[a, a] = NumOps.Add(ZtZ[a, a], ridge);
-
-        var beta = MatrixSolutionHelper.SolveLinearSystem<T>(ZtZ, Zty, MatrixDecompositionType.Lu);
-
-        var residuals = new Vector<T>(n);
-        for (int t = 0; t < n; t++)
-        {
-            T pred = NumOps.Zero;
-            for (int c = 0; c < p; c++) pred = NumOps.Add(pred, NumOps.Multiply(Z[t, c], beta[c]));
-            residuals[t] = NumOps.Subtract(y[t], pred);
-        }
-
-        return residuals;
+        return SeriesCorrelation(residI, residJ);
     }
 
     private double ComputeWindowCorrelation(Matrix<T> data, int count, int offset, int i, int j)
     {
-        double mi = 0, mj = 0;
-        for (int k = 0; k < count; k++)
-        {
-            int t = offset + k;
-            mi += NumOps.ToDouble(data[t, i]); mj += NumOps.ToDouble(data[t, j]);
-        }
-        mi /= count; mj /= count;
-        double sij = 0, sii = 0, sjj = 0;
-        for (int k = 0; k < count; k++)
-        {
-            int t = offset + k;
-            double di = NumOps.ToDouble(data[t, i]) - mi, dj = NumOps.ToDouble(data[t, j]) - mj;
-            sij += di * dj; sii += di * di; sjj += dj * dj;
-        }
-        return (sii > 1e-10 && sjj > 1e-10) ? sij / Math.Sqrt(sii * sjj) : 0;
-    }
-
-    private double PearsonCorrelation(Vector<T> x, Vector<T> y, int n)
-    {
-        double mx = 0, my = 0;
-        for (int i = 0; i < n; i++) { mx += NumOps.ToDouble(x[i]); my += NumOps.ToDouble(y[i]); }
-        mx /= n; my /= n;
-
-        double sxy = 0, sxx = 0, syy = 0;
-        for (int i = 0; i < n; i++)
-        {
-            double dx = NumOps.ToDouble(x[i]) - mx, dy = NumOps.ToDouble(y[i]) - my;
-            sxy += dx * dy; sxx += dx * dx; syy += dy * dy;
-        }
-
-        return (sxx > 1e-10 && syy > 1e-10) ? sxy / Math.Sqrt(sxx * syy) : 0;
+        var x = Tensor<T>.FromMatrix(data);
+        return SeriesCorrelation(LaggedSeries(x, i, 0, offset, count), LaggedSeries(x, j, 0, offset, count));
     }
 
     private static double FisherZTestPValue(double partialCorrelation, int n, int condSetSize)
