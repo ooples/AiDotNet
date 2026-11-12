@@ -35,15 +35,14 @@ public class Sharpen<T> : ImageAugmenterBase<T>
         // Laplacian: (center * (8 + L) - sum of the 8 neighbours) / (8 + L), edges replicated
         var engine = Engine;
         var image = data.ToPlanarTensor();
-        double[,] laplacianKernel =
-        {
-            { -1, -1, -1 },
-            { -1, 8 + lightness, -1 },
-            { -1, -1, -1 }
-        };
+        // Laplacian kernel: -1 everywhere except the centre tap, which is 8 + lightness
+        T centre = NumOps.FromDouble(8 + lightness);
+        var laplacianKernel = engine.TensorAdd(
+            ImageTensor<T>.KernelTensor(new double[,] { { -1, -1, -1 }, { -1, 0, -1 }, { -1, -1, -1 } }),
+            engine.TensorMultiplyScalar(
+                ImageTensor<T>.KernelTensor(new double[,] { { 0, 0, 0 }, { 0, 1, 0 }, { 0, 0, 0 } }), centre));
         var laplacian = engine.TensorDivideScalar(
-            ImageTensor<T>.Correlate(image, ImageTensor<T>.KernelTensor(laplacianKernel), mirror: false),
-            NumOps.FromDouble(8 + lightness));
+            ImageTensor<T>.Correlate(image, laplacianKernel, mirror: false), centre);
 
         var sharpened = engine.TensorAdd(
             engine.TensorMultiplyScalar(image, NumOps.FromDouble(1 - alpha)),

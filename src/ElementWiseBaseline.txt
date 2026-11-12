@@ -11893,6 +11893,7 @@
 2	ADNELEM002|AiDotNet.Augmentation.Audio.PitchShift<T>.ApplyPitchShift(AiDotNet.Tensors.LinearAlgebra.Tensor<T>, double)
 3	ADNELEM002|AiDotNet.Augmentation.Audio.TimeStretch<T>.ApplyTimeStretch(AiDotNet.Tensors.LinearAlgebra.Tensor<T>, double)
 2	ADNELEM002|AiDotNet.Augmentation.Audio.VolumeChange<T>.ApplyGain(AiDotNet.Tensors.LinearAlgebra.Tensor<T>, double)
+1	ADNELEM002|AiDotNet.Augmentation.Image.SegmentationMask<T>.FillPolygon(T[*,*], System.Collections.Generic.IList<(double x, double y)>)
 3	ADNELEM002|AiDotNet.Augmentation.Tabular.AdasynAugmenter<T>.GenerateSyntheticSamples(AiDotNet.Tensors.LinearAlgebra.Matrix<T>, AiDotNet.Tensors.LinearAlgebra.Matrix<T>?, AiDotNet.Augmentation.AugmentationContext<T>)
 4	ADNELEM002|AiDotNet.Augmentation.Tabular.BorderlineSmoteAugmenter<T>.GenerateSyntheticSamples(AiDotNet.Tensors.LinearAlgebra.Matrix<T>, AiDotNet.Tensors.LinearAlgebra.Matrix<T>?, AiDotNet.Augmentation.AugmentationContext<T>)
 1	ADNELEM002|AiDotNet.Augmentation.Tabular.FeatureDropout<T>.ApplyAugmentation(AiDotNet.Tensors.LinearAlgebra.Matrix<T>, AiDotNet.Augmentation.AugmentationContext<T>)

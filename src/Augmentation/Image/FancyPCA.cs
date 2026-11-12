@@ -34,7 +34,7 @@ public class FancyPCA<T> : ImageAugmenterBase<T>
         // 1e-10 that eigenvector stops changing (the scalar loop's break)
         T eps = NumOps.FromDouble(1e-10);
         T zero = NumOps.Zero;
-        var identity = ImageTensor<T>.KernelTensor(new double[,] { { 1, 0, 0 }, { 0, 1, 0 }, { 0, 0, 1 } });
+        var identity = engine.TensorEye<T>(3);
         var tempCov = covTensor;
         var eigenvalues = new Tensor<T>[3];
         var eigenvectors = new Tensor<T>[3];

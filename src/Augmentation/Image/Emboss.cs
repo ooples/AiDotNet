@@ -31,15 +31,15 @@ public class Emboss<T> : ImageAugmenterBase<T>
         // [-1*s, -s, 0]
         // [-s,    1, s]
         // [0,     s, 1*s]
-        double[,] kernel = {
-            { -strength, -strength, 0 },
-            { -strength,  1,        strength },
-            { 0,          strength,  strength }
-        };
-
         var engine = Engine;
+        var kernel = engine.TensorAdd(
+            engine.TensorMultiplyScalar(
+                ImageTensor<T>.KernelTensor(new double[,] { { -1, -1, 0 }, { -1, 0, 1 }, { 0, 1, 1 } }),
+                NumOps.FromDouble(strength)),
+            ImageTensor<T>.KernelTensor(new double[,] { { 0, 0, 0 }, { 0, 1, 0 }, { 0, 0, 0 } }));
+
         var image = data.ToPlanarTensor();
-        var embossed = ImageTensor<T>.Correlate(image, ImageTensor<T>.KernelTensor(kernel), mirror: false);
+        var embossed = ImageTensor<T>.Correlate(image, kernel, mirror: false);
         var blended = engine.TensorAdd(
             engine.TensorMultiplyScalar(image, NumOps.FromDouble(1 - alpha)),
             engine.TensorMultiplyScalar(embossed, NumOps.FromDouble(alpha)));

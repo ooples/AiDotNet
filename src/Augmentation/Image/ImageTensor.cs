@@ -1047,17 +1047,18 @@ public class ImageTensor<T>
     /// </summary>
     internal static T[] OctaveWeights(int count)
     {
-        var weights = new double[count];
-        for (int k = 0; k < count; k++)
-        {
-            weights[k] = 1.0 / (1 << k);
-        }
-
-        return new Tensor<double>(weights, [count]).Cast<T>().ToArray();
+        // 2 * cumprod(0.5, ..., 0.5) = 1, 1/2, 1/4, ...: every step halves, so each weight is exact
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var engine = AiDotNetEngine.Current;
+        var halves = new Tensor<T>([count]);
+        engine.TensorFill(halves, numOps.FromDouble(0.5));
+        return engine.TensorMultiplyScalar(engine.TensorCumProd(halves, 0), numOps.FromDouble(2.0)).ToArray();
     }
 
     /// <summary>
-    /// Converts a 2-D kernel to a [rows, columns] tensor of <typeparamref name="T"/>.
+    /// Converts a fixed table of literal kernel coefficients to a [rows, columns] tensor of
+    /// <typeparamref name="T"/> in one bulk conversion. Only for literal tables: anything computed
+    /// from input data or random draws is combined in <typeparamref name="T"/> by the caller.
     /// </summary>
     internal static Tensor<T> KernelTensor(double[,] kernel)
     {

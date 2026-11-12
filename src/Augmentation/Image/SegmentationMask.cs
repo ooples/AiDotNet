@@ -460,67 +460,69 @@ public class SegmentationMask<T>
     /// </summary>
     private T[,] RasterizePolygons()
     {
-        if (Polygons is null || Polygons.Count == 0 || Width == 0 || Height == 0)
+        if (Polygons is null || Polygons.Count == 0)
         {
             return new T[Height, Width];
         }
 
-        var engine = AiDotNetEngine.Current;
-        var filled = new Tensor<int>([Height, Width]);
+        var result = new T[Height, Width];
+
         foreach (var polygon in Polygons.Where(p => p.Count >= 3))
         {
-            filled = engine.TensorMax(filled, FillPolygon(polygon));
+            // Use scanline algorithm to fill polygon
+            FillPolygon(result, polygon);
         }
 
-        return ToArray2D(filled.Cast<T>(), Height, Width);
+        return result;
     }
 
     /// <summary>
-    /// Scanline fill of one polygon as a [height, width] 0/1 tensor. Row y crosses edge (p1, p2) when
-    /// y lies in [min(y1, y2), max(y1, y2)) at x = x1 + (y - y1) / (y2 - y1) * (x2 - x1); pixel x is
-    /// filled when it lies between a pair of sorted crossings (inclusive), i.e. when the number of
-    /// crossings below x is odd or a crossing equals x.
+    /// Fills a polygon using scanline algorithm.
     /// </summary>
-    private Tensor<int> FillPolygon(IList<(double x, double y)> polygon)
+    private void FillPolygon(T[,] result, IList<(double x, double y)> polygon)
     {
-        var engine = AiDotNetEngine.Current;
-        int edges = polygon.Count;
-        var vertexX = polygon.Select(v => v.x).ToArray();
-        var vertexY = polygon.Select(v => v.y).ToArray();
-        var x1 = new Tensor<T>(Array.ConvertAll(vertexX, NumOps.FromDouble), [1, edges]);
-        var y1 = new Tensor<T>(Array.ConvertAll(vertexY, NumOps.FromDouble), [1, edges]);
-        var x2 = engine.TensorRoll(x1, [-1], [1]);
-        var y2 = engine.TensorRoll(y1, [-1], [1]);
+        // Find y bounds
+        double minY = double.MaxValue, maxY = double.MinValue;
+        foreach (var (x, y) in polygon)
+        {
+            minY = Math.Min(minY, y);
+            maxY = Math.Max(maxY, y);
+        }
 
-        // Crossing of every row with every edge: [height, edges]
-        int[] rowEdge = [Height, edges];
-        var y = engine.TensorBroadcastTo(engine.Reshape(engine.TensorArange<T>(0, Height, 1), [Height, 1]), rowEdge);
-        var y1b = engine.TensorBroadcastTo(y1, rowEdge);
-        var y2b = engine.TensorBroadcastTo(y2, rowEdge);
-        var upward = engine.TensorMultiply(
-            engine.ScalarMinusTensor(NumOps.One, engine.TensorGreaterThan(y1b, y)), engine.TensorGreaterThan(y2b, y));
-        var downward = engine.TensorMultiply(
-            engine.ScalarMinusTensor(NumOps.One, engine.TensorGreaterThan(y2b, y)), engine.TensorGreaterThan(y1b, y));
-        var crosses = engine.TensorAdd(upward, downward);
-        var rise = engine.TensorSubtract(y2, y1);
-        var safeRise = engine.TensorWhere(engine.TensorEquals(rise, NumOps.Zero), ImageTensor<T>.Constant(rise, 1.0), rise);
-        var slope = engine.TensorDivide(engine.TensorSubtract(x2, x1), safeRise);
-        var crossingX = engine.TensorAdd(
-            engine.TensorBroadcastTo(x1, rowEdge),
-            engine.TensorMultiply(engine.TensorSubtract(y, y1b), engine.TensorBroadcastTo(slope, rowEdge)));
+        int yStart = Math.Max(0, (int)Math.Floor(minY));
+        int yEnd = Math.Min(Height - 1, (int)Math.Ceiling(maxY));
 
-        // Crossings strictly below and at-or-below every pixel column: [height, width]
-        int[] grid = [Height, Width, edges];
-        var column = engine.TensorBroadcastTo(engine.Reshape(engine.TensorArange<T>(0, Width, 1), [1, Width, 1]), grid);
-        var crossing = engine.TensorBroadcastTo(engine.Reshape(crossingX, [Height, 1, edges]), grid);
-        var counted = engine.TensorBroadcastTo(engine.Reshape(crosses, [Height, 1, edges]), grid);
-        var below = engine.ReduceSum(engine.TensorMultiply(counted, engine.TensorLessThan(crossing, column)), [2], false).Cast<int>();
-        var atOrBelow = engine.ReduceSum(
-            engine.TensorMultiply(counted, engine.ScalarMinusTensor(NumOps.One, engine.TensorGreaterThan(crossing, column))), [2], false)
-            .Cast<int>();
+        // Scanline for each y
+        for (int y = yStart; y <= yEnd; y++)
+        {
+            var intersections = new List<double>();
 
-        var oddBelow = engine.TensorSubtract(below, engine.TensorMultiplyScalar(engine.TensorDivideScalar(below, 2), 2));
-        var onCrossing = engine.TensorGreaterThan(atOrBelow, below);
-        return engine.TensorMax(oddBelow, onCrossing);
+            // Find intersections with polygon edges
+            for (int i = 0; i < polygon.Count; i++)
+            {
+                var p1 = polygon[i];
+                var p2 = polygon[(i + 1) % polygon.Count];
+
+                if ((p1.y <= y && p2.y > y) || (p2.y <= y && p1.y > y))
+                {
+                    double xIntersect = p1.x + (y - p1.y) / (p2.y - p1.y) * (p2.x - p1.x);
+                    intersections.Add(xIntersect);
+                }
+            }
+
+            intersections.Sort();
+
+            // Fill between pairs of intersections
+            for (int i = 0; i + 1 < intersections.Count; i += 2)
+            {
+                int xStart = Math.Max(0, (int)Math.Ceiling(intersections[i]));
+                int xEnd = Math.Min(Width - 1, (int)Math.Floor(intersections[i + 1]));
+
+                for (int x = xStart; x <= xEnd; x++)
+                {
+                    result[y, x] = NumOps.FromDouble(1);
+                }
+            }
+        }
     }
 }
