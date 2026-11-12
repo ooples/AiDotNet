@@ -26,16 +26,15 @@ public class SlidingWindowSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     private readonly int _nFeaturesToSelect;
     private readonly int _windowSize;
 
-    private readonly Queue<double[]> _windowX;
-    private readonly Queue<double> _windowY;
-    private double[]? _featureScores;
+    private Tensor<T>? _window;
+    private Vector<T>? _featureScores;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public int WindowSize => _windowSize;
-    public double[]? FeatureScores => _featureScores;
+    public Vector<T>? FeatureScores => _featureScores;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -54,8 +53,6 @@ public class SlidingWindowSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
 
         _nFeaturesToSelect = nFeaturesToSelect;
         _windowSize = windowSize;
-        _windowX = new Queue<double[]>();
-        _windowY = new Queue<double>();
     }
 
     /// <inheritdoc />
@@ -72,23 +69,20 @@ public class SlidingWindowSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         int p = data.Columns;
         _nInputFeatures = p;
 
-        // Add new samples to window
-        for (int i = 0; i < n; i++)
+        // Add new samples to window (features, then the target as the last column)
+        var rows = Engine.TensorConcatenate(new[]
         {
-            var row = new double[p];
-            for (int j = 0; j < p; j++)
-                row[j] = NumOps.ToDouble(data[i, j]);
+            Tensor<T>.FromMatrix(data), Engine.Reshape(Tensor<T>.FromVector(target), new[] { n, 1 })
+        }, 1);
+        var window = _window is null
+            ? rows
+            : n == 0 ? _window : Engine.TensorConcatenate(new[] { _window, rows }, 0);
 
-            _windowX.Enqueue(row);
-            _windowY.Enqueue(NumOps.ToDouble(target[i]));
-
-            // Remove old samples if window is full
-            while (_windowX.Count > _windowSize)
-            {
-                _windowX.Dequeue();
-                _windowY.Dequeue();
-            }
-        }
+        // Remove old samples if window is full
+        int count = window.Shape[0];
+        if (count > _windowSize)
+            window = Engine.TensorSlice(window, new[] { count - _windowSize, 0 }, new[] { _windowSize, p + 1 });
+        _window = window;
 
         // Compute feature scores from window
         ComputeScoresFromWindow(p);
@@ -98,44 +92,18 @@ public class SlidingWindowSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
 
     private void ComputeScoresFromWindow(int p)
     {
-        int windowN = _windowX.Count;
+        if (_window is null)
+            return;
+
+        int windowN = _window.Shape[0];
         if (windowN < 2) return;
 
-        var X = _windowX.ToArray();
-        var y = _windowY.ToArray();
-
-        _featureScores = new double[p];
-
-        double yMean = y.Average();
-
-        for (int j = 0; j < p; j++)
-        {
-            double xMean = 0;
-            for (int i = 0; i < windowN; i++)
-                xMean += X[i][j];
-            xMean /= windowN;
-
-            double sxy = 0, sxx = 0, syy = 0;
-            for (int i = 0; i < windowN; i++)
-            {
-                double xd = X[i][j] - xMean;
-                double yd = y[i] - yMean;
-                sxy += xd * yd;
-                sxx += xd * xd;
-                syy += yd * yd;
-            }
-
-            _featureScores[j] = (sxx > 1e-10 && syy > 1e-10)
-                ? Math.Abs(sxy / Math.Sqrt(sxx * syy))
-                : 0;
-        }
-
-        int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = Enumerable.Range(0, p)
-            .OrderByDescending(j => _featureScores[j])
-            .Take(numToSelect)
-            .OrderBy(x => x)
-            .ToArray();
+        // |Pearson r| of every feature with the target, 0 for a constant feature or target
+        var x = Engine.TensorSlice(_window, new[] { 0, 0 }, new[] { windowN, p });
+        var y = Engine.Reshape(Engine.TensorSlice(_window, new[] { 0, p }, new[] { windowN, 1 }), new[] { windowN });
+        var scores = Engine.TensorAbs(PreprocessingTensorOps.TargetCorrelations(x, y));
+        _featureScores = scores.ToVector();
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(scores, Math.Min(_nFeaturesToSelect, p));
     }
 
     public void PartialFit(Matrix<T> data, Vector<T> target)
@@ -156,15 +124,7 @@ public class SlidingWindowSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         if (_selectedIndices is null)
             throw new InvalidOperationException("SlidingWindowSelector has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

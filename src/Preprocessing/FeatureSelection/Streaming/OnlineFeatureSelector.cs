@@ -26,9 +26,10 @@ public class OnlineFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     private readonly int _nFeaturesToSelect;
     private readonly double _learningRate;
 
-    private double[]? _runningScores;
-    private double[]? _runningMeans;
-    private double[]? _runningVars;
+    private Tensor<T>? _runningScores;
+    private Vector<T>? _runningScoreValues;
+    private Tensor<T>? _runningMeans;
+    private Tensor<T>? _runningVars;
     private int _sampleCount;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
@@ -36,7 +37,7 @@ public class OnlineFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public double LearningRate => _learningRate;
-    public double[]? RunningScores => _runningScores;
+    public Vector<T>? RunningScores => _runningScoreValues;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -71,75 +72,88 @@ public class OnlineFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         int p = data.Columns;
         _nInputFeatures = p;
 
+        // Running means and sums of squared deviations of the features and (last column) the target,
+        // feature-target co-moments and the running scores
         if (_runningScores is null)
         {
-            _runningScores = new double[p];
-            _runningMeans = new double[p];
-            _runningVars = new double[p];
+            _runningScores = new Tensor<T>(new[] { 1, p });
+            _runningMeans = new Tensor<T>(new[] { 1, p + 1 });
+            _runningVars = new Tensor<T>(new[] { 1, p + 1 });
+            _covariances = new Tensor<T>(new[] { 1, p });
         }
 
-        // Process each sample incrementally
         var runningMeans = _runningMeans ?? throw new InvalidOperationException("Running means have not been initialized.");
         var runningVars = _runningVars ?? throw new InvalidOperationException("Running variances have not been initialized.");
         var runningScores = _runningScores ?? throw new InvalidOperationException("Running scores have not been initialized.");
+        var covariances = _covariances ?? throw new InvalidOperationException("Running covariances have not been initialized.");
 
-        for (int i = 0; i < n; i++)
+        if (n > 0)
         {
-            double yi = NumOps.ToDouble(target[i]);
-            _sampleCount++;
-
-            for (int j = 0; j < p; j++)
+            int width = p + 1;
+            var shape = new[] { n, width };
+            var columns = Engine.TensorConcatenate(new[]
             {
-                double xi = NumOps.ToDouble(data[i, j]);
+                Tensor<T>.FromMatrix(data), Engine.Reshape(Tensor<T>.FromVector(target), new[] { n, 1 })
+            }, 1);
 
-                // Welford's online algorithm for mean and variance
-                double delta = xi - runningMeans[j];
-                runningMeans[j] += delta / _sampleCount;
-                double delta2 = xi - runningMeans[j];
-                runningVars[j] += delta * delta2;
+            // Welford's statistics after every sample, from prefix sums of the deviations from a shift s (the
+            // running mean, or the first sample when there is none): with N_k samples seen and A_k, Q_k the prefix
+            // sums of (z - s) and (z - s)^2, mean_k = s + A_k / N_k and M2_k = M2_0 + Q_k - A_k^2 / N_k; the
+            // co-moment is C_k = C_0 + sum (x - s_x)(y - s_y) - A_x A_y / N_k.
+            var shift = _sampleCount > 0 ? runningMeans : PreprocessingTensorOps.Row(columns, 0);
+            var deviation = Engine.TensorSubtract(columns, Engine.TensorBroadcastTo(shift, shape));
+            var sums = Engine.TensorCumSum(deviation, 0);
+            var squares = Engine.TensorCumSum(Engine.TensorMultiply(deviation, deviation), 0);
+            var featureDeviation = Engine.TensorSlice(deviation, new[] { 0, 0 }, new[] { n, p });
+            var targetDeviation = Engine.TensorBroadcastTo(Engine.TensorSlice(deviation, new[] { 0, p }, new[] { n, 1 }), new[] { n, p });
+            var crossSums = Engine.TensorCumSum(Engine.TensorMultiply(featureDeviation, targetDeviation), 0);
+            var counts = Engine.Reshape(Engine.TensorArange<T>(_sampleCount + 1, _sampleCount + n + 1, 1), new[] { n, 1 });
 
-                // Update correlation estimate incrementally
-                double correlation = ComputeOnlineCorrelation(xi, yi, j, runningMeans, runningVars);
-                runningScores[j] = (1 - _learningRate) * runningScores[j] + _learningRate * correlation;
-            }
+            var vars = Engine.TensorAdd(Engine.TensorBroadcastTo(runningVars, shape), Engine.TensorSubtract(squares,
+                Engine.TensorDivide(Engine.TensorMultiply(sums, sums), Engine.TensorBroadcastTo(counts, shape))));
+            var featureSums = Engine.TensorSlice(sums, new[] { 0, 0 }, new[] { n, p });
+            var targetSums = Engine.TensorBroadcastTo(Engine.TensorSlice(sums, new[] { 0, p }, new[] { n, 1 }), new[] { n, p });
+            var comoments = Engine.TensorAdd(Engine.TensorBroadcastTo(covariances, new[] { n, p }), Engine.TensorSubtract(crossSums,
+                Engine.TensorDivide(Engine.TensorMultiply(featureSums, targetSums), Engine.TensorBroadcastTo(counts, new[] { n, p }))));
+
+            // Correlation estimate after every sample, 0 unless both variances are above 1e-10
+            T eps = NumOps.FromDouble(1e-10);
+            var xVar = Engine.TensorSlice(vars, new[] { 0, 0 }, new[] { n, p });
+            var yVar = Engine.TensorBroadcastTo(Engine.TensorSlice(vars, new[] { 0, p }, new[] { n, 1 }), new[] { n, p });
+            var usable = Engine.TensorMultiply(Engine.TensorGreaterThan(xVar, eps), Engine.TensorGreaterThan(yVar, eps));
+            var product = Engine.TensorWhere(usable, Engine.TensorMultiply(xVar, yVar), PreprocessingTensorOps.Filled(new[] { n, p }, NumOps.One));
+            var correlations = SelectorTensorOps.ZeroUnless(usable, Engine.TensorDivide(comoments, Engine.TensorSqrt(product)));
+
+            // Running scores: n steps of S <- (1 - rate) S + rate r
+            T keep = NumOps.FromDouble(1 - _learningRate);
+            var exponents = Engine.TensorSubtract(
+                PreprocessingTensorOps.Filled(new[] { n }, NumOps.FromDouble(n - 1)), Engine.TensorArange<T>(0, n, 1));
+            var decay = Engine.Reshape(Engine.TensorPower(PreprocessingTensorOps.Filled(new[] { n }, keep), exponents), new[] { 1, n });
+            runningScores = Engine.TensorAdd(
+                Engine.TensorMultiplyScalar(runningScores, NumOps.FromDouble(Math.Pow(1 - _learningRate, n))),
+                Engine.TensorMultiplyScalar(Engine.TensorMatMul(decay, correlations), NumOps.FromDouble(_learningRate)));
+
+            _sampleCount += n;
+            runningMeans = Engine.TensorAdd(shift, Engine.TensorDivideScalar(
+                Engine.TensorSlice(sums, new[] { n - 1, 0 }, new[] { 1, width }), NumOps.FromDouble(_sampleCount)));
+            runningVars = Engine.TensorSlice(vars, new[] { n - 1, 0 }, new[] { 1, width });
+            covariances = Engine.TensorSlice(comoments, new[] { n - 1, 0 }, new[] { 1, p });
         }
 
+        _runningScores = runningScores;
+        _runningMeans = runningMeans;
+        _runningVars = runningVars;
+        _covariances = covariances;
+        _runningScoreValues = Engine.Reshape(runningScores, new[] { p }).ToVector();
+
         // Select top features
-        int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = Enumerable.Range(0, p)
-            .OrderByDescending(j => Math.Abs(runningScores[j]))
-            .Take(numToSelect)
-            .OrderBy(x => x)
-            .ToArray();
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(
+            Engine.TensorAbs(Engine.Reshape(runningScores, new[] { p })), Math.Min(_nFeaturesToSelect, p));
 
         IsFitted = true;
     }
 
-    private double _targetMean = 0;
-    private double _targetVar = 0;
-    private double[]? _covariances;
-
-    private double ComputeOnlineCorrelation(double x, double y, int featureIdx, double[] runningMeans, double[] runningVars)
-    {
-        if (_covariances is null)
-            _covariances = new double[_nInputFeatures];
-
-        // Update target statistics
-        double oldTargetMean = _targetMean;
-        _targetMean += (y - _targetMean) / _sampleCount;
-        _targetVar += (y - oldTargetMean) * (y - _targetMean);
-
-        // Update covariance
-        _covariances[featureIdx] += (x - runningMeans[featureIdx]) * (y - _targetMean);
-
-        // Compute correlation
-        double xVar = runningVars[featureIdx];
-        double yVar = _targetVar;
-
-        if (xVar > 1e-10 && yVar > 1e-10)
-            return _covariances[featureIdx] / Math.Sqrt(xVar * yVar);
-        return 0;
-    }
+    private Tensor<T>? _covariances;
 
     public void PartialFit(Matrix<T> data, Vector<T> target)
     {
@@ -160,15 +174,7 @@ public class OnlineFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         if (_selectedIndices is null)
             throw new InvalidOperationException("OnlineFeatureSelector has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />
