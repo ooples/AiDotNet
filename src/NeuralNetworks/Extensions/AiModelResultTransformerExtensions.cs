@@ -107,8 +107,6 @@ public static class AiModelResultTransformerExtensions
         var rng = seed.HasValue
             ? RandomHelper.CreateSeededRandom(seed.Value)
             : RandomHelper.CreateSecureRandom();
-        var numOps = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>();
-
         bool allowKvCache = result.GetInferenceOptimizationConfigForServing()?.EnableKVCache ?? true;
         if (batch == 1 &&
             allowKvCache &&
@@ -116,8 +114,11 @@ public static class AiModelResultTransformerExtensions
         {
             int promptLen = startTokens.Shape[1];
             var allIds = new List<int>(promptLen + maxNewTokens);
-            for (int t = 0; t < promptLen; t++)
-                allIds.Add((int)Math.Round(numOps.ToDouble(startTokens[0, t])));
+            if (promptLen > 0)
+            {
+                var promptRow = AiDotNetEngine.Current.TensorSlice(startTokens, new[] { 0, 0 }, new[] { 1, promptLen });
+                allIds.AddRange(promptRow.Cast<double>().ToVector().ToArray().Select(id => (int)Math.Round(id)));
+            }
 
             try
             {
@@ -134,25 +135,18 @@ public static class AiModelResultTransformerExtensions
                     int picked;
                     if (argmax)
                     {
-                        picked = 0;
-                        T bestVal = stepLogits[0];
-                        for (int v = 1; v < vocab; v++)
-                        {
-                            if (numOps.GreaterThan(stepLogits[v], bestVal))
-                            {
-                                bestVal = stepLogits[v];
-                                picked = v;
-                            }
-                        }
+                        // The first strictly largest logit
+                        picked = AiDotNetEngine.Current.TensorArgMax(Tensor<T>.FromVector(stepLogits), 0)[0];
                     }
                     else
                     {
                         var probs = new double[vocab];
                         double invT = 1.0 / Math.Max(1e-6, Convert.ToDouble(temperature));
                         double maxLogit = double.NegativeInfinity;
+                        var stepValues = Tensor<T>.FromVector(stepLogits).Cast<double>().ToVector().ToArray();
                         for (int v = 0; v < vocab; v++)
                         {
-                            double l = Convert.ToDouble(stepLogits[v]) * invT;
+                            double l = stepValues[v] * invT;
                             probs[v] = l;
                             if (l > maxLogit) maxLogit = l;
                         }
@@ -183,10 +177,7 @@ public static class AiModelResultTransformerExtensions
                 incrementalLm.ResetCache();
             }
 
-            var outTyped = new T[allIds.Count];
-            for (int i = 0; i < allIds.Count; i++)
-                outTyped[i] = numOps.FromDouble(allIds[i]);
-            return new Tensor<T>(new[] { 1, allIds.Count }, new Vector<T>(outTyped));
+            return new Tensor<int>(allIds.ToArray(), new[] { 1, allIds.Count }).Cast<T>();
         }
         for (int step = 0; step < maxNewTokens; step++)
         {
@@ -204,21 +195,18 @@ public static class AiModelResultTransformerExtensions
             int vocab  = logits.Shape[2];
 
             var nextIds = new int[batch];
+            // The last position's logits per batch row: [batch, vocab]
+            var lastStep = AiDotNetEngine.Current.Reshape(
+                AiDotNetEngine.Current.TensorSlice(logits, new[] { 0, seqLen - 1, 0 }, new[] { batch, 1, vocab }),
+                new[] { batch, vocab });
+            var greedyIds = argmax ? AiDotNetEngine.Current.TensorArgMax(lastStep, 1).ToVector().ToArray() : Array.Empty<int>();
+            var lastValues = argmax ? Array.Empty<double>() : lastStep.Cast<double>().ToVector().ToArray();
             for (int b = 0; b < batch; b++)
             {
                 if (argmax)
                 {
-                    int bestIdx = 0;
-                    T bestVal = logits[b, seqLen - 1, 0];
-                    for (int v = 1; v < vocab; v++)
-                    {
-                        if (numOps.GreaterThan(logits[b, seqLen - 1, v], bestVal))
-                        {
-                            bestVal = logits[b, seqLen - 1, v];
-                            bestIdx = v;
-                        }
-                    }
-                    nextIds[b] = bestIdx;
+                    // The first strictly largest logit
+                    nextIds[b] = greedyIds[b];
                 }
                 else
                 {
@@ -227,7 +215,7 @@ public static class AiModelResultTransformerExtensions
                     double maxLogit = double.NegativeInfinity;
                     for (int v = 0; v < vocab; v++)
                     {
-                        double l = Convert.ToDouble(logits[b, seqLen - 1, v]) * invT;
+                        double l = lastValues[(b * vocab) + v] * invT;
                         probs[v] = l;
                         if (l > maxLogit) maxLogit = l;
                     }
@@ -252,17 +240,8 @@ public static class AiModelResultTransformerExtensions
             // Append per-batch nextIds directly into a T[] — token IDs stay T all the way,
             // no float32 round-trip (avoids the 2^24 precision-loss risk on double T if
             // vocab > 16M) and eliminates two extra array allocations per step.
-            int newLen = current.Shape[1] + 1;
-            var appendedTyped = new T[batch * newLen];
-            for (int b = 0; b < batch; b++)
-            {
-                for (int t = 0; t < current.Shape[1]; t++)
-                {
-                    appendedTyped[b * newLen + t] = current[b, t];
-                }
-                appendedTyped[b * newLen + current.Shape[1]] = numOps.FromDouble(nextIds[b]);
-            }
-            current = new Tensor<T>(new[] { batch, newLen }, new Vector<T>(appendedTyped));
+            var nextColumn = new Tensor<int>(nextIds, new[] { batch, 1 }).Cast<T>();
+            current = AiDotNetEngine.Current.TensorConcatenate(new[] { current, nextColumn }, 1);
 
             // Streaming: report each generated token id as it emits (first batch's token for
             // multi-batch generation; per-batch callback would require IProgress<int[]>).
