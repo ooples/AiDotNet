@@ -1,13 +1,98 @@
 #if NET5_0_OR_GREATER
 using AiDotNet.Finance.Evaluation;
+using AiDotNet.Finance.Interfaces;
+using AiDotNet.Enums;
 using AiDotNet.Finance.Portfolio;
 using AiDotNet.Finance.Risk;
+using Moq;
 using Xunit;
 
 namespace AiDotNet.Tests.UnitTests.Finance;
 
 public class FinanceNumericalRegressionTests
 {
+    [Fact]
+    public void HalfGiftMetrics_KeepLargeCountsFloorsAndQuantileLevelsWide()
+    {
+        var metric = new GIFTEvalBenchmark<Half>();
+        var ones = new Tensor<Half>(Enumerable.Repeat((Half)1, 70000).ToArray(), new[] { 70000 });
+        var zeros = new Tensor<Half>(new[] { 70000 });
+        var history = new Tensor<Half>(Enumerable.Range(0, 70001).Select(i => (Half)(i % 2)).ToArray(), new[] { 70001 });
+        Assert.Equal(1.0, metric.ComputeMASE(ones, zeros, history));
+        Assert.Equal(1.0, metric.ComputeMASE(ones, ones, new Tensor<Half>(new[] { (Half)1, (Half)1 }, new[] { 2 })));
+        Assert.Equal(1.0, metric.ComputeCRPS(new Dictionary<double, Tensor<Half>> { [0.5] = zeros }, ones));
+        var large = new Tensor<Half>(new[] { (Half)60000 }, new[] { 1 });
+        var zero = new Tensor<Half>(new[] { 1 });
+        Assert.Equal(0.00006, metric.ComputeQuantileLoss(zero, large, 1e-9), 12);
+        double quantile = 1 - 1e-10;
+        Assert.Equal((1 - quantile) * 60000, metric.ComputeQuantileLoss(large, zero, quantile), 12);
+    }
+
+    [Fact]
+    public void HalfGiftBenchmark_AggregatesUnroundedLossesAndTargets()
+    {
+        var model = new Mock<ITimeSeriesFoundationModel<Half>>();
+        model.Setup(m => m.Forecast(It.IsAny<Tensor<Half>>(), It.IsAny<double[]?>()))
+            .Returns(new Tensor<Half>(new[] { 2 }));
+        var series = new Tensor<Half>(new[] { (Half)0, (Half)1, (Half)60000, (Half)60000 }, new[] { 4 });
+        var results = new GIFTEvalBenchmark<Half>().RunBenchmark(model.Object, new[] { series }, new[] { 2 }, new[] { 1 }, new[] { 0.5 });
+        Assert.Equal(60000.0, results["MASE"]);
+        Assert.Equal(1.0, results["CRPS"]);
+        Assert.Equal(1.0, results["NumEvaluated"]);
+        Assert.Equal(1.0, results["NumCRPSEvaluated"]);
+    }
+
+    [Fact]
+    public void HalfEvaluationHarness_ReportsWideErrorsAndExactPointCounts()
+    {
+        const int count = 70000;
+        var model = new Mock<ITimeSeriesFoundationModel<Half>>();
+        model.SetupGet(m => m.SupportedTasks).Returns(new[] { TimeSeriesFoundationModelTask.Imputation });
+        var predicted = new Tensor<Half>(Enumerable.Repeat((Half)60000, count).ToArray(), new[] { count });
+        var target = new Tensor<Half>(Enumerable.Repeat((Half)30000, count).ToArray(), new[] { count });
+        var zero = new Tensor<Half>(new[] { count });
+        model.Setup(m => m.Forecast(It.IsAny<Tensor<Half>>(), It.IsAny<double[]?>())).Returns(predicted);
+        model.Setup(m => m.Impute(It.IsAny<Tensor<Half>>(), It.IsAny<Tensor<Half>>())).Returns(predicted);
+        var evaluator = new MultiTaskEvaluationHarness<Half>();
+        var forecast = evaluator.EvaluateForecasting(model.Object, new[] { (target, target) });
+        Assert.Equal(900000000.0, forecast["MSE"]);
+        Assert.Equal(30000.0, forecast["MAE"]);
+        Assert.Equal(30000.0, forecast["RMSE"]);
+        Assert.Equal(count, forecast["NumPoints"]);
+        var imputation = evaluator.EvaluateImputation(model.Object, new[] { target }, new[] { zero });
+        Assert.Equal(900000000.0, imputation["MSE"]);
+        Assert.Equal(30000.0, imputation["RMSE"]);
+        Assert.Equal(count, imputation["NumMaskedPoints"]);
+    }
+
+    [Fact]
+    public void HalfEvaluationHarness_ReportsWideAnomalyAndClassificationCounts()
+    {
+        const int count = 70000;
+        var model = new Mock<ITimeSeriesFoundationModel<Half>>();
+        model.SetupGet(m => m.SupportedTasks).Returns(new[] { TimeSeriesFoundationModelTask.AnomalyDetection, TimeSeriesFoundationModelTask.Classification });
+        model.SetupGet(m => m.MaxContextLength).Returns(100000);
+        model.SetupGet(m => m.MaxPredictionHorizon).Returns(100000);
+        var zero = new Tensor<Half>(new[] { count });
+        var labels = new Tensor<Half>(Enumerable.Repeat((Half)1, count).ToArray(), new[] { count });
+        model.Setup(m => m.DetectAnomalies(It.IsAny<Tensor<Half>>(), It.IsAny<double?>())).Returns(zero);
+        model.Setup(m => m.Classify(It.IsAny<Tensor<Half>>(), 2))
+            .Returns(new Tensor<Half>(new[] { Half.NaN, (Half)1 }, new[] { 2 }));
+        var evaluator = new MultiTaskEvaluationHarness<Half>();
+        var anomalies = evaluator.EvaluateAnomalyDetection(model.Object, new[] { zero }, new[] { labels }, -1e-10);
+        Assert.Equal(count, anomalies["TruePositives"]);
+        Assert.Equal(1.0, anomalies["F1"]);
+        var sample = new Tensor<Half>(new[] { 1 });
+        var classification = evaluator.EvaluateClassification(model.Object,
+            Enumerable.Repeat(sample, count).ToArray(), Enumerable.Repeat(1, count).ToArray(), 2);
+        Assert.Equal(1.0, classification["Accuracy"]);
+        Assert.Equal(count, classification["Correct"]);
+        Assert.Equal(count, classification["Total"]);
+        var metadata = evaluator.RunFullEvaluation(model.Object)["ModelInfo"];
+        Assert.Equal(100000.0, metadata["MaxContextLength"]);
+        Assert.Equal(100000.0, metadata["MaxPredictionHorizon"]);
+    }
+
     [Fact]
     public void HalfBootstrapStatistics_KeepMomentsAndCountsWide()
     {
