@@ -98,10 +98,11 @@ public partial class EllipticEnvelopeDetector<T> : AnomalyDetectorBase<T>
         }
 
         // Compute robust location and covariance using simplified MCD
-        (_location, var covariance) = ComputeRobustEstimates(X);
+        var (location, covariance) = ComputeRobustEstimates(AnomalyTensorOps.ToTensor(X));
+        _location = location.ToVector();
 
         // Compute precision matrix (inverse of covariance)
-        _precisionMatrix = ComputeInverse(covariance, d);
+        _precisionMatrix = LinalgDispatch<T>.Inv(covariance).ToMatrix();
 
         // Calculate scores for training data to set threshold
         var trainingScores = ScoreAnomaliesInternal(X);
@@ -121,281 +122,46 @@ public partial class EllipticEnvelopeDetector<T> : AnomalyDetectorBase<T>
     {
         ValidateInput(X);
 
-        var scores = new Vector<T>(X.Rows);
-        int d = X.Columns;
-
-        // Pre-allocate reusable vectors outside the loop
-        var diff = new Vector<T>(d);
-        var temp = new Vector<T>(d);
-        var precRow = new Vector<T>(d);
         var location = _location ?? throw new InvalidOperationException("_location has not been initialized.");
         var precMat = _precisionMatrix ?? throw new InvalidOperationException("_precisionMatrix has not been initialized.");
 
-        for (int i = 0; i < X.Rows; i++)
-        {
-            // Compute Mahalanobis distance: sqrt((x - mu)' * Precision * (x - mu))
-            for (int j = 0; j < d; j++)
-                diff[j] = NumOps.Subtract(X[i, j], location[j]);
-
-            // temp = Precision * diff
-            for (int j = 0; j < d; j++)
-            {
-                for (int k = 0; k < d; k++) precRow[k] = precMat[j, k];
-                temp[j] = Engine.DotProduct(precRow, diff);
-            }
-
-            // distance^2 = diff' * temp
-            T distSquared = Engine.DotProduct(diff, temp);
-
-            scores[i] = NumOps.Sqrt(distSquared);
-        }
-
-        return scores;
+        // Mahalanobis distance: sqrt((x - mu)' * Precision * (x - mu))
+        var centered = AnomalyTensorOps.SubtractRow(AnomalyTensorOps.ToTensor(X), location.AsTensor());
+        return Engine.TensorSqrt(AnomalyTensorOps.MahalanobisSquared(centered, AnomalyTensorOps.ToTensor(precMat))).ToVector();
     }
 
-    private (Vector<T> location, Matrix<T> covariance) ComputeRobustEstimates(Matrix<T> X)
+    private (Tensor<T> location, Tensor<T> covariance) ComputeRobustEstimates(Tensor<T> X)
     {
-        int n = X.Rows;
-        int d = X.Columns;
-        var random = RandomHelper.CreateSeededRandom(_randomSeed);
-
+        var engine = Engine;
+        int n = X.Shape[0];
+        int d = X.Shape[1];
         int h = (int)(n * _supportFraction);
         h = Math.Max(h, d + 1);
 
         // Start with median-based initial estimates
-        var location = ComputeMedian(X);
-        var covariance = ComputeCovariance(X, location);
+        var location = AnomalyTensorOps.ColumnMedians(X);
+        var covariance = RegularizedCovariance(AnomalyTensorOps.SubtractRow(X, location), n - 1);
 
-        // Iterative refinement (C-steps)
+        // Iterative refinement (C-steps): keep the h points with the smallest Mahalanobis distances
+        // (by index on ties) and recompute location and covariance from that subset
         for (int iter = 0; iter < 10; iter++)
         {
-            // Compute Mahalanobis distances
-            var precision = ComputeInverse(covariance, d);
-            var distances = new double[n];
-
-            for (int i = 0; i < n; i++)
-            {
-                var diff = new Vector<T>(d);
-                for (int j = 0; j < d; j++)
-                {
-                    diff[j] = NumOps.Subtract(X[i, j], location[j]);
-                }
-
-                var temp = new Vector<T>(d);
-                for (int j = 0; j < d; j++)
-                {
-                    T sum = NumOps.Zero;
-                    for (int k = 0; k < d; k++)
-                    {
-                        sum = NumOps.Add(sum, NumOps.Multiply(precision[j, k], diff[k]));
-                    }
-                    temp[j] = sum;
-                }
-
-                T distSquared = NumOps.Zero;
-                distSquared = NumOps.Add(distSquared, Engine.DotProduct(diff, temp));
-
-                distances[i] = NumOps.ToDouble(distSquared);
-            }
-
-            // Select h points with smallest distances
-            var indices = Enumerable.Range(0, n)
-                .OrderBy(i => distances[i])
-                .Take(h)
-                .ToArray();
-
-            // Recompute location and covariance from subset
-            location = ComputeSubsetMean(X, indices);
-            covariance = ComputeSubsetCovariance(X, location, indices);
+            var precision = LinalgDispatch<T>.Inv(covariance);
+            var distances = AnomalyTensorOps.MahalanobisSquared(AnomalyTensorOps.SubtractRow(X, location), precision);
+            var order = engine.TensorArgsort(distances, 0, false);
+            var subset = engine.TensorGather(X, engine.TensorSlice(order, new[] { 0 }, new[] { h }), 0);
+            location = engine.ReduceMean(subset, new[] { 0 }, false);
+            covariance = RegularizedCovariance(AnomalyTensorOps.SubtractRow(subset, location), h - 1);
         }
 
         return (location, covariance);
     }
 
-    private Vector<T> ComputeMedian(Matrix<T> X)
+    // centered' centered / divisor + 1e-6 I.
+    private Tensor<T> RegularizedCovariance(Tensor<T> centered, int divisor)
     {
-        int d = X.Columns;
-        var median = new Vector<T>(d);
-
-        for (int j = 0; j < d; j++)
-        {
-            var values = new List<double>();
-            for (int i = 0; i < X.Rows; i++)
-            {
-                values.Add(NumOps.ToDouble(X[i, j]));
-            }
-            values.Sort();
-
-            int mid = values.Count / 2;
-            double medianValue = values.Count % 2 == 0
-                ? (values[mid - 1] + values[mid]) / 2
-                : values[mid];
-
-            median[j] = NumOps.FromDouble(medianValue);
-        }
-
-        return median;
-    }
-
-    private Vector<T> ComputeSubsetMean(Matrix<T> X, int[] indices)
-    {
-        int d = X.Columns;
-        var mean = new Vector<T>(d);
-
-        foreach (int i in indices)
-        {
-            for (int j = 0; j < d; j++)
-            {
-                mean[j] = NumOps.Add(mean[j], X[i, j]);
-            }
-        }
-
-        for (int j = 0; j < d; j++)
-        {
-            mean[j] = NumOps.Divide(mean[j], NumOps.FromDouble(indices.Length));
-        }
-
-        return mean;
-    }
-
-    private Matrix<T> ComputeCovariance(Matrix<T> X, Vector<T> mean)
-    {
-        int n = X.Rows;
-        int d = X.Columns;
-        var cov = new Matrix<T>(d, d);
-
-        for (int i = 0; i < d; i++)
-        {
-            for (int j = i; j < d; j++)
-            {
-                var centI = new Vector<T>(n);
-                var centJ = new Vector<T>(n);
-                for (int k = 0; k < n; k++)
-                {
-                    centI[k] = NumOps.Subtract(X[k, i], mean[i]);
-                    centJ[k] = NumOps.Subtract(X[k, j], mean[j]);
-                }
-                cov[i, j] = NumOps.Divide(Engine.DotProduct(centI, centJ), NumOps.FromDouble(n - 1));
-                cov[j, i] = cov[i, j];
-            }
-        }
-
-        // Add regularization
-        double epsilon = 1e-6;
-        for (int i = 0; i < d; i++)
-        {
-            cov[i, i] = NumOps.Add(cov[i, i], NumOps.FromDouble(epsilon));
-        }
-
-        return cov;
-    }
-
-    private Matrix<T> ComputeSubsetCovariance(Matrix<T> X, Vector<T> mean, int[] indices)
-    {
-        int d = X.Columns;
-        var cov = new Matrix<T>(d, d);
-
-        for (int i = 0; i < d; i++)
-        {
-            for (int j = i; j < d; j++)
-            {
-                T sum = NumOps.Zero;
-                foreach (int k in indices)
-                {
-                    T diffI = NumOps.Subtract(X[k, i], mean[i]);
-                    T diffJ = NumOps.Subtract(X[k, j], mean[j]);
-                    sum = NumOps.Add(sum, NumOps.Multiply(diffI, diffJ));
-                }
-                cov[i, j] = NumOps.Divide(sum, NumOps.FromDouble(indices.Length - 1));
-                cov[j, i] = cov[i, j];
-            }
-        }
-
-        // Add regularization
-        double epsilon = 1e-6;
-        for (int i = 0; i < d; i++)
-        {
-            cov[i, i] = NumOps.Add(cov[i, i], NumOps.FromDouble(epsilon));
-        }
-
-        return cov;
-    }
-
-    private Matrix<T> ComputeInverse(Matrix<T> matrix, int d)
-    {
-        var result = new Matrix<T>(d, d);
-        var augmented = new Matrix<T>(d, 2 * d);
-
-        // Create augmented matrix [A | I]
-        for (int i = 0; i < d; i++)
-        {
-            for (int j = 0; j < d; j++)
-            {
-                augmented[i, j] = matrix[i, j];
-                augmented[i, j + d] = i == j ? NumOps.FromDouble(1) : NumOps.Zero;
-            }
-        }
-
-        // Gauss-Jordan elimination
-        for (int col = 0; col < d; col++)
-        {
-            // Find pivot
-            int maxRow = col;
-            for (int row = col + 1; row < d; row++)
-            {
-                if (NumOps.GreaterThan(NumOps.Abs(augmented[row, col]), NumOps.Abs(augmented[maxRow, col])))
-                {
-                    maxRow = row;
-                }
-            }
-
-            // Swap rows
-            if (maxRow != col)
-            {
-                for (int j = 0; j < 2 * d; j++)
-                {
-                    T temp = augmented[col, j];
-                    augmented[col, j] = augmented[maxRow, j];
-                    augmented[maxRow, j] = temp;
-                }
-            }
-
-            // Scale pivot row
-            T pivot = augmented[col, col];
-            if (NumOps.Equals(pivot, NumOps.Zero))
-            {
-                pivot = NumOps.FromDouble(1e-6);
-            }
-
-            for (int j = 0; j < 2 * d; j++)
-            {
-                augmented[col, j] = NumOps.Divide(augmented[col, j], pivot);
-            }
-
-            // Eliminate column
-            for (int row = 0; row < d; row++)
-            {
-                if (row != col)
-                {
-                    T factor = augmented[row, col];
-                    for (int j = 0; j < 2 * d; j++)
-                    {
-                        augmented[row, j] = NumOps.Subtract(augmented[row, j],
-                            NumOps.Multiply(factor, augmented[col, j]));
-                    }
-                }
-            }
-        }
-
-        // Extract inverse
-        for (int i = 0; i < d; i++)
-        {
-            for (int j = 0; j < d; j++)
-            {
-                result[i, j] = augmented[i, j + d];
-            }
-        }
-
-        return result;
+        int d = centered.Shape[1];
+        return Engine.TensorAdd(AnomalyTensorOps.Covariance(centered, NumOps.FromDouble(divisor)),
+            AnomalyTensorOps.ScaledIdentity(d, NumOps.FromDouble(1e-6)));
     }
 }
