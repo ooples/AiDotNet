@@ -257,6 +257,21 @@ public class MetaLearningPaperFidelityTests
     }
 
     [Fact]
+    public void TaskDifficultyEstimator_TwoSeparatedClasses_MatchesHandComputedScores()
+    {
+        // Centroids 0.05 and 10.05: inter-class distance 10, mean distance to own centroid 0.05.
+        var x = new Vector<double>(new[] { 0.0, 0.1, 10.0, 10.1 });
+        var y = new Vector<double>(new[] { 0.0, 0.0, 1.0, 1.0 });
+
+        double ratio = 0.05 / (10.0 + 1e-8);
+        double expected = 1.0 / (1.0 + Math.Exp(-(ratio - 1.0) * 3.0));
+        Assert.Equal(expected, TaskDifficultyEstimator<double>.EstimateDifficulty(x, y, 2, 2), 1e-12);
+
+        // Grand mean 5.05: total variance 100.01, between-class variance 2 * 25 + 2 * 25 = 100.
+        Assert.Equal(1.0 - 100.0 / 100.01, TaskDifficultyEstimator<double>.EstimateFisherDifficulty(x, y, 2), 1e-12);
+    }
+
+    [Fact]
     public void ProtoNets_Defaults_MatchSnellEtAl2017()
     {
         // Snell, Swersky and Zemel (2017), Section 3: one gradient step per training episode, squared Euclidean
