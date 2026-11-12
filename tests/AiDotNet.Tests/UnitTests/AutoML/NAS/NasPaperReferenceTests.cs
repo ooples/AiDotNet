@@ -391,6 +391,63 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.Equal(expected[bestIndex], bestLoss, 12);
         }
 
+        /// <summary>
+        /// AttentiveNAS (Wang et al. 2021, Sec. 3.2): draw a FLOPs target from the space's FLOPs prior, draw k
+        /// candidates under it, and train the predicted Pareto-best (BestUp) or Pareto-worst (WorstUp). The old
+        /// sampler drew each dimension independently from a softmax and never formed a candidate pool.
+        /// </summary>
+        [Theory]
+        [InlineData(AttentiveSamplingStrategy.BestUp)]
+        [InlineData(AttentiveSamplingStrategy.WorstUp)]
+        public void AttentiveNAS_AttentiveSample_PicksParetoBestOrWorstUnderFlopsTarget(AttentiveSamplingStrategy strategy)
+        {
+            var depths = new List<int> { 2, 3, 4, 5 };
+            var widths = new List<double> { 0.5, 0.75, 1.0, 1.25 };
+            var kernels = new List<int> { 3, 5, 7 };
+            var nas = new AttentiveNAS<double>(new SearchSpaceBase<double>(), depths, widths, kernels, attentionHiddenSize: 8)
+            {
+                SamplingStrategy = strategy,
+                CandidatePoolSize = 5
+            };
+            var context = new Vector<double>(new[] { 0.3, -0.2, 0.1, 0.05, 0.0, 0.0, 0.0, 0.0 });
+            var flopsPrior = new HashSet<double>(
+                from d in depths
+                from w in widths
+                from k in kernels
+                select AttentiveNAS<double>.RelativeFlops(new AttentiveNASConfig<double> { Depth = d, WidthMultiplier = w, KernelSize = k }));
+
+            for (int trial = 0; trial < 10; trial++)
+            {
+                var candidates = nas.DrawCandidates(out double target);
+                Assert.Contains(target, flopsPrior);
+                Assert.Equal(5, candidates.Count);
+                Assert.All(candidates, c => Assert.True(AttentiveNAS<double>.RelativeFlops(c) <= target));
+
+                var chosen = nas.SelectCandidate(candidates, context);
+                var predicted = candidates.Select(c => nas.PredictPerformance(c)).ToList();
+                double extreme = strategy == AttentiveSamplingStrategy.BestUp ? predicted.Max() : predicted.Min();
+                Assert.Same(candidates[predicted.IndexOf(extreme)], chosen);
+            }
+        }
+
+        [Fact]
+        public void AttentiveNAS_UpdateAttention_TakesSquaredErrorStepOnThePredictor()
+        {
+            // The predictor is x^T (W[:, d] + W[:, w] + W[:, k]); one step on (pred - perf)^2 / 2 moves each of the
+            // three columns by -lr (pred - perf) x, so the prediction moves by -3 lr (pred - perf) |x|^2.
+            var nas = new AttentiveNAS<double>(new SearchSpaceBase<double>(), attentionHiddenSize: 8);
+            var context = new Vector<double>(new[] { 0.3, -0.2, 0.1, 0.05, 0.0, 0.0, 0.0, 0.0 });
+            var config = nas.SelectCandidate(nas.DrawCandidates(out _), context);
+            var features = config.Embedding ?? throw new InvalidOperationException("SelectCandidate sets the features.");
+            double squaredNorm = features.ToArray().Sum(v => v * v);
+
+            const double performance = 0.8, learningRate = 0.01;
+            double before = nas.PredictPerformance(config);
+            nas.UpdateAttention(config, performance, learningRate);
+
+            Assert.Equal(before - 3 * learningRate * (before - performance) * squaredNorm, nas.PredictPerformance(config), 12);
+        }
+
         private static Architecture<double> AllEdges(int nodes, string op)
         {
             var arch = new Architecture<double>();
