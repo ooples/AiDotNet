@@ -599,20 +599,20 @@ public class FeatureSelectionDeepMathIntegrationTests
 
         Assert.NotNull(selector.Scores);
 
-        // Perfect linear fit → SSresidual = 0 → F = SSreg / (SSres/(n-2))
-        // But SSres = 0 gives MSres = 0 which is <= 1e-10, so F = 0
-        // Actually let's compute:
         // xMean = 3, yMean = 9
         // Sxy = (1-3)(3-9)+(2-3)(6-9)+(3-3)(9-9)+(4-3)(12-9)+(5-3)(15-9) = 12+3+0+3+12 = 30
         // Sxx = 4+1+0+1+4 = 10
         // beta = 30/10 = 3
         // pred = [3,6,9,12,15] → residuals all 0 → SSres = 0
-        // SStotal = 36+9+0+9+36 = 90
-        // SSreg = 90 - 0 = 90
-        // MSres = 0 / 3 = 0 → F = 0 (since msw <= 1e-10 check)
-        // So with perfect linear relationship, the implementation returns F=0
-        // This is a known limitation of the implementation
-        Assert.Equal(0.0, selector.Scores[0], Tolerance);
+        // SStotal = 36+9+0+9+36 = 90, SSreg = 90 - 0 = 90
+        // F = SSreg / (SSres / (n-2)) = 90 / 0 = +inf: a perfect linear fit is the strongest possible
+        // relationship. scikit-learn's f_regression reports exactly this
+        // (sklearn.feature_selection.f_regression([[1],[2],[3],[4],[5]], [3,6,9,12,15], force_finite=False)
+        // -> F = [inf], p = [0.]; the default force_finite=True only caps it at the largest finite double).
+        // The old F = 0 ranked the best feature last.
+        Assert.True(double.IsPositiveInfinity(selector.Scores[0]), $"Expected F = +inf, got {selector.Scores[0]}");
+        Assert.NotNull(selector.PValues);
+        Assert.Equal(0.0, selector.PValues[0], Tolerance);
     }
 
     [Fact(Timeout = 120000)]
