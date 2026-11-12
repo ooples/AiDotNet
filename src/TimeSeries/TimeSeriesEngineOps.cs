@@ -25,21 +25,41 @@ internal static class TimeSeriesEngineOps<T>
 
     /// <summary>
     /// Lag matrix of <paramref name="y"/> for the time steps <c>start .. start + count - 1</c>: row r holds
-    /// <c>[y[t-1], y[t-2], ..., y[t-p]]</c> for <c>t = start + r</c>. Requires <c>start &gt;= p</c>.
+    /// <c>[y[t-s], y[t-2s], ..., y[t-p·s]]</c> for <c>t = start + r</c> and stride s. Requires
+    /// <c>start &gt;= p·s</c>.
     /// </summary>
-    public static Matrix<T> LagMatrix(Vector<T> y, int p, int start, int count)
+    public static Matrix<T> LagMatrix(Vector<T> y, int p, int start, int count, int stride = 1)
     {
         if (count <= 0 || p <= 0)
         {
             return new Matrix<T>(Math.Max(count, 0), Math.Max(p, 0));
         }
 
-        // Windows y[t-p .. t-1] in forward order, then columns reversed so column i is lag i + 1.
-        var segment = Tensor<T>.FromVector(y.GetSubVector(start - p, count + p - 1));
-        var windows = Engine.TensorUnfold(segment, 0, p, 1);
-        var reversed = new Tensor<int>(new[] { p }, new Vector<int>(Enumerable.Range(0, p).Reverse()));
-        return Engine.TensorIndexSelect(windows, reversed, 1).ToMatrix();
+        // Windows y[t-p·s .. t-s] in forward order; column i (lag (i + 1)·s) sits at offset (p - 1 - i)·s.
+        int span = (p - 1) * stride + 1;
+        var segment = Tensor<T>.FromVector(y.GetSubVector(start - p * stride, count + span - 1));
+        var windows = Engine.TensorUnfold(segment, 0, span, 1);
+        var columns = new Tensor<int>(new[] { p },
+            new Vector<int>(Enumerable.Range(0, p).Select(i => (p - 1 - i) * stride)));
+        return Engine.TensorIndexSelect(windows, columns, 1).ToMatrix();
     }
+
+    /// <summary>The elements of <paramref name="v"/> at <paramref name="indices"/>, in that order.</summary>
+    public static Vector<T> Gather(Vector<T> v, IEnumerable<int> indices)
+    {
+        var index = indices.ToArray();
+        if (index.Length == 0)
+        {
+            return new Vector<T>(0);
+        }
+
+        return Engine.TensorIndexSelect(Tensor<T>.FromVector(v), new Tensor<int>(new[] { index.Length }, new Vector<int>(index)), 0)
+            .ToVector();
+    }
+
+    /// <summary>Dot product of the first <paramref name="count"/> elements of two vectors (zero when count is 0).</summary>
+    public static T DotPrefix(Vector<T> a, Vector<T> b, int count)
+        => count > 0 ? Engine.DotProduct(a.GetSubVector(0, count), b.GetSubVector(0, count)) : NumOps.Zero;
 
     /// <summary>
     /// The most recent <paramref name="count"/> values of <paramref name="history"/>, newest first
@@ -165,15 +185,14 @@ internal static class TimeSeriesEngineOps<T>
             return new Vector<T>(0);
         }
 
-        // Lay the differences out as a [rows, lag] phase grid (zero-padded), cumulative-sum each phase column
-        // and add the tail value of that phase.
+        // Lay the differences out as a [rows, lag] phase grid (zero-padded) under a first row holding the
+        // tail, so a cumulative sum down each phase column continues from that phase's tail value in the
+        // same left-to-right order as the scalar recursion; the tail row is dropped afterwards.
         int rows = (h + lag - 1) / lag;
-        var padded = Vector<T>.Concatenate(differences, new Vector<T>(rows * lag - h));
-        var grid = Tensor<T>.FromVector(padded, new[] { rows, lag });
-        var sums = Engine.TensorCumSum(grid, 0);
-        var start = Engine.TensorBroadcastTo(Tensor<T>.FromVector(tail, new[] { 1, lag }), new[] { rows, lag });
-        var values = Engine.TensorAdd(sums, start).Reshape(new[] { rows * lag });
-        return Engine.TensorSlice(values, new[] { 0 }, new[] { h }).ToVector();
+        var padded = Vector<T>.Concatenate(tail.GetSubVector(0, lag), differences, new Vector<T>(rows * lag - h));
+        var grid = Tensor<T>.FromVector(padded, new[] { rows + 1, lag });
+        var values = Engine.TensorCumSum(grid, 0).Reshape(new[] { (rows + 1) * lag });
+        return Engine.TensorSlice(values, new[] { lag }, new[] { h }).ToVector();
     }
 
     /// <summary>
