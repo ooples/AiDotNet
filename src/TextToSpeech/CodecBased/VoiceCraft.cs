@@ -252,11 +252,10 @@ public partial class VoiceCraft<T> : TtsModelBase<T>, ICodecTts<T>
     {
         int[,] codes = TensorToCodes(tokens);
         var rows = DelayRows(codes, trimTail: false);
-        var result = new Tensor<T>(new[] { rows.Count, _options.NumCodebooks });
-        for (int r = 0; r < rows.Count; r++)
-            for (int q = 0; q < _options.NumCodebooks; q++)
-                result[r, q] = NumOps.FromDouble(rows[r][q]);
-        return result;
+        int nq = _options.NumCodebooks;
+        var flat = new int[rows.Count * nq];
+        for (int r = 0; r < rows.Count; r++) Array.Copy(rows[r], 0, flat, r * nq, nq);
+        return new Tensor<int>(flat, new[] { rows.Count, nq }).Cast<T>();
     }
 
     protected override Tensor<T> PreprocessText(string text) => TokenizeText(text);
@@ -370,8 +369,7 @@ public partial class VoiceCraft<T> : TtsModelBase<T>, ICodecTts<T>
             var positions = Enumerable.Range(0, layout.Labels[q].Length)
                 .Where(i => layout.Labels[q][i] >= 0).ToArray();
             if (positions.Length == 0) continue;
-            var indices = new Tensor<int>(new[] { positions.Length });
-            for (int i = 0; i < positions.Length; i++) indices[i] = positions[i];
+            var indices = new Tensor<int>(positions, new[] { positions.Length });
             var selected = Engine.TensorIndexSelect(logits[q], indices, 0);
             var labels = positions.Select(i => layout.Labels[q][i]).ToArray();
             var loss = UniAudioOps<T>.CrossEntropy(Engine, selected, labels);
@@ -524,11 +522,7 @@ public partial class VoiceCraft<T> : TtsModelBase<T>, ICodecTts<T>
 
     private Tensor<T> CodesToTensor(int[,] codes)
     {
-        int frames = codes.GetLength(1);
-        var result = new Tensor<T>(new[] { frames, _options.NumCodebooks });
-        for (int frame = 0; frame < frames; frame++)
-            for (int q = 0; q < _options.NumCodebooks; q++) result[frame, q] = NumOps.FromDouble(codes[q, frame]);
-        return result;
+        return FrameMajorCodes(codes, _options.NumCodebooks);
     }
 
     private int[,] TensorToCodes(Tensor<T> tokens)
@@ -541,15 +535,16 @@ public partial class VoiceCraft<T> : TtsModelBase<T>, ICodecTts<T>
                 : tokens.Rank == 1 && tokens.Length % _options.NumCodebooks == 0
                     ? new int[_options.NumCodebooks, frames = tokens.Length / _options.NumCodebooks]
                     : throw new ArgumentException($"VoiceCraft codes must be [frames, {_options.NumCodebooks}], [{_options.NumCodebooks}, frames], or flattened frame-major.", nameof(tokens));
+        var rounded = RoundedIds(tokens);
+        bool frameMajor = tokens.Rank == 1 || tokens.Shape[1] == _options.NumCodebooks;
         for (int frame = 0; frame < frames; frame++)
             for (int q = 0; q < _options.NumCodebooks; q++)
             {
-                double value = tokens.Rank == 1 ? NumOps.ToDouble(tokens[frame * _options.NumCodebooks + q])
-                    : tokens.Shape[1] == _options.NumCodebooks ? NumOps.ToDouble(tokens[frame, q])
-                    : NumOps.ToDouble(tokens[q, frame]);
-                codes[q, frame] = MathPolyfill.Clamp((int)Math.Round(value), 0, _options.CodebookSize - 1);
+                int value = frameMajor ? rounded[frame * _options.NumCodebooks + q] : rounded[q * frames + frame];
+                codes[q, frame] = MathPolyfill.Clamp(value, 0, _options.CodebookSize - 1);
             }
         return codes;
+
     }
 
     private static int[,] SliceCodes(int[,] codes, int start, int end)
