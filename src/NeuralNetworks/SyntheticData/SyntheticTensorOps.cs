@@ -428,4 +428,46 @@ internal static class SyntheticTensorOps<T>
         var erf = engine.TensorErf(engine.TensorMultiplyScalar(z, NumOps.FromDouble(1.0 / Math.Sqrt(2.0))));
         return engine.TensorMultiplyScalar(engine.TensorAddScalar(erf, NumOps.One), NumOps.FromDouble(0.5));
     }
+
+    /// <summary>
+    /// Matrix exponential e^A of a square [d, d] tensor by scaling and squaring (Higham 2005): A is scaled by 2^-s
+    /// so its 1-norm is at most 1/2, a degree-12 Taylor polynomial is evaluated in Horner form (truncation error
+    /// below 1e-13 at that norm), and the result is squared s times. Matches scipy.linalg.expm to double precision
+    /// for the small, non-negative matrices NOTEARS uses.
+    /// </summary>
+    public static Tensor<T> MatrixExponential(Tensor<T> a)
+    {
+        var engine = Engine;
+        int d = a.Shape[0];
+        var identity = engine.TensorEye<T>(d);
+        if (d == 0) return identity;
+
+        // 1-norm: the largest absolute column sum.
+        double norm = NumOps.ToDouble(engine.TensorMaxValue(engine.ReduceSum(engine.TensorAbs(a), new[] { 0 }, keepDims: false)));
+        int squarings = norm > 0.5 ? (int)Math.Ceiling(Math.Log(norm / 0.5, 2.0)) : 0;
+        var x = squarings > 0 ? engine.TensorMultiplyScalar(a, NumOps.FromDouble(Math.Pow(2.0, -squarings))) : a;
+
+        // Horner: e^X ~ I + X (I + X/2 (I + X/3 ( ... (I + X/12)))).
+        Tensor<T> Level(Tensor<T> inner, double inverseK)
+            => engine.TensorAdd(identity, engine.TensorMultiplyScalar(engine.TensorMatMul(x, inner), NumOps.FromDouble(inverseK)));
+        var e = engine.TensorAdd(identity, engine.TensorMultiplyScalar(x, NumOps.FromDouble(1.0 / 12.0)));
+        e = Level(e, 1.0 / 11.0);
+        e = Level(e, 1.0 / 10.0);
+        e = Level(e, 1.0 / 9.0);
+        e = Level(e, 1.0 / 8.0);
+        e = Level(e, 1.0 / 7.0);
+        e = Level(e, 1.0 / 6.0);
+        e = Level(e, 1.0 / 5.0);
+        e = Level(e, 1.0 / 4.0);
+        e = Level(e, 1.0 / 3.0);
+        e = Level(e, 1.0 / 2.0);
+        e = Level(e, 1.0);
+
+        for (int i = 0; i < squarings; i++)
+        {
+            e = engine.TensorMatMul(e, e);
+        }
+
+        return e;
+    }
 }
