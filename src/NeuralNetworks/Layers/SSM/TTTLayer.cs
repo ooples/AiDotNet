@@ -303,8 +303,7 @@ public partial class TTTLayer<T> : LayerBase<T>, IShapeContract
         }
 
         // Eta scale initialized to 1.0 so effective lr = innerLearningRate * 1.0
-        for (int h = 0; h < _numHeads; h++)
-            _etaScale[h] = NumOps.One;
+        _etaScale.Fill(NumOps.One);
 
         InitializeTensor2D(_outputGateWeights);
         _outputGateBias.Fill(NumOps.Zero);
@@ -312,11 +311,8 @@ public partial class TTTLayer<T> : LayerBase<T>, IShapeContract
         _outputProjectionBias.Fill(NumOps.Zero);
 
         // Layer norm: gamma=1, beta=0
-        for (int i = 0; i < _modelDimension; i++)
-        {
-            _lnGamma[i] = NumOps.One;
-            _lnBeta[i] = NumOps.Zero;
-        }
+        _lnGamma.Fill(NumOps.One);
+        _lnBeta.Fill(NumOps.Zero);
     }
 
     private void InitializeTensor2D(Tensor<T> tensor)

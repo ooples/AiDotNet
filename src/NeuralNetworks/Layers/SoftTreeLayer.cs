@@ -302,24 +302,13 @@ public partial class SoftTreeLayer<T> : LayerBase<T>, IShapeContract
     /// <inheritdoc/>
     public override void UpdateParameters(Vector<T> parameters)
     {
+        // The vector is split weights, then split biases, then leaf values, each copied in place.
+        var flat = parameters.AsTensor();
         int idx = 0;
-
-        // Update split weights
-        for (int i = 0; i < _splitWeights.Length; i++)
+        foreach (var target in new[] { _splitWeights, _splitBiases, _leafValues })
         {
-            _splitWeights[i] = parameters[idx++];
-        }
-
-        // Update split biases
-        for (int i = 0; i < _splitBiases.Length; i++)
-        {
-            _splitBiases[i] = parameters[idx++];
-        }
-
-        // Update leaf values
-        for (int i = 0; i < _leafValues.Length; i++)
-        {
-            _leafValues[i] = parameters[idx++];
+            Engine.TensorCopy(Engine.Reshape(Engine.TensorSlice(flat, [idx], [target.Length]), target._shape), target);
+            idx += target.Length;
         }
 
         // Invalidate GPU caches
@@ -373,20 +362,9 @@ public partial class SoftTreeLayer<T> : LayerBase<T>, IShapeContract
     /// <returns>Feature importance scores [inputDim].</returns>
     public T[] GetFeatureImportance()
     {
-        var importance = new T[_inputDim];
-
-        for (int f = 0; f < _inputDim; f++)
-        {
-            var sum = NumOps.Zero;
-            for (int n = 0; n < _numInternalNodes; n++)
-            {
-                var weight = _splitWeights[n * _inputDim + f];
-                sum = NumOps.Add(sum, NumOps.Multiply(weight, weight));
-            }
-            importance[f] = NumOps.Sqrt(sum);
-        }
-
-        return importance;
+        // Per feature: the L2 norm of its split weights across all internal nodes.
+        var weights = Engine.Reshape(_splitWeights, [_numInternalNodes, _inputDim]);
+        return Engine.TensorSqrt(Engine.ReduceSum(Engine.TensorMultiply(weights, weights), [0], keepDims: false)).ToArray();
     }
 
 }

@@ -241,10 +241,7 @@ public partial class SpyNetLayer<T> : LayerBase<T>, IShapeContract
             foreach (var module in _basicModules)
             {
                 var moduleParams = module.GetParameters();
-                var newParams = new T[moduleParams.Length];
-                for (int i = 0; i < moduleParams.Length; i++)
-                    newParams[i] = pending[offset + i];
-                module.SetParameters(new Vector<T>(newParams));
+                module.SetParameters(pending.GetSubVector(offset, moduleParams.Length));
                 offset += moduleParams.Length;
             }
         }
@@ -604,20 +601,26 @@ public partial class SpyNetLayer<T> : LayerBase<T>, IShapeContract
         // scalar writes detached the entire warp from both the input and flow.
         double widthNormValue = width > 1 ? 2.0 / (width - 1) : 0.0;
         double heightNormValue = height > 1 ? 2.0 / (height - 1) : 0.0;
-        var identityValues = new T[height * width * 2];
-        for (int h = 0; h < height; h++)
+        // Channel 0 is x = w * widthNorm - 1 and channel 1 is y = h * heightNorm - 1 (0 on a size-1 axis).
+        Tensor<T> identityGrid;
+        using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
         {
-            for (int w = 0; w < width; w++)
-            {
-                int index = (h * width + w) * 2;
-                identityValues[index] = NumOps.FromDouble(width > 1 ? w * widthNormValue - 1.0 : 0.0);
-                identityValues[index + 1] = NumOps.FromDouble(height > 1 ? h * heightNormValue - 1.0 : 0.0);
-            }
+            var xs = Engine.TensorAddScalar(
+                Engine.TensorMultiplyScalar(Engine.TensorArange<T>(0, width, 1), NumOps.FromDouble(widthNormValue)),
+                NumOps.FromDouble(width > 1 ? -1.0 : 0.0));
+            var ys = Engine.TensorAddScalar(
+                Engine.TensorMultiplyScalar(Engine.TensorArange<T>(0, height, 1), NumOps.FromDouble(heightNormValue)),
+                NumOps.FromDouble(height > 1 ? -1.0 : 0.0));
+            identityGrid = Engine.TensorConcatenate(
+                new[]
+                {
+                    Engine.TensorBroadcastTo(Engine.Reshape(xs, new[] { 1, width, 1 }), new[] { height, width, 1 }),
+                    Engine.TensorBroadcastTo(Engine.Reshape(ys, new[] { height, 1, 1 }), new[] { height, width, 1 })
+                },
+                2);
         }
         var identity = Engine.TensorBroadcastTo(
-            Engine.Reshape(
-                new Tensor<T>(identityValues, new[] { height, width, 2 }),
-                new[] { 1, height, width, 2 }),
+            Engine.Reshape(identityGrid, new[] { 1, height, width, 2 }),
             new[] { batch, height, width, 2 });
         var flow4D = hasBatch
             ? flow

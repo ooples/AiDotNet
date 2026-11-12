@@ -231,36 +231,6 @@ public partial class RebasedLayer<T> : LayerBase<T>, IShapeContract
         InitializeLayerWeights(tensor, tensor.Shape[0], tensor.Shape[1]);
     }
 
-    /// <summary>
-    /// Applies the squared ReLU feature map with L2 normalization: phi(x) = ReLU(x)^2 / ||ReLU(x)^2||.
-    /// </summary>
-    /// <remarks>
-    /// The squared ReLU kernel creates richer quadratic feature interactions compared to linear
-    /// feature maps. The L2 normalization prevents feature magnitudes from growing unboundedly
-    /// as the head dimension increases, stabilizing the linear attention recurrence.
-    /// </remarks>
-    private void ApplySquaredReluFeatureMap(T[] headVector, T[] featureOutput)
-    {
-        // Step 1: ReLU(x)^2
-        T normSq = NumOps.Zero;
-        for (int d = 0; d < _headDimension; d++)
-        {
-            T val = headVector[d];
-            // ReLU: max(0, x)
-            T reluVal = NumOps.GreaterThan(val, NumOps.FromDouble(0.0)) ? val : NumOps.Zero;
-            // Square the ReLU output
-            T squared = NumOps.Multiply(reluVal, reluVal);
-            featureOutput[d] = squared;
-            normSq = NumOps.Add(normSq, NumOps.Multiply(squared, squared));
-        }
-
-        // Step 2: L2 normalize
-        T norm = NumOps.Sqrt(NumOps.Add(normSq, NumOps.FromDouble(1e-8)));
-        T normInv = NumOps.Divide(NumOps.One, norm);
-        for (int d = 0; d < _headDimension; d++)
-            featureOutput[d] = NumOps.Multiply(featureOutput[d], normInv);
-    }
-
     /// <inheritdoc />
     protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {

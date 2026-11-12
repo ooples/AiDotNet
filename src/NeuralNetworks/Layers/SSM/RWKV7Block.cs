@@ -600,16 +600,19 @@ public partial class RWKV7Block<T> : LayerBase<T>, IShapeContract
         T half = NumOps.FromDouble(0.5);
 
         // Token shift mixing coefficients initialized to 0.5
-        for (int i = 0; i < _modelDimension; i++)
-        {
-            _timeMixR[i] = half;
-            _timeMixK[i] = half;
-            _timeMixV[i] = half;
-            _timeMixA[i] = half;
-            _timeMixB[i] = half;
-            _channelMixR[i] = half;
-            _channelMixK[i] = half;
-        }
+        _timeMixR.Fill(half);
+        _timeMixK.Fill(half);
+        _timeMixV.Fill(half);
+        _timeMixA.Fill(half);
+        _timeMixB.Fill(half);
+        _channelMixR.Fill(half);
+        _channelMixK.Fill(half);
+
+        // Channel index n = 0..C-1 and its fraction n/(C-1) (all zeros when C == 1), shared by the ramps below.
+        var channelIndex = Engine.TensorArange<T>(0.0, _modelDimension, 1.0);
+        var channelFraction = _modelDimension > 1
+            ? Engine.TensorDivideScalar(channelIndex, NumOps.FromDouble(_modelDimension - 1))
+            : new Tensor<T>([_modelDimension]);
 
         InitializeProjection(_receptanceWeights);
         InitializeProjection(_keyWeights);
@@ -644,15 +647,25 @@ public partial class RWKV7Block<T> : LayerBase<T>, IShapeContract
         // index, so the exponent uses ratio_0_to_1 = 0 (exponent 1, a linear ramp) â€” the reference's
         // first-layer schedule. Threading a layer index through would let later layers use the
         // steeper curve the reference gives them.
-        for (int n = 0; n < _modelDimension; n++)
+        // zz is the channel's position within its head mapped to [-1, 1]; the head pattern repeats numHeads times.
+        Tensor<T> zz;
+        if (_headDimension > 1)
         {
-            double frac = _modelDimension > 1 ? (double)n / (_modelDimension - 1) : 0.0;
-            double zz = _headDimension > 1
-                ? ((n % _headDimension) - (_headDimension - 1) / 2.0) / ((_headDimension - 1) / 2.0)
-                : 0.0;
-            double zigzag = zz * Math.Abs(zz);
-            _aBias[n] = NumOps.FromDouble(-6.0 + 6.0 * frac + 0.5 + zigzag * 2.5);
+            T halfSpan = NumOps.FromDouble((_headDimension - 1) / 2.0);
+            var inHead = Engine.TensorTile(Engine.TensorArange<T>(0.0, _headDimension, 1.0), [_numHeads]);
+            zz = Engine.TensorDivideScalar(Engine.TensorAddScalar(inHead, NumOps.Negate(halfSpan)), halfSpan);
         }
+        else
+        {
+            zz = new Tensor<T>([_modelDimension]);
+        }
+
+        var zigzag = Engine.TensorMultiply(zz, Engine.TensorAbs(zz));
+        Engine.TensorCopy(
+            Engine.TensorAdd(
+                Engine.TensorAddScalar(Engine.TensorMultiplyScalar(channelFraction, NumOps.FromDouble(6.0)), NumOps.FromDouble(-6.0 + 0.5)),
+                Engine.TensorMultiplyScalar(zigzag, NumOps.FromDouble(2.5))),
+            _aBias);
 
         // ICL-rate LoRA, same scheme. No tanh on this path in the reference â€” the sigmoid applied to
         // the sum bounds it.
@@ -664,11 +677,11 @@ public partial class RWKV7Block<T> : LayerBase<T>, IShapeContract
         // (RWKV-LM RWKV-v7): k_k = 0.71 - linear*0.1 with linear[n] = n/(C-1) - 0.5, and
         // k_a = 1.02. The k_k ramp gives early channels a slightly larger removal scale than late
         // ones; k_a just above 1 starts the injection key a touch beyond a plain delta rule.
-        for (int n = 0; n < _modelDimension; n++)
-        {
-            double linear = _modelDimension > 1 ? (double)n / (_modelDimension - 1) - 0.5 : 0.0;
-            _kk[n] = NumOps.FromDouble(0.71 - linear * 0.1);
-        }
+        // linear[n] = n/(C-1) - 0.5, or 0 when C == 1.
+        var linearRamp = _modelDimension > 1
+            ? Engine.TensorAddScalar(channelFraction, NumOps.FromDouble(-0.5))
+            : new Tensor<T>([_modelDimension]);
+        Engine.TensorCopy(Engine.ScalarMinusTensor(NumOps.FromDouble(0.71), Engine.TensorMultiplyScalar(linearRamp, NumOps.FromDouble(0.1))), _kk);
         _ka.Fill(NumOps.FromDouble(1.02));
 
         // r_k bonus scale, and the gate LoRA (same zero/orthogonal scheme as the decay and ICL pairs).
@@ -676,21 +689,17 @@ public partial class RWKV7Block<T> : LayerBase<T>, IShapeContract
 
         // Value-residual gate. v0 = 0.73 - linear*0.4 puts sigmoid(v0) near 0.6-0.7 at init, so a fresh
         // deeper layer already leans toward the first layer.s values and learns its way off that.
-        for (int n = 0; n < _modelDimension; n++)
-        {
-            double vlin = _modelDimension > 1 ? (double)n / (_modelDimension - 1) - 0.5 : 0.0;
-            _v0[n] = NumOps.FromDouble(0.73 - vlin * 0.4);
-        }
+        Engine.TensorCopy(Engine.ScalarMinusTensor(NumOps.FromDouble(0.73), Engine.TensorMultiplyScalar(linearRamp, NumOps.FromDouble(0.4))), _v0);
         _v1.Fill(NumOps.Zero);
         OrthogonalLoRA().InitializeWeights(_v2, _mvLoraRank, _modelDimension);
         _g1.Fill(NumOps.Zero);
         OrthogonalLoRA().InitializeWeights(_g2, _gateLoraRank, _modelDimension);
         // x_g uses the same 0.2 exponent as x_r in the reference's token-shift ramp.
-        for (int n = 0; n < _modelDimension; n++)
-        {
-            double ddd = _modelDimension > 1 ? (double)n / _modelDimension : 0.0;
-            _timeMixG[n] = NumOps.FromDouble(1.0 - Math.Pow(ddd, 0.2));
-        }
+        // 1 - (n/C)^0.2, or 1 everywhere when C == 1.
+        var gateRatio = _modelDimension > 1
+            ? Engine.TensorDivideScalar(channelIndex, NumOps.FromDouble(_modelDimension))
+            : new Tensor<T>([_modelDimension]);
+        Engine.TensorCopy(Engine.ScalarMinusTensor(NumOps.One, Engine.TensorPower(gateRatio, NumOps.FromDouble(0.2))), _timeMixG);
 
         _groupNormGamma.Fill(NumOps.One);
         _groupNormBeta.Fill(NumOps.Zero);
@@ -1105,36 +1114,27 @@ public partial class RWKV7Block<T> : LayerBase<T>, IShapeContract
         Tensor<T> seed, Tensor<T> aAll, Tensor<T> bAll, Tensor<T> kAll, Tensor<T> vAll, int batchSize, int seqLen)
     {
         int hd = _headDimension;
-        var s = new Tensor<T>(new[] { batchSize, _numHeads, hd, hd });
+        int[] stateShape = [batchSize, _numHeads, hd, hd];
+        using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
+        {
+            // Seed from the prior state so streaming (seqLen == 1 per call) accumulates across calls.
+            var s = new Tensor<T>(stateShape);
+            Engine.TensorCopy(Engine.Reshape(seed, stateShape), s);
 
-        // Seed from the prior state so streaming (seqLen == 1 per call) accumulates across calls.
-        for (int bi = 0; bi < batchSize; bi++)
-            for (int h = 0; h < _numHeads; h++)
-                for (int di = 0; di < hd; di++)
-                    for (int vi = 0; vi < hd; vi++)
-                        s[new[] { bi, h, di, vi }] = seed[new[] { bi, h, di, vi }];
+            var decay = Engine.Sigmoid(aAll);
+            var injection = Engine.TensorMultiply(Engine.Sigmoid(bAll), kAll);
+            for (int t = 0; t < seqLen; t++)
+            {
+                // a and bk index the state row di, v indexes the state column vi.
+                var a = Engine.Reshape(Engine.TensorSlice(decay, [0, t, 0], [batchSize, 1, _modelDimension]), [batchSize, _numHeads, hd, 1]);
+                var bk = Engine.Reshape(Engine.TensorSlice(injection, [0, t, 0], [batchSize, 1, _modelDimension]), [batchSize, _numHeads, hd, 1]);
+                var v = Engine.Reshape(Engine.TensorSlice(vAll, [0, t, 0], [batchSize, 1, _modelDimension]), [batchSize, _numHeads, 1, hd]);
+                s = Engine.TensorAdd(Engine.TensorMultiply(s, a), Engine.TensorMultiply(bk, v));
+            }
 
-        for (int t = 0; t < seqLen; t++)
-            for (int bi = 0; bi < batchSize; bi++)
-                for (int h = 0; h < _numHeads; h++)
-                    for (int di = 0; di < hd; di++)
-                    {
-                        int idx = (h * hd) + di;
-                        T a = Sigmoid(aAll[new[] { bi, t, idx }]);
-                        T bk = NumOps.Multiply(Sigmoid(bAll[new[] { bi, t, idx }]), kAll[new[] { bi, t, idx }]);
-                        for (int vi = 0; vi < hd; vi++)
-                        {
-                            T v = vAll[new[] { bi, t, (h * hd) + vi }];
-                            T prev = s[new[] { bi, h, di, vi }];
-                            s[new[] { bi, h, di, vi }] = NumOps.Add(NumOps.Multiply(a, prev), NumOps.Multiply(bk, v));
-                        }
-                    }
-
-        return s;
+            return s;
+        }
     }
-
-    private T Sigmoid(T x) =>
-        NumOps.Divide(NumOps.One, NumOps.Add(NumOps.One, NumOps.FromDouble(Math.Exp(-NumOps.ToDouble(x)))));
 
     /// <summary>
     /// Channel mixing forward with SiLU gating (RWKV-7 style).
@@ -1286,8 +1286,7 @@ public partial class RWKV7Block<T> : LayerBase<T>, IShapeContract
 
     private static void CopyTensorData(Tensor<T> source, Tensor<T> destination)
     {
-        for (int i = 0; i < source.Length; i++)
-            destination[i] = source[i];
+        AiDotNetEngine.Current.TensorCopy(source, destination);
     }
 
     /// <inheritdoc />
