@@ -461,25 +461,8 @@ public partial class JanusPro<T> : VisionLanguageModelBase<T>, IUnifiedVisionMod
             engine.TensorBroadcastTo(offsetSq.Reshape([1, patchSize]), [patchSize, patchSize]));
         var smooth = engine.ScalarMinusTensor(NumOps.One, engine.TensorMultiplyScalar(radiusSq, NumOps.FromDouble(0.15)));
 
-        // Nearest-neighbour upsample each cell's colour across its patch: [gy, py, gx, px, c].
-        var upsampled = engine.TensorMultiply(
-            engine.TensorBroadcastTo(colors.Reshape([gridSize, 1, gridSize, 1, 3]), [gridSize, patchSize, gridSize, patchSize, 3]),
-            smooth.Reshape([1, patchSize, 1, patchSize, 1]));
-        int covered = gridSize * patchSize;
-        var image = upsampled.Reshape([covered, covered, 3]);
-
-        // Patches past the output edge are dropped; pixels no patch reaches stay 0.
-        int kept = Math.Min(covered, outSize);
-        if (kept < covered)
-            image = engine.TensorSlice(image, [0, 0, 0], [kept, kept, 3]);
-        if (kept < outSize)
-        {
-            image = engine.TensorConcatenate([image, new Tensor<T>([kept, outSize - kept, 3])], 1);
-            image = engine.TensorConcatenate([image, new Tensor<T>([outSize - kept, outSize, 3])], 0);
-        }
-
-        var result = image.Reshape([outSize * outSize * 3]);
-        return result;
+        // Nearest-neighbour upsample each cell's colour across its patch; out-of-image pixels are dropped.
+        return PaintPatchGrid(colors.Reshape([gridSize, gridSize, 3]), smooth, outSize);
     }
 
     /// <summary>
