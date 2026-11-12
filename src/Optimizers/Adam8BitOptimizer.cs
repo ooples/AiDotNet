@@ -1814,7 +1814,8 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
         if (vector is null) return;
 
         writer.Write(vector.Length);
-        writer.Write(vector.AsSpan().ToArray());
+        // Bounded chunks: a full-size copy of a large moment would double the checkpoint's memory.
+        WriteVectorBytesChunked(writer, vector);
     }
 
     // Reject a stream-declared element count that is negative OR larger than the bytes physically
