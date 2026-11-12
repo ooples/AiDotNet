@@ -463,7 +463,7 @@ public partial class SpeakerDiarizer<T> : SpeakerRecognitionBase<T>, ISpeakerDia
 
                 var embedding = _embeddingExtractor.Extract(segmentAudio);
                 // Convert embedding Vector to Tensor (a copy)
-                var embeddingTensor = new Tensor<T>([embedding.Vector.Length], embedding.Vector.Clone());
+                var embeddingTensor = new Tensor<T>(embedding.Vector.ToArray(), [embedding.Vector.Length]);
                 speakerEmbeddings.Add(embeddingTensor);
             }
 
