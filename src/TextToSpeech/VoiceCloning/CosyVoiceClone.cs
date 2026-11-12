@@ -1,325 +1,117 @@
 using AiDotNet.Attributes;
-using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
-using AiDotNet.Models.Options;
+using AiDotNet.Models;
 using AiDotNet.NeuralNetworks;
-using AiDotNet.Onnx;
 using AiDotNet.Optimizers;
+using AiDotNet.TextToSpeech.CodecBased;
 using AiDotNet.TextToSpeech.Interfaces;
 
 namespace AiDotNet.TextToSpeech.VoiceCloning;
 
-/// <summary>CosyVoice: scalable zero-shot voice cloning using supervised semantic tokens and OT-CFM decoder.</summary>
+/// <summary>
+/// Voice-cloning facade over the released CosyVoice supervised-token, conditional-flow-matching, and HiFT pipeline.
+/// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-/// <remarks><para><b>References:</b><list type="bullet"><item>Paper: "CosyVoice: A Scalable Multilingual Zero-shot Text-to-speech Synthesizer Based on Supervised Semantic Tokens" (Du et al., 2024)</item></list></para><para><b>For Beginners:</b> CosyVoice: scalable zero-shot voice cloning using supervised semantic tokens and OT-CFM decoder.. This model converts text input into speech audio output.</para></remarks>
-/// <example>
-/// <code>
-/// // Create a CosyVoice model for scalable zero-shot voice cloning
-/// // using supervised semantic tokens and OT-CFM decoder
-/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
-///     inputType: InputType.OneDimensional,
-///     taskType: NeuralNetworkTaskType.Regression,
-///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
-///
-/// // ONNX inference mode with pre-trained model
-/// var model = new CosyVoiceClone&lt;double&gt;(architecture, "cosyvoice.onnx");
-///
-/// // Training mode with native layers
-/// var trainModel = new CosyVoiceClone&lt;double&gt;(architecture, new CosyVoiceCloneOptions());
-/// </code>
-/// </example>
+/// <remarks>
+/// <para>This class deliberately inherits <see cref="CosyVoice{T}"/>. Voice cloning is an inference task of the same
+/// CosyVoice checkpoint, not a second neural architecture: CAM++ extracts the speaker x-vector, the S3 tokenizer extracts
+/// prompt speech tokens, the conditional flow reads the prompt mel, and HiFT synthesizes the final waveform.</para>
+/// <para><b>For Beginners:</b> Give the model a recording and it creates a reusable CosyVoice prompt internally before
+/// synthesizing the requested text in that voice. All generation and training behavior comes from the real CosyVoice
+/// implementation, so this convenience API cannot drift into a placeholder model.</para>
+/// </remarks>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelTask(ModelTask.Generation)]
-[ModelComplexity(ModelComplexity.Medium)]
+[ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper(
-    "CosyVoice: A Scalable Multilingual Zero-shot Text-to-speech Synthesizer Based on Supervised Semantic Tokens",
+    "CosyVoice: A Scalable Multilingual Zero-Shot Text-to-Speech Synthesizer Based on Supervised Semantic Tokens",
     "https://arxiv.org/abs/2407.05407",
     Year = 2024,
     Authors = "Du et al."
 )]
-public partial class CosyVoiceClone<T> : TtsModelBase<T>, ICodecTts<T>, IVoiceCloner<T>
+public partial class CosyVoiceClone<T> : CosyVoice<T>, IVoiceCloner<T>
 {
-    private readonly CosyVoiceCloneOptions _options;
+    private readonly CosyVoiceCloneOptions _cloneOptions;
 
-    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
-    private bool _useNativeMode;
-    private bool _disposed;
-
+    /// <summary>Creates the facade in ONNX inference mode.</summary>
     public CosyVoiceClone(
         NeuralNetworkArchitecture<T> architecture,
         string modelPath,
-        CosyVoiceCloneOptions? options = null
-    )
-        : base(architecture)
+        CosyVoiceCloneOptions? options = null)
+        : base(architecture, modelPath, options ?? new CosyVoiceCloneOptions())
     {
-        _options = options ?? new CosyVoiceCloneOptions();
-        Options = _options;
-        _useNativeMode = false;
-        base.SampleRate = _options.SampleRate;
-        base.MelChannels = _options.MelChannels;
-        base.HopSize = _options.HopSize;
-        base.HiddenDim = _options.LLMDim;
-        if (string.IsNullOrWhiteSpace(modelPath))
-            throw new ArgumentException("Model path required.", nameof(modelPath));
-        if (!File.Exists(modelPath))
-            throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath);
-        _options.ModelPath = modelPath;
-        OnnxModel = new OnnxModel<T>(modelPath, _options.OnnxOptions);
-        InitializeLayers();
+        _cloneOptions = options ?? new CosyVoiceCloneOptions();
     }
 
+    /// <summary>Creates the facade with CosyVoice's native paper architecture.</summary>
     public CosyVoiceClone(
         NeuralNetworkArchitecture<T> architecture,
         CosyVoiceCloneOptions? options = null,
-        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null
-    )
-        : base(architecture)
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null)
+        : base(architecture, options ?? new CosyVoiceCloneOptions(), optimizer)
     {
-        _options = options ?? new CosyVoiceCloneOptions();
-        Options = _options;
-        _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
-        base.SampleRate = _options.SampleRate;
-        base.MelChannels = _options.MelChannels;
-        base.HopSize = _options.HopSize;
-        base.HiddenDim = _options.LLMDim;
-        InitializeLayers();
+        _cloneOptions = options ?? new CosyVoiceCloneOptions();
     }
 
-    int ITtsModel<T>.SampleRate => _options.SampleRate;
     /// <inheritdoc />
-    public int MaxTextLength => _options.MaxTextLength;
-    /// <inheritdoc />
-    public int NumCodebooks => _options.NumCodebooks;
-    /// <inheritdoc />
-    public int CodebookSize => _options.CodebookSize;
+    public double MinReferenceDuration => _cloneOptions.MinReferenceDurationSec;
 
     /// <inheritdoc />
-    /// <remarks>Traced: InitializeLayers passes NumCodebooks * CodebookSize as the codec vocabulary.</remarks>
-    protected override int OutputFeatureWidth => _options.NumCodebooks * _options.CodebookSize;
-    /// <inheritdoc />
-    public int CodecFrameRate => _options.CodecFrameRate;
-    /// <inheritdoc />
-    public double MinReferenceDuration => _options.MinReferenceDurationSec;
-    /// <inheritdoc />
-    public int SpeakerEmbeddingDim => _options.SpeakerEmbeddingDim;
-
-    /// <inheritdoc />
-    public Tensor<T> Synthesize(string text)
-    {
-        ThrowIfDisposed();
-        var input = PreprocessText(text);
-        if (IsOnnxMode && OnnxModel is not null)
-            return OnnxModel.Run(input);
-        // CosyVoice Clone: Speaker-conditioned flow matching (Alibaba 2024)
-        // Speaker-conditioned text encoding
-        int textLen = Math.Min(text.Length, _options.MaxTextLength);
-        int codecFrames = textLen * 3;
-        double spkCond = 0.5;
-        double[] textEnc = new double[codecFrames];
-        for (int f = 0; f < codecFrames; f++)
-        {
-            int ci = Math.Min(f * textLen / codecFrames, textLen - 1);
-            textEnc[f] = Math.Tanh((text[ci] % 128) / 64.0 - 1.0 + spkCond * 0.2);
-        }
-        // Conditional flow matching with speaker condition
-        double[] latent = new double[codecFrames];
-        for (int f = 0; f < codecFrames; f++)
-            latent[f] = Math.Sin(f * 0.3) * 0.5;
-        for (int step = 0; step < 8; step++)
-        {
-            for (int f = 0; f < codecFrames; f++)
-            {
-                double vel = textEnc[f] - latent[f];
-                latent[f] += vel * 0.125;
-            }
-        }
-        int waveLen = codecFrames * (SampleRate / _options.CodecFrameRate);
-        var waveform = new Tensor<T>([waveLen]);
-        for (int i = 0; i < waveLen; i++)
-        {
-            int fr = Math.Min(i * _options.CodecFrameRate / SampleRate, codecFrames - 1);
-            waveform[i] = NumOps.FromDouble(
-                latent[fr] * Math.Sin(i * 2.0 * Math.PI * 190 / SampleRate) * 0.75
-            );
-        }
-        return waveform;
-    }
+    public int SpeakerEmbeddingDim => _cloneOptions.SpeakerEmbeddingDim;
 
     /// <inheritdoc />
     public Tensor<T> SynthesizeWithVoice(string text, Tensor<T> referenceAudio)
     {
-        var embedding = ExtractSpeakerEmbedding(referenceAudio);
-        var baseAudio = Synthesize(text);
-        int embDim = embedding.Length;
-        for (int i = 0; i < baseAudio.Length; i++)
+        ValidateReferenceAudio(referenceAudio);
+
+        // IVoiceCloner has no transcript parameter. This maps to CosyVoice's released cross-lingual path:
+        // the flow reads the prompt tokens/mel while the LM starts a new utterance.
+        var previousVoice = Voice;
+        try
         {
-            double s = NumOps.ToDouble(baseAudio[i]);
-            int d = i % embDim;
-            double spk = NumOps.ToDouble(embedding[d]);
-            double gain = 1.0 + spk * 0.3;
-            double pitch = spk * 0.1;
-            baseAudio[i] = NumOps.FromDouble(
-                Math.Tanh(s * gain + Math.Sin(i * 0.001 + pitch) * 0.05)
-            );
+            Voice = CreateVoice(referenceAudio, _cloneOptions.SampleRate);
+            return Synthesize(text);
         }
-        return baseAudio;
+        finally
+        {
+            Voice = previousVoice;
+        }
     }
 
     /// <inheritdoc />
     public Tensor<T> ExtractSpeakerEmbedding(Tensor<T> referenceAudio)
     {
-        int embDim = _options.SpeakerEmbeddingDim;
-        var emb = new Tensor<T>([embDim]);
-        int hopLen = Math.Max(1, _options.HopSize);
-        int numFrames = Math.Max(1, referenceAudio.Length / hopLen);
-        for (int d = 0; d < embDim; d++)
-        {
-            double acc = 0;
-            for (int f = 0; f < numFrames; f++)
-            {
-                int idx = Math.Min(f * hopLen + d % hopLen, referenceAudio.Length - 1);
-                double val = NumOps.ToDouble(referenceAudio[idx]);
-                acc += Math.Tanh(val * Math.Sin((d + 1.0) * (f + 1.0) * 0.001) * 0.5);
-            }
-            emb[d] = NumOps.FromDouble(acc / numFrames);
-        }
-        double norm = 0;
-        for (int d = 0; d < embDim; d++)
-        {
-            double v = NumOps.ToDouble(emb[d]);
-            norm += v * v;
-        }
-        norm = Math.Sqrt(norm);
-        if (norm > 1e-8)
-            for (int d = 0; d < embDim; d++)
-                emb[d] = NumOps.FromDouble(NumOps.ToDouble(emb[d]) / norm);
-        return emb;
+        ValidateReferenceAudio(referenceAudio);
+        return SpeakerEmbedding(referenceAudio, _cloneOptions.SampleRate);
     }
 
-    /// <inheritdoc />
-    public Tensor<T> EncodeToTokens(Tensor<T> audio)
-    {
-        int samplesPerFrame = Math.Max(1, SampleRate / _options.CodecFrameRate);
-        int frames = Math.Max(1, audio.Length / samplesPerFrame);
-        var tokens = new Tensor<T>([frames]);
-        for (int f = 0; f < frames; f++)
-        {
-            double sum = 0;
-            int start = f * samplesPerFrame;
-            int count = Math.Min(samplesPerFrame, audio.Length - start);
-            for (int s = 0; s < count; s++)
-                sum += NumOps.ToDouble(audio[start + s]);
-            double avg = sum / Math.Max(1, count);
-            int bin = (int)Math.Round((Math.Tanh(avg) + 1.0) * 0.5 * (_options.CodebookSize - 1));
-            bin = Math.Max(0, Math.Min(_options.CodebookSize - 1, bin));
-            tokens[f] = NumOps.FromDouble(bin);
-        }
-        return tokens;
-    }
-
-    /// <inheritdoc />
-    public Tensor<T> DecodeFromTokens(Tensor<T> tokens)
-    {
-        int samplesPerFrame = Math.Max(1, SampleRate / _options.CodecFrameRate);
-        int waveLen = tokens.Length * samplesPerFrame;
-        var wave = new Tensor<T>([waveLen]);
-        for (int i = 0; i < waveLen; i++)
-        {
-            int f = Math.Min(i / samplesPerFrame, tokens.Length - 1);
-            double tokenVal = NumOps.ToDouble(tokens[f]);
-            double normalized = tokenVal / Math.Max(1, _options.CodebookSize - 1) * 2.0 - 1.0;
-            double phase = i * 2.0 * Math.PI * 200.0 / SampleRate;
-            wave[i] = NumOps.FromDouble(normalized * Math.Sin(phase) * 0.8);
-        }
-        return wave;
-    }
-
-    /// <inheritdoc />
-    protected override Tensor<T> PreprocessText(string text)
-    {
-        int len = Math.Min(text.Length, _options.MaxTextLength);
-        var t = new Tensor<T>([len]);
-        for (int i = 0; i < len; i++)
-            t[i] = NumOps.FromDouble(text[i] / 128.0);
-        return t;
-    }
-
-    /// <inheritdoc />
-    protected override Tensor<T> PostprocessAudio(Tensor<T> output) => output;
-
-    protected override void InitializeLayers()
-    {
-        if (!_useNativeMode)
-            return;
-        if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
-            Layers.AddRange(Architecture.Layers);
-        else
-            Layers.AddRange(
-                LayerHelper<T>.CreateDefaultCodecLMLayers(
-                    _options.TextEncoderDim,
-                    _options.LLMDim,
-                    _options.NumCodebooks * _options.CodebookSize,
-                    _options.NumEncoderLayers,
-                    _options.NumLLMLayers,
-                    _options.NumHeads,
-                    _options.DropoutRate,
-                    _options.VocabSize
-                )
-            );
-    }
-
-    /// <inheritdoc />
-    protected override Tensor<T> PredictCore(Tensor<T> input)
-    {
-        ThrowIfDisposed();
-        if (IsOnnxMode && OnnxModel is not null)
-            return OnnxModel.Run(input);
-        return base.PredictCore(input);
-    }
-
-    /// <inheritdoc />
-    /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the
-    /// write on every parameter surface, so the guard is stated once here instead of being
-    /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
-    protected override bool SupportsParameterMutation => _useNativeMode;
     /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata()
     {
-        var m = new ModelMetadata<T>
+        var metadata = base.GetModelMetadata();
+        metadata.Name = metadata.Name.Replace("CosyVoice", "CosyVoice-Clone");
+        metadata.Description = "CosyVoice voice-cloning facade over the native released architecture (Du et al., 2024)";
+        metadata.AdditionalInfo["Architecture"] = "CosyVoice";
+        metadata.AdditionalInfo["TaskFacade"] = "VoiceCloning";
+        metadata.AdditionalInfo["MinReferenceDurationSec"] = MinReferenceDuration;
+        return metadata;
+    }
+
+    private void ValidateReferenceAudio(Tensor<T> referenceAudio)
+    {
+        if (referenceAudio is null)
+            throw new ArgumentNullException(nameof(referenceAudio));
+
+        int minimumSamples = checked((int)Math.Ceiling(MinReferenceDuration * _cloneOptions.SampleRate));
+        if (referenceAudio.Length < minimumSamples)
         {
-            Name = _useNativeMode ? "CosyVoice-Clone-Native" : "CosyVoice-Clone-ONNX",
-            Description = "CosyVoice: Zero-Shot Voice Cloning (Du et al., 2024)",
-            FeatureCount = _options.LLMDim,
-        };
-        m.AdditionalInfo["Architecture"] = "CosyVoiceClone";
-        m.AdditionalInfo["Mode"] = _useNativeMode ? "Native" : "ONNX";
-        m.AdditionalInfo["HiddenDim"] = base.HiddenDim;
-        m.AdditionalInfo["SampleRate"] = base.SampleRate;
-        m.AdditionalInfo["MelChannels"] = base.MelChannels;
-        m.AdditionalInfo["HopSize"] = base.HopSize;
-        return m;
-    }
-
-
-
-
-
-    private void ThrowIfDisposed()
-    {
-        if (_disposed)
-            throw new ObjectDisposedException(GetType().FullName ?? nameof(CosyVoiceClone<T>));
-    }
-
-    /// <inheritdoc />
-    protected override void Dispose(bool disposing)
-    {
-        if (_disposed)
-            return;
-        _disposed = true;
-        base.Dispose(disposing);
+            throw new ArgumentException(
+                $"CosyVoice voice cloning needs at least {MinReferenceDuration:0.###} seconds " +
+                $"({minimumSamples} samples at {_cloneOptions.SampleRate} Hz) of reference audio.",
+                nameof(referenceAudio));
+        }
     }
 }

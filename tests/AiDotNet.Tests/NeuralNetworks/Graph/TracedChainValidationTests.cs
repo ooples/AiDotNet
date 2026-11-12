@@ -47,7 +47,7 @@ public class TracedChainValidationTests
         Assert.True(open is not null, $"{modelName} not found");
 
         object? instance = null;
-        try { instance = Activator.CreateInstance(open.MakeGenericType(typeof(double))); }
+            try { instance = modelName == "SAM2" ? SmallSam2() : Activator.CreateInstance(open.MakeGenericType(typeof(double))); }
         catch (Exception ex) { _out.WriteLine($"cannot construct: {ex.GetType().Name}"); return; }
         if (instance is null) return;
 
@@ -81,4 +81,18 @@ public class TracedChainValidationTests
             + "gap in the tracer - it is no longer explainable as the linear reading pairing layers that "
             + "never meet.");
     }
+
+    // SAM 2's default is the paper's Hiera-B+ at 1024 px, whose forward in double took the testhost past 12 GB; the
+    // branches this test traces are the same at any width, so it runs the generated suite's capacity-scaled SAM 2
+    // (every module kept, a 32 px canvas).
+    private static object SmallSam2() => new AiDotNet.Video.Segmentation.SAM2<double>(
+        new NeuralNetworkArchitecture<double>(inputType: AiDotNet.Enums.InputType.ThreeDimensional,
+            taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, inputHeight: 32, inputWidth: 32, inputDepth: 3, outputSize: 1),
+        options: new AiDotNet.Video.Options.SAM2Options
+        {
+            MemoryBankSize = 2, HieraEmbeddingDimension = 16, HieraStageDepths = new[] { 1, 1, 1, 1 }, HieraInitialHeadCount = 1,
+            HieraWindowSizes = new[] { 8, 4, 2, 1 }, HieraGlobalAttentionBlockIndexes = new[] { 2 }, ModelDimension = 16,
+            MemoryDimension = 8, DecoderHeadCount = 4, MemoryAttentionLayerCount = 4, MemoryAttentionFeedForwardDimension = 64,
+            MemoryFuserDimension = 32, MaskDecoderMlpDimension = 64,
+        });
 }

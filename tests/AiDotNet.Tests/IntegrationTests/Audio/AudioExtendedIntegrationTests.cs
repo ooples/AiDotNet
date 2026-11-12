@@ -4,7 +4,6 @@ using AiDotNet.Audio.MusicAnalysis;
 using AiDotNet.Audio.Pitch;
 using AiDotNet.Audio.Speaker;
 using AiDotNet.Audio.SourceSeparation;
-using AiDotNet.Audio.TextToSpeech;
 using AiDotNet.Audio.VoiceActivity;
 using AiDotNet.Audio.Whisper;
 using AiDotNet.Interfaces;
@@ -451,7 +450,8 @@ public class AudioExtendedIntegrationTests
         Assert.Equal(16000, options.SampleRate);
         Assert.Equal(1.5, options.WindowDurationSeconds, Tolerance);
         Assert.Equal(0.75, options.HopDurationSeconds, Tolerance);
-        Assert.Equal(256, options.EmbeddingDimension);
+        // The diarizer embeds windows with the 512-dim x-vector of Snyder et al. 2018 (Sell et al. 2018 recipe).
+        Assert.Equal(512, options.EmbeddingDimension);
         Assert.Equal(0.65, options.ClusteringThreshold, Tolerance);
         Assert.Equal(0.5, options.MinTurnDuration, Tolerance);
         Assert.Null(options.MaxSpeakers);
@@ -485,10 +485,11 @@ public class AudioExtendedIntegrationTests
     {
         var options = new SpeakerEmbeddingOptions();
         Assert.Equal(16000, options.SampleRate);
-        Assert.Equal(512, options.FftSize);
+        // Snyder et al. 2018, section 3.2 and Table 1: 25 ms frames every 10 ms, 24 filterbanks, 512-dim x-vectors.
+        Assert.Equal(400, options.FftSize);
         Assert.Equal(160, options.HopLength);
-        Assert.Equal(40, options.NumMfcc);
-        Assert.Equal(256, options.EmbeddingDimension);
+        Assert.Equal(24, options.NumMfcc);
+        Assert.Equal(512, options.EmbeddingDimension);
         Assert.NotNull(options.OnnxOptions);
     }
 
@@ -845,104 +846,6 @@ public class AudioExtendedIntegrationTests
             SampleRate = 22050
         };
         Assert.Equal(22050, result.SampleRate);
-    }
-
-    #endregion
-
-    #region TtsOptions
-
-    [Fact(Timeout = 120000)]
-    public async Task TtsOptions_DefaultValues()
-    {
-        var options = new TtsOptions();
-        Assert.Equal(22050, options.SampleRate);
-        Assert.Equal(1.0, options.SpeakingRate, Tolerance);
-        Assert.Equal(0.0, options.PitchShift, Tolerance);
-        Assert.Equal(1.0, options.Energy, Tolerance);
-        Assert.Null(options.SpeakerId);
-        Assert.Null(options.Language);
-        Assert.Null(options.VocoderModelPath);
-        Assert.True(options.UseGriffinLimFallback);
-        Assert.Equal(60, options.GriffinLimIterations);
-        Assert.NotNull(options.OnnxOptions);
-        Assert.Equal(80, options.NumMels);
-        Assert.Equal(1024, options.FftSize);
-        Assert.Equal(256, options.HopLength);
-    }
-
-    [Fact(Timeout = 120000)]
-    public async Task TtsOptions_CustomValues()
-    {
-        var options = new TtsOptions
-        {
-            SampleRate = 44100,
-            SpeakingRate = 1.5,
-            PitchShift = 2.0,
-            Energy = 0.8,
-            SpeakerId = 3,
-            Language = "fr",
-            VocoderModelPath = "/model/vocoder.onnx",
-            UseGriffinLimFallback = false,
-            GriffinLimIterations = 100,
-            NumMels = 128,
-            FftSize = 2048,
-            HopLength = 512
-        };
-        Assert.Equal(44100, options.SampleRate);
-        Assert.Equal(1.5, options.SpeakingRate, Tolerance);
-        Assert.Equal(2.0, options.PitchShift, Tolerance);
-        Assert.Equal(0.8, options.Energy, Tolerance);
-        Assert.Equal(3, options.SpeakerId);
-        Assert.Equal("fr", options.Language);
-        Assert.False(options.UseGriffinLimFallback);
-    }
-
-    #endregion
-
-    #region TtsResult
-
-    [Fact(Timeout = 120000)]
-    public async Task TtsResult_Properties()
-    {
-        var result = new TtsResult<double>
-        {
-            Audio = new double[] { 0.1, 0.2, 0.3, 0.4 },
-            SampleRate = 22050,
-            Duration = 2.5,
-            ProcessingTimeMs = 1200
-        };
-        Assert.Equal(4, result.Audio.Length);
-        Assert.Equal(22050, result.SampleRate);
-        Assert.Equal(2.5, result.Duration, Tolerance);
-        Assert.Equal(1200L, result.ProcessingTimeMs);
-    }
-
-    #endregion
-
-    #region TtsModelType Enum
-
-    [Fact(Timeout = 120000)]
-    public async Task TtsModelType_AllValues()
-    {
-        var values = (((TtsModelType[])Enum.GetValues(typeof(TtsModelType))));
-        Assert.Equal(3, values.Length);
-        Assert.Contains(TtsModelType.FastSpeech2, values);
-        Assert.Contains(TtsModelType.Tacotron2, values);
-        Assert.Contains(TtsModelType.VITS, values);
-    }
-
-    #endregion
-
-    #region VocoderType Enum
-
-    [Fact(Timeout = 120000)]
-    public async Task VocoderType_AllValues()
-    {
-        var values = (((VocoderType[])Enum.GetValues(typeof(VocoderType))));
-        Assert.Equal(3, values.Length);
-        Assert.Contains(VocoderType.HiFiGan, values);
-        Assert.Contains(VocoderType.WaveGlow, values);
-        Assert.Contains(VocoderType.GriffinLim, values);
     }
 
     #endregion

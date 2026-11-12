@@ -6,6 +6,7 @@ namespace AiDotNet.TextToSpeech.Vocoders;
 /// <remarks>
 /// <para><b>For Beginners:</b> These options configure the Vocoder model. Default values follow the original paper settings.</para>
 /// </remarks>
+[AiDotNet.Attributes.DimensionDivisibility(nameof(UpsampleInitialChannels), nameof(UpsampleChannelDivisor))]
 public class VocoderOptions : TtsModelOptions
 {
     /// <summary>Initializes a new instance with default values.</summary>
@@ -34,7 +35,6 @@ public class VocoderOptions : TtsModelOptions
             throw new ArgumentNullException(nameof(other));
 
         UpsampleRates = other.UpsampleRates;
-        UpsampleKernelSizes = other.UpsampleKernelSizes;
         UpsampleInitialChannels = other.UpsampleInitialChannels;
         ResblockKernelSizes = other.ResblockKernelSizes;
         NumDiffusionSteps = other.NumDiffusionSteps;
@@ -43,11 +43,12 @@ public class VocoderOptions : TtsModelOptions
     /// <summary>Gets or sets the upsample rates for each upsampling block.</summary>
     public int[] UpsampleRates { get; set; } = [8, 8, 2, 2];
 
-    /// <summary>Gets or sets the kernel sizes for each upsampling block.</summary>
-    public int[] UpsampleKernelSizes { get; set; } = [16, 16, 4, 4];
-
     /// <summary>Gets or sets the initial upsample channel count.</summary>
     public int UpsampleInitialChannels { get; set; } = 512;
+
+    /// <summary>The factor the upsampling stages halve <see cref="UpsampleInitialChannels"/> by (2 per stage), which
+    /// it must therefore be a multiple of for the last stage to keep a channel.</summary>
+    public int UpsampleChannelDivisor => 1 << UpsampleRates.Length;
 
     /// <summary>Gets or sets the resblock kernel sizes.</summary>
     public int[] ResblockKernelSizes { get; set; } = [3, 7, 11];

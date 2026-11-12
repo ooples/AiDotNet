@@ -189,12 +189,19 @@ public partial class AudioVAE<T> : VAEModelBase<T>
     /// <returns>The names read: every weight of the model.</returns>
     public IReadOnlyCollection<string> LoadDiffusersWeights(Func<string, int[], double[]> read)
     {
+        if (read is null) throw new ArgumentNullException(nameof(read));
+        return LoadDiffusersWeights(AiDotNet.ModelLoading.TorchTensorSource.From(read));
+    }
+
+    /// <summary>Loads a diffusers <c>AutoencoderKL</c> state dict straight from <paramref name="source"/> into the weights.</summary>
+    internal IReadOnlyCollection<string> LoadDiffusersWeights(AiDotNet.ModelLoading.TorchTensorSource source)
+    {
         return KlModule<T>.Load(
             _encoder.NamedTensors("encoder")
                 .Concat(_quantConv.NamedTensors("quant_conv"))
                 .Concat(_postQuantConv.NamedTensors("post_quant_conv"))
                 .Concat(_decoder.NamedTensors("decoder")),
-            read);
+            source);
     }
 
     private static void RequireImage(Tensor<T> x, int channels, string name)
