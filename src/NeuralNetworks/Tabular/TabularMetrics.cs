@@ -1,3 +1,5 @@
+using System;
+using System.Collections.Generic;
 using AiDotNet.Helpers;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.LinearAlgebra;
@@ -171,5 +173,57 @@ internal static class TabularMetrics
         }
 
         return result;
+    }
+
+    /// <summary>
+    /// Mean-ablation feature importance over a batch: feature f scores the mean absolute change of the
+    /// predictions when column f is replaced by its batch mean, and the scores are normalized to sum to one.
+    /// </summary>
+    /// <remarks>
+    /// This is feature ablation (occlusion) attribution, which needs only predictions, so it applies to any
+    /// model. A batch whose ablations change nothing (one row, or constant columns) gets the uniform
+    /// 1 / features. Each feature is ablated in its own forward pass, so a model that attends across rows
+    /// (SAINT's intersample attention) never mixes rows of different ablations.
+    /// </remarks>
+    /// <param name="predict">The model's inference forward pass.</param>
+    /// <param name="batch">A [rows, features] batch of inputs.</param>
+    /// <returns>One importance per feature, in column order.</returns>
+    public static T[] MeanAblationImportance<T>(Func<Tensor<T>, Tensor<T>> predict, Tensor<T> batch)
+    {
+        if (predict is null) throw new ArgumentNullException(nameof(predict));
+        if (batch is null) throw new ArgumentNullException(nameof(batch));
+
+        var engine = AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<T>();
+        int rows = batch.Rank > 1 ? batch.Shape[0] : 1;
+        int features = batch.Length / Math.Max(rows, 1);
+        if (features == 0) return Array.Empty<T>();
+
+        var x = Flat(batch, rows * features).Reshape(rows, features);
+        var reference = predict(x);
+        var means = engine.TensorTile(
+            engine.TensorMultiplyScalar(
+                engine.ReduceSum(x, new[] { 0 }, true), ops.FromDouble(1.0 / rows)),
+            new[] { rows, 1 });
+
+        var changes = new List<T>(features);
+        for (int f = 0; f < features; f++)
+        {
+            var column = engine.TensorTile(
+                engine.TensorOneHot<T>(Tensor<int>.FromVector(new Vector<int>(new[] { f })), features).Reshape(1, features),
+                new[] { rows, 1 });
+            var ablated = predict(engine.TensorWhere(column, means, x));
+            changes.Add(engine.TensorSum(engine.TensorAbs(engine.TensorSubtract(
+                Flat(ablated, reference.Length), Flat(reference, reference.Length)))));
+        }
+
+        var scores = new Tensor<T>(new[] { features }, new Vector<T>(changes.ToArray()));
+        var total = engine.TensorSum(scores);
+        if (!(ops.GreaterThan(total, ops.Zero) && !ops.IsNaN(total) && !ops.IsInfinity(total)))
+        {
+            return engine.TensorFullLike(scores, ops.FromDouble(1.0 / features)).ToArray();
+        }
+
+        return engine.TensorDivideScalar(scores, total).ToArray();
     }
 }

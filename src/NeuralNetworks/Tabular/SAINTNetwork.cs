@@ -182,6 +182,10 @@ public partial class SAINTNetwork<T> : TabularNeuralNetworkBase<T>
         InitializeLayers();
     }
 
+    /// <summary>The batch the last prediction ran on, attributed by <see cref="GetFeatureImportance"/>.</summary>
+    [Scratch]
+    private Tensor<T>? _importanceBatch;
+
     /// <summary>
     /// Initializes the layers of the SAINT network based on the provided architecture.
     /// </summary>
@@ -248,6 +252,8 @@ public partial class SAINTNetwork<T> : TabularNeuralNetworkBase<T>
     /// </remarks>
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
+        // Kept for GetFeatureImportance, which attributes the most recent batch
+        _importanceBatch = input;
 
         // CPU path: forward pass through each layer sequentially
         return Accelerate(input, () =>
@@ -287,17 +293,30 @@ public partial class SAINTNetwork<T> : TabularNeuralNetworkBase<T>
     {
         var importance = new Dictionary<string, T>();
         int numFeatures = Architecture.CalculatedInputSize;
+        var batch = _importanceBatch;
 
-        // Each attention layer gives every feature an equal contribution of one; the sum is normalized by the
-        // number of attention layers. Without attention layers the uniform 1 / numFeatures baseline stands.
-        int attentionLayerCount = Layers.Count(layer => layer is MultiHeadAttentionLayer<T>);
-        var value = attentionLayerCount > 0
-            ? NumOps.Divide(NumOps.FromDouble(attentionLayerCount), NumOps.FromDouble(attentionLayerCount))
-            : NumOps.FromDouble(1.0 / numFeatures);
-
-        for (int f = 0; f < numFeatures; f++)
+        // Mean-ablation attribution of the last predicted batch; before any prediction there is no data to
+        // attribute, so every feature keeps the uniform 1 / numFeatures
+        T[] scores;
+        if (batch is not null && batch.Rank == 2 && batch.Shape[1] == numFeatures && batch.Shape[0] > 1)
         {
-            importance[$"feature_{f}"] = value;
+            try
+            {
+                scores = TabularMetrics.MeanAblationImportance(Predict, batch);
+            }
+            finally
+            {
+                _importanceBatch = batch;
+            }
+        }
+        else
+        {
+            scores = Enumerable.Repeat(NumOps.FromDouble(1.0 / Math.Max(numFeatures, 1)), numFeatures).ToArray();
+        }
+
+        for (int f = 0; f < scores.Length; f++)
+        {
+            importance[$"feature_{f}"] = scores[f];
         }
 
         return importance;
