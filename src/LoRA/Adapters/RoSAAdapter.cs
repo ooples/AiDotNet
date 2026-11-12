@@ -225,15 +225,12 @@ public partial class RoSAAdapter<T> : LoRAAdapterBase<T>
     /// </remarks>
     private void InitializeSparseWeights()
     {
-        Random random = RandomHelper.CreateSecureRandom();
-        for (int i = 0; i < _sparseWeights.Shape[0]; i++)
-        {
-            for (int j = 0; j < _sparseWeights.Shape[1]; j++)
-            {
-                // Small random initialization
-                double value = random.NextGaussian(0.0, 0.01);
-                _sparseWeights[i, j] = NumOps.FromDouble(value);
-            }
+        // Small random initialization, N(0, 0.01). The generator is unseeded, so drawing the
+        // whole tensor at once keeps the same distribution.
+        Tensor<T> init = Engine.TensorRandomNormal<T>(
+            _sparseWeights.Shape.ToArray(), NumOps.Zero, NumOps.FromDouble(0.01));
+        init.AsSpan().CopyTo(_sparseWeights.AsWritableSpan());
+    }
         }
     }
 
@@ -273,44 +270,31 @@ public partial class RoSAAdapter<T> : LoRAAdapterBase<T>
         int cols = _sparseWeights.Shape[1];
         int totalWeights = rows * cols;
 
-        // Collect magnitudes
-        List<(int row, int col, double magnitude)> magnitudes = new List<(int, int, double)>();
-        for (int i = 0; i < rows; i++)
-        {
-            for (int j = 0; j < cols; j++)
-            {
-                double mag = Math.Abs(Convert.ToDouble(_sparseWeights[i, j]));
-                magnitudes.Add((i, j, mag));
-            }
-        }
-
-        // Sort by magnitude (descending)
-        magnitudes.Sort((a, b) => b.magnitude.CompareTo(a.magnitude));
+        Tensor<T> magnitudes = Engine.TensorAbs(_sparseWeights);
 
         // Determine number of non-zero weights to keep
         int keepCount = (int)((1.0 - SparsityRatio) * totalWeights);
         keepCount = Math.Max(1, keepCount); // Keep at least one weight
 
         // Also consider threshold-based pruning
-        double adaptiveThreshold = SparseThreshold;
-        if (keepCount < magnitudes.Count)
+        T adaptiveThreshold = NumOps.FromDouble(SparseThreshold);
+        if (keepCount < totalWeights)
         {
-            // Use the larger of: fixed threshold or magnitude of keepCount-th element
-            adaptiveThreshold = Math.Max(SparseThreshold, magnitudes[keepCount].magnitude);
+            // Use the larger of: fixed threshold or magnitude of the keepCount-th largest weight
+            // (0-based in descending order), i.e. the (totalWeights - keepCount)-th smallest.
+            T kthMagnitude = Engine.TensorKthvalue(magnitudes, totalWeights - keepCount).Value;
+            if (NumOps.GreaterThan(kthMagnitude, adaptiveThreshold))
+            {
+                adaptiveThreshold = kthMagnitude;
+            }
         }
 
         // Apply pruning: zero out weights below threshold
-        for (int i = 0; i < rows; i++)
-        {
-            for (int j = 0; j < cols; j++)
-            {
-                double mag = Math.Abs(Convert.ToDouble(_sparseWeights[i, j]));
-                if (mag < adaptiveThreshold)
-                {
-                    _sparseWeights[i, j] = NumOps.Zero;
-                }
-            }
-        }
+        Tensor<T> pruned = Engine.TensorWhere(
+            Engine.TensorLessThan(magnitudes, adaptiveThreshold),
+            new Tensor<T>(_sparseWeights.Shape.ToArray()),
+            _sparseWeights);
+        pruned.AsSpan().CopyTo(_sparseWeights.AsWritableSpan());
     }
 
     /// <summary>
@@ -337,22 +321,10 @@ public partial class RoSAAdapter<T> : LoRAAdapterBase<T>
     public double GetSparsity()
     {
         int totalWeights = _sparseWeights.Shape[0] * _sparseWeights.Shape[1];
-        int zeroCount = 0;
-        double epsilon = 1e-10;
+        // Count zero and near-zero (|w| < 1e-10) elements
+        T zeroCount = Engine.TensorSum(Engine.TensorLessThan(Engine.TensorAbs(_sparseWeights), NumOps.FromDouble(1e-10)));
 
-        for (int i = 0; i < _sparseWeights.Shape[0]; i++)
-        {
-            for (int j = 0; j < _sparseWeights.Shape[1]; j++)
-            {
-                double val = Math.Abs(Convert.ToDouble(_sparseWeights[i, j]));
-                if (val < epsilon)
-                {
-                    zeroCount++;
-                }
-            }
-        }
-
-        return (double)zeroCount / totalWeights;
+        return NumOps.ToDouble(zeroCount) / totalWeights;
     }
 
     /// <summary>
@@ -395,39 +367,13 @@ public partial class RoSAAdapter<T> : LoRAAdapterBase<T>
         int inputSize = GetInputShape()[0];
         int outputSize = GetOutputLayerShape().RequireConcrete("Sizing a LoRA adapter's low-rank factors")[0];
 
-        // Convert input to matrix
-        Matrix<T> inputMatrix = new Matrix<T>(batchSize, inputSize);
-        for (int i = 0; i < batchSize; i++)
-        {
-            for (int j = 0; j < inputSize; j++)
-            {
-                inputMatrix[i, j] = input[i * inputSize + j];
-            }
-        }
-
         // Multiply by sparse weights: [batchSize, inputSize] @ [inputSize, outputSize]
-        Matrix<T> sparseOutputMatrix = inputMatrix.Multiply(_sparseWeights.ToMatrix().Transpose());
-
-        // Convert to tensor
-        Vector<T> sparseOutputData = new Vector<T>(batchSize * outputSize);
-        int idx = 0;
-        for (int i = 0; i < batchSize; i++)
-        {
-            for (int j = 0; j < outputSize; j++)
-            {
-                sparseOutputData[idx++] = sparseOutputMatrix[i, j];
-            }
-        }
-        Tensor<T> sparseOutput = new Tensor<T>(new[] { batchSize, outputSize }, sparseOutputData);
+        Tensor<T> sparseOutput = Engine.TensorMatMul(
+            Engine.Reshape(input, [batchSize, inputSize]), Engine.TensorTranspose(_sparseWeights));
 
         // 4. Sum all three outputs
-        Tensor<T> result = new Tensor<T>(baseOutput._shape);
-        for (int i = 0; i < baseOutput.Length; i++)
-        {
-            T sum = NumOps.Add(baseOutput[i], loraOutput[i]);
-            sum = NumOps.Add(sum, sparseOutput[i]);
-            result[i] = sum;
-        }
+        Tensor<T> result = Engine.TensorAdd(
+            Engine.TensorAdd(baseOutput, loraOutput), Engine.Reshape(sparseOutput, baseOutput.Shape.ToArray()));
 
         return result;
     }
@@ -460,14 +406,8 @@ public partial class RoSAAdapter<T> : LoRAAdapterBase<T>
         // 2. Update sparse weights (always)
         if (_sparseGradients != null)
         {
-            for (int i = 0; i < _sparseWeights.Shape[0]; i++)
-            {
-                for (int j = 0; j < _sparseWeights.Shape[1]; j++)
-                {
-                    T update = NumOps.Multiply(_sparseGradients[i, j], learningRate);
-                    _sparseWeights[i, j] = NumOps.Subtract(_sparseWeights[i, j], update);
-                }
-            }
+            Engine.TensorSubtractInPlace(
+                _sparseWeights, Tensor<T>.FromMatrix(Engine.MatrixMultiplyScalar(_sparseGradients, learningRate)));
 
             // Prune sparse weights to maintain sparsity
             PruneSparseWeights();
@@ -532,30 +472,15 @@ public partial class RoSAAdapter<T> : LoRAAdapterBase<T>
         // Get LoRA weight contribution
         Matrix<T> loraWeights = _loraLayer.MergeWeights();
 
-        // Create merged parameters (weights + biases)
-        Vector<T> mergedParams = new Vector<T>(baseParams.Length);
-
-        // Merge weights: W' = W_base + W_lora + W_sparse
-        for (int i = 0; i < weightCount; i++)
-        {
-            int row = i / inputSize;
-            int col = i % inputSize;
-
-            T baseWeight = baseParams[i];
-            T loraWeight = loraWeights[row, col];
-            T sparseWeight = _sparseWeights[row, col];
-
-            // Sum all three components
-            T merged = NumOps.Add(baseWeight, loraWeight);
-            merged = NumOps.Add(merged, sparseWeight);
-            mergedParams[i] = merged;
-        }
-
-        // Copy biases unchanged (LoRA and sparse don't modify biases)
-        for (int i = weightCount; i < baseParams.Length; i++)
-        {
-            mergedParams[i] = baseParams[i];
-        }
+        // Merge weights: W' = W_base + W_lora + W_sparse. The LoRA delta is [inputSize, outputSize]
+        // and the sparse weights [outputSize, inputSize]; DenseLayer stores its weights input-major
+        // and FullyConnectedLayer output-major. Biases are kept unchanged.
+        bool isOutputMajor = _baseLayer is FullyConnectedLayer<T>;
+        Matrix<T> sparseMatrix = _sparseWeights.ToMatrix();
+        Vector<T> mergedParams = AddFlatWeightsToParameters(
+            baseParams, isOutputMajor ? Engine.MatrixTranspose(loraWeights) : loraWeights, weightCount);
+        mergedParams = AddFlatWeightsToParameters(
+            mergedParams, isOutputMajor ? sparseMatrix : Engine.MatrixTranspose(sparseMatrix), weightCount);
 
         // Use helper method to clone base layer and preserve activation function
         return CreateMergedLayerWithClone(mergedParams);

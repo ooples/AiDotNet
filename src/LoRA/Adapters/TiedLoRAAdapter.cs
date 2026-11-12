@@ -275,14 +275,8 @@ public partial class TiedLoRAAdapter<T> : LoRAAdapterBase<T>
             }
 
             // Initialize matrix B (rank × outputSize) with zeros (no initial effect)
-            _sharedMatrixB = new Matrix<T>(rank, outputSize);
-            for (int i = 0; i < rank; i++)
-            {
-                for (int j = 0; j < outputSize; j++)
-                {
-                    _sharedMatrixB[i, j] = ops.Zero;
-                }
-            }
+            _sharedMatrixB = new Matrix<T>(rank, outputSize); // zero-filled
+
 
             // Initialize gradient matrices
             _sharedMatrixAGradient = new Matrix<T>(inputSize, rank);
@@ -312,32 +306,14 @@ public partial class TiedLoRAAdapter<T> : LoRAAdapterBase<T>
     {
         lock (_sharedLock)
         {
-            var ops = MathHelper.GetNumericOperations<T>();
-
             if (_sharedMatrixAGradient != null)
             {
-                int rows = _sharedMatrixAGradient.Rows;
-                int cols = _sharedMatrixAGradient.Columns;
-                for (int i = 0; i < rows; i++)
-                {
-                    for (int j = 0; j < cols; j++)
-                    {
-                        _sharedMatrixAGradient[i, j] = ops.Zero;
-                    }
-                }
+                _sharedMatrixAGradient = new Matrix<T>(_sharedMatrixAGradient.Rows, _sharedMatrixAGradient.Columns);
             }
 
             if (_sharedMatrixBGradient != null)
             {
-                int rows = _sharedMatrixBGradient.Rows;
-                int cols = _sharedMatrixBGradient.Columns;
-                for (int i = 0; i < rows; i++)
-                {
-                    for (int j = 0; j < cols; j++)
-                    {
-                        _sharedMatrixBGradient[i, j] = ops.Zero;
-                    }
-                }
+                _sharedMatrixBGradient = new Matrix<T>(_sharedMatrixBGradient.Rows, _sharedMatrixBGradient.Columns);
             }
         }
     }
@@ -357,27 +333,12 @@ public partial class TiedLoRAAdapter<T> : LoRAAdapterBase<T>
                 return;
             }
 
-            var ops = MathHelper.GetNumericOperations<T>();
-
-            // Update matrix A
-            for (int i = 0; i < _sharedMatrixA.Rows; i++)
-            {
-                for (int j = 0; j < _sharedMatrixA.Columns; j++)
-                {
-                    T update = ops.Multiply(_sharedMatrixAGradient[i, j], learningRate);
-                    _sharedMatrixA[i, j] = ops.Subtract(_sharedMatrixA[i, j], update);
-                }
-            }
-
-            // Update matrix B
-            for (int i = 0; i < _sharedMatrixB.Rows; i++)
-            {
-                for (int j = 0; j < _sharedMatrixB.Columns; j++)
-                {
-                    T update = ops.Multiply(_sharedMatrixBGradient[i, j], learningRate);
-                    _sharedMatrixB[i, j] = ops.Subtract(_sharedMatrixB[i, j], update);
-                }
-            }
+            // W -= learningRate * dW for both shared matrices
+            var engine = AiDotNetEngine.Current;
+            _sharedMatrixA = engine.MatrixSubtract(
+                _sharedMatrixA, engine.MatrixMultiplyScalar(_sharedMatrixAGradient, learningRate));
+            _sharedMatrixB = engine.MatrixSubtract(
+                _sharedMatrixB, engine.MatrixMultiplyScalar(_sharedMatrixBGradient, learningRate));
         }
     }
 
@@ -434,47 +395,15 @@ public partial class TiedLoRAAdapter<T> : LoRAAdapterBase<T>
             int inputSize = input.Shape.Length > 1 ? input.Shape[1] : input.Length;
             int outputSize = GetOutputLayerShape().RequireConcrete("Sizing a LoRA adapter's low-rank factors")[0];
 
-            // Convert input to matrix [batchSize, inputSize]
-            Matrix<T> inputMatrix = new Matrix<T>(batchSize, inputSize);
-            for (int i = 0; i < batchSize; i++)
-            {
-                for (int j = 0; j < inputSize; j++)
-                {
-                    inputMatrix[i, j] = input[i * inputSize + j];
-                }
-            }
-
-            // Compute: input * A_shared → [batchSize, rank]
-            Matrix<T> afterA = inputMatrix.Multiply(_sharedMatrixA);
-
-            // Compute: afterA * B_shared → [batchSize, outputSize]
-            Matrix<T> afterB = afterA.Multiply(_sharedMatrixB);
+            // Compute: input * A_shared â†’ [batchSize, rank], then * B_shared â†’ [batchSize, outputSize]
+            Tensor<T> afterA = Engine.TensorMatMul(
+                Engine.Reshape(input, [batchSize, inputSize]), Tensor<T>.FromMatrix(_sharedMatrixA));
+            Tensor<T> afterB = Engine.TensorMatMul(afterA, Tensor<T>.FromMatrix(_sharedMatrixB));
 
             // Apply layer-specific scaling and alpha/rank scaling
             T scaling = NumOps.Divide(NumOps.FromDouble(Alpha), NumOps.FromDouble(Rank));
             T totalScaling = NumOps.Multiply(_layerScaling[0], scaling);
-
-            Matrix<T> scaled = new Matrix<T>(batchSize, outputSize);
-            for (int i = 0; i < batchSize; i++)
-            {
-                for (int j = 0; j < outputSize; j++)
-                {
-                    scaled[i, j] = NumOps.Multiply(afterB[i, j], totalScaling);
-                }
-            }
-
-            // Convert back to tensor
-            Vector<T> tiedLoraOutputData = new Vector<T>(batchSize * outputSize);
-            int idx = 0;
-            for (int i = 0; i < batchSize; i++)
-            {
-                for (int j = 0; j < outputSize; j++)
-                {
-                    tiedLoraOutputData[idx++] = scaled[i, j];
-                }
-            }
-
-            Tensor<T> tiedLoraOutput = new Tensor<T>(new[] { batchSize, outputSize }, tiedLoraOutputData);
+            Tensor<T> tiedLoraOutput = Engine.TensorMultiplyScalar(afterB, totalScaling);
 
             // Sum base output and Tied-LoRA output
             Tensor<T> result = Engine.TensorAdd(baseOutput, tiedLoraOutput);
@@ -559,38 +488,18 @@ public partial class TiedLoRAAdapter<T> : LoRAAdapterBase<T>
             Matrix<T> intermediate = _sharedMatrixA.Multiply(_sharedMatrixB);
 
             // Apply total scaling: W_tied = intermediate * totalScaling
-            Matrix<T> tiedWeights = new Matrix<T>(inputSize, outputSize);
-            for (int i = 0; i < inputSize; i++)
-            {
-                for (int j = 0; j < outputSize; j++)
-                {
-                    tiedWeights[i, j] = NumOps.Multiply(intermediate[i, j], totalScaling);
-                }
-            }
-
-            // Transpose to match DenseLayer format [outputSize, inputSize]
-            Matrix<T> tiedWeightsTransposed = tiedWeights.Transpose();
+            Matrix<T> tiedWeights = Engine.MatrixMultiplyScalar(intermediate, totalScaling);
 
             // Get base layer parameters
             Vector<T> baseParams = _baseLayer.GetParameters();
             int weightCount = inputSize * outputSize;
 
-            // Create merged parameters
-            Vector<T> mergedParams = new Vector<T>(baseParams.Length);
-
-            // Merge weights
-            for (int i = 0; i < weightCount; i++)
-            {
-                int row = i / inputSize;
-                int col = i % inputSize;
-                mergedParams[i] = NumOps.Add(baseParams[i], tiedWeightsTransposed[row, col]);
-            }
-
-            // Copy biases unchanged
-            for (int i = weightCount; i < baseParams.Length; i++)
-            {
-                mergedParams[i] = baseParams[i];
-            }
+            // Merge weights. tiedWeights is [inputSize, outputSize]; DenseLayer stores its weights
+            // input-major and FullyConnectedLayer output-major ([outputSize, inputSize]), so the
+            // latter uses the transpose. Biases are kept unchanged.
+            bool isOutputMajor = _baseLayer is FullyConnectedLayer<T>;
+            Vector<T> mergedParams = AddFlatWeightsToParameters(
+                baseParams, isOutputMajor ? tiedWeights.Transpose() : tiedWeights, weightCount);
 
             // Use helper method to clone base layer and preserve activation function
             return CreateMergedLayerWithClone(mergedParams);

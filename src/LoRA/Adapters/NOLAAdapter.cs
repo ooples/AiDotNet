@@ -182,12 +182,8 @@ public partial class NOLAAdapter<T> : LoRAAdapterBase<T>
 
         // Initialize coefficients to zero (NOLA starts with no effect)
         _coefficientsA = new Tensor<T>([_numBasis]);
-        _coefficientsB = new Tensor<T>([_numBasis]);
-        for (int i = 0; i < _numBasis; i++)
-        {
-            _coefficientsA[i] = NumOps.Zero;
-            _coefficientsB[i] = NumOps.Zero;
-        }
+        _coefficientsB = new Tensor<T>([_numBasis]); // fresh tensors are zero-filled
+
 
         // NOLA trains only its coefficient tensors; random bases are reproducibly derived from the
         // seed and the inherited standard LoRA factors are unused.
@@ -243,25 +239,31 @@ public partial class NOLAAdapter<T> : LoRAAdapterBase<T>
     /// each template is a color, and each coefficient controls how much of that color to use.
     /// </para>
     /// </remarks>
-    private Matrix<T> ReconstructMatrixA()
+    private Matrix<T> CombineBases(int rows, int cols, int basisOffset, Tensor<T> coefficients)
     {
-        int inputSize = GetInputShape()[0];
-        Matrix<T> matrixA = new Matrix<T>(inputSize, Rank);
+        if (_numBasis == 0)
+        {
+            return new Matrix<T>(rows, cols);
+        }
 
-        // Linear combination of basis matrices
+        Tensor<T>[] bases = new Tensor<T>[_numBasis];
         for (int b = 0; b < _numBasis; b++)
         {
-            Matrix<T> basis = GenerateRandomBasis(inputSize, Rank, b);
-            T coef = _coefficientsA[b];
-
-            for (int i = 0; i < inputSize; i++)
-            {
-                for (int j = 0; j < Rank; j++)
-                {
-                    matrixA[i, j] = NumOps.Add(matrixA[i, j], NumOps.Multiply(basis[i, j], coef));
-                }
-            }
+            bases[b] = Tensor<T>.FromMatrix(GenerateRandomBasis(rows, cols, basisOffset + b));
         }
+
+        // [numBasis, rows, cols] * coefficients[numBasis, 1, 1], summed over the basis axis
+        Tensor<T> weighted = Engine.TensorMultiply(
+            Engine.TensorStack(bases, 0), Engine.Reshape(coefficients, [_numBasis, 1, 1]));
+        return Engine.ReduceSum(weighted, [0], false).ToMatrix();
+    }
+
+    private Matrix<T> ReconstructMatrixA()
+
+    {
+        int inputSize = GetInputShape()[0];
+        // Linear combination of basis matrices: A = sum_b coefA[b] * basis_b
+        Matrix<T> matrixA = CombineBases(inputSize, Rank, 0, _coefficientsA);
 
         return matrixA;
     }
@@ -282,22 +284,8 @@ public partial class NOLAAdapter<T> : LoRAAdapterBase<T>
     private Matrix<T> ReconstructMatrixB()
     {
         int outputSize = GetOutputLayerShape().RequireConcrete("Sizing a LoRA adapter's low-rank factors")[0];
-        Matrix<T> matrixB = new Matrix<T>(Rank, outputSize);
-
-        // Linear combination of basis matrices
-        for (int b = 0; b < _numBasis; b++)
-        {
-            Matrix<T> basis = GenerateRandomBasis(Rank, outputSize, _numBasis + b);  // Offset by numBasis for B
-            T coef = _coefficientsB[b];
-
-            for (int i = 0; i < Rank; i++)
-            {
-                for (int j = 0; j < outputSize; j++)
-                {
-                    matrixB[i, j] = NumOps.Add(matrixB[i, j], NumOps.Multiply(basis[i, j], coef));
-                }
-            }
-        }
+        // Linear combination of basis matrices (offset by numBasis for B): B = sum_b coefB[b] * basis_b
+        Matrix<T> matrixB = CombineBases(Rank, outputSize, _numBasis, _coefficientsB);
 
         return matrixB;
     }
@@ -339,39 +327,16 @@ public partial class NOLAAdapter<T> : LoRAAdapterBase<T>
         int inputSize = input.Shape.Length > 1 ? input.Shape[1] : input.Length;
         int outputSize = GetOutputLayerShape().RequireConcrete("Sizing a LoRA adapter's low-rank factors")[0];
 
-        // Convert input to matrix [batchSize, inputSize]
-        Matrix<T> inputMatrix = new Matrix<T>(batchSize, inputSize);
-        for (int i = 0; i < batchSize; i++)
-        {
-            for (int j = 0; j < inputSize; j++)
-            {
-                inputMatrix[i, j] = input[i * inputSize + j];
-            }
-        }
-
-        // Compute: input * A (result: [batchSize, rank])
-        Matrix<T> intermediate = inputMatrix.Multiply(matrixA);
-
-        // Compute: intermediate * B (result: [batchSize, outputSize])
-        Matrix<T> nolaOutput = intermediate.Multiply(matrixB);
+        // Compute: input * A (result: [batchSize, rank]), then * B (result: [batchSize, outputSize])
+        Tensor<T> intermediate = Engine.TensorMatMul(
+            Engine.Reshape(input, [batchSize, inputSize]), Tensor<T>.FromMatrix(matrixA));
+        Tensor<T> nolaOutput = Engine.TensorMatMul(intermediate, Tensor<T>.FromMatrix(matrixB));
 
         // Apply scaling (alpha / rank)
         T scaling = NumOps.Divide(
             NumOps.FromDouble(Alpha),
             NumOps.FromDouble(Rank));
-        nolaOutput = nolaOutput.Multiply(scaling);
-
-        // Convert to tensor
-        Vector<T> nolaOutputData = new Vector<T>(batchSize * outputSize);
-        int idx = 0;
-        for (int i = 0; i < batchSize; i++)
-        {
-            for (int j = 0; j < outputSize; j++)
-            {
-                nolaOutputData[idx++] = nolaOutput[i, j];
-            }
-        }
-        Tensor<T> nolaOutputTensor = new Tensor<T>(new[] { batchSize, outputSize }, nolaOutputData);
+        Tensor<T> nolaOutputTensor = Engine.TensorMultiplyScalar(nolaOutput, scaling);
 
         // Sum base and NOLA outputs
         Tensor<T> result = Engine.TensorAdd(baseOutput, nolaOutputTensor);
@@ -391,19 +356,9 @@ public partial class NOLAAdapter<T> : LoRAAdapterBase<T>
             return;
         }
 
-        // Update coefficients for A
-        for (int i = 0; i < _numBasis; i++)
-        {
-            T update = NumOps.Multiply(_coefficientsAGradient[i], learningRate);
-            _coefficientsA[i] = NumOps.Subtract(_coefficientsA[i], update);
-        }
-
-        // Update coefficients for B
-        for (int i = 0; i < _numBasis; i++)
-        {
-            T update = NumOps.Multiply(_coefficientsBGradient[i], learningRate);
-            _coefficientsB[i] = NumOps.Subtract(_coefficientsB[i], update);
-        }
+        // Update coefficients for A and B: c -= learningRate * dc
+        Engine.TensorSubtractInPlace(_coefficientsA, Tensor<T>.FromVector(Engine.Multiply(_coefficientsAGradient, learningRate)));
+        Engine.TensorSubtractInPlace(_coefficientsB, Tensor<T>.FromVector(Engine.Multiply(_coefficientsBGradient, learningRate)));
 
         // Update base layer if not frozen
         if (!_freezeBaseLayer)
