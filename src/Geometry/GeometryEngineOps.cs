@@ -129,4 +129,39 @@ internal static class GeometryEngineOps<T>
         var flags = Engine.TensorWhere(isNan, Engine.TensorOnesLike(rows), Engine.TensorZerosLike(rows));
         return Engine.TensorGreaterThan(Engine.ReduceMax(flags, new[] { 0 }, false), NumOps.Zero);
     }
+
+    /// <summary>
+    /// Returns the xyz columns of a [points, features] tensor whose first three features are the position.
+    /// </summary>
+    internal static Tensor<T> Positions(Tensor<T> points)
+    {
+        int count = points.Shape[0];
+        return points.Shape[1] == 3 ? points : Engine.TensorSlice(points, new[] { 0, 0 }, new[] { count, 3 });
+    }
+
+    /// <summary>
+    /// Returns the [from, to] matrix of squared Euclidean distances between the xyz positions of two point sets,
+    /// computed from the coordinate differences (not the less accurate |a|^2 + |b|^2 - 2ab expansion).
+    /// </summary>
+    internal static Tensor<T> PairwiseSquaredDistances(Tensor<T> from, Tensor<T> to)
+    {
+        int fromCount = from.Shape[0];
+        int toCount = to.Shape[0];
+        var shape = new[] { fromCount, toCount, 3 };
+        var left = Engine.TensorBroadcastTo(Positions(from).Reshape(fromCount, 1, 3), shape);
+        var right = Engine.TensorBroadcastTo(Positions(to).Reshape(1, toCount, 3), shape);
+        var difference = Engine.TensorSubtract(left, right);
+        return Engine.ReduceSum(Engine.TensorSquare(difference), new[] { 2 }, false);
+    }
+
+    /// <summary>
+    /// Returns the minimum of every row of a [rows, columns] tensor the way a running "value &lt; best" scan
+    /// starting from <c>MaxValue</c> finds it: NaN entries never win and an all-NaN row reports <c>MaxValue</c>.
+    /// </summary>
+    internal static Tensor<T> RowMinSkippingNan(Tensor<T> table)
+    {
+        var masked = Engine.TensorWhere(Engine.TensorIsNan(table), Engine.TensorFullLike(table, NumOps.MaxValue), table);
+        var min = Engine.TensorNegate(Engine.ReduceMax(Engine.TensorNegate(masked), new[] { 1 }, false));
+        return Engine.TensorMin(min, NumOps.MaxValue);
+    }
 }
