@@ -372,6 +372,26 @@ public static class DeserializationHelper
                 TryGetDouble(additionalParams, "LocalizationMargin") ?? 0.01)
                 ?? throw new MissingLayerCtorException("Cannot construct SVTRThinPlateSplineLayer.");
         }
+        else if (genericDef == typeof(ObliviousDecisionTreeLayer<>))
+        {
+            // Reached only when the generated factory declined, which it does when a [LayerState] key is
+            // absent. A checkpoint written before the choice functions existed carries no
+            // "choiceFunction" key and was trained with softmax feature choice and sigmoid splits, so it
+            // is rebuilt with those and master's optional-argument defaults. With the key present, the
+            // generated factory could only have declined over a missing architectural key: a damaged file.
+            var state = new AiDotNet.Serialization.LayerStateBag(additionalParams, layerType);
+            if (state.Has("choiceFunction"))
+            {
+                throw new InvalidOperationException(
+                    "ObliviousDecisionTreeLayer metadata names a choiceFunction but lacks depth, outputDim or initScale.");
+            }
+
+            instance = new ObliviousDecisionTreeLayer<T>(
+                state.Int32("depth", 6),
+                state.Int32("outputDim", 1),
+                state.Double("initScale", 0.01),
+                ObliviousTreeChoiceFunction.SoftmaxSigmoid);
+        }
         else if (genericDef == typeof(PatchGANDiscriminator<>))
         {
             instance = new PatchGANDiscriminator<T>(
