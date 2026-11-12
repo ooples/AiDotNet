@@ -330,7 +330,6 @@ public partial class BiorthogonalWavelet<T> : WaveletFunctionBase<T>
     /// </para>
     /// </remarks>
     public override (Vector<T> approximation, Vector<T> detail) Decompose(Vector<T> input)
-    public override (Vector<T> approximation, Vector<T> detail) Decompose(Vector<T> input)
     {
         if (input.Length % 2 != 0)
             throw new ArgumentException("Input length must be even for biorthogonal wavelet decomposition.");
