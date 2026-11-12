@@ -113,27 +113,43 @@ public partial class HtsatSpectrogramImageLayer<T> : LayerBase<T>, IShapeContrac
     /// </summary>
     internal static Tensor<T> BicubicMatrix(int outputs, int inputs)
     {
+        var engine = AiDotNetEngine.Current;
         var ops = MathHelper.GetNumericOperations<T>();
-        var weights = new double[outputs, inputs];
         double scale = outputs > 1 ? (inputs - 1) / (double)(outputs - 1) : 0.0;
         const double a = -0.75;
-        static double Near(double x, double a) => (((a + 2) * x) - (a + 3)) * x * x + 1;
-        static double Far(double x, double a) => ((((a * x) - (5 * a)) * x) + (8 * a)) * x - (4 * a);
-        for (int i = 0; i < outputs; i++)
+        T aT = ops.FromDouble(a);
+        T nearLinear = ops.FromDouble(a + 2), nearConstant = ops.FromDouble(-(a + 3));
+        T farFive = ops.FromDouble(-5 * a), farEight = ops.FromDouble(8 * a), farFour = ops.FromDouble(-4 * a);
+        T lastInput = ops.FromDouble(inputs - 1);
+
+        // Keys' cubic convolution: Near(x) = ((a+2)x - (a+3))x^2 + 1 for |x| <= 1,
+        // Far(x) = ((ax - 5a)x + 8a)x - 4a for 1 < |x| < 2.
+        Tensor<T> Near(Tensor<T> x) => engine.TensorAddScalar(
+            engine.TensorMultiply(engine.TensorMultiply(
+                engine.TensorAddScalar(engine.TensorMultiplyScalar(x, nearLinear), nearConstant), x), x),
+            ops.One);
+        Tensor<T> Far(Tensor<T> x) => engine.TensorAddScalar(engine.TensorMultiply(
+            engine.TensorAddScalar(engine.TensorMultiply(
+                engine.TensorAddScalar(engine.TensorMultiplyScalar(x, aT), farFive), x), farEight), x), farFour);
+
+        // Source coordinate i * scale per output row, its integer part and fractional offset.
+        var real = engine.TensorMultiplyScalar(engine.TensorArange<T>(0, outputs, 1), ops.FromDouble(scale));
+        var index = engine.TensorFloor(real);
+        var t = engine.TensorSubtract(real, index);
+        var oneMinusT = engine.ScalarMinusTensor(ops.One, t);
+
+        // Tap k sits at source clamp(index - 1 + k, 0, inputs - 1); taps that clamp onto the same
+        // border column accumulate, as the reference's "weights[i, source] += w[k]" does.
+        Tensor<T> Tap(T offset, Tensor<T> weight)
         {
-            double real = scale * i;
-            int index = (int)Math.Floor(real);
-            double t = real - index;
-            double[] w = { Far(t + 1, a), Near(t, a), Near(1 - t, a), Far(2 - t, a) };
-            for (int k = 0; k < 4; k++)
-            {
-                int source = Math.Min(Math.Max(index - 1 + k, 0), inputs - 1);
-                weights[i, source] += w[k];
-            }
+            var source = engine.TensorClamp(engine.TensorAddScalar(index, offset), ops.Zero, lastInput).Cast<int>();
+            return engine.TensorMultiply(engine.TensorOneHot<T>(source, inputs), weight.Reshape(new[] { outputs, 1 }));
         }
-        var matrix = new Tensor<T>(new[] { outputs, inputs });
-        for (int i = 0; i < outputs; i++)
-            for (int j = 0; j < inputs; j++) matrix[i, j] = ops.FromDouble(weights[i, j]);
+
+        var matrix = Tap(ops.FromDouble(-1), Far(engine.TensorAddScalar(t, ops.One)));
+        matrix = engine.TensorAdd(matrix, Tap(ops.Zero, Near(t)));
+        matrix = engine.TensorAdd(matrix, Tap(ops.One, Near(oneMinusT)));
+        matrix = engine.TensorAdd(matrix, Tap(ops.FromDouble(2), Far(engine.TensorAddScalar(oneMinusT, ops.One))));
         return matrix;
     }
 

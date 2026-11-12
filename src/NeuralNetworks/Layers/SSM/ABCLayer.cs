@@ -286,8 +286,7 @@ public partial class ABCLayer<T> : LayerBase<T>, IShapeContract
         InitializeSlotKeys();
         InitializeTensor2D(_forgetGateWeights);
         // Forget gate bias ~ 2 so sigmoid(2) ~ 0.88 -> strong initial memory retention
-        for (int i = 0; i < _forgetGateBias.Length; i++)
-            _forgetGateBias[i] = NumOps.FromDouble(2.0);
+        _forgetGateBias.Fill(NumOps.FromDouble(2.0));
         InitializeTensor2D(_outputGateWeights);
         _outputGateBias.Fill(NumOps.Zero);
         InitializeTensor2D(_outputProjectionWeights);

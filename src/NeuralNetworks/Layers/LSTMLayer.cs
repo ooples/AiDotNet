@@ -1128,10 +1128,7 @@ public partial class LSTMLayer<T> : LayerBase<T>, IShapeContract
 
         // Scale by the scale factor and copy to weight tensor using flat indexer
         var scaled = Engine.TensorMultiplyScalar(shifted, scale);
-        for (int i = 0; i < weight.Length; i++)
-        {
-            weight[i] = scaled[i];
-        }
+        Engine.TensorCopy(scaled, weight);
     }
 
     /// <summary>

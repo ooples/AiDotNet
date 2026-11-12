@@ -1357,15 +1357,18 @@ public partial class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLa
         }
         else if (UseCausalMask)
         {
-            plane = new Tensor<T>([1, seqQ, seqKv]);
-            T negInf = NumOps.FromDouble(double.NegativeInfinity);
+            // Key j is in the future of query i when j > (seqKv - seqQ) + i.
             int keyOffset = seqKv - seqQ;
-            for (int i = 0; i < seqQ; i++)
-            {
-                int lastAllowed = Math.Min(keyOffset + i, seqKv - 1);
-                for (int j = lastAllowed + 1; j < seqKv; j++)
-                    plane[0, i, j] = negInf;
-            }
+            int[] planeShape = [seqQ, seqKv];
+            var lastAllowedKey = Engine.TensorBroadcastTo(
+                Engine.Reshape(Engine.TensorArange<T>(keyOffset, keyOffset + seqQ, 1), [seqQ, 1]), planeShape);
+            var keyIndex = Engine.TensorBroadcastTo(
+                Engine.Reshape(Engine.TensorArange<T>(0, seqKv, 1), [1, seqKv]), planeShape);
+            var negInf = new Tensor<T>(planeShape);
+            negInf.Fill(NumOps.FromDouble(double.NegativeInfinity));
+            plane = Engine.Reshape(
+                Engine.TensorWhere(Engine.TensorGreaterThan(keyIndex, lastAllowedKey), negInf, new Tensor<T>(planeShape)),
+                [1, seqQ, seqKv]);
 
             planes = 1;
         }
@@ -1375,18 +1378,12 @@ public partial class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLa
         }
 
         // Tile to every (batch, head) slice; batch-major so slice b*H + h receives head h's plane.
-        int planeLength = seqQ * seqKv;
-        var source = plane.Contiguous();
-        var tiled = new Tensor<T>([batchHeads, seqQ, seqKv]);
-        for (int slice = 0; slice < batchHeads; slice++)
-        {
-            int sourceBase = (slice % planes) * planeLength;
-            int targetBase = slice * planeLength;
-            for (int e = 0; e < planeLength; e++)
-                tiled.SetFlat(targetBase + e, source.GetFlat(sourceBase + e));
-        }
-
-        return tiled;
+        var source = Engine.Reshape(plane.Contiguous(), [planes, seqQ, seqKv]);
+        int repeats = (batchHeads + planes - 1) / planes;
+        var tiled = Engine.TensorTile(source, [repeats, 1, 1]);
+        return repeats * planes == batchHeads
+            ? tiled
+            : Engine.TensorSlice(tiled, [0, 0, 0], [batchHeads, seqQ, seqKv]);
     }
 
     private int[] _originalQueryShape = [];

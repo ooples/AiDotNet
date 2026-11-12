@@ -217,7 +217,7 @@ public partial class RMSNormalizationLayer<T> : LayerBase<T>, IShapeContract
         var updGamma = Engine.TensorSubtract(
             _gamma,
             Engine.TensorMultiplyScalar(_gammaGradient, learningRate));
-        for (int i = 0; i < _gamma.Length; i++) _gamma[i] = updGamma[i];
+        Engine.TensorCopy(updGamma, _gamma);
 
         Engine.InvalidatePersistentTensor(_gamma);
     }
