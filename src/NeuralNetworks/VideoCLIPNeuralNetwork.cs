@@ -455,13 +455,16 @@ public partial class VideoCLIPNeuralNetwork<T> : MultimodalModelLayoutBase<T>, I
     /// <inheritdoc/>
     public T ComputeSimilarity(Vector<T> textEmbedding, Vector<T> imageEmbedding)
     {
-        T similarity = NumOps.Zero;
-        for (int i = 0; i < Math.Min(textEmbedding.Length, imageEmbedding.Length); i++)
+        // Dot product over the overlapping prefix
+        int length = Math.Min(textEmbedding.Length, imageEmbedding.Length);
+        if (length == 0)
         {
-            similarity = NumOps.Add(similarity,
-                NumOps.Multiply(textEmbedding[i], imageEmbedding[i]));
+            return NumOps.Zero;
         }
-        return similarity;
+
+        var text = textEmbedding.Length == length ? textEmbedding : textEmbedding.GetSubVector(0, length);
+        var image = imageEmbedding.Length == length ? imageEmbedding : imageEmbedding.GetSubVector(0, length);
+        return Engine.DotProduct(text, image);
     }
 
     /// <inheritdoc/>
@@ -565,17 +568,14 @@ public partial class VideoCLIPNeuralNetwork<T> : MultimodalModelLayoutBase<T>, I
     {
         var queryEmbedding = GetTextEmbedding(query);
         var embeddings = videoEmbeddings.ToList();
-        var scores = new List<(int Index, T Score)>();
+        var scores = new T[embeddings.Count];
 
         for (int i = 0; i < embeddings.Count; i++)
         {
-            var similarity = ComputeSimilarity(queryEmbedding, embeddings[i]);
-            scores.Add((i, similarity));
+            scores[i] = ComputeSimilarity(queryEmbedding, embeddings[i]);
         }
 
-        return scores
-            .OrderByDescending(s => NumOps.ToDouble(s.Score))
-            .Take(topK);
+        return TopScoring(scores, topK);
     }
 
     /// <inheritdoc/>
@@ -587,17 +587,36 @@ public partial class VideoCLIPNeuralNetwork<T> : MultimodalModelLayoutBase<T>, I
         var videoEmbedding = GetVideoEmbedding(frames);
         var texts = candidateTexts.ToList();
         var textEmbeddings = GetTextEmbeddings(texts).ToList();
-        var scores = new List<(int Index, T Score)>();
+        var scores = new T[textEmbeddings.Count];
 
         for (int i = 0; i < textEmbeddings.Count; i++)
         {
-            var similarity = ComputeSimilarity(textEmbeddings[i], videoEmbedding);
-            scores.Add((i, similarity));
+            scores[i] = ComputeSimilarity(textEmbeddings[i], videoEmbedding);
         }
 
-        return scores
-            .OrderByDescending(s => NumOps.ToDouble(s.Score))
-            .Take(topK);
+        return TopScoring(scores, topK);
+    }
+
+    /// <summary>
+    /// The <paramref name="topK"/> best (index, score) pairs, highest score first, ties in index order and
+    /// NaN last: the order <c>OrderByDescending(score).Take(topK)</c> gives.
+    /// </summary>
+    private static List<(int Index, T Score)> TopScoring(T[] scores, int topK)
+    {
+        int take = Math.Max(0, Math.Min(topK, scores.Length));
+        var picked = new List<(int Index, T Score)>(take);
+        if (take == 0)
+        {
+            return picked;
+        }
+
+        var order = TieBreakArgMax.StableDescendingOrder1D(new Tensor<T>(scores, new[] { scores.Length })).ToArray();
+        for (int rank = 0; rank < take; rank++)
+        {
+            picked.Add((order[rank], scores[order[rank]]));
+        }
+
+        return picked;
     }
 
     /// <inheritdoc/>
@@ -620,9 +639,8 @@ public partial class VideoCLIPNeuralNetwork<T> : MultimodalModelLayoutBase<T>, I
             results.Add((start, start + windowSize - 1, similarity));
         }
 
-        return results
-            .OrderByDescending(r => NumOps.ToDouble(r.Score))
-            .Take(10);
+        var scores = results.Select(r => r.Score).ToArray();
+        return TopScoring(scores, 10).Select(top => results[top.Index]);
     }
 
     /// <inheritdoc/>
@@ -664,11 +682,7 @@ public partial class VideoCLIPNeuralNetwork<T> : MultimodalModelLayoutBase<T>, I
         generatedTokens.Add(BOS_TOKEN);
 
         // Create context tensor from video embedding
-        var contextTensor = Tensor<T>.CreateDefault([1, videoContext.Length], NumOps.Zero);
-        for (int i = 0; i < videoContext.Length; i++)
-        {
-            contextTensor[0, i] = videoContext[i];
-        }
+        var contextTensor = Tensor<T>.FromVector(videoContext).Reshape(1, videoContext.Length);
 
         for (int step = 0; step < maxLength - 1; step++)
         {
@@ -682,12 +696,7 @@ public partial class VideoCLIPNeuralNetwork<T> : MultimodalModelLayoutBase<T>, I
             var logits = captionHead.Forward(combinedContext);
 
             // Get logits for the last position
-            int vocabSize = logits.Shape.Length > 1 ? logits.Shape[1] : logits.Shape[0];
-            var lastLogits = new T[Math.Min(vocabSize, _vocabularySize)];
-            for (int i = 0; i < lastLogits.Length; i++)
-            {
-                lastLogits[i] = logits.Shape.Length > 1 ? logits[0, i] : logits[i];
-            }
+            var lastLogits = LastPositionLogits(logits);
 
             // Apply softmax and sample next token (greedy or nucleus sampling)
             int nextToken = SampleNextToken(lastLogits, temperature: 0.8, topP: 0.9);
@@ -711,21 +720,29 @@ public partial class VideoCLIPNeuralNetwork<T> : MultimodalModelLayoutBase<T>, I
             throw new InvalidOperationException("Text embedding layers not initialized.");
 
         int seqLen = tokenIds.Count;
-        var tokenTensor = Tensor<T>.CreateDefault([seqLen], NumOps.Zero);
-        for (int i = 0; i < seqLen; i++)
-        {
-            tokenTensor[i] = NumOps.FromDouble(tokenIds[i]);
-        }
+        var tokenTensor = new Tensor<int>(tokenIds.ToArray(), new[] { seqLen }).Cast<T>();
 
         var embedded = _textTokenEmbedding.Forward(tokenTensor);
 
-        // Add positional embeddings
-        for (int i = 0; i < seqLen && i < _textPositionalEmbeddings.Shape[0]; i++)
+        // Add positional embeddings to the overlapping [rows, cols] corner
+        int rows = Math.Min(seqLen, _textPositionalEmbeddings.Shape[0]);
+        int cols = Math.Min(embedded.Shape[1], _textPositionalEmbeddings.Shape[1]);
+        if (rows > 0 && cols > 0)
         {
-            for (int j = 0; j < embedded.Shape[1] && j < _textPositionalEmbeddings.Shape[1]; j++)
+            var corner = Engine.TensorNarrow(Engine.TensorNarrow(_textPositionalEmbeddings, 0, 0, rows), 1, 0, cols);
+            if (cols < embedded.Shape[1])
             {
-                embedded[i, j] = NumOps.Add(embedded[i, j], _textPositionalEmbeddings[i, j]);
+                corner = Engine.TensorConcatenate(
+                    new[] { corner, new Tensor<T>(new[] { rows, embedded.Shape[1] - cols }) }, 1);
             }
+
+            if (rows < embedded.Shape[0])
+            {
+                corner = Engine.TensorConcatenate(
+                    new[] { corner, new Tensor<T>(new[] { embedded.Shape[0] - rows, embedded.Shape[1] }) }, 0);
+            }
+
+            embedded = Engine.TensorAdd(embedded, corner);
         }
 
         // Apply text encoder layers
@@ -752,21 +769,45 @@ public partial class VideoCLIPNeuralNetwork<T> : MultimodalModelLayoutBase<T>, I
 
         // Concatenate or add video and text contexts
         int outputDim = Math.Min(videoContext.Shape[1], _embeddingDimension);
-        var combined = Tensor<T>.CreateDefault([1, outputDim], NumOps.Zero);
+        var videoVal = Engine.TensorNarrow(Engine.TensorNarrow(videoContext, 0, 0, 1), 1, 0, outputDim).Reshape(outputDim);
+        var textVal = PadOrTruncate(textPooled, outputDim);
 
-        for (int i = 0; i < outputDim; i++)
-        {
-            T videoVal = i < videoContext.Shape[1] ? videoContext[0, i] : NumOps.Zero;
-            T textVal = i < textPooled.Length ? textPooled[i] : NumOps.Zero;
-            // Gated combination
-            T gate = NumOps.FromDouble(0.5);
-            combined[0, i] = NumOps.Add(
-                NumOps.Multiply(gate, videoVal),
-                NumOps.Multiply(NumOps.Subtract(NumOps.One, gate), textVal));
-        }
+        // Gated combination
+        T gate = NumOps.FromDouble(0.5);
+        var combined = Engine.TensorAdd(
+            Engine.TensorMultiplyScalar(videoVal, gate),
+            Engine.TensorMultiplyScalar(textVal, NumOps.Subtract(NumOps.One, gate)));
 
-        return combined;
+        return combined.Reshape(1, outputDim);
     }
+
+    /// <summary>
+    /// The first <paramref name="length"/> entries of <paramref name="values"/>, zero-padded when it is shorter.
+    /// </summary>
+    private Tensor<T> PadOrTruncate(Vector<T> values, int length)
+    {
+        int kept = Math.Min(values.Length, length);
+        var head = Tensor<T>.FromVector(kept == values.Length ? values : values.GetSubVector(0, kept));
+        return kept == length
+            ? head
+            : Engine.TensorConcatenate(new[] { head, new Tensor<T>(new[] { length - kept }) }, 0);
+    }
+
+    /// <summary>
+    /// Logits of the first row (or the vector itself), limited to the vocabulary size.
+    /// </summary>
+    private T[] LastPositionLogits(Tensor<T> logits)
+    {
+        bool rows = logits.Shape.Length > 1;
+        int vocabSize = rows ? logits.Shape[1] : logits.Shape[0];
+        int count = Math.Min(vocabSize, _vocabularySize);
+        var first = rows
+            ? Engine.TensorNarrow(Engine.TensorNarrow(logits, 0, 0, 1), 1, 0, count)
+            : Engine.TensorNarrow(logits, 0, 0, count);
+        return first.Contiguous().ToArray();
+    }
+
+    private static Tensor<T> Full(int length, T value) => Tensor<T>.CreateDefault(new[] { length }, value);
 
     /// <summary>
     /// Samples the next token using temperature scaling and nucleus (top-p) sampling.
@@ -776,55 +817,33 @@ public partial class VideoCLIPNeuralNetwork<T> : MultimodalModelLayoutBase<T>, I
         if (logits.Length == 0)
             return 0;
 
-        // Apply temperature
-        var scaledLogits = new double[logits.Length];
-        for (int i = 0; i < logits.Length; i++)
-        {
-            scaledLogits[i] = NumOps.ToDouble(logits[i]) / Math.Max(temperature, 0.01);
-        }
+        int n = logits.Length;
 
-        // Softmax
-        double maxLogit = scaledLogits.Max();
-        var expLogits = scaledLogits.Select(l => Math.Exp(l - maxLogit)).ToArray();
-        double sumExp = expLogits.Sum();
-        var probs = expLogits.Select(e => e / sumExp).ToArray();
+        // Apply temperature, then softmax
+        var raw = new Tensor<T>(logits, new[] { n });
+        var scaled = Engine.TensorDivide(raw, Full(n, NumOps.FromDouble(Math.Max(temperature, 0.01))));
+        var probs = Engine.Softmax(scaled, -1);
 
-        // Nucleus (top-p) sampling
-        var sortedIndices = Enumerable.Range(0, probs.Length)
-            .OrderByDescending(i => probs[i])
-            .ToList();
+        // Nucleus (top-p) sampling: most probable first (stable, NaN last), up to and including the token
+        // that brings the running total to topP
+        var order = TieBreakArgMax.StableDescendingOrder1D(probs);
+        var sortedProbs = Engine.TensorTake(probs, order);
+        var cumulativeProb = Engine.TensorCumSum(sortedProbs, 0);
+        var reached = Engine.TensorGreaterEqual(cumulativeProb, Full(n, NumOps.FromDouble(topP)));
+        int nucleusSize = Engine.TensorCountNonzero(reached) == 0 ? n : TieBreakArgMax.FirstMaxIndex(reached) + 1;
 
-        double cumulativeProb = 0.0;
-        var nucleusIndices = new List<int>();
-        var nucleusProbs = new List<double>();
+        // Renormalize nucleus probabilities (their sum is the running total at the last nucleus token)
+        var nucleusProbs = Engine.TensorNarrow(sortedProbs, 0, 0, nucleusSize);
+        T nucleusSum = cumulativeProb.GetFlat(nucleusSize - 1);
+        var normalizedProbs = Engine.TensorDivide(nucleusProbs, Full(nucleusSize, nucleusSum));
 
-        foreach (var idx in sortedIndices)
-        {
-            cumulativeProb += probs[idx];
-            nucleusIndices.Add(idx);
-            nucleusProbs.Add(probs[idx]);
-
-            if (cumulativeProb >= topP)
-                break;
-        }
-
-        // Renormalize nucleus probabilities
-        double nucleusSum = nucleusProbs.Sum();
-        var normalizedProbs = nucleusProbs.Select(p => p / nucleusSum).ToArray();
-
-        // Sample from nucleus
+        // Sample from nucleus: the first token whose running total reaches the draw
         var random = RandomHelper.Shared;
         double sample = random.NextDouble();
-        double cumulative = 0.0;
-
-        for (int i = 0; i < nucleusIndices.Count; i++)
-        {
-            cumulative += normalizedProbs[i];
-            if (sample <= cumulative)
-                return nucleusIndices[i];
-        }
-
-        return nucleusIndices[nucleusIndices.Count - 1];
+        var cumulative = Engine.TensorCumSum(normalizedProbs, 0);
+        var hit = Engine.TensorLessEqual(Full(nucleusSize, NumOps.FromDouble(sample)), cumulative);
+        int chosen = Engine.TensorCountNonzero(hit) == 0 ? nucleusSize - 1 : TieBreakArgMax.FirstMaxIndex(hit);
+        return order.GetFlat(chosen);
     }
 
     /// <summary>
@@ -905,23 +924,22 @@ public partial class VideoCLIPNeuralNetwork<T> : MultimodalModelLayoutBase<T>, I
 
         // Create combined video-question context tensor
         int contextDim = videoContext.Length;
-        var combinedContextTensor = Tensor<T>.CreateDefault([1, contextDim], NumOps.Zero);
+        var videoVal = Tensor<T>.FromVector(videoContext);
+        var questionVal = PadOrTruncate(questionContext, contextDim);
 
-        // Fuse video and question embeddings with attention-weighted mechanism
-        for (int i = 0; i < contextDim; i++)
-        {
-            T videoVal = i < videoContext.Length ? videoContext[i] : NumOps.Zero;
-            T questionVal = i < questionContext.Length ? questionContext[i] : NumOps.Zero;
-
-            // Attention-weighted fusion: emphasize question-relevant video features
-            T dotProduct = NumOps.Multiply(videoVal, questionVal);
-            T weight = NumOps.FromDouble(Math.Max(0.3, Math.Min(0.7,
-                0.5 + NumOps.ToDouble(dotProduct) * 0.2)));
-
-            combinedContextTensor[0, i] = NumOps.Add(
-                NumOps.Multiply(weight, videoVal),
-                NumOps.Multiply(NumOps.Subtract(NumOps.One, weight), questionVal));
-        }
+        // Fuse video and question embeddings with attention-weighted mechanism:
+        // weight = clamp(0.5 + 0.2 * video * question, 0.3, 0.7), NaN passed through
+        var dotProduct = Engine.TensorMultiply(videoVal, questionVal);
+        var rawWeight = Engine.TensorAddScalar(
+            Engine.TensorMultiplyScalar(dotProduct, NumOps.FromDouble(0.2)), NumOps.FromDouble(0.5));
+        var weight = Engine.TensorWhere(
+            Engine.TensorIsNan(rawWeight),
+            rawWeight,
+            Engine.TensorClamp(rawWeight, NumOps.FromDouble(0.3), NumOps.FromDouble(0.7)));
+        var combinedContextTensor = Engine.TensorAdd(
+                Engine.TensorMultiply(weight, videoVal),
+                Engine.TensorMultiply(Engine.ScalarMinusTensor(NumOps.One, weight), questionVal))
+            .Reshape(1, contextDim);
 
         // Check if this is a yes/no question for constrained decoding
         bool isYesNoQuestion = IsYesNoQuestion(question);
@@ -938,12 +956,7 @@ public partial class VideoCLIPNeuralNetwork<T> : MultimodalModelLayoutBase<T>, I
             var logits = captionHead.Forward(decoderInput);
 
             // Get logits for the last position
-            int vocabSize = logits.Shape.Length > 1 ? logits.Shape[1] : logits.Shape[0];
-            var lastLogits = new T[Math.Min(vocabSize, _vocabularySize)];
-            for (int i = 0; i < lastLogits.Length; i++)
-            {
-                lastLogits[i] = logits.Shape.Length > 1 ? logits[0, i] : logits[i];
-            }
+            var lastLogits = LastPositionLogits(logits);
 
             int nextToken;
             if (isYesNoQuestion && step == 0)
@@ -1163,12 +1176,7 @@ public partial class VideoCLIPNeuralNetwork<T> : MultimodalModelLayoutBase<T>, I
     {
         var tensor = EncodeVideoNativeTensor(frames);
         int dim = tensor.Shape[0];
-        var result = new Vector<T>(dim);
-        for (int i = 0; i < dim; i++)
-        {
-            result[i] = tensor[i];
-        }
-        return result;
+        return PrefixVector(tensor, dim, dim);
     }
 
     /// <summary>
@@ -1214,12 +1222,7 @@ public partial class VideoCLIPNeuralNetwork<T> : MultimodalModelLayoutBase<T>, I
     {
         var tensor = EncodeFrameNativeTensor(frame);
         int dim = Math.Min(_visionHiddenDim, tensor.Shape[0]);
-        var result = new Vector<T>(_visionHiddenDim);
-        for (int i = 0; i < dim; i++)
-        {
-            result[i] = tensor[i];
-        }
-        return result;
+        return PrefixVector(tensor, dim, _visionHiddenDim);
     }
 
     private Vector<T> EncodeVideoOnnx(List<Tensor<T>> frames)
@@ -1240,22 +1243,9 @@ public partial class VideoCLIPNeuralNetwork<T> : MultimodalModelLayoutBase<T>, I
         int numSampledFrames = sampledFrames.Count;
 
         // Create input tensor [1, numFrames, channels, height, width]
-        var inputArray = new float[1 * numSampledFrames * channels * height * width];
-        int idx = 0;
-        for (int f = 0; f < numSampledFrames; f++)
-        {
-            var frame = sampledFrames[f];
-            for (int c = 0; c < channels; c++)
-            {
-                for (int h = 0; h < height; h++)
-                {
-                    for (int w = 0; w < width; w++)
-                    {
-                        inputArray[idx++] = (float)NumOps.ToDouble(frame[c, h, w]);
-                    }
-                }
-            }
-        }
+        var stacked = Engine.TensorConcatenate(
+            sampledFrames.Select(frame => frame.Reshape(1, channels, height, width)).ToArray(), 0);
+        var inputArray = stacked.Contiguous().Cast<float>().ToArray();
 
         var inputTensor = new OnnxTensors.DenseTensor<float>(inputArray, [1, numSampledFrames, channels, height, width]);
         var inputs = new List<NamedOnnxValue>
@@ -1310,11 +1300,9 @@ public partial class VideoCLIPNeuralNetwork<T> : MultimodalModelLayoutBase<T>, I
         var inputIds = encoded.TokenIds;
 
         // Truncate or pad
-        var tokenTensor = Tensor<T>.CreateDefault([_maxSequenceLength], NumOps.Zero);
-        for (int i = 0; i < _maxSequenceLength; i++)
-        {
-            tokenTensor[i] = NumOps.FromDouble(i < inputIds.Count ? inputIds[i] : 0);
-        }
+        int kept = Math.Min(inputIds.Count, _maxSequenceLength);
+        var paddedIds = inputIds.Take(kept).Concat(Enumerable.Repeat(0, _maxSequenceLength - kept)).ToArray();
+        var tokenTensor = new Tensor<int>(paddedIds, new[] { _maxSequenceLength }).Cast<T>();
         var embedded = _textTokenEmbedding.Forward(tokenTensor);
 
         // Add positional embeddings via Engine
@@ -1348,12 +1336,7 @@ public partial class VideoCLIPNeuralNetwork<T> : MultimodalModelLayoutBase<T>, I
     {
         var tensor = EncodeTextNativeTensor(text);
         int dim = Math.Min(_embeddingDimension, tensor.Shape[0]);
-        var result = new Vector<T>(_embeddingDimension);
-        for (int i = 0; i < dim; i++)
-        {
-            result[i] = tensor[i];
-        }
-        return result;
+        return PrefixVector(tensor, dim, _embeddingDimension);
     }
 
     private Vector<T> EncodeTextOnnx(string text)
@@ -1443,11 +1426,17 @@ public partial class VideoCLIPNeuralNetwork<T> : MultimodalModelLayoutBase<T>, I
     {
         var pooled = MeanPoolTensor(tensor);
         int dim = pooled.Shape[0];
-        var result = new Vector<T>(dim);
-        for (int i = 0; i < dim; i++)
-        {
-            result[i] = pooled[i];
-        }
+        return PrefixVector(pooled, dim, dim);
+    }
+
+    /// <summary>
+    /// A zero vector of <paramref name="length"/> whose first <paramref name="copied"/> entries are the
+    /// tensor's first flat entries.
+    /// </summary>
+    private static Vector<T> PrefixVector(Tensor<T> tensor, int copied, int length)
+    {
+        var result = new Vector<T>(length);
+        tensor.Contiguous().AsSpan().Slice(0, copied).CopyTo(result.AsWritableSpan());
         return result;
     }
 
@@ -1486,10 +1475,13 @@ public partial class VideoCLIPNeuralNetwork<T> : MultimodalModelLayoutBase<T>, I
 
     private List<T> Softmax(List<T> values)
     {
-        double maxVal = values.Max(v => NumOps.ToDouble(v));
-        var expValues = values.Select(v => Math.Exp(NumOps.ToDouble(v) - maxVal)).ToList();
-        double sumExp = expValues.Sum();
-        return expValues.Select(e => NumOps.FromDouble(e / sumExp)).ToList();
+        if (values.Count == 0)
+        {
+            throw new InvalidOperationException("Sequence contains no elements");
+        }
+
+        var probabilities = Engine.Softmax(new Tensor<T>(values.ToArray(), new[] { values.Count }), -1);
+        return new List<T>(probabilities.ToArray());
     }
 
     #endregion
@@ -1506,12 +1498,7 @@ public partial class VideoCLIPNeuralNetwork<T> : MultimodalModelLayoutBase<T>, I
         {
             var frames = ParseInputToFrames(input);
             var embedding = GetVideoEmbedding(frames);
-            var result = Tensor<T>.CreateDefault([1, embedding.Length], NumOps.Zero);
-            for (int i = 0; i < embedding.Length; i++)
-            {
-                result[0, i] = embedding[i];
-            }
-            return result;
+            return Tensor<T>.FromVector(embedding).Reshape(1, embedding.Length);
         });
     }
 
@@ -1579,12 +1566,7 @@ public partial class VideoCLIPNeuralNetwork<T> : MultimodalModelLayoutBase<T>, I
         {
             // ONNX mode: not tape-tracked, fallback to legacy path
             var embedding = EncodeVideoOnnx(frames);
-            var result = Tensor<T>.CreateDefault([1, embedding.Length], NumOps.Zero);
-            for (int i = 0; i < embedding.Length; i++)
-            {
-                result[0, i] = embedding[i];
-            }
-            return result;
+            return Tensor<T>.FromVector(embedding).Reshape(1, embedding.Length);
         }
     }
 
@@ -1637,7 +1619,6 @@ public partial class VideoCLIPNeuralNetwork<T> : MultimodalModelLayoutBase<T>, I
 
     private static void SerializeMatrix(BinaryWriter writer, Tensor<T>? matrix)
     {
-        var ops = MathHelper.GetNumericOperations<T>();
         if (matrix is null)
         {
             writer.Write(0);
@@ -1646,23 +1627,24 @@ public partial class VideoCLIPNeuralNetwork<T> : MultimodalModelLayoutBase<T>, I
         }
         writer.Write(matrix.Shape[0]);
         writer.Write(matrix.Shape[1]);
-        for (int r = 0; r < matrix.Shape[0]; r++)
-            for (int c = 0; c < matrix.Shape[1]; c++)
-                writer.Write(ops.ToDouble(matrix[r, c]));
+
+        // Row-major [rows, cols] in the double wire format
+        var engine = AiDotNetEngine.Current;
+        var rowsByCols = engine.TensorNarrow(engine.TensorNarrow(matrix, 0, 0, matrix.Shape[0]), 1, 0, matrix.Shape[1]);
+        foreach (double value in rowsByCols.Contiguous().Cast<double>().ToArray())
+            writer.Write(value);
     }
 
     private static Tensor<T>? DeserializeMatrix(BinaryReader reader)
     {
-        var ops = MathHelper.GetNumericOperations<T>();
         int rows = reader.ReadInt32();
         int cols = reader.ReadInt32();
         if (rows == 0 && cols == 0)
             return null;
-        var matrix = new Tensor<T>([rows, cols]);
-        for (int r = 0; r < rows; r++)
-            for (int c = 0; c < cols; c++)
-                matrix[r, c] = ops.FromDouble(reader.ReadDouble());
-        return matrix;
+        var stored = new double[rows * cols];
+        for (int i = 0; i < stored.Length; i++)
+            stored[i] = reader.ReadDouble();
+        return new Tensor<double>(stored, new[] { rows, cols }).Cast<T>();
     }
 
     /// <inheritdoc/>
@@ -1696,15 +1678,7 @@ public partial class VideoCLIPNeuralNetwork<T> : MultimodalModelLayoutBase<T>, I
             return new Matrix<T>(0, EmbeddingDimension);
         }
 
-        var matrix = new Matrix<T>(embeddings.Count, embeddings[0].Length);
-        for (int i = 0; i < embeddings.Count; i++)
-        {
-            for (int j = 0; j < embeddings[i].Length; j++)
-            {
-                matrix[i, j] = embeddings[i][j];
-            }
-        }
-        return matrix;
+        return StackRows(embeddings);
     }
 
     /// <inheritdoc/>
@@ -1725,15 +1699,7 @@ public partial class VideoCLIPNeuralNetwork<T> : MultimodalModelLayoutBase<T>, I
             return new Matrix<T>(0, EmbeddingDimension);
         }
 
-        var matrix = new Matrix<T>(embeddings.Count, embeddings[0].Length);
-        for (int i = 0; i < embeddings.Count; i++)
-        {
-            for (int j = 0; j < embeddings[i].Length; j++)
-            {
-                matrix[i, j] = embeddings[i][j];
-            }
-        }
-        return matrix;
+        return StackRows(embeddings);
     }
 
     /// <inheritdoc/>
@@ -1741,6 +1707,22 @@ public partial class VideoCLIPNeuralNetwork<T> : MultimodalModelLayoutBase<T>, I
     {
         var tensor = ConvertToTensor(imageData);
         return ZeroShotClassify(tensor, labels);
+    }
+
+    /// <summary>
+    /// Stacks embeddings as the rows of a matrix as wide as the first one.
+    /// </summary>
+    private static Matrix<T> StackRows(List<Vector<T>> embeddings)
+    {
+        int cols = embeddings[0].Length;
+        var matrix = new Matrix<T>(embeddings.Count, cols);
+        var rows = matrix.AsWritableSpan();
+        for (int i = 0; i < embeddings.Count; i++)
+        {
+            embeddings[i].AsSpan().CopyTo(rows.Slice(i * cols, cols));
+        }
+
+        return matrix;
     }
 
     /// <summary>
@@ -1766,19 +1748,8 @@ public partial class VideoCLIPNeuralNetwork<T> : MultimodalModelLayoutBase<T>, I
             throw new ArgumentException($"Image must be square. Got {pixels} pixels which is not a perfect square.", nameof(imageData));
         }
 
-        var tensor = new Tensor<T>(new[] { channels, size, size });
-        int idx = 0;
-        for (int c = 0; c < channels; c++)
-        {
-            for (int h = 0; h < size; h++)
-            {
-                for (int w = 0; w < size; w++)
-                {
-                    tensor[c, h, w] = NumOps.FromDouble(imageData[idx++]);
-                }
-            }
-        }
-        return tensor;
+        // Channel-major [C, H, W], converted from the caller's doubles
+        return new Tensor<double>(imageData, new[] { channels, size, size }).Cast<T>();
     }
 
     #endregion
