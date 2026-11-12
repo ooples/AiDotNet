@@ -253,6 +253,39 @@ internal static class FeatureSelectionTensorOps
     }
 
     /// <summary>
+    /// The <paramref name="count"/> largest eigenvalues of a symmetric matrix ([p, p]) and their eigenvectors
+    /// (as the columns of a [p, count] tensor), in descending eigenvalue order.
+    /// </summary>
+    public static Tensor<T> TopEigenpairs<T>(Tensor<T> symmetric, int count, out Tensor<T> values)
+    {
+        var engine = AiDotNetEngine.Current;
+        int p = symmetric.Shape[0];
+        if (count <= 0 || p == 0)
+        {
+            values = new Tensor<T>(new[] { 0 });
+            return new Tensor<T>(new[] { p, 0 });
+        }
+
+        var (ascendingValues, ascendingVectors) = LinalgDispatch<T>.Eigh(symmetric);
+        var order = new int[count];
+        for (int c = 0; c < count; c++)
+            order[c] = p - 1 - c;
+        var index = new Tensor<int>(order, new[] { count });
+        values = engine.TensorIndexSelect(ascendingValues, index, 0);
+        return engine.TensorIndexSelect(ascendingVectors, index, 1);
+    }
+
+    /// <summary>The sample covariance matrix (divisor n - 1) of the columns of an [n, p] tensor.</summary>
+    public static Tensor<T> SampleCovariance<T>(Tensor<T> x)
+    {
+        var engine = AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<T>();
+        var centered = engine.TensorSubtract(x, engine.ReduceMean(x, new[] { 0 }, true));
+        return engine.TensorDivideScalar(
+            engine.TensorMatMul(engine.TensorTranspose(centered), centered), ops.FromDouble(x.Shape[0] - 1));
+    }
+
+    /// <summary>
     /// The positions of the <paramref name="k"/> largest entries of a 1-D score tensor, returned in ascending
     /// index order; ties keep the lower index first (LINQ <c>OrderByDescending(...).Take(k).OrderBy(i)</c>).
     /// </summary>

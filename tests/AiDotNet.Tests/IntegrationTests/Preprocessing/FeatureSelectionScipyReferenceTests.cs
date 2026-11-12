@@ -2,6 +2,7 @@ using AiDotNet.Preprocessing.FeatureSelection.Manifold;
 using AiDotNet.Preprocessing.FeatureSelection.Moment;
 using AiDotNet.Preprocessing.FeatureSelection.Morphological;
 using AiDotNet.Preprocessing.FeatureSelection.NLP;
+using AiDotNet.Preprocessing.FeatureSelection.Projection;
 using AiDotNet.Preprocessing.FeatureSelection.Quantile;
 using AiDotNet.Preprocessing.FeatureSelection.Range;
 using AiDotNet.Tensors.LinearAlgebra;
@@ -198,6 +199,28 @@ public class FeatureSelectionScipyReferenceTests
 
         AssertValues(new[] { 0.8526099922737964, 1.6058679731353886, 1.8084026457213203 }, laplacian.LaplacianScores, 1e-9);
         Assert.Equal(new[] { 0 }, laplacian.SelectedIndices);
+    }
+
+    [Fact]
+    public void ProjectionSelectors_MatchScikitLearnPcaAndPrincipalAxisFactoring()
+    {
+        // pca = sklearn.decomposition.PCA(n_components=2).fit(X)
+        // PCAVarianceSelector: (explained_variance_ / explained_variance_.sum()) @ components_**2
+        // SVDBasedSelector: (s**2 / (s**2).sum()) @ components_**2 with s = singular_values_
+        // FactorAnalysisSelector: R = corrcoef with diag max|r_jk|^2; top-2 eigh(R): (V**2) @ max(lambda, 0)
+        var pca = new PCAVarianceSelector<double>(nFeaturesToSelect: 1, nComponents: 2);
+        pca.Fit(SpiralData());
+        var svd = new SVDBasedSelector<double>(nFeaturesToSelect: 1, nComponents: 2);
+        svd.Fit(SpiralData());
+        var factor = new FactorAnalysisSelector<double>(nFeaturesToSelect: 2, nFactors: 2);
+        factor.Fit(SpiralData());
+
+        AssertValues(new[] { 0.5856747286422438, 0.4140705686003831, 0.0002547027573734128 }, pca.VarianceContributions, 1e-9);
+        AssertValues(new[] { 0.5856747286420579, 0.41407056860025176, 0.00025470275737333195 }, svd.FeatureScores, 1e-9);
+        AssertValues(new[] { 0.03798463307245823, 0.1911529724857474, 0.19576025573400804 }, factor.Communalities, 1e-9);
+        Assert.Equal(new[] { 0 }, pca.SelectedIndices);
+        Assert.Equal(new[] { 0 }, svd.SelectedIndices);
+        Assert.Equal(new[] { 1, 2 }, factor.SelectedIndices);
     }
 
     private static void AssertValues(double[] expected, Vector<double>? actual, double tolerance = Tolerance)

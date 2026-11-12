@@ -22605,3 +22605,11 @@ AiDotNet.Preprocessing.FeatureSelection.Manifold.LLEBasedSelector<T>.LLEBasedSel
 AiDotNet.Preprocessing.FeatureSelection.Manifold.LLESelector<T>.LLESelector(int nFeaturesToSelect = 10, int nNeighbors = 5, int[]? columnIndices = null, double regularization = 0.001) -> void
 AiDotNet.Preprocessing.FeatureSelection.Manifold.LLEBasedSelector<T>.Regularization.get -> double
 AiDotNet.Preprocessing.FeatureSelection.Manifold.LLESelector<T>.Regularization.get -> double
+*REMOVED*AiDotNet.Preprocessing.FeatureSelection.Projection.PCAVarianceSelector<T>.VarianceContributions.get -> double[]?
+AiDotNet.Preprocessing.FeatureSelection.Projection.PCAVarianceSelector<T>.VarianceContributions.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
+*REMOVED*AiDotNet.Preprocessing.FeatureSelection.Projection.SVDBasedSelector<T>.FeatureScores.get -> double[]?
+AiDotNet.Preprocessing.FeatureSelection.Projection.SVDBasedSelector<T>.FeatureScores.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
+*REMOVED*AiDotNet.Preprocessing.FeatureSelection.Projection.FactorAnalysisSelector<T>.Communalities.get -> double[]?
+AiDotNet.Preprocessing.FeatureSelection.Projection.FactorAnalysisSelector<T>.Communalities.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
+*REMOVED*AiDotNet.Preprocessing.FeatureSelection.Projection.RandomProjectionSelector<T>.FeatureScores.get -> double[]?
+AiDotNet.Preprocessing.FeatureSelection.Projection.RandomProjectionSelector<T>.FeatureScores.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
