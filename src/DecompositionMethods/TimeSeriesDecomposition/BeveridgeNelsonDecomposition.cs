@@ -227,6 +227,11 @@ public partial class BeveridgeNelsonDecomposition<T> : TimeSeriesDecompositionBa
     private Vector<T> CalculateStandardTrend()
     {
         int n = TimeSeries.Length;
+        if (n <= 1)
+        {
+            // No first differences: the whole series is trend.
+            return TimeSeries.Clone();
+        }
 
         // Calculate first differences
         Vector<T> differenced = Engine.Subtract(TimeSeries.GetSubVector(1, n - 1), TimeSeries.GetSubVector(0, n - 1));
@@ -235,10 +240,6 @@ public partial class BeveridgeNelsonDecomposition<T> : TimeSeriesDecompositionBa
         T meanDiff = StatisticsHelper<T>.CalculateMean(differenced);
 
         int m = n - 1;
-        if (m == 0)
-        {
-            return TimeSeries.Clone();
-        }
 
         // Autocovariance of the differenced series for every lag k in [0, m): the zero-padded
         // self-correlation of the centred series puts lag k at output position m - 1 - k.
@@ -251,6 +252,13 @@ public partial class BeveridgeNelsonDecomposition<T> : TimeSeriesDecompositionBa
 
         // Long-run variance = gamma_0 + 2 * sum_{k >= 1} gamma_k
         T gamma0 = Engine.TensorSum(Engine.TensorSlice(autocovariance, new[] { 0 }, new[] { 1 }));
+        if (NumOps.Equals(gamma0, NumOps.Zero))
+        {
+            // Constant first differences (a linear or constant series, or any two-point series):
+            // there is no transitory variance to separate, so the series is all trend.
+            return TimeSeries.Clone();
+        }
+
         T longRunVariance = NumOps.Subtract(
             NumOps.Multiply(NumOps.FromDouble(2), Engine.TensorSum(autocovariance)), gamma0);
 
