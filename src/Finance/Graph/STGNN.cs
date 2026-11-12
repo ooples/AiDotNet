@@ -978,20 +978,38 @@ public partial class STGNN<T> : ForecastingModelBase<T>
             return new Tensor<T>(new[] { 0 });
 
         int len = samples[0].ToVector().Length;
-        var result = new T[len * quantiles.Length];
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
 
-        for (int pos = 0; pos < len; pos++)
+        // One row per sample, sorted down each position; quantile q reads row (int)(q * (n - 1)).
+        var rows = new Tensor<T>[samples.Count];
+        for (int s = 0; s < samples.Count; s++)
+            rows[s] = Engine.TensorNarrow(Engine.Reshape(samples[s], new[] { samples[s].Length }), 0, 0, len);
+        var grid = Engine.TensorStack(rows, 0);
+
+        if (Engine.TensorCountNonzero(Engine.TensorIsNan(grid)) > 0)
         {
-            var values = samples.Select(s => NumOps.ToDouble(s.ToVector()[pos])).OrderBy(v => v).ToList();
-
-            for (int q = 0; q < quantiles.Length; q++)
+            // NaN sorts first under the default double comparer; keep that exact ordering.
+            var result = new T[len * quantiles.Length];
+            for (int pos = 0; pos < len; pos++)
             {
-                int idx = (int)(quantiles[q] * (values.Count - 1));
-                result[q * len + pos] = NumOps.FromDouble(values[idx]);
+                var values = samples.Select(s => NumOps.ToDouble(s.ToVector()[pos])).OrderBy(v => v).ToList();
+
+                for (int q = 0; q < quantiles.Length; q++)
+                {
+                    int idx = (int)(quantiles[q] * (values.Count - 1));
+                    result[q * len + pos] = NumOps.FromDouble(values[idx]);
+                }
             }
+
+            return new Tensor<T>(new[] { quantiles.Length, len }, new Vector<T>(result));
         }
 
-        return new Tensor<T>(new[] { quantiles.Length, len }, new Vector<T>(result));
+        var sorted = Engine.TensorSort(grid, 0, false).Values;
+        var picks = new int[quantiles.Length];
+        for (int q = 0; q < quantiles.Length; q++)
+            picks[q] = (int)(quantiles[q] * (samples.Count - 1));
+
+        return Engine.TensorIndexSelect(sorted, new Tensor<int>(new[] { picks.Length }, new Vector<int>(picks)), 0);
     }
 
     /// <summary>
@@ -1016,21 +1034,14 @@ public partial class STGNN<T> : ForecastingModelBase<T>
         var resultVec = quantileResult.ToVector();
 
         int len = samples[0].ToVector().Length;
-        var lowerVec = new T[len];
-        var medianVec = new T[len];
-        var upperVec = new T[len];
+        var flat = Tensor<T>.FromVector(resultVec);
 
-        for (int i = 0; i < len; i++)
-        {
-            lowerVec[i] = resultVec[i];
-            medianVec[i] = resultVec[len + i];
-            upperVec[i] = resultVec[2 * len + i];
-        }
-
-        var shape = new[] { len };
-        return (new Tensor<T>(shape, new Vector<T>(medianVec)),
-                new Tensor<T>(shape, new Vector<T>(lowerVec)),
-                new Tensor<T>(shape, new Vector<T>(upperVec)));
+        // Rows 0, 1 and 2 of the [quantiles, len] block are the lower, median and upper bounds.
+        return (
+            Engine.TensorNarrow(flat, 0, len, len).Contiguous(),
+            Engine.TensorNarrow(flat, 0, 0, len).Contiguous(),
+            Engine.TensorNarrow(flat, 0, 2 * len, len).Contiguous()
+        );
     }
 
     #endregion
