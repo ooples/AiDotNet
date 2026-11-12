@@ -172,4 +172,67 @@ public class LoRAMergeReferenceTests
             }
         }
     }
+
+    [Fact(Timeout = 120000)]
+    public async Task DyLoRA_TrainingStep_WithUnfrozenBase_TrainsBaseAlongFiniteDifferenceGradient()
+    {
+        await Task.Yield();
+        const double learningRate = 0.1;
+        const double step = 1e-6;
+
+        var baseLayer = CreateBaseLayer(InputSize, OutputSize);
+        var adapter = new DyLoRAAdapter<double>(baseLayer, 4, new[] { 2 }, alpha: 8.0, freezeBaseLayer: false);
+        var loraStart = new double[adapter.LoRALayer.GetParameters().Length];
+        for (int i = 0; i < loraStart.Length; i++)
+        {
+            loraStart[i] = 0.05 * Math.Cos(0.61 * i + 0.2);
+        }
+        adapter.LoRALayer.SetParameters(new Vector<double>(loraStart));
+        var start = baseLayer.GetParameters().ToArray();
+
+        var input = CreateInput(1, InputSize);
+        var targetData = new Vector<double>(OutputSize);
+        for (int i = 0; i < OutputSize; i++)
+        {
+            targetData[i] = Math.Sin(0.9 * i + 1.1);
+        }
+        var target = new Tensor<double>(new[] { 1, OutputSize }, targetData);
+
+        double Loss(Tensor<double> output, Tensor<double> expected)
+        {
+            double sum = 0;
+            for (int i = 0; i < output.Length; i++)
+            {
+                double diff = output[i] - expected[i];
+                sum += 0.5 * diff * diff;
+            }
+            return sum;
+        }
+
+        var gradient = new double[start.Length];
+        for (int i = 0; i < start.Length; i++)
+        {
+            var plus = (double[])start.Clone();
+            var minus = (double[])start.Clone();
+            plus[i] += step;
+            minus[i] -= step;
+            baseLayer.SetParameters(new Vector<double>(plus));
+            double lossPlus = Loss(adapter.Forward(input), target);
+            baseLayer.SetParameters(new Vector<double>(minus));
+            double lossMinus = Loss(adapter.Forward(input), target);
+            gradient[i] = (lossPlus - lossMinus) / (2 * step);
+        }
+        baseLayer.SetParameters(new Vector<double>(start));
+
+        adapter.TrainWithNestedDropout(new[] { input }, new[] { target }, 1, learningRate, Loss);
+        var after = baseLayer.GetParameters();
+
+        for (int i = 0; i < start.Length; i++)
+        {
+            double expected = start[i] - learningRate * gradient[i];
+            Assert.True(
+                Math.Abs(expected - after[i]) <= 1e-8,
+                $"base parameter {i}: expected {expected:G12}, got {after[i]:G12}");
+        }
+    }
 }
