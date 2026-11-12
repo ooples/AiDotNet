@@ -144,7 +144,7 @@ public partial class IPAdapterFaceIDPlusModel<T> : LatentDiffusionModelBase<T>
 
     private static void AddParams(List<T> allParams, Vector<T> p)
     {
-        for (int i = 0; i < p.Length; i++) allParams.Add(p[i]);
+        allParams.AddRange(p.AsSpan().ToArray());
     }
 
     /// <inheritdoc />

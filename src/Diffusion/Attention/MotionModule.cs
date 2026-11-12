@@ -164,10 +164,7 @@ public partial class MotionModule<T> : LayerBase<T>, IShapeContract
     private static void SetSubParams(LayerBase<T> layer, Vector<T> parameters, ref int offset)
     {
         int count = layer.GetParameters().Length;
-        var sub = new Vector<T>(count);
-        for (int i = 0; i < count; i++)
-            sub[i] = parameters[offset + i];
-        layer.SetParameters(sub);
+        layer.SetParameters(parameters.GetSubVector(offset, count));
         offset += count;
     }
 
