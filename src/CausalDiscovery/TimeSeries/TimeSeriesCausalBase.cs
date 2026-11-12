@@ -99,7 +99,10 @@ public abstract class TimeSeriesCausalBase<T> : CausalDiscoveryBase<T>
     /// <summary>
     /// Residuals y - Z beta of the least-squares fit (Z'Z + ridge I) beta = Z'y over Z [n x p] and y [n];
     /// with <paramref name="center"/> both are centered first, which is the residual of a fit with an
-    /// intercept. Z'Z is mirrored from its upper triangle so it is exactly symmetric.
+    /// intercept. Z'Z is mirrored from its upper triangle so it is exactly symmetric. With the Cholesky
+    /// solver, a factorization that fails (a non-positive pivot from collinear columns whose rounding
+    /// error exceeds the ridge) falls back to partial-pivoting LU, and a system LU also reports singular
+    /// gets beta = 0 (the residual is the response), so callers see residuals instead of an exception.
     /// </summary>
     private protected Tensor<T> OlsResidualSeries(Tensor<T> z, Tensor<T> y, bool center, double ridge,
         MatrixDecompositionType solver)
@@ -111,10 +114,29 @@ public abstract class TimeSeriesCausalBase<T> : CausalDiscoveryBase<T>
         var designT = Engine.TensorTranspose(design);
         var gram = CausalTensorHelpers.Symmetrize(Engine.TensorMatMul(designT, design));
         gram = Engine.TensorAdd(gram, Engine.TensorMultiplyScalar(Engine.TensorEye<T>(p), NumOps.FromDouble(ridge)));
-        var zty = Engine.TensorMatMul(designT, response).Reshape(new[] { p }).ToVector();
+        var ztyColumn = Engine.TensorMatMul(designT, response);
 
-        var beta = MatrixSolutionHelper.SolveLinearSystem<T>(gram.ToMatrix(), zty, solver);
-        return Engine.TensorSubtract(response, Engine.TensorMatMul(design, beta.AsTensor().Reshape(new[] { p, 1 })))
+        Tensor<T> beta;
+        if (solver == MatrixDecompositionType.Cholesky)
+        {
+            var (factor, info) = LinalgDispatch<T>.CholeskyEx(gram);
+            if (Engine.TensorCountNonzero(info) == 0)
+            {
+                beta = LinalgDispatch<T>.CholeskySolve(ztyColumn, factor);
+            }
+            else
+            {
+                var (solution, luInfo) = LinalgDispatch<T>.SolveEx(gram, ztyColumn);
+                beta = Engine.TensorCountNonzero(luInfo) == 0 ? solution : new Tensor<T>(new[] { p, 1 });
+            }
+        }
+        else
+        {
+            var zty = ztyColumn.Reshape(new[] { p }).ToVector();
+            beta = MatrixSolutionHelper.SolveLinearSystem<T>(gram.ToMatrix(), zty, solver).AsTensor();
+        }
+
+        return Engine.TensorSubtract(response, Engine.TensorMatMul(design, beta.Reshape(new[] { p, 1 })))
             .Reshape(new[] { n });
     }
 
