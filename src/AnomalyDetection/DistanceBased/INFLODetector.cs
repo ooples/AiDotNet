@@ -53,6 +53,7 @@ public partial class INFLODetector<T> : AnomalyDetectorBase<T>
     private Vector<T>? _localDensities;
     // [n, k] kNN of every training point (itself excluded). The influence space IS(j) = kNN(j) union RkNN(j)
     // follows from it: i is in RkNN(j) exactly when j is in kNN(i).
+    [Buffer]
     private Tensor<int>? _knnIndices;
     private int _nFeatures;
 
