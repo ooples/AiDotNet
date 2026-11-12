@@ -223,8 +223,7 @@ public class GIFTEvalBenchmark<T>
             var context = new Tensor<T>(new[] { contextLen });
             var future = new Tensor<T>(new[] { horizonLen });
 
-            for (int i = 0; i < contextLen; i++)
-                context.Data.Span[i] = series[i];
+            series.AsSpan().Slice(0, contextLen).CopyTo(context.Data.Span);
             for (int i = 0; i < horizonLen; i++)
                 future.Data.Span[i] = series[contextLen + i];
 
@@ -235,11 +234,8 @@ public class GIFTEvalBenchmark<T>
             // Compute MASE from point forecast
             var predSlice = new Tensor<T>(new[] { evalLen });
             var actualSlice = new Tensor<T>(new[] { evalLen });
-            for (int i = 0; i < evalLen; i++)
-            {
-                predSlice.Data.Span[i] = pointPrediction[i];
-                actualSlice.Data.Span[i] = future[i];
-            }
+            pointPrediction.AsSpan().Slice(0, evalLen).CopyTo(predSlice.Data.Span);
+            future.AsSpan().Slice(0, evalLen).CopyTo(actualSlice.Data.Span);
 
             double mase = ComputeMASE(predSlice, actualSlice, context, seasonalPeriod);
             if (!double.IsInfinity(mase) && !double.IsNaN(mase))

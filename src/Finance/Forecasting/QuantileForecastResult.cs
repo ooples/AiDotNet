@@ -128,8 +128,7 @@ public class QuantileForecastResult<T>
             pointData[t] = NumOps.Divide(sum, NumOps.FromDouble(numSamples));
         }
         PointForecast = new Tensor<T>(new[] { horizon });
-        for (int t = 0; t < horizon; t++)
-            PointForecast.Data.Span[t] = pointData[t];
+        pointData.AsSpan().Slice(0, horizon).CopyTo(PointForecast.Data.Span);
 
         // Pre-create tensors for each quantile level
         var qForecasts = new Dictionary<double, Tensor<T>>();

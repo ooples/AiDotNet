@@ -476,8 +476,7 @@ public partial class TimeDiff<T> : TimeSeriesFoundationModelBase<T>, ITrainingOb
         var fullForecast = Forecast(input, null);
         if (steps >= fullForecast.Length) return fullForecast;
         var result = new Tensor<T>(new[] { steps });
-        for (int i = 0; i < steps; i++)
-            result.Data.Span[i] = fullForecast[i];
+        fullForecast.AsSpan().Slice(0, steps).CopyTo(result.Data.Span);
         return result;
     }
 

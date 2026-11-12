@@ -635,11 +635,8 @@ public partial class UniTS<T> : ForecastingModelBase<T>
 
         var meanT = new Tensor<T>(new[] { batch, 1 });
         var stdT = new Tensor<T>(new[] { batch, 1 });
-        for (int b = 0; b < batch; b++)
-        {
-            meanT.Data.Span[b] = _revinMean[b];
-            stdT.Data.Span[b] = _revinStd[b];
-        }
+        _revinMean.AsSpan().Slice(0, batch).CopyTo(meanT.Data.Span);
+        _revinStd.AsSpan().Slice(0, batch).CopyTo(stdT.Data.Span);
 
         bool reshaped = forecast.Rank != 2;
         var work = reshaped ? Engine.Reshape(forecast, new[] { batch, forecast.Length / batch }) : forecast;

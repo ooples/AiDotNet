@@ -399,10 +399,7 @@ public sealed class FinancialPreprocessor<T>
     /// </remarks>
     private void InitializeMinMax(Tensor<T> input, T[] min, T[] max, int featureCount)
     {
-        for (int f = 0; f < featureCount; f++)
-        {
-            min[f] = input.Data.Span[f];
-            max[f] = input.Data.Span[f];
-        }
+        input.Data.Span.Slice(0, featureCount).CopyTo(min.AsSpan());
+        input.Data.Span.Slice(0, featureCount).CopyTo(max.AsSpan());
     }
 }

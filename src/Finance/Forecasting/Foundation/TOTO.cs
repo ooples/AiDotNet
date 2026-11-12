@@ -378,7 +378,8 @@ public partial class TOTO<T> : TimeSeriesFoundationModelBase<T>
 
         var meanRow = new Tensor<T>(new[] { 1, features });
         var stdRow = new Tensor<T>(new[] { 1, features });
-        for (int f = 0; f < features; f++) { meanRow.Data.Span[f] = _revinMean[f]; stdRow.Data.Span[f] = _revinStd[f]; }
+        _revinMean.AsSpan().Slice(0, features).CopyTo(meanRow.Data.Span);
+        _revinStd.AsSpan().Slice(0, features).CopyTo(stdRow.Data.Span);
 
         int rows = forecast.Length / features;
         var fc2d = Engine.Reshape(forecast, new[] { rows, features });
