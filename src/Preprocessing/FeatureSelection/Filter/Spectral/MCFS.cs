@@ -98,10 +98,10 @@ public class MCFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IFixedCountFeat
         var rand = _randomState.HasValue
             ? RandomHelper.CreateSeededRandom(_randomState.Value)
             : RandomHelper.CreateSecureRandom();
-        T lower = NumOps.FromDouble(-0.5);
-        T upper = NumOps.FromDouble(0.5);
+        // each start is rand.NextDouble() - 0.5 per row, drawn in master's order
+        T half = NumOps.FromDouble(-0.5);
         var starts = Enumerable.Range(0, _nClusters)
-            .Select(_ => engine.TensorRandomUniformRange<T>(new[] { n, 1 }, lower, upper, rand.Next()))
+            .Select(_ => engine.TensorAddScalar(Tensor<T>.CreateRandom(rand, n, 1), half))
             .ToList();
         var indicators = engine.TensorConcatenate(
             FeatureSelectionTensorOps.PowerIteration(propagation, starts, 100, keepPreviousOnZeroNorm: false).ToArray(), 1);

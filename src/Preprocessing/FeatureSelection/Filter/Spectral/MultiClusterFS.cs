@@ -86,10 +86,10 @@ public class MultiClusterFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IFixe
 
         // Eigenvectors by power iteration from random starts
         int k = Math.Min(_nClusters, n - 1);
-        T lower = NumOps.FromDouble(-0.5);
-        T upper = NumOps.FromDouble(0.5);
+        // each start is random.NextDouble() - 0.5 per row, drawn in master's order
+        T half = NumOps.FromDouble(-0.5);
         var starts = Enumerable.Range(0, Math.Max(k, 0))
-            .Select(_ => engine.TensorRandomUniformRange<T>(new[] { n, 1 }, lower, upper, random.Next()))
+            .Select(_ => engine.TensorAddScalar(Tensor<T>.CreateRandom(random, n, 1), half))
             .ToList();
         var eigenvectors = FeatureSelectionTensorOps.PowerIteration(L, starts, 50, keepPreviousOnZeroNorm: true);
 
