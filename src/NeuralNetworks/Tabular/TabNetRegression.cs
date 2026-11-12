@@ -261,21 +261,14 @@ public class TabNetRegression<T> : TabNetBase<T>
     /// </remarks>
     public T TrainStep(Tensor<T> input, Tensor<T> targets, T learningRate)
     {
-        // Forward pass
-        var predictions = Forward(input);
-
-        // Compute loss
-        var loss = ComputeTotalLoss(predictions, targets);
-
-        // Compute gradient
-        var lossGradient = ComputeMSEGradient(predictions, targets);
-
-        // Backward pass
-
-        // Update parameters
-        UpdateParameters(learningRate);
-
-        return loss;
+        // Mean squared error plus the sparsity regularizer over the masks this forward produced
+        return TrainWithTape(
+            () =>
+            {
+                var predictions = Forward(input);
+                return Engine.TensorAdd(TabularTraining.MeanSquaredErrorObjective(predictions, targets), SparsityObjective());
+            },
+            learningRate);
     }
 
     /// <summary>

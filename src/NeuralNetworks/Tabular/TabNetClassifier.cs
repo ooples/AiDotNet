@@ -342,21 +342,19 @@ public class TabNetClassifier<T> : TabNetBase<T>
     /// </remarks>
     public T TrainStep(Tensor<T> input, Tensor<T> targets, T learningRate)
     {
-        // Forward pass
-        var probabilities = Forward(input);
+        int batchSize = input.Shape[0];
+        var labels = TabularTraining.OneHotTargets<T>(TabularMetrics.ClassIndices(targets, batchSize), batchSize, _numClasses);
+        var epsilon = NumOps.FromDouble(1e-15);
 
-        // Compute loss
-        var loss = ComputeTotalLoss(probabilities, targets);
-
-        // Compute gradient (using logits for proper gradient flow)
-        var lossGradient = ComputeCrossEntropyGradient(probabilities, targets);
-
-        // Backward pass
-
-        // Update parameters
-        UpdateParameters(learningRate);
-
-        return loss;
+        // Cross-entropy plus the sparsity regularizer over the masks this forward produced (Arik and Pfister 2021, eq. 3)
+        return TrainWithTape(
+            () =>
+            {
+                var probabilities = Forward(input);
+                return Engine.TensorAdd(
+                    TabularTraining.CrossEntropyObjective(probabilities, labels, epsilon), SparsityObjective());
+            },
+            learningRate);
     }
 
     /// <summary>

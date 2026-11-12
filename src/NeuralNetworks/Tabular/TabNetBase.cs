@@ -1,3 +1,7 @@
+using System;
+using System.Collections.Generic;
+using AiDotNet.Interfaces;
+using System.Linq;
 using AiDotNet.Engines;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks.Layers;
@@ -364,8 +368,39 @@ public abstract class TabNetBase<T>
             stepLossValues[step] = _attentiveTransformers[step].ComputeSparsityLoss(mask);
         }
 
-        var totalLoss = Engine.Sum(stepLosses);
+        // L_sparse = sum over steps of the batch-mean mask entropy, divided by the number of steps
+        // (Arik and Pfister 2021, eq. 3), scaled by lambda_sparse
+        int steps = _attentiveTransformers.Count;
+        if (steps == 0)
+        {
+            return NumOps.Zero;
+        }
+
+        var totalLoss = NumOps.Divide(Engine.Sum(stepLosses), NumOps.FromDouble(steps));
         return NumOps.Multiply(totalLoss, NumOps.FromDouble(Options.SparsityCoefficient));
+    }
+
+    /// <summary>
+    /// The sparsity regularizer of the last forward pass as a tape objective:
+    /// <c>lambda_sparse * sum_steps sum_b sum_j -M log(M + eps) / (steps * B)</c> (Arik and Pfister 2021, eq. 3).
+    /// </summary>
+    protected Tensor<T> SparsityObjective()
+    {
+        int steps = _attentiveTransformers.Count;
+        if (steps == 0 || _stepAttentionMasks.Count < steps + 1)
+        {
+            return new Tensor<T>(new[] { 1 });
+        }
+
+        var epsilon = NumOps.FromDouble(1e-15);
+        int batchSize = _stepAttentionMasks[1].Shape[0];
+        var scale = NumOps.FromDouble(-Options.SparsityCoefficient / (steps * (double)batchSize));
+
+        // Masks after the uniform first one, stacked so the entropy is one reduction
+        var masks = Engine.TensorConcatenate(_stepAttentionMasks.GetRange(1, steps).ToArray(), 0);
+        var weightedLog = Engine.TensorMultiply(masks, Engine.TensorLog(TensorTapeOps.TapeAddScalar(Engine, masks, epsilon)));
+        var total = Engine.ReduceSum(weightedLog, new[] { 0, 1 }, false);
+        return TensorTapeOps.TapeMultiplyScalar(Engine, total, scale);
     }
 
     /// <summary>
@@ -633,6 +668,35 @@ public abstract class TabNetBase<T>
             at.SetTrainingMode(isTraining);
         }
         _outputLayer.SetTrainingMode(isTraining);
+    }
+
+    /// <summary>
+    /// The live tensors a tape training step updates: the shared fully connected layers, every feature and attentive transformer and the output layer.
+    /// </summary>
+    protected IEnumerable<Tensor<T>> GetTrainableTensors()
+    {
+        var layers = new List<ILayer<T>>();
+        layers.AddRange(_sharedFCLayers);
+        layers.AddRange(_featureTransformers);
+        layers.AddRange(_attentiveTransformers);
+        layers.Add(_outputLayer);
+        return TabularTraining.LayerTensors(layers);
+    }
+
+    /// <summary>
+    /// One tape training step: gradients of <paramref name="objective"/> over every trainable tensor, then SGD.
+    /// </summary>
+    /// <returns>The loss before the update.</returns>
+    protected T TrainWithTape(Func<Tensor<T>> objective, T learningRate)
+    {
+        try
+        {
+            return TabularTraining.SgdStep(GetTrainableTensors, objective, learningRate);
+        }
+        finally
+        {
+            ResetState();
+        }
     }
 
     /// <summary>
