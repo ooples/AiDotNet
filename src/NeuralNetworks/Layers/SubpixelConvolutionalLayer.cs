@@ -811,13 +811,9 @@ public partial class SubpixelConvolutionalLayer<T> : LayerBase<T>, IShapeContrac
         else
         {
             var scalarAct = ScalarActivation ?? throw new InvalidOperationException("ScalarActivation has not been initialized.");
-            var result = TensorAllocator.Rent<T>(outputGradient._shape);
-            for (int i = 0; i < outputGradient.Length; i++)
-            {
-                result[i] = NumOps.Multiply(scalarAct.Derivative(lastOutput[i]), outputGradient[i]);
-            }
-
-            return result;
+            // f'(lastOutput) * outputGradient, element-wise.
+            return Engine.TensorMultiply(
+                scalarAct.Derivative(Engine.Reshape(lastOutput, outputGradient._shape)), outputGradient);
         }
     }
 
