@@ -65,6 +65,8 @@ namespace AiDotNet.SpeechRecognition.Specialized;
     "https://arxiv.org/abs/1811.00241",
     Year = 2019,
     Authors = "Zhiping Zeng, Yerbolat Khassanov, Van Tung Pham, Haihua Xu, Eng Siong Chng, Haizhou Li")]
+[AiDotNet.Attributes.PreprocessesInput("CodeSwitchingAsrNetwork converts the waveform to log-mel features and feeds them to the first convolution as a [B, 1, frames, bins] image, so Layers[0] never sees the raw samples.")]
+[AiDotNet.Attributes.StackInputLayout(AiDotNet.Enums.TensorAxis.Batch, AiDotNet.Enums.TensorAxis.Channels, AiDotNet.Enums.TensorAxis.Height, AiDotNet.Enums.TensorAxis.Width)]
 public partial class CodeSwitchingASR<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>, ITrainingObjectiveProvider<T>
 {
     /// <inheritdoc />

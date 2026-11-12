@@ -48,6 +48,11 @@ public partial class TrigonometricInterpolation<T> : IInterpolation<T>
     private readonly T _period;
 
     /// <summary>
+    /// The angular frequency 2 pi k / period of each Fourier term, for k = 0..n.
+    /// </summary>
+    private readonly Tensor<T> _frequencies;
+
+    /// <summary>
     /// Operations for performing numeric calculations with type T.
     /// </summary>
     private readonly INumericOperations<T> _numOps;
@@ -57,10 +62,12 @@ public partial class TrigonometricInterpolation<T> : IInterpolation<T>
     /// </summary>
     /// <param name="x">The x-coordinates of the data points.</param>
     /// <param name="y">The y-coordinates (values) of the data points.</param>
-    /// <param name="customPeriod">Optional custom period for the data. If not provided, it will be calculated as max(x) - min(x).</param>
+    /// <param name="customPeriod">The period of the data. The two-argument constructor uses (max(x) - min(x)) * N / (N - 1).</param>
     /// <exception cref="ArgumentException">
-    /// Thrown when the input vectors have different lengths or when the number of points is even.
+    /// Thrown when the input vectors have different lengths, when the number of points is even, or when there are
+    /// fewer than three points.
     /// </exception>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when the period is not positive and finite.</exception>
     /// <remarks>
     /// <para>
     /// <b>For Beginners:</b> This constructor takes your data points (x and y coordinates) and prepares the
@@ -78,37 +85,68 @@ public partial class TrigonometricInterpolation<T> : IInterpolation<T>
     /// even number of points, you might need to add or remove a point.
     /// </para>
     /// </remarks>
-    public TrigonometricInterpolation(IEnumerable<double> x, IEnumerable<double> y, double? customPeriod = null)
+    public TrigonometricInterpolation(Vector<T> x, Vector<T> y, T customPeriod)
     {
-        _numOps = MathHelper.GetNumericOperations<T>();
-
-        var xList = x.ToList();
-        var yList = y.ToList();
-
-        if (xList.Count != yList.Count)
+        Guard.NotNull(x);
+        Guard.NotNull(y);
+        if (x.Length != y.Length)
             throw new ArgumentException("Input vectors must have the same length.");
-        if (xList.Count % 2 == 0)
+        if (x.Length % 2 == 0)
             throw new ArgumentException("Number of points must be odd for trigonometric interpolation.");
+        if (x.Length < 3)
+            throw new ArgumentException("At least three points are required for trigonometric interpolation.", nameof(x));
 
-        _x = new Vector<T>(xList.Select(val => _numOps.FromDouble(val)));
-        _y = new Vector<T>(yList.Select(val => _numOps.FromDouble(val)));
+        _numOps = MathHelper.GetNumericOperations<T>();
+        if (!_numOps.GreaterThan(customPeriod, _numOps.Zero) || _numOps.IsInfinity(customPeriod))
+            throw new ArgumentOutOfRangeException(nameof(customPeriod), "The period must be positive and finite.");
+        _x = x;
+        _y = y;
+        _period = customPeriod;
 
-        // Calculate or set the period
-        if (customPeriod.HasValue)
+        // Angular frequency 2 pi k / period of every Fourier term k = 0..n
+        int n = (x.Length - 1) / 2;
+        _frequencies = AiDotNetEngine.Current.TensorDivideScalar(
+            AiDotNetEngine.Current.TensorMultiplyScalar(Vector<T>.Range(0, n + 1).AsTensor(), _numOps.FromDouble(2 * Math.PI)),
+            _period);
+
+        (_a, _b) = CalculateCoefficients();
+    }
+
+    /// <summary>
+    /// Creates a trigonometric interpolation whose period is N times the sample spacing,
+    /// (max(x) - min(x)) * N / (N - 1), so that for evenly spaced x the interpolant passes through every sample.
+    /// </summary>
+    /// <param name="x">The x-coordinates of the data points.</param>
+    /// <param name="y">The y-coordinates (values) of the data points.</param>
+    /// <exception cref="ArgumentException">
+    /// Thrown when the input vectors have different lengths, when the number of points is even, or when there are no points.
+    /// </exception>
+    public TrigonometricInterpolation(Vector<T> x, Vector<T> y)
+        : this(x, y, DefaultPeriod(x))
+    {
+    }
+
+    /// <summary>
+    /// The default period: N evenly spaced samples cover N spacings of one period, so the period is
+    /// (max(x) - min(x)) * N / (N - 1). The span max(x) - min(x) alone is one spacing short, which breaks the
+    /// discrete orthogonality the coefficients rely on, so the interpolant would miss the samples.
+    /// </summary>
+    private static T DefaultPeriod(Vector<T> x)
+    {
+        Guard.NotNull(x);
+        if (x.Length == 0)
+            throw new ArgumentException("At least one point is required for trigonometric interpolation.", nameof(x));
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+        T span = numOps.Subtract(TensorPrimitivesHelper<T>.Max(x), TensorPrimitivesHelper<T>.Min(x));
+        int count = x.Length;
+        if (count < 2)
         {
-            _period = _numOps.FromDouble(customPeriod.Value);
-        }
-        else
-        {
-            double calculatedPeriod = xList.Max() - xList.Min();
-            _period = _numOps.FromDouble(calculatedPeriod);
+            // The constructor rejects fewer than three points with its own message.
+            return span;
         }
 
-        int n = (xList.Count - 1) / 2;
-        _a = new Vector<T>(n + 1);
-        _b = new Vector<T>(n);
-
-        CalculateCoefficients();
+        return numOps.Divide(numOps.Multiply(span, numOps.FromDouble(count)), numOps.FromDouble(count - 1));
     }
 
     /// <summary>
@@ -135,17 +173,18 @@ public partial class TrigonometricInterpolation<T> : IInterpolation<T>
     {
         T result = _a[0];
         int n = _a.Length - 1;
-
-        for (int k = 1; k <= n; k++)
+        if (n < 1)
         {
-            T angle = _numOps.Multiply(_numOps.Divide(_numOps.FromDouble(2 * k * Math.PI), _period), x);
-            result = _numOps.Add(result, _numOps.Multiply(_a[k], MathHelper.Cos(angle)));
-
-            if (k < n)
-            {
-                result = _numOps.Add(result, _numOps.Multiply(_b[k - 1], MathHelper.Sin(angle)));
-            }
+            return result;
         }
+
+        // a[0] (already halved to the mean) + sum_{k=1..n} (a[k] cos(f_k x) + b[k - 1] sin(f_k x))
+        var engine = AiDotNetEngine.Current;
+        Tensor<T> angles = engine.TensorMultiplyScalar(engine.TensorSlice(_frequencies, new[] { 1 }, new[] { n }), x);
+        Tensor<T> cosineCoefficients = engine.TensorSlice(_a.AsTensor(), new[] { 1 }, new[] { n });
+        result = _numOps.Add(result, engine.TensorSum(engine.TensorMultiply(cosineCoefficients, engine.TensorCos(angles))));
+
+        result = _numOps.Add(result, engine.TensorSum(engine.TensorMultiply(_b.AsTensor(), engine.TensorSin(angles))));
 
         return result;
     }
@@ -171,33 +210,58 @@ public partial class TrigonometricInterpolation<T> : IInterpolation<T>
     /// accurate these coefficients will be.
     /// </para>
     /// </remarks>
-    private void CalculateCoefficients()
+    private (Vector<T> CosineCoefficients, Vector<T> SineCoefficients) CalculateCoefficients()
     {
-        int n = (_x.Length - 1) / 2;
-        T twoOverN = _numOps.Divide(_numOps.FromDouble(2), _numOps.FromDouble(_x.Length));
+        var engine = AiDotNetEngine.Current;
+        int count = _x.Length;
+        int n = (count - 1) / 2;
+        T twoOverN = _numOps.Divide(_numOps.FromDouble(2), _numOps.FromDouble(count));
+        Tensor<T> ys = _y.AsTensor().Reshape(count, 1);
 
-        for (int k = 0; k <= n; k++)
+        // a[k] = 2/N * sum_j y[j] cos(f_k x[j]) for k = 0..n, one row of angles per frequency. The interpolant is
+        // a[0] / 2 + sum_k (a[k] cos + b[k] sin), so the stored constant term is halved to the data mean:
+        // scale = [1/2, 1, ..., 1] applied in one engine multiply.
+        Tensor<T> cosineProjections = engine.TensorMultiplyScalar(
+            ProjectOnto(engine, _frequencies, ys, cosine: true), twoOverN).Reshape(n + 1);
+        Tensor<T> scale = engine.TensorConcatenate(new[]
         {
-            _a[k] = _numOps.Zero;
-            for (int j = 0; j < _x.Length; j++)
-            {
-                T angle = _numOps.Multiply(_numOps.Divide(_numOps.FromDouble(2 * k * Math.PI), _period), _x[j]);
-                _a[k] = _numOps.Add(_a[k], _numOps.Multiply(_y[j], MathHelper.Cos(angle)));
-            }
+            Tensor<T>.CreateDefault(new[] { 1 }, _numOps.FromDouble(0.5)),
+            Tensor<T>.CreateDefault(new[] { n }, _numOps.One)
+        }, 0);
+        Vector<T> a = engine.TensorMultiply(cosineProjections, scale).ToVector();
 
-            _a[k] = _numOps.Multiply(_a[k], twoOverN);
+        // b[k - 1] = 2/N * sum_j y[j] sin(f_k x[j]) for k = 1..n (odd N has no Nyquist term, so every sine is kept)
+        Tensor<T> sineFrequencies = engine.TensorSlice(_frequencies, new[] { 1 }, new[] { n });
+        Vector<T> sineCoefficients = engine.TensorMultiplyScalar(ProjectOnto(engine, sineFrequencies, ys, cosine: false), twoOverN)
+            .Reshape(n).ToVector();
+
+        return (a, sineCoefficients);
+    }
+
+    /// <summary>
+    /// Upper bound on the elements of one [frequencies, points] angle block in <see cref="ProjectOnto"/>, so the
+    /// coefficient calculation never holds the full [n + 1, N] angle matrix.
+    /// </summary>
+    private const int CoefficientBlockElements = 1 << 20;
+
+    /// <summary>
+    /// sum_j ys[j] * cos(f_k x[j]) (or sin) for every frequency f_k, as a [frequencies, 1] tensor, computed over
+    /// bounded blocks of frequency rows.
+    /// </summary>
+    private Tensor<T> ProjectOnto(IEngine engine, Tensor<T> frequencies, Tensor<T> ys, bool cosine)
+    {
+        int rows = frequencies.Length;
+        int count = _x.Length;
+        int block = Math.Max(1, Math.Min(rows, CoefficientBlockElements / Math.Max(1, count)));
+        var parts = new List<Tensor<T>>();
+        for (int start = 0; start < rows; start += block)
+        {
+            int size = Math.Min(block, rows - start);
+            Tensor<T> angles = engine.TensorOuter(engine.TensorNarrow(frequencies, 0, start, size).Contiguous(), _x.AsTensor());
+            Tensor<T> basis = cosine ? engine.TensorCos(angles) : engine.TensorSin(angles);
+            parts.Add(engine.TensorMatMul(basis, ys));
         }
 
-        for (int k = 1; k < n; k++)
-        {
-            _b[k - 1] = _numOps.Zero;
-            for (int j = 0; j < _x.Length; j++)
-            {
-                T angle = _numOps.Multiply(_numOps.Divide(_numOps.FromDouble(2 * k * Math.PI), _period), _x[j]);
-                _b[k - 1] = _numOps.Add(_b[k - 1], _numOps.Multiply(_y[j], MathHelper.Sin(angle)));
-            }
-
-            _b[k - 1] = _numOps.Multiply(_b[k - 1], twoOverN);
-        }
+        return parts.Count == 1 ? parts[0] : engine.TensorConcatenate(parts.ToArray(), 0);
     }
 }

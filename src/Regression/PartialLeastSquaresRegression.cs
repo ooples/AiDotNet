@@ -224,161 +224,140 @@ public partial class PartialLeastSquaresRegression<T> : RegressionBase<T>
 
         // Centre X and y. PLS is defined on centred data: the components are directions of
         // covariance, and an uncentred mean would dominate the first one.
-        _xMean = new Vector<T>(p);
-        for (int j = 0; j < p; j++)
-        {
-            T sum = NumOps.Zero;
-            for (int i = 0; i < n; i++) sum = NumOps.Add(sum, x[i, j]);
-            _xMean[j] = NumOps.Divide(sum, NumOps.FromDouble(n));
-        }
+        var xTensor = Tensor<T>.FromMatrix(x);
+        var meanRow = Engine.TensorDivideScalar(
+            Engine.ReduceSum(xTensor, new[] { 0 }, keepDims: true), NumOps.FromDouble(n));
+        _xMean = meanRow.Reshape(new[] { p }).ToVector();
 
-        T ySum = NumOps.Zero;
-        for (int i = 0; i < n; i++) ySum = NumOps.Add(ySum, y[i]);
+        T ySum = Engine.Sum(y);
         _yMean = NumOps.Divide(ySum, NumOps.FromDouble(n));
 
         // Scaling is recorded so a caller can inspect it; the deflation below works on the centred
         // residuals either way.
-        _xStd = new Vector<T>(p);
-        for (int j = 0; j < p; j++)
-        {
-            T ss = NumOps.Zero;
-            for (int i = 0; i < n; i++)
-            {
-                T d = NumOps.Subtract(x[i, j], _xMean[j]);
-                ss = NumOps.Add(ss, NumOps.Multiply(d, d));
-            }
-            T variance = NumOps.Divide(ss, NumOps.FromDouble(Math.Max(1, n - 1)));
-            T sd = NumOps.Sqrt(variance);
-            _xStd[j] = NumOps.LessThanOrEquals(sd, NumOps.FromDouble(1e-12)) ? NumOps.One : sd;
-        }
+        var centred = Engine.TensorSubtract(xTensor, Engine.TensorBroadcastTo(meanRow, new[] { n, p }));
+        var variance = Engine.TensorDivideScalar(
+            Engine.ReduceSum(Engine.TensorSquare(centred), new[] { 0 }, keepDims: false),
+            NumOps.FromDouble(Math.Max(1, n - 1)));
+        var sd = Engine.TensorSqrt(variance).ToVector();
+        _xStd = Engine.TensorWhere(
+            RegressionEngineOps.LessOrEqualMask(sd, NumOps.FromDouble(1e-12)),
+            Tensor<T>.FromVector(Engine.Fill(p, NumOps.One)),
+            Tensor<T>.FromVector(sd)).ToVector();
         _yStd = NumOps.One;
 
-        var e = new Matrix<T>(n, p);
-        for (int i = 0; i < n; i++)
-        for (int j = 0; j < p; j++) e[i, j] = NumOps.Subtract(x[i, j], _xMean[j]);
+        var e = centred.ToMatrix();
+        var f = Engine.Subtract(y, Engine.Fill(n, _yMean));
 
-        var f = new Vector<T>(n);
-        for (int i = 0; i < n; i++) f[i] = NumOps.Subtract(y[i], _yMean);
-
-        var w = new Matrix<T>(p, components);   // weights
-        var t = new Matrix<T>(n, components);   // scores
-        var pl = new Matrix<T>(p, components);  // X-loadings
-        var c = new Vector<T>(components);      // y-loadings
+        var weightColumns = new List<Vector<T>>(components);   // weights
+        var scoreColumns = new List<Vector<T>>(components);    // scores
+        var loadingColumns = new List<Vector<T>>(components);  // X-loadings
+        var yLoadings = new List<T>(components);               // y-loadings
 
         for (int k = 0; k < components; k++)
         {
-            // w_k = E'f, normalised
-            var wk = new Vector<T>(p);
-            T norm2 = NumOps.Zero;
-            for (int j = 0; j < p; j++)
+            var component = ExtractComponent(e, f);
+            if (component is null)
             {
-                T acc = NumOps.Zero;
-                for (int i = 0; i < n; i++) acc = NumOps.Add(acc, NumOps.Multiply(e[i, j], f[i]));
-                wk[j] = acc;
-                norm2 = NumOps.Add(norm2, NumOps.Multiply(acc, acc));
-            }
-            T norm = NumOps.Sqrt(norm2);
-            if (NumOps.LessThanOrEquals(norm, NumOps.FromDouble(1e-12)))
-            {
-                // No covariance left with the target: further components would be noise.
-                components = k;
-                break;
-            }
-            for (int j = 0; j < p; j++) wk[j] = NumOps.Divide(wk[j], norm);
-
-            // t_k = E w_k
-            var tk = new Vector<T>(n);
-            T tt = NumOps.Zero;
-            for (int i = 0; i < n; i++)
-            {
-                T acc = NumOps.Zero;
-                for (int j = 0; j < p; j++) acc = NumOps.Add(acc, NumOps.Multiply(e[i, j], wk[j]));
-                tk[i] = acc;
-                tt = NumOps.Add(tt, NumOps.Multiply(acc, acc));
-            }
-            if (NumOps.LessThanOrEquals(tt, NumOps.FromDouble(1e-12)))
-            {
+                // No covariance (or no score variance) left with the target: further components
+                // would be noise.
                 components = k;
                 break;
             }
 
-            // p_k = E't_k / (t_k't_k),  c_k = f't_k / (t_k't_k)
-            var pk = new Vector<T>(p);
-            for (int j = 0; j < p; j++)
-            {
-                T acc = NumOps.Zero;
-                for (int i = 0; i < n; i++) acc = NumOps.Add(acc, NumOps.Multiply(e[i, j], tk[i]));
-                pk[j] = NumOps.Divide(acc, tt);
-            }
-            T fc = NumOps.Zero;
-            for (int i = 0; i < n; i++) fc = NumOps.Add(fc, NumOps.Multiply(f[i], tk[i]));
-            T ck = NumOps.Divide(fc, tt);
+            var (wk, tk, pk, ck) = component.Value;
 
-            // Deflate
-            for (int i = 0; i < n; i++)
-            {
-                for (int j = 0; j < p; j++)
-                    e[i, j] = NumOps.Subtract(e[i, j], NumOps.Multiply(tk[i], pk[j]));
-                f[i] = NumOps.Subtract(f[i], NumOps.Multiply(tk[i], ck));
-            }
+            // Deflate: E -= t_k p_k',  f -= t_k c_k
+            e = Engine.TensorSubtract(Tensor<T>.FromMatrix(e), OuterProduct(tk, pk)).ToMatrix();
+            f = Engine.Subtract(f, Engine.Multiply(tk, ck));
 
-            for (int j = 0; j < p; j++) { w[j, k] = wk[j]; pl[j, k] = pk[j]; }
-            for (int i = 0; i < n; i++) t[i, k] = tk[i];
-            c[k] = ck;
+            weightColumns.Add(wk);
+            scoreColumns.Add(tk);
+            loadingColumns.Add(pk);
+            yLoadings.Add(ck);
         }
 
-        // Trim to the components actually extracted -- an early break above means the rest are
+        // Trim to the components actually extracted -- an early break above means the rest would be
         // zero columns, and keeping them would report parameters that carry no information.
-        _weights = ToTensor(w, p, components);
-        _loadings = Submatrix(pl, p, components);
-        _scores = Submatrix(t, n, components);
-        _yLoadings = new Vector<T>(components);
-        for (int k = 0; k < components; k++) _yLoadings[k] = c[k];
+        var w = StackColumns(weightColumns, p);
+        var pl = StackColumns(loadingColumns, p);
+        _weights = Tensor<T>.FromMatrix(w);
+        _loadings = pl;
+        _scores = StackColumns(scoreColumns, n);
+        _yLoadings = new Vector<T>(yLoadings);
 
         // B = W (P'W)^-1 c, mapping back to the original variables.
-        var ptw = new Matrix<T>(components, components);
-        for (int a = 0; a < components; a++)
-        for (int b = 0; b < components; b++)
+        Vector<T> beta;
+        if (components == 0)
         {
-            T acc = NumOps.Zero;
-            for (int j = 0; j < p; j++) acc = NumOps.Add(acc, NumOps.Multiply(pl[j, a], w[j, b]));
-            ptw[a, b] = acc;
+            SolveSystem(new Matrix<T>(0, 0), _yLoadings);
+            beta = new Vector<T>(p);
         }
-        for (int a = 0; a < components; a++)
-            ptw[a, a] = NumOps.Add(ptw[a, a], NumOps.FromDouble(1e-12));
-
-        var alpha = SolveSystem(ptw, _yLoadings);
-
-        var beta = new Vector<T>(p);
-        for (int j = 0; j < p; j++)
+        else
         {
-            T acc = NumOps.Zero;
-            for (int a = 0; a < components; a++) acc = NumOps.Add(acc, NumOps.Multiply(w[j, a], alpha[a]));
-            beta[j] = acc;
+            var ptw = Engine.MatrixMultiply(Engine.MatrixTranspose(pl), w);
+            ptw = Engine.MatrixAdd(ptw, Matrix<T>.CreateDiagonal(Engine.Fill(components, NumOps.FromDouble(1e-12))));
+
+            var alpha = SolveSystem(ptw, _yLoadings);
+            beta = Engine.MatrixVectorMultiply(w, alpha);
         }
 
         Coefficients = beta;
 
-        T intercept = _yMean;
-        for (int j = 0; j < p; j++)
-            intercept = NumOps.Subtract(intercept, NumOps.Multiply(beta[j], _xMean[j]));
-        Intercept = intercept;
+        Intercept = NumOps.Subtract(_yMean, Engine.DotProduct(beta, _xMean));
     }
 
-    private static Matrix<T> Submatrix(Matrix<T> source, int rows, int cols)
+    /// <summary>
+    /// One NIPALS step on the residuals: w = E'f / |E'f|, t = E w, p = E't / t't, c = f't / t't.
+    /// Returns null when |E'f| or t't is at or below 1e-12 (nothing left to extract).
+    /// </summary>
+    private (Vector<T> Weight, Vector<T> Score, Vector<T> Loading, T YLoading)? ExtractComponent(Matrix<T> e, Vector<T> f)
     {
-        var result = new Matrix<T>(rows, cols);
-        for (int i = 0; i < rows; i++)
-        for (int j = 0; j < cols; j++) result[i, j] = source[i, j];
-        return result;
+        T tolerance = NumOps.FromDouble(1e-12);
+        var eTranspose = Engine.MatrixTranspose(e);
+
+        var wk = Engine.MatrixVectorMultiply(eTranspose, f);
+        T norm = NumOps.Sqrt(Engine.DotProduct(wk, wk));
+        if (NumOps.LessThanOrEquals(norm, tolerance))
+        {
+            return null;
+        }
+
+        wk = Engine.Divide(wk, norm);
+
+        var tk = Engine.MatrixVectorMultiply(e, wk);
+        T tt = Engine.DotProduct(tk, tk);
+        if (NumOps.LessThanOrEquals(tt, tolerance))
+        {
+            return null;
+        }
+
+        var pk = Engine.Divide(Engine.MatrixVectorMultiply(eTranspose, tk), tt);
+        T ck = NumOps.Divide(Engine.DotProduct(f, tk), tt);
+        return (wk, tk, pk, ck);
     }
 
-    private static Tensor<T> ToTensor(Matrix<T> source, int rows, int cols)
+    /// <summary>
+    /// Outer product left * right' as a [left.Length, right.Length] tensor.
+    /// </summary>
+    private Tensor<T> OuterProduct(Vector<T> left, Vector<T> right)
     {
-        var result = new Tensor<T>([rows, cols]);
-        for (int i = 0; i < rows; i++)
-        for (int j = 0; j < cols; j++) result[i, j] = source[i, j];
-        return result;
+        return Tensor<T>.FromMatrix(Engine.MatrixMultiply(
+            new Tensor<T>(new[] { left.Length, 1 }, left).ToMatrix(),
+            new Tensor<T>(new[] { 1, right.Length }, right).ToMatrix()));
+    }
+
+    /// <summary>
+    /// Stacks the vectors as the columns of a [rows, columns.Count] matrix.
+    /// </summary>
+    private Matrix<T> StackColumns(List<Vector<T>> columns, int rows)
+    {
+        if (columns.Count == 0)
+        {
+            return new Matrix<T>(rows, 0);
+        }
+
+        var columnTensors = columns.Select(column => new Tensor<T>(new[] { rows, 1 }, column)).ToArray();
+        return Engine.TensorConcatenate(columnTensors, 1).ToMatrix();
     }
 
     /// <summary>
@@ -427,12 +406,7 @@ public partial class PartialLeastSquaresRegression<T> : RegressionBase<T>
     {
         // Use base linear prediction: input * Coefficients + Intercept
         var predictions = input.Multiply(Coefficients);
-        for (int i = 0; i < predictions.Length; i++)
-        {
-            predictions[i] = NumOps.Add(predictions[i], Intercept);
-        }
-
-        return predictions;
+        return Engine.Add(predictions, Engine.Fill(predictions.Length, Intercept));
     }
 
     /// <summary>
@@ -506,37 +480,26 @@ public partial class PartialLeastSquaresRegression<T> : RegressionBase<T>
         // When using OLS (no PLS decomposition), use absolute coefficient values
         if (_scores.Rows == 0 || _weights.Shape[0] == 0)
         {
-            var importance = new Vector<T>(Coefficients.Length);
-            for (int j = 0; j < Coefficients.Length; j++)
-            {
-                importance[j] = NumOps.Abs(Coefficients[j]);
-            }
-            return importance;
+            return Engine.Abs(Coefficients);
         }
 
-        // VIP (Variable Importance in Projection) scores
-        Vector<T> vip = new Vector<T>(Coefficients.Length);
-
-        // Calculate ssY (sum of squares of Y)
-        T ssY = NumOps.Zero;
-        Matrix<T> scoresTransposeMultiplyScores = _scores.Transpose().Multiply(_scores);
-        for (int i = 0; i < scoresTransposeMultiplyScores.Rows; i++)
+        // VIP (Variable Importance in Projection) scores:
+        // vip_j = sqrt(P * sum_a w[j,a]^2 t_a / ssY) * beta_j, with t_a = |scores[:, a]|^2 and
+        // ssY = trace(S'S) = sum_a t_a. Components beyond the extracted ones are zero columns and
+        // contribute nothing, so the sum runs over the stored weight columns.
+        int componentCount = Math.Min(_options.NumComponents, Math.Min(_weights.Shape[1], _scores.Columns));
+        if (componentCount == 0 || Coefficients.Length == 0)
         {
-            ssY = NumOps.Add(ssY, scoresTransposeMultiplyScores[i, i]);
+            return new Vector<T>(Coefficients.Length);
         }
 
-        for (int j = 0; j < Coefficients.Length; j++)
-        {
-            T score = NumOps.Zero;
-            for (int a = 0; a < _options.NumComponents; a++)
-            {
-                T w = _weights[j, a];
-                T t = _scores.GetColumn(a).DotProduct(_scores.GetColumn(a));
-                score = NumOps.Add(score, NumOps.Multiply(NumOps.Multiply(w, w), t));
-            }
-            vip[j] = NumOps.Multiply(NumOps.Sqrt(NumOps.Multiply(NumOps.FromDouble(Coefficients.Length), NumOps.Divide(score, ssY))), Coefficients[j]);
-        }
+        var scores = Tensor<T>.FromMatrix(_scores.GetSubMatrix(0, 0, _scores.Rows, componentCount));
+        var componentVariance = Engine.ReduceSum(Engine.TensorSquare(scores), new[] { 0 }, keepDims: false).ToVector();
+        T ssY = Engine.Sum(componentVariance);
 
-        return vip;
+        var weights = Tensor<T>.FromMatrix(_weights.ToMatrix().GetSubMatrix(0, 0, Coefficients.Length, componentCount));
+        var score = Engine.MatrixVectorMultiply(Engine.TensorSquare(weights).ToMatrix(), componentVariance);
+        var ratio = Engine.Multiply(Engine.Divide(score, ssY), NumOps.FromDouble(Coefficients.Length));
+        return Engine.Multiply(Engine.Sqrt(ratio), Coefficients);
     }
 }

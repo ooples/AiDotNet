@@ -144,7 +144,7 @@ public partial class NormalOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInp
             // Compare consecutive current-iteration fitnesses, not the running best.
             T currentFitness = currentStepData.FitnessScore;
             bool identicalToLast = haveLastIterationFitness
-                && NumOps.Equals(currentFitness, lastIterationFitness);
+                && IsSameFitness(currentFitness, lastIterationFitness);
             if (degenerateFeatureSearch && identicalToLast)
             {
                 break;
@@ -165,6 +165,9 @@ public partial class NormalOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInp
 
         return CreateOptimizationResult(bestStepData, inputData);
     }
+
+    /// <summary>True when two fitness scores are exactly equal (the converged-plateau test).</summary>
+    private bool IsSameFitness(T current, T previous) => NumOps.Equals(current, previous);
 
     /// <summary>
     /// Updates the adaptive parameters of the optimizer based on the current and previous optimization steps.

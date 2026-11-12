@@ -97,25 +97,49 @@ internal sealed class DiffusionTSNetwork<T>
         int retained = window % 2 == 0 ? window / 2 - 1 : (window - 1) / 2;
         _fourierTopK = retained > 0 ? (int)(fourierTopKFactor * Math.Log(retained)) : 0;
         int columns = Math.Max(retained, 1);
-        _fourierCos = new Tensor<T>(new[] { window, columns });
-        _fourierSin = new Tensor<T>(new[] { window, columns });
-        _fourierCosInverse = new Tensor<T>(new[] { columns, window });
-        _fourierSinInverse = new Tensor<T>(new[] { columns, window });
-        for (int t = 0; t < window; t++)
-            for (int j = 0; j < retained; j++)
+        var engine = AiDotNetEngine.Current;
+        using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
+        {
+            if (retained > 0)
             {
-                double angle = 2.0 * Math.PI * (j + 1) * t / window;
-                _fourierCos[t * columns + j] = _numOps.FromDouble(Math.Cos(angle));
-                _fourierSin[t * columns + j] = _numOps.FromDouble(-Math.Sin(angle));
+                // angle[t, j] = 2 pi ((j + 1) t mod L) / L, the integer phase reduced first for low-precision accuracy.
+                var phase = new int[window * retained];
+                for (int t = 0, n = 0; t < window; t++)
+                    for (int j = 0; j < retained; j++, n++)
+                        phase[n] = (int)((long)(j + 1) * t % window);
+                var angle = engine.TensorDivideScalar(
+                    engine.TensorMultiplyScalar(
+                        new Tensor<int>(new[] { window, retained }, new Vector<int>(phase)).Cast<T>(),
+                        _numOps.FromDouble(2.0 * Math.PI)),
+                    _numOps.FromDouble(window));
+                var cos = engine.TensorCos(angle);
+                var sin = engine.TensorSin(angle);
+                _fourierCos = cos;
+                _fourierSin = engine.TensorNegate(sin);
                 // A real signal's components at f and -f add up to (2 / L) Re(X e^{i angle}) (the inverse DFT's 1 / L).
-                _fourierCosInverse[j * window + t] = _numOps.FromDouble(2.0 * Math.Cos(angle) / window);
-                _fourierSinInverse[j * window + t] = _numOps.FromDouble(-2.0 * Math.Sin(angle) / window);
+                T two = _numOps.FromDouble(2.0);
+                T length = _numOps.FromDouble(window);
+                _fourierCosInverse = engine.TensorTranspose(
+                    engine.TensorDivideScalar(engine.TensorMultiplyScalar(cos, two), length)).Contiguous();
+                _fourierSinInverse = engine.TensorTranspose(
+                    engine.TensorDivideScalar(engine.TensorMultiplyScalar(sin, _numOps.Negate(two)), length)).Contiguous();
+            }
+            else
+            {
+                _fourierCos = new Tensor<T>(new[] { window, columns });
+                _fourierSin = new Tensor<T>(new[] { window, columns });
+                _fourierCosInverse = new Tensor<T>(new[] { columns, window });
+                _fourierSinInverse = new Tensor<T>(new[] { columns, window });
             }
 
-        _trendBasis = new Tensor<T>(new[] { TrendPolynomialOrder, window });
-        for (int p = 0; p < TrendPolynomialOrder; p++)
-            for (int t = 0; t < window; t++)
-                _trendBasis[p * window + t] = _numOps.FromDouble(Math.Pow((t + 1.0) / (window + 1.0), p + 1));
+            // Row p is ((t + 1) / (L + 1))^(p + 1).
+            var position = engine.TensorDivideScalar(
+                engine.TensorArange<T>(1, window + 1, 1), _numOps.FromDouble(window + 1.0));
+            var rows = new Tensor<T>[TrendPolynomialOrder];
+            for (int p = 0; p < TrendPolynomialOrder; p++)
+                rows[p] = engine.TensorPower(position, _numOps.FromDouble(p + 1));
+            _trendBasis = engine.TensorStack(rows, 0);
+        }
 
         Build();
     }
@@ -308,9 +332,10 @@ internal sealed class DiffusionTSNetwork<T>
     private Tensor<T> StepEmbedding(IEngine engine, Tensor<T> steps, int batch)
     {
         int half = _modelDim / 2;
-        var frequencies = new Tensor<T>(new[] { 1, half });
         double scale = half > 1 ? Math.Log(10000.0) / (half - 1) : 0.0;
-        for (int i = 0; i < half; i++) frequencies[i] = _numOps.FromDouble(Math.Exp(-scale * i));
+        var frequencies = engine.Reshape(
+            engine.TensorExp(engine.TensorMultiplyScalar(engine.TensorArange<T>(0, half, 1), _numOps.FromDouble(-scale))),
+            new[] { 1, half });
         var shape = new[] { batch, half };
         var phase = engine.TensorMultiply(
             engine.TensorBroadcastTo(engine.Reshape(steps, new[] { batch, 1 }), shape),

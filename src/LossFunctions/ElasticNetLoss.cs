@@ -83,14 +83,9 @@ public class ElasticNetLoss<T> : LossFunctionBase<T>
         T mseLoss = StatisticsHelper<T>.CalculateMeanSquaredError(predicted, actual);
 
         // Calculate L1 and L2 regularization terms
-        T l1Regularization = NumOps.Zero;
-        T l2Regularization = NumOps.Zero;
-
-        for (int i = 0; i < predicted.Length; i++)
-        {
-            l1Regularization = NumOps.Add(l1Regularization, NumOps.Abs(predicted[i]));
-            l2Regularization = NumOps.Add(l2Regularization, NumOps.Power(predicted[i], NumOps.FromDouble(2)));
-        }
+        // L1 = Σ|pᵢ|, L2 = Σpᵢ²
+        T l1Regularization = Engine.Sum(Engine.Abs(predicted));
+        T l2Regularization = Engine.DotProduct(predicted, predicted);
 
         // Scale the regularization terms
         T l1Term = NumOps.Multiply(

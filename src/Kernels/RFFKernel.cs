@@ -41,12 +41,12 @@ public class RFFKernel<T> : IKernelFunction<T>
     /// <summary>
     /// The random frequency vectors (ω).
     /// </summary>
-    private readonly double[,] _frequencies;
+    private readonly Tensor<T> _frequencies;
 
     /// <summary>
     /// The random phase shifts (b).
     /// </summary>
-    private readonly double[] _phases;
+    private readonly Tensor<T> _phases;
 
     /// <summary>
     /// Number of random features.
@@ -87,7 +87,7 @@ public class RFFKernel<T> : IKernelFunction<T>
         RBF,
         /// <summary>Laplacian (Exponential) kernel.</summary>
         Laplacian,
-        /// <summary>Matern 1/2 kernel (same as Laplacian).</summary>
+        /// <summary>Matern 1/2 kernel: exp(-||x - x'||₂ / l), the L2 exponential (Laplacian is the L1 form).</summary>
         Matern12,
         /// <summary>Matern 3/2 kernel.</summary>
         Matern32,
@@ -148,100 +148,111 @@ public class RFFKernel<T> : IKernelFunction<T>
         _outputScale = outputScale;
         _numOps = MathHelper.GetNumericOperations<T>();
 
-        // Initialize random frequencies and phases
-        _frequencies = new double[numFeatures, inputDim];
-        _phases = new double[numFeatures];
-
         var rand = seed.HasValue
             ? RandomHelper.CreateSeededRandom(seed.Value)
             : RandomHelper.CreateSecureRandom();
 
-        SampleFrequencies(rand);
-        SamplePhases(rand);
+        // Initialize random frequencies and phases from one seeded engine draw
+        (_frequencies, _phases) = SampleFrequenciesAndPhases(rand.Next());
     }
 
     /// <summary>
-    /// Samples random frequencies from the spectral density of the kernel.
+    /// Samples the frequencies from the kernel's spectral density, scaled by 1/lengthScale, and the
+    /// phases uniformly from [0, 2π), all from one seeded uniform tensor.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// <b>For Beginners:</b> Different kernels have different spectral densities (Fourier transforms).
-    /// We sample frequencies according to these densities:
-    ///
-    /// - RBF: Gaussian with variance 1/l²
-    /// - Laplacian: Cauchy distribution
-    /// - Matern: t-distribution with degrees of freedom based on ν
+    /// Spectral densities: RBF → Gaussian (Box-Muller); Laplacian (the L1 kernel) → independent Cauchy
+    /// per coordinate (inverse CDF); Matérn-ν (L2) → multivariate Student-t with 2ν degrees of freedom:
+    /// Matern12 → df 1, Matern32 → df 3, Matern52 → df 5. A multivariate t shares one chi-squared value
+    /// across all coordinates of a frequency row (a Gaussian vector over the root of chi-squared / df).
     /// </para>
     /// </remarks>
-    private void SampleFrequencies(Random rand)
+    private (Tensor<T> Frequencies, Tensor<T> Phases) SampleFrequenciesAndPhases(int seed)
     {
-        double scale = 1.0 / _lengthScale;
-
-        for (int i = 0; i < _numFeatures; i++)
+        var engine = AiDotNetEngine.Current;
+        var shape = new[] { _numFeatures, _inputDim };
+        int perFrequency = _kernelType switch
         {
-            for (int d = 0; d < _inputDim; d++)
-            {
-                double freq = _kernelType switch
-                {
-                    RFFKernelType.RBF => SampleGaussian(rand) * scale,
-                    RFFKernelType.Laplacian or RFFKernelType.Matern12 => SampleCauchy(rand) * scale,
-                    RFFKernelType.Matern32 => SampleStudentT(rand, 3) * scale,
-                    RFFKernelType.Matern52 => SampleStudentT(rand, 5) * scale,
-                    _ => SampleGaussian(rand) * scale
-                };
-                _frequencies[i, d] = freq;
-            }
-        }
+            RFFKernelType.Laplacian => 1,
+            RFFKernelType.Matern12 => 2 * (1 + 1),
+            RFFKernelType.Matern32 => 2 * (1 + 3),
+            RFFKernelType.Matern52 => 2 * (1 + 5),
+            _ => 2
+        };
+
+        // Uniform draws: perFrequency planes of [numFeatures, inputDim], then one plane for the phases
+        var uniforms = engine.TensorRandomUniformRange(new[] { perFrequency * _numFeatures * _inputDim + _numFeatures },
+            _numOps.Zero, _numOps.One, seed);
+        int planeSize = _numFeatures * _inputDim;
+        Tensor<T> Plane(int index) => engine.TensorSlice(uniforms, new[] { index * planeSize }, new[] { planeSize }).Reshape(shape);
+
+        Tensor<T> frequencies = _kernelType switch
+        {
+            RFFKernelType.Laplacian => SampleCauchy(Plane(0)),
+            RFFKernelType.Matern12 => SampleStudentT(Plane, 1),
+            RFFKernelType.Matern32 => SampleStudentT(Plane, 3),
+            RFFKernelType.Matern52 => SampleStudentT(Plane, 5),
+            _ => SampleGaussian(Plane(0), Plane(1))
+        };
+        frequencies = engine.TensorMultiplyScalar(frequencies, _numOps.FromDouble(1.0 / _lengthScale));
+
+        var phases = engine.TensorMultiplyScalar(
+            engine.TensorSlice(uniforms, new[] { perFrequency * planeSize }, new[] { _numFeatures }),
+            _numOps.FromDouble(2 * Math.PI));
+
+        return (frequencies, phases);
     }
 
     /// <summary>
-    /// Samples random phases uniformly from [0, 2π].
+    /// Box-Muller: sqrt(-2 log(max(u1, 1e-10))) cos(2π u2).
     /// </summary>
-    private void SamplePhases(Random rand)
+    private Tensor<T> SampleGaussian(Tensor<T> u1, Tensor<T> u2)
     {
-        for (int i = 0; i < _numFeatures; i++)
-        {
-            _phases[i] = rand.NextDouble() * 2 * Math.PI;
-        }
-    }
+        var engine = AiDotNetEngine.Current;
 
-    /// <summary>
-    /// Samples from a standard Gaussian distribution using Box-Muller transform.
-    /// </summary>
-    private static double SampleGaussian(Random rand)
-    {
-        double u1 = rand.NextDouble();
-        double u2 = rand.NextDouble();
         // Avoid log(0)
-        u1 = Math.Max(u1, 1e-10);
-        return Math.Sqrt(-2 * Math.Log(u1)) * Math.Cos(2 * Math.PI * u2);
+        var radius = engine.TensorSqrt(engine.TensorMultiplyScalar(
+            engine.TensorLog(engine.TensorClampMin(u1, _numOps.FromDouble(1e-10))), _numOps.FromDouble(-2.0)));
+        return engine.TensorMultiply(radius,
+            engine.TensorCos(engine.TensorMultiplyScalar(u2, _numOps.FromDouble(2 * Math.PI))));
     }
 
     /// <summary>
-    /// Samples from a Cauchy distribution.
+    /// Inverse-CDF Cauchy: tan(π (u - 0.5)) with u clamped to [0.001, 0.999].
     /// </summary>
-    private static double SampleCauchy(Random rand)
+    private Tensor<T> SampleCauchy(Tensor<T> u)
     {
-        double u = rand.NextDouble();
+        var engine = AiDotNetEngine.Current;
+
         // Avoid tan(π/2)
-        u = Math.Max(0.001, Math.Min(0.999, u));
-        return Math.Tan(Math.PI * (u - 0.5));
+        var angle = engine.TensorMultiplyScalar(
+            engine.TensorAddScalar(engine.TensorClamp(u, _numOps.FromDouble(0.001), _numOps.FromDouble(0.999)),
+                _numOps.FromDouble(-0.5)),
+            _numOps.FromDouble(Math.PI));
+        return engine.TensorDivide(engine.TensorSin(angle), engine.TensorCos(angle));
     }
 
     /// <summary>
-    /// Samples from a Student-t distribution with given degrees of freedom.
+    /// Multivariate Student-t with df degrees of freedom per frequency row: z / sqrt(chi2 / df), with z a
+    /// Gaussian per coordinate and chi2 (the sum of df squared Gaussians) drawn once per row.
     /// </summary>
-    private static double SampleStudentT(Random rand, double df)
+    private Tensor<T> SampleStudentT(Func<int, Tensor<T>> plane, int df)
     {
-        // Use ratio of Gaussian to chi-squared
-        double z = SampleGaussian(rand);
-        double chi2 = 0;
-        for (int i = 0; i < (int)df; i++)
+        var engine = AiDotNetEngine.Current;
+        var z = SampleGaussian(plane(0), plane(1));
+        int rows = z.Shape[0];
+        int columns = z.Shape[1];
+        var squares = Enumerable.Range(1, df).Select(k =>
         {
-            double g = SampleGaussian(rand);
-            chi2 += g * g;
-        }
-        return z / Math.Sqrt(chi2 / df);
+            // One Gaussian per row: the first coordinate's draw of this plane pair.
+            var g = engine.TensorSlice(SampleGaussian(plane(2 * k), plane(2 * k + 1)), new[] { 0, 0 }, new[] { rows, 1 });
+            return engine.TensorMultiply(g, g);
+        });
+        var chi2 = engine.TensorBroadcastTo(squares.Aggregate((sum, square) => engine.TensorAdd(sum, square)),
+            new[] { rows, columns });
+
+        return engine.TensorDivide(z, engine.TensorSqrt(engine.TensorMultiplyScalar(chi2, _numOps.FromDouble(1.0 / df))));
     }
 
     /// <summary>
@@ -287,28 +298,28 @@ public class RFFKernel<T> : IKernelFunction<T>
     /// - Neural network layers (kernel approximation via random features)
     /// </para>
     /// </remarks>
-    public double[] GetFeatures(Vector<T> x)
+    public Vector<T> GetFeatures(Vector<T> x)
     {
         if (x.Length != _inputDim)
             throw new ArgumentException($"Expected input dimension {_inputDim}, got {x.Length}.");
 
-        var features = new double[_numFeatures];
-        double scale = Math.Sqrt(2.0 * _outputScale / _numFeatures);
+        // √(2σ²/D) × cos(ωᵢ·x + bᵢ)
+        return FeatureMap(x.AsTensor().Reshape(new[] { 1, _inputDim })).ToVector();
+    }
 
-        for (int i = 0; i < _numFeatures; i++)
-        {
-            // Compute ωᵢ·x
-            double dot = 0;
-            for (int d = 0; d < _inputDim; d++)
-            {
-                dot += _frequencies[i, d] * _numOps.ToDouble(x[d]);
-            }
+    /// <summary>
+    /// Computes √(2σ²/D) × cos(X Ωᵀ + b) for a [n, inputDim] batch.
+    /// </summary>
+    private Tensor<T> FeatureMap(Tensor<T> inputs)
+    {
+        var engine = AiDotNetEngine.Current;
+        int n = inputs.Shape[0];
+        var projections = engine.TensorMatMul(inputs, engine.TensorTranspose(_frequencies));
+        var shifted = engine.TensorAdd(projections,
+            engine.TensorBroadcastTo(_phases.Reshape(new[] { 1, _numFeatures }), new[] { n, _numFeatures }));
 
-            // Compute √(2σ²/D) × cos(ωᵢ·x + bᵢ)
-            features[i] = scale * Math.Cos(dot + _phases[i]);
-        }
-
-        return features;
+        return engine.TensorMultiplyScalar(engine.TensorCos(shifted),
+            _numOps.FromDouble(Math.Sqrt(2.0 * _outputScale / _numFeatures)));
     }
 
     /// <summary>
@@ -329,16 +340,7 @@ public class RFFKernel<T> : IKernelFunction<T>
     /// </remarks>
     public T Calculate(Vector<T> x1, Vector<T> x2)
     {
-        double[] f1 = GetFeatures(x1);
-        double[] f2 = GetFeatures(x2);
-
-        double result = 0;
-        for (int i = 0; i < _numFeatures; i++)
-        {
-            result += f1[i] * f2[i];
-        }
-
-        return _numOps.FromDouble(result);
+        return AiDotNetEngine.Current.DotProduct(GetFeatures(x1), GetFeatures(x2));
     }
 
     /// <summary>
@@ -358,28 +360,16 @@ public class RFFKernel<T> : IKernelFunction<T>
     /// 3. Predictions: mean = Φ_test × w
     /// </para>
     /// </remarks>
-    public double[,] GetFeatureMatrix(Matrix<T> X)
+    public Matrix<T> GetFeatureMatrix(Matrix<T> X)
     {
-        int n = X.Rows;
-        var features = new double[n, _numFeatures];
-        double scale = Math.Sqrt(2.0 * _outputScale / _numFeatures);
+        if (X is null)
+            throw new ArgumentNullException(nameof(X));
+        if (X.Columns != _inputDim)
+            throw new ArgumentException($"Expected input dimension {_inputDim}, got {X.Columns}.", nameof(X));
+        if (X.Rows == 0)
+            return new Matrix<T>(0, _numFeatures);
 
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < _numFeatures; j++)
-            {
-                // Compute ωⱼ·xᵢ
-                double dot = 0;
-                for (int d = 0; d < _inputDim; d++)
-                {
-                    dot += _frequencies[j, d] * _numOps.ToDouble(X[i, d]);
-                }
-
-                features[i, j] = scale * Math.Cos(dot + _phases[j]);
-            }
-        }
-
-        return features;
+        return FeatureMap(Tensor<T>.FromMatrix(X)).ToMatrix();
     }
 
     /// <summary>
@@ -396,43 +386,34 @@ public class RFFKernel<T> : IKernelFunction<T>
     /// If the error is too high, increase numFeatures.
     /// </para>
     /// </remarks>
-    public double EstimateApproximationError(Matrix<T> X, IKernelFunction<T> exactKernel)
+    public T EstimateApproximationError(Matrix<T> X, IKernelFunction<T> exactKernel)
     {
         int n = X.Rows;
-        int numPairs = Math.Min(n * (n + 1) / 2, 1000); // Sample at most 1000 pairs
+        // Sample at most 1000 pairs; the pair count is formed in long so large n cannot overflow int.
+        int numPairs = (int)Math.Min((long)n * (n + 1) / 2, 1000L);
 
-        double totalError = 0;
-        int count = 0;
+        // Draw every pair first, in the same order as before (i then j per trial)
         var rand = RandomHelper.CreateSecureRandom();
-
-        for (int trial = 0; trial < numPairs && count < numPairs; trial++)
+        var pairs = new (int I, int J)[numPairs];
+        for (int trial = 0; trial < numPairs; trial++)
         {
             int i = rand.Next(n);
             int j = rand.Next(n);
-
-            var xi = GetRow(X, i);
-            var xj = GetRow(X, j);
-
-            double exact = _numOps.ToDouble(exactKernel.Calculate(xi, xj));
-            double approx = _numOps.ToDouble(Calculate(xi, xj));
-
-            totalError += Math.Abs(exact - approx);
-            count++;
+            pairs[trial] = (i, j);
         }
 
-        return count > 0 ? totalError / count : 0;
+        if (numPairs == 0)
+            return _numOps.Zero;
+
+        var errors = new Vector<T>(pairs.Select(pair => PairError(X.GetRow(pair.I), X.GetRow(pair.J), exactKernel)));
+        return _numOps.Divide(AiDotNetEngine.Current.Sum(errors), _numOps.FromDouble(numPairs));
     }
 
     /// <summary>
-    /// Extracts a row from a matrix as a vector.
+    /// |k_exact(xi, xj) - k_rff(xi, xj)|.
     /// </summary>
-    private Vector<T> GetRow(Matrix<T> matrix, int row)
+    private T PairError(Vector<T> xi, Vector<T> xj, IKernelFunction<T> exactKernel)
     {
-        var result = new Vector<T>(matrix.Columns);
-        for (int j = 0; j < matrix.Columns; j++)
-        {
-            result[j] = matrix[row, j];
-        }
-        return result;
+        return _numOps.Abs(_numOps.Subtract(exactKernel.Calculate(xi, xj), Calculate(xi, xj)));
     }
 }

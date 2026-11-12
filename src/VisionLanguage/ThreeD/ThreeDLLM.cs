@@ -208,85 +208,136 @@ public partial class ThreeDLLM<T> : VisionLanguageModelBase<T>, IThreeDVisionLan
         int numViews = _options.NumViews;
         int encoderDim = _options.PointEncoderDim;
 
+        var engine = Engine;
+        if (numViews < 0)
+            throw new OverflowException("The number of views cannot be negative.");
+        // Points p < numPoints with p * channels + 2 < totalValues are read (the scan stops at the
+        // first point that is not).
+        int readPoints = ReadablePointCount(numPoints, channels, totalValues);
+
         // Step 1: Multi-view rendering simulation
         // For each view, project 3D points onto a virtual camera plane
-        var viewFeatures = new double[numViews][];
-        for (int v = 0; v < numViews; v++)
+        Tensor<T> viewFeatures = new Tensor<T>([numViews, encoderDim]);
+        if (numViews > 0 && readPoints > 0)
         {
-            viewFeatures[v] = new double[encoderDim];
-            // Virtual camera at different azimuth angles around the scene
-            double azimuth = 2.0 * Math.PI * v / numViews;
-            double cosA = Math.Cos(azimuth);
-            double sinA = Math.Sin(azimuth);
+            var coords = PointCoordinates(pointCloud, readPoints, channels);
+            var x = engine.TensorSlice(coords, [0, 0], [readPoints, 1]).Reshape([1, readPoints]);
+            var y = engine.TensorSlice(coords, [0, 1], [readPoints, 1]).Reshape([1, readPoints]);
+            var z = engine.TensorSlice(coords, [0, 2], [readPoints, 1]).Reshape([1, readPoints]);
+            int[] viewShape = [numViews, readPoints];
 
-            // Project points and aggregate features per view
-            for (int p = 0; p < numPoints; p++)
+            // Virtual camera at different azimuth angles 2 pi v / numViews around the scene
+            var azimuth = engine.TensorDivideScalar(
+                engine.TensorMultiplyScalar(engine.TensorArange<T>(0, numViews, 1), NumOps.FromDouble(2.0 * Math.PI)),
+                NumOps.FromDouble(numViews)).Reshape([numViews, 1]);
+            var cosA = engine.TensorBroadcastTo(engine.TensorCos(azimuth), viewShape);
+            var sinA = engine.TensorBroadcastTo(engine.TensorSin(azimuth), viewShape);
+            var xWide = engine.TensorBroadcastTo(x, viewShape);
+            var yWide = engine.TensorBroadcastTo(y, viewShape);
+            var zWide = engine.TensorBroadcastTo(z, viewShape);
+
+            // Camera-relative coordinates (rotation around Y axis)
+            var xCam = engine.TensorAdd(engine.TensorMultiply(xWide, cosA), engine.TensorMultiply(zWide, sinA));
+            var depth = engine.TensorAddScalar(
+                engine.TensorAdd(engine.TensorMultiply(engine.TensorNegate(xWide), sinA), engine.TensorMultiply(zWide, cosA)),
+                NumOps.FromDouble(5.0)); // 5.0 = camera distance
+            // Points with depth < 0.1 are behind the camera (a NaN depth is not, as in a scalar comparison).
+            var visible = engine.ScalarMinusTensor(NumOps.One, engine.TensorLessThan(depth, NumOps.FromDouble(0.1)));
+            var noView = new Tensor<T>(viewShape);
+
+            // Project to 2D image plane
+            var u = engine.TensorDivide(xCam, depth);
+            var vCoord = engine.TensorDivide(yWide, depth);
+
+            // Accumulate features weighted by visibility (closer = more important)
+            var weight = engine.TensorDivide(
+                Tensor<T>.CreateDefault(viewShape, NumOps.One),
+                engine.TensorAddScalar(engine.TensorMultiply(depth, depth), NumOps.FromDouble(1e-8)));
+
+            // Include color/appearance features if available: the sum of values 3 .. channels - 1.
+            int appearanceChannels = channels - 3;
+            Tensor<T> appearance;
+            if (appearanceChannels <= 0)
             {
-                int baseIdx = p * channels;
-                if (baseIdx + 2 >= totalValues)
-                    break;
+                appearance = new Tensor<T>([1, readPoints]);
+            }
+            else
+            {
+                var channelIndex = engine.TensorAdd(
+                    engine.TensorBroadcastTo(
+                        engine.TensorAddScalar(
+                            engine.TensorMultiplyScalar(engine.TensorArange<int>(0, readPoints, 1), channels), 3).Reshape([readPoints, 1]),
+                        [readPoints, appearanceChannels]),
+                    engine.TensorBroadcastTo(
+                        engine.TensorArange<int>(0, appearanceChannels, 1).Reshape([1, appearanceChannels]), [readPoints, appearanceChannels]));
+                var appearanceValues = engine.TensorWhere(
+                    engine.TensorLessThan(channelIndex, totalValues).Cast<T>(),
+                    engine.TensorTake(pointCloud.Reshape([totalValues]), engine.TensorMin(channelIndex, totalValues - 1)),
+                    new Tensor<T>([readPoints, appearanceChannels]));
+                appearance = engine.ReduceSum(appearanceValues, [1], false).Reshape([1, readPoints]);
+            }
+            var contribution = engine.TensorWhere(
+                visible,
+                engine.TensorMultiply(weight, engine.TensorAddScalar(engine.TensorBroadcastTo(appearance, viewShape), NumOps.One)),
+                noView);
 
-                double x = NumOps.ToDouble(pointCloud[baseIdx]);
-                double y = NumOps.ToDouble(pointCloud[baseIdx + 1]);
-                double z = NumOps.ToDouble(pointCloud[baseIdx + 2]);
-
-                // Camera-relative coordinates (rotation around Y axis)
-                double xCam = x * cosA + z * sinA;
-                double depth = -x * sinA + z * cosA + 5.0; // 5.0 = camera distance
-                if (depth < 0.1)
-                    continue; // Behind camera
-
-                // Project to 2D image plane
-                double u = xCam / depth;
-                double vCoord = y / depth;
-
-                // Accumulate features weighted by visibility (closer = more important)
-                double weight = 1.0 / (depth * depth + 1e-8);
-                int featureIdx = Math.Abs((int)(u * 100 + vCoord * 10)) % encoderDim;
-
-                // Include color/appearance features if available
-                double appearance = 0;
-                for (int c = 3; c < channels && baseIdx + c < totalValues; c++)
-                    appearance += NumOps.ToDouble(pointCloud[baseIdx + c]);
-
-                viewFeatures[v][featureIdx] += weight * (1.0 + appearance);
+            if (encoderDim == 0)
+            {
+                if (engine.TensorSum(visible.Cast<int>()) > 0)
+                    throw new DivideByZeroException("Projected points cannot be binned into a zero-width feature vector.");
+            }
+            else
+            {
+                // featureIdx = |(int)(u * 100 + v * 10)| % encoderDim for every visible point.
+                var cellValue = engine.TensorWhere(
+                    visible,
+                    engine.TensorAdd(
+                        engine.TensorMultiplyScalar(u, NumOps.FromDouble(100.0)),
+                        engine.TensorMultiplyScalar(vCoord, NumOps.FromDouble(10.0))),
+                    noView);
+                var cell = engine.TensorTrunc(cellValue).Cast<int>();
+                if (engine.TensorSum(engine.TensorEquals(cell, int.MinValue)) > 0)
+                    throw new OverflowException("Negating the minimum value of a twos complement number is invalid.");
+                var featureIdx = engine.TensorRemainder(engine.TensorAbs(cell), Tensor<int>.CreateDefault(viewShape, encoderDim));
+                viewFeatures = engine.ScatterAdd(contribution, featureIdx, 1, encoderDim);
             }
         }
 
-        // Step 2: 2D feature extraction per view (via vision encoder)
-        for (int v = 0; v < numViews; v++)
+        Tensor<T> features3D;
+        if (encoderDim == 0)
         {
-            // Normalize view features
-            double norm = 0;
-            for (int d = 0; d < encoderDim; d++)
-                norm += viewFeatures[v][d] * viewFeatures[v][d];
-            norm = Math.Sqrt(norm) + 1e-8;
-            for (int d = 0; d < encoderDim; d++)
-                viewFeatures[v][d] /= norm;
+            features3D = new Tensor<T>([0]);
         }
-
-        // Step 3: Lift 2D features back to 3D with position embeddings
-        // Aggregate multi-view features using view-weighted attention
-        var features3D = new Tensor<T>([encoderDim]);
-        for (int d = 0; d < encoderDim; d++)
+        else
         {
-            double sum = 0;
-            double attnSum = 0;
-            for (int v = 0; v < numViews; v++)
+            if (numViews > 0)
             {
-                double magnitude = Math.Abs(viewFeatures[v][d]);
-                double attn = Math.Exp(magnitude);
-                attnSum += attn;
-                sum += attn * viewFeatures[v][d];
+                // Step 2: 2D feature extraction per view (via vision encoder)
+                // Normalize view features: divide by the view's L2 norm + 1e-8.
+                var norm = engine.TensorAddScalar(
+                    engine.TensorSqrt(engine.ReduceSum(engine.TensorMultiply(viewFeatures, viewFeatures), [1], true)),
+                    NumOps.FromDouble(1e-8));
+                viewFeatures = engine.TensorDivide(viewFeatures, engine.TensorBroadcastTo(norm, [numViews, encoderDim]));
             }
-            features3D[d] = NumOps.FromDouble(attnSum > 1e-8 ? sum / attnSum : 0);
-        }
 
-        // Step 4: Add 3D position embeddings (sinusoidal over XYZ)
-        for (int d = 0; d < encoderDim; d++)
-        {
-            double posEmbed = Math.Sin(d * Math.PI / encoderDim) * 0.1;
-            features3D[d] = NumOps.FromDouble(NumOps.ToDouble(features3D[d]) + posEmbed);
+            // Step 3: Lift 2D features back to 3D with position embeddings
+            // Aggregate multi-view features using view-weighted attention exp(|f|) over the views
+            // (0 when the attention mass is not above 1e-8).
+            var attn = engine.TensorExp(engine.TensorAbs(viewFeatures));
+            var attnSum = engine.ReduceSum(attn, [0], false);
+            var sum = engine.ReduceSum(engine.TensorMultiply(attn, viewFeatures), [0], false);
+            features3D = engine.TensorWhere(
+                engine.TensorGreaterThan(attnSum, NumOps.FromDouble(1e-8)),
+                engine.TensorDivide(sum, attnSum),
+                new Tensor<T>([encoderDim]));
+
+            // Step 4: Add 3D position embeddings (sinusoidal over XYZ): sin(d pi / encoderDim) * 0.1.
+            var posEmbed = engine.TensorMultiplyScalar(
+                engine.TensorSin(engine.TensorDivideScalar(
+                    engine.TensorMultiplyScalar(engine.TensorArange<T>(0, encoderDim, 1), NumOps.FromDouble(Math.PI)),
+                    NumOps.FromDouble(encoderDim))),
+                NumOps.FromDouble(0.1));
+            features3D = engine.TensorAdd(features3D, posEmbed);
         }
 
         // Step 5: Process through encoder layers
@@ -295,18 +346,7 @@ public partial class ThreeDLLM<T> : VisionLanguageModelBase<T>, IThreeDVisionLan
             encoded = Layers[i].Forward(encoded);
 
         // Step 6: Fuse with prompt and decode through LLM
-        var promptTokens = TokenizeText(prompt);
-        int promptLen = promptTokens.Length;
-        for (int d = 0; d < encoded.Length; d++)
-        {
-            if (promptLen > 0)
-            {
-                double promptVal = NumOps.ToDouble(promptTokens[d % promptLen]);
-                double encVal = NumOps.ToDouble(encoded[d]);
-                double gate = 1.0 / (1.0 + Math.Exp(-promptVal / 100.0));
-                encoded[d] = NumOps.FromDouble(encVal * (0.5 + gate));
-            }
-        }
+        encoded = PromptGated(encoded, TokenizeText(prompt));
 
         var output = encoded;
         for (int i = _encoderLayerEnd; i < Layers.Count; i++)
@@ -355,10 +395,7 @@ public partial class ThreeDLLM<T> : VisionLanguageModelBase<T>, IThreeDVisionLan
             throw new InvalidOperationException("Tokenizer not initialized.");
         var encoding = _tokenizer.Encode(text);
         int seqLen = Math.Min(encoding.TokenIds.Count, _options.MaxSequenceLength);
-        var tokens = new Tensor<T>([seqLen]);
-        for (int i = 0; i < seqLen; i++)
-            tokens[i] = NumOps.FromDouble(encoding.TokenIds[i]);
-        return tokens;
+        return TokenIdsToTensor(encoding.TokenIds, seqLen);
     }
 
     /// <inheritdoc />

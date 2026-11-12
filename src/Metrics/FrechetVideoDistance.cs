@@ -39,7 +39,6 @@ namespace AiDotNet.Metrics;
 /// <typeparam name="T">The numeric type for computations</typeparam>
 public class FrechetVideoDistance<T>
 {
-    private readonly INumericOperations<T> _numOps;
     private IEngine Engine => AiDotNetEngine.Current;
 
     /// <summary>
@@ -85,7 +84,6 @@ public class FrechetVideoDistance<T>
                 "Feature dimension must be at least 1");
         }
 
-        _numOps = MathHelper.GetNumericOperations<T>();
         FeatureNetwork = featureNetwork;
         FeatureDimension = featureDimension;
         FramesPerClip = framesPerClip;
@@ -98,7 +96,7 @@ public class FrechetVideoDistance<T>
     /// <param name="realVideos">Tensor of real videos [N, T, C, H, W] or [N, C, T, H, W]</param>
     /// <param name="generatedVideos">Tensor of generated videos with same format</param>
     /// <returns>FVD score (lower is better)</returns>
-    public double ComputeFVD(Tensor<T> realVideos, Tensor<T> generatedVideos)
+    public T ComputeFVD(Tensor<T> realVideos, Tensor<T> generatedVideos)
     {
         if (realVideos.Shape.Length < 5 || generatedVideos.Shape.Length < 5)
         {
@@ -121,7 +119,7 @@ public class FrechetVideoDistance<T>
     /// <param name="realCov">Covariance of real video features</param>
     /// <param name="generatedVideos">Generated videos to evaluate</param>
     /// <returns>FVD score</returns>
-    public double ComputeFVDWithStats(
+    public T ComputeFVDWithStats(
         Vector<T> realMean,
         Matrix<T> realCov,
         Tensor<T> generatedVideos)
@@ -168,10 +166,7 @@ public class FrechetVideoDistance<T>
 
                 // Store features (global average pooled if needed)
                 var videoFeature = GlobalAveragePool(output);
-                for (int j = 0; j < Math.Min(videoFeature.Length, FeatureDimension); j++)
-                {
-                    features[v, j] = videoFeature[j];
-                }
+                Engine.SetRow(features, v, FrechetDistanceHelper<T>.FeatureRow(videoFeature, FeatureDimension));
             }
 
             return features;
@@ -212,36 +207,28 @@ public class FrechetVideoDistance<T>
         // Sample frames according to strategy
         int[] frameIndices = SampleFrameIndices(totalFrames);
 
-        // Create output tensor for the clip [1, C, T, H, W]
-        var clipShape = new[] { 1, channels, FramesPerClip, height, width };
-        var clip = new Tensor<T>(clipShape);
-
-        for (int t = 0; t < FramesPerClip; t++)
+        // Gather the sampled frames into a [1, C, T, H, W] clip.
+        var engine = Engine;
+        var frames = new Tensor<int>(frameIndices, new[] { FramesPerClip });
+        Tensor<T> clip;
+        if (isNTCHW)
         {
-            int srcFrame = frameIndices[t];
-
-            for (int c = 0; c < channels; c++)
-            {
-                for (int h = 0; h < height; h++)
-                {
-                    for (int w = 0; w < width; w++)
-                    {
-                        T value;
-                        if (isNTCHW)
-                        {
-                            value = videos[videoIdx, srcFrame, c, h, w];
-                        }
-                        else
-                        {
-                            value = videos[videoIdx, c, srcFrame, h, w];
-                        }
-                        clip[0, c, t, h, w] = value;
-                    }
-                }
-            }
+            // [T, C, H, W] -> sampled [T', C, H, W] -> [C, T', H, W]
+            var video = engine.Reshape(
+                engine.TensorSlice(videos, new[] { videoIdx, 0, 0, 0, 0 }, new[] { 1, totalFrames, channels, height, width }),
+                new[] { totalFrames, channels, height, width });
+            clip = engine.TensorPermute(engine.TensorIndexSelect(video, frames, 0), new[] { 1, 0, 2, 3 });
+        }
+        else
+        {
+            // [C, T, H, W] -> sampled [C, T', H, W]
+            var video = engine.Reshape(
+                engine.TensorSlice(videos, new[] { videoIdx, 0, 0, 0, 0 }, new[] { 1, channels, totalFrames, height, width }),
+                new[] { channels, totalFrames, height, width });
+            clip = engine.TensorIndexSelect(video, frames, 1);
         }
 
-        return clip;
+        return engine.Reshape(clip, new[] { 1, channels, FramesPerClip, height, width });
     }
 
     /// <summary>
@@ -299,44 +286,20 @@ public class FrechetVideoDistance<T>
     /// <summary>
     /// Applies global average pooling to reduce spatial and temporal dimensions.
     /// </summary>
-    private T[] GlobalAveragePool(Tensor<T> tensor)
+    private Tensor<T> GlobalAveragePool(Tensor<T> tensor)
     {
         // Assuming tensor is [1, C, T, H, W] or [1, C, H, W] or [1, D]
+        var engine = Engine;
         if (tensor.Rank <= 2)
         {
-            // Already reduced, just return as array
-            var result = new T[tensor.Shape[tensor.Rank - 1]];
-            for (int i = 0; i < result.Length; i++)
-            {
-                result[i] = tensor.GetFlat(i);
-            }
-            return result;
+            // Already reduced: the first Shape[last] values
+            int featureCount = tensor.Shape[tensor.Rank - 1];
+            return engine.TensorSlice(engine.Reshape(tensor, new[] { tensor.Length }), new[] { 0 }, new[] { featureCount });
         }
 
+        // Mean over all spatial and temporal positions of each channel
         int channels = tensor.Shape[1];
-        var pooled = new T[channels];
-        int spatiotemporalSize = tensor.Length / channels;
-
-        for (int c = 0; c < channels; c++)
-        {
-            T sum = _numOps.Zero;
-            int count = 0;
-
-            // Sum over all spatial and temporal dimensions
-            for (int idx = 0; idx < tensor.Length / channels; idx++)
-            {
-                int flatIdx = c * (tensor.Length / channels) + idx;
-                if (flatIdx < tensor.Length)
-                {
-                    sum = _numOps.Add(sum, tensor.GetFlat(flatIdx));
-                    count++;
-                }
-            }
-
-            pooled[c] = count > 0 ? _numOps.Divide(sum, _numOps.FromDouble(count)) : _numOps.Zero;
-        }
-
-        return pooled;
+        return engine.ReduceMean(engine.Reshape(tensor, new[] { channels, tensor.Length / channels }), new[] { 1 }, keepDims: false);
     }
 
     /// <summary>
@@ -344,202 +307,19 @@ public class FrechetVideoDistance<T>
     /// </summary>
     private (Vector<T> mean, Matrix<T> covariance) ComputeStatistics(Matrix<T> features)
     {
-        int numSamples = features.Rows;
-        int dim = features.Columns;
-
-        if (numSamples < 2)
-        {
-            throw new ArgumentException(
-                $"Need at least 2 samples to compute covariance, got {numSamples}.",
-                nameof(features));
-        }
-
-        var mean = new Vector<T>(dim);
-        T nInv = _numOps.FromDouble(1.0 / numSamples);
-
-        // Compute mean
-        for (int j = 0; j < dim; j++)
-        {
-            T sum = _numOps.Zero;
-            for (int i = 0; i < numSamples; i++)
-            {
-                sum = _numOps.Add(sum, features[i, j]);
-            }
-            mean[j] = _numOps.Multiply(sum, nInv);
-        }
-
-        // Compute centered features
-        var centered = new Matrix<T>(numSamples, dim);
-        for (int i = 0; i < numSamples; i++)
-        {
-            for (int j = 0; j < dim; j++)
-            {
-                centered[i, j] = _numOps.Subtract(features[i, j], mean[j]);
-            }
-        }
-
-        // Compute covariance: (1/(n-1)) * centered^T * centered
-        T nMinusOneInv = _numOps.FromDouble(1.0 / (numSamples - 1));
-        var centeredT = centered.Transpose();
-        var covariance = (Matrix<T>)Engine.MatrixMultiply(centeredT, centered);
-
-        for (int i = 0; i < dim; i++)
-        {
-            for (int j = 0; j < dim; j++)
-            {
-                covariance[i, j] = _numOps.Multiply(covariance[i, j], nMinusOneInv);
-            }
-        }
-
-        return (mean, covariance);
+        return FrechetDistanceHelper<T>.ComputeStatistics(features);
     }
 
     /// <summary>
     /// Computes the Fréchet distance between two Gaussian distributions.
     /// </summary>
-    private double ComputeFrechetDistance(
+    private T ComputeFrechetDistance(
         Vector<T> mean1,
         Matrix<T> cov1,
         Vector<T> mean2,
         Matrix<T> cov2)
     {
-        var meanDiff = (Vector<T>)Engine.Subtract(mean1, mean2);
-        var meanDiffSq = Engine.DotProduct(meanDiff, meanDiff);
-
-        var trace1 = ComputeTrace(cov1);
-        var trace2 = ComputeTrace(cov2);
-        var traceCov = _numOps.Add(trace1, trace2);
-
-        var traceSqrtCovProduct = ComputeTraceSqrtCovProduct(cov1, cov2);
-
-        var fvd = _numOps.Add(meanDiffSq, traceCov);
-        fvd = _numOps.Subtract(fvd, _numOps.Multiply(_numOps.FromDouble(2.0), traceSqrtCovProduct));
-
-        return _numOps.ToDouble(fvd);
-    }
-
-    /// <summary>
-    /// Computes the trace of a matrix.
-    /// </summary>
-    private T ComputeTrace(Matrix<T> matrix)
-    {
-        var trace = _numOps.Zero;
-        int n = Math.Min(matrix.Rows, matrix.Columns);
-        for (int i = 0; i < n; i++)
-        {
-            trace = _numOps.Add(trace, matrix[i, i]);
-        }
-        return trace;
-    }
-
-    /// <summary>
-    /// Computes Tr(sqrt(cov1 * cov2)) using Newton-Schulz iteration.
-    /// </summary>
-    private T ComputeTraceSqrtCovProduct(Matrix<T> cov1, Matrix<T> cov2)
-    {
-        int n = cov1.Rows;
-
-        var product = (Matrix<T>)Engine.MatrixMultiply(cov1, cov2);
-
-        // Symmetrize the product
-        var symProduct = new Matrix<T>(n, n);
-        T half = _numOps.FromDouble(0.5);
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < n; j++)
-            {
-                symProduct[i, j] = _numOps.Multiply(
-                    _numOps.Add(product[i, j], product[j, i]),
-                    half);
-            }
-        }
-
-        // Add regularization for numerical stability
-        T eps = _numOps.FromDouble(1e-6);
-        for (int i = 0; i < n; i++)
-        {
-            symProduct[i, i] = _numOps.Add(symProduct[i, i], eps);
-        }
-
-        // Compute Frobenius norm for scaling
-        T frobNormSq = _numOps.Zero;
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < n; j++)
-            {
-                frobNormSq = _numOps.Add(frobNormSq,
-                    _numOps.Multiply(symProduct[i, j], symProduct[i, j]));
-            }
-        }
-        T frobNorm = _numOps.Sqrt(frobNormSq);
-
-        if (_numOps.LessThan(frobNorm, _numOps.FromDouble(1e-10)))
-        {
-            return _numOps.Zero;
-        }
-
-        // Scale for better numerical stability
-        T scale = _numOps.Sqrt(frobNorm);
-        T scaleInv = _numOps.Divide(_numOps.One, scale);
-
-        var A = new Matrix<T>(n, n);
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < n; j++)
-            {
-                A[i, j] = _numOps.Multiply(symProduct[i, j], scaleInv);
-            }
-        }
-
-        // Newton-Schulz iteration for matrix square root
-        var Y = Matrix<T>.CreateIdentity(n);
-        var identity = Matrix<T>.CreateIdentity(n);
-        T three = _numOps.FromDouble(3.0);
-
-        const int maxIterations = 15;
-        const double convergenceTolerance = 1e-10;
-
-        for (int iter = 0; iter < maxIterations; iter++)
-        {
-            var YY = (Matrix<T>)Engine.MatrixMultiply(Y, Y);
-            var AYY = (Matrix<T>)Engine.MatrixMultiply(A, YY);
-
-            var threeIMinusAYY = new Matrix<T>(n, n);
-            for (int i = 0; i < n; i++)
-            {
-                for (int j = 0; j < n; j++)
-                {
-                    threeIMinusAYY[i, j] = _numOps.Subtract(
-                        _numOps.Multiply(three, identity[i, j]),
-                        AYY[i, j]);
-                }
-            }
-
-            var newY = (Matrix<T>)Engine.MatrixMultiply(Y, threeIMinusAYY);
-
-            T updateNormSq = _numOps.Zero;
-            for (int i = 0; i < n; i++)
-            {
-                for (int j = 0; j < n; j++)
-                {
-                    T newVal = _numOps.Multiply(half, newY[i, j]);
-                    T diff = _numOps.Subtract(newVal, Y[i, j]);
-                    updateNormSq = _numOps.Add(updateNormSq, _numOps.Multiply(diff, diff));
-                    Y[i, j] = newVal;
-                }
-            }
-
-            if (_numOps.ToDouble(_numOps.Sqrt(updateNormSq)) < convergenceTolerance)
-            {
-                break;
-            }
-        }
-
-        var AY = (Matrix<T>)Engine.MatrixMultiply(A, Y);
-        T sqrtScale = _numOps.Sqrt(scale);
-        T traceAY = ComputeTrace(AY);
-
-        return _numOps.Multiply(sqrtScale, traceAY);
+        return FrechetDistanceHelper<T>.FrechetDistance(mean1, cov1, mean2, cov2);
     }
 }
 

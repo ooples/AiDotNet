@@ -82,30 +82,15 @@ public partial class PerceptualLoss<T> : LossFunctionBase<T>
             throw new ArgumentException("Generated and target feature counts do not match.");
         }
 
-        // If layer weights are not provided or have incorrect length, use uniform weights
+        // Calculate MSE for each feature layer (in layer order)
+        var layerLosses = Vector<T>.Wrap(
+            generatedFeatures.Zip(targetFeatures, (genFeatures, tgtFeatures) => MeanSquaredError(genFeatures, tgtFeatures)).ToArray());
+
+        // Weighted sum of the layer losses; weights that are missing or have the wrong length are uniform (1)
         Vector<T> weights = _layerWeights;
-        if (weights == null || weights.Length != generatedFeatures.Length)
-        {
-            weights = new Vector<T>(generatedFeatures.Length);
-            for (int i = 0; i < weights.Length; i++)
-            {
-                weights[i] = NumOps.One;
-            }
-        }
-
-        // Calculate weighted MSE loss for each feature layer
-        T totalLoss = NumOps.Zero;
-        for (int layer = 0; layer < generatedFeatures.Length; layer++)
-        {
-            Vector<T> genFeatures = generatedFeatures[layer];
-            Vector<T> tgtFeatures = targetFeatures[layer];
-
-            // Calculate MSE for this feature layer
-            T layerLoss = MeanSquaredError(genFeatures, tgtFeatures);
-
-            // Apply weight to this layer's loss
-            totalLoss = NumOps.Add(totalLoss, NumOps.Multiply(weights[layer], layerLoss));
-        }
+        T totalLoss = weights == null || weights.Length != generatedFeatures.Length
+            ? Engine.Sum(layerLosses)
+            : Engine.DotProduct(weights, layerLosses);
 
         return totalLoss;
     }
@@ -120,12 +105,8 @@ public partial class PerceptualLoss<T> : LossFunctionBase<T>
             throw new ArgumentException("Vectors must have the same length.");
         }
 
-        T sum = NumOps.Zero;
-        for (int i = 0; i < v1.Length; i++)
-        {
-            T diff = NumOps.Subtract(v1[i], v2[i]);
-            sum = NumOps.Add(sum, NumOps.Multiply(diff, diff));
-        }
+        var diff = Engine.Subtract(v1, v2);
+        T sum = Engine.DotProduct(diff, diff);
 
         return NumOps.Divide(sum, NumOps.FromDouble(v1.Length));
     }
