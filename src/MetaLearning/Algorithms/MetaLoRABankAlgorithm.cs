@@ -121,6 +121,7 @@ public partial class MetaLoRABankAlgorithm<T, TInput, TOutput> : MetaLearnerBase
         var metaGradients = new List<Vector<T>>();
         var baseParams = ParamModel.GetParameters();
         var moduleUsageCounts = new int[_bankSize];
+        T loadBalanceWeight = NumOps.FromDouble(_algoOptions.LoadBalanceRegularization);
 
         foreach (var task in taskBatch.Tasks)
         {
@@ -152,7 +153,7 @@ public partial class MetaLoRABankAlgorithm<T, TInput, TOutput> : MetaLearnerBase
 
             // Add load balancing regularization
             T loadBalanceLoss = ComputeLoadBalanceLoss(moduleUsageCounts, taskBatch.Tasks.Length);
-            var totalLoss = NumOps.Add(queryLoss, NumOps.Multiply(NumOps.FromDouble(_algoOptions.LoadBalanceRegularization), loadBalanceLoss));
+            var totalLoss = NumOps.Add(queryLoss, NumOps.Multiply(loadBalanceWeight, loadBalanceLoss));
             losses.Add(totalLoss);
 
             metaGradients.Add(ClipGradients(ComputeGradients(MetaModel, task.QueryInput, task.QueryOutput)));

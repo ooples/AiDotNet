@@ -106,6 +106,7 @@ public partial class InContextRLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<
         var losses = new List<T>();
         var metaGradients = new List<Vector<T>>();
         var initParams = ParamModel.GetParameters();
+        T contextWeight = NumOps.FromDouble(_algoOptions.ContextPredictionWeight);
 
         foreach (var task in taskBatch.Tasks)
         {
@@ -115,18 +116,8 @@ public partial class InContextRLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<
             ParamModel.SetParameters(currentParams);
             var queryLoss = ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput);
 
-            // Context prediction auxiliary loss: population variance of the buffered support losses
-            T ctxPredLoss = NumOps.Zero;
-            if (contextLosses.Count > 1)
-            {
-                var bufferLosses = new Vector<T>(contextLosses);
-                var centered = Engine.Subtract(bufferLosses,
-                    Engine.Fill(bufferLosses.Length, NumOps.Divide(Engine.Sum(bufferLosses), NumOps.FromDouble(bufferLosses.Length))));
-                ctxPredLoss = NumOps.Divide(Engine.DotProduct(centered, centered), NumOps.FromDouble(bufferLosses.Length));
-            }
-
-            var totalLoss = NumOps.Add(queryLoss,
-                NumOps.Multiply(NumOps.FromDouble(_algoOptions.ContextPredictionWeight), ctxPredLoss));
+            // Context prediction auxiliary loss
+            var totalLoss = NumOps.Add(queryLoss, NumOps.Multiply(contextWeight, BufferVariance(contextLosses)));
             losses.Add(totalLoss);
             metaGradients.Add(ClipGradients(ComputeGradients(MetaModel, task.QueryInput, task.QueryOutput)));
         }
@@ -184,6 +175,17 @@ public partial class InContextRLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<
         }
 
         return currentParams;
+    }
+
+    /// <summary>Population variance of the buffered support losses; 0 for fewer than two.</summary>
+    private T BufferVariance(List<T> contextLosses)
+    {
+        if (contextLosses.Count <= 1) return NumOps.Zero;
+
+        var bufferLosses = new Vector<T>(contextLosses);
+        T count = NumOps.FromDouble(bufferLosses.Length);
+        var centered = Engine.Subtract(bufferLosses, Engine.Fill(bufferLosses.Length, NumOps.Divide(Engine.Sum(bufferLosses), count)));
+        return NumOps.Divide(Engine.DotProduct(centered, centered), count);
     }
 
     /// <summary>tanh(W g[0..compressedDim)) with W stored [contextDim, compressedDim].</summary>

@@ -322,23 +322,32 @@ public partial class MetaDiffAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, 
         {
             int t = step;
             var predictedNoise = PredictNoise(wt, taskCondition, t);
-
-            T sqrtAlpha = NumOps.Sqrt(_alphas[t]);
-            T betaOverSqrt = NumOps.Divide(_betas[t],
-                NumOps.Sqrt(NumOps.Add(NumOps.Subtract(NumOps.One, _alphasCumprod[t]), NumOps.FromDouble(1e-10))));
-
-            wt = Engine.Divide(Engine.Subtract(wt, Engine.Multiply(predictedNoise, betaOverSqrt)), sqrtAlpha);
-
-            // Add noise (except for t=0)
-            if (t > 0)
-            {
-                T sigma = NumOps.Sqrt(_betas[t]);
-                var z = SampleGaussianArray(_compressedDim);
-                wt = Engine.Add(wt, Engine.Multiply(z, sigma));
-            }
+            wt = ReverseStep(wt, predictedNoise, t);
         }
 
         return wt;
+    }
+
+    /// <summary>
+    /// (w_t - beta_t / sqrt(1 - alphaBar_t + 1e-10) * eps_hat) / sqrt(alpha_t), plus sqrt(beta_t) z for t &gt; 0.
+    /// </summary>
+    private Vector<T> ReverseStep(Vector<T> wt, Vector<T> predictedNoise, int t)
+    {
+        T sqrtAlpha = NumOps.Sqrt(_alphas[t]);
+        T betaOverSqrt = NumOps.Divide(_betas[t],
+            NumOps.Sqrt(NumOps.Add(NumOps.Subtract(NumOps.One, _alphasCumprod[t]), NumOps.FromDouble(1e-10))));
+
+        var next = Engine.Divide(Engine.Subtract(wt, Engine.Multiply(predictedNoise, betaOverSqrt)), sqrtAlpha);
+
+        // Add noise (except for t=0)
+        if (t > 0)
+        {
+            T sigma = NumOps.Sqrt(_betas[t]);
+            var z = SampleGaussianArray(_compressedDim);
+            next = Engine.Add(next, Engine.Multiply(z, sigma));
+        }
+
+        return next;
     }
 
     /// <summary>
@@ -360,9 +369,9 @@ public partial class MetaDiffAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, 
     /// <summary>Standard-normal draws, one SampleNormal per entry in order (the seeded stream is unchanged).</summary>
     private Vector<T> SampleGaussianArray(int length)
     {
+        // SampleNormal() * 1.0 is exactly SampleNormal(), so the draws match master's one per entry in order.
         var arr = new Vector<T>(length);
-        for (int i = 0; i < length; i++)
-            arr[i] = NumOps.FromDouble(SampleNormal());
+        InitGaussian(arr, 1.0);
         return arr;
     }
 

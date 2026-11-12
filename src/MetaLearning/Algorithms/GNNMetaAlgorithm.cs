@@ -724,21 +724,21 @@ public partial class GNNMetaAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, T
         int sampleCount = Math.Min(_messagePassingWeights.Length, 50);
         // Scale factor for unbiased gradient estimation when subsampling
         double scaleFactor = (double)_messagePassingWeights.Length / sampleCount;
+        T stepSize = NumOps.FromDouble(_gnnOptions.OuterLearningRate * scaleFactor);
 
         for (int i = 0; i < sampleCount; i++)
         {
             int idx = (i * _messagePassingWeights.Length / sampleCount) % _messagePassingWeights.Length;
 
             T original = _messagePassingWeights[idx];
-            _messagePassingWeights[idx] = NumOps.Add(original, NumOps.FromDouble(epsilon));
+            _messagePassingWeights[idx] = NumOps.Add(original, epsilonT);
 
             // Recompute loss with perturbed weight
             T newLoss = ComputeBatchLoss(taskBatch);
             T grad = NumOps.Divide(NumOps.Subtract(newLoss, currentLoss), epsilonT);
 
             // Apply scaled gradient update
-            _messagePassingWeights[idx] = NumOps.Subtract(original,
-                NumOps.Multiply(NumOps.FromDouble(_gnnOptions.OuterLearningRate), NumOps.Multiply(grad, NumOps.FromDouble(scaleFactor))));
+            _messagePassingWeights[idx] = NumOps.Subtract(original, NumOps.Multiply(stepSize, grad));
         }
     }
 
