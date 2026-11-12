@@ -95,22 +95,22 @@ public class WhittakerShannonInterpolation<T> : IInterpolation<T>
     /// </remarks>
     public T Interpolate(T x)
     {
-        T result = _numOps.Zero;
-
-        for (int i = 0; i < _x.Length; i++)
+        if (_x.Length == 0)
         {
-            T t = _numOps.Subtract(x, _x[i]);
-            T sincValue = Sinc(t);
-            result = _numOps.Add(result, _numOps.Multiply(_y[i], sincValue));
+            return _numOps.Zero;
         }
 
-        return result;
+        // sum over i of y[i] * sinc(x - x[i])
+        var engine = AiDotNetEngine.Current;
+        Tensor<T> sincValues = Sinc(engine.ScalarMinusTensor(x, _x.AsTensor()));
+
+        return engine.TensorSum(engine.TensorMultiply(_y.AsTensor(), sincValues));
     }
 
     /// <summary>
     /// Calculates the sinc function value for a given input.
     /// </summary>
-    /// <param name="x">The input value.</param>
+    /// <param name="x">The input values.</param>
     /// <returns>The sinc function value.</returns>
     /// <remarks>
     /// <para>
@@ -126,13 +126,21 @@ public class WhittakerShannonInterpolation<T> : IInterpolation<T>
     /// final result through its own sinc function.
     /// </para>
     /// </remarks>
-    private T Sinc(T x)
+    private Tensor<T> Sinc(Tensor<T> x)
     {
-        if (_numOps.Equals(x, _numOps.Zero))
-            return _numOps.One;
+        // sin(pi x) / (pi x), with the removable singularity at x = 0 filled by 1
+        var engine = AiDotNetEngine.Current;
+        Tensor<T> atZero = engine.TensorEquals(x, _numOps.Zero);
+        Tensor<T> piX = engine.TensorMultiplyScalar(x, MathHelper.Pi<T>());
 
-        T piX = _numOps.Multiply(MathHelper.Pi<T>(), x);
-        return _numOps.Divide(MathHelper.Sin(piX), piX);
+        // piX is exactly 0 wherever atZero is 1, so adding the mask only replaces the zero denominators
+        // (a decimal 0 / 0 throws); the mask overrides those entries below
+        Tensor<T> ratio = engine.TensorDivide(engine.TensorSin(piX), engine.TensorAdd(piX, atZero));
+
+        return engine.TensorWhere(
+            atZero,
+            Tensor<T>.CreateDefault(new[] { x.Length }, _numOps.One),
+            ratio);
     }
 
     /// <summary>
@@ -165,15 +173,16 @@ public class WhittakerShannonInterpolation<T> : IInterpolation<T>
         T interval = _numOps.Subtract(_x[1], _x[0]);
         T tolerance = _numOps.Multiply(interval, _numOps.FromDouble(1e-6));
 
-        for (int i = 2; i < _x.Length; i++)
-        {
-            T currentInterval = _numOps.Subtract(_x[i], _x[i - 1]);
-            if (_numOps.GreaterThan(_numOps.Abs(_numOps.Subtract(currentInterval, interval)), tolerance))
-            {
-                return false;
-            }
-        }
+        // Every later spacing x[i] - x[i-1] (i >= 2) must stay within the tolerance of the first one
+        var engine = AiDotNetEngine.Current;
+        Tensor<T> xs = _x.AsTensor();
+        int count = _x.Length - 2;
+        Tensor<T> spacings = engine.TensorSubtract(
+            engine.TensorSlice(xs, new[] { 2 }, new[] { count }),
+            engine.TensorSlice(xs, new[] { 1 }, new[] { count }));
+        Tensor<T> deviations = engine.TensorAbs(engine.TensorSubtractScalar(spacings, interval));
+        Tensor<T> outside = engine.TensorGreaterThan(deviations, tolerance);
 
-        return true;
+        return !_numOps.GreaterThan(engine.TensorSum(outside), _numOps.Zero);
     }
 }

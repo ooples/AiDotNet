@@ -22284,6 +22284,12 @@ AiDotNet.NeuralNetworks.CreditAssignment.SampledTiedReadoutLocalErrorCreditRule<
 AiDotNet.NeuralNetworks.CreditAssignment.SampledTiedReadoutLocalErrorCreditRule<T>.UseDepthProgressiveWeight.get -> bool
 static AiDotNet.NeuralNetworks.CreditAssignment.CreditRules.TiedReadoutLocalError<T>(int readoutLayerCount = 2, double localWeight = 1, bool detachReadoutOnHiddenLayers = false, int layerStride = 1, bool useDepthProgressiveWeight = false) -> AiDotNet.Interfaces.ICreditRule<T>!
 static AiDotNet.NeuralNetworks.CreditAssignment.CreditRules.SampledTiedReadoutLocalError<T>(int readoutLayerCount = 2, int maxCandidates = 1024, double localWeight = 1, bool detachReadoutOnHiddenLayers = true, int layerStride = 1, bool useDepthProgressiveWeight = false, int? seed = null) -> AiDotNet.Interfaces.ICreditRule<T>!
+*REMOVED*AiDotNet.Interpolation.SincInterpolation<T>.SincInterpolation(System.Collections.Generic.IEnumerable<double>! x, System.Collections.Generic.IEnumerable<double>! y, double cutoffFrequency = 1) -> void
+*REMOVED*AiDotNet.Interpolation.TrigonometricInterpolation<T>.TrigonometricInterpolation(System.Collections.Generic.IEnumerable<double>! x, System.Collections.Generic.IEnumerable<double>! y, double? customPeriod = null) -> void
+AiDotNet.Interpolation.SincInterpolation<T>.SincInterpolation(AiDotNet.Tensors.LinearAlgebra.Vector<T>! x, AiDotNet.Tensors.LinearAlgebra.Vector<T>! y) -> void
+AiDotNet.Interpolation.SincInterpolation<T>.SincInterpolation(AiDotNet.Tensors.LinearAlgebra.Vector<T>! x, AiDotNet.Tensors.LinearAlgebra.Vector<T>! y, T cutoffFrequency) -> void
+AiDotNet.Interpolation.TrigonometricInterpolation<T>.TrigonometricInterpolation(AiDotNet.Tensors.LinearAlgebra.Vector<T>! x, AiDotNet.Tensors.LinearAlgebra.Vector<T>! y) -> void
+AiDotNet.Interpolation.TrigonometricInterpolation<T>.TrigonometricInterpolation(AiDotNet.Tensors.LinearAlgebra.Vector<T>! x, AiDotNet.Tensors.LinearAlgebra.Vector<T>! y, T customPeriod) -> void
 AiDotNet.Models.Options.GradientBasedOptimizerOptions<T, TInput, TOutput>.RegularizationOrder.get -> AiDotNet.Models.Options.RegularizationOrder
 AiDotNet.Models.Options.GradientBasedOptimizerOptions<T, TInput, TOutput>.RegularizationOrder.set -> void
 AiDotNet.Models.Options.RegularizationOrder
