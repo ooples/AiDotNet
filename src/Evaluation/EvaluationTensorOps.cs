@@ -410,6 +410,50 @@ internal static class EvaluationTensorOps<T>
     }
 
     /// <summary>
+    /// Index of the first element equal to <paramref name="target"/> under <c>Compare</c> semantics (NaN equals
+    /// NaN), or -1 when none matches.
+    /// </summary>
+    internal static int FirstIndexOf(Tensor<T> values, T target)
+    {
+        using var noGrad = new NoGradScope<T>();
+        var engine = AiDotNetEngine.Current;
+        var matches = EqualMask(values, target);
+        // Elements before the first match have a running match count of zero.
+        int leading = Count(EqualMask(engine.TensorCumSum(matches, 0), MathHelper.GetNumericOperations<T>().Zero));
+        return leading == values.Length ? -1 : leading;
+    }
+
+    /// <summary>
+    /// The index a left-to-right scan keeps when it replaces the best value only on a strict
+    /// <c>GreaterThan</c> (or <c>LessThan</c>) comparison: NaN never wins and never loses, so a NaN first element
+    /// stays best.
+    /// </summary>
+    internal static int StrictScanBestIndex(Tensor<T> values, bool highest)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        if (numOps.IsNaN(values[0])) return 0;
+        using var noGrad = new NoGradScope<T>();
+        var engine = AiDotNetEngine.Current;
+        var finite = Select(values, Not(NanMask(values)));
+        return FirstIndexOf(values, highest ? engine.TensorMaxValue(finite) : engine.TensorMinValue(finite));
+    }
+
+    /// <summary>
+    /// The index a left-to-right scan keeps when it replaces the best value only when <c>Compare</c> (CompareTo
+    /// order, NaN lowest) is strictly greater (or strictly less).
+    /// </summary>
+    internal static int CompareScanBestIndex(Tensor<T> values, bool highest)
+    {
+        using var noGrad = new NoGradScope<T>();
+        var engine = AiDotNetEngine.Current;
+        var nan = MathHelper.GetNumericOperations<T>().FromDouble(double.NaN);
+        var finite = Select(values, Not(NanMask(values)));
+        if (finite.Length == 0) return 0;
+        if (highest) return FirstIndexOf(values, engine.TensorMaxValue(finite));
+        return finite.Length < values.Length ? FirstIndexOf(values, nan) : FirstIndexOf(values, engine.TensorMinValue(finite));
+    }
+
+    /// <summary>
     /// Sums pooled values per group (torch <c>index_add</c> into a zero vector of length <paramref name="groupCount"/>).
     /// </summary>
     internal static Tensor<T> GroupSums(Tensor<T> pooled, Tensor<int> groupIndex, int groupCount)
