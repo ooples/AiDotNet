@@ -24,14 +24,8 @@ internal static class TokenSampler<T>
     {
         if (logits is null) throw new ArgumentNullException(nameof(logits));
         if (logits.Length == 0) throw new ArgumentException("logits must be non-empty.", nameof(logits));
-        int best = 0;
-        double bestVal = NumOps.ToDouble(logits[0]);
-        for (int i = 1; i < logits.Length; i++)
-        {
-            double v = NumOps.ToDouble(logits[i]);
-            if (v > bestVal) { bestVal = v; best = i; }
-        }
-        return best;
+        // The first strictly largest logit (compared as double); a NaN is never taken after index 0.
+        return AiDotNetEngine.Current.TensorArgMax(Tensor<T>.FromVector(logits), 0)[0];
     }
 
     /// <summary>
@@ -91,8 +85,10 @@ internal static class TokenSampler<T>
         SamplingOptions options)
     {
         int n = logits.Length;
-        var scaled = new double[n];
-        for (int i = 0; i < n; i++) scaled[i] = NumOps.ToDouble(logits[i]) / options.Temperature;
+        var scaled = n == 0
+            ? Array.Empty<double>()
+            : AiDotNetEngine.Current.TensorDivideScalar(Tensor<T>.FromVector(logits).Cast<double>(), options.Temperature)
+                .ToVector().ToArray();
 
         var keep = new bool[n];
         for (int i = 0; i < n; i++) keep[i] = true;
