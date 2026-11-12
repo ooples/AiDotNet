@@ -294,10 +294,9 @@ public partial class FireRedTTS<T> : TtsModelBase<T>, ICodecTts<T>
 
     private int[] TextIds(Tensor<T> tensor, string name)
     {
-        var ids = new int[tensor.Length];
+        var ids = RoundedIds(tensor);
         for (int i = 0; i < ids.Length; i++)
         {
-            ids[i] = (int)Math.Round(Ops.ToDouble(tensor.GetFlat(i)));
             if (ids[i] < 0 || ids[i] >= TextTokens) throw new ArgumentOutOfRangeException(name, $"Text token ids lie in [0, {TextTokens}).");
         }
         return ids;
@@ -390,9 +389,7 @@ public partial class FireRedTTS<T> : TtsModelBase<T>, ICodecTts<T>
     public Tensor<T> EncodeToTokens(Tensor<T> audio)
     {
         var ids = EncodeSemanticTokens(audio, _options.SampleRate);
-        var tokens = new Tensor<T>(new[] { ids.Length, 1 });
-        for (int i = 0; i < ids.Length; i++) tokens[i, 0] = Ops.FromDouble(ids[i]);
-        return tokens;
+        return Engine.Reshape(IdTensor(ids), new[] { ids.Length, 1 });
     }
 
     /// <inheritdoc />
@@ -404,7 +401,8 @@ public partial class FireRedTTS<T> : TtsModelBase<T>, ICodecTts<T>
         if (tokens is null) throw new ArgumentNullException(nameof(tokens));
         if (!HasPaperLayers) throw NotNative();
         if (tokens.Rank == 2 && tokens.Shape[1] != 1) throw new ArgumentException("Semantic tokens are [frames, 1].", nameof(tokens));
-        var ids = Enumerable.Range(0, tokens.Shape[0]).Select(i => (int)Math.Round(Ops.ToDouble(tokens.GetFlat(i)))).ToArray();
+        var ids = RoundedIds(tokens);
+
         var prompt = Prompt(RequireVoice());
         using var _ = new NoGradScope<T>();
         var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(_options.SamplingSeed);
