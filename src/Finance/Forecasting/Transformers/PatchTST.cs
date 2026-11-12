@@ -1346,17 +1346,17 @@ public partial class PatchTST<T> : ForecastingModelBase<T>
     private Tensor<T> ApplyRevIN(Tensor<T> input, bool normalize)
     {
         var result = new Tensor<T>(input._shape);
-        T epsilon = NumOps.FromDouble(1e-5);
 
         if (normalize)
         {
             _instanceMean = CalculateInstanceMean(input);
             _instanceStd = CalculateInstanceStd(input, _instanceMean);
 
-            // (x - mean[i % F]) / (std[i % F] + eps) over the full feature rows and the partial tail row.
+            // (x - mean[i % F]) / stdev[i % F] over the full feature rows and the partial tail row, where
+            // stdev = sqrt(var + eps) as in the RevIN reference, so denormalizing by stdev is its exact inverse.
             using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
             var (rows, tail) = FeatureRows(input);
-            var denominator = Engine.TensorAddScalar(_instanceStd, epsilon);
+            var denominator = _instanceStd;
             var rowShape = rows._shape;
             var normalizedRows = Engine.TensorDivide(
                 Engine.TensorSubtract(rows, Engine.TensorBroadcastTo(Engine.Reshape(_instanceMean, new[] { 1, NumFeatures }), rowShape)),
@@ -1407,13 +1407,13 @@ public partial class PatchTST<T> : ForecastingModelBase<T>
     /// </remarks>
     private Tensor<T> CalculateInstanceMean(Tensor<T> input)
     {
-        int samplesPerFeature = input.Length / NumFeatures;
-
-        // Element i belongs to feature i % F: sum the full rows, then the partial tail row.
+        // Element i belongs to feature i % F: sum the full rows and the partial tail row, then divide by
+        // the number of values each feature actually has (one more for the features the tail reaches).
         using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        var counts = FeatureSampleCounts(input.Length);
         var (rows, tail) = FeatureRows(input);
         var sum = AddFeatureTail(Engine.ReduceSum(rows, new[] { 0 }, false), tail);
-        return Engine.TensorDivideScalar(sum, NumOps.FromDouble(samplesPerFeature));
+        return Engine.TensorDivide(sum, counts);
     }
 
     /// <summary>
@@ -1434,15 +1434,15 @@ public partial class PatchTST<T> : ForecastingModelBase<T>
     /// centered at 0 with values mostly between -2 and +2.
     /// </para>
     /// <para>
-    /// The formula is: std = sqrt(sum((x - mean)²) / n)
+    /// The formula is: std = sqrt(sum((x - mean)²) / n + eps), with n the feature's own sample count
     /// </para>
     /// </remarks>
     private Tensor<T> CalculateInstanceStd(Tensor<T> input, Tensor<T> mean)
     {
-        int samplesPerFeature = input.Length / NumFeatures;
-
-        // Population std per feature (element i belongs to feature i % F), full rows then the tail row.
+        // RevIN (Kim et al. 2022) and the PatchTST reference: stdev = sqrt(population variance + eps) per
+        // feature, where element i belongs to feature i % F and each feature divides by its own count.
         using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        var counts = FeatureSampleCounts(input.Length);
         var (rows, tail) = FeatureRows(input);
         var centered = Engine.TensorSubtract(rows, Engine.TensorBroadcastTo(Engine.Reshape(mean, new[] { 1, NumFeatures }), rows._shape));
         Tensor<T>? centeredTail = tail is null
@@ -1451,7 +1451,28 @@ public partial class PatchTST<T> : ForecastingModelBase<T>
         var sumSq = AddFeatureTail(
             Engine.ReduceSum(Engine.TensorMultiply(centered, centered), new[] { 0 }, false),
             centeredTail is null ? null : Engine.TensorMultiply(centeredTail, centeredTail));
-        return Engine.TensorSqrt(Engine.TensorDivideScalar(sumSq, NumOps.FromDouble(samplesPerFeature)));
+        return Engine.TensorSqrt(Engine.TensorAddScalar(Engine.TensorDivide(sumSq, counts), NumOps.FromDouble(RevINEpsilon)));
+    }
+
+    /// <summary>Added to each feature's variance before the square root (the RevIN reference's eps).</summary>
+    private const double RevINEpsilon = 1e-5;
+
+    /// <summary>
+    /// How many values each feature has in a flat input of the given length: the full rows, plus one for
+    /// the features 0..tail-1 that the trailing partial row reaches.
+    /// </summary>
+    private Tensor<T> FeatureSampleCounts(int length)
+    {
+        int rowCount = length / NumFeatures;
+        if (rowCount == 0)
+            throw new ArgumentException(
+                $"RevIN needs at least one time step for every feature: the input has {length} values for {NumFeatures} features.");
+        var counts = Engine.TensorFullLike(new Tensor<T>(new[] { NumFeatures }), NumOps.FromDouble(rowCount));
+        int tailLength = length - rowCount * NumFeatures;
+        if (tailLength == 0)
+            return counts;
+        var ones = Engine.TensorFullLike(new Tensor<T>(new[] { tailLength }), NumOps.One);
+        return AddFeatureTail(counts, ones);
     }
 
     /// <summary>The flat input as full [rows, F] feature rows plus the trailing partial row, if any.</summary>
