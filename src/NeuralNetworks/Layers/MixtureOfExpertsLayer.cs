@@ -164,6 +164,15 @@ public partial class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLaye
     /// </remarks>
     private readonly ILayer<T> _router;
 
+    /// <summary>How the training-time gating noise is scaled (Shazeer et al. 2017, eq. 4 by default).</summary>
+    private readonly MixtureOfExpertsGatingNoise _gatingNoise;
+
+    /// <summary>
+    /// <c>W_noise</c> of noisy top-k gating: a bias-free projection to one noise logit per expert,
+    /// zero-initialized as in the paper. Null unless <see cref="MixtureOfExpertsGatingNoise.LearnedNoiseWeights"/>.
+    /// </summary>
+    private readonly DenseLayer<T>? _noiseProjection;
+
     /// <summary>
     /// The number of top experts to activate for each input (0 means use all experts).
     /// </summary>
@@ -347,7 +356,8 @@ public partial class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLaye
     /// typically have trainable parameters.
     /// </para>
     /// </remarks>
-    public override bool SupportsTraining => _router.SupportsTraining || _experts.Any(e => e.SupportsTraining);
+    public override bool SupportsTraining => _router.SupportsTraining || _experts.Any(e => e.SupportsTraining)
+        || (_noiseProjection?.SupportsTraining ?? false);
 
     /// <summary>
     /// Gets the number of experts in this MoE layer.
@@ -379,6 +389,7 @@ public partial class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLaye
         var metadata = base.GetMetadata();
         metadata["NumExperts"] = _experts.Count.ToString();
         metadata["TopK"] = _topK.ToString();
+        metadata["GatingNoise"] = _gatingNoise.ToString();
         return metadata;
     }
 
@@ -394,6 +405,12 @@ public partial class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLaye
     /// <param name="outputShape">The shape of output tensors.</param>
     /// <param name="topK">Number of experts to activate per input (0 = use all experts). Default is 0.</param>
     /// <param name="activationFunction">Optional activation function to apply after combining expert outputs.</param>
+    /// <param name="useLoadBalancing">Whether to add the load-balancing auxiliary loss.</param>
+    /// <param name="loadBalancingWeight">Weight of the load-balancing loss (0.01 when omitted).</param>
+    /// <param name="gatingNoise">
+    /// How the training-time gating noise is scaled. Defaults to learned <c>W_noise</c> weights
+    /// (Shazeer et al. 2017, eq. 4).
+    /// </param>
     /// <exception cref="ArgumentException">Thrown when the experts list is empty or when topK is invalid.</exception>
     /// <remarks>
     /// <para>
@@ -442,7 +459,8 @@ public partial class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLaye
         int topK = 0,
         IActivationFunction<T>? activationFunction = null,
         bool useLoadBalancing = false,
-        T? loadBalancingWeight = default)
+        T? loadBalancingWeight = default,
+        MixtureOfExpertsGatingNoise gatingNoise = MixtureOfExpertsGatingNoise.LearnedNoiseWeights)
         : base(inputShape, outputShape, activationFunction ?? new IdentityActivation<T>())
     {
         _useLoadBalancing = useLoadBalancing;
@@ -466,6 +484,7 @@ public partial class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLaye
         _experts = experts;
         _router = router;
         _topK = topK;
+        _gatingNoise = gatingNoise;
         _useAuxiliaryLoss = useLoadBalancing;
         _auxiliaryLossWeight = loadBalancingWeight ?? NumOps.FromDouble(0.01); // Default to 0.01
 
@@ -473,6 +492,17 @@ public partial class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLaye
         foreach (var expert in _experts)
         {
             RegisterSubLayer(expert);
+        }
+
+        // Registered after the experts so the flat parameter layout of router and experts is unchanged.
+        if (gatingNoise == MixtureOfExpertsGatingNoise.LearnedNoiseWeights)
+        {
+            _noiseProjection = new DenseLayer<T>(
+                experts.Count,
+                new IdentityActivation<T>() as IActivationFunction<T>,
+                new ZeroInitializationStrategy<T>(),
+                BiasMode.Never);
+            RegisterSubLayer(_noiseProjection);
         }
 
         // Eagerly resolve lazy sub-layers using the known input shape so
@@ -485,6 +515,7 @@ public partial class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLaye
             {
                 ResolveSubLayer(expert, inputShape);
             }
+            if (_noiseProjection is not null) ResolveSubLayer(_noiseProjection, inputShape);
         }
     }
 
@@ -553,6 +584,7 @@ public partial class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLaye
         {
             ResolveSubLayer(expert, resolvedInputShape);
         }
+        if (_noiseProjection is not null) ResolveSubLayer(_noiseProjection, resolvedInputShape);
 
         // Output shape inherits from the first expert's resolved output
         // (all experts share the same output shape by MoE contract). Use
@@ -667,8 +699,10 @@ public partial class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLaye
         // During inference, use clean logits for deterministic routing.
         if (IsTrainingMode)
         {
-            // Softplus(x) = log(1 + exp(x)) — noise scale
-            var expLogits = Engine.TensorExp(routingLogits);
+            // Softplus(x) = log(1 + exp(x)) — noise scale. The paper's noise logits are x·W_noise; the
+            // legacy option reuses the router logits instead.
+            var noiseLogits = _noiseProjection is not null ? _noiseProjection.Forward(input2D) : routingLogits;
+            var expLogits = Engine.TensorExp(noiseLogits);
             var onePlusExp = Engine.TensorAddScalar(expLogits, NumOps.One);
             var noiseScale = Engine.TensorLog(onePlusExp);
 
@@ -800,6 +834,11 @@ public partial class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLaye
             _router.UpdateParameters(learningRate);
         }
 
+        if (_noiseProjection is not null && _noiseProjection.SupportsTraining)
+        {
+            _noiseProjection.UpdateParameters(learningRate);
+        }
+
         // Update only experts that were active during the last forward/backward pass
         for (int i = 0; i < _experts.Count; i++)
         {
@@ -814,6 +853,7 @@ public partial class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLaye
     public override void ClearGradients()
     {
         _router.ClearGradients();
+        _noiseProjection?.ClearGradients();
         foreach (var expert in _experts)
             expert.ClearGradients();
     }
@@ -854,6 +894,7 @@ public partial class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLaye
 
         // Reset router state
         _router.ResetState();
+        _noiseProjection?.ResetState();
 
         // Reset all expert states
         foreach (var expert in _experts)

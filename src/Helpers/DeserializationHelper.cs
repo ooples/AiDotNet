@@ -2554,7 +2554,14 @@ public static class DeserializationHelper
                 experts.Add(new DenseLayer<T>(outputSize, new IdentityActivation<T>() as IActivationFunction<T>));
 
             var router = new DenseLayer<T>(numExperts, new SoftmaxActivation<T>() as IActivationFunction<T>);
-            instance = new MixtureOfExpertsLayer<T>(experts, router, inputShape, outputShape, topK);
+            // Files written before the option existed carry no W_noise weights: restore them with the
+            // router-logit noise they were trained with.
+            var gatingNoise = Enum.TryParse<MixtureOfExpertsGatingNoise>(
+                TryGetString(additionalParams, "GatingNoise"), out var parsedNoise)
+                ? parsedNoise
+                : MixtureOfExpertsGatingNoise.SoftplusOfRouterLogits;
+            instance = new MixtureOfExpertsLayer<T>(experts, router, inputShape, outputShape, topK,
+                gatingNoise: gatingNoise);
         }
         else if (genericDef == typeof(ReservoirLayer<>))
         {
