@@ -189,10 +189,10 @@ internal static class EvaluationTensorOps<T>
         var engine = AiDotNetEngine.Current;
         int n = labels.Length;
         var shape = new[] { n, numClasses };
-        var rounded = engine.TensorBroadcastTo(engine.Reshape(engine.TensorRound(labels), new[] { n, 1 }), shape);
+        var rounded = engine.TensorBroadcastTo(engine.Reshape(engine.TensorRound(labels.Cast<double>()), new[] { n, 1 }), shape);
         var classIndex = engine.TensorBroadcastTo(
-            engine.Reshape(engine.TensorArange<T>(0, numClasses, 1), new[] { 1, numClasses }), shape);
-        return engine.TensorEquals(rounded, classIndex);
+            engine.Reshape(engine.TensorArange<double>(0, numClasses, 1), new[] { 1, numClasses }), shape);
+        return engine.TensorEquals(rounded, classIndex).Cast<T>();
     }
 
     /// <summary>
@@ -229,8 +229,8 @@ internal static class EvaluationTensorOps<T>
         // A value's ties occupy sorted positions [below, atOrBelow); their mean 1-based rank is (below + atOrBelow + 1) / 2.
         var below = engine.TensorSearchSorted(sorted, values, false);
         var atOrBelow = engine.TensorSearchSorted(sorted, values, true);
-        var doubled = engine.TensorAddScalar(engine.TensorAdd(below.Cast<T>(), atOrBelow.Cast<T>()), NumOps.One);
-        return engine.TensorMultiplyScalar(doubled, NumOps.FromDouble(0.5));
+        var doubled = engine.TensorAddScalar(engine.TensorAdd(below.Cast<double>(), atOrBelow.Cast<double>()), 1.0);
+        return engine.TensorMultiplyScalar(doubled, 0.5).Cast<T>();
     }
 
     /// <summary>The entries of <paramref name="values"/> where the 1/0 <paramref name="mask"/> is 1, in order.</summary>
@@ -246,25 +246,25 @@ internal static class EvaluationTensorOps<T>
     /// run, a run being consecutive sorted values whose neighbouring gaps are below <paramref name="tolerance"/>.
     /// </summary>
     /// <returns>The sorted values, the source index of each sorted position, and the rank of each sorted position.</returns>
-    internal static (Tensor<T> Sorted, Tensor<int> Order, Tensor<T> Ranks) SortedRunRanks(Tensor<T> values, T tolerance)
+    internal static (Tensor<T> Sorted, Tensor<int> Order, Tensor<T> Ranks) SortedRunRanks(Tensor<T> values, double tolerance)
     {
         using var noGrad = new NoGradScope<T>();
         var engine = AiDotNetEngine.Current;
         var (sorted, order) = engine.TensorSort(values);
-        var runStart = new Tensor<T>(new[] { 1 });
+        var runStart = new Tensor<double>(new[] { 1 });
         if (values.Length > 1)
         {
             // A gap that is not below the tolerance (NaN included) starts a new run.
-            var gaps = engine.TensorAbs(engine.TensorDiff(sorted, 1, 0));
-            runStart = engine.TensorConcatenate(new[] { runStart, Not(engine.TensorLessThan(gaps, tolerance)) }, 0);
+            var gaps = engine.TensorAbs(engine.TensorDiff(sorted.Cast<double>(), 1, 0));
+            runStart = engine.TensorConcatenate(new[] { runStart, EvaluationTensorOps<double>.Not(engine.TensorLessThan(gaps, tolerance)) }, 0);
         }
 
         // Run ids are non-decreasing, so a run occupies sorted positions [below, atOrBelow) of its id.
         var runId = engine.TensorCumSum(runStart, 0);
         var below = engine.TensorSearchSorted(runId, runId, false);
         var atOrBelow = engine.TensorSearchSorted(runId, runId, true);
-        var doubled = engine.TensorAddScalar(engine.TensorAdd(below.Cast<T>(), atOrBelow.Cast<T>()), NumOps.One);
-        return (sorted, order, engine.TensorMultiplyScalar(doubled, NumOps.FromDouble(0.5)));
+        var doubled = engine.TensorAddScalar(engine.TensorAdd(below.Cast<double>(), atOrBelow.Cast<double>()), 1.0);
+        return (sorted, order, engine.TensorMultiplyScalar(doubled, 0.5).Cast<T>());
     }
 
     /// <summary>Stacks equal-length rows into a [rows.Length, length] tensor.</summary>
@@ -285,27 +285,27 @@ internal static class EvaluationTensorOps<T>
     /// sorted values whose neighbouring gaps are below <paramref name="tolerance"/> sharing its mean rank.
     /// </summary>
     /// <returns>The [n, k] ranks in the matrix's own positions.</returns>
-    internal static Tensor<T> RowRanksDescending(Tensor<T> matrix, T tolerance)
+    internal static Tensor<T> RowRanksDescending(Tensor<T> matrix, double tolerance)
     {
         using var noGrad = new NoGradScope<T>();
         var engine = AiDotNetEngine.Current;
         int rows = matrix.Shape[0];
         int columns = matrix.Shape[1];
         var (sorted, order) = engine.TensorSort(matrix, 1, true);
-        var runStart = new Tensor<T>(new[] { rows, 1 });
+        var runStart = new Tensor<double>(new[] { rows, 1 });
         if (columns > 1)
         {
             // A gap that is not below the tolerance (NaN included) starts a new run.
-            var gaps = engine.TensorAbs(engine.TensorDiff(sorted, 1, 1));
-            runStart = engine.TensorConcatenate(new[] { runStart, Not(engine.TensorLessThan(gaps, tolerance)) }, 1);
+            var gaps = engine.TensorAbs(engine.TensorDiff(sorted.Cast<double>(), 1, 1));
+            runStart = engine.TensorConcatenate(new[] { runStart, EvaluationTensorOps<double>.Not(engine.TensorLessThan(gaps, tolerance)) }, 1);
         }
 
         // Per row, run ids are non-decreasing, so a run occupies sorted positions [below, atOrBelow) of its id.
         var runId = engine.TensorCumSum(runStart, 1);
         var below = engine.TensorSearchSorted(runId, runId, false);
         var atOrBelow = engine.TensorSearchSorted(runId, runId, true);
-        var doubled = engine.TensorAddScalar(engine.TensorAdd(below.Cast<T>(), atOrBelow.Cast<T>()), NumOps.One);
-        var sortedRanks = engine.TensorMultiplyScalar(doubled, NumOps.FromDouble(0.5));
+        var doubled = engine.TensorAddScalar(engine.TensorAdd(below.Cast<double>(), atOrBelow.Cast<double>()), 1.0);
+        var sortedRanks = engine.TensorMultiplyScalar(doubled, 0.5).Cast<T>();
 
         // Back to the matrix positions: the inverse of each row's sort permutation.
         var inverse = engine.TensorArgsort(order, 1, false);
@@ -349,8 +349,8 @@ internal static class EvaluationTensorOps<T>
         int positives = Count(positiveMask);
         int negatives = scores.Length - positives;
         var (negativesBelow, negativesAtOrBelow) = WeightBelow(scores, Not(positiveMask));
-        var pairCredit = engine.TensorSum(engine.TensorMultiply(positiveMask, engine.TensorAdd(negativesBelow, negativesAtOrBelow)));
-        return NumOps.Divide(pairCredit, NumOps.FromDouble(2.0 * positives * negatives));
+        var pairCredit = engine.TensorSum(engine.TensorMultiply(positiveMask.Cast<double>(), engine.TensorAdd(negativesBelow, negativesAtOrBelow)));
+        return NumOps.FromDouble(pairCredit / (2.0 * positives * negatives));
     }
 
     /// <summary>
@@ -371,25 +371,25 @@ internal static class EvaluationTensorOps<T>
         // At the threshold of each sample's own score: predicted positives are the samples scoring at least as high.
         var (positivesBelow, _) = WeightBelow(scores, positiveMask);
         var (samplesBelow, _) = WeightBelow(scores, engine.TensorOnesLike(scores));
-        var truePositives = engine.TensorSubtract(engine.TensorFullLike(scores, NumOps.FromDouble(positives)), positivesBelow);
-        var predictedPositives = engine.TensorSubtract(engine.TensorFullLike(scores, NumOps.FromDouble(scores.Length)), samplesBelow);
+        var truePositives = engine.TensorSubtract(engine.TensorFullLike(positivesBelow, (double)positives), positivesBelow);
+        var predictedPositives = engine.TensorSubtract(engine.TensorFullLike(samplesBelow, (double)scores.Length), samplesBelow);
         var precision = engine.TensorDivide(truePositives, predictedPositives);
 
         // Each positive adds 1 / positives of recall at its threshold.
-        var gained = engine.TensorSum(engine.TensorMultiply(positiveMask, precision));
-        return NumOps.Divide(gained, NumOps.FromDouble(positives));
+        var gained = engine.TensorSum(engine.TensorMultiply(positiveMask.Cast<double>(), precision));
+        return NumOps.FromDouble(gained / positives);
     }
 
     /// <summary>
     /// For every sample, the total <paramref name="weights"/> of the samples scoring strictly below it and of
     /// those scoring at or below it.
     /// </summary>
-    private static (Tensor<T> Below, Tensor<T> AtOrBelow) WeightBelow(Tensor<T> scores, Tensor<T> weights)
+    private static (Tensor<double> Below, Tensor<double> AtOrBelow) WeightBelow(Tensor<T> scores, Tensor<T> weights)
     {
         var engine = AiDotNetEngine.Current;
         var (sorted, order) = engine.TensorSort(scores);
-        var cumulative = engine.TensorCumSum(engine.TensorGather(weights, order, 0), 0);
-        var padded = engine.TensorConcatenate(new[] { new Tensor<T>(new[] { 1 }), cumulative }, 0);
+        var cumulative = engine.TensorCumSum(engine.TensorGather(weights.Cast<double>(), order, 0), 0);
+        var padded = engine.TensorConcatenate(new[] { new Tensor<double>(new[] { 1 }), cumulative }, 0);
         var below = engine.TensorSearchSorted(sorted, scores, false);
         var atOrBelow = engine.TensorSearchSorted(sorted, scores, true);
         return (engine.TensorGather(padded, below, 0), engine.TensorGather(padded, atOrBelow, 0));
@@ -515,11 +515,12 @@ internal static class EvaluationTensorOps<T>
     {
         using var noGrad = new NoGradScope<T>();
         var engine = AiDotNetEngine.Current;
-        var nan = MathHelper.GetNumericOperations<T>().FromDouble(double.NaN);
         var finite = Select(values, Not(NanMask(values)));
         if (finite.Length == 0) return 0;
         if (highest) return FirstIndexOf(values, engine.TensorMaxValue(finite));
-        return finite.Length < values.Length ? FirstIndexOf(values, nan) : FirstIndexOf(values, engine.TensorMinValue(finite));
+        if (finite.Length < values.Length)
+            return engine.TensorArgMax(NanMask(values), 0)[0];
+        return FirstIndexOf(values, engine.TensorMinValue(finite));
     }
 
     /// <summary>

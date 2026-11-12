@@ -63,7 +63,7 @@ public class WilcoxonSignedRankTest<T> : IPairedTest<T>
         // Rank by absolute value; a run of absolute values whose neighbouring gaps are below 1e-10 shares its
         // average rank
         var diffs = EvaluationTensorOps<T>.Select(allDiffs, nonZero);
-        var (_, order, ranks) = EvaluationTensorOps<T>.SortedRunRanks(engine.TensorAbs(diffs), tolerance);
+        var (_, order, ranks) = EvaluationTensorOps<T>.SortedRunRanks(engine.TensorAbs(diffs), 1e-10);
 
         // Calculate W+ (sum of ranks for positive differences) and W- (the rest)
         var positive = engine.TensorGather(engine.TensorGreaterThan(diffs, NumOps.Zero), order, 0);

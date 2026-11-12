@@ -51,21 +51,20 @@ public class PearsonCorrelationMetric<T> : IRegressionMetric<T>
 
         var engine = AiDotNetEngine.Current;
         using var noGrad = new NoGradScope<T>();
-        var pred = EvaluationTensorOps<T>.ToTensor(predictions);
-        var actual = EvaluationTensorOps<T>.ToTensor(actuals);
-        var tolerance = NumOps.FromDouble(1e-10);
+        var pred = EvaluationTensorOps<T>.ToTensor(predictions).Cast<double>();
+        var actual = EvaluationTensorOps<T>.ToTensor(actuals).Cast<double>();
 
         // Covariance and standard deviations around the means
         var diffPred = engine.TensorSubtractScalar(pred, engine.TensorMean(pred));
         var diffActual = engine.TensorSubtractScalar(actual, engine.TensorMean(actual));
-        T covariance = engine.TensorSum(engine.TensorMultiply(diffPred, diffActual));
-        T stdPred = NumOps.Sqrt(engine.TensorSumOfSquares(diffPred));
-        T stdActual = NumOps.Sqrt(engine.TensorSumOfSquares(diffActual));
+        double covariance = engine.TensorSum(engine.TensorMultiply(diffPred, diffActual));
+        double stdPred = Math.Sqrt(engine.TensorSumOfSquares(diffPred));
+        double stdActual = Math.Sqrt(engine.TensorSumOfSquares(diffActual));
 
-        if (NumOps.LessThan(stdPred, tolerance) || NumOps.LessThan(stdActual, tolerance))
+        if (stdPred < 1e-10 || stdActual < 1e-10)
             return NumOps.Zero;
 
-        return NumOps.Divide(covariance, NumOps.Multiply(stdPred, stdActual));
+        return NumOps.FromDouble(covariance / (stdPred * stdActual));
     }
 
     /// <inheritdoc />

@@ -75,31 +75,42 @@ internal class EnergyScoreMetric<T> : IRegressionMetric<T>
                 throw new ArgumentException("All ensemble samples must have the same dimension as observation.");
         }
 
+        if (d == 0) return NumOps.Zero;
         var engine = AiDotNetEngine.Current;
         using var noGrad = new NoGradScope<T>();
-        var members = new Tensor<T>[m];
+        var members = new Tensor<double>[m];
+        for (int i = 0; i < m; i++)
+            members[i] = new Tensor<T>(ensembleSamples[i], [d]).Cast<double>();
+        var ensemble = engine.TensorStack(members, 0);
+        var obs = new Tensor<T>(observation, [1, d]).Cast<double>();
+
+        // Bound temporary feature grids to 2 MiB, or one row when the feature vector is wider.
+        int blockSize = Math.Max(1, 262144 / d);
+        double observationDistances = 0, pairDistances = 0;
+        for (int start = 0; start < m;)
+        {
+            int count = Math.Min(blockSize, m - start);
+            var block = engine.TensorSlice(ensemble, [start, 0], [count, d]);
+            var difference = engine.TensorSubtract(block, engine.TensorBroadcastTo(obs, [count, d]));
+            observationDistances += engine.TensorSum(engine.TensorSqrt(
+                engine.ReduceSum(engine.TensorSquare(difference), [1], false)));
+            start += count;
+        }
         for (int i = 0; i < m; i++)
         {
-            members[i] = new Tensor<T>(ensembleSamples[i], new[] { d });
+            var left = engine.TensorSlice(ensemble, [i, 0], [1, d]);
+            for (int start = i + 1; start < m;)
+            {
+                int count = Math.Min(blockSize, m - start);
+                var right = engine.TensorSlice(ensemble, [start, 0], [count, d]);
+                var difference = engine.TensorSubtract(right, engine.TensorBroadcastTo(left, [count, d]));
+                pairDistances += engine.TensorSum(engine.TensorSqrt(
+                    engine.ReduceSum(engine.TensorSquare(difference), [1], false)));
+                start += count;
+            }
         }
-
-        var ensemble = engine.TensorStack(members, 0);
-        var obs = new Tensor<T>(observation, new[] { 1, d });
-
-        // E||X - y||
-        var toObservation = engine.TensorSubtract(ensemble, engine.TensorBroadcastTo(obs, new[] { m, d }));
-        T term1 = engine.TensorMean(engine.TensorSqrt(engine.ReduceSum(engine.TensorSquare(toObservation), new[] { 1 }, false)));
-
-        // 0.5 * E||X - X'|| over all ordered pairs (the distance matrix is symmetric with a zero diagonal)
-        var shape = new[] { m, m, d };
-        var left = engine.TensorBroadcastTo(engine.Reshape(ensemble, new[] { m, 1, d }), shape);
-        var right = engine.TensorBroadcastTo(engine.Reshape(ensemble, new[] { 1, m, d }), shape);
-        var pairDistances = engine.TensorSqrt(engine.ReduceSum(engine.TensorSquare(engine.TensorSubtract(left, right)), new[] { 2 }, false));
-        T term2 = NumOps.Divide(
-            NumOps.Multiply(NumOps.FromDouble(0.5), engine.TensorSum(pairDistances)),
-            NumOps.FromDouble((double)m * m));
-
-        return NumOps.Subtract(term1, term2);
+        // Each unordered pair represents both ordered pairs in 0.5 E||X-X'||.
+        return NumOps.FromDouble(observationDistances / m - pairDistances / ((double)m * m));
     }
 
     /// <inheritdoc/>

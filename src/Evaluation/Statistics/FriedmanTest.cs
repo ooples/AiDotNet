@@ -64,7 +64,7 @@ public class FriedmanTest<T> : IMultipleSampleTest<T>
         var results = engine.TensorPermute(EvaluationTensorOps<T>.StackRows(samples, n), new[] { 1, 0 });
 
         // Rank each dataset (higher value = rank 1 for performance metrics), then average over datasets
-        var datasetRanks = EvaluationTensorOps<T>.RowRanksDescending(results, NumOps.FromDouble(1e-10));
+        var datasetRanks = EvaluationTensorOps<T>.RowRanksDescending(results, 1e-10);
         var ranks = engine.TensorDivideScalar(engine.ReduceSum(datasetRanks, new[] { 0 }, false), NumOps.FromDouble(n));
 
         // Friedman statistic (chi-squared approximation)
