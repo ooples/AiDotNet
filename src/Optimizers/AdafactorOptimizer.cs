@@ -90,11 +90,14 @@ public class AdafactorOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase
         return scaleByParameters ? rate * Math.Max(_options.ParameterScaleFloor, parameterRms) : rate;
     }
 
-    /// <summary>Root mean square of every element, as one engine sum-of-squares reduction.</summary>
-    private double Rms(Tensor<T> values)
+    /// <summary>
+    /// Root mean square of every element, from one engine sum-of-squares reduction that cannot overflow a
+    /// narrow <typeparamref name="T"/> such as Half (see <c>SparseEmbeddingOptimizerHelpers.SumOfSquares</c>).
+    /// </summary>
+    private static double Rms(Tensor<T> values)
     {
         if (values.Length == 0) return 0.0;
-        return Math.Sqrt(NumOps.ToDouble(Engine.TensorSumOfSquares(values)) / values.Length);
+        return Math.Sqrt(SparseEmbeddingOptimizerHelpers.SumOfSquares(values) / values.Length);
     }
 
     /// <summary>Whether a parameter has enough structure for the factored estimate to save anything.</summary>
@@ -170,7 +173,7 @@ public class AdafactorOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase
         // UPDATE rather than the gradient is what keeps this stable without a warmup.
         var update = engine.TensorDivide(
             g, engine.TensorSqrt(engine.TensorMax(estimate, NumOps.FromDouble(epsilon))));
-        double updateRms = Math.Sqrt(NumOps.ToDouble(engine.TensorSumOfSquares(update)) / length);
+        double updateRms = Math.Sqrt(SparseEmbeddingOptimizerHelpers.SumOfSquares(update) / length);
         double scale = updateRms > clip && clip > 0 ? clip / updateRms : 1.0;
         // The first moment averages the clipped update already multiplied by this step's size, as the reference
         // implementations do (transformers' Adafactor: clip, multiply by lr, then average).
@@ -271,7 +274,7 @@ public class AdafactorOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase
         var update = engine.TensorDivide(
             g, engine.TensorSqrt(engine.TensorMax(newState, NumOps.FromDouble(epsilon))));
 
-        double sumSquares = parameters.Length == 0 ? 0.0 : NumOps.ToDouble(engine.TensorSumOfSquares(update));
+        double sumSquares = parameters.Length == 0 ? 0.0 : SparseEmbeddingOptimizerHelpers.SumOfSquares(update);
         double updateRms = Math.Sqrt(sumSquares / Math.Max(1, parameters.Length));
         double scale = updateRms > clip && clip > 0 ? clip / updateRms : 1.0;
         double decay = _options.WeightDecay;

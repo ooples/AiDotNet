@@ -195,15 +195,40 @@ internal static partial class SparseEmbeddingOptimizerHelpers
     /// Sum of squares of the first <paramref name="count"/> elements (all of them when omitted) as one engine
     /// reduction, read back as a double.
     /// </summary>
+    /// <remarks>
+    /// The engine reduction returns <typeparamref name="T"/>, so for a narrow type the sum can overflow even
+    /// though every element is finite (a Half holding 256 squares to 65536, past Half.MaxValue). When the
+    /// direct sum is not finite, the elements are rescaled by max|x| and sqrt(length) so every partial sum
+    /// stays at most 1, and the scale is restored in double:
+    /// sum x^2 = max^2 * length * sum (x / max / sqrt(length))^2.
+    /// </remarks>
     internal static double SumOfSquares<T>(Tensor<T> values, int count = -1)
     {
         int length = count < 0 ? values.Length : count;
         if (length == 0) return 0.0;
         var engine = AiDotNet.Tensors.Engines.AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<T>();
         var source = length == values.Length
             ? values
             : Vector<T>.FromSpan(values.AsSpan().Slice(0, length)).AsTensor();
-        return MathHelper.GetNumericOperations<T>().ToDouble(engine.TensorSumOfSquares(source));
+
+        T direct = engine.TensorSumOfSquares(source);
+        if (!ops.IsInfinity(direct) || ops.IsNaN(direct))
+        {
+            return ops.ToDouble(direct);
+        }
+
+        T maxAbs = engine.TensorMaxValue(engine.TensorAbs(source));
+        if (ops.IsInfinity(maxAbs) || ops.Equals(maxAbs, ops.Zero))
+        {
+            // An infinite element makes the true sum infinite; a zero maximum cannot overflow.
+            return ops.ToDouble(direct);
+        }
+
+        var normalized = engine.TensorDivideScalar(
+            engine.TensorDivideScalar(source, maxAbs), ops.FromDouble(Math.Sqrt(length)));
+        double scale = ops.ToDouble(maxAbs);
+        return scale * scale * length * ops.ToDouble(engine.TensorSumOfSquares(normalized));
     }
 
     internal static bool TryGetEffectiveGradient<T>(
