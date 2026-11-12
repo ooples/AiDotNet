@@ -384,6 +384,21 @@ public partial class CTABGANPlusGenerator<T> : NeuralSyntheticTabularGeneratorBa
     /// </remarks>
     public void Fit(Matrix<T> data, IReadOnlyList<ColumnMetadata> columns, int? epochs = null)
     {
+        try
+        {
+            FitCore(data, columns, epochs);
+        }
+        finally
+        {
+            // The cached training rows only serve the training loop: a fitted generator, or one whose Fit failed,
+            // does not keep a copy of its training data.
+            _realDataSource = null;
+            _realDataTensor = null;
+        }
+    }
+
+    private void FitCore(Matrix<T> data, IReadOnlyList<ColumnMetadata> columns, int? epochs)
+    {
         int epochCount = epochs ?? _options.Epochs;
         ValidateFitInputs(data, columns, epochCount);
 
@@ -517,7 +532,7 @@ public partial class CTABGANPlusGenerator<T> : NeuralSyntheticTabularGeneratorBa
 
         int[] conditionColumns = conditionColumn is not null ? SyntheticTensorOps<T>.TruncateToInt(conditionColumn) : Array.Empty<int>();
         int[] conditionValues = conditionValue is not null ? SyntheticTensorOps<T>.TruncateToInt(conditionValue) : Array.Empty<int>();
-        var fakeRows = new List<Tensor<T>>(numSamples);
+        var generated = new Tensor<T>(new[] { numSamples, _dataWidth });
 
         // Rows are generated one at a time, in order, so each row's noise and condition draws keep their RNG order.
         for (int i = 0; i < numSamples; i++)
@@ -535,14 +550,16 @@ public partial class CTABGANPlusGenerator<T> : NeuralSyntheticTabularGeneratorBa
             }
 
             var genInput = ConcatVectors(noise, condVector);
-            fakeRows.Add(Predict(VectorToTensor(genInput)));
+            SyntheticTensorOps<T>.WriteRow(generated, i, Predict(VectorToTensor(genInput)), _dataWidth);
         }
 
         // CTAB-GAN+ samples like sdv-dev/CTGAN: each mode and category block is drawn from its distribution
         // (gumbel_softmax then argmax), not set to its most likely entry.
-        var sampled = SyntheticTensorOps<T>.SampleCategoricalBlocks(
-            SyntheticTensorOps<T>.StackRows(fakeRows, _dataWidth), _transformer, _columns.Count, _random);
-        return _transformer.InverseTransform(sampled.ToMatrix());
+        // Decoded in bounded blocks, so only one block's intermediates are alive at a time.
+        TabularDataTransformer<T> transformer = _transformer;
+        int columnCount = _columns.Count;
+        return SyntheticTensorOps<T>.DecodeInBlocks(generated, block => transformer.InverseTransform(
+            SyntheticTensorOps<T>.SampleCategoricalBlocks(block, transformer, columnCount, _random).ToMatrix()));
     }
 
     #endregion

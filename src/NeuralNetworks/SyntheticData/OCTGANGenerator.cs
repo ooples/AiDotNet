@@ -284,6 +284,21 @@ public partial class OCTGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>
     /// <inheritdoc />
     public void Fit(Matrix<T> data, IReadOnlyList<ColumnMetadata> columns, int? epochs = null)
     {
+        try
+        {
+            FitCore(data, columns, epochs);
+        }
+        finally
+        {
+            // The cached training rows only serve the training loop: a fitted generator, or one whose Fit failed,
+            // does not keep a copy of its training data.
+            _realDataSource = null;
+            _realDataTensor = null;
+        }
+    }
+
+    private void FitCore(Matrix<T> data, IReadOnlyList<ColumnMetadata> columns, int? epochs)
+    {
         if (data is null) throw new ArgumentNullException(nameof(data));
         if (columns is null) throw new ArgumentNullException(nameof(columns));
         if (data.Rows == 0) throw new ArgumentException("OCT-GAN needs at least one training row.", nameof(data));
@@ -365,7 +380,7 @@ public partial class OCTGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>
             ? SyntheticTensorOps<T>.TruncateToInt(conditionColumn) : Array.Empty<int>();
         var requestedValues = conditionColumn is not null && conditionValue is not null
             ? SyntheticTensorOps<T>.TruncateToInt(conditionValue) : Array.Empty<int>();
-        var chunks = new List<Tensor<T>>();
+        var generated = new Tensor<T>(new[] { numSamples, _dataWidth });
         int chunk = Math.Max(1, _options.BatchSize);
         SetTrainingMode(false);
         for (int start = 0; start < numSamples; start += chunk)
@@ -382,10 +397,12 @@ public partial class OCTGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>
             var cond = SyntheticTensorOps<T>.StackRows(condRows, _condWidth);
             var input = _condWidth > 0 ? Engine.TensorConcatenate(new[] { Noise(count), cond }, axis: 1) : Noise(count);
             var fake = GeneratorForward(input, gumbel: true);
-            chunks.Add(Engine.TensorSlice(fake, new[] { 0, 0 }, new[] { count, _dataWidth }));
+            // Each batch is copied into the one result buffer, so no generated batch outlives its iteration.
+            Engine.TensorSlice(fake, new[] { 0, 0 }, new[] { count, _dataWidth })
+                .CopyTo(generated.AsWritableSpan().Slice(start * _dataWidth, count * _dataWidth));
         }
-        var rows = chunks.Count == 1 ? chunks[0] : Engine.TensorConcatenate(chunks.ToArray(), axis: 0);
-        return _transformer.InverseTransform(rows.ToMatrix());
+        TabularDataTransformer<T> transformer = _transformer;
+        return SyntheticTensorOps<T>.DecodeInBlocks(generated, block => transformer.InverseTransform(block.ToMatrix()));
     }
 
     #endregion

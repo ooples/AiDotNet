@@ -68,6 +68,57 @@ internal static class SyntheticTensorOps<T>
         return Engine.TensorConcatenate(new[] { flat, new Tensor<T>(new[] { length - v.Length }) }, 0);
     }
 
+    /// <summary>Rows decoded per block when generated rows are sampled and inverse-transformed.</summary>
+    public const int GenerationBlockRows = 4096;
+
+    /// <summary>
+    /// Copies <paramref name="row"/> into row <paramref name="rowIndex"/> of <paramref name="buffer"/> ([rows, width]),
+    /// truncated or zero-padded to <paramref name="width"/>. The copy is taken immediately, so a layer that reuses its
+    /// output buffer across calls cannot change a row already written.
+    /// </summary>
+    public static void WriteRow(Tensor<T> buffer, int rowIndex, Tensor<T> row, int width)
+    {
+        var destination = buffer.AsWritableSpan().Slice(rowIndex * width, width);
+        int count = Math.Min(width, row.Length);
+        row.AsSpan().Slice(0, count).CopyTo(destination);
+        if (count < width)
+        {
+            destination.Slice(count).Fill(NumOps.Zero);
+        }
+    }
+
+    /// <summary>
+    /// Decodes generated rows ([rows, width]) block by block: <paramref name="decode"/> maps each block of at most
+    /// <see cref="GenerationBlockRows"/> rows to its output rows, which are copied into one result matrix. Only one
+    /// block's intermediates are alive at a time.
+    /// </summary>
+    public static Matrix<T> DecodeInBlocks(Tensor<T> generated, Func<Tensor<T>, Matrix<T>> decode)
+    {
+        int rows = generated.Shape[0];
+        int width = generated.Shape[1];
+        if (rows == 0)
+        {
+            return decode(generated);
+        }
+
+        Matrix<T>? result = null;
+        for (int start = 0; start < rows; start += GenerationBlockRows)
+        {
+            int count = Math.Min(GenerationBlockRows, rows - start);
+            var block = rows <= GenerationBlockRows ? generated : Engine.TensorSlice(generated, new[] { start, 0 }, new[] { count, width });
+            var decoded = decode(block);
+            if (rows <= GenerationBlockRows)
+            {
+                return decoded;
+            }
+
+            result ??= new Matrix<T>(rows, decoded.Columns);
+            decoded.AsSpan().CopyTo(result.AsWritableSpan().Slice(start * decoded.Columns, count * decoded.Columns));
+        }
+
+        return result ?? new Matrix<T>(0, 0);
+    }
+
     /// <summary>
     /// Stacks <paramref name="rows"/> into a [rows.Count, width] tensor, truncating or zero-padding each row.
     /// </summary>
@@ -201,6 +252,14 @@ internal static class SyntheticTensorOps<T>
         var logits = output;
         if (gumbelNoise is not null)
         {
+            // softmax((logits + g) / tau) needs a finite, positive temperature: tau = 0 divides by zero and a
+            // negative tau reverses the category preference.
+            if (!(temperature > 0.0) || double.IsInfinity(temperature))
+            {
+                throw new ArgumentOutOfRangeException(nameof(temperature), temperature,
+                    "The Gumbel-softmax temperature must be finite and positive.");
+            }
+
             logits = engine.TensorMultiplyScalar(engine.TensorAdd(output, gumbelNoise), NumOps.FromDouble(1.0 / temperature));
         }
 
