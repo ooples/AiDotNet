@@ -139,9 +139,9 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             // Act
             var totalLoss = fbnet.ComputeTotalLoss(taskLoss);
 
-            // Assert - FBNet (Wu et al. 2019), Eq. 6: L = CE * alpha * log(LAT)^beta with alpha = 0.5, beta = 0.6.
+            // Assert - FBNet (Wu et al. 2019), Eq. 2: L = CE * alpha * log(LAT)^beta with alpha = 0.5, beta = 0.6.
             // The old assertion encoded an additive CE + alpha * log(LAT), which is not the paper's loss.
-            double expected = taskLoss * 0.5 * Math.Pow(Math.Log(1.0 + latency), 0.6);
+            double expected = taskLoss * 0.5 * Math.Pow(Math.Log(Math.Max(latency, 1.0 + 1e-6)), 0.6);
             Assert.Equal(expected, totalLoss, 1e-9);
         }
 
@@ -353,7 +353,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             // Act
             var totalLoss = fbnet.ComputeTotalLoss(taskLoss);
 
-            // Assert - FBNet (Wu et al. 2019), Eq. 6: L = CE * alpha * log(LAT)^beta, so alpha = 0 gives 0. The old
+            // Assert - FBNet (Wu et al. 2019), Eq. 2: L = CE * alpha * log(LAT)^beta, so alpha = 0 gives 0. The old
             // assertion (total == task loss) encoded an additive latency term, which is not the paper's loss.
             Assert.Equal(0.0, totalLoss, 12);
         }
