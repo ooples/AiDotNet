@@ -3887,7 +3887,7 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         var neat = new NEAT<float>(
             architecture,
             populationSize: 10,
-            options: new NEATOptions { MutationRate = 0.1, CrossoverRate = 0.75 });
+            options: new NEATOptions { WeightMutationRate = 0.8, CrossoverRate = 0.75 });
 
         var input = CreateRandomTensor([4]);
 
