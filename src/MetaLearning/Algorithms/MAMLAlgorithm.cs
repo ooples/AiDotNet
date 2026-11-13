@@ -178,10 +178,7 @@ public partial class MAMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
             }
             else
             {
-                for (int i = 0; i < accumulatedMetaGradients.Length; i++)
-                {
-                    accumulatedMetaGradients[i] = NumOps.Add(accumulatedMetaGradients[i], taskMetaGradients[i]);
-                }
+                accumulatedMetaGradients = Engine.Add(accumulatedMetaGradients, taskMetaGradients);
             }
         }
 
@@ -192,10 +189,7 @@ public partial class MAMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
 
         // Average the meta-gradients
         T batchSizeT = NumOps.FromDouble(taskBatch.BatchSize);
-        for (int i = 0; i < accumulatedMetaGradients.Length; i++)
-        {
-            accumulatedMetaGradients[i] = NumOps.Divide(accumulatedMetaGradients[i], batchSizeT);
-        }
+        accumulatedMetaGradients = Engine.Divide(accumulatedMetaGradients, batchSizeT);
 
         // Apply gradient clipping if configured
         if (_mamlOptions.GradientClipThreshold.HasValue && _mamlOptions.GradientClipThreshold.Value > 0)

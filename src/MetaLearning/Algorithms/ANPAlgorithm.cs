@@ -124,62 +124,66 @@ public partial class ANPAlgorithm<T, TInput, TOutput> : NeuralProcessBase<T, TIn
         if (queryFeatures == null || contextReps.Count == 0)
             return new Vector<T>(RepresentationDim);
 
-        // Simplified dot-product attention: query attends to context representations
-        var result = new Vector<T>(RepresentationDim);
-        var weights = new double[contextReps.Count];
-        double sumW = 0;
-
-        for (int c = 0; c < contextReps.Count; c++)
+        int count = contextReps.Count;
+        int width = contextReps[0].Length;
+        int used = Math.Min(RepresentationDim, width);
+        if (used == 0) return new Vector<T>(RepresentationDim);
+        var context = Engine.TensorStack(contextReps.Select(r => Tensor<T>.FromVector(r).Cast<double>()).ToArray(), 0);
+        int m = Math.Min(queryFeatures.Length, width);
+        Tensor<double> weights;
+        if (m == 0)
         {
-            double dot = 0;
-            for (int i = 0; i < Math.Min(queryFeatures.Length, contextReps[c].Length); i++)
-            {
-                int pIdx = i % _attentionParams.Length;
-                dot += NumOps.ToDouble(queryFeatures[i % queryFeatures.Length]) *
-                       NumOps.ToDouble(contextReps[c][i]) *
-                       NumOps.ToDouble(_attentionParams[pIdx]);
-            }
-            weights[c] = Math.Exp(dot / Math.Sqrt(RepresentationDim));
-            sumW += weights[c];
+            // An empty query has zero dot products, hence uniform attention over the context.
+            weights = Engine.TensorFullLike(new Tensor<double>(new[] { count, 1 }), 1.0);
         }
-
-        if (sumW > 0)
+        else
         {
-            for (int c = 0; c < contextReps.Count; c++)
-            {
-                double w = weights[c] / sumW;
-                for (int i = 0; i < RepresentationDim && i < contextReps[c].Length; i++)
-                    result[i] = NumOps.Add(result[i], NumOps.Multiply(contextReps[c][i], NumOps.FromDouble(w)));
-            }
+            var query = Tensor<T>.FromVector(queryFeatures.GetSubVector(0, m)).Cast<double>().ToVector();
+            var attention = Tensor<T>.FromVector(ParameterModulation.Cycle(Engine, _attentionParams, m)).Cast<double>().ToVector();
+            var scaledQuery = Engine.Multiply(query, attention);
+            var scores = Engine.TensorMultiplyScalar(Engine.TensorMatMul(
+                Engine.TensorSlice(context, new[] { 0, 0 }, new[] { count, m }),
+                Engine.Reshape(Tensor<double>.FromVector(scaledQuery), new[] { m, 1 })),
+                1.0 / Math.Sqrt(RepresentationDim));
+            // Subtracting a shared maximum preserves normalized attention and prevents exponential overflow.
+            weights = Engine.TensorExp(Engine.TensorSubtractScalar(scores, Engine.TensorMaxValue(scores)));
         }
-
-        return result;
+        double sumW = Engine.TensorSum(weights);
+        if (!(sumW > 0)) return new Vector<T>(RepresentationDim);
+        var attended = Engine.TensorMatMul(
+            Engine.Reshape(Engine.TensorDivideScalar(weights, sumW), new[] { 1, count }),
+            Engine.TensorSlice(context, new[] { 0, 0 }, new[] { count, used })).Cast<T>().ToVector();
+        return used == RepresentationDim
+            ? attended
+            : Vector<T>.Concatenate(attended, new Vector<T>(RepresentationDim - used));
     }
+
 
     private (Vector<T> mean, Vector<T> logvar) ComputeLatent(Vector<T> representation)
     {
         int latentDim = _anpOptions.LatentDim;
-        var meanPre = new Vector<T>(latentDim);
-        var logvar = new Vector<T>(latentDim);
-
-        for (int i = 0; i < latentDim; i++)
+        int m = Math.Min(representation.Length, RepresentationDim);
+        if (latentDim <= 0 || m == 0)
         {
-            T sum = NumOps.Zero;
-            for (int j = 0; j < Math.Min(representation.Length, RepresentationDim); j++)
-            {
-                int pIdx = (i * RepresentationDim + j) % _latentEncoderParams.Length;
-                sum = NumOps.Add(sum, NumOps.Multiply(representation[j], _latentEncoderParams[pIdx]));
-            }
-            meanPre[i] = sum;
-
-            double sumVar = 0;
-            for (int j = 0; j < Math.Min(representation.Length, RepresentationDim); j++)
-            {
-                int pIdx = (latentDim * RepresentationDim + i * RepresentationDim + j) % _latentEncoderParams.Length;
-                sumVar += NumOps.ToDouble(representation[j]) * NumOps.ToDouble(_latentEncoderParams[pIdx]);
-            }
-            logvar[i] = NumOps.FromDouble(Math.Max(-4, Math.Min(2, sumVar)));
+            return (VectorTanh(new Vector<T>(Math.Max(latentDim, 0))), new Vector<T>(Math.Max(latentDim, 0)));
         }
+
+        // The encoder reads its parameters cyclically: the mean weight for (i, j) is P[(i R + j) mod |P|] and the
+        // log-variance weight is P[(latentDim R + i R + j) mod |P|], so both are row-major [latentDim, R] blocks of
+        // P repeated to 2 latentDim R entries.
+        int block = latentDim * RepresentationDim;
+        var cycled = Tensor<T>.FromVector(ParameterModulation.Cycle(Engine, _latentEncoderParams, 2 * block));
+        var meanWeights = Engine.TensorSlice(
+            Engine.Reshape(Engine.TensorSlice(cycled, new[] { 0 }, new[] { block }), new[] { latentDim, RepresentationDim }),
+            new[] { 0, 0 }, new[] { latentDim, m });
+        var logVarWeights = Engine.TensorSlice(
+            Engine.Reshape(Engine.TensorSlice(cycled, new[] { block }, new[] { block }), new[] { latentDim, RepresentationDim }),
+            new[] { 0, 0 }, new[] { latentDim, m });
+        var rep = Engine.Reshape(Tensor<T>.FromVector(representation.GetSubVector(0, m)), new[] { m, 1 });
+
+        var meanPre = Engine.TensorMatMul(meanWeights, rep).ToVector();
+        var logvar = Engine.Clamp(
+            Engine.TensorMatMul(logVarWeights, rep).ToVector(), NumOps.FromDouble(-4), NumOps.FromDouble(2));
 
         // SIMD tanh on entire mean vector
         var mean = VectorTanh(meanPre);
@@ -188,11 +192,11 @@ public partial class ANPAlgorithm<T, TInput, TOutput> : NeuralProcessBase<T, TIn
 
     private double ComputeScale(Vector<T> z, Vector<T> attended)
     {
-        double norm = 0;
-        for (int i = 0; i < z.Length; i++) norm += NumOps.ToDouble(z[i]) * NumOps.ToDouble(z[i]);
-        for (int i = 0; i < attended.Length; i++) norm += NumOps.ToDouble(attended[i]) * NumOps.ToDouble(attended[i]);
-        norm = Math.Sqrt(norm / Math.Max(z.Length + attended.Length, 1));
-        return 0.5 + 0.5 / (1.0 + Math.Exp(-norm + 1.0));
+        var wideZ = Tensor<T>.FromVector(z).Cast<double>().ToVector();
+        var wideAttended = Tensor<T>.FromVector(attended).Cast<double>().ToVector();
+        double squared = Engine.DotProduct(wideZ, wideZ) + Engine.DotProduct(wideAttended, wideAttended);
+        double norm = Math.Sqrt(squared / Math.Max((long)z.Length + attended.Length, 1));
+        return 0.5 + 0.5 / (1 + Math.Exp(1 - norm));
     }
 
     private double ComputeAuxLoss(TaskBatch<T, TInput, TOutput> taskBatch)

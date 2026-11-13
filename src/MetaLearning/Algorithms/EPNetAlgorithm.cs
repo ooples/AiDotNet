@@ -126,105 +126,53 @@ public partial class EPNetAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
 
         int k = Math.Min(_epnetOptions.NumNeighbors, n - 1);
         double alpha = _epnetOptions.PropagationAlpha;
+        var square = new[] { n, n };
 
         // Step 1: Compute pairwise squared distances between all feature elements
-        var distances = new double[n * n];
-        for (int i = 0; i < n; i++)
-        {
-            double fi = NumOps.ToDouble(features[i]);
-            for (int j = i + 1; j < n; j++)
-            {
-                double fj = NumOps.ToDouble(features[j]);
-                double diff = fi - fj;
-                double dist = diff * diff;
-                distances[i * n + j] = dist;
-                distances[j * n + i] = dist;
-            }
-        }
+        var column = Engine.Reshape(Tensor<T>.FromVector(features).Cast<double>(), new[] { n, 1 });
+        var distances = Engine.TensorSquare(Engine.TensorSubtract(
+            Engine.TensorBroadcastTo(column, square),
+            Engine.TensorBroadcastTo(Engine.Reshape(column, new[] { 1, n }), square)));
 
-        // Step 2: Build kNN adjacency matrix W using feature similarity
-        // For each node, find k nearest neighbors by distance and compute RBF weights
-        var W = new double[n * n];
-
-        // Compute median distance for adaptive RBF bandwidth
-        var allDists = new List<double>(n * (n - 1) / 2);
+        // Step 2: Build kNN adjacency matrix W using feature similarity, with the median distance over distinct
+        // pairs (i < j) as the adaptive RBF bandwidth
+        var upper = new List<int>(n * (n - 1) / 2);
         for (int i = 0; i < n; i++)
             for (int j = i + 1; j < n; j++)
-                allDists.Add(distances[i * n + j]);
-        allDists.Sort();
-        double medianDist = allDists.Count > 0 ? allDists[allDists.Count / 2] : 1.0;
-        double sigma2 = Math.Max(medianDist, 1e-10); // RBF bandwidth = median distance
+                upper.Add(i * n + j);
+        var pairDistances = Engine.TensorIndexSelect(
+            Engine.Reshape(distances, new[] { n * n }), new Tensor<int>(upper.ToArray(), new[] { upper.Count }), 0);
+        double medianDist = Engine.TensorSort(pairDistances, 0, false).Values[upper.Count / 2];
+        double sigma2 = Math.Max(medianDist, 1e-10);
 
-        for (int i = 0; i < n; i++)
-        {
-            // Collect distances to all other nodes
-            var neighborDists = new (int idx, double dist)[n - 1];
-            int count = 0;
-            for (int j = 0; j < n; j++)
-            {
-                if (j == i) continue;
-                neighborDists[count++] = (j, distances[i * n + j]);
-            }
-
-            // Partial sort: find k smallest distances
-            Array.Sort(neighborDists, 0, count, Comparer<(int idx, double dist)>.Create(
-                (a, b) => a.dist.CompareTo(b.dist)));
-
-            // Set RBF weights for k nearest neighbors (symmetric)
-            int numNeighbors = Math.Min(k, count);
-            for (int ni = 0; ni < numNeighbors; ni++)
-            {
-                int j = neighborDists[ni].idx;
-                double rbfWeight = Math.Exp(-neighborDists[ni].dist / (2.0 * sigma2));
-                W[i * n + j] = rbfWeight;
-                W[j * n + i] = rbfWeight; // Symmetrize
-            }
-        }
+        // Each node links to its k nearest other nodes (distance, then index), symmetrized, with RBF weights
+        var rbf = Engine.TensorExp(Engine.TensorMultiplyScalar(
+            distances, -1.0 / (2.0 * sigma2)));
+        var W = Engine.TensorMultiply(NearestNeighborGraph.SymmetricNearestMask(Engine, distances, k), rbf);
 
         // Step 3: Compute degree matrix D and normalized adjacency S = D^(-1/2) W D^(-1/2)
-        var degree = new double[n];
-        for (int i = 0; i < n; i++)
-        {
-            double d = 0;
-            for (int j = 0; j < n; j++)
-                d += W[i * n + j];
-            degree[i] = d;
-        }
-
-        var S = new double[n * n];
-        for (int i = 0; i < n; i++)
-        {
-            double di = degree[i] > 1e-10 ? 1.0 / Math.Sqrt(degree[i]) : 0;
-            for (int j = 0; j < n; j++)
-            {
-                double dj = degree[j] > 1e-10 ? 1.0 / Math.Sqrt(degree[j]) : 0;
-                S[i * n + j] = di * W[i * n + j] * dj;
-            }
-        }
+        var degree = Engine.ReduceSum(W, new[] { 1 }, true);
+        var connected = Engine.TensorGreaterThan(degree, 1e-10);
+        var invSqrtDegree = Engine.TensorWhere(connected,
+            Engine.TensorDivide(Engine.TensorOnesLike(degree),
+                Engine.TensorSqrt(Engine.TensorWhere(connected, degree, Engine.TensorOnesLike(degree)))),
+            Engine.TensorZerosLike(degree));
+        var S = Engine.TensorMultiply(Engine.TensorMultiply(
+            Engine.TensorBroadcastTo(invSqrtDegree, square), W),
+            Engine.TensorBroadcastTo(Engine.Reshape(invSqrtDegree, new[] { 1, n }), square));
 
         // Step 4: Iterative feature propagation: z_prop = alpha * S @ z_prop + (1-alpha) * z_original
-        var propagated = new Vector<T>(n);
-        for (int i = 0; i < n; i++)
-            propagated[i] = features[i];
-
+        var wideFeatures = Tensor<T>.FromVector(features).Cast<double>().ToVector();
+        var anchor = Engine.Multiply(wideFeatures, 1.0 - alpha);
+        var propagated = wideFeatures.Clone();
         for (int iter = 0; iter < _epnetOptions.PropagationIterations; iter++)
         {
-            var next = new Vector<T>(n);
-            for (int i = 0; i < n; i++)
-            {
-                // Weighted neighbor aggregation: sum_j S[i,j] * z_prop[j]
-                double aggregated = 0;
-                for (int j = 0; j < n; j++)
-                    aggregated += S[i * n + j] * NumOps.ToDouble(propagated[j]);
-
-                // Diffusion with anchor to original features
-                next[i] = NumOps.FromDouble(
-                    alpha * aggregated + (1.0 - alpha) * NumOps.ToDouble(features[i]));
-            }
-            propagated = next;
+            var aggregated = Engine.Reshape(
+                Engine.TensorMatMul(S, Engine.Reshape(Tensor<double>.FromVector(propagated), new[] { n, 1 })), new[] { n });
+            propagated = Engine.Add(Engine.Multiply(aggregated.ToVector(), alpha), anchor);
         }
 
-        return propagated;
+        return Tensor<double>.FromVector(propagated).Cast<T>().ToVector();
     }
 
     /// <inheritdoc/>
@@ -246,38 +194,14 @@ public partial class EPNetAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
             int queryLen = queryFeatures?.Length ?? 0;
 
             // Run embedding propagation to compute modulation factor
-            if (supportLen > 0 && queryLen > 0)
+            if (supportFeatures is not null && queryFeatures is not null && supportLen > 0 && queryLen > 0)
             {
-                var combined = new Vector<T>(supportLen + queryLen);
-                for (int i = 0; i < supportLen; i++)
-                    combined[i] = supportFeatures is not null ? supportFeatures[i] : NumOps.Zero;
-                for (int i = 0; i < queryLen; i++)
-                    combined[supportLen + i] = queryFeatures is not null ? queryFeatures[i] : NumOps.Zero;
+                var combined = Vector<T>.Concatenate(supportFeatures, queryFeatures);
 
                 var propagated = PropagateEmbeddings(combined);
 
                 // Compute modulation from propagation effect on features
-                double sumRatio = 0;
-                int count = 0;
-                for (int i = 0; i < combined.Length; i++)
-                {
-                    double raw = NumOps.ToDouble(combined[i]);
-                    double prop = NumOps.ToDouble(propagated[i]);
-                    if (Math.Abs(raw) > 1e-10)
-                    {
-                        sumRatio += Math.Max(0.5, Math.Min(2.0, prop / raw));
-                        count++;
-                    }
-                }
-                if (count > 0)
-                {
-                    double avgRatio = sumRatio / count;
-                    var currentParams = ParamModel.GetParameters();
-                    var modulatedParams = new Vector<T>(currentParams.Length);
-                    for (int i = 0; i < currentParams.Length; i++)
-                        modulatedParams[i] = NumOps.Multiply(currentParams[i], NumOps.FromDouble(avgRatio));
-                    ParamModel.SetParameters(modulatedParams);
-                }
+                ParameterModulation.ScaleByMeanClampedRatio(Engine, ParamModel, combined, propagated, 0.5, 2.0, 1e-10);
             }
 
             var queryLoss = ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput);
@@ -312,12 +236,9 @@ public partial class EPNetAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
 
         if (supportLen > 0 || queryLen > 0)
         {
-            // Concatenate support + query into a single feature vector
-            var combined = new Vector<T>(supportLen + queryLen);
-            for (int i = 0; i < supportLen; i++)
-                combined[i] = supportFeatures is not null ? supportFeatures[i] : NumOps.Zero;
-            for (int i = 0; i < queryLen; i++)
-                combined[supportLen + i] = queryFeatures is not null ? queryFeatures[i] : NumOps.Zero;
+            // Concatenate support + query into a single feature vector (a missing set contributes nothing)
+            var combined = Vector<T>.Concatenate(
+                supportFeatures ?? new Vector<T>(0), queryFeatures ?? new Vector<T>(0));
 
             // Propagate on the joint graph
             var propagated = PropagateEmbeddings(combined);
@@ -325,38 +246,22 @@ public partial class EPNetAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
             // Split back into support and query portions
             if (supportLen > 0)
             {
-                propagatedSupport = new Vector<T>(supportLen);
-                for (int i = 0; i < supportLen; i++)
-                    propagatedSupport[i] = propagated[i];
+                propagatedSupport = propagated.GetSubVector(0, supportLen);
             }
             if (queryLen > 0)
             {
-                propagatedQuery = new Vector<T>(queryLen);
-                for (int i = 0; i < queryLen; i++)
-                    propagatedQuery[i] = propagated[supportLen + i];
+                propagatedQuery = propagated.GetSubVector(supportLen, queryLen);
             }
         }
 
         // Compute feature-delta modulation: how much propagation changed support features
         // Use this to create a task-specific parameter perturbation
-        double[]? modulationFactors = null;
+        Vector<T>? modulationFactors = null;
         if (propagatedSupport != null && supportFeatures != null && supportLen > 0)
         {
             // Compute relative change: propagated / raw (clamped to avoid extreme values)
-            double sumRatio = 0;
-            int count = 0;
-            for (int i = 0; i < supportLen; i++)
-            {
-                double raw = NumOps.ToDouble(supportFeatures[i]);
-                double prop = NumOps.ToDouble(propagatedSupport[i]);
-                if (Math.Abs(raw) > 1e-10)
-                {
-                    sumRatio += Math.Max(0.5, Math.Min(2.0, prop / raw));
-                    count++;
-                }
-            }
-            double avgRatio = count > 0 ? sumRatio / count : 1.0;
-            modulationFactors = [avgRatio];
+            modulationFactors = ParameterModulation.MeanClampedRatio(Engine, supportFeatures, propagatedSupport, 0.5, 2.0, 1e-10)
+                ?? new Vector<T>(new[] { NumOps.One });
         }
 
         return new EPNetModel<T, TInput, TOutput>(
@@ -374,12 +279,13 @@ public partial class EPNetAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
 /// </remarks>
 internal class EPNetModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetadata<T>>, IAdaptedMetaModel<T>
 {
-    private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
     private readonly IFullModel<T, TInput, TOutput> _model;
     private readonly Vector<T> _backboneParams;
     private readonly Vector<T>? _propagatedSupport;
     private readonly Vector<T>? _propagatedQuery;
-    private readonly double[]? _modulationFactors;
+    // Not readonly: a readonly Vector<T> field is not persisted by the generated model state, and these
+    // factors belong in the adapted model's checkpoint as the double[] they replace did.
+    private Vector<T>? _modulationFactors;
 
     /// <inheritdoc/>
     public ModelMetadata<T> Metadata { get; } = new ModelMetadata<T>();
@@ -388,14 +294,14 @@ internal class EPNetModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMet
     public Vector<T>? AdaptedSupportFeatures => _propagatedSupport;
 
     /// <inheritdoc/>
-    public double[]? ParameterModulationFactors => _modulationFactors;
+    public Vector<T>? ParameterModulationFactors => _modulationFactors;
 
     public EPNetModel(
         IFullModel<T, TInput, TOutput> model,
         Vector<T> backboneParams,
         Vector<T>? propagatedSupport,
         Vector<T>? propagatedQuery,
-        double[]? modulationFactors)
+        Vector<T>? modulationFactors)
     {
         // Predict pushes the adapted parameters into this model, so it is a copy: holding the meta-learner's
         // MetaModel would let every prediction overwrite the meta-model.
@@ -412,12 +318,7 @@ internal class EPNetModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMet
         if (_modulationFactors != null && _modulationFactors.Length > 0)
         {
             // Apply propagation-derived parameter modulation
-            var modulatedParams = new Vector<T>(_backboneParams.Length);
-            for (int i = 0; i < _backboneParams.Length; i++)
-            {
-                double mod = _modulationFactors[i % _modulationFactors.Length];
-                modulatedParams[i] = NumOps.Multiply(_backboneParams[i], NumOps.FromDouble(mod));
-            }
+            var modulatedParams = ParameterModulation.Apply(AiDotNetEngine.Current, _backboneParams, _modulationFactors);
             InterfaceGuard.Parameterizable(_model).SetParameters(modulatedParams);
         }
         else

@@ -199,7 +199,7 @@ internal class OpenMAMLModel<T, TInput, TOutput> : IModel<TInput, TOutput, Model
     public Vector<T>? AdaptedSupportFeatures => _supportFeatures;
 
     /// <inheritdoc/>
-    public double[]? ParameterModulationFactors => _threshold > 0 ? [_threshold] : null;
+    public Vector<T>? ParameterModulationFactors => _threshold > 0 ? new Vector<T>(new[] { NumOps.FromDouble(_threshold) }) : null;
 
     /// <inheritdoc/>
     public ModelMetadata<T> Metadata { get; } = new ModelMetadata<T>();

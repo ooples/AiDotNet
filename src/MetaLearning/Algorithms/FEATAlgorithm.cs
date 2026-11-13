@@ -102,6 +102,12 @@ public partial class FEATAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
     private readonly FEATOptions<T, TInput, TOutput> _featOptions;
 
     /// <summary>
+    /// Elements (rows x n) of the attention matrix held at once by <see cref="AdaptPrototypes"/>; larger inputs are
+    /// processed in blocks of rows.
+    /// </summary>
+    private const int AttentionBlockElements = 1 << 20;
+
+    /// <summary>
     /// Parameters for the set-to-set transformer that adapts prototypes.
     /// </summary>
     [AiDotNet.Attributes.TrainableParameter]
@@ -184,6 +190,7 @@ public partial class FEATAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
         var losses = new List<T>();
 
         var initParams = ParamModel.GetParameters();
+        T contrastiveWeight = NumOps.FromDouble(_featOptions.ContrastiveWeight);
 
         foreach (var task in taskBatch.Tasks)
         {
@@ -203,13 +210,10 @@ public partial class FEATAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
             // Apply adaptation-derived modulation to backbone before computing query loss
             // This connects the transformer adaptation to the training loss
             var modFactor = ComputeModulationFactor(supportFeatures, adaptedPrototypes);
-            if (modFactor.HasValue)
+            if (modFactor is not null)
             {
                 var currentParams = ParamModel.GetParameters();
-                var modulatedParams = new Vector<T>(currentParams.Length);
-                for (int i = 0; i < currentParams.Length; i++)
-                    modulatedParams[i] = NumOps.Multiply(currentParams[i], NumOps.FromDouble(modFactor.Value));
-                ParamModel.SetParameters(modulatedParams);
+                ParamModel.SetParameters(ParameterModulation.Apply(Engine, currentParams, modFactor));
             }
 
             // Classification loss on modulated backbone (transformer affects loss)
@@ -218,22 +222,16 @@ public partial class FEATAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
 
             // Contrastive loss: adapted prototypes should stay close to original
             // L_contrastive = ||adapted - original||^2 / dim
-            double contrastiveLoss = 0;
+            T contrastiveLoss = NumOps.Zero;
             if (_featOptions.ContrastiveWeight > 0 && adaptedPrototypes != null && supportFeatures != null)
             {
-                double sumSqDiff = 0;
-                int minLen = Math.Min(supportFeatures.Length, adaptedPrototypes.Length);
-                for (int i = 0; i < minLen; i++)
-                {
-                    double diff = NumOps.ToDouble(adaptedPrototypes[i]) - NumOps.ToDouble(supportFeatures[i]);
-                    sumSqDiff += diff * diff;
-                }
-                contrastiveLoss = sumSqDiff / Math.Max(minLen, 1);
+                contrastiveLoss = ContrastiveLoss(adaptedPrototypes, supportFeatures);
             }
 
             // Combined loss = classification + contrastive
-            double totalLoss = NumOps.ToDouble(queryLoss) + _featOptions.ContrastiveWeight * contrastiveLoss;
-            losses.Add(NumOps.FromDouble(totalLoss));
+            T totalLoss = NumOps.Add(queryLoss,
+                NumOps.Multiply(contrastiveWeight, contrastiveLoss));
+            losses.Add(totalLoss);
 
             // Compute meta-gradients
             var metaGrad = ComputeGradients(MetaModel, task.QueryInput, task.QueryOutput);
@@ -270,8 +268,7 @@ public partial class FEATAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
         var adaptedPrototypes = supportFeatures != null ? AdaptPrototypes(supportFeatures) : null;
 
         // Compute modulation factors from adapted vs raw prototypes
-        var adaptModFactor = ComputeModulationFactor(supportFeatures, adaptedPrototypes);
-        double[]? modulationFactors = adaptModFactor.HasValue ? [adaptModFactor.Value] : null;
+        Vector<T>? modulationFactors = ComputeModulationFactor(supportFeatures, adaptedPrototypes);
 
         return new FEATModel<T, TInput, TOutput>(
             MetaModel, currentParams, adaptedPrototypes, _featOptions.Temperature, modulationFactors);
@@ -297,13 +294,10 @@ public partial class FEATAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
                 adaptedPrototypes = AdaptPrototypes(supportFeatures);
 
             var auxModFactor = ComputeModulationFactor(supportFeatures, adaptedPrototypes);
-            if (auxModFactor.HasValue)
+            if (auxModFactor is not null)
             {
                 var currentParams = ParamModel.GetParameters();
-                var modulatedParams = new Vector<T>(currentParams.Length);
-                for (int i = 0; i < currentParams.Length; i++)
-                    modulatedParams[i] = NumOps.Multiply(currentParams[i], NumOps.FromDouble(auxModFactor.Value));
-                ParamModel.SetParameters(modulatedParams);
+                ParamModel.SetParameters(ParameterModulation.Apply(Engine, currentParams, auxModFactor));
             }
 
             var queryPred = MetaModel.Predict(task.QueryInput);
@@ -315,25 +309,29 @@ public partial class FEATAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
     }
 
     /// <summary>
+    /// ||adapted - raw||^2 / dim over the first min(adapted.Length, raw.Length) entries (zero when that is none).
+    /// The squares accumulate in double, as the scalar loop did: a Half running sum stops growing past 2048.
+    /// </summary>
+    private T ContrastiveLoss(Vector<T> adapted, Vector<T> raw)
+    {
+        int minLen = Math.Min(raw.Length, adapted.Length);
+        if (minLen == 0)
+        {
+            return NumOps.Zero;
+        }
+
+        var diff = Engine.Subtract(adapted.GetSubVector(0, minLen), raw.GetSubVector(0, minLen));
+        return NumOps.FromDouble(WideReduction.SumOfSquares(Engine, diff) / minLen);
+    }
+
+    /// <summary>
     /// Computes a scalar modulation factor by comparing adapted vs raw feature vectors.
     /// Returns the clamped average ratio of adapted/raw values, or null if no valid ratios.
     /// </summary>
-    private double? ComputeModulationFactor(Vector<T>? rawFeatures, Vector<T>? adaptedFeatures)
+    private Vector<T>? ComputeModulationFactor(Vector<T>? rawFeatures, Vector<T>? adaptedFeatures)
     {
         if (rawFeatures == null || adaptedFeatures == null) return null;
-        double sumRatio = 0;
-        int count = 0;
-        for (int i = 0; i < Math.Min(rawFeatures.Length, adaptedFeatures.Length); i++)
-        {
-            double rawVal = NumOps.ToDouble(rawFeatures[i]);
-            double adaptedVal = NumOps.ToDouble(adaptedFeatures[i]);
-            if (Math.Abs(rawVal) > 1e-10)
-            {
-                sumRatio += Math.Max(0.5, Math.Min(2.0, adaptedVal / rawVal));
-                count++;
-            }
-        }
-        return count > 0 ? sumRatio / count : null;
+        return ParameterModulation.MeanClampedRatio(Engine, rawFeatures, adaptedFeatures, 0.5, 2.0, 1e-10);
     }
 
     /// <summary>
@@ -360,75 +358,82 @@ public partial class FEATAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
     /// The result: prototypes that are spread apart for this specific task.
     /// </para>
     /// </remarks>
-    private Vector<T> AdaptPrototypes(Vector<T> prototypes)
+    internal Vector<T> AdaptPrototypes(Vector<T> prototypes)
     {
-        var adapted = new Vector<T>(prototypes.Length);
+        // A stack of zero set-to-set layers is the identity map: the prototypes come back unadapted.
+        int n = prototypes.Length;
+        var adapted = prototypes;
+        if (n == 0 || _featOptions.NumTransformerLayers <= 0)
+        {
+            return adapted;
+        }
+
+        // Attention weights are read from the transformer parameters in (layer, i, j) order; once they
+        // run out, every remaining pair uses the constant weight 0.01.
+        // The n x n attention is processed in blocks of rows, each reading its own slice of the parameter stream,
+        // so peak memory is O(block * n) rather than O(n^2) while every row's result is unchanged.
         int paramIdx = 0;
+        long pairCount = (long)n * n;
+        int blockRows = Math.Max(1, Math.Min(n, AttentionBlockElements / n));
+        double invSqrtN = 1.0 / Math.Sqrt(n);
+        const double maxScore = 10.0;
+        double normCount = n;
+        const double layerNormEps = 1e-5;
+        T fallbackWeight = NumOps.FromDouble(0.01);
+        const double minTotalWeight = 1e-10;
 
         for (int layer = 0; layer < _featOptions.NumTransformerLayers; layer++)
         {
-            // Snapshot input prototypes for this layer (avoid in-place mutation)
-            var layerInput = new Vector<T>(prototypes.Length);
-            for (int i = 0; i < prototypes.Length; i++)
-                layerInput[i] = prototypes[i];
+            // Frozen layer input (avoid in-place mutation)
+            var x = Tensor<T>.FromVector(prototypes).Cast<double>();
 
-            // Self-attention: each position attends to all positions
-            for (int i = 0; i < adapted.Length; i++)
+            int available = (int)Math.Max(0, Math.Min(pairCount, (long)_transformerParams.Length - paramIdx));
+            var xColumn = Engine.Reshape(x, new[] { n, 1 });
+            var attendedBlocks = new List<Tensor<double>>((n + blockRows - 1) / blockRows);
+            for (int start = 0; start < n; start += blockRows)
             {
-                T sum = NumOps.Zero;
-                double totalWeight = 0;
+                int rows = Math.Min(blockRows, n - start);
+                int blockPairs = rows * n;
 
-                for (int j = 0; j < layerInput.Length; j++)
-                {
-                    // Compute attention score using frozen layer input
-                    double qi = NumOps.ToDouble(layerInput[i]);
-                    double kj = NumOps.ToDouble(layerInput[j]);
-                    double wParam = paramIdx < _transformerParams.Length
-                        ? NumOps.ToDouble(_transformerParams[paramIdx++ % _transformerParams.Length])
-                        : 0.01;
-                    double score = qi * kj * wParam / Math.Sqrt(layerInput.Length);
-                    double weight = Math.Exp(Math.Min(score, 10.0)); // Softmax component
-                    totalWeight += weight;
-                    sum = NumOps.Add(sum, NumOps.Multiply(layerInput[j], NumOps.FromDouble(weight)));
-                }
+                // This block's weights w[start .. start + rows, 0 .. n): stream entries from offset start * n,
+                // the ones past the end of the parameters taking the fallback weight.
+                long blockOffset = (long)start * n;
+                int blockAvailable = (int)Math.Max(0, Math.Min(blockPairs, available - blockOffset));
+                var blockWeights = blockAvailable == blockPairs
+                    ? _transformerParams.GetSubVector(paramIdx + (int)blockOffset, blockPairs)
+                    : Vector<T>.Concatenate(
+                        blockAvailable > 0
+                            ? _transformerParams.GetSubVector(paramIdx + (int)blockOffset, blockAvailable)
+                            : new Vector<T>(0),
+                        Engine.Fill(blockPairs - blockAvailable, fallbackWeight));
 
-                if (totalWeight > 1e-10)
-                {
-                    adapted[i] = NumOps.Divide(sum, NumOps.FromDouble(totalWeight));
-                }
-                else
-                {
-                    adapted[i] = layerInput[i];
-                }
+                // score[i, j] = x_i * x_j * w_ij / sqrt(n); weight = exp(min(score, 10))
+                var xRows = Engine.TensorSlice(x, new[] { start }, new[] { rows });
+                var pairWeights = Engine.Reshape(Tensor<T>.FromVector(blockWeights).Cast<double>(), new[] { rows, n });
+                var scores = Engine.TensorMultiplyScalar(
+                    Engine.TensorMultiply(Engine.TensorOuter(xRows, x), pairWeights), invSqrtN);
+                var weights = Engine.TensorExp(Engine.TensorMin(scores, maxScore));
+                var totalWeight = Engine.ReduceSum(weights, new[] { 1 }, false);
+                var weightedSum = Engine.Reshape(Engine.TensorMatMul(weights, xColumn), new[] { rows });
+
+                // Rows whose total weight underflows keep their input value.
+                var valid = Engine.TensorGreaterThan(totalWeight, minTotalWeight);
+                var safeTotal = Engine.TensorWhere(valid, totalWeight, Engine.TensorOnesLike(totalWeight));
+                attendedBlocks.Add(Engine.TensorWhere(valid, Engine.TensorDivide(weightedSum, safeTotal), xRows));
             }
 
-            // Residual connection (uses frozen layer input, not mutated adapted)
-            for (int i = 0; i < adapted.Length; i++)
-            {
-                adapted[i] = NumOps.Add(adapted[i], layerInput[i]);
-            }
+            paramIdx += available;
+            var attended = attendedBlocks.Count == 1 ? attendedBlocks[0] : Engine.Concat(attendedBlocks.ToArray(), 0);
 
-            // Layer normalization
-            T mean = NumOps.Zero;
-            for (int i = 0; i < adapted.Length; i++)
-            {
-                mean = NumOps.Add(mean, adapted[i]);
-            }
-            mean = NumOps.Divide(mean, NumOps.FromDouble(Math.Max(1, adapted.Length)));
+            // Residual connection (uses frozen layer input)
+            var residual = Engine.TensorAdd(attended, x).ToVector();
 
-            T variance = NumOps.Zero;
-            for (int i = 0; i < adapted.Length; i++)
-            {
-                T diff = NumOps.Subtract(adapted[i], mean);
-                variance = NumOps.Add(variance, NumOps.Multiply(diff, diff));
-            }
-            variance = NumOps.Divide(variance, NumOps.FromDouble(Math.Max(1, adapted.Length)));
-            double std = Math.Sqrt(NumOps.ToDouble(variance) + 1e-5);
-
-            for (int i = 0; i < adapted.Length; i++)
-            {
-                adapted[i] = NumOps.Divide(NumOps.Subtract(adapted[i], mean), NumOps.FromDouble(std));
-            }
+            // Layer normalization (population variance, eps = 1e-5)
+            double mean = Engine.Sum(residual) / normCount;
+            var centered = Engine.Subtract(residual, Engine.Fill(n, mean));
+            double variance = Engine.DotProduct(centered, centered) / normCount;
+            double std = Math.Sqrt(variance + layerNormEps);
+            adapted = Tensor<double>.FromVector(Engine.Divide(centered, std)).Cast<T>().ToVector();
 
             prototypes = adapted;
         }
@@ -451,18 +456,19 @@ public partial class FEATAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
 /// </remarks>
 internal class FEATModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetadata<T>>, IAdaptedMetaModel<T>
 {
-    private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
     private readonly IFullModel<T, TInput, TOutput> _model;
     private readonly Vector<T> _backboneParams;
     private readonly Vector<T>? _adaptedPrototypes;
     private readonly double _temperature;
-    private readonly double[]? _modulationFactors;
+    // Not readonly: a readonly Vector<T> field is not persisted by the generated model state, and these
+    // factors belong in the adapted model's checkpoint as the double[] they replace did.
+    private Vector<T>? _modulationFactors;
 
     /// <inheritdoc/>
     public Vector<T>? AdaptedSupportFeatures => _adaptedPrototypes;
 
     /// <inheritdoc/>
-    public double[]? ParameterModulationFactors => _modulationFactors;
+    public Vector<T>? ParameterModulationFactors => _modulationFactors;
 
     /// <inheritdoc/>
     public ModelMetadata<T> Metadata { get; } = new ModelMetadata<T>();
@@ -472,7 +478,7 @@ internal class FEATModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMeta
         Vector<T> backboneParams,
         Vector<T>? adaptedPrototypes,
         double temperature,
-        double[]? modulationFactors)
+        Vector<T>? modulationFactors)
     {
         // Predict pushes the adapted parameters into this model, so it is a copy: holding the meta-learner's
         // MetaModel would let every prediction overwrite the meta-model.
@@ -488,10 +494,7 @@ internal class FEATModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMeta
     {
         if (_modulationFactors != null && _modulationFactors.Length > 0)
         {
-            var modulated = new Vector<T>(_backboneParams.Length);
-            for (int i = 0; i < _backboneParams.Length; i++)
-                modulated[i] = NumOps.Multiply(_backboneParams[i],
-                    NumOps.FromDouble(_modulationFactors[i % _modulationFactors.Length]));
+            var modulated = ParameterModulation.Apply(AiDotNetEngine.Current, _backboneParams, _modulationFactors);
             InterfaceGuard.Parameterizable(_model).SetParameters(modulated);
         }
         else

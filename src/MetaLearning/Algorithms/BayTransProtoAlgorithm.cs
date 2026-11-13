@@ -63,6 +63,15 @@ public partial class BayTransProtoAlgorithm<T, TInput, TOutput> : MetaLearnerBas
     [AiDotNet.Attributes.TrainableParameter]
     private Vector<T> _logVar;
 
+    // The SPSA estimate of the log-variance gradient reuses these per-task posterior means and standard-normal
+    // draws for the base and every perturbed loss (common random numbers), so each finite difference measures
+    // only the change in _logVar through the reparameterized samples mean + exp(logVar / 2) * noise and the KL.
+    private Vector<T>[] _spsaMeans = Array.Empty<Vector<T>>();
+    private Vector<T>[] _spsaNoise = Array.Empty<Vector<T>>();
+
+    /// <summary>The learned posterior log-variance, one entry per model parameter.</summary>
+    internal Vector<T> PosteriorLogVariance => _logVar;
+
     /// <inheritdoc/>
     public override MetaLearningAlgorithmType AlgorithmType => MetaLearningAlgorithmType.BayTransProto;
 
@@ -73,41 +82,30 @@ public partial class BayTransProtoAlgorithm<T, TInput, TOutput> : MetaLearnerBas
     {
         _algoOptions = options;
         _paramDim = InterfaceGuard.Parameterizable(options.MetaModel).GetParameters().Length;
-        _logVar = new Vector<T>(_paramDim);
-        for (int d = 0; d < _paramDim; d++)
-            _logVar[d] = NumOps.FromDouble(options.InitialLogVar);
+        _logVar = Engine.Fill(_paramDim, NumOps.FromDouble(options.InitialLogVar));
     }
 
     /// <inheritdoc/>
     public override T MetaTrain(TaskBatch<T, TInput, TOutput> taskBatch)
     {
+        // The setter is public, so re-check here: a nonpositive count would otherwise surface only after the
+        // outer update had already changed the model (negative) or freeze the log-variance (zero).
+        if (_algoOptions.NumPosteriorSamples <= 0)
+        {
+            throw new InvalidOperationException(
+                $"NumPosteriorSamples must be positive, but is {_algoOptions.NumPosteriorSamples}.");
+        }
+
         var losses = new List<T>();
         var metaGradients = new List<Vector<T>>();
         var initParams = ParamModel.GetParameters();
+        T transductiveLR = NumOps.FromDouble(_algoOptions.TransductiveLR);
+        T klScale = NumOps.FromDouble(_algoOptions.KLWeight / _paramDim);
 
         foreach (var task in taskBatch.Tasks)
         {
-            // Phase 1: Standard inner-loop adaptation
-            var adaptedMean = new Vector<T>(_paramDim);
-            for (int d = 0; d < _paramDim; d++) adaptedMean[d] = initParams[d];
-
-            for (int step = 0; step < _algoOptions.AdaptationSteps; step++)
-            {
-                ParamModel.SetParameters(adaptedMean);
-                var grad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
-                adaptedMean = ApplyInnerGradients(adaptedMean, grad, _algoOptions.InnerLearningRate, step == 0);
-            }
-
-            // Phase 2: Transductive refinement using query gradients
-            for (int tStep = 0; tStep < _algoOptions.TransductiveSteps; tStep++)
-            {
-                // Use query gradients to refine posterior mean
-                ParamModel.SetParameters(adaptedMean);
-                var queryGrad = ClipGradients(ComputeGradients(MetaModel, task.QueryInput, task.QueryOutput));
-                for (int d = 0; d < _paramDim; d++)
-                    adaptedMean[d] = NumOps.Subtract(adaptedMean[d],
-                        NumOps.FromDouble(_algoOptions.TransductiveLR * NumOps.ToDouble(queryGrad[d])));
-            }
+            // Phases 1 and 2: support adaptation, then transductive refinement of the posterior mean
+            var adaptedMean = AdaptPosteriorMean(task, initParams, transductiveLR);
 
             // Final evaluation: ensemble loss
             var finalLosses = new List<T>();
@@ -120,16 +118,9 @@ public partial class BayTransProtoAlgorithm<T, TInput, TOutput> : MetaLearnerBas
             var ensembleLoss = ComputeMean(finalLosses);
 
             // KL divergence: KL(N(adapted, σ²) || N(init, I))
-            double kl = 0;
-            for (int d = 0; d < _paramDim; d++)
-            {
-                double logv = NumOps.ToDouble(_logVar[d]);
-                double v = Math.Exp(logv);
-                double meanDiff = NumOps.ToDouble(adaptedMean[d]) - NumOps.ToDouble(initParams[d]);
-                kl += 0.5 * (v + meanDiff * meanDiff - 1.0 - logv);
-            }
+            T kl = DiagonalGaussianKL(adaptedMean, initParams);
 
-            var totalLoss = NumOps.Add(ensembleLoss, NumOps.FromDouble(_algoOptions.KLWeight * kl / _paramDim));
+            var totalLoss = NumOps.Add(ensembleLoss, NumOps.Multiply(klScale, kl));
             losses.Add(totalLoss);
 
             ParamModel.SetParameters(adaptedMean);
@@ -138,17 +129,53 @@ public partial class BayTransProtoAlgorithm<T, TInput, TOutput> : MetaLearnerBas
 
         ApplyOuterUpdate(initParams, metaGradients, _algoOptions.OuterLearningRate);
 
+        // The posterior means do not depend on _logVar, so they are adapted once from the updated
+        // initialization; the noise draws are fixed for the whole SPSA estimate.
+        var updatedParams = ParamModel.GetParameters();
+        _spsaMeans = taskBatch.Tasks.Select(task => AdaptPosteriorMean(task, updatedParams, transductiveLR)).ToArray();
+        _spsaNoise = Enumerable.Range(0, _algoOptions.NumPosteriorSamples)
+            .Select(_ => Engine.GenerateGaussianNoise(_paramDim, NumOps.Zero, NumOps.One, RandomGenerator.Next()))
+            .ToArray();
+        ParamModel.SetParameters(updatedParams);
+
         UpdateAuxiliaryParamsSPSA(taskBatch, ref _logVar, _algoOptions.OuterLearningRate * 0.01, ComputeBayTransLoss);
 
+        _spsaMeans = Array.Empty<Vector<T>>();
+        _spsaNoise = Array.Empty<Vector<T>>();
         return ComputeMean(losses);
+    }
+
+    /// <summary>
+    /// Adapts the posterior mean to a task: inner-loop steps on the support set, then transductive steps on the
+    /// query set. Leaves the model holding the last parameters it evaluated.
+    /// </summary>
+    private Vector<T> AdaptPosteriorMean(IMetaLearningTask<T, TInput, TOutput> task, Vector<T> initParams, T transductiveLR)
+    {
+        var adaptedMean = initParams.Clone();
+
+        for (int step = 0; step < _algoOptions.AdaptationSteps; step++)
+        {
+            ParamModel.SetParameters(adaptedMean);
+            var grad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
+            adaptedMean = ApplyInnerGradients(adaptedMean, grad, _algoOptions.InnerLearningRate, step == 0);
+        }
+
+        for (int tStep = 0; tStep < _algoOptions.TransductiveSteps; tStep++)
+        {
+            // Use query gradients to refine posterior mean
+            ParamModel.SetParameters(adaptedMean);
+            var queryGrad = ClipGradients(ComputeGradients(MetaModel, task.QueryInput, task.QueryOutput));
+            adaptedMean = Engine.Subtract(adaptedMean, Engine.Multiply(queryGrad, transductiveLR));
+        }
+
+        return adaptedMean;
     }
 
     /// <inheritdoc/>
     public override IModel<TInput, TOutput, ModelMetadata<T>> Adapt(IMetaLearningTask<T, TInput, TOutput> task)
     {
         var initParams = ParamModel.GetParameters();
-        var adaptedMean = new Vector<T>(_paramDim);
-        for (int d = 0; d < _paramDim; d++) adaptedMean[d] = initParams[d];
+        var adaptedMean = initParams.Clone();
 
         for (int step = 0; step < _algoOptions.AdaptationSteps; step++)
         {
@@ -172,24 +199,49 @@ public partial class BayTransProtoAlgorithm<T, TInput, TOutput> : MetaLearnerBas
         return sample;
     }
 
+    /// <summary>KL(N(mean, diag exp(logVar)) || N(prior, I)) = 0.5 * sum_d [v_d + (mean_d - prior_d)^2 - 1 - log v_d].</summary>
+    private T DiagonalGaussianKL(Vector<T> mean, Vector<T> prior)
+    {
+        // Per dimension v_d - 1 - log v_d = expm1(log v_d) - log v_d is nonnegative and near zero when log v_d is,
+        // so it is summed first; adding the squared mean shift to that small sum (rather than to a sum near D)
+        // keeps a tiny shift visible when T is float. Both sums accumulate in double: a Half running sum over the
+        // parameter vector stops growing past 2048.
+        return WideReduction.DiagonalGaussianKL(Engine, _logVar, mean, prior, _logVar.Length);
+    }
+
+    /// <summary>
+    /// The variational objective the posterior log-variance minimizes, averaged over the batch: the expected query
+    /// loss under q(theta) = N(mean, diag exp(logVar)), estimated with the fixed reparameterized draws, plus
+    /// KLWeight / D * KL(q || N(theta_init, I)) - the same ensemble-plus-KL loss meta-training reports.
+    /// </summary>
     private double ComputeBayTransLoss(TaskBatch<T, TInput, TOutput> taskBatch)
     {
-        double totalLoss = 0;
+        int count = Math.Min(taskBatch.Tasks.Length, _spsaMeans.Length);
+        if (count == 0 || _spsaNoise.Length == 0) return 0;
+
         var initParams = ParamModel.GetParameters();
-        foreach (var task in taskBatch.Tasks)
+        var objectives = new List<T>(count);
+        for (int t = 0; t < count; t++)
         {
-            var ap = new Vector<T>(_paramDim);
-            for (int d = 0; d < _paramDim; d++) ap[d] = initParams[d];
-            for (int step = 0; step < _algoOptions.AdaptationSteps; step++)
-            {
-                ParamModel.SetParameters(ap);
-                var g = ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput);
-                ap = ApplyInnerGradients(ap, g, _algoOptions.InnerLearningRate, step == 0);
-            }
-            ParamModel.SetParameters(ap);
-            totalLoss += NumOps.ToDouble(ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput));
+            objectives.Add(PosteriorObjective(taskBatch.Tasks[t], _spsaMeans[t], initParams));
         }
+
         ParamModel.SetParameters(initParams);
-        return totalLoss / Math.Max(taskBatch.Tasks.Length, 1);
+        return NumOps.ToDouble(ComputeMean(objectives));
+    }
+
+    /// <summary>Ensemble query loss over the reparameterized posterior samples plus the scaled KL term.</summary>
+    private T PosteriorObjective(IMetaLearningTask<T, TInput, TOutput> task, Vector<T> mean, Vector<T> initParams)
+    {
+        var std = Engine.Exp(Engine.Multiply(_logVar, NumOps.FromDouble(0.5)));
+        var losses = new List<T>(_spsaNoise.Length);
+        foreach (var noise in _spsaNoise)
+        {
+            ParamModel.SetParameters(Engine.Add(mean, Engine.Multiply(std, noise)));
+            losses.Add(ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput));
+        }
+
+        T klScale = NumOps.FromDouble(_algoOptions.KLWeight / _paramDim);
+        return NumOps.Add(ComputeMean(losses), NumOps.Multiply(klScale, DiagonalGaussianKL(mean, initParams)));
     }
 }

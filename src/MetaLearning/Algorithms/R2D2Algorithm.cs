@@ -296,14 +296,10 @@ public partial class R2D2Algorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
         }
 
         // Compute modulation from ridge weight magnitudes
-        double[]? modulationFactors = null;
+        Vector<T>? modulationFactors = null;
         if (ridgeWeights != null && ridgeWeights.Length > 0)
         {
-            double sumAbs = 0;
-            for (int i = 0; i < ridgeWeights.Length; i++)
-                sumAbs += Math.Abs(NumOps.ToDouble(ridgeWeights[i]));
-            double meanAbs = sumAbs / ridgeWeights.Length;
-            modulationFactors = [0.5 + 0.5 / (1.0 + Math.Exp(-meanAbs + 1.0))];
+            modulationFactors = ParameterModulation.MeanAbsGate(Engine, ridgeWeights);
         }
 
         return new R2D2Model<T, TInput, TOutput>(MetaModel, currentParams, ridgeWeights, _lambda, modulationFactors);
@@ -619,24 +615,25 @@ public partial class R2D2Algorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
 /// </remarks>
 internal class R2D2Model<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetadata<T>>, IAdaptedMetaModel<T>
 {
-    private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
     private readonly IFullModel<T, TInput, TOutput> _model;
     private readonly Vector<T> _backboneParams;
     private readonly Vector<T>? _ridgeWeights;
     private readonly double _lambda;
-    private readonly double[]? _modulationFactors;
+    // Not readonly: a readonly Vector<T> field is not persisted by the generated model state, and these
+    // factors belong in the adapted model's checkpoint as the double[] they replace did.
+    private Vector<T>? _modulationFactors;
 
     /// <inheritdoc/>
     public Vector<T>? AdaptedSupportFeatures => _ridgeWeights;
 
     /// <inheritdoc/>
-    public double[]? ParameterModulationFactors => _modulationFactors;
+    public Vector<T>? ParameterModulationFactors => _modulationFactors;
 
     /// <inheritdoc/>
     public ModelMetadata<T> Metadata { get; } = new ModelMetadata<T>();
 
     public R2D2Model(IFullModel<T, TInput, TOutput> model, Vector<T> backboneParams,
-        Vector<T>? ridgeWeights, double lambda, double[]? modulationFactors)
+        Vector<T>? ridgeWeights, double lambda, Vector<T>? modulationFactors)
     {
         // Predict pushes the adapted parameters into this model, so it is a copy: holding the meta-learner's
         // MetaModel would let every prediction overwrite the meta-model.
@@ -652,10 +649,7 @@ internal class R2D2Model<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMeta
     {
         if (_modulationFactors != null && _modulationFactors.Length > 0)
         {
-            var modulated = new Vector<T>(_backboneParams.Length);
-            for (int i = 0; i < _backboneParams.Length; i++)
-                modulated[i] = NumOps.Multiply(_backboneParams[i],
-                    NumOps.FromDouble(_modulationFactors[i % _modulationFactors.Length]));
+            var modulated = ParameterModulation.Apply(AiDotNetEngine.Current, _backboneParams, _modulationFactors);
             InterfaceGuard.Parameterizable(_model).SetParameters(modulated);
         }
         else
