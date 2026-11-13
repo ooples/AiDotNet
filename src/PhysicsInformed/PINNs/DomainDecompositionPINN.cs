@@ -449,6 +449,8 @@ public partial class DomainDecompositionPINN<T> : PhysicsInformedNeuralNetwork<T
             loss = Engine.TensorAdd(loss, physics);
         }
 
+        T interfaceWeight = NumOps.FromDouble(_interfaceWeight);
+        T interfaceGradientWeight = NumOps.FromDouble(_interfaceGradientWeight);
         Tensor<T>? interfaceLoss = null;
         T half = NumOps.FromDouble(0.5);
         foreach (var iface in _interfaces)
@@ -471,8 +473,8 @@ public partial class DomainDecompositionPINN<T> : PhysicsInformedNeuralNetwork<T
                 MeanOf(Engine.TensorMultiply(secondGap, secondGap)));
             var residualGap = Engine.TensorSubtract(firstResidual, secondResidual);
             var term = Engine.TensorAdd(
-                Engine.TensorMultiplyScalar(continuity, NumOps.FromDouble(_interfaceWeight)),
-                Engine.TensorMultiplyScalar(MeanOf(Engine.TensorMultiply(residualGap, residualGap)), NumOps.FromDouble(_interfaceGradientWeight)));
+                Engine.TensorMultiplyScalar(continuity, interfaceWeight),
+                Engine.TensorMultiplyScalar(MeanOf(Engine.TensorMultiply(residualGap, residualGap)), interfaceGradientWeight));
             interfaceLoss = interfaceLoss is null ? term : Engine.TensorAdd(interfaceLoss, term);
         }
 

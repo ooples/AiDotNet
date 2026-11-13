@@ -169,21 +169,6 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
         }
 
         /// <summary>
-        /// Forward pass through the graph neural operator.
-        /// </summary>
-        /// <param name="nodeFeatures">Features for each node.</param>
-        /// <param name="adjacencyMatrix">Graph adjacency matrix.</param>
-        /// <returns>Updated node features.</returns>
-        public T[,] Forward(T[,] nodeFeatures, T[,] adjacencyMatrix)
-        {
-            ValidateGraphInput(nodeFeatures, adjacencyMatrix);
-            var featureTensor = ToTensor3D(nodeFeatures);
-            var adjacencyTensor = ToTensor2D(adjacencyMatrix);
-            var outputTensor = Forward(featureTensor, adjacencyTensor);
-            return ToArray2D(outputTensor.GetSlice(0));
-        }
-
-        /// <summary>
         /// Forward pass using an identity adjacency matrix.
         /// </summary>
         /// <param name="input">Node feature tensor.</param>
@@ -431,63 +416,7 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
 
         private Tensor<T> CreateIdentityAdjacency(int numNodes)
         {
-            var adjacency = new Tensor<T>(new int[] { numNodes, numNodes });
-            for (int i = 0; i < numNodes; i++)
-            {
-                for (int j = 0; j < numNodes; j++)
-                {
-                    adjacency[i, j] = i == j ? NumOps.One : NumOps.Zero;
-                }
-            }
-
-            return adjacency;
-        }
-
-        private static T[,] ToArray2D(Tensor<T> tensor)
-        {
-            if (tensor.Rank != 2)
-            {
-                throw new ArgumentException("Expected a 2D tensor.");
-            }
-
-            var result = new T[tensor.Shape[0], tensor.Shape[1]];
-            for (int i = 0; i < tensor.Shape[0]; i++)
-            {
-                for (int j = 0; j < tensor.Shape[1]; j++)
-                {
-                    result[i, j] = tensor[i, j];
-                }
-            }
-
-            return result;
-        }
-
-        private static Tensor<T> ToTensor2D(T[,] data)
-        {
-            var tensor = new Tensor<T>(new int[] { data.GetLength(0), data.GetLength(1) });
-            for (int i = 0; i < data.GetLength(0); i++)
-            {
-                for (int j = 0; j < data.GetLength(1); j++)
-                {
-                    tensor[i, j] = data[i, j];
-                }
-            }
-
-            return tensor;
-        }
-
-        private static Tensor<T> ToTensor3D(T[,] data)
-        {
-            var tensor = new Tensor<T>(new int[] { 1, data.GetLength(0), data.GetLength(1) });
-            for (int i = 0; i < data.GetLength(0); i++)
-            {
-                for (int j = 0; j < data.GetLength(1); j++)
-                {
-                    tensor[0, i, j] = data[i, j];
-                }
-            }
-
-            return tensor;
+            return Engine.TensorEye<T>(numNodes);
         }
 
         private Tensor<T> AddBatchDimension(Tensor<T> tensor)
@@ -497,80 +426,11 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
                 throw new ArgumentException("Expected a 2D tensor.");
             }
 
-            var output = new Tensor<T>(new int[] { 1, tensor.Shape[0], tensor.Shape[1] });
-            for (int i = 0; i < tensor.Shape[0]; i++)
-            {
-                for (int j = 0; j < tensor.Shape[1]; j++)
-                {
-                    output[0, i, j] = tensor[i, j];
-                }
-            }
-
-            return output;
-        }
-
-        private T ComputeMSE(T[,] predictions, T[,] targets)
-        {
-            int rows = predictions.GetLength(0);
-            int cols = predictions.GetLength(1);
-            if (rows != targets.GetLength(0) || cols != targets.GetLength(1))
-            {
-                throw new ArgumentException("Prediction and target shapes must match.");
-            }
-
-            T sumSquaredError = NumOps.Zero;
-            int count = 0;
-
-            for (int i = 0; i < rows; i++)
-            {
-                for (int j = 0; j < cols; j++)
-                {
-                    T error = NumOps.Subtract(predictions[i, j], targets[i, j]);
-                    sumSquaredError = NumOps.Add(sumSquaredError, NumOps.Multiply(error, error));
-                    count++;
-                }
-            }
-
-            return count > 0
-                ? NumOps.Divide(sumSquaredError, NumOps.FromDouble(count))
-                : NumOps.Zero;
+            return Engine.Reshape(tensor, new[] { 1, tensor.Shape[0], tensor.Shape[1] });
         }
 
         /// <inheritdoc />
         public override bool SupportsTraining => true;
-
-        private void ValidateGraphInput(T[,] nodeFeatures, T[,] adjacencyMatrix)
-        {
-            if (nodeFeatures == null)
-            {
-                throw new ArgumentNullException(nameof(nodeFeatures));
-            }
-
-            if (adjacencyMatrix == null)
-            {
-                throw new ArgumentNullException(nameof(adjacencyMatrix));
-            }
-
-            int numNodes = nodeFeatures.GetLength(0);
-            int featureDim = nodeFeatures.GetLength(1);
-            if (featureDim != _inputDim)
-            {
-                throw new ArgumentException($"Input feature dimension ({featureDim}) must match configured input dimension ({_inputDim}).", nameof(nodeFeatures));
-            }
-
-            int adjRows = adjacencyMatrix.GetLength(0);
-            int adjCols = adjacencyMatrix.GetLength(1);
-            if (adjRows != adjCols)
-            {
-                throw new ArgumentException("Adjacency matrix must be square.", nameof(adjacencyMatrix));
-            }
-
-            if (adjRows != numNodes)
-            {
-                throw new ArgumentException($"Adjacency matrix size ({adjRows}) must match number of nodes ({numNodes}).", nameof(adjacencyMatrix));
-            }
-        }
-
         private void ValidateGraphTensorInputs(Tensor<T> nodeFeatures, Tensor<T> adjacencyMatrix)
         {
             if (nodeFeatures == null)
@@ -654,75 +514,28 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
             return _normalizeAdjacency ? NormalizeAdjacency(adjacencyMatrix) : adjacencyMatrix;
         }
 
+        /// <summary>
+        /// The symmetric normalization D^-1/2 A D^-1/2 of one adjacency [N, N] or a batch [B, N, N].
+        /// </summary>
+        /// <remarks>
+        /// An isolated node (degree 0) gets a zero row and column. The old code added a fixed 1e-10 to every
+        /// degree, which is zero in low precision, so an isolated node divided by zero there.
+        /// </remarks>
         private Tensor<T> NormalizeAdjacency(Tensor<T> adjacency)
         {
-            return adjacency.Rank == 2
-                ? NormalizeAdjacencySingle(adjacency)
-                : NormalizeAdjacencyBatch(adjacency);
-        }
+            int rank = adjacency.Rank;
+            var degrees = Engine.ReduceSum(adjacency, new[] { rank - 1 }, keepDims: false);
+            var zero = Engine.TensorEquals(degrees, NumOps.Zero);
+            var ones = Tensor<T>.CreateDefault(degrees.Shape.ToArray(), NumOps.One);
+            var inverseRoot = Engine.TensorReciprocal(Engine.TensorSqrt(Engine.TensorWhere(zero, ones, degrees)));
+            inverseRoot = Engine.TensorWhere(zero, new Tensor<T>(degrees.Shape.ToArray()), inverseRoot);
 
-        private Tensor<T> NormalizeAdjacencySingle(Tensor<T> adjacency)
-        {
-            int numNodes = adjacency.Shape[0];
-            var normalized = new Tensor<T>(adjacency._shape);
-            var degrees = new T[numNodes];
-            var invSqrt = new T[numNodes];
-            T epsilon = NumOps.FromDouble(1e-10);
-
-            for (int i = 0; i < numNodes; i++)
-            {
-                T sum = NumOps.Zero;
-                for (int j = 0; j < numNodes; j++)
-                {
-                    sum = NumOps.Add(sum, adjacency[i, j]);
-                }
-                degrees[i] = NumOps.Add(sum, epsilon);
-                invSqrt[i] = NumOps.Divide(NumOps.One, NumOps.Sqrt(degrees[i]));
-            }
-
-            for (int i = 0; i < numNodes; i++)
-            {
-                for (int j = 0; j < numNodes; j++)
-                {
-                    normalized[i, j] = NumOps.Multiply(adjacency[i, j], NumOps.Multiply(invSqrt[i], invSqrt[j]));
-                }
-            }
-
-            return normalized;
-        }
-
-        private Tensor<T> NormalizeAdjacencyBatch(Tensor<T> adjacency)
-        {
-            int batch = adjacency.Shape[0];
-            int numNodes = adjacency.Shape[1];
-            var normalized = new Tensor<T>(adjacency._shape);
-            var degrees = new T[numNodes];
-            var invSqrt = new T[numNodes];
-            T epsilon = NumOps.FromDouble(1e-10);
-
-            for (int b = 0; b < batch; b++)
-            {
-                for (int i = 0; i < numNodes; i++)
-                {
-                    T sum = NumOps.Zero;
-                    for (int j = 0; j < numNodes; j++)
-                    {
-                        sum = NumOps.Add(sum, adjacency[b, i, j]);
-                    }
-                    degrees[i] = NumOps.Add(sum, epsilon);
-                    invSqrt[i] = NumOps.Divide(NumOps.One, NumOps.Sqrt(degrees[i]));
-                }
-
-                for (int i = 0; i < numNodes; i++)
-                {
-                    for (int j = 0; j < numNodes; j++)
-                    {
-                        normalized[b, i, j] = NumOps.Multiply(adjacency[b, i, j], NumOps.Multiply(invSqrt[i], invSqrt[j]));
-                    }
-                }
-            }
-
-            return normalized;
+            var rowShape = adjacency.Shape.ToArray();
+            rowShape[rank - 1] = 1;
+            var columnShape = adjacency.Shape.ToArray();
+            columnShape[rank - 2] = 1;
+            var rows = Engine.TensorMultiply(adjacency, Engine.Reshape(inverseRoot, rowShape));
+            return Engine.TensorMultiply(rows, Engine.Reshape(inverseRoot, columnShape));
         }
 
     }

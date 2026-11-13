@@ -23,7 +23,6 @@ public class HamiltonianNeuralNetworkOptions : PhysicsInformedOptions
         HiddenDimension = other.HiddenDimension;
         LearningRate = other.LearningRate;
         WeightDecay = other.WeightDecay;
-        DerivativeStep = other.DerivativeStep;
     }
 
     /// <summary>Gets or sets the number of tanh hidden layers.</summary>
@@ -56,16 +55,6 @@ public class HamiltonianNeuralNetworkOptions : PhysicsInformedOptions
     /// </remarks>
     public double WeightDecay { get; set; } = 1e-4;
 
-    /// <summary>Gets or sets the central-difference displacement used for input derivatives.</summary>
-    /// <value>The positive displacement. The default is 0.001.</value>
-    /// <remarks>
-    /// AiDotNet's first-order tape does not retain the higher-order graph required to differentiate
-    /// an input gradient with respect to network parameters. A centered input difference preserves
-    /// the paper's symplectic derivative objective while remaining differentiable with respect to
-    /// every model parameter. The default is large enough to remain resolvable in single precision.
-    /// </remarks>
-    public double DerivativeStep { get; set; } = 1e-3;
-
     /// <summary>Validates the paper training recipe and architecture.</summary>
     public void Validate()
     {
@@ -77,7 +66,5 @@ public class HamiltonianNeuralNetworkOptions : PhysicsInformedOptions
             throw new ArgumentOutOfRangeException(nameof(LearningRate), "LearningRate must be finite and positive.");
         if (double.IsNaN(WeightDecay) || double.IsInfinity(WeightDecay) || WeightDecay < 0.0)
             throw new ArgumentOutOfRangeException(nameof(WeightDecay), "WeightDecay must be finite and nonnegative.");
-        if (double.IsNaN(DerivativeStep) || double.IsInfinity(DerivativeStep) || DerivativeStep <= 0.0)
-            throw new ArgumentOutOfRangeException(nameof(DerivativeStep), "DerivativeStep must be finite and positive.");
     }
 }

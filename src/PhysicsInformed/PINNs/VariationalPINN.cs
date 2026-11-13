@@ -105,7 +105,9 @@ namespace AiDotNet.PhysicsInformed.PINNs
         private readonly bool _usesDefaultOptimizer;
         private readonly Tensor<T> _quadraturePoints;
         private readonly Tensor<T> _quadratureWeights;
+        [AiDotNet.Attributes.Scratch]
         private readonly Tensor<T>[] _testValues;
+        [AiDotNet.Attributes.Scratch]
         private readonly Tensor<T>[] _testGradients;
         private readonly int _numTestFunctions;
         private readonly int _numQuadraturePoints;
