@@ -22659,7 +22659,6 @@ AiDotNet.Finance.Trading.Agents.TradingAgentBase<T>.GaussianLogProbability(AiDot
 AiDotNet.Finance.Tokenization.TimeSeriesTokenizer<T>.Dequantize(int[]! tokens, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! binEdges) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 *REMOVED*AiDotNet.Finance.Tokenization.TimeSeriesTokenizer<T>.Quantize(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! series) -> (int[]! Tokens, double[]! BinEdges)
 AiDotNet.Finance.Tokenization.TimeSeriesTokenizer<T>.Quantize(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! series) -> (int[]! Tokens, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! BinEdges)
-||||||| 0c06dc461c
 AiDotNet.NeuralNetworks.CreditAssignment.TiedReadoutLocalErrorCreditRule<T>.TiedReadoutLocalErrorCreditRule(int readoutLayerCount = 2, double localWeight = 1, bool detachReadoutOnHiddenLayers = false, int layerStride = 1, bool useDepthProgressiveWeight = false) -> void
 AiDotNet.Models.Options.Adam8BitOptimizerOptions<T, TInput, TOutput>.UseDecoupledWeightDecay.get -> bool
 AiDotNet.Models.Options.Adam8BitOptimizerOptions<T, TInput, TOutput>.UseDecoupledWeightDecay.set -> void
