@@ -359,27 +359,37 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
                     continue;
                 }
 
-                var clientStartModel = usePersonalization && effectivePersonalizationOptions is not null && perClientPersonalState != null
-                    ? CreatePersonalizedStartModel(
-                        personalizationStrategy,
-                        effectivePersonalizationOptions,
-                        clientId,
-                        globalBefore,
-                        globalBeforeParams,
-                        personalizedIndices,
-                        perClientPersonalState,
-                        perClusterPersonalState)
-                    : globalBefore;
-
-                var localModel = CloneModelByParameters(clientStartModel);
-                var localOptimizer = CreateOptimizerForModel(localModel);
                 int effectiveLocalEpochs = useMetaLearning && effectiveMetaLearningOptions is { InnerEpochs: > 0 } ? effectiveMetaLearningOptions.InnerEpochs : localEpochs;
-                ConfigureLocalOptimizer(localOptimizer, effectiveLocalEpochs);
+                IFullModel<T, TInput, TOutput> trainedModel;
+                if (usePersonalization && IsPFedMePersonalization(personalizationStrategy) &&
+                    effectivePersonalizationOptions is { } pFedMeOptions && perClientPersonalState is { } pFedMeState)
+                {
+                    // pFedMe trains with its own bi-level update rather than the local optimizer.
+                    trainedModel = TrainPFedMeClient(globalBefore, globalBeforeParams, dataset, pFedMeOptions, effectiveLocalEpochs, clientId, pFedMeState);
+                }
+                else
+                {
+                    var clientStartModel = usePersonalization && effectivePersonalizationOptions is not null && perClientPersonalState != null
+                        ? CreatePersonalizedStartModel(
+                            personalizationStrategy,
+                            effectivePersonalizationOptions,
+                            clientId,
+                            globalBefore,
+                            globalBeforeParams,
+                            personalizedIndices,
+                            perClientPersonalState,
+                            perClusterPersonalState)
+                        : globalBefore;
 
-                var inputData = CreateLocalOptimizationInputData(dataset, localModel);
-                OptimizationResult<T, TInput, TOutput> localResult = localOptimizer.Optimize(inputData);
+                    var localModel = CloneModelByParameters(clientStartModel);
+                    var localOptimizer = CreateOptimizerForModel(localModel);
+                    ConfigureLocalOptimizer(localOptimizer, effectiveLocalEpochs);
 
-                var trainedModel = localResult.BestSolution ?? localModel;
+                    var inputData = CreateLocalOptimizationInputData(dataset, localModel);
+                    OptimizationResult<T, TInput, TOutput> localResult = localOptimizer.Optimize(inputData);
+
+                    trainedModel = localResult.BestSolution ?? localModel;
+                }
 
                 double weight = Math.Max(1.0, dataset.SampleCount);
                 clientWeights[clientId] = weight;
@@ -541,6 +551,15 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
                 var merged = ReplaceAt(InterfaceGuard.Parameterizable(newGlobalModel).GetParameters(), heAggregated, encryptedIndices, skipOutOfRange: false);
 
                 newGlobalModel = InterfaceGuard.Parameterizable(newGlobalModel).WithParameters(merged);
+            }
+
+            if (usePersonalization && IsPFedMePersonalization(personalizationStrategy) &&
+                effectivePersonalizationOptions is { } pFedMeServerOptions)
+            {
+                // pFedMe server step: w <- (1 - beta) w + beta * mean of the clients' local models.
+                var averaged = InterfaceGuard.Parameterizable(newGlobalModel).GetParameters();
+                var mixed = ApplyMetaLearningUpdate(globalBeforeParams, averaged, pFedMeServerOptions.PFedMeBeta);
+                newGlobalModel = InterfaceGuard.Parameterizable(globalBefore).WithParameters(mixed);
             }
 
             if (useMetaLearning && effectiveMetaLearningOptions != null)
@@ -1500,21 +1519,8 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
 
         if (IsPFedMePersonalization(personalizationStrategy))
         {
-            if (!perClientState.TryGetValue(clientId, out var theta))
-            {
-                theta = globalBaseline.Clone();
-            }
-
-            double mu = Math.Max(0.0, options.PFedMeMu);
-            double alpha = 1.0 / (1.0 + mu);
-            int steps = Math.Max(1, options.PFedMeInnerSteps);
-            for (int k = 0; k < steps; k++)
-            {
-                theta = ApplyMetaLearningUpdate(theta, trainedParameters, alpha);
-            }
-
-            perClientState[clientId] = theta;
-            return theta;
+            // TrainPFedMeClient has stored the personalized model; the local model w is what the server averages.
+            return trainedParameters;
         }
 
         if (IsDittoPersonalization(personalizationStrategy))
@@ -1727,6 +1733,93 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
         clusterCount = Math.Max(1, clusterCount);
         int mod = clientId % clusterCount;
         return mod < 0 ? mod + clusterCount : mod;
+    }
+
+    /// <summary>
+    /// One client's pFedMe round: the local model starts from the global one, <see cref="PFedMeLocalUpdate"/>
+    /// runs over the client's data, the personalized model is stored for the client and the local model is
+    /// returned for aggregation.
+    /// </summary>
+    private IFullModel<T, TInput, TOutput> TrainPFedMeClient(
+        IFullModel<T, TInput, TOutput> globalModel,
+        Vector<T> globalParameters,
+        FederatedClientDataset<TInput, TOutput> dataset,
+        FederatedPersonalizationOptions options,
+        int localRounds,
+        int clientId,
+        Dictionary<int, Vector<T>> perClientState)
+    {
+        var parameterizable = InterfaceGuard.Parameterizable(globalModel);
+        Vector<T> Gradient(Vector<T> theta)
+        {
+            if (parameterizable.WithParameters(theta) is not IGradientComputable<T, TInput, TOutput> differentiable)
+            {
+                throw new InvalidOperationException(
+                    "pFedMe solves each client's personalized problem with gradients of the client loss, so the model must implement IGradientComputable.");
+            }
+
+            return differentiable.ComputeGradients(dataset.Features, dataset.Labels);
+        }
+
+        var local = PFedMeLocalUpdate(Gradient, globalParameters, options, localRounds, out var personalized);
+        perClientState[clientId] = personalized;
+        return parameterizable.WithParameters(local);
+    }
+
+    /// <summary>
+    /// The client update of pFedMe (Dinh, Tran and Nguyen 2020, Algorithm 1). For each of
+    /// <paramref name="localRounds"/> local rounds the personalized model theta approximately solves the
+    /// Moreau-envelope problem min_theta f(theta) + lambda/2 ||theta - w||^2 with K gradient steps of size
+    /// <see cref="FederatedPersonalizationOptions.PFedMePersonalLearningRate"/>, then the local model moves toward it:
+    /// w &lt;- w - eta lambda (w - theta). Theta starts from the global model and carries over between local rounds.
+    /// </summary>
+    /// <param name="gradient">The gradient of the client loss f at a parameter vector.</param>
+    /// <param name="globalParameters">The global model w the round starts from.</param>
+    /// <param name="options">lambda (<see cref="FederatedPersonalizationOptions.PFedMeMu"/>), K, eta and the personal rate.</param>
+    /// <param name="localRounds">The number of local rounds R.</param>
+    /// <param name="personalized">The personalized model theta after the last local round.</param>
+    /// <returns>The local model w after R local rounds.</returns>
+    internal static Vector<T> PFedMeLocalUpdate(
+        Func<Vector<T>, Vector<T>> gradient,
+        Vector<T> globalParameters,
+        FederatedPersonalizationOptions options,
+        int localRounds,
+        out Vector<T> personalized)
+    {
+        if (gradient is null) throw new ArgumentNullException(nameof(gradient));
+        if (options is null) throw new ArgumentNullException(nameof(options));
+
+        var engine = AiDotNetEngine.Current;
+        var numOps = MathHelper.GetNumericOperations<T>();
+        double lambda = Math.Max(0.0, options.PFedMeMu);
+        var lambdaT = numOps.FromDouble(lambda);
+        var personalRate = numOps.FromDouble(options.PFedMePersonalLearningRate);
+        var localStep = numOps.FromDouble(options.PFedMeLearningRate * lambda);
+        int innerSteps = Math.Max(1, options.PFedMeInnerSteps);
+        int rounds = Math.Max(1, localRounds);
+
+        var w = globalParameters.Clone();
+        var theta = globalParameters.Clone();
+        for (int r = 0; r < rounds; r++)
+        {
+            for (int k = 0; k < innerSteps; k++)
+            {
+                var g = gradient(theta);
+                if (g.Length != theta.Length)
+                {
+                    throw new InvalidOperationException($"The loss gradient has {g.Length} entries for {theta.Length} parameters.");
+                }
+
+                // gradient of f(theta) + lambda/2 ||theta - w||^2
+                var moreau = engine.Add(g, engine.Multiply(engine.Subtract(theta, w), lambdaT));
+                theta = engine.Subtract(theta, engine.Multiply(moreau, personalRate));
+            }
+
+            w = engine.Subtract(w, engine.Multiply(engine.Subtract(w, theta), localStep));
+        }
+
+        personalized = theta.Clone();
+        return w;
     }
 
     private Vector<T> ApplyMetaLearningUpdate(Vector<T> baseline, Vector<T> averaged, double metaRate)
