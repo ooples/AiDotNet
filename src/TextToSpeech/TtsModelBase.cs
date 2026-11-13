@@ -293,20 +293,15 @@ public abstract partial class TtsModelBase<T> : NeuralNetworkBase<T>, IShapeCont
         if (length <= 0)
             throw new ArgumentException("Text must contain at least one character.", nameof(text));
 
-        var tokens = new Tensor<T>(new[] { length });
         var domain = GetInputDomain(new[] { length });
-        if (domain.IsResolved && domain.Kind == LayerInputDomainKind.IntegerIndices)
-        {
-            int range = Math.Max(1, domain.MaxExclusive - domain.MinInclusive);
-            for (int i = 0; i < length; i++)
-                tokens[i] = NumOps.FromDouble(domain.MinInclusive + text[i] % range);
-        }
-        else
-        {
-            for (int i = 0; i < length; i++)
-                tokens[i] = NumOps.FromDouble(text[i] / 128.0);
-        }
-        return tokens;
+        bool integerIndices = domain.IsResolved && domain.Kind == LayerInputDomainKind.IntegerIndices;
+        int range = integerIndices ? Math.Max(1, domain.MaxExclusive - domain.MinInclusive) : 0;
+        var codes = new int[length];
+        for (int i = 0; i < length; i++)
+            codes[i] = integerIndices ? domain.MinInclusive + text[i] % range : text[i];
+        var tokens = new Tensor<int>(codes, new[] { length }).Cast<T>();
+        // Character codes are scaled by 1/128 (a power of two, so exact in every T) for a continuous front end.
+        return integerIndices ? tokens : Engine.TensorDivideScalar(tokens, NumOps.FromDouble(128.0));
     }
 
     /// <summary>Longest text, in tokens, the model reads.</summary>
@@ -594,20 +589,13 @@ public abstract partial class TtsModelBase<T> : NeuralNetworkBase<T>, IShapeCont
         double refLevel = 20.0
     )
     {
-        var result = new Tensor<T>(mel._shape);
         double range = refLevel - minLevel;
         if (Math.Abs(range) < 1e-10)
             range = 1.0;
 
-        for (int i = 0; i < mel.Length; i++)
-        {
-            double val = NumOps.ToDouble(mel[i]);
-            double normalized = (val - minLevel) / range;
-            normalized = Math.Max(0.0, Math.Min(1.0, normalized));
-            result[i] = NumOps.FromDouble(normalized);
-        }
-
-        return result;
+        var shifted = Engine.TensorAddScalar(mel, NumOps.FromDouble(-minLevel));
+        var normalized = Engine.TensorDivideScalar(shifted, NumOps.FromDouble(range));
+        return Engine.TensorClamp(normalized, NumOps.Zero, NumOps.One);
     }
 
     /// <summary>
@@ -627,30 +615,271 @@ public abstract partial class TtsModelBase<T> : NeuralNetworkBase<T>, IShapeCont
     /// <returns>Probabilities that sum to 1.</returns>
     protected Tensor<T> Softmax(Tensor<T> logits)
     {
-        double maxVal = double.MinValue;
-        for (int i = 0; i < logits.Length; i++)
+        // One distribution over every element (the max-shifted exponentials sum to at least 1).
+        var flat = Engine.Reshape(logits, new[] { logits.Length });
+        return Engine.Reshape(Engine.TensorSoftmax(flat, axis: 0), logits._shape);
+    }
+
+    /// <summary>Token or symbol ids as a <c>[count]</c> tensor of T.</summary>
+    protected static Tensor<T> IdTensor(IReadOnlyList<int> ids)
+    {
+        Guard.NotNull(ids);
+        var values = ids as int[] ?? ids.ToArray();
+        return new Tensor<int>(values, new[] { values.Length }).Cast<T>();
+    }
+
+    /// <summary>Each element rounded half to even (as <see cref="Math.Round(double)"/>), as ints: ids carried in T.</summary>
+    protected int[] RoundedIds(Tensor<T> tensor)
+    {
+        Guard.NotNull(tensor);
+        return Engine.TensorRound(tensor).Cast<int>().ToArray();
+    }
+
+    /// <summary>
+    /// <c>x / max(‖x‖₂, eps)</c> over the whole tensor (<c>torch.nn.functional.normalize</c>). The norm is taken after
+    /// scaling by the peak magnitude, so its sum of squares cannot overflow a narrow T.
+    /// </summary>
+    protected Tensor<T> NormalizeL2(Tensor<T> tensor, double eps)
+    {
+        Guard.NotNull(tensor);
+        if (tensor.Length == 0) return tensor;
+        var peak = Engine.TensorMaxValue(Engine.TensorAbs(tensor));
+        if (NumOps.Equals(peak, NumOps.Zero)) return new Tensor<T>(tensor._shape);
+        var scaled = Engine.TensorDivideScalar(tensor, peak);
+        var scaledNorm = NumOps.Sqrt(Engine.TensorSum(Engine.TensorSquare(scaled)));
+        var floor = NumOps.FromDouble(eps);
+        return NumOps.LessThan(NumOps.Multiply(peak, scaledNorm), floor)
+            ? Engine.TensorDivideScalar(tensor, floor)
+            : Engine.TensorDivideScalar(scaled, scaledNorm);
+    }
+
+    /// <summary>
+    /// The index of the first largest element of a tensor read flat (a scan that keeps the earlier index on ties).
+    /// The ties are broken explicitly: each maximal element is keyed by <c>n − index</c>, so the arg-max is unique.
+    /// </summary>
+    protected int FirstArgMax(Tensor<T> values)
+    {
+        Guard.NotNull(values);
+        int n = values.Length;
+        var flat = Engine.Reshape(values, new[] { n });
+        var isMax = Engine.TensorEquals(flat, Engine.TensorMaxValue(flat));
+        var reverseIndex = Engine.ScalarMinusTensor(NumOps.FromDouble(n), Engine.TensorArange<T>(0, n));
+        return Engine.TensorArgMax(Engine.TensorMultiply(isMax, reverseIndex), 0).ToArray()[0];
+    }
+
+    /// <summary>Level-major codec codes <c>[levels, frames]</c> (the first <paramref name="levels"/> levels) as a
+    /// frame-major tensor <c>[frames, levels]</c> of T.</summary>
+    protected static Tensor<T> FrameMajorCodes(int[,] codes, int levels)
+    {
+        Guard.NotNull(codes);
+        int frames = codes.GetLength(1);
+        var flat = new int[frames * levels];
+        for (int f = 0; f < frames; f++)
+            for (int q = 0; q < levels; q++) flat[f * levels + q] = codes[q, f];
+        return new Tensor<int>(flat, new[] { frames, levels }).Cast<T>();
+    }
+
+    /// <summary>Frame-major codec tokens <c>[frames, levels]</c> carried in T, rounded half to even, as level-major
+    /// codes <c>[levels, frames]</c>.</summary>
+    protected int[,] LevelMajorCodes(Tensor<T> tokens)
+    {
+        Guard.NotNull(tokens);
+        int frames = tokens.Shape[0], levels = tokens.Shape[1];
+        var flat = RoundedIds(tokens);
+        var codes = new int[levels, frames];
+        for (int f = 0; f < frames; f++)
+            for (int q = 0; q < levels; q++) codes[q, f] = flat[f * levels + q];
+        return codes;
+    }
+
+    /// <summary>The frame mask <c>[1, 1, 1, padded]</c>: 1 on the first <paramref name="frames"/> frames, 0 on the padding.</summary>
+    protected Tensor<T> PaddedFrameMask(int frames, int padded)
+    {
+        var valid = Tensor<T>.CreateDefault(new[] { 1, 1, 1, frames }, NumOps.One);
+        return frames == padded ? valid
+            : Engine.TensorConcatenate(new[] { valid, new Tensor<T>(new[] { 1, 1, 1, padded - frames }) }, 3);
+    }
+
+    /// <summary>Inference durations <c>(int)(⌈exp(log d̂)⌉ · lengthScale)</c> (truncated toward zero), as Grad-TTS and
+    /// its descendants compute them.</summary>
+    protected int[] CeilScaledDurations(Tensor<T> logDurations, double lengthScale)
+    {
+        Guard.NotNull(logDurations);
+        return Engine.TensorTrunc(Engine.TensorMultiplyScalar(Engine.TensorCeiling(Engine.TensorExp(logDurations)),
+            NumOps.FromDouble(lengthScale))).Cast<int>().ToArray();
+    }
+
+    /// <summary>
+    /// The log-duration target <c>log(eps + d)</c> <c>[durations.Length]</c>. A zero duration's target is
+    /// <c>log(eps)</c> itself, which adding a narrow T's rounded eps (0 in Half for 1e-8) would turn into −∞.
+    /// </summary>
+    protected Tensor<T> LogDurationTarget(int[] durations, double eps)
+    {
+        Guard.NotNull(durations);
+        var counts = IdTensor(durations);
+        return Engine.TensorWhere(Engine.TensorEquals(counts, NumOps.Zero),
+            Tensor<T>.CreateDefault(new[] { durations.Length }, NumOps.FromDouble(Math.Log(eps))),
+            Engine.TensorLog(Engine.TensorAddScalar(counts, NumOps.FromDouble(eps))));
+    }
+
+    /// <summary>An int matrix <c>[rows, columns]</c> as a tensor of T with the same layout.</summary>
+    protected static Tensor<T> IntMatrixTensor(int[,] values)
+    {
+        Guard.NotNull(values);
+        int rows = values.GetLength(0), columns = values.GetLength(1);
+        var flat = new int[rows * columns];
+        Buffer.BlockCopy(values, 0, flat, 0, flat.Length * sizeof(int));
+        return new Tensor<int>(flat, new[] { rows, columns }).Cast<T>();
+    }
+
+    /// <summary>A <c>[rows, columns]</c> tensor of ids carried in T, rounded half to even, as an int matrix.</summary>
+    protected int[,] RoundedIdMatrix(Tensor<T> tensor)
+    {
+        Guard.NotNull(tensor);
+        int rows = tensor.Shape[0], columns = tensor.Shape[1];
+        var flat = RoundedIds(tensor);
+        var values = new int[rows, columns];
+        Buffer.BlockCopy(flat, 0, values, 0, flat.Length * sizeof(int));
+        return values;
+    }
+
+    /// <summary>Row <paramref name="index"/> of a <c>[batch, n]</c> tensor, as a <c>[n]</c> tensor.</summary>
+    protected Tensor<T> BatchRow(Tensor<T> batch, int index)
+    {
+        Guard.NotNull(batch);
+        int n = batch.Shape[1];
+        return Engine.Reshape(Engine.TensorSlice(batch, new[] { index, 0 }, new[] { 1, n }), new[] { n });
+    }
+
+    /// <summary>
+    /// Per-utterance outputs <c>[frames_b, ≥ columns]</c> as one <c>[batch, longest, columns]</c> tensor: the first
+    /// <paramref name="columns"/> channels of each, zero-padded after its last frame.
+    /// </summary>
+    protected Tensor<T> PadAndStack(IReadOnlyList<Tensor<T>> outputs, int columns)
+    {
+        Guard.NotNull(outputs);
+        int longest = outputs.Max(o => o.Shape[0]);
+        var padded = new Tensor<T>[outputs.Count];
+        for (int b = 0; b < padded.Length; b++)
         {
-            double v = NumOps.ToDouble(logits[i]);
-            if (v > maxVal)
-                maxVal = v;
+            int length = outputs[b].Shape[0];
+            var rows = Engine.TensorSlice(outputs[b], new[] { 0, 0 }, new[] { length, columns });
+            padded[b] = length < longest
+                ? Engine.TensorConcatenate(new[] { rows, new Tensor<T>(new[] { longest - length, columns }) }, 0)
+                : rows;
+        }
+        return Engine.TensorStack(padded, 0);
+    }
+
+    /// <summary>A <c>[flags.Count, columns]</c> tensor that is 1 on the rows whose flag is set and 0 elsewhere.</summary>
+    protected Tensor<T> RowMask(IReadOnlyList<bool> flags, int columns)
+    {
+        Guard.NotNull(flags);
+        var set = new int[flags.Count];
+        for (int i = 0; i < set.Length; i++) set[i] = flags[i] ? 1 : 0;
+        return Engine.TensorTile(new Tensor<int>(set, new[] { set.Length, 1 }).Cast<T>(), new[] { 1, columns });
+    }
+
+    /// <summary>
+    /// The hard monotonic alignment <c>[durations.Length, sum(durations)]</c> that expands phoneme i over its
+    /// durations[i] frames: row i is 1 on those frames and 0 elsewhere.
+    /// </summary>
+    protected Tensor<T> DurationAlignment(int[] durations)
+    {
+        Guard.NotNull(durations);
+        int total = durations.Sum();
+        var owner = new int[total];
+        int frame = 0;
+        for (int i = 0; i < durations.Length; i++)
+            for (int f = 0; f < durations[i]; f++) owner[frame++] = i;
+        if (total == 0 || durations.Length == 0)
+            return new Tensor<T>(new[] { durations.Length, total });
+        var frameToPhoneme = Engine.TensorOneHot<T>(new Tensor<int>(owner, new[] { total }), durations.Length);
+        return Engine.TensorTranspose(frameToPhoneme);
+    }
+
+    /// <summary>
+    /// The Glow-TTS search scores <c>−½ ‖y_j − μ_i‖²</c> <c>[tokens, frames]</c> of token means <c>[tokens, ≥ C]</c>
+    /// against frames <c>[frames, C]</c> (the first C channels of the means), off the gradient tape.
+    /// </summary>
+    protected Tensor<T> AlignmentScores(Tensor<T> means, Tensor<T> frames)
+    {
+        Guard.NotNull(means);
+        Guard.NotNull(frames);
+        int tokens = means.Shape[0], count = frames.Shape[0], channels = frames.Shape[1];
+        using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
+        {
+            var mu = Engine.TensorSlice(means, new[] { 0, 0 }, new[] { tokens, channels });
+            // [tokens, frames, C] pairwise differences, squared and summed over the channels.
+            var tiledMeans = Engine.TensorTile(Engine.Reshape(mu, new[] { tokens, 1, channels }), new[] { 1, count, 1 });
+            var tiledFrames = Engine.TensorTile(Engine.Reshape(frames, new[] { 1, count, channels }), new[] { tokens, 1, 1 });
+            var squared = Engine.ReduceSum(Engine.TensorSquare(Engine.TensorSubtract(tiledFrames, tiledMeans)), new[] { 2 }, keepDims: false);
+            return Engine.TensorMultiplyScalar(squared, NumOps.FromDouble(-0.5));
+        }
+    }
+
+    /// <summary>
+    /// Monotonic alignment search (Glow-TTS, Kim et al. 2020, Alg. 1): the durations of the monotonic, surjective
+    /// alignment of <c>[tokens, frames]</c> scores with the highest total. Q[i, j] = s[i, j] + max(Q[i, j−1], Q[i−1, j−1])
+    /// one frame at a time with engine ops, a tie staying on the same token; then the path is traced back from the last
+    /// token at the last frame.
+    /// </summary>
+    protected int[] MonotonicDurations(Tensor<T> scores) => MonotonicDurations(Engine, scores);
+
+    /// <summary>The search of <see cref="MonotonicDurations(Tensor{T})"/> on <paramref name="engine"/>.</summary>
+    internal static int[] MonotonicDurations(AiDotNet.Tensors.Engines.IEngine engine, Tensor<T> scores)
+    {
+        Guard.NotNull(engine);
+        var ops = MathHelper.GetNumericOperations<T>();
+        Guard.NotNull(scores);
+        if (scores.Rank != 2) throw new ArgumentException("Expected [tokens, frames] scores.", nameof(scores));
+        int tokens = scores.Shape[0], frames = scores.Shape[1];
+        if (tokens == 0 || frames < tokens)
+            throw new ArgumentException($"A monotonic alignment of {tokens} tokens needs at least that many frames; got {frames}.", nameof(scores));
+
+        // The band of cells reachable from (0, 0) that can still reach (tokens − 1, frames − 1), frame-major.
+        var bandBits = new int[frames * tokens];
+        for (int frame = 0; frame < frames; frame++)
+            for (int token = Math.Max(0, tokens - frames + frame); token <= Math.Min(tokens - 1, frame); token++)
+                bandBits[frame * tokens + token] = 1;
+        var band = new Tensor<int>(bandBits, new[] { frames, tokens }).Cast<T>();
+        var byFrame = engine.TensorTranspose(scores);                                                   // [frames, tokens]
+        // x − x is NaN exactly where x is NaN or infinite; only the band's scores are read.
+        var nonFinite = engine.TensorWhere(band, engine.TensorSubtract(byFrame, byFrame), Tensor<T>.CreateDefault(new[] { frames, tokens }, ops.Zero));
+        if (ops.IsNaN(engine.TensorSum(nonFinite)))
+            throw new ArgumentException("Alignment scores must be finite.", nameof(scores));
+
+        T negativeInfinity = ops.FromDouble(double.NegativeInfinity);
+        var unreachable = Tensor<T>.CreateDefault(new[] { tokens }, negativeInfinity);
+        var firstPredecessor = Tensor<T>.CreateDefault(new[] { 1 }, negativeInfinity);
+        var start = engine.TensorWhere(engine.TensorEquals(engine.TensorArange<T>(0, tokens), ops.Zero),
+            Tensor<T>.CreateDefault(new[] { tokens }, ops.Zero), unreachable);                     // [0, −∞, …]
+        var previous = unreachable;
+        var moves = new Tensor<T>[frames];
+        for (int frame = 0; frame < frames; frame++)
+        {
+            var step = tokens == 1
+                ? firstPredecessor
+                : engine.TensorConcatenate(new[] { firstPredecessor, engine.TensorSlice(previous, new[] { 0 }, new[] { tokens - 1 }) }, 0);
+            var advance = engine.TensorGreaterThan(step, previous);
+            var best = frame == 0 ? start : engine.TensorWhere(advance, step, previous);
+            var inBand = engine.Reshape(engine.TensorSlice(band, new[] { frame, 0 }, new[] { 1, tokens }), new[] { tokens });
+            var score = engine.Reshape(engine.TensorSlice(byFrame, new[] { frame, 0 }, new[] { 1, tokens }), new[] { tokens });
+            previous = engine.TensorWhere(inBand, engine.TensorAdd(score, best), unreachable);
+            moves[frame] = engine.TensorMultiply(advance, inBand);
         }
 
-        var result = new Tensor<T>(logits._shape);
-        double sum = 0;
-        for (int i = 0; i < logits.Length; i++)
+        var advances = engine.TensorStack(moves, 0).Cast<int>().ToArray();                              // [frames, tokens]
+        var durations = new int[tokens];
+        int activeToken = tokens - 1;
+        for (int frame = frames - 1; frame >= 0; frame--)
         {
-            double v = Math.Exp(NumOps.ToDouble(logits[i]) - maxVal);
-            result[i] = NumOps.FromDouble(v);
-            sum += v;
+            durations[activeToken]++;
+            if (advances[frame * tokens + activeToken] != 0) activeToken--;
         }
-
-        if (sum > 1e-8)
-        {
-            for (int i = 0; i < result.Length; i++)
-                result[i] = NumOps.FromDouble(NumOps.ToDouble(result[i]) / sum);
-        }
-
-        return result;
+        if (activeToken != 0 || durations.Any(d => d <= 0))
+            throw new InvalidOperationException("Monotonic alignment failed to cover every token.");
+        return durations;
     }
 
     /// <summary>
@@ -660,22 +889,19 @@ public abstract partial class TtsModelBase<T> : NeuralNetworkBase<T>, IShapeCont
     /// <returns>Unit-normalized tensor.</returns>
     protected Tensor<T> L2Normalize(Tensor<T> tensor)
     {
-        double norm = 0;
-        for (int i = 0; i < tensor.Length; i++)
-        {
-            double v = NumOps.ToDouble(tensor[i]);
-            norm += v * v;
-        }
-
-        norm = Math.Sqrt(norm);
-        if (norm < 1e-8)
+        if (tensor.Length == 0)
+            return tensor;
+        // Scale by the largest magnitude first so the sum of squares cannot overflow a narrow T:
+        // x / ||x|| = (x / m) / ||x / m||.
+        var peak = Engine.TensorMaxValue(Engine.TensorAbs(tensor));
+        if (NumOps.Equals(peak, NumOps.Zero))
+            return tensor;
+        var scaled = Engine.TensorDivideScalar(tensor, peak);
+        var scaledNorm = NumOps.Sqrt(Engine.TensorSum(Engine.TensorSquare(scaled)));
+        if (NumOps.LessThan(NumOps.Multiply(peak, scaledNorm), NumOps.FromDouble(1e-8)))
             return tensor;
 
-        var result = new Tensor<T>(tensor._shape);
-        for (int i = 0; i < tensor.Length; i++)
-            result[i] = NumOps.FromDouble(NumOps.ToDouble(tensor[i]) / norm);
-
-        return result;
+        return Engine.TensorDivideScalar(scaled, scaledNorm);
     }
 
     /// <summary>
