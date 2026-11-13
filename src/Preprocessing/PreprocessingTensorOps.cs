@@ -20,6 +20,48 @@ internal static class PreprocessingTensorOps
     public static T Tolerance<T>(double epsilon) =>
         MathHelper.GetNumericOperations<T>().FromDouble(typeof(T) == typeof(Half) ? Math.Max(epsilon, HalfSmallestNormal) : epsilon);
 
+    /// <summary>
+    /// Whether <typeparamref name="T"/> is a 16-bit float (Half or BFloat16). Sums of squares and their products
+    /// overflow Half's 65504 maximum and lose BFloat16's 8-bit mantissa, so second-moment statistics are evaluated in
+    /// float for these types and cast back once.
+    /// </summary>
+    public static bool IsNarrowFloat<T>() =>
+        typeof(T) == typeof(Half) || typeof(T) == typeof(AiDotNet.Tensors.NumericOperations.BFloat16);
+
+    /// <summary>
+    /// Linear solve <c>a x = b</c> (<c>Linalg.Solve</c>, batched like it) for any T. The tensor library's
+    /// factorizations run only in float and double (torch.linalg.solve likewise rejects float16), so Half and
+    /// BFloat16 systems are widened to float, any other T (decimal) to double, solved there and cast back once.
+    /// </summary>
+    public static Tensor<T> Solve<T>(Tensor<T> a, Tensor<T> b)
+    {
+        if (typeof(T) == typeof(float) || typeof(T) == typeof(double))
+            return AiDotNet.Helpers.LinalgDispatch<T>.Solve(a, b);
+
+        return IsNarrowFloat<T>()
+            ? AiDotNet.Helpers.LinalgDispatch<float>.Solve(a.Cast<float>(), b.Cast<float>()).Cast<T>()
+            : AiDotNet.Helpers.LinalgDispatch<double>.Solve(a.Cast<double>(), b.Cast<double>()).Cast<T>();
+    }
+
+    /// <summary>
+    /// Symmetric eigendecomposition (<c>Linalg.Eigh</c>: eigenvalues ascending, eigenvectors as columns) for any T,
+    /// widened like <see cref="Solve{T}"/>: the library's Eigh runs only in float and double.
+    /// </summary>
+    public static (Tensor<T> Values, Tensor<T> Vectors) SymmetricEigh<T>(Tensor<T> symmetric)
+    {
+        if (typeof(T) == typeof(float) || typeof(T) == typeof(double))
+            return AiDotNet.Helpers.LinalgDispatch<T>.Eigh(symmetric);
+
+        if (IsNarrowFloat<T>())
+        {
+            var (floatValues, floatVectors) = AiDotNet.Helpers.LinalgDispatch<float>.Eigh(symmetric.Cast<float>());
+            return (floatValues.Cast<T>(), floatVectors.Cast<T>());
+        }
+
+        var (values, vectors) = AiDotNet.Helpers.LinalgDispatch<double>.Eigh(symmetric.Cast<double>());
+        return (values.Cast<T>(), vectors.Cast<T>());
+    }
+
     /// <summary>Gathers the given columns of <paramref name="data"/> into a new matrix, in the given order.</summary>
     public static Matrix<T> SelectColumns<T>(Matrix<T> data, int[] columns)
     {
@@ -161,20 +203,21 @@ internal static class PreprocessingTensorOps
     /// </summary>
     public static Tensor<T> TargetCorrelations<T>(Tensor<T> x, Tensor<T> y, double epsilon = 1e-10)
     {
+        if (IsNarrowFloat<T>())
+            return TargetCorrelations(x.Cast<float>(), y.Cast<float>(), epsilon).Cast<T>();
+
         var engine = AiDotNetEngine.Current;
         var ops = MathHelper.GetNumericOperations<T>();
         int n = x.Shape[0];
         T eps = Tolerance<T>(epsilon);
         var xc = engine.TensorSubtract(x, engine.ReduceMean(x, new[] { 0 }, true));
         var yc = engine.Reshape(engine.TensorSubtractScalar(y, engine.TensorMean(y)), new[] { n, 1 });
-        var sxy = engine.Reshape(engine.TensorMatMul(engine.TensorTranspose(xc), yc), new[] { x.Shape[1] });
         var sxx = engine.ReduceSum(engine.TensorSquare(xc), new[] { 0 }, false);
         T syy = engine.TensorSumOfSquares(yc);
         var zeros = new Tensor<T>(new[] { x.Shape[1] });
         if (!ops.GreaterThan(syy, eps))
             return zeros;
-        var r = engine.TensorDivide(sxy, engine.TensorSqrt(engine.TensorMultiplyScalar(sxx, syy)));
-        return engine.TensorWhere(engine.TensorGreaterThan(sxx, eps), r, zeros);
+        return engine.TensorWhere(engine.TensorGreaterThan(sxx, eps), CenteredCorrelations(xc, yc), zeros);
     }
 
     /// <summary>
@@ -183,17 +226,52 @@ internal static class PreprocessingTensorOps
     /// </summary>
     public static Tensor<T> CorrelationsWithDenominatorGuard<T>(Tensor<T> x, Tensor<T> y, double epsilon = 1e-10)
     {
+        if (IsNarrowFloat<T>())
+            return CorrelationsWithDenominatorGuard(x.Cast<float>(), y.Cast<float>(), epsilon).Cast<T>();
+
         var engine = AiDotNetEngine.Current;
-        var ops = MathHelper.GetNumericOperations<T>();
         int n = x.Shape[0];
         int p = x.Shape[1];
         var xc = engine.TensorSubtract(x, engine.ReduceMean(x, new[] { 0 }, true));
         var yc = engine.Reshape(engine.TensorSubtractScalar(y, engine.TensorMean(y)), new[] { n, 1 });
-        var sxy = engine.Reshape(engine.TensorMatMul(engine.TensorTranspose(xc), yc), new[] { p });
         var sxx = engine.ReduceSum(engine.TensorSquare(xc), new[] { 0 }, false);
-        var denom = engine.TensorSqrt(engine.TensorMultiplyScalar(sxx, engine.TensorSumOfSquares(yc)));
+        // sqrt(sxx) sqrt(syy): the product sxx syy overflows a narrow T such as Half long before either factor does
+        var denom = engine.TensorMultiplyScalar(
+            engine.TensorSqrt(sxx), MathHelper.GetNumericOperations<T>().Sqrt(engine.TensorSumOfSquares(yc)));
         return engine.TensorWhere(
-            engine.TensorGreaterThan(denom, Tolerance<T>(epsilon)), engine.TensorDivide(sxy, denom), new Tensor<T>(new[] { p }));
+            engine.TensorGreaterThan(denom, Tolerance<T>(epsilon)), CenteredCorrelations(xc, yc), new Tensor<T>(new[] { p }));
+    }
+
+    /// <summary>
+    /// Pearson correlation of every centred column of <paramref name="xc"/> ([n, p]) with the centred
+    /// <paramref name="yc"/> ([n, 1]), as [p]. r does not change when a column is scaled, so every column (and the
+    /// target) is first divided by its largest magnitude: the sums of squares and cross products then stay at most
+    /// n and the denominator is formed as <c>sqrt(sxx) sqrt(syy)</c>, so nothing overflows a narrow T such as Half
+    /// (unscaled, the sums of squares of 100 ranks already pass Half's 65504). The caller guards degenerate columns.
+    /// Half and BFloat16 are evaluated in float and cast back once: scaled or not, a sum accumulated in Half stops
+    /// growing at 2048 (2048 + 1 rounds back to 2048), so past 2048 rows the norms would come out short.
+    /// </summary>
+    public static Tensor<T> CenteredCorrelations<T>(Tensor<T> xc, Tensor<T> yc)
+    {
+        if (IsNarrowFloat<T>())
+            return CenteredCorrelations(xc.Cast<float>(), yc.Cast<float>()).Cast<T>();
+
+        var engine = AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<T>();
+        int p = xc.Shape[1];
+        var xs = DivideColumnsByMaxMagnitude(xc);
+        var ys = DivideColumnsByMaxMagnitude(yc);
+        var sxy = engine.Reshape(engine.TensorMatMul(engine.TensorTranspose(xs), ys), new[] { p });
+        var xNorm = engine.TensorSqrt(engine.ReduceSum(engine.TensorSquare(xs), new[] { 0 }, false));
+        T yNorm = ops.Sqrt(engine.TensorSum(engine.TensorSquare(ys)));
+        return engine.TensorDivide(sxy, engine.TensorMultiplyScalar(xNorm, yNorm));
+    }
+
+    /// <summary>Every column of a 2-D tensor divided by its largest magnitude (an all-zero column is left as is).</summary>
+    private static Tensor<T> DivideColumnsByMaxMagnitude<T>(Tensor<T> x)
+    {
+        var engine = AiDotNetEngine.Current;
+        return engine.TensorDivide(x, SafeScale(engine.ReduceMax(engine.TensorAbs(x), new[] { 0 }, true)));
     }
 
     /// <summary>Column-wise minimum of a 2-D tensor ([n, p] to [p]).</summary>
@@ -350,6 +428,14 @@ internal static class PreprocessingTensorOps
         return AiDotNetEngine.Current.TensorOneHot<T>(
             new Tensor<int>((int[])classIndex.Clone(), new[] { classIndex.Length }), classCount);
     }
+
+    /// <summary>
+    /// 0/1 indicator [<paramref name="length"/>] of a single position, built from the int position (comparing a
+    /// <see cref="Range{T}"/> in T against the position fails in Half above 2048, where integers are not all exact).
+    /// </summary>
+    public static Tensor<T> PositionOneHot<T>(int position, int length) =>
+        AiDotNetEngine.Current.Reshape(
+            AiDotNetEngine.Current.TensorOneHot<T>(new Tensor<int>(new[] { position }, new[] { 1 }), length), new[] { length });
 
     /// <summary>Row <paramref name="row"/> of a 2-D tensor as a [1, columns] tensor.</summary>
     public static Tensor<T> Row<T>(Tensor<T> x, int row) =>
