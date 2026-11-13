@@ -399,15 +399,14 @@ public partial class LayoutEmbeddingLayer<T> : LayerBase<T>, IShapeContract
     /// Maps a raw coordinate onto the table's index range. OCR boxes arrive in page pixels or on the
     /// paper's 0-1000 grid, and a stray value must not throw out of a lookup that the caller cannot
     /// see — so out-of-range coordinates saturate at the edge of the page, which is where they are.
-    /// </summary>
-    /// <summary>
-    /// Coordinate to table index: NaN maps to 0, then round half to even and clamp to
-    /// <c>[0, maxPosition2D - 1]</c>.
+    /// NaN maps to 0, then the value rounds half to even and clamps to <c>[0, maxPosition2D - 1]</c>.
     /// </summary>
     private Tensor<T> ClampCoordinate(Tensor<T> value)
     {
-        var finite = Engine.TensorNanToNum(value.Cast<double>(), 0.0, null, null);
-        return Engine.TensorClamp(Engine.TensorRound(finite), 0.0, _maxPosition2D - 1.0).Cast<T>();
+        // Every step is exact in T (a coordinate is already a T), so no wider staging is needed;
+        // infinities become T's finite extremes and then clamp to the table's edges.
+        var finite = Engine.TensorNanToNum(value, 0.0, null, null);
+        return Engine.TensorClamp(Engine.TensorRound(finite), NumOps.Zero, NumOps.FromDouble(_maxPosition2D - 1));
     }
 
     /// <inheritdoc/>
