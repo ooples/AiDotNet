@@ -1,5 +1,6 @@
 using System;
 using System.Reflection;
+using System.Threading.Tasks;
 using AiDotNet.Enums;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Tensors.Engines;
@@ -96,57 +97,65 @@ public class VideoWarpAndMaskReferenceTests
     }
 
     [Fact(Timeout = 120000)]
-    public void RaftWarpIsAlignedCornersWithZeroPadding()
+    public async Task RaftWarpIsAlignedCornersWithZeroPadding()
     {
+        await Task.Yield();
         var model = new RAFT<double>(Arch());
         AssertBackwardWarp(model.WarpByFlow, zerosPadding: true);
     }
 
     [Fact(Timeout = 120000)]
-    public void FlowFormerWarpIsAlignedCornersWithZeroPadding()
+    public async Task FlowFormerWarpIsAlignedCornersWithZeroPadding()
     {
+        await Task.Yield();
         var model = new FlowFormer<double>(Arch());
         AssertBackwardWarp(model.WarpWithFlow, zerosPadding: true);
     }
 
     [Fact(Timeout = 120000)]
-    public void BasicVsrPlusPlusWarpIsAlignedCornersWithZeroPadding()
+    public async Task BasicVsrPlusPlusWarpIsAlignedCornersWithZeroPadding()
     {
+        await Task.Yield();
         var model = new BasicVSRPlusPlus<double>(Arch());
         AssertBackwardWarp(model.WarpFeatureTape, zerosPadding: true);
     }
 
     [Fact(Timeout = 120000)]
-    public void FilmWarpIsAlignedCornersWithBorderPadding()
+    public async Task FilmWarpIsAlignedCornersWithBorderPadding()
     {
+        await Task.Yield();
         var model = new FILM<double>(Arch(), options: new FILMOptions { NumScales = 3, NumFeatures = 32 });
         AssertBackwardWarp(model.WarpFeatures, zerosPadding: false);
     }
 
     [Fact(Timeout = 120000)]
-    public void RifeWarpIsAlignedCornersWithBorderPadding()
+    public async Task RifeWarpIsAlignedCornersWithBorderPadding()
     {
+        await Task.Yield();
         var model = new RIFE<double>(Arch());
         AssertBackwardWarp(model.WarpImage, zerosPadding: false);
     }
 
     [Fact(Timeout = 120000)]
-    public void E2fgviWarpIsAlignedCornersWithZeroPadding()
+    public async Task E2fgviWarpIsAlignedCornersWithZeroPadding()
     {
+        await Task.Yield();
         var model = new E2FGVI<double>(Arch());
         AssertBackwardWarp(model.WarpFeatures, zerosPadding: true);
     }
 
     [Fact(Timeout = 120000)]
-    public void ProPainterWarpIsAlignedCornersWithZeroPadding()
+    public async Task ProPainterWarpIsAlignedCornersWithZeroPadding()
     {
+        await Task.Yield();
         var model = new ProPainter<double>(Arch());
         AssertBackwardWarp(model.WarpImage, zerosPadding: true);
     }
 
     [Fact(Timeout = 120000)]
-    public void FastDvdNetNoiseEstimateRecoversTheGaussianSigma()
+    public async Task FastDvdNetNoiseEstimateRecoversTheGaussianSigma()
     {
+        await Task.Yield();
         // White Gaussian noise of sigma 0.1: the 4-neighbour Laplacian multiplies sigma by sqrt(20), so
         // median(|L|) / 0.6745 must still be divided by sqrt(20). Without that the estimate was ~0.447.
         const int size = 96;
@@ -166,8 +175,9 @@ public class VideoWarpAndMaskReferenceTests
     }
 
     [Fact(Timeout = 120000)]
-    public void GmFlowOcclusionUsesThePaperMotionScaledTolerance()
+    public async Task GmFlowOcclusionUsesThePaperMotionScaledTolerance()
     {
+        await Task.Yield();
         // occluded <=> |f + b(x + f)|^2 > 0.01 (|f|^2 + |b(x + f)|^2) + 0.5 (forward_backward_consistency_check)
         const int height = 4, width = 64;
         var model = new GMFlow<double>(Arch());
@@ -198,8 +208,9 @@ public class VideoWarpAndMaskReferenceTests
     }
 
     [Fact(Timeout = 120000)]
-    public void E2fgviKnownPixelsPassThroughUnchanged()
+    public async Task E2fgviKnownPixelsPassThroughUnchanged()
     {
+        await Task.Yield();
         // m * prediction + (1 - m) * frame: where the mask is 0 the output IS the frame, including pixel 0, which
         // used to carry an extra 1e-3 x mean(mask).
         var model = new E2FGVI<double>(Arch());
@@ -219,8 +230,9 @@ public class VideoWarpAndMaskReferenceTests
     }
 
     [Fact(Timeout = 120000)]
-    public void RvmPredictDoesNotOverwriteTheCallersFrame()
+    public async Task RvmPredictDoesNotOverwriteTheCallersFrame()
     {
+        await Task.Yield();
         var model = new RVM<double>(Arch());
         var frame = Tensor<double>.CreateDefault(new[] { 1, 3, 32, 32 }, 0.5);
         var hidden = typeof(RVM<double>).GetField("_hiddenState", BindingFlags.NonPublic | BindingFlags.Instance);
@@ -244,15 +256,17 @@ public class VideoWarpAndMaskReferenceTests
     }
 
     [Fact(Timeout = 120000)]
-    public void E2fgviReluIsDifferentiable()
+    public async Task E2fgviReluIsDifferentiable()
     {
+        await Task.Yield();
         var model = new E2FGVI<double>(Arch());
         Assert.Equal(new[] { 0.0, 1.0 }, TapeGradient(model.ApplyReLU, new[] { -1.5, 2.0 }));
     }
 
     [Fact(Timeout = 120000)]
-    public void ProPainterActivationsAreDifferentiable()
+    public async Task ProPainterActivationsAreDifferentiable()
     {
+        await Task.Yield();
         var model = new ProPainter<double>(Arch());
         Assert.Equal(new[] { 0.0, 1.0 }, TapeGradient(model.ApplyReLU, new[] { -1.5, 2.0 }));
 
