@@ -123,12 +123,16 @@ public class AdversarialPromptDefense<T, TInput, TOutput> : IAdversarialDefense<
             NormType = AdversarialNormType.LInfinity
         });
         T delta = NumOps.FromDouble(FiniteDifferenceStep);
+        T learningRate = NumOps.FromDouble(_promptLearningRate);
+        T upperLimit = NumOps.One;
+        T lowerLimit = NumOps.Negate(upperLimit);
+        int batchSize = Math.Min(32, trainingData.Length);
+        T batchDivisor = NumOps.FromDouble(batchSize);
 
         // Optimize prompt to maximize accuracy on adversarial inputs
         for (int step = 0; step < _promptOptimizationSteps; step++)
         {
             // Sample a mini-batch
-            int batchSize = Math.Min(32, trainingData.Length);
             int adversarialCount = (int)Math.Round(_options.AdversarialRatio * batchSize);
             var gradientAccumulator = new Vector<T>(_promptLength);
 
@@ -143,10 +147,10 @@ public class AdversarialPromptDefense<T, TInput, TOutput> : IAdversarialDefense<
             }
 
             // Gradient descent on the averaged gradient, then clamp prompt values to [-1, 1]
-            var averaged = Engine.Divide<T>(gradientAccumulator, NumOps.FromDouble(batchSize));
+            var averaged = Engine.Divide<T>(gradientAccumulator, batchDivisor);
             var current = _defensePrompt ?? new Vector<T>(_promptLength);
-            var updated = Engine.Subtract<T>(current, Engine.Multiply<T>(averaged, NumOps.FromDouble(_promptLearningRate)));
-            _defensePrompt = Engine.Clamp<T>(updated, NumOps.Negate(NumOps.One), NumOps.One);
+            var updated = Engine.Subtract<T>(current, Engine.Multiply<T>(averaged, learningRate));
+            _defensePrompt = Engine.Clamp<T>(updated, lowerLimit, upperLimit);
         }
 
         // The model itself is unchanged — defense is applied via PreprocessInput
