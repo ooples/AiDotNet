@@ -107,7 +107,8 @@ public static class FiganLoss<T>
             }
             else
             {
-                var unit = engine.TensorMultiplyScalar(difference, 1.0 / peak);
+                // Divided, not multiplied by 1 / peak: a subnormal peak's reciprocal overflows to infinity
+                var unit = engine.TensorDivideScalar(difference, peak);
                 squared = engine.TensorMean(engine.TensorMultiply(unit, unit)) * peak * peak;
             }
         }

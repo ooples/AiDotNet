@@ -138,15 +138,14 @@ public class VideoCLIPVideoOptions : VideoHyperparameterOptions
         ValidateCore();
 
         // The text tower splits its width across a fixed 12 heads; a width that does not divide evenly would leave
-        // the remainder channels unattended (64 gives 12 heads of 5, and 4 channels zero-filled).
-        foreach (var (name, width) in new[] { (nameof(HiddenDim), HiddenDim), (nameof(HiddenDimension), HiddenDimension) })
+        // the remainder channels unattended (64 gives 12 heads of 5, and 4 channels zero-filled). Supplied options
+        // size the tower from HiddenDimension; HiddenDim is read only without options, and the model checks that
+        // effective width itself.
+        if (HiddenDimension > 0 && HiddenDimension % TextAttentionHeads != 0)
         {
-            if (width > 0 && width % TextAttentionHeads != 0)
-            {
-                throw new ArgumentException(
-                    $"{name} ({width}) must be a multiple of the text tower's {TextAttentionHeads} attention heads.",
-                    name);
-            }
+            throw new ArgumentException(
+                $"{nameof(HiddenDimension)} ({HiddenDimension}) must be a multiple of the text tower's " +
+                $"{TextAttentionHeads} attention heads.", nameof(HiddenDimension));
         }
     }
 

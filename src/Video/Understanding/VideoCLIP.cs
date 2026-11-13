@@ -809,7 +809,9 @@ public partial class VideoCLIP<T> : NeuralNetworkBase<T>
 
         // Convert to tensor, truncated or padded with the padding token 0
         var ids = new int[_textMaxLength];
-        int count = Math.Min(tokenIds.Count, _textMaxLength);
+        // The encoder pads TokenIds to MaxLength; the attention mask marks the real tokens, so pooling and key
+        // masking cover those alone.
+        int count = Math.Min(Math.Min(encoded.AttentionMask.Sum(), tokenIds.Count), _textMaxLength);
         for (int i = 0; i < count; i++)
         {
             ids[i] = tokenIds[i];

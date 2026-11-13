@@ -140,6 +140,16 @@ public class McnetComponentTests
     }
 
     [Fact]
+    public void PixelLossOfASubnormalErrorIsThatError()
+    {
+        // 1 / 1e-310 overflows double, so normalizing by the reciprocal returned infinity instead of 1e-310.
+        var predicted = new Vector<double>(new[] { 1e-310 });
+        var target = new Vector<double>(new[] { 0.0 });
+
+        Assert.Equal(1e-310, McnetLoss<double>.Pixel(predicted, target, p: 1));
+    }
+
+    [Fact]
     public void PixelLossUsesTheSquaredNormByDefault()
     {
         // p = 2. Errors of 1 and 3 give a mean square of 5, not the L1 mean of 2.

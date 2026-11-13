@@ -57,6 +57,17 @@ public class FiganComponentTests
     }
 
     [Fact]
+    public void ContentLossOfASubnormalFeatureErrorIsFinite()
+    {
+        // 1 / 1e-310 overflows double; scaling by it gave inf * peak^2 = NaN. The true term, 0.001 * 1e-620,
+        // underflows to 0.
+        var zero = new Vector<double>(new[] { 0.0 });
+        var tiny = new Vector<double>(new[] { 1e-310 });
+
+        Assert.Equal(0.0, FiganLoss<double>.Content(zero, zero, tiny, zero));
+    }
+
+    [Fact]
     public void ContentLossAddsTheVggTermSquaredAndWeighted()
     {
         // Identical pixels so L1 = 0, isolating the perceptual term. Feature deltas of 2 and 4 give a

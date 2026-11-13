@@ -1092,26 +1092,29 @@ public partial class VideoMAE<T> : NeuralNetworkBase<T>
 
         if (normalize)
         {
-            // Each channel of each tubelet patch over its own ts x P x P pixels: (x - mean) / (std + 1e-6)
+            // Each channel of each tubelet patch over its own ts x P x P pixels: (x - mean) / (std + 1e-6). In
+            // double, narrowed once: a float mean of a flat patch leaves a residue the division then amplifies.
             int[] pixelAxes = [2, 5, 7];
-            var shape = grouped._shape;
+            var wide = TensorCopyHelper.CastLogical<T, double>(grouped);
+            var shape = wide._shape;
             var centered = Engine.TensorSubtract(
-                grouped, Engine.TensorBroadcastTo(Engine.ReduceMean(grouped, pixelAxes, true), shape));
+                wide, Engine.TensorBroadcastTo(Engine.ReduceMean(wide, pixelAxes, true), shape));
 
             // Unbiased standard deviation, with the deviations scaled by their largest magnitude before squaring
             var peak = Engine.ReduceMax(Engine.TensorAbs(centered), pixelAxes, true);
             var safePeak = Engine.TensorWhere(
-                Engine.TensorGreaterThan(peak, NumOps.Zero), peak, Engine.TensorOnesLike(peak));
+                Engine.TensorGreaterThan(peak, 0.0), peak, Engine.TensorOnesLike(peak));
             var unit = Engine.TensorDivide(centered, Engine.TensorBroadcastTo(safePeak, shape));
             var std = pixelsPerPatchChannel > 1
                 ? Engine.TensorMultiply(
                     Engine.TensorSqrt(Engine.TensorMultiplyScalar(
                         Engine.ReduceSum(Engine.TensorMultiply(unit, unit), pixelAxes, true),
-                        NumOps.FromDouble(1.0 / (pixelsPerPatchChannel - 1)))),
+                        1.0 / (pixelsPerPatchChannel - 1))),
                     safePeak)
                 : Engine.TensorZerosLike(peak);
-            var denominator = Engine.TensorAddScalar(std, NumOps.FromDouble(ReconstructionTargetStdOffset));
-            grouped = Engine.TensorDivide(centered, Engine.TensorBroadcastTo(denominator, shape));
+            var denominator = Engine.TensorAddScalar(std, ReconstructionTargetStdOffset);
+            grouped = TensorCopyHelper.CastLogical<double, T>(
+                Engine.TensorDivide(centered, Engine.TensorBroadcastTo(denominator, shape)));
         }
 
         // -> [B, tubelet, ts, C, y, x, patchRow, patchCol], then channel ((ts * C + c) * P + y) * P + x
