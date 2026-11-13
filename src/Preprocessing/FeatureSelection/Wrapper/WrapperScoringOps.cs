@@ -71,10 +71,12 @@ internal static class WrapperScoringOps
         var engine = AiDotNetEngine.Current;
         var centered = FilterStatisticTensorOps.CenterColumns(Columns(data, features));
         var sumOfSquares = SelectorTensorOps.ColumnSumOfSquares(centered);
-        var varying = engine.TensorGreaterThan(sumOfSquares, ops.FromDouble(Epsilon));
+        var varying = engine.TensorGreaterThan(sumOfSquares, PreprocessingTensorOps.Tolerance<T>(Epsilon));
         var safe = engine.TensorWhere(varying, sumOfSquares, PreprocessingTensorOps.Filled(new[] { k }, ops.One));
         var products = engine.TensorMatMul(engine.TensorTranspose(centered), centered);
-        var correlation = engine.TensorDivide(products, engine.TensorSqrt(engine.TensorOuter(safe, safe)));
+        // sqrt(a) sqrt(b) rather than sqrt(a b): the product of two sums of squares overflows Half long before either
+        var root = engine.TensorSqrt(safe);
+        var correlation = engine.TensorDivide(products, engine.TensorOuter(root, root));
         var counted = engine.TensorMultiply(engine.TensorOuter(varying, varying), SelectorTensorOps.StrictUpperMask<T>(k));
         T total = engine.TensorSum(engine.TensorMultiply(counted, engine.TensorAbs(correlation)));
         return ops.Divide(total, ops.FromDouble(k * (k - 1) / 2));
@@ -99,7 +101,7 @@ internal static class WrapperScoringOps
 
         var (u, s, vh) = LinalgDispatch<T>.Svd(xc, false);
         int rank = s.Length;
-        var kept = engine.TensorGreaterThan(s, ops.Multiply(engine.TensorMaxValue(s), ops.FromDouble(Epsilon)));
+        var kept = engine.TensorGreaterThan(s, ops.Multiply(engine.TensorMaxValue(s), PreprocessingTensorOps.Tolerance<T>(Epsilon)));
         var safe = engine.TensorWhere(kept, s, PreprocessingTensorOps.Filled(new[] { rank }, ops.One));
         var inverse = engine.TensorMultiply(kept, engine.TensorReciprocal(safe));
         var projections = engine.Reshape(engine.TensorMatMul(engine.TensorTranspose(u), yc), new[] { rank });
@@ -129,7 +131,7 @@ internal static class WrapperScoringOps
         var ops = MathHelper.GetNumericOperations<T>();
         T ssRes = engine.TensorSumOfSquares(engine.TensorSubtract(y, predictions));
         T ssTot = engine.TensorSumOfSquares(engine.TensorSubtractScalar(y, engine.TensorMean(y)));
-        return ops.GreaterThan(ssTot, ops.FromDouble(Epsilon))
+        return ops.GreaterThan(ssTot, PreprocessingTensorOps.Tolerance<T>(Epsilon))
             ? ops.Subtract(ops.One, ops.Divide(ssRes, ssTot))
             : ops.Zero;
     }
@@ -211,14 +213,32 @@ internal static class WrapperScoringOps
         return draws;
     }
 
-    /// <summary>A 1-D tensor of <paramref name="count"/> values <paramref name="value"/>(0 .. count - 1) in T.</summary>
-    public static Tensor<T> FromDoubles<T>(int count, Func<int, double> value)
+    /// <summary>
+    /// The next <paramref name="count"/> draws of <paramref name="random"/>.NextDouble() (in draw order, see
+    /// <see cref="NextDoubles"/>) as a 1-D tensor in T: the generator yields doubles, converted once as a whole.
+    /// </summary>
+    public static Tensor<T> Draws<T>(Random random, int count) => FromDraws<T>(NextDoubles(random, count));
+
+    /// <summary>Uniform draws already taken from a generator, as a 1-D tensor in T (converted once as a whole).</summary>
+    public static Tensor<T> FromDraws<T>(double[] draws) =>
+        new Tensor<double>((double[])draws.Clone(), new[] { draws.Length }).Cast<T>();
+
+    /// <summary>
+    /// Every <paramref name="stride"/>-th entry of a 1-D tensor starting at <paramref name="offset"/>
+    /// (entries <c>offset, offset + stride, ...</c>), for draws interleaved per dimension.
+    /// </summary>
+    public static Tensor<T> Strided<T>(Tensor<T> values, int stride, int offset)
     {
-        var ops = MathHelper.GetNumericOperations<T>();
-        var values = new T[count];
-        for (int i = 0; i < count; i++)
-            values[i] = ops.FromDouble(value(i));
-        return new Tensor<T>(values, new[] { count });
+        var engine = AiDotNetEngine.Current;
+        int count = values.Length / stride;
+        return engine.Reshape(engine.TensorSliceAxis(engine.Reshape(values, new[] { count, stride }), 1, offset), new[] { count });
+    }
+
+    /// <summary><c>scale x + offset</c> element-wise.</summary>
+    public static Tensor<T> Affine<T>(Tensor<T> x, T scale, T offset)
+    {
+        var engine = AiDotNetEngine.Current;
+        return engine.TensorAddScalar(engine.TensorMultiplyScalar(x, scale), offset);
     }
 
     /// <summary>A 1-D tensor holding <paramref name="values"/>.</summary>
@@ -274,8 +294,10 @@ internal static class WrapperScoringOps
         var engine = AiDotNetEngine.Current;
         var centered = FilterStatisticTensorOps.CenterColumns(Columns(data, features));
         var sumOfSquares = SelectorTensorOps.ColumnSumOfSquares(centered);
-        var denominator = engine.TensorSqrt(engine.TensorOuter(sumOfSquares, sumOfSquares));
-        var valid = engine.TensorGreaterThan(denominator, ops.FromDouble(Epsilon));
+        // sqrt(a) sqrt(b) rather than sqrt(a b): the product of two sums of squares overflows Half long before either
+        var root = engine.TensorSqrt(sumOfSquares);
+        var denominator = engine.TensorOuter(root, root);
+        var valid = engine.TensorGreaterThan(denominator, PreprocessingTensorOps.Tolerance<T>(Epsilon));
         var safe = engine.TensorWhere(valid, denominator, PreprocessingTensorOps.Filled(new[] { k, k }, ops.One));
         var correlation = engine.TensorDivide(engine.TensorMatMul(engine.TensorTranspose(centered), centered), safe);
         var counted = engine.TensorMultiply(valid, SelectorTensorOps.StrictUpperMask<T>(k));

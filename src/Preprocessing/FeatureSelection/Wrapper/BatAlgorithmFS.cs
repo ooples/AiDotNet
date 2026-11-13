@@ -108,8 +108,7 @@ public class BatAlgorithmFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupe
 
         for (int i = 0; i < _populationSize; i++)
         {
-            var draws = WrapperScoringOps.NextDoubles(random, p);
-            positions[i] = WrapperScoringOps.FromDoubles<T>(p, j => draws[j]);
+            positions[i] = WrapperScoringOps.Draws<T>(random, p);
             velocities[i] = PreprocessingTensorOps.Filled(new[] { p }, NumOps.Zero);
             fitness[i] = EvaluateSolution(positions[i], data, target);
             loudness[i] = initialLoudness;
@@ -124,6 +123,8 @@ public class BatAlgorithmFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupe
         T one = NumOps.One;
         T step = NumOps.FromDouble(0.01);
         T loudnessDecay = NumOps.FromDouble(0.9);
+        T two = NumOps.FromDouble(2);
+        T minusOne = NumOps.FromDouble(-1);
 
         // Optimization loop
         for (int iter = 0; iter < _maxIterations; iter++)
@@ -149,14 +150,15 @@ public class BatAlgorithmFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupe
                     if (WrapperScoringOps.IsAbove(WrapperScoringOps.Scalar<T>(random.NextDouble()), pulseRate[i]))
                     {
                         local.Add(j);
-                        walkDraws[j] = 2 * random.NextDouble() - 1;
+                        walkDraws[j] = random.NextDouble();
                     }
                 }
 
                 if (local.Count > 0)
                 {
                     var walk = Engine.TensorAdd(bestPosition, Engine.TensorMultiplyScalar(
-                        WrapperScoringOps.FromDoubles<T>(p, j => walkDraws[j]), WrapperScoringOps.Multiply(step, loudness[i])));
+                        WrapperScoringOps.Affine(WrapperScoringOps.FromDraws<T>(walkDraws), two, minusOne),
+                        WrapperScoringOps.Multiply(step, loudness[i])));
                     moved = Engine.TensorWhere(WrapperScoringOps.Membership<T>(local.ToArray(), p), walk, moved);
                 }
 

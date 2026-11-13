@@ -111,14 +111,16 @@ public class ParticleSwarmFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISup
         T zero = NumOps.Zero;
         T one = NumOps.One;
         T minusOne = NumOps.FromDouble(-1);
+        T velocityScale = NumOps.FromDouble(0.1);
+        T velocityOffset = NumOps.FromDouble(-0.05);
 
         // Initialize
         for (int i = 0; i < _nParticles; i++)
         {
             // Per dimension: the position draw, then the velocity draw (master's order)
-            var draws = WrapperScoringOps.NextDoubles(random, 2 * p);
-            positions[i] = WrapperScoringOps.FromDoubles<T>(p, j => draws[2 * j]);
-            velocities[i] = WrapperScoringOps.FromDoubles<T>(p, j => (draws[2 * j + 1] - 0.5) * 0.1);
+            var draws = WrapperScoringOps.Draws<T>(random, 2 * p);
+            positions[i] = WrapperScoringOps.Strided(draws, 2, 0);
+            velocities[i] = WrapperScoringOps.Affine(WrapperScoringOps.Strided(draws, 2, 1), velocityScale, velocityOffset);
             pBest[i] = positions[i];
 
             pBestFitness[i] = EvaluatePosition(data, target, positions[i], scorer);
@@ -137,9 +139,9 @@ public class ParticleSwarmFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISup
             {
                 // Update velocity: w v + c1 r1 (pBest - x) + c2 r2 (gBest - x), clamped to [-1, 1]
                 // Per dimension: r1, then r2 (master's order)
-                var draws = WrapperScoringOps.NextDoubles(random, 2 * p);
-                var r1 = WrapperScoringOps.FromDoubles<T>(p, j => draws[2 * j]);
-                var r2 = WrapperScoringOps.FromDoubles<T>(p, j => draws[2 * j + 1]);
+                var draws = WrapperScoringOps.Draws<T>(random, 2 * p);
+                var r1 = WrapperScoringOps.Strided(draws, 2, 0);
+                var r2 = WrapperScoringOps.Strided(draws, 2, 1);
                 var velocity = Engine.TensorAdd(Engine.TensorMultiplyScalar(velocities[i], inertia), Engine.TensorAdd(
                     Engine.TensorMultiplyScalar(Engine.TensorMultiply(r1, Engine.TensorSubtract(pBest[i], positions[i])), cognitive),
                     Engine.TensorMultiplyScalar(Engine.TensorMultiply(r2, Engine.TensorSubtract(gBest, positions[i])), social)));

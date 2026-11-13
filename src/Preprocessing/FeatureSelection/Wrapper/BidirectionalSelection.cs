@@ -83,6 +83,7 @@ public class BidirectionalSelection<T> : TransformerBase<T, Matrix<T>, Matrix<T>
         T alphaAdd = NumOps.FromDouble(_alphaAdd);
         T alphaRemove = NumOps.FromDouble(_alphaRemove);
         T currentScore = NumOps.Zero;
+        T negativeInfinity = NumOps.FromDouble(double.NegativeInfinity);
 
         while (selected.Count < _nFeaturesToSelect && available.Count > 0)
         {
@@ -118,7 +119,7 @@ public class BidirectionalSelection<T> : TransformerBase<T, Matrix<T>, Matrix<T>
             if (selected.Count > 1)
             {
                 int worstToRemove = -1;
-                T bestRemoveScore = NumOps.FromDouble(double.NegativeInfinity);
+                T bestRemoveScore = negativeInfinity;
 
                 foreach (int j in selected)
                 {

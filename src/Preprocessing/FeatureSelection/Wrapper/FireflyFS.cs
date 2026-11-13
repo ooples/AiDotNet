@@ -103,12 +103,13 @@ public class FireflyFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervise
 
         for (int i = 0; i < _populationSize; i++)
         {
-            var draws = WrapperScoringOps.NextDoubles(random, p);
-            fireflies[i] = WrapperScoringOps.FromDoubles<T>(p, k => draws[k]);
+            fireflies[i] = WrapperScoringOps.Draws<T>(random, p);
             brightness[i] = EvaluateSolution(fireflies[i], data, target);
         }
 
         T beta0 = NumOps.FromDouble(_beta0);
+        T noiseScale = NumOps.FromDouble(_alpha);
+        T noiseOffset = NumOps.FromDouble(-0.5 * _alpha);
         T negativeGamma = NumOps.FromDouble(-_gamma);
         T zero = NumOps.Zero;
         T one = NumOps.One;
@@ -129,8 +130,7 @@ public class FireflyFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervise
                             WrapperScoringOps.Exp(WrapperScoringOps.Multiply(negativeGamma, squaredDistance)));
 
                         // Move firefly i toward j, plus a random step alpha u with u uniform on [-0.5, 0.5)
-                        var draws = WrapperScoringOps.NextDoubles(random, p);
-                        var noise = WrapperScoringOps.FromDoubles<T>(p, k => _alpha * (draws[k] - 0.5));
+                        var noise = WrapperScoringOps.Affine(WrapperScoringOps.Draws<T>(random, p), noiseScale, noiseOffset);
                         fireflies[i] = Engine.TensorClamp(Engine.TensorAdd(fireflies[i],
                             Engine.TensorAdd(Engine.TensorMultiplyScalar(difference, beta), noise)), zero, one);
 

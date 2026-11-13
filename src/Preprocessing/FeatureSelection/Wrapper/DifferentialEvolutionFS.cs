@@ -100,8 +100,7 @@ public class DifferentialEvolutionFS<T> : TransformerBase<T, Matrix<T>, Matrix<T
 
         for (int i = 0; i < _populationSize; i++)
         {
-            var draws = WrapperScoringOps.NextDoubles(random, p);
-            population[i] = WrapperScoringOps.FromDoubles<T>(p, j => draws[j]);
+            population[i] = WrapperScoringOps.Draws<T>(random, p);
             fitness[i] = EvaluateVector(data, target, population[i], p, scorer);
         }
 

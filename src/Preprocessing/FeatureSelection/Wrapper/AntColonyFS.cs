@@ -107,6 +107,10 @@ public class AntColonyFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervi
         T zero = NumOps.Zero;
         T minimumDeposit = NumOps.FromDouble(0.01);
         T keep = NumOps.FromDouble(1 - _evaporationRate);
+        T alpha = NumOps.FromDouble(_alpha);
+        T beta = NumOps.FromDouble(_beta);
+        T two = NumOps.FromDouble(2);
+        T minimumElite = NumOps.FromDouble(0.02);
 
         // ACO iterations
         for (int iter = 0; iter < _nIterations; iter++)
@@ -116,8 +120,8 @@ public class AntColonyFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervi
 
             // Each ant constructs a solution (tau^alpha eta^beta is fixed while the ants build)
             var weights = Engine.TensorMultiply(
-                Engine.TensorPower(pheromones, NumOps.FromDouble(_alpha)),
-                Engine.TensorPower(heuristic, NumOps.FromDouble(_beta)));
+                Engine.TensorPower(pheromones, alpha),
+                Engine.TensorPower(heuristic, beta));
             for (int ant = 0; ant < _nAnts; ant++)
             {
                 var solution = ConstructSolution(p, weights, random);
@@ -138,12 +142,12 @@ public class AntColonyFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervi
             pheromones = Engine.TensorAdd(pheromones, Engine.Reshape(
                 Engine.TensorMatMul(depositRow, WrapperScoringOps.MembershipRows<T>(antSolutions, p)), new[] { p }));
 
-            // Elitist strategy: extra deposit for best solution
-            T elite = WrapperScoringOps.IsAbove(bestFitness, zero)
-                ? NumOps.Multiply(bestFitness, NumOps.FromDouble(2))
-                : NumOps.FromDouble(0.02);
-            pheromones = Engine.TensorAdd(pheromones,
-                Engine.TensorMultiplyScalar(WrapperScoringOps.Membership<T>(bestSolution, p), elite));
+            // Elitist strategy: extra deposit for best solution (2 x its fitness, 0.02 when that is not positive)
+            var bestMembership = WrapperScoringOps.Membership<T>(bestSolution, p);
+            var eliteDeposit = WrapperScoringOps.IsAbove(bestFitness, zero)
+                ? Engine.TensorMultiplyScalar(Engine.TensorMultiplyScalar(bestMembership, bestFitness), two)
+                : Engine.TensorMultiplyScalar(bestMembership, minimumElite);
+            pheromones = Engine.TensorAdd(pheromones, eliteDeposit);
         }
 
         _pheromones = pheromones.ToVector();
@@ -158,7 +162,7 @@ public class AntColonyFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervi
         var selected = new HashSet<int>();
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
         var available = PreprocessingTensorOps.Filled(new[] { p }, NumOps.One);
-        T limit = NumOps.FromDouble(1e-10);
+        T limit = PreprocessingTensorOps.Tolerance<T>(1e-10);
 
         while (selected.Count < numToSelect)
         {
