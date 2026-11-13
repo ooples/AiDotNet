@@ -298,11 +298,19 @@ public partial class FinancialA2CAgent<T> : TradingAgentBase<T>, IGradientComput
         var cumulative = engine.TensorCumSum(probabilities.AsTensor(), 0);
 
         // The cumulative sum is non-decreasing, so the entries at or below r form a prefix and their count is
-        // the first index above r. Only floating-point round-off (or non-finite logits) can leave every entry
-        // at or below r; that falls through to the last index.
-        var above = engine.TensorGreaterThan(cumulative, NumOps.FromDouble(r));
-        int index = probabilities.Length - NumOps.ToInt32(engine.TensorSum(above));
-        return Math.Min(index, probabilities.Length - 1);
+        // the first index above r (counted in int, which holds any action count exactly).
+        var above = engine.TensorGreaterThan(cumulative, NumOps.FromDouble(r)).Cast<int>();
+        int index = probabilities.Length - engine.TensorSum(above);
+        if (index < probabilities.Length) return index;
+
+        // Round-off left the whole cumulative sum at or below r. The last legal entry takes the remainder, as in
+        // FinancialPPOAgent: the largest position (1-based, so 0 never wins) whose probability is positive. The last
+        // index could be a masked, zero-probability action.
+        var positivePositions = engine.TensorMultiply(
+            engine.TensorGreaterThan(probabilities.AsTensor(), NumOps.Zero).Cast<int>(),
+            engine.TensorArange<int>(1, probabilities.Length + 1, 1));
+        int last = engine.TensorMaxValue(positivePositions);
+        return last > 0 ? last - 1 : probabilities.Length - 1;
     }
 
     #endregion

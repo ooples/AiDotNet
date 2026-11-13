@@ -91,9 +91,11 @@ public partial class FinancialPPOAgent<T> : TradingAgentBase<T>, IGradientComput
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
     private readonly Random _random;
 
-    private Vector<T>? _observationSum;
-    private Vector<T>? _observationSumOfSquares;
-    private T _observationCount;
+    // Running sums in double whatever T is: a sum of squares outgrows a narrow T (Half overflows at 65504 -- value 10
+    // over one 2048-step rollout is 204800) and would leave every later standard deviation infinite.
+    private double[]? _observationSum;
+    private double[]? _observationSumOfSquares;
+    private double _observationCount = ObservationStatisticsEpsilon;
 
     // The rollout: raw observations (normalized at update time, under the statistics the update uses), the actions,
     // rewards, value predictions made when each step was taken, episode ends and legal-action masks.
@@ -144,7 +146,6 @@ public partial class FinancialPPOAgent<T> : TradingAgentBase<T>, IGradientComput
         : base(options)
     {
         _options = options;
-        _observationCount = NumOps.FromDouble(ObservationStatisticsEpsilon);
         _ppoOptions = options as FinancialPPOAgentOptions<T> ?? new FinancialPPOAgentOptions<T>();
         ValidatePpoOptions(_ppoOptions);
 
@@ -237,27 +238,28 @@ public partial class FinancialPPOAgent<T> : TradingAgentBase<T>, IGradientComput
     private (Tensor<T> Mean, Tensor<T> Std) ObservationStatistics(int size)
     {
         var engine = AiDotNetEngine.Current;
-        T epsilon = NumOps.FromDouble(ObservationStatisticsEpsilon);
-        Tensor<T> sum;
-        Tensor<T> squares;
-        T count;
+        Tensor<double> sum;
+        Tensor<double> squares;
+        double count;
         if (_observationSum is { } s && s.Length == size && _observationSumOfSquares is { } q && q.Length == size)
         {
-            sum = s.AsTensor();
-            squares = q.AsTensor();
+            sum = new Tensor<double>(s, new[] { size });
+            squares = new Tensor<double>(q, new[] { size });
             count = _observationCount;
         }
         else
         {
-            sum = new Tensor<T>(new[] { size });
-            squares = new Tensor<T>(new[] { size });
-            engine.TensorFill(squares, epsilon);
-            count = epsilon;
+            sum = new Tensor<double>(new[] { size });
+            squares = new Tensor<double>(new[] { size });
+            engine.TensorFill(squares, ObservationStatisticsEpsilon);
+            count = ObservationStatisticsEpsilon;
         }
 
+        // Only the final statistics come back to T; both stay well inside any T's range.
         var mean = engine.TensorDivideScalar(sum, count);
         var variance = engine.TensorSubtract(engine.TensorDivideScalar(squares, count), engine.TensorMultiply(mean, mean));
-        return (mean, engine.TensorSqrt(engine.TensorClampMin(variance, NumOps.FromDouble(1e-2))));
+        var std = engine.TensorSqrt(engine.TensorClampMin(variance, 1e-2));
+        return (mean.Cast<T>(), std.Cast<T>());
     }
 
     private void UpdateObservationStatistics(IReadOnlyList<Vector<T>> states)
@@ -265,26 +267,27 @@ public partial class FinancialPPOAgent<T> : TradingAgentBase<T>, IGradientComput
         int size = states[0].Length;
         RequireStableStateSize(states, size);
         var engine = AiDotNetEngine.Current;
-        Vector<T> sum;
-        Vector<T> squares;
+        Tensor<double> sum;
+        Tensor<double> squares;
         if (_observationSum is { } existingSum && _observationSumOfSquares is { } existingSquares && existingSum.Length == size)
         {
-            sum = existingSum;
-            squares = existingSquares;
+            sum = new Tensor<double>(existingSum, new[] { size });
+            squares = new Tensor<double>(existingSquares, new[] { size });
         }
         else
         {
-            sum = new Vector<T>(size);
-            squares = new Vector<T>(size);
-            squares.Fill(NumOps.FromDouble(ObservationStatisticsEpsilon));
-            _observationCount = NumOps.FromDouble(ObservationStatisticsEpsilon);
+            sum = new Tensor<double>(new[] { size });
+            squares = new Tensor<double>(new[] { size });
+            engine.TensorFill(squares, ObservationStatisticsEpsilon);
+            _observationCount = ObservationStatisticsEpsilon;
         }
 
-        var observations = engine.TensorStack(states.Select(state => state.AsTensor()).ToArray(), 0);
-        _observationSum = engine.TensorAdd(sum.AsTensor(), engine.ReduceSum(observations, new[] { 0 }, false)).ToVector();
+        // Widened before squaring and summing, so neither the squares nor the sums can overflow T.
+        var observations = engine.TensorStack(states.Select(state => state.AsTensor()).ToArray(), 0).Cast<double>();
+        _observationSum = engine.TensorAdd(sum, engine.ReduceSum(observations, new[] { 0 }, false)).ToArray();
         _observationSumOfSquares = engine.TensorAdd(
-            squares.AsTensor(), engine.ReduceSum(engine.TensorMultiply(observations, observations), new[] { 0 }, false)).ToVector();
-        _observationCount = NumOps.Add(_observationCount, NumOps.FromDouble(states.Count));
+            squares, engine.ReduceSum(engine.TensorMultiply(observations, observations), new[] { 0 }, false)).ToArray();
+        _observationCount += states.Count;
     }
 
     private static void RequireStableStateSize(IEnumerable<Vector<T>> states, int stateSize)
@@ -604,13 +607,18 @@ public partial class FinancialPPOAgent<T> : TradingAgentBase<T>, IGradientComput
         var engine = AiDotNetEngine.Current;
         T mean = engine.TensorMean(values);
         var centered = engine.TensorSubtractScalar(values, mean);
-        T std = NumOps.Sqrt(engine.TensorMean(engine.TensorMultiply(centered, centered)));
-        if (!NumOps.GreaterThan(std, NumOps.Zero))
+        // Divided by the largest deviation before squaring: (c / m) / std(c / m) = c / std(c), and the largest scaled
+        // square is 1, so the variance cannot underflow to zero in a narrow T (Half flushes squares below ~3e-8) for
+        // advantages that are close together but not equal. Only m = 0 -- every advantage equal -- is rejected.
+        T largest = engine.TensorMaxValue(engine.TensorAbs(centered));
+        if (!NumOps.GreaterThan(largest, NumOps.Zero))
             throw new InvalidOperationException(
                 $"Every advantage in this rollout of {values.Length} steps equals {mean}, so standardizing them divides by "
                 + "zero. PPO normalizes advantages by their standard deviation over the rollout; a rollout with no "
                 + "variation in reward or value gives it nothing to learn from.");
-        return engine.TensorDivideScalar(centered, std);
+        var scaled = engine.TensorDivideScalar(centered, largest);
+        T std = NumOps.Sqrt(engine.TensorMean(engine.TensorMultiply(scaled, scaled)));
+        return engine.TensorDivideScalar(scaled, std);
     }
 
     // Fisher-Yates over the agent's generator (numpy.random.shuffle in the reference).

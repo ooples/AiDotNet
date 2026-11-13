@@ -174,6 +174,15 @@ public class PortfolioManagerEnvironment<T> : TradingEnvironment<T>
 
         var engine = Engine;
         var tradablePrices = prices.GetSubVector(0, _tradableCount);
+        // A non-finite price cannot be masked out of the cash reductions below (a zero quantity times NaN is NaN), and
+        // once cash is NaN every later step of the episode is too, so it is rejected before any cash moves.
+        int nonFinite = _tradableCount - engine.TensorSum(engine.TensorIsFinite(tradablePrices.AsTensor()).Cast<int>());
+        if (nonFinite > 0)
+        {
+            throw new ArgumentException(
+                $"{nonFinite} of the {_tradableCount} tradable prices are not finite; prices must be finite to trade.", nameof(prices));
+        }
+
         var positions = _positions.GetSubVector(0, _tradableCount);
         var zeros = new Tensor<T>(new[] { _tradableCount });
 
@@ -206,9 +215,12 @@ public class PortfolioManagerEnvironment<T> : TradingEnvironment<T>
         // order the assets are listed in (the old per-asset loop filled low-index assets first and starved the rest).
         T unitCostFactor = NumOps.FromDouble(1.0 + TransactionCost + _slippageCoefficient);
         T required = NumOps.Multiply(engine.DotProduct(buys, tradablePrices), unitCostFactor);
-        if (NumOps.GreaterThan(required, _cash))
+        // The financing deduction below also charges slippage on the sells, so the buys may spend only the cash left
+        // after that charge; otherwise funding buys from sells could end the step with negative cash.
+        T buyCash = NumOps.Subtract(_cash, NumOps.Multiply(soldNotional, NumOps.FromDouble(_slippageCoefficient)));
+        if (NumOps.GreaterThan(required, buyCash))
         {
-            T fraction = NumOps.GreaterThan(_cash, NumOps.Zero) ? NumOps.Divide(_cash, required) : NumOps.Zero;
+            T fraction = NumOps.GreaterThan(buyCash, NumOps.Zero) ? NumOps.Divide(buyCash, required) : NumOps.Zero;
             buys = engine.Multiply(buys, fraction);
         }
 
