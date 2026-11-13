@@ -27,6 +27,8 @@ internal interface ITrainingObjectiveProvider<T>
     /// A caller-supplied supervised target. Unsupervised learners may replace it with
     /// the input or another target derived from the input.
     /// </param>
+    /// <returns>The target to train on. Callers keep it for every later step, so call this outside any step
+    /// <c>TensorArena</c>: a target built from engine ops there is a buffer the arena reissues.</returns>
     Tensor<T> ResolveTrainingTarget(Tensor<T> input, Tensor<T> proposedTarget);
 
     /// <summary>
