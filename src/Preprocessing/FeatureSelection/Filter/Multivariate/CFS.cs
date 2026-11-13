@@ -69,7 +69,7 @@ public class CFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFeatu
         // |r| with the target and between features, on columns scaled to unit largest deviation: the raw centred sums
         // of squares overflow Half once a deviation passes 256 (r came out NaN); 0 for a constant column
         var classCorrelation = FeatureSelectionTensorOps.AbsoluteCorrelation(x, FilterStatisticTensorOps.AsTensor(target));
-        var interCorrelation = Engine.TensorAbs(FeatureSelectionTensorOps.CorrelationMatrix(x));
+        var interCorrelation = Engine.TensorAbs(FeatureSelectionTensorOps.UnitDeviationCorrelationMatrix(x));
         _featureClassCorrelations = classCorrelation.ToVector();
 
         // greedy forward selection; accumulators are broadcast over the [p] candidates
