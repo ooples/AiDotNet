@@ -378,8 +378,10 @@ internal abstract class GroundingHeadModule<T>
         Tensor<T> locations;
         if (refDim == 2)
         {
-            var inverseSizes = new Tensor<T>(new[] { 1, 1, levels, 1, 2 }, Vector<T>.FromArray(
-                value.Shapes.SelectMany(s => new[] { NumOps.FromDouble(1.0 / s.W), NumOps.FromDouble(1.0 / s.H) }).ToArray()));
+            // Deformable DETR's offset_normalizer: each level's (W, H), counted in int and divided in T.
+            var sizes = new Tensor<int>(new[] { 1, 1, levels, 1, 2 },
+                Vector<int>.FromArray(value.Shapes.SelectMany(s => new[] { s.W, s.H }).ToArray())).Cast<T>();
+            var inverseSizes = Engine.TensorDivide(Tensor<T>.CreateDefault(sizes.Shape.ToArray(), NumOps.One), sizes);
             locations = Engine.TensorAdd(Engine.TensorBroadcastTo(Engine.Reshape(reference, new[] { lq, 1, 1, 1, 2 }), shape),
                 Engine.TensorMultiply(offsets, Engine.TensorBroadcastTo(inverseSizes, shape)));
         }

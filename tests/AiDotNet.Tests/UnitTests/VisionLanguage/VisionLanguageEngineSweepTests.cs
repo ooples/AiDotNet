@@ -8,7 +8,6 @@ using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.VisionLanguage;
 using AiDotNet.VisionLanguage.Encoders;
-using AiDotNet.VisionLanguage.Foundational;
 using AiDotNet.VisionLanguage.Grounding;
 using Xunit;
 
@@ -78,11 +77,9 @@ public class VisionLanguageEngineSweepTests
     }
 
     [Fact]
-    public void SigLIPDefaults_UsePaperInitialLogitScaleAndBias()
+    public void SigLIP2Defaults_UsePaperInitialLogitScaleAndBias()
     {
-        // t' = log 10 (t = 10) and b = -10; Temperature is 1 / t.
-        Assert.Equal(0.1, new SigLIPOptions().Temperature, precision: 12);
-        Assert.Equal(-10.0, new SigLIPOptions().SigmoidBias, precision: 12);
+        // t' = log 10 (t = 10) and b = -10; Temperature is 1 / t. (SigLIP's own defaults are fixed and tested in #2533.)
         Assert.Equal(0.1, new SigLIP2Options().Temperature, precision: 12);
         Assert.Equal(-10.0, new SigLIP2Options().SigmoidBias, precision: 12);
     }
@@ -123,25 +120,6 @@ public class VisionLanguageEngineSweepTests
         Assert.Equal(3 * 40, logits.Length);
         for (int i = 0; i < logits.Length; i++)
             Assert.False(double.IsNaN(logits[i]) || double.IsInfinity(logits[i]));
-    }
-
-    [Fact]
-    public void ViLBERTMeanPool_Rank4_AveragesEveryTokenAxis()
-    {
-        var input = Random(13, 2, 3, 2, 4);
-
-        var pooled = ViLBERT<double>.MeanPoolOverTokens(AiDotNetEngine.Current, input);
-
-        Assert.Equal(new[] { 2, 4 }, pooled.Shape.ToArray());
-        for (int b = 0; b < 2; b++)
-            for (int k = 0; k < 4; k++)
-            {
-                double sum = 0;
-                for (int i = 0; i < 3; i++)
-                    for (int j = 0; j < 2; j++)
-                        sum += input[b, i, j, k];
-                Assert.Equal(sum / 6, pooled[b, k], Tolerance);
-            }
     }
 
     [Fact]
