@@ -22925,3 +22925,39 @@ AiDotNet.VisionLanguage.Grounding.OWLv2Options.NumTextLayers.get -> int
 AiDotNet.VisionLanguage.Grounding.OWLv2Options.NumTextLayers.set -> void
 AiDotNet.VisionLanguage.Grounding.OWLViTOptions.NumTextLayers.get -> int
 AiDotNet.VisionLanguage.Grounding.OWLViTOptions.NumTextLayers.set -> void
+override AiDotNet.VisionLanguage.Encoders.SigLIP2<T>.CopyGeneratedLayerAliasesTo(AiDotNet.NeuralNetworks.NeuralNetworkBase<T>! destination) -> void
+override AiDotNet.VisionLanguage.Encoders.SigLIP2<T>.GetExtraTrainableLayers() -> System.Collections.Generic.IEnumerable<AiDotNet.NeuralNetworks.Layers.LayerBase<T>?>!
+override AiDotNet.VisionLanguage.Encoders.SigLIP2<T>.GetGeneratedAdditionalLayerGroups() -> System.Collections.Generic.IEnumerable<AiDotNet.NeuralNetworks.NeuralNetworkBase<T>.GeneratedAdditionalLayerGroup!>!
+override AiDotNet.VisionLanguage.Encoders.SigLIP2<T>.RebindLayerAliases(System.Collections.Generic.IReadOnlyList<AiDotNet.Interfaces.ILayer<T>!>! previousLayers, System.Collections.Generic.IReadOnlyList<AiDotNet.Interfaces.ILayer<T>!>! replacementLayers) -> void
+override AiDotNet.VisionLanguage.Grounding.DINOX<T>.CopyGeneratedLayerAliasesTo(AiDotNet.NeuralNetworks.NeuralNetworkBase<T>! destination) -> void
+override AiDotNet.VisionLanguage.Grounding.DINOX<T>.GetExtraTrainableLayers() -> System.Collections.Generic.IEnumerable<AiDotNet.NeuralNetworks.Layers.LayerBase<T>?>!
+override AiDotNet.VisionLanguage.Grounding.DINOX<T>.GetGeneratedAdditionalLayerGroups() -> System.Collections.Generic.IEnumerable<AiDotNet.NeuralNetworks.NeuralNetworkBase<T>.GeneratedAdditionalLayerGroup!>!
+override AiDotNet.VisionLanguage.Grounding.DINOX<T>.RebindLayerAliases(System.Collections.Generic.IReadOnlyList<AiDotNet.Interfaces.ILayer<T>!>! previousLayers, System.Collections.Generic.IReadOnlyList<AiDotNet.Interfaces.ILayer<T>!>! replacementLayers) -> void
+override AiDotNet.VisionLanguage.Grounding.Ferret<T>.CopyGeneratedLayerAliasesTo(AiDotNet.NeuralNetworks.NeuralNetworkBase<T>! destination) -> void
+override AiDotNet.VisionLanguage.Grounding.Ferret<T>.GetExtraTrainableLayers() -> System.Collections.Generic.IEnumerable<AiDotNet.NeuralNetworks.Layers.LayerBase<T>?>!
+override AiDotNet.VisionLanguage.Grounding.Ferret<T>.GetGeneratedAdditionalLayerGroups() -> System.Collections.Generic.IEnumerable<AiDotNet.NeuralNetworks.NeuralNetworkBase<T>.GeneratedAdditionalLayerGroup!>!
+override AiDotNet.VisionLanguage.Grounding.Ferret<T>.RebindLayerAliases(System.Collections.Generic.IReadOnlyList<AiDotNet.Interfaces.ILayer<T>!>! previousLayers, System.Collections.Generic.IReadOnlyList<AiDotNet.Interfaces.ILayer<T>!>! replacementLayers) -> void
+override AiDotNet.VisionLanguage.Grounding.FerretV2<T>.CopyGeneratedLayerAliasesTo(AiDotNet.NeuralNetworks.NeuralNetworkBase<T>! destination) -> void
+override AiDotNet.VisionLanguage.Grounding.FerretV2<T>.GetExtraTrainableLayers() -> System.Collections.Generic.IEnumerable<AiDotNet.NeuralNetworks.Layers.LayerBase<T>?>!
+override AiDotNet.VisionLanguage.Grounding.FerretV2<T>.GetGeneratedAdditionalLayerGroups() -> System.Collections.Generic.IEnumerable<AiDotNet.NeuralNetworks.NeuralNetworkBase<T>.GeneratedAdditionalLayerGroup!>!
+override AiDotNet.VisionLanguage.Grounding.FerretV2<T>.RebindLayerAliases(System.Collections.Generic.IReadOnlyList<AiDotNet.Interfaces.ILayer<T>!>! previousLayers, System.Collections.Generic.IReadOnlyList<AiDotNet.Interfaces.ILayer<T>!>! replacementLayers) -> void
+override AiDotNet.VisionLanguage.Grounding.Groma<T>.CopyGeneratedLayerAliasesTo(AiDotNet.NeuralNetworks.NeuralNetworkBase<T>! destination) -> void
+override AiDotNet.VisionLanguage.Grounding.Groma<T>.GetExtraTrainableLayers() -> System.Collections.Generic.IEnumerable<AiDotNet.NeuralNetworks.Layers.LayerBase<T>?>!
+override AiDotNet.VisionLanguage.Grounding.Groma<T>.GetGeneratedAdditionalLayerGroups() -> System.Collections.Generic.IEnumerable<AiDotNet.NeuralNetworks.NeuralNetworkBase<T>.GeneratedAdditionalLayerGroup!>!
+override AiDotNet.VisionLanguage.Grounding.Groma<T>.RebindLayerAliases(System.Collections.Generic.IReadOnlyList<AiDotNet.Interfaces.ILayer<T>!>! previousLayers, System.Collections.Generic.IReadOnlyList<AiDotNet.Interfaces.ILayer<T>!>! replacementLayers) -> void
+override AiDotNet.VisionLanguage.Grounding.GroundingDINO15<T>.CopyGeneratedLayerAliasesTo(AiDotNet.NeuralNetworks.NeuralNetworkBase<T>! destination) -> void
+override AiDotNet.VisionLanguage.Grounding.GroundingDINO15<T>.GetExtraTrainableLayers() -> System.Collections.Generic.IEnumerable<AiDotNet.NeuralNetworks.Layers.LayerBase<T>?>!
+override AiDotNet.VisionLanguage.Grounding.GroundingDINO15<T>.GetGeneratedAdditionalLayerGroups() -> System.Collections.Generic.IEnumerable<AiDotNet.NeuralNetworks.NeuralNetworkBase<T>.GeneratedAdditionalLayerGroup!>!
+override AiDotNet.VisionLanguage.Grounding.GroundingDINO15<T>.RebindLayerAliases(System.Collections.Generic.IReadOnlyList<AiDotNet.Interfaces.ILayer<T>!>! previousLayers, System.Collections.Generic.IReadOnlyList<AiDotNet.Interfaces.ILayer<T>!>! replacementLayers) -> void
+override AiDotNet.VisionLanguage.Grounding.OWLViT<T>.CopyGeneratedLayerAliasesTo(AiDotNet.NeuralNetworks.NeuralNetworkBase<T>! destination) -> void
+override AiDotNet.VisionLanguage.Grounding.OWLViT<T>.GetExtraTrainableLayers() -> System.Collections.Generic.IEnumerable<AiDotNet.NeuralNetworks.Layers.LayerBase<T>?>!
+override AiDotNet.VisionLanguage.Grounding.OWLViT<T>.GetGeneratedAdditionalLayerGroups() -> System.Collections.Generic.IEnumerable<AiDotNet.NeuralNetworks.NeuralNetworkBase<T>.GeneratedAdditionalLayerGroup!>!
+override AiDotNet.VisionLanguage.Grounding.OWLViT<T>.RebindLayerAliases(System.Collections.Generic.IReadOnlyList<AiDotNet.Interfaces.ILayer<T>!>! previousLayers, System.Collections.Generic.IReadOnlyList<AiDotNet.Interfaces.ILayer<T>!>! replacementLayers) -> void
+override AiDotNet.VisionLanguage.Grounding.OWLv2<T>.CopyGeneratedLayerAliasesTo(AiDotNet.NeuralNetworks.NeuralNetworkBase<T>! destination) -> void
+override AiDotNet.VisionLanguage.Grounding.OWLv2<T>.GetExtraTrainableLayers() -> System.Collections.Generic.IEnumerable<AiDotNet.NeuralNetworks.Layers.LayerBase<T>?>!
+override AiDotNet.VisionLanguage.Grounding.OWLv2<T>.GetGeneratedAdditionalLayerGroups() -> System.Collections.Generic.IEnumerable<AiDotNet.NeuralNetworks.NeuralNetworkBase<T>.GeneratedAdditionalLayerGroup!>!
+override AiDotNet.VisionLanguage.Grounding.OWLv2<T>.RebindLayerAliases(System.Collections.Generic.IReadOnlyList<AiDotNet.Interfaces.ILayer<T>!>! previousLayers, System.Collections.Generic.IReadOnlyList<AiDotNet.Interfaces.ILayer<T>!>! replacementLayers) -> void
+override AiDotNet.VisionLanguage.Grounding.Shikra<T>.CopyGeneratedLayerAliasesTo(AiDotNet.NeuralNetworks.NeuralNetworkBase<T>! destination) -> void
+override AiDotNet.VisionLanguage.Grounding.Shikra<T>.GetExtraTrainableLayers() -> System.Collections.Generic.IEnumerable<AiDotNet.NeuralNetworks.Layers.LayerBase<T>?>!
+override AiDotNet.VisionLanguage.Grounding.Shikra<T>.GetGeneratedAdditionalLayerGroups() -> System.Collections.Generic.IEnumerable<AiDotNet.NeuralNetworks.NeuralNetworkBase<T>.GeneratedAdditionalLayerGroup!>!
+override AiDotNet.VisionLanguage.Grounding.Shikra<T>.RebindLayerAliases(System.Collections.Generic.IReadOnlyList<AiDotNet.Interfaces.ILayer<T>!>! previousLayers, System.Collections.Generic.IReadOnlyList<AiDotNet.Interfaces.ILayer<T>!>! replacementLayers) -> void
