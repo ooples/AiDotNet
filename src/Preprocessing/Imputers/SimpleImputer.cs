@@ -155,7 +155,7 @@ public class SimpleImputer<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
                 stats = Engine.TensorNanQuantile(x, 0.5, 0, false, QuantileInterpolation.Linear);
                 break;
             case ImputationStrategy.MostFrequent:
-                stats = ComputeMostFrequent(data, columnsToProcess);
+                stats = ScalerTensorOps.ColumnModes(data, columnsToProcess);
                 break;
             case ImputationStrategy.Constant:
                 stats = PreprocessingTensorOps.Filled(new[] { numColumns }, _fillValue ?? NumOps.Zero);
@@ -167,31 +167,6 @@ public class SimpleImputer<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         var empty = Engine.TensorEquals(ScalerTensorOps.NanColumnCount(x), NumOps.Zero);
         stats = Engine.TensorWhere(empty, PreprocessingTensorOps.Filled(new[] { numColumns }, emptyValue), stats);
         _statistics = ScalerTensorOps.MaskedParameters(mask, stats, NumOps.Zero);
-    }
-
-    /// <summary>
-    /// The most frequent non-missing value of each processed column; ties go to the smallest value, as in
-    /// scikit-learn's SimpleImputer(strategy="most_frequent"). Columns with no observed value get 0.
-    /// </summary>
-    private Tensor<T> ComputeMostFrequent(Matrix<T> data, int[] columnsToProcess)
-    {
-        var modes = new Tensor<T>(new[] { data.Columns });
-        foreach (var col in columnsToProcess)
-        {
-            var column = PreprocessingTensorOps.Column(data, col);
-            var observed = PreprocessingTensorOps.MaskPositions(PreprocessingTensorOps.Not(ScalerTensorOps.NanMask(column)));
-            if (observed.Length == 0)
-            {
-                continue;
-            }
-
-            var values = Engine.TensorIndexSelect(column, new Tensor<int>(observed, new[] { observed.Length }), 0);
-            var (mode, _) = Engine.TensorMode(values);
-            var single = PreprocessingTensorOps.Filled(new[] { 1 }, mode);
-            modes = Engine.TensorSetSlice(modes, single, new[] { col });
-        }
-
-        return modes;
     }
 
     /// <summary>

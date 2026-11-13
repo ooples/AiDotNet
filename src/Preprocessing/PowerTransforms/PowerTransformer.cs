@@ -128,11 +128,8 @@ public class PowerTransformer<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
                 // scikit-learn standardizes with StandardScaler: NaN-ignoring mean and population standard
                 // deviation, with (near-)zero scales left at 1.
                 var transformedData = Tensor<T>.FromMatrix(PreprocessingTensorOps.StackColumns(transformedColumns, data.Rows));
-                var mean = ScalerTensorOps.NanColumnMean(transformedData);
-                var variance = ScalerTensorOps.NanColumnVariance(transformedData, mean);
-                var count = ScalerTensorOps.NanColumnCount(transformedData);
-                var scale = ScalerTensorOps.HandleZerosInScale(
-                    Engine.TensorSqrt(variance), ScalerTensorOps.ConstantFeatureMask(variance, mean, count));
+                var (mean, std, constant) = ScalerTensorOps.NanColumnMoments(transformedData);
+                var scale = ScalerTensorOps.HandleZerosInScale(std, constant);
                 var mask = ScalerTensorOps.ColumnMask<T>(numColumns, columnsToProcess);
                 means = Tensor<T>.FromVector(ScalerTensorOps.MaskedParameters(mask, mean, NumOps.Zero));
                 stdDevs = Tensor<T>.FromVector(ScalerTensorOps.MaskedParameters(mask, scale, NumOps.One));
@@ -162,7 +159,15 @@ public class PowerTransformer<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
                 $"Found non-positive value in column {col}. Use YeoJohnson instead.");
         }
 
-        double bestLambda = values.Length == 0 ? 1.0 : FindOptimalLambda(values);
+        // scikit-learn's _fit keeps lambda 1 for a constant Yeo-Johnson feature (its likelihood has no maximum),
+        // and scipy.stats.boxcox raises "Data must not be constant." for Box-Cox.
+        bool constant = IsConstantFeature(values);
+        if (constant && _method == PowerTransformMethod.BoxCox)
+        {
+            throw new ArgumentException($"Box-Cox transformation requires non-constant data. Column {col} is constant.");
+        }
+
+        double bestLambda = values.Length == 0 || constant ? 1.0 : FindOptimalLambda(values);
         T lambda = NumOps.FromDouble(bestLambda);
         return (PreprocessingTensorOps.Filled(new[] { 1 }, lambda), TransformColumn(column, lambda));
     }
@@ -178,9 +183,28 @@ public class PowerTransformer<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         var jacobianTerms = _method == PowerTransformMethod.BoxCox
             ? Engine.TensorLog(values)
             : Engine.TensorMultiply(Engine.TensorSign(values), Engine.TensorLog1p(Engine.TensorAbs(values)));
-        double jacobian = NumOps.ToDouble(Engine.TensorSum(jacobianTerms));
+        // Reduced as numpy does (float32 intermediates for float16), not in Half, whose sum stops growing
+        double jacobian = ScalerTensorOps.Sum(jacobianTerms);
         double n = values.Length;
         return BrentMinimizer.Minimize(lambda => -ComputeLogLikelihood(values, lambda, n, jacobian), -2.0, 2.0);
+    }
+
+    /// <summary>
+    /// scikit-learn's <c>_is_constant_feature</c> on the float64 mean and variance of the observed values:
+    /// <c>var &lt;= n eps var + (n mean eps)^2</c>.
+    /// </summary>
+    private static bool IsConstantFeature(Tensor<T> values)
+    {
+        int n = values.Length;
+        if (n == 0)
+        {
+            return false;
+        }
+
+        double mean = ScalerTensorOps.Sum(values) / n;
+        double variance = ScalerTensorOps.Variance(values);
+        double eps = ScalerTensorOps.Float64Epsilon;
+        return variance <= n * eps * variance + (n * mean * eps) * (n * mean * eps);
     }
 
     /// <summary>
@@ -190,8 +214,7 @@ public class PowerTransformer<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     private double ComputeLogLikelihood(Tensor<T> values, double lambda, double n, double jacobian)
     {
         var transformed = TransformColumn(values, NumOps.FromDouble(lambda));
-        T mean = Engine.TensorMean(transformed);
-        double variance = NumOps.ToDouble(Engine.TensorMean(Engine.TensorSquare(Engine.TensorSubtractScalar(transformed, mean))));
+        double variance = ScalerTensorOps.Variance(transformed);
         if (!(variance >= Float64Tiny))
         {
             return double.NegativeInfinity;

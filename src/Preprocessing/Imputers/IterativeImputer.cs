@@ -178,7 +178,10 @@ public class IterativeImputer<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
                 xt = ApplyStep(xt, missing, step);
             }
 
-            var change = Engine.TensorMaxValue(Engine.TensorAbs(Engine.TensorSubtract(xt, previous)));
+            // scikit-learn: np.linalg.norm(Xt - Xt_previous, ord=np.inf, axis=None), which for a 2-D array is the
+            // matrix infinity norm, the largest row sum of absolute changes (not the largest single change)
+            var change = Engine.TensorMaxValue(
+                Engine.ReduceSum(Engine.TensorAbs(Engine.TensorSubtract(xt, previous)), new[] { 1 }, false));
             if (PreprocessingTensorOps.IsBelow(change, normalizedTolerance))
             {
                 break;
@@ -256,7 +259,7 @@ public class IterativeImputer<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
                 values = Engine.TensorNanQuantile(x, 0.5, 0, false, QuantileInterpolation.Linear);
                 break;
             case IterativeImputerInitialStrategy.MostFrequent:
-                values = ColumnModes(data);
+                values = ScalerTensorOps.ColumnModes(data, Enumerable.Range(0, nFeatures));
                 break;
             default:
                 values = new Tensor<T>(new[] { nFeatures });
@@ -265,27 +268,6 @@ public class IterativeImputer<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
 
         var empty = Engine.TensorEquals(ScalerTensorOps.NanColumnCount(x), NumOps.Zero);
         return Engine.TensorWhere(empty, new Tensor<T>(new[] { nFeatures }), values).ToVector();
-    }
-
-    /// <summary>The most frequent observed value of every column (smallest on ties).</summary>
-    private Tensor<T> ColumnModes(Matrix<T> data)
-    {
-        var modes = new Tensor<T>(new[] { data.Columns });
-        for (int col = 0; col < data.Columns; col++)
-        {
-            var column = PreprocessingTensorOps.Column(data, col);
-            var observed = PreprocessingTensorOps.MaskPositions(PreprocessingTensorOps.Not(ScalerTensorOps.NanMask(column)));
-            if (observed.Length == 0)
-            {
-                continue;
-            }
-
-            var values = Engine.TensorIndexSelect(column, new Tensor<int>(observed, new[] { observed.Length }), 0);
-            var (mode, _) = Engine.TensorMode(values);
-            modes = Engine.TensorSetSlice(modes, PreprocessingTensorOps.Filled(new[] { 1 }, mode), new[] { col });
-        }
-
-        return modes;
     }
 
     /// <summary>
@@ -338,12 +320,19 @@ public class IterativeImputer<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         return Engine.Reshape(Engine.TensorMatMul(eigenvectors, scaled), new[] { p });
     }
 
-    /// <summary>Minimum-norm least squares: eigenvalues below the lstsq cut-off are dropped.</summary>
+    /// <summary>
+    /// Minimum-norm least squares (scikit-learn's LinearRegression, scipy <c>lstsq</c>): the directions X^T X
+    /// cannot resolve are dropped.
+    /// </summary>
     private Tensor<T> SolveLeastSquares(Tensor<T> eigenvalues, Tensor<T> eigenvectors, Tensor<T> projected, int size)
     {
-        // singular value s is kept when s > eps * max(n, p) * s_max, i.e. eigenvalue e = s^2 > e_max * (eps * size)^2
+        // An eigenvalue of X^T X carries a rounding error of about eps * e_max, so a singular direction (an exactly
+        // collinear feature) comes back as an eigenvalue near eps * e_max, not 0. The cut-off is that noise floor,
+        // eps * max(n, p) * e_max: cutting at the squared singular-value tolerance (eps * size)^2 * e_max instead
+        // kept the noise eigenvalue and blew the coefficients of collinear features up instead of returning
+        // lstsq's minimum-norm solution.
         double relative = ScalerTensorOps.Float64Epsilon * size;
-        T cutoff = NumOps.Multiply(Engine.TensorMaxValue(eigenvalues), NumOps.FromDouble(relative * relative));
+        T cutoff = NumOps.Multiply(Engine.TensorMaxValue(eigenvalues), NumOps.FromDouble(relative));
         var kept = Engine.TensorGreaterThan(eigenvalues, cutoff);
         var safe = Engine.TensorWhere(kept, eigenvalues, PreprocessingTensorOps.Filled(eigenvalues.Shape.ToArray(), NumOps.One));
         var weights = Engine.TensorMultiply(kept, Engine.TensorReciprocal(safe));
