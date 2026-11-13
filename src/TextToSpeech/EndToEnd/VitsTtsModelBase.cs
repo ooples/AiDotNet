@@ -621,19 +621,21 @@ public abstract partial class VitsTtsModelBase<T> : TtsModelBase<T>, IEndToEndTt
         var zp = _flow!.Forward(z, condition, reverse: false);
 
         int tokens = mean.Shape[2], frames = data.Frames, channels = _vits.InterChannels;
-        Tensor<T> scores;
+        Tensor<double> scores;
         using (new NoGradScope<T>())
         {
             // log N(z_j; m_i, σ_i) summed over channels, expanded as the reference does (neg_cent1 … neg_cent4):
-            // Σ_c (−½ log 2π − ls) + (−½ σ⁻²)ᵀ z² + (m σ⁻²)ᵀ z + Σ_c (−½ m² σ⁻²), [tokens, frames].
-            var m = Engine.Reshape(mean, new[] { channels, tokens });
-            var ls = Engine.Reshape(logScale, new[] { channels, tokens });
-            var zf = Engine.Reshape(zp, new[] { channels, frames });
-            var inverseVariance = Engine.TensorExp(Engine.TensorMultiplyScalar(ls, NumOps.FromDouble(-2.0)));
-            var constant = Engine.ReduceSum(Engine.TensorAddScalar(Engine.TensorNegate(ls), NumOps.FromDouble(-0.5 * Math.Log(2 * Math.PI))), new[] { 0 }, false);
-            var quadratic = Engine.ReduceSum(Engine.TensorMultiplyScalar(Engine.TensorMultiply(Engine.TensorMultiply(m, m), inverseVariance), NumOps.FromDouble(-0.5)), new[] { 0 }, false);
+            // Σ_c (−½ log 2π − ls) + (−½ σ⁻²)ᵀ z² + (m σ⁻²)ᵀ z + Σ_c (−½ m² σ⁻²), [tokens, frames]. The scores and the
+            // noise statistics stay in double (the search only compares them): in half precision the cross term
+            // alone overflows (192 channels at m = z = 20 give 76,800) and so do n − 1 and the sum of squares.
+            var m = TensorCopyHelper.CastLogical<T, double>(Engine.Reshape(mean, new[] { channels, tokens }));
+            var ls = TensorCopyHelper.CastLogical<T, double>(Engine.Reshape(logScale, new[] { channels, tokens }));
+            var zf = TensorCopyHelper.CastLogical<T, double>(Engine.Reshape(zp, new[] { channels, frames }));
+            var inverseVariance = Engine.TensorExp(Engine.TensorMultiplyScalar(ls, -2.0));
+            var constant = Engine.ReduceSum(Engine.TensorAddScalar(Engine.TensorNegate(ls), -0.5 * Math.Log(2 * Math.PI)), new[] { 0 }, false);
+            var quadratic = Engine.ReduceSum(Engine.TensorMultiplyScalar(Engine.TensorMultiply(Engine.TensorMultiply(m, m), inverseVariance), -0.5), new[] { 0 }, false);
             var perToken = Engine.TensorBroadcastTo(Engine.Reshape(Engine.TensorAdd(constant, quadratic), new[] { tokens, 1 }), new[] { tokens, frames });
-            var squares = Engine.TensorMatMul(Engine.TensorTranspose(Engine.TensorMultiplyScalar(inverseVariance, NumOps.FromDouble(-0.5))),
+            var squares = Engine.TensorMatMul(Engine.TensorTranspose(Engine.TensorMultiplyScalar(inverseVariance, -0.5)),
                 Engine.TensorMultiply(zf, zf));
             var cross = Engine.TensorMatMul(Engine.TensorTranspose(Engine.TensorMultiply(m, inverseVariance)), zf);
             scores = Engine.TensorAdd(Engine.TensorAdd(squares, cross), perToken);
@@ -644,10 +646,16 @@ public abstract partial class VitsTtsModelBase<T> : TtsModelBase<T>, IEndToEndTt
             {
                 // ε = std(P) · N(0, 1) · scale (torch.std, unbiased), drawn in the alignment seed's order.
                 var centred = Engine.TensorSubtractScalar(scores, Engine.TensorMean(scores));
-                T std = NumOps.Sqrt(NumOps.Divide(Engine.TensorSumOfSquares(centred), NumOps.FromDouble(n - 1)));
+                double std = Math.Sqrt(Engine.TensorSumOfSquares(centred) / (n - 1));
                 var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(draw.AlignmentSeed);
-                var noise = Gaussian(new[] { tokens, frames }, random);
-                scores = Engine.TensorAdd(scores, Engine.TensorMultiplyScalar(noise, NumOps.Multiply(std, NumOps.FromDouble(noiseScale))));
+                var noise = new Tensor<double>(new[] { tokens, frames });
+                for (int i = 0; i < noise.Length; i++)
+                {
+                    // Gaussian's draws, in its order, kept in double.
+                    double u1 = 1.0 - random.NextDouble(), u2 = random.NextDouble();
+                    noise[i] = Math.Sqrt(-2 * Math.Log(u1)) * Math.Cos(2 * Math.PI * u2);
+                }
+                scores = Engine.TensorAdd(scores, Engine.TensorMultiplyScalar(noise, std * noiseScale));
             }
         }
         return new VitsAlignment(hidden, mean, logScale, z, logScaleQ, zp, speaker, language, MonotonicAlignment.MaximumPath(scores));

@@ -1,3 +1,4 @@
+using AiDotNet.Helpers;
 using AiDotNet.Enums;
 using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
@@ -43,6 +44,7 @@ public partial class WaveRNN<T> : SegmentVocoderBase<T>
     private WaveRnnCore<T>? _core;
     private TacotronSpectrogram? _features;
     private Tensor<T>? _mask;
+    private Tensor<T>? _scaledByteTable;
 
     /// <summary>Creates a WaveRNN that runs an exported ONNX graph.</summary>
     public WaveRNN(NeuralNetworkArchitecture<T> architecture, string modelPath, WaveRNNOptions? options = null)
@@ -134,14 +136,14 @@ public partial class WaveRNN<T> : SegmentVocoderBase<T>
     internal static double FromSixteenBit(int s) => s / 32767.5 - 1;
 
     /// <summary>The coarse (high) and fine (low) bytes of a waveform <c>[samples]</c>.</summary>
-    /// <remarks>The 16-bit value round((x + 1) · 32767.5) is assembled in integers from y = x · 32767.5, which stays
-    /// within ±32767.5 (representable in every T, half precision included): with n = ⌊y⌋, y + 32767.5 lies in
-    /// (n + 32767, n + 32768] and rounds (half to even) to n + 32768, except at a tie (y = n) with n odd.</remarks>
+    /// <remarks>The 16-bit value round((x + 1) · 32767.5) is assembled in integers from y = x · 32767.5, formed in
+    /// double (half precision rounds 32767.5 itself to 32768): with n = ⌊y⌋, y + 32767.5 lies in (n + 32767, n + 32768]
+    /// and rounds (half to even) to n + 32768, except at a tie (y = n) with n odd.</remarks>
     public (int[] Coarse, int[] Fine) Split(Tensor<T> audio)
     {
         if (audio is null) throw new ArgumentNullException(nameof(audio));
-        var y = Engine.TensorMultiplyScalar(Engine.TensorClamp(Engine.Reshape(audio, new[] { audio.Length }),
-            NumOps.FromDouble(-1), NumOps.One), NumOps.FromDouble(32767.5));
+        var y = Engine.TensorMultiplyScalar(Engine.TensorClamp(
+            TensorCopyHelper.CastLogical<T, double>(Engine.Reshape(audio, new[] { audio.Length })), -1.0, 1.0), 32767.5);
         var floor = Engine.TensorFloor(y);
         var whole = floor.Cast<int>().ToArray();
         var exact = Engine.TensorEquals(y, floor).Cast<int>().ToArray();
@@ -158,11 +160,20 @@ public partial class WaveRNN<T> : SegmentVocoderBase<T>
     }
 
     // Byte b scaled to [−1, 1] (§2: "encoded as scalars in [0, 255] and scaled to the interval [−1, 1]"),
-    // gathered from the 256-entry table of b / 127.5 − 1.
+    // gathered from the 256-entry table of b / 127.5 − 1, built once and outside any caller arena (generation reads
+    // it twice per sample, and an arena reset would reissue its storage).
     private Tensor<T> ScaledBytes(int[] bytes, int[] shape)
     {
-        var table = Engine.TensorAddScalar(Engine.TensorDivideScalar(Engine.TensorArange<T>(0, 256, 1), NumOps.FromDouble(127.5)),
-            NumOps.FromDouble(-1));
+        var table = _scaledByteTable;
+        if (table is null)
+        {
+            using (AiDotNet.Tensors.Helpers.TensorArena.Suspend())
+            {
+                table = Engine.TensorAddScalar(Engine.TensorDivideScalar(Engine.TensorArange<T>(0, 256, 1), NumOps.FromDouble(127.5)),
+                    NumOps.FromDouble(-1));
+            }
+            _scaledByteTable = table;
+        }
         return Engine.Reshape(Engine.TensorIndexSelect(table, new Tensor<int>(bytes, new[] { bytes.Length }), 0), shape);
     }
 
@@ -232,11 +243,11 @@ public partial class WaveRNN<T> : SegmentVocoderBase<T>
             previousCoarse = c;
             previousFine = f;
         }
-        // (256 c + f) / 32767.5 - 1, as (128 c + f / 2) / 16383.75 - 1: halving both sides is exact, and the halved
-        // value stays below half precision's 65504.
-        var halved = Engine.TensorAdd(Engine.TensorMultiplyScalar(new Tensor<int>(coarse, new[] { samples }).Cast<T>(), NumOps.FromDouble(128)),
-            Engine.TensorMultiplyScalar(new Tensor<int>(fine, new[] { samples }).Cast<T>(), NumOps.FromDouble(0.5)));
-        var wave = Engine.TensorAddScalar(Engine.TensorDivideScalar(halved, NumOps.FromDouble(16383.75)), NumOps.FromDouble(-1));
+        // (256 c + f) / 32767.5 − 1 in double, narrowed once: in half precision the 16-bit value and its divisor both
+        // round, and quiet samples (c = 128, f = 1 → 4.6e-5) came out as 0.
+        var pcm = Engine.TensorAdd(Engine.TensorMultiplyScalar(new Tensor<int>(coarse, new[] { samples }).Cast<double>(), 256.0),
+            new Tensor<int>(fine, new[] { samples }).Cast<double>());
+        var wave = Engine.TensorAddScalar(Engine.TensorDivideScalar(pcm, 32767.5), -1.0).Cast<T>();
         return Engine.Reshape(wave, new[] { 1, 1, samples });
     }
 

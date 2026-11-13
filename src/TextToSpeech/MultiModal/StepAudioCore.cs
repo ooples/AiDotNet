@@ -1,3 +1,4 @@
+using AiDotNet.Helpers;
 using AiDotNet.Audio.Features;
 using AiDotNet.Audio.Foundations;
 using AiDotNet.Audio.Speaker;
@@ -165,20 +166,34 @@ internal sealed class StepAudioCore<T>
     /// <summary>The linguistic codes of 16 kHz audio: the streaming Paraformer encoder's frames, each the nearest
     /// centroid's index (Euclidean, <c>torch.cdist</c>).</summary>
     /// <remarks>The squared distances are formed as ‖f‖² − 2 f·c + ‖c‖² with one matrix product — the expansion
-    /// <c>torch.cdist</c> itself uses past 25 rows — and the first nearest centroid is taken.</remarks>
+    /// <c>torch.cdist</c> itself uses past 25 rows — and the first nearest centroid is taken. They are formed in double
+    /// (in a lower-precision T the three terms cancel for a frame on a centroid, and an earlier centroid can win the
+    /// tie) and over <see cref="DistanceBatch"/> frames at a time, so the <c>[frames, codes]</c> matrices stay bounded
+    /// for any recording length.</remarks>
     public int[] LinguisticCodes(Tensor<T> audio)
     {
         // The Paraformer's Kaldi front end is a double[] reference port; the recording enters it once.
-        var frames = Linguistic.Encode(audio.Cast<double>().ToArray());
+        var frames = TensorCopyHelper.CastLogical<T, double>(Linguistic.Encode(TensorCopyHelper.CastLogical<T, double>(audio).ToArray()));
         int count = frames.Shape[0], width = frames.Shape[1], codes = Centroids.Length / width;
-        var centroids = new Tensor<double>(Centroids, new[] { codes, width }).Cast<T>();
-        var frameNorms = _engine.ReduceSum(_engine.TensorMultiply(frames, frames), new[] { 1 }, true);              // [count, 1]
+        var centroids = new Tensor<double>(Centroids, new[] { codes, width });
+        var centroidsT = _engine.TensorTranspose(centroids);                                                        // [width, codes]
         var centroidNorms = _engine.Reshape(_engine.ReduceSum(_engine.TensorMultiply(centroids, centroids), new[] { 1 }, false), new[] { 1, codes });
-        var cross = _engine.TensorMatMul(frames, _engine.TensorTranspose(centroids));                              // [count, codes]
-        var distance = _engine.TensorAdd(_engine.TensorSubtract(_engine.TensorBroadcastTo(frameNorms, new[] { count, codes }),
-            _engine.TensorMultiplyScalar(cross, Ops.FromDouble(2.0))), _engine.TensorBroadcastTo(centroidNorms, new[] { count, codes }));
-        return _engine.TensorArgMin(distance, 1).ToArray();
+        var result = new int[count];
+        for (int start = 0; start < count; start += DistanceBatch)
+        {
+            int rows = Math.Min(DistanceBatch, count - start);
+            var batch = _engine.TensorSlice(frames, new[] { start, 0 }, new[] { rows, width });
+            var frameNorms = _engine.ReduceSum(_engine.TensorMultiply(batch, batch), new[] { 1 }, true);            // [rows, 1]
+            var cross = _engine.TensorMatMul(batch, centroidsT);                                                    // [rows, codes]
+            var distance = _engine.TensorAdd(_engine.TensorSubtract(_engine.TensorBroadcastTo(frameNorms, new[] { rows, codes }),
+                _engine.TensorMultiplyScalar(cross, 2.0)), _engine.TensorBroadcastTo(centroidNorms, new[] { rows, codes }));
+            Array.Copy(_engine.TensorArgMin(distance, 1).ToArray(), 0, result, start, rows);
+        }
+        return result;
     }
+
+    // Frames per distance batch: 2,048 × 1,024 codes is 16 MiB per double matrix.
+    private const int DistanceBatch = 2048;
 
     /// <summary>The semantic codes of 16 kHz audio (tokenizer.py's <c>get_vq06_code</c>): S3 v1 over 30 s chunks of the
     /// 128-band Whisper log-mel, chunks under 480 samples skipped.</summary>

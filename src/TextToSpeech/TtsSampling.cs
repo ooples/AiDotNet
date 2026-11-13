@@ -43,7 +43,8 @@ internal static class TtsSampling<T>
     /// <summary>
     /// The position a multinomial draw lands on over non-negative <paramref name="weights"/> (in visiting order):
     /// with <c>d = u · Σw</c>, the first position whose running sum exceeds d (<paramref name="inclusive"/>: reaches d,
-    /// skipping zero weights); the last position (inclusive: the last positive weight) when rounding leaves none.
+    /// skipping zero weights); the last positive weight when rounding leaves none (a draw narrowed to T can round up
+    /// to the total, and the last position may carry no weight). Weights with no positive entry are rejected.
     /// </summary>
     public static int DrawPosition(Tensor<T> weights, double u, bool inclusive)
     {
@@ -54,17 +55,18 @@ internal static class TtsSampling<T>
         var flat = engine.Reshape(weights, new[] { n });
         var running = engine.TensorCumSum(flat, 0);
         T draw = Ops.Multiply(Ops.FromDouble(u), engine.TensorSum(flat));
+        var positive = engine.TensorGreaterThan(flat, Ops.Zero).Cast<int>().ToArray();
+        int last = Array.LastIndexOf(positive, 1);
+        if (last < 0) throw new ArgumentException("The weights have no positive entry to draw.", nameof(weights));
         if (!inclusive)
         {
             int below = n - engine.TensorGreaterThan(running, draw).Cast<int>().ToArray().Sum();
-            return Math.Min(below, n - 1);
+            return below < n ? below : last;
         }
         int before = engine.TensorLessThan(running, draw).Cast<int>().ToArray().Sum();
-        var positive = engine.TensorGreaterThan(flat, Ops.Zero).Cast<int>().ToArray();
         for (int j = before; j < n; j++)
             if (positive[j] != 0) return j;
-        int last = Array.LastIndexOf(positive, 1);
-        return last >= 0 ? last : n - 1;
+        return last;
     }
 
     /// <summary>A <c>[n]</c> tensor of <paramref name="values"/> with <paramref name="fill"/> where <paramref name="mask"/> is set.</summary>

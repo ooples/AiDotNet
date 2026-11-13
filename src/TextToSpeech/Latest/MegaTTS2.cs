@@ -414,19 +414,23 @@ public partial class MegaTTS2<T> : TtsModelBase<T>, IEndToEndTts<T>
         }
         var targetCache = Prefill(target);
         var styleCache = style is null ? null : Prefill(style);
-        T gamma = NumOps.FromDouble(style is null ? 0 : _options.ProsodyInterpolation);
+        double gamma = style is null ? 0 : _options.ProsodyInterpolation;
         int n = pooled.Shape[0], h = pooled.Shape[1], v = _options.Codes + 1;
         var codes = new int[n];
         int token = Network.StartToken;
         var startMask = new bool[v];
         startMask[0] = true;
-        Tensor<T> Probabilities(MegaTts3DurationCache<T> cache, Tensor<T> row)
+        // The softmax, the Eq. 3 mixture and the start-token renormalization run in double and only the final
+        // distribution is narrowed to T: in half precision exp(logit − max) is 0 for a logit 17.3 below the maximum,
+        // and no rescaling after the narrowing brings those tokens back once the start token is masked.
+        Tensor<double> Probabilities(MegaTts3DurationCache<T> cache, Tensor<T> row)
         {
-            var logits = Engine.Reshape(Engine.TensorSlice(model.Extend(new[] { token }, row, cache), new[] { 0, 0 }, new[] { 1, v }), new[] { v });
-            var e = Engine.TensorExp(Engine.TensorAddScalar(logits, NumOps.Negate(Engine.TensorMaxValue(logits))));
+            var logits = TensorCopyHelper.CastLogical<T, double>(Engine.Reshape(
+                Engine.TensorSlice(model.Extend(new[] { token }, row, cache), new[] { 0, 0 }, new[] { 1, v }), new[] { v }));
+            var e = Engine.TensorExp(Engine.TensorAddScalar(logits, -Engine.TensorMaxValue(logits)));
             return Engine.TensorDivideScalar(e, Engine.TensorSum(e));
         }
-        T keep = NumOps.Subtract(NumOps.One, gamma);
+        double keep = 1 - gamma;
         for (int i = 0; i < n; i++)
         {
             var row = Engine.TensorSlice(pooled, new[] { i, 0 }, new[] { 1, h });
@@ -436,9 +440,12 @@ public partial class MegaTTS2<T> : TtsModelBase<T>, IEndToEndTts<T>
                 var q = Probabilities(styleCache, row);
                 p = Engine.TensorAdd(Engine.TensorMultiplyScalar(p, keep), Engine.TensorMultiplyScalar(q, gamma));
             }
-            p = TtsSampling<T>.Fill(p, startMask, NumOps.Zero);
-            observeDistribution?.Invoke(p);
-            codes[i] = TopK(p, _options.TopK, random) - 1;
+            p = TtsSampling<double>.Fill(p, startMask, 0.0);
+            double remaining = Engine.TensorSum(p);
+            if (remaining > 0) p = Engine.TensorDivideScalar(p, remaining);
+            var distribution = p.Cast<T>();
+            observeDistribution?.Invoke(distribution);
+            codes[i] = TopK(distribution, _options.TopK, random) - 1;
             token = codes[i] + 1;
         }
         return codes;
