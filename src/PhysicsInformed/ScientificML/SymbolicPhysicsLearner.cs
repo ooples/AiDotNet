@@ -11,6 +11,7 @@ using AiDotNet.Models.Options;
 using AiDotNet.Regression;
 using AiDotNet.Attributes;
 using AiDotNet.LossFunctions;
+using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 
@@ -87,23 +88,23 @@ namespace AiDotNet.PhysicsInformed.ScientificML
             _random = RandomHelper.CreateSeededRandom(42);
             _unaryOperators = new List<SymbolicUnaryOperator<T>>
             {
-                new SymbolicUnaryOperator<T>("neg", x => NumOps.Negate(x), value => $"-({value})"),
-                new SymbolicUnaryOperator<T>("square", x => NumOps.Multiply(x, x), value => $"({value})^2"),
-                new SymbolicUnaryOperator<T>("reciprocal", x => NumOps.Divide(NumOps.One, x), value => $"1/({value})"),
-                new SymbolicUnaryOperator<T>("sqrt", x => NumOps.Sqrt(x), value => $"sqrt({value})"),
-                new SymbolicUnaryOperator<T>("sin", MathHelper.Sin, value => $"sin({value})"),
-                new SymbolicUnaryOperator<T>("cos", MathHelper.Cos, value => $"cos({value})"),
-                new SymbolicUnaryOperator<T>("exp", NumOps.Exp, value => $"exp({value})"),
-                new SymbolicUnaryOperator<T>("log", NumOps.Log, value => $"log({value})")
+                new SymbolicUnaryOperator<T>("neg", x => NumOps.Negate(x), x => Engine.TensorNegate(x), value => $"-({value})"),
+                new SymbolicUnaryOperator<T>("square", x => NumOps.Multiply(x, x), x => Engine.TensorMultiply(x, x), value => $"({value})^2"),
+                new SymbolicUnaryOperator<T>("reciprocal", x => NumOps.Divide(NumOps.One, x), x => Engine.TensorReciprocal(x), value => $"1/({value})"),
+                new SymbolicUnaryOperator<T>("sqrt", x => NumOps.Sqrt(x), x => Engine.TensorSqrt(x), value => $"sqrt({value})"),
+                new SymbolicUnaryOperator<T>("sin", MathHelper.Sin, x => Engine.TensorSin(x), value => $"sin({value})"),
+                new SymbolicUnaryOperator<T>("cos", MathHelper.Cos, x => Engine.TensorCos(x), value => $"cos({value})"),
+                new SymbolicUnaryOperator<T>("exp", NumOps.Exp, x => Engine.TensorExp(x), value => $"exp({value})"),
+                new SymbolicUnaryOperator<T>("log", NumOps.Log, x => Engine.TensorLog(x), value => $"log({value})")
             };
 
             _binaryOperators = new List<SymbolicBinaryOperator<T>>
             {
-                new SymbolicBinaryOperator<T>("+", NumOps.Add, (left, right) => $"({left} + {right})"),
-                new SymbolicBinaryOperator<T>("-", NumOps.Subtract, (left, right) => $"({left} - {right})"),
-                new SymbolicBinaryOperator<T>("*", NumOps.Multiply, (left, right) => $"({left} * {right})"),
-                new SymbolicBinaryOperator<T>("/", NumOps.Divide, (left, right) => $"({left} / {right})"),
-                new SymbolicBinaryOperator<T>("pow", NumOps.Power, (left, right) => $"pow({left}, {right})")
+                new SymbolicBinaryOperator<T>("+", NumOps.Add, (a, b) => Engine.TensorAdd(a, b), (left, right) => $"({left} + {right})"),
+                new SymbolicBinaryOperator<T>("-", NumOps.Subtract, (a, b) => Engine.TensorSubtract(a, b), (left, right) => $"({left} - {right})"),
+                new SymbolicBinaryOperator<T>("*", NumOps.Multiply, (a, b) => Engine.TensorMultiply(a, b), (left, right) => $"({left} * {right})"),
+                new SymbolicBinaryOperator<T>("/", NumOps.Divide, (a, b) => Engine.TensorDivide(a, b), (left, right) => $"({left} / {right})"),
+                new SymbolicBinaryOperator<T>("pow", NumOps.Power, (a, b) => Engine.TensorPower(a, b), (left, right) => $"pow({left}, {right})")
             };
         }
 
@@ -151,6 +152,22 @@ namespace AiDotNet.PhysicsInformed.ScientificML
                 throw new ArgumentOutOfRangeException(nameof(numGenerations));
             }
 
+            return DiscoverEquation(
+                Tensor<T>.FromMatrix(new Matrix<T>(inputs)),
+                Tensor<T>.FromVector(new Vector<T>(outputs)),
+                maxComplexity,
+                numGenerations);
+        }
+
+        /// <summary>
+        /// The search itself, on inputs [samples, features] and outputs [samples] already validated.
+        /// </summary>
+        private SymbolicExpression<T> DiscoverEquation(
+            Tensor<T> inputs,
+            Tensor<T> outputs,
+            int maxComplexity,
+            int numGenerations)
+        {
             // Schmidt and Lipson's symbolic search includes affine expressions. Seed that part of
             // the search deterministically for any feature count, then retain whichever candidate
             // actually fits the observations better. Previously this baseline existed only for a
@@ -160,12 +177,7 @@ namespace AiDotNet.PhysicsInformed.ScientificML
             if (linearExpression != null)
             {
                 double linearMse = ComputeMse(linearExpression, inputs, outputs);
-                double targetScale = 0.0;
-                for (int i = 0; i < outputs.Length; i++)
-                {
-                    double output = NumOps.ToDouble(outputs[i]);
-                    targetScale = Math.Max(targetScale, Math.Abs(output));
-                }
+                double targetScale = Math.Max(0.0, NumOps.ToDouble(Engine.TensorMaxValue(Engine.TensorAbs(outputs))));
 
                 // An affine expression with only scale-relative round-off residual is already
                 // an exact member of the symbolic search space. Return it directly instead of
@@ -199,7 +211,7 @@ namespace AiDotNet.PhysicsInformed.ScientificML
                 return regressionExpression;
             }
 
-            int variableCount = inputs.GetLength(1);
+            int variableCount = inputs.Shape[1];
             int populationSize = Math.Max(20, maxComplexity * 4);
             int maxDepth = Math.Max(2, maxComplexity / 2);
 
@@ -459,94 +471,39 @@ namespace AiDotNet.PhysicsInformed.ScientificML
             }
         }
 
-        private double ComputeMse(SymbolicExpression<T> expression, T[,] inputs, T[] outputs)
+        /// <summary>
+        /// The mean squared error of an expression over every sample at once; +infinity when a variable index is out
+        /// of range or the error is not finite (a NaN or infinite prediction makes the sum NaN or infinite).
+        /// </summary>
+        private double ComputeMse(SymbolicExpression<T> expression, Tensor<T> inputs, Tensor<T> outputs)
         {
-            int samples = inputs.GetLength(0);
-            int features = inputs.GetLength(1);
-
+            int samples = inputs.Shape[0];
             if (samples == 0)
             {
                 return double.PositiveInfinity;
             }
 
-            T sumSquared = NumOps.Zero;
-            var variables = new T[features];
-
-            for (int i = 0; i < samples; i++)
+            Tensor<T> predictions;
+            try
             {
-                for (int j = 0; j < features; j++)
-                {
-                    variables[j] = inputs[i, j];
-                }
-
-                T prediction;
-                try
-                {
-                    prediction = expression.Evaluate(variables);
-                }
-                catch (ArgumentOutOfRangeException)
-                {
-                    return double.PositiveInfinity;
-                }
-
-                if (NumOps.IsNaN(prediction) || NumOps.IsInfinity(prediction))
-                {
-                    return double.PositiveInfinity;
-                }
-
-                T error = NumOps.Subtract(prediction, outputs[i]);
-                sumSquared = NumOps.Add(sumSquared, NumOps.Multiply(error, error));
+                predictions = expression.Evaluate(inputs, Engine);
+            }
+            catch (ArgumentOutOfRangeException)
+            {
+                return double.PositiveInfinity;
             }
 
-            T mse = NumOps.Divide(sumSquared, NumOps.FromDouble(samples));
+            var error = Engine.TensorSubtract(predictions, outputs);
+            T mse = NumOps.Divide(Engine.TensorSum(Engine.TensorMultiply(error, error)), NumOps.FromDouble(samples));
             double mseValue = NumOps.ToDouble(mse);
 
             return double.IsNaN(mseValue) || double.IsInfinity(mseValue) ? double.PositiveInfinity : mseValue;
         }
 
-        private double ComputeLoss(SymbolicExpression<T> expression, T[,] inputs, T[] outputs, int maxComplexity)
+        private double ComputeLoss(SymbolicExpression<T> expression, Tensor<T> inputs, Tensor<T> outputs, int maxComplexity)
         {
-            int samples = inputs.GetLength(0);
-            int features = inputs.GetLength(1);
-
-            if (samples == 0)
-            {
-                return double.PositiveInfinity;
-            }
-
-            T sumSquared = NumOps.Zero;
-            var variables = new T[features];
-
-            for (int i = 0; i < samples; i++)
-            {
-                for (int j = 0; j < features; j++)
-                {
-                    variables[j] = inputs[i, j];
-                }
-
-                T prediction;
-                try
-                {
-                    prediction = expression.Evaluate(variables);
-                }
-                catch (ArgumentOutOfRangeException)
-                {
-                    return double.PositiveInfinity;
-                }
-
-                if (NumOps.IsNaN(prediction) || NumOps.IsInfinity(prediction))
-                {
-                    return double.PositiveInfinity;
-                }
-
-                T error = NumOps.Subtract(prediction, outputs[i]);
-                sumSquared = NumOps.Add(sumSquared, NumOps.Multiply(error, error));
-            }
-
-            T mse = NumOps.Divide(sumSquared, NumOps.FromDouble(samples));
-            double mseValue = NumOps.ToDouble(mse);
-
-            if (double.IsNaN(mseValue) || double.IsInfinity(mseValue))
+            double mseValue = ComputeMse(expression, inputs, outputs);
+            if (double.IsPositiveInfinity(mseValue))
             {
                 return double.PositiveInfinity;
             }
@@ -556,8 +513,8 @@ namespace AiDotNet.PhysicsInformed.ScientificML
         }
 
         private SymbolicExpression<T>? TryDiscoverWithSymbolicRegression(
-            T[,] inputs,
-            T[] outputs,
+            Tensor<T> inputs,
+            Tensor<T> outputs,
             int maxComplexity,
             int numGenerations)
         {
@@ -570,7 +527,7 @@ namespace AiDotNet.PhysicsInformed.ScientificML
                 };
 
                 var regression = new SymbolicRegression<T>(options);
-                regression.Train(new Matrix<T>(inputs), new Vector<T>(outputs));
+                regression.Train(inputs.ToMatrix(), outputs.ToVector());
 
                 var bestModel = regression.BestModel;
                 if (bestModel == null)
@@ -592,176 +549,61 @@ namespace AiDotNet.PhysicsInformed.ScientificML
             }
         }
 
-        private SymbolicExpression<T>? TryBuildLinearExpressionFromData(T[,] inputs, T[] outputs)
+        /// <summary>
+        /// Fits the affine law y = c . x + b by least squares on the centred normal equations.
+        /// </summary>
+        /// <remarks>
+        /// Centring makes the intercept exact and keeps translated or scaled targets well conditioned. The Gram matrix
+        /// X_c^T X_c is symmetric positive semi-definite, and a ridge of 1e-10 of its largest diagonal entry (1e-10 when
+        /// that is zero) makes it positive definite without privileging a feature by its index, so a Cholesky solve
+        /// fits. A Gram matrix that is still not positive definite, or a non-finite fit, means the candidate is
+        /// degenerate and the search goes on without it.
+        /// </remarks>
+        private SymbolicExpression<T>? TryBuildLinearExpressionFromData(Tensor<T> inputs, Tensor<T> outputs)
         {
-            int sampleCount = inputs.GetLength(0);
-            int featureCount = inputs.GetLength(1);
+            int sampleCount = inputs.Shape[0];
+            int featureCount = inputs.Shape[1];
             if (sampleCount == 0 || featureCount == 0 || outputs.Length != sampleCount)
             {
                 return null;
             }
 
-            // Solve the centered least-squares normal equations. Centering makes the intercept
-            // exact and keeps translated/scaled targets well-conditioned; a tiny scale-relative
-            // ridge handles collinear columns without privileging a feature by its index.
-            var featureMeans = new double[featureCount];
-            double outputMean = 0.0;
+            var featureMeans = Engine.ReduceMean(inputs, new[] { 0 }, keepDims: true);
+            T outputMean = Engine.TensorMean(outputs);
+            var centered = Engine.TensorSubtract(inputs, featureMeans);
+            var centeredOutput = Engine.Reshape(Engine.TensorSubtractScalar(outputs, outputMean), new[] { sampleCount, 1 });
 
-            for (int i = 0; i < sampleCount; i++)
-            {
-                outputMean += NumOps.ToDouble(outputs[i]);
-                for (int j = 0; j < featureCount; j++)
-                {
-                    featureMeans[j] += NumOps.ToDouble(inputs[i, j]);
-                }
-            }
+            var centeredT = Engine.TensorTranspose(centered);
+            var gram = Engine.TensorMatMul(centeredT, centered);
+            var rhs = Engine.TensorMatMul(centeredT, centeredOutput);
 
-            outputMean /= sampleCount;
-            for (int j = 0; j < featureCount; j++)
-            {
-                featureMeans[j] /= sampleCount;
-            }
+            // RELATIVE TO THE GRAM MATRIX, NOT TO 1.0: the ridge keeps the same ratio to the data at every scale.
+            T diagonalScale = Engine.TensorMaxValue(Engine.TensorAbs(LinalgDispatch<T>.Diagonal(gram)));
+            T relativeRidge = NumOps.FromDouble(1e-10);
+            T ridge = NumOps.GreaterThan(diagonalScale, NumOps.Zero)
+                ? NumOps.Multiply(diagonalScale, relativeRidge)
+                : relativeRidge;
+            gram = Engine.TensorAdd(gram, Engine.TensorMultiplyScalar(Engine.TensorEye<T>(featureCount), ridge));
 
-            var gram = new double[featureCount, featureCount];
-            var rhs = new double[featureCount];
-
-            // ONE CONVERSION PER FEATURE PER SAMPLE, NOT f*(f+1)/2. The inner loop used to call
-            // NumOps.ToDouble(inputs[i, column]) for every (row, column) pair, so each sample paid for
-            // the upper triangle of conversions when f of them describe the whole row. NumOps.ToDouble
-            // is an interface dispatch, so this is real work rather than a constant factor on cheap
-            // arithmetic. The centred row is hoisted into a buffer that is reused across samples.
-            var centeredRow = new double[featureCount];
-            for (int i = 0; i < sampleCount; i++)
-            {
-                double centeredOutput = NumOps.ToDouble(outputs[i]) - outputMean;
-                for (int j = 0; j < featureCount; j++)
-                {
-                    centeredRow[j] = NumOps.ToDouble(inputs[i, j]) - featureMeans[j];
-                }
-
-                for (int row = 0; row < featureCount; row++)
-                {
-                    double value = centeredRow[row];
-                    rhs[row] += value * centeredOutput;
-                    for (int column = row; column < featureCount; column++)
-                    {
-                        gram[row, column] += value * centeredRow[column];
-                    }
-                }
-            }
-
-            double diagonalScale = 0.0;
-            for (int row = 0; row < featureCount; row++)
-            {
-                for (int column = row + 1; column < featureCount; column++)
-                {
-                    gram[column, row] = gram[row, column];
-                }
-
-                diagonalScale = Math.Max(diagonalScale, Math.Abs(gram[row, row]));
-            }
-
-            // RELATIVE TO THE GRAM MATRIX, NOT TO 1.0. Math.Max(1.0, diagonalScale) meant that for a
-            // well-scaled but small problem -- features in, say, the 1e-3 range, giving a diagonal around
-            // 1e-6 -- the ridge was a FIXED 1e-10 rather than 1e-16 of the diagonal, so the regularizer
-            // was four orders of magnitude larger relative to the data than intended and biased the fit.
-            // Scaling by the diagonal keeps the ratio constant at every problem scale; the fallback only
-            // covers an exactly-zero diagonal, where there is no scale to be relative to.
-            double ridge = diagonalScale > 0.0 ? diagonalScale * 1e-10 : 1e-10;
-            for (int i = 0; i < featureCount; i++)
-            {
-                gram[i, i] += ridge;
-            }
-
-            var solved = SolveNormalEquations(gram, rhs, featureCount);
-            if (solved is null)
-            {
-                return null;
-            }
-
-            double intercept = outputMean;
-            var coefficients = new Vector<T>(featureCount);
-            for (int i = 0; i < featureCount; i++)
-            {
-                if (double.IsNaN(solved[i]) || double.IsInfinity(solved[i]))
-                {
-                    return null;
-                }
-
-                coefficients[i] = NumOps.FromDouble(solved[i]);
-                intercept -= solved[i] * featureMeans[i];
-            }
-
-            if (double.IsNaN(intercept) || double.IsInfinity(intercept))
-            {
-                return null;
-            }
-
-            return BuildLinearExpression(coefficients, NumOps.FromDouble(intercept), includeIntercept: true);
-        }
-
-        /// <summary>
-        /// Solves the ridge-regularized normal equations for the centred least-squares fit.
-        /// </summary>
-        /// <remarks>
-        /// <para>
-        /// <b>THE FRAMEWORK'S SOLVER, NOT A LOCAL ONE.</b> This used to be sixty lines of Gaussian
-        /// elimination with partial pivoting written out by hand -- a second, unreviewed
-        /// implementation of something the framework already provides, tests, and can swap the
-        /// algorithm of. A bug fixed in <see cref="MatrixSolutionHelper"/> would never have reached
-        /// the copy, and a copy is where numerical bugs survive longest because nobody thinks to
-        /// look at it.
-        /// </para>
-        /// <para>
-        /// <b>Cholesky is the right decomposition here rather than a general-purpose one.</b> The
-        /// matrix is a Gram matrix -- X-transpose-X of the centred features -- so it is symmetric
-        /// and positive semi-definite by construction, and the scale-relative ridge added by the
-        /// caller makes it positive definite. Cholesky exploits that structure for roughly half the
-        /// work of LU, and it does not need the pivoting the hand-rolled version spent a third of
-        /// its lines on, because a positive-definite matrix has no zero pivot to search around.
-        /// </para>
-        /// <para>
-        /// <b>The catch preserves a control-flow outcome, it does not swallow a fault.</b> Exactly
-        /// collinear features can still defeat a ridge of 1e-10 of the diagonal, and the
-        /// decomposition reports that as <see cref="ArgumentException"/>. For this caller that is not
-        /// an error but the ordinary answer "this candidate expression is degenerate, reject it" --
-        /// which is precisely what the old <c>return null</c> on a tiny pivot meant. The candidate is
-        /// dropped and the search continues, so nothing is hidden from anyone; the alternative would
-        /// be tearing down an entire symbolic-regression run because one candidate out of thousands
-        /// happened to be rank-deficient.
-        /// </para>
-        /// </remarks>
-        private static double[]? SolveNormalEquations(double[,] gram, double[] rhs, int featureCount)
-        {
-            var a = new Matrix<double>(featureCount, featureCount);
-            var b = new Vector<double>(featureCount);
-            for (int row = 0; row < featureCount; row++)
-            {
-                b[row] = rhs[row];
-                for (int column = 0; column < featureCount; column++)
-                {
-                    a[row, column] = gram[row, column];
-                }
-            }
-
-            Vector<double> solution;
-            try
-            {
-                solution = MatrixSolutionHelper.SolveLinearSystem(a, b, MatrixDecompositionType.Cholesky);
-            }
-            catch (ArgumentException)
+            var (factor, info) = LinalgDispatch<T>.CholeskyEx(gram);
+            if (info.ToArray()[0] != 0)
             {
                 // Rank-deficient even after the ridge: the candidate is degenerate, not the run.
                 return null;
             }
 
-            var solved = new double[featureCount];
-            for (int row = 0; row < featureCount; row++)
+            var solution = Engine.Reshape(LinalgDispatch<T>.CholeskySolve(rhs, factor), new[] { featureCount });
+
+            // A NaN or infinite coefficient makes the intercept NaN or infinite too, so one check covers both.
+            T intercept = NumOps.Subtract(
+                outputMean,
+                Engine.TensorSum(Engine.TensorMultiply(solution, Engine.Reshape(featureMeans, new[] { featureCount }))));
+            if (NumOps.IsNaN(intercept) || NumOps.IsInfinity(intercept))
             {
-                solved[row] = solution[row];
+                return null;
             }
 
-            return solved;
+            return BuildLinearExpression(solution.ToVector(), intercept, includeIntercept: true);
         }
 
         private SymbolicExpression<T>? TryConvertModelToExpression(IFullModel<T, Matrix<T>, Vector<T>> model)
@@ -790,18 +632,18 @@ namespace AiDotNet.PhysicsInformed.ScientificML
             var addOperator = GetBinaryOperator("+");
             var multiplyOperator = GetBinaryOperator("*");
 
-            SymbolicExpressionNode<T>? root = null;
-            for (int i = 0; i < coefficients.Length; i++)
-            {
-                var coefficient = coefficients[i];
-                if (NumOps.Equals(coefficient, NumOps.Zero))
-                {
-                    continue;
-                }
+            // Terms in feature order, zero coefficients dropped.
+            int[] nonZero = coefficients.Length == 0
+                ? Array.Empty<int>()
+                : Engine.TensorNonzero(Engine.TensorNotEquals(Tensor<T>.FromVector(coefficients), NumOps.Zero)).ToArray();
+            T[] values = coefficients.ToArray();
 
+            SymbolicExpressionNode<T>? root = null;
+            foreach (int i in nonZero)
+            {
                 var term = new SymbolicExpressionNode<T>(
                     multiplyOperator,
-                    new SymbolicExpressionNode<T>(coefficient),
+                    new SymbolicExpressionNode<T>(values[i]),
                     new SymbolicExpressionNode<T>(i));
 
                 root = root == null ? term : new SymbolicExpressionNode<T>(addOperator, root, term);
@@ -873,13 +715,18 @@ namespace AiDotNet.PhysicsInformed.ScientificML
         /// </summary>
         public override void Train(Matrix<T> input, Vector<T> expectedOutput)
         {
-            var inputs = new T[input.Rows, input.Columns];
-            for (int i = 0; i < input.Rows; i++)
-                for (int j = 0; j < input.Columns; j++)
-                    inputs[i, j] = input[i, j];
+            if (input.Rows != expectedOutput.Length)
+            {
+                throw new ArgumentException("Input and output sample counts must match.");
+            }
 
-            var outputs = expectedOutput.ToArray();
-            _discoveredEquation = DiscoverEquation(inputs, outputs);
+            if (input.Columns == 0)
+            {
+                throw new ArgumentException("Inputs must have at least one feature.");
+            }
+
+            _discoveredEquation = DiscoverEquation(
+                Tensor<T>.FromMatrix(input), Tensor<T>.FromVector(expectedOutput), maxComplexity: 10, numGenerations: 100);
         }
 
         /// <summary>
@@ -890,15 +737,7 @@ namespace AiDotNet.PhysicsInformed.ScientificML
             if (_discoveredEquation is null)
                 throw new InvalidOperationException("Model has not been trained. Call Train() first.");
 
-            var result = new Vector<T>(input.Rows);
-            for (int i = 0; i < input.Rows; i++)
-            {
-                var row = new T[input.Columns];
-                for (int j = 0; j < input.Columns; j++)
-                    row[j] = input[i, j];
-                result[i] = _discoveredEquation.Evaluate(row);
-            }
-            return result;
+            return _discoveredEquation.Evaluate(Tensor<T>.FromMatrix(input), Engine).ToVector();
         }
 
         /// <inheritdoc/>
@@ -926,12 +765,7 @@ namespace AiDotNet.PhysicsInformed.ScientificML
 
             var constants = new List<SymbolicExpressionNode<T>>();
             CollectConstantNodes(_discoveredEquation.Root, constants);
-            var parameters = new Vector<T>(constants.Count);
-            for (int i = 0; i < constants.Count; i++)
-            {
-                parameters[i] = constants[i].Constant;
-            }
-            return parameters;
+            return new Vector<T>(constants.Select(node => node.Constant).ToArray());
         }
 
         /// <inheritdoc/>
@@ -985,9 +819,10 @@ namespace AiDotNet.PhysicsInformed.ScientificML
                     nameof(parameters));
             }
 
+            T[] values = parameters.ToArray();
             for (int i = 0; i < constants.Count; i++)
             {
-                constants[i].Constant = parameters[i];
+                constants[i].Constant = values[i];
             }
         }
 
@@ -1020,29 +855,42 @@ namespace AiDotNet.PhysicsInformed.ScientificML
 
     internal sealed class SymbolicUnaryOperator<T>
     {
-        public SymbolicUnaryOperator(string name, Func<T, T> apply, Func<string, string> formatter)
+        public SymbolicUnaryOperator(
+            string name, Func<T, T> apply, Func<Tensor<T>, Tensor<T>> applyTensor, Func<string, string> formatter)
         {
             Name = name;
             Apply = apply;
+            ApplyTensor = applyTensor;
             Formatter = formatter;
         }
 
         public string Name { get; }
         public Func<T, T> Apply { get; }
+
+        /// <summary>The same operator applied to every element of a tensor at once.</summary>
+        public Func<Tensor<T>, Tensor<T>> ApplyTensor { get; }
         public Func<string, string> Formatter { get; }
     }
 
     internal sealed class SymbolicBinaryOperator<T>
     {
-        public SymbolicBinaryOperator(string name, Func<T, T, T> apply, Func<string, string, string> formatter)
+        public SymbolicBinaryOperator(
+            string name,
+            Func<T, T, T> apply,
+            Func<Tensor<T>, Tensor<T>, Tensor<T>> applyTensor,
+            Func<string, string, string> formatter)
         {
             Name = name;
             Apply = apply;
+            ApplyTensor = applyTensor;
             Formatter = formatter;
         }
 
         public string Name { get; }
         public Func<T, T, T> Apply { get; }
+
+        /// <summary>The same operator applied element-wise to two tensors of one shape.</summary>
+        public Func<Tensor<T>, Tensor<T>, Tensor<T>> ApplyTensor { get; }
         public Func<string, string, string> Formatter { get; }
     }
 
@@ -1115,6 +963,37 @@ namespace AiDotNet.PhysicsInformed.ScientificML
                         bRight.Evaluate(variables, numOps));
                 default:
                     return numOps.Zero;
+            }
+        }
+
+        /// <summary>
+        /// Evaluates the node for every sample of <paramref name="inputs"/> [samples, features] at once, giving
+        /// [samples]. Throws <see cref="ArgumentOutOfRangeException"/> for a variable index outside the features, as
+        /// the per-sample evaluation does.
+        /// </summary>
+        public Tensor<T> Evaluate(Tensor<T> inputs, IEngine engine)
+        {
+            switch (Type)
+            {
+                case SymbolicExpressionType.Constant:
+                    return Tensor<T>.CreateDefault(new[] { inputs.Shape[0] }, Constant);
+                case SymbolicExpressionType.Variable:
+                    if (VariableIndex < 0 || VariableIndex >= inputs.Shape[1])
+                    {
+                        throw new ArgumentOutOfRangeException(nameof(VariableIndex));
+                    }
+                    return engine.TensorSelect(inputs, 1, VariableIndex);
+                case SymbolicExpressionType.UnaryOperation:
+                    var uOp = UnaryOperator ?? throw new InvalidOperationException("UnaryOperator is null.");
+                    var uLeft = Left ?? throw new InvalidOperationException("Left child is null.");
+                    return uOp.ApplyTensor(uLeft.Evaluate(inputs, engine));
+                case SymbolicExpressionType.BinaryOperation:
+                    var bOp = BinaryOperator ?? throw new InvalidOperationException("BinaryOperator is null.");
+                    var bLeft = Left ?? throw new InvalidOperationException("Left child is null.");
+                    var bRight = Right ?? throw new InvalidOperationException("Right child is null.");
+                    return bOp.ApplyTensor(bLeft.Evaluate(inputs, engine), bRight.Evaluate(inputs, engine));
+                default:
+                    return Tensor<T>.CreateDefault(new[] { inputs.Shape[0] }, NumOps.Zero);
             }
         }
 
@@ -1245,6 +1124,12 @@ namespace AiDotNet.PhysicsInformed.ScientificML
         internal T Evaluate(T[] variables)
         {
             return Root.Evaluate(variables, NumOps);
+        }
+
+        /// <summary>Evaluates the expression for every row of <paramref name="inputs"/> [samples, features].</summary>
+        internal Tensor<T> Evaluate(Tensor<T> inputs, IEngine engine)
+        {
+            return Root.Evaluate(inputs, engine);
         }
 
         public SymbolicExpression<T> Clone()
