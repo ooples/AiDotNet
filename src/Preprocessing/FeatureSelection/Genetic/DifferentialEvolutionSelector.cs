@@ -103,7 +103,10 @@ public class DifferentialEvolutionSelector<T> : TransformerBase<T, Matrix<T>, Ma
             fitness[i] = Fitness(population[i], correlation, numToSelect);
         }
 
-        var importances = new Tensor<T>(new[] { p });
+        // the importances (each generation's fitness-weighted feature counts, summed over the generations) are summed
+        // in double whatever T is, and normalised there: a running sum in Half stops taking a contribution c once it
+        // passes 2048 c, which capped the frequently kept features and skewed their normalised ratios
+        var importances = new Tensor<double>(new[] { p });
         T mutationFactor = NumOps.FromDouble(_mutationFactor);
         T zero = NumOps.Zero;
         T one = NumOps.One;
@@ -111,6 +114,7 @@ public class DifferentialEvolutionSelector<T> : TransformerBase<T, Matrix<T>, Ma
         // DE iterations
         for (int gen = 0; gen < _nGenerations; gen++)
         {
+            var generation = new Tensor<double>(new[] { p });
             for (int i = 0; i < _populationSize; i++)
             {
                 // Select three random distinct individuals
@@ -137,9 +141,12 @@ public class DifferentialEvolutionSelector<T> : TransformerBase<T, Matrix<T>, Ma
                 }
 
                 // Track feature importance
-                importances = Engine.TensorAdd(importances, Engine.TensorMultiply(
-                    FeatureScoringTensorOps.TopKMask(population[i], numToSelect), Engine.TensorBroadcastTo(fitness[i], new[] { p })));
+                generation = Engine.TensorAdd(generation, Engine.TensorMultiply(
+                    FeatureScoringTensorOps.TopKMask(population[i], numToSelect), Engine.TensorBroadcastTo(fitness[i], new[] { p }))
+                    .Cast<double>());
             }
+
+            importances = Engine.TensorAdd(importances, generation);
         }
 
         // Find best solution (the first with the highest fitness)
@@ -147,11 +154,11 @@ public class DifferentialEvolutionSelector<T> : TransformerBase<T, Matrix<T>, Ma
         _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(population[bestIdx], numToSelect);
 
         // Normalize by the largest value when it is positive
-        var largest = PreprocessingTensorOps.ColumnMax(Engine.Reshape(importances, new[] { p, 1 }));
-        if (Engine.TensorGreaterThan(largest, NumOps.Zero).Cast<int>().ToArray()[0] == 1)
-            importances = Engine.TensorDivide(importances, Engine.TensorBroadcastTo(largest, new[] { p }));
+        double largest = Engine.TensorMaxValue(importances);
+        if (largest > 0)
+            importances = Engine.TensorDivideScalar(importances, largest);
 
-        _featureImportances = importances.ToVector();
+        _featureImportances = importances.Cast<T>().ToVector();
         IsFitted = true;
     }
 

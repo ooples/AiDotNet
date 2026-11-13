@@ -77,7 +77,9 @@ public class ShapleyFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>
             : RandomHelper.CreateSecureRandom();
 
         var model = new SubsetRegression(FilterStatisticTensorOps.AsTensor(data), FilterStatisticTensorOps.AsTensor(target));
-        var totals = new Tensor<T>(new[] { p });
+        // the marginal contributions are summed in double whatever T is: a running sum in Half stops taking a
+        // contribution near 1 once it reaches 2048, which capped a Shapley value at 2048 / nSamples
+        var totals = new Tensor<double>(new[] { p });
         T zero = NumOps.Zero;
 
         // Monte Carlo approximation of Shapley values
@@ -97,11 +99,12 @@ public class ShapleyFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>
             var scores = new Tensor<T>((T[])prefixScores.Clone(), new[] { p + 1 });
             var marginal = Engine.TensorSubtract(
                 Engine.TensorSlice(scores, new[] { 1 }, new[] { p }), Engine.TensorSlice(scores, new[] { 0 }, new[] { p }));
-            totals = Engine.TensorAdd(totals, FeatureScoringTensorOps.ScatterToFeatures(marginal, permutation, p, zero));
+            totals = Engine.TensorAdd(
+                totals, FeatureScoringTensorOps.ScatterToFeatures(marginal, permutation, p, zero).Cast<double>());
         }
 
         // Average over samples
-        var shapley = Engine.TensorDivideScalar(totals, NumOps.FromDouble(_nSamples));
+        var shapley = Engine.TensorDivideScalar(totals, (double)Math.Max(_nSamples, 1)).Cast<T>();
         _shapleyValues = shapley.ToVector();
         _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(shapley, Math.Min(_nFeaturesToSelect, p));
         IsFitted = true;

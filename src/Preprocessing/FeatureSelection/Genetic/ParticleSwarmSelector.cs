@@ -110,7 +110,10 @@ public class ParticleSwarmSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         var personalBestFitness = FilterStatisticTensorOps.Filled(new[] { _swarmSize }, NumOps.MinValue);
         var globalBest = new Tensor<T>(new[] { p });
         var globalBestFitness = new Tensor<T>(new[] { NumOps.MinValue }, new[] { 1 });
-        var importances = new Tensor<T>(new[] { p });
+        // the importances (each iteration's fitness-weighted feature counts, summed over the iterations) are summed
+        // in double whatever T is, and normalised there: a running sum in Half stops taking a contribution c once it
+        // passes 2048 c, which capped the frequently kept features and skewed their normalised ratios
+        var importances = new Tensor<double>(new[] { p });
         T inertia = NumOps.FromDouble(_inertia);
         T cognitive = NumOps.FromDouble(_cognitive);
         T social = NumOps.FromDouble(_social);
@@ -147,7 +150,8 @@ public class ParticleSwarmSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
 
             // Track feature importance
             importances = Engine.TensorAdd(importances, Engine.Reshape(
-                Engine.TensorMatMul(Engine.TensorTranspose(masks), Engine.Reshape(fitness, new[] { _swarmSize, 1 })), new[] { p }));
+                Engine.TensorMatMul(Engine.TensorTranspose(masks), Engine.Reshape(fitness, new[] { _swarmSize, 1 })), new[] { p })
+                .Cast<double>());
 
             // Update velocities and positions (per particle and feature, r1 is drawn before r2)
             for (int k = 0; k < r1Draws.Length; k++)
@@ -167,11 +171,11 @@ public class ParticleSwarmSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         }
 
         // Normalize by the largest value when it is positive
-        var largest = PreprocessingTensorOps.ColumnMax(Engine.Reshape(importances, new[] { p, 1 }));
-        if (Engine.TensorGreaterThan(largest, NumOps.Zero).Cast<int>().ToArray()[0] == 1)
-            importances = Engine.TensorDivide(importances, Engine.TensorBroadcastTo(largest, new[] { p }));
+        double largest = Engine.TensorMaxValue(importances);
+        if (largest > 0)
+            importances = Engine.TensorDivideScalar(importances, largest);
 
-        _featureImportances = importances.ToVector();
+        _featureImportances = importances.Cast<T>().ToVector();
         _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(globalBest, numToSelect);
         IsFitted = true;
     }

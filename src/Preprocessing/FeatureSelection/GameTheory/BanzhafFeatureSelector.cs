@@ -102,9 +102,11 @@ public class BanzhafFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>
         var flippedSums = Engine.TensorAdd(sums, Engine.TensorMultiply(direction, FilterStatisticTensorOps.RowBroadcast(correlation, _nSamples)));
         var flippedWins = OneMinusBelow(CoalitionScore(flippedSums, Engine.TensorAdd(counts, direction)), threshold);
 
-        // Banzhaf index: the share of sampled coalitions in which the feature is a swing voter
-        var swings = Engine.ReduceSum(Engine.TensorAbs(Engine.TensorSubtract(wins, flippedWins)), new[] { 0 }, false);
-        var indices = Engine.TensorDivideScalar(swings, NumOps.FromDouble(_nSamples));
+        // Banzhaf index: the share of sampled coalitions in which the feature is a swing voter. The swings are counted
+        // in int and divided in double before the cast to T: a 0/1 sum in Half stops counting at 2048, which capped the
+        // index of a feature that swings every one of 3000 coalitions at 2048 / 3000
+        var swings = Engine.ReduceSum(Engine.TensorNotEquals(wins, flippedWins).Cast<int>(), new[] { 0 }, false);
+        var indices = Engine.TensorDivideScalar(swings.Cast<double>(), (double)Math.Max(_nSamples, 1)).Cast<T>();
         _banzhafIndices = indices.ToVector();
         _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(indices, Math.Min(_nFeaturesToSelect, p));
         IsFitted = true;
