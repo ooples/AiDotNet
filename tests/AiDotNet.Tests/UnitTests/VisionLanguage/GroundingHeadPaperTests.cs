@@ -375,6 +375,66 @@ public class GroundingHeadPaperTests
         }
     }
 
+    [Fact]
+    public void DinoX_TwoCategoryPrompt_AttendsWithinEachPhrase_AndRestartsPositions()
+    {
+        // Grounding DINO's generate_masks_with_special_tokens_and_transfer_map: [CLS] cat . dog . [SEP] splits into the
+        // phrases "cat ." and "dog .", each attending only within itself with position ids restarting at 0.
+        using var model = new DINOX<double>(
+            new NeuralNetworkArchitecture<double>(inputType: InputType.ThreeDimensional,
+                taskType: NeuralNetworkTaskType.ObjectDetection, inputHeight: 8, inputWidth: 8, inputDepth: 3, outputSize: 4),
+            new DINOXOptions
+            {
+                ImageSize = 8, VisionDim = 16, DecoderDim = 16, NumVisionLayers = 1, NumDecoderLayers = 1, NumHeads = 2,
+                VocabSize = 512, MaxSequenceLength = 16, NumQueryPositions = 4, MaxDetections = 4,
+                ConfidenceThreshold = 0.0, DropoutRate = 0.0,
+            });
+
+        var (ids, structure) = model.PromptStructure("cat . dog .");
+
+        var specials = Enumerable.Range(0, ids.Count).Where(i => model.PromptSpecialTokenIds.Contains(ids[i])).ToArray();
+        Assert.Equal(4, specials.Length);
+        Assert.Equal(0, specials[0]);
+        Assert.Equal(ids.Count - 1, specials[3]);
+        int dot1 = specials[1], dot2 = specials[2];
+        Assert.Equal(ids[dot1], ids[dot2]);
+        Assert.NotEqual(ids[dot1], ids[ids.Count - 1]);
+        Assert.True(dot1 > 1 && dot2 > dot1 + 1);
+        var catBlock = Enumerable.Range(1, dot1).ToArray();
+        var dogBlock = Enumerable.Range(dot1 + 1, dot2 - dot1).ToArray();
+
+        Assert.Equal(0, structure.Positions[0]);
+        Assert.Equal(0, structure.Positions[ids.Count - 1]);
+        Assert.Equal(Enumerable.Range(0, catBlock.Length), catBlock.Select(i => structure.Positions[i]));
+        Assert.Equal(Enumerable.Range(0, dogBlock.Length), dogBlock.Select(i => structure.Positions[i]));
+
+        var head = new GroundingQueryDecoder<double>(Engine, new List<ILayer<double>>(),
+            new GroundingQueryDecoderConfiguration(8, 2, 16, 1, 1, 3, 512, 16));
+        var textLayer = head.EnhancerLayers[0].Text ?? throw new InvalidOperationException("A text head has text layers.");
+        var weights = head.TextSelfAttentionWeights(textLayer, head.EmbedText(ids, structure.Positions), structure);
+
+        int n = ids.Count;
+        Assert.Equal(new[] { 2, n, n }, weights.Shape.ToArray());
+        for (int h = 0; h < 2; h++)
+        {
+            foreach (int c in catBlock)
+            {
+                foreach (int d in dogBlock)
+                {
+                    Assert.Equal(0.0, weights[h, c, d]);
+                    Assert.Equal(0.0, weights[h, d, c]);
+                }
+                foreach (int other in catBlock) Assert.True(weights[h, c, other] > 0.0);
+                Assert.Equal(0.0, weights[h, c, 0]);
+                Assert.Equal(0.0, weights[h, 0, c]);
+            }
+            foreach (int d in dogBlock)
+                foreach (int other in dogBlock) Assert.True(weights[h, d, other] > 0.0);
+            Assert.Equal(1.0, weights[h, 0, 0], 12);
+            Assert.Equal(1.0, weights[h, n - 1, n - 1], 12);
+        }
+    }
+
     private static SigLIP2<double> SmallSigLIP2() => new(
         new NeuralNetworkArchitecture<double>(inputType: InputType.ThreeDimensional,
             taskType: NeuralNetworkTaskType.ImageClassification, inputHeight: 32, inputWidth: 32, inputDepth: 3,
