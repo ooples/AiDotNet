@@ -113,8 +113,8 @@ public class SelectKBest<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         // Use the sample variance (divisor n - 1) as the score for unsupervised selection; columns outside the
         // processed set score -infinity with p-value 1, processed ones have no p-value (0)
         var processed = FilterStatisticTensorOps.AsTensor(FilterStatisticTensorOps.SelectColumns(data, columnsToProcess));
-        var variance = engine.TensorDivideScalar(
-            FilterStatisticTensorOps.ColumnSumOfSquaredDeviations(processed), NumOps.FromDouble(n > 1 ? n - 1 : 1));
+        // (the deviations are scaled before squaring: the raw sum of squares overflows Half where the variance does not)
+        var variance = FeatureSelectionTensorOps.ColumnVariance(processed, n > 1 ? n - 1 : 1);
         var scores = FeatureSelectionTensorOps.ScatterToFeatures(
             variance, columnsToProcess, _nInputFeatures, NumOps.FromDouble(double.NegativeInfinity));
         _scores = scores.ToVector();

@@ -69,9 +69,9 @@ public class PearsonCorrelation<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, I
         int p = data.Columns;
         var x = FilterStatisticTensorOps.AsTensor(data);
         var y = FilterStatisticTensorOps.AsTensor(target);
-        var (sxx, sxy, syy) = FilterStatisticTensorOps.CenteredCrossSums(x, y);
-        var correlations = FilterStatisticTensorOps.GuardedDivide(
-            sxy, Engine.TensorMultiplyScalar(Engine.TensorSqrt(sxx), NumOps.Sqrt(syy)), 1e-10, NumOps.Zero);
+        // r on columns scaled to unit largest deviation: the raw centred sums of squares overflow Half once a
+        // deviation passes 256 (r came out 0 or NaN); 0 for a constant column or target
+        var correlations = FeatureSelectionTensorOps.Correlation(x, y);
         _correlations = correlations.ToVector();
         _selectedIndices = FilterStatisticTensorOps.CandidatesOrTopK(
             Engine.TensorAbs(correlations), NumOps.FromDouble(_minCorrelation), Math.Min(_nFeaturesToSelect, p));

@@ -10,6 +10,8 @@ namespace AiDotNet.Preprocessing.FeatureSelection;
 /// <remarks>
 /// The features are an [n, p] int tensor of codes in <c>[0, levels)</c>; the target is a one-hot [n, k] class
 /// membership. Methods taking a feature index <c>s</c> return the quantity for every feature j paired with s.
+/// Counts stay in int and the shares <c>count / n</c> are formed from them before anything is taken to T, so the
+/// entropies hold for any row count (in Half the row count 65536 itself reads as infinity).
 /// </remarks>
 internal sealed class DiscreteInformation<T>
 {
@@ -20,7 +22,6 @@ internal sealed class DiscreteInformation<T>
     private readonly Tensor<T> _targetOneHot;
     private readonly int _n;
     private readonly int _p;
-    private readonly T _total;
     private Tensor<T>? _featureEntropy;
     private Tensor<T>? _featureTargetEntropy;
 
@@ -31,9 +32,9 @@ internal sealed class DiscreteInformation<T>
         _targetOneHot = targetOneHot;
         _n = codes.Shape[0];
         _p = codes.Shape[1];
-        _total = _ops.FromDouble(Math.Max(_n, 1));
-        TargetEntropy = _engine.TensorSum(FeatureSelectionTensorOps.Entropy(
-            _engine.Reshape(FeatureSelectionTensorOps.Counts(targetOneHot, 0), new[] { 1, targetOneHot.Shape[1] }), _total, 1));
+        var classCounts = _engine.ReduceSum(targetOneHot.Cast<int>(), new[] { 0 }, false);
+        TargetEntropy = _engine.TensorSum(FeatureSelectionTensorOps.CountEntropy<T>(
+            _engine.Reshape(classCounts, new[] { 1, targetOneHot.Shape[1] }), _n, 1));
     }
 
     /// <summary>
@@ -49,7 +50,8 @@ internal sealed class DiscreteInformation<T>
     /// <summary>
     /// Greedy forward selection of up to <paramref name="count"/> of <paramref name="p"/> features. Each step,
     /// <paramref name="candidateScores"/> receives the features chosen so far (in selection order) and returns a [p]
-    /// score; the highest score among the features not yet chosen wins, ties going to the lowest index.
+    /// score; the highest score among the features not yet chosen wins, ties going to the lowest index. A NaN score
+    /// ranks below every number, and a chosen feature is never chosen again whatever the scores.
     /// </summary>
     /// <returns>The chosen features in ascending order and a [p] vector of each chosen feature's winning score (zero
     /// for features never chosen).</returns>
@@ -68,14 +70,19 @@ internal sealed class DiscreteInformation<T>
         }
 
         var selected = new List<int>();
+        var chosen = new bool[p];
         int target = Math.Min(count, p);
         while (selected.Count < target)
         {
             var masked = FeatureSelectionTensorOps.KeepOrFill(
                 candidateScores(selected), new Tensor<T>((T[])available.Clone(), new[] { p }), negativeInfinity);
-            int best = FilterStatisticTensorOps.FirstArgMax(masked);
+
+            // the best of the features still available: the -infinity mask alone does not exclude a chosen feature
+            // when every available score is NaN or -infinity (NaN ranks below -infinity), which chose it again
+            int best = PreprocessingTensorOps.StableOrder(masked, descending: true).First(j => !chosen[j]);
             won[best] = masked.ToArray()[best];
             available[best] = zero;
+            chosen[best] = true;
             selected.Add(best);
         }
 
@@ -105,7 +112,7 @@ internal sealed class DiscreteInformation<T>
     public Tensor<T> FeatureEntropy()
     {
         if (_featureEntropy is null)
-            _featureEntropy = FeatureSelectionTensorOps.Entropy(FeatureSelectionTensorOps.CodeCounts<T>(_codes, _levels), _total, 1);
+            _featureEntropy = FeatureSelectionTensorOps.CountEntropy<T>(FeatureSelectionTensorOps.CodeTally(_codes, _levels), _n, 1);
         return _featureEntropy;
     }
 
@@ -115,9 +122,9 @@ internal sealed class DiscreteInformation<T>
         if (_featureTargetEntropy is null)
         {
             int k = _targetOneHot.Shape[1];
-            var joint = FeatureSelectionTensorOps.JointCounts(_codes, _levels, _targetOneHot);
-            _featureTargetEntropy = FeatureSelectionTensorOps.Entropy(
-                _engine.Reshape(joint, new[] { _p, _levels * k }), _total, 1);
+            var joint = FeatureSelectionTensorOps.JointTally(_codes, _levels, _targetOneHot);
+            _featureTargetEntropy = FeatureSelectionTensorOps.CountEntropy<T>(
+                _engine.Reshape(joint, new[] { _p, _levels * k }), _n, 1);
         }
 
         return _featureTargetEntropy;
@@ -155,18 +162,18 @@ internal sealed class DiscreteInformation<T>
 
     /// <summary>H(X_j, X_s) for every feature j ([p]).</summary>
     public Tensor<T> PairEntropy(int s) =>
-        FeatureSelectionTensorOps.Entropy(
-            _engine.Reshape(FeatureSelectionTensorOps.PairedJointCounts<T>(_codes, _levels, Partner(s), _levels),
+        FeatureSelectionTensorOps.CountEntropy<T>(
+            _engine.Reshape(FeatureSelectionTensorOps.PairedJointTally(_codes, _levels, Partner(s), _levels),
                 new[] { _p, _levels * _levels }),
-            _total, 1);
+            _n, 1);
 
     /// <summary>H(X_j, X_s, Y) for every feature j ([p]).</summary>
     public Tensor<T> PairTargetEntropy(int s)
     {
         int k = _targetOneHot.Shape[1];
         var combined = _engine.TensorAdd(_engine.TensorMultiplyScalar(_codes, _levels), Partner(s));
-        var joint = FeatureSelectionTensorOps.JointCounts(combined, _levels * _levels, _targetOneHot);
-        return FeatureSelectionTensorOps.Entropy(_engine.Reshape(joint, new[] { _p, _levels * _levels * k }), _total, 1);
+        var joint = FeatureSelectionTensorOps.JointTally(combined, _levels * _levels, _targetOneHot);
+        return FeatureSelectionTensorOps.CountEntropy<T>(_engine.Reshape(joint, new[] { _p, _levels * _levels * k }), _n, 1);
     }
 
     /// <summary>I(X_j; X_s) = H(X_j) + H(X_s) - H(X_j, X_s) for every feature j ([p]).</summary>

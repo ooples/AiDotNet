@@ -24,14 +24,23 @@ namespace AiDotNet.Preprocessing.FeatureSelection.Helpers;
 /// </remarks>
 internal static class StatisticalTestHelper
 {
-    // Below this, a centred sum of squares is treated as zero (a constant feature or target).
+    // Below this, a mean square of a feature scaled to unit largest deviation is treated as zero: the cut-off is
+    // relative to the feature's own spread (an absolute 1e-10 on raw sums of squares scored a feature that varies
+    // at 1e-6 as constant).
     private const double ZeroVariance = 1e-10;
+
+    // numpy.isclose(r^2, 1) defaults, the "perfect fit" test of scikit-learn's f_regression(force_finite=True).
+    private const double IsCloseAbsoluteTolerance = 1e-8;
+    private const double IsCloseRelativeTolerance = 1e-5;
 
     // scikit-learn's mutual_info_regression default neighbour count.
     private const int MutualInfoNeighbors = 3;
 
     // Euler-Mascheroni constant: digamma(m) = H(m - 1) - gamma for a positive integer m.
     private const double EulerGamma = 0.57721566490153286060651209;
+
+    // Scale of the tie-breaking noise of scikit-learn's mutual_info_regression.
+    private const double TieNoiseScale = 1e-10;
 
     /// <summary>
     /// Scores every feature (column) of <paramref name="data"/> against <paramref name="target"/>.
@@ -104,10 +113,23 @@ internal static class StatisticalTestHelper
         var oneHot = ClassOneHot(target, out int k);
         int dfBetween = k - 1;
         int dfWithin = n - k;
-        if (dfBetween <= 0 || dfWithin <= 0)
-            return Uninformative<T>(p);
 
-        var (ssBetween, ssWithin) = FilterStatisticTensorOps.AnovaSums(FilterStatisticTensorOps.AsTensor(data), oneHot);
+        // every distinct target value is a class: a constant target has no second class, and a continuous one (all
+        // values distinct) leaves no within-class degrees of freedom, so f_classif has no statistic at all
+        if (dfBetween <= 0)
+            throw new ArgumentException(
+                "The FClassif scoring function needs a target with at least two classes; this target has one value.",
+                nameof(target));
+        if (dfWithin <= 0)
+            throw new ArgumentException(
+                $"The FClassif scoring function needs more rows ({n}) than classes ({k}); every distinct target value " +
+                "is a class, so a continuous target needs the FRegression scoring function.", nameof(target));
+
+        // F is unchanged by scaling a feature, so every feature is centred and divided by its largest deviation
+        // first: the sums of squares then stay at most n (raw ones overflow Half past 256) and the zero-scatter
+        // cut-off below is relative to the feature's spread; a constant feature (all zero) scores 0 with p = 1
+        var scaled = FeatureSelectionTensorOps.UnitDeviationColumns(FilterStatisticTensorOps.AsTensor(data), out _);
+        var (ssBetween, ssWithin) = FilterStatisticTensorOps.AnovaSums(scaled, oneHot);
         var msBetween = engine.TensorDivideScalar(ssBetween, ops.FromDouble(dfBetween));
         var msWithin = engine.TensorDivideScalar(ssWithin, ops.FromDouble(dfWithin));
 
@@ -127,28 +149,39 @@ internal static class StatisticalTestHelper
         if (df <= 0)
             return Uninformative<T>(p);
 
-        var (sxx, sxy, syy) = FilterStatisticTensorOps.CenteredCrossSums(
-            FilterStatisticTensorOps.AsTensor(data), FilterStatisticTensorOps.AsTensor(target));
-        if (!ops.GreaterThan(syy, ops.FromDouble(ZeroVariance)))
+        var x = FilterStatisticTensorOps.AsTensor(data);
+        var y = FilterStatisticTensorOps.AsTensor(target);
+
+        // a constant target leaves r undefined for every feature (scikit-learn: NaN, forced to F = 0 with p = 1)
+        if (ops.Equals(engine.TensorMaxValue(y), engine.TensorMinValue(y)))
             return Uninformative<T>(p);
 
-        // r^2 = Sxy^2 / (Sxx Syy); a constant feature (Sxx = 0) has an undefined correlation, scored 0 with p = 1
-        // r = Sxy / (sqrt(Sxx) sqrt(Syy)), squared after the division: Sxy^2 and Sxx Syy overflow Half once the sums
-        // pass 256 (r^2 came out inf / inf = NaN)
-        var r2 = engine.TensorSquare(FilterStatisticTensorOps.GuardedDivide(
-            sxy, engine.TensorMultiplyScalar(engine.TensorSqrt(sxx), ops.Sqrt(syy)), ZeroVariance, ops.Zero));
-        var informative = engine.TensorGreaterThan(sxx, ops.FromDouble(ZeroVariance));
+        // r of every feature (scale-free, so its sums stay in range for Half), squared; a constant feature (max = min)
+        // has an undefined correlation, scored 0 with p = 1
+        var r2 = engine.TensorSquare(FeatureSelectionTensorOps.Correlation(x, y));
+        var constantFeature = engine.TensorEquals(PreprocessingTensorOps.ColumnMax(x), PreprocessingTensorOps.ColumnMin(x));
+        var informative = PreprocessingTensorOps.OneMinus(constantFeature);
 
-        // F = r^2 / (1 - r^2) (n - 2); a perfect fit (r^2 within numpy.isclose of 1) is the largest finite value
+        // F = r^2 / (1 - r^2) (n - 2). scikit-learn's force_finite replaces scores only when some F is not finite: an
+        // exact fit (1 - r^2 = 0, or below 0 by rounding) or a constant feature (NaN). Then every feature whose r^2
+        // is numpy.isclose to 1 takes the largest finite value with p = 0; otherwise near-perfect fits keep their
+        // finite F, so a closer fit still ranks above a looser one
         var oneMinusR2 = PreprocessingTensorOps.OneMinus(r2);
-        var perfect = engine.TensorLessThan(engine.TensorAbs(oneMinusR2), ops.FromDouble(1e-8 + 1e-5));
         var f = engine.TensorMultiplyScalar(
             FilterStatisticTensorOps.GuardedDivide(r2, oneMinusR2, 0.0, ops.Zero), ops.FromDouble(df));
-        f = engine.TensorWhere(perfect, FilterStatisticTensorOps.FilledLike(f, ops.MaxValue), f);
-        f = engine.TensorWhere(informative, f, FilterStatisticTensorOps.FilledLike(f, ops.Zero));
-
         var pValues = FilterStatisticTensorOps.FSurvival(f, 1, df);
-        pValues = engine.TensorWhere(perfect, FilterStatisticTensorOps.FilledLike(pValues, ops.Zero), pValues);
+        bool forceFinite = engine.TensorCountNonzero(engine.TensorLessThan(oneMinusR2, ops.Zero)) > 0
+            || engine.TensorCountNonzero(engine.TensorEquals(oneMinusR2, ops.Zero)) > 0
+            || engine.TensorCountNonzero(constantFeature) > 0;
+        if (forceFinite)
+        {
+            var perfect = engine.TensorLessThan(
+                engine.TensorAbs(oneMinusR2), ops.FromDouble(IsCloseAbsoluteTolerance + IsCloseRelativeTolerance));
+            f = engine.TensorWhere(perfect, FilterStatisticTensorOps.FilledLike(f, ops.MaxValue), f);
+            pValues = engine.TensorWhere(perfect, FilterStatisticTensorOps.FilledLike(pValues, ops.Zero), pValues);
+        }
+
+        f = engine.TensorWhere(informative, f, FilterStatisticTensorOps.FilledLike(f, ops.Zero));
         pValues = engine.TensorWhere(informative, pValues, FilterStatisticTensorOps.FilledLike(pValues, ops.One));
         return (f.ToVector(), pValues.ToVector());
     }
@@ -187,16 +220,21 @@ internal static class StatisticalTestHelper
         return (chi2.ToVector(), pValues.ToVector());
     }
 
-    // sklearn.feature_selection.mutual_info_regression (n_neighbors = 3) without its 1e-10 tie-breaking noise:
-    // MI = psi(n) + psi(k) - mean psi(n_x + 1) - mean psi(n_y + 1), the Kraskov et al. (2004) estimator 1,
-    // on features and target scaled to unit (population) standard deviation.
-    internal static Vector<T> MutualInfoRegression<T>(Matrix<T> data, Vector<T> target, int neighbors = MutualInfoNeighbors)
+    // sklearn.feature_selection.mutual_info_regression (n_neighbors = 3): MI = psi(n) + psi(k) - mean psi(n_x + 1)
+    // - mean psi(n_y + 1), the Kraskov et al. (2004) estimator 1, on features and target scaled to unit (population)
+    // standard deviation. With a noise seed it first adds the tie-breaking noise of scikit-learn,
+    // 1e-10 max(1, mean |v|) N(0, 1) per column and for the target (its random_state); without one the data are used
+    // as they are, so the estimate is deterministic. Rows run in blocks (see FeatureSelectionTensorOps.RowBlocks) and
+    // the k-th neighbour distance is a partial selection, so only a block x n slice of the pair distances is held: the
+    // full [n, n] grids it replaced were 3.2 GB each at 20000 rows.
+    internal static Vector<T> MutualInfoRegression<T>(
+        Matrix<T> data, Vector<T> target, int neighbors = MutualInfoNeighbors, int? noiseSeed = null)
     {
         var engine = AiDotNetEngine.Current;
         var ops = MathHelper.GetNumericOperations<T>();
         int n = data.Rows;
         int p = data.Columns;
-        if (n <= neighbors)
+        if (n <= neighbors || p == 0)
             return new Vector<T>(p);
 
         var digammaTable = DigammaTable<T>(n);
@@ -204,40 +242,70 @@ internal static class StatisticalTestHelper
             ops.Subtract(ops.FromDouble(HarmonicNumber(n - 1)), ops.FromDouble(EulerGamma)),
             ops.Subtract(ops.FromDouble(HarmonicNumber(neighbors - 1)), ops.FromDouble(EulerGamma)));
 
-        var y = ScaleToUnitStd(FilterStatisticTensorOps.AsTensor(target));
-        var self = engine.TensorEye<T>(n);
-        var infinity = FilterStatisticTensorOps.Filled(new[] { n, n }, ops.FromDouble(double.PositiveInfinity));
-        var dy = engine.TensorWhere(self, infinity, AbsoluteDifferences(y));
-
+        // the feature noise is drawn before the target noise, as scikit-learn does
+        var random = noiseSeed.HasValue ? RandomHelper.CreateSeededRandom(noiseSeed.Value) : null;
         var x = FilterStatisticTensorOps.AsTensor(data);
-        var scores = new List<Tensor<T>>(p);
+        var columns = new Tensor<T>[p];
         for (int j = 0; j < p; j++)
+            columns[j] = WithTieNoise(ScaleToUnitStd(engine.Reshape(
+                engine.TensorIndexSelect(x, new Tensor<int>(new[] { j }, new[] { 1 }), 1), new[] { n })), random);
+        var y = WithTieNoise(ScaleToUnitStd(FilterStatisticTensorOps.AsTensor(target)), random);
+
+        T infinity = ops.FromDouble(double.PositiveInfinity);
+        T rowShare = ops.FromDouble(1.0 / n);
+        var meanPsi = new Tensor<T>[p];
+        for (int j = 0; j < p; j++)
+            meanPsi[j] = new Tensor<T>(new[] { 1 });
+
+        foreach (var block in FeatureSelectionTensorOps.RowBlocks(Enumerable.Range(0, n).ToArray(), n))
         {
-            var column = engine.Reshape(engine.TensorIndexSelect(x, new Tensor<int>(new[] { j }, new[] { 1 }), 1), new[] { n });
-            var dx = engine.TensorWhere(self, infinity, AbsoluteDifferences(ScaleToUnitStd(column)));
+            int start = block[0];
+            int count = block.Length;
+            var notSelf = PreprocessingTensorOps.OneMinus(FeatureSelectionTensorOps.SelfMask<T>(block, n));
+            var dy = FeatureSelectionTensorOps.KeepOrFill(AbsoluteDifferences(y, start, count), notSelf, infinity);
+            for (int j = 0; j < p; j++)
+            {
+                var dx = FeatureSelectionTensorOps.KeepOrFill(AbsoluteDifferences(columns[j], start, count), notSelf, infinity);
 
-            // distance to the k-th nearest neighbour in the joint space (max norm), self excluded
-            var joint = engine.TensorMax(dx, dy);
-            var radius = engine.TensorIndexSelect(
-                engine.TensorSort(joint, 1, false).Item1, new Tensor<int>(new[] { neighbors - 1 }, new[] { 1 }), 1);
-            var radiusGrid = engine.TensorBroadcastTo(radius, new[] { n, n });
+                // distance to the k-th nearest neighbour in the joint space (max norm), self excluded: the largest of
+                // the k smallest distances, from a top-k of the negated distances
+                var joint = engine.TensorMax(dx, dy);
+                var nearest = engine.TensorTopK(engine.TensorNegate(joint), neighbors, 1, out _);
+                var radius = engine.ReduceMax(engine.TensorNegate(nearest), new[] { 1 }, true);
+                var radiusGrid = engine.TensorBroadcastTo(radius, new[] { count, n });
 
-            // neighbours strictly inside that radius in each marginal space, counted in int (a 0/1 sum in T stops
-            // counting at 2048 for Half)
-            var nx = engine.ReduceSum(engine.TensorLessThan(dx, radiusGrid).Cast<int>(), new[] { 1 }, false);
-            var ny = engine.ReduceSum(engine.TensorLessThan(dy, radiusGrid).Cast<int>(), new[] { 1 }, false);
-            var psiX = engine.TensorGather(digammaTable, nx, 0);
-            var psiY = engine.TensorGather(digammaTable, ny, 0);
-            scores.Add(engine.TensorAdd(
-                engine.ReduceMean(psiX, new[] { 0 }, true), engine.ReduceMean(psiY, new[] { 0 }, true)));
+                // neighbours strictly inside that radius in each marginal space, counted in int (a 0/1 sum in T stops
+                // counting at 2048 for Half)
+                var nx = engine.ReduceSum(engine.TensorLessThan(dx, radiusGrid).Cast<int>(), new[] { 1 }, false);
+                var ny = engine.ReduceSum(engine.TensorLessThan(dy, radiusGrid).Cast<int>(), new[] { 1 }, false);
+                var psi = engine.TensorAdd(engine.TensorGather(digammaTable, nx, 0), engine.TensorGather(digammaTable, ny, 0));
+
+                // the row means, every term divided by n before the sum (a sum of n digammas overflows Half)
+                meanPsi[j] = engine.TensorAdd(meanPsi[j],
+                    engine.ReduceSum(engine.TensorMultiplyScalar(psi, rowShare), new[] { 0 }, true));
+            }
         }
 
-        if (p == 0)
-            return new Vector<T>(0);
-
         // MI = psi(n) + psi(k) - (mean psi(n_x + 1) + mean psi(n_y + 1)), clipped at 0 as scikit-learn does
-        var mi = engine.TensorAddScalar(engine.TensorNegate(engine.TensorConcatenate(scores.ToArray(), 0)), constant);
+        var mi = engine.TensorAddScalar(engine.TensorNegate(engine.TensorConcatenate(meanPsi, 0)), constant);
         return engine.TensorMax(mi, ops.Zero).ToVector();
+    }
+
+    // The tie-breaking noise of scikit-learn, v + 1e-10 max(1, mean |v|) N(0, 1), drawn with the next seed of the
+    // random source; the values unchanged without one. (1e-10 is below the resolution of Half and float at unit
+    // scale, so the noise only moves double values.)
+    private static Tensor<T> WithTieNoise<T>(Tensor<T> values, Random? random)
+    {
+        if (random is null)
+            return values;
+
+        var engine = AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<T>();
+        T meanMagnitude = engine.TensorMean(engine.TensorAbs(values));
+        T amplitude = ops.Multiply(ops.FromDouble(TieNoiseScale),
+            ops.GreaterThan(meanMagnitude, ops.One) ? meanMagnitude : ops.One);
+        var noise = engine.TensorRandnLike(values, random.Next());
+        return engine.TensorAdd(values, engine.TensorMultiplyScalar(noise, amplitude));
     }
 
     // The entries of a vector divided by its population standard deviation (sklearn.preprocessing.scale without
@@ -268,13 +336,14 @@ internal static class StatisticalTestHelper
             engine.TensorConcatenate(new[] { new Tensor<double>(new[] { 1 }), harmonic }, 0), -EulerGamma).Cast<T>();
     }
 
-    // |v[i] - v[j]| for every pair ([n] to [n, n]).
-    private static Tensor<T> AbsoluteDifferences<T>(Tensor<T> values)
+    // |v[i] - v[j]| for the rows i in [start, start + count) and every j ([n] to [count, n]).
+    private static Tensor<T> AbsoluteDifferences<T>(Tensor<T> values, int start, int count)
     {
         var engine = AiDotNetEngine.Current;
         int n = values.Length;
         return engine.TensorAbs(engine.TensorSubtract(
-            FilterStatisticTensorOps.ColumnBroadcast(values, n), FilterStatisticTensorOps.RowBroadcast(values, n)));
+            FilterStatisticTensorOps.ColumnBroadcast(engine.TensorNarrow(values, 0, start, count), n),
+            FilterStatisticTensorOps.RowBroadcast(values, count)));
     }
 
     // H(m) = 1 + 1/2 + ... + 1/m, H(0) = 0; a scalar constant of the estimator, not data.
@@ -327,13 +396,17 @@ internal static class StatisticalTestHelper
         return engine.TensorGather(adjustedSorted, inverse, 0).ToVector();
     }
 
-    /// <summary>Bonferroni adjusted p-values: <c>min(1, p n)</c>.</summary>
+    /// <summary>
+    /// Bonferroni adjusted p-values: <c>min(1, p n)</c>. The factor n is capped at T's largest value: 65536 tests read
+    /// as infinity in Half, which made a zero p-value 0 * infinity = NaN and rejected a perfectly predictive feature
+    /// (any p-value above 1 / 65504 is adjusted to 1 either way).
+    /// </summary>
     public static Vector<T> BonferroniCorrection<T>(Vector<T> pValues)
     {
         var engine = AiDotNetEngine.Current;
         var ops = MathHelper.GetNumericOperations<T>();
+        T factor = ops.FromDouble(Math.Min(pValues.Length, ops.ToDouble(ops.MaxValue)));
         return engine.TensorMin(
-            engine.TensorMultiplyScalar(FilterStatisticTensorOps.AsTensor(pValues), ops.FromDouble(pValues.Length)),
-            ops.One).ToVector();
+            engine.TensorMultiplyScalar(FilterStatisticTensorOps.AsTensor(pValues), factor), ops.One).ToVector();
     }
 }

@@ -66,14 +66,10 @@ public class CFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFeatu
         _nInputFeatures = data.Columns;
         int p = data.Columns;
         var x = FilterStatisticTensorOps.AsTensor(data);
-        var (sxx, sxy, syy) = FilterStatisticTensorOps.CenteredCrossSums(x, FilterStatisticTensorOps.AsTensor(target));
-        var norms = Engine.TensorSqrt(sxx);
-        var classCorrelation = Engine.TensorAbs(FilterStatisticTensorOps.GuardedDivide(
-            sxy, Engine.TensorMultiplyScalar(Engine.TensorSqrt(sxx), NumOps.Sqrt(syy)), 1e-10, NumOps.Zero));
-        var centered = FilterStatisticTensorOps.CenterColumns(x);
-        var interCorrelation = Engine.TensorAbs(FilterStatisticTensorOps.GuardedDivide(
-            Engine.TensorMatMul(Engine.TensorTranspose(centered), centered), Engine.TensorOuter(norms, norms),
-            1e-10, NumOps.Zero));
+        // |r| with the target and between features, on columns scaled to unit largest deviation: the raw centred sums
+        // of squares overflow Half once a deviation passes 256 (r came out NaN); 0 for a constant column
+        var classCorrelation = FeatureSelectionTensorOps.AbsoluteCorrelation(x, FilterStatisticTensorOps.AsTensor(target));
+        var interCorrelation = Engine.TensorAbs(FeatureSelectionTensorOps.CorrelationMatrix(x));
         _featureClassCorrelations = classCorrelation.ToVector();
 
         // greedy forward selection; accumulators are broadcast over the [p] candidates

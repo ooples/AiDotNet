@@ -64,24 +64,16 @@ public class WilcoxonSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISu
 
         _nInputFeatures = data.Columns;
         int p = data.Columns;
-        var engine = Engine;
 
         // class 0 is target < 0.5
         var class0 = FilterStatisticTensorOps.BelowMask(target, 0.5, out int n0);
         int n1 = data.Rows - n0;
 
-        // U statistic for class 0 from tie-averaged ranks, normalised to [0, 1] as |U0 - maxU / 2| / (maxU / 2)
-        int maxU = n0 * n1;
-        if (maxU > 0)
-        {
-            var u0 = FeatureSelectionTensorOps.RankSumU(FilterStatisticTensorOps.AsTensor(data), class0, n0);
-            var half = NumOps.FromDouble(maxU / 2.0);
-            _uStatistics = engine.TensorDivideScalar(engine.TensorAbs(engine.TensorSubtractScalar(u0, half)), half).ToVector();
-        }
-        else
-        {
-            _uStatistics = new Vector<T>(p);
-        }
+        // U statistic for class 0 from tie-averaged ranks, normalised to [0, 1] as |U0 - n0 n1 / 2| / (n0 n1 / 2) in
+        // double before the cast to T (n0 n1 overflows int at 50000 rows per class, and U0 overflows Half at a few
+        // hundred); every feature scores 0 when a class is empty
+        _uStatistics = FeatureSelectionTensorOps.RankSumSeparation(
+            FilterStatisticTensorOps.AsTensor(data), class0, n0, n1).ToVector();
 
         _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(
             FilterStatisticTensorOps.AsTensor(_uStatistics), Math.Min(_nFeaturesToSelect, p));

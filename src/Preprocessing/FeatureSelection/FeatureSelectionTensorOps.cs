@@ -32,9 +32,24 @@ internal static class FeatureSelectionTensorOps
         return (h.Cast<T>(), pValues.Cast<T>());
     }
 
-    /// <summary>The Mann-Whitney U of group 0 for every column, computed in double (see RankSumUCore).</summary>
-    public static Tensor<T> RankSumU<T>(Tensor<T> x, Tensor<T> groupMask, int n0) =>
-        RankSumUCore(x.Cast<double>(), groupMask.Cast<double>(), n0).Cast<T>();
+    /// <summary>
+    /// How far the Mann-Whitney U of group 0 sits from its null midpoint, <c>|U0 - n0 n1 / 2| / (n0 n1 / 2)</c> in
+    /// <c>[0, 1]</c>, for every column; computed in double (see RankSumUCore) and normalised there before the cast to
+    /// T: U0 and the midpoint pass 65504 in Half (n0 = n1 = 400 gives 80000) although the normalised score does not,
+    /// and n0 n1 is formed in double because it passes int.MaxValue at 50000 rows per group. Zero for every column
+    /// when a group is empty.
+    /// </summary>
+    public static Tensor<T> RankSumSeparation<T>(Tensor<T> x, Tensor<T> groupMask, int n0, int n1)
+    {
+        var engine = AiDotNetEngine.Current;
+        int p = x.Shape.Length > 1 ? x.Shape[1] : 0;
+        double midpoint = (double)n0 * n1 / 2.0;
+        if (midpoint <= 0)
+            return new Tensor<T>(new[] { p });
+
+        var u0 = RankSumUCore(x.Cast<double>(), groupMask.Cast<double>(), n0);
+        return engine.TensorDivideScalar(engine.TensorAbs(engine.TensorAddScalar(u0, -midpoint)), midpoint).Cast<T>();
+    }
 
     /// <summary>The Mann-Whitney U test of every column, computed in double (see MannWhitneyCore).</summary>
     public static (Tensor<T> U, Tensor<T> PValues) MannWhitney<T>(Tensor<T> x, Tensor<T> groupMask, int n0, int n1)
@@ -136,13 +151,38 @@ internal static class FeatureSelectionTensorOps
         if (n == 0)
             return x;
 
-        var min = PreprocessingTensorOps.ColumnMin(x);
-        var range = engine.TensorSubtract(PreprocessingTensorOps.ColumnMax(x), min);
+        // a column whose range overflows T is halved first (the scaled values do not change; see WithinRange)
+        var (within, min, max) = WithinRange(x);
+        var range = engine.TensorSubtract(max, min);
         // divided by the range (not multiplied by its reciprocal, which rounds differently and moves values that sit
         // exactly on an equal-width bin edge into the bin below)
         return FilterStatisticTensorOps.GuardedDivide(
-            engine.TensorSubtract(x, FilterStatisticTensorOps.RowBroadcast(min, n)),
+            engine.TensorSubtract(within, FilterStatisticTensorOps.RowBroadcast(min, n)),
             FilterStatisticTensorOps.RowBroadcast(range, n), minimumRange, ops.Zero);
+    }
+
+    /// <summary>
+    /// An [n, p] tensor with its column minima and maxima, every column whose range <c>max - min</c> is past T's
+    /// largest value halved first. Range scaling and equal-width bins depend only on <c>(x - min) / (max - min)</c>,
+    /// which halving leaves unchanged, but the range itself overflows Half for a column such as
+    /// <c>[-40000, 0, 40000]</c> (80000 &gt; 65504) and put every value in bin 0. Columns whose range is
+    /// representable are returned exactly as they are.
+    /// </summary>
+    private static (Tensor<T> X, Tensor<T> Min, Tensor<T> Max) WithinRange<T>(Tensor<T> x)
+    {
+        var engine = AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<T>();
+        int n = x.Shape[0];
+        var min = PreprocessingTensorOps.ColumnMin(x);
+        var max = PreprocessingTensorOps.ColumnMax(x);
+        var wide = engine.TensorGreaterThan(engine.TensorSubtract(max, min), ops.MaxValue);
+        if (engine.TensorCountNonzero(wide) == 0)
+            return (x, min, max);
+
+        var factor = engine.TensorWhere(
+            wide, FilterStatisticTensorOps.FilledLike(min, ops.FromDouble(0.5)), FilterStatisticTensorOps.FilledLike(min, ops.One));
+        return (engine.TensorMultiply(x, FilterStatisticTensorOps.RowBroadcast(factor, n)),
+            engine.TensorMultiply(min, factor), engine.TensorMultiply(max, factor));
     }
 
     /// <summary>The given rows of an [n, p] tensor ([rows.Length, p]).</summary>
@@ -236,78 +276,155 @@ internal static class FeatureSelectionTensorOps
             return total;
 
         T infinity = ops.FromDouble(double.PositiveInfinity);
-        var sampledRows = Rows(scaled, samples);
-        var distance = engine.TensorCDist(sampledRows, scaled, 1.0);
-        var oneHot = FilterStatisticTensorOps.ClassOneHot<T>(classIndex, classCount);
-        var sampleOneHot = Rows(oneHot, samples);
-        var notSelf = PreprocessingTensorOps.OneMinus(SelfMask<T>(samples, n));
-        var priors = engine.TensorDivideScalar(Counts(oneHot, 0), ops.FromDouble(n));
-        var otherMass = PreprocessingTensorOps.OneMinus(
-            engine.Reshape(engine.TensorMatMul(sampleOneHot, engine.Reshape(priors, new[] { classCount, 1 })), new[] { m }));
-
-        // nearest hits: same class, not the instance itself
-        var hitKeep = engine.TensorMultiply(engine.TensorMatMul(sampleOneHot, engine.TensorTranspose(oneHot)), notSelf);
-        foreach (var (index, found) in NearestPerRow(KeepOrFill(distance, hitKeep, infinity), k))
-            total = engine.TensorSubtract(total, WeightedRowSum(found, NeighbourDifference(sampledRows, scaled, index)));
-
-        // nearest misses of every other class, weighted by P(C) / (1 - P(class of the instance))
         T zero = ops.Zero;
-        for (int c = 0; c < classCount; c++)
+        var oneHot = FilterStatisticTensorOps.ClassOneHot<T>(classIndex, classCount);
+        var priors = engine.TensorDivideScalar(Counts(oneHot, 0), ops.FromDouble(n));
+
+        // the sampled instances in blocks of rows, so the instance-by-instance grids stay bounded (see RowBlocks)
+        foreach (var block in RowBlocks(samples, n))
         {
-            var inClass = PreprocessingTensorOps.ColumnVector(oneHot, c);
-            var otherClass = PreprocessingTensorOps.OneMinus(PreprocessingTensorOps.ColumnVector(sampleOneHot, c));
-            var classPrior = engine.TensorBroadcastTo(Entries(priors, new[] { c }), new[] { m });
-            var factor = engine.TensorMultiply(
-                FilterStatisticTensorOps.GuardedDivide(classPrior, otherMass, 0.0, zero), otherClass);
-            var missKeep = FilterStatisticTensorOps.RowBroadcast(inClass, m);
-            foreach (var (index, found) in NearestPerRow(KeepOrFill(distance, missKeep, infinity), k))
-                total = engine.TensorAdd(total, WeightedRowSum(
-                    engine.TensorMultiply(found, factor), NeighbourDifference(sampledRows, scaled, index)));
+            int b = block.Length;
+            var sampledRows = Rows(scaled, block);
+            var distance = engine.TensorCDist(sampledRows, scaled, 1.0);
+            var sampleOneHot = Rows(oneHot, block);
+            var notSelf = PreprocessingTensorOps.OneMinus(SelfMask<T>(block, n));
+            var otherMass = PreprocessingTensorOps.OneMinus(
+                engine.Reshape(engine.TensorMatMul(sampleOneHot, engine.Reshape(priors, new[] { classCount, 1 })), new[] { b }));
+
+            // nearest hits: same class, not the instance itself
+            var hitKeep = engine.TensorMultiply(engine.TensorMatMul(sampleOneHot, engine.TensorTranspose(oneHot)), notSelf);
+            foreach (var (index, found) in NearestPerRow(KeepOrFill(distance, hitKeep, infinity), k))
+                total = engine.TensorSubtract(total, WeightedRowSum(found, NeighbourDifference(sampledRows, scaled, index)));
+
+            // nearest misses of every other class, weighted by P(C) / (1 - P(class of the instance))
+            for (int c = 0; c < classCount; c++)
+            {
+                var inClass = PreprocessingTensorOps.ColumnVector(oneHot, c);
+                var otherClass = PreprocessingTensorOps.OneMinus(PreprocessingTensorOps.ColumnVector(sampleOneHot, c));
+                var classPrior = engine.TensorBroadcastTo(Entries(priors, new[] { c }), new[] { b });
+                var factor = engine.TensorMultiply(
+                    FilterStatisticTensorOps.GuardedDivide(classPrior, otherMass, 0.0, zero), otherClass);
+                var missKeep = FilterStatisticTensorOps.RowBroadcast(inClass, b);
+                foreach (var (index, found) in NearestPerRow(KeepOrFill(distance, missKeep, infinity), k))
+                    total = engine.TensorAdd(total, WeightedRowSum(
+                        engine.TensorMultiply(found, factor), NeighbourDifference(sampledRows, scaled, index)));
+            }
         }
 
         return engine.TensorDivideScalar(total, ops.FromDouble((double)m * k));
     }
 
     /// <summary>
-    /// <c>sum_{i, j} pairWeight[i, j] |x[i, a] - x[j, a]|</c> for every feature a of an [n, p] tensor, with an
-    /// [n, n] pair weighting ([p]). Evaluated one feature at a time so only n x n values are ever held.
+    /// Relief feature weights (Kira and Rendell 1992, with the nearest miss of Kononenko 1994 for several classes):
+    /// for every sampled instance that has both, <c>W += (diff(nearest miss) - diff(nearest hit)) / divisor</c>, where
+    /// the neighbours are the closest instances of the same and of another class (not the instance itself, ties to the
+    /// lower index) under the Minkowski distance of order <paramref name="distanceP"/> on <paramref name="scaled"/>,
+    /// which holds range-scaled features. The sampled rows run in blocks (see RowBlocks).
     /// </summary>
-    public static Tensor<T> PairWeightedDifference<T>(Tensor<T> x, Tensor<T> pairWeight)
+    public static Tensor<T> ReliefWeights<T>(Tensor<T> scaled, Tensor<T> classOneHot, int[] samples, double distanceP, int divisor)
     {
         var engine = AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<T>();
+        int n = scaled.Shape[0];
+        int p = scaled.Shape[1];
+        var total = new Tensor<T>(new[] { p });
+        if (samples.Length == 0 || divisor <= 0)
+            return total;
+
+        T infinity = ops.FromDouble(double.PositiveInfinity);
+        foreach (var block in RowBlocks(samples, n))
+        {
+            var sampledRows = Rows(scaled, block);
+            var distance = engine.TensorCDist(sampledRows, scaled, distanceP);
+            var self = SelfMask<T>(block, n);
+            var sameClass = engine.TensorMatMul(Rows(classOneHot, block), engine.TensorTranspose(classOneHot));
+
+            // nearest hit (same class) and nearest miss (other class), first index on ties
+            var (hit, hasHit) = FirstArgMinRows(KeepOrFill(
+                distance, engine.TensorMultiply(sameClass, PreprocessingTensorOps.OneMinus(self)), infinity));
+            var (miss, hasMiss) = FirstArgMinRows(KeepOrFill(distance, PreprocessingTensorOps.OneMinus(sameClass), infinity));
+
+            // the instances that have both add diff(miss) - diff(hit)
+            var diffHit = engine.TensorAbs(engine.TensorSubtract(sampledRows, Rows(scaled, hit)));
+            var diffMiss = engine.TensorAbs(engine.TensorSubtract(sampledRows, Rows(scaled, miss)));
+            var both = engine.Reshape(engine.TensorMultiply(hasHit, hasMiss), new[] { 1, block.Length });
+            total = engine.TensorAdd(total, engine.Reshape(
+                engine.TensorMatMul(both, engine.TensorSubtract(diffMiss, diffHit)), new[] { p }));
+        }
+
+        return engine.TensorDivideScalar(total, ops.FromDouble(divisor));
+    }
+
+    // Upper bound on the entries of one block of a sampled-instance-by-instance grid (distances, neighbour masks).
+    private const int RowBlockElements = 1 << 22;
+
+    /// <summary>
+    /// The sampled instances <paramref name="samples"/> in consecutive blocks of rows small enough that a block x
+    /// <paramref name="n"/> grid holds at most about four million entries. The Relief family sums one contribution
+    /// per sampled instance, so a fit can run block by block: one [m, n] grid at m = n = 20000 is 3.2 GB of double,
+    /// and a fit held about ten of them.
+    /// </summary>
+    public static IEnumerable<int[]> RowBlocks(int[] samples, int n)
+    {
+        int size = Math.Max(1, RowBlockElements / Math.Max(n, 1));
+        for (int start = 0; start < samples.Length; start += size)
+        {
+            var block = new int[Math.Min(size, samples.Length - start)];
+            Array.Copy(samples, start, block, 0, block.Length);
+            yield return block;
+        }
+    }
+
+    /// <summary>
+    /// <c>sum_{i, j} pairWeight[i, j] |rows[i, a] - x[j, a]|</c> for every feature a, with <paramref name="rows"/>
+    /// ([b, p]) a block of the instances of <paramref name="x"/> ([n, p]) and a [b, n] pair weighting ([p]).
+    /// Evaluated one feature at a time so only b x n values are held.
+    /// </summary>
+    public static Tensor<T> PairWeightedDifference<T>(Tensor<T> rows, Tensor<T> x, Tensor<T> pairWeight)
+    {
+        var engine = AiDotNetEngine.Current;
+        int b = rows.Shape[0];
         int n = x.Shape[0];
         int p = x.Shape[1];
-        if (n == 0 || p == 0)
+        if (b == 0 || n == 0 || p == 0)
             return new Tensor<T>(new[] { p });
 
         var perFeature = new Tensor<T>[p];
         for (int a = 0; a < p; a++)
         {
-            var column = PreprocessingTensorOps.ColumnVector(x, a);
             var difference = engine.TensorAbs(engine.TensorSubtract(
-                FilterStatisticTensorOps.ColumnBroadcast(column, n), FilterStatisticTensorOps.RowBroadcast(column, n)));
-            perFeature[a] = engine.ReduceSum(engine.Reshape(engine.TensorMultiply(difference, pairWeight), new[] { 1, n * n }), new[] { 1 }, false);
+                FilterStatisticTensorOps.ColumnBroadcast(PreprocessingTensorOps.ColumnVector(rows, a), n),
+                FilterStatisticTensorOps.RowBroadcast(PreprocessingTensorOps.ColumnVector(x, a), b)));
+            perFeature[a] = engine.ReduceSum(
+                engine.Reshape(engine.TensorMultiply(difference, pairWeight), new[] { 1, b * n }), new[] { 1 }, false);
         }
 
         return engine.TensorConcatenate(perFeature, 0);
     }
 
     /// <summary>
-    /// The SURF-family pair weighting for near neighbours: <c>-hit[i, j] / (n max(1, hits_i)) +
-    /// miss[i, j] / (n max(1, misses_i))</c>, from 0/1 [n, n] hit and miss masks.
+    /// <see cref="NearNeighbourPairWeight{T}(Tensor{T}, Tensor{T}, int)"/> of [n, n] masks covering every instance.
     /// </summary>
-    public static Tensor<T> NearNeighbourPairWeight<T>(Tensor<T> hits, Tensor<T> misses)
+    public static Tensor<T> NearNeighbourPairWeight<T>(Tensor<T> hits, Tensor<T> misses) =>
+        NearNeighbourPairWeight(hits, misses, hits.Shape[0]);
+
+    /// <summary>
+    /// The SURF-family pair weighting for near neighbours: <c>-hit[i, j] / (n max(1, hits_i)) +
+    /// miss[i, j] / (n max(1, misses_i))</c>, from 0/1 [b, n] hit and miss masks of a block of instances
+    /// (<paramref name="n"/> instances in all).
+    /// </summary>
+    public static Tensor<T> NearNeighbourPairWeight<T>(Tensor<T> hits, Tensor<T> misses, int n)
     {
         var engine = AiDotNetEngine.Current;
         var ops = MathHelper.GetNumericOperations<T>();
-        int n = hits.Shape[0];
+        int columns = hits.Shape[1];
         T scale = ops.FromDouble(n);
         // divided by the count and then by n: the product n * count overflows Half past 65504
         var hitCount = engine.TensorMax(Counts(hits, 1), ops.One);
         var missCount = engine.TensorMax(Counts(misses, 1), ops.One);
         return engine.TensorDivideScalar(engine.TensorSubtract(
-            engine.TensorDivide(misses, FilterStatisticTensorOps.ColumnBroadcast(missCount, n)),
-            engine.TensorDivide(hits, FilterStatisticTensorOps.ColumnBroadcast(hitCount, n))), scale);
+            engine.TensorDivide(misses, FilterStatisticTensorOps.ColumnBroadcast(missCount, columns)),
+            engine.TensorDivide(hits, FilterStatisticTensorOps.ColumnBroadcast(hitCount, columns))), scale);
     }
 
     /// <summary>
@@ -457,12 +574,13 @@ internal static class FeatureSelectionTensorOps
         if (n == 0)
             return new Tensor<int>(x.Shape.ToArray());
 
-        var min = PreprocessingTensorOps.ColumnMin(x);
-        var width = engine.TensorDivideScalar(engine.TensorSubtract(PreprocessingTensorOps.ColumnMax(x), min), ops.FromDouble(bins));
+        // a column whose range overflows T is halved first (the bins do not change; see WithinRange)
+        var (within, min, max) = WithinRange(x);
+        var width = engine.TensorDivideScalar(engine.TensorSubtract(max, min), ops.FromDouble(bins));
         var degenerate = engine.TensorLessThan(width, ops.FromDouble(minimumWidth));
         width = engine.TensorWhere(degenerate, FilterStatisticTensorOps.FilledLike(width, ops.One), width);
         return ToBinIndex(engine.TensorDivide(
-            engine.TensorSubtract(x, FilterStatisticTensorOps.RowBroadcast(min, n)),
+            engine.TensorSubtract(within, FilterStatisticTensorOps.RowBroadcast(min, n)),
             FilterStatisticTensorOps.RowBroadcast(width, n)), bins);
     }
 
@@ -507,46 +625,94 @@ internal static class FeatureSelectionTensorOps
     /// codes in <c>[0, aLevels)</c>, <paramref name="bOneHot"/> an [n, bLevels] membership of a code shared by all
     /// features. Returns [p, aLevels, bLevels] counts in T.
     /// </summary>
-    public static Tensor<T> JointCounts<T>(Tensor<int> a, int aLevels, Tensor<T> bOneHot)
+    public static Tensor<T> JointCounts<T>(Tensor<int> a, int aLevels, Tensor<T> bOneHot) =>
+        JointTally(a, aLevels, bOneHot).Cast<T>();
+
+    /// <summary>
+    /// <see cref="JointCounts{T}"/> as an int tensor: [p, aLevels, bLevels] counts, a row in no column of the
+    /// one-hot <paramref name="bOneHot"/> counted nowhere.
+    /// </summary>
+    public static Tensor<int> JointTally<T>(Tensor<int> a, int aLevels, Tensor<T> bOneHot)
     {
         var engine = AiDotNetEngine.Current;
         int n = a.Shape[0];
         int p = a.Shape[1];
         int bLevels = bOneHot.Shape[1];
-        if (n == 0 || p == 0)
-            return new Tensor<T>(new[] { p, aLevels, bLevels });
+        if (n == 0 || p == 0 || aLevels == 0 || bLevels == 0)
+            return new Tensor<int>(new[] { p, aLevels, bLevels });
 
-        // one-hot of (feature, code) in a single axis: [n, p * aLevels]
-        var aOneHot = engine.Reshape(OneHot<T>(a, aLevels), new[] { n, p * aLevels });
-        return engine.Reshape(CountProduct(aOneHot, bOneHot), new[] { p, aLevels, bLevels });
+        // the membership's column per row, and whether the row has one at all
+        var member = bOneHot.Cast<int>();
+        var b = FilterStatisticTensorOps.ColumnBroadcast(engine.TensorArgMax(member, 1), p);
+        var inAny = FilterStatisticTensorOps.ColumnBroadcast(engine.ReduceMax(member, new[] { 1 }, false), p);
+        int cells = CellCount(aLevels, bLevels);
+        var combined = engine.TensorAdd(engine.TensorMultiplyScalar(a, bLevels), b);
+        combined = engine.TensorWhere(inAny, combined, FilterStatisticTensorOps.FilledLike(combined, cells));
+        return engine.Reshape(FeatureTally(combined, cells), new[] { p, aLevels, bLevels });
     }
 
     /// <summary>
     /// Joint counts of two per-feature codes: <paramref name="a"/> and <paramref name="b"/> are [n, p] int tensors
     /// of codes in <c>[0, aLevels)</c> and <c>[0, bLevels)</c>. Returns [p, aLevels, bLevels] counts in T.
     /// </summary>
-    public static Tensor<T> PairedJointCounts<T>(Tensor<int> a, int aLevels, Tensor<int> b, int bLevels)
+    public static Tensor<T> PairedJointCounts<T>(Tensor<int> a, int aLevels, Tensor<int> b, int bLevels) =>
+        PairedJointTally(a, aLevels, b, bLevels).Cast<T>();
+
+    /// <summary><see cref="PairedJointCounts{T}"/> as an int tensor ([p, aLevels, bLevels]).</summary>
+    public static Tensor<int> PairedJointTally(Tensor<int> a, int aLevels, Tensor<int> b, int bLevels)
     {
         var engine = AiDotNetEngine.Current;
         int n = a.Shape[0];
         int p = a.Shape[1];
-        if (n == 0 || p == 0)
-            return new Tensor<T>(new[] { p, aLevels, bLevels });
+        if (n == 0 || p == 0 || aLevels == 0 || bLevels == 0)
+            return new Tensor<int>(new[] { p, aLevels, bLevels });
 
-        // one code per (row, feature): a * bLevels + b, counted per feature with a feature-major one-hot
+        // one code per (row, feature): a * bLevels + b
+        int cells = CellCount(aLevels, bLevels);
         var combined = engine.TensorAdd(engine.TensorMultiplyScalar(a, bLevels), b);
-        return engine.Reshape(Counts(OneHot<T>(combined, aLevels * bLevels), 0), new[] { p, aLevels, bLevels });
+        return engine.Reshape(FeatureTally(combined, cells), new[] { p, aLevels, bLevels });
     }
 
     /// <summary>Counts of each code per feature: [n, p] int codes in <c>[0, levels)</c> to [p, levels] counts.</summary>
-    public static Tensor<T> CodeCounts<T>(Tensor<int> codes, int levels)
+    public static Tensor<T> CodeCounts<T>(Tensor<int> codes, int levels) => CodeTally(codes, levels).Cast<T>();
+
+    /// <summary><see cref="CodeCounts{T}"/> as an int tensor ([p, levels]).</summary>
+    public static Tensor<int> CodeTally(Tensor<int> codes, int levels)
+    {
+        int n = codes.Shape[0];
+        int p = codes.Shape[1];
+        if (n == 0 || p == 0 || levels == 0)
+            return new Tensor<int>(new[] { p, levels });
+        return FeatureTally(codes, levels);
+    }
+
+    /// <summary>
+    /// Per-feature counts of [n, p] int codes in <c>[0, levels]</c> ([p, levels]; the code <c>levels</c> itself
+    /// marks a row that is counted nowhere). One bincount of the codes offset by feature, <c>code + j (levels + 1)</c>,
+    /// so it needs O(n p) memory: the one-hot it replaces held n p levels values in T, 800 MB of double for
+    /// n = 10000, p = 100 and 100 pair codes.
+    /// </summary>
+    private static Tensor<int> FeatureTally(Tensor<int> codes, int levels)
     {
         var engine = AiDotNetEngine.Current;
         int n = codes.Shape[0];
         int p = codes.Shape[1];
-        if (n == 0 || p == 0)
-            return new Tensor<T>(new[] { p, levels });
-        return Counts(OneHot<T>(codes, levels), 0);
+        int stride = CellCount(levels + 1, 1);
+        int bins = CellCount(stride, p);
+        var offsets = FilterStatisticTensorOps.RowBroadcast(
+            engine.TensorMultiplyScalar(engine.TensorArange<int>(0, p, 1), stride), n);
+        var keyed = engine.Reshape(engine.TensorAdd(codes, offsets), new[] { n * p });
+        var counts = engine.Reshape(engine.TensorNarrow(engine.TensorBinCount(keyed, bins), 0, 0, bins), new[] { p, stride });
+        return engine.TensorNarrow(counts, 1, 0, levels);
+    }
+
+    // a * b as the size of a count table, rejected when it does not fit an int index
+    private static int CellCount(int a, int b)
+    {
+        long cells = (long)a * b;
+        if (cells >= int.MaxValue)
+            throw new ArgumentException($"A count table of {a} x {b} cells is too large to index.");
+        return (int)cells;
     }
 
     /// <summary>
@@ -600,6 +766,18 @@ internal static class FeatureSelectionTensorOps
     {
         var engine = AiDotNetEngine.Current;
         var q = engine.TensorDivideScalar(counts, total);
+        return engine.TensorNegate(engine.ReduceSum(engine.TensorXlogy(q, q), new[] { axis }, false));
+    }
+
+    /// <summary>
+    /// <see cref="Entropy{T}"/> of int counts over <paramref name="total"/> samples. The shares <c>count / total</c>
+    /// are formed from the exact integers in double and only then taken to T: the row count and a cell count pass
+    /// 65504 in Half (65536 rows read as infinity, which turned every share into 0 and every entropy into 0).
+    /// </summary>
+    public static Tensor<T> CountEntropy<T>(Tensor<int> counts, int total, int axis)
+    {
+        var engine = AiDotNetEngine.Current;
+        var q = engine.TensorDivideScalar(counts.Cast<double>(), (double)Math.Max(total, 1)).Cast<T>();
         return engine.TensorNegate(engine.ReduceSum(engine.TensorXlogy(q, q), new[] { axis }, false));
     }
 
@@ -1007,21 +1185,104 @@ internal static class FeatureSelectionTensorOps
         return engine.TensorSubtract(totals, engine.ReduceSum(engine.TensorMultiply(counts, shares), new[] { 1 }, false));
     }
 
+    /// <summary>|Pearson r| of every column of an [n, p] tensor with a target ([p]); see <see cref="Correlation{T}"/>.</summary>
+    public static Tensor<T> AbsoluteCorrelation<T>(Tensor<T> x, Tensor<T> y) =>
+        AiDotNetEngine.Current.TensorAbs(Correlation(x, y));
+
     /// <summary>
-    /// |Pearson r| of every column of an [n, p] tensor with a target ([p]); 0 for a column whose centred sum of
-    /// squares is not above 1e-10, and everywhere when the target's is not.
+    /// Pearson r of every column of <paramref name="x"/> ([n, p]) with <paramref name="y"/> ([n]) ([p]); 0 for a
+    /// constant column (max = min) and everywhere for a constant target, as scikit-learn's
+    /// <c>r_regression(force_finite=True)</c> reports them.
     /// </summary>
-    public static Tensor<T> AbsoluteCorrelation<T>(Tensor<T> x, Tensor<T> y)
+    /// <remarks>
+    /// Every centred column (and the centred target) is divided by its largest absolute deviation before the sums
+    /// of squares and products. r is scale invariant, so this changes nothing but the range of the sums: they stay
+    /// at most n, where the raw sums overflowed Half once a deviation passed 256 (sum (x - mean)^2 = 160000 for
+    /// <c>[-200, -200, 200, 200]</c>), and an absolute 1e-10 cut-off on them scored a feature that varies at 1e-6
+    /// as constant. A constant column is recognised exactly (its maximum equals its minimum), not by a cut-off.
+    /// </remarks>
+    public static Tensor<T> Correlation<T>(Tensor<T> x, Tensor<T> y)
     {
         var engine = AiDotNetEngine.Current;
         var ops = MathHelper.GetNumericOperations<T>();
-        var (sxx, sxy, syy) = FilterStatisticTensorOps.CenteredCrossSums(x, y);
-        T tolerance = ops.FromDouble(1e-10);
-        if (!ops.GreaterThan(syy, tolerance))
-            return FilterStatisticTensorOps.FilledLike(sxx, ops.Zero);
-        var correlation = engine.TensorAbs(FilterStatisticTensorOps.GuardedDivide(
-            sxy, engine.TensorMultiplyScalar(engine.TensorSqrt(sxx), ops.Sqrt(syy)), 0, ops.Zero));
-        return KeepOrFill(correlation, engine.TensorGreaterThan(sxx, tolerance), ops.Zero);
+        int n = x.Shape[0];
+        int p = x.Shape[1];
+        if (n == 0 || p == 0 || ops.Equals(engine.TensorMaxValue(y), engine.TensorMinValue(y)))
+            return new Tensor<T>(new[] { p });
+
+        var u = UnitDeviationColumns(x, out var constant);
+        var yc = engine.TensorSubtractScalar(y, engine.TensorMean(y));
+        var v = engine.Reshape(
+            engine.TensorDivideScalar(yc, engine.TensorMaxValue(engine.TensorAbs(yc))), new[] { n, 1 });
+        var products = engine.Reshape(engine.TensorMatMul(engine.TensorTranspose(u), v), new[] { p });
+        var norms = engine.TensorMultiplyScalar(
+            engine.TensorSqrt(engine.ReduceSum(engine.TensorSquare(u), new[] { 0 }, false)),
+            ops.Sqrt(engine.TensorSumOfSquares(v)));
+        var r = FilterStatisticTensorOps.GuardedDivide(products, norms, 0.0, ops.Zero);
+        return engine.TensorWhere(constant, FilterStatisticTensorOps.FilledLike(r, ops.Zero), r);
+    }
+
+    /// <summary>
+    /// The [p, p] Pearson correlation matrix of the columns of an [n, p] tensor, on columns scaled as in
+    /// <see cref="Correlation{T}"/>; every entry in a constant column's row and column is 0.
+    /// </summary>
+    public static Tensor<T> CorrelationMatrix<T>(Tensor<T> x)
+    {
+        var engine = AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<T>();
+        int p = x.Shape[1];
+        if (x.Shape[0] == 0 || p == 0)
+            return new Tensor<T>(new[] { p, p });
+
+        var u = UnitDeviationColumns(x, out var constant);
+        var norms = engine.TensorSqrt(engine.ReduceSum(engine.TensorSquare(u), new[] { 0 }, false));
+        var r = FilterStatisticTensorOps.GuardedDivide(
+            engine.TensorMatMul(engine.TensorTranspose(u), u), engine.TensorOuter(norms, norms), 0.0, ops.Zero);
+        var varying = PreprocessingTensorOps.OneMinus(constant);
+        return engine.TensorMultiply(r, engine.TensorOuter(varying, varying));
+    }
+
+    /// <summary>
+    /// Column variances of an [n, p] tensor with the given divisor ([p]), from columns divided by their largest
+    /// absolute deviation <c>s</c>: <c>s (s sum (d / s)^2 / divisor)</c>. Each factor stays in range wherever the
+    /// variance does: in Half the squared deviations of <c>[100, -100, ...]</c> over ten rows sum to 100000 although
+    /// the variance, 11111, is representable.
+    /// </summary>
+    public static Tensor<T> ColumnVariance<T>(Tensor<T> x, int divisor)
+    {
+        var engine = AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<T>();
+        int p = x.Shape[1];
+        if (x.Shape[0] == 0 || p == 0)
+            return new Tensor<T>(new[] { p });
+
+        var centered = FilterStatisticTensorOps.CenterColumns(x);
+        var spread = engine.ReduceMax(engine.TensorAbs(centered), new[] { 0 }, false);
+        var safeSpread = engine.TensorWhere(
+            engine.TensorGreaterThan(spread, ops.Zero), spread, FilterStatisticTensorOps.FilledLike(spread, ops.One));
+        var u = engine.TensorDivide(centered, FilterStatisticTensorOps.RowBroadcast(safeSpread, x.Shape[0]));
+        var meanSquare = engine.TensorDivideScalar(
+            engine.ReduceSum(engine.TensorSquare(u), new[] { 0 }, false), ops.FromDouble(Math.Max(divisor, 1)));
+        return engine.TensorMultiply(spread, engine.TensorMultiply(spread, meanSquare));
+    }
+
+    /// <summary>
+    /// Every column of an [n, p] tensor centred and divided by its largest absolute deviation (entries in
+    /// <c>[-1, 1]</c>), with a 0/1 [p] flag of the constant columns (max = min), whose entries are all zero.
+    /// </summary>
+    internal static Tensor<T> UnitDeviationColumns<T>(Tensor<T> x, out Tensor<T> constant)
+    {
+        var engine = AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<T>();
+        int n = x.Shape[0];
+        constant = engine.TensorEquals(PreprocessingTensorOps.ColumnMax(x), PreprocessingTensorOps.ColumnMin(x));
+        var centered = FilterStatisticTensorOps.CenterColumns(x);
+        var spread = engine.ReduceMax(engine.TensorAbs(centered), new[] { 0 }, false);
+        var usable = engine.TensorMultiply(
+            engine.TensorGreaterThan(spread, ops.Zero), PreprocessingTensorOps.OneMinus(constant));
+        var safeSpread = engine.TensorWhere(usable, spread, FilterStatisticTensorOps.FilledLike(spread, ops.One));
+        var u = engine.TensorDivide(centered, FilterStatisticTensorOps.RowBroadcast(safeSpread, n));
+        return engine.TensorMultiply(u, FilterStatisticTensorOps.RowBroadcast(usable, n));
     }
 
     /// <summary>

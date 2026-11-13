@@ -75,21 +75,23 @@ public class FuzzyRoughSetSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         var classOneHot = FilterStatisticTensorOps.ClassOneHot<T>(classIndex, classCount);
         var decision = Engine.TensorMatMul(classOneHot, Engine.TensorTranspose(classOneHot));
         int n = data.Rows;
-        var similarity = new Tensor<T>[p];
-        for (int j = 0; j < p; j++)
-            similarity[j] = FeatureSimilarity(x, j);
 
-        // Compute individual feature fuzzy dependency
+        // The [n, n] similarity of a feature is built when it is needed and reduced at once, so at most a few
+        // [n, n] grids are alive (keeping all p of them was 40 GB of double at n = 10000, p = 50)
+        // Individual feature fuzzy dependency, and the similarity of all features together (their minimum)
         var single = new T[p];
+        var all = FilterStatisticTensorOps.Filled(new[] { n, n }, NumOps.One);
         for (int j = 0; j < p; j++)
-            single[j] = FuzzyDependency(similarity[j], decision);
+        {
+            var similarity = FeatureSimilarity(x, j);
+            single[j] = FuzzyDependency(similarity, decision);
+            all = Engine.TensorMin(all, similarity);
+        }
+
         var individual = new Tensor<T>(single, new[] { p });
         _fuzzyDependencies = individual.ToVector();
 
         // Greedy forward selection based on fuzzy dependency
-        var all = FilterStatisticTensorOps.Filled(new[] { n, n }, NumOps.One);
-        for (int j = 0; j < p; j++)
-            all = Engine.TensorMin(all, similarity[j]);
         var fullDependency = Scalar(NumOps.Subtract(FuzzyDependency(all, decision), NumOps.FromDouble(1e-6)));
         var current = Scalar(NumOps.Zero);
         var selectedSimilarity = FilterStatisticTensorOps.Filled(new[] { n, n }, NumOps.One);
@@ -101,7 +103,7 @@ public class FuzzyRoughSetSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             for (int j = 0; j < p; j++)
                 candidates[j] = selected.Contains(j)
                     ? excluded
-                    : FuzzyDependency(Engine.TensorMin(selectedSimilarity, similarity[j]), decision);
+                    : FuzzyDependency(Engine.TensorMin(selectedSimilarity, FeatureSimilarity(x, j)), decision);
 
             // the first candidate with the highest dependency, if it improves on the current one
             var scores = new Tensor<T>(candidates, new[] { p });
@@ -111,7 +113,7 @@ public class FuzzyRoughSetSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
                 break;
 
             selected.Add(bestFeature);
-            selectedSimilarity = Engine.TensorMin(selectedSimilarity, similarity[bestFeature]);
+            selectedSimilarity = Engine.TensorMin(selectedSimilarity, FeatureSimilarity(x, bestFeature));
             current = best;
         }
 

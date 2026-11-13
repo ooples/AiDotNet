@@ -89,13 +89,13 @@ public class MultiClusterFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IFixe
         var starts = FeatureSelectionTensorOps.CenteredUniformStarts<T>(random, Math.Max(k, 0), n);
         var eigenvectors = FeatureSelectionTensorOps.PowerIteration(L, starts, 50, keepPreviousOnZeroNorm: true);
 
-        // standardised features (population std); score = max_k |f' v_k| / n
+        // standardised features (population std); score = max_k |f' v_k| / n. A constant feature is centred to 0 and
+        // scores 0: keeping its raw values (as master did) scored |c sum(v)| / n, which grows with the constant c and
+        // ranked a column of 1000s above every informative feature
         var centered = FilterStatisticTensorOps.CenterColumns(x);
         var std = engine.TensorSqrt(FilterStatisticTensorOps.ColumnPopulationVariance(x));
-        var scale = FilterStatisticTensorOps.GuardedDivide(FilterStatisticTensorOps.FilledLike(std, NumOps.One), std, 1e-10, NumOps.One);
-        var spread = FilterStatisticTensorOps.RowBroadcast(engine.TensorGreaterThan(std, NumOps.FromDouble(1e-10)), n);
-        var standardized = engine.TensorWhere(
-            spread, engine.TensorMultiply(centered, FilterStatisticTensorOps.RowBroadcast(scale, n)), x);
+        var scale = FilterStatisticTensorOps.GuardedDivide(FilterStatisticTensorOps.FilledLike(std, NumOps.One), std, 1e-10, NumOps.Zero);
+        var standardized = engine.TensorMultiply(centered, FilterStatisticTensorOps.RowBroadcast(scale, n));
         var scores = eigenvectors.Count == 0
             ? new Tensor<T>(new[] { p })
             : engine.ReduceMax(engine.TensorDivideScalar(engine.TensorAbs(engine.TensorMatMul(

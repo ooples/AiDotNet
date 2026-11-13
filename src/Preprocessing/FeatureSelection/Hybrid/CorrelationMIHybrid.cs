@@ -81,14 +81,8 @@ public class CorrelationMIHybrid<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, 
         int p = data.Columns;
         var x = FilterStatisticTensorOps.AsTensor(data);
 
-        // |Pearson r|, 0 when the feature or the target is (near) constant
-        var (sxx, sxy, syy) = FilterStatisticTensorOps.CenteredCrossSums(x, FilterStatisticTensorOps.AsTensor(target));
-        T tolerance = NumOps.FromDouble(1e-10);
-        var correlation = NumOps.GreaterThan(syy, tolerance)
-            ? Engine.TensorAbs(FilterStatisticTensorOps.GuardedDivide(
-                sxy, Engine.TensorMultiplyScalar(Engine.TensorSqrt(sxx), NumOps.Sqrt(syy)), 0, NumOps.Zero))
-            : FilterStatisticTensorOps.FilledLike(sxx, NumOps.Zero);
-        correlation = FeatureSelectionTensorOps.KeepOrFill(correlation, Engine.TensorGreaterThan(sxx, tolerance), NumOps.Zero);
+        // |Pearson r|, 0 when the feature or the target is constant
+        var correlation = FeatureSelectionTensorOps.AbsoluteCorrelation(x, FilterStatisticTensorOps.AsTensor(target));
 
         // plug-in mutual information of the binned feature with the target classes
         var mi = DiscreteInformation<T>.ForTarget(FeatureSelectionTensorOps.RangeBins(x, _nBins), _nBins, target).Relevance();

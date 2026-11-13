@@ -85,7 +85,7 @@ public class BanzhafFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>
             membership[k] = rand.NextDouble() < 0.5 ? 1 : 0;
 
         // a coalition scores the mean absolute correlation of its features with the target (0 when empty)
-        var correlation = AbsoluteCorrelation(FilterStatisticTensorOps.AsTensor(data), FilterStatisticTensorOps.AsTensor(target));
+        var correlation = FeatureSelectionTensorOps.AbsoluteCorrelation(FilterStatisticTensorOps.AsTensor(data), FilterStatisticTensorOps.AsTensor(target));
         var memberCodes = new Tensor<int>(membership, new[] { _nSamples, p });
         var inCoalition = memberCodes.Cast<T>();
         var shape = new[] { _nSamples, p };
@@ -117,18 +117,6 @@ public class BanzhafFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>
     // 1 where the value reaches the threshold, else 0
     private Tensor<T> OneMinusBelow(Tensor<T> values, T threshold) =>
         PreprocessingTensorOps.OneMinus(Engine.TensorLessThan(values, threshold));
-
-    // |Pearson r| of every column with the target; 0 when the column or the target is (near) constant
-    private Tensor<T> AbsoluteCorrelation(Tensor<T> x, Tensor<T> y)
-    {
-        var (sxx, sxy, syy) = FilterStatisticTensorOps.CenteredCrossSums(x, y);
-        T tolerance = NumOps.FromDouble(1e-10);
-        if (!NumOps.GreaterThan(syy, tolerance))
-            return FilterStatisticTensorOps.FilledLike(sxx, NumOps.Zero);
-        var correlation = Engine.TensorAbs(FilterStatisticTensorOps.GuardedDivide(
-            sxy, Engine.TensorMultiplyScalar(Engine.TensorSqrt(sxx), NumOps.Sqrt(syy)), 0, NumOps.Zero));
-        return FeatureSelectionTensorOps.KeepOrFill(correlation, Engine.TensorGreaterThan(sxx, tolerance), NumOps.Zero);
-    }
 
     /// <inheritdoc />
     public Matrix<T> FitTransform(Matrix<T> data, Vector<T> target)
