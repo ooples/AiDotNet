@@ -320,9 +320,12 @@ namespace AiDotNet.AutoML.NAS
 
             T error = _ops.Subtract(PredictPerformance(config), performance);
             var engine = AiDotNetEngine.Current;
-            var update = new Tensor<T>(new[] { hiddenRows });
-            update.SetSubTensor(new[] { 0 }, engine.TensorMultiplyScalar(
-                engine.TensorMultiplyScalar(embedding.GetSubVector(0, shared).AsTensor(), error), learningRate));
+            // The first `shared` hidden rows take the step; any rows past the embedding's length stay at zero.
+            var step = engine.TensorMultiplyScalar(
+                engine.TensorMultiplyScalar(embedding.GetSubVector(0, shared).AsTensor(), error), learningRate);
+            var update = shared == hiddenRows
+                ? step
+                : engine.TensorConcatenate(new[] { step, new Tensor<T>(new[] { hiddenRows - shared }) }, 0);
             engine.TensorSubtractInPlace(_attentionWeights, engine.TensorOuter(update, columnMask));
         }
 
