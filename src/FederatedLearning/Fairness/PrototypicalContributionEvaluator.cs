@@ -73,21 +73,25 @@ public class PrototypicalContributionEvaluator<T> : FederatedLearningComponentBa
             // If we have history, use the mean over all rounds for a more stable prototype
             if (clientHistories is not null && clientHistories.TryGetValue(clientId, out var history) && history.Count > 1)
             {
-                prototype = new Tensor<T>(new[] { modelSize });
+                // Mean of the history with each update pre-divided by the count, so the running sum cannot
+                // overflow narrow T when the mean itself is in range.
+                var updates = new List<Tensor<T>>(history.Count);
+                var ones = new List<double>(history.Count);
                 foreach (var update in history)
                 {
-                    prototype = Engine.TensorAdd(prototype, FitToLength(update, modelSize));
+                    updates.Add(FitToLength(update, modelSize));
+                    ones.Add(1.0);
                 }
 
-                prototype = Engine.TensorDivideScalar(prototype, NumOps.FromDouble(history.Count));
+                prototype = Infrastructure.FederatedTensorMath<T>.WeightedSum(updates, ones, history.Count);
             }
 
             prototypes[c] = prototype.Reshape(new[] { 1, modelSize });
         }
 
         // Unit prototypes and the global direction (first modelSize entries of the global model).
-        var (units, magnitudes) = NormalizeRows(Engine.TensorConcatenate(prototypes, 0));
-        var (globalUnit, _) = NormalizeRows(FitToLength(globalModel, modelSize).Reshape(new[] { 1, modelSize }));
+        var (units, magnitudes) = Infrastructure.FederatedTensorMath<T>.NormalizeRows(Engine.TensorConcatenate(prototypes, 0));
+        var (globalUnit, _) = Infrastructure.FederatedTensorMath<T>.NormalizeRows(FitToLength(globalModel, modelSize).Reshape(new[] { 1, modelSize }));
         var alignments = Engine.TensorMatMul(units, Engine.TensorTranspose(globalUnit)).Cast<double>().ToArray();
         var cosines = Engine.TensorMatMul(units, Engine.TensorTranspose(units)).Cast<double>().ToArray();
 
@@ -167,28 +171,6 @@ public class PrototypicalContributionEvaluator<T> : FederatedLearningComponentBa
         }
 
         return Engine.TensorConcatenate(new[] { flat, new Tensor<T>(new[] { length - covered }) }, 0);
-    }
-
-    /// <summary>
-    /// Splits each row r of <paramref name="rows"/> into its norm and unit direction, scaling by max |r| first so
-    /// the squared norm cannot overflow narrow T. Zero rows get norm 0 and a zero direction.
-    /// </summary>
-    private (Tensor<T> Units, double[] Norms) NormalizeRows(Tensor<T> rows)
-    {
-        int count = rows.Shape[0];
-        int width = rows.Shape[1];
-        var shape = new[] { count, width };
-        var one = Engine.TensorFullLike(new Tensor<T>(new[] { count, 1 }), NumOps.One);
-
-        var rowMax = Engine.ReduceMax(Engine.TensorAbs(rows), new[] { 1 }, true); // [count, 1]
-        var safeMax = Engine.TensorWhere(Engine.TensorGreaterThan(rowMax, NumOps.Zero), rowMax, one);
-        var scaled = Engine.TensorDivide(rows, Engine.TensorBroadcastTo(safeMax, shape));
-        var scaledNorm = Engine.TensorSqrt(Engine.ReduceSum(Engine.TensorSquare(scaled), new[] { 1 }, true));
-        var safeNorm = Engine.TensorWhere(Engine.TensorGreaterThan(scaledNorm, NumOps.Zero), scaledNorm, one);
-        var units = Engine.TensorDivide(scaled, Engine.TensorBroadcastTo(safeNorm, shape));
-
-        var norms = Engine.TensorMultiply(rowMax, scaledNorm).Cast<double>().ToArray();
-        return (units, norms);
     }
 
     private static void NormalizeScores(Dictionary<int, double> scores)

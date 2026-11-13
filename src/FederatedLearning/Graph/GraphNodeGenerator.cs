@@ -187,7 +187,7 @@ public partial class GraphNodeGenerator<T> : FederatedLearningComponentBase<T>
         return Engine.TensorConcatenate(new[] { rows, new Tensor<T>(new[] { count, width - current }) }, 1);
     }
 
-    private (Tensor<T>? Inputs, Tensor<T>? Targets, Tensor<T>? TargetMask) BuildTrainingPairs(
+    internal (Tensor<T>? Inputs, Tensor<T>? Targets, Tensor<T>? TargetMask) BuildTrainingPairs(
         Tensor<T> adjacency, Tensor<T> nodeFeatures, int numNodes, int featureDim)
     {
         if (numNodes == 0)
@@ -223,14 +223,12 @@ public partial class GraphNodeGenerator<T> : FederatedLearningComponentBase<T>
         var neighborMask = Engine.TensorMultiply(
             Engine.TensorGreaterThan(adjacencyCells, NumOps.Zero),
             new Tensor<int>(offDiagonal, new[] { numNodes, numNodes }).Cast<T>());
-        var degrees = Engine.ReduceSum(neighborMask, new[] { 1 }, true); // [N, 1]
 
-        var degreeCounts = new int[numNodes];
-        var degreeValues = degrees.Cast<double>().ToArray();
+        // Degrees are counted in int: a 0/1 sum in Half stops increasing at 2048.
+        var degreeCounts = Infrastructure.FederatedTensorMath<T>.CountNonzeroPerRow(neighborMask);
         var withNeighbors = new List<int>();
         for (int i = 0; i < numNodes; i++)
         {
-            degreeCounts[i] = (int)Math.Round(degreeValues[i]);
             if (degreeCounts[i] > 0)
             {
                 withNeighbors.Add(i);

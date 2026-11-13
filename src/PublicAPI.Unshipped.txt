@@ -22993,10 +22993,36 @@ AiDotNet.FederatedLearning.ContinualLearning.FedCILContinualLearning<T>.Generate
 AiDotNet.FederatedLearning.ContinualLearning.FedCILContinualLearning<T>.Classify(AiDotNet.FederatedLearning.ContinualLearning.FedCILGenerativeModel<T>! model, AiDotNet.Tensors.LinearAlgebra.Matrix<T>! features) -> int[]!
 AiDotNet.FederatedLearning.ContinualLearning.FedCILContinualLearning<T>.ComputeConsistencyLoss(AiDotNet.FederatedLearning.ContinualLearning.FedCILGenerativeModel<T>! globalModel, AiDotNet.FederatedLearning.ContinualLearning.FedCILGenerativeModel<T>! localModel, AiDotNet.Tensors.LinearAlgebra.Matrix<T>! samples) -> T
 AiDotNet.FederatedLearning.ContinualLearning.FedCILGenerativeModel<T>
-AiDotNet.FederatedLearning.Distillation.FedGENDistillation<T>.FedGENDistillation(int numClasses = 10, int featureDim = 64, int generatorEpochs = 5, double generatorLearningRate = 0.01, int seed = 42, int noiseDim = 16, int generatorHiddenDim = 32, int batchSize = 32, int distillationEpochs = 5, double distillationLearningRate = 0.01) -> void
+AiDotNet.FederatedLearning.Distillation.FedGENDistillation<T>.FedGENDistillation(int numClasses = 10, int featureDim = 64, int generatorEpochs = 5, double generatorLearningRate = 0.0003, int seed = 42, int noiseDim = 16, int generatorHiddenDim = 32, int batchSize = 32, int distillationEpochs = 5, double distillationLearningRate = 0.01) -> void
 AiDotNet.FederatedLearning.Distillation.FedGENDistillation<T>.HeadParameterCount.get -> int
 AiDotNet.FederatedLearning.Distillation.FedGENDistillation<T>.GeneratorParameterCount.get -> int
 AiDotNet.FederatedLearning.Distillation.FedGENDistillation<T>.ExtractHeadKnowledge(AiDotNet.Tensors.LinearAlgebra.Vector<T>! localModelParameters, int[]! labelCounts) -> AiDotNet.Tensors.LinearAlgebra.Matrix<T>!
 AiDotNet.FederatedLearning.Distillation.FedGENDistillation<T>.GenerateFeatures(int label, int count) -> AiDotNet.Tensors.LinearAlgebra.Matrix<T>!
 AiDotNet.FederatedLearning.Graph.PrototypeFederatedGraphLearning<T>.RegisterClientPrototypes(int clientId, System.Collections.Generic.Dictionary<int, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>! prototypes, System.Collections.Generic.Dictionary<int, int>! classSampleCounts) -> void
 AiDotNet.FederatedLearning.Graph.PrototypeFederatedGraphLearning<T>.ComputePrototypes(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! nodeEmbeddings, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! labels, int embeddingDim, out System.Collections.Generic.Dictionary<int, int>! classSampleCounts) -> System.Collections.Generic.Dictionary<int, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>!
+AiDotNet.Enums.FedGenTeacherLoss
+AiDotNet.Enums.FedGenTeacherLoss.EnsembleCrossEntropy = 0 -> AiDotNet.Enums.FedGenTeacherLoss
+AiDotNet.Enums.FedGenTeacherLoss.WeightedClientCrossEntropy = 1 -> AiDotNet.Enums.FedGenTeacherLoss
+AiDotNet.FederatedLearning.Distillation.FedGENDistillation<T>.DiversityLossWeight.get -> double
+AiDotNet.FederatedLearning.Distillation.FedGENDistillation<T>.DiversityLossWeight.set -> void
+AiDotNet.FederatedLearning.Distillation.FedGENDistillation<T>.StudentLossWeight.get -> double
+AiDotNet.FederatedLearning.Distillation.FedGENDistillation<T>.StudentLossWeight.set -> void
+AiDotNet.FederatedLearning.Distillation.FedGENDistillation<T>.TeacherLoss.get -> AiDotNet.Enums.FedGenTeacherLoss
+AiDotNet.FederatedLearning.Distillation.FedGENDistillation<T>.TeacherLoss.set -> void
+AiDotNet.FederatedLearning.Distillation.FedGENDistillation<T>.TeacherLossWeight.get -> double
+AiDotNet.FederatedLearning.Distillation.FedGENDistillation<T>.TeacherLossWeight.set -> void
+AiDotNet.Enums.FedGenGeneratorOptimizer
+AiDotNet.Enums.FedGenGeneratorOptimizer.Adam = 0 -> AiDotNet.Enums.FedGenGeneratorOptimizer
+AiDotNet.Enums.FedGenGeneratorOptimizer.Sgd = 1 -> AiDotNet.Enums.FedGenGeneratorOptimizer
+AiDotNet.FederatedLearning.Distillation.FedGENDistillation<T>.AdamBeta1.get -> double
+AiDotNet.FederatedLearning.Distillation.FedGENDistillation<T>.AdamBeta1.set -> void
+AiDotNet.FederatedLearning.Distillation.FedGENDistillation<T>.AdamBeta2.get -> double
+AiDotNet.FederatedLearning.Distillation.FedGENDistillation<T>.AdamBeta2.set -> void
+AiDotNet.FederatedLearning.Distillation.FedGENDistillation<T>.AdamEpsilon.get -> double
+AiDotNet.FederatedLearning.Distillation.FedGENDistillation<T>.AdamEpsilon.set -> void
+AiDotNet.FederatedLearning.Distillation.FedGENDistillation<T>.GeneratorWeightDecay.get -> double
+AiDotNet.FederatedLearning.Distillation.FedGENDistillation<T>.GeneratorWeightDecay.set -> void
+AiDotNet.FederatedLearning.Distillation.FedGENDistillation<T>.GeneratorLearningRateDecay.get -> double
+AiDotNet.FederatedLearning.Distillation.FedGENDistillation<T>.GeneratorLearningRateDecay.set -> void
+AiDotNet.FederatedLearning.Distillation.FedGENDistillation<T>.GeneratorOptimizer.get -> AiDotNet.Enums.FedGenGeneratorOptimizer
+AiDotNet.FederatedLearning.Distillation.FedGENDistillation<T>.GeneratorOptimizer.set -> void

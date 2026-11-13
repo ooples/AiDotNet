@@ -184,14 +184,15 @@ public class DPFedLoRA<T> : Infrastructure.FederatedLearningComponentBase<T>, IF
         }
 
         // Steps 1-2: clip each client's adapters to clipNorm, then take the weighted average.
-        var clipNormT = NumOps.FromDouble(_clipNorm);
         var aggregated = new Vector<T>(adapterLen);
         double totalWeight = 0;
         foreach (var (clientId, adapters) in clientAdapters)
         {
-            var norm = Engine.Norm(adapters);
-            var clipScale = NumOps.GreaterThan(norm, clipNormT) ? NumOps.Divide(clipNormT, norm) : NumOps.One;
-            var clippedAdapter = Engine.Multiply(adapters, clipScale);
+            // The norm is taken pre-scaled and kept in double: squaring a Half entry above 256 overflows, and an
+            // infinite norm would clip the client's update to zero.
+            double norm = Infrastructure.FederatedTensorMath<T>.ScaledNorm(adapters);
+            double clipScale = norm > _clipNorm ? _clipNorm / norm : 1.0;
+            var clippedAdapter = Engine.Multiply(adapters, NumOps.FromDouble(clipScale));
 
             double w = clientWeights?.GetValueOrDefault(clientId, 1.0) ?? 1.0;
             totalWeight += w;

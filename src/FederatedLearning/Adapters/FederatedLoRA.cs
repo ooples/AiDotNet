@@ -180,21 +180,24 @@ public class FederatedLoRA<T> : Infrastructure.FederatedLearningComponentBase<T>
         // Batched over layers: B is [layers, out, rank] and A is [layers, rank, in].
         var bShape = new[] { _numAdaptedLayers, _layerOutputDim, _rank };
         var aShape = new[] { _numAdaptedLayers, _rank, _layerInputDim };
-        var meanProduct = new Tensor<T>(new[] { _numAdaptedLayers, _layerOutputDim, _layerInputDim });
-        var meanB = new Tensor<T>(bShape);
-        var meanA = new Tensor<T>(aShape);
+        var products = new List<Tensor<T>>(clientAdapters.Count);
+        var factorsB = new List<Tensor<T>>(clientAdapters.Count);
+        var factorsA = new List<Tensor<T>>(clientAdapters.Count);
+        var weights = new List<double>(clientAdapters.Count);
         foreach (var (clientId, adapters) in clientAdapters)
         {
-            var p = NumOps.FromDouble((clientWeights?.GetValueOrDefault(clientId, 1.0) ?? 1.0) / totalWeight);
             var layers = new Tensor<T>(new[] { _numAdaptedLayers, paramsPerLayer }, adapters.GetSubVector(0, required));
             var b = Engine.TensorSlice(layers, new[] { 0, 0 }, new[] { _numAdaptedLayers, bSize }).Reshape(bShape);
             var a = Engine.TensorSlice(layers, new[] { 0, bSize }, new[] { _numAdaptedLayers, aSize }).Reshape(aShape);
-
-            meanProduct = Engine.TensorAdd(meanProduct, Engine.TensorMultiplyScalar(Engine.TensorMatMul(b, a), p));
-            meanB = Engine.TensorAdd(meanB, Engine.TensorMultiplyScalar(b, p));
-            meanA = Engine.TensorAdd(meanA, Engine.TensorMultiplyScalar(a, p));
+            products.Add(Engine.TensorMatMul(b, a));
+            factorsB.Add(b);
+            factorsA.Add(a);
+            weights.Add(clientWeights?.GetValueOrDefault(clientId, 1.0) ?? 1.0);
         }
 
+        var meanProduct = Infrastructure.FederatedTensorMath<T>.WeightedSum(products, weights, totalWeight);
+        var meanB = Infrastructure.FederatedTensorMath<T>.WeightedSum(factorsB, weights, totalWeight);
+        var meanA = Infrastructure.FederatedTensorMath<T>.WeightedSum(factorsA, weights, totalWeight);
         return Engine.TensorSubtract(meanProduct, Engine.TensorMatMul(meanB, meanA));
     }
 }

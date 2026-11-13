@@ -191,7 +191,7 @@ public class SubgraphFederatedTrainer<T> : FederatedLearningComponentBase<T>, IF
             var errors = Engine.TensorSubtract(
                 Engine.TensorSlice(nodeEmbeddings, new[] { 0 }, new[] { labelCount }),
                 Engine.TensorSlice(labels.Reshape(new[] { labels.Length }), new[] { 0 }, new[] { labelCount }));
-            gradientScale = SumOfSquares(errors) / labelCount;
+            gradientScale = Infrastructure.FederatedTensorMath<T>.ScaledSumOfSquares(errors) / labelCount;
         }
 
         // Apply a simple gradient scaling to the local parameters: p -= lr * scale * p * 0.01
@@ -203,7 +203,7 @@ public class SubgraphFederatedTrainer<T> : FederatedLearningComponentBase<T>, IF
     /// Mean over each node's neighbors of the neighbor's summed features. The node count comes from the
     /// adjacency (N x N, flattened) and the feature width from the flattened features (N * F).
     /// </summary>
-    private Tensor<T> ComputeNodeEmbeddings(ExpandedSubgraph<T> expanded)
+    internal Tensor<T> ComputeNodeEmbeddings(ExpandedSubgraph<T> expanded)
     {
         int numNodes = (int)Math.Sqrt(expanded.Adjacency.Length);
         if (numNodes == 0)
@@ -224,28 +224,15 @@ public class SubgraphFederatedTrainer<T> : FederatedLearningComponentBase<T>, IF
                     .Reshape(new[] { numNodes, featureDim }),
                 new[] { 1 }, true);
         var sums = Engine.TensorMatMul(neighborMask, featureSums).Reshape(new[] { numNodes });
-        var counts = Engine.ReduceSum(neighborMask, new[] { 1 }, false);
+
+        // Neighbor counts are formed in int: a 0/1 sum in Half stops increasing at 2048.
+        var counts = new Tensor<int>(Infrastructure.FederatedTensorMath<T>.CountNonzeroPerRow(neighborMask), new[] { numNodes })
+            .Cast<T>();
 
         // Mean aggregation (nodes without neighbors embed to 0)
         var hasNeighbors = Engine.TensorGreaterThan(counts, NumOps.Zero);
         var safeCounts = Engine.TensorWhere(hasNeighbors, counts, Engine.TensorOnesLike(counts));
         return Engine.TensorMultiply(Engine.TensorDivide(sums, safeCounts), hasNeighbors);
-    }
-
-    /// <summary>
-    /// Σ v² computed as max|v|² · Σ (v / max|v|)² so the squares cannot overflow narrow T.
-    /// </summary>
-    private double SumOfSquares(Tensor<T> values)
-    {
-        T maxAbs = Engine.TensorMaxValue(Engine.TensorAbs(values));
-        if (!NumOps.GreaterThan(maxAbs, NumOps.Zero))
-        {
-            return 0;
-        }
-
-        double scaled = NumOps.ToDouble(Engine.TensorSum(Engine.TensorSquare(Engine.TensorDivideScalar(values, maxAbs))));
-        double max = NumOps.ToDouble(maxAbs);
-        return max * max * scaled;
     }
 
     private Dictionary<int, Tensor<T>> GetCrossClientNeighborFeatures(int clientId)

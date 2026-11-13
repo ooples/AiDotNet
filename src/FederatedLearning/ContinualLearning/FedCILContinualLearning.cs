@@ -231,7 +231,8 @@ public class FedCILContinualLearning<T> : Infrastructure.FederatedLearningCompon
         if (totalWeight <= 0)
             throw new ArgumentException("Client weights must sum to a positive value.", nameof(clientWeights));
 
-        var average = new Vector<T>(ParameterCount);
+        var parameterSets = new List<Tensor<T>>(clientModels.Count);
+        var weights = new List<double>(clientModels.Count);
         var sources = new List<(FedCILGenerativeModel<T> Model, int[] Classes)>();
         foreach (var (clientId, model) in clientModels)
         {
@@ -241,8 +242,8 @@ public class FedCILContinualLearning<T> : Infrastructure.FederatedLearningCompon
             }
 
             ValidateClasses(classes, nameof(clientClasses));
-            double w = clientWeights?.GetValueOrDefault(clientId, 1.0) ?? 1.0;
-            average = Engine.Add(average, Engine.Multiply(GetParameters(model), NumOps.FromDouble(w / totalWeight)));
+            parameterSets.Add(GetParameters(model).AsTensor());
+            weights.Add(clientWeights?.GetValueOrDefault(clientId, 1.0) ?? 1.0);
             var ordered = classes.Distinct().OrderBy(c => c).ToArray();
             sources.Add((model, ordered));
             foreach (int c in ordered)
@@ -251,7 +252,7 @@ public class FedCILContinualLearning<T> : Infrastructure.FederatedLearningCompon
             }
         }
 
-        var global = CreateModel(average);
+        var global = CreateModel(Infrastructure.FederatedTensorMath<T>.WeightedSum(parameterSets, weights, totalWeight).ToVector());
         var allClasses = _knownClasses.ToArray();
         int perClient = Math.Max(1, (_batchSize + sources.Count - 1) / sources.Count);
         for (int step = 0; step < _consolidationSteps; step++)
@@ -294,23 +295,10 @@ public class FedCILContinualLearning<T> : Infrastructure.FederatedLearningCompon
         if (features.Columns != _featureDim)
             throw new ArgumentException($"Features must have {_featureDim} columns.", nameof(features));
 
-        var logits = DiscriminatorForward(model, Tensor<T>.FromMatrix(features)).ClassLogits.Cast<double>().ToArray();
-        var predictions = new int[features.Rows];
-        for (int i = 0; i < predictions.Length; i++)
-        {
-            int best = 0;
-            for (int c = 1; c < _numClasses; c++)
-            {
-                if (logits[i * _numClasses + c] > logits[i * _numClasses + best])
-                {
-                    best = c;
-                }
-            }
+        if (features.Rows == 0) return Array.Empty<int>();
 
-            predictions[i] = best;
-        }
-
-        return predictions;
+        // Arg-max over the class logits (the first maximum wins).
+        return Engine.TensorArgMax(DiscriminatorForward(model, Tensor<T>.FromMatrix(features)).ClassLogits, 1).ToArray();
     }
 
     /// <summary>

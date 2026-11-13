@@ -95,8 +95,9 @@ public class DataFreeFCL<T> : Infrastructure.FederatedLearningComponentBase<T>, 
 
         // Compute per-parameter sensitivity: parameters with larger magnitude relative
         // to layer statistics are considered more important (proxy for Fisher information).
+        // The norm is taken pre-scaled in double: squaring Half entries overflows long before the RMS does.
         T rms = paramCount > 0
-            ? NumOps.Divide(Engine.Norm(modelParameters), NumOps.Sqrt(NumOps.FromDouble(paramCount)))
+            ? NumOps.FromDouble(Infrastructure.FederatedTensorMath<T>.ScaledNorm(modelParameters) / Math.Sqrt(paramCount))
             : NumOps.Zero;
 
         // Importance proportional to how far parameter is from zero relative to RMS, capped at 10 to

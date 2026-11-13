@@ -227,34 +227,45 @@ public class PrototypeFederatedGraphLearning<T> : FederatedLearningComponentBase
     /// <returns>Regularization loss value.</returns>
     public double ComputePrototypeLoss(Dictionary<int, Tensor<T>> clientPrototypes, double lambda = 0.1)
     {
-        double loss = 0;
+        Guard.NotNull(clientPrototypes);
 
+        // Every matched class contributes one row diff_c = local_c - global_c (both cut to the shorter length);
+        // rows are zero-padded to a common width, which leaves their norms unchanged.
+        var diffs = new List<Tensor<T>>();
+        int width = 0;
         foreach (var kvp in clientPrototypes)
         {
-            int classId = kvp.Key;
-            var localProto = kvp.Value;
-
-            if (_globalPrototypes.TryGetValue(classId, out var globalProto))
+            if (!_globalPrototypes.TryGetValue(kvp.Key, out var globalProto))
             {
-                int dim = Math.Min(localProto.Shape[0], globalProto.Shape[0]);
-                if (dim == 0)
-                {
-                    continue;
-                }
-
-                // L2 distance between local and global prototype, as max|diff|^2 * Σ (diff / max|diff|)^2 so the
-                // sum of squares cannot overflow narrow T.
-                var diff = Engine.TensorSubtract(FitToLength(localProto, dim), FitToLength(globalProto, dim));
-                T maxAbs = Engine.TensorMaxValue(Engine.TensorAbs(diff));
-                if (!NumOps.GreaterThan(maxAbs, NumOps.Zero))
-                {
-                    continue;
-                }
-
-                double scaledSumSq = NumOps.ToDouble(Engine.TensorSum(Engine.TensorSquare(Engine.TensorDivideScalar(diff, maxAbs))));
-                double maxValue = NumOps.ToDouble(maxAbs);
-                loss += lambda * maxValue * maxValue * scaledSumSq;
+                continue;
             }
+
+            int dim = Math.Min(kvp.Value.Length, globalProto.Length);
+            if (dim == 0)
+            {
+                continue;
+            }
+
+            diffs.Add(Engine.TensorSubtract(FitToLength(kvp.Value, dim), FitToLength(globalProto, dim)));
+            width = Math.Max(width, dim);
+        }
+
+        if (diffs.Count == 0)
+        {
+            return 0;
+        }
+
+        var rows = new Tensor<T>[diffs.Count];
+        for (int r = 0; r < rows.Length; r++)
+        {
+            rows[r] = FitToLength(diffs[r], width);
+        }
+
+        // ||diff_c|| is formed as max|diff_c| * ||diff_c / max|diff_c||| in double, so squaring cannot overflow T.
+        double loss = 0;
+        foreach (double norm in Infrastructure.FederatedTensorMath<T>.NormalizeRows(Engine.TensorStack(rows, 0)).Norms)
+        {
+            loss += lambda * norm * norm;
         }
 
         return loss;

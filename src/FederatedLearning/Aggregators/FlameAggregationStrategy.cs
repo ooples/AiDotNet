@@ -148,42 +148,44 @@ public class FlameAggregationStrategy<T> : ParameterDictionaryAggregationStrateg
             admitted = Enumerable.Range(0, n).ToArray();
         }
 
-        // Step 2: Adaptive clipping bound S_t = median distance of all models to G_{t-1}.
+        // Step 2: Adaptive clipping bound S_t = median distance of all models to G_{t-1}. The distances are taken
+        // pre-scaled and kept in double: a squared Half distance overflows once a model is ~256 away from G_{t-1}.
         var previousGlobal = GetPreviousGlobal(layerNames, referenceModel, totalParams);
-        var deltas = Engine.TensorSubtract(models, previousGlobal.Reshape(new[] { 1, totalParams }));
-        var distances = Engine.TensorNorm(deltas, 1, false);
-        var (sortedDistances, _) = Engine.TensorSort(distances, 0, false);
-        T clipBound = n % 2 == 1
+        var deltas = Engine.TensorSubtract(
+            models, Engine.TensorBroadcastTo(previousGlobal.Reshape(new[] { 1, totalParams }), new[] { n, totalParams }));
+        var distances = Infrastructure.FederatedTensorMath<T>.NormalizeRows(deltas).Norms;
+        var sortedDistances = (double[])distances.Clone();
+        Array.Sort(sortedDistances);
+        double clipBound = n % 2 == 1
             ? sortedDistances[n / 2]
-            : NumOps.Divide(NumOps.Add(sortedDistances[n / 2 - 1], sortedDistances[n / 2]), NumOps.FromDouble(2.0));
+            : (sortedDistances[n / 2 - 1] + sortedDistances[n / 2]) / 2.0;
 
-        // Clip factors min(1, S_t / e_i); a model at distance 0 is not scaled.
-        var clipFactors = Engine.TensorWhere(
-            Engine.TensorGreaterThan(distances, clipBound),
-            Engine.TensorDivide(Engine.TensorFullLike(distances, clipBound), distances),
-            Engine.TensorOnesLike(distances));
+        // Clip factors min(1, S_t / e_i) of the admitted models; a model at distance 0 is not scaled.
+        var admittedFactors = new double[admitted.Length];
+        for (int a = 0; a < admitted.Length; a++)
+        {
+            double distance = distances[admitted[a]];
+            admittedFactors[a] = distance > clipBound ? clipBound / distance : 1.0;
+        }
 
         // Step 3: G_t = G_{t-1} + mean over admitted models of the clipped deltas.
         var admittedIndex = new Tensor<int>(admitted, new[] { admitted.Length });
         var admittedDeltas = Engine.TensorIndexSelect(deltas, admittedIndex, 0);
-        var admittedFactors = Engine.TensorIndexSelect(clipFactors, admittedIndex, 0).Reshape(new[] { admitted.Length, 1 });
-        var meanClippedDelta = Engine.ReduceMean(Engine.TensorMultiply(admittedDeltas, admittedFactors), new[] { 0 }, false);
-        var aggregated = Engine.TensorAdd(previousGlobal, meanClippedDelta).ToVector();
+        var factorColumn = new Tensor<double>(admittedFactors, new[] { admitted.Length, 1 }).Cast<T>();
+        var clippedDeltas = Engine.TensorMultiply(
+            admittedDeltas, Engine.TensorBroadcastTo(factorColumn, new[] { admitted.Length, totalParams }));
+        var meanClippedDelta = Engine.ReduceMean(clippedDeltas, new[] { 0 }, false);
+        var aggregatedTensor = Engine.TensorAdd(previousGlobal, meanClippedDelta);
 
         // Step 4: Add calibrated Gaussian noise with std = lambda * S_t.
         if (_noiseMultiplier > 0)
         {
-            double noiseStd = _noiseMultiplier * NumOps.ToDouble(clipBound);
+            double noiseStd = _noiseMultiplier * clipBound;
             var rng = RandomHelper.CreateSeededRandom(_seed + _roundCounter++);
-
-            for (int i = 0; i < totalParams; i++)
-            {
-                double u1 = 1.0 - rng.NextDouble();
-                double u2 = 1.0 - rng.NextDouble();
-                double noise = noiseStd * Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2);
-                aggregated[i] = NumOps.Add(aggregated[i], NumOps.FromDouble(noise));
-            }
+            aggregatedTensor = Engine.TensorAdd(aggregatedTensor, GaussianNoise(rng, totalParams, noiseStd));
         }
+
+        var aggregated = aggregatedTensor.ToVector();
 
         // Unflatten into the layer dictionary.
         var result = new Dictionary<string, T[]>(referenceModel.Count, referenceModel.Comparer);
@@ -198,6 +200,22 @@ public class FlameAggregationStrategy<T> : ParameterDictionaryAggregationStrateg
 
         RememberGlobalModel(result);
         return result;
+    }
+
+    /// <summary>
+    /// Box-Muller draws N(0, std^2), one (u1, u2) pair per element in order.
+    /// </summary>
+    private static Tensor<T> GaussianNoise(Random rng, int count, double std)
+    {
+        var noise = new double[count];
+        for (int i = 0; i < count; i++)
+        {
+            double u1 = 1.0 - rng.NextDouble();
+            double u2 = 1.0 - rng.NextDouble();
+            noise[i] = std * Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2);
+        }
+
+        return new Tensor<double>(noise, new[] { count }).Cast<T>();
     }
 
     /// <summary>
@@ -269,14 +287,11 @@ public class FlameAggregationStrategy<T> : ParameterDictionaryAggregationStrateg
             return Array.Empty<int>();
         }
 
-        // Pairwise cosine distances d(i, j) = 1 - cos(W_i, W_j); a zero model is at distance 1 from all.
-        var norms = Engine.TensorNorm(models, 1, false);
-        var gram = Engine.TensorMatMul(models, Engine.TensorTranspose(models));
-        var normProducts = Engine.TensorOuter(norms, norms);
-        var cosine = Engine.TensorWhere(
-            Engine.TensorGreaterThan(normProducts, NumOps.Zero),
-            Engine.TensorDivide(gram, normProducts),
-            new Tensor<T>(new[] { n, n }));
+        // Pairwise cosine distances d(i, j) = 1 - cos(W_i, W_j); a zero model is at distance 1 from all. The models
+        // are normalized to unit rows first, so the Gram matrix holds the cosines directly and its dot products
+        // cannot overflow narrow T the way W W^T and the norm products do.
+        var units = Infrastructure.FederatedTensorMath<T>.NormalizeRows(models).Units;
+        var cosine = Engine.TensorMatMul(units, Engine.TensorTranspose(units));
         var cosineDistances = Engine.TensorAddScalar(Engine.TensorNegate(cosine), NumOps.One);
 
         // Upper-triangle edges (i < j) in a fixed order.

@@ -284,26 +284,21 @@ public class FedKDCompressor<T> : Infrastructure.FederatedLearningComponentBase<
             throw new ArgumentException("Total client weight must be positive.", nameof(clientWeights));
         }
 
-        Tensor<T>? sum = null;
+        var gradients = new List<Tensor<T>>(clientGradients.Count);
+        var weights = new List<double>(clientGradients.Count);
         foreach (var (clientId, compressed) in clientGradients)
         {
-            var p = NumOps.FromDouble((clientWeights?.GetValueOrDefault(clientId, 1.0) ?? 1.0) / totalWeight);
-            var weighted = Engine.TensorMultiplyScalar(Tensor<T>.FromMatrix(DecompressGradient(compressed)), p);
-            if (sum is null)
-            {
-                sum = weighted;
-            }
-            else if (!sum.Shape.Equals(weighted.Shape))
+            var gradient = Tensor<T>.FromMatrix(DecompressGradient(compressed));
+            if (gradients.Count > 0 && !gradients[0].Shape.Equals(gradient.Shape))
             {
                 throw new ArgumentException($"Client {clientId} gradient shape differs from the others.", nameof(clientGradients));
             }
-            else
-            {
-                sum = Engine.TensorAdd(sum, weighted);
-            }
+
+            gradients.Add(gradient);
+            weights.Add(clientWeights?.GetValueOrDefault(clientId, 1.0) ?? 1.0);
         }
 
-        return (sum ?? new Tensor<T>(new[] { 0, 0 })).ToMatrix();
+        return Infrastructure.FederatedTensorMath<T>.WeightedSum(gradients, weights, totalWeight).ToMatrix();
     }
 
     /// <summary>Gets the distillation temperature.</summary>

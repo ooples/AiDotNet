@@ -964,4 +964,429 @@ public class FederatedElementwiseSweep29bReferenceTests
             new Dictionary<int, Tensor<double>> { [0] = new Tensor<double>(new[] { 1.0, 1.0 }, new[] { 2 }) },
             new Dictionary<int, int>()));
     }
+
+    // ---- Narrow-T (Half) regressions: Half overflows at 65504 and a 0/1 count in Half stops at 2048. ----
+
+    private static readonly AiDotNet.Tensors.Interfaces.INumericOperations<Half> HalfOps =
+        MathHelper.GetNumericOperations<Half>();
+
+    private static Half[] HalfArray(params double[] values)
+    {
+        var result = new Half[values.Length];
+        for (int i = 0; i < values.Length; i++)
+        {
+            result[i] = HalfOps.FromDouble(values[i]);
+        }
+
+        return result;
+    }
+
+    [Fact(Timeout = 60000)]
+    public async Task DPFedLoRA_HalfClipUsesTrueNormAboveHalfSquareRange()
+    {
+        await Task.Yield();
+
+        // DP-FedAvg clips the update [300, 400] (norm 500) to C = 1: [0.6, 0.8]. 300^2 + 400^2 = 250000
+        // overflows Half, so a norm formed from raw squares is infinite and clipped the update to 0.
+        var strategy = new DPFedLoRA<Half>(
+            modelDim: 100, rank: 1, noiseMultiplier: 0.0, clipNorm: 1.0,
+            numAdaptedLayers: 1, layerInputDim: 1, layerOutputDim: 1, seed: 42);
+        var clients = new Dictionary<int, Vector<Half>> { [0] = new Vector<Half>(HalfArray(300, 400)) };
+
+        var aggregated = strategy.AggregateAdapters(clients, null);
+
+        Assert.Equal(0.6, HalfOps.ToDouble(aggregated[0]), 3);
+        Assert.Equal(0.8, HalfOps.ToDouble(aggregated[1]), 3);
+    }
+
+    [Fact(Timeout = 60000)]
+    public async Task DataFreeFCL_HalfImportanceUsesRmsAboveHalfSquareRange()
+    {
+        await Task.Yield();
+
+        // Importance = min(|theta| / rms(theta), 10); rms([300, 400]) = 500 / sqrt(2) = 353.553, giving
+        // [0.848528, 1.131371]. The raw sum of squares overflowed Half and made every importance 0.
+        var fcl = new AiDotNet.FederatedLearning.ContinualLearning.DataFreeFCL<Half>();
+        var importance = fcl.ComputeImportance(new Vector<Half>(HalfArray(300, 400)), new Matrix<Half>(1, 1));
+
+        Assert.Equal(300 / (500 / Math.Sqrt(2)), HalfOps.ToDouble(importance[0]), 2);
+        Assert.Equal(400 / (500 / Math.Sqrt(2)), HalfOps.ToDouble(importance[1]), 2);
+    }
+
+    [Fact(Timeout = 60000)]
+    public async Task Flame_HalfModelsAboveHalfSquareRangeAreClusteredAndClipped()
+    {
+        await Task.Yield();
+
+        // FLAME, first round (G = 0), lambda = 0: [300, 400], [600, 800], [150, 200] all point the same way, so
+        // the cluster admits all 3. Distances {500, 1000, 250}, median S = 500: [600, 800] clips to [300, 400].
+        // G = ([300, 400] + [300, 400] + [150, 200]) / 3 = [250, 333.33]. The squares (up to 10^6) overflow Half.
+        var flame = new FlameAggregationStrategy<Half>(noiseMultiplier: 0.0);
+        var models = new Dictionary<int, Dictionary<string, Half[]>>
+        {
+            [0] = new Dictionary<string, Half[]> { ["w"] = HalfArray(300, 400) },
+            [1] = new Dictionary<string, Half[]> { ["w"] = HalfArray(600, 800) },
+            [2] = new Dictionary<string, Half[]> { ["w"] = HalfArray(150, 200) },
+        };
+        var weights = new Dictionary<int, double> { [0] = 1.0, [1] = 1.0, [2] = 1.0 };
+
+        var aggregated = flame.Aggregate(models, weights);
+
+        Assert.InRange(HalfOps.ToDouble(aggregated["w"][0]), 249.5, 250.5);
+        Assert.InRange(HalfOps.ToDouble(aggregated["w"][1]), 333.0, 333.75);
+    }
+
+    // Star graph: node 0 is linked to every other node, node 1 has feature 3000 and the rest 0.
+    private static (Tensor<Half> Adjacency, Tensor<Half> Features) HalfStarGraph(int nodes)
+    {
+        var adjacency = new Half[nodes * nodes];
+        var one = HalfOps.One;
+        for (int j = 1; j < nodes; j++)
+        {
+            adjacency[j] = one;
+            adjacency[j * nodes] = one;
+        }
+
+        var features = new Half[nodes];
+        features[1] = HalfOps.FromDouble(3000);
+        return (new Tensor<Half>(adjacency, new[] { nodes * nodes }), new Tensor<Half>(features, new[] { nodes }));
+    }
+
+    [Fact(Timeout = 60000)]
+    public async Task GraphNodeGenerator_HalfMeanNeighborFeatureDividesByTrueDegreeAbove2048()
+    {
+        await Task.Yield();
+
+        // FedSage+ NeighGen input = mean neighbor features. Node 0 has 4096 neighbors summing to 3000:
+        // 3000 / 4096 = 0.732. A degree summed in Half stops at 2048 and gave 1.465.
+        const int nodes = 4097;
+        var (adjacency, features) = HalfStarGraph(nodes);
+        var generator = new AiDotNet.FederatedLearning.Graph.GraphNodeGenerator<Half>(featureDim: 1);
+
+        var (inputs, _, _) = generator.BuildTrainingPairs(adjacency, features, nodes, 1);
+
+        Assert.NotNull(inputs);
+        if (inputs is not null)
+        {
+            Assert.Equal(3000.0 / 4096.0, HalfOps.ToDouble(inputs[0, 0]), 3);
+        }
+    }
+
+    [Fact(Timeout = 60000)]
+    public async Task SubgraphFederatedTrainer_HalfEmbeddingDividesByTrueNeighborCountAbove2048()
+    {
+        await Task.Yield();
+
+        // Mean aggregation over the 4096 neighbors of node 0: 3000 / 4096 = 0.732. Counting neighbors in Half
+        // stops at 2048 and gave 1.465.
+        const int nodes = 4097;
+        var (adjacency, features) = HalfStarGraph(nodes);
+        var trainer = new AiDotNet.FederatedLearning.Graph.SubgraphFederatedTrainer<Half>(
+            new AiDotNet.Models.Options.FederatedGraphOptions(),
+            new AiDotNet.FederatedLearning.Graph.FedGnnAggregationStrategy<Half>());
+
+        var embeddings = trainer.ComputeNodeEmbeddings(
+            new AiDotNet.FederatedLearning.Graph.ExpandedSubgraph<Half> { Adjacency = adjacency, NodeFeatures = features });
+
+        Assert.Equal(3000.0 / 4096.0, HalfOps.ToDouble(embeddings[0]), 3);
+    }
+
+    [Fact(Timeout = 60000)]
+    public async Task PrototypicalContribution_HalfMagnitudeAboveHalfMaxStaysFinite()
+    {
+        await Task.Yield();
+
+        // Both prototypes point along the global direction, so the larger one scores higher and min-max scaling
+        // gives 1 and 0. ||[50000, 50000]|| = 70711 is above Half.MaxValue; forming it in Half gave infinity
+        // and NaN scores.
+        var evaluator = new AiDotNet.FederatedLearning.Fairness.PrototypicalContributionEvaluator<Half>(
+            new AiDotNet.Models.Options.ContributionEvaluationOptions());
+        var clients = new Dictionary<int, Tensor<Half>>
+        {
+            [0] = new Tensor<Half>(HalfArray(50000, 50000), new[] { 2 }),
+            [1] = new Tensor<Half>(HalfArray(10000, 10000), new[] { 2 }),
+        };
+
+        var scores = evaluator.EvaluateContributions(
+            clients, new Tensor<Half>(HalfArray(1, 1), new[] { 2 }), new Dictionary<int, List<Tensor<Half>>>());
+
+        Assert.Equal(1.0, scores[0], 6);
+        Assert.Equal(0.0, scores[1], 6);
+    }
+
+    [Fact(Timeout = 60000)]
+    public async Task ShapleyValue_HalfCoalitionDistanceAboveHalfMaxStaysFinite()
+    {
+        await Task.Yield();
+
+        // Exact Shapley, global 0: v({}) = 0, v({0}) = -||[50000, 50000]|| = -70711, v({1}) = 0,
+        // v({0, 1}) = -35355. phi_0 = (-70711 - 35355) / 2 < phi_1 = 35355 / 2, so min-max gives 0 and 1.
+        // The distance 70711 overflowed Half to -infinity and the marginals became NaN.
+        var evaluator = new AiDotNet.FederatedLearning.Fairness.ShapleyValueEvaluator<Half>(
+            new AiDotNet.Models.Options.ContributionEvaluationOptions());
+        var clients = new Dictionary<int, Tensor<Half>>
+        {
+            [0] = new Tensor<Half>(HalfArray(50000, 50000), new[] { 2 }),
+            [1] = new Tensor<Half>(HalfArray(0, 0), new[] { 2 }),
+        };
+
+        var scores = evaluator.EvaluateContributions(
+            clients, new Tensor<Half>(HalfArray(0, 0), new[] { 2 }), new Dictionary<int, List<Tensor<Half>>>());
+
+        Assert.Equal(0.0, scores[0], 6);
+        Assert.Equal(1.0, scores[1], 6);
+    }
+
+    [Fact(Timeout = 60000)]
+    public async Task ShapleyValue_HalfSampledPrefixMeansDoNotOverflowWhenTheMeanFits()
+    {
+        await Task.Yield();
+
+        // 16 identical clients [40000] and global [40000]: every coalition mean is 40000 (distance 0) and
+        // v({}) = -40000, so one permutation gives the first client marginal 40000 and the rest ~0. After
+        // min-max scaling one client scores 1 and the rest ~0. A running sum in Half reached infinity at the
+        // second client and turned the marginals into NaN.
+        var evaluator = new AiDotNet.FederatedLearning.Fairness.ShapleyValueEvaluator<Half>(
+            new AiDotNet.Models.Options.ContributionEvaluationOptions { SamplingRounds = 1 });
+        var clients = new Dictionary<int, Tensor<Half>>();
+        for (int i = 0; i < 16; i++)
+        {
+            clients[i] = new Tensor<Half>(HalfArray(40000), new[] { 1 });
+        }
+
+        var scores = evaluator.EvaluateContributions(
+            clients, new Tensor<Half>(HalfArray(40000), new[] { 1 }), new Dictionary<int, List<Tensor<Half>>>()).Values.ToList();
+
+        Assert.Equal(1, scores.Count(s => s > 0.99));
+        Assert.Equal(15, scores.Count(s => s >= 0 && s < 0.01));
+    }
+
+    [Fact(Timeout = 60000)]
+    public async Task FedGEN_GeneratorObjectiveMatchesHandComputedTeacherStudentAndDiversityTerms()
+    {
+        await Task.Yield();
+
+        // FedGen (Zhu et al. 2021; official serverpFedGen.train_generator with DiversityLoss('l1')). C = 2, L = 1,
+        // B = 2, noise dim 1. Heads h_0 = [1, -1] z and h_1 = [3, 0] z (zero bias); alpha_0 = [0.75, 0.5] and
+        // alpha_1 = [0.25, 0.5] per class; labels [0, 1]; z = [1, -1]; eps = [0, 1]; server head = 0.
+        // Ensemble logits: row 0 = 0.75 [1, -1] + 0.25 [3, 0] = [1.5, -0.75]; row 1 = 0.5 [-1, 1] + 0.5 [-3, 0]
+        // = [-2, 0.5]. Teacher CE = (log(1 + e^-2.25) + log(1 + e^-2.5)) / 2.
+        // Weighted client CE = (0.75 log(1 + e^-2) + 0.25 log(1 + e^-3) + 0.5 log(1 + e^-2) + 0.5 log(1 + e^-3)) / 2.
+        // KL(p || uniform) averaged over the 4 entries; diversity = exp(-mean([0, 1*2, 1*2, 0])) = e^-1.
+        // dJ/dz (alpha = 1, beta = 0, eta = 1): teacher row 0 = -1.125 p_01, row 1 = 1.25 p_10; diversity
+        // -/+ 0.5 e^-1.
+        var fedGen = new AiDotNet.FederatedLearning.Distillation.FedGENDistillation<double>(
+            numClasses: 2, featureDim: 1, generatorEpochs: 0, noiseDim: 1, generatorHiddenDim: 2, batchSize: 2);
+        Assert.Equal(1.0, fedGen.TeacherLossWeight);
+        Assert.Equal(0.0, fedGen.StudentLossWeight);
+        Assert.Equal(1.0, fedGen.DiversityLossWeight);
+
+        var heads = new[]
+        {
+            (new Tensor<double>(new[] { 1.0, -1.0 }, new[] { 2, 1 }), new Tensor<double>(new[] { 0.0, 0.0 }, new[] { 2 })),
+            (new Tensor<double>(new[] { 3.0, 0.0 }, new[] { 2, 1 }), new Tensor<double>(new[] { 0.0, 0.0 }, new[] { 2 })),
+        };
+        var alpha = new[] { new[] { 0.75, 0.5 }, new[] { 0.25, 0.5 } };
+        var server = (new Tensor<double>(new[] { 0.0, 0.0 }, new[] { 2, 1 }), new Tensor<double>(new[] { 0.0, 0.0 }, new[] { 2 }));
+        var labels = new[] { 0, 1 };
+        var latent = new Tensor<double>(new[] { 1.0, -1.0 }, new[] { 2, 1 });
+        var noise = new[] { 0.0, 1.0 };
+
+        var result = fedGen.GeneratorObjective(heads, alpha, server, labels, latent, noise);
+
+        double ce225 = Math.Log(1 + Math.Exp(-2.25));
+        double ce25 = Math.Log(1 + Math.Exp(-2.5));
+        double p00 = 1 / (1 + Math.Exp(-2.25));
+        double p01 = 1 - p00;
+        double p11 = 1 / (1 + Math.Exp(-2.5));
+        double p10 = 1 - p11;
+        double kl = (p00 * Math.Log(2 * p00) + p01 * Math.Log(2 * p01) + p10 * Math.Log(2 * p10) + p11 * Math.Log(2 * p11)) / 4;
+        Assert.Equal((ce225 + ce25) / 2, result.Teacher, Precision);
+        Assert.Equal(kl, result.Student, Precision);
+        Assert.Equal(Math.Exp(-1), result.Diversity, Precision);
+        Assert.Equal(-1.125 * p01 - 0.5 * Math.Exp(-1), result.GradLatent[0, 0], Precision);
+        Assert.Equal(1.25 * p10 + 0.5 * Math.Exp(-1), result.GradLatent[1, 0], Precision);
+
+        // The official code's teacher form: label-weighted sum of each client's own cross-entropy.
+        fedGen.TeacherLoss = AiDotNet.Enums.FedGenTeacherLoss.WeightedClientCrossEntropy;
+        double ce2 = Math.Log(1 + Math.Exp(-2));
+        double ce3 = Math.Log(1 + Math.Exp(-3));
+        var weighted = fedGen.GeneratorObjective(heads, alpha, server, labels, latent, noise);
+        Assert.Equal((0.75 * ce2 + 0.25 * ce3 + 0.5 * ce2 + 0.5 * ce3) / 2, weighted.Teacher, Precision);
+
+        // dJ/dz matches a central difference of J = teacher - beta KL + eta diversity with every term switched on.
+        fedGen.TeacherLoss = AiDotNet.Enums.FedGenTeacherLoss.EnsembleCrossEntropy;
+        fedGen.TeacherLossWeight = 0.7;
+        fedGen.StudentLossWeight = 0.4;
+        fedGen.DiversityLossWeight = 1.3;
+        var server2 = (new Tensor<double>(new[] { 0.5, -0.2 }, new[] { 2, 1 }), new Tensor<double>(new[] { 0.1, 0.0 }, new[] { 2 }));
+        var analytic = fedGen.GeneratorObjective(heads, alpha, server2, labels, latent, noise).GradLatent;
+        const double h = 1e-6;
+        for (int row = 0; row < 2; row++)
+        {
+            var plus = latent.Clone();
+            var minus = latent.Clone();
+            plus[row, 0] += h;
+            minus[row, 0] -= h;
+            var up = fedGen.GeneratorObjective(heads, alpha, server2, labels, plus, noise);
+            var down = fedGen.GeneratorObjective(heads, alpha, server2, labels, minus, noise);
+            double jUp = 0.7 * up.Teacher - 0.4 * up.Student + 1.3 * up.Diversity;
+            double jDown = 0.7 * down.Teacher - 0.4 * down.Student + 1.3 * down.Diversity;
+            Assert.Equal((jUp - jDown) / (2 * h), analytic[row, 0], 6);
+        }
+
+        Assert.Throws<ArgumentOutOfRangeException>(() => fedGen.StudentLossWeight = -1);
+    }
+
+    [Fact(Timeout = 60000)]
+    public async Task FedGEN_HalfLabelCountsAbove2048ReachTheServerExactly()
+    {
+        await Task.Yield();
+
+        // Client counts {2049, 70001}: p(y) = [2049, 70001] / 72050 = [0.028439, 0.971561]. A count stored as one
+        // Half rounds 2049 to 2048 and overflows 70001 to infinity (NaN label distribution).
+        var fedGen = new AiDotNet.FederatedLearning.Distillation.FedGENDistillation<Half>(
+            numClasses: 2, featureDim: 1, generatorEpochs: 0, noiseDim: 1, generatorHiddenDim: 2, batchSize: 2);
+        var head = new Vector<Half>(HalfArray(1, -1, 0, 0));
+        var knowledge = fedGen.ExtractHeadKnowledge(head, new[] { 2049, 70001 });
+
+        for (int c = 0; c < 2; c++)
+        {
+            double decoded = 0;
+            for (int d = 3; d >= 0; d--)
+            {
+                decoded = decoded * 256 + HalfOps.ToDouble(knowledge[c, 2 + d]);
+            }
+
+            Assert.Equal(c == 0 ? 2049.0 : 70001.0, decoded);
+        }
+
+        var global = fedGen.AggregateKnowledge(new Dictionary<int, Matrix<Half>> { [0] = knowledge }, null);
+        Assert.Equal(2049.0 / 72050.0, HalfOps.ToDouble(global[0, global.Columns - 2]), 4);
+        Assert.Equal(70001.0 / 72050.0, HalfOps.ToDouble(global[0, global.Columns - 1]), 3);
+    }
+
+    [Fact(Timeout = 60000)]
+    public async Task DataFreeFCL_HalfRmsOfLongVectorAccumulatesSquaresInDouble()
+    {
+        await Task.Yield();
+
+        // 4096 ones: rms = 1, so every importance is 1. Summing the 4096 squares in Half stops at 2048, giving
+        // rms = sqrt(2048 / 4096) = 0.707 and importance 1.414.
+        var values = new double[4096];
+        for (int i = 0; i < values.Length; i++)
+        {
+            values[i] = 1;
+        }
+
+        var fcl = new AiDotNet.FederatedLearning.ContinualLearning.DataFreeFCL<Half>();
+        var importance = fcl.ComputeImportance(new Vector<Half>(HalfArray(values)), new Matrix<Half>(1, 1));
+
+        Assert.Equal(1.0, HalfOps.ToDouble(importance[0]), 3);
+        Assert.Equal(1.0, HalfOps.ToDouble(importance[4095]), 3);
+    }
+
+    [Fact(Timeout = 60000)]
+    public async Task PrototypeFederatedGraphLearning_HalfLossOfLongPrototypeAccumulatesSquaresInDouble()
+    {
+        await Task.Yield();
+
+        // FedProto regularizer lambda * ||p_local - p_global||^2 with a zero global prototype and 4096 ones:
+        // 0.1 * 4096 = 409.6. Summing the squares in Half stops at 2048 (loss 204.8).
+        const int dim = 4096;
+        var learner = new AiDotNet.FederatedLearning.Graph.PrototypeFederatedGraphLearning<Half>(
+            new AiDotNet.Models.Options.FederatedGraphOptions(), prototypeDim: dim, numClasses: 1);
+        learner.RegisterClientPrototypes(
+            0,
+            new Dictionary<int, Tensor<Half>> { [0] = new Tensor<Half>(new Half[dim], new[] { dim }) },
+            new Dictionary<int, int> { [0] = 1 });
+        learner.AggregatePrototypes();
+
+        var ones = new double[dim];
+        for (int i = 0; i < dim; i++)
+        {
+            ones[i] = 1;
+        }
+
+        double loss = learner.ComputePrototypeLoss(
+            new Dictionary<int, Tensor<Half>> { [0] = new Tensor<Half>(HalfArray(ones), new[] { dim }) }, 0.1);
+
+        Assert.Equal(409.6, loss, 6);
+    }
+
+    [Fact(Timeout = 60000)]
+    public async Task FedGEN_GeneratorStepIsOfficialAdamWithWeightDecayAndPerRoundLearningRateDecay()
+    {
+        await Task.Yield();
+
+        // Official FedGen: torch.optim.Adam(lr = ensemble_lr = 3e-4, betas (0.9, 0.999), eps 1e-8,
+        // weight_decay 1e-2) with ExponentialLR(gamma = 0.98) stepped once per round. Generator with 2 classes,
+        // noise dim 1, hidden 1, feature 1; input [onehot(0); 0.5] = [1, 0, 0.5], hidden [2], dJ/dz = 0.4:
+        // dW2 = 0.8, db2 = 0.4, dW1 = 0.4 w2 [1, 0, 0.5], db1 = 0.4 w2. Step 1 uses lr 3e-4; after one round the
+        // second step uses 3e-4 * 0.98 with the accumulated moments.
+        var fedGen = new AiDotNet.FederatedLearning.Distillation.FedGENDistillation<double>(
+            numClasses: 2, featureDim: 1, generatorEpochs: 0, seed: 7, noiseDim: 1, generatorHiddenDim: 1, batchSize: 1);
+        Assert.Equal(AiDotNet.Enums.FedGenGeneratorOptimizer.Adam, fedGen.GeneratorOptimizer);
+        Assert.Equal(3e-4, fedGen.CurrentGeneratorLearningRate, 15);
+
+        var state = fedGen.GeneratorState;
+        var w1 = state.W1.ToArray();
+        var b1 = state.B1.ToArray();
+        var w2 = state.W2.ToArray();
+        var b2 = state.B2.ToArray();
+        var m = new double[6];
+        var v = new double[6];
+
+        var input = new Tensor<double>(new[] { 1.0, 0.0, 0.5 }, new[] { 1, 3 });
+        var hidden = new Tensor<double>(new[] { 2.0 }, new[] { 1, 1 });
+        var gradLatent = new Tensor<double>(new[] { 0.4 }, new[] { 1, 1 });
+
+        for (int step = 1; step <= 2; step++)
+        {
+            double lr = step == 1 ? 3e-4 : 3e-4 * 0.98;
+            var theta = new[] { w2[0], b2[0], w1[0], w1[1], w1[2], b1[0] };
+            var grad = new[] { 0.8, 0.4, 0.4 * w2[0], 0.0, 0.2 * w2[0], 0.4 * w2[0] };
+            for (int i = 0; i < 6; i++)
+            {
+                double g = grad[i] + 1e-2 * theta[i];
+                m[i] = 0.9 * m[i] + 0.1 * g;
+                v[i] = 0.999 * v[i] + 0.001 * g * g;
+                double mHat = m[i] / (1 - Math.Pow(0.9, step));
+                double vHat = v[i] / (1 - Math.Pow(0.999, step));
+                theta[i] -= lr * mHat / (Math.Sqrt(vHat) + 1e-8);
+            }
+
+            fedGen.BackpropGenerator(input, hidden, gradLatent);
+            w2[0] = theta[0];
+            b2[0] = theta[1];
+            w1[0] = theta[2];
+            w1[1] = theta[3];
+            w1[2] = theta[4];
+            b1[0] = theta[5];
+
+            var after = fedGen.GeneratorState;
+            Assert.Equal(w2[0], after.W2.ToArray()[0], 12);
+            Assert.Equal(b2[0], after.B2.ToArray()[0], 12);
+            Assert.Equal(w1[0], after.W1.ToArray()[0], 12);
+            Assert.Equal(w1[1], after.W1.ToArray()[1], 12);
+            Assert.Equal(w1[2], after.W1.ToArray()[2], 12);
+            Assert.Equal(b1[0], after.B1.ToArray()[0], 12);
+
+            if (step == 1)
+            {
+                // One aggregation round (no generator steps) advances the ExponentialLR schedule.
+                var head = new Vector<double>(new[] { 1.0, -1.0, 0.0, 0.0 });
+                fedGen.AggregateKnowledge(
+                    new Dictionary<int, Matrix<double>> { [0] = fedGen.ExtractHeadKnowledge(head, new[] { 1, 1 }) }, null);
+                Assert.Equal(3e-4 * 0.98, fedGen.CurrentGeneratorLearningRate, 15);
+            }
+        }
+
+        // SGD with the same weight decay is available: theta -= lr (g + 1e-2 theta).
+        fedGen.GeneratorOptimizer = AiDotNet.Enums.FedGenGeneratorOptimizer.Sgd;
+        double lrNow = fedGen.CurrentGeneratorLearningRate;
+        double expectedB2 = b2[0] - lrNow * (0.4 + 1e-2 * b2[0]);
+        fedGen.BackpropGenerator(input, hidden, gradLatent);
+        Assert.Equal(expectedB2, fedGen.GeneratorState.B2.ToArray()[0], 12);
+    }
 }

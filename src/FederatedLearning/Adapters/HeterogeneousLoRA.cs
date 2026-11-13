@@ -143,16 +143,19 @@ public class HeterogeneousLoRA<T> : Infrastructure.FederatedLearningComponentBas
         }
 
         // Step 1: reconstruct and average the full-size updates dW = sum_k p_k B_k A_k.
-        var deltaW = new Tensor<T>(new[] { _layerDim, _layerDim });
+        var updates = new List<Tensor<T>>(clientAdapters.Count);
+        var weights = new List<double>(clientAdapters.Count);
         foreach (var (clientId, adapters) in clientAdapters)
         {
             int clientRank = adapters.Length / blockSize;
             int factorSize = _layerDim * clientRank;
             var b = new Tensor<T>(new[] { _layerDim, clientRank }, adapters.GetSubVector(0, factorSize));
             var a = new Tensor<T>(new[] { clientRank, _layerDim }, adapters.GetSubVector(factorSize, factorSize));
-            double p = (clientWeights?.GetValueOrDefault(clientId, 1.0) ?? 1.0) / totalWeight;
-            deltaW = Engine.TensorAdd(deltaW, Engine.TensorMultiplyScalar(Engine.TensorMatMul(b, a), NumOps.FromDouble(p)));
+            updates.Add(Engine.TensorMatMul(b, a));
+            weights.Add(clientWeights?.GetValueOrDefault(clientId, 1.0) ?? 1.0);
         }
+
+        var deltaW = Infrastructure.FederatedTensorMath<T>.WeightedSum(updates, weights, totalWeight);
 
         // Step 2: SVD and rank-r truncation, B = U_r S_r, A = V_r^T.
         var (u, s, vh) = LinalgDispatch<T>.Svd(deltaW, fullMatrices: false);

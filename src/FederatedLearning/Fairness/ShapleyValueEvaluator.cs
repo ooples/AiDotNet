@@ -160,23 +160,26 @@ public class ShapleyValueEvaluator<T> : FederatedLearningComponentBase<T>, IClie
                 (perm[i], perm[j]) = (perm[j], perm[i]);
             }
 
-            // Prefix means of the permuted clients: row i is the coalition of the first i + 1 clients
-            // (a running sum, so any number of clients works without a bit mask).
+            // Prefix means of the permuted clients: row i is the coalition of the first i + 1 clients, formed as
+            // a lower-triangular 1 / (i + 1) weight matrix times the client matrix. Weighting before summing keeps
+            // every partial sum within max |x|; a running sum in narrow T overflows long before the mean does.
             var ordered = new Tensor<T>[n];
             for (int i = 0; i < n; i++)
             {
                 ordered[i] = FitToLength(clientModels[perm[i]], modelSize).Reshape(new[] { 1, modelSize });
             }
 
-            var counts = new double[n];
+            var prefixWeights = new double[n * n];
             for (int i = 0; i < n; i++)
             {
-                counts[i] = i + 1;
+                for (int j = 0; j <= i; j++)
+                {
+                    prefixWeights[i * n + j] = 1.0 / (i + 1);
+                }
             }
 
-            var prefixSums = Engine.TensorCumSum(Engine.TensorConcatenate(ordered, 0), 0);
-            var prefixMeans = Engine.TensorDivide(prefixSums,
-                Engine.TensorBroadcastTo(new Tensor<double>(counts, new[] { n, 1 }).Cast<T>(), new[] { n, modelSize }));
+            var prefixMeans = Engine.TensorMatMul(
+                new Tensor<double>(prefixWeights, new[] { n, n }).Cast<T>(), Engine.TensorConcatenate(ordered, 0));
             var performances = NegativeRowDistances(prefixMeans, reference);
 
             double prevPerformance = emptyPerformance;
@@ -248,12 +251,14 @@ public class ShapleyValueEvaluator<T> : FederatedLearningComponentBase<T>, IClie
         int count = rows.Shape[0];
         var shape = new[] { count, rows.Shape[1] };
         var diff = Engine.TensorSubtract(rows, Engine.TensorBroadcastTo(reference, shape));
-        var rowMax = Engine.ReduceMax(Engine.TensorAbs(diff), new[] { 1 }, true);
-        var one = Engine.TensorFullLike(rowMax, NumOps.One);
-        var safeMax = Engine.TensorWhere(Engine.TensorGreaterThan(rowMax, NumOps.Zero), rowMax, one);
-        var scaled = Engine.TensorDivide(diff, Engine.TensorBroadcastTo(safeMax, shape));
-        var scaledNorm = Engine.TensorSqrt(Engine.ReduceSum(Engine.TensorSquare(scaled), new[] { 1 }, true));
-        var distances = Engine.TensorNegate(Engine.TensorMultiply(rowMax, scaledNorm)).Cast<double>().ToArray();
+
+        // max|d| * ||d / max|d||| is formed in double: the product can exceed the range of T.
+        var norms = Infrastructure.FederatedTensorMath<T>.NormalizeRows(diff).Norms;
+        var distances = new double[count];
+        for (int i = 0; i < count; i++)
+        {
+            distances[i] = -norms[i];
+        }
 
         // Return negative distance so higher = better
         return distances;
