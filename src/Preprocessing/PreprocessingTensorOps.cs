@@ -357,13 +357,20 @@ internal static class PreprocessingTensorOps
     /// <paramref name="bins"/> bins of width <c>(max - min) / bins + 1e-10</c> and the bin index is
     /// <c>min(floor((x - min) / width), bins - 1)</c>. Returns the bins one-hot as [n, p * bins] (column j owns
     /// entries j * bins .. j * bins + bins - 1) and, in <paramref name="varying"/>, a [p] 0/1 mask of the columns
-    /// whose range is at least 1e-10.
+    /// whose range is at least 1e-10. Half and BFloat16 are binned in float and the 0/1 results cast back: in Half
+    /// the range of finite values overflows past 65504, and 1e-10 (raised to 2^-14 there) would widen small bins.
     /// </summary>
     public static Tensor<T> EqualWidthBinOneHot<T>(Tensor<T> x, int bins, out Tensor<T> varying)
     {
+        if (IsNarrowFloat<T>())
+        {
+            var wide = EqualWidthBinOneHot(x.Cast<float>(), bins, out var wideVarying);
+            varying = wideVarying.Cast<T>();
+            return wide.Cast<T>();
+        }
+
         var engine = AiDotNetEngine.Current;
         var ops = MathHelper.GetNumericOperations<T>();
-        int n = x.Shape[0];
         int p = x.Shape[1];
         var min = ColumnMin(x);
         var range = engine.TensorSubtract(ColumnMax(x), min);
@@ -379,10 +386,14 @@ internal static class PreprocessingTensorOps
     /// <summary>
     /// Range-scaled bins of every column of <paramref name="x"/> ([n, p]):
     /// <c>bin = min(floor((x - min) / (max - min) * (bins - 1)), bins - 1)</c>, 0 for a column whose range is not
-    /// above 1e-10. Returns the bins one-hot as [n, p * bins].
+    /// above 1e-10. Returns the bins one-hot as [n, p * bins]. Half and BFloat16 are binned in float and the 0/1
+    /// result cast back: the range of finite Half values overflows past 65504.
     /// </summary>
     public static Tensor<T> RangeScaledBinOneHot<T>(Tensor<T> x, int bins)
     {
+        if (IsNarrowFloat<T>())
+            return RangeScaledBinOneHot(x.Cast<float>(), bins).Cast<T>();
+
         var engine = AiDotNetEngine.Current;
         var ops = MathHelper.GetNumericOperations<T>();
         int n = x.Shape[0];
@@ -596,32 +607,58 @@ internal static class PreprocessingTensorOps
 
     /// <summary>
     /// Inverse of a label lookup: each label (truncated toward zero) in 0..categories-1 becomes that category;
-    /// any other label keeps its value.
+    /// any other label keeps its value. The bounds are applied in float for Half and BFloat16, where the category
+    /// count is not exact past 2048 (2049 rounds to 2048, which would reject the valid label 2048).
     /// </summary>
     public static Tensor<T> GatherCategories<T>(Tensor<T> categories, Tensor<T> labels)
     {
         var engine = AiDotNetEngine.Current;
-        var ops = MathHelper.GetNumericOperations<T>();
         int k = categories.Length;
         if (k == 0 || labels.Length == 0)
             return labels;
 
         var truncated = engine.TensorTrunc(labels);
-        var valid = engine.TensorMultiply(
-            AtLeast(truncated, ops.Zero), engine.TensorLessThan(truncated, ops.FromDouble(k)));
-        var index = engine.TensorClamp(truncated, ops.Zero, ops.FromDouble(k - 1)).Cast<int>();
+        Tensor<T> valid;
+        Tensor<int> index;
+        if (IsNarrowFloat<T>())
+        {
+            index = CategoryPositions(truncated.Cast<float>(), k, out var wideValid);
+            valid = wideValid.Cast<T>();
+        }
+        else
+        {
+            index = CategoryPositions(truncated, k, out valid);
+        }
+
         return engine.TensorWhere(valid, engine.TensorIndexSelect(categories, index, 0), labels);
     }
 
-    /// <summary>Per-category sums of <paramref name="values"/> ([n]) for category positions <paramref name="index"/>.</summary>
+    /// <summary>
+    /// The category position of every truncated label, clamped into 0..<paramref name="k"/>-1, and in
+    /// <paramref name="valid"/> the 0/1 mask of the labels that were already in that range.
+    /// </summary>
+    private static Tensor<int> CategoryPositions<T>(Tensor<T> truncated, int k, out Tensor<T> valid)
+    {
+        var engine = AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<T>();
+        valid = engine.TensorMultiply(
+            AtLeast(truncated, ops.Zero), engine.TensorLessThan(truncated, ops.FromDouble(k)));
+        return engine.TensorClamp(truncated, ops.Zero, ops.FromDouble(k - 1)).Cast<int>();
+    }
+
+    /// <summary>
+    /// Per-category sums of <paramref name="values"/> ([n]) for category positions <paramref name="index"/>, added
+    /// by an index-add (torch.index_add) in O(n + categories) storage; a one-hot [n, categories] matrix product
+    /// needs n * categories (8 GB of doubles for 100,000 rows of 10,000 categories).
+    /// </summary>
     public static Tensor<T> CategorySums<T>(Tensor<int> index, Tensor<T> values, int categories)
     {
         var engine = AiDotNetEngine.Current;
         if (values.Length == 0)
             return new Tensor<T>(new[] { categories });
-        var oneHot = engine.TensorOneHot<T>(index, categories); // [n, k]
-        return engine.Reshape(
-            engine.TensorMatMul(engine.Reshape(values, new[] { 1, values.Length }), oneHot), new[] { categories });
+        var flatIndex = index.Rank == 1 ? index : engine.Reshape(index, new[] { index.Length });
+        var flatValues = values.Rank == 1 ? values : engine.Reshape(values, new[] { values.Length });
+        return engine.TensorIndexAdd(new Tensor<T>(new[] { categories }), 0, flatIndex, flatValues);
     }
 
     /// <summary>
@@ -664,10 +701,12 @@ internal static class PreprocessingTensorOps
         if (w == 0)
             return new int[n];
 
-        var columnIndex = engine.TensorBroadcastTo(engine.Reshape(Range<T>(w), new[] { 1, w }), new[] { n, w });
-        var candidates = engine.TensorWhere(mask, columnIndex, Filled(new[] { n, w }, MathHelper.GetNumericOperations<T>().FromDouble(w)));
+        // Positions and the sentinel w in int: Half holds integers exactly only up to 2048 (2049 rounds to 2048)
+        var nonZero = engine.TensorNotEquals(mask, MathHelper.GetNumericOperations<T>().Zero).Cast<int>();
+        var columnIndex = engine.TensorBroadcastTo(engine.Reshape(Range<int>(w), new[] { 1, w }), new[] { n, w });
+        var candidates = engine.TensorWhere(nonZero, columnIndex, Filled(new[] { n, w }, w));
         var first = engine.TensorNegate(engine.ReduceMax(engine.TensorNegate(candidates), new[] { 1 }, false));
-        return first.Cast<int>().AsSpan().ToArray();
+        return first.AsSpan().ToArray();
     }
 
     /// <summary>
@@ -778,10 +817,14 @@ internal static class PreprocessingTensorOps
             : AiDotNetEngine.Current.TensorTrunc(Column(data, column)).Cast<int>().AsSpan().ToArray();
 
     /// <summary>
-    /// <c>(x - min(x)) / (max(x) - min(x))</c>, dividing by 1 instead when the range is not positive.
+    /// <c>(x - min(x)) / (max(x) - min(x))</c>, dividing by 1 instead when the range is not positive. Half and
+    /// BFloat16 are normalized in float and cast back: the range of finite Half values overflows past 65504.
     /// </summary>
     public static Tensor<T> MinMaxNormalize<T>(Tensor<T> x)
     {
+        if (IsNarrowFloat<T>())
+            return MinMaxNormalize(x.Cast<float>()).Cast<T>();
+
         var engine = AiDotNetEngine.Current;
         var ops = MathHelper.GetNumericOperations<T>();
         T min = engine.TensorMinValue(x);
@@ -793,12 +836,15 @@ internal static class PreprocessingTensorOps
 
     /// <summary>
     /// The equal-width block of each value: <c>min(trunc((x - min) / width), blocks - 1)</c> with
-    /// <c>width = (max - min) / blocks</c>, or width 1 when that is not positive.
+    /// <c>width = (max - min) / blocks</c>, or width 1 when that is not positive. Half and BFloat16 are blocked in
+    /// float: the range of finite Half values overflows past 65504, giving an infinite width.
     /// </summary>
     public static int[] EqualWidthBlockIndex<T>(Tensor<T> x, int blocks)
     {
         if (x.Length == 0)
             return Array.Empty<int>();
+        if (IsNarrowFloat<T>())
+            return EqualWidthBlockIndex(x.Cast<float>(), blocks);
 
         var engine = AiDotNetEngine.Current;
         var ops = MathHelper.GetNumericOperations<T>();
@@ -836,10 +882,14 @@ internal static class PreprocessingTensorOps
     /// <summary>
     /// The Euclidean norm of every row of a 2-D tensor ([n, p] to [n]), computed as <c>s * sqrt(sum((x / s)^2))</c>
     /// with <c>s</c> the row's largest magnitude: the plain sum of squares overflows Half (max 65504) once an entry
-    /// passes 256, where master's double sums did not.
+    /// passes 256, where master's double sums did not. Half and BFloat16 are evaluated in float and cast back: even
+    /// scaled, a row of 65,536 ones sums its squares to 65,536, past Half's maximum, though its norm 256 is not.
     /// </summary>
     public static Tensor<T> RowNorms<T>(Tensor<T> x)
     {
+        if (IsNarrowFloat<T>())
+            return RowNorms(x.Cast<float>()).Cast<T>();
+
         var engine = AiDotNetEngine.Current;
         int n = x.Shape[0];
         var scale = SafeScale(engine.ReduceMax(engine.TensorAbs(x), new[] { 1 }, true));
