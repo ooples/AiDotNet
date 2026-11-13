@@ -57,7 +57,7 @@ public class SurvivalReferenceValueTests
         Assert.Equal((float)Math.Exp(-1), survival[0, 1], 5);
         Assert.Equal(0f, survival[0, 2]);
         Assert.Equal((float)Math.Exp(-1), survival[1, 2], 5);
-        Assert.All(model.PredictHazardRatio(x).ToArray(), value => Assert.True(float.IsFinite(value)));
+        Assert.All(model.PredictHazardRatio(x).ToArray(), value => Assert.False(float.IsNaN(value) || float.IsInfinity(value)));
         var copy = (CoxProportionalHazards<float>)model.DeepCopy();
         var copied = copy.PredictSurvivalProbability(x, queries);
         for (int i = 0; i < x.Rows; i++)
