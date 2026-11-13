@@ -77,9 +77,9 @@ public class FClassification<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISup
         var membership = PreprocessingTensorOps.ClassOneHot<T>(classIndex, k);
 
         // Between-group and within-group sums of squares
-        var counts = engine.ReduceSum(membership, new[] { 0 }, false);
+        // Class sizes and means counted exactly (a Half sum of the 0/1 membership stops at 2048)
+        var groupMeans = FeatureSelectionTensorOps.GroupMeans(membership, X, out var counts);
         var countColumn = engine.TensorBroadcastTo(engine.Reshape(counts, new[] { k, 1 }), new[] { k, p });
-        var groupMeans = engine.TensorDivide(engine.TensorMatMul(engine.TensorTranspose(membership), X), countColumn);
         var overallMean = engine.TensorBroadcastTo(engine.ReduceMean(X, new[] { 0 }, true), new[] { k, p });
         var ssBetween = engine.ReduceSum(engine.TensorMultiply(
             engine.TensorSquare(engine.TensorSubtract(groupMeans, overallMean)), countColumn), new[] { 0 }, false);

@@ -79,10 +79,11 @@ public class GiniImpuritySelection<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         // Parent Gini over the rounded class labels
         PreprocessingTensorOps.ClassLabels(target, out var classes, out var classIndex);
         int k = classes.Length;
-        var classOneHot = PreprocessingTensorOps.ClassOneHot<T>(classIndex, k);
-        T parentGini = FeatureSelectionTensorOps.GiniImpurity(classOneHot);
+        T parentGini = FeatureSelectionTensorOps.GiniImpurity(PreprocessingTensorOps.ClassOneHot<T>(classIndex, k));
+        // Class and split counts are formed in double: a Half sum of 0/1 memberships stops counting at 2048
+        var classOneHotCounts = PreprocessingTensorOps.ClassOneHot<double>(classIndex, k);
         var classTotals = engine.TensorBroadcastTo(
-            engine.Reshape(engine.ReduceSum(classOneHot, new[] { 0 }, false), new[] { 1, k }), new[] { p, k });
+            engine.Reshape(engine.ReduceSum(classOneHotCounts, new[] { 0 }, false), new[] { 1, k }), new[] { p, k });
 
         // Columns whose range is below 1e-10 score 0
         var minVal = PreprocessingTensorOps.ColumnMin(X);
@@ -93,8 +94,6 @@ public class GiniImpuritySelection<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         var zeros = new Tensor<T>(new[] { p });
         var bestReduction = zeros;
         T divisor = NumOps.FromDouble(_nThresholds + 1);
-        T zero = NumOps.Zero;
-        T sampleCount = NumOps.FromDouble(n);
         T negatedParent = NumOps.Negate(parentGini);
         for (int t = 1; t <= _nThresholds; t++)
         {
@@ -102,16 +101,17 @@ public class GiniImpuritySelection<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
                 engine.TensorDivideScalar(engine.TensorMultiplyScalar(range, PreprocessingTensorOps.CountAsScalar<T>(t)), divisor));
             var left = PreprocessingTensorOps.Not(engine.TensorGreaterThan(X,
                 engine.TensorBroadcastTo(engine.Reshape(threshold, new[] { 1, p }), shape)));
-            var leftCounts = engine.TensorMatMul(engine.TensorTranspose(left), classOneHot);
+            var leftMask = left.Cast<double>();
+            var leftCounts = engine.TensorMatMul(engine.TensorTranspose(leftMask), classOneHotCounts);
             var sides = engine.TensorConcatenate(new[]
             {
                 engine.Reshape(leftCounts, new[] { p, 1, k }),
                 engine.Reshape(engine.TensorSubtract(classTotals, leftCounts), new[] { p, 1, k })
             }, 1);
-            var weightedGini = FeatureSelectionTensorOps.WeightedBinGini(sides, n);
-            var nLeft = engine.ReduceSum(left, new[] { 0 }, false);
-            var bothSides = engine.TensorMultiply(engine.TensorGreaterThan(nLeft, zero),
-                engine.TensorLessThan(nLeft, sampleCount));
+            var weightedGini = FeatureSelectionTensorOps.WeightedBinGini(sides, n).Cast<T>();
+            var nLeft = engine.ReduceSum(leftMask, new[] { 0 }, false);
+            var bothSides = engine.TensorMultiply(engine.TensorGreaterThan(nLeft, 0.0),
+                engine.TensorLessThan(nLeft, (double)n)).Cast<T>();
             var reduction = engine.TensorWhere(bothSides,
                 engine.TensorNegate(engine.TensorAddScalar(weightedGini, negatedParent)), zeros);
             bestReduction = engine.TensorMax(bestReduction, reduction);

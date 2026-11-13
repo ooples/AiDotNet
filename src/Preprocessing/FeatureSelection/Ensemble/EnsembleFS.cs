@@ -89,8 +89,9 @@ public class EnsembleFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervis
         var X = Tensor<T>.FromMatrix(data);
         var y = Tensor<T>.FromVector(target);
 
-        // Run multiple base methods and collect rankings (0 = best, ties by index)
-        var methodRankings = new List<Tensor<T>>();
+        // Run multiple base methods and collect rankings (0 = best, ties by index). Ranks stay in int: Half cannot
+        // hold every rank above 2048, so rank comparisons and sums are done in int / double.
+        var methodRankings = new List<Tensor<int>>();
         var methodScores = new List<Tensor<T>>();
 
         // Method 1: Correlation-based
@@ -114,16 +115,16 @@ public class EnsembleFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervis
         methodRankings.Add(GetRanking(igScores));
         methodScores.Add(igScores);
 
-        // Aggregate results
+        // Aggregate results (rank-based aggregates are exact integers, selected on before the cast to T)
         var aggregatedScores = _aggregation switch
         {
             AggregationMethod.MajorityVoting => AggregateMajorityVoting(methodRankings, p),
-            AggregationMethod.WeightedVoting => AggregateWeightedVoting(methodScores, p),
+            AggregationMethod.WeightedVoting => AggregateWeightedVoting(methodScores, p).Cast<double>(),
             AggregationMethod.RankAggregation => AggregateRanks(methodRankings, p),
             AggregationMethod.BordaCount => AggregateBordaCount(methodRankings, p),
             _ => AggregateMajorityVoting(methodRankings, p)
         };
-        _aggregatedScores = aggregatedScores.ToVector();
+        _aggregatedScores = aggregatedScores.Cast<T>().ToVector();
 
         // Select top features
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
@@ -150,20 +151,23 @@ public class EnsembleFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervis
         var upper = engine.TensorGreaterThan(y, engine.TensorMean(y));
         var lower = PreprocessingTensorOps.Not(upper);
         var one = NumOps.One;
+        var zeroRows = new Tensor<T>(shape);
 
+        // Group sizes are counted in int (a Half sum of the 0/1 mask stops at 2048); rows outside the group are
+        // selected away rather than multiplied by 0, which would turn an infinite value into NaN
         Tensor<T> GroupMean(Tensor<T> mask, out Tensor<T> rowMask, out T divisor)
         {
             rowMask = engine.TensorBroadcastTo(engine.Reshape(mask, new[] { n, 1 }), shape);
-            divisor = PreprocessingTensorOps.ScalarMax(one, engine.TensorSum(mask));
-            return engine.TensorDivideScalar(engine.ReduceSum(engine.TensorMultiply(X, rowMask), new[] { 0 }, true), divisor);
+            divisor = PreprocessingTensorOps.CountAsScalar<T>(Math.Max(1, PreprocessingTensorOps.CountNonZero(mask)));
+            return engine.TensorDivideScalar(engine.ReduceSum(engine.TensorWhere(rowMask, X, zeroRows), new[] { 0 }, true), divisor);
         }
 
         var mean0 = GroupMean(lower, out var mask0, out T count0);
         var mean1 = GroupMean(upper, out var mask1, out T count1);
-        var var0 = engine.ReduceSum(engine.TensorMultiply(engine.TensorSquare(
-            engine.TensorSubtract(X, engine.TensorBroadcastTo(mean0, shape))), mask0), new[] { 0 }, false);
-        var var1 = engine.ReduceSum(engine.TensorMultiply(engine.TensorSquare(
-            engine.TensorSubtract(X, engine.TensorBroadcastTo(mean1, shape))), mask1), new[] { 0 }, false);
+        var var0 = engine.ReduceSum(engine.TensorWhere(mask0, engine.TensorSquare(
+            engine.TensorSubtract(X, engine.TensorBroadcastTo(mean0, shape))), zeroRows), new[] { 0 }, false);
+        var var1 = engine.ReduceSum(engine.TensorWhere(mask1, engine.TensorSquare(
+            engine.TensorSubtract(X, engine.TensorBroadcastTo(mean1, shape))), zeroRows), new[] { 0 }, false);
 
         var between = engine.Reshape(engine.TensorSquare(engine.TensorSubtract(mean0, mean1)), new[] { p });
         var within = engine.TensorAdd(engine.TensorDivideScalar(var0, count0), engine.TensorDivideScalar(var1, count1));
@@ -172,7 +176,7 @@ public class EnsembleFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervis
         return engine.TensorWhere(usable, engine.TensorDivide(between, safe), new Tensor<T>(new[] { p }));
     }
 
-    private Tensor<T> GetRanking(Tensor<T> scores)
+    private static Tensor<int> GetRanking(Tensor<T> scores)
     {
         // Rank of every feature in the stable descending order of its score
         int p = scores.Length;
@@ -180,19 +184,18 @@ public class EnsembleFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervis
         var ranks = new int[p];
         for (int rank = 0; rank < p; rank++)
             ranks[order[rank]] = rank;
-        return Engine.TensorIndexSelect(PreprocessingTensorOps.Range<T>(p), new Tensor<int>(ranks, new[] { p }), 0);
+        return new Tensor<int>(ranks, new[] { p });
     }
 
-    private Tensor<T> AggregateMajorityVoting(List<Tensor<T>> rankings, int p)
+    private Tensor<double> AggregateMajorityVoting(List<Tensor<int>> rankings, int p)
     {
         // One vote per method for each of its top-k ranked features
-        var votes = new Tensor<T>(new[] { p });
-        T topK = NumOps.FromDouble(_nFeaturesToSelect);
+        var votes = new Tensor<int>(new[] { p });
 
         foreach (var ranking in rankings)
-            votes = Engine.TensorAdd(votes, Engine.TensorLessThan(ranking, topK));
+            votes = Engine.TensorAdd(votes, Engine.TensorLessThan(ranking, _nFeaturesToSelect));
 
-        return votes;
+        return votes.Cast<double>();
     }
 
     private Tensor<T> AggregateWeightedVoting(List<Tensor<T>> allScores, int p)
@@ -210,26 +213,27 @@ public class EnsembleFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervis
         return aggregated;
     }
 
-    private Tensor<T> AggregateRanks(List<Tensor<T>> rankings, int p)
+    private Tensor<double> AggregateRanks(List<Tensor<int>> rankings, int p)
     {
-        var rankSums = new Tensor<T>(new[] { p });
+        var rankSums = new Tensor<int>(new[] { p });
 
         foreach (var ranking in rankings)
             rankSums = Engine.TensorAdd(rankSums, ranking);
 
         // Convert to scores (lower rank = higher score)
-        return Engine.TensorSubtract(PreprocessingTensorOps.Filled(new[] { p }, Engine.TensorMaxValue(rankSums)), rankSums);
+        var sums = rankSums.Cast<double>();
+        return Engine.TensorSubtract(PreprocessingTensorOps.Filled(new[] { p }, Engine.TensorMaxValue(sums)), sums);
     }
 
-    private Tensor<T> AggregateBordaCount(List<Tensor<T>> rankings, int p)
+    private Tensor<double> AggregateBordaCount(List<Tensor<int>> rankings, int p)
     {
-        var bordaScores = new Tensor<T>(new[] { p });
-        var features = PreprocessingTensorOps.Filled(new[] { p }, NumOps.FromDouble(p));
+        var bordaScores = new Tensor<int>(new[] { p });
+        var features = PreprocessingTensorOps.Filled(new[] { p }, p);
 
         foreach (var ranking in rankings)
             bordaScores = Engine.TensorAdd(bordaScores, Engine.TensorSubtract(features, ranking));
 
-        return bordaScores;
+        return bordaScores.Cast<double>();
     }
     /// <inheritdoc />
     public Matrix<T> FitTransform(Matrix<T> data, Vector<T> target)

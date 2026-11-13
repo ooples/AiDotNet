@@ -71,7 +71,8 @@ public class SilhouetteBasedSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T
 
         // Class membership, class sizes and each sample's own-class size
         var Y = PreprocessingTensorOps.ClassOneHot<T>(classIndex, k);
-        var counts = engine.ReduceSum(Y, new[] { 0 }, false);
+        // Counted in int: a Half sum of the 0/1 membership stops at 2048
+        var counts = engine.ReduceSum(Y.Cast<int>(), new[] { 0 }, false).Cast<T>();
         var ownCount = engine.Reshape(engine.TensorMatMul(Y, engine.Reshape(counts, new[] { k, 1 })), new[] { n });
         var inMultiMemberClass = engine.TensorGreaterThan(ownCount, NumOps.One);
         var ownDenominator = engine.TensorMax(engine.TensorSubtractScalar(ownCount, NumOps.One), NumOps.One);
@@ -108,7 +109,8 @@ public class SilhouetteBasedSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T
                 engine.TensorDivide(engine.TensorSubtract(b, a), largest), zeros);
             s = engine.TensorWhere(inMultiMemberClass, s, zeros);
 
-            perFeature[j] = engine.ReduceMean(s, new[] { 0 }, true);
+            // Averaged in double: a Half sum of n silhouettes stalls once it passes 2048 times their spacing
+            perFeature[j] = engine.ReduceMean(s.Cast<double>(), new[] { 0 }, true).Cast<T>();
         }
 
         var scores = p == 0 ? new Tensor<T>(new[] { 0 }) : engine.Reshape(engine.TensorConcatenate(perFeature, 0), new[] { p });

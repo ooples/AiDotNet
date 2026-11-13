@@ -80,14 +80,14 @@ public class SampleEntropySelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
 
         // Richman and Moorman (2000): B and A count the matching pairs among the same n - m templates
         int templates = n - _embeddingDimension;
-        var bCounts = new Tensor<T>[p];
-        var aCounts = new Tensor<T>[p];
+        var bCounts = new Tensor<double>[p];
+        var aCounts = new Tensor<double>[p];
         for (int j = 0; j < p; j++)
         {
             if (degenerate.Contains(j))
             {
-                bCounts[j] = new Tensor<T>(new[] { 1 });
-                aCounts[j] = new Tensor<T>(new[] { 1 });
+                bCounts[j] = new Tensor<double>(new[] { 1 });
+                aCounts[j] = new Tensor<double>(new[] { 1 });
                 continue;
             }
 
@@ -99,14 +99,15 @@ public class SampleEntropySelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             aCounts[j] = CountMatches(col, _embeddingDimension + 1, templates, r);
         }
 
-        // SampEn = -ln(A/B), 0 when either count is 0
+        // SampEn = -ln(A/B), 0 when either count is 0. The pair counts reach (n - m)^2 / 2, past Half's exact
+        // integers (2048) and its maximum (65504), so they are counted in int and the ratio is taken in double.
         var shape = new[] { p };
-        var b = p == 0 ? new Tensor<T>(shape) : engine.TensorConcatenate(bCounts, 0);
-        var a = p == 0 ? new Tensor<T>(shape) : engine.TensorConcatenate(aCounts, 0);
-        var defined = engine.TensorMultiply(engine.TensorGreaterThan(b, NumOps.Zero), engine.TensorGreaterThan(a, NumOps.Zero));
-        var ones = PreprocessingTensorOps.Filled(shape, NumOps.One);
+        var b = p == 0 ? new Tensor<double>(shape) : engine.TensorConcatenate(bCounts, 0);
+        var a = p == 0 ? new Tensor<double>(shape) : engine.TensorConcatenate(aCounts, 0);
+        var defined = engine.TensorMultiply(engine.TensorGreaterThan(b, 0.0), engine.TensorGreaterThan(a, 0.0));
+        var ones = PreprocessingTensorOps.Filled(shape, 1.0);
         var sampen = engine.TensorWhere(defined, engine.TensorNegate(engine.TensorLog(engine.TensorDivide(
-            engine.TensorWhere(defined, a, ones), engine.TensorWhere(defined, b, ones)))), new Tensor<T>(shape));
+            engine.TensorWhere(defined, a, ones), engine.TensorWhere(defined, b, ones)))), new Tensor<double>(shape)).Cast<T>();
         _sampenValues = sampen.ToVector();
 
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
@@ -116,12 +117,12 @@ public class SampleEntropySelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     }
 
     /// <summary>Number of template pairs i &lt; k (of the first <paramref name="count"/> templates) within r. Returns [1].</summary>
-    private Tensor<T> CountMatches(Tensor<T> data, int m, int count, Tensor<T> r)
+    private Tensor<double> CountMatches(Tensor<T> data, int m, int count, Tensor<T> r)
     {
         // Every template matches itself, so the pairs are (all matches - count) / 2
         var matches = Engine.ReduceSum(Engine.Reshape(
-            FeatureSelectionTensorOps.TemplateMatches(data, m, count, r), new[] { count * count }), new[] { 0 }, true);
-        return Engine.TensorDivideScalar(Engine.TensorSubtractScalar(matches, NumOps.FromDouble(count)), NumOps.FromDouble(2));
+            FeatureSelectionTensorOps.TemplateMatches(data, m, count, r).Cast<int>(), new[] { count * count }), new[] { 0 }, true);
+        return Engine.TensorDivideScalar(Engine.TensorSubtractScalar(matches.Cast<double>(), (double)count), 2.0);
     }
     public new Matrix<T> FitTransform(Matrix<T> data)
     {

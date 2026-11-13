@@ -78,7 +78,8 @@ public class AdjustedMutualInformation<T> : TransformerBase<T, Matrix<T>, Matrix
         var classLabels = PreprocessingTensorOps.SortedUnique(y);
         int k = classLabels.Length;
         var classOneHot = engine.TensorOneHot<T>(PreprocessingTensorOps.LookupSorted(classLabels, y, out _), k);
-        var classCounts = engine.ReduceSum(classOneHot, new[] { 0 }, false);
+        // Counted in int: a Half sum of the 0/1 one-hot stops at 2048
+        var classCounts = engine.ReduceSum(classOneHot.Cast<int>(), new[] { 0 }, false).Cast<T>();
         var featureBins = PreprocessingTensorOps.RangeScaledBinOneHot(Tensor<T>.FromMatrix(data), _nBins);
         var joint = FeatureSelectionTensorOps.JointBinCounts(featureBins, classOneHot, _nBins);
 

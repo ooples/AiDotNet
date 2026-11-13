@@ -98,8 +98,8 @@ public class StabilitySelection<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, I
 
         var engine = Engine;
 
-        // Count selections across iterations
-        var selectionCounts = new Tensor<T>(new[] { p });
+        // Count selections across iterations (in int: a Half count stops at 2048 iterations)
+        var selectionCounts = new Tensor<int>(new[] { p });
         int sampleSize = Math.Max(1, (int)(n * _sampleFraction));
 
         for (int iter = 0; iter < _nIterations; iter++)
@@ -120,13 +120,13 @@ public class StabilitySelection<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, I
 
             if (selected.Length > 0)
             {
-                selectionCounts = engine.TensorAdd(selectionCounts, engine.ReduceSum(engine.TensorOneHot<T>(
-                    new Tensor<int>((int[])selected.Clone(), new[] { selected.Length }), p), new[] { 0 }, false));
+                selectionCounts = engine.TensorAdd(selectionCounts, PreprocessingTensorOps.CategoryCounts<int>(
+                    new Tensor<int>((int[])selected.Clone(), new[] { selected.Length }), p));
             }
         }
 
         // Compute selection probabilities
-        var selectionProbabilities = engine.TensorDivideScalar(selectionCounts, NumOps.FromDouble(_nIterations));
+        var selectionProbabilities = engine.TensorDivideScalar(selectionCounts.Cast<double>(), (double)_nIterations).Cast<T>();
         _selectionProbabilities = selectionProbabilities.ToVector();
 
         // Select features above threshold, most frequently selected first

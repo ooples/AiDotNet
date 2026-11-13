@@ -1,4 +1,5 @@
 using AiDotNet.Helpers;
+using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Enums;
 using AiDotNet.Attributes;
@@ -91,9 +92,10 @@ public class TextFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, 
         var X = Tensor<T>.FromMatrix(data);
         var y = Tensor<T>.FromVector(target);
 
-        // Compute document frequencies
+        // Compute document frequencies (counted in int: a Half sum of the 0/1 mask stops at 2048)
         var present = engine.TensorGreaterThan(X, NumOps.Zero);
-        var documentFrequencies = engine.ReduceMean(present, new[] { 0 }, false);
+        var documentCounts = engine.ReduceSum(present.Cast<int>(), new[] { 0 }, false).Cast<double>();
+        var documentFrequencies = engine.TensorDivideScalar(documentCounts, (double)n).Cast<T>();
         _documentFrequencies = documentFrequencies.ToVector();
 
         // Filter by document frequency
@@ -105,7 +107,7 @@ public class TextFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, 
 
         // Compute feature scores (0 for features outside the document-frequency band)
         var scores = _useChiSquare
-            ? ComputeChiSquareScores(present, target, n, p)
+            ? ComputeChiSquareScores(present.Cast<double>(), target, n, p).Cast<T>()
             : engine.TensorAbs(PreprocessingTensorOps.TargetCorrelations(X, y));
         scores = engine.TensorWhere(candidateMask, scores, new Tensor<T>(new[] { p }));
         _featureScores = scores.ToVector();
@@ -132,14 +134,19 @@ public class TextFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, 
         IsFitted = true;
     }
 
-    private Tensor<T> ComputeChiSquareScores(Tensor<T> present, Vector<T> target, int n, int p)
+    /// <summary>
+    /// Chi-square statistic of every feature's presence against the classes. The contingency counts and the
+    /// expected-count products exceed Half's exact-integer (2048) and finite (65504) ranges, so the table is built
+    /// and scored in double.
+    /// </summary>
+    private static Tensor<double> ComputeChiSquareScores(Tensor<double> present, Vector<T> target, int n, int p)
     {
-        var engine = Engine;
+        var engine = AiDotNetEngine.Current;
 
         // Get class counts
         PreprocessingTensorOps.ClassLabels(target, out var classes, out var classIndex);
         int k = classes.Length;
-        var membership = PreprocessingTensorOps.ClassOneHot<T>(classIndex, k);
+        var membership = PreprocessingTensorOps.ClassOneHot<double>(classIndex, k);
         var classTotals = engine.ReduceSum(membership, new[] { 0 }, false);
 
         // Contingency table: rows with the feature present / absent in each class ([p, k] each)
@@ -149,7 +156,7 @@ public class TextFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, 
 
         // Expected counts: (feature total) * (class total) / n
         var featureCount = engine.ReduceSum(present, new[] { 0 }, false);
-        T total = NumOps.FromDouble(n);
+        double total = n;
         var expectedPresent = engine.TensorDivideScalar(engine.TensorOuter(featureCount, classTotals), total);
         var expectedAbsent = engine.TensorDivideScalar(engine.TensorOuter(
             engine.TensorSubtract(PreprocessingTensorOps.Filled(new[] { p }, total), featureCount), classTotals), total);
@@ -158,11 +165,11 @@ public class TextFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, 
         return engine.TensorAdd(ChiSquareTerms(observedPresent, expectedPresent), ChiSquareTerms(observedAbsent, expectedAbsent));
     }
 
-    private Tensor<T> ChiSquareTerms(Tensor<T> observed, Tensor<T> expected)
+    private static Tensor<double> ChiSquareTerms(Tensor<double> observed, Tensor<double> expected)
     {
-        var engine = Engine;
+        var engine = AiDotNetEngine.Current;
         var terms = engine.TensorDivide(engine.TensorSquare(engine.TensorSubtract(observed, expected)), expected);
-        var kept = engine.TensorWhere(engine.TensorGreaterThan(expected, NumOps.Zero), terms, new Tensor<T>(expected.Shape.ToArray()));
+        var kept = engine.TensorWhere(engine.TensorGreaterThan(expected, 0.0), terms, new Tensor<double>(expected.Shape.ToArray()));
         return engine.ReduceSum(kept, new[] { 1 }, false);
     }
     /// <inheritdoc />

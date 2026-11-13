@@ -187,14 +187,16 @@ public class FairFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, 
         var upper = engine.TensorGreaterThan(protectedVals, median);
         var lower = PreprocessingTensorOps.Not(upper);
 
-        // Compute mean feature value for each group
-        T count0 = engine.TensorSum(lower);
-        T count1 = engine.TensorSum(upper);
-        T mean0 = NumOps.GreaterThan(count0, NumOps.Zero)
-            ? NumOps.Divide(engine.TensorSum(engine.TensorMultiply(featureVals, lower)), count0)
+        // Compute mean feature value for each group. Group sizes are counted in int (a Half sum of the 0/1 mask
+        // stops at 2048), and rows outside a group are selected away rather than multiplied by 0 (0 * inf = NaN).
+        int count0 = PreprocessingTensorOps.CountNonZero(lower);
+        int count1 = PreprocessingTensorOps.CountNonZero(upper);
+        var zeros = new Tensor<T>(new[] { n });
+        T mean0 = count0 > 0
+            ? NumOps.Divide(engine.TensorSum(engine.TensorWhere(lower, featureVals, zeros)), PreprocessingTensorOps.CountAsScalar<T>(count0))
             : NumOps.Zero;
-        T mean1 = NumOps.GreaterThan(count1, NumOps.Zero)
-            ? NumOps.Divide(engine.TensorSum(engine.TensorMultiply(featureVals, upper)), count1)
+        T mean1 = count1 > 0
+            ? NumOps.Divide(engine.TensorSum(engine.TensorWhere(upper, featureVals, zeros)), PreprocessingTensorOps.CountAsScalar<T>(count1))
             : NumOps.Zero;
 
         // Disparate impact ratio (closer to 1 is fairer)

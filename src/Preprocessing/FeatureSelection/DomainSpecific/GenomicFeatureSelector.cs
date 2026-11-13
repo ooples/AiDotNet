@@ -181,21 +181,25 @@ public class GenomicFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>
         if (count == 0)
             return new Tensor<T>(new[] { p });
 
+        // Summed in double by GroupMeans: a Half class sum stalls past 2048 times the values' spacing and
+        // overflows at 65504
         var engine = Engine;
-        return engine.TensorDivideScalar(
-            engine.Reshape(engine.TensorMatMul(engine.Reshape(rowMask, new[] { 1, n }), X), new[] { p }),
-            NumOps.FromDouble(count));
+        return engine.Reshape(FeatureSelectionTensorOps.GroupMeans(engine.Reshape(rowMask, new[] { n, 1 }), X, out _), new[] { p });
     }
 
     private Tensor<T> ClassSampleVariances(Tensor<T> X, Tensor<T> rowMask, Tensor<T> mean, int count, int n, int p)
     {
         var engine = Engine;
         var shape = new[] { n, p };
-        var deviations = engine.TensorMultiply(
+        // Other-class rows are selected away (not multiplied by 0, which turns an overflowed square into NaN) and
+        // the squares are averaged in double by GroupMeans, then rescaled from 1/count to 1/(count - 1)
+        var membership = engine.Reshape(rowMask, new[] { n, 1 });
+        var deviations = engine.TensorWhere(engine.TensorBroadcastTo(membership, shape),
             engine.TensorSubtract(X, engine.TensorBroadcastTo(engine.Reshape(mean, new[] { 1, p }), shape)),
-            engine.TensorBroadcastTo(engine.Reshape(rowMask, new[] { n, 1 }), shape));
-        return engine.TensorDivideScalar(
-            engine.ReduceSum(engine.TensorSquare(deviations), new[] { 0 }, false), NumOps.FromDouble(count - 1));
+            new Tensor<T>(shape));
+        var meanSquares = engine.Reshape(
+            FeatureSelectionTensorOps.GroupMeans(membership, engine.TensorSquare(deviations), out _), new[] { p });
+        return engine.TensorMultiplyScalar(meanSquares, NumOps.FromDouble(count / (count - 1.0)));
     }
 
     /// <inheritdoc />

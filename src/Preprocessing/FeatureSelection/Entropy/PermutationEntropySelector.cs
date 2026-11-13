@@ -80,7 +80,6 @@ public class PermutationEntropySelector<T> : TransformerBase<T, Matrix<T>, Matri
         for (int i = 2; i <= m; i++)
             factorial *= i;
         double maxEntropy = Math.Log(factorial) / Math.Log(2);
-        T maxEntropyT = NumOps.FromDouble(maxEntropy);
 
         // Pattern of a window = the stable rank of every position (equal values rank by position), which
         // identifies its stable argsort permutation one to one
@@ -123,13 +122,13 @@ public class PermutationEntropySelector<T> : TransformerBase<T, Matrix<T>, Matri
                 windowPattern[i] = id;
             }
 
-            var patternCounts = engine.Reshape(engine.ReduceSum(engine.TensorOneHot<T>(
-                new Tensor<int>(windowPattern, new[] { totalPatterns }), patternIds.Count), new[] { 0 }, false),
-                new[] { 1, patternIds.Count });
+            // Counted in int (a Half sum of the 0/1 one-hot stops at 2048)
+            var patternCounts = engine.Reshape(PreprocessingTensorOps.CategoryCounts<double>(
+                new Tensor<int>(windowPattern, new[] { totalPatterns }), patternIds.Count), new[] { 1, patternIds.Count });
 
             // Compute entropy (bits) normalized by maximum entropy
             entropyValues[j] = maxEntropy > 0
-                ? engine.TensorDivideScalar(FeatureSelectionTensorOps.EntropyBits(patternCounts, totalPatterns), maxEntropyT)
+                ? engine.TensorDivideScalar(FeatureSelectionTensorOps.EntropyBits(patternCounts, totalPatterns), maxEntropy).Cast<T>()
                 : new Tensor<T>(new[] { 1 });
         }
 

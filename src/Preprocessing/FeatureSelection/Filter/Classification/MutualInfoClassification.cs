@@ -88,7 +88,7 @@ public class MutualInfoClassification<T> : TransformerBase<T, Matrix<T>, Matrix<
         var pJoint = engine.TensorDivideScalar(joint, count);
         var pFeature = engine.TensorBroadcastTo(engine.TensorDivideScalar(engine.ReduceSum(joint, new[] { 2 }, true), count), cellShape);
         var pClass = engine.TensorBroadcastTo(engine.Reshape(engine.TensorDivideScalar(
-            engine.ReduceSum(classOneHot, new[] { 0 }, false), count), new[] { 1, 1, nClasses }), cellShape);
+            engine.ReduceSum(classOneHot.Cast<int>(), new[] { 0 }, false).Cast<T>(), count), new[] { 1, 1, nClasses }), cellShape);
 
         // Mutual information (nats) over the non-empty joint cells, clamped at 0
         var occupied = engine.TensorGreaterThan(joint, NumOps.Zero);

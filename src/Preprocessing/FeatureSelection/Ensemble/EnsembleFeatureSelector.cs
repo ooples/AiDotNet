@@ -1,4 +1,5 @@
 using AiDotNet.Helpers;
+using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Enums;
 using AiDotNet.Attributes;
@@ -189,27 +190,28 @@ public class EnsembleFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T
     /// Sums, over the in-range entries of <paramref name="selection"/>, the weight of each entry's rank
     /// (<paramref name="rankWeights"/>, or 1 when null) into a [p] tensor.
     /// </summary>
-    private Tensor<T> SelectionScores(int[] selection, int p, Tensor<T>? rankWeights)
+    private static Tensor<TS> SelectionScores<TS>(int[] selection, int p, Tensor<TS>? rankWeights)
     {
+        var engine = AiDotNetEngine.Current;
         var ranks = Enumerable.Range(0, selection.Length).Where(r => selection[r] >= 0 && selection[r] < p).ToArray();
         if (ranks.Length == 0)
-            return new Tensor<T>(new[] { p });
+            return new Tensor<TS>(new[] { p });
 
         var features = ranks.Select(r => selection[r]).ToArray();
-        var oneHot = Engine.TensorOneHot<T>(new Tensor<int>(features, new[] { features.Length }), p);
+        var oneHot = engine.TensorOneHot<TS>(new Tensor<int>(features, new[] { features.Length }), p);
         if (rankWeights is null)
-            return Engine.ReduceSum(oneHot, new[] { 0 }, false);
+            return engine.ReduceSum(oneHot, new[] { 0 }, false);
 
-        var weights = Engine.TensorIndexSelect(rankWeights, new Tensor<int>(ranks, new[] { ranks.Length }), 0);
-        return Engine.ReduceSum(Engine.TensorMultiply(oneHot, Engine.TensorBroadcastTo(
-            Engine.Reshape(weights, new[] { ranks.Length, 1 }), new[] { ranks.Length, p })), new[] { 0 }, false);
+        var weights = engine.TensorIndexSelect(rankWeights, new Tensor<int>(ranks, new[] { ranks.Length }), 0);
+        return engine.ReduceSum(engine.TensorMultiply(oneHot, engine.TensorBroadcastTo(
+            engine.Reshape(weights, new[] { ranks.Length, 1 }), new[] { ranks.Length, p })), new[] { 0 }, false);
     }
 
     private void AggregateByVoting(List<int[]> allSelections, int p)
     {
         var votes = new Tensor<T>(new[] { p });
         foreach (var selection in allSelections)
-            votes = Engine.TensorAdd(votes, SelectionScores(selection, p, null));
+            votes = Engine.TensorAdd(votes, SelectionScores<T>(selection, p, null));
 
         _aggregateScores = Engine.TensorDivideScalar(votes, NumOps.FromDouble(allSelections.Count)).ToVector();
 
@@ -234,18 +236,18 @@ public class EnsembleFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T
 
     private void AggregateByBordaCount(List<int[]> allSelections, int p)
     {
-        // A selection of length L gives its rank-r entry L - r points
-        var bordaScores = new Tensor<T>(new[] { p });
+        // A selection of length L gives its rank-r entry L - r points. Points are exact integers kept in double and
+        // ranked before the cast to T (Half cannot hold every integer above 2048).
+        var bordaScores = new Tensor<double>(new[] { p });
 
         foreach (var selection in allSelections)
         {
             int length = selection.Length;
-            var points = Engine.TensorSubtract(PreprocessingTensorOps.Filled(new[] { length }, PreprocessingTensorOps.CountAsScalar<T>(length)),
-                PreprocessingTensorOps.Range<T>(length));
+            var points = new Tensor<double>(Enumerable.Range(0, length).Select(r => (double)(length - r)).ToArray(), new[] { length });
             bordaScores = Engine.TensorAdd(bordaScores, SelectionScores(selection, p, points));
         }
 
-        _aggregateScores = bordaScores.ToVector();
+        _aggregateScores = bordaScores.Cast<T>().ToVector();
         _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(bordaScores, Math.Min(_nFeaturesToSelect, p));
     }
 
@@ -256,7 +258,7 @@ public class EnsembleFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T
 
         var scores = new Tensor<T>(new[] { p });
         foreach (var selection in allSelections)
-            scores = Engine.TensorAdd(scores, Engine.TensorMultiplyScalar(SelectionScores(selection, p, null), weight));
+            scores = Engine.TensorAdd(scores, Engine.TensorMultiplyScalar(SelectionScores<T>(selection, p, null), weight));
 
         _aggregateScores = scores.ToVector();
         _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(scores, Math.Min(_nFeaturesToSelect, p));

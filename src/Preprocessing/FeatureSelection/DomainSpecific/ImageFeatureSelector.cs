@@ -136,9 +136,9 @@ public class ImageFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>,
             rows[j] = y;
         }
 
-        var xs = new Tensor<int>(columns, new[] { p }).Cast<T>();
-        var ys = new Tensor<int>(rows, new[] { p }).Cast<T>();
-        var positions = PreprocessingTensorOps.Range<T>(p);
+        // Positions and pixel coordinates stay in int: Half cannot hold every index above 2048
+        var xs = new Tensor<int>(columns, new[] { p });
+        var ys = new Tensor<int>(rows, new[] { p });
         var selected = new Tensor<T>(new[] { p });
         var lowest = PreprocessingTensorOps.Filled(new[] { p }, NumOps.MinValue);
         var unpenalized = PreprocessingTensorOps.Filled(new[] { p }, NumOps.One);
@@ -155,14 +155,14 @@ public class ImageFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>,
                 break;
 
             int bestIdx = PreprocessingTensorOps.FirstArgMax(candidates);
-            var isBest = engine.TensorEquals(positions, PreprocessingTensorOps.CountAsScalar<T>(bestIdx));
+            var isBest = PreprocessingTensorOps.PositionOneHot<T>(bestIdx, p);
             selected = engine.TensorMax(selected, isBest);
 
             // Reduce scores of spatially nearby features (within 3 pixels) by 1 - exp(-distance / 2) * 0.5
             var (x1, y1, _) = GetSpatialPosition(bestIdx);
             var distance = engine.TensorSqrt(engine.TensorAdd(
-                engine.TensorSquare(engine.TensorSubtractScalar(xs, PreprocessingTensorOps.CountAsScalar<T>(x1))),
-                engine.TensorSquare(engine.TensorSubtractScalar(ys, PreprocessingTensorOps.CountAsScalar<T>(y1)))));
+                engine.TensorSquare(engine.TensorSubtractScalar(xs, x1).Cast<T>()),
+                engine.TensorSquare(engine.TensorSubtractScalar(ys, y1).Cast<T>())));
             var penalty = engine.TensorExp(engine.TensorMultiplyScalar(distance, negativeHalf));
             var factor = PreprocessingTensorOps.OneMinus(engine.TensorMultiplyScalar(penalty, half));
             var nearby = engine.TensorMultiply(PreprocessingTensorOps.Not(selected), engine.TensorLessThan(distance, radius));

@@ -118,7 +118,8 @@ public class HurstExponentSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             // Average R/S over the subseries whose standard deviation is above 1e-10
             var usable = engine.TensorGreaterThan(std, stdFloor);
             var rs = engine.TensorWhere(usable, engine.TensorDivide(range, std), new Tensor<T>(new[] { numSubseries, p }));
-            var usableCount = engine.ReduceSum(usable, new[] { 0 }, false);
+            // Counted in int: a Half sum of the 0/1 mask stops at 2048
+            var usableCount = engine.ReduceSum(usable.Cast<int>(), new[] { 0 }, false).Cast<T>();
             rsValues.Add(engine.TensorDivide(engine.ReduceSum(rs, new[] { 0 }, false), usableCount));
             validValues.Add(engine.TensorGreaterThan(usableCount, zero));
             lagSizes.Add(lag);

@@ -86,8 +86,9 @@ public class NormalizedCompressionSelector<T> : TransformerBase<T, Matrix<T>, Ma
         Tensor<T> jointEntropy;
         if (yVarying)
         {
+            // Counted exactly (a Half matmul of the 0/1 one-hots stops counting at 2048)
             var jointCounts = engine.Reshape(
-                engine.TensorMatMul(engine.TensorTranspose(oneHotX), oneHotY), new[] { p, _nBins * _nBins });
+                FeatureSelectionTensorOps.JointBinCounts(oneHotX, oneHotY, _nBins), new[] { p, _nBins * _nBins });
             jointEntropy = engine.TensorWhere(xVarying, FeatureSelectionTensorOps.EntropyBits(jointCounts, n), entropyYRow);
         }
         else

@@ -78,12 +78,12 @@ public class ApproximateEntropySelector<T> : TransformerBase<T, Matrix<T>, Matri
         var degenerate = new HashSet<int>(PreprocessingTensorOps.MaskPositions(
             engine.TensorLessThan(tolerances, PreprocessingTensorOps.Tolerance<T>(1e-10))));
 
-        var apenValues = new Tensor<T>[p];
+        var apenValues = new Tensor<double>[p];
         for (int j = 0; j < p; j++)
         {
             if (degenerate.Contains(j))
             {
-                apenValues[j] = new Tensor<T>(new[] { 1 });
+                apenValues[j] = new Tensor<double>(new[] { 1 });
                 continue;
             }
 
@@ -95,7 +95,7 @@ public class ApproximateEntropySelector<T> : TransformerBase<T, Matrix<T>, Matri
                 ComputePhi(col, _embeddingDimension, r), ComputePhi(col, _embeddingDimension + 1, r));
         }
 
-        var apen = p == 0 ? new Tensor<T>(new[] { 0 }) : engine.TensorConcatenate(apenValues, 0);
+        var apen = (p == 0 ? new Tensor<double>(new[] { 0 }) : engine.TensorConcatenate(apenValues, 0)).Cast<T>();
         _apenValues = apen.ToVector();
 
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
@@ -108,14 +108,15 @@ public class ApproximateEntropySelector<T> : TransformerBase<T, Matrix<T>, Matri
     /// phi(m) = mean over the n - m + 1 templates of ln(C_i), C_i the fraction of templates (self included) within
     /// r of template i (Pincus 1991). Returns [1].
     /// </summary>
-    private Tensor<T> ComputePhi(Tensor<T> data, int m, Tensor<T> r)
+    private Tensor<double> ComputePhi(Tensor<T> data, int m, Tensor<T> r)
     {
         int n = data.Length;
         int count = n - m + 1;
-        if (count <= 0) return new Tensor<T>(new[] { 1 });
+        if (count <= 0) return new Tensor<double>(new[] { 1 });
 
-        var matches = Engine.ReduceSum(FeatureSelectionTensorOps.TemplateMatches(data, m, count, r), new[] { 1 }, false);
-        var logs = Engine.TensorLog(Engine.TensorDivideScalar(matches, NumOps.FromDouble(count)));
+        // Counted in int (a Half sum of the 0/1 matches stops at 2048); the fractions and logs are taken in double
+        var matches = Engine.ReduceSum(FeatureSelectionTensorOps.TemplateMatches(data, m, count, r).Cast<int>(), new[] { 1 }, false);
+        var logs = Engine.TensorLog(Engine.TensorDivideScalar(matches.Cast<double>(), (double)count));
         return Engine.ReduceMean(logs, new[] { 0 }, true);
     }
     public new Matrix<T> FitTransform(Matrix<T> data)

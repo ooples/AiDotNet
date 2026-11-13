@@ -107,11 +107,13 @@ public class LyapunovSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IFi
         int reference = numVectors - 10;
         if (reference <= 0) return none;
 
+        // |k - i| >= minTimeSep as the union of the bands k - i >= minTimeSep and k - i <= -minTimeSep: built from the
+        // positions, not from time indices held in T (Half cannot hold every index above 2048)
         var shape = new[] { reference, numVectors };
-        var timeGap = engine.TensorAbs(engine.TensorSubtract(
-            engine.TensorBroadcastTo(engine.Reshape(PreprocessingTensorOps.Range<T>(numVectors), new[] { 1, numVectors }), shape),
-            engine.TensorBroadcastTo(engine.Reshape(PreprocessingTensorOps.Range<T>(reference), new[] { reference, 1 }), shape)));
-        var separated = PreprocessingTensorOps.AtLeast(timeGap, NumOps.FromDouble(minTimeSep));
+        var ones = PreprocessingTensorOps.Filled(shape, NumOps.One);
+        var separated = minTimeSep <= 0
+            ? ones
+            : engine.TensorAdd(engine.TensorTriu(ones, minTimeSep), engine.TensorTril(ones, -minTimeSep));
         var referenceVectors = engine.TensorSlice(vectors, new[] { 0, 0 }, new[] { reference, _embeddingDimension });
         var distances = engine.TensorSqrt(FeatureSelectionTensorOps.SquaredDistances(referenceVectors, vectors));
         T maxValue = NumOps.MaxValue;
@@ -131,7 +133,7 @@ public class LyapunovSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IFi
         // Track divergence over time steps: log(dist / minDist) / step
         var zeros = new Tensor<T>(new[] { reference });
         Tensor<T>? total = null;
-        Tensor<T>? count = null;
+        Tensor<int>? count = null;
         for (int step = 1; step <= 5; step++)
         {
             int offset = step;
@@ -144,16 +146,17 @@ public class LyapunovSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IFi
             var terms = engine.TensorWhere(used, engine.TensorDivideScalar(
                 engine.TensorLog(engine.TensorDivide(dist, minDist)), PreprocessingTensorOps.CountAsScalar<T>(step)), zeros);
             total = total is null ? terms : engine.TensorAdd(total, terms);
-            count = count is null ? used : engine.TensorAdd(count, used);
+            count = count is null ? used.Cast<int>() : engine.TensorAdd(count, used.Cast<int>());
         }
 
         if (total is null || count is null)
             return none;
 
-        var divergenceSum = engine.ReduceSum(total, new[] { 0 }, true);
-        var divergenceCount = engine.ReduceSum(count, new[] { 0 }, true);
-        return engine.TensorWhere(engine.TensorGreaterThan(divergenceCount, zero),
-            engine.TensorDivide(divergenceSum, divergenceCount), none);
+        // Up to 5 terms per reference point: counted in int and averaged in double (a Half count stops at 2048)
+        var divergenceSum = engine.ReduceSum(total.Cast<double>(), new[] { 0 }, true);
+        var divergenceCount = engine.ReduceSum(count, new[] { 0 }, true).Cast<double>();
+        return engine.TensorWhere(engine.TensorGreaterThan(divergenceCount, 0.0),
+            engine.TensorDivide(divergenceSum, divergenceCount), new Tensor<double>(new[] { 1 })).Cast<T>();
     }
     public new Matrix<T> FitTransform(Matrix<T> data)
     {

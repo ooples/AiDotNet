@@ -72,7 +72,6 @@ public class PointBiserial<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISuper
 
         // Split samples by class (target < 0.5 is class 0)
         var class1 = PreprocessingTensorOps.AtLeast(Tensor<T>.FromVector(target), NumOps.FromDouble(0.5));
-        var class0 = PreprocessingTensorOps.OneMinus(class1);
         int n1 = PreprocessingTensorOps.CountNonZero(class1);
         int n0 = n - n1;
 
@@ -85,10 +84,12 @@ public class PointBiserial<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISuper
         }
 
         // r_pb = |mean1 - mean0| / std_n * sqrt(n0 n1 / n^2) (0 for a feature whose std is below 1e-10)
-        var mean0 = engine.TensorDivideScalar(engine.Reshape(engine.TensorMatMul(
-            engine.Reshape(class0, new[] { 1, n }), X), new[] { p }), NumOps.FromDouble(n0));
-        var mean1 = engine.TensorDivideScalar(engine.Reshape(engine.TensorMatMul(
-            engine.Reshape(class1, new[] { 1, n }), X), new[] { p }), NumOps.FromDouble(n1));
+        // Class means through GroupMeans, which sums in double: a Half class sum stops growing once it passes 2048
+        // times the values' spacing and overflows at 65504
+        var classMeans = FeatureSelectionTensorOps.GroupMeans(
+            PreprocessingTensorOps.ClassOneHot<T>(class1.Cast<int>().AsSpan().ToArray(), 2), X, out _);
+        var mean0 = engine.Reshape(PreprocessingTensorOps.Row(classMeans, 0), new[] { p });
+        var mean1 = engine.Reshape(PreprocessingTensorOps.Row(classMeans, 1), new[] { p });
         var stdTotal = FeatureSelectionTensorOps.ColumnStd(X);
         var usable = PreprocessingTensorOps.AtLeast(stdTotal, PreprocessingTensorOps.Tolerance<T>(1e-10));
         var safeStd = engine.TensorWhere(usable, stdTotal, PreprocessingTensorOps.Filled(new[] { p }, NumOps.One));

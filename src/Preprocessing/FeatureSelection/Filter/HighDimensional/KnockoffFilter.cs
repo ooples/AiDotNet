@@ -151,11 +151,14 @@ public class KnockoffFilter<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupe
         // Rows index W_k, columns the candidate t_j = |W_j|
         var w = engine.TensorBroadcastTo(engine.Reshape(wStats, new[] { p, 1 }), shape);
         var t = engine.TensorBroadcastTo(engine.Reshape(absW, new[] { 1, p }), shape);
-        var numPositive = engine.ReduceSum(PreprocessingTensorOps.Not(engine.TensorLessThan(w, t)), new[] { 0 }, false);
-        var numNegative = engine.ReduceSum(PreprocessingTensorOps.Not(engine.TensorGreaterThan(w, engine.TensorNegate(t))), new[] { 0 }, false);
-        var fdp = engine.TensorDivide(engine.TensorAddScalar(numNegative, NumOps.One), engine.TensorMax(numPositive, NumOps.One));
+        // Counted in int (a Half sum of 0/1 indicators stops at 2048) and the ratio taken in double
+        var numPositive = engine.ReduceSum(
+            PreprocessingTensorOps.Not(engine.TensorLessThan(w, t)).Cast<int>(), new[] { 0 }, false).Cast<double>();
+        var numNegative = engine.ReduceSum(
+            PreprocessingTensorOps.Not(engine.TensorGreaterThan(w, engine.TensorNegate(t))).Cast<int>(), new[] { 0 }, false).Cast<double>();
+        var fdp = engine.TensorDivide(engine.TensorAddScalar(numNegative, 1.0), engine.TensorMax(numPositive, 1.0));
         var valid = engine.TensorMultiply(
-            PreprocessingTensorOps.Not(engine.TensorGreaterThan(fdp, NumOps.FromDouble(_fdr))),
+            PreprocessingTensorOps.Not(engine.TensorGreaterThan(fdp, _fdr)).Cast<T>(),
             engine.TensorGreaterThan(absW, NumOps.Zero));
 
         if (PreprocessingTensorOps.CountNonZero(valid) == 0)

@@ -196,6 +196,8 @@ public class BorutaSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupe
         // Normalize
         return Engine.TensorDivideScalar(importances, NumOps.FromDouble(_nTrees));
     }
+
+    /// <inheritdoc />
     public Matrix<T> FitTransform(Matrix<T> data, Vector<T> target)
     {
         Fit(data, target);

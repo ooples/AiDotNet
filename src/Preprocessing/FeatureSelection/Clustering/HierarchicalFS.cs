@@ -124,7 +124,6 @@ public class HierarchicalFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IFixe
         T maxValue = NumOps.MaxValue;
         var unreachable = PreprocessingTensorOps.Filled(shape, maxValue);
         var upper = engine.TensorTriu(PreprocessingTensorOps.Filled(shape, NumOps.One), 1);
-        var positions = PreprocessingTensorOps.Range<T>(p);
         bool average = _linkage != "single" && _linkage != "complete";
 
         while (numActiveClusters > nClusters)
@@ -166,8 +165,9 @@ public class HierarchicalFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IFixe
                 newDist = _linkage == "single" ? engine.TensorMin(row1, row2) : engine.TensorMax(row1, row2);
             }
 
-            var isMerge1 = engine.TensorEquals(positions, PreprocessingTensorOps.CountAsScalar<T>(merge1));
-            var isMerge2 = engine.TensorEquals(positions, PreprocessingTensorOps.CountAsScalar<T>(merge2));
+            // One-hots built from the int positions (Half cannot hold every index above 2048)
+            var isMerge1 = PreprocessingTensorOps.PositionOneHot<T>(merge1, p);
+            var isMerge2 = PreprocessingTensorOps.PositionOneHot<T>(merge2, p);
             var others = engine.TensorMultiply(active, PreprocessingTensorOps.OneMinus(engine.TensorAdd(isMerge1, isMerge2)));
             clusterDistances = engine.TensorWhere(engine.TensorOuter(isMerge1, others),
                 engine.TensorBroadcastTo(engine.Reshape(newDist, new[] { 1, p }), shape), clusterDistances);
