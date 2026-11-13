@@ -124,12 +124,6 @@ public partial class HRAAdapter<T> : LoRAAdapterBase<T>
     private Tensor<T>? _sparseGradients;
 
     /// <summary>
-    /// Cached input from forward pass for computing sparse gradients in backward pass.
-    /// </summary>
-    [Scratch]
-    private Tensor<T>? _cachedInput;
-
-    /// <summary>
     /// Maximum number of sparse full-rank parameters to allocate.
     /// </summary>
     /// <remarks>
@@ -312,9 +306,6 @@ public partial class HRAAdapter<T> : LoRAAdapterBase<T>
     /// </remarks>
     protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
-        // Cache input for the sparse-gradient backward only when a manual backward will read it
-        SaveForBackward(ref _cachedInput, input);
-
         // 1. Forward through base layer
         Tensor<T> baseOutput = _baseLayer.Forward(input);
 
@@ -361,83 +352,94 @@ public partial class HRAAdapter<T> : LoRAAdapterBase<T>
             return new Tensor<T>(new[] { batchSize, outputSize }, zeroData);
         }
 
-        // Sparse matrix multiplication: output[b, row] += (value * scaling) * input[b, col] for every
-        // active entry, i.e. output = input * W^T with the dense [outputSize, inputSize] sparse delta W.
-        Tensor<T> sparseDelta = BuildScaledSparseDelta(activeCount, outputSize, inputSize);
-        return Engine.TensorMatMul(Engine.Reshape(input, [batchSize, inputSize]), Engine.TensorTranspose(sparseDelta));
+        // Sparse matrix multiplication: output[b, row_k] += (value_k * scaling) * input[b, col_k] for every
+        // active entry k. Gathering input columns and scatter-adding into output rows keeps work and memory
+        // at O(activeCount * batch); no one-hot or dense [outputSize, inputSize] delta is built.
+        Tensor<int> rows = ActiveCoordinates(_sparseRows, activeCount);
+        Tensor<int> cols = ActiveCoordinates(_sparseColumns, activeCount);
+        Tensor<T> scaledValues;
+        Tensor<T> inputColumns;
+        Tensor<T> output;
+        using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
+        {
+            scaledValues = Engine.TensorBroadcastTo(Engine.Reshape(
+                Engine.TensorMultiplyScalar(Engine.TensorNarrow(_sparseValues, 0, 0, activeCount), _sparseScaling),
+                [activeCount, 1]), [activeCount, batchSize]);
+            inputColumns = Engine.TensorIndexSelect(
+                Engine.TensorTranspose(Engine.Reshape(input, [batchSize, inputSize])), cols, 0); // [activeCount, batch]
+            Tensor<T> outputByRow = Engine.TensorScatterAdd(
+                new Tensor<T>([outputSize, batchSize]), rows, Engine.TensorMultiply(inputColumns, scaledValues), 0);
+            output = Engine.TensorTranspose(outputByRow);
+        }
+
+        if (AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>.IsSuppressed) return output;
+
+        // The closure keeps only the gathered [activeCount, batch] columns and the coordinate lists.
+        int[] inputShape = input.Shape.ToArray();
+        return RegisterManualBackwardNode(output, [input, _sparseValues],
+            gradient => BackwardSparseFullRank(gradient, inputColumns, scaledValues, rows, cols, inputShape, outputSize));
     }
 
     /// <summary>
-    /// One-hot encodes the first <paramref name="activeCount"/> stored coordinates against
-    /// 0..<paramref name="size"/>-1 as an [activeCount, size] 0/1 tensor.
+    /// Reads the first <paramref name="activeCount"/> stored coordinates as integer indices.
     /// </summary>
-    private Tensor<T> SparseCoordinateOneHot(Tensor<T> coordinates, int activeCount, int size)
-    {
-        Tensor<T> active = Engine.TensorNarrow(coordinates, 0, 0, activeCount);
-        return Engine.TensorEquals(
-            Engine.TensorBroadcastTo(Engine.Reshape(active, [activeCount, 1]), [activeCount, size]),
-            Engine.TensorBroadcastTo(Engine.Reshape(Engine.TensorArange<T>(0, size, 1), [1, size]), [activeCount, size]));
-    }
+    private Tensor<int> ActiveCoordinates(Tensor<T> coordinates, int activeCount)
+        => Engine.TensorNarrow(coordinates, 0, 0, activeCount).Cast<int>();
+
+    /// <summary>
+    /// Flat row-major position (row * inputSize + col) of each active sparse coordinate.
+    /// </summary>
+    private Tensor<int> ActiveFlatPositions(int activeCount, int inputSize)
+        => Engine.TensorAdd(
+            Engine.TensorMultiplyScalar(ActiveCoordinates(_sparseRows, activeCount), inputSize),
+            ActiveCoordinates(_sparseColumns, activeCount));
+
+    /// <summary>
+    /// Scatter-adds one value per active coordinate into a flat [outputSize * inputSize] tensor
+    /// (repeated coordinates accumulate). Cost: one dense buffer plus O(activeCount).
+    /// </summary>
+    private Tensor<T> ScatterActiveToDense(Tensor<T> values, int activeCount, int outputSize, int inputSize)
+        => Engine.TensorScatterAdd(
+            new Tensor<T>([outputSize * inputSize]), ActiveFlatPositions(activeCount, inputSize), values, 0);
 
     /// <summary>
     /// Builds the dense [outputSize, inputSize] matrix holding value * scaling at every active
-    /// (row, col) sparse coordinate (repeated coordinates accumulate).
+    /// (row, col) sparse coordinate. Used only for merging, where a dense matrix is the result.
     /// </summary>
     private Tensor<T> BuildScaledSparseDelta(int activeCount, int outputSize, int inputSize)
     {
         Tensor<T> weights = Engine.TensorMultiplyScalar(Engine.TensorNarrow(_sparseValues, 0, 0, activeCount), _sparseScaling);
-        Tensor<T> weightedRows = Engine.TensorMultiply(
-            SparseCoordinateOneHot(_sparseRows, activeCount, outputSize), Engine.Reshape(weights, [activeCount, 1]));
-        return Engine.TensorMatMul(
-            Engine.TensorTranspose(weightedRows), SparseCoordinateOneHot(_sparseColumns, activeCount, inputSize));
+        return Engine.Reshape(ScatterActiveToDense(weights, activeCount, outputSize, inputSize), [outputSize, inputSize]);
     }
 
     /// <summary>
-    /// Performs backward pass through the sparse full-rank component.
+    /// Backward pass through the sparse full-rank component, using the columns gathered in the forward pass.
     /// </summary>
-    /// <param name="outputGradient">Output gradient tensor.</param>
-    /// <returns>Input gradient tensor.</returns>
-    private Tensor<T> BackwardSparseFullRank(Tensor<T> outputGradient)
+    /// <returns>Gradients for the layer input and for the full-capacity sparse value tensor.</returns>
+    private Tensor<T>?[] BackwardSparseFullRank(
+        Tensor<T> outputGradient, Tensor<T> inputColumns, Tensor<T> scaledValues,
+        Tensor<int> rows, Tensor<int> cols, int[] inputShape, int outputSize)
     {
-        int batchSize = outputGradient.Shape[0];
-        int outputSize = outputGradient.Shape.Length > 1 ? outputGradient.Shape[1] : outputGradient.Length;
-        int inputSize = GetInputShape()[0];
+        int activeCount = rows.Length;
+        int batchSize = inputColumns.Shape[1];
+        int inputSize = inputShape.Length > 1 ? inputShape[1] : inputShape[0];
 
-        // Initialize sparse gradients
-        _sparseGradients = new Tensor<T>([_maxSparseParams]);
+        // grad[b, row_k] for every active entry: [activeCount, batch]
+        Tensor<T> gradientRows = Engine.TensorIndexSelect(
+            Engine.TensorTranspose(Engine.Reshape(outputGradient, [batchSize, outputSize])), rows, 0);
 
-        // If no sparse parameters, return zeros
-        int activeCount = ActiveSparseParams;
-        if (activeCount == 0)
-        {
-            Vector<T> zeroData = new Vector<T>(batchSize * inputSize);
-            return new Tensor<T>(new[] { batchSize, inputSize }, zeroData);
-        }
+        // dL/dValue_k = scaling * Σ_b grad[b, row_k] * input[b, col_k]
+        Tensor<T> valueGradients = Engine.TensorMultiplyScalar(
+            Engine.ReduceSum(Engine.TensorMultiply(gradientRows, inputColumns), [1], false), _sparseScaling);
+        Tensor<T> fullValueGradients = activeCount < _maxSparseParams
+            ? Engine.TensorConcatenate([valueGradients, new Tensor<T>([_maxSparseParams - activeCount])], 0)
+            : valueGradients;
+        _sparseGradients = fullValueGradients;
 
-        // Validate cached input is available
-        if (_cachedInput == null)
-        {
-            throw new InvalidOperationException("Forward must be called before Backward");
-        }
-
-        Tensor<T> gradMatrix = Engine.Reshape(outputGradient, [batchSize, outputSize]);
-        Tensor<T> inputMatrix = Engine.Reshape(_cachedInput, [batchSize, inputSize]);
-
-        // Parameter gradient: dL/dWeight[row, col] = Σ_batch (input[b, col] * dL/dOutput[b, row])
-        // (outer product of input and output error), scaled like the forward pass. With
-        // M = grad^T * input ([outputSize, inputSize]) the k-th entry reads M[row_k, col_k].
-        Tensor<T> rowOneHot = SparseCoordinateOneHot(_sparseRows, activeCount, outputSize);
-        Tensor<T> colOneHot = SparseCoordinateOneHot(_sparseColumns, activeCount, inputSize);
-        Tensor<T> outer = Engine.TensorMatMul(Engine.TensorTranspose(gradMatrix), inputMatrix);
-        Tensor<T> paramGrads = Engine.TensorMultiplyScalar(
-            Engine.ReduceSum(Engine.TensorMultiply(Engine.TensorMatMul(rowOneHot, outer), colOneHot), [1], false),
-            _sparseScaling);
-        _sparseGradients = activeCount < _maxSparseParams
-            ? Engine.TensorConcatenate([paramGrads, new Tensor<T>([_maxSparseParams - activeCount])], 0)
-            : paramGrads;
-
-        // Input gradient: dL/dInput[b, col] += (value * scaling) * dL/dOutput[b, row] = grad * W
-        return Engine.TensorMatMul(gradMatrix, BuildScaledSparseDelta(activeCount, outputSize, inputSize));
+        // dL/dInput[b, col_k] += (value_k * scaling) * grad[b, row_k]
+        Tensor<T> inputGradientByColumn = Engine.TensorScatterAdd(
+            new Tensor<T>([inputSize, batchSize]), cols, Engine.TensorMultiply(gradientRows, scaledValues), 0);
+        return [Engine.Reshape(Engine.TensorTranspose(inputGradientByColumn), inputShape), fullValueGradients];
     }
 
     /// <summary>
@@ -539,14 +541,10 @@ public partial class HRAAdapter<T> : LoRAAdapterBase<T>
         Tensor<T> existingMask = new Tensor<T>([total]);
         if (activeCount > 0)
         {
-            Tensor<T> rowOneHot = SparseCoordinateOneHot(_sparseRows, activeCount, outputSize);
-            Tensor<T> colOneHot = SparseCoordinateOneHot(_sparseColumns, activeCount, inputSize);
-            Tensor<T> weightedRows = Engine.TensorMultiply(
-                rowOneHot, Engine.Reshape(Engine.TensorNarrow(_sparseValues, 0, 0, activeCount), [activeCount, 1]));
-            existingValues = Engine.Reshape(
-                Engine.TensorMatMul(Engine.TensorTranspose(weightedRows), colOneHot), [total]);
-            existingMask = Engine.Reshape(
-                Engine.TensorMatMul(Engine.TensorTranspose(rowOneHot), colOneHot), [total]);
+            existingValues = ScatterActiveToDense(
+                Engine.TensorNarrow(_sparseValues, 0, 0, activeCount), activeCount, outputSize, inputSize);
+            existingMask = ScatterActiveToDense(
+                Tensor<T>.CreateDefault([activeCount], NumOps.One), activeCount, outputSize, inputSize);
         }
 
         // Preserve existing values if already allocated, otherwise initialize a small random value
