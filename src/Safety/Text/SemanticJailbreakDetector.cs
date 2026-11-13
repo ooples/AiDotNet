@@ -90,8 +90,8 @@ public class SemanticJailbreakDetector<T> : TextSafetyModuleBase<T>
         if (_attackIntents.Length == 0) return findings;
 
         // Compare against every attack intent at once
-        var intents = Engine.TensorStack(Array.ConvertAll(_attackIntents, intent => Tensor<T>.FromVector(intent.Embedding)), 0);
-        var similarities = SafetyTensorOps<T>.CosineSimilarities(Tensor<T>.FromVector(inputEmbedding), intents);
+        var similarities = SafetyTensorOps<T>.CosineSimilarities(
+            inputEmbedding, Array.ConvertAll(_attackIntents, intent => intent.Embedding));
         var similarityValues = similarities.ToArray();
 
         foreach (int i in SafetyTensorOps<T>.IndicesAtLeast(similarities, _threshold))

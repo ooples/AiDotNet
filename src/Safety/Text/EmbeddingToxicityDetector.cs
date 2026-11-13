@@ -103,8 +103,7 @@ public class EmbeddingToxicityDetector<T> : TextSafetyModuleBase<T>
         if (_toxicConceptVectors.Length == 0) return findings;
 
         // Compare against every toxic concept at once
-        var concepts = Engine.TensorStack(Array.ConvertAll(_toxicConceptVectors, v => Tensor<T>.FromVector(v)), 0);
-        var similarities = SafetyTensorOps<T>.CosineSimilarities(Tensor<T>.FromVector(inputEmbedding), concepts);
+        var similarities = SafetyTensorOps<T>.CosineSimilarities(inputEmbedding, _toxicConceptVectors);
         var similarityValues = similarities.ToArray();
 
         foreach (int i in SafetyTensorOps<T>.IndicesAtLeast(similarities, _threshold))

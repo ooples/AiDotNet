@@ -188,8 +188,11 @@ public class ContinuousMexicanHatWavelet<T> : WaveletFunctionBase<T>
 
         // sinc(x) = sin(pi x) / (pi x), with sinc(0) = 1, normalized by the sum of absolute values
         var piX = engine.TensorMultiplyScalar(x, MathHelper.Pi<T>());
-        var sinc = engine.TensorDivide(engine.TensorSin(piX), piX);
-        var values = engine.TensorWhere(engine.TensorEquals(x, NumOps.Zero), engine.TensorOnesLike(x), sinc);
+        // The centre divides by one instead (decimal throws on 0 / 0 before the centre value is selected).
+        var atZero = engine.TensorEquals(x, NumOps.Zero);
+        var safePiX = engine.TensorWhere(atZero, engine.TensorOnesLike(piX), piX);
+        var sinc = engine.TensorDivide(engine.TensorSin(piX), safePiX);
+        var values = engine.TensorWhere(atZero, engine.TensorOnesLike(x), sinc);
         T sum = engine.TensorSum(engine.TensorAbs(values));
         return engine.TensorDivideScalar(values, sum).ToVector();
     }

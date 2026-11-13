@@ -46,7 +46,7 @@ public static class RenderingMetrics<T>
     {
         ValidateShapes(predicted, groundTruth);
 
-        double mse = NumOps.ToDouble(ComputeMSE(predicted, groundTruth));
+        double mse = MSE(predicted, groundTruth);
 
         if (mse < 1e-10)
         {
@@ -137,6 +137,11 @@ public static class RenderingMetrics<T>
     public static double SimplifiedLPIPS(Tensor<T> predicted, Tensor<T> groundTruth)
     {
         ValidateShapes(predicted, groundTruth);
+        if (typeof(T) == typeof(Half))
+        {
+            // Half sums and element counts overflow at 65504: measure in float.
+            return RenderingMetrics<float>.SimplifiedLPIPS(predicted.Cast<float>(), groundTruth.Cast<float>());
+        }
 
         var predEdges = ComputeEdgeMagnitude(predicted);
         var gtEdges = ComputeEdgeMagnitude(groundTruth);
@@ -162,6 +167,12 @@ public static class RenderingMetrics<T>
     public static double MSE(Tensor<T> a, Tensor<T> b)
     {
         ValidateShapes(a, b);
+        if (typeof(T) == typeof(Half))
+        {
+            // TensorMean converts the element count to Half (65,536 becomes infinity): measure in float.
+            return RenderingMetrics<float>.MSE(a.Cast<float>(), b.Cast<float>());
+        }
+
         return NumOps.ToDouble(ComputeMSE(a, b));
     }
 
@@ -174,6 +185,10 @@ public static class RenderingMetrics<T>
     public static double MAE(Tensor<T> a, Tensor<T> b)
     {
         ValidateShapes(a, b);
+        if (typeof(T) == typeof(Half))
+        {
+            return RenderingMetrics<float>.MAE(a.Cast<float>(), b.Cast<float>());
+        }
 
         return NumOps.ToDouble(Engine.TensorMean(Engine.TensorAbs(Engine.TensorSubtract(a, b))));
     }
@@ -368,14 +383,30 @@ public static class RenderingMetrics<T>
             return new Tensor<T>(new[] { height, width, 2 });
         }
 
+        // Windows are expanded in row blocks of at most 1 << 22 elements (as SumWindowSSIM does): the full window
+        // tensor is 9 * channels times the image, about 1.8 GB for a 4K RGB double image.
         var axes = new[] { 2, 3, 4 };
-        var windows = Windows(hwc, halfWindow, 0, height - 2 * halfWindow);
-        var mean = Engine.ReduceMean(windows, axes, true);
-        var centred = Engine.TensorSubtract(windows, Engine.TensorBroadcastTo(mean, windows.Shape.ToArray()));
-        var deviation = Engine.TensorSqrt(Engine.ReduceMean(Engine.TensorSquare(centred), axes, false));
+        int windowRows = height - 2 * halfWindow;
+        int windowColumns = width - 2 * halfWindow;
+        int perWindow = hwc.Shape[2] * 9;
+        int blockRows = Math.Max(1, (1 << 22) / Math.Max(1, windowColumns * perWindow));
+        var meanBlocks = new List<Tensor<T>>();
+        var deviationBlocks = new List<Tensor<T>>();
+        for (int start = 0; start < windowRows; start += blockRows)
+        {
+            int rows = Math.Min(blockRows, windowRows - start);
+            var windows = Windows(hwc, halfWindow, start, rows);
+            var blockMean = Engine.ReduceMean(windows, axes, true);
+            var centred = Engine.TensorSubtract(windows, Engine.TensorBroadcastTo(blockMean, windows.Shape.ToArray()));
+            meanBlocks.Add(blockMean.Reshape(rows, windowColumns));
+            deviationBlocks.Add(Engine.TensorSqrt(Engine.ReduceMean(Engine.TensorSquare(centred), axes, false)).Reshape(rows, windowColumns));
+        }
+
+        var mean = meanBlocks.Count == 1 ? meanBlocks[0] : Engine.TensorConcatenate(meanBlocks.ToArray(), 0);
+        var deviation = deviationBlocks.Count == 1 ? deviationBlocks[0] : Engine.TensorConcatenate(deviationBlocks.ToArray(), 0);
 
         var padding = new[] { halfWindow, halfWindow, halfWindow, halfWindow };
-        var meanPlane = Engine.TensorConstantPad(mean.Reshape(height - 2, width - 2), padding, NumOps.Zero);
+        var meanPlane = Engine.TensorConstantPad(mean, padding, NumOps.Zero);
         var deviationPlane = Engine.TensorConstantPad(deviation, padding, NumOps.Zero);
         // Planar layout (all means, then all deviations) under the [H, W, 2] shape, as before.
         var planes = Engine.TensorConcatenate(

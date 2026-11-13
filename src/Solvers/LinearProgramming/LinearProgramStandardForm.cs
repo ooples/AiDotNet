@@ -203,8 +203,8 @@ internal sealed class LinearProgramStandardForm<T>
                 limits[k] = upperBoundRows[k].Limit;
             }
 
-            rowBlocks.Add(engine.TensorIndexSelect(
-                engine.TensorEye<T>(variableCount), new Tensor<int>(new[] { columns.Length }, new Vector<int>(columns)), 0));
+            // Unit rows e_column only (a dense identity would be [n, n] to select a few rows).
+            rowBlocks.Add(engine.TensorOneHot<T>(new Tensor<int>(new[] { columns.Length }, new Vector<int>(columns)), variableCount));
             rightHandSideBlocks.Add(new Tensor<T>(new[] { limits.Length }, new Vector<T>(limits)));
         }
 
@@ -352,7 +352,9 @@ internal sealed class LinearProgramStandardForm<T>
         {
             var engine = SolverTensorOps<T>.Engine;
             int rows = x.Shape[0];
-            var scaled = engine.TensorMultiply(x, engine.Reshape(Scales, new[] { 1, Scales.Length }));
+            // Explicit broadcast: equal shapes keep the product valid under ShapePolicy.Strict().
+            var scaled = engine.TensorMultiply(
+                x, engine.TensorBroadcastTo(engine.Reshape(Scales, new[] { 1, Scales.Length }), x.Shape.ToArray()));
             var result = engine.TensorIndexAdd(
                 Tensor<T>.CreateDefault(new[] { rows, _variableCount }, NumOps.Zero), 1, _primary, scaled);
             if (_negativeSource is not null && _negativeColumn is not null)

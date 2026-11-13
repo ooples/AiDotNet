@@ -180,10 +180,12 @@ public partial class DaubechiesWavelet<T> : WaveletFunctionBase<T>
         for (int iter = 0; iter < iterations; iter++)
         {
             // new[(2i + k) mod 2n] += h[k] * values[i]: upsample by two, then convolve periodically with h, i.e.
-            // correlate with h over a window that starts L-1 samples before each output.
+            // correlate with the reversed h over a window that starts L-1 samples before each output (as
+            // PeriodicSynthesis does; correlating with h itself reverses the scaling function).
             int newLength = values.Length * 2;
             values = WaveletEngineOps<T>.PeriodicCorrelate(
-                WaveletEngineOps<T>.Upsample(values, 2), _scalingCoefficients, 1, newLength, -(filterLength - 1));
+                WaveletEngineOps<T>.Upsample(values, 2), WaveletEngineOps<T>.Reverse(_scalingCoefficients),
+                1, newLength, -(filterLength - 1));
         }
 
         int index_t = (int)(t * values.Length);

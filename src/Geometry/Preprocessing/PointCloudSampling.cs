@@ -79,6 +79,13 @@ public static class PointCloudSampling<T>
                 nameof(pointCloud));
         }
 
+        if (typeof(T) == typeof(Half))
+        {
+            // Half squared distances overflow above 256, which ties every far point at MaxValue: select in float.
+            // Half values round-trip through float exactly, and the draws do not depend on T.
+            return Narrow(PointCloudSampling<float>.FarthestPointSample(Widen<float>(pointCloud), numSamples, seed));
+        }
+
         var random = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : RandomHelper.CreateSecureRandom();
 
         var engine = AiDotNetEngine.Current;
@@ -141,6 +148,14 @@ public static class PointCloudSampling<T>
             throw new ArgumentException(
                 $"PoissonDiskSample requires at least 3 features (xyz coordinates). Got {numFeatures} features.",
                 nameof(pointCloud));
+        }
+
+        if (typeof(T) == typeof(Half))
+        {
+            // Half squared distances and the squared threshold overflow to infinity (infinity < infinity is false,
+            // so every point would be accepted): sample in float.
+            return Narrow(PointCloudSampling<float>.PoissonDiskSample(
+                Widen<float>(pointCloud), NumOps.ToFloat(minDistance), maxSamples, seed));
         }
 
         var random = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : RandomHelper.CreateSecureRandom();
@@ -217,17 +232,12 @@ public static class PointCloudSampling<T>
                 nameof(pointCloud));
         }
 
-        if (typeof(T) == typeof(Half))
+        if (typeof(T) == typeof(Half) || NumOps.Equals(NumOps.FromDouble(0.5), NumOps.Zero))
         {
-            // Half voxel sums overflow above 65504 and its counts stop being exact above 2048: average in float.
-            var widened = PointCloudSampling<float>.VoxelGridSample(
-                new PointCloudData<float>(
-                    pointCloud.Points.Cast<float>(),
-                    pointCloud.Labels is null ? null : Tensor<T>.FromVector(pointCloud.Labels).Cast<float>().ToVector()),
-                NumOps.ToFloat(voxelSize));
-            return new PointCloudData<T>(
-                widened.Points.Cast<T>(),
-                widened.Labels is null ? null : Tensor<float>.FromVector(widened.Labels).Cast<T>().ToVector());
+            // Half voxel sums overflow above 65504 and its counts stop being exact above 2048; integral sums
+            // overflow the type (two int points at 1.5e9) and the cell division truncates. Average in double and
+            // convert only the centroids back.
+            return Narrow(PointCloudSampling<double>.VoxelGridSample(Widen<double>(pointCloud), NumOps.ToDouble(voxelSize)));
         }
 
         // Compute bounding box minimum for origin-relative voxel indexing
@@ -321,6 +331,18 @@ public static class PointCloudSampling<T>
 
         return new PointCloudData<T>(tensor, sampledLabels);
     }
+
+    /// <summary>The cloud (points and labels) converted to <typeparamref name="TWide"/>.</summary>
+    private static PointCloudData<TWide> Widen<TWide>(PointCloudData<T> cloud)
+        => new PointCloudData<TWide>(
+            cloud.Points.Cast<TWide>(),
+            cloud.Labels is null ? null : Tensor<T>.FromVector(cloud.Labels).Cast<TWide>().ToVector());
+
+    /// <summary>A widened cloud converted back to <typeparamref name="T"/>.</summary>
+    private static PointCloudData<T> Narrow<TWide>(PointCloudData<TWide> cloud)
+        => new PointCloudData<T>(
+            cloud.Points.Cast<T>(),
+            cloud.Labels is null ? null : Tensor<TWide>.FromVector(cloud.Labels).Cast<T>().ToVector());
 
     private static Tensor<T> UpdateDistances(Tensor<T> positions, int newPointIdx, Tensor<T> minDistances)
     {

@@ -77,42 +77,30 @@ public class AcousticToxicityDetector<T> : AudioSafetyModuleBase<T>
         int hopSize = 256;
         int numFrames = (audioSamples.Length - frameSize) / hopSize + 1;
 
-        // Extract per-frame features for every frame at once: [numFrames, frameSize].
-        var frames = SafetyTensorOps<T>.Frames(SafetyTensorOps<T>.AsTensor(audioSamples), frameSize, hopSize, numFrames);
-        var axis1 = new[] { 1 };
+        // Per-frame features are extracted in batches of FrameBatch frames, so the frame, spectrum and lag tensors
+        // of a long recording are never held at once; only the per-frame values are kept.
+        var audio = SafetyTensorOps<T>.AsTensor(audioSamples);
+        var energyParts = new List<Tensor<T>>();
+        var zcrParts = new List<Tensor<T>>();
+        var centroidParts = new List<Tensor<T>>();
+        var pitchParts = new List<Tensor<T>>();
+        for (int first = 0; first < numFrames; first += FrameBatch)
+        {
+            int count = Math.Min(FrameBatch, numFrames - first);
+            var segment = engine.TensorNarrow(audio, 0, first * hopSize, (count - 1) * hopSize + frameSize);
+            var (energy, zcr, centroid, pitch, voiced) = FrameFeatures(
+                SafetyTensorOps<T>.Frames(segment, frameSize, hopSize, count), sampleRate);
+            energyParts.Add(SafetyTensorOps<T>.Compact(energy, voiced));
+            zcrParts.Add(SafetyTensorOps<T>.Compact(zcr, voiced));
+            centroidParts.Add(SafetyTensorOps<T>.Compact(centroid, voiced));
+            pitchParts.Add(SafetyTensorOps<T>.Compact(pitch, SafetyTensorOps<T>.And(voiced, SafetyTensorOps<T>.Gt(pitch, 0.0))));
+        }
 
-        // Frame energy (mean square) and zero-crossing rate.
-        var energy = engine.TensorDivideScalar(
-            engine.ReduceSum(engine.TensorSquare(frames), axis1, false), NumOps.FromDouble(frameSize));
-        var zcr = engine.TensorDivideScalar(
-            SafetyTensorOps<T>.ZeroCrossings(frames, nanIsNegative: false), NumOps.FromDouble(frameSize));
-
-        // Skip silent frames (energy < 1e-8; a NaN energy is not "< 1e-8" and is kept).
-        var voiced = SafetyTensorOps<T>.Not(SafetyTensorOps<T>.Lt(energy, 1e-8));
-
-        // Spectral centroid via FFT of the Hann-windowed frame, bins 1 .. halfLen-1.
-        var windowed = engine.TensorMultiply(frames, SafetyTensorOps<T>.SymmetricHann(frameSize));
-        var magnitudes = SafetyTensorOps<T>.FftMagnitude(windowed);
-        int halfLen = frameSize / 2;
-        var band = engine.TensorNarrow(magnitudes, 1, 1, halfLen - 1);
-        var binIndex = engine.TensorAddScalar(SafetyTensorOps<T>.Range(halfLen - 1), NumOps.One);
-        var weightedSum = engine.ReduceSum(engine.TensorMultiply(band, binIndex), axis1, false);
-        var magSum = engine.ReduceSum(band, axis1, false);
-        var hasMagnitude = SafetyTensorOps<T>.Gt(magSum, 1e-10);
-        var centroid = SafetyTensorOps<T>.Where(hasMagnitude,
-            engine.TensorMultiplyScalar(
-                engine.TensorDivide(weightedSum, SafetyTensorOps<T>.Where(hasMagnitude, magSum, 1.0)),
-                NumOps.FromDouble((double)sampleRate / frameSize)),
-            0.0);
-
-        // Pitch estimation (autocorrelation), kept only when positive.
-        var pitch = SafetyTensorOps<T>.AutocorrelationPitch(frames, sampleRate, Math.Min(sampleRate / 50, frameSize / 2));
-
-        var energies = SafetyTensorOps<T>.Compact(energy, voiced);
+        var energies = Join(energyParts);
         if (energies.Length < 3) return findings;
-        var zcrs = SafetyTensorOps<T>.Compact(zcr, voiced);
-        var centroids = SafetyTensorOps<T>.Compact(centroid, voiced);
-        var pitches = SafetyTensorOps<T>.Compact(pitch, SafetyTensorOps<T>.And(voiced, SafetyTensorOps<T>.Gt(pitch, 0.0)));
+        var zcrs = Join(zcrParts);
+        var centroids = Join(centroidParts);
+        var pitches = Join(pitchParts);
 
         // Feature 1: Energy dynamics (30%) — shouting/aggression has high and variable energy
         T energyScore = ComputeEnergyAggressionScore(energies);
@@ -151,6 +139,52 @@ public class AcousticToxicityDetector<T> : AudioSafetyModuleBase<T>
 
         return findings;
     }
+
+    /// <summary>The number of frames analysed per tensor batch.</summary>
+    internal const int FrameBatch = 1024;
+
+    /// <summary>
+    /// Energy (mean square), zero-crossing rate, spectral centroid and autocorrelation pitch of every frame of a
+    /// <c>[frames, frameSize]</c> batch, with the voiced mask (energy not below 1e-8; a NaN energy is kept).
+    /// </summary>
+    private static (Tensor<T> Energy, Tensor<T> Zcr, Tensor<T> Centroid, Tensor<T> Pitch, Tensor<T> Voiced) FrameFeatures(
+        Tensor<T> frames, int sampleRate)
+    {
+        var engine = SafetyTensorOps<T>.Engine;
+        int frameSize = frames.Shape[1];
+        var axis1 = new[] { 1 };
+
+        // Frame energy (mean square) and zero-crossing rate.
+        var energy = engine.TensorDivideScalar(
+            engine.ReduceSum(engine.TensorSquare(frames), axis1, false), NumOps.FromDouble(frameSize));
+        var zcr = engine.TensorDivideScalar(
+            SafetyTensorOps<T>.ZeroCrossings(frames, nanIsNegative: false), NumOps.FromDouble(frameSize));
+
+        // Skip silent frames (energy < 1e-8; a NaN energy is not "< 1e-8" and is kept).
+        var voiced = SafetyTensorOps<T>.Not(SafetyTensorOps<T>.Lt(energy, 1e-8));
+
+        // Spectral centroid via FFT of the Hann-windowed frame, bins 1 .. halfLen-1.
+        var windowed = engine.TensorMultiply(frames, SafetyTensorOps<T>.SymmetricHann(frameSize));
+        var magnitudes = SafetyTensorOps<T>.FftMagnitude(windowed);
+        int halfLen = frameSize / 2;
+        var band = engine.TensorNarrow(magnitudes, 1, 1, halfLen - 1);
+        var binIndex = engine.TensorAddScalar(SafetyTensorOps<T>.Range(halfLen - 1), NumOps.One);
+        var weightedSum = engine.ReduceSum(engine.TensorMultiply(band, binIndex), axis1, false);
+        var magSum = engine.ReduceSum(band, axis1, false);
+        var hasMagnitude = SafetyTensorOps<T>.Gt(magSum, 1e-10);
+        var centroid = SafetyTensorOps<T>.Where(hasMagnitude,
+            engine.TensorMultiplyScalar(
+                engine.TensorDivide(weightedSum, SafetyTensorOps<T>.Where(hasMagnitude, magSum, 1.0)),
+                NumOps.FromDouble((double)sampleRate / frameSize)),
+            0.0);
+
+        // Pitch estimation (autocorrelation), kept only when positive.
+        var pitch = SafetyTensorOps<T>.AutocorrelationPitch(frames, sampleRate, Math.Min(sampleRate / 50, frameSize / 2));
+        return (energy, zcr, centroid, pitch, voiced);
+    }
+
+    private static Tensor<T> Join(List<Tensor<T>> parts)
+        => parts.Count == 1 ? parts[0] : SafetyTensorOps<T>.Engine.TensorConcatenate(parts.ToArray(), 0);
 
     private static T ComputeEnergyAggressionScore(Tensor<T> energies)
     {

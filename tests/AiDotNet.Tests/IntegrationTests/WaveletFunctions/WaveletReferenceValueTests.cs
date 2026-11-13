@@ -318,12 +318,20 @@ public class WaveletReferenceValueTests
         }
     }
 
-    [Fact(Timeout = 120000)]
-    public async Task FejerKorovkin4_ReconstructInvertsDecompose()
+    [Theory(Timeout = 120000)]
+    [InlineData(4, 12)]
+    [InlineData(6, 12)]
+    [InlineData(8, 7)]
+    [InlineData(14, 10)]
+    [InlineData(22, 9)]
+    public async Task FejerKorovkin_PublishedOrders_ReconstructInvertsDecompose(int order, int digits)
     {
         await Task.Yield();
-        var wavelet = new FejérKorovkinWavelet<double>(4);
-        var signal = new Vector<double>(new[] { 1.0, 0.0, 0.0, 0.0, 2.0, -1.0, 0.5, 3.0 });
+        // The published taps are orthonormal to their printed precision (fk8 to ~1e-9), which bounds the error.
+        var wavelet = new FejérKorovkinWavelet<double>(order);
+        var values = new double[48];
+        for (int i = 0; i < values.Length; i++) values[i] = Math.Sin(0.37 * i) + 0.25 * (i % 5) - (i == 7 ? 2.0 : 0.0);
+        var signal = new Vector<double>(values);
 
         var (approximation, detail) = wavelet.Decompose(signal);
         var restored = wavelet.Reconstruct(approximation, detail);
@@ -331,8 +339,66 @@ public class WaveletReferenceValueTests
         Assert.Equal(signal.Length, restored.Length);
         for (int i = 0; i < signal.Length; i++)
         {
-            Assert.Equal(signal[i], restored[i], 9);
+            Assert.Equal(signal[i], restored[i], digits);
         }
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task FejerKorovkin_UnpublishedOrder_ReconstructDoesNotThrow()
+    {
+        await Task.Yield();
+        var wavelet = new FejérKorovkinWavelet<double>(10);
+        var signal = new Vector<double>(new[] { 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0 });
+
+        var (approximation, detail) = wavelet.Decompose(signal);
+        var restored = wavelet.Reconstruct(approximation, detail);
+
+        Assert.Equal(signal.Length, restored.Length);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task Daubechies_CascadeConvolvesWithTheScalingFilter()
+    {
+        await Task.Yield();
+        // Reference: master's scalar cascade, new[(2i + k) mod 2n] += h[k] * values[i], seven iterations.
+        var wavelet = new DaubechiesWavelet<double>(4);
+        var h = wavelet.GetScalingCoefficients();
+        double Cascade(double t)
+        {
+            var values = new double[1 << 7];
+            values[0] = 1;
+            for (int iter = 0; iter < 7; iter++)
+            {
+                var next = new double[values.Length * 2];
+                for (int i = 0; i < values.Length; i++)
+                {
+                    for (int k = 0; k < h.Length; k++)
+                    {
+                        next[(2 * i + k) % next.Length] += h[k] * values[i];
+                    }
+                }
+
+                values = next;
+            }
+
+            return values[(int)(t * values.Length)];
+        }
+
+        foreach (var x in new[] { 0.3, 1.45, 2.7 })
+        {
+            int k = (int)Math.Floor(x);
+            Assert.Equal(h[k] * Cascade(x - k), wavelet.Calculate(x), 10);
+        }
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task SincCoefficients_Decimal_DoNotDivideByZeroAtTheCentre()
+    {
+        await Task.Yield();
+        Assert.Equal(64, new ContinuousMexicanHatWavelet<decimal>().GetScalingCoefficients().Length);
+        var shannon = new ShannonWavelet<decimal>();
+        Assert.True(shannon.GetScalingCoefficients().Length > 0);
+        Assert.True(shannon.GetWaveletCoefficients().Length > 0);
     }
 
     [Fact(Timeout = 120000)]

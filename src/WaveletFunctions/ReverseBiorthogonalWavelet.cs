@@ -455,6 +455,15 @@ namespace AiDotNet.WaveletFunctions
             int length = filter.Length;
             int first = start + 1 - length / 2;
 
+            // An interior window needs no boundary extension: correlate the window alone, so a chunk costs its
+            // own length rather than a rebuild (or rotation) of the whole signal.
+            int windowEnd = first + 2 * (count - 1) + length - 1;
+            if (first >= 0 && windowEnd < n)
+            {
+                var window = input.GetSubVector(first, windowEnd - first + 1);
+                return WaveletEngineOps<T>.PeriodicCorrelate(window, filter, 2, count, 0);
+            }
+
             switch (_boundaryMethod)
             {
                 case BoundaryHandlingMethod.Periodic:

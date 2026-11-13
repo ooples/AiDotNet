@@ -123,6 +123,28 @@ internal static class GeometryEngineOps<T>
     }
 
     /// <summary>
+    /// Whether <c>-x</c> is exact for every value of <typeparamref name="T"/>: true for the floating and decimal
+    /// types; integral types wrap (unsigned values, and the signed minimum), so their minima are not taken by
+    /// negating a maximum.
+    /// </summary>
+    private static readonly bool NegationIsExact = !NumOps.Equals(NumOps.FromDouble(0.5), NumOps.Zero);
+
+    /// <summary>
+    /// The minimum of a rank-2 tensor along <paramref name="axis"/>: <c>-max(-x)</c> where negation is exact,
+    /// otherwise the first entry of an ascending sort.
+    /// </summary>
+    internal static Tensor<T> AxisMin(Tensor<T> table, int axis)
+    {
+        if (NegationIsExact || table.Shape[axis] == 0)
+        {
+            return Engine.TensorNegate(Engine.ReduceMax(Engine.TensorNegate(table), new[] { axis }, false));
+        }
+
+        var (sorted, _) = Engine.TensorSort(table, axis, false);
+        return Engine.TensorSliceAxis(sorted, axis, 0).Contiguous();
+    }
+
+    /// <summary>
     /// Returns the per-column minimum and maximum of a [rows, columns] tensor, ignoring NaN entries. The results
     /// start from <c>MaxValue</c> and <c>MinValue</c>, as a running comparison would, so they never exceed the
     /// type's finite range and an all-NaN column reports those start values.
@@ -132,7 +154,7 @@ internal static class GeometryEngineOps<T>
         var isNan = Engine.TensorIsNan(rows);
         var forMin = Engine.TensorWhere(isNan, Engine.TensorFullLike(rows, NumOps.MaxValue), rows);
         var forMax = Engine.TensorWhere(isNan, Engine.TensorFullLike(rows, NumOps.MinValue), rows);
-        var min = Engine.TensorNegate(Engine.ReduceMax(Engine.TensorNegate(forMin), new[] { 0 }, false));
+        var min = AxisMin(forMin, 0);
         var max = Engine.ReduceMax(forMax, new[] { 0 }, false);
         return (Engine.TensorMin(min, NumOps.MaxValue), Engine.TensorMax(max, NumOps.MinValue));
     }
@@ -232,7 +254,7 @@ internal static class GeometryEngineOps<T>
     internal static Tensor<T> RowMinSkippingNan(Tensor<T> table)
     {
         var masked = Engine.TensorWhere(Engine.TensorIsNan(table), Engine.TensorFullLike(table, NumOps.MaxValue), table);
-        var min = Engine.TensorNegate(Engine.ReduceMax(Engine.TensorNegate(masked), new[] { 1 }, false));
+        var min = AxisMin(masked, 1);
         return Engine.TensorMin(min, NumOps.MaxValue);
     }
 
@@ -327,7 +349,7 @@ internal static class GeometryEngineOps<T>
         int columns = rows.Shape[1];
         var first = Engine.TensorSlice(rows, new[] { 0, 0 }, new[] { 1, columns });
         var masked = Engine.TensorWhere(Engine.TensorIsNan(rows), Engine.TensorBroadcastTo(first, rows.Shape.ToArray()), rows);
-        var min = Engine.TensorNegate(Engine.ReduceMax(Engine.TensorNegate(masked), new[] { 0 }, false));
+        var min = AxisMin(masked, 0);
         var max = Engine.ReduceMax(masked, new[] { 0 }, false);
         var firstRow = first.Reshape(columns);
         var firstIsNan = Engine.TensorIsNan(firstRow);

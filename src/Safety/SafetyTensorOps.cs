@@ -1,3 +1,4 @@
+using AiDotNet.Helpers;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Interfaces;
 using AiDotNet.Tensors.LinearAlgebra;
@@ -347,6 +348,9 @@ internal static class SafetyTensorOps<T>
 
         var inRange = And(Ge(rounded, 0.0), Le(rounded, 65535.0));
         var codes = Where(inRange, rounded, (double)'?');
+
+        // Infinity is out of range, but for Half the 65535 bound itself converts to +infinity and lets it through.
+        codes = engine.TensorWhere(engine.TensorIsInf(rounded), Full(rounded.Shape.ToArray(), C('?')), codes);
         codes = engine.TensorWhere(engine.TensorIsNan(rounded), Full(rounded.Shape.ToArray(), nanReplacement), codes);
 
         // Integral codes 0..65535 convert to int exactly (a bucketize against a 0..65534 grid held in T merged
@@ -427,23 +431,23 @@ internal static class SafetyTensorOps<T>
     }
 
     /// <summary>
-    /// <c>VectorHelper.CosineSimilarity(query, row)</c> for every row of <paramref name="rows"/>
-    /// (<c>[count, dim]</c>): <c>clamp(dot / sqrt(|q|^2 |r|^2), -1, 1)</c>, 0 when that
-    /// denominator is at most 1e-10.
+    /// <c>VectorHelper.CosineSimilarity(query, row)</c> for every row: <c>clamp(dot / sqrt(|q|^2 |r|^2), -1, 1)</c>,
+    /// 0 when that denominator is at most 1e-10, converted to <typeparamref name="T"/>.
     /// </summary>
-    internal static Tensor<T> CosineSimilarities(Tensor<T> query, Tensor<T> rows)
+    /// <remarks>
+    /// Each similarity is taken by <c>VectorHelper.CosineSimilarity</c>, which pins its reductions to a fixed CPU
+    /// engine: routing them through <c>AiDotNetEngine.Current</c> let a GPU engine (enabled process-wide by
+    /// <c>AiModelBuilder.BuildAsync</c>) round them differently and flip threshold decisions near the boundary.
+    /// </remarks>
+    internal static Tensor<T> CosineSimilarities(Vector<T> query, Vector<T>[] rows)
     {
-        var engine = Engine;
-        int count = rows.Shape[0];
-        int dim = rows.Shape[1];
-        var dot = engine.Reshape(engine.TensorMatMul(rows, engine.Reshape(query, new[] { dim, 1 })), new[] { count });
-        T queryNorm = engine.TensorSumOfSquares(query);
-        var rowNorms = engine.ReduceSum(engine.TensorSquare(rows), new[] { 1 }, false);
-        var denom = engine.TensorSqrt(engine.TensorMultiplyScalar(rowNorms, queryNorm));
-        var valid = Gt(denom, 1e-10);
-        var ratio = engine.TensorDivide(dot, Where(valid, denom, 1.0));
-        ratio = Where(Lt(ratio, -1.0), -1.0, MinOne(ratio));
-        return Where(valid, ratio, 0.0);
+        var similarities = new double[rows.Length];
+        for (int i = 0; i < rows.Length; i++)
+        {
+            similarities[i] = VectorHelper.CosineSimilarity(query, rows[i]);
+        }
+
+        return new Tensor<double>(similarities, new[] { rows.Length }).Cast<T>();
     }
 
     /// <summary>Positions (ascending) where <c>values &gt;= threshold</c> (NaN never qualifies).</summary>

@@ -348,22 +348,36 @@ public sealed class BranchAndBoundSolver<T>
         var engine = SolverTensorOps<T>.Engine;
         int variableCount = program.VariableCount;
 
-        // Branch rows in variable order, the upper row (e_i, U_i) before the lower row (-e_i, -L_i), picked from
-        // the stacked tables [I; 0 - I] and [U; -L].
+        // Branch rows in variable order, the upper row (e_i, U_i) before the lower row (-e_i, -L_i). Only the
+        // branch rows are built: one-hot rows e_i, and 0 - e_i for the lower ones, picked from [E; 0 - E]
+        // ([2 * branchRows, n]) rather than from a dense [I; 0 - I] ([2n, n]). Bounds come from [U; -L].
         var picks = new int[branchRows];
+        var columns = new int[branchRows];
+        var rowPicks = new int[branchRows];
         int nextRow = 0;
         for (int variable = 0; variable < variableCount; variable++)
         {
-            if (node.HasUpper[variable]) picks[nextRow++] = variable;
-            if (node.HasLower[variable]) picks[nextRow++] = variableCount + variable;
+            if (node.HasUpper[variable])
+            {
+                columns[nextRow] = variable;
+                rowPicks[nextRow] = nextRow;
+                picks[nextRow++] = variable;
+            }
+
+            if (node.HasLower[variable])
+            {
+                columns[nextRow] = variable;
+                rowPicks[nextRow] = branchRows + nextRow;
+                picks[nextRow++] = variableCount + variable;
+            }
         }
 
-        var identity = engine.TensorEye<T>(variableCount);
-        var rowTable = engine.TensorConcatenate(new[] { identity, engine.ScalarMinusTensor(NumOps.Zero, identity) }, 0);
+        var unitRows = engine.TensorOneHot<T>(new Tensor<int>(new[] { branchRows }, new Vector<int>(columns)), variableCount);
+        var rowTable = engine.TensorConcatenate(new[] { unitRows, engine.ScalarMinusTensor(NumOps.Zero, unitRows) }, 0);
         var boundTable = engine.TensorConcatenate(
             new[] { SolverTensorOps<T>.AsTensor(node.UpperValues), engine.TensorNegate(SolverTensorOps<T>.AsTensor(node.LowerValues)) }, 0);
         var pickIds = new Tensor<int>(new[] { picks.Length }, new Vector<int>(picks));
-        var branchMatrix = engine.TensorIndexSelect(rowTable, pickIds, 0);
+        var branchMatrix = engine.TensorIndexSelect(rowTable, new Tensor<int>(new[] { branchRows }, new Vector<int>(rowPicks)), 0);
         var branchBounds = engine.TensorTake(boundTable, pickIds);
 
         Matrix<T> matrix;

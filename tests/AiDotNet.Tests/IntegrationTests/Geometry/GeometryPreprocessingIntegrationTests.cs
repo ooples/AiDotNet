@@ -1116,4 +1116,42 @@ public class GeometryPreprocessingIntegrationTests
     }
 
     #endregion
+
+    [Fact(Timeout = 120000)]
+    public async Task ChamferDistance_UnsignedIdenticalClouds_IsZero()
+    {
+        await Task.Yield();
+        // -max(-x) wraps for uint: negated 1 becomes 4294967295, so the "minimum" came out as 1.
+        var points = new Tensor<uint>(new uint[] { 0, 0, 0, 1, 0, 0 }, new[] { 2, 3 });
+        var cloud = new PointCloudData<uint>(points);
+
+        Assert.Equal(0u, GeometryMetrics<uint>.ChamferDistance(cloud, cloud, squared: true));
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task PoissonDiskSample_HalfFarPoints_KeepsTheMinimumDistance()
+    {
+        await Task.Yield();
+        // 300^2 and 400^2 overflow Half; infinity < infinity is false, so both points were accepted.
+        var cloud = new PointCloudData<Half>(new Tensor<Half>(
+            new[] { (Half)0, (Half)0, (Half)0, (Half)300, (Half)0, (Half)0 }, new[] { 2, 3 }));
+
+        var sampled = PointCloudSampling<Half>.PoissonDiskSample(cloud, (Half)400, seed: 3);
+
+        Assert.Equal(1, sampled.NumPoints);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task VoxelGridSample_IntegerCoordinates_SumWithoutOverflow()
+    {
+        await Task.Yield();
+        // Two identical int points: their x sum (3e9) overflows int, the centroid 1.5e9 does not.
+        var cloud = new PointCloudData<int>(new Tensor<int>(
+            new[] { 1_500_000_000, 0, 0, 1_500_000_000, 0, 0 }, new[] { 2, 3 }));
+
+        var sampled = PointCloudSampling<int>.VoxelGridSample(cloud, 10);
+
+        Assert.Equal(1, sampled.NumPoints);
+        Assert.Equal(1_500_000_000, sampled.Points[0, 0]);
+    }
 }

@@ -527,9 +527,7 @@ public sealed class SimplexSolver<T> : ILinearProgramSolver<T>
             var factors = TableauColumn(enteringColumn);
             var eliminated = engine.TensorSubtract(
                 _tableau,
-                engine.TensorMultiply(
-                    engine.Reshape(factors, new[] { _constraintCount, 1 }),
-                    engine.Reshape(scaledRow, new[] { 1, width })));
+                engine.TensorOuter(factors.Reshape(_constraintCount), scaledRow.Reshape(width)));
             var isPivotRow = engine.TensorSliceAxis(engine.TensorEye<T>(_constraintCount), 0, pivotRow);
             var changes = engine.TensorMultiply(
                 engine.TensorNotEquals(factors, NumOps.Zero), engine.ScalarMinusTensor(NumOps.One, isPivotRow));

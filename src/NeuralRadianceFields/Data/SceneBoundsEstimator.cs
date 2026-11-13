@@ -41,9 +41,10 @@ public static class SceneBoundsEstimator
             cameraRows[i] = Tensor<T>.FromVector(viewList[i].CameraPosition.GetSubVector(0, 3));
         }
 
-        var cameras = engine.TensorStack(cameraRows, 0);
-        var centroid = engine.TensorDivideScalar(
-            engine.ReduceSum(cameras, new[] { 0 }, true), numOps.FromDouble(viewList.Count));
+        // The bounds are measured in double, as SceneBounds stores them: squared offsets overflow float (2e19)
+        // and Half long before the bounds themselves do.
+        var cameras = engine.TensorStack(cameraRows, 0).Cast<double>();
+        var centroid = engine.TensorDivideScalar(engine.ReduceSum(cameras, new[] { 0 }, true), (double)viewList.Count);
         var offsets = engine.TensorSubtract(cameras, engine.TensorBroadcastTo(centroid, cameras.Shape.ToArray()));
         var distances = engine.TensorSqrt(engine.ReduceSum(engine.TensorSquare(offsets), new[] { 1 }, false));
         var isNan = engine.TensorIsNan(distances);
@@ -52,29 +53,25 @@ public static class SceneBoundsEstimator
         // The running "d > best" scan seeded with 0 skips NaN distances; distances are never negative, so
         // the maximum with NaN replaced by 0 is that scan's result.
         var forMax = engine.TensorWhere(isNan, engine.TensorZerosLike(distances), distances);
-        T maxDist = engine.TensorMaxValue(forMax);
-        T radius = numOps.Multiply(maxDist, numOps.FromDouble(1.0 + margin));
+        double maxDist = engine.TensorMaxValue(forMax);
+        double radius = maxDist * (1.0 + margin);
 
         // Near = smallest camera-to-centroid distance minus half-radius (surface hits before
         // reaching centroid). Far = camera-to-far-side-of-bbox from the most distant camera.
-        // NaN distances are skipped by masking them with the type's largest value (decimal has no infinity to
-        // convert). When every distance is NaN the scan never moved off +infinity, so near is +infinity.
-        bool allNan = engine.TensorCountNonzero(isNan) == distances.Length;
-        var forMin = engine.TensorWhere(isNan, engine.TensorFullLike(distances, numOps.MaxValue), distances);
-        T minDist = engine.TensorMinValue(forMin);
+        // NaN distances are skipped; when every distance is NaN the scan never moved off +infinity.
+        var forMin = engine.TensorWhere(isNan, engine.TensorFullLike(distances, double.PositiveInfinity), distances);
+        double minDist = engine.TensorMinValue(forMin);
 
         // Math.Max(0.1, value) semantics: a NaN value propagates.
-        T nearFloor = numOps.FromDouble(0.1);
-        T nearCandidate = numOps.Subtract(minDist, radius);
-        T near = numOps.IsNaN(nearCandidate) || numOps.GreaterThan(nearCandidate, nearFloor) ? nearCandidate : nearFloor;
-        T far = numOps.Add(maxDist, radius);
+        double nearCandidate = minDist - radius;
+        double near = double.IsNaN(nearCandidate) || nearCandidate > 0.1 ? nearCandidate : 0.1;
+        double far = maxDist + radius;
 
-        // SceneBounds is double by design; only the final values are converted.
         return new SceneBounds(
-            center: (numOps.ToDouble(centroid[0, 0]), numOps.ToDouble(centroid[0, 1]), numOps.ToDouble(centroid[0, 2])),
-            radius: numOps.ToDouble(radius),
-            near: allNan ? double.PositiveInfinity : numOps.ToDouble(near),
-            far: numOps.ToDouble(far));
+            center: (centroid[0, 0], centroid[0, 1], centroid[0, 2]),
+            radius: radius,
+            near: near,
+            far: far);
     }
 }
 

@@ -235,8 +235,10 @@ public class ShannonWavelet<T> : WaveletFunctionBase<T>
         // x = k / n for k = -n/2 .. n/2 - 1; sqrt(1/2) * sinc(2 pi x), with sqrt(1/2) at k = 0
         var x = engine.TensorDivideScalar(WaveletEngineOps<T>.CenteredGrid(n), NumOps.FromDouble(n));
         var angle = engine.TensorMultiplyScalar(x, twoPi);
-        var values = engine.TensorMultiplyScalar(engine.TensorDivide(engine.TensorSin(angle), angle), scale);
+        // The centre divides by one instead (decimal throws on 0 / 0 before the centre value is selected).
         var center = engine.TensorEquals(x, NumOps.Zero);
+        var safeAngle = engine.TensorWhere(center, engine.TensorOnesLike(angle), angle);
+        var values = engine.TensorMultiplyScalar(engine.TensorDivide(engine.TensorSin(angle), safeAngle), scale);
         return engine.TensorWhere(center, engine.TensorFullLike(values, scale), values).ToVector();
     }
 
@@ -273,10 +275,11 @@ public class ShannonWavelet<T> : WaveletFunctionBase<T>
         // x = k / n for k = -n/2 .. n/2 - 1; sqrt(1/2) * sinc(2 pi x) * cos(2 pi x), with sqrt(1/2) at k = 0
         var x = engine.TensorDivideScalar(WaveletEngineOps<T>.CenteredGrid(n), NumOps.FromDouble(n));
         var angle = engine.TensorMultiplyScalar(x, twoPi);
-        var sinc = engine.TensorDivide(engine.TensorSin(angle), angle);
+        var center = engine.TensorEquals(x, NumOps.Zero);
+        var safeAngle = engine.TensorWhere(center, engine.TensorOnesLike(angle), angle);
+        var sinc = engine.TensorDivide(engine.TensorSin(angle), safeAngle);
         var modulation = engine.TensorCos(angle);
         var values = engine.TensorMultiplyScalar(engine.TensorMultiply(sinc, modulation), scale);
-        var center = engine.TensorEquals(x, NumOps.Zero);
         return engine.TensorWhere(center, engine.TensorFullLike(values, scale), values).ToVector();
     }
 }

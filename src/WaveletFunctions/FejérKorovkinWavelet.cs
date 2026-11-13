@@ -366,6 +366,52 @@ public partial class FejérKorovkinWavelet<T> : WaveletFunctionBase<T>
     }
 
     /// <summary>
+    /// Published Fejer-Korovkin scaling (low-pass) filters by length: fk4, fk6, fk8, fk14 and fk22 (Nielsen,
+    /// "On the construction and frequency localization of finite orthogonal quadrature filters", J. Approx. Theory
+    /// 108 (2001); the same values as MATLAB's <c>fejerkorovkin</c>). Copied from the low-pass halves of the
+    /// <c>fk4</c> .. <c>fk22</c> tables in wavelib's <c>src/wavefilt.c</c> (BSD-3, Rafat Hussain and Holger
+    /// Nahrstaedt). PyWavelets ships no Fejer-Korovkin family, and no fk18 table was found in a citable source.
+    /// </summary>
+    private static readonly Dictionary<int, double[]> PublishedScalingFilters = new Dictionary<int, double[]>
+    {
+        [4] = new[]
+        {
+            0.6539275555697651, 0.7532724928394872, 0.5317922877905981e-1,
+            -0.4616571481521770e-1,
+        },
+        [6] = new[]
+        {
+            0.4279150324223103, 0.8129196431369074, 0.3563695110701871,
+            -0.1464386812725773, -0.7717775740697006e-1, 0.4062581442323794e-1,
+        },
+        [8] = new[]
+        {
+            0.3492381118637999, 0.7826836203840648, 0.4752651350794712,
+            -0.9968332845057319e-1, -0.1599780974340301, 0.4310666810651625e-1,
+            0.4258163167758178e-1, -0.1900017885373592e-1,
+        },
+        [14] = new[]
+        {
+            0.2603717692913964, 0.6868914772395985, 0.6115546539595115,
+            0.5142165414211914e-1, -0.2456139281621916, -0.4857533908585527e-1,
+            0.1242825609215128, 0.2222673962246313e-1, -0.6399737303914167e-1,
+            -0.5074372549972850e-2, 0.2977971159037902e-1, -0.3297479152708717e-2,
+            -0.9270613374448239e-2, 0.3514100970435962e-2,
+        },
+        [22] = new[]
+        {
+            0.1938961077599566, 0.5894521909294277, 0.6700849629420265,
+            0.2156298491347700, -0.2280288557715772, -0.1644657152688429,
+            0.1115491437220700, 0.1101552649340661, -0.6608451679377920e-1,
+            -0.7184168192312605e-1, 0.4354236762555708e-1, 0.4477521218440976e-1,
+            -0.2974288074927414e-1, -0.2597087308902119e-1, 0.2028448606667798e-1,
+            0.1296424941108978e-1, -0.1288599056244363e-1, -0.4838432636440189e-2,
+            0.7173803165271690e-2, 0.3612855622194901e-3, -0.2676991638581043e-2,
+            0.8805773686384639e-3,
+        },
+    };
+
+    /// <summary>
     /// Initializes the scaling and wavelet coefficients used for signal decomposition.
     /// </summary>
     /// <remarks>
@@ -392,13 +438,11 @@ public partial class FejérKorovkinWavelet<T> : WaveletFunctionBase<T>
     private void InitializeCoefficients()
     {
         var engine = AiDotNetEngine.Current;
-        if (_order == 4)
+        if (PublishedScalingFilters.TryGetValue(_order, out var taps))
         {
-            // fk4 (Nielsen 2001; MATLAB fejerkorovkin('fk4')): an orthonormal scaling filter (sum sqrt(2), unit norm,
-            // orthogonal to its even shifts) with its quadrature-mirror high-pass, so Reconstruct inverts Decompose.
-            _scalingCoefficients = new Tensor<double>(
-                new[] { 0.6539275555697651, 0.7532724928394872, 0.0531792287790598, -0.0461657148152177 },
-                new[] { 4 }).Cast<T>().ToVector();
+            // Published fk taps: an orthonormal scaling filter (sum sqrt(2), unit norm, orthogonal to its even shifts)
+            // with its quadrature-mirror high-pass, so Reconstruct inverts Decompose.
+            _scalingCoefficients = new Tensor<double>(taps, new[] { taps.Length }).Cast<T>().ToVector();
             _waveletCoefficients = WaveletEngineOps<T>.QuadratureMirror(_scalingCoefficients);
             return;
         }
@@ -471,18 +515,13 @@ public partial class FejérKorovkinWavelet<T> : WaveletFunctionBase<T>
     /// Reconstruct(Decompose(signal)) should equal the original signal.
     /// </para>
     /// </remarks>
-    /// <exception cref="NotSupportedException">
-    /// The order is not 4: only the fk4 taps are an orthonormal filter bank here, and synthesis with any other
-    /// filters would not return the decomposed signal.
-    /// </exception>
+    /// <remarks>
+    /// Orders 4, 6, 8, 14 and 22 use the published Fejer-Korovkin filter banks, which are orthonormal, so this
+    /// inverts <see cref="Decompose"/> exactly. Other orders have no published taps; they keep the cosine/sine
+    /// filters, for which this is the adjoint of the analysis but not its inverse.
+    /// </remarks>
     public Vector<T> Reconstruct(Vector<T> approximation, Vector<T> detail)
     {
-        if (_order != 4)
-        {
-            throw new NotSupportedException(
-                "Fejer-Korovkin reconstruction is available for order 4 (fk4) only; other orders have no orthonormal filter bank here.");
-        }
-
         // Adjoint of the periodic analysis in Decompose:
         // x[m] = sum_j h[j] * up(a)[(m - j) mod n] + g[j] * up(d)[(m - j) mod n].
         return WaveletEngineOps<T>.PeriodicSynthesis(approximation, detail, _scalingCoefficients, _waveletCoefficients);

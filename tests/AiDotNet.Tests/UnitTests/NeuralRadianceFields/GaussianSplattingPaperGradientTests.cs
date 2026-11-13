@@ -580,4 +580,36 @@ public class GaussianSplattingPaperGradientTests
 
         Assert.Equal(1.0, AiDotNet.NeuralRadianceFields.Metrics.RenderingMetrics<double>.SSIM(image, image, windowSize: 1), 9);
     }
+
+    [Fact]
+    public void SceneBounds_FloatCamerasFarApart_StayFinite()
+    {
+        // Offsets of 2e19 square past float's range; the bounds themselves (radius 2.5e19) do not.
+        var rotation = new Matrix<float>(3, 3);
+        for (int i = 0; i < 3; i++) rotation[i, i] = 1f;
+        var photo = new Tensor<float>(new[] { 1, 1, 3 });
+        var views = new[]
+        {
+            new AiDotNet.NeuralRadianceFields.Data.ImageView<float>(photo, new Vector<float>(new[] { 2e19f, 0f, 0f }), rotation),
+            new AiDotNet.NeuralRadianceFields.Data.ImageView<float>(photo, new Vector<float>(new[] { -2e19f, 0f, 0f }), rotation),
+        };
+
+        var bounds = AiDotNet.NeuralRadianceFields.Data.SceneBoundsEstimator.EstimateFromViews(views);
+
+        Assert.Equal(2.5e19, bounds.Radius, 2.5e19 * 1e-6);
+        Assert.False(double.IsNaN(bounds.Near) || double.IsInfinity(bounds.Far));
+    }
+
+    [Fact]
+    public void Mse_HalfImages_DoNotOverflowTheElementCount()
+    {
+        // 256 x 256 = 65,536 elements: converted to Half the count is infinity and the mean collapsed to 0.
+        var zeros = new Tensor<Half>(new[] { 256, 256 });
+        var halves = new Half[256 * 256];
+        for (int i = 0; i < halves.Length; i++) halves[i] = (Half)0.5f;
+        var image = new Tensor<Half>(halves, new[] { 256, 256 });
+
+        Assert.Equal(0.25, AiDotNet.NeuralRadianceFields.Metrics.RenderingMetrics<Half>.MSE(zeros, image), 6);
+        Assert.Equal(0.5, AiDotNet.NeuralRadianceFields.Metrics.RenderingMetrics<Half>.MAE(zeros, image), 6);
+    }
 }

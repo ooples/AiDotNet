@@ -76,6 +76,14 @@ public class VoiceprintDeepfakeDetector<T> : AudioSafetyModuleBase<T>
             return findings; // Need enough frames for consistency analysis
         }
 
+        if (typeof(T) == typeof(Half))
+        {
+            // Half spectral moments overflow at 65504 (a 1 kHz tone's first moment is ~128,000) and so do the squared
+            // sums behind the variances: analyse in float. The findings carry no T values.
+            var wide = Tensor<T>.FromVector(audioSamples).Cast<float>().ToVector();
+            return new VoiceprintDeepfakeDetector<float>(NumOps.ToDouble(_threshold), sampleRate).EvaluateAudio(wide, sampleRate);
+        }
+
         using var noGrad = new NoGradScope<T>();
 
         // Extract voiceprint features for every frame at once.
