@@ -37,7 +37,7 @@ internal static class DpSgdTrainingStep<T>
     /// <param name="computeLoss">One example's scalar loss from the forward output and its slots.</param>
     /// <param name="clipNorm">C, the per-example global L2 clip.</param>
     /// <param name="noiseMultiplier">sigma; the noise standard deviation is <c>C * sigma / batch</c> (0 = none).</param>
-    /// <param name="random">The model's generator (used by the fused primitive's noise).</param>
+    /// <param name="random">The model's generator (the source of the Gaussian noise on both paths).</param>
     /// <param name="optimizer">The update rule applied to the noised average gradient.</param>
     public static T Step(
         IReadOnlyList<Tensor<T>> parameters,
@@ -74,7 +74,7 @@ internal static class DpSgdTrainingStep<T>
         {
             lossSum = 0.0;
             noisedAverage = EagerNoisedAverage(
-                parameters, exampleCount, exampleSlots, forward, ExampleLoss, clipNorm, noiseMultiplier);
+                parameters, exampleCount, exampleSlots, forward, ExampleLoss, clipNorm, noiseMultiplier, random);
         }
 
         T meanLoss = NumOps.FromDouble(lossSum / exampleCount);
@@ -113,7 +113,8 @@ internal static class DpSgdTrainingStep<T>
         Func<IReadOnlyList<Tensor<T>>, Tensor<T>> forward,
         Func<Tensor<T>, IReadOnlyList<Tensor<T>>, Tensor<T>> computeLoss,
         double clipNorm,
-        double noiseMultiplier)
+        double noiseMultiplier,
+        Random random)
     {
         var engine = AiDotNetEngine.Current;
         var clippedSums = new Dictionary<Tensor<T>, Tensor<T>>(parameters.Count, TensorReferenceComparer<Tensor<T>>.Instance);
@@ -153,8 +154,9 @@ internal static class DpSgdTrainingStep<T>
             engine.TensorMultiplyScalarInPlace(average, NumOps.FromDouble(inverseCount));
             if (noiseStd > 0)
             {
-                var noise = new Tensor<T>(average._shape);
-                engine.TensorRandomNormalInto(noise, NumOps.Zero, NumOps.FromDouble(noiseStd));
+                // Drawn from the model's generator, as the fused primitive's noise is: the engine's shared stream made
+                // a seeded DP model train to different weights on every run.
+                var noise = engine.TensorMultiplyScalar(engine.TensorRandnLike(average, random.Next()), NumOps.FromDouble(noiseStd));
                 engine.TensorAddInPlace(average, noise);
             }
             noisedAverage[pair.Key] = average;
