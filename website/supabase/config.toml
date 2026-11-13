@@ -23,3 +23,26 @@ jwt_expiry = 3600
 [auth.email]
 enable_signup = true
 enable_confirmations = true
+
+# Edge functions. CI deploys every function on each website deploy (deploy-website.yml), and the CLI
+# defaults verify_jwt to true. All of these must stay false, as production has always run them:
+# the SDK calls the license endpoints without a Supabase JWT, Stripe signs its own webhook requests,
+# and the account/admin functions check the caller's session themselves.
+
+[functions.validate-license]
+verify_jwt = false
+
+[functions.issue-license]
+verify_jwt = false
+
+[functions.get-revocations]
+verify_jwt = false
+
+[functions.register-community-license]
+verify_jwt = false
+
+[functions.stripe-webhook]
+verify_jwt = false
+
+[functions.admin-resend-license-email]
+verify_jwt = false
