@@ -1,7 +1,6 @@
 
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
-using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.RetrievalAugmentedGeneration.Models;
@@ -129,7 +128,7 @@ public class MaximalMarginalRelevanceReranker<T> : RerankerBase<T>
     /// Reranks documents using Maximal Marginal Relevance.
     /// </summary>
     protected override IEnumerable<Document<T>> RerankCore(string query, IList<Document<T>> documents)
-    {
+        {
         var docList = documents.ToList();
 
         if (docList.Count == 0)
@@ -138,84 +137,38 @@ public class MaximalMarginalRelevanceReranker<T> : RerankerBase<T>
         if (docList.Count == 1)
             return docList;
 
-        // Get embeddings for all documents
-        var embeddings = docList.Select(doc => _getEmbedding(doc)).ToList();
+        // MMR = argmax[λ Sim1(D_i, Q) - (1 - λ) max_{D_j ∈ S} Sim2(D_i, D_j)] (Carbonell and Goldstein 1998),
+        // with Sim1 the original relevance score (0 when absent) and Sim2 the embedding cosine similarity.
+        var relevance = new Tensor<T>(
+            docList.Select(doc => doc.HasRelevanceScore ? doc.RelevanceScore : NumOps.Zero).ToArray(), [docList.Count]);
+        var similarity = CosineSimilarityMatrix(docList.Select(doc => _getEmbedding(doc)).ToList());
+        var order = MarginalRelevanceOrder(relevance, similarity, NumOps.FromDouble(_lambda));
 
-        // Track which documents have been selected
-        var selected = new List<int>();
-        var unselected = Enumerable.Range(0, docList.Count).ToList();
-
-        // Select first document (most relevant)
-        var firstIdx = unselected
-            .OrderByDescending(i => docList[i].HasRelevanceScore ? Convert.ToDouble(docList[i].RelevanceScore) : 0.0)
-            .First();
-
-        selected.Add(firstIdx);
-        unselected.Remove(firstIdx);
-
-        // Iteratively select remaining documents using MMR
-        while (unselected.Count > 0)
-        {
-            var bestIdx = -1;
-            var bestScore = NumOps.MinValue;
-
-            foreach (var i in unselected)
-            {
-                var doc = docList[i];
-
-                // Relevance component (original score)
-                var relevance = doc.HasRelevanceScore ? doc.RelevanceScore : NumOps.Zero;
-
-                // Diversity component (max similarity to selected docs)
-                var maxSimilarity = NumOps.Zero;
-                foreach (var j in selected)
-                {
-                    var similarity = NumOps.FromDouble(VectorHelper.CosineSimilarity(embeddings[i], embeddings[j]));
-                    if (NumOps.GreaterThan(similarity, maxSimilarity))
-                        maxSimilarity = similarity;
-                }
-
-                // MMR score = λ * relevance - (1 - λ) * maxSimilarity
-                var lambdaT = NumOps.FromDouble(_lambda);
-                var oneMinusLambda = NumOps.FromDouble(1.0 - _lambda);
-
-                var mmrScore = NumOps.Subtract(
-                    NumOps.Multiply(lambdaT, relevance),
-                    NumOps.Multiply(oneMinusLambda, maxSimilarity)
-                );
-
-                if (bestScore == null || NumOps.GreaterThan(mmrScore, bestScore))
-                {
-                    bestScore = mmrScore;
-                    bestIdx = i;
-                }
-            }
-
-            if (bestIdx >= 0)
-            {
-                selected.Add(bestIdx);
-                unselected.Remove(bestIdx);
-            }
-            else
-            {
-                break;
-            }
-        }
-
-        // Return documents in MMR order
-        var reranked = new List<Document<T>>();
-        for (int i = 0; i < selected.Count; i++)
-        {
-            var doc = docList[selected[i]];
-
-            // Update relevance score to reflect MMR position
-            doc.RelevanceScore = NumOps.FromDouble(1.0 - (i / (double)selected.Count));
-            doc.HasRelevanceScore = true;
-
-            reranked.Add(doc);
-        }
-
+        // Return documents in MMR order; scores reflect MMR position: 1 - i / n
+        var reranked = order.Select(i => docList[i]).ToList();
+        AssignRankScores(reranked);
         return reranked;
     }
+
+    /// <summary>
+    /// Pairwise cosine similarity of the embeddings (0 for zero vectors), clamped to [-1, 1].
+    /// Rows are divided by their largest magnitude before squaring so narrow T cannot overflow.
+    /// </summary>
+    private static Tensor<T> CosineSimilarityMatrix(List<Vector<T>> embeddings)
+    {
+        var matrix = Engine.TensorStack(embeddings.Select(e => Tensor<T>.FromVector(e)).ToArray(), 0);
+        var one = NumOps.One;
+        var scale = Engine.ReduceMax(Engine.TensorAbs(matrix), [1], true);
+        var scaled = Engine.TensorDivide(matrix, NonZero(scale, one));
+        var norms = Engine.TensorSqrt(Engine.ReduceSum(Engine.TensorSquare(scaled), [1], true));
+        var unit = Engine.TensorDivide(scaled, NonZero(norms, one));
+        var cosine = Engine.TensorMatMul(unit, Engine.TensorTranspose(unit));
+        return Engine.TensorClamp(cosine, NumOps.Negate(one), one);
+    }
+
+    /// <summary>Replaces zero entries with <paramref name="fill"/> (a zero row stays zero after dividing).</summary>
+    private static Tensor<T> NonZero(Tensor<T> values, T fill)
+        => Engine.TensorWhere(
+            Engine.TensorGreaterThan(values, NumOps.Zero), values, Tensor<T>.CreateDefault(values._shape, fill));
 
 }

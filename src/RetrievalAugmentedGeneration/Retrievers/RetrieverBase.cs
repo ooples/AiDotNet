@@ -2,6 +2,7 @@
 using System.Threading;
 using System.Threading.Tasks;
 using AiDotNet.Interfaces;
+using AiDotNet.Tensors.Engines;
 using AiDotNet.RetrievalAugmentedGeneration.Models;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.Retrievers;
@@ -32,6 +33,28 @@ public abstract class RetrieverBase<T> : IRetriever<T>
     /// Provides mathematical operations for the numeric type T.
     /// </summary>
     protected static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
+
+    /// <summary>The engine used for vectorized scoring.</summary>
+    private protected static IEngine Engine => AiDotNetEngine.Current;
+
+    /// <summary>
+    /// Orders fused documents by their (rank-derived, double) score, keeps the top <paramref name="topK"/> and
+    /// sets the scores on them, converting to <typeparamref name="T"/> in one pass.
+    /// </summary>
+    private protected static List<Document<T>> TakeTopByFusedScore(IEnumerable<(Document<T> Doc, double Score)> fused, int topK)
+    {
+        var top = fused.OrderByDescending(x => x.Score).Take(topK).ToList();
+        if (top.Count == 0)
+            return new List<Document<T>>();
+
+        var scores = new Tensor<double>(top.Select(x => x.Score).ToArray(), [top.Count]).Cast<T>().ToArray();
+        return top.Select((x, i) =>
+        {
+            x.Doc.RelevanceScore = scores[i];
+            x.Doc.HasRelevanceScore = true;
+            return x.Doc;
+        }).ToList();
+    }
 
     /// <summary>
     /// Gets the default number of documents to retrieve.

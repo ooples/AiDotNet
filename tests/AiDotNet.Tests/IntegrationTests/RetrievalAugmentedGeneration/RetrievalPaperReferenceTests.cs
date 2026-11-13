@@ -1,0 +1,143 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using AiDotNet.Enums;
+using AiDotNet.RetrievalAugmentedGeneration.DocumentStores;
+using AiDotNet.RetrievalAugmentedGeneration.Models;
+using AiDotNet.RetrievalAugmentedGeneration.Rerankers;
+using AiDotNet.RetrievalAugmentedGeneration.RerankingStrategies;
+using AiDotNet.RetrievalAugmentedGeneration.Retrievers;
+using Xunit;
+
+namespace AiDotNet.Tests.IntegrationTests.RetrievalAugmentedGeneration;
+
+/// <summary>
+/// Rerankers and retriever score aggregation checked against the papers they implement.
+/// </summary>
+public class RetrievalPaperReferenceTests
+{
+    private const double Tolerance = 1e-12;
+
+    /// <summary>
+    /// Carbonell and Goldstein 1998: MMR = argmax[λ rel_i - (1 - λ) max_j sim(i, j)] uses the true maximum
+    /// similarity to the selected set. With λ = 0.5 and A selected first, B (rel 0.5, cos -1) scores
+    /// 0.25 + 0.5 = 0.75 and C (rel 0.6, cos -0.2) scores 0.3 + 0.1 = 0.4, so B is next. Master clamped the
+    /// maximum at 0, scored B 0.25 and C 0.3, and picked C.
+    /// </summary>
+    [Fact]
+    public void Mmr_UsesTrueMaximumSimilarity_ForNegativeCosines()
+    {
+        var embeddings = new Dictionary<string, Vector<double>>
+        {
+            ["A"] = new Vector<double>(new[] { 1.0, 0.0 }),
+            ["B"] = new Vector<double>(new[] { -1.0, 0.0 }),
+            ["C"] = new Vector<double>(new[] { -0.2, Math.Sqrt(1.0 - 0.04) }),
+        };
+        var docs = new[] { Scored("A", 1.0), Scored("B", 0.5), Scored("C", 0.6) };
+        var reranker = new MaximalMarginalRelevanceReranker<double>(d => embeddings[d.Id], lambda: 0.5);
+
+        var order = reranker.Rerank("q", docs).Select(d => d.Id).ToArray();
+
+        Assert.Equal(new[] { "A", "B", "C" }, order);
+    }
+
+    /// <summary>
+    /// Cormack, Clarke and Buettcher 2009: RRF(d) = Σ 1 / (k + r(d)). With k = 60, "a" at ranks 1 and 2
+    /// scores 1/61 + 1/62 and "b" at ranks 2 and 1 the same; "c" at rank 3 once scores 1/63.
+    /// Fused documents carry their score (master left HasRelevanceScore false).
+    /// </summary>
+    [Fact]
+    public void Rrf_FusedScores_MatchCormack2009()
+    {
+        var rrf = new ReciprocalRankFusion<double>();
+        var fused = rrf.FuseRankings(new List<List<Document<double>>>
+        {
+            new() { new Document<double>("a", "a"), new Document<double>("b", "b"), new Document<double>("c", "c") },
+            new() { new Document<double>("b", "b"), new Document<double>("a", "a") },
+        }, topK: 3);
+
+        Assert.Equal(new[] { "a", "b", "c" }, fused.Select(d => d.Id).ToArray());
+        Assert.Equal(1.0 / 61 + 1.0 / 62, fused[0].RelevanceScore, Tolerance);
+        Assert.Equal(1.0 / 61 + 1.0 / 62, fused[1].RelevanceScore, Tolerance);
+        Assert.Equal(1.0 / 63, fused[2].RelevanceScore, Tolerance);
+        Assert.All(fused, d => Assert.True(d.HasRelevanceScore));
+    }
+
+    /// <summary>RRF is generic in T: master sorted through Convert.ToDouble, which throws for Half.</summary>
+    [Fact]
+    public void Rrf_Rerank_WorksForHalf()
+    {
+        var rrf = new ReciprocalRankFusion<Half>();
+        var docs = new[] { new Document<Half>("a", "a"), new Document<Half>("b", "b") };
+
+        var reranked = rrf.Rerank("q", docs).ToList();
+
+        Assert.Equal(new[] { "a", "b" }, reranked.Select(d => d.Id).ToArray());
+        Assert.Equal((Half)(1.0 / 61), reranked[0].RelevanceScore);
+    }
+
+    /// <summary>
+    /// Weighted multi-vector aggregation weighs vector N of "docId_vector_N" by 1 / (N + 1). The store returns
+    /// vectors in similarity order (vector 1 at 0.8 before vector 0 at 0.2), so the score is
+    /// (0.2 * 1 + 0.8 * 0.5) / 1.5 = 0.4. Master weighted by arrival order and returned 0.6.
+    /// </summary>
+    [Fact]
+    public void MultiVector_WeightedAggregation_WeighsByVectorPosition()
+    {
+        var scores = new List<(int position, double score)> { (1, 0.8), (0, 0.2) };
+
+        Assert.Equal(0.4, MultiVectorRetriever<double>.AggregateScores(scores, MultiVectorAggregation.Weighted), Tolerance);
+        Assert.Equal(0.8, MultiVectorRetriever<double>.AggregateScores(scores, MultiVectorAggregation.Max), Tolerance);
+        Assert.Equal(0.5, MultiVectorRetriever<double>.AggregateScores(scores, MultiVectorAggregation.Mean), Tolerance);
+    }
+
+    /// <summary>
+    /// Okapi BM25 (Robertson and Zaragoza 2009, Eq. 3.15) with k1 = 1.5, b = 0.75 on "a b", "a a c", "c" for
+    /// query "c": N = 3, df = 2, avgdl = 5/3, idf = ln(1.5 / 2.5).
+    /// </summary>
+    [Fact]
+    public void Bm25_Scores_MatchRobertsonZaragoza()
+    {
+        var retriever = new BM25Retriever<double>(Store<double>("a b", "a a c", "c"), k1: 1.5, b: 0.75);
+
+        var results = retriever.Retrieve("c", topK: 3).ToDictionary(d => d.Id, d => d.RelevanceScore);
+
+        double idf = Math.Log(1.5 / 2.5);
+        double avgdl = 5.0 / 3.0;
+        double Term(double tf, double dl) => idf * tf * 2.5 / (tf + 1.5 * (0.25 + 0.75 * dl / avgdl));
+        Assert.Equal(Term(1, 3), results["d1"], Tolerance);
+        Assert.Equal(Term(1, 1), results["d2"], Tolerance);
+        Assert.Equal(0.0, results["d0"], Tolerance);
+    }
+
+    /// <summary>BM25 and TF-IDF are generic in T: master computed the idf / ranking through Convert.ToDouble,
+    /// which throws for Half.</summary>
+    [Fact]
+    public void SparseRetrievers_WorkForHalf()
+    {
+        var store = Store<Half>("a b", "a a c", "c");
+
+        var bm25 = new BM25Retriever<Half>(store).Retrieve("b", topK: 3).ToList();
+        var tfidf = new TFIDFRetriever<Half>(store).Retrieve("b", topK: 3).ToList();
+
+        Assert.Equal("d0", bm25[0].Id);
+        Assert.Equal("d0", tfidf[0].Id);
+
+        // tf = 1 / max count 1, idf = ln(3 / 1)
+        Assert.Equal((Half)Math.Log(3.0), tfidf[0].RelevanceScore);
+    }
+
+    private static InMemoryDocumentStore<TNum> Store<TNum>(params string[] contents)
+    {
+        var store = new InMemoryDocumentStore<TNum>(1);
+        for (int i = 0; i < contents.Length; i++)
+        {
+            store.Add(new VectorDocument<TNum>(new Document<TNum>("d" + i, contents[i]), new Vector<TNum>(1)));
+        }
+
+        return store;
+    }
+
+    private static Document<double> Scored(string id, double score)
+        => new Document<double>(id, id) { RelevanceScore = score, HasRelevanceScore = true };
+}

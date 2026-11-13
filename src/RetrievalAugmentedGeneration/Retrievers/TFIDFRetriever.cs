@@ -33,8 +33,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Retrievers
         private readonly IDocumentStore<T> _documentStore;
         private readonly object _cacheLock = new object();
 
-        private Dictionary<string, Dictionary<string, T>>? _cachedTfidf;
-        private Dictionary<string, T>? _cachedIdf;
+        private TermIndex? _cachedIndex;
         private int _cachedDocumentCount;
 
         public TFIDFRetriever(IDocumentStore<T> documentStore, int defaultTopK = 5) : base(defaultTopK)
@@ -47,53 +46,67 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Retrievers
 
         /// <inheritdoc />
         protected override IEnumerable<Document<T>> RetrieveCore(string query, int topK, Dictionary<string, object> metadataFilters)
-        {
-            var queryTerms = Tokenize(query);
-            var scores = new Dictionary<string, T>();
-
-            var candidates = _documentStore.GetAll();
-            var candidatesList = candidates.ToList();
-            var candidatesById = candidatesList.ToDictionary(d => d.Id);
-
-            // Use cached TF-IDF or build if cache is stale
-            var tfidf = GetOrBuildTFIDF(candidatesList);
-
-            foreach (var doc in candidatesList.Where(d => MatchesFilters(d, metadataFilters)))
-            {
-                var score = NumOps.Zero;
-
-                if (tfidf.TryGetValue(doc.Id, out var docTfidf))
                 {
-                    foreach (var term in queryTerms.Where(t => docTfidf.ContainsKey(t)))
-                    {
-                        score = NumOps.Add(score, docTfidf[term]);
-                    }
-                }
+            var candidatesList = _documentStore.GetAll().ToList();
 
-                scores[doc.Id] = score;
-            }
+            // Use cached term statistics or build them if the cache is stale
+            var index = GetOrBuildIndex(candidatesList);
+            var indexScores = ScoreDocuments(Tokenize(query), index);
+            var scoreById = new Dictionary<string, T>();
+            for (int i = 0; i < index.DocumentIds.Count; i++)
+                scoreById[index.DocumentIds[i]] = indexScores[i];
 
-            var results = scores
-                .Select(kv => new { DocId = kv.Key, Score = Convert.ToDouble(kv.Value) })
-                .OrderByDescending(x => x.Score)
+            return candidatesList
+                .Where(d => MatchesFilters(d, metadataFilters))
+                .Select(doc => (doc, score: scoreById.TryGetValue(doc.Id, out var score) ? score : NumOps.Zero))
+                .OrderByDescending(x => x.score)
                 .Take(topK)
                 .Select(x =>
                 {
-                    if (candidatesById.TryGetValue(x.DocId, out var doc))
-                    {
-                        doc.RelevanceScore = NumOps.FromDouble(x.Score);
-                        doc.HasRelevanceScore = true;
-                        return doc;
-                    }
-                    return null;
+                    x.doc.RelevanceScore = x.score;
+                    x.doc.HasRelevanceScore = true;
+                    return x.doc;
                 })
-                .Where(d => d != null)
-                .Cast<Document<T>>();
-
-            return results;
+                .ToList();
         }
 
-        private List<string> Tokenize(string text)
+        /// <summary>
+        /// Σ over query terms (per occurrence) of tf · idf, with tf = count / max count in the document and
+        /// idf = ln(N / df) (Salton and Buckley 1988), for every indexed document.
+        /// </summary>
+        internal static T[] ScoreDocuments(List<string> queryTerms, TermIndex index)
+        {
+            int documents = index.TermCounts.Count;
+            var vocabulary = queryTerms.Distinct().Where(index.DocumentFrequency.ContainsKey).ToList();
+            int terms = vocabulary.Count;
+            if (documents == 0)
+                return Array.Empty<T>();
+            if (terms == 0)
+                return new T[documents];
+
+            var counts = new int[documents * terms];
+            for (int d = 0; d < documents; d++)
+            {
+                for (int t = 0; t < terms; t++)
+                {
+                    counts[d * terms + t] = index.TermCounts[d].TryGetValue(vocabulary[t], out var count) ? count : 0;
+                }
+            }
+
+            var queryCounts = vocabulary.Select(term => queryTerms.Count(q => q == term)).ToArray();
+            var df = new Tensor<int>(vocabulary.Select(term => index.DocumentFrequency[term]).ToArray(), [terms]).Cast<T>();
+            var idf = Engine.TensorLog(Engine.TensorDivide(Tensor<T>.CreateDefault([terms], NumOps.FromDouble(documents)), df));
+            var termWeights = Engine.TensorMultiply(idf, new Tensor<int>(queryCounts, [terms]).Cast<T>());
+
+            // Documents without terms have max count 0 but no matching counts either; divide by 1 instead.
+            var maxCounts = new Tensor<int>(index.MaxTermCount.Select(m => Math.Max(m, 1)).ToArray(), [documents, 1]).Cast<T>();
+            var tf = Engine.TensorDivide(
+                new Tensor<int>(counts, [documents, terms]).Cast<T>(), Engine.TensorBroadcastTo(maxCounts, [documents, terms]));
+
+            return Engine.TensorMatMul(tf, Engine.Reshape(termWeights, [terms, 1])).ToArray();
+        }
+
+        internal static List<string> Tokenize(string text)
         {
             if (string.IsNullOrWhiteSpace(text))
                 return new List<string>();
@@ -103,91 +116,59 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Retrievers
                 .ToList();
         }
 
-        private Dictionary<string, Dictionary<string, T>> GetOrBuildTFIDF(List<Document<T>> documents)
-        {
+        private TermIndex GetOrBuildIndex(List<Document<T>> documents)
+                {
             var currentDocCount = documents.Count;
 
             lock (_cacheLock)
             {
                 // Return cached statistics if document count hasn't changed
-                if (_cachedTfidf != null && _cachedDocumentCount == currentDocCount)
+                if (_cachedIndex != null && _cachedDocumentCount == currentDocCount)
                 {
-                    return _cachedTfidf;
+                    return _cachedIndex;
                 }
 
                 // Build new statistics and cache them
-                var (tfidf, idf) = BuildTFIDFStatistics(documents);
-                _cachedTfidf = tfidf;
-                _cachedIdf = idf;
+                var index = BuildIndex(documents);
+                _cachedIndex = index;
                 _cachedDocumentCount = currentDocCount;
 
-                return tfidf;
+                return index;
             }
         }
 
-        private (Dictionary<string, Dictionary<string, T>> tfidf, Dictionary<string, T> idf) BuildTFIDFStatistics(List<Document<T>> documents)
+        /// <summary>Counts every document's terms and every term's document frequency.</summary>
+        internal static TermIndex BuildIndex(List<Document<T>> documents)
         {
-            if (documents == null || documents.Count == 0)
-                return (new Dictionary<string, Dictionary<string, T>>(), new Dictionary<string, T>());
-
-            var termDocFreq = new Dictionary<string, int>();
-            var docTermFreq = new Dictionary<string, Dictionary<string, int>>();
-
+            var index = new TermIndex();
             foreach (var doc in documents)
             {
-                var terms = Tokenize(doc.Content);
                 var termCounts = new Dictionary<string, int>();
-
-                foreach (var term in terms)
+                foreach (var term in Tokenize(doc.Content))
                 {
-                    if (termCounts.TryGetValue(term, out var count))
-                        termCounts[term] = count + 1;
-                    else
-                        termCounts[term] = 1;
+                    termCounts[term] = termCounts.TryGetValue(term, out var count) ? count + 1 : 1;
                 }
-
-                docTermFreq[doc.Id] = termCounts;
 
                 foreach (var term in termCounts.Keys)
                 {
-                    if (termDocFreq.TryGetValue(term, out var docCount))
-                        termDocFreq[term] = docCount + 1;
-                    else
-                        termDocFreq[term] = 1;
-                }
-            }
-
-            var idf = new Dictionary<string, T>();
-            foreach (var term in termDocFreq.Keys)
-            {
-                var df = termDocFreq[term];
-                idf[term] = NumOps.FromDouble(Math.Log((double)documents.Count / (double)df));
-            }
-
-            var tfidf = new Dictionary<string, Dictionary<string, T>>();
-            foreach (var doc in documents)
-            {
-                var termTfidf = new Dictionary<string, T>();
-                var termCounts = docTermFreq[doc.Id];
-
-                if (termCounts.Count == 0)
-                {
-                    tfidf[doc.Id] = termTfidf;
-                    continue;
+                    index.DocumentFrequency[term] = index.DocumentFrequency.TryGetValue(term, out var docCount) ? docCount + 1 : 1;
                 }
 
-                var maxFreq = termCounts.Values.Max();
-
-                foreach (var termCount in termCounts)
-                {
-                    var tf = NumOps.FromDouble((double)termCount.Value / (double)maxFreq);
-                    termTfidf[termCount.Key] = NumOps.Multiply(tf, idf[termCount.Key]);
-                }
-
-                tfidf[doc.Id] = termTfidf;
+                index.DocumentIds.Add(doc.Id);
+                index.TermCounts.Add(termCounts);
+                index.MaxTermCount.Add(termCounts.Count == 0 ? 0 : termCounts.Values.Max());
             }
 
-            return (tfidf, idf);
+            return index;
+        }
+
+        /// <summary>Integer term statistics of an indexed corpus.</summary>
+        internal sealed class TermIndex
+        {
+            public List<string> DocumentIds { get; } = new List<string>();
+            public List<Dictionary<string, int>> TermCounts { get; } = new List<Dictionary<string, int>>();
+            public List<int> MaxTermCount { get; } = new List<int>();
+            public Dictionary<string, int> DocumentFrequency { get; } = new Dictionary<string, int>();
         }
 
         private bool MatchesFilters(Document<T> document, Dictionary<string, object> filters)

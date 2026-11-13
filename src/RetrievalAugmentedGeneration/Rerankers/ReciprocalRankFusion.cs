@@ -39,26 +39,16 @@ namespace AiDotNet.RetrievalAugmentedGeneration.RerankingStrategies
         /// <param name="documents">The documents to rerank.</param>
         /// <returns>A reranked list of documents.</returns>
         protected override IEnumerable<Document<T>> RerankCore(string query, IList<Document<T>> documents)
-        {
-            var scores = new Dictionary<string, T>();
-
-            for (int rank = 0; rank < documents.Count; rank++)
-            {
-                var doc = documents[rank];
-                var rrfScore = NumOps.FromDouble(1.0 / (_k + rank + 1));
-
-                scores[doc.Id] = scores.TryGetValue(doc.Id, out var existingScore)
-                    ? NumOps.Add(existingScore, rrfScore)
-                    : rrfScore;
-            }
+                {
+            var (index, scores) = ReciprocalRankScores(new[] { documents });
 
             var reranked = documents
-                .OrderByDescending(d => scores.TryGetValue(d.Id, out var score) ? Convert.ToDouble(score) : 0.0)
+                .OrderByDescending(d => scores[index[d.Id]])
                 .ToList();
 
-            foreach (var doc in reranked.Where(d => scores.ContainsKey(d.Id)))
+            foreach (var doc in reranked)
             {
-                doc.RelevanceScore = scores[doc.Id];
+                doc.RelevanceScore = scores[index[doc.Id]];
                 doc.HasRelevanceScore = true;
             }
 
@@ -72,44 +62,68 @@ namespace AiDotNet.RetrievalAugmentedGeneration.RerankingStrategies
         /// <param name="topK">The number of top documents to return.</param>
         /// <returns>A fused and reranked list of documents.</returns>
         public List<Document<T>> FuseRankings(List<List<Document<T>>> rankingLists, int topK)
-        {
+                {
             if (rankingLists == null || rankingLists.Count == 0)
                 throw new ArgumentException("Ranking lists cannot be null or empty", nameof(rankingLists));
             if (topK <= 0) throw new ArgumentOutOfRangeException(nameof(topK));
 
-            var scores = new Dictionary<string, T>();
             var allDocs = new Dictionary<string, Document<T>>();
-
-            foreach (var rankingList in rankingLists)
+            foreach (var doc in rankingLists.SelectMany(list => list))
             {
-                for (int rank = 0; rank < rankingList.Count; rank++)
-                {
-                    var doc = rankingList[rank];
-                    var rrfScore = NumOps.FromDouble(1.0 / (_k + rank + 1));
-
-                    if (scores.TryGetValue(doc.Id, out var existingScore))
-                    {
-                        scores[doc.Id] = NumOps.Add(existingScore, rrfScore);
-                    }
-                    else
-                    {
-                        scores[doc.Id] = rrfScore;
-                        allDocs[doc.Id] = doc;
-                    }
-                }
+                if (!allDocs.ContainsKey(doc.Id))
+                    allDocs[doc.Id] = doc;
             }
 
+            var (index, scores) = ReciprocalRankScores(rankingLists);
+
             var reranked = allDocs.Values
-                .OrderByDescending(d => Convert.ToDouble(scores[d.Id]))
+                .OrderByDescending(d => scores[index[d.Id]])
                 .Take(topK)
                 .ToList();
 
             foreach (var doc in reranked)
             {
-                doc.RelevanceScore = scores[doc.Id];
+                doc.RelevanceScore = scores[index[doc.Id]];
+                doc.HasRelevanceScore = true;
             }
 
             return reranked;
+        }
+
+        /// <summary>
+        /// RRF(d) = Σ_lists 1 / (k + r(d)) with r the 1-based rank (Cormack, Clarke and Buettcher 2009).
+        /// </summary>
+        /// <returns>Each document id's position in the score array, and the fused scores.</returns>
+        private (Dictionary<string, int> Index, T[] Scores) ReciprocalRankScores(IEnumerable<IList<Document<T>>> rankingLists)
+        {
+            var index = new Dictionary<string, int>();
+            var occurrences = new List<int>();
+            var ranks = new List<int>();
+            foreach (var rankingList in rankingLists)
+            {
+                for (int rank = 0; rank < rankingList.Count; rank++)
+                {
+                    var id = rankingList[rank].Id;
+                    if (!index.TryGetValue(id, out var position))
+                    {
+                        position = index.Count;
+                        index[id] = position;
+                    }
+
+                    occurrences.Add(position);
+                    ranks.Add(rank + 1);
+                }
+            }
+
+            int m = ranks.Count;
+            if (m == 0)
+                return (index, Array.Empty<T>());
+
+            var denominators = Engine.TensorAddScalar(new Tensor<int>(ranks.ToArray(), [m]).Cast<T>(), NumOps.FromDouble(_k));
+            var contributions = Engine.TensorDivide(Tensor<T>.CreateDefault([m], NumOps.One), denominators);
+            var membership = Engine.TensorOneHot<T>(new Tensor<int>(occurrences.ToArray(), [m]), index.Count);
+            var totals = Engine.TensorMatMul(Engine.Reshape(contributions, [1, m]), membership);
+            return (index, totals.ToArray());
         }
     }
 }

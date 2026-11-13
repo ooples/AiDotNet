@@ -22931,3 +22931,9 @@ AiDotNet.UncertaintyQuantification.ConformalPrediction.SplitConformalPredictor<T
 *REMOVED*AiDotNet.UncertaintyQuantification.ConformalPrediction.ConformalClassifier<T>.EvaluateCoverage(AiDotNet.Tensors.LinearAlgebra.Matrix<T>! testInputs, AiDotNet.Tensors.LinearAlgebra.Vector<int>! testLabels, double confidenceLevel = 0.9) -> double
 AiDotNet.UncertaintyQuantification.ConformalPrediction.ConformalClassifier<T>.ComputeAverageSetSize(AiDotNet.Tensors.LinearAlgebra.Matrix<T>! testInputs, double confidenceLevel = 0.9) -> T
 AiDotNet.UncertaintyQuantification.ConformalPrediction.ConformalClassifier<T>.EvaluateCoverage(AiDotNet.Tensors.LinearAlgebra.Matrix<T>! testInputs, AiDotNet.Tensors.LinearAlgebra.Vector<int>! testLabels, double confidenceLevel = 0.9) -> T
+*REMOVED*AiDotNet.RetrievalAugmentedGeneration.Retrievers.MultiVectorRetriever<T>.MultiVectorRetriever(AiDotNet.Interfaces.IDocumentStore<T>! documentStore, int vectorsPerDocument, string! aggregationMethod, AiDotNet.RetrievalAugmentedGeneration.Retrievers.IQueryEmbedder<T>? queryEmbedder = null) -> void
+AiDotNet.RetrievalAugmentedGeneration.Retrievers.MultiVectorRetriever<T>.MultiVectorRetriever(AiDotNet.Interfaces.IDocumentStore<T>! documentStore, int vectorsPerDocument, AiDotNet.Enums.MultiVectorAggregation aggregationMethod, AiDotNet.RetrievalAugmentedGeneration.Retrievers.IQueryEmbedder<T>? queryEmbedder = null) -> void
+AiDotNet.Enums.MultiVectorAggregation
+AiDotNet.Enums.MultiVectorAggregation.Max = 0 -> AiDotNet.Enums.MultiVectorAggregation
+AiDotNet.Enums.MultiVectorAggregation.Mean = 1 -> AiDotNet.Enums.MultiVectorAggregation
+AiDotNet.Enums.MultiVectorAggregation.Weighted = 2 -> AiDotNet.Enums.MultiVectorAggregation

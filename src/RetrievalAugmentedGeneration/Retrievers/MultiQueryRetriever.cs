@@ -42,29 +42,43 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Retrievers
 
         /// <inheritdoc />
         protected override IEnumerable<Document<T>> RetrieveCore(string query, int topK, Dictionary<string, object> metadataFilters)
-        {
-            var queries = GenerateQueries(query);
-            var allResults = new Dictionary<string, (Document<T> doc, T score)>();
-
-            foreach (var q in queries)
-            {
-                var results = _baseRetriever.Retrieve(q, topK, metadataFilters);
-
-                foreach (var doc in results.Where(d => d.HasRelevanceScore))
                 {
-                    if (allResults.TryGetValue(doc.Id, out var existing))
+            // CombSUM over the generated queries: a document's score is the sum of its scores for every query
+            // that retrieved it (the latest returned instance of the document is kept).
+            var position = new Dictionary<string, int>();
+            var documents = new List<Document<T>>();
+            var hits = new List<int>();
+            var hitScores = new List<T>();
+
+            foreach (var q in GenerateQueries(query))
+            {
+                foreach (var doc in _baseRetriever.Retrieve(q, topK, metadataFilters).Where(d => d.HasRelevanceScore))
+                {
+                    if (position.TryGetValue(doc.Id, out var index))
                     {
-                        var newScore = NumOps.Add(existing.score, doc.RelevanceScore);
-                        allResults[doc.Id] = (doc, newScore);
+                        documents[index] = doc;
                     }
                     else
                     {
-                        allResults[doc.Id] = (doc, doc.RelevanceScore);
+                        index = documents.Count;
+                        position[doc.Id] = index;
+                        documents.Add(doc);
                     }
+
+                    hits.Add(index);
+                    hitScores.Add(doc.RelevanceScore);
                 }
             }
 
-            var merged = allResults.Values
+            if (hits.Count == 0)
+                return new List<Document<T>>();
+
+            var membership = Engine.TensorOneHot<T>(new Tensor<int>(hits.ToArray(), [hits.Count]), documents.Count);
+            var totals = Engine.TensorMatMul(
+                new Tensor<T>(hitScores.ToArray(), [1, hitScores.Count]), membership).ToArray();
+
+            return documents
+                .Select((doc, i) => (doc, score: totals[i]))
                 .OrderByDescending(x => x.score)
                 .Take(topK)
                 .Select(x =>
@@ -74,8 +88,6 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Retrievers
                     return x.doc;
                 })
                 .ToList();
-
-            return merged;
         }
 
         private List<string> GenerateQueries(string originalQuery)

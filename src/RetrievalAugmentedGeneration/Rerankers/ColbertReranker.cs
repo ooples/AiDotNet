@@ -123,25 +123,27 @@ public class ColbertReranker<T> : RerankerBase<T>
     /// <param name="docTokens">The L2-normalised document token embeddings.</param>
     /// <returns>The summed maximum-similarity score.</returns>
     internal static T MaxSim(IReadOnlyList<Vector<T>> queryTokens, IReadOnlyList<Vector<T>> docTokens)
-    {
-        var total = NumOps.Zero;
-        if (queryTokens.Count == 0 || docTokens.Count == 0)
-            return total;
-
-        foreach (var q in queryTokens)
         {
-            var best = NumOps.FromDouble(double.NegativeInfinity);
-            foreach (var d in docTokens)
-            {
-                var dot = Dot(q, d);
-                if (NumOps.GreaterThan(dot, best))
-                    best = dot;
-            }
+        if (queryTokens.Count == 0 || docTokens.Count == 0)
+            return NumOps.Zero;
 
-            total = NumOps.Add(total, best);
+        // Zero-padding to a common width keeps each dot product over the two vectors' shared prefix.
+        int width = Math.Max(queryTokens.Max(t => t.Length), docTokens.Max(t => t.Length));
+        var similarities = Engine.TensorMatMul(
+            TokenMatrix(queryTokens, width), Engine.TensorTranspose(TokenMatrix(docTokens, width)));
+        return Engine.TensorSum(Engine.ReduceMax(similarities, [1], false));
+    }
+
+    /// <summary>Stacks token vectors into a [tokens, width] matrix, zero-padding shorter vectors.</summary>
+    private static Tensor<T> TokenMatrix(IReadOnlyList<Vector<T>> tokens, int width)
+    {
+        var data = new T[tokens.Count * width];
+        for (int i = 0; i < tokens.Count; i++)
+        {
+            tokens[i].AsSpan().CopyTo(data.AsSpan(i * width, tokens[i].Length));
         }
 
-        return total;
+        return new Tensor<T>(data, [tokens.Count, width]);
     }
 
     private Vector<T>[] GetDocumentTokens(Document<T> doc, Dictionary<string, Vector<T>[]> cache)
@@ -168,15 +170,4 @@ public class ColbertReranker<T> : RerankerBase<T>
         return tokens;
     }
 
-    private static T Dot(Vector<T> a, Vector<T> b)
-    {
-        var length = Math.Min(a.Length, b.Length);
-        var sum = NumOps.Zero;
-        for (int i = 0; i < length; i++)
-        {
-            sum = NumOps.Add(sum, NumOps.Multiply(a[i], b[i]));
-        }
-
-        return sum;
-    }
 }

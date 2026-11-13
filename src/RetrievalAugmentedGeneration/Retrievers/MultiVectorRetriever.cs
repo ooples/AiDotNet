@@ -59,7 +59,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Retrievers;
 /// var retriever = new MultiVectorRetriever&lt;double&gt;(
 ///     documentStore,
 ///     vectorsPerDocument: 5,        // 5 vectors per document
-///     aggregationMethod: "max",     // Use best match
+///     aggregationMethod: MultiVectorAggregation.Max,     // Use best match
 ///     queryEmbedder: new EmbeddingModelQueryEmbedder&lt;double&gt;(embeddingModel)  // same space as the documents
 /// );
 /// 
@@ -85,7 +85,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Retrievers;
 public class MultiVectorRetriever<T> : RetrieverBase<T>
 {
     private readonly int _vectorsPerDocument;
-    private readonly string _aggregationMethod;
+    private readonly MultiVectorAggregation _aggregationMethod;
 
     private readonly IDocumentStore<T> _documentStore;
     private readonly IQueryEmbedder<T>? _queryEmbedder;
@@ -95,27 +95,27 @@ public class MultiVectorRetriever<T> : RetrieverBase<T>
     /// </summary>
     /// <param name="documentStore">The document store containing documents with multiple vector representations.</param>
     /// <param name="vectorsPerDocument">Number of embedding vectors per document (typically 3-5 for optimal balance).</param>
-    /// <param name="aggregationMethod">Method for combining vector scores: "max" (best match), "mean" (average), or "weighted" (position-based weights).</param>
-    /// <exception cref="ArgumentNullException">Thrown when documentStore or aggregationMethod is null.</exception>
+    /// <param name="aggregationMethod">Method for combining vector scores: Max (best match), Mean (average), or Weighted (position-based weights).</param>
+    /// <exception cref="ArgumentNullException">Thrown when documentStore is null.</exception>
     /// <exception cref="ArgumentOutOfRangeException">Thrown when vectorsPerDocument is less than or equal to zero.</exception>
     /// <remarks>
     /// <para><b>For Beginners:</b> This sets up the retriever with your multi-vector document store.
     /// 
     /// Aggregation methods explained:
-    /// - "max": Use the BEST matching vector (recommended for precise queries)
-    /// - "mean": AVERAGE all vector scores (recommended for general queries)
-    /// - "weighted": Give MORE importance to earlier vectors (e.g., summaries > details)
+    /// - Max: Use the BEST matching vector (recommended for precise queries)
+    /// - Mean: AVERAGE all vector scores (recommended for general queries)
+    /// - Weighted: Give MORE importance to earlier vectors (e.g., summaries > details)
     /// 
     /// Common configurations:
-    /// - Technical papers: 5 vectors, "max" aggregation
-    /// - General documents: 3 vectors, "mean" aggregation
-    /// - Hierarchical content: 5 vectors, "weighted" aggregation
+    /// - Technical papers: 5 vectors, Max aggregation
+    /// - General documents: 3 vectors, Mean aggregation
+    /// - Hierarchical content: 5 vectors, Weighted aggregation
     /// </para>
     /// </remarks>
     public MultiVectorRetriever(
         IDocumentStore<T> documentStore,
         int vectorsPerDocument,
-        string aggregationMethod,
+        MultiVectorAggregation aggregationMethod,
         IQueryEmbedder<T>? queryEmbedder = null)
     {
         Guard.NotNull(documentStore);
@@ -125,7 +125,8 @@ public class MultiVectorRetriever<T> : RetrieverBase<T>
             throw new ArgumentOutOfRangeException(nameof(vectorsPerDocument), "Vectors per document must be positive");
 
         _vectorsPerDocument = vectorsPerDocument;
-        Guard.NotNull(aggregationMethod);
+        if (!Enum.IsDefined(typeof(MultiVectorAggregation), aggregationMethod))
+            throw new ArgumentOutOfRangeException(nameof(aggregationMethod), "Unknown aggregation method.");
         _aggregationMethod = aggregationMethod;
         _queryEmbedder = queryEmbedder;
     }
@@ -212,7 +213,7 @@ public class MultiVectorRetriever<T> : RetrieverBase<T>
         // 3. Group documents by base ID. doc.RelevanceScore is the cosine
         //    similarity the store computed against the query vector, which
         //    IS the per-sub-vector query-aware score we want to aggregate.
-        var documentScores = new Dictionary<string, (Document<T> doc, List<T> scores)>();
+        var documentScores = new Dictionary<string, (Document<T> doc, List<(int position, T score)> scores)>();
 
         foreach (var doc in allDocuments)
         {
@@ -220,13 +221,14 @@ public class MultiVectorRetriever<T> : RetrieverBase<T>
 
             if (!documentScores.ContainsKey(docId))
             {
-                documentScores[docId] = (doc, new List<T>());
+                documentScores[docId] = (doc, new List<(int position, T score)>());
             }
 
             // doc.RelevanceScore is the store's cosine(queryVec, subVec).
             // Use it directly so the aggregation reflects the real query.
             T subScore = doc.HasRelevanceScore ? doc.RelevanceScore : NumOps.Zero;
-            documentScores[docId].scores.Add(subScore);
+            var vectorScores = documentScores[docId].scores;
+            vectorScores.Add((GetVectorPosition(doc.Id, vectorScores.Count), subScore));
         }
 
         // Aggregate scores based on the specified method
@@ -237,7 +239,7 @@ public class MultiVectorRetriever<T> : RetrieverBase<T>
             var docId = kvp.Key;
             var doc = kvp.Value.doc;
             var scores = kvp.Value.scores;
-            T aggregatedScore = AggregateScores(scores);
+            T aggregatedScore = AggregateScores(scores, _aggregationMethod);
             aggregatedResults.Add((doc, aggregatedScore));
         }
 
@@ -260,46 +262,45 @@ public class MultiVectorRetriever<T> : RetrieverBase<T>
         return parts.Length > 0 ? parts[0] : vectorDocId;
     }
 
-    private T AggregateScores(List<T> scores)
-    {
+    /// <summary>
+    /// Combines one document's vector scores.
+    /// </summary>
+    /// <param name="scores">Each matched vector's position in its document and its query similarity.</param>
+    /// <param name="method">How to combine them.</param>
+    internal static T AggregateScores(IReadOnlyList<(int position, T score)> scores, MultiVectorAggregation method)
+        {
         if (scores.Count == 0)
             return NumOps.Zero;
 
-        switch (_aggregationMethod.ToLower())
+        var values = new Tensor<T>(scores.Select(s => s.score).ToArray(), [scores.Count]);
+        switch (method)
         {
-            case "max":
-                return scores.Max() ?? NumOps.Zero;
+            case MultiVectorAggregation.Mean:
+                return Engine.TensorMean(values);
 
-            case "mean":
-            case "average":
-                var sum = NumOps.Zero;
-                foreach (var score in scores)
-                {
-                    sum = NumOps.Add(sum, score);
-                }
-                return NumOps.Divide(sum, NumOps.FromDouble(scores.Count));
-
-            case "weighted":
-                // Weight by position (first vectors get higher weight)
-                var weightedSum = NumOps.Zero;
-                var totalWeight = 0.0;
-
-                for (int i = 0; i < scores.Count; i++)
-                {
-                    var weight = 1.0 / (i + 1.0); // Decreasing weights
-                    weightedSum = NumOps.Add(
-                        weightedSum,
-                        NumOps.Multiply(scores[i], NumOps.FromDouble(weight))
-                    );
-                    totalWeight += weight;
-                }
-
-                return NumOps.Divide(weightedSum, NumOps.FromDouble(totalWeight));
+            case MultiVectorAggregation.Weighted:
+                // Weight by the vector's position in the document (first vectors get higher weight): 1 / (N + 1)
+                var positions = new Tensor<int>(scores.Select(s => s.position + 1).ToArray(), [scores.Count]).Cast<T>();
+                var weights = Engine.TensorDivide(Tensor<T>.CreateDefault([scores.Count], NumOps.One), positions);
+                return NumOps.Divide(Engine.TensorSum(Engine.TensorMultiply(values, weights)), Engine.TensorSum(weights));
 
             default:
-                // Default to max
-                return scores.Max() ?? NumOps.Zero;
+                return Engine.TensorMaxValue(values);
         }
+    }
+
+    /// <summary>
+    /// The N of a "docId_vector_N" id, or <paramref name="fallback"/> (arrival order) when the id has no index.
+    /// </summary>
+    private static int GetVectorPosition(string vectorDocId, int fallback)
+    {
+        const string marker = "_vector_";
+        int at = vectorDocId.LastIndexOf(marker, StringComparison.Ordinal);
+        return at >= 0
+            && int.TryParse(vectorDocId.Substring(at + marker.Length), System.Globalization.NumberStyles.None,
+                System.Globalization.CultureInfo.InvariantCulture, out var position)
+            ? position
+            : fallback;
     }
 
 }
