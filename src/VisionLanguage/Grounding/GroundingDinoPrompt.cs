@@ -29,6 +29,12 @@ public sealed record GroundingDetection<T>(T X1, T Y1, T X2, T Y2, T Score, stri
     /// by it where their scores tie. Zero for a detection built outside the model.
     /// </summary>
     internal T Logit { get; init; } = MathHelper.GetNumericOperations<T>().Zero;
+
+    /// <summary>
+    /// The model's box (cx, cy, w, h) the corners came from, or <c>null</c> for a detection built outside the model. Grounded
+    /// SAM 2 scales the corners from it in double, rounding to T once, as the official transform_boxes does.
+    /// </summary>
+    internal T[]? CenterSize { get; init; }
 }
 
 /// <summary>
@@ -159,6 +165,7 @@ internal sealed class GroundingDinoPrompt
         var corners = engine.TensorConcatenate(new[] { engine.TensorSubtract(centre, half), engine.TensorAdd(centre, half) }, 1).ToArray();
         var scores = engine.TensorSigmoid(bestLogit).ToArray();
         var maxLogits = bestLogit.ToArray();
+        var centreSize = box.ToArray();
 
         var zero = ops.Zero;
         var comparer = EqualityComparer<T>.Default;
@@ -172,7 +179,7 @@ internal sealed class GroundingDinoPrompt
             for (int j = 1; j < tokens; j++)
                 if (!comparer.Equals(above[q * width + j], zero)) ids.Add(Ids[j]);
             result.Add(new GroundingDetection<T>(corners[4 * q], corners[4 * q + 1], corners[4 * q + 2], corners[4 * q + 3], scores[q],
-                Decode(ids).Replace(".", "")) { Logit = maxLogits[q] });
+                Decode(ids).Replace(".", "")) { Logit = maxLogits[q], CenterSize = centreSize.AsSpan(4 * q, 4).ToArray() });
         }
         return result;
     }

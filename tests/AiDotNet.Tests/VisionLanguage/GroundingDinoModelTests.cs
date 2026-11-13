@@ -104,6 +104,23 @@ public class GroundingDinoModelTests
     }
 
     [Fact]
+    public void GroundedSam2BoxCorners_AreScaledInDoubleAndRoundedOnce()
+    {
+        // Half box cx = 0.300048828125, w = 0.04998779296875: x1 = 0.275054931640625, and x1 * 1000 = 275.05 rounds to
+        // 275 in Half. Rounding x1 to Half first (0.27514648) and then scaling gave 275.25.
+        var output = HalfOutput((0, 1, 9f));
+        var boxes = output.Boxes[0];
+        boxes[0, 0, 0] = (Half)0.300048828125f;
+        boxes[0, 0, 2] = (Half)0.04998779296875f;
+        var detections = GroundingDinoPrompt.Create("cat . remote control").Detections(output, 0, 0.35, 0.25);
+
+        var corners = GroundedSAM2<Half>.ScaledCorners(AiDotNet.Tensors.Engines.AiDotNetEngine.Current, detections, 1000);
+
+        Assert.Equal(275f, (float)corners[0, 0]);
+        Assert.Equal(325f, (float)corners[0, 2]); // x2 = 0.325042724609375 * 1000 = 325.04 -> 325
+    }
+
+    [Fact]
     public void GroundedSam2Combine_GivesAPixelToTheStrongerOfTwoTiedHalfScores()
     {
         // Both detections score 1 in Half; the second has the larger logit, so the pixel both masks cover is its class.

@@ -202,9 +202,7 @@ public partial class GroundedSAM2<T> : VisionLanguageModelBase<T>, IVisualGround
         using var _ = new Tensors.Engines.Autodiff.NoGradScope<T>();
         var (embedding, s0, s1) = Segmenter.EncodeImage(SegmenterInput(batch));
         var positional = Segmenter.DensePositional();
-        // The predictor's transform_boxes: pixel corners scaled to the resized image.
-        var corners = Engine.TensorMultiplyScalar(new Tensor<T>(new[] { detections.Count, 4 },
-            Vector<T>.FromArray(detections.SelectMany(d => new[] { d.X1, d.Y1, d.X2, d.Y2 }).ToArray())), NumOps.FromDouble(side));
+        var corners = ScaledCorners(Engine, detections, side);
         for (int i = 0; i < detections.Count; i++)
         {
             var box = Engine.TensorSlice(corners, new[] { i, 0 }, new[] { 1, 4 });
@@ -217,6 +215,29 @@ public partial class GroundedSAM2<T> : VisionLanguageModelBase<T>, IVisualGround
             segments.Add(new GroundedSegment<T>(detections[i], mask, iou.ToArray()[0]));
         }
         return segments;
+    }
+
+    /// <summary>
+    /// The predictor's transform_boxes: each detection's pixel corners scaled to SAM's input side, <c>[n, 4]</c>.
+    /// </summary>
+    /// <remarks>
+    /// The corners are computed from the model's (cx, cy, w, h) and scaled in double, then rounded to
+    /// <typeparamref name="T"/> once. Scaling the corners already rounded to T rounded twice: in Half a corner of
+    /// 0.27505 at side 1000 became 275.25 instead of 275.
+    /// </remarks>
+    internal static Tensor<T> ScaledCorners(IEngine engine, IReadOnlyList<GroundingDetection<T>> detections, int side)
+    {
+        int n = detections.Count;
+        // Rows of (cx, cy, w, h) where the model's box is known, else the detection's own corners.
+        var values = new Tensor<T>(new[] { n, 4 }, Vector<T>.FromArray(
+            detections.SelectMany(d => d.CenterSize ?? new[] { d.X1, d.Y1, d.X2, d.Y2 }).ToArray())).Cast<double>();
+        var fromBox = new Tensor<double>(new[] { n, 1 }, Vector<double>.FromArray(
+            detections.Select(d => d.CenterSize is null ? 0.0 : 1.0).ToArray()));
+        var centre = engine.TensorSlice(values, new[] { 0, 0 }, new[] { n, 2 });
+        var half = engine.TensorMultiplyScalar(engine.TensorSlice(values, new[] { 0, 2 }, new[] { n, 2 }), 0.5);
+        var boxCorners = engine.TensorConcatenate(new[] { engine.TensorSubtract(centre, half), engine.TensorAdd(centre, half) }, 1);
+        var corners = engine.TensorWhere(engine.TensorBroadcastTo(fromBox, new[] { n, 4 }), boxCorners, values);
+        return engine.TensorMultiplyScalar(corners, (double)side).Cast<T>();
     }
 
     /// <summary>
