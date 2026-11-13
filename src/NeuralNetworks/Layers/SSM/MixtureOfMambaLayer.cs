@@ -256,9 +256,7 @@ public partial class MixtureOfMambaLayer<T> : LayerBase<T>, IShapeContract
         InitializeTensor3D(_expertC, _modelDimension, _stateDimension);
 
         // Initialize D to 1 (identity skip connection)
-        for (int e = 0; e < _numExperts; e++)
-            for (int d = 0; d < _modelDimension; d++)
-                _expertD[new[] { e, d }] = NumOps.One;
+        _expertD.Fill(NumOps.One);
 
         InitializeTensor2D(_outputGateWeights);
         _outputGateBias.Fill(NumOps.Zero);
@@ -305,20 +303,13 @@ public partial class MixtureOfMambaLayer<T> : LayerBase<T>, IShapeContract
         int totalTokens = batchSize * seqLen;
         var routerProbabilities = Engine.Softmax(routerLogits, axis: 1);
         _ = Engine.TensorTopK(routerProbabilities, _topK, axis: 1, out Tensor<int> topKTensor);
-        var activeMaskFlat = new Tensor<T>(new[] { totalTokens, _numExperts });
-        var topKIndices = new int[totalTokens, _topK];
-        for (int token = 0; token < totalTokens; token++)
-            for (int selected = 0; selected < _topK; selected++)
-            {
-                int expert = topKTensor[token, selected];
-                topKIndices[token, selected] = expert;
-                activeMaskFlat[token, expert] = NumOps.One;
-            }
+        // 0/1 mask of each token's top-K experts: the K (distinct) one-hot rows summed.
+        var activeMaskFlat = Engine.ReduceSum(
+            Engine.TensorOneHot<T>(topKTensor, _numExperts).Reshape(new[] { totalTokens, _topK, _numExperts }), new[] { 1 }, keepDims: false);
         var maskedWeights = Engine.TensorMultiply(routerProbabilities, activeMaskFlat);
         var weightSums = Engine.ReduceSum(maskedWeights, new[] { 1 }, keepDims: true);
-        var routerWeightsResult = Engine.TensorDivide(
-            maskedWeights, Engine.TensorAddScalar(weightSums, NumOps.FromDouble(1e-10)));
-
+        var routerWeightsResult = Engine.TensorDivide(maskedWeights,
+            Engine.TensorBroadcastTo(Engine.TensorAddScalar(weightSums, NumOps.FromDouble(1e-10)), maskedWeights.Shape.ToArray()));
         // Step 2: one operation-specific recurrent node owns the routed expert scan. This exactly
         // preserves the legacy reset semantics: an expert not selected at t has zero state at t+1.
         var activeMask = Engine.Reshape(activeMaskFlat, new[] { batchSize, seqLen, _numExperts });
@@ -359,81 +350,6 @@ public partial class MixtureOfMambaLayer<T> : LayerBase<T>, IShapeContract
         outputShape[rank - 2] = seqLen;
         outputShape[rank - 1] = _modelDimension;
         return Engine.Reshape(result, outputShape);
-    }
-
-    /// <summary>
-    /// Computes softmax over experts and selects top-K for each token.
-    /// </summary>
-    private void ComputeTopKSoftmax(
-        Tensor<T> logits, Tensor<T> weights, int[,] topKIndices, int totalTokens)
-    {
-        for (int tokenIdx = 0; tokenIdx < totalTokens; tokenIdx++)
-        {
-            // Find max for numerical stability
-            T maxLogit = NumOps.FromDouble(-1e9);
-            for (int e = 0; e < _numExperts; e++)
-            {
-                T val = logits[new[] { tokenIdx, e }];
-                double valD = NumOps.ToDouble(val);
-                double maxD = NumOps.ToDouble(maxLogit);
-                if (valD > maxD) maxLogit = val;
-            }
-
-            // Compute exp and sum
-            var expValues = new T[_numExperts];
-            T sumExp = NumOps.Zero;
-            for (int e = 0; e < _numExperts; e++)
-            {
-                expValues[e] = NumOps.Exp(NumOps.Subtract(logits[new[] { tokenIdx, e }], maxLogit));
-                sumExp = NumOps.Add(sumExp, expValues[e]);
-            }
-
-            T sumExpSafe = NumOps.Add(sumExp, NumOps.FromDouble(1e-10));
-
-            // Softmax probabilities
-            var probs = new T[_numExperts];
-            for (int e = 0; e < _numExperts; e++)
-                probs[e] = NumOps.Divide(expValues[e], sumExpSafe);
-
-            // Top-K selection by finding K largest probabilities
-            var selected = new bool[_numExperts];
-            for (int ki = 0; ki < _topK; ki++)
-            {
-                int bestIdx = -1;
-                double bestVal = -1.0;
-                for (int e = 0; e < _numExperts; e++)
-                {
-                    if (!selected[e])
-                    {
-                        double probVal = NumOps.ToDouble(probs[e]);
-                        if (probVal > bestVal)
-                        {
-                            bestVal = probVal;
-                            bestIdx = e;
-                        }
-                    }
-                }
-                topKIndices[tokenIdx, ki] = bestIdx;
-                selected[bestIdx] = true;
-            }
-
-            // Renormalize selected experts' weights
-            T topKSum = NumOps.Zero;
-            for (int ki = 0; ki < _topK; ki++)
-            {
-                int expertIdx = topKIndices[tokenIdx, ki];
-                topKSum = NumOps.Add(topKSum, probs[expertIdx]);
-            }
-
-            T topKSumSafe = NumOps.Add(topKSum, NumOps.FromDouble(1e-10));
-            for (int e = 0; e < _numExperts; e++)
-                weights[new[] { tokenIdx, e }] = NumOps.Zero;
-            for (int ki = 0; ki < _topK; ki++)
-            {
-                int expertIdx = topKIndices[tokenIdx, ki];
-                weights[new[] { tokenIdx, expertIdx }] = NumOps.Divide(probs[expertIdx], topKSumSafe);
-            }
-        }
     }
 
     private Tensor<T> ComputeSiLUDerivative(Tensor<T> x)

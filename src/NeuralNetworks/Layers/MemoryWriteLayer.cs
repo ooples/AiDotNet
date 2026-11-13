@@ -392,11 +392,8 @@ public partial class MemoryWriteLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>,
         // Scale by the scale factor
         var scaled = Engine.TensorMultiplyScalar(shifted, scale);
 
-        // Copy to tensor
-        for (int i = 0; i < tensor.Length; i++)
-        {
-            tensor[i] = scaled.GetFlat(i);
-        }
+        // Copy to tensor in bulk
+        Engine.TensorCopy(scaled, tensor);
     }
 
     /// <summary>

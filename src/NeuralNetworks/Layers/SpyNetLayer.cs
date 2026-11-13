@@ -241,10 +241,7 @@ public partial class SpyNetLayer<T> : LayerBase<T>, IShapeContract
             foreach (var module in _basicModules)
             {
                 var moduleParams = module.GetParameters();
-                var newParams = new T[moduleParams.Length];
-                for (int i = 0; i < moduleParams.Length; i++)
-                    newParams[i] = pending[offset + i];
-                module.SetParameters(new Vector<T>(newParams));
+                module.SetParameters(pending.GetSubVector(offset, moduleParams.Length));
                 offset += moduleParams.Length;
             }
         }
@@ -434,130 +431,9 @@ public partial class SpyNetLayer<T> : LayerBase<T>, IShapeContract
         return (gradImg1, gradWarped2, gradFlow);
     }
 
-    private Tensor<T> ConvertGridGradientToFlowGradient(Tensor<T> gradGrid, bool hasBatch)
-    {
-        // Grid gradient is always 4D [batch, height, width, 2] from GridSampleBackwardGrid
-        // Flow is NCHW: [batch, 2, height, width] or [2, height, width]
-        // gradFlow = gradGrid * (dim - 1) / 2
-        int batch = gradGrid.Shape[0];
-        int height = gradGrid.Shape[1];
-        int width = gradGrid.Shape[2];
-
-        var flowShape = hasBatch ? new[] { batch, 2, height, width } : new[] { 2, height, width };
-        var gradFlow = new Tensor<T>(flowShape);
-
-        T scaleW = NumOps.FromDouble((width - 1) / 2.0);
-        T scaleH = NumOps.FromDouble((height - 1) / 2.0);
-
-        for (int b = 0; b < batch; b++)
-        {
-            for (int h = 0; h < height; h++)
-            {
-                for (int w = 0; w < width; w++)
-                {
-                    // Grid is always 4D [batch, height, width, 2] where last dim is (x, y)
-                    int gridIdxX = b * height * width * 2 + h * width * 2 + w * 2;
-                    int gridIdxY = gridIdxX + 1;
-
-                    // Flow output is NCHW or CHW
-                    int flowIdxX = hasBatch
-                        ? b * 2 * height * width + 0 * height * width + h * width + w
-                        : 0 * height * width + h * width + w;
-                    int flowIdxY = hasBatch
-                        ? b * 2 * height * width + 1 * height * width + h * width + w
-                        : 1 * height * width + h * width + w;
-
-                    gradFlow.Data.Span[flowIdxX] = NumOps.Multiply(gradGrid.Data.Span[gridIdxX], scaleW);
-                    gradFlow.Data.Span[flowIdxY] = NumOps.Multiply(gradGrid.Data.Span[gridIdxY], scaleH);
-                }
-            }
-        }
-
-        return gradFlow;
-    }
-
     private Tensor<T> AddTensors(Tensor<T> a, Tensor<T> b)
     {
         return Engine.TensorAdd(a, b);
-    }
-
-    private void AccumulatePyramidGradient(Tensor<T> target, Tensor<T> gradient, int level, bool hasBatch)
-    {
-        // Upsample gradient from pyramid level to full resolution and accumulate
-        int targetH = hasBatch ? target.Shape[2] : target.Shape[1];
-        int targetW = hasBatch ? target.Shape[3] : target.Shape[2];
-
-        // Simple bilinear upsampling to target resolution
-        var upsampled = UpsampleGradient(gradient, targetH, targetW, hasBatch);
-
-        var tSpan = target.AsWritableSpan();
-        var uSpan = upsampled.AsSpan();
-        for (int i = 0; i < tSpan.Length; i++)
-        {
-            tSpan[i] = NumOps.Add(tSpan[i], uSpan[i]);
-        }
-    }
-
-    private Tensor<T> UpsampleGradient(Tensor<T> gradient, int targetH, int targetW, bool hasBatch)
-    {
-        int batch = hasBatch ? gradient.Shape[0] : 1;
-        int channels = hasBatch ? gradient.Shape[1] : gradient.Shape[0];
-        int srcH = hasBatch ? gradient.Shape[2] : gradient.Shape[1];
-        int srcW = hasBatch ? gradient.Shape[3] : gradient.Shape[2];
-
-        if (srcH == targetH && srcW == targetW)
-            return gradient;
-
-        var outShape = hasBatch ? new[] { batch, channels, targetH, targetW } : new[] { channels, targetH, targetW };
-        var output = TensorAllocator.Rent<T>(outShape);
-
-        double scaleH = (double)srcH / targetH;
-        double scaleW = (double)srcW / targetW;
-
-        for (int b = 0; b < batch; b++)
-        {
-            for (int c = 0; c < channels; c++)
-            {
-                for (int h = 0; h < targetH; h++)
-                {
-                    for (int w = 0; w < targetW; w++)
-                    {
-                        double srcHf = h * scaleH;
-                        double srcWf = w * scaleW;
-
-                        int h0 = (int)Math.Floor(srcHf);
-                        int w0 = (int)Math.Floor(srcWf);
-                        int h1 = Math.Min(h0 + 1, srcH - 1);
-                        int w1 = Math.Min(w0 + 1, srcW - 1);
-
-                        double hWeight = srcHf - h0;
-                        double wWeight = srcWf - w0;
-
-                        T v00 = GetGradValue(gradient, b, c, h0, w0, hasBatch, srcH, srcW, channels);
-                        T v01 = GetGradValue(gradient, b, c, h0, w1, hasBatch, srcH, srcW, channels);
-                        T v10 = GetGradValue(gradient, b, c, h1, w0, hasBatch, srcH, srcW, channels);
-                        T v11 = GetGradValue(gradient, b, c, h1, w1, hasBatch, srcH, srcW, channels);
-
-                        T top = NumOps.Add(
-                            NumOps.Multiply(v00, NumOps.FromDouble(1 - wWeight)),
-                            NumOps.Multiply(v01, NumOps.FromDouble(wWeight)));
-                        T bottom = NumOps.Add(
-                            NumOps.Multiply(v10, NumOps.FromDouble(1 - wWeight)),
-                            NumOps.Multiply(v11, NumOps.FromDouble(wWeight)));
-                        T value = NumOps.Add(
-                            NumOps.Multiply(top, NumOps.FromDouble(1 - hWeight)),
-                            NumOps.Multiply(bottom, NumOps.FromDouble(hWeight)));
-
-                        int outIdx = hasBatch
-                            ? b * channels * targetH * targetW + c * targetH * targetW + h * targetW + w
-                            : c * targetH * targetW + h * targetW + w;
-                        output.Data.Span[outIdx] = value;
-                    }
-                }
-            }
-        }
-
-        return output;
     }
 
     private T GetGradValue(Tensor<T> grad, int b, int c, int h, int w, bool hasBatch, int height, int width, int channels)
@@ -566,53 +442,6 @@ public partial class SpyNetLayer<T> : LayerBase<T>, IShapeContract
             ? b * channels * height * width + c * height * width + h * width + w
             : c * height * width + h * width + w;
         return grad.Data.Span[idx];
-    }
-
-    private Tensor<T> DownsampleFlowGradient(Tensor<T> gradFlow, bool hasBatch)
-    {
-        int batch = hasBatch ? gradFlow.Shape[0] : 1;
-        int height = hasBatch ? gradFlow.Shape[2] : gradFlow.Shape[1];
-        int width = hasBatch ? gradFlow.Shape[3] : gradFlow.Shape[2];
-
-        int newH = height / 2;
-        int newW = width / 2;
-
-        var outShape = hasBatch ? new[] { batch, 2, newH, newW } : new[] { 2, newH, newW };
-        var output = TensorAllocator.Rent<T>(outShape);
-
-        // Average pooling 2x2 for gradient downsampling
-        for (int b = 0; b < batch; b++)
-        {
-            for (int c = 0; c < 2; c++)
-            {
-                for (int h = 0; h < newH; h++)
-                {
-                    for (int w = 0; w < newW; w++)
-                    {
-                        T sum = NumOps.Zero;
-                        for (int dh = 0; dh < 2; dh++)
-                        {
-                            for (int dw = 0; dw < 2; dw++)
-                            {
-                                int ih = h * 2 + dh;
-                                int iw = w * 2 + dw;
-                                int idx = hasBatch
-                                    ? b * 2 * height * width + c * height * width + ih * width + iw
-                                    : c * height * width + ih * width + iw;
-                                sum = NumOps.Add(sum, gradFlow.Data.Span[idx]);
-                            }
-                        }
-                        int outIdx = hasBatch
-                            ? b * 2 * newH * newW + c * newH * newW + h * newW + w
-                            : c * newH * newW + h * newW + w;
-                        // Scale flow gradient by 0.5 for each dimension (consistent with flow scaling)
-                        output.Data.Span[outIdx] = NumOps.Multiply(sum, NumOps.FromDouble(0.5));
-                    }
-                }
-            }
-        }
-
-        return output;
     }
 
     private Tensor<T> ConcatenateFrameGradients(Tensor<T> gradFrame1, Tensor<T> gradFrame2, bool hasBatch)
@@ -760,6 +589,32 @@ public partial class SpyNetLayer<T> : LayerBase<T>, IShapeContract
         }
     }
 
+    /// <summary>
+    /// The align-corners identity sampling grid <c>[height, width, 2]</c>: channel 0 is
+    /// <c>x = w * 2 / (width - 1) - 1</c> and channel 1 is <c>y = h * 2 / (height - 1) - 1</c> (0 on a size-1
+    /// axis). The coordinates are formed in double and rounded to <typeparamref name="T"/> once; in a narrow T
+    /// the product and the "- 1" would each round, and near the centre that cancellation costs several ulps.
+    /// </summary>
+    internal static Tensor<T> IdentityGrid(int height, int width)
+    {
+        var engine = AiDotNetEngine.Current;
+        double widthNormValue = width > 1 ? 2.0 / (width - 1) : 0.0;
+        double heightNormValue = height > 1 ? 2.0 / (height - 1) : 0.0;
+        var xs = engine.TensorAddScalar(
+            engine.TensorMultiplyScalar(engine.TensorArange<double>(0, width, 1), widthNormValue),
+            width > 1 ? -1.0 : 0.0);
+        var ys = engine.TensorAddScalar(
+            engine.TensorMultiplyScalar(engine.TensorArange<double>(0, height, 1), heightNormValue),
+            height > 1 ? -1.0 : 0.0);
+        return engine.TensorConcatenate(
+            new[]
+            {
+                engine.TensorBroadcastTo(engine.Reshape(xs, new[] { 1, width, 1 }), new[] { height, width, 1 }),
+                engine.TensorBroadcastTo(engine.Reshape(ys, new[] { height, 1, 1 }), new[] { height, width, 1 })
+            },
+            2).Cast<T>();
+    }
+
     private (Tensor<T> warped, Tensor<T> grid) WarpImageWithGrid(Tensor<T> image, Tensor<T> flow, bool hasBatch)
     {
         int batch = hasBatch ? image.Shape[0] : 1;
@@ -772,20 +627,13 @@ public partial class SpyNetLayer<T> : LayerBase<T>, IShapeContract
         // scalar writes detached the entire warp from both the input and flow.
         double widthNormValue = width > 1 ? 2.0 / (width - 1) : 0.0;
         double heightNormValue = height > 1 ? 2.0 / (height - 1) : 0.0;
-        var identityValues = new T[height * width * 2];
-        for (int h = 0; h < height; h++)
+        Tensor<T> identityGrid;
+        using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
         {
-            for (int w = 0; w < width; w++)
-            {
-                int index = (h * width + w) * 2;
-                identityValues[index] = NumOps.FromDouble(width > 1 ? w * widthNormValue - 1.0 : 0.0);
-                identityValues[index + 1] = NumOps.FromDouble(height > 1 ? h * heightNormValue - 1.0 : 0.0);
-            }
+            identityGrid = IdentityGrid(height, width);
         }
         var identity = Engine.TensorBroadcastTo(
-            Engine.Reshape(
-                new Tensor<T>(identityValues, new[] { height, width, 2 }),
-                new[] { 1, height, width, 2 }),
+            Engine.Reshape(identityGrid, new[] { 1, height, width, 2 }),
             new[] { batch, height, width, 2 });
         var flow4D = hasBatch
             ? flow
@@ -816,51 +664,6 @@ public partial class SpyNetLayer<T> : LayerBase<T>, IShapeContract
         }
 
         return (warped, grid);
-    }
-
-    private Tensor<T> WarpImage(Tensor<T> image, Tensor<T> flow, bool hasBatch)
-    {
-        int batch = hasBatch ? image.Shape[0] : 1;
-        int channels = hasBatch ? image.Shape[1] : image.Shape[0];
-        int height = hasBatch ? image.Shape[2] : image.Shape[1];
-        int width = hasBatch ? image.Shape[3] : image.Shape[2];
-
-        var output = TensorAllocator.Rent<T>(image._shape);
-
-        for (int b = 0; b < batch; b++)
-        {
-            for (int h = 0; h < height; h++)
-            {
-                for (int w = 0; w < width; w++)
-                {
-                    // Get flow at this position
-                    int flowIdxX = hasBatch
-                        ? b * 2 * height * width + 0 * height * width + h * width + w
-                        : 0 * height * width + h * width + w;
-                    int flowIdxY = hasBatch
-                        ? b * 2 * height * width + 1 * height * width + h * width + w
-                        : 1 * height * width + h * width + w;
-
-                    double dx = NumOps.ToDouble(flow.Data.Span[flowIdxX]);
-                    double dy = NumOps.ToDouble(flow.Data.Span[flowIdxY]);
-
-                    double srcX = w + dx;
-                    double srcY = h + dy;
-
-                    // Bilinear sample from source image
-                    for (int c = 0; c < channels; c++)
-                    {
-                        T value = BilinearSample(image, b, c, srcY, srcX, hasBatch, height, width, channels);
-                        int outIdx = hasBatch
-                            ? b * channels * height * width + c * height * width + h * width + w
-                            : c * height * width + h * width + w;
-                        output.Data.Span[outIdx] = value;
-                    }
-                }
-            }
-        }
-
-        return output;
     }
 
     private T BilinearSample(Tensor<T> image, int b, int c, double h, double w, bool hasBatch, int height, int width, int channels)

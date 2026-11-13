@@ -365,6 +365,8 @@ public partial class ReservoirLayer<T> : LayerBase<T>, IShapeContract
         // One matmul for every step's input contribution, rather than a scalar loop per step.
         var inputContributions = Engine.TensorMatMul(scaledInput, inputWeightsTransposed);
 
+        T keepRate = NumOps.FromDouble(1 - _leakingRate);
+        T leakRate = NumOps.FromDouble(_leakingRate);
         var stepStates = new Tensor<T>[flatBatch];
         for (int i = 0; i < flatBatch; i++)
         {
@@ -375,8 +377,8 @@ public partial class ReservoirLayer<T> : LayerBase<T>, IShapeContract
             var reservoirInput = Engine.TensorAdd(weightedState, inputContribution);
 
             var activated = ApplyActivation(reservoirInput);
-            var oldComponent = Engine.TensorMultiplyScalar(stateRow, NumOps.FromDouble(1 - _leakingRate));
-            var newComponent = Engine.TensorMultiplyScalar(activated, NumOps.FromDouble(_leakingRate));
+            var oldComponent = Engine.TensorMultiplyScalar(stateRow, keepRate);
+            var newComponent = Engine.TensorMultiplyScalar(activated, leakRate);
             var nextState = Engine.TensorAdd(oldComponent, newComponent);
 
             _reservoirState = Engine.Reshape(nextState, [_reservoirSize]);
@@ -580,9 +582,8 @@ public partial class ReservoirLayer<T> : LayerBase<T>, IShapeContract
         // "original=NaN, deserialized=NaN" -- NaN on BOTH sides, so the round trip was faithfully
         // preserving a value the layer had already broken.
         //
-        // The companion normalisation below already guards its own division; this one did not.
-        T maxEigenvalue = ComputeMaxEigenvalue(_reservoirWeights, random);
-        double maxEigenvalueAsDouble = Convert.ToDouble(maxEigenvalue);
+        T maxEigenvalue = ComputeMaxEigenvalue(_reservoirWeights);
+        double maxEigenvalueAsDouble = NumOps.ToDouble(maxEigenvalue);
         if (maxEigenvalueAsDouble != 0.0 && !double.IsNaN(maxEigenvalueAsDouble)
             && !double.IsInfinity(maxEigenvalueAsDouble))
         {
@@ -595,90 +596,29 @@ public partial class ReservoirLayer<T> : LayerBase<T>, IShapeContract
     }
 
     /// <summary>
-    /// Computes the maximum eigenvalue (spectral radius) of a matrix using power iteration.
+    /// Computes the spectral radius (largest eigenvalue modulus) of a square matrix.
     /// </summary>
-    /// <param name="matrix">The matrix for which to compute the maximum eigenvalue.</param>
-    /// <returns>The maximum absolute eigenvalue of the matrix.</returns>
+    /// <param name="matrix">The matrix whose spectral radius is computed.</param>
+    /// <returns>The maximum absolute (complex) eigenvalue of the matrix.</returns>
     /// <remarks>
-    /// This private method implements the power iteration algorithm to compute the maximum eigenvalue
-    /// (spectral radius) of the reservoir weight matrix. This value is important for scaling the
-    /// weights to achieve the desired spectral radius, which affects the memory and stability of
-    /// the reservoir. The method uses improvements like random initialization and Rayleigh quotient
-    /// for better convergence.
+    /// The reservoir weights are scaled by this value to reach the desired spectral radius, which
+    /// affects the memory and stability of the reservoir.
     /// </remarks>
-    private T ComputeMaxEigenvalue(Tensor<T> matrix, Random random)
+    internal T ComputeMaxEigenvalue(Tensor<T> matrix)
     {
-        // Power iteration method with improvements for better convergence
-        int maxIterations = 1000;
-        double tolerance = 1e-10;
-        int size = _reservoirSize;
-
-        // Start with a random vector instead of all ones
-        var v = new Tensor<T>([size]);
-        for (int i = 0; i < size; i++)
-        {
-            v[i] = NumOps.FromDouble(random.NextDouble() - 0.5);
-        }
-
-        // Normalize the initial vector
-        T initialNorm = ComputeNorm(v);
-        if (!NumOps.Equals(initialNorm, NumOps.Zero))
-        {
-            v = Engine.TensorMultiplyScalar(v, NumOps.Divide(NumOps.One, initialNorm));
-        }
-
-        T prevEigenvalue = NumOps.Zero;
-        T currentEigenvalue = NumOps.Zero;
-
-        for (int iter = 0; iter < maxIterations; iter++)
-        {
-            // Apply matrix to vector: Av = matrix @ v (matrix multiply)
-            var vColumn = v.Reshape([size, 1]);
-            var AvColumn = Engine.TensorMatMul(matrix, vColumn);
-            var Av = AvColumn.Reshape([size]);
-
-            // Calculate Rayleigh quotient for better eigenvalue approximation
-            T rayleighQuotient = ComputeDotProduct(v, Av);
-
-            // Normalize the vector
-            T norm = ComputeNorm(Av);
-            if (NumOps.Equals(norm, NumOps.Zero))
-            {
-                // If we get a zero vector, the matrix might be nilpotent
-                return NumOps.Zero;
-            }
-
-            v = Engine.TensorMultiplyScalar(Av, NumOps.Divide(NumOps.One, norm));
-            currentEigenvalue = rayleighQuotient;
-
-            // Check for convergence
-            T diff = NumOps.Abs(NumOps.Subtract(currentEigenvalue, prevEigenvalue));
-            if (Convert.ToDouble(diff) < tolerance && iter > 5)
-            {
-                return NumOps.Abs(currentEigenvalue);
-            }
-
-            prevEigenvalue = currentEigenvalue;
-        }
-
-        // Return absolute value to ensure positive spectral radius
-        return NumOps.Abs(prevEigenvalue);
-    }
-
-    /// <summary>
-    /// Computes the L2 norm of a tensor.
-    /// </summary>
-    private T ComputeNorm(Tensor<T> tensor)
-    {
-        return VectorHelper.L2Norm(tensor.ToVector());
-    }
-
-    /// <summary>
-    /// Computes the dot product of two tensors.
-    /// </summary>
-    private T ComputeDotProduct(Tensor<T> a, Tensor<T> b)
-    {
-        return VectorHelper.DotProduct(a.ToVector(), b.ToVector());
+        // Spectral radius = max_i |lambda_i| over the eigenvalues of the (non-symmetric) reservoir matrix,
+        // which are complex in general (Jaeger 2001, "The echo state approach"; numpy.linalg.eigvals).
+        // A Rayleigh-quotient power iteration only sees real dominant eigenvalues: for a dominant complex
+        // pair it oscillates and returns a meaningless estimate (exactly 0 for a scaled rotation).
+        var wide = matrix.Cast<double>();
+        double scale = Engine.TensorMaxValue(Engine.TensorAbs(wide));
+        // An all-zero (or non-finite) matrix has no usable spectral radius; avoids an exact float equality.
+        if (!(scale > 0) || double.IsInfinity(scale)) return NumOps.Zero;
+        var normalized = Engine.TensorDivide(wide, Tensor<double>.CreateDefault(wide.Shape.ToArray(), scale));
+        var eigenvalues = LinalgDispatch<double>.Eig(normalized).Values;
+        var modulus = Engine.TensorSqrt(
+            Engine.ReduceSum(Engine.TensorMultiply(eigenvalues, eigenvalues), [1], keepDims: false));
+        return NumOps.FromDouble(Engine.TensorMaxValue(modulus) * scale);
     }
 
 }

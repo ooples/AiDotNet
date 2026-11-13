@@ -280,12 +280,6 @@ public partial class RWKV7Block<T> : LayerBase<T>, IShapeContract
     // Previous tokens per timestep reconstructed from _cachedTimeMixNormed1 during backward
 
     // Channel mixing forward caches
-    [Scratch]
-    private Tensor<T>? _cachedChannelRGate;   // [batch, seqLen, modelDim] sigmoid(W_r * rInput)
-    [Scratch]
-    private Tensor<T>? _cachedChannelSiLU;    // [batch, seqLen, ffnDim] SiLU(W_k * kInput)
-    [Scratch]
-    private Tensor<T>? _cachedChannelVProj;   // [batch, seqLen, modelDim] W_v * SiLU(k)
 
     // ============ Gradients ============
 
@@ -600,16 +594,21 @@ public partial class RWKV7Block<T> : LayerBase<T>, IShapeContract
         T half = NumOps.FromDouble(0.5);
 
         // Token shift mixing coefficients initialized to 0.5
-        for (int i = 0; i < _modelDimension; i++)
-        {
-            _timeMixR[i] = half;
-            _timeMixK[i] = half;
-            _timeMixV[i] = half;
-            _timeMixA[i] = half;
-            _timeMixB[i] = half;
-            _channelMixR[i] = half;
-            _channelMixK[i] = half;
-        }
+        _timeMixR.Fill(half);
+        _timeMixK.Fill(half);
+        _timeMixV.Fill(half);
+        _timeMixA.Fill(half);
+        _timeMixB.Fill(half);
+        _channelMixR.Fill(half);
+        _channelMixK.Fill(half);
+
+        // Channel index n = 0..C-1 and its fraction n/(C-1) (all zeros when C == 1), shared by the ramps below.
+        // The ramps are evaluated in double and rounded to T once, as the reference does: w0 is a sum of
+        // terms near +/-6 that cancels toward 0, so evaluating it in a narrow T such as Half loses ulps.
+        var channelIndex = Engine.TensorArange<double>(0.0, _modelDimension, 1.0);
+        var channelFraction = _modelDimension > 1
+            ? Engine.TensorDivideScalar(channelIndex, (double)(_modelDimension - 1))
+            : new Tensor<double>([_modelDimension]);
 
         InitializeProjection(_receptanceWeights);
         InitializeProjection(_keyWeights);
@@ -644,15 +643,25 @@ public partial class RWKV7Block<T> : LayerBase<T>, IShapeContract
         // index, so the exponent uses ratio_0_to_1 = 0 (exponent 1, a linear ramp) â€” the reference's
         // first-layer schedule. Threading a layer index through would let later layers use the
         // steeper curve the reference gives them.
-        for (int n = 0; n < _modelDimension; n++)
+        // zz is the channel's position within its head mapped to [-1, 1]; the head pattern repeats numHeads times.
+        Tensor<double> zz;
+        if (_headDimension > 1)
         {
-            double frac = _modelDimension > 1 ? (double)n / (_modelDimension - 1) : 0.0;
-            double zz = _headDimension > 1
-                ? ((n % _headDimension) - (_headDimension - 1) / 2.0) / ((_headDimension - 1) / 2.0)
-                : 0.0;
-            double zigzag = zz * Math.Abs(zz);
-            _aBias[n] = NumOps.FromDouble(-6.0 + 6.0 * frac + 0.5 + zigzag * 2.5);
+            double halfSpan = (_headDimension - 1) / 2.0;
+            var inHead = Engine.TensorTile(Engine.TensorArange<double>(0.0, _headDimension, 1.0), [_numHeads]);
+            zz = Engine.TensorDivideScalar(Engine.TensorAddScalar(inHead, -halfSpan), halfSpan);
         }
+        else
+        {
+            zz = new Tensor<double>([_modelDimension]);
+        }
+
+        var zigzag = Engine.TensorMultiply(zz, Engine.TensorAbs(zz));
+        Engine.TensorCopy(
+            Engine.TensorAdd(
+                Engine.TensorAddScalar(Engine.TensorMultiplyScalar(channelFraction, 6.0), -6.0 + 0.5),
+                Engine.TensorMultiplyScalar(zigzag, 2.5)).Cast<T>(),
+            _aBias);
 
         // ICL-rate LoRA, same scheme. No tanh on this path in the reference â€” the sigmoid applied to
         // the sum bounds it.
@@ -664,11 +673,11 @@ public partial class RWKV7Block<T> : LayerBase<T>, IShapeContract
         // (RWKV-LM RWKV-v7): k_k = 0.71 - linear*0.1 with linear[n] = n/(C-1) - 0.5, and
         // k_a = 1.02. The k_k ramp gives early channels a slightly larger removal scale than late
         // ones; k_a just above 1 starts the injection key a touch beyond a plain delta rule.
-        for (int n = 0; n < _modelDimension; n++)
-        {
-            double linear = _modelDimension > 1 ? (double)n / (_modelDimension - 1) - 0.5 : 0.0;
-            _kk[n] = NumOps.FromDouble(0.71 - linear * 0.1);
-        }
+        // linear[n] = n/(C-1) - 0.5, or 0 when C == 1.
+        var linearRamp = _modelDimension > 1
+            ? Engine.TensorAddScalar(channelFraction, -0.5)
+            : new Tensor<double>([_modelDimension]);
+        Engine.TensorCopy(Engine.ScalarMinusTensor(0.71, Engine.TensorMultiplyScalar(linearRamp, 0.1)).Cast<T>(), _kk);
         _ka.Fill(NumOps.FromDouble(1.02));
 
         // r_k bonus scale, and the gate LoRA (same zero/orthogonal scheme as the decay and ICL pairs).
@@ -676,21 +685,17 @@ public partial class RWKV7Block<T> : LayerBase<T>, IShapeContract
 
         // Value-residual gate. v0 = 0.73 - linear*0.4 puts sigmoid(v0) near 0.6-0.7 at init, so a fresh
         // deeper layer already leans toward the first layer.s values and learns its way off that.
-        for (int n = 0; n < _modelDimension; n++)
-        {
-            double vlin = _modelDimension > 1 ? (double)n / (_modelDimension - 1) - 0.5 : 0.0;
-            _v0[n] = NumOps.FromDouble(0.73 - vlin * 0.4);
-        }
+        Engine.TensorCopy(Engine.ScalarMinusTensor(0.73, Engine.TensorMultiplyScalar(linearRamp, 0.4)).Cast<T>(), _v0);
         _v1.Fill(NumOps.Zero);
         OrthogonalLoRA().InitializeWeights(_v2, _mvLoraRank, _modelDimension);
         _g1.Fill(NumOps.Zero);
         OrthogonalLoRA().InitializeWeights(_g2, _gateLoraRank, _modelDimension);
         // x_g uses the same 0.2 exponent as x_r in the reference's token-shift ramp.
-        for (int n = 0; n < _modelDimension; n++)
-        {
-            double ddd = _modelDimension > 1 ? (double)n / _modelDimension : 0.0;
-            _timeMixG[n] = NumOps.FromDouble(1.0 - Math.Pow(ddd, 0.2));
-        }
+        // 1 - (n/C)^0.2, or 1 everywhere when C == 1.
+        var gateRatio = _modelDimension > 1
+            ? Engine.TensorDivideScalar(channelIndex, (double)_modelDimension)
+            : new Tensor<double>([_modelDimension]);
+        Engine.TensorCopy(Engine.ScalarMinusTensor(1.0, Engine.TensorPower(gateRatio, 0.2)).Cast<T>(), _timeMixG);
 
         _groupNormGamma.Fill(NumOps.One);
         _groupNormBeta.Fill(NumOps.Zero);
@@ -1105,36 +1110,29 @@ public partial class RWKV7Block<T> : LayerBase<T>, IShapeContract
         Tensor<T> seed, Tensor<T> aAll, Tensor<T> bAll, Tensor<T> kAll, Tensor<T> vAll, int batchSize, int seqLen)
     {
         int hd = _headDimension;
-        var s = new Tensor<T>(new[] { batchSize, _numHeads, hd, hd });
+        int[] stateShape = [batchSize, _numHeads, hd, hd];
+        using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
+        {
+            // Seed from the prior state so streaming (seqLen == 1 per call) accumulates across calls.
+            var s = new Tensor<T>(stateShape);
+            Engine.TensorCopy(Engine.Reshape(seed, stateShape), s);
 
-        // Seed from the prior state so streaming (seqLen == 1 per call) accumulates across calls.
-        for (int bi = 0; bi < batchSize; bi++)
-            for (int h = 0; h < _numHeads; h++)
-                for (int di = 0; di < hd; di++)
-                    for (int vi = 0; vi < hd; vi++)
-                        s[new[] { bi, h, di, vi }] = seed[new[] { bi, h, di, vi }];
+            var decay = Engine.Sigmoid(aAll);
+            var injection = Engine.TensorMultiply(Engine.Sigmoid(bAll), kAll);
+            for (int t = 0; t < seqLen; t++)
+            {
+                // a and bk index the state row di, v indexes the state column vi.
+                var a = Engine.Reshape(Engine.TensorSlice(decay, [0, t, 0], [batchSize, 1, _modelDimension]), [batchSize, _numHeads, hd, 1]);
+                var bk = Engine.Reshape(Engine.TensorSlice(injection, [0, t, 0], [batchSize, 1, _modelDimension]), [batchSize, _numHeads, hd, 1]);
+                var v = Engine.Reshape(Engine.TensorSlice(vAll, [0, t, 0], [batchSize, 1, _modelDimension]), [batchSize, _numHeads, 1, hd]);
+                s = Engine.TensorAdd(
+                    Engine.TensorMultiply(s, Engine.TensorBroadcastTo(a, stateShape)),
+                    Engine.TensorMultiply(Engine.TensorBroadcastTo(bk, stateShape), Engine.TensorBroadcastTo(v, stateShape)));
+            }
 
-        for (int t = 0; t < seqLen; t++)
-            for (int bi = 0; bi < batchSize; bi++)
-                for (int h = 0; h < _numHeads; h++)
-                    for (int di = 0; di < hd; di++)
-                    {
-                        int idx = (h * hd) + di;
-                        T a = Sigmoid(aAll[new[] { bi, t, idx }]);
-                        T bk = NumOps.Multiply(Sigmoid(bAll[new[] { bi, t, idx }]), kAll[new[] { bi, t, idx }]);
-                        for (int vi = 0; vi < hd; vi++)
-                        {
-                            T v = vAll[new[] { bi, t, (h * hd) + vi }];
-                            T prev = s[new[] { bi, h, di, vi }];
-                            s[new[] { bi, h, di, vi }] = NumOps.Add(NumOps.Multiply(a, prev), NumOps.Multiply(bk, v));
-                        }
-                    }
-
-        return s;
+            return s;
+        }
     }
-
-    private T Sigmoid(T x) =>
-        NumOps.Divide(NumOps.One, NumOps.Add(NumOps.One, NumOps.FromDouble(Math.Exp(-NumOps.ToDouble(x)))));
 
     /// <summary>
     /// Channel mixing forward with SiLU gating (RWKV-7 style).
@@ -1221,190 +1219,6 @@ public partial class RWKV7Block<T> : LayerBase<T>, IShapeContract
     }
 
 
-    /// <summary>
-    /// GroupNorm backward pass. Computes input gradient with proper normalization chain rule.
-    /// Uses the standard formula: dx = (1/N) * gamma / std * (N*dy - sum(dy) - xhat*sum(dy*xhat))
-    /// </summary>
-    private Tensor<T> GroupNormBackward(Tensor<T> dOutput, Tensor<T> input, int batchSize)
-    {
-        var dInput = TensorAllocator.Rent<T>(input._shape);
-        T eps = NumOps.FromDouble(1e-6);
-
-        for (int bi = 0; bi < batchSize; bi++)
-        {
-            for (int hi = 0; hi < _numHeads; hi++)
-            {
-                int dimStart = hi * _headDimension;
-
-                // Compute mean and variance for this head
-                T mean = NumOps.Zero;
-                for (int d = 0; d < _headDimension; d++)
-                    mean = NumOps.Add(mean, input[new[] { bi, dimStart + d }]);
-                mean = NumOps.Divide(mean, NumOps.FromDouble(_headDimension));
-
-                T variance = NumOps.Zero;
-                for (int d = 0; d < _headDimension; d++)
-                {
-                    T diff = NumOps.Subtract(input[new[] { bi, dimStart + d }], mean);
-                    variance = NumOps.Add(variance, NumOps.Multiply(diff, diff));
-                }
-                variance = NumOps.Divide(variance, NumOps.FromDouble(_headDimension));
-                T stdInv = NumOps.Divide(NumOps.One, NumOps.Sqrt(NumOps.Add(variance, eps)));
-
-                // Compute xhat and the two sums needed for BN backward
-                T sumDy = NumOps.Zero;
-                T sumDyXhat = NumOps.Zero;
-                var xhat = new T[_headDimension];
-                var dyGamma = new T[_headDimension];
-
-                for (int d = 0; d < _headDimension; d++)
-                {
-                    int flatD = dimStart + d;
-                    xhat[d] = NumOps.Multiply(NumOps.Subtract(input[new[] { bi, flatD }], mean), stdInv);
-                    dyGamma[d] = NumOps.Multiply(dOutput[new[] { bi, flatD }], _groupNormGamma[flatD]);
-                    sumDy = NumOps.Add(sumDy, dyGamma[d]);
-                    sumDyXhat = NumOps.Add(sumDyXhat, NumOps.Multiply(dyGamma[d], xhat[d]));
-
-                    // Accumulate groupNorm gamma/beta gradients
-                    if (_groupNormGammaGrad is not null)
-                        _groupNormGammaGrad[flatD] = NumOps.Add(_groupNormGammaGrad[flatD],
-                            NumOps.Multiply(dOutput[new[] { bi, flatD }], xhat[d]));
-                    if (_groupNormBetaGrad is not null)
-                        _groupNormBetaGrad[flatD] = NumOps.Add(_groupNormBetaGrad[flatD],
-                            dOutput[new[] { bi, flatD }]);
-                }
-
-                // Standard normalization backward:
-                // dx = (1/N) * stdInv * (N * dyGamma - sumDy - xhat * sumDyXhat)
-                T invN = NumOps.Divide(NumOps.One, NumOps.FromDouble(_headDimension));
-                for (int d = 0; d < _headDimension; d++)
-                {
-                    int flatD = dimStart + d;
-                    T nDy = NumOps.Multiply(NumOps.FromDouble(_headDimension), dyGamma[d]);
-                    T term = NumOps.Subtract(NumOps.Subtract(nDy, sumDy),
-                        NumOps.Multiply(xhat[d], sumDyXhat));
-                    dInput[new[] { bi, flatD }] = NumOps.Multiply(NumOps.Multiply(invN, stdInv), term);
-                }
-            }
-        }
-
-        return dInput;
-    }
-
-    /// <summary>
-    /// Accumulates gradients for LayerNorm gamma and beta parameters.
-    /// LayerNorm: output = gamma * (input - mean) / std + beta
-    /// </summary>
-    /// <summary>
-    /// Copies a 2D slice [batch, dim] into a 3D tensor [batch, seqLen, dim] at time position t.
-    /// Uses explicit per-element copy to avoid SetSlice position bugs.
-    /// </summary>
-    private static void SafeSetSlice(Tensor<T> dest, int t, Tensor<T> slice, int batch, int dim)
-    {
-        for (int bi = 0; bi < batch; bi++)
-            for (int d = 0; d < dim; d++)
-                dest[new[] { bi, t, d }] = slice[new[] { bi, d }];
-    }
-
-
-    /// <summary>
-    /// LayerNorm backward: returns gradient w.r.t. input.
-    /// Forward: output = gamma * (x - mean) / std + beta
-    /// Backward: dx = (gamma*dy - normalized*mean(gamma*dy*normalized)) / std (per the LN paper)
-    /// </summary>
-    private Tensor<T> LayerNormBackward(Tensor<T> dOutput, Tensor<T> input,
-        Tensor<T> gamma, int batchSize, int seqLen)
-    {
-        var dInput = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _modelDimension });
-        T eps = NumOps.FromDouble(1e-6);
-        T invDim = NumOps.FromDouble(1.0 / _modelDimension);
-
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int t = 0; t < seqLen; t++)
-            {
-                T mean = NumOps.Zero;
-                for (int d = 0; d < _modelDimension; d++)
-                    mean = NumOps.Add(mean, input[new[] { b, t, d }]);
-                mean = NumOps.Multiply(mean, invDim);
-
-                T variance = NumOps.Zero;
-                for (int d = 0; d < _modelDimension; d++)
-                {
-                    T diff = NumOps.Subtract(input[new[] { b, t, d }], mean);
-                    variance = NumOps.Add(variance, NumOps.Multiply(diff, diff));
-                }
-                variance = NumOps.Multiply(variance, invDim);
-                T stdInv = NumOps.Divide(NumOps.One, NumOps.Sqrt(NumOps.Add(variance, eps)));
-
-                // Compute normalized and the correction term
-                var normalized = new T[_modelDimension];
-                T dotProduct = NumOps.Zero;
-                for (int d = 0; d < _modelDimension; d++)
-                {
-                    normalized[d] = NumOps.Multiply(NumOps.Subtract(input[new[] { b, t, d }], mean), stdInv);
-                    dotProduct = NumOps.Add(dotProduct,
-                        NumOps.Multiply(NumOps.Multiply(gamma[d], dOutput[new[] { b, t, d }]), normalized[d]));
-                }
-                T meanDot = NumOps.Multiply(dotProduct, invDim);
-
-                // Compute sum of gamma * dy for the mean subtraction correction
-                T sumGammaDy = NumOps.Zero;
-                for (int d = 0; d < _modelDimension; d++)
-                    sumGammaDy = NumOps.Add(sumGammaDy, NumOps.Multiply(gamma[d], dOutput[new[] { b, t, d }]));
-                T meanGammaDy = NumOps.Multiply(sumGammaDy, invDim);
-
-                for (int d = 0; d < _modelDimension; d++)
-                {
-                    T gammaDy = NumOps.Multiply(gamma[d], dOutput[new[] { b, t, d }]);
-                    T correction = NumOps.Multiply(normalized[d], meanDot);
-                    dInput[new[] { b, t, d }] = NumOps.Multiply(
-                        NumOps.Subtract(NumOps.Subtract(gammaDy, meanGammaDy), correction), stdInv);
-                }
-            }
-        }
-
-        return dInput;
-    }
-
-    private void AccumulateLayerNormGradients(Tensor<T> dOutput, Tensor<T> input,
-        Tensor<T> gamma, ref Tensor<T>? gammaGrad, ref Tensor<T>? betaGrad,
-        int batchSize, int seqLen)
-    {
-        if (gammaGrad == null || betaGrad == null) return;
-
-        T eps = NumOps.FromDouble(1e-6);
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int t = 0; t < seqLen; t++)
-            {
-                // Compute mean and std for this position
-                T mean = NumOps.Zero;
-                for (int d = 0; d < _modelDimension; d++)
-                    mean = NumOps.Add(mean, input[new[] { b, t, d }]);
-                mean = NumOps.Divide(mean, NumOps.FromDouble(_modelDimension));
-
-                T variance = NumOps.Zero;
-                for (int d = 0; d < _modelDimension; d++)
-                {
-                    T diff = NumOps.Subtract(input[new[] { b, t, d }], mean);
-                    variance = NumOps.Add(variance, NumOps.Multiply(diff, diff));
-                }
-                variance = NumOps.Divide(variance, NumOps.FromDouble(_modelDimension));
-                T stdInv = NumOps.Divide(NumOps.One, NumOps.Sqrt(NumOps.Add(variance, eps)));
-
-                for (int d = 0; d < _modelDimension; d++)
-                {
-                    T normalized = NumOps.Multiply(
-                        NumOps.Subtract(input[new[] { b, t, d }], mean), stdInv);
-                    T dOut = dOutput[new[] { b, t, d }];
-
-                    gammaGrad[d] = NumOps.Add(gammaGrad[d], NumOps.Multiply(dOut, normalized));
-                    betaGrad[d] = NumOps.Add(betaGrad[d], dOut);
-                }
-            }
-        }
-    }
 
     private void InitializeGradients()
     {
@@ -1445,88 +1259,6 @@ public partial class RWKV7Block<T> : LayerBase<T>, IShapeContract
         _normBeta2Grad = new Tensor<T>([_modelDimension]);
     }
 
-    /// <summary>
-    /// Accumulates gradients for the output projection weights from the time mixing sub-layer.
-    /// </summary>
-    private void AccumulateTimeMixGradients(Tensor<T> dOutput, Tensor<T> normedInput,
-        int batchSize, int seqLen)
-    {
-        if (_cachedWkvOut == null || _outputWeightsGrad == null) return;
-
-        // dOutput flows through output projection: y = wkv * W_out
-        // dW_out += wkv^T * dOutput
-        for (int t = 0; t < seqLen; t++)
-        {
-            var dOut_t = dOutput.GetSliceAlongDimension(t, 1);  // [batch, modelDim]
-            var wkv_t = _cachedWkvOut.GetSliceAlongDimension(t, 1);
-
-            var dW = Engine.TensorMatMul(wkv_t.Transpose(new[] { 1, 0 }), dOut_t);
-
-            for (int i = 0; i < _modelDimension; i++)
-                for (int j = 0; j < _modelDimension; j++)
-                    _outputWeightsGrad[new[] { i, j }] = NumOps.Add(
-                        _outputWeightsGrad[new[] { i, j }], dW[new[] { i, j }]);
-        }
-    }
-
-    /// <summary>
-    /// Accumulates gradients for the channel mixing sub-layer.
-    /// </summary>
-    /// <remarks>
-    /// Channel mixing: output = sigmoid(r) * (W_v * SiLU(W_k * kInput))
-    /// Gradients computed for W_v (value weights) and W_r (receptance weights).
-    /// </remarks>
-    private void AccumulateChannelMixGradients(Tensor<T> dOutput, Tensor<T> normedInput,
-        int batchSize, int seqLen)
-    {
-        if (_cachedChannelRGate == null || _cachedChannelSiLU == null ||
-            _cachedChannelVProj == null || _channelValueWeightsGrad == null ||
-            _channelReceptanceWeightsGrad == null)
-            return;
-
-        for (int t = 0; t < seqLen; t++)
-        {
-            var dOut_t = dOutput.GetSliceAlongDimension(t, 1);  // [batch, modelDim]
-            var rGate_t = _cachedChannelRGate.GetSliceAlongDimension(t, 1);  // [batch, modelDim]
-            var siLU_t = _cachedChannelSiLU.GetSliceAlongDimension(t, 1);    // [batch, ffnDim]
-            var vProj_t = _cachedChannelVProj.GetSliceAlongDimension(t, 1);  // [batch, modelDim]
-
-            // dOutput flows through: y = rGate * vProj
-            // d(vProj) = rGate * dOutput (element-wise)
-            var dVProj = Engine.TensorMultiply(rGate_t, dOut_t);
-
-            // d(W_v) += SiLU^T * d(vProj)
-            var dWv = Engine.TensorMatMul(siLU_t.Transpose(new[] { 1, 0 }), dVProj);
-            for (int i = 0; i < _ffnDimension; i++)
-                for (int j = 0; j < _modelDimension; j++)
-                    _channelValueWeightsGrad[new[] { i, j }] = NumOps.Add(
-                        _channelValueWeightsGrad[new[] { i, j }], dWv[new[] { i, j }]);
-
-            // d(rGate) = vProj * dOutput (element-wise) - for receptance weight gradients
-            // rGate = sigmoid(W_r * rInput), so d(W_r) involves sigmoid derivative
-            // Simplified: accumulate W_r gradient via dRGate * sigmoid'(rGate) * rInput^T
-            var dRGate = Engine.TensorMultiply(vProj_t, dOut_t);
-
-            // sigmoid derivative: sigmoid(x) * (1 - sigmoid(x)) = rGate * (1 - rGate)
-            var sigmoidDeriv = new Tensor<T>(rGate_t._shape);
-            for (int bi = 0; bi < batchSize; bi++)
-                for (int d = 0; d < _modelDimension; d++)
-                {
-                    T r = rGate_t[new[] { bi, d }];
-                    sigmoidDeriv[new[] { bi, d }] = NumOps.Multiply(r, NumOps.Subtract(NumOps.One, r));
-                }
-
-            var dRProj = Engine.TensorMultiply(dRGate, sigmoidDeriv);
-            var normed_t = normedInput.GetSliceAlongDimension(t, 1);
-
-            var dWr = Engine.TensorMatMul(normed_t.Transpose(new[] { 1, 0 }), dRProj);
-            for (int i = 0; i < _modelDimension; i++)
-                for (int j = 0; j < _modelDimension; j++)
-                    _channelReceptanceWeightsGrad[new[] { i, j }] = NumOps.Add(
-                        _channelReceptanceWeightsGrad[new[] { i, j }], dWr[new[] { i, j }]);
-        }
-    }
-
     /// <inheritdoc />
     public override void UpdateParameters(T learningRate)
     {
@@ -1552,8 +1284,7 @@ public partial class RWKV7Block<T> : LayerBase<T>, IShapeContract
 
     private static void CopyTensorData(Tensor<T> source, Tensor<T> destination)
     {
-        for (int i = 0; i < source.Length; i++)
-            destination[i] = source[i];
+        AiDotNetEngine.Current.TensorCopy(source, destination);
     }
 
     /// <inheritdoc />
@@ -1629,9 +1360,6 @@ public partial class RWKV7Block<T> : LayerBase<T>, IShapeContract
     {
         _originalInputShape = null;
         _cachedWkvOut = null;
-        _cachedChannelRGate = null;
-        _cachedChannelSiLU = null;
-        _cachedChannelVProj = null;
         _recurrentState = null;
         _prevToken = null;
         _prevChannelToken = null;

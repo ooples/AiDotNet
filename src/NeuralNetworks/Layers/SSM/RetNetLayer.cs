@@ -139,10 +139,6 @@ public partial class RetNetLayer<T> : LayerBase<T>, IShapeContract
 
     // Cached values for backward pass
     [Scratch]
-    private Tensor<T>? _lastDecayMasks;
-    [Scratch]
-    private Tensor<T>? _lastRetentionScores;
-    [Scratch]
     private Tensor<T>? _lastGroupNormMean;
     [Scratch]
     private Tensor<T>? _lastGroupNormVar;
@@ -278,16 +274,16 @@ public partial class RetNetLayer<T> : LayerBase<T>, IShapeContract
         // Initialize gammas per the paper's formula:
         // gamma_h = 1 - 2^(-5 - h * range / numHeads)
         // This spaces decay rates logarithmically so heads cover different time scales.
-        for (int h = 0; h < _numHeads; h++)
-        {
-            double exponent = -5.0 - (h * 8.0 / _numHeads);
-            double gamma = 1.0 - Math.Pow(2.0, exponent);
-            _gammas[h] = NumOps.FromDouble(gamma);
-        }
+        // gamma_h = 1 - 2^(-5 - 8h/H)
+        var exponent = Engine.TensorAddScalar(
+            Engine.TensorMultiplyScalar(Engine.TensorArange<T>(0, _numHeads, 1), NumOps.FromDouble(-8.0 / _numHeads)),
+            NumOps.FromDouble(-5.0));
+        Engine.TensorCopy(
+            Engine.ScalarMinusTensor(NumOps.One, Engine.TensorExp(Engine.TensorMultiplyScalar(exponent, NumOps.FromDouble(Math.Log(2.0))))),
+            _gammas);
 
         // Group normalization: scale = 1, bias = 0
-        for (int i = 0; i < _groupNormScale.Length; i++)
-            _groupNormScale[i] = NumOps.One;
+        _groupNormScale.Fill(NumOps.One);
         _groupNormBias.Fill(NumOps.Zero);
 
         RegisterTrainableParameter(_gammas, PersistentTensorRole.Weights);
@@ -379,94 +375,6 @@ public partial class RetNetLayer<T> : LayerBase<T>, IShapeContract
     }
 
     /// <summary>
-    /// Computes multi-scale retention in parallel mode: Retention_h(X) = (Q_h K_h^T odot D_h) V_h
-    /// where D_h[i,j] = gamma_h^(i-j) for i &gt;= j, 0 otherwise.
-    /// </summary>
-    private Tensor<T> MultiScaleRetentionForward(
-        Tensor<T> q, Tensor<T> k, Tensor<T> v,
-        int batchSize, int seqLen)
-    {
-        var output = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _modelDimension });
-
-        // Pre-compute decay masks: D_h[i,j] = gamma_h^(i-j) for i >= j, 0 otherwise
-        // Shape: [numHeads, seqLen, seqLen]
-        var decayMasks = new Tensor<T>(new[] { _numHeads, seqLen, seqLen });
-        for (int h = 0; h < _numHeads; h++)
-        {
-            T gamma = _gammas[h];
-            for (int i = 0; i < seqLen; i++)
-            {
-                for (int j = 0; j <= i; j++)
-                {
-                    // D[i,j] = gamma^(i-j)
-                    int diff = i - j;
-                    T decayVal = NumOps.One;
-                    for (int p = 0; p < diff; p++)
-                        decayVal = NumOps.Multiply(decayVal, gamma);
-                    decayMasks[new[] { h, i, j }] = decayVal;
-                }
-                // j > i entries are already zero from initialization
-            }
-        }
-        _lastDecayMasks = decayMasks;
-
-        // Store retention scores for backward pass: [batch, numHeads, seqLen, seqLen]
-        var retentionScores = TensorAllocator.Rent<T>(new[] { batchSize, _numHeads, seqLen, seqLen });
-        _lastRetentionScores = retentionScores;
-
-        // For each head, compute retention
-        T headScale = NumOps.FromDouble(1.0 / Math.Sqrt(_headDimension));
-
-        for (int bi = 0; bi < batchSize; bi++)
-        {
-            for (int h = 0; h < _numHeads; h++)
-            {
-                int dimStart = h * _headDimension;
-
-                // Compute Q_h K_h^T: [seqLen, seqLen]
-                for (int i = 0; i < seqLen; i++)
-                {
-                    for (int j = 0; j <= i; j++)
-                    {
-                        T dot = NumOps.Zero;
-                        for (int d = 0; d < _headDimension; d++)
-                        {
-                            int flatD = dimStart + d;
-                            T qVal = q[new[] { bi, i, flatD }];
-                            T kVal = k[new[] { bi, j, flatD }];
-                            dot = NumOps.Add(dot, NumOps.Multiply(qVal, kVal));
-                        }
-                        // Scale by 1/sqrt(d_k) and apply causal decay mask
-                        T scaledDot = NumOps.Multiply(dot, headScale);
-                        T decayVal = decayMasks[new[] { h, i, j }];
-                        T score = NumOps.Multiply(scaledDot, decayVal);
-                        retentionScores[new[] { bi, h, i, j }] = score;
-                    }
-                }
-
-                // Multiply retention scores by V_h: output[i] = sum_j score[i,j] * V[j]
-                for (int i = 0; i < seqLen; i++)
-                {
-                    for (int d = 0; d < _headDimension; d++)
-                    {
-                        int flatD = dimStart + d;
-                        T sum = NumOps.Zero;
-                        for (int j = 0; j <= i; j++)
-                        {
-                            T score = retentionScores[new[] { bi, h, i, j }];
-                            T vVal = v[new[] { bi, j, flatD }];
-                            sum = NumOps.Add(sum, NumOps.Multiply(score, vVal));
-                        }
-                        output[new[] { bi, i, flatD }] = sum;
-                    }
-                }
-            }
-        }
-
-        return output;
-    }
-
-    /// <summary>
     /// Applies group normalization (per-head LayerNorm) to the retention output.
     /// Each head's output is independently normalized, then scaled and shifted.
     /// </summary>
@@ -488,79 +396,6 @@ public partial class RetNetLayer<T> : LayerBase<T>, IShapeContract
         _lastGroupNormMean = Engine.Reshape(meanFlat, new[] { batchSize, seqLen, _numHeads });
         _lastGroupNormVar = Engine.Reshape(varFlat, new[] { batchSize, seqLen, _numHeads });
         return output;
-    }
-
-    /// <summary>
-    /// Backward pass through group normalization.
-    /// </summary>
-    private Tensor<T> GroupNormBackward(
-        Tensor<T> dNormed, Tensor<T> retentionInput,
-        int batchSize, int seqLen)
-    {
-        var dInput = TensorAllocator.Rent<T>(retentionInput._shape);
-        T eps = NumOps.FromDouble(1e-6);
-
-        for (int bi = 0; bi < batchSize; bi++)
-        {
-            for (int t = 0; t < seqLen; t++)
-            {
-                for (int h = 0; h < _numHeads; h++)
-                {
-                    int dimStart = h * _headDimension;
-                    T mean = (_lastGroupNormMean ?? throw new InvalidOperationException("_lastGroupNormMean has not been initialized."))[new[] { bi, t, h }];
-                    T variance = (_lastGroupNormVar ?? throw new InvalidOperationException("_lastGroupNormVar has not been initialized."))[new[] { bi, t, h }];
-                    T invStd = NumOps.FromDouble(1.0 / Math.Sqrt(
-                        NumOps.ToDouble(NumOps.Add(variance, eps))));
-                    T invHD = NumOps.FromDouble(1.0 / _headDimension);
-
-                    // Accumulate group norm parameter gradients and compute intermediate sums
-                    T sumDy = NumOps.Zero;
-                    T sumDyXhat = NumOps.Zero;
-
-                    for (int d = 0; d < _headDimension; d++)
-                    {
-                        int flatD = dimStart + d;
-                        T xHat = NumOps.Multiply(
-                            NumOps.Subtract(retentionInput[new[] { bi, t, flatD }], mean),
-                            invStd);
-                        T dy = dNormed[new[] { bi, t, flatD }];
-                        T scale = _groupNormScale[new[] { h, d }];
-
-                        // dScale += dy * xHat, dBias += dy
-                        (_groupNormScaleGradient ?? throw new InvalidOperationException("_groupNormScaleGradient has not been initialized."))[new[] { h, d }] = NumOps.Add(
-                            _groupNormScaleGradient[new[] { h, d }],
-                            NumOps.Multiply(dy, xHat));
-                        (_groupNormBiasGradient ?? throw new InvalidOperationException("_groupNormBiasGradient has not been initialized."))[new[] { h, d }] = NumOps.Add(
-                            _groupNormBiasGradient[new[] { h, d }], dy);
-
-                        // For input gradient, dy is scaled by the norm scale
-                        T dyScaled = NumOps.Multiply(dy, scale);
-                        sumDy = NumOps.Add(sumDy, dyScaled);
-                        sumDyXhat = NumOps.Add(sumDyXhat, NumOps.Multiply(dyScaled, xHat));
-                    }
-
-                    // Compute input gradient for each dimension in this head
-                    for (int d = 0; d < _headDimension; d++)
-                    {
-                        int flatD = dimStart + d;
-                        T xHat = NumOps.Multiply(
-                            NumOps.Subtract(retentionInput[new[] { bi, t, flatD }], mean),
-                            invStd);
-                        T dy = dNormed[new[] { bi, t, flatD }];
-                        T scale = _groupNormScale[new[] { h, d }];
-                        T dyScaled = NumOps.Multiply(dy, scale);
-
-                        // dInput = invStd * (dyScaled - invHD * (sumDy + xHat * sumDyXhat))
-                        T correction = NumOps.Multiply(invHD,
-                            NumOps.Add(sumDy, NumOps.Multiply(xHat, sumDyXhat)));
-                        dInput[new[] { bi, t, flatD }] = NumOps.Multiply(
-                            invStd, NumOps.Subtract(dyScaled, correction));
-                    }
-                }
-            }
-        }
-
-        return dInput;
     }
 
     /// <summary>
@@ -600,12 +435,16 @@ public partial class RetNetLayer<T> : LayerBase<T>, IShapeContract
         Engine.TensorAddInPlace(_groupNormBias, Engine.TensorMultiplyScalar((_groupNormBiasGradient ?? throw new InvalidOperationException("_groupNormBiasGradient is null where it is required.")), negLR));
 
         // Clamp gammas to (0, 1) after update to maintain valid decay rates
-        for (int h = 0; h < _numHeads; h++)
-        {
-            double gVal = NumOps.ToDouble(_gammas[h]);
-            if (gVal <= 0.0) _gammas[h] = NumOps.FromDouble(1e-6);
-            else if (gVal >= 1.0) _gammas[h] = NumOps.FromDouble(1.0 - 1e-6);
-        }
+        // Keep each decay in (0, 1): values <= 0 become 1e-6 and values >= 1 become 1 - 1e-6 (NaN is left as is).
+        int[] gammaShape = _gammas._shape;
+        var floor = new Tensor<T>(gammaShape);
+        floor.Fill(NumOps.FromDouble(1e-6));
+        var ceiling = new Tensor<T>(gammaShape);
+        ceiling.Fill(NumOps.FromDouble(1.0 - 1e-6));
+        var clampedLow = Engine.TensorWhere(Engine.TensorLessEqual(_gammas, new Tensor<T>(gammaShape)), floor, _gammas);
+        var oneTensor = new Tensor<T>(gammaShape);
+        oneTensor.Fill(NumOps.One);
+        Engine.TensorCopy(Engine.TensorWhere(Engine.TensorGreaterEqual(clampedLow, oneTensor), ceiling, clampedLow), _gammas);
 
     }
 
@@ -630,8 +469,6 @@ public partial class RetNetLayer<T> : LayerBase<T>, IShapeContract
     /// <inheritdoc />
     public override void ResetState()
     {
-        _lastDecayMasks = null;
-        _lastRetentionScores = null;
         _lastGroupNormMean = null;
         _lastGroupNormVar = null;
         _originalInputShape = null;
@@ -660,9 +497,8 @@ public partial class RetNetLayer<T> : LayerBase<T>, IShapeContract
         metadata["HeadDimension"] = _headDimension.ToString();
 
         // Include the decay rates for inspection
-        var gammaValues = new string[_numHeads];
-        for (int h = 0; h < _numHeads; h++)
-            gammaValues[h] = NumOps.ToDouble(_gammas[h]).ToString("F6");
+        // Display only: each decay rate formatted with six decimals.
+        var gammaValues = _gammas.ToArray().Select(g => string.Format(System.Globalization.CultureInfo.CurrentCulture, "{0:F6}", g));
         metadata["DecayRates"] = string.Join(", ", gammaValues);
 
         return metadata;
