@@ -325,4 +325,20 @@ public class PreprocessingHelperCountTests
 
         Assert.Equal(256.0, (double)norms.GetFlat(0), Tolerance);
     }
+
+    // Column [-65504, 65504, 65504]: mean 21834.67, differences -87338.67, 43669.33, 43669.33 and population std
+    // 61758.04, so the standardized distances are sqrt(2), 1 / sqrt(2) and 1 / sqrt(2). In Half the column sum and
+    // the first difference passed 65504 and the distances came out inf or NaN.
+    [Fact(Timeout = 60000)]
+    public async Task CentroidDistances_Half_DifferencesPast65504()
+    {
+        await Task.Yield();
+        var data = new Matrix<Half>(new[,] { { (Half)(-65504) }, { (Half)65504 }, { (Half)65504 } });
+
+        var distances = PreprocessingTensorOps.CentroidDistances(data, standardize: true);
+
+        Assert.Equal(Math.Sqrt(2), (double)distances.GetFlat(0), 1e-2);
+        Assert.Equal(1 / Math.Sqrt(2), (double)distances.GetFlat(1), 1e-2);
+        Assert.Equal(1 / Math.Sqrt(2), (double)distances.GetFlat(2), 1e-2);
+    }
 }

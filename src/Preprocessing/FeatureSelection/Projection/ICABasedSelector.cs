@@ -71,14 +71,25 @@ public class ICABasedSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IFi
         var rand = RandomHelper.CreateSecureRandom();
 
         // Whitening: FastICA (Hyvarinen 1999) runs on PCA-whitened data
+        // (directions without variance are dropped, so the whitened dimension d can be below k)
         var z = FastIcaOps.Whiten(x, k, out var whitening);
+        int d = z.Shape[1];
 
-        // Deflationary FastICA; component c starts from uniform draws in [-0.5, 0.5)
-        var initial = engine.TensorTranspose(PopulationSearchOps.Affine(PopulationSearchOps.Uniform<T>(rand, k, k), 1, -0.5));
-        var unmixing = engine.TensorMatMul(whitening, FastIcaOps.Deflation(z, initial, _nIterations, 0));
+        // Deflationary FastICA; component c starts from uniform draws in [-0.5, 0.5). Constant data has no
+        // component, and every feature scores 0.
+        Tensor<T> scores;
+        if (d == 0)
+        {
+            scores = new Tensor<T>(new[] { p });
+        }
+        else
+        {
+            var initial = engine.TensorTranspose(PopulationSearchOps.Affine(PopulationSearchOps.Uniform<T>(rand, d, d), 1, -0.5));
+            var unmixing = engine.TensorMatMul(whitening, FastIcaOps.Deflation(z, initial, _nIterations, 0));
 
-        // Feature scores = sum of absolute unmixing weights (in the original feature space) across components
-        var scores = engine.ReduceSum(engine.TensorAbs(unmixing), new[] { 1 }, false);
+            // Feature scores = sum of absolute unmixing weights (in the original feature space) across components
+            scores = engine.ReduceSum(engine.TensorAbs(unmixing), new[] { 1 }, false);
+        }
         _featureScores = scores.ToVector();
 
         int numToSelect = Math.Min(_nFeaturesToSelect, p);

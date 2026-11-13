@@ -61,26 +61,12 @@ public class LempelZivSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IF
         int n = data.Rows;
         int p = data.Columns;
 
-        var engine = Engine;
-        var X = Tensor<T>.FromMatrix(data);
-
         // Normalized complexity bound: n / log_k(n) where k = alphabet size
         double normFactor = n / (Math.Log(n) / Math.Log(_nBins));
 
-        // Discretize every column to symbols: trunc((x - min) / range * (nBins - 1)), capped at nBins - 1;
-        // a (near-)constant column is all symbol 0
-        var min = engine.Reshape(PreprocessingTensorOps.ColumnMin(X), new[] { 1, p });
-        var range = engine.TensorSubtract(engine.Reshape(PreprocessingTensorOps.ColumnMax(X), new[] { 1, p }), min);
-        var scaled = engine.TensorMultiplyScalar(
-            engine.TensorDivide(engine.TensorSubtract(X, engine.TensorBroadcastTo(min, new[] { n, p })),
-                engine.TensorBroadcastTo(range, new[] { n, p })),
-            NumOps.FromDouble(_nBins - 1));
-        var bins = engine.TensorMin(engine.TensorTrunc(scaled), NumOps.FromDouble(_nBins - 1));
-        var constant = engine.TensorBroadcastTo(engine.TensorLessThan(range, PreprocessingTensorOps.Tolerance<T>(1e-10)), new[] { n, p });
-        var symbols = engine.TensorWhere(constant, new Tensor<T>(new[] { n, p }), bins);
+        var columnSymbols = Symbols(Tensor<T>.FromMatrix(data), _nBins);
 
         // Compute Lempel-Ziv complexity of each column's integer symbol sequence
-        var columnSymbols = engine.TensorTranspose(symbols).Cast<int>().AsSpan().ToArray();
         var complexity = new int[p];
         for (int j = 0; j < p; j++)
         {
@@ -89,17 +75,51 @@ public class LempelZivSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IF
             complexity[j] = ComputeLZComplexity(sequence);
         }
 
-        // Normalize by theoretical bound
-        var complexityValues = new Tensor<int>(complexity, new[] { p }).Cast<T>();
-        complexityValues = normFactor > 0
-            ? engine.TensorDivideScalar(complexityValues, NumOps.FromDouble(normFactor))
-            : new Tensor<T>(new[] { p });
+        var complexityValues = NormalizeComplexity(complexity, normFactor);
         _complexityValues = complexityValues.ToVector();
 
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
         _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(complexityValues, numToSelect);
 
         IsFitted = true;
+    }
+
+    /// <summary>
+    /// Discretizes every column to integer symbols, column-major: trunc((x - min) / range * (nBins - 1)),
+    /// capped at nBins - 1; a (near-)constant column is all symbol 0. Half widens to double first, since its
+    /// range and numerators overflow at 65504 for representable inputs.
+    /// </summary>
+    internal static int[] Symbols(Tensor<T> x, int nBins)
+    {
+        if (PreprocessingTensorOps.IsNarrowFloat<T>())
+            return LempelZivSelector<double>.Symbols(x.Cast<double>(), nBins);
+
+        var engine = AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<T>();
+        int n = x.Shape[0];
+        int p = x.Shape[1];
+        var min = engine.Reshape(PreprocessingTensorOps.ColumnMin(x), new[] { 1, p });
+        var range = engine.TensorSubtract(engine.Reshape(PreprocessingTensorOps.ColumnMax(x), new[] { 1, p }), min);
+        var scaled = engine.TensorMultiplyScalar(
+            engine.TensorDivide(engine.TensorSubtract(x, engine.TensorBroadcastTo(min, new[] { n, p })),
+                engine.TensorBroadcastTo(range, new[] { n, p })),
+            ops.FromDouble(nBins - 1));
+        var bins = engine.TensorMin(engine.TensorTrunc(scaled), ops.FromDouble(nBins - 1));
+        var constant = engine.TensorBroadcastTo(engine.TensorLessThan(range, PreprocessingTensorOps.Tolerance<T>(1e-10)), new[] { n, p });
+        var symbols = engine.TensorWhere(constant, new Tensor<T>(new[] { n, p }), bins);
+        return engine.TensorTranspose(symbols).Cast<int>().AsSpan().ToArray();
+    }
+
+    /// <summary>
+    /// Divides the raw complexities by the theoretical bound in double and casts only the result: the bound
+    /// itself passes 65504 for Half once n reaches about two million rows.
+    /// </summary>
+    internal static Tensor<T> NormalizeComplexity(int[] complexity, double normFactor)
+    {
+        if (normFactor <= 0)
+            return new Tensor<T>(new[] { complexity.Length });
+        var raw = new Tensor<int>((int[])complexity.Clone(), new[] { complexity.Length }).Cast<double>();
+        return AiDotNetEngine.Current.TensorDivideScalar(raw, normFactor).Cast<T>();
     }
 
     private int ComputeLZComplexity(int[] sequence)

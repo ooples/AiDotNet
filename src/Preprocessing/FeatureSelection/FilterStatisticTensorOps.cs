@@ -421,6 +421,11 @@ internal static class FilterStatisticTensorOps
     /// </summary>
     public static Tensor<T> StudentTTwoSided<T>(Tensor<T> t, Tensor<T> df)
     {
+        // t^2 passes Half's 65504 at |t| = 256, which zeroes the beta argument; the widening must happen before the
+        // square, since widening inside RegularizedIncompleteBeta cannot recover the lost ratio.
+        if (PreprocessingTensorOps.IsNarrowFloat<T>())
+            return StudentTTwoSided(t.Cast<float>(), df.Cast<float>()).Cast<T>();
+
         var engine = AiDotNetEngine.Current;
         var ops = MathHelper.GetNumericOperations<T>();
         T one = ops.One;

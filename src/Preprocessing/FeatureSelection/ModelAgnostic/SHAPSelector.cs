@@ -201,8 +201,11 @@ public class SHAPSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISuperv
         var sizes = engine.ReduceSum(joined.Cast<int>(), new[] { 1 }, false).Cast<T>();
         var proper = PreprocessingTensorOps.MaskPositions(engine.TensorMultiply(
             engine.TensorGreaterThan(sizes, ops.Zero), engine.TensorLessThan(sizes, ops.FromDouble(p))));
+        // Every draw was empty or full, which says nothing about the individual features: fall back to the p
+        // singleton coalitions (all proper for p >= 2) instead of splitting the gap equally, which credited a
+        // feature the model ignores.
         if (proper.Length == 0)
-            return engine.TensorDivideScalar(engine.TensorBroadcastTo(gap, new[] { p }), ops.FromDouble(p));
+            return KernelShap(instance, baseline, engine.TensorEye<T>(p), predict);
 
         int m = proper.Length;
         var properIndex = new Tensor<int>(proper, new[] { m });
@@ -231,12 +234,15 @@ public class SHAPSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISuperv
         var design = engine.TensorSubtract(
             engine.TensorSlice(z, new[] { 0, 0 }, new[] { m, p - 1 }),
             engine.TensorBroadcastTo(engine.Reshape(last, new[] { m, 1 }), new[] { m, p - 1 }));
-        var weighted = PopulationSearchOps.ScaleRows(design, weights);
-        var transposed = engine.TensorTranspose(weighted);
+        // The ridged normal equations are formed and solved in double: a 1e-10 ridge vanishes on a Gram diagonal
+        // of about 1 in float and Half, which left a single coalition such as [1, 1, 0] (Gram all ones) singular.
+        // Solve widens only after the Gram is formed, so it cannot restore the ridge.
+        var designWide = design.Cast<double>();
+        var transposed = engine.TensorTranspose(PopulationSearchOps.ScaleRows(designWide, weights.Cast<double>()));
         var gram = engine.TensorAdd(
-            engine.TensorMatMul(transposed, design), engine.TensorMultiplyScalar(engine.TensorEye<T>(p - 1), PreprocessingTensorOps.Tolerance<T>(1e-10)));
-        var rhs = engine.TensorMatMul(transposed, engine.Reshape(response, new[] { m, 1 }));
-        var head = engine.Reshape(PreprocessingTensorOps.Solve(gram, rhs), new[] { p - 1 });
+            engine.TensorMatMul(transposed, designWide), engine.TensorMultiplyScalar(engine.TensorEye<double>(p - 1), 1e-10));
+        var rhs = engine.TensorMatMul(transposed, engine.Reshape(response.Cast<double>(), new[] { m, 1 }));
+        var head = engine.Reshape(PreprocessingTensorOps.Solve(gram, rhs), new[] { p - 1 }).Cast<T>();
         var tail = engine.TensorSubtract(gap, engine.ReduceSum(head, new[] { 0 }, true));
         return engine.TensorConcatenate(new[] { head, tail }, 0);
     }

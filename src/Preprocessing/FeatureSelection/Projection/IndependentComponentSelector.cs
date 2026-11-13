@@ -74,14 +74,25 @@ public class IndependentComponentSelector<T> : TransformerBase<T, Matrix<T>, Mat
 
         // Whitening via PCA: FastICA (Hyvarinen 1999) runs on whitened data
         int numComponents = Math.Min(_nComponents, Math.Min(n, p));
+        // (directions without variance are dropped, so the whitened dimension d can be below numComponents)
         var z = FastIcaOps.Whiten(x, numComponents, out var whitening);
+        int d = z.Shape[1];
 
-        // Initialize random mixing matrix [d, k] with draws in [-0.5, 0.5), then deflationary FastICA
-        var initial = PopulationSearchOps.Affine(PopulationSearchOps.Uniform<T>(rand, numComponents, numComponents), 1, -0.5);
-        var unmixing = engine.TensorMatMul(whitening, FastIcaOps.Deflation(z, initial, 100, 1e-6));
+        // Initialize random mixing matrix [d, d] with draws in [-0.5, 0.5), then deflationary FastICA. Constant
+        // data has no component, and every feature scores 0.
+        Tensor<T> scores;
+        if (d == 0)
+        {
+            scores = new Tensor<T>(new[] { p });
+        }
+        else
+        {
+            var initial = PopulationSearchOps.Affine(PopulationSearchOps.Uniform<T>(rand, d, d), 1, -0.5);
+            var unmixing = engine.TensorMatMul(whitening, FastIcaOps.Deflation(z, initial, 100, 1e-6));
 
-        // Score features by their total contribution to independent components
-        var scores = engine.ReduceSum(engine.TensorAbs(unmixing), new[] { 1 }, false);
+            // Score features by their total contribution to independent components
+            scores = engine.ReduceSum(engine.TensorAbs(unmixing), new[] { 1 }, false);
+        }
         _independenceScores = scores.ToVector();
 
         int numToSelect = Math.Min(_nFeaturesToSelect, p);

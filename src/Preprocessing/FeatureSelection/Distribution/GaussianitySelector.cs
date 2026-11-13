@@ -56,33 +56,10 @@ public class GaussianitySelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, 
     protected override void FitCore(Matrix<T> data)
     {
         _nInputFeatures = data.Columns;
-        int n = data.Rows;
         int p = data.Columns;
 
         var engine = Engine;
-        var X = Tensor<T>.FromMatrix(data);
-        var shape = new[] { n, p };
-
-        // Population moments of every feature
-        var centered = engine.TensorSubtract(X, engine.TensorBroadcastTo(engine.ReduceMean(X, new[] { 0 }, true), shape));
-        var std = engine.TensorSqrt(engine.ReduceMean(engine.TensorSquare(centered), new[] { 0 }, true));
-        var z = engine.TensorDivide(centered, engine.TensorBroadcastTo(std, shape));
-        var zSquared = engine.TensorSquare(z);
-
-        // Compute skewness
-        var skewness = engine.ReduceMean(engine.TensorMultiply(zSquared, z), new[] { 0 }, false);
-
-        // Compute excess kurtosis
-        var kurtosis = engine.TensorSubtractScalar(
-            engine.ReduceMean(engine.TensorSquare(zSquared), new[] { 0 }, false), NumOps.FromDouble(3));
-
-        // Jarque-Bera test statistic: JB = n/6 * (S² + K²/4)
-        // Lower JB = more Gaussian; a constant feature gets the maximum value (very non-normal)
-        var jb = engine.TensorMultiplyScalar(
-            engine.TensorAdd(engine.TensorSquare(skewness), engine.TensorDivideScalar(engine.TensorSquare(kurtosis), NumOps.FromDouble(4.0))),
-            NumOps.FromDouble(n / 6.0));
-        var constant = engine.TensorLessThan(engine.Reshape(std, new[] { p }), PreprocessingTensorOps.Tolerance<T>(1e-10));
-        jb = engine.TensorWhere(constant, PreprocessingTensorOps.Filled(new[] { p }, NumOps.MaxValue), jb);
+        var jb = JarqueBera(Tensor<T>.FromMatrix(data));
         _jbStatistics = jb.ToVector();
 
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
@@ -110,6 +87,53 @@ public class GaussianitySelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, 
     {
         Fit(data);
         return Transform(data);
+    }
+
+    /// <summary>
+    /// Jarque-Bera statistic of every column, JB = n/6 * (S² + K²/4) from population moments; lower is more
+    /// Gaussian and a constant column gets the maximum value. Half widens to double for the moments, since
+    /// squared deviations pass 65504 for representable data, and only the statistic is cast back.
+    /// </summary>
+    internal static Tensor<T> JarqueBera(Tensor<T> x)
+    {
+        var ops = MathHelper.GetNumericOperations<T>();
+        if (PreprocessingTensorOps.IsNarrowFloat<T>())
+        {
+            var wideEngine = AiDotNetEngine.Current;
+            var wide = GaussianitySelector<double>.JarqueBera(x.Cast<double>());
+            // Constant columns carry double.MaxValue and map to T's maximum; every real statistic stays below that
+            // maximum so the constant-column sentinel remains distinguishable after the cast.
+            var constantColumns = PreprocessingTensorOps.Not(wideEngine.TensorLessThan(wide, double.MaxValue)).Cast<T>();
+            var below = wideEngine.TensorMin(wide, ops.ToDouble(ops.MaxValue) * (1 - 1.0 / 64)).Cast<T>();
+            return wideEngine.TensorWhere(
+                constantColumns, PreprocessingTensorOps.Filled(new[] { wide.Length }, ops.MaxValue), below);
+        }
+
+        var engine = AiDotNetEngine.Current;
+        int n = x.Shape[0];
+        int p = x.Shape[1];
+        var shape = new[] { n, p };
+
+        // Population moments of every feature
+        var centered = engine.TensorSubtract(x, engine.TensorBroadcastTo(engine.ReduceMean(x, new[] { 0 }, true), shape));
+        var std = engine.TensorSqrt(engine.ReduceMean(engine.TensorSquare(centered), new[] { 0 }, true));
+        var z = engine.TensorDivide(centered, engine.TensorBroadcastTo(std, shape));
+        var zSquared = engine.TensorSquare(z);
+
+        // Compute skewness
+        var skewness = engine.ReduceMean(engine.TensorMultiply(zSquared, z), new[] { 0 }, false);
+
+        // Compute excess kurtosis
+        var kurtosis = engine.TensorSubtractScalar(
+            engine.ReduceMean(engine.TensorSquare(zSquared), new[] { 0 }, false), ops.FromDouble(3));
+
+        // Jarque-Bera test statistic: JB = n/6 * (S² + K²/4)
+        // Lower JB = more Gaussian; a constant feature gets the maximum value (very non-normal)
+        var jb = engine.TensorMultiplyScalar(
+            engine.TensorAdd(engine.TensorSquare(skewness), engine.TensorDivideScalar(engine.TensorSquare(kurtosis), ops.FromDouble(4.0))),
+            ops.FromDouble(n / 6.0));
+        var constant = engine.TensorLessThan(engine.Reshape(std, new[] { p }), PreprocessingTensorOps.Tolerance<T>(1e-10));
+        return engine.TensorWhere(constant, PreprocessingTensorOps.Filled(new[] { p }, ops.MaxValue), jb);
     }
 
     /// <inheritdoc />

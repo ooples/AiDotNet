@@ -141,6 +141,12 @@ public class FilterWrapperHybridSelector<T> : TransformerBase<T, Matrix<T>, Matr
     /// </summary>
     internal static Tensor<T> CrossValidatedRSquared(Tensor<T> x, Tensor<T> y, List<int> features, int[] foldOrder)
     {
+        // Half and BFloat16 cross-validate in double: the fold Gram matrix passes 65504 (eight rows of 300 give
+        // 720000) before RidgeCoefficients sees it, and widening inside the solve cannot recover it.
+        if (PreprocessingTensorOps.IsNarrowFloat<T>())
+            return FilterWrapperHybridSelector<double>.CrossValidatedRSquared(
+                x.Cast<double>(), y.Cast<double>(), features, foldOrder).Cast<T>();
+
         var engine = AiDotNetEngine.Current;
         var ops = MathHelper.GetNumericOperations<T>();
         int n = foldOrder.Length;

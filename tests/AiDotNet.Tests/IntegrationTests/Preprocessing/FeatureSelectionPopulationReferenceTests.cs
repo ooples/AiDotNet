@@ -1473,6 +1473,7 @@ public class FeatureSelectionPopulationReferenceTests
         var w = AiDotNet.Preprocessing.FeatureSelection.Helpers.FastIcaOps.Deflation(
             z, Tensor2D(new double[,] { { 0.3, -0.2 }, { 0.1, 0.4 } }), 200, 1e-9);
         var unmixing = ToArray(w);
+        var matched = new int[2];
         for (int c = 0; c < 2; c++)
         {
             var y = new double[n];
@@ -1490,11 +1491,19 @@ public class FeatureSelectionPopulationReferenceTests
                     yy += y[i] * y[i];
                 }
 
-                best = System.Math.Max(best, System.Math.Abs(sy / System.Math.Sqrt(ss * yy)));
+                double r = System.Math.Abs(sy / System.Math.Sqrt(ss * yy));
+                if (r > best)
+                {
+                    best = r;
+                    matched[c] = src;
+                }
             }
 
             Assert.True(best > 0.99, $"component {c} correlates at most {best} with a source");
         }
+
+        // One-to-one: two copies of the same recovered source must not pass for both components
+        Assert.NotEqual(matched[0], matched[1]);
     }
 
     // ---------------------------------------------------------------- Neural selectors (gradient checks)

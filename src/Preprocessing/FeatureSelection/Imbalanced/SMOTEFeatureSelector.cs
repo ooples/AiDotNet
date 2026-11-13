@@ -145,31 +145,61 @@ public class SMOTEFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>,
     /// <summary>
     /// For every minority row, the positions (within <paramref name="minority"/>) of its
     /// <paramref name="k"/> nearest other minority rows by Euclidean distance, ties to the lower position.
+    /// Distances are formed for blocks of rows of at most <paramref name="blockElements"/> [rows, m, p] elements, so
+    /// the working set stays bounded: the full [m, m] distance and identity tensors needed 2.5 billion elements
+    /// (20 GB in double) for 50000 minority rows.
     /// </summary>
-    internal static int[][] MinorityNeighbors(Tensor<T> minority, int k)
+    internal static int[][] MinorityNeighbors(Tensor<T> minority, int k, int blockElements = NeighborBlockElements)
     {
         var engine = AiDotNetEngine.Current;
         var ops = MathHelper.GetNumericOperations<T>();
         int m = minority.Shape[0];
+        int p = minority.Shape[1];
         int count = Math.Min(k, m - 1);
+        var neighbors = new int[m][];
+        if (m == 0)
+            return neighbors;
 
         // The row itself is pushed past every other row so it is never its own neighbour. The neighbour order does
-        // not depend on the scale, so the rows are divided by their largest magnitude first: the distance expansion
-        // squares the values, which passes 65504 in Half past 256 and left every distance NaN.
-        var eye = engine.TensorEye<T>(m);
+        // not depend on the scale, so the rows are divided by their largest magnitude first: the squared distances
+        // pass 65504 in Half past 256 and left every distance NaN.
         var largest = engine.ReduceMax(engine.TensorAbs(minority), new[] { 0, 1 }, true);
         var scale = engine.TensorWhere(
             engine.TensorGreaterThan(largest, ops.Zero), largest, PreprocessingTensorOps.Filled(largest.Shape.ToArray(), ops.One));
         var unit = engine.TensorDivide(minority, engine.TensorBroadcastTo(scale, minority.Shape.ToArray()));
-        var distances = engine.TensorWhere(
-            eye, PreprocessingTensorOps.Filled(new[] { m, m }, ops.MaxValue), FeatureSelectionTensorOps.PairwiseDistances(unit));
-        var neighbors = new int[m][];
-        for (int i = 0; i < m; i++)
-            neighbors[i] = PreprocessingTensorOps.StableOrder(PopulationSearchOps.Row(distances, i), descending: false)
-                .Take(count)
-                .ToArray();
+        var all = engine.Reshape(unit, new[] { 1, m, p });
+
+        long perRow = (long)m * Math.Max(p, 1);
+        int block = (int)Math.Max(1, Math.Min(m, Math.Max(1, blockElements) / perRow));
+        for (int start = 0; start < m; start += block)
+        {
+            int rows = Math.Min(block, m - start);
+            var shape = new[] { rows, m, p };
+            var current = engine.Reshape(engine.TensorSlice(unit, new[] { start, 0 }, new[] { rows, p }), new[] { rows, 1, p });
+            var delta = engine.TensorSubtract(engine.TensorBroadcastTo(current, shape), engine.TensorBroadcastTo(all, shape));
+            var distances = engine.ReduceSum(engine.TensorSquare(delta), new[] { 2 }, false); // [rows, m]
+
+            var self = new int[rows];
+            for (int i = 0; i < rows; i++)
+                self[i] = i * m + start + i;
+            var selfMask = engine.Reshape(engine.TensorScatter(
+                new Tensor<T>(new[] { rows * m }),
+                new Tensor<int>(self, new[] { rows }),
+                PreprocessingTensorOps.Filled(new[] { rows }, ops.One),
+                0), new[] { rows, m });
+            distances = engine.TensorWhere(selfMask, PreprocessingTensorOps.Filled(new[] { rows, m }, ops.MaxValue), distances);
+
+            for (int i = 0; i < rows; i++)
+                neighbors[start + i] = PreprocessingTensorOps.StableOrder(PopulationSearchOps.Row(distances, i), descending: false)
+                    .Take(count)
+                    .ToArray();
+        }
+
         return neighbors;
     }
+
+    /// <summary>Element budget of one [rows, m, p] block of the neighbour search.</summary>
+    internal const int NeighborBlockElements = 1 << 22;
 
     /// <summary>
     /// SMOTE samples base + lambda (neighbour - base) for row pairs (<paramref name="baseRows"/>[s],
@@ -177,6 +207,12 @@ public class SMOTEFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>,
     /// </summary>
     internal static Tensor<T> Interpolate(Tensor<T> minority, int[] baseRows, int[] neighborRows, Tensor<T> lambdas)
     {
+        // Half and BFloat16 interpolate in double: neighbour - base passes 65504 for representable endpoints such
+        // as -60000 and 60000, whose midpoint is 0.
+        if (PreprocessingTensorOps.IsNarrowFloat<T>())
+            return SMOTEFeatureSelector<double>.Interpolate(
+                minority.Cast<double>(), baseRows, neighborRows, lambdas.Cast<double>()).Cast<T>();
+
         var engine = AiDotNetEngine.Current;
         int s = baseRows.Length;
         int p = minority.Shape[1];
@@ -188,11 +224,16 @@ public class SMOTEFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>,
 
     /// <summary>
     /// Fisher's discriminant ratio (mean0 - mean1)^2 / (var0 + var1) per feature of two classes [n0, p] and
-    /// [n1, p], with population variances; 0 where the variances sum to at most 1e-10.
+    /// [n1, p], with population variances; 0 where the variances sum to at most 1e-10. Half and BFloat16 evaluate
+    /// in double, since the squared mean gap and the squared deviations pass 65504 for representable data.
     /// </summary>
-    private Tensor<T> FisherScores(Tensor<T> class0, Tensor<T> class1)
+    internal static Tensor<T> FisherScores(Tensor<T> class0, Tensor<T> class1)
     {
-        var engine = Engine;
+        if (PreprocessingTensorOps.IsNarrowFloat<T>())
+            return SMOTEFeatureSelector<double>.FisherScores(class0.Cast<double>(), class1.Cast<double>()).Cast<T>();
+
+        var engine = AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<T>();
         int p = class0.Shape[1];
         var mean0 = engine.ReduceMean(class0, new[] { 0 }, true);
         var mean1 = engine.ReduceMean(class1, new[] { 0 }, true);
@@ -200,7 +241,7 @@ public class SMOTEFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>,
         var var1 = engine.ReduceMean(engine.TensorSquare(engine.TensorSubtract(class1, engine.TensorBroadcastTo(mean1, class1.Shape.ToArray()))), new[] { 0 }, false);
         var denom = engine.TensorAdd(var0, var1);
         var valid = engine.TensorGreaterThan(denom, PreprocessingTensorOps.Tolerance<T>(1e-10));
-        var safe = engine.TensorWhere(valid, denom, PreprocessingTensorOps.Filled(new[] { p }, NumOps.One));
+        var safe = engine.TensorWhere(valid, denom, PreprocessingTensorOps.Filled(new[] { p }, ops.One));
         var gap = engine.TensorSquare(engine.Reshape(engine.TensorSubtract(mean0, mean1), new[] { p }));
         return engine.TensorWhere(valid, engine.TensorDivide(gap, safe), new Tensor<T>(new[] { p }));
     }

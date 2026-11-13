@@ -79,12 +79,13 @@ public class DifferentialPrivacySelector<T> : TransformerBase<T, Matrix<T>, Matr
     {
         if (nFeaturesToSelect < 1)
             throw new ArgumentException("Number of features must be at least 1.", nameof(nFeaturesToSelect));
-        if (epsilon <= 0)
-            throw new ArgumentException("Epsilon must be positive.", nameof(epsilon));
-        if (featureBound <= 0)
-            throw new ArgumentException("Feature bound must be positive.", nameof(featureBound));
-        if (targetBound <= 0)
-            throw new ArgumentException("Target bound must be positive.", nameof(targetBound));
+        // NaN passes a "<= 0" guard and then makes the noise scale NaN, so non-finite values are rejected as well
+        if (!IsPositiveFinite(epsilon))
+            throw new ArgumentException("Epsilon must be positive and finite.", nameof(epsilon));
+        if (!IsPositiveFinite(featureBound))
+            throw new ArgumentException("Feature bound must be positive and finite.", nameof(featureBound));
+        if (!IsPositiveFinite(targetBound))
+            throw new ArgumentException("Target bound must be positive and finite.", nameof(targetBound));
 
         _nFeaturesToSelect = nFeaturesToSelect;
         _epsilon = epsilon;
@@ -115,11 +116,28 @@ public class DifferentialPrivacySelector<T> : TransformerBase<T, Matrix<T>, Matr
             : RandomHelper.CreateSecureRandom();
 
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        var utility = Utilities(data, target, _featureBound, _targetBound);
         _noiseScale = NoiseScaleFor(_epsilon, numToSelect, n, _featureBound, _targetBound);
-        _selectedIndices = ExponentialMechanismTopK(utility, numToSelect, _noiseScale, rand);
+        _selectedIndices = PrivateTopK(data, target, numToSelect, _noiseScale, _featureBound, _targetBound, rand);
 
         IsFitted = true;
+    }
+
+    private static bool IsPositiveFinite(double value) =>
+        !double.IsNaN(value) && !double.IsInfinity(value) && value > 0;
+
+    /// <summary>
+    /// The exponential-mechanism selection of <paramref name="k"/> features, with the utilities and the Gumbel
+    /// perturbation formed and ranked in double whatever T is: a calibrated scale such as 5.6e-9 rounds to 0 in
+    /// Half, which removed the noise and turned the private mechanism into a plain data-dependent top-k.
+    /// </summary>
+    internal static int[] PrivateTopK(
+        Matrix<T> data, Vector<T> target, int k, double scale, double featureBound, double targetBound, Random rand)
+    {
+        var utility = DifferentialPrivacySelector<double>.Utilities(
+            Tensor<T>.FromMatrix(data).Cast<double>().ToMatrix(),
+            Tensor<T>.FromVector(target).Cast<double>().ToVector(),
+            featureBound, targetBound);
+        return DifferentialPrivacySelector<double>.ExponentialMechanismTopK(utility, k, scale, rand);
     }
 
     /// <summary>

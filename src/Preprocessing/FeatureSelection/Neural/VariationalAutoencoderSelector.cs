@@ -100,9 +100,16 @@ public class VariationalAutoencoderSelector<T> : TransformerBase<T, Matrix<T>, M
     /// <summary>The weight of the KL term in the per-sample loss.</summary>
     internal const double KlWeight = 0.01;
 
-    /// <summary>Columns of x [n, p] mapped to [0, 1] as (x - min) / (max - min + 1e-10); a constant column maps to 0.</summary>
+    /// <summary>
+    /// Columns of x [n, p] mapped to [0, 1] as (x - min) / (max - min + 1e-10); a constant column maps to 0. Half
+    /// and BFloat16 scale in double: max - min of a representable column such as [-40000, 40000] is infinite in
+    /// Half, and inf / inf left NaN.
+    /// </summary>
     internal static Tensor<T> MinMaxScale(Tensor<T> raw)
     {
+        if (PreprocessingTensorOps.IsNarrowFloat<T>())
+            return VariationalAutoencoderSelector<double>.MinMaxScale(raw.Cast<double>()).Cast<T>();
+
         var engine = AiDotNetEngine.Current;
         int n = raw.Shape[0];
         int p = raw.Shape[1];

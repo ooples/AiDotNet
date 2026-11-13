@@ -26,23 +26,32 @@ internal static class NeuralSelectorOps
     /// <summary>
     /// The population standard deviation [1, p] of every column of the centred <paramref name="centered"/> [n, p],
     /// with 1 for a column whose deviation is below 1e-10 (the smallest normal value in Half: 1e-10 itself is 0
-    /// in Half, so a constant column kept std 0 and divided 0 by 0).
+    /// in Half, so a constant column kept std 0 and divided 0 by 0). Half and BFloat16 square in float, since a
+    /// deviation of 256 already squares past 65504, and the 1e-10 guard is applied after the cast back.
     /// </summary>
     public static Tensor<T> PopulationStdOrOne<T>(Tensor<T> centered)
     {
         var engine = AiDotNetEngine.Current;
         var ops = MathHelper.GetNumericOperations<T>();
         int p = centered.Shape[1];
-        var std = engine.TensorSqrt(engine.ReduceMean(engine.TensorSquare(centered), new[] { 0 }, true));
+        var std = PreprocessingTensorOps.IsNarrowFloat<T>()
+            ? engine.TensorSqrt(engine.ReduceMean(engine.TensorSquare(centered.Cast<float>()), new[] { 0 }, true)).Cast<T>()
+            : engine.TensorSqrt(engine.ReduceMean(engine.TensorSquare(centered), new[] { 0 }, true));
         return engine.TensorWhere(
             engine.TensorLessThan(std, PreprocessingTensorOps.Tolerance<T>(1e-10)),
             PreprocessingTensorOps.Filled(new[] { 1, p }, ops.One),
             std);
     }
 
-    /// <summary>Columns of x [n, p] centered and divided by (sample standard deviation + 1e-10).</summary>
+    /// <summary>
+    /// Columns of x [n, p] centered and divided by (sample standard deviation + 1e-10). Half and BFloat16
+    /// standardize in float, since squared deviations of representable data pass 65504.
+    /// </summary>
     public static Tensor<T> StandardizeSample<T>(Tensor<T> x)
     {
+        if (PreprocessingTensorOps.IsNarrowFloat<T>())
+            return StandardizeSample(x.Cast<float>()).Cast<T>();
+
         var engine = AiDotNetEngine.Current;
         var ops = MathHelper.GetNumericOperations<T>();
         int n = x.Shape[0];

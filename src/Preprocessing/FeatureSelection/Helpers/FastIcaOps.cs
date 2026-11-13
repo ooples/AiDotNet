@@ -12,24 +12,53 @@ internal static class FastIcaOps
 {
     /// <summary>
     /// PCA whitening of the centered data [n, p] to <paramref name="dimensions"/> dimensions: z = x K with
-    /// K = E D^(-1/2) [p, d] from the top eigenpairs of the covariance x^T x / n (eigenvalues floored at 1e-10),
-    /// so z has identity covariance. Returns z [n, d].
+    /// K = E D^(-1/2) [p, d] from the top eigenpairs of the covariance x^T x / n, so z has identity covariance.
+    /// Directions without variance are dropped (numpy.linalg.matrix_rank's cutoff, largest eigenvalue * p * eps):
+    /// flooring their eigenvalue instead gave a constant feature a whitening gain of 1e5. d is therefore at most
+    /// <paramref name="dimensions"/> and is the column count of the result; it is 0 for constant data.
+    /// Half and BFloat16 whiten in float, since the covariance of representable data passes 65504.
     /// </summary>
     public static Tensor<T> Whiten<T>(Tensor<T> centered, int dimensions, out Tensor<T> whitening)
     {
+        if (PreprocessingTensorOps.IsNarrowFloat<T>())
+        {
+            var wide = Whiten(centered.Cast<float>(), dimensions, out var wideWhitening);
+            whitening = wideWhitening.Cast<T>();
+            return wide.Cast<T>();
+        }
+
         var engine = AiDotNetEngine.Current;
         var ops = MathHelper.GetNumericOperations<T>();
         int n = centered.Shape[0];
         int p = centered.Shape[1];
-        // divided by sqrt(n) before the product: in Half, x^T x passes 65504 once n * x^2 does
+        // divided by sqrt(n) before the product, which keeps x^T x / n finite where x^T x is not
         var scaled = engine.TensorDivideScalar(centered, ops.FromDouble(Math.Sqrt(n)));
         var covariance = engine.TensorMatMul(engine.TensorTranspose(scaled), scaled);
         var vectors = FeatureSelectionTensorOps.TopEigenpairs(covariance, dimensions, out var values);
+
+        // values are in descending order, so the retained directions are a prefix
+        double largest = values.Length > 0 ? Math.Max(ops.ToDouble(values[0]), 0.0) : 0.0;
+        double epsilon = typeof(T) == typeof(float) ? 1.1920928955078125e-7 : 2.220446049250313e-16;
+        var retained = PreprocessingTensorOps.MaskPositions(
+            engine.TensorGreaterThan(values, ops.FromDouble(largest * Math.Max(p, 1) * epsilon)));
+        int d = retained.Length;
+        if (d == 0)
+        {
+            whitening = new Tensor<T>(new[] { p, 0 });
+            return new Tensor<T>(new[] { n, 0 });
+        }
+
+        if (d < values.Length)
+        {
+            var keep = new Tensor<int>(retained, new[] { d });
+            values = engine.TensorIndexSelect(values, keep, 0);
+            vectors = engine.TensorIndexSelect(vectors, keep, 1);
+        }
+
         var inverseRoot = engine.TensorDivide(
-            PreprocessingTensorOps.Filled(new[] { dimensions }, ops.One),
-            engine.TensorSqrt(engine.TensorMax(values, PopulationSearchOps.Tiny<T>(1e-10))));
+            PreprocessingTensorOps.Filled(new[] { d }, ops.One), engine.TensorSqrt(values));
         whitening = engine.TensorMultiply(
-            vectors, engine.TensorBroadcastTo(engine.Reshape(inverseRoot, new[] { 1, dimensions }), new[] { p, dimensions }));
+            vectors, engine.TensorBroadcastTo(engine.Reshape(inverseRoot, new[] { 1, d }), new[] { p, d }));
         return engine.TensorMatMul(centered, whitening);
     }
 

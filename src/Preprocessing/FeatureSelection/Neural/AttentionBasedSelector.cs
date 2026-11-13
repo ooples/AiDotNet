@@ -76,7 +76,6 @@ public class AttentionBasedSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>
         _nInputFeatures = data.Columns;
         int n = data.Rows;
         int p = data.Columns;
-        var engine = Engine;
 
         var rand = RandomHelper.CreateSecureRandom();
 
@@ -105,16 +104,26 @@ public class AttentionBasedSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>
         }
 
         // Final attention scores: the mean attention over the samples
-        var attention = new Tensor<T>(new[] { p });
-        for (int i = 0; i < n; i++)
-            attention = engine.TensorAdd(attention, Forward(rows[i], w1, w2, wPred, out _, out _));
-        var scores = engine.TensorDivideScalar(attention, NumOps.FromDouble(n));
+        var scores = MeanAttention(n, p, i => Forward(rows[i], w1, w2, wPred, out _, out _));
         _attentionScores = scores.ToVector();
 
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
         _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(scores, numToSelect);
 
         IsFitted = true;
+    }
+
+    /// <summary>
+    /// The mean of the attention vectors [p] of samples 0 to n - 1, accumulated in double and cast once: a Half
+    /// running total stops growing at 2048 when every attention is 1, which halved the mean at 4096 samples.
+    /// </summary>
+    internal static Tensor<T> MeanAttention(int n, int p, Func<int, Tensor<T>> attentionOf)
+    {
+        var engine = AiDotNetEngine.Current;
+        var total = new Tensor<double>(new[] { p });
+        for (int i = 0; i < n; i++)
+            total = engine.TensorAdd(total, attentionOf(i).Cast<double>());
+        return n > 0 ? engine.TensorDivideScalar(total, (double)n).Cast<T>() : new Tensor<T>(new[] { p });
     }
 
     /// <summary>

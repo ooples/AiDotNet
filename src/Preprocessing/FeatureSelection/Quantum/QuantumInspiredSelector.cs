@@ -52,6 +52,8 @@ public class QuantumInspiredSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T
     {
         if (nFeaturesToSelect < 1)
             throw new ArgumentException("Number of features must be at least 1.", nameof(nFeaturesToSelect));
+        if (double.IsNaN(rotationAngle) || double.IsInfinity(rotationAngle) || rotationAngle < 0)
+            throw new ArgumentException("Rotation angle must be finite and non-negative.", nameof(rotationAngle));
 
         _nFeaturesToSelect = nFeaturesToSelect;
         _populationSize = populationSize;
@@ -141,7 +143,8 @@ public class QuantumInspiredSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T
     /// The rotation gate of Han and Kim (2002) for a solution worse than or equal to the best: where the observed
     /// bit differs from the best solution's bit, theta turns by <paramref name="angle"/> towards it, increasing
     /// (towards pi / 2, bit 1) while theta &lt; pi / 2 when the best bit is 1 and decreasing (towards 0, bit 0)
-    /// while theta &gt; 0 when it is 0.
+    /// while theta &gt; 0 when it is 0. The result is clamped to [0, pi / 2]: a large angle (2.0 from pi / 4 gives
+    /// 2.785) otherwise overshot past pi / 2, lowered P(1) to 0.12 and could not turn back.
     /// </summary>
     internal static Tensor<T> Rotate(Tensor<T> theta, Tensor<T> solution, Tensor<T> best, double angle)
     {
@@ -152,7 +155,8 @@ public class QuantumInspiredSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T
             engine.TensorMultiply(differs, best), engine.TensorLessThan(theta, ops.FromDouble(Math.PI / 2)));
         var down = engine.TensorMultiply(
             engine.TensorMultiply(differs, PreprocessingTensorOps.OneMinus(best)), engine.TensorGreaterThan(theta, ops.Zero));
-        return engine.TensorAdd(theta, engine.TensorMultiplyScalar(engine.TensorSubtract(up, down), ops.FromDouble(angle)));
+        var rotated = engine.TensorAdd(theta, engine.TensorMultiplyScalar(engine.TensorSubtract(up, down), ops.FromDouble(angle)));
+        return engine.TensorClamp(rotated, ops.Zero, ops.FromDouble(Math.PI / 2));
     }
 
     /// <inheritdoc />

@@ -61,8 +61,15 @@ internal static class PopulationSearchOps
     /// </summary>
     public static Tensor<T> SubsetFitness<T>(Tensor<T> mask, Tensor<T> scores, double targetCount, T penalty, T emptyValue)
     {
-        var engine = AiDotNetEngine.Current;
         var ops = MathHelper.GetNumericOperations<T>();
+        // Half and BFloat16 evaluate in float: a count of 65536 is infinite in Half, and |count - target| * 0 then
+        // gives NaN even with no penalty. Only the finished fitness is cast back.
+        if (PreprocessingTensorOps.IsNarrowFloat<T>())
+            return SubsetFitness(
+                mask.Cast<float>(), scores.Cast<float>(), targetCount,
+                (float)ops.ToDouble(penalty), (float)ops.ToDouble(emptyValue)).Cast<T>();
+
+        var engine = AiDotNetEngine.Current;
         int m = mask.Shape[0];
         int p = mask.Shape[1];
         var total = engine.Reshape(engine.TensorMatMul(mask, engine.Reshape(scores, new[] { p, 1 })), new[] { m });
@@ -224,18 +231,23 @@ internal static class PopulationSearchOps
     /// <summary>The single value of a one-element tensor.</summary>
     public static T Value<T>(Tensor<T> oneElement) => AiDotNetEngine.Current.TensorSum(oneElement);
 
-    /// <summary>A 0/1 [p] mask with ones at <paramref name="indices"/>.</summary>
+    /// <summary>
+    /// A 0/1 [p] mask with ones at <paramref name="indices"/> (a repeated index still marks 1). The ones are
+    /// scattered straight into the [p] result: a one-hot [indices, p] sum needed 200 million entries for 10000 of
+    /// 20000 features.
+    /// </summary>
     public static Tensor<T> IndexMask<T>(int[] indices, int length)
     {
         var engine = AiDotNetEngine.Current;
         if (indices.Length == 0)
             return new Tensor<T>(new[] { length });
 
-        var oneHot = engine.TensorOneHot<T>(new Tensor<int>((int[])indices.Clone(), new[] { indices.Length }), length);
-        return engine.TensorClamp(
-            engine.ReduceSum(oneHot, new[] { 0 }, false),
-            MathHelper.GetNumericOperations<T>().Zero,
-            MathHelper.GetNumericOperations<T>().One);
+        var distinct = indices.Distinct().ToArray();
+        return engine.TensorScatter(
+            new Tensor<T>(new[] { length }),
+            new Tensor<int>(distinct, new[] { distinct.Length }),
+            PreprocessingTensorOps.Filled(new[] { distinct.Length }, MathHelper.GetNumericOperations<T>().One),
+            0);
     }
 
     /// <summary>

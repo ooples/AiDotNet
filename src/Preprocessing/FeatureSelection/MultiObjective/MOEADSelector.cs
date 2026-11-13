@@ -156,11 +156,31 @@ public class MOEADSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISuper
         var middle = engine.TensorBroadcastTo(
             PopulationSearchOps.Rows(weights, new[] { _populationSize / 2 }), new[] { _populationSize, 2 });
         int bestIdx = PopulationSearchOps.ArgMin(Tchebycheff(accuracy, featureCount, middle, zAcc, zFeat));
-        _selectedIndices = PreprocessingTensorOps.MaskPositions(PopulationSearchOps.Row(population, bestIdx))
-            .Take(_nFeaturesToSelect)
-            .ToArray();
+        _selectedIndices = CompleteSelection(
+            PopulationSearchOps.Row(population, bestIdx), scores, Math.Min(_nFeaturesToSelect, p));
 
         IsFitted = true;
+    }
+
+    /// <summary>
+    /// The features of the 0/1 solution <paramref name="best"/> [p], cut to the first <paramref name="count"/> or,
+    /// when it holds fewer, completed with the unselected features of highest <paramref name="scores"/> (ties to
+    /// the lower index), in ascending index order. The selector keeps a fixed number of columns, and neither the
+    /// initial subsets (1 to k features) nor crossover and bit-flip mutation keep a solution at k features.
+    /// </summary>
+    internal static int[] CompleteSelection(Tensor<T> best, Tensor<T> scores, int count)
+    {
+        var chosen = PreprocessingTensorOps.MaskPositions(best);
+        if (chosen.Length >= count)
+            return chosen.Take(count).ToArray();
+
+        var taken = new HashSet<int>(chosen);
+        var completed = chosen
+            .Concat(PreprocessingTensorOps.StableOrder(scores, descending: true).Where(j => !taken.Contains(j)))
+            .Take(count)
+            .ToArray();
+        Array.Sort(completed);
+        return completed;
     }
 
     /// <summary>The weight vectors [N, 2] with rows (i / (N - 1), 1 - i / (N - 1)).</summary>

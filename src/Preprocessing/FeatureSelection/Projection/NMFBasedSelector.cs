@@ -73,10 +73,30 @@ public class NMFBasedSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IFi
         T offset = NumOps.FromDouble(0.01);
         var w = engine.TensorAddScalar(PopulationSearchOps.Uniform<T>(rand, n, k), offset);
         var h = engine.TensorAddScalar(PopulationSearchOps.Uniform<T>(rand, k, p), offset);
-        T eps = PopulationSearchOps.Tiny<T>(1e-10);
 
-        // Multiplicative update rules (Lee and Seung 2001)
-        for (int iter = 0; iter < _nIterations; iter++)
+        var scores = FactorScores(x, w, h, _nIterations);
+        _featureScores = scores.ToVector();
+
+        int numToSelect = Math.Min(_nFeaturesToSelect, p);
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(scores, numToSelect);
+
+        IsFitted = true;
+    }
+
+    /// <summary>
+    /// Runs the Lee and Seung (2001) multiplicative updates H = H .* (W'X) ./ (W'WH + eps) and
+    /// W = W .* (XH') ./ (WHH' + eps) from the non-negative x [n, p], w [n, k] and h [k, p], and returns the
+    /// feature scores sum_c H_cj^2 [p]. Half and BFloat16 factorize in float: for a 2 x 100 matrix of 100 the
+    /// products H H' and X H' pass 65504 in Half, the W update divides inf by inf and the scores became NaN.
+    /// </summary>
+    internal static Tensor<T> FactorScores(Tensor<T> x, Tensor<T> w, Tensor<T> h, int iterations)
+    {
+        if (PreprocessingTensorOps.IsNarrowFloat<T>())
+            return NMFBasedSelector<float>.FactorScores(x.Cast<float>(), w.Cast<float>(), h.Cast<float>(), iterations).Cast<T>();
+
+        var engine = AiDotNetEngine.Current;
+        T eps = PopulationSearchOps.Tiny<T>(1e-10);
+        for (int iter = 0; iter < iterations; iter++)
         {
             // Update H: H = H .* (W'X) ./ (W'WH + eps)
             var wt = engine.TensorTranspose(w);
@@ -92,13 +112,7 @@ public class NMFBasedSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IFi
         }
 
         // Feature scores = sum of squared H values across components
-        var scores = engine.ReduceSum(engine.TensorSquare(h), new[] { 0 }, false);
-        _featureScores = scores.ToVector();
-
-        int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(scores, numToSelect);
-
-        IsFitted = true;
+        return engine.ReduceSum(engine.TensorSquare(h), new[] { 0 }, false);
     }
 
     /// <inheritdoc />
