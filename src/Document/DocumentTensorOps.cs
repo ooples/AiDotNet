@@ -268,4 +268,60 @@ internal static class DocumentTensorOps
         => values.Length == 0
             ? MathHelper.GetNumericOperations<T>().Zero
             : engine.TensorMean(new Tensor<T>((T[])values.Clone(), new[] { values.Length }));
+
+    /// <summary>
+    /// For each row of an output viewed as <c>[rows, columns]</c>: the rows whose best class (first strict
+    /// maximum of the first <paramref name="classes"/> columns, above 0) is not the background class 0 and
+    /// reaches <paramref name="threshold"/>, with that class and score.
+    /// </summary>
+    internal static (int[] Rows, int[] Classes, T[] Scores) ForegroundRows<T>(IEngine engine, Tensor<T> output, int classes, T threshold)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        if (output.Rank == 0 || output.Shape[0] == 0 || output.Length == 0 || classes <= 0)
+            return (Array.Empty<int>(), Array.Empty<int>(), Array.Empty<T>());
+        var (arg, max) = RowMax(engine, output, classes);
+        var keep = engine.TensorMultiply(
+            engine.TensorMultiply(engine.TensorGreaterThan(max, numOps.Zero), AtLeast(engine, max, threshold)),
+            engine.TensorGreaterThan(IntTensor<T>(arg), numOps.Zero));
+        int[] rows = Hits(engine, keep);
+        return (rows, rows.Select(r => arg[r]).ToArray(), Pick(engine, max, rows));
+    }
+
+    /// <summary>
+    /// Extractive span answering over a <c>[seq, hidden]</c> output whose column 0 holds start logits and
+    /// column <c>min(1, hidden - 1)</c> end logits: the first best start, the first best end in
+    /// <c>[start, start + maxAnswerLength)</c>, the greedy token (first maximum over the first
+    /// <paramref name="vocab"/> columns, kept when above 0) of every position in the span, and the confidence
+    /// <c>clamp((startLogit + endLogit) / 2, 0, 1)</c> (0 when the end window is empty).
+    /// </summary>
+    internal static (List<int> Tokens, T Confidence) SpanAnswer<T>(IEngine engine, Tensor<T> output, int hidden, int vocab, int maxAnswerLength)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        int seqLen = output.Shape[0];
+        var tokens = new List<int>();
+        if (seqLen == 0 || output.Length == 0)
+            return (tokens, numOps.Zero);
+        int columns = output.Length / seqLen;
+        var matrix = engine.Reshape(output, new[] { seqLen, columns });
+        var start = engine.Reshape(engine.TensorSlice(matrix, new[] { 0, 0 }, new[] { seqLen, 1 }), new[] { 1, seqLen });
+        int bestStart = RowArgMax(engine, start)[0];
+        T startScore = engine.TensorMaxValue(start);
+        int endLimit = Math.Min(seqLen, bestStart + maxAnswerLength);
+        if (endLimit <= bestStart)
+            return (tokens, numOps.Zero);
+        int endColumn = Math.Min(1, hidden - 1);
+        var end = engine.Reshape(engine.TensorSlice(matrix, new[] { bestStart, endColumn }, new[] { endLimit - bestStart, 1 }),
+            new[] { 1, endLimit - bestStart });
+        int bestEnd = bestStart + RowArgMax(engine, end)[0];
+        T endScore = engine.TensorMaxValue(end);
+        int width = Math.Min(Math.Min(hidden, vocab), columns);
+        if (width > 0)
+        {
+            var span = engine.TensorSlice(matrix, new[] { bestStart, 0 }, new[] { bestEnd - bestStart + 1, width });
+            tokens.AddRange(RowArgMax(engine, span).Where(t => t > 0));
+        }
+        T mean = numOps.Divide(numOps.Add(startScore, endScore), numOps.FromDouble(2.0));
+        T confidence = numOps.LessThan(mean, numOps.Zero) ? numOps.Zero : numOps.GreaterThan(mean, numOps.One) ? numOps.One : mean;
+        return (tokens, confidence);
+    }
 }
