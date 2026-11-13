@@ -161,7 +161,10 @@ public class SplineTransformer<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
 
             // Create knots based on strategy
             // Fitted state: copy the engine result out of any tensor arena that would hand its buffer out again
-            var knots = CreateKnots(values);
+            // Half and BFloat16 are placed in float: max - min of finite Half values overflows past 65504
+            var knots = PreprocessingTensorOps.IsNarrowFloat<T>()
+                ? CreateKnots(values.Cast<float>()).Cast<T>()
+                : CreateKnots(values);
             _knots[col] = new Tensor<T>(knots.Shape.ToArray(), knots.ToVector());
             numOutputCols += _nSplineFeatures;
         }
@@ -173,24 +176,25 @@ public class SplineTransformer<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     /// Builds the full knot vector of a column from its ascending values: (degree + 1) repeated boundary
     /// knots at each end around the uniform or quantile internal knots.
     /// </summary>
-    private Tensor<T> CreateKnots(Tensor<T> sortedValues)
+    private Tensor<TC> CreateKnots<TC>(Tensor<TC> sortedValues)
     {
         var engine = Engine;
+        var ops = MathHelper.GetNumericOperations<TC>();
         int count = sortedValues.Length;
-        T minVal = sortedValues.GetFlat(0);
-        T maxVal = sortedValues.GetFlat(count - 1);
-        var positions = engine.TensorAddScalar(PreprocessingTensorOps.Range<T>(_nKnots), NumOps.One); // i + 1
+        TC minVal = sortedValues.GetFlat(0);
+        TC maxVal = sortedValues.GetFlat(count - 1);
+        var positions = engine.TensorAddScalar(PreprocessingTensorOps.Range<TC>(_nKnots), ops.One); // i + 1
 
         // Create internal knots
-        Tensor<T> internalKnots;
+        Tensor<TC> internalKnots;
         if (_knotStrategy == SplineKnotStrategy.Uniform)
         {
             // Evenly spaced knots: min + (i + 1) / (nKnots + 1) * (max - min). The position fraction is formed
             // first so the product never exceeds the range (Half overflows at 65504 when (i + 1) * range does).
             internalKnots = engine.TensorAddScalar(
                 engine.TensorMultiplyScalar(
-                    engine.TensorDivideScalar(positions, NumOps.FromDouble(_nKnots + 1)),
-                    NumOps.Subtract(maxVal, minVal)),
+                    engine.TensorDivideScalar(positions, ops.FromDouble(_nKnots + 1)),
+                    ops.Subtract(maxVal, minVal)),
                 minVal);
         }
         else // Quantile
@@ -216,7 +220,7 @@ public class SplineTransformer<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
 
             var knotShape = new[] { _nKnots };
             var fractions = engine.TensorDivideScalar(
-                new Tensor<int>(remainders, knotShape).Cast<T>(), NumOps.FromDouble(denominator));
+                new Tensor<int>(remainders, knotShape).Cast<TC>(), ops.FromDouble(denominator));
             var lowerValues = engine.TensorIndexSelect(sortedValues, new Tensor<int>(lowerIndex, knotShape), 0);
             var upperValues = engine.TensorIndexSelect(sortedValues, new Tensor<int>(upperIndex, knotShape), 0);
             var interpolated = engine.TensorAdd(lowerValues, engine.TensorMultiply(
@@ -270,7 +274,11 @@ public class SplineTransformer<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             }
 
             // Compute B-spline basis for this column
-            var basis = ComputeBSplineBasis(column, _knots[col]);
+            // Half and BFloat16 are evaluated in float: x - knot overflows past 65504 (inf * a zero basis is NaN),
+            // and the 1e-10 interval guard, raised to 2^-14 in Half, would drop valid small intervals
+            var basis = PreprocessingTensorOps.IsNarrowFloat<T>()
+                ? ComputeBSplineBasis(column.Cast<float>(), _knots[col].Cast<float>()).Cast<T>()
+                : ComputeBSplineBasis(column, _knots[col]);
             int nBasis = basis.Shape[1];
             blocks.Add(engine.TensorSlice(basis, new[] { 0, startIdx }, new[] { numRows, nBasis - startIdx }));
         }
@@ -283,9 +291,10 @@ public class SplineTransformer<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     /// <summary>
     /// The <c>[rows, basis]</c> B-spline basis values of every entry of <paramref name="x"/> (Cox-de Boor recursion).
     /// </summary>
-    private Tensor<T> ComputeBSplineBasis(Tensor<T> x, Tensor<T> knots)
+    private Tensor<TC> ComputeBSplineBasis<TC>(Tensor<TC> x, Tensor<TC> knots)
     {
         var engine = Engine;
+        var ops = MathHelper.GetNumericOperations<TC>();
         int rows = x.Length;
         int nKnotValues = knots.Length;
         int n = nKnotValues - _degree - 1; // Number of basis functions
@@ -296,7 +305,7 @@ public class SplineTransformer<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             x = engine.TensorClamp(x, knots.GetFlat(_degree), knots.GetFlat(nKnotValues - _degree - 1));
 
         var xs = engine.TensorBroadcastTo(engine.Reshape(x, new[] { rows, 1 }), shape);
-        Tensor<T> KnotRow(int offset) =>
+        Tensor<TC> KnotRow(int offset) =>
             engine.TensorBroadcastTo(engine.Reshape(engine.TensorSlice(knots, new[] { offset }, new[] { n }), new[] { 1, n }), shape);
 
         // Start with degree 0 (step functions): knots[i] <= x < knots[i + 1]
@@ -306,16 +315,16 @@ public class SplineTransformer<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
 
         // Handle the last interval (include right endpoint)
         var atEnd = engine.TensorEquals(x, knots.GetFlat(nKnotValues - 1));
-        var lastColumn = new Tensor<T>(new[] { 1, n });
-        lastColumn.SetFlat(n - 1, NumOps.One);
+        var lastColumn = new Tensor<TC>(new[] { 1, n });
+        lastColumn.SetFlat(n - 1, ops.One);
         var setLast = engine.TensorMultiply(
             engine.TensorBroadcastTo(engine.Reshape(atEnd, new[] { rows, 1 }), shape),
             engine.TensorBroadcastTo(lastColumn, shape));
         basis = engine.TensorAdd(basis, engine.TensorMultiply(setLast, PreprocessingTensorOps.OneMinus(basis)));
 
         // Recursively build higher degree basis functions
-        T epsilon = PreprocessingTensorOps.Tolerance<T>(1e-10);
-        T one = NumOps.One;
+        TC epsilon = PreprocessingTensorOps.Tolerance<TC>(1e-10);
+        TC one = ops.One;
         var hasNext = engine.TensorBroadcastTo(engine.TensorSubtract(PreprocessingTensorOps.Filled(new[] { 1, n }, one), lastColumn), shape);
         for (int d = 1; d <= _degree; d++)
         {
@@ -335,9 +344,9 @@ public class SplineTransformer<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
                 ? engine.TensorConcatenate(new[]
                 {
                     engine.TensorSlice(basis, new[] { 0, 1 }, new[] { rows, n - 1 }),
-                    new Tensor<T>(new[] { rows, 1 }),
+                    new Tensor<TC>(new[] { rows, 1 }),
                 }, 1)
-                : new Tensor<T>(shape);
+                : new Tensor<TC>(shape);
             var term1 = engine.TensorMultiply(
                 engine.TensorMultiply(engine.TensorDivide(engine.TensorSubtract(xs, left), safe1), basis), valid1);
             var term2 = engine.TensorMultiply(

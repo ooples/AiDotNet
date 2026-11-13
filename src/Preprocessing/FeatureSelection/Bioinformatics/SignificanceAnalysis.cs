@@ -112,8 +112,58 @@ public class SignificanceAnalysis<T> : TransformerBase<T, Matrix<T>, Matrix<T>>,
             return;
         }
 
-        T count0 = NumOps.FromDouble(n0);
-        T count1 = NumOps.FromDouble(n1);
+        // Half and BFloat16 are analysed in float and the scores cast back once: within-class squared deviations
+        // pass Half's 65504 (300^2 = 90000), giving inf and NaN scores that no permutation exceeds
+        var scores = PreprocessingTensorOps.IsNarrowFloat<T>()
+            ? Analyze(X.Cast<float>(), class0.Cast<float>(), class1.Cast<float>(), n0, n1, random, out var exceedCounts).Cast<T>()
+            : Analyze(X, class0, class1, n0, n1, random, out exceedCounts);
+        _samScores = scores.ToVector();
+        var absScores = engine.TensorAbs(scores);
+
+        // Estimate q-values (FDR): the ratio of the int counts is formed in double before one cast (70,000
+        // permutations are inf in Half, and inf / inf is NaN)
+        var qValues = engine.TensorDivideScalar(exceedCounts.Cast<double>(), (double)_nPermutations);
+        _qValues = qValues.Cast<T>().ToVector();
+
+        // Select features passing the FDR threshold, by |score|; none passing falls back to the top scores
+        var candidates = PreprocessingTensorOps.Not(engine.TensorGreaterThan(qValues, _fdrThreshold));
+        int numToSelect = Math.Min(_nFeaturesToSelect, PreprocessingTensorOps.CountNonZero(candidates));
+        if (numToSelect == 0)
+        {
+            _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(absScores, Math.Min(_nFeaturesToSelect, p));
+        }
+        else
+        {
+            // Rank only the candidates (master ordered the passing features alone): a non-candidate given a -1 score
+            // would still outrank a candidate whose score is NaN, which ranks below every number
+            var candidateIndices = PreprocessingTensorOps.MaskPositions(candidates);
+            var candidateScores = engine.TensorIndexSelect(
+                absScores, new Tensor<int>(candidateIndices, new[] { candidateIndices.Length }), 0);
+            _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(candidateScores, numToSelect)
+                .Select(i => candidateIndices[i])
+                .OrderBy(i => i)
+                .ToArray();
+        }
+
+        IsFitted = true;
+    }
+
+    /// <summary>
+    /// The SAM statistic d (difference of class means over the pooled standard deviation plus the s0 fudge factor)
+    /// of every column of <paramref name="X"/> ([n, p]) and, in <paramref name="exceedCounts"/>, the number of label
+    /// permutations whose |d| is at or above the observed |d|.
+    /// </summary>
+    private Tensor<TC> Analyze<TC>(
+        Tensor<TC> X, Tensor<TC> class0, Tensor<TC> class1, int n0, int n1, Random random, out Tensor<int> exceedCounts)
+    {
+        var engine = AiDotNet.Tensors.Engines.AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<TC>();
+        int n = X.Shape[0];
+        int p = X.Shape[1];
+        int nPermutations = _nPermutations;
+
+        TC count0 = ops.FromDouble(n0);
+        TC count1 = ops.FromDouble(n1);
         var class0Row = engine.Reshape(class0, new[] { 1, n });
         var class1Row = engine.Reshape(class1, new[] { 1, n });
         var mean0 = engine.TensorDivideScalar(engine.TensorMatMul(class0Row, X), count0); // [1, p]
@@ -122,31 +172,29 @@ public class SignificanceAnalysis<T> : TransformerBase<T, Matrix<T>, Matrix<T>>,
         // Pooled standard deviations; s0 (fudge factor) is their median
         var ss0 = engine.TensorMatMul(class0Row, engine.TensorSquare(engine.TensorSubtract(X, mean0)));
         var ss1 = engine.TensorMatMul(class1Row, engine.TensorSquare(engine.TensorSubtract(X, mean1)));
-        var pooledVar = engine.TensorDivideScalar(engine.TensorAdd(ss0, ss1), NumOps.FromDouble(n0 + n1 - 2));
+        var pooledVar = engine.TensorDivideScalar(engine.TensorAdd(ss0, ss1), ops.FromDouble(n0 + n1 - 2));
         var pooledStds = engine.Reshape(
-            engine.TensorSqrt(engine.TensorMultiplyScalar(pooledVar, NumOps.FromDouble(1.0 / n0 + 1.0 / n1))), new[] { p });
+            engine.TensorSqrt(engine.TensorMultiplyScalar(pooledVar, ops.FromDouble(1.0 / n0 + 1.0 / n1))), new[] { p });
 
         var (sortedStds, _) = engine.TensorSort(pooledStds, 0, false);
-        T s0 = sortedStds.GetFlat(p / 2);
-        if (NumOps.IsNaN(s0) || !NumOps.GreaterThan(s0, NumOps.Zero))
-            s0 = PreprocessingTensorOps.Tolerance<T>(1e-12);
+        TC s0 = sortedStds.GetFlat(p / 2);
+        if (ops.IsNaN(s0) || !ops.GreaterThan(s0, ops.Zero))
+            s0 = PreprocessingTensorOps.Tolerance<TC>(1e-12);
         var denominator = engine.TensorAddScalar(pooledStds, s0);
 
         // d_i (SAM statistic)
         var scores = engine.TensorDivide(engine.Reshape(engine.TensorSubtract(mean1, mean0), new[] { p }), denominator);
-        _samScores = scores.ToVector();
-        var absScores = engine.TensorAbs(scores);
 
         // Permutation testing for FDR estimation: the first n0 shuffled rows form class 0
         var columnTotals = engine.ReduceSum(X, new[] { 0 }, true);
-        var ones = PreprocessingTensorOps.Filled(new[] { n }, NumOps.One);
-        var zeros = new Tensor<T>(new[] { n });
+        var ones = PreprocessingTensorOps.Filled(new[] { n }, ops.One);
+        var zeros = new Tensor<TC>(new[] { n });
         var allIndices = Enumerable.Range(0, n).ToArray();
         var inClass0 = new bool[n];
         // Counted as int: a sum of 0/1 masks in T stops counting at 2048 for Half (2048 + 1 rounds back to 2048)
-        var exceedCounts = new Tensor<int>(new[] { p });
+        exceedCounts = new Tensor<int>(new[] { p });
 
-        for (int perm = 0; perm < _nPermutations; perm++)
+        for (int perm = 0; perm < nPermutations; perm++)
         {
             // Shuffle labels
             var shuffled = allIndices.OrderBy(_ => random.Next()).ToArray();
@@ -161,27 +209,10 @@ public class SignificanceAnalysis<T> : TransformerBase<T, Matrix<T>, Matrix<T>>,
                 engine.Reshape(engine.TensorSubtract(permMean1, permMean0), new[] { p }), denominator));
 
             // Permuted scores at or above the observed score (a NaN score is never at or above anything, as in master)
-            exceedCounts = engine.TensorAdd(exceedCounts, engine.TensorGreaterEqual(permScores, absScores).Cast<int>());
+            exceedCounts = engine.TensorAdd(exceedCounts, engine.TensorGreaterEqual(permScores, engine.TensorAbs(scores)).Cast<int>());
         }
 
-        // Estimate q-values (FDR)
-        var qValues = engine.TensorDivideScalar(exceedCounts.Cast<T>(), NumOps.FromDouble(_nPermutations));
-        _qValues = qValues.ToVector();
-
-        // Select features passing the FDR threshold, by |score|; none passing falls back to the top scores
-        var candidates = PreprocessingTensorOps.Not(engine.TensorGreaterThan(qValues, NumOps.FromDouble(_fdrThreshold)));
-        int numToSelect = Math.Min(_nFeaturesToSelect, PreprocessingTensorOps.CountNonZero(candidates));
-        if (numToSelect == 0)
-        {
-            _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(absScores, Math.Min(_nFeaturesToSelect, p));
-        }
-        else
-        {
-            var ranked = engine.TensorWhere(candidates, absScores, PreprocessingTensorOps.Filled(new[] { p }, NumOps.FromDouble(-1.0)));
-            _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(ranked, numToSelect);
-        }
-
-        IsFitted = true;
+        return scores;
     }
 
     /// <inheritdoc />

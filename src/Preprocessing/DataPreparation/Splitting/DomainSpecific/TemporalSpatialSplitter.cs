@@ -95,28 +95,44 @@ public class TemporalSpatialSplitter<T> : DataSplitterBase<T>
                 $"Required columns ({_timeColumn}, {_xColumn}, {_yColumn}) exceed feature count ({nFeatures}).");
         }
 
-        // Normalized time and coordinates (a non-positive range divides by 1)
-        var engine = AiDotNet.Tensors.Engines.AiDotNetEngine.Current;
-        var normalizedTime = PreprocessingTensorOps.MinMaxNormalize(PreprocessingTensorOps.Column(X, _timeColumn));
-        var normalizedX = PreprocessingTensorOps.MinMaxNormalize(PreprocessingTensorOps.Column(X, _xColumn));
-        var normalizedY = PreprocessingTensorOps.MinMaxNormalize(PreprocessingTensorOps.Column(X, _yColumn));
-
-        // Calculate combined score for each sample (higher = later time, farther from origin)
-        var spatialDist = engine.TensorDivideScalar(
-            engine.TensorSqrt(engine.TensorAdd(
-                engine.TensorMultiply(normalizedX, normalizedX), engine.TensorMultiply(normalizedY, normalizedY))),
-            NumOps.FromDouble(Math.Sqrt(2)));
-        var scores = engine.TensorAdd(
-            engine.TensorMultiplyScalar(normalizedTime, NumOps.FromDouble(_temporalWeight)),
-            engine.TensorMultiplyScalar(spatialDist, NumOps.FromDouble(_spatialWeight)));
-
-        // Sort by combined score
-        var sortedIndices = PreprocessingTensorOps.StableOrder(scores, descending: false);
+        // Sort by combined score. Half and BFloat16 are scored in float: their ranges overflow past 65504, and scores
+        // rounded back to Half would tie samples that master's double scores order.
+        var time = PreprocessingTensorOps.Column(X, _timeColumn);
+        var xs = PreprocessingTensorOps.Column(X, _xColumn);
+        var ys = PreprocessingTensorOps.Column(X, _yColumn);
+        var sortedIndices = PreprocessingTensorOps.IsNarrowFloat<T>()
+            ? PreprocessingTensorOps.StableOrder(
+                CombinedScores(time.Cast<float>(), xs.Cast<float>(), ys.Cast<float>(), _temporalWeight, _spatialWeight),
+                descending: false)
+            : PreprocessingTensorOps.StableOrder(
+                CombinedScores(time, xs, ys, _temporalWeight, _spatialWeight), descending: false);
 
         // Split: earlier/closer samples for training, later/farther for testing
         var trainIndices = sortedIndices.Take(nSamples - targetTestSize).ToArray();
         var testIndices = sortedIndices.Skip(nSamples - targetTestSize).ToArray();
 
         return BuildResult(X, y, trainIndices, testIndices);
+    }
+
+    /// <summary>
+    /// Combined score per sample (higher = later time, farther from origin):
+    /// <c>temporalWeight * t + spatialWeight * sqrt(x^2 + y^2) / sqrt(2)</c> over min-max normalized time and
+    /// coordinates (a non-positive range divides by 1).
+    /// </summary>
+    private static Tensor<TC> CombinedScores<TC>(
+        Tensor<TC> time, Tensor<TC> xs, Tensor<TC> ys, double temporalWeight, double spatialWeight)
+    {
+        var engine = AiDotNet.Tensors.Engines.AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<TC>();
+        var normalizedTime = PreprocessingTensorOps.MinMaxNormalize(time);
+        var normalizedX = PreprocessingTensorOps.MinMaxNormalize(xs);
+        var normalizedY = PreprocessingTensorOps.MinMaxNormalize(ys);
+        var spatialDist = engine.TensorDivideScalar(
+            engine.TensorSqrt(engine.TensorAdd(
+                engine.TensorMultiply(normalizedX, normalizedX), engine.TensorMultiply(normalizedY, normalizedY))),
+            ops.FromDouble(Math.Sqrt(2)));
+        return engine.TensorAdd(
+            engine.TensorMultiplyScalar(normalizedTime, ops.FromDouble(temporalWeight)),
+            engine.TensorMultiplyScalar(spatialDist, ops.FromDouble(spatialWeight)));
     }
 }

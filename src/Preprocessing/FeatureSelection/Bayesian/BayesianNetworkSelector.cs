@@ -59,6 +59,9 @@ public class BayesianNetworkSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T
             "BayesianNetworkSelector requires target values. Use Fit(Matrix<T> data, Vector<T> target) instead.");
     }
 
+    // Upper bound on the elements of one block of the pairwise joint histogram ([p * nBins, block * nBins]).
+    private const int PairBlockElements = 1 << 22;
+
     /// <inheritdoc />
     public void Fit(Matrix<T> data, Vector<T> target)
     {
@@ -81,20 +84,34 @@ public class BayesianNetworkSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T
             engine.Reshape(PreprocessingTensorOps.HistogramMutualInformation(xBins, yBins, nBins), new[] { p }),
             engine.TensorMultiply(xVarying, engine.TensorBroadcastTo(yVarying, new[] { p })));
 
-        // Pairwise feature mutual information ([p, p]); constant columns carry no information
-        var miPairs = engine.TensorMultiply(
-            PreprocessingTensorOps.HistogramMutualInformation(xBins, xBins, nBins),
-            engine.TensorOuter(xVarying, xVarying));
-
         // Conditional mutual information (Markov blanket approximation):
-        // redundancy(j, k) = min(MI(j; y), MI(k; y), MI(j; k)) over k != j
-        var redundancy = engine.TensorMin(
-            engine.TensorMin(
-                engine.TensorBroadcastTo(engine.Reshape(miWithTarget, new[] { p, 1 }), new[] { p, p }),
-                engine.TensorBroadcastTo(engine.Reshape(miWithTarget, new[] { 1, p }), new[] { p, p })),
-            miPairs);
-        var offDiagonal = engine.TensorAddScalar(engine.TensorNegate(engine.TensorEye<T>(p)), NumOps.One);
-        var maxRedundancy = engine.ReduceMax(engine.TensorMultiply(redundancy, offDiagonal), new[] { 1 }, false);
+        // redundancy(j, k) = min(MI(j; y), MI(k; y), MI(j; k)) over k != j, maximised over k. The pairwise MI runs
+        // over bounded blocks of k: all pairs at once is a [p * nBins, p * nBins] joint histogram (3.2 GB of doubles
+        // for 2000 features in 10 bins). Constant columns carry no information.
+        int blockWidth = Math.Max(1, PairBlockElements / Math.Max(1, p * nBins * nBins));
+        var maxRedundancy = new Tensor<T>(new[] { p });
+        for (int start = 0; start < p; start += blockWidth)
+        {
+            int width = Math.Min(blockWidth, p - start);
+            var blockBins = engine.TensorSlice(xBins, new[] { 0, start * nBins }, new[] { n, width * nBins });
+            var blockVarying = engine.TensorSlice(xVarying, new[] { start }, new[] { width });
+            var blockTarget = engine.TensorSlice(miWithTarget, new[] { start }, new[] { width });
+            var miPairs = engine.TensorMultiply(
+                PreprocessingTensorOps.HistogramMutualInformation(xBins, blockBins, nBins),
+                engine.TensorOuter(xVarying, blockVarying));
+            var redundancy = engine.TensorMin(
+                engine.TensorMin(
+                    engine.TensorBroadcastTo(engine.Reshape(miWithTarget, new[] { p, 1 }), new[] { p, width }),
+                    engine.TensorBroadcastTo(engine.Reshape(blockTarget, new[] { 1, width }), new[] { p, width })),
+                miPairs);
+
+            // k = start + c is feature j itself on row start + c of column c
+            var self = engine.TensorTranspose(engine.TensorOneHot<T>(
+                new Tensor<int>(Enumerable.Range(start, width).ToArray(), new[] { width }), p));
+            var offDiagonal = PreprocessingTensorOps.Not(self);
+            maxRedundancy = engine.TensorMax(maxRedundancy,
+                engine.ReduceMax(engine.TensorMultiply(redundancy, offDiagonal), new[] { 1 }, false));
+        }
 
         // Connection strength = direct MI minus redundancy
         var strengths = engine.TensorMax(

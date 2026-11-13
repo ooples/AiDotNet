@@ -64,14 +64,41 @@ public class MarginSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupe
         int n = data.Rows;
         int p = data.Columns;
 
-        var engine = Engine;
         var X = Tensor<T>.FromMatrix(data);
         PreprocessingTensorOps.ClassLabels(target, out var classes, out var classIndex);
-        int k = classes.Length;
-        var membership = engine.TensorTranspose(PreprocessingTensorOps.ClassOneHot<T>(classIndex, k)); // [k, n]
 
+        // Half and BFloat16 are scored in float and the scores cast back once: squaring centred values past 256
+        // overflows Half, which made the standard deviation inf and collapsed the standardized column to 0
+        int numToSelect = Math.Min(_nFeaturesToSelect, p);
+        if (PreprocessingTensorOps.IsNarrowFloat<T>())
+        {
+            var wideScores = ComputeMarginScores(X.Cast<float>(), classIndex, classes.Length);
+            _marginScores = wideScores.Cast<T>().ToVector();
+            _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(wideScores, numToSelect);
+        }
+        else
+        {
+            var scores = ComputeMarginScores(X, classIndex, classes.Length);
+            _marginScores = scores.ToVector();
+            _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(scores, numToSelect);
+        }
+
+        IsFitted = true;
+    }
+
+    /// <summary>
+    /// The mean normalized margin between the per-class ranges of every standardized column of <paramref name="X"/>
+    /// ([n, p]) over all class pairs.
+    /// </summary>
+    private static Tensor<TC> ComputeMarginScores<TC>(Tensor<TC> X, int[] classIndex, int k)
+    {
+        var engine = AiDotNet.Tensors.Engines.AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<TC>();
+        int n = X.Shape[0];
+        int p = X.Shape[1];
+        var membership = engine.TensorTranspose(PreprocessingTensorOps.ClassOneHot<TC>(classIndex, k)); // [k, n]
         // Standardize each feature (population std); near-constant features stay as they are
-        T eps = PreprocessingTensorOps.Tolerance<T>(1e-10);
+        TC eps = PreprocessingTensorOps.Tolerance<TC>(1e-10);
         var mean = engine.ReduceMean(X, new[] { 0 }, true);
         var centered = engine.TensorSubtract(X, mean);
         var std = engine.TensorSqrt(engine.ReduceMean(engine.TensorSquare(centered), new[] { 0 }, true));
@@ -81,17 +108,17 @@ public class MarginSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupe
             X);
 
         // Per-class range of every feature
-        var classMin = new Tensor<T>[k];
-        var classMax = new Tensor<T>[k];
+        var classMin = new Tensor<TC>[k];
+        var classMax = new Tensor<TC>[k];
         for (int c = 0; c < k; c++)
             (classMin[c], classMax[c]) = PreprocessingTensorOps.MaskedColumnRange(
                 standardized, PreprocessingTensorOps.RowVector(membership, c));
 
         // For each pair of classes, compute the margin between their ranges
-        var totalMargin = new Tensor<T>(new[] { p });
-        var zeros = new Tensor<T>(new[] { p });
+        var totalMargin = new Tensor<TC>(new[] { p });
+        var zeros = new Tensor<TC>(new[] { p });
         int pairs = 0;
-        T half = NumOps.FromDouble(0.5);
+        TC half = ops.FromDouble(0.5);
         for (int ci = 0; ci < k; ci++)
         {
             for (int cj = ci + 1; cj < k; cj++)
@@ -117,13 +144,7 @@ public class MarginSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupe
             }
         }
 
-        var scores = pairs > 0 ? engine.TensorDivideScalar(totalMargin, NumOps.FromDouble(pairs)) : zeros;
-        _marginScores = scores.ToVector();
-
-        int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(scores, numToSelect);
-
-        IsFitted = true;
+        return pairs > 0 ? engine.TensorDivideScalar(totalMargin, ops.FromDouble(pairs)) : zeros;
     }
 
     /// <inheritdoc />

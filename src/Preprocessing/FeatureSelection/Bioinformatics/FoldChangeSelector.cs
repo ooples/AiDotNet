@@ -88,14 +88,15 @@ public class FoldChangeSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, I
         if (class0Count == 0 || class1Count == 0)
             throw new ArgumentException("Both classes must have at least one sample.");
 
-        // Class means, floored at a small value to avoid division by zero
+        // Class means, floored at a small value to avoid division by zero. Half and BFloat16 sums are formed in float
+        // and only the means cast back: two Half rows of 40000 sum past 65504 though their mean does not.
         T eps = PreprocessingTensorOps.Tolerance<T>(1e-10);
-        var mean0 = engine.TensorMax(engine.TensorDivideScalar(
-            engine.Reshape(engine.TensorMatMul(engine.Reshape(class0Mask, new[] { 1, n }), X), new[] { p }),
-            NumOps.FromDouble(class0Count)), eps);
-        var mean1 = engine.TensorMax(engine.TensorDivideScalar(
-            engine.Reshape(engine.TensorMatMul(engine.Reshape(class1Mask, new[] { 1, n }), X), new[] { p }),
-            NumOps.FromDouble(class1Count)), eps);
+        var mean0 = engine.TensorMax(PreprocessingTensorOps.IsNarrowFloat<T>()
+            ? ClassMean(X.Cast<float>(), class0Mask.Cast<float>(), class0Count).Cast<T>()
+            : ClassMean(X, class0Mask, class0Count), eps);
+        var mean1 = engine.TensorMax(PreprocessingTensorOps.IsNarrowFloat<T>()
+            ? ClassMean(X.Cast<float>(), class1Mask.Cast<float>(), class1Count).Cast<T>()
+            : ClassMean(X, class1Mask, class1Count), eps);
 
         // Fold change (larger / smaller) and its signed log2
         T ln2 = NumOps.FromDouble(Math.Log(2));
@@ -124,6 +125,17 @@ public class FoldChangeSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, I
         }
 
         IsFitted = true;
+    }
+
+    /// <summary>The column means ([p]) of the rows of <paramref name="x"/> ([n, p]) in a 0/1 class mask ([n]).</summary>
+    private static Tensor<TC> ClassMean<TC>(Tensor<TC> x, Tensor<TC> classMask, int classCount)
+    {
+        var engine = AiDotNet.Tensors.Engines.AiDotNetEngine.Current;
+        int n = x.Shape[0];
+        int p = x.Shape[1];
+        return engine.TensorDivideScalar(
+            engine.Reshape(engine.TensorMatMul(engine.Reshape(classMask, new[] { 1, n }), x), new[] { p }),
+            MathHelper.GetNumericOperations<TC>().FromDouble(classCount));
     }
 
     /// <inheritdoc />

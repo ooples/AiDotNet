@@ -154,8 +154,13 @@ public class ARDSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervi
             // Posterior mean (coefficients)
             coefficients = engine.TensorMultiplyScalar(engine.TensorMultiply(sigma, xty), beta);
 
-            // gamma = 1 - alpha * sigma (effective number of parameters per feature)
-            var gamma = engine.TensorAddScalar(engine.TensorNegate(engine.TensorMultiply(alphas, sigma)), ops.One);
+            // gamma = 1 - alpha * sigma (effective number of parameters per feature), formed as the equal
+            // beta * diag(X^T X) * sigma where sigma = 1 / denom: when beta * diag(X^T X) is below the rounding unit
+            // of alpha, 1 - alpha * sigma cancels to 0 in float (and the feature's alpha is pinned at the threshold)
+            var invertible = engine.TensorGreaterThan(denom, eps);
+            var gamma = engine.TensorWhere(invertible,
+                engine.TensorMultiply(engine.TensorMultiplyScalar(xtxDiag, beta), sigma),
+                engine.TensorAddScalar(engine.TensorNegate(engine.TensorMultiply(alphas, sigma)), ops.One));
 
             // Update alphas
             var w2 = engine.TensorSquare(coefficients);

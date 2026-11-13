@@ -113,7 +113,9 @@ public class MRMR<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFeat
 
             var open = engine.TensorWhere(isSelected, excluded, score);
             int bestFeature = PreprocessingTensorOps.FirstArgMax(open);
-            selectedScores[bestFeature] = open;
+            // Keep only the selected feature's score: retaining every open [p] tensor costs O(p * k)
+            selectedScores[bestFeature] = engine.TensorIndexSelect(
+                open, new Tensor<int>(new[] { bestFeature }, new[] { 1 }), 0);
             selected.Add(bestFeature);
             isSelected[bestFeature] = true;
 
@@ -128,7 +130,7 @@ public class MRMR<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFeat
         foreach (int j in selected)
         {
             var position = new Tensor<int>(new[] { j }, new[] { 1 });
-            scores = engine.TensorIndexCopy(scores, 0, position, engine.TensorIndexSelect(selectedScores[j], position, 0));
+            scores = engine.TensorIndexCopy(scores, 0, position, selectedScores[j]);
         }
 
         _mrmrScores = scores.ToVector();

@@ -1,4 +1,5 @@
 using AiDotNet.Preprocessing.DataPreparation.Splitting.ActiveLearning;
+using AiDotNet.Preprocessing.DataPreparation.Splitting.DomainSpecific;
 using AiDotNet.Preprocessing.DataPreparation.Splitting.Specialized;
 using AiDotNet.Preprocessing.Encoders;
 using AiDotNet.Preprocessing.FeatureGeneration;
@@ -61,7 +62,7 @@ public class PreprocessingSweepReviewTests
     [Fact(Timeout = 120000)]
     public async Task CatBoostEncoder_OrderedSum_RestartsAtEveryCategory()
     {
-        await Task.CompletedTask;
+        await Task.Yield();
         var data = M(new double[,] { { 0 }, { 0 }, { 0 }, { 1 }, { 1 }, { 1 }, { 1 } });
         var target = new Vector<double>(new double[] { 1e17, 1e17, 1e17, 1, 1, 1, 1 });
 
@@ -83,7 +84,7 @@ public class PreprocessingSweepReviewTests
     [Fact(Timeout = 120000)]
     public async Task LabelAndOrdinalEncoders_FittedInArena_KeepTheirCategories()
     {
-        await Task.CompletedTask;
+        await Task.Yield();
         var data = M(new double[,] { { 30, 7 }, { 10, 5 }, { 20, 7 }, { 10, 6 } });
         var expectedLabel = new LabelEncoder<double>().FitTransform(data);
         var expectedOrdinal = new OrdinalEncoder<double>().FitTransform(data);
@@ -116,7 +117,7 @@ public class PreprocessingSweepReviewTests
     [Fact(Timeout = 120000)]
     public async Task SplineTransformer_Half_QuantileKnotsUseExactPositions()
     {
-        await Task.CompletedTask;
+        await Task.Yield();
         var spline = new SplineTransformer<Half>(nKnots: 3, degree: 3, knotStrategy: SplineKnotStrategy.Quantile);
         spline.Fit(HalfColumn(4000, i => i < 3000 ? 0.0 : 1.0));
 
@@ -132,7 +133,7 @@ public class PreprocessingSweepReviewTests
     [Fact(Timeout = 120000)]
     public async Task BayesianFeatureSelector_Half_StrongFeatureHasPosteriorOne()
     {
-        await Task.CompletedTask;
+        await Task.Yield();
         double[] x = { 1, 1.25, 1, 1.25, 0, 0.25, 0, 0.25 };
         var selector = new BayesianFeatureSelector<Half>(nFeaturesToSelect: 1);
         selector.Fit(HalfColumn(8, i => x[i]), HalfVector(8, i => i < 4 ? 1.0 : 0.0));
@@ -147,7 +148,7 @@ public class PreprocessingSweepReviewTests
     [Fact(Timeout = 120000)]
     public async Task SpikeAndSlabSelector_Half_LargeBayesFactorHasInclusionOne()
     {
-        await Task.CompletedTask;
+        await Task.Yield();
         var selector = new SpikeAndSlabSelector<Half>(nFeaturesToSelect: 1, slabVariance: 0.001, spikeVariance: 1.0);
         selector.Fit(HalfColumn(8, i => i + 1), HalfVector(8, i => i + 1));
 
@@ -161,7 +162,7 @@ public class PreprocessingSweepReviewTests
     [Fact(Timeout = 120000)]
     public async Task BayesianModelAveraging_ManySamples_GivesFiniteInclusionProbabilities()
     {
-        await Task.CompletedTask;
+        await Task.Yield();
         const int n = 400;
         var data = new Matrix<double>(n, 3);
         var target = new Vector<double>(n);
@@ -193,7 +194,7 @@ public class PreprocessingSweepReviewTests
     [Fact(Timeout = 120000)]
     public async Task SAM_Half_CountsMoreThan2048FalsePositives()
     {
-        await Task.CompletedTask;
+        await Task.Yield();
         const int p = 30;
         var data = new Half[4, p];
         for (int j = 0; j < p; j++)
@@ -217,7 +218,7 @@ public class PreprocessingSweepReviewTests
     [Fact(Timeout = 120000)]
     public async Task SignificanceAnalysis_Half_CountsMoreThan2048Exceedances()
     {
-        await Task.CompletedTask;
+        await Task.Yield();
         var selector = new SignificanceAnalysisSelector(nFeaturesToSelect: 1, nPermutations: 3000, randomState: 7);
         selector.Fit(HalfColumn(4, i => i % 2), HalfVector(4, i => i < 2 ? 0.0 : 1.0));
 
@@ -230,7 +231,7 @@ public class PreprocessingSweepReviewTests
     [Fact(Timeout = 120000)]
     public async Task AprioriBasedSelector_Half_CountsMoreThan2048Transactions()
     {
-        await Task.CompletedTask;
+        await Task.Yield();
         var selector = new AprioriBasedSelector<Half>(nFeaturesToSelect: 1, minSupport: 0.1, minConfidence: 0.5, nBins: 2);
         selector.Fit(HalfColumn(4000, i => i < 3000 ? 1.0 : 0.0), HalfVector(4000, i => i < 3000 ? 1.0 : 0.0));
 
@@ -243,7 +244,7 @@ public class PreprocessingSweepReviewTests
     [Fact(Timeout = 120000)]
     public async Task FrequentPatternSelector_Half_MatchesDouble()
     {
-        await Task.CompletedTask;
+        await Task.Yield();
         Func<int, double> value = i => i < 3000 ? 1.0 : 0.0;
         var reference = new FrequentPatternSelector<double>(nFeaturesToSelect: 1);
         var doubleData = new Matrix<double>(4000, 1);
@@ -278,7 +279,7 @@ public class PreprocessingSweepReviewTests
     [Fact(Timeout = 120000)]
     public async Task GiniImpuritySelector_Half_CountsMoreThan2048PerClass()
     {
-        await Task.CompletedTask;
+        await Task.Yield();
         var (data, target) = ImbalancedHalfClasses();
         var selector = new GiniImpuritySelector<Half>(nFeaturesToSelect: 1);
         selector.Fit(data, target);
@@ -292,7 +293,7 @@ public class PreprocessingSweepReviewTests
     [Fact(Timeout = 120000)]
     public async Task DecisionBoundarySelector_Half_CountsMoreThan2048PerClass()
     {
-        await Task.CompletedTask;
+        await Task.Yield();
         var (data, target) = ImbalancedHalfClasses();
         var selector = new DecisionBoundarySelector<Half>(nFeaturesToSelect: 1);
         selector.Fit(data, target);
@@ -306,7 +307,7 @@ public class PreprocessingSweepReviewTests
     [Fact(Timeout = 120000)]
     public async Task LDAProjectionSelector_Half_CountsMoreThan2048PerClass()
     {
-        await Task.CompletedTask;
+        await Task.Yield();
         var (data, target) = ImbalancedHalfClasses();
         var selector = new LDAProjectionSelector<Half>(nFeaturesToSelect: 1);
         selector.Fit(data, target);
@@ -321,7 +322,7 @@ public class PreprocessingSweepReviewTests
     [Fact(Timeout = 120000)]
     public async Task SimilarityBasedSplitter_NaNRow_DoesNotPoisonOtherRows()
     {
-        await Task.CompletedTask;
+        await Task.Yield();
         var data = M(new double[,] { { 1, 0 }, { 1, 1 }, { 0, 1 }, { double.NaN, 1 } });
         var splitter = new SimilarityBasedSplitter<double>(testSize: 0.25, testSimilar: true, shuffle: false);
 
@@ -336,7 +337,7 @@ public class PreprocessingSweepReviewTests
     [Fact(Timeout = 120000)]
     public async Task WOEEncoder_Half_RecognisesBinaryTargets()
     {
-        await Task.CompletedTask;
+        await Task.Yield();
         double[] categories = { 0, 0, 0, 1, 1, 1 };
         double[] labels = { 1, 1, 0, 1, 0, 0 };
         var data = HalfColumn(6, i => categories[i]);
@@ -353,7 +354,7 @@ public class PreprocessingSweepReviewTests
     [Fact(Timeout = 120000)]
     public async Task KBinsDiscretizer_Uniform_NaNMakesEveryEdgeNaNAsInMaster()
     {
-        await Task.CompletedTask;
+        await Task.Yield();
         var data = M(new double[,] { { 1 }, { double.NaN }, { 3 }, { 5 }, { 7 } });
         var discretizer = new AiDotNet.Preprocessing.Discretizers.KBinsDiscretizer<double>(
             nBins: 2, strategy: AiDotNet.Preprocessing.Discretizers.BinningStrategy.Uniform);
@@ -368,7 +369,7 @@ public class PreprocessingSweepReviewTests
     [Fact(Timeout = 120000)]
     public async Task KBinsDiscretizer_Quantile_SortsNaNFirstAsInMaster()
     {
-        await Task.CompletedTask;
+        await Task.Yield();
         var data = M(new double[,] { { 1 }, { double.NaN }, { 3 }, { 5 }, { 7 } });
         var discretizer = new AiDotNet.Preprocessing.Discretizers.KBinsDiscretizer<double>(
             nBins: 2, strategy: AiDotNet.Preprocessing.Discretizers.BinningStrategy.Quantile);
@@ -382,7 +383,7 @@ public class PreprocessingSweepReviewTests
     [Fact(Timeout = 120000)]
     public async Task KBinsDiscretizer_InverseOfNaNCodeIsTheFirstBinMidpoint()
     {
-        await Task.CompletedTask;
+        await Task.Yield();
         var discretizer = new AiDotNet.Preprocessing.Discretizers.KBinsDiscretizer<double>(
             nBins: 2, strategy: AiDotNet.Preprocessing.Discretizers.BinningStrategy.Quantile);
         discretizer.Fit(M(new double[,] { { 1 }, { 3 }, { 5 }, { 7 }, { 9 } }));
@@ -399,7 +400,7 @@ public class PreprocessingSweepReviewTests
     [Fact(Timeout = 120000)]
     public async Task Encoders_NaN_IsOneCategoryOrderedFirstAsInMaster()
     {
-        await Task.CompletedTask;
+        await Task.Yield();
         var data = M(new double[,] { { double.NaN }, { 1 }, { double.NaN }, { 2 } });
 
         var oneHot = new OneHotEncoder<double>(handleUnknown: OneHotUnknownHandling.Error).FitTransform(data);
@@ -426,7 +427,7 @@ public class PreprocessingSweepReviewTests
     [Fact(Timeout = 120000)]
     public async Task WOEEncoder_Half_CountsMoreThan2048EventsPerCategory()
     {
-        await Task.CompletedTask;
+        await Task.Yield();
         const int n = 8000;
         var data = HalfColumn(n, i => i < 4000 ? 0.0 : 1.0);
         var target = HalfVector(n, i => i < 3000 || (i >= 4000 && i < 5000) ? 1.0 : 0.0);
@@ -444,7 +445,7 @@ public class PreprocessingSweepReviewTests
     [Fact(Timeout = 120000)]
     public async Task Boruta_Half_CountsMoreThan2048Hits()
     {
-        await Task.CompletedTask;
+        await Task.Yield();
         var selector = new BorutaSelector(
             maxIterations: 4200,
             importanceFunction: (extended, _) => new Vector<Half>(new[] { (Half)1, (Half)0 }),
@@ -467,7 +468,7 @@ public class PreprocessingSweepReviewTests
     [Fact(Timeout = 120000)]
     public async Task CovariateShiftSplitter_NaN_IsAMiddleSampleAsInMaster()
     {
-        await Task.CompletedTask;
+        await Task.Yield();
         var values = new double[11, 1];
         values[0, 0] = double.NaN;
         for (int i = 1; i < 11; i++)
@@ -485,7 +486,7 @@ public class PreprocessingSweepReviewTests
     [Fact(Timeout = 120000)]
     public async Task PoolBasedSplitter_Half_DiverseSelectionDoesNotOverflow()
     {
-        await Task.CompletedTask;
+        await Task.Yield();
         double[] points = { 0, 300, -310 };
         var splitter = new PoolBasedSplitter<Half>(
             initialLabeledRatio: 0.1, minLabeledSamples: 2, strategy: PoolBasedSplitter<Half>.SelectionStrategy.Diverse);
@@ -505,7 +506,7 @@ public class PreprocessingSweepReviewTests
     [Fact(Timeout = 120000)]
     public async Task OutOfDistributionSplitter_Half_StandardizationDoesNotOverflow()
     {
-        await Task.CompletedTask;
+        await Task.Yield();
         var splitter = new OutOfDistributionSplitter<Half>(testSize: 0.1, oodPercentile: 0.5);
 
         var result = splitter.Split(HalfColumn(10, i => i == 8 ? 400.0 : i == 9 ? -350.0 : 0.0));
@@ -519,7 +520,7 @@ public class PreprocessingSweepReviewTests
     [Fact(Timeout = 120000)]
     public async Task MarkovBlanketSelector_Half_CountsMoreThan2048PerGroup()
     {
-        await Task.CompletedTask;
+        await Task.Yield();
         const int n = 8100;
         var data = new Half[n, 2];
         var target = new Half[n];
@@ -546,11 +547,12 @@ public class PreprocessingSweepReviewTests
     }
 
     // Uniform knots are min + (i + 1) / (nKnots + 1) * (max - min): 15000, 30000 and 45000 for the range [0, 60000].
-    // Formed as (i + 1) * (max - min) first, 120000 and 180000 overflow Half to inf.
+    // Formed as (i + 1) * (max - min) first, 120000 and 180000 overflow Half to inf. Half steps by 32 above 32768, so
+    // the stored 45000 knot is the nearest Half, 44992 (no Half equals 45000).
     [Fact(Timeout = 120000)]
     public async Task SplineTransformer_Half_UniformKnotsDoNotOverflow()
     {
-        await Task.CompletedTask;
+        await Task.Yield();
         var spline = new SplineTransformer<Half>(nKnots: 3, degree: 3, knotStrategy: SplineKnotStrategy.Uniform);
         spline.Fit(HalfColumn(2, i => i * 60000.0));
 
@@ -561,7 +563,7 @@ public class PreprocessingSweepReviewTests
         var knots = allKnots[0];
         Assert.Equal(15000.0, (double)knots[4], Tolerance);
         Assert.Equal(30000.0, (double)knots[5], Tolerance);
-        Assert.Equal(45000.0, (double)knots[6], Tolerance);
+        Assert.Equal((double)(Half)45000.0, (double)knots[6], Tolerance);
     }
 
     // Classes {0, 600} and {-600, 0}: means 300 and -300, population variances 90000, pooled 90000, standard error
@@ -570,7 +572,7 @@ public class PreprocessingSweepReviewTests
     [Fact(Timeout = 120000)]
     public async Task BayesianFeatureSelector_Half_VariancesDoNotOverflowPast256()
     {
-        await Task.CompletedTask;
+        await Task.Yield();
         double[] x = { 0, 600, -600, 0 };
         var selector = new BayesianFeatureSelector<Half>(nFeaturesToSelect: 1);
         selector.Fit(HalfColumn(4, i => x[i]), HalfVector(4, i => i < 2 ? 1.0 : 0.0));
@@ -585,7 +587,7 @@ public class PreprocessingSweepReviewTests
     [Fact(Timeout = 120000)]
     public async Task ARDSelector_Half_MatchesDoubleWhenDiagXtXOverflows()
     {
-        await Task.CompletedTask;
+        await Task.Yield();
         Func<int, double> xValue = i => 100.0 * (i + 1);
         Func<int, double> yValue = i => (i + 1) + (i % 2 == 0 ? 0.25 : -0.25);
         var reference = new ARDSelector<double>(nFeaturesToSelect: 1);
@@ -614,7 +616,7 @@ public class PreprocessingSweepReviewTests
     [Fact(Timeout = 120000)]
     public async Task SpikeAndSlabSelector_Half_ColumnNormDoesNotOverflowPast256()
     {
-        await Task.CompletedTask;
+        await Task.Yield();
         var selector = new SpikeAndSlabSelector<Half>(nFeaturesToSelect: 1, slabVariance: 0.001, spikeVariance: 1.0);
         selector.Fit(HalfColumn(8, i => 100.0 * (i + 1)), HalfVector(8, i => i + 1));
 
@@ -629,7 +631,7 @@ public class PreprocessingSweepReviewTests
     [Fact(Timeout = 120000)]
     public async Task JamesSteinEncoder_Half_ShrinkageDoesNotOverflowTheDenominator()
     {
-        await Task.CompletedTask;
+        await Task.Yield();
         const int rows = 600;
         Func<int, double> category = i => i % 2;
         Func<int, double> target = i => i % 2 == 0 ? 20.0 : -20.0;
@@ -650,5 +652,358 @@ public class PreprocessingSweepReviewTests
         Assert.Equal(-19.8998, expected[1, 0], 1e-3);
         Assert.Equal(expected[0, 0], (double)encoded[0, 0], 0.05);
         Assert.Equal(expected[1, 0], (double)encoded[1, 0], 0.05);
+    }
+
+    // Two groups at -60000 and 60000: their difference (120000) overflows Half, so every cross-group distance was
+    // inf / inf = NaN, which ranks below the -1 of the selected rows; the third pick re-selected a labeled row. In
+    // float the second pick is the far group and three distinct rows are labeled.
+    [Fact(Timeout = 120000)]
+    public async Task PoolBasedSplitter_Half_DiverseSelectionAcrossAnOverflowingRange()
+    {
+        await Task.Yield();
+        double[] points = { -60000, -60000, 60000, 60000 };
+        var splitter = new PoolBasedSplitter<Half>(
+            initialLabeledRatio: 0.1, minLabeledSamples: 3, strategy: PoolBasedSplitter<Half>.SelectionStrategy.Diverse);
+
+        var result = splitter.Split(HalfColumn(4, i => points[i]));
+
+        Assert.Equal(3, result.TrainIndices.Distinct().Count());
+        Assert.Single(result.TestIndices);
+        Assert.Contains(result.TrainIndices, i => points[i] < 0);
+        Assert.Contains(result.TrainIndices, i => points[i] > 0);
+    }
+
+    // Times [20000, -40000, 0, -20000, 40000] normalize to [0.75, 0, 0.5, 0.25, 1] (coordinates are all 0), so with
+    // temporal weight 1 the two latest rows, 0 and 4, are the test set. The Half range 80000 overflowed to inf and the
+    // normalized times became [0, 0, 0, 0, NaN], which sent rows 3 and 4 to the test set.
+    [Fact(Timeout = 120000)]
+    public async Task TemporalSpatialSplitter_Half_TimeRangePast65504()
+    {
+        await Task.Yield();
+        double[] times = { 20000, -40000, 0, -20000, 40000 };
+        var data = new Half[5, 3];
+        for (int i = 0; i < 5; i++)
+            data[i, 0] = (Half)times[i];
+
+        var result = new TemporalSpatialSplitter<Half>(testSize: 0.4, temporalWeight: 1.0, spatialWeight: 0.0)
+            .Split(new Matrix<Half>(data));
+
+        Assert.Equal(new[] { 0, 4 }, result.TestIndices.OrderBy(i => i).ToArray());
+    }
+
+    // Sorted values [-60000 x4, -30000 x3, 0, 60000 x4]: median -30000, q25 -60000 and q75 60000, so with strength 0.5
+    // the test threshold is -30000 + 0.5 * 90000 = 15000 and the four 60000 rows fill the four test slots. In Half
+    // q75 - median overflowed to inf, no row was a test candidate and the slots were drawn from the middle rows.
+    [Fact(Timeout = 120000)]
+    public async Task CovariateShiftSplitter_Half_PercentileGapPast65504()
+    {
+        await Task.Yield();
+        double[] values = { -60000, 60000, -30000, -60000, 0, 60000, -30000, -60000, 60000, -30000, -60000, 60000 };
+
+        var result = new CovariateShiftSplitter<Half>(testSize: 0.34, shiftStrength: 0.5)
+            .Split(HalfColumn(values.Length, i => values[i]));
+
+        Assert.Equal(new[] { 1, 5, 8, 11 }, result.TestIndices.OrderBy(i => i).ToArray());
+    }
+
+    // Element-wise x + 1 on the unsorted selection [2, 0] of [10, 20, 30] gives [11, 20, 31]. Writing the transformed
+    // columns back in ascending order swapped them to [31, 20, 11].
+    [Fact(Timeout = 120000)]
+    public async Task FunctionTransformer_UnsortedColumnIndicesKeepTheirColumns()
+    {
+        await Task.Yield();
+        var transformer = FunctionTransformer<double>.FromElementFunction(x => x + 1, columnIndices: new[] { 2, 0 });
+        var data = M(new double[,] { { 10, 20, 30 } });
+        transformer.Fit(data);
+
+        var result = transformer.Transform(data);
+
+        Assert.Equal(11.0, result[0, 0], Tolerance);
+        Assert.Equal(20.0, result[0, 1], Tolerance);
+        Assert.Equal(31.0, result[0, 2], Tolerance);
+    }
+
+    // Uniform knots over [-60000, 60000] are -30000, 0 and 30000, and every row of the cubic basis sums to 1. The Half
+    // range 120000 overflowed, giving infinite knots and NaN basis values.
+    [Fact(Timeout = 120000)]
+    public async Task SplineTransformer_Half_RangePast65504()
+    {
+        await Task.Yield();
+        var spline = new SplineTransformer<Half>(nKnots: 3, degree: 3, knotStrategy: SplineKnotStrategy.Uniform);
+        var data = HalfColumn(3, i => (i - 1) * 60000.0);
+        spline.Fit(data);
+
+        var allKnots = spline.Knots;
+        Assert.NotNull(allKnots);
+        if (allKnots is null)
+            return;
+        Assert.Equal(-30000.0, (double)allKnots[0][4], Tolerance);
+        Assert.Equal(0.0, (double)allKnots[0][5], Tolerance);
+        Assert.Equal(30000.0, (double)allKnots[0][6], Tolerance);
+
+        var basis = spline.Transform(data);
+        for (int i = 0; i < basis.Rows; i++)
+        {
+            double sum = 0;
+            for (int j = 0; j < basis.Columns; j++)
+                sum += (double)basis[i, j];
+            Assert.Equal(1.0, sum, 1e-2);
+        }
+    }
+
+    // Fitted on [0, 1e-4] with three knots, the linear basis intervals are about 2.5e-5 wide and the basis is a
+    // partition of unity. The 1e-10 interval guard raised to Half's 2^-14 (6.1e-5) rejected every interval, so every
+    // basis value was 0.
+    [Fact(Timeout = 120000)]
+    public async Task SplineTransformer_Half_SmallKnotIntervalsKeepThePartitionOfUnity()
+    {
+        await Task.Yield();
+        var spline = new SplineTransformer<Half>(nKnots: 3, degree: 1, knotStrategy: SplineKnotStrategy.Uniform);
+        spline.Fit(HalfColumn(2, i => i * 1e-4));
+
+        var basis = spline.Transform(HalfColumn(1, _ => 5e-5));
+
+        double sum = 0;
+        for (int j = 0; j < basis.Columns; j++)
+            sum += (double)basis[0, j];
+        Assert.Equal(1.0, sum, 1e-2);
+    }
+
+    // Feature 0 splits [0, 0, 1e-5, 1e-5] into bins 0 and 1 (width 1e-5 + 1e-10), the upper bin holding exactly the
+    // positives: support 0.5, confidence 1, lift 2, score 1. The constant feature 1 scores 0.5 * 0.5 * 1 = 0.25. With
+    // 1e-10 raised to Half's 2^-14 the range was 7.1e-5, both values fell in bin 0 and feature 0 also scored 0.25.
+    [Fact(Timeout = 120000)]
+    public async Task AprioriBasedSelector_Half_SmallSpreadKeepsItsBins()
+    {
+        await Task.Yield();
+        var data = new Half[4, 2];
+        for (int i = 0; i < 4; i++)
+            data[i, 0] = (Half)(i < 2 ? 0.0 : 1e-5);
+
+        var selector = new AprioriBasedSelector<Half>(nFeaturesToSelect: 1, minSupport: 0.1, minConfidence: 0.5, nBins: 2);
+        selector.Fit(new Matrix<Half>(data), HalfVector(4, i => i < 2 ? 0.0 : 1.0));
+
+        var scores = selector.AssociationScores;
+        Assert.NotNull(scores);
+        if (scores is null)
+            return;
+        Assert.Equal(1.0, (double)scores[0], 1e-3);
+        Assert.Equal(0.25, (double)scores[1], 1e-3);
+    }
+
+    // 70,000 transactions, 56,000 positive, one constant feature: support = confidence = 0.8 and lift 1, score 0.64.
+    // The transaction count and the feature count are inf in Half, which zeroed support and confidence.
+    [Fact(Timeout = 120000)]
+    public async Task AprioriBasedSelector_Half_CountsPast65504()
+    {
+        await Task.Yield();
+        var selector = new AprioriBasedSelector<Half>(nFeaturesToSelect: 1, minSupport: 0.1, minConfidence: 0.5, nBins: 2);
+        selector.Fit(HalfColumn(70000, _ => 1.0), HalfVector(70000, i => i < 56000 ? 1.0 : 0.0));
+
+        var scores = selector.AssociationScores;
+        Assert.NotNull(scores);
+        if (scores is null)
+            return;
+        Assert.Equal(0.64, (double)scores[0], 1e-3);
+    }
+
+    // 70,000 transactions, 56,000 positive, one always-present item: support 56000 / 70000 = 0.8. The count n was inf
+    // in Half, so the support was 0 and the item never frequent.
+    [Fact(Timeout = 120000)]
+    public async Task FrequentPatternSelector_Half_SupportPast65504Rows()
+    {
+        await Task.Yield();
+        var selector = new FrequentPatternSelector<Half>(nFeaturesToSelect: 1, minSupport: 0.1, maxPatternSize: 2);
+        selector.Fit(HalfColumn(70000, _ => 1.0), HalfVector(70000, i => i < 56000 ? 1.0 : 0.0));
+
+        var scores = selector.PatternScores;
+        Assert.NotNull(scores);
+        if (scores is null)
+            return;
+        Assert.Equal(0.8, (double)scores[0], 1e-3);
+    }
+
+    // X = [-1e-4, 1e-4], y = [-1, 1]: diag(X^T X) = 2e-8, so 1 - alpha / (alpha + 2e-8) is 2e-8 but cancels to 0 in
+    // float; the feature's alpha was then pinned at the 1e8 threshold. As beta diag(X^T X) sigma the effective
+    // parameter count stays positive and alpha falls below 1.
+    [Fact(Timeout = 120000)]
+    public async Task ArdSelector_Float_GammaDoesNotCancel()
+    {
+        await Task.Yield();
+        var data = new Matrix<float>(new float[,] { { -1e-4f }, { 1e-4f } });
+        var selector = new ARDSelector<float>(nFeaturesToSelect: 1);
+        selector.Fit(data, new Vector<float>(new[] { -1f, 1f }));
+
+        var alphas = selector.Alphas;
+        Assert.NotNull(alphas);
+        if (alphas is null)
+            return;
+        Assert.True(alphas[0] < 1f, $"alpha {alphas[0]} should fall below 1 for a perfectly predictive feature");
+    }
+
+    // Positives at 0.002 and negatives at 0.001 separate perfectly: scaled by s = 0.002, the variances are only the
+    // 1e-10 / s^2 = 2.5e-5 guard, t is about 141 and the posterior saturates at 1. The guard raised to Half's 2^-14
+    // became 15.3 after scaling, giving t = 0.18 and a posterior of 0.504, below the 0.9 threshold.
+    [Fact(Timeout = 120000)]
+    public async Task BayesianFeatureSelector_Half_SmallScaleKeepsTheOriginalTolerance()
+    {
+        await Task.Yield();
+        var selector = new BayesianFeatureSelector<Half>(nFeaturesToSelect: 1, threshold: 0.9);
+        selector.Fit(HalfColumn(8, i => i < 4 ? 0.002 : 0.001), HalfVector(8, i => i < 4 ? 1.0 : 0.0));
+
+        var posterior = selector.PosteriorProbabilities;
+        Assert.NotNull(posterior);
+        if (posterior is null)
+            return;
+        Assert.True((double)posterior[0] > 0.99, $"posterior {(double)posterior[0]}");
+        Assert.Equal(new[] { 0 }, selector.SelectedIndices);
+    }
+
+    // Positives [1, 0.99951171875], negatives [0.99951171875, 0.99951171875]: centred, the population variances are
+    // 5.96e-8 and 0 (plus 1e-10), the pooled variance 2.99e-8, t = 0.000244140625 / 1.729e-4 = 1.4119 and the
+    // posterior sigmoid(t^2 / 2) = 0.7304. In Half E[x^2] - E[x]^2 went negative and the posterior was NaN.
+    [Fact(Timeout = 120000)]
+    public async Task BayesianFeatureSelector_Half_VarianceFromCentredDeviations()
+    {
+        await Task.Yield();
+        double[] values = { 1, 0.99951171875, 0.99951171875, 0.99951171875 };
+        var selector = new BayesianFeatureSelector<Half>(nFeaturesToSelect: 1);
+        selector.Fit(HalfColumn(4, i => values[i]), HalfVector(4, i => i < 2 ? 1.0 : 0.0));
+
+        var posterior = selector.PosteriorProbabilities;
+        Assert.NotNull(posterior);
+        if (posterior is null)
+            return;
+        Assert.Equal(0.7304, (double)posterior[0], 1e-2);
+    }
+
+    // Positives [40000, 2] x2 and negatives [30000, 1] x2: fold changes 4/3 and 2, so the single pick is feature 1.
+    // The positive sum 80000 of feature 0 overflowed Half, its fold change became inf and it was picked instead.
+    [Fact(Timeout = 120000)]
+    public async Task FoldChangeSelector_Half_ClassSumPast65504()
+    {
+        await Task.Yield();
+        var data = new Half[4, 2];
+        for (int i = 0; i < 4; i++)
+        {
+            data[i, 0] = (Half)(i < 2 ? 40000 : 30000);
+            data[i, 1] = (Half)(i < 2 ? 2 : 1);
+        }
+
+        var selector = new AiDotNet.Preprocessing.FeatureSelection.Bioinformatics.FoldChangeSelector<Half>(nFeaturesToSelect: 1);
+        selector.Fit(new Matrix<Half>(data), HalfVector(4, i => i < 2 ? 1.0 : 0.0));
+
+        Assert.Equal(new[] { 1 }, selector.SelectedIndices);
+        var foldChanges = selector.FoldChanges;
+        Assert.NotNull(foldChanges);
+        if (foldChanges is null)
+            return;
+        Assert.Equal(4.0 / 3.0, (double)foldChanges[0], 1e-2);
+    }
+
+    // Feature 0 [0, 1, 1000, 1001] standardizes to about [-1, -0.998, 0.998, 1], a margin of 1.996 over a spread of
+    // 0.002 (999); feature 1 [0, 1, 2, 3] scores 1. Squaring centred values near 500 overflowed Half, the std became
+    // inf, feature 0 standardized to 0 and feature 1 was picked.
+    [Fact(Timeout = 120000)]
+    public async Task MarginSelector_Half_StandardizationDoesNotOverflow()
+    {
+        await Task.Yield();
+        double[] f0 = { 0, 1, 1000, 1001 };
+        var data = new Half[4, 2];
+        for (int i = 0; i < 4; i++)
+        {
+            data[i, 0] = (Half)f0[i];
+            data[i, 1] = (Half)i;
+        }
+
+        var selector = new MarginSelector<Half>(nFeaturesToSelect: 1);
+        selector.Fit(new Matrix<Half>(data), HalfVector(4, i => i < 2 ? 0.0 : 1.0));
+
+        Assert.Equal(new[] { 0 }, selector.SelectedIndices);
+    }
+
+    // Classes [-300, 300] and [700, 1300]: means 0 and 1000, pooled variance 180000, standard error 424.26 and, with
+    // one feature, s0 = 424.26, so d = 1000 / 848.53 = 1.1785. The squared deviations (90000) overflowed Half.
+    [Fact(Timeout = 120000)]
+    public async Task Sam_Half_SquaredDeviationsPast65504()
+    {
+        await Task.Yield();
+        double[] values = { -300, 300, 700, 1300 };
+        var selector = new SamSelector(nFeaturesToSelect: 1, nPermutations: 10, randomState: 7);
+        selector.Fit(HalfColumn(4, i => values[i]), HalfVector(4, i => i < 2 ? 0.0 : 1.0));
+
+        var d = selector.DStatistics;
+        Assert.NotNull(d);
+        if (d is null)
+            return;
+        Assert.Equal(1.1785, (double)d[0], 1e-2);
+    }
+
+    // Classes [-300, 300] and [700, 1300]: d = 1000 / (424.26 + s0) with s0 the median pooled std, 1.1785 for one
+    // feature. The squared deviations (90000) overflowed Half and the score was NaN.
+    [Fact(Timeout = 120000)]
+    public async Task SignificanceAnalysis_Half_SquaredDeviationsPast65504()
+    {
+        await Task.Yield();
+        double[] values = { -300, 300, 700, 1300 };
+        var selector = new SignificanceAnalysisSelector(nFeaturesToSelect: 1, nPermutations: 10, randomState: 7);
+        selector.Fit(HalfColumn(4, i => values[i]), HalfVector(4, i => i < 2 ? 0.0 : 1.0));
+
+        var scores = selector.SAMScores;
+        Assert.NotNull(scores);
+        if (scores is null)
+            return;
+        Assert.Equal(1.1785, (double)scores[0], 1e-2);
+    }
+
+    // A constant feature: every one of the 70,000 permuted scores equals the observed 0, so q = 70000 / 70000 = 1.
+    // Both counts were inf in Half and q was inf / inf = NaN.
+    [Fact(Timeout = 600000)]
+    public async Task SignificanceAnalysis_Half_QValueOfPermutationCountsPast65504()
+    {
+        await Task.Yield();
+        var selector = new SignificanceAnalysisSelector(nFeaturesToSelect: 1, nPermutations: 70000, randomState: 7);
+        selector.Fit(HalfColumn(4, _ => 1.0), HalfVector(4, i => i < 2 ? 0.0 : 1.0));
+
+        var qValues = selector.QValues;
+        Assert.NotNull(qValues);
+        if (qValues is null)
+            return;
+        Assert.Equal(1.0, (double)qValues[0], Tolerance);
+    }
+
+    // Feature 0 holds a NaN, so its score is NaN, no permutation exceeds it and q = 0: it is the only candidate.
+    // Feature 1 is constant (q = 1). Master ranked the candidates alone and kept feature 0; ranking every feature
+    // with the non-candidates at -1 put the NaN below feature 1, which was picked although it failed the FDR test.
+    [Fact(Timeout = 120000)]
+    public async Task SignificanceAnalysis_NaNScoredCandidateOutranksNonCandidates()
+    {
+        await Task.Yield();
+        var data = M(new double[,] { { double.NaN, 1 }, { 1, 1 }, { 2, 1 }, { 3, 1 } });
+        var selector = new AiDotNet.Preprocessing.FeatureSelection.Bioinformatics.SignificanceAnalysis<double>(
+            nFeaturesToSelect: 1, nPermutations: 20, randomState: 7);
+        selector.Fit(data, new Vector<double>(new[] { 0.0, 0.0, 1.0, 1.0 }));
+
+        Assert.Equal(new[] { 0 }, selector.SelectedIndices);
+    }
+
+    // Column 0 [-300, -300, 300, 300] conditions column 1 [-1, -1, 1, 1] (a scaled copy) to a zero residual, so
+    // MMPC keeps column 2 [-1, 1, -1, 1], which explains the target given column 0. The conditioning sum of squares
+    // (360000) was inf in Half, every slope 0, and the copy was kept instead.
+    [Fact(Timeout = 120000)]
+    public async Task MmpcSelector_Half_ConditioningSumOfSquaresPast65504()
+    {
+        await Task.Yield();
+        double[,] values = { { -300, -1, -1 }, { -300, -1, 1 }, { 300, 1, -1 }, { 300, 1, 1 } };
+        var data = new Half[4, 3];
+        for (int i = 0; i < 4; i++)
+            for (int j = 0; j < 3; j++)
+                data[i, j] = (Half)values[i, j];
+        double[] target = { -1.5, -0.5, 0.5, 1.5 };
+
+        var selector = new MMPCSelector<Half>(nFeaturesToSelect: 2);
+        selector.Fit(new Matrix<Half>(data), HalfVector(4, i => target[i]));
+
+        Assert.Equal(new[] { 0, 2 }, selector.SelectedIndices);
     }
 }

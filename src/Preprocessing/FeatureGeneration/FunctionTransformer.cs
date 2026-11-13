@@ -190,14 +190,20 @@ public class FunctionTransformer<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         int numRows = data.Rows;
         var transformedSubset = func(PreprocessingTensorOps.SelectColumns(data, columnsToProcess));
 
-        // Reconstruct full matrix: processed columns (in ascending column order) take the transformed columns
-        var processSet = new HashSet<int>(columnsToProcess);
+        // Reconstruct full matrix: transformed column k goes back to its source column columnsToProcess[k] (the
+        // selection need not be sorted; a repeated index keeps its first transformed column), the others are kept
+        var subsetColumnOf = new Dictionary<int, int>(columnsToProcess.Length);
+        for (int k = 0; k < columnsToProcess.Length; k++)
+        {
+            if (!subsetColumnOf.ContainsKey(columnsToProcess[k]))
+                subsetColumnOf[columnsToProcess[k]] = k;
+        }
+
         var columns = new List<Tensor<T>>(data.Columns);
-        int subsetCol = 0;
         for (int j = 0; j < data.Columns; j++)
         {
-            columns.Add(processSet.Contains(j)
-                ? PreprocessingTensorOps.Column(transformedSubset, subsetCol++)
+            columns.Add(subsetColumnOf.TryGetValue(j, out int subsetCol)
+                ? PreprocessingTensorOps.Column(transformedSubset, subsetCol)
                 : PreprocessingTensorOps.Column(data, j));
         }
 

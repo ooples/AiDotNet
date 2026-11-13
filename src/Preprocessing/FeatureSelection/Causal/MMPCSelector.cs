@@ -76,23 +76,49 @@ public class MMPCSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISuperv
         int n = data.Rows;
         int p = data.Columns;
 
-        var engine = Engine;
+        // Half and BFloat16 run in float and the association scores are cast back once: the conditioning column's
+        // sum of squares passes Half's 65504 once its values pass 256 / sqrt(n), which zeroed every slope and left
+        // the residuals unconditioned
         var X = Tensor<T>.FromMatrix(data);
         var y = Tensor<T>.FromVector(target);
+        List<int> candidates;
+        if (PreprocessingTensorOps.IsNarrowFloat<T>())
+        {
+            candidates = SelectCandidates(X.Cast<float>(), y.Cast<float>(), out var wideScores);
+            _associationScores = wideScores.Cast<T>().ToVector();
+        }
+        else
+        {
+            candidates = SelectCandidates(X, y, out var scores);
+            _associationScores = scores.ToVector();
+        }
+
+        _selectedIndices = candidates.OrderBy(x => x).ToArray();
+        IsFitted = true;
+    }
+
+    /// <summary>
+    /// The min-max parents-and-children candidates of the target among the columns of <paramref name="X"/> ([n, p]),
+    /// with the marginal association scores in <paramref name="scores"/>.
+    /// </summary>
+    private List<int> SelectCandidates<TC>(Tensor<TC> X, Tensor<TC> y, out Tensor<TC> scores)
+    {
+        var engine = AiDotNet.Tensors.Engines.AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<TC>();
+        int p = X.Shape[1];
         var xc = engine.TensorSubtract(X, engine.ReduceMean(X, new[] { 0 }, true));
         var yc = engine.TensorSubtractScalar(y, engine.TensorMean(y));
-        T threshold = NumOps.FromDouble(_minAssociationThreshold);
+        TC threshold = ops.FromDouble(_minAssociationThreshold);
 
         // Marginal association with the target
-        var scores = engine.TensorAbs(PreprocessingTensorOps.CorrelationsWithDenominatorGuard(X, y));
-        _associationScores = scores.ToVector();
+        scores = engine.TensorAbs(PreprocessingTensorOps.CorrelationsWithDenominatorGuard(X, y));
 
         // Phase 1: Forward - greedy min-max selection. minAssoc[j] is the smallest association of j with
         // the target over the empty set and every single current candidate (partial association).
         var candidates = new List<int>();
         var isCandidate = new bool[p];
-        var partialColumns = new Dictionary<int, Tensor<T>>();
-        var excluded = PreprocessingTensorOps.Filled(new[] { p }, NumOps.FromDouble(-1.0));
+        var partialColumns = new Dictionary<int, Tensor<TC>>();
+        var excluded = PreprocessingTensorOps.Filled(new[] { p }, ops.FromDouble(-1.0));
         var minAssoc = scores;
 
         while (candidates.Count < Math.Min(_nFeaturesToSelect, p))
@@ -115,11 +141,11 @@ public class MMPCSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISuperv
         {
             int m = candidates.Count;
             var candidateIndex = new Tensor<int>(candidates.ToArray(), new[] { m });
-            var columns = new Tensor<T>[m];
+            var columns = new Tensor<TC>[m];
             for (int b = 0; b < m; b++)
                 columns[b] = engine.TensorIndexSelect(partialColumns[candidates[b]], candidateIndex, 0);
             var pairwise = engine.TensorStack(columns, 1); // [a, b] = partial association of a given b
-            var offDiagonal = PreprocessingTensorOps.Not(engine.TensorEye<T>(m));
+            var offDiagonal = PreprocessingTensorOps.Not(engine.TensorEye<TC>(m));
             var dependent = engine.TensorMultiply(PreprocessingTensorOps.AtLeast(pairwise, threshold), offDiagonal);
             var anyDependent = engine.ReduceMax(dependent, new[] { 1 }, false);
             var independent = PreprocessingTensorOps.MaskPositions(PreprocessingTensorOps.Not(anyDependent));
@@ -137,25 +163,25 @@ public class MMPCSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISuperv
             candidates.AddRange(PreprocessingTensorOps.TopKIndicesSorted(open, extra));
         }
 
-        _selectedIndices = candidates.OrderBy(x => x).ToArray();
-        IsFitted = true;
+        return candidates;
     }
 
-    private Tensor<T> PartialAssociations(Tensor<T> xc, Tensor<T> yc, int conditioning)
+    private static Tensor<TC> PartialAssociations<TC>(Tensor<TC> xc, Tensor<TC> yc, int conditioning)
     {
         // |corr(resid(x_j | z), resid(y | z))| for every column j, with z the conditioning column
-        var engine = Engine;
+        var engine = AiDotNet.Tensors.Engines.AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<TC>();
         int n = xc.Shape[0];
         var z = PreprocessingTensorOps.ColumnVector(xc, conditioning);
-        T varZ = engine.TensorSumOfSquares(z);
+        TC varZ = engine.TensorSumOfSquares(z);
         var residX = xc;
         var residY = yc;
-        if (NumOps.GreaterThan(varZ, PreprocessingTensorOps.Tolerance<T>(1e-10)))
+        if (ops.GreaterThan(varZ, PreprocessingTensorOps.Tolerance<TC>(1e-10)))
         {
             var zColumn = engine.Reshape(z, new[] { n, 1 });
             var slopeX = engine.TensorDivideScalar(engine.TensorMatMul(engine.TensorTranspose(zColumn), xc), varZ);
             residX = engine.TensorSubtract(xc, engine.TensorMatMul(zColumn, slopeX));
-            T slopeY = NumOps.Divide(engine.TensorSum(engine.TensorMultiply(yc, z)), varZ);
+            TC slopeY = ops.Divide(engine.TensorSum(engine.TensorMultiply(yc, z)), varZ);
             residY = engine.TensorSubtract(yc, engine.TensorMultiplyScalar(z, slopeY));
         }
 

@@ -81,16 +81,16 @@ public class FrequentPatternSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T
         var median = PreprocessingTensorOps.ColumnOrderStatistic(X, n / 2);
         var positiveItems = engine.TensorMultiply(PreprocessingTensorOps.AtLeastRow(X, median), positive);
 
-        // Frequent 1-itemsets
-        T count = NumOps.FromDouble(n);
-        // Counted as int: a sum of 0/1 entries in T stops counting at 2048 for Half (2048 + 1 rounds back to 2048)
-        var support1 = engine.TensorDivideScalar(
-            engine.ReduceSum(positiveItems.Cast<int>(), new[] { 0 }, false).Cast<T>(), count);
-        var frequent1 = PreprocessingTensorOps.AtLeast(support1, NumOps.FromDouble(_minSupport));
-        var freq1Keys = PreprocessingTensorOps.MaskPositions(frequent1).ToList();
+        // Frequent 1-itemsets. Counted as int (a sum of 0/1 entries in T stops counting at 2048 for Half, 2048 + 1
+        // rounding back to 2048) and the support ratio formed in double before one cast: a count or n past 65504
+        // is inf in Half, which zeroed the support and dropped every frequent 1-itemset.
+        var support1Wide = engine.TensorDivideScalar(
+            engine.ReduceSum(positiveItems.Cast<int>(), new[] { 0 }, false).Cast<double>(), (double)n);
+        var frequent1Wide = PreprocessingTensorOps.AtLeast(support1Wide, _minSupport);
+        var freq1Keys = PreprocessingTensorOps.MaskPositions(frequent1Wide).ToList();
 
         // Score features based on the frequent itemsets they participate in
-        var scores = engine.TensorMultiply(support1, frequent1);
+        var scores = engine.TensorMultiply(support1Wide, frequent1Wide).Cast<T>();
 
         // Frequent 2-itemsets and higher (up to maxPatternSize): per size, the summed support counts
         // of the frequent patterns each feature belongs to.
@@ -98,7 +98,8 @@ public class FrequentPatternSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T
         if (_maxPatternSize >= 2 && maxSize >= 2)
         {
             int sizes = maxSize - 1;
-            var countSums = new int[sizes * p];
+            // long: a feature in C(127, 2) frequent 3-itemsets over 300,000 rows sums 2.4e9 counts, past int
+            var countSums = new long[sizes * p];
             var missingItems = PreprocessingTensorOps.Not(positiveItems);
             T zero = NumOps.Zero;
             for (int size = 2; size <= maxSize; size++)

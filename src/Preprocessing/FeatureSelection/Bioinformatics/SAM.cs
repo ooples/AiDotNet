@@ -110,8 +110,50 @@ public class SAM<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFeatu
         if (n0 < 2 || n1 < 2)
             throw new ArgumentException("SAM requires at least 2 samples in each class.");
 
-        T count0 = NumOps.FromDouble(n0);
-        T count1 = NumOps.FromDouble(n1);
+        // Half and BFloat16 are analysed in float and the statistics cast back once: within-class squared deviations
+        // pass Half's 65504 (300^2 = 90000), giving inf, and 0 * inf = NaN in the masked sums
+        var dStatistics = PreprocessingTensorOps.IsNarrowFloat<T>()
+            ? Analyze(X.Cast<float>(), class0.Cast<float>(), class1.Cast<float>(), n0, n1, random, out var fdrRatios).Cast<T>()
+            : Analyze(X, class0, class1, n0, n1, random, out fdrRatios);
+        _dStatistics = dStatistics.ToVector();
+        var absD = engine.TensorAbs(dStatistics);
+        var fdr = new Tensor<double>(fdrRatios, new[] { p }).Cast<T>();
+
+        _fdr = fdr.ToVector();
+        _qValues = fdr.ToVector();
+
+        // Select significant features
+        var significant = PreprocessingTensorOps.Not(engine.TensorGreaterThan(fdr, NumOps.FromDouble(_fdrThreshold)));
+        if (PreprocessingTensorOps.CountNonZero(significant) >= _nFeaturesToSelect)
+        {
+            var ranked = engine.TensorWhere(significant, absD, PreprocessingTensorOps.Filled(new[] { p }, NumOps.FromDouble(-1.0)));
+            _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(ranked, _nFeaturesToSelect);
+        }
+        else
+        {
+            // Fall back to top by |d|
+            _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(absD, _nFeaturesToSelect);
+        }
+
+        IsFitted = true;
+    }
+
+    /// <summary>
+    /// The d statistic (difference of class means over the pooled standard error plus the s0 fudge factor) of every
+    /// column of <paramref name="X"/> ([n, p]) and, in <paramref name="fdrRatios"/>, its permutation FDR estimate.
+    /// </summary>
+    private Tensor<TC> Analyze<TC>(
+        Tensor<TC> X, Tensor<TC> class0, Tensor<TC> class1, int n0, int n1, Random random, out double[] fdrRatios)
+    {
+        var engine = AiDotNet.Tensors.Engines.AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<TC>();
+        int n = X.Shape[0];
+        int p = X.Shape[1];
+        int nPermutations = _nPermutations;
+        double s0Percentile = _s0Percentile;
+
+        TC count0 = ops.FromDouble(n0);
+        TC count1 = ops.FromDouble(n1);
         var class0Row = engine.Reshape(class0, new[] { 1, n });
         var class1Row = engine.Reshape(class1, new[] { 1, n });
         var mean0 = engine.TensorDivideScalar(engine.TensorMatMul(class0Row, X), count0); // [1, p]
@@ -120,30 +162,29 @@ public class SAM<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFeatu
         // Standard errors from the pooled within-class variance
         var ss0 = engine.TensorMatMul(class0Row, engine.TensorSquare(engine.TensorSubtract(X, mean0)));
         var ss1 = engine.TensorMatMul(class1Row, engine.TensorSquare(engine.TensorSubtract(X, mean1)));
-        var pooledVar = engine.TensorDivideScalar(engine.TensorAdd(ss0, ss1), NumOps.FromDouble(n0 + n1 - 2));
+        var pooledVar = engine.TensorDivideScalar(engine.TensorAdd(ss0, ss1), ops.FromDouble(n0 + n1 - 2));
         var standardErrors = engine.Reshape(
-            engine.TensorSqrt(engine.TensorMultiplyScalar(pooledVar, NumOps.FromDouble(1.0 / n0 + 1.0 / n1))), new[] { p });
+            engine.TensorSqrt(engine.TensorMultiplyScalar(pooledVar, ops.FromDouble(1.0 / n0 + 1.0 / n1))), new[] { p });
 
         // s0 (fudge factor) is the percentile of standard errors
         var (sortedSE, _) = engine.TensorSort(standardErrors, 0, false);
-        T s0 = sortedSE.GetFlat((int)(_s0Percentile * (p - 1)));
-        if (!NumOps.GreaterThan(s0, NumOps.Zero))
-            s0 = PreprocessingTensorOps.Tolerance<T>(1e-12);
+        TC s0 = sortedSE.GetFlat((int)(s0Percentile * (p - 1)));
+        if (!ops.GreaterThan(s0, ops.Zero))
+            s0 = PreprocessingTensorOps.Tolerance<TC>(1e-12);
         var denominator = engine.TensorAddScalar(standardErrors, s0);
 
         // d-statistics
         var dStatistics = engine.TensorDivide(engine.Reshape(engine.TensorSubtract(mean1, mean0), new[] { p }), denominator);
-        _dStatistics = dStatistics.ToVector();
 
         // Permutation test: the first n0 shuffled rows form class 0
         var columnTotals = engine.ReduceSum(X, new[] { 0 }, true);
-        var ones = PreprocessingTensorOps.Filled(new[] { n }, NumOps.One);
-        var zeros = new Tensor<T>(new[] { n });
+        var ones = PreprocessingTensorOps.Filled(new[] { n }, ops.One);
+        var zeros = new Tensor<TC>(new[] { n });
         var indices = Enumerable.Range(0, n).ToArray();
         var inClass0 = new bool[n];
-        var permutedD = new Tensor<T>[_nPermutations];
+        var permutedD = new Tensor<TC>[nPermutations];
 
-        for (int perm = 0; perm < _nPermutations; perm++)
+        for (int perm = 0; perm < nPermutations; perm++)
         {
             // Shuffle indices
             for (int i = n - 1; i > 0; i--)
@@ -171,50 +212,32 @@ public class SAM<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFeatu
         // are int insertion indices and the ratio is formed from them in double: in T, nPermutations * p (and the
         // counts themselves) overflow Half (max 65504) and stop being exact past 2048.
         var absD = engine.TensorAbs(dStatistics);
-        var minusOne = PreprocessingTensorOps.Filled(new[] { p }, NumOps.FromDouble(-1.0));
+        var minusOne = PreprocessingTensorOps.Filled(new[] { p }, ops.FromDouble(-1.0));
         var observedIsNumber = engine.TensorEquals(absD, absD);
         var observed = engine.TensorWhere(observedIsNumber, absD, minusOne);
         var (sortedObserved, _) = engine.TensorSort(observed, 0, false);
         var observedBelow = engine.TensorSearchSorted(sortedObserved, observed, false).AsSpan().ToArray();
 
         // nPermutations is at least 10 (validated in the constructor)
-        int permutedCount = _nPermutations * p;
+        int permutedCount = nPermutations * p;
         var permutedAbs = engine.Reshape(engine.TensorAbs(engine.TensorStack(permutedD, 0)), new[] { permutedCount });
         var permuted = engine.TensorWhere(engine.TensorEquals(permutedAbs, permutedAbs), permutedAbs,
-            PreprocessingTensorOps.Filled(new[] { permutedCount }, NumOps.FromDouble(-1.0)));
+            PreprocessingTensorOps.Filled(new[] { permutedCount }, ops.FromDouble(-1.0)));
         var (sortedPermuted, _) = engine.TensorSort(permuted, 0, false);
         var permutedBelow = engine.TensorSearchSorted(sortedPermuted, observed, false).AsSpan().ToArray();
         var isNumber = observedIsNumber.Cast<int>().AsSpan().ToArray();
 
         // FDR = (false positives / nPermutations) / true positives, capped at 1; 1 when there is no true positive.
         // The ratio of the int counts is formed in double and converted to T in one cast.
-        var fdrRatios = new double[p];
+        fdrRatios = new double[p];
         for (int j = 0; j < p; j++)
         {
             int truePositives = isNumber[j] != 0 ? p - observedBelow[j] : 0;
-            double expectedFalsePositives = (double)(permutedCount - permutedBelow[j]) / _nPermutations;
+            double expectedFalsePositives = (double)(permutedCount - permutedBelow[j]) / nPermutations;
             fdrRatios[j] = truePositives > 0 ? Math.Min(expectedFalsePositives / truePositives, 1.0) : 1.0;
         }
 
-        var fdr = new Tensor<double>(fdrRatios, new[] { p }).Cast<T>();
-
-        _fdr = fdr.ToVector();
-        _qValues = fdr.ToVector();
-
-        // Select significant features
-        var significant = PreprocessingTensorOps.Not(engine.TensorGreaterThan(fdr, NumOps.FromDouble(_fdrThreshold)));
-        if (PreprocessingTensorOps.CountNonZero(significant) >= _nFeaturesToSelect)
-        {
-            var ranked = engine.TensorWhere(significant, absD, PreprocessingTensorOps.Filled(new[] { p }, NumOps.FromDouble(-1.0)));
-            _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(ranked, _nFeaturesToSelect);
-        }
-        else
-        {
-            // Fall back to top by |d|
-            _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(absD, _nFeaturesToSelect);
-        }
-
-        IsFitted = true;
+        return dStatistics;
     }
 
     /// <inheritdoc />
