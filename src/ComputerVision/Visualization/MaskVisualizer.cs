@@ -100,18 +100,30 @@ public class MaskVisualizer<T>
     {
         var engine = AiDotNetEngine.Current;
 
-        // Initialize with -1 (background); later instances overwrite earlier ones.
-        var instanceMap = new Tensor<T>(new[] { 1, 1, height, width });
-        engine.TensorFill(instanceMap, _numOps.FromDouble(-1.0));
+        // Initialize with -1 (background); later instances overwrite earlier ones. The map holds int ids: an
+        // instance index stored in T stops being exact past 2048 in Half (2049 rounds to 2048).
+        var instanceMap = new Tensor<int>(new[] { height, width });
+        engine.TensorFill(instanceMap, -1);
 
         for (int i = 0; i < result.Instances.Count; i++)
         {
-            var id = new Tensor<T>(new[] { _numOps.FromDouble(i) }, new[] { 1, 1, 1, 1 });
-            instanceMap = PaintWhere(instanceMap, result.Instances[i].Mask, 1, id);
+            var mask = result.Instances[i].Mask;
+            int h = Math.Min(mask.Shape[0], height);
+            int w = Math.Min(mask.Shape[1], width);
+            if (h <= 0 || w <= 0)
+            {
+                continue;
+            }
+
+            var region = engine.TensorSlice(instanceMap, new[] { 0, 0 }, new[] { h, w });
+            var inside = MaskOn(engine.TensorSlice(mask, new[] { 0, 0 }, new[] { h, w })).Cast<int>();
+            var id = new Tensor<int>(new[] { h, w });
+            engine.TensorFill(id, i);
+            instanceMap = engine.TensorSetSlice(instanceMap, engine.TensorWhere(inside, id, region), new[] { 0, 0 });
         }
 
         var ids = new int[height, width];
-        var flat = instanceMap.Cast<int>().ToArray();
+        var flat = instanceMap.ToArray();
         Buffer.BlockCopy(flat, 0, ids, 0, flat.Length * sizeof(int));
         return ids;
     }

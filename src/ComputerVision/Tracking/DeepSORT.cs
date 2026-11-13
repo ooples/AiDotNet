@@ -559,15 +559,24 @@ internal class ReIDNetwork<T>
         var first = engine.TensorSlice(crop, new[] { 0, 0, 0, 0 }, new[] { 1, channels, crop.Shape[2], crop.Shape[3] });
         var pooled = engine.Reshape(engine.ReduceMean(first, new[] { 2, 3 }, keepDims: false), new[] { channels, 1 });
 
-        // projection[f, c] = sin((f + 1) * c * 0.1)
-        var rowsIndex = engine.TensorArange<T>(1, _featureDim + 1);
-        var colsIndex = engine.TensorArange<T>(0, channels);
-        var projection = engine.TensorSin(engine.TensorMultiplyScalar(
-            engine.TensorOuter(rowsIndex, colsIndex), NumOps.FromDouble(0.1)));
-
+        var projection = Projection(_featureDim, channels);
         var feature = engine.Reshape(engine.TensorTanh(engine.TensorMatMul(projection, pooled)), new[] { _featureDim });
 
         T norm = NumOps.Sqrt(engine.TensorSumOfSquares(feature));
         return NumOps.GreaterThan(norm, NumOps.Zero) ? engine.TensorDivideScalar(feature, norm) : feature;
+    }
+
+    /// <summary>
+    /// The fixed projection <c>[featureDim, channels]</c>, <c>sin((f + 1) * c * 0.1)</c>. It is a constant
+    /// table, so it is computed in double and rounded to <typeparamref name="T"/> once: forming the angle in
+    /// <typeparamref name="T"/> would round 0.1 and the product first, an angle error that grows with
+    /// <c>(f + 1) * c</c>.
+    /// </summary>
+    internal static Tensor<T> Projection(int featureDim, int channels)
+    {
+        var engine = AiDotNetEngine.Current;
+        var rows = engine.TensorArange<double>(1, featureDim + 1);
+        var cols = engine.TensorArange<double>(0, channels);
+        return engine.TensorSin(engine.TensorMultiplyScalar(engine.TensorOuter(rows, cols), 0.1)).Cast<T>();
     }
 }

@@ -150,9 +150,12 @@ internal static class TrackingAssociation<T>
             cost);
         int[] assignment = SolveAssignment(capped);
 
+        // Reject on the ORIGINAL cost: a pair is beyond the gate exactly when its cost exceeds maxDistance.
+        // Testing the capped cost relies on maxDistance + 1e-5 being larger than maxDistance, which fails
+        // in Half (0.2 + 1e-5 rounds back to 0.2) and would accept every capped pair.
         var assignedRows = Enumerable.Range(0, rows).Where(r => assignment[r] >= 0).ToArray();
         var flat = new Tensor<int>(assignedRows.Select(r => r * cols + assignment[r]).ToArray(), new[] { assignedRows.Length });
-        var pairCost = engine.TensorTake(capped, flat);
+        var pairCost = engine.TensorTake(cost, flat);
         int[] tooFar = engine.TensorGreaterThan(pairCost, maxDistance).Cast<int>().ToArray();
 
         var colTaken = new bool[cols];
