@@ -128,11 +128,13 @@ public static class ConcertoIntraModalObjective<T>
             engine.TensorDivideScalar(studentLogits, NumOps.FromDouble(studentTemperature)), axis: -1);
 
         // H(teacher, student) = -sum_k teacher_k * log student_k; prototypes the teacher gives zero
-        // probability contribute nothing (so 0 * -inf never turns the loss into NaN).
+        // probability contribute nothing (so 0 * -inf never turns the loss into NaN). The skip is
+        // "teacher_k <= 0", not "not teacher_k > 0": a NaN teacher probability is not skipped and
+        // makes the loss NaN, as the scalar reference does.
         var terms = engine.TensorWhere(
-            engine.TensorGreaterThan(teacherProbabilities, NumOps.Zero),
-            engine.TensorMultiply(teacherProbabilities, logStudent),
-            engine.TensorFullLike(teacherProbabilities, NumOps.Zero));
+            engine.TensorLessEqual(teacherProbabilities, engine.TensorFullLike(teacherProbabilities, NumOps.Zero)),
+            engine.TensorFullLike(teacherProbabilities, NumOps.Zero),
+            engine.TensorMultiply(teacherProbabilities, logStudent));
 
         // Mean over points of the per-point cross-entropy. Each point's value is scaled by 1 / sqrt(numPoints)
         // before the full sum (accumulated in float for Half) and once more after it, so the running total stays
