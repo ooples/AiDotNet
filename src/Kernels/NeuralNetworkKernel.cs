@@ -158,6 +158,11 @@ public class NeuralNetworkKernel<T> : IKernelFunction<T>
             throw new ArgumentException("Vectors must have the same length.");
 
         // Compute norms squared with bias term: sigma_b^2 + sigma_w^2 * <x, y>
+        // Preserve wide angular geometry and reductions for low-precision storage types.
+        if (typeof(T) != typeof(double))
+            return _numOps.FromDouble(new NeuralNetworkKernel<double>(_order, _weightVariance, _biasVariance)
+                .Calculate(x1.AsTensor().Cast<double>().ToVector(), x2.AsTensor().Cast<double>().ToVector()));
+
         var engine = AiDotNetEngine.Current;
         T biasVariance = _numOps.FromDouble(_biasVariance);
         T weightVariance = _numOps.FromDouble(_weightVariance);
@@ -356,6 +361,10 @@ public class DeepNeuralNetworkKernel<T> : IKernelFunction<T>
             throw new ArgumentException("Vectors must have the same length.");
 
         // Initialize with input norms: sigma_b^2 + sigma_w^2 * <x, y>
+        if (typeof(T) != typeof(double))
+            return _numOps.FromDouble(new DeepNeuralNetworkKernel<double>(_order, _weightVariance, _biasVariance, _numLayers)
+                .Calculate(x1.AsTensor().Cast<double>().ToVector(), x2.AsTensor().Cast<double>().ToVector()));
+
         var engine = AiDotNetEngine.Current;
         T biasVariance = _numOps.FromDouble(_biasVariance);
         T weightVariance = _numOps.FromDouble(_weightVariance);

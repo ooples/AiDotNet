@@ -496,30 +496,24 @@ public abstract partial class SurvivalModelBase<T> : ISurvivalModel<T>, IModelSh
         var engine = AiDotNetEngine.Current;
         int n = x.Rows;
 
-        // Subject i anchors comparable pairs when it had the event (any nonzero indicator, as the scalar
-        // version's `events[i] == 0 → skip` did).
+        // Any nonzero event indicator anchors comparable pairs, preserving the scalar implementation.
         var hadEvent = engine.TensorGreaterThan(
-            engine.TensorAbs(engine.TensorSlice(events.AsTensor().Cast<T>(), new[] { 0 }, new[] { n })), NumOps.Zero);
-        var timesTensor = engine.TensorSlice(times.AsTensor(), new[] { 0 }, new[] { n });
-        var riskTensor = riskScores.AsTensor();
+            engine.TensorAbs(engine.TensorSlice(events.AsTensor().Cast<double>(), new[] { 0 }, new[] { n })), 0.0);
+        var timesTensor = engine.TensorSlice(times.AsTensor().Cast<double>(), new[] { 0 }, new[] { n });
+        var riskTensor = riskScores.AsTensor().Cast<double>();
 
         // Rows are processed in blocks so the pairwise tensors stay at [blockSize, n] (about 4M entries)
         // instead of [n, n].
         int blockSize = Math.Max(1, (1 << 22) / Math.Max(1, n));
-        var blocks = new List<(T Comparable, T Concordant)>();
+        var blocks = new List<(double Comparable, double Concordant)>();
         for (int start = 0; start < n; start += blockSize)
         {
             blocks.Add(ConcordanceBlock(hadEvent, timesTensor, riskTensor, start, Math.Min(blockSize, n - start)));
         }
 
-        T comparable = engine.Sum(new Vector<T>(blocks.Select(block => block.Comparable)));
-        T halfCredit = NumOps.FromDouble(0.5);
-        if (NumOps.Equals(comparable, NumOps.Zero))
-        {
-            return halfCredit;
-        }
-
-        return NumOps.Divide(engine.Sum(new Vector<T>(blocks.Select(block => block.Concordant))), comparable);
+        double comparable = engine.Sum(new Vector<double>(blocks.Select(block => block.Comparable)));
+        if (comparable == 0) return NumOps.FromDouble(0.5);
+        return NumOps.FromDouble(engine.Sum(new Vector<double>(blocks.Select(block => block.Concordant))) / comparable);
     }
 
     /// <summary>
@@ -527,8 +521,8 @@ public abstract partial class SurvivalModelBase<T> : ISurvivalModel<T>, IModelSh
     /// comparable when subject i had the event and t_i &lt; t_j; it scores 1 when r_i &gt; r_j and
     /// otherwise 1/2 when |r_i - r_j| &lt; 1e-10 (Harrell's C-index).
     /// </summary>
-    private (T Comparable, T Concordant) ConcordanceBlock(
-        Tensor<T> hadEvent, Tensor<T> times, Tensor<T> risk, int start, int length)
+    private static (double Comparable, double Concordant) ConcordanceBlock(
+        Tensor<double> hadEvent, Tensor<double> times, Tensor<double> risk, int start, int length)
     {
         var engine = AiDotNetEngine.Current;
         int n = times.Length;
@@ -547,10 +541,10 @@ public abstract partial class SurvivalModelBase<T> : ISurvivalModel<T>, IModelSh
         var riskDiff = engine.TensorSubtract(
             engine.TensorBroadcastTo(anchorRisk, block),
             engine.TensorBroadcastTo(risk.Reshape(otherRow), block));
-        var higher = engine.TensorGreaterThan(riskDiff, NumOps.Zero);
-        var tied = engine.TensorLessThan(engine.TensorAbs(riskDiff), NumOps.FromDouble(1e-10));
+        var higher = engine.TensorGreaterThan(riskDiff, 0.0);
+        var tied = engine.TensorLessThan(engine.TensorAbs(riskDiff), 1e-10);
         var credit = engine.TensorAdd(higher,
-            engine.TensorMultiplyScalar(engine.TensorSubtract(tied, engine.TensorMultiply(tied, higher)), NumOps.FromDouble(0.5)));
+            engine.TensorMultiplyScalar(engine.TensorSubtract(tied, engine.TensorMultiply(tied, higher)), 0.5));
 
         return (engine.TensorSum(comparablePairs), engine.TensorSum(engine.TensorMultiply(comparablePairs, credit)));
     }
@@ -816,24 +810,23 @@ public abstract partial class SurvivalModelBase<T> : ISurvivalModel<T>, IModelSh
     /// <param name="events">Event indicators (1 = event occurred, 0 = censored).</param>
     /// <param name="eventTimes">The sorted unique event times.</param>
     /// <returns>The at-risk counts and event counts, one per event time.</returns>
-    private protected (Tensor<T> AtRisk, Tensor<T> Events) CountAtRiskAndEvents(
+    private protected (Tensor<double> AtRisk, Tensor<double> Events) CountAtRiskAndEvents(
         Vector<T> times, Vector<int> events, Vector<T> eventTimes)
     {
         var engine = AiDotNetEngine.Current;
-        int n = times.Length;
-        var atRisk = AtRiskSums(times, Tensor<T>.CreateDefault(new[] { n }, NumOps.One), eventTimes);
-
-        // Events per exact time group, read at each event time; a query time that is not an observed
-        // time has no events.
         var (unique, group) = GroupTimes(times);
-        var eventIndicator = engine.TensorEquals(events.AsTensor().Cast<T>(), NumOps.One);
-        var groupedEvents = GroupedSumsWithZeroRow(eventIndicator, group, unique.Length, suffix: false);
         var position = engine.TensorSearchSorted(unique, eventTimes.AsTensor());
-        var paddedUnique = engine.TensorConcatenate(new[] { unique, Tensor<T>.CreateDefault(new[] { 1 }, NumOps.MaxValue) }, 0);
-        var matches = engine.TensorEquals(engine.TensorIndexSelect(paddedUnique, position, 0), eventTimes.AsTensor());
+        var suffixCounts = SurvivalModelBase<double>.GroupedSumsWithZeroRow(
+            Tensor<double>.CreateDefault(new[] { times.Length }, 1.0), group, unique.Length, suffix: true);
+        var atRisk = engine.TensorIndexSelect(suffixCounts, position, 0);
+        var eventIndicator = engine.TensorEquals(events.AsTensor().Cast<double>(), 1.0);
+        var groupedEvents = SurvivalModelBase<double>.GroupedSumsWithZeroRow(
+            eventIndicator, group, unique.Length, suffix: false);
+        var paddedUnique = engine.TensorConcatenate(new[] { unique,
+            Tensor<T>.CreateDefault(new[] { 1 }, NumOps.MaxValue) }, 0);
+        var matches = engine.TensorEquals(engine.TensorIndexSelect(paddedUnique, position, 0), eventTimes.AsTensor()).Cast<double>();
         var eventsAtTime = engine.TensorWhere(matches, engine.TensorIndexSelect(groupedEvents, position, 0),
-            new Tensor<T>(new[] { eventTimes.Length }));
-
+            new Tensor<double>(new[] { eventTimes.Length }));
         return (atRisk, eventsAtTime);
     }
 
