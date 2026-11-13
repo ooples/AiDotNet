@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using AiDotNet.Helpers;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.RetrievalAugmentedGeneration.VectorSearch.Metrics;
@@ -175,105 +176,65 @@ namespace AiDotNet.RetrievalAugmentedGeneration.VectorSearch
             if (!IsGpuAvailable())
                 return false;
 
-            var numOps = MathHelper.GetNumericOperations<T>();
-
-            // Pack docs into an [n, dim] row-major float matrix and accumulate squared norms.
-            int total = (int)totalLong;
-            var docData = new float[total];
-            var docNormSq = new double[n];
-            int idx = 0;
             for (int i = 0; i < n; i++)
             {
-                var v = docs[i];
-                if (v == null || v.Length != dim)
+                if (docs[i] == null || docs[i].Length != dim)
                     return false; // inconsistent dimensions -> CPU fallback
-
-                double ss = 0.0;
-                for (int j = 0; j < dim; j++)
-                {
-                    double d = numOps.ToDouble(v[j]);
-                    docData[idx++] = (float)d;
-                    ss += d * d;
-                }
-                docNormSq[i] = ss;
             }
 
-            // Pack the query as a [dim, 1] column and accumulate its squared norm.
-            var queryData = new float[dim];
-            double queryNormSq = 0.0;
-            for (int j = 0; j < dim; j++)
-            {
-                double d = numOps.ToDouble(query[j]);
-                queryData[j] = (float)d;
-                queryNormSq += d * d;
-            }
+            var engine = AiDotNetEngine.Current;
+            var matrix = engine.TensorStack(docs.Select(v => Tensor<T>.FromVector(v)).ToArray(), 0);
+            var queryRow = Tensor<T>.FromVector(query);
 
-            float[] dots;
-            try
+            Tensor<T> result;
+            switch (kind)
             {
-                var engine = AiDotNetEngine.Current as DirectGpuTensorEngine;
-                var backend = engine?.GetBackend();
-                if (backend == null)
+                case MetricKind.DotProduct:
+                    result = engine.TensorMatMul(matrix, engine.Reshape(queryRow, [dim, 1]));
+                    break;
+
+                case MetricKind.Cosine:
+                    // Unit rows (zero rows stay zero, giving similarity 0).
+                    result = engine.TensorMatMul(UnitRows(engine, matrix), engine.Reshape(UnitRows(engine, engine.Reshape(queryRow, [1, dim])), [dim, 1]));
+                    break;
+
+                case MetricKind.Euclidean:
+                    // ||q - d|| directly (no ||q||^2 + ||d||^2 - 2 q.d cancellation), scaled by the largest
+                    // magnitude before squaring.
+                    result = RowNorms(engine, engine.TensorSubtract(matrix, engine.TensorBroadcastTo(engine.Reshape(queryRow, [1, dim]), [n, dim])));
+                    break;
+
+                default:
                     return false;
-
-                // C[n,1] = A[n,dim] @ B[dim,1]  ->  dots[i] = dot(doc_i, query)
-                using var docsBuffer = backend.AllocateBuffer(docData);
-                using var queryBuffer = backend.AllocateBuffer(queryData);
-                using var outBuffer = backend.AllocateBuffer(n);
-                backend.Gemm(docsBuffer, queryBuffer, outBuffer, n, 1, dim);
-                dots = backend.DownloadBuffer(outBuffer);
-            }
-            catch
-            {
-                // Any GPU failure -> signal CPU fallback.
-                scores = Array.Empty<T>();
-                return false;
             }
 
-            if (dots == null || dots.Length < n)
-            {
-                scores = Array.Empty<T>();
-                return false;
-            }
-
-            var result = new T[n];
-            double queryNorm = Math.Sqrt(queryNormSq);
-            for (int i = 0; i < n; i++)
-            {
-                double dot = dots[i];
-                double score;
-                switch (kind)
-                {
-                    case MetricKind.DotProduct:
-                        score = dot;
-                        break;
-
-                    case MetricKind.Cosine:
-                        {
-                            double denom = queryNorm * Math.Sqrt(docNormSq[i]);
-                            score = denom > 0.0 ? dot / denom : 0.0;
-                        }
-                        break;
-
-                    case MetricKind.Euclidean:
-                        {
-                            // ||q - d||^2 = ||q||^2 + ||d||^2 - 2 q.d ; clamp tiny negatives from fp error.
-                            double sq = queryNormSq + docNormSq[i] - 2.0 * dot;
-                            if (sq < 0.0)
-                                sq = 0.0;
-                            score = Math.Sqrt(sq);
-                        }
-                        break;
-
-                    default:
-                        return false;
-                }
-
-                result[i] = numOps.FromDouble(score);
-            }
-
-            scores = result;
+            scores = result.ToArray();
             return true;
+        }
+
+        /// <summary>Euclidean norm of every row, computed on rows pre-divided by their largest magnitude.</summary>
+        private static Tensor<T> RowNorms<T>(IEngine engine, Tensor<T> matrix)
+        {
+            var scale = NonZero(engine, engine.ReduceMax(engine.TensorAbs(matrix), [1], true));
+            var scaled = engine.TensorDivide(matrix, engine.TensorBroadcastTo(scale, matrix._shape));
+            var norms = engine.TensorMultiply(
+                engine.TensorSqrt(engine.ReduceSum(engine.TensorSquare(scaled), [1], true)), scale);
+            return engine.Reshape(norms, [matrix._shape[0]]);
+        }
+
+        /// <summary>Each row divided by its Euclidean norm; zero rows stay zero.</summary>
+        private static Tensor<T> UnitRows<T>(IEngine engine, Tensor<T> matrix)
+        {
+            var norms = NonZero(engine, engine.Reshape(RowNorms(engine, matrix), [matrix._shape[0], 1]));
+            return engine.TensorDivide(matrix, engine.TensorBroadcastTo(norms, matrix._shape));
+        }
+
+        /// <summary>Replaces zero entries with one so dividing a zero row by them leaves it zero.</summary>
+        private static Tensor<T> NonZero<T>(IEngine engine, Tensor<T> values)
+        {
+            var numOps = MathHelper.GetNumericOperations<T>();
+            return engine.TensorWhere(
+                engine.TensorGreaterThan(values, numOps.Zero), values, Tensor<T>.CreateDefault(values._shape, numOps.One));
         }
     }
 }

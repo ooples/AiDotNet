@@ -183,6 +183,7 @@ public class ChromaDBDocumentStore<T> : DocumentStoreBase<T>
         var result = JObject.Parse(responseContent);
 
         var results = new List<Document<T>>();
+        var scores = new List<double>();
         var ids = result["ids"]?[0];
         var documents = result["documents"]?[0];
         var metadatas = result["metadatas"]?[0];
@@ -200,17 +201,15 @@ public class ChromaDBDocumentStore<T> : DocumentStoreBase<T>
             var doc = docToken.ToString();
             var metadataObj = metadatas?[i]?.ToObject<Dictionary<string, object>>() ?? new Dictionary<string, object>();
 
-            var distance = distances != null ? Convert.ToDouble(distances[i]) : 0.0;
+            var distance = distances?[i] is JToken distanceToken && distanceToken.Type != JTokenType.Null
+                ? Convert.ToDouble(distanceToken, System.Globalization.CultureInfo.InvariantCulture)
+                : 0.0;
 
-            var document = new Document<T>(id, doc, metadataObj)
-            {
-                RelevanceScore = NumOps.FromDouble(1.0 / (1.0 + distance)),
-                HasRelevanceScore = true
-            };
-
-            results.Add(document);
+            results.Add(new Document<T>(id, doc, metadataObj));
+            scores.Add(1.0 / (1.0 + distance));
         }
 
+        AssignApiScores(results, scores);
         return results;
     }
 

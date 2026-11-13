@@ -154,13 +154,10 @@ namespace AiDotNet.RetrievalAugmentedGeneration.EmbeddingModels
             var embedding = ApplyMeanPooling(lastHiddenState, attentionMask);
 
             // 6. Convert to generic type T and normalize
-            var values = new T[_dimension];
-            for (int i = 0; i < Math.Min(_dimension, embedding.Length); i++)
-            {
-                values[i] = NumOps.FromDouble(embedding[i]);
-            }
-
-            return new Vector<T>(values).Normalize();
+            // The ONNX runtime returns float; convert in one pass (zero-padding a shorter output to _dimension).
+            var values = new float[_dimension];
+            Array.Copy(embedding, values, Math.Min(_dimension, embedding.Length));
+            return new Tensor<float>(values, [values.Length]).Cast<T>().ToVector().Normalize();
         }
 
         /// <summary>

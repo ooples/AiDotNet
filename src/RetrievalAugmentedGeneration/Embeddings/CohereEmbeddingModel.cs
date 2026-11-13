@@ -116,17 +116,7 @@ public class CohereEmbeddingModel<T> : EmbeddingModelBase<T>
             throw new InvalidOperationException("Cohere API returned an empty or mismatched response.");
         }
 
-        var matrix = new Matrix<T>(texts.Count, _dimension);
-        for (int i = 0; i < result.Embeddings.Count; i++)
-        {
-            var embedding = result.Embeddings[i];
-            for (int j = 0; j < embedding.Length; j++)
-            {
-                matrix[i, j] = NumOps.FromDouble(embedding[j]);
-            }
-        }
-
-        return matrix;
+        return FromApiRows(result.Embeddings, texts.Count, _dimension, "Cohere");
     }
 
     /// <summary>
@@ -162,14 +152,7 @@ public class CohereEmbeddingModel<T> : EmbeddingModelBase<T>
             throw new InvalidOperationException("Cohere API returned an empty or invalid response.");
         }
 
-        var embedding = result.Embeddings[0];
-        var values = new T[embedding.Length];
-        for (int i = 0; i < embedding.Length; i++)
-        {
-            values[i] = NumOps.FromDouble(embedding[i]);
-        }
-
-        return new Vector<T>(values);
+        return FromApiValues(result.Embeddings[0]);
     }
 
     private class CohereEmbeddingResponse

@@ -1,5 +1,6 @@
 
 using AiDotNet.Interfaces;
+using AiDotNet.Tensors.Engines;
 using AiDotNet.LinearAlgebra;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.Embeddings;
@@ -28,6 +29,9 @@ public abstract class EmbeddingModelBase<T> : IEmbeddingModel<T>, IDisposable
     /// Gets the numeric operations for type T.
     /// </summary>
     protected readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
+
+    /// <summary>The engine used for vectorized embedding arithmetic.</summary>
+    private protected static IEngine Engine => AiDotNetEngine.Current;
 
     /// <summary>
     /// Gets the dimensionality of the embedding vectors produced by this model.
@@ -191,6 +195,32 @@ public abstract class EmbeddingModelBase<T> : IEmbeddingModel<T>, IDisposable
     }
 
     /// <summary>
+    /// Converts embedding values received from a provider API (JSON doubles) to <typeparamref name="T"/> in one pass.
+    /// </summary>
+    private protected static Vector<T> FromApiValues(double[] values)
+        => values.Length == 0 ? new Vector<T>(0) : new Tensor<double>(values, [values.Length]).Cast<T>().ToVector();
+
+    /// <summary>
+    /// Builds the batch matrix from a provider API's embeddings, one row per input text, after checking that the
+    /// provider returned exactly one embedding of the configured dimension per text.
+    /// </summary>
+    private protected static Matrix<T> FromApiRows(IReadOnlyList<double[]> rows, int expectedRows, int dimension, string provider)
+    {
+        if (rows.Count != expectedRows)
+            throw new InvalidOperationException(
+                $"{provider} returned {rows.Count} embeddings for {expectedRows} input texts.");
+
+        for (int i = 0; i < rows.Count; i++)
+        {
+            if (rows[i].Length != dimension)
+                throw new InvalidOperationException(
+                    $"{provider} returned an embedding of dimension {rows[i].Length} at index {i}; expected {dimension}.");
+        }
+
+        return Matrix<T>.FromRowVectors(rows.Select(FromApiValues));
+    }
+
+    /// <summary>
     /// Creates a matrix from a collection of vectors.
     /// </summary>
     /// <param name="vectors">The vectors to combine into a matrix.</param>
@@ -200,7 +230,6 @@ public abstract class EmbeddingModelBase<T> : IEmbeddingModel<T>, IDisposable
         if (vectors == null || vectors.Count == 0)
             throw new ArgumentException("Vector collection cannot be null or empty");
 
-        var rows = vectors.Count;
         var cols = vectors[0].Length;
 
         // Validate all vectors have same dimension
@@ -210,16 +239,7 @@ public abstract class EmbeddingModelBase<T> : IEmbeddingModel<T>, IDisposable
                 throw new ArgumentException($"All vectors must have the same dimension. Expected {cols}, got {vectors[i].Length} at index {i}");
         }
 
-        var data = new T[rows, cols];
-        for (int i = 0; i < rows; i++)
-        {
-            for (int j = 0; j < cols; j++)
-            {
-                data[i, j] = vectors[i][j];
-            }
-        }
-
-        return new Matrix<T>(data);
+        return Matrix<T>.FromRowVectors(vectors);
     }
 
     /// <summary>

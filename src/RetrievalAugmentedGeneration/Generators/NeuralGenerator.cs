@@ -284,9 +284,7 @@ public class NeuralGenerator<T> : IGenerator<T>
         // 4. Combine all metrics: confidence = α*retrieval_score + β*generation_score + γ*entailment_score
         //
         // Current implementation: Simple average of document relevance scores as proxy for answer quality
-        var avgScore = contextList
-            .Where(d => d.HasRelevanceScore)
-            .Select(d => Convert.ToDouble(d.RelevanceScore))
+        var avgScore = RagScoreConversion<T>.ToDouble(contextList.Where(d => d.HasRelevanceScore).Select(d => d.RelevanceScore))
             .DefaultIfEmpty(0.6)
             .Average();
 
@@ -432,12 +430,7 @@ public class NeuralGenerator<T> : IGenerator<T>
 
         // Get the last time step's output
         var lastStepStart = outputVector.Length - outputDim;
-        var logits = new T[Math.Min(outputDim, _vocabularySize)];
-
-        for (int i = 0; i < logits.Length; i++)
-        {
-            logits[i] = outputVector[lastStepStart + i];
-        }
+        var logits = outputVector.GetSubVector(lastStepStart, Math.Min(outputDim, _vocabularySize)).ToArray();
 
         // Apply temperature and convert to probabilities
         var probabilities = ApplyTemperatureAndSoftmax(logits, _temperature);
@@ -447,34 +440,11 @@ public class NeuralGenerator<T> : IGenerator<T>
     }
 
     private double[] ApplyTemperatureAndSoftmax(T[] logits, double temperature)
-    {
-        // Apply temperature scaling: logits / temperature
-        var scaledLogits = new double[logits.Length];
-        var maxLogit = double.NegativeInfinity;
-
-        for (int i = 0; i < logits.Length; i++)
         {
-            scaledLogits[i] = Convert.ToDouble(logits[i]) / temperature;
-            if (scaledLogits[i] > maxLogit)
-                maxLogit = scaledLogits[i];
-        }
-
-        // Subtract max for numerical stability
-        var expSum = 0.0;
-        for (int i = 0; i < scaledLogits.Length; i++)
-        {
-            scaledLogits[i] = Math.Exp(scaledLogits[i] - maxLogit);
-            expSum += scaledLogits[i];
-        }
-
-        // Normalize to probabilities
-        var probabilities = new double[scaledLogits.Length];
-        for (int i = 0; i < scaledLogits.Length; i++)
-        {
-            probabilities[i] = scaledLogits[i] / expSum;
-        }
-
-        return probabilities;
+        // softmax(logits / temperature); the sampler draws from it in double.
+        var engine = AiDotNetEngine.Current;
+        var scaled = engine.TensorDivideScalar(new Tensor<T>(logits, [logits.Length]), NumOps.FromDouble(temperature));
+        return engine.TensorSoftmax(scaled, 0).Cast<double>().ToArray();
     }
 
     private int SampleFromDistribution(double[] probabilities, Random random)

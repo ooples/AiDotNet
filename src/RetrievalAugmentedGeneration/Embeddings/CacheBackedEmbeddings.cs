@@ -245,49 +245,29 @@ public sealed class CacheBackedEmbeddings<T> : IEmbeddingModel<T>
     /// Extracts a single row of a matrix as a vector.
     /// </summary>
     private static Vector<T> GetRow(Matrix<T> matrix, int row)
-    {
-        var cols = matrix.Columns;
-        var values = new T[cols];
-        for (int j = 0; j < cols; j++)
         {
-            values[j] = matrix[row, j];
-        }
-
-        return new Vector<T>(values);
+        return new Vector<T>(matrix.GetRowReadOnlySpan(row).ToArray());
     }
 
     /// <summary>
     /// Combines the ordered result vectors into a matrix, one row per input text.
     /// </summary>
     private Matrix<T> BuildMatrix(Vector<T>[] results)
-    {
-        var rows = results.Length;
-        var cols = EmbeddingDimension;
-        var matrix = new Matrix<T>(rows, cols);
-
-        for (int i = 0; i < rows; i++)
         {
-            var vector = results[i];
-            for (int j = 0; j < cols; j++)
-            {
-                matrix[i, j] = vector[j];
-            }
-        }
+        var cols = EmbeddingDimension;
+        var mismatch = Array.FindIndex(results, vector => vector.Length != cols);
+        if (mismatch >= 0)
+            throw new InvalidOperationException(
+                $"Embedding at index {mismatch} has dimension {results[mismatch].Length}; expected {cols}.");
 
-        return matrix;
+        return results.Length == 0 ? new Matrix<T>(0, cols) : Matrix<T>.FromRowVectors(results);
     }
 
     /// <summary>
     /// Creates a defensive copy of a vector so that cached data cannot be mutated by callers or the inner model.
     /// </summary>
     private static Vector<T> Clone(Vector<T> vector)
-    {
-        var values = new T[vector.Length];
-        for (int i = 0; i < vector.Length; i++)
         {
-            values[i] = vector[i];
-        }
-
-        return new Vector<T>(values);
+        return new Vector<T>(vector.ToArray());
     }
 }

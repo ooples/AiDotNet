@@ -654,10 +654,8 @@ public class FileDocumentStore<T> : DocumentStoreBase<T>, IDisposable
 
         foreach (var kvp in allDocuments)
         {
-            var embedding = kvp.Value.Embedding;
-            for (int i = 0; i < embedding.Length; i++)
+            foreach (double val in VectorToDoubleArray(kvp.Value.Embedding))
             {
-                double val = NumOps.ToDouble(embedding[i]);
                 writer.Write(val);
             }
         }
@@ -684,13 +682,12 @@ public class FileDocumentStore<T> : DocumentStoreBase<T>, IDisposable
 
         for (int doc = 0; doc < documentCount; doc++)
         {
-            var vector = new Vector<T>(vectorDimension);
+            var values = new double[vectorDimension];
             for (int i = 0; i < vectorDimension; i++)
             {
-                double val = reader.ReadDouble();
-                vector[i] = NumOps.FromDouble(val);
+                values[i] = reader.ReadDouble();
             }
-            vectors.Add(vector);
+            vectors.Add(DoubleArrayToVector(values));
         }
 
         return vectors;
@@ -933,26 +930,21 @@ public class FileDocumentStore<T> : DocumentStoreBase<T>, IDisposable
     /// Converts a Vector&lt;T&gt; to a double array for WAL serialization.
     /// </summary>
     private double[] VectorToDoubleArray(Vector<T> vector)
-    {
-        var result = new double[vector.Length];
-        for (int i = 0; i < vector.Length; i++)
         {
-            result[i] = NumOps.ToDouble(vector[i]);
-        }
-        return result;
+        // The on-disk format stores doubles; convert in one pass.
+        if (vector.Length == 0)
+            return Array.Empty<double>();
+        return Tensor<T>.FromVector(vector).Cast<double>().ToArray();
     }
 
     /// <summary>
     /// Converts a double array back to a Vector&lt;T&gt;.
     /// </summary>
     private Vector<T> DoubleArrayToVector(double[] data)
-    {
-        var vector = new Vector<T>(data.Length);
-        for (int i = 0; i < data.Length; i++)
         {
-            vector[i] = NumOps.FromDouble(data[i]);
-        }
-        return vector;
+        if (data.Length == 0)
+            return new Vector<T>(0);
+        return new Tensor<double>(data, [data.Length]).Cast<T>().ToVector();
     }
 
     /// <summary>

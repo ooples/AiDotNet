@@ -36,6 +36,25 @@ public abstract class DocumentStoreBase<T> : IDocumentStore<T>
     protected static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 
     /// <summary>
+    /// Sets the relevance scores a remote store returned (JSON doubles) on its hits, converting them to
+    /// <typeparamref name="T"/> in one pass.
+    /// </summary>
+    private protected static void AssignApiScores(IList<Document<T>> documents, IList<double> scores)
+    {
+        if (documents.Count != scores.Count)
+            throw new InvalidOperationException("Each search hit needs exactly one score.");
+        if (documents.Count == 0)
+            return;
+
+        var converted = new Tensor<double>(scores.ToArray(), [scores.Count]).Cast<T>().ToArray();
+        for (int i = 0; i < converted.Length; i++)
+        {
+            documents[i].RelevanceScore = converted[i];
+            documents[i].HasRelevanceScore = true;
+        }
+    }
+
+    /// <summary>
     /// Gets the number of documents currently stored in the document store.
     /// </summary>
     public abstract int DocumentCount { get; }

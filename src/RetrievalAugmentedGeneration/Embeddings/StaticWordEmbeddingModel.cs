@@ -83,7 +83,6 @@ public partial class StaticWordEmbeddingModel<T> : EmbeddingModelBase<T>
 
         var wordVectors = new Dictionary<string, Vector<T>>();
         int dimension = 0;
-        var numOps = MathHelper.GetNumericOperations<T>();
 
         using (var reader = new StreamReader(filePath))
         {
@@ -111,15 +110,11 @@ public partial class StaticWordEmbeddingModel<T> : EmbeddingModelBase<T>
                     continue;
                 }
 
-                var values = new T[dimension];
+                var parsed = new double[dimension];
                 bool validLine = true;
                 for (int i = 0; i < dimension; i++)
                 {
-                    if (double.TryParse(parts[i + 1], NumberStyles.Float, CultureInfo.InvariantCulture, out double val))
-                    {
-                        values[i] = numOps.FromDouble(val);
-                    }
-                    else
+                    if (!double.TryParse(parts[i + 1], NumberStyles.Float, CultureInfo.InvariantCulture, out parsed[i]))
                     {
                         validLine = false;
                         break;
@@ -128,7 +123,8 @@ public partial class StaticWordEmbeddingModel<T> : EmbeddingModelBase<T>
 
                 if (validLine)
                 {
-                    wordVectors[word] = new Vector<T>(values);
+                    // The text format stores decimal numbers; convert the row in one pass.
+                    wordVectors[word] = new Vector<T>(RagScoreConversion<T>.FromDouble(parsed));
                     count++;
                 }
             }
