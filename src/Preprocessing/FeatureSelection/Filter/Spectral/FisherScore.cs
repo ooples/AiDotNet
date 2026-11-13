@@ -25,6 +25,9 @@ namespace AiDotNet.Preprocessing.FeatureSelection.Filter.Spectral;
 [PipelineStage(PipelineStage.Preprocessing)]
 public class FisherScore<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFeatureSelector<T>, IFixedCountFeatureSelector<T>
 {
+    // A scatter at or below this is treated as zero (no within-class scatter, or no separation at all).
+    private const double ScatterTolerance = 1e-10;
+
     private readonly int _nFeaturesToSelect;
 
     private Vector<T>? _fisherScores;
@@ -73,7 +76,7 @@ public class FisherScore<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervi
         // within-class scatter, class means that differ separate the classes exactly (+infinity), equal ones score 0
         var (betweenClassVar, withinClassVar) = FilterStatisticTensorOps.AnovaSums(
             FilterStatisticTensorOps.AsTensor(data), classOneHot);
-        var scores = FilterStatisticTensorOps.SeparationAwareRatio(betweenClassVar, withinClassVar, 1e-10);
+        var scores = FilterStatisticTensorOps.SeparationAwareRatio(betweenClassVar, withinClassVar, ScatterTolerance);
         _fisherScores = scores.ToVector();
 
         _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(scores, Math.Min(_nFeaturesToSelect, p));

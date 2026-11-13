@@ -80,8 +80,6 @@ public class Relief<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFe
             ? RandomHelper.CreateSeededRandom(_randomState.Value)
             : RandomHelper.CreateSecureRandom();
 
-        var engine = Engine;
-
         // Features scaled to [0, 1] by their range; a constant feature never differs between instances
         var scaled = FeatureSelectionTensorOps.RangeScaled(FilterStatisticTensorOps.AsTensor(data));
         var classOneHot = StatisticalTestHelper.ClassOneHot(target, out _);
@@ -89,27 +87,9 @@ public class Relief<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFe
         // Sample m instances (without replacement), in the same random order as before
         var sampleIndices = Enumerable.Range(0, n).OrderBy(_ => random.Next()).Take(m).ToArray();
 
-        // Euclidean distance from every sampled instance to every instance; the instance itself is no neighbour
-        var sampledRows = FeatureSelectionTensorOps.Rows(scaled, sampleIndices);
-        var distance = engine.TensorCDist(sampledRows, scaled, 2.0);
-        var self = FeatureSelectionTensorOps.SelfMask<T>(sampleIndices, n);
-        var sameClass = engine.TensorMatMul(
-            FeatureSelectionTensorOps.Rows(classOneHot, sampleIndices), engine.TensorTranspose(classOneHot));
-        T infinity = NumOps.FromDouble(double.PositiveInfinity);
-
-        // nearest hit (same class) and nearest miss (other class), first index on ties
-        var (nearestHit, hasHit) = FeatureSelectionTensorOps.FirstArgMinRows(FeatureSelectionTensorOps.KeepOrFill(
-            distance, engine.TensorMultiply(sameClass, PreprocessingTensorOps.OneMinus(self)), infinity));
-        var (nearestMiss, hasMiss) = FeatureSelectionTensorOps.FirstArgMinRows(FeatureSelectionTensorOps.KeepOrFill(
-            distance, PreprocessingTensorOps.OneMinus(sameClass), infinity));
-
-        // W += (diff(miss) - diff(hit)) / m for the instances that have both
-        var diffHit = engine.TensorAbs(engine.TensorSubtract(sampledRows, FeatureSelectionTensorOps.Rows(scaled, nearestHit)));
-        var diffMiss = engine.TensorAbs(engine.TensorSubtract(sampledRows, FeatureSelectionTensorOps.Rows(scaled, nearestMiss)));
-        var both = engine.Reshape(engine.TensorMultiply(hasHit, hasMiss), new[] { 1, sampleIndices.Length });
-        var weights = engine.TensorDivideScalar(
-            engine.Reshape(engine.TensorMatMul(both, engine.TensorSubtract(diffMiss, diffHit)), new[] { p }),
-            NumOps.FromDouble(m));
+        // W += (diff(nearest miss) - diff(nearest hit)) / m under the Euclidean distance, for the instances that have
+        // both; the instance itself is no neighbour
+        var weights = FeatureSelectionTensorOps.ReliefWeights(scaled, classOneHot, sampleIndices, 2.0, m);
         _featureWeights = weights.ToVector();
 
         _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(weights, Math.Min(_nFeaturesToSelect, p));

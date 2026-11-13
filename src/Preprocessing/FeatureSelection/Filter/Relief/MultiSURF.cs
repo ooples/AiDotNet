@@ -71,31 +71,39 @@ public class MultiSURF<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervise
         // Features scaled to [0, 1] by their range; a constant feature never differs between instances
         var scaled = FeatureSelectionTensorOps.RangeScaled(FilterStatisticTensorOps.AsTensor(data));
         var classOneHot = StatisticalTestHelper.ClassOneHot(target, out _);
+        T otherCount = NumOps.FromDouble(Math.Max(n - 1, 1));
 
-        // All pairwise distances; an instance is not its own neighbour
-        var distances = engine.TensorCDist(scaled, scaled, 2.0);
-        var others = PreprocessingTensorOps.OneMinus(engine.TensorEye<T>(n));
-        T otherCount = NumOps.FromDouble(n - 1);
+        // One block of instances at a time (see RowBlocks); an instance is not its own neighbour
+        var weights = new Tensor<T>(new[] { p });
+        foreach (var block in FeatureSelectionTensorOps.RowBlocks(Enumerable.Range(0, n).ToArray(), n))
+        {
+            var rows = FeatureSelectionTensorOps.Rows(scaled, block);
+            var distances = engine.TensorCDist(rows, scaled, 2.0);
+            var others = PreprocessingTensorOps.OneMinus(FeatureSelectionTensorOps.SelfMask<T>(block, n));
 
-        // Per-instance threshold: mean - 0.5 * std of its distances to the others (closer than average)
-        var meanDist = engine.TensorDivideScalar(
-            engine.ReduceSum(engine.TensorMultiply(distances, others), new[] { 1 }, false), otherCount);
-        var deviation = engine.TensorMultiply(
-            engine.TensorSubtract(distances, FilterStatisticTensorOps.ColumnBroadcast(meanDist, n)), others);
-        var stdDist = engine.TensorSqrt(engine.TensorDivideScalar(
-            engine.ReduceSum(engine.TensorSquare(deviation), new[] { 1 }, false), otherCount));
-        var threshold = engine.TensorSubtract(meanDist, engine.TensorMultiplyScalar(stdDist, NumOps.FromDouble(0.5)));
+            // Per-instance threshold: mean - 0.5 * std of its distances to the others (closer than average); every
+            // term is divided by n - 1 before the row sum, which overflows Half for a few thousand instances
+            var meanDist = engine.ReduceSum(
+                engine.TensorDivideScalar(engine.TensorMultiply(distances, others), otherCount), new[] { 1 }, false);
+            var deviation = engine.TensorMultiply(
+                engine.TensorSubtract(distances, FilterStatisticTensorOps.ColumnBroadcast(meanDist, n)), others);
+            var stdDist = engine.TensorSqrt(engine.ReduceSum(
+                engine.TensorDivideScalar(engine.TensorSquare(deviation), otherCount), new[] { 1 }, false));
+            var threshold = engine.TensorSubtract(meanDist, engine.TensorMultiplyScalar(stdDist, NumOps.FromDouble(0.5)));
 
-        // Near neighbours (within the threshold), split into hits (same class) and misses
-        var near = engine.TensorMultiply(PreprocessingTensorOps.OneMinus(engine.TensorGreaterThan(
-            distances, FilterStatisticTensorOps.ColumnBroadcast(threshold, n))), others);
-        var sameClass = engine.TensorMatMul(classOneHot, engine.TensorTranspose(classOneHot));
-        var hits = engine.TensorMultiply(near, sameClass);
-        var misses = engine.TensorMultiply(near, PreprocessingTensorOps.OneMinus(sameClass));
+            // Near neighbours (within the threshold), split into hits (same class) and misses
+            var near = engine.TensorMultiply(PreprocessingTensorOps.OneMinus(engine.TensorGreaterThan(
+                distances, FilterStatisticTensorOps.ColumnBroadcast(threshold, n))), others);
+            var sameClass = engine.TensorMatMul(
+                FeatureSelectionTensorOps.Rows(classOneHot, block), engine.TensorTranspose(classOneHot));
+            var hits = engine.TensorMultiply(near, sameClass);
+            var misses = engine.TensorMultiply(near, PreprocessingTensorOps.OneMinus(sameClass));
 
-        // W -= diff(hit) / (n * #hits), W += diff(miss) / (n * #misses)
-        var weights = FeatureSelectionTensorOps.PairWeightedDifference(
-            scaled, FeatureSelectionTensorOps.NearNeighbourPairWeight(hits, misses));
+            // W -= diff(hit) / (n * #hits), W += diff(miss) / (n * #misses)
+            weights = engine.TensorAdd(weights, FeatureSelectionTensorOps.PairWeightedDifference(
+                rows, scaled, FeatureSelectionTensorOps.NearNeighbourPairWeight(hits, misses, n)));
+        }
+
         _featureWeights = weights.ToVector();
 
         _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(weights, Math.Min(_nFeaturesToSelect, p));

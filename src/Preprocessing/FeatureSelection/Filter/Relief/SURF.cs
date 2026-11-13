@@ -1,4 +1,5 @@
 using AiDotNet.Helpers;
+using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Enums;
 using AiDotNet.Attributes;
@@ -79,35 +80,52 @@ public class SURF<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFeat
         var scaled = FeatureSelectionTensorOps.RangeScaled(FilterStatisticTensorOps.AsTensor(data));
         var classIndex = FilterStatisticTensorOps.ClassIndex(target, out int classCount);
         var classOneHot = FilterStatisticTensorOps.ClassOneHot<T>(classIndex, classCount);
-        var distances = engine.TensorCDist(scaled, scaled, 2.0);
 
         // Threshold: the mean pairwise distance among the first (up to) 100 instances, times the threshold factor
-        int sampleSize = Math.Min(100, n);
-        int pairCount = sampleSize * (sampleSize - 1) / 2;
-        var head = FeatureSelectionTensorOps.Rows(scaled, Enumerable.Range(0, sampleSize).ToArray());
-        T avgDist = pairCount > 0
-            ? NumOps.Divide(
-                NumOps.Multiply(engine.TensorSum(engine.TensorCDist(head, head, 2.0)), NumOps.FromDouble(0.5)),
-                NumOps.FromDouble(pairCount))
-            : NumOps.One;
-        T threshold = NumOps.Multiply(avgDist, NumOps.FromDouble(_distanceThreshold));
+        var head = FeatureSelectionTensorOps.Rows(scaled, Enumerable.Range(0, Math.Min(100, n)).ToArray());
+        T threshold = NumOps.Multiply(MeanPairDistance(head), NumOps.FromDouble(_distanceThreshold));
 
-        // Neighbours within the threshold, split into hits (same class) and misses; an instance is not its own
-        var others = PreprocessingTensorOps.OneMinus(engine.TensorEye<T>(n));
-        var near = engine.TensorMultiply(PreprocessingTensorOps.OneMinus(engine.TensorGreaterThan(distances, threshold)), others);
-        var sameClass = engine.TensorMatMul(classOneHot, engine.TensorTranspose(classOneHot));
-        var hits = engine.TensorMultiply(near, sameClass);
-        var misses = engine.TensorMultiply(near, PreprocessingTensorOps.OneMinus(sameClass));
+        // Neighbours within the threshold, split into hits (same class) and misses; an instance is not its own.
+        // W -= diff(hit) / (n * #hits), W += diff(miss) / (n * #misses), one block of instances at a time.
+        var weights = new Tensor<T>(new[] { p });
+        foreach (var block in FeatureSelectionTensorOps.RowBlocks(Enumerable.Range(0, n).ToArray(), n))
+        {
+            var rows = FeatureSelectionTensorOps.Rows(scaled, block);
+            var others = PreprocessingTensorOps.OneMinus(FeatureSelectionTensorOps.SelfMask<T>(block, n));
+            var near = engine.TensorMultiply(PreprocessingTensorOps.OneMinus(
+                engine.TensorGreaterThan(engine.TensorCDist(rows, scaled, 2.0), threshold)), others);
+            var sameClass = engine.TensorMatMul(
+                FeatureSelectionTensorOps.Rows(classOneHot, block), engine.TensorTranspose(classOneHot));
+            var hits = engine.TensorMultiply(near, sameClass);
+            var misses = engine.TensorMultiply(near, PreprocessingTensorOps.OneMinus(sameClass));
+            weights = engine.TensorAdd(weights, FeatureSelectionTensorOps.PairWeightedDifference(
+                rows, scaled, FeatureSelectionTensorOps.NearNeighbourPairWeight(hits, misses, n)));
+        }
 
-        // W -= diff(hit) / (n * #hits), W += diff(miss) / (n * #misses)
-        var weights = FeatureSelectionTensorOps.PairWeightedDifference(
-            scaled, FeatureSelectionTensorOps.NearNeighbourPairWeight(hits, misses));
         _featureWeights = weights.ToVector();
 
         // Select top features
         _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(weights, Math.Min(_nFeaturesToSelect, p));
 
         IsFitted = true;
+    }
+
+    /// <summary>
+    /// The mean Euclidean distance between the distinct pairs of the rows of <paramref name="rows"/> ([s, p]), or 1
+    /// for fewer than two rows. Each row's distance sum is divided by <c>s (s - 1)</c> before the rows are added: the
+    /// sum of all s (s - 1) distances overflows Half once the mean distance passes about 6.6 (some 264 range-scaled
+    /// features at s = 100), which made the threshold infinite and every pair a neighbour.
+    /// </summary>
+    internal static T MeanPairDistance(Tensor<T> rows)
+    {
+        var engine = AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<T>();
+        int s = rows.Shape[0];
+        if (s < 2)
+            return ops.One;
+
+        return engine.TensorSum(engine.TensorDivideScalar(
+            engine.ReduceSum(engine.TensorCDist(rows, rows, 2.0), new[] { 1 }, false), ops.FromDouble((double)s * (s - 1))));
     }
 
     /// <inheritdoc />

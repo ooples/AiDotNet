@@ -72,19 +72,29 @@ public class KendallTau<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervis
         // pair counts and sign sums run in double, as master did: they pass 2048 (n > 45) in Half, and the 1e-10
         // tie tolerance is 0 in Half, which made no pair tied
         var x = FilterStatisticTensorOps.AsTensor(data).Cast<double>();
+        var y = FilterStatisticTensorOps.AsTensor(target).Cast<double>();
         const double tolerance = 1e-10;
-        var (yTied, ySign) = PairSigns(FilterStatisticTensorOps.AsTensor(target).Cast<double>(), tolerance);
+
+        // the n x n pair grid runs one block of rows at a time and is reduced at once, so only a block x n slice is
+        // ever held (four full [n, n] grids of double were 3.2 GB at 10000 rows)
         var signSums = new double[p];
         var tieSums = new double[p];
-        for (int j = 0; j < p; j++)
+        double yTiedSum = 0;
+        foreach (var block in FeatureSelectionTensorOps.RowBlocks(Enumerable.Range(0, n).ToArray(), n))
         {
-            var (xTied, xSign) = PairSigns(PreprocessingTensorOps.ColumnVector(x, j), tolerance);
-            signSums[j] = Engine.TensorSum(Engine.TensorMultiply(xSign, ySign));
-            tieSums[j] = Engine.TensorSum(xTied);
+            int start = block[0];
+            var (yTied, ySign) = PairSigns(y, start, block.Length, tolerance);
+            yTiedSum += Engine.TensorSum(yTied);
+            for (int j = 0; j < p; j++)
+            {
+                var (xTied, xSign) = PairSigns(PreprocessingTensorOps.ColumnVector(x, j), start, block.Length, tolerance);
+                signSums[j] += Engine.TensorSum(Engine.TensorMultiply(xSign, ySign));
+                tieSums[j] += Engine.TensorSum(xTied);
+            }
         }
 
         double pairs = (double)n * (n - 1) / 2;
-        double yTies = (Engine.TensorSum(yTied) - n) * 0.5;
+        double yTies = (yTiedSum - n) * 0.5;
         var xTies = Engine.TensorMultiplyScalar(Engine.TensorSubtractScalar(new Tensor<double>(tieSums, new[] { p }), (double)n), 0.5);
         var numerator = Engine.TensorMultiplyScalar(new Tensor<double>(signSums, new[] { p }), 0.5);
         var untiedX = Engine.TensorNegate(Engine.TensorSubtractScalar(xTies, pairs));
@@ -96,12 +106,14 @@ public class KendallTau<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervis
         IsFitted = true;
     }
 
-    // For every pair (i, k) of a 1-D tensor: 1 where |v[k] - v[i]| < tolerance, and the sign of v[k] - v[i] (0 when tied).
-    private (Tensor<double> Tied, Tensor<double> Sign) PairSigns(Tensor<double> values, double tolerance)
+    // For the rows i in [start, start + count) and every k of a 1-D tensor: 1 where |v[k] - v[i]| < tolerance, and
+    // the sign of v[k] - v[i] (0 when tied); [count, n].
+    private (Tensor<double> Tied, Tensor<double> Sign) PairSigns(Tensor<double> values, int start, int count, double tolerance)
     {
         int n = values.Length;
         var difference = Engine.TensorSubtract(
-            FilterStatisticTensorOps.RowBroadcast(values, n), FilterStatisticTensorOps.ColumnBroadcast(values, n));
+            FilterStatisticTensorOps.RowBroadcast(values, count),
+            FilterStatisticTensorOps.ColumnBroadcast(Engine.TensorNarrow(values, 0, start, count), n));
         var tied = Engine.TensorLessThan(Engine.TensorAbs(difference), tolerance);
         return (tied, Engine.TensorMultiply(Engine.TensorSign(difference), PreprocessingTensorOps.OneMinus(tied)));
     }

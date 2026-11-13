@@ -77,8 +77,9 @@ public class MutualInfoRegression<T> : TransformerBase<T, Matrix<T>, Matrix<T>>,
         int p = data.Columns;
 
         // Kraskov et al. (2004) estimator on unit-variance features and target, as
-        // sklearn.feature_selection.mutual_info_regression (without its tie-breaking noise)
-        var scores = StatisticalTestHelper.MutualInfoRegression(data, target, _nNeighbors);
+        // sklearn.feature_selection.mutual_info_regression; the random state seeds its tie-breaking noise (none
+        // without one, which keeps the estimate deterministic)
+        var scores = StatisticalTestHelper.MutualInfoRegression(data, target, _nNeighbors, _randomState);
         _miScores = scores;
         _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(
             FilterStatisticTensorOps.AsTensor(scores), Math.Min(_nFeaturesToSelect, p));
