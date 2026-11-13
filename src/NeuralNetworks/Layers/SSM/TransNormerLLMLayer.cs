@@ -257,16 +257,15 @@ public partial class TransNormerLLMLayer<T> : LayerBase<T>, IShapeContract
         // Initialize gammas with multi-scale decay rates centered around the specified decay rate
         // Heads get slightly different rates for multi-scale context capture
         // gamma_h = clamp(decayRate + (h - (H - 1) / 2) / max(1, H - 1) * 0.02, 0.9, 0.9999), evaluated in
-        // double and rounded to T once so each decay is the nearest T to the formula.
+        // double and rounded to T once so each decay is the nearest T to the formula. Plain double arithmetic,
+        // not an engine op: a GPU engine may evaluate a double tensor in float.
         const double spread = 0.02;
-        var offsets = Engine.TensorMultiplyScalar(
-            Engine.TensorDivideScalar(
-                Engine.TensorAddScalar(Engine.TensorArange<double>(0, _numHeads, 1), -(_numHeads - 1.0) / 2.0),
-                (double)Math.Max(1, _numHeads - 1)),
-            spread);
-        Engine.TensorCopy(
-            Engine.TensorClamp(Engine.TensorAddScalar(offsets, _decayRate), 0.9, 0.9999).Cast<T>(),
-            _gammas);
+        double center = (_numHeads - 1.0) / 2.0;
+        double denominator = Math.Max(1, _numHeads - 1);
+        var gammas = Enumerable.Range(0, _numHeads)
+            .Select(h => Math.Min(0.9999, Math.Max(0.9, _decayRate + (h - center) / denominator * spread)))
+            .ToArray();
+        Engine.TensorCopy(new Tensor<double>(gammas, new[] { _numHeads }).Cast<T>(), _gammas);
 
         InitializeTensor2D(_outputGateWeights);
         _outputGateBias.Fill(NumOps.Zero);

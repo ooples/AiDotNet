@@ -177,6 +177,27 @@ public class Elementwise02RegressionTests
             ReadField<Tensor<float>>(s5Narrow, "_aImag").ToArray());
     }
 
+    // In double the S4D-Lin frequencies are exactly n * Math.PI, formed by plain double arithmetic rather than an
+    // engine op a GPU engine could evaluate in float.
+    [Fact]
+    public void S4d_DoubleFrequencies_AreExactMultiplesOfPi()
+    {
+        var layer = new S4DLayer<double>(4, 4, 16);
+        var aImag = ReadField<Tensor<double>>(layer, "_aImag").ToArray();
+        var expected = Enumerable.Range(1, 16).Select(n => n * Math.PI).ToArray();
+        Assert.Equal(expected, aImag.Take(16).ToArray());
+    }
+
+    // The Born-rule division ran before the zero-row selection; decimal division by zero throws, so an all-zero
+    // row must divide by a safe divisor and still come out as zeros.
+    [Fact]
+    public void Measurement_DecimalZeroRow_ReturnsZeros()
+    {
+        var layer = new MeasurementLayer<decimal>(4);
+        var output = layer.Forward(new Tensor<decimal>(new[] { 2, 4 }));
+        Assert.All(output.ToArray(), p => Assert.Equal(0m, p));
+    }
+
     // gamma_h = clamp(decay + (h - (H-1)/2) / (H-1) * 0.02, 0.9, 0.9999); in float the three roundings put
     // head 0 of a 4-head, 0.97 layer at 0.96000004 instead of 0.96.
     [Fact]
