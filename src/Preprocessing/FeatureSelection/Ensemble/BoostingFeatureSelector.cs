@@ -138,7 +138,7 @@ public class BoostingFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T
             }
         }
 
-        var boostingScores = FeatureSelectionTensorOps.ScatterAdd(bestFeatures, bestIncrements, p);
+        var boostingScores = FeatureScoringTensorOps.ScatterAdd(bestFeatures, bestIncrements, p);
         _boostingScores = boostingScores.ToVector();
 
         int numToSelect = Math.Min(_nFeaturesToSelect, p);

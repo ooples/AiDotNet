@@ -76,7 +76,7 @@ public class KDEBasedSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISu
         // Feature values per class
         var classValues = new Tensor<T>[k];
         for (int c = 0; c < k; c++)
-            classValues[c] = FeatureSelectionTensorOps.Rows(X, FeatureSelectionTensorOps.GroupMembers(classIndex, c));
+            classValues[c] = FeatureScoringTensorOps.Rows(X, FeatureScoringTensorOps.GroupMembers(classIndex, c));
 
         // For each feature, compute the Hellinger distance between class densities, averaged over class pairs
         var totalSeparation = new Tensor<T>(new[] { p });
@@ -116,7 +116,7 @@ public class KDEBasedSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISu
         int nPoints = 100;
         var span = engine.TensorSubtract(maxVal, minVal);
         var step = engine.TensorDivideScalar(span, NumOps.FromDouble(nPoints - 1));
-        var grid = FeatureSelectionTensorOps.EvenGrid(minVal, span, nPoints);
+        var grid = FeatureScoringTensorOps.EvenGrid(minVal, span, nPoints);
 
         var density1 = ComputeKDE(grid, values1, h);
         var density2 = ComputeKDE(grid, values2, h);
@@ -130,7 +130,7 @@ public class KDEBasedSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISu
     {
         var engine = Engine;
         var sums = engine.TensorDivideScalar(
-            FeatureSelectionTensorOps.GaussianKernelSums(grid, values, h), NumOps.FromDouble(Math.Sqrt(2 * Math.PI)));
+            FeatureScoringTensorOps.GaussianKernelSums(grid, values, h), NumOps.FromDouble(Math.Sqrt(2 * Math.PI)));
         T denominator = NumOps.Add(NumOps.Multiply(NumOps.FromDouble(values.Shape[0]), h), PreprocessingTensorOps.Tolerance<T>(1e-10));
         return engine.TensorDivideScalar(sums, denominator);
     }

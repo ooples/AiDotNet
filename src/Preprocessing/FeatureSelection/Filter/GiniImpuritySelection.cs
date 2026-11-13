@@ -79,7 +79,7 @@ public class GiniImpuritySelection<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         // Parent Gini over the rounded class labels
         PreprocessingTensorOps.ClassLabels(target, out var classes, out var classIndex);
         int k = classes.Length;
-        T parentGini = FeatureSelectionTensorOps.GiniImpurity(PreprocessingTensorOps.ClassOneHot<T>(classIndex, k));
+        T parentGini = FeatureScoringTensorOps.GiniImpurity(PreprocessingTensorOps.ClassOneHot<T>(classIndex, k));
         // Class and split counts are formed in double: a Half sum of 0/1 memberships stops counting at 2048
         var classOneHotCounts = PreprocessingTensorOps.ClassOneHot<double>(classIndex, k);
         var classTotals = engine.TensorBroadcastTo(
@@ -108,7 +108,7 @@ public class GiniImpuritySelection<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
                 engine.Reshape(leftCounts, new[] { p, 1, k }),
                 engine.Reshape(engine.TensorSubtract(classTotals, leftCounts), new[] { p, 1, k })
             }, 1);
-            var weightedGini = FeatureSelectionTensorOps.WeightedBinGini(sides, n).Cast<T>();
+            var weightedGini = FeatureScoringTensorOps.WeightedBinGini(sides, n).Cast<T>();
             var nLeft = engine.ReduceSum(leftMask, new[] { 0 }, false);
             var bothSides = engine.TensorMultiply(engine.TensorGreaterThan(nLeft, 0.0),
                 engine.TensorLessThan(nLeft, (double)n)).Cast<T>();

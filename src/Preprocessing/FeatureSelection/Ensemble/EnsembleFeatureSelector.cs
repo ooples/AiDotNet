@@ -172,9 +172,9 @@ public class EnsembleFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T
         var x = Tensor<T>.FromMatrix(data);
         var y = Tensor<T>.FromVector(target);
         var r = PreprocessingTensorOps.TargetCorrelations(x, y);
-        var sxx = FeatureSelectionTensorOps.ColumnSumSquaredDeviations(x);
+        var sxx = FeatureScoringTensorOps.ColumnSumSquaredDeviations(x);
         var zeros = new Tensor<T>(new[] { p });
-        if (!PreprocessingTensorOps.IsAbove(FeatureSelectionTensorOps.SumSquaredDeviations(y), floor))
+        if (!PreprocessingTensorOps.IsAbove(FeatureScoringTensorOps.SumSquaredDeviations(y), floor))
             return zeros;
 
         var mi = engine.TensorMultiplyScalar(engine.TensorLog(engine.TensorAddScalar(

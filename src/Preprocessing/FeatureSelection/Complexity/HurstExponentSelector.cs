@@ -134,7 +134,7 @@ public class HurstExponentSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         var valid = engine.TensorStack(validValues.ToArray(), 0);
         var logRS = engine.TensorWhere(valid, engine.TensorLog(engine.TensorStack(rsValues.ToArray(), 0)), new Tensor<T>(new[] { count, p }));
         var logLag = engine.TensorLog(new Tensor<int>(lagSizes.ToArray(), new[] { count }).Cast<T>());
-        var slope = FeatureSelectionTensorOps.MaskedSlope(logLag, logRS, valid, 1e-10, out var fitted);
+        var slope = FeatureScoringTensorOps.MaskedSlope(logLag, logRS, valid, 1e-10, out var fitted);
 
         // Clamp to valid range [0, 1]; too few lags or a flat log(lag) gives 0.5 (random walk)
         return engine.TensorWhere(fitted, engine.TensorClamp(slope, NumOps.Zero, NumOps.One), randomWalk);

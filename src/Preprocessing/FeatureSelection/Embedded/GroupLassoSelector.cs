@@ -106,8 +106,8 @@ public class GroupLassoSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, I
         var engine = Engine;
 
         // Standardize data (population std; a near-zero std is replaced by 1) and center the target
-        var X = FeatureSelectionTensorOps.Standardize(Tensor<T>.FromMatrix(data), out _);
-        var residuals = FeatureSelectionTensorOps.Center(Tensor<T>.FromVector(target));
+        var X = FeatureScoringTensorOps.Standardize(Tensor<T>.FromMatrix(data), out _);
+        var residuals = FeatureScoringTensorOps.Center(Tensor<T>.FromVector(target));
 
         // Per-group column blocks, single columns and penalty thresholds alpha * sqrt(|group|)
         T one = NumOps.One;

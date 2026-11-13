@@ -72,7 +72,7 @@ public class KendallTau<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervis
         int p = data.Columns;
 
         // Absolute Kendall's tau (tau-b or tau-a) of every feature with the target
-        var tauScores = Engine.TensorAbs(FeatureSelectionTensorOps.KendallTau(
+        var tauScores = Engine.TensorAbs(FeatureScoringTensorOps.KendallTau(
             Tensor<T>.FromMatrix(data), Tensor<T>.FromVector(target), _useTauB));
         _tauScores = tauScores.ToVector();
 

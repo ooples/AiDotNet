@@ -101,7 +101,7 @@ public class GenomicFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>
         int class0Count = n - class1Count;
 
         // Step 1: Compute variances and filter by percentile
-        var variances = engine.TensorDivideScalar(FeatureSelectionTensorOps.ColumnSumSquaredDeviations(X), NumOps.FromDouble(n));
+        var variances = engine.TensorDivideScalar(FeatureScoringTensorOps.ColumnSumSquaredDeviations(X), NumOps.FromDouble(n));
         _variances = variances.ToVector();
 
         int varianceIndex = (int)(p * _variancePercentile);
@@ -184,7 +184,7 @@ public class GenomicFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>
         // Summed in double by GroupMeans: a Half class sum stalls past 2048 times the values' spacing and
         // overflows at 65504
         var engine = Engine;
-        return engine.Reshape(FeatureSelectionTensorOps.GroupMeans(engine.Reshape(rowMask, new[] { n, 1 }), X, out _), new[] { p });
+        return engine.Reshape(FeatureScoringTensorOps.GroupMeans(engine.Reshape(rowMask, new[] { n, 1 }), X, out _), new[] { p });
     }
 
     private Tensor<T> ClassSampleVariances(Tensor<T> X, Tensor<T> rowMask, Tensor<T> mean, int count, int n, int p)
@@ -198,7 +198,7 @@ public class GenomicFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>
             engine.TensorSubtract(X, engine.TensorBroadcastTo(engine.Reshape(mean, new[] { 1, p }), shape)),
             new Tensor<T>(shape));
         var meanSquares = engine.Reshape(
-            FeatureSelectionTensorOps.GroupMeans(membership, engine.TensorSquare(deviations), out _), new[] { p });
+            FeatureScoringTensorOps.GroupMeans(membership, engine.TensorSquare(deviations), out _), new[] { p });
         return engine.TensorMultiplyScalar(meanSquares, NumOps.FromDouble(count / (count - 1.0)));
     }
 

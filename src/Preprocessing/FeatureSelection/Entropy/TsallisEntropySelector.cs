@@ -66,8 +66,8 @@ public class TsallisEntropySelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>
         var floor = PreprocessingTensorOps.Tolerance<T>(1e-10);
 
         // Discretize: bin = min(bins - 1, trunc((v - min) / range * bins)), 0 when the column is constant
-        var counts = FeatureSelectionTensorOps.BinCounts(
-            FeatureSelectionTensorOps.RangeBinOneHot(Tensor<T>.FromMatrix(data), _nBins, _nBins), _nBins);
+        var counts = FeatureScoringTensorOps.BinCounts(
+            FeatureScoringTensorOps.RangeBinOneHot(Tensor<T>.FromMatrix(data), _nBins, _nBins), _nBins);
         var probabilities = engine.TensorDivideScalar(counts, NumOps.FromDouble(n));
         var shape = new[] { p, _nBins };
         var present = engine.TensorGreaterThan(probabilities, floor);

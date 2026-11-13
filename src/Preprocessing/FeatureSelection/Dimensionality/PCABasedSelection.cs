@@ -75,12 +75,12 @@ public class PCABasedSelection<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IF
 
         // Power iteration for top eigenvalues/eigenvectors
         int nComp = Math.Min(_nComponents, p);
-        var loadings = FeatureSelectionTensorOps.PowerIterationComponents(cov, nComp, 100, false, out var eigenvalues);
+        var loadings = FeatureScoringTensorOps.PowerIterationComponents(cov, nComp, 100, false, out var eigenvalues);
 
         // Compute feature importance as weighted sum of squared loadings
         var weights = engine.TensorDivideScalar(eigenvalues,
             NumOps.Add(engine.TensorSum(eigenvalues), PreprocessingTensorOps.Tolerance<T>(1e-10)));
-        var importances = FeatureSelectionTensorOps.WeightedSquaredLoadings(loadings, weights);
+        var importances = FeatureScoringTensorOps.WeightedSquaredLoadings(loadings, weights);
         _featureImportances = importances.ToVector();
 
         int numToSelect = Math.Min(_nFeaturesToSelect, p);

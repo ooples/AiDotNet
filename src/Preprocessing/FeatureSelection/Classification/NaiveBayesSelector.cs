@@ -79,10 +79,10 @@ public class NaiveBayesSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, I
             // Per-class means of the values and of the squared deviations through GroupMeans, which counts and sums
             // in double: in Half a 0/1 count stops at 2048 and a class sum stalls once it passes 2048 times the
             // values' spacing
-            var means = FeatureSelectionTensorOps.GroupMeans(Y, X, out _);
+            var means = FeatureScoringTensorOps.GroupMeans(Y, X, out _);
             var centered = engine.TensorSubtract(X, engine.TensorMatMul(Y, means));
             var variances = engine.TensorMax(
-                FeatureSelectionTensorOps.GroupMeans(Y, engine.TensorSquare(centered), out _),
+                FeatureScoringTensorOps.GroupMeans(Y, engine.TensorSquare(centered), out _),
                 PreprocessingTensorOps.Tolerance<T>(1e-10));
 
             // Every ordered class pair (c1, c2) as [k, k, p]; the symmetric KL is symmetric in the pair and

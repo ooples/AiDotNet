@@ -74,7 +74,7 @@ public class DistanceCorrelation<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, 
 
         // Distance correlation dCor = sqrt(dCov^2 / sqrt(dVar^2(x) dVar^2(y))) (Szekely, Rizzo and Bakirov 2007),
         // 0 when the denominator is not above 1e-10
-        var dcov2 = FeatureSelectionTensorOps.SquaredDistanceCovariances(
+        var dcov2 = FeatureScoringTensorOps.SquaredDistanceCovariances(
             Tensor<T>.FromMatrix(data), Tensor<T>.FromVector(target), out var xVariances, out T yVariance);
         var zeros = new Tensor<T>(new[] { p });
         // sqrt(a) sqrt(b) rather than sqrt(a b): the product of the two variances overflows Half's 65504 maximum

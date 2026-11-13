@@ -72,19 +72,19 @@ public class ConditionalEntropySelector<T> : TransformerBase<T, Matrix<T>, Matri
         T count = NumOps.FromDouble(n);
 
         // Discretize target and features: bin = min(bins - 1, trunc((v - min) / range * bins)), 0 when constant
-        var yBins = FeatureSelectionTensorOps.RangeBinOneHot(
+        var yBins = FeatureScoringTensorOps.RangeBinOneHot(
             engine.Reshape(Tensor<T>.FromVector(target), new[] { n, 1 }), _nBins, _nBins);
-        var xBins = FeatureSelectionTensorOps.RangeBinOneHot(Tensor<T>.FromMatrix(data), _nBins, _nBins);
+        var xBins = FeatureScoringTensorOps.RangeBinOneHot(Tensor<T>.FromMatrix(data), _nBins, _nBins);
 
         // Compute H(Y)
-        T hY = engine.TensorSum(FeatureSelectionTensorOps.EntropyBits(
-            FeatureSelectionTensorOps.BinCounts(yBins, _nBins), n));
+        T hY = engine.TensorSum(FeatureScoringTensorOps.EntropyBits(
+            FeatureScoringTensorOps.BinCounts(yBins, _nBins), n));
 
         // Compute H(Y|X) = -sum p(x, y) log2 p(y | x) over the non-empty joint cells
-        var joint = FeatureSelectionTensorOps.JointBinCounts(xBins, yBins, _nBins);
+        var joint = FeatureScoringTensorOps.JointBinCounts(xBins, yBins, _nBins);
         var cellShape = new[] { p, _nBins, _nBins };
         var xCounts = engine.TensorBroadcastTo(engine.Reshape(
-            FeatureSelectionTensorOps.BinCounts(xBins, _nBins), new[] { p, _nBins, 1 }), cellShape);
+            FeatureScoringTensorOps.BinCounts(xBins, _nBins), new[] { p, _nBins, 1 }), cellShape);
         var occupied = engine.TensorGreaterThan(joint, NumOps.Zero);
         var safeXCounts = engine.TensorWhere(occupied, xCounts, PreprocessingTensorOps.Filled(cellShape, NumOps.One));
         var conditional = engine.TensorDivide(joint, safeXCounts);

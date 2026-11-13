@@ -64,7 +64,7 @@ public class CompressionRatioSelector<T> : TransformerBase<T, Matrix<T>, Matrix<
         // a (near-)constant column scores 0
         var oneHot = PreprocessingTensorOps.EqualWidthBinOneHot(X, _nBins, out var varying);
         var scores = Engine.TensorMultiply(
-            FeatureSelectionTensorOps.EntropyBits(FeatureSelectionTensorOps.BinCounts(oneHot, _nBins), n), varying);
+            FeatureScoringTensorOps.EntropyBits(FeatureScoringTensorOps.BinCounts(oneHot, _nBins), n), varying);
         _entropyScores = scores.ToVector();
 
         int numToSelect = Math.Min(_nFeaturesToSelect, p);

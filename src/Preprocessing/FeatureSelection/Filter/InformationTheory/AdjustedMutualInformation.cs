@@ -81,13 +81,13 @@ public class AdjustedMutualInformation<T> : TransformerBase<T, Matrix<T>, Matrix
         // Counted in int: a Half sum of the 0/1 one-hot stops at 2048
         var classCounts = engine.ReduceSum(classOneHot.Cast<int>(), new[] { 0 }, false).Cast<T>();
         var featureBins = PreprocessingTensorOps.RangeScaledBinOneHot(Tensor<T>.FromMatrix(data), _nBins);
-        var joint = FeatureSelectionTensorOps.JointBinCounts(featureBins, classOneHot, _nBins);
+        var joint = FeatureScoringTensorOps.JointBinCounts(featureBins, classOneHot, _nBins);
 
         // MI = H(Y) - H(Y|X), expected MI under permutation, and AMI = (MI - EMI) / (max(H(X), H(Y)) - EMI)
-        T hY = FeatureSelectionTensorOps.ClassEntropyNats(classOneHot);
-        var hX = FeatureSelectionTensorOps.BinEntropyNats(joint, n, out var conditionalEntropy);
+        T hY = FeatureScoringTensorOps.ClassEntropyNats(classOneHot);
+        var hX = FeatureScoringTensorOps.BinEntropyNats(joint, n, out var conditionalEntropy);
         var mi = engine.TensorNegate(engine.TensorAddScalar(conditionalEntropy, NumOps.Negate(hY)));
-        var emi = FeatureSelectionTensorOps.ExpectedMutualInformation(
+        var emi = FeatureScoringTensorOps.ExpectedMutualInformation(
             engine.Reshape(engine.ReduceSum(joint, new[] { 2 }, false), new[] { p, _nBins }), classCounts, n);
         var denominator = engine.TensorSubtract(engine.TensorMax(hX, hY), emi);
         var usable = engine.TensorGreaterThan(engine.TensorAbs(denominator), PreprocessingTensorOps.Tolerance<T>(1e-10));

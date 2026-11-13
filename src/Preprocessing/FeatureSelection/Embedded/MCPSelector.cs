@@ -86,13 +86,13 @@ public class MCPSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervi
         var engine = Engine;
 
         // Standardize data (population std; a near-zero std is replaced by 1) and center the target
-        var X = FeatureSelectionTensorOps.Standardize(Tensor<T>.FromMatrix(data), out _);
-        var y = FeatureSelectionTensorOps.Center(Tensor<T>.FromVector(target));
+        var X = FeatureScoringTensorOps.Standardize(Tensor<T>.FromMatrix(data), out _);
+        var y = FeatureScoringTensorOps.Center(Tensor<T>.FromVector(target));
 
         // Coordinate descent with MCP penalty on the partial residual correlation x_j . r_j / n
         T count = NumOps.FromDouble(n);
-        var coefficients = FeatureSelectionTensorOps.CoordinateDescent(X, y, _maxIterations, _tolerance,
-            (partial, j) => FeatureSelectionTensorOps.McpThreshold(engine.TensorDivideScalar(partial, count), _lambda, _gamma), out _);
+        var coefficients = FeatureScoringTensorOps.CoordinateDescent(X, y, _maxIterations, _tolerance,
+            (partial, j) => FeatureScoringTensorOps.McpThreshold(engine.TensorDivideScalar(partial, count), _lambda, _gamma), out _);
         _coefficients = coefficients.ToVector();
 
         // Select top features by absolute coefficient, dropping (near-)zero ones unless none is left

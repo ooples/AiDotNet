@@ -71,16 +71,16 @@ public class JointEntropySelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>,
         var engine = Engine;
 
         // Discretize target and features: bin = min(bins - 1, trunc((v - min) / range * bins)), 0 when constant
-        var yBins = FeatureSelectionTensorOps.RangeBinOneHot(
+        var yBins = FeatureScoringTensorOps.RangeBinOneHot(
             engine.Reshape(Tensor<T>.FromVector(target), new[] { n, 1 }), _nBins, _nBins);
-        var xBins = FeatureSelectionTensorOps.RangeBinOneHot(Tensor<T>.FromMatrix(data), _nBins, _nBins);
+        var xBins = FeatureScoringTensorOps.RangeBinOneHot(Tensor<T>.FromMatrix(data), _nBins, _nBins);
 
         // Compute H(Y), H(X) and the joint entropy H(X,Y) (bits)
-        T hY = engine.TensorSum(FeatureSelectionTensorOps.EntropyBits(
-            FeatureSelectionTensorOps.BinCounts(yBins, _nBins), n));
-        var hX = FeatureSelectionTensorOps.EntropyBits(FeatureSelectionTensorOps.BinCounts(xBins, _nBins), n);
-        var hXY = FeatureSelectionTensorOps.EntropyBits(engine.Reshape(
-            FeatureSelectionTensorOps.JointBinCounts(xBins, yBins, _nBins), new[] { p, _nBins * _nBins }), n);
+        T hY = engine.TensorSum(FeatureScoringTensorOps.EntropyBits(
+            FeatureScoringTensorOps.BinCounts(yBins, _nBins), n));
+        var hX = FeatureScoringTensorOps.EntropyBits(FeatureScoringTensorOps.BinCounts(xBins, _nBins), n);
+        var hXY = FeatureScoringTensorOps.EntropyBits(engine.Reshape(
+            FeatureScoringTensorOps.JointBinCounts(xBins, yBins, _nBins), new[] { p, _nBins * _nBins }), n);
 
         // Mutual information I(X;Y) = H(X) + H(Y) - H(X,Y), normalized by the mean entropy (0 when not above 1e-10)
         var entropySum = engine.TensorAddScalar(hX, hY);

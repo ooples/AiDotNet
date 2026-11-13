@@ -86,11 +86,11 @@ public class PointBiserial<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISuper
         // r_pb = |mean1 - mean0| / std_n * sqrt(n0 n1 / n^2) (0 for a feature whose std is below 1e-10)
         // Class means through GroupMeans, which sums in double: a Half class sum stops growing once it passes 2048
         // times the values' spacing and overflows at 65504
-        var classMeans = FeatureSelectionTensorOps.GroupMeans(
+        var classMeans = FeatureScoringTensorOps.GroupMeans(
             PreprocessingTensorOps.ClassOneHot<T>(class1.Cast<int>().AsSpan().ToArray(), 2), X, out _);
         var mean0 = engine.Reshape(PreprocessingTensorOps.Row(classMeans, 0), new[] { p });
         var mean1 = engine.Reshape(PreprocessingTensorOps.Row(classMeans, 1), new[] { p });
-        var stdTotal = FeatureSelectionTensorOps.ColumnStd(X);
+        var stdTotal = FeatureScoringTensorOps.ColumnStd(X);
         var usable = PreprocessingTensorOps.AtLeast(stdTotal, PreprocessingTensorOps.Tolerance<T>(1e-10));
         var safeStd = engine.TensorWhere(usable, stdTotal, PreprocessingTensorOps.Filled(new[] { p }, NumOps.One));
         T sqrtPq = NumOps.Sqrt(NumOps.FromDouble((double)n0 * n1 / ((double)n * n)));

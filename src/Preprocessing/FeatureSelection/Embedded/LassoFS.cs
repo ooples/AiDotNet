@@ -84,14 +84,14 @@ public class LassoFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedF
         var engine = Engine;
 
         // Standardize features (population std; a near-zero std is replaced by 1) and center the target
-        var xStandardized = FeatureSelectionTensorOps.Standardize(Tensor<T>.FromMatrix(data), out var xStds);
-        var yCentered = FeatureSelectionTensorOps.Center(Tensor<T>.FromVector(target));
+        var xStandardized = FeatureScoringTensorOps.Standardize(Tensor<T>.FromMatrix(data), out var xStds);
+        var yCentered = FeatureScoringTensorOps.Center(Tensor<T>.FromVector(target));
 
         // Coordinate descent for LASSO: rho = x_j . r / n, soft-thresholded at alpha
         T count = NumOps.FromDouble(n);
         T alpha = NumOps.FromDouble(_alpha);
-        var coefficients = FeatureSelectionTensorOps.CoordinateDescent(xStandardized, yCentered, _maxIterations, _tolerance,
-            (rho, j) => FeatureSelectionTensorOps.SoftThreshold(engine.TensorDivideScalar(rho, count), alpha), out _);
+        var coefficients = FeatureScoringTensorOps.CoordinateDescent(xStandardized, yCentered, _maxIterations, _tolerance,
+            (rho, j) => FeatureScoringTensorOps.SoftThreshold(engine.TensorDivideScalar(rho, count), alpha), out _);
 
         // Rescale coefficients
         coefficients = engine.TensorDivide(coefficients, xStds);

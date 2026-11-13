@@ -338,8 +338,8 @@ public class FeatureSelectionSweepReferenceTests
         var x = HalfTensor(new[] { 100, 1 }, i => i);
         var y = HalfTensor(new[] { 100 }, i => i);
 
-        Assert.Equal(1.0, (double)AiDotNet.Preprocessing.FeatureSelection.FeatureSelectionTensorOps.KendallTau(x, y, tauB: false).GetFlat(0), Tolerance);
-        Assert.Equal(1.0, (double)AiDotNet.Preprocessing.FeatureSelection.FeatureSelectionTensorOps.KendallTau(x, y, tauB: true).GetFlat(0), Tolerance);
+        Assert.Equal(1.0, (double)AiDotNet.Preprocessing.FeatureSelection.FeatureScoringTensorOps.KendallTau(x, y, tauB: false).GetFlat(0), Tolerance);
+        Assert.Equal(1.0, (double)AiDotNet.Preprocessing.FeatureSelection.FeatureScoringTensorOps.KendallTau(x, y, tauB: true).GetFlat(0), Tolerance);
     }
 
     [Fact(Timeout = 120000)]
@@ -352,20 +352,20 @@ public class FeatureSelectionSweepReferenceTests
         var classes = ImbalancedClasses();
         var oneHot = AiDotNet.Preprocessing.PreprocessingTensorOps.ClassOneHot<Half>(classes, 2);
 
-        Assert.Equal(0.277778, (double)AiDotNet.Preprocessing.FeatureSelection.FeatureSelectionTensorOps.GiniImpurity(oneHot), 1e-3);
-        Assert.Equal(0.450561, (double)AiDotNet.Preprocessing.FeatureSelection.FeatureSelectionTensorOps.ClassEntropyNats(oneHot), 1e-3);
+        Assert.Equal(0.277778, (double)AiDotNet.Preprocessing.FeatureSelection.FeatureScoringTensorOps.GiniImpurity(oneHot), 1e-3);
+        Assert.Equal(0.450561, (double)AiDotNet.Preprocessing.FeatureSelection.FeatureScoringTensorOps.ClassEntropyNats(oneHot), 1e-3);
 
-        var counts = AiDotNet.Preprocessing.FeatureSelection.FeatureSelectionTensorOps.BinCounts(oneHot, 2);
+        var counts = AiDotNet.Preprocessing.FeatureSelection.FeatureScoringTensorOps.BinCounts(oneHot, 2);
         Assert.Equal(500.0, (double)counts.GetFlat(0), Tolerance);
         Assert.Equal(2500.0, (double)counts.GetFlat(1), Tolerance);
 
-        var chiSquared = AiDotNet.Preprocessing.FeatureSelection.FeatureSelectionTensorOps.ContingencyChiSquared(oneHot, oneHot, 2, out var occupied);
+        var chiSquared = AiDotNet.Preprocessing.FeatureSelection.FeatureScoringTensorOps.ContingencyChiSquared(oneHot, oneHot, 2, out var occupied);
         Assert.Equal(3000.0, (double)chiSquared.GetFlat(0), 2.0);
         Assert.Equal(2.0, (double)occupied.GetFlat(0), Tolerance);
 
         // The split between the classes leaves two pure children, so the reduction is the parent Gini
         var feature = HalfTensor(new[] { 3000, 1 }, i => classes[i]);
-        Assert.Equal(0.277778, (double)AiDotNet.Preprocessing.FeatureSelection.FeatureSelectionTensorOps.BestGiniSplitReduction(feature, classes, 2).GetFlat(0), 1e-3);
+        Assert.Equal(0.277778, (double)AiDotNet.Preprocessing.FeatureSelection.FeatureScoringTensorOps.BestGiniSplitReduction(feature, classes, 2).GetFlat(0), 1e-3);
     }
 
     [Fact(Timeout = 120000)]
@@ -376,7 +376,7 @@ public class FeatureSelectionSweepReferenceTests
         await Task.CompletedTask;
         var rows = HalfTensor(new[] { 300, 1 }, i => i);
 
-        Assert.Equal(301.0 / 3.0, (double)AiDotNet.Preprocessing.FeatureSelection.FeatureSelectionTensorOps.MeanPairwiseDifference(rows, squared: false).GetFlat(0), 0.1);
+        Assert.Equal(301.0 / 3.0, (double)AiDotNet.Preprocessing.FeatureSelection.FeatureScoringTensorOps.MeanPairwiseDifference(rows, squared: false).GetFlat(0), 0.1);
     }
 
     [Fact(Timeout = 120000)]
@@ -438,7 +438,7 @@ public class FeatureSelectionSweepReferenceTests
         float d = (float)Math.Pow(2, -11);
         var x = new Tensor<float>(new[] { 4096f - d, 4096f + d }, new[] { 2, 1 });
 
-        var std = AiDotNet.Preprocessing.FeatureSelection.FeatureSelectionTensorOps.ColumnStd(x);
+        var std = AiDotNet.Preprocessing.FeatureSelection.FeatureScoringTensorOps.ColumnStd(x);
 
         Assert.Equal(Math.Pow(2, -11), std.GetFlat(0), Tolerance);
     }
@@ -554,7 +554,7 @@ public class FeatureSelectionSweepReferenceTests
         var pair = HalfTensor(new[] { 400, 2 }, i => (i % 2 + 1) * (i / 2));
 
         Assert.Equal(1.0, (double)AiDotNet.Preprocessing.PreprocessingTensorOps.CorrelationsWithDenominatorGuard(x, y).GetFlat(0), 2e-3);
-        Assert.Equal(1.0, (double)AiDotNet.Preprocessing.FeatureSelection.FeatureSelectionTensorOps.CorrelationMatrix(pair).GetFlat(1), 2e-3);
+        Assert.Equal(1.0, (double)AiDotNet.Preprocessing.FeatureSelection.FeatureScoringTensorOps.CorrelationMatrix(pair).GetFlat(1), 2e-3);
     }
 
     [Fact(Timeout = 120000)]
@@ -565,8 +565,8 @@ public class FeatureSelectionSweepReferenceTests
         await Task.CompletedTask;
         var x = HalfTensor(new[] { 3000, 1 }, i => 2 * (i % 2));
 
-        Assert.Equal(3000.0, (double)AiDotNet.Preprocessing.FeatureSelection.FeatureSelectionTensorOps.ColumnSumSquaredDeviations(x).GetFlat(0), 2.0);
-        Assert.Equal(1.0, (double)AiDotNet.Preprocessing.FeatureSelection.FeatureSelectionTensorOps.ColumnStd(x).GetFlat(0), 1e-3);
+        Assert.Equal(3000.0, (double)AiDotNet.Preprocessing.FeatureSelection.FeatureScoringTensorOps.ColumnSumSquaredDeviations(x).GetFlat(0), 2.0);
+        Assert.Equal(1.0, (double)AiDotNet.Preprocessing.FeatureSelection.FeatureScoringTensorOps.ColumnStd(x).GetFlat(0), 1e-3);
     }
 
     [Fact(Timeout = 120000)]

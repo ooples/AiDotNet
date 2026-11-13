@@ -84,7 +84,7 @@ public class MutualInfoClassification<T> : TransformerBase<T, Matrix<T>, Matrix<
 
         // Joint, feature and class probabilities
         var cellShape = new[] { p, _nBins, nClasses };
-        var joint = FeatureSelectionTensorOps.JointBinCounts(featureBins, classOneHot, _nBins);
+        var joint = FeatureScoringTensorOps.JointBinCounts(featureBins, classOneHot, _nBins);
         var pJoint = engine.TensorDivideScalar(joint, count);
         var pFeature = engine.TensorBroadcastTo(engine.TensorDivideScalar(engine.ReduceSum(joint, new[] { 2 }, true), count), cellShape);
         var pClass = engine.TensorBroadcastTo(engine.Reshape(engine.TensorDivideScalar(

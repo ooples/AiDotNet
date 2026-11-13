@@ -68,7 +68,7 @@ public class KendallCorrelation<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, I
         int p = data.Columns;
 
         // Kendall's tau-b of every feature with the target
-        var tauScores = FeatureSelectionTensorOps.KendallTau(
+        var tauScores = FeatureScoringTensorOps.KendallTau(
             Tensor<T>.FromMatrix(data), Tensor<T>.FromVector(target), tauB: true);
         _tauScores = tauScores.ToVector();
 

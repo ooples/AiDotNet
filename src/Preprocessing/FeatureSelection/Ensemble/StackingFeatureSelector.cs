@@ -71,7 +71,7 @@ public class StackingFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T
 
         // Base scorers: correlation, variance, mutual information approximation
         var correlationScores = engine.TensorAbs(PreprocessingTensorOps.TargetCorrelations(X, y));
-        var varianceScores = engine.TensorDivideScalar(FeatureSelectionTensorOps.ColumnSumSquaredDeviations(X),
+        var varianceScores = engine.TensorDivideScalar(FeatureScoringTensorOps.ColumnSumSquaredDeviations(X),
             NumOps.FromDouble(n - 1));
         var miScores = ComputeMIScores(X, y, n, p);
 
@@ -124,7 +124,7 @@ public class StackingFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T
         var top = new Tensor<int>(topFeatures, new[] { topFeatures.Length });
         var topScores = engine.TensorIndexSelect(scores, top, 0);
 
-        T ssTot = FeatureSelectionTensorOps.SumSquaredDeviations(y);
+        T ssTot = FeatureScoringTensorOps.SumSquaredDeviations(y);
 
         // Simple weighted average prediction (unnormalized when the weights sum to at most 1e-10)
         var pred = engine.Reshape(engine.TensorMatMul(engine.TensorIndexSelect(X, top, 1),

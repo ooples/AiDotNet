@@ -82,14 +82,14 @@ public class GainRatioSelection<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, I
         // Target entropy (nats) over the rounded class labels
         PreprocessingTensorOps.ClassLabels(target, out var classes, out var classIndex);
         var classOneHot = PreprocessingTensorOps.ClassOneHot<T>(classIndex, classes.Length);
-        T targetEntropy = FeatureSelectionTensorOps.ClassEntropyNats(classOneHot);
+        T targetEntropy = FeatureScoringTensorOps.ClassEntropyNats(classOneHot);
 
         // Discretize features: min(trunc((x - min) / range * (bins - 1)), bins - 1), 0 for a constant feature
         var featureBins = PreprocessingTensorOps.RangeScaledBinOneHot(Tensor<T>.FromMatrix(data), _nBins);
-        var joint = FeatureSelectionTensorOps.JointBinCounts(featureBins, classOneHot, _nBins);
+        var joint = FeatureScoringTensorOps.JointBinCounts(featureBins, classOneHot, _nBins);
 
         // IG = H(Y) - H(Y|X), split info H(X), gain ratio IG / split info (0 when split info is not above 1e-10)
-        var splitInfo = FeatureSelectionTensorOps.BinEntropyNats(joint, n, out var conditionalEntropy);
+        var splitInfo = FeatureScoringTensorOps.BinEntropyNats(joint, n, out var conditionalEntropy);
         var informationGain = engine.TensorNegate(engine.TensorAddScalar(conditionalEntropy, NumOps.Negate(targetEntropy)));
         var usable = engine.TensorGreaterThan(splitInfo, PreprocessingTensorOps.Tolerance<T>(1e-10));
         var gainRatioScores = engine.TensorWhere(usable, engine.TensorDivide(informationGain,

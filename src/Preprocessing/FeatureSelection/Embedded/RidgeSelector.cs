@@ -71,11 +71,11 @@ public class RidgeSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISuper
         var engine = Engine;
 
         // Standardize features (population std; a near-zero std is replaced by 1) and center the target
-        var X = FeatureSelectionTensorOps.Standardize(Tensor<T>.FromMatrix(data), out _);
-        var y = FeatureSelectionTensorOps.Center(Tensor<T>.FromVector(target));
+        var X = FeatureScoringTensorOps.Standardize(Tensor<T>.FromMatrix(data), out _);
+        var y = FeatureScoringTensorOps.Center(Tensor<T>.FromVector(target));
 
         // Solve (X^T * X + alpha * I) * beta = X^T * y
-        var coefficients = FeatureSelectionTensorOps.RegularizedNormalSolve(X, y, _alpha);
+        var coefficients = FeatureScoringTensorOps.RegularizedNormalSolve(X, y, _alpha);
         _coefficients = coefficients.ToVector();
 
         // Select features by absolute coefficient magnitude

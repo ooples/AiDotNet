@@ -90,17 +90,17 @@ public class ElasticNetFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISuperv
         var engine = Engine;
 
         // Standardize features (population std; a near-zero std is replaced by 1) and center the target
-        var xStandardized = FeatureSelectionTensorOps.Standardize(Tensor<T>.FromMatrix(data), out var xStds);
-        var yCentered = FeatureSelectionTensorOps.Center(Tensor<T>.FromVector(target));
+        var xStandardized = FeatureScoringTensorOps.Standardize(Tensor<T>.FromMatrix(data), out var xStds);
+        var yCentered = FeatureScoringTensorOps.Center(Tensor<T>.FromVector(target));
 
         // Coordinate descent for Elastic Net on the 1/(2n)-scaled objective (as in sklearn ElasticNet):
         // beta_j = S(x_j . r / n, alpha * l1Ratio) / (1 + alpha * (1 - l1Ratio)) for standardized x_j
         T count = NumOps.FromDouble(n);
         T l1Penalty = NumOps.FromDouble(_alpha * _l1Ratio);
         T l2Scale = NumOps.FromDouble(1 + _alpha * (1 - _l1Ratio));
-        var coefficients = FeatureSelectionTensorOps.CoordinateDescent(xStandardized, yCentered, _maxIterations, _tolerance,
+        var coefficients = FeatureScoringTensorOps.CoordinateDescent(xStandardized, yCentered, _maxIterations, _tolerance,
             (rho, j) => engine.TensorDivideScalar(
-                FeatureSelectionTensorOps.SoftThreshold(engine.TensorDivideScalar(rho, count), l1Penalty), l2Scale), out _);
+                FeatureScoringTensorOps.SoftThreshold(engine.TensorDivideScalar(rho, count), l1Penalty), l2Scale), out _);
 
         // Rescale coefficients back to original scale
         coefficients = engine.TensorDivide(coefficients, xStds);

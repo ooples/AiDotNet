@@ -115,13 +115,13 @@ public class LyapunovSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IFi
             ? ones
             : engine.TensorAdd(engine.TensorTriu(ones, minTimeSep), engine.TensorTril(ones, -minTimeSep));
         var referenceVectors = engine.TensorSlice(vectors, new[] { 0, 0 }, new[] { reference, _embeddingDimension });
-        var distances = engine.TensorSqrt(FeatureSelectionTensorOps.SquaredDistances(referenceVectors, vectors));
+        var distances = engine.TensorSqrt(FeatureScoringTensorOps.SquaredDistances(referenceVectors, vectors));
         T maxValue = NumOps.MaxValue;
         T zero = NumOps.Zero;
         var allowed = engine.TensorMultiply(separated, engine.TensorGreaterThan(distances, zero));
         var candidates = engine.TensorWhere(allowed, distances, PreprocessingTensorOps.Filled(shape, maxValue));
         var minDist = engine.TensorNegate(engine.ReduceMax(engine.TensorNegate(candidates), new[] { 1 }, false));
-        var nearest = FeatureSelectionTensorOps.FirstArgMinPerRow(candidates);
+        var nearest = FeatureScoringTensorOps.FirstArgMinPerRow(candidates);
 
         // Points whose neighbour exists and has 5 successors are tracked
         int lastNeighbour = numVectors - 5;

@@ -95,7 +95,7 @@ public class TreeBasedFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervi
         var splitFeatures = new List<int>();
         var splitGains = new List<Tensor<T>>();
         BuildTree(X, classOneHot, Enumerable.Range(0, n).ToArray(), 0, random, splitFeatures, splitGains);
-        var featureImportances = FeatureSelectionTensorOps.ScatterAdd(splitFeatures, splitGains, p);
+        var featureImportances = FeatureScoringTensorOps.ScatterAdd(splitFeatures, splitGains, p);
 
         // Normalize importances
         T totalImportance = Engine.TensorSum(featureImportances);
@@ -119,7 +119,7 @@ public class TreeBasedFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervi
         int p = data.Shape[1];
         var rows = new Tensor<int>(indices, new[] { indices.Length });
         var nodeClasses = engine.TensorIndexSelect(classOneHot, rows, 0);
-        T parentImpurity = FeatureSelectionTensorOps.GiniImpurity(nodeClasses);
+        T parentImpurity = FeatureScoringTensorOps.GiniImpurity(nodeClasses);
 
         // Sample a subset of features
         int nTry = Math.Max(1, (int)Math.Sqrt(p));
@@ -131,14 +131,14 @@ public class TreeBasedFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervi
         // Find best split (Gini decrease) over every boundary between consecutive distinct values
         var nodeX = engine.TensorIndexSelect(engine.TensorIndexSelect(data, rows, 0),
             new Tensor<int>(candidateFeatures, new[] { candidateFeatures.Length }), 1);
-        if (!FeatureSelectionTensorOps.TryBestSplit(nodeX, nodeClasses, SplitCriterion.Gini, parentImpurity, _minSamplesLeaf,
+        if (!FeatureScoringTensorOps.TryBestSplit(nodeX, nodeClasses, SplitCriterion.Gini, parentImpurity, _minSamplesLeaf,
             out int bestColumn, out T bestThreshold, out var bestGain))
             return;
 
         splitFeatures.Add(candidateFeatures[bestColumn]);
         splitGains.Add(engine.TensorMultiplyScalar(bestGain, NumOps.FromDouble(indices.Length)));
 
-        FeatureSelectionTensorOps.PartitionRows(PreprocessingTensorOps.ColumnVector(nodeX, bestColumn), bestThreshold,
+        FeatureScoringTensorOps.PartitionRows(PreprocessingTensorOps.ColumnVector(nodeX, bestColumn), bestThreshold,
             indices, out var left, out var right);
 
         BuildTree(data, classOneHot, left, depth + 1, random, splitFeatures, splitGains);

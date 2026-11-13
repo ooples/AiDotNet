@@ -71,13 +71,13 @@ public class TruncatedSVDSelection<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
 
         // Power iteration for top eigenvectors of X^T X (negative eigenvalues floored at 0 as a numerical guard)
         int nComp = Math.Min(_nComponents, p);
-        var loadings = FeatureSelectionTensorOps.PowerIterationComponents(xTx, nComp, 100, true, out var eigenvalues);
+        var loadings = FeatureScoringTensorOps.PowerIterationComponents(xTx, nComp, 100, true, out var eigenvalues);
         var singularValues = engine.TensorSqrt(eigenvalues);
 
         // Compute feature importance as weighted sum of squared loadings
         var squared = engine.TensorSquare(singularValues);
         var weights = engine.TensorDivideScalar(squared, NumOps.Add(engine.TensorSum(squared), PreprocessingTensorOps.Tolerance<T>(1e-10)));
-        var importances = FeatureSelectionTensorOps.WeightedSquaredLoadings(loadings, weights);
+        var importances = FeatureScoringTensorOps.WeightedSquaredLoadings(loadings, weights);
         _featureImportances = importances.ToVector();
 
         int numToSelect = Math.Min(_nFeaturesToSelect, p);

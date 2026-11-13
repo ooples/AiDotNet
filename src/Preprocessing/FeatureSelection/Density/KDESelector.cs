@@ -84,14 +84,14 @@ public class KDESelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervi
         // Compute class-specific densities at evaluation points (50 points from each feature's min to max)
         int nEvalPoints = 50;
         var minVal = PreprocessingTensorOps.ColumnMin(standardized);
-        var evalPoints = FeatureSelectionTensorOps.EvenGrid(
+        var evalPoints = FeatureScoringTensorOps.EvenGrid(
             minVal, engine.TensorSubtract(PreprocessingTensorOps.ColumnMax(standardized), minVal), nEvalPoints);
 
         // Compute KDE for each class
         var classDensities = new Tensor<T>[k];
         for (int c = 0; c < k; c++)
             classDensities[c] = ComputeKDE(
-                FeatureSelectionTensorOps.Rows(standardized, FeatureSelectionTensorOps.GroupMembers(classIndex, c)), evalPoints);
+                FeatureScoringTensorOps.Rows(standardized, FeatureScoringTensorOps.GroupMembers(classIndex, c)), evalPoints);
 
         // Compute separation score: average symmetric KL divergence between class densities
         var totalSeparation = new Tensor<T>(new[] { p });
@@ -119,7 +119,7 @@ public class KDESelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervi
         var engine = Engine;
         T normFactor = NumOps.Divide(NumOps.One,
             NumOps.FromDouble(data.Shape[0] * _bandwidth * Math.Sqrt(2 * Math.PI)));
-        var sums = FeatureSelectionTensorOps.GaussianKernelSums(evalPoints, data, NumOps.FromDouble(_bandwidth));
+        var sums = FeatureScoringTensorOps.GaussianKernelSums(evalPoints, data, NumOps.FromDouble(_bandwidth));
 
         // Add small constant to avoid log(0)
         return engine.TensorAddScalar(engine.TensorMultiplyScalar(sums, normFactor), PreprocessingTensorOps.Tolerance<T>(1e-10));

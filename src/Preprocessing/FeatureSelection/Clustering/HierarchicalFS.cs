@@ -81,12 +81,12 @@ public class HierarchicalFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IFixe
 
         // Compute feature scores (sample variance)
         var scores = engine.TensorDivideScalar(
-            FeatureSelectionTensorOps.ColumnSumSquaredDeviations(X), NumOps.FromDouble(n - 1));
+            FeatureScoringTensorOps.ColumnSumSquaredDeviations(X), NumOps.FromDouble(n - 1));
         _featureScores = scores.ToVector();
 
         // Select best feature from each cluster
         int numClusters = clusterAssignments.Max() + 1;
-        _selectedIndices = FeatureSelectionTensorOps.BestPerGroup(scores, clusterAssignments, numClusters)
+        _selectedIndices = FeatureScoringTensorOps.BestPerGroup(scores, clusterAssignments, numClusters)
             .OrderBy(x => x).ToArray();
         IsFitted = true;
     }
@@ -135,7 +135,7 @@ public class HierarchicalFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IFixe
             if (!PreprocessingTensorOps.IsBelow(engine.TensorMinValue(candidates), maxValue))
                 break;
 
-            int flat = FeatureSelectionTensorOps.FirstArgMinPerRow(engine.Reshape(candidates, new[] { 1, p * p }))[0];
+            int flat = FeatureScoringTensorOps.FirstArgMinPerRow(engine.Reshape(candidates, new[] { 1, p * p }))[0];
             int merge1 = flat / p;
             int merge2 = flat % p;
 

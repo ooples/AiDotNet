@@ -72,13 +72,13 @@ public class ManhattanDistanceSelector<T> : TransformerBase<T, Matrix<T>, Matrix
         var classCenters = new Tensor<T>[k];
         for (int c = 0; c < k; c++)
         {
-            var rows = FeatureSelectionTensorOps.Rows(X, FeatureSelectionTensorOps.GroupMembers(classIndex, c));
-            classCenters[c] = Engine.Reshape(FeatureSelectionTensorOps.ColumnMedian(rows), new[] { 1, p });
+            var rows = FeatureScoringTensorOps.Rows(X, FeatureScoringTensorOps.GroupMembers(classIndex, c));
+            classCenters[c] = Engine.Reshape(FeatureScoringTensorOps.ColumnMedian(rows), new[] { 1, p });
         }
 
         // Average pairwise distance between class medians
         var scores = k > 0
-            ? FeatureSelectionTensorOps.MeanPairwiseDifference(Engine.TensorConcatenate(classCenters, 0), squared: false)
+            ? FeatureScoringTensorOps.MeanPairwiseDifference(Engine.TensorConcatenate(classCenters, 0), squared: false)
             : new Tensor<T>(new[] { p });
         _distanceScores = scores.ToVector();
 

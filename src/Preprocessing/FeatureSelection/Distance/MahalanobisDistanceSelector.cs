@@ -72,7 +72,7 @@ public class MahalanobisDistanceSelector<T> : TransformerBase<T, Matrix<T>, Matr
 
         // Compute class means for each feature
         var membership = PreprocessingTensorOps.ClassOneHot<T>(classIndex, k);
-        var classMeans = FeatureSelectionTensorOps.GroupMeans(membership, X, out _);
+        var classMeans = FeatureScoringTensorOps.GroupMeans(membership, X, out _);
 
         // Compute pooled within-class variance for each feature
         var withinClass = engine.TensorSubtract(X, engine.TensorMatMul(membership, classMeans));
@@ -84,7 +84,7 @@ public class MahalanobisDistanceSelector<T> : TransformerBase<T, Matrix<T>, Matr
         // Compute Mahalanobis-like contribution for each feature: mean squared class-mean difference over variance
         var variance = engine.TensorMax(pooledVariance, PreprocessingTensorOps.Tolerance<T>(1e-10));
         var contributions = engine.TensorDivide(
-            FeatureSelectionTensorOps.MeanPairwiseDifference(classMeans, squared: true), variance);
+            FeatureScoringTensorOps.MeanPairwiseDifference(classMeans, squared: true), variance);
         _distanceContributions = contributions.ToVector();
 
         int numToSelect = Math.Min(_nFeaturesToSelect, p);

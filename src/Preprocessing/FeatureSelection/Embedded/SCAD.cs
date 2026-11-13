@@ -88,13 +88,13 @@ public class SCAD<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFeat
         var engine = Engine;
 
         // Standardize data (population std; a near-zero std is replaced by 1) and center the target
-        var X = FeatureSelectionTensorOps.Standardize(Tensor<T>.FromMatrix(data), out _);
-        var y = FeatureSelectionTensorOps.Center(Tensor<T>.FromVector(target));
+        var X = FeatureScoringTensorOps.Standardize(Tensor<T>.FromMatrix(data), out _);
+        var y = FeatureScoringTensorOps.Center(Tensor<T>.FromVector(target));
 
         // Coordinate descent with SCAD penalty on the partial residual correlation rho = x_j . r_j / n
         T count = NumOps.FromDouble(n);
-        var coefficients = FeatureSelectionTensorOps.CoordinateDescent(X, y, _maxIterations, _tolerance,
-            (rho, j) => FeatureSelectionTensorOps.ScadThreshold(engine.TensorDivideScalar(rho, count), _lambda, _a), out _);
+        var coefficients = FeatureScoringTensorOps.CoordinateDescent(X, y, _maxIterations, _tolerance,
+            (rho, j) => FeatureScoringTensorOps.ScadThreshold(engine.TensorDivideScalar(rho, count), _lambda, _a), out _);
         _coefficients = coefficients.ToVector();
 
         // Select features with non-zero coefficients (largest first); fall back to the top correlations

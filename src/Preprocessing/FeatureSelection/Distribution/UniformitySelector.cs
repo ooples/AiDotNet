@@ -72,8 +72,8 @@ public class UniformitySelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, I
         double maxEntropy = Math.Log(_nBins) / Math.Log(2);
 
         // Histogram entropy (bits) of every feature; constant features have zero uniformity
-        var binCounts = FeatureSelectionTensorOps.RangeBinCounts(X, _nBins, out var constant);
-        var entropy = FeatureSelectionTensorOps.EntropyBits(binCounts, n);
+        var binCounts = FeatureScoringTensorOps.RangeBinCounts(X, _nBins, out var constant);
+        var entropy = FeatureScoringTensorOps.EntropyBits(binCounts, n);
 
         // Uniformity score = entropy / max_entropy (normalized)
         var zeros = new Tensor<T>(new[] { p });

@@ -74,7 +74,7 @@ public class SampleEntropySelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         var X = Tensor<T>.FromMatrix(data);
 
         // Tolerance r = tolerance * population std per feature; features with r below 1e-10 score 0
-        var tolerances = engine.TensorMultiplyScalar(FeatureSelectionTensorOps.ColumnStd(X), NumOps.FromDouble(_tolerance));
+        var tolerances = engine.TensorMultiplyScalar(FeatureScoringTensorOps.ColumnStd(X), NumOps.FromDouble(_tolerance));
         var degenerate = new HashSet<int>(PreprocessingTensorOps.MaskPositions(
             engine.TensorLessThan(tolerances, PreprocessingTensorOps.Tolerance<T>(1e-10))));
 
@@ -121,7 +121,7 @@ public class SampleEntropySelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     {
         // Every template matches itself, so the pairs are (all matches - count) / 2
         var matches = Engine.ReduceSum(Engine.Reshape(
-            FeatureSelectionTensorOps.TemplateMatches(data, m, count, r).Cast<int>(), new[] { count * count }), new[] { 0 }, true);
+            FeatureScoringTensorOps.TemplateMatches(data, m, count, r).Cast<int>(), new[] { count * count }), new[] { 0 }, true);
         return Engine.TensorDivideScalar(Engine.TensorSubtractScalar(matches.Cast<double>(), (double)count), 2.0);
     }
     public new Matrix<T> FitTransform(Matrix<T> data)

@@ -138,7 +138,7 @@ public class GradientBoostingImportance<T> : TransformerBase<T, Matrix<T>, Matri
 
         BuildNode(data, residuals, Enumerable.Range(0, n).ToArray(), leafOf, leafMeans, splitFeatures, splitGains, 0, random);
 
-        importance = FeatureSelectionTensorOps.ScatterAdd(splitFeatures, splitGains, p);
+        importance = FeatureScoringTensorOps.ScatterAdd(splitFeatures, splitGains, p);
         if (leafMeans.Count == 0)
             return new Tensor<T>(new[] { n });
 
@@ -172,8 +172,8 @@ public class GradientBoostingImportance<T> : TransformerBase<T, Matrix<T>, Matri
         // Find best split (variance reduction, at least 2 rows per side)
         var nodeX = engine.TensorIndexSelect(engine.TensorIndexSelect(data, rows, 0),
             new Tensor<int>(featureSubset, new[] { featureSubset.Length }), 1);
-        T parentVar = FeatureSelectionTensorOps.SumSquaredDeviations(nodeResiduals);
-        if (!FeatureSelectionTensorOps.TryBestSplit(nodeX, nodeResiduals, SplitCriterion.SumOfSquares, parentVar, 2,
+        T parentVar = FeatureScoringTensorOps.SumSquaredDeviations(nodeResiduals);
+        if (!FeatureScoringTensorOps.TryBestSplit(nodeX, nodeResiduals, SplitCriterion.SumOfSquares, parentVar, 2,
             out int bestColumn, out T bestThreshold, out var bestGain))
         {
             AddLeaf(nodeResiduals, indices, leafOf, leafMeans);
@@ -185,7 +185,7 @@ public class GradientBoostingImportance<T> : TransformerBase<T, Matrix<T>, Matri
         splitGains.Add(bestGain);
 
         // Split and recurse
-        FeatureSelectionTensorOps.PartitionRows(PreprocessingTensorOps.ColumnVector(nodeX, bestColumn), bestThreshold,
+        FeatureScoringTensorOps.PartitionRows(PreprocessingTensorOps.ColumnVector(nodeX, bestColumn), bestThreshold,
             indices, out var left, out var right);
 
         BuildNode(data, residuals, left, leafOf, leafMeans, splitFeatures, splitGains, depth + 1, random);

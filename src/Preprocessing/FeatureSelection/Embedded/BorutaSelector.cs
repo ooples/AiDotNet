@@ -190,7 +190,7 @@ public class BorutaSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupe
             // Best Gini-reduction decision stump on every feature
             var sample = Engine.TensorIndexSelect(data, new Tensor<int>(sampleIndices, new[] { n }), 0);
             importances = Engine.TensorAdd(importances,
-                FeatureSelectionTensorOps.BestGiniSplitReduction(sample, sampleClasses, classCount));
+                FeatureScoringTensorOps.BestGiniSplitReduction(sample, sampleClasses, classCount));
         }
 
         // Normalize

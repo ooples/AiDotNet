@@ -75,7 +75,7 @@ public class RidgeFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedF
         var engine = Engine;
 
         // Solve (Xc'Xc + alpha*I) * beta = Xc'yc on centered features and target by Cholesky decomposition
-        var coefficients = FeatureSelectionTensorOps.RidgeCoefficients(
+        var coefficients = FeatureScoringTensorOps.RidgeCoefficients(
             Tensor<T>.FromMatrix(data), Tensor<T>.FromVector(target), _alpha);
         _coefficients = coefficients.ToVector();
 

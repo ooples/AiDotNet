@@ -74,7 +74,7 @@ public class ChebyshevDistanceSelector<T> : TransformerBase<T, Matrix<T>, Matrix
         var classMax = new Tensor<T>[k];
         for (int c = 0; c < k; c++)
         {
-            var rows = FeatureSelectionTensorOps.Rows(X, FeatureSelectionTensorOps.GroupMembers(classIndex, c));
+            var rows = FeatureScoringTensorOps.Rows(X, FeatureScoringTensorOps.GroupMembers(classIndex, c));
             classMin[c] = PreprocessingTensorOps.ColumnMin(rows);
             classMax[c] = PreprocessingTensorOps.ColumnMax(rows);
         }

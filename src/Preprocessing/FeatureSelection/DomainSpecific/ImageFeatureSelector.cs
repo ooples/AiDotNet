@@ -115,7 +115,7 @@ public class ImageFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>,
 
         // |correlation| with target, plus the standard deviation (pixels with high variance are more informative)
         var corr = engine.TensorAbs(PreprocessingTensorOps.TargetCorrelations(X, Tensor<T>.FromVector(target)));
-        var variance = engine.TensorDivideScalar(FeatureSelectionTensorOps.ColumnSumSquaredDeviations(X), NumOps.FromDouble(n));
+        var variance = engine.TensorDivideScalar(FeatureScoringTensorOps.ColumnSumSquaredDeviations(X), NumOps.FromDouble(n));
 
         return engine.TensorAdd(
             engine.TensorMultiplyScalar(corr, NumOps.FromDouble(0.7)),

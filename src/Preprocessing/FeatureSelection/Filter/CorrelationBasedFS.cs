@@ -72,7 +72,7 @@ public class CorrelationBasedFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, I
 
         // Absolute feature-target and feature-feature correlations (0 when a sum of squares is not above 1e-10)
         var featureTargetCorr = engine.TensorAbs(PreprocessingTensorOps.TargetCorrelations(X, Tensor<T>.FromVector(target)));
-        var featureCorr = engine.TensorAbs(FeatureSelectionTensorOps.CorrelationMatrix(X));
+        var featureCorr = engine.TensorAbs(FeatureScoringTensorOps.CorrelationMatrix(X));
 
         // Greedy forward selection using CFS merit k * r_cf / sqrt(k + k(k-1) r_ff). For a candidate c added to the
         // selected set S: k * r_cf = sum_S r_f + r_c and k + k(k-1) r_ff = 1 + sum_{S x S} r_ff + 2 sum_S r_fc.

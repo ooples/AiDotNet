@@ -96,7 +96,7 @@ public class LOFBasedSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IFi
         // Compute distance matrix
         var distances = X.Shape[1] == 0
             ? new Tensor<T>(new[] { n, n })
-            : engine.TensorSqrt(FeatureSelectionTensorOps.SquaredDistances(X, X));
+            : engine.TensorSqrt(FeatureScoringTensorOps.SquaredDistances(X, X));
 
         // Find k-nearest neighbors (closest first, lower index among ties) and k-distance
         var maxed = engine.TensorWhere(engine.TensorEye<T>(n),

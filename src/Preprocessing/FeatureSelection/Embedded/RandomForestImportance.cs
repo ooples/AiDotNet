@@ -112,7 +112,7 @@ public class RandomForestImportance<T> : TransformerBase<T, Matrix<T>, Matrix<T>
             var splitFeatures = new List<int>();
             var splitGains = new List<Tensor<T>>();
             BuildTree(X, y, sampleIndices, featureSubset, 0, splitFeatures, splitGains);
-            var treeImportances = FeatureSelectionTensorOps.ScatterAdd(splitFeatures, splitGains, p);
+            var treeImportances = FeatureScoringTensorOps.ScatterAdd(splitFeatures, splitGains, p);
 
             featureImportances = engine.TensorAdd(featureImportances, engine.TensorDivideScalar(treeImportances, treeCount));
         }
@@ -140,7 +140,7 @@ public class RandomForestImportance<T> : TransformerBase<T, Matrix<T>, Matrix<T>
         var engine = Engine;
         var rows = new Tensor<int>(indices, new[] { indices.Length });
         var nodeY = engine.TensorIndexSelect(y, rows, 0);
-        T currentVar = FeatureSelectionTensorOps.SumSquaredDeviations(nodeY);
+        T currentVar = FeatureScoringTensorOps.SumSquaredDeviations(nodeY);
 
         if (PreprocessingTensorOps.IsBelow(currentVar, PreprocessingTensorOps.Tolerance<T>(1e-10)))
             return;
@@ -148,14 +148,14 @@ public class RandomForestImportance<T> : TransformerBase<T, Matrix<T>, Matrix<T>
         // Find best split (variance reduction)
         var nodeX = engine.TensorIndexSelect(engine.TensorIndexSelect(X, rows, 0),
             new Tensor<int>(features, new[] { features.Length }), 1);
-        if (!FeatureSelectionTensorOps.TryBestSplit(nodeX, nodeY, SplitCriterion.SumOfSquares, currentVar, _minSamplesLeaf,
+        if (!FeatureScoringTensorOps.TryBestSplit(nodeX, nodeY, SplitCriterion.SumOfSquares, currentVar, _minSamplesLeaf,
             out int bestColumn, out T bestThreshold, out var bestGain))
             return;
 
         splitFeatures.Add(features[bestColumn]);
         splitGains.Add(bestGain);
 
-        FeatureSelectionTensorOps.PartitionRows(PreprocessingTensorOps.ColumnVector(nodeX, bestColumn), bestThreshold,
+        FeatureScoringTensorOps.PartitionRows(PreprocessingTensorOps.ColumnVector(nodeX, bestColumn), bestThreshold,
             indices, out var leftIndices, out var rightIndices);
 
         // Recurse

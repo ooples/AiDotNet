@@ -76,14 +76,14 @@ public class GainRatio<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervise
         // Class distribution (rounded target values) and target entropy (nats)
         PreprocessingTensorOps.ClassLabels(target, out var classes, out var classIndex);
         var classOneHot = PreprocessingTensorOps.ClassOneHot<T>(classIndex, classes.Length);
-        T targetEntropy = FeatureSelectionTensorOps.ClassEntropyNats(classOneHot);
+        T targetEntropy = FeatureScoringTensorOps.ClassEntropyNats(classOneHot);
 
         // Bin every feature: min(trunc((x - min) / range * bins), bins - 1), one bin for a constant feature
-        var featureBins = FeatureSelectionTensorOps.RangeBinOneHot(Tensor<T>.FromMatrix(data), _nBins, _nBins);
-        var joint = FeatureSelectionTensorOps.JointBinCounts(featureBins, classOneHot, _nBins);
+        var featureBins = FeatureScoringTensorOps.RangeBinOneHot(Tensor<T>.FromMatrix(data), _nBins, _nBins);
+        var joint = FeatureScoringTensorOps.JointBinCounts(featureBins, classOneHot, _nBins);
 
         // Information gain max(0, H(Y) - H(Y|X)) and gain ratio IG / H(X) (0 when H(X) is not above 1e-10)
-        var intrinsicInfo = FeatureSelectionTensorOps.BinEntropyNats(joint, n, out var conditionalEntropy);
+        var intrinsicInfo = FeatureScoringTensorOps.BinEntropyNats(joint, n, out var conditionalEntropy);
         var informationGains = engine.TensorMax(
             engine.TensorNegate(engine.TensorAddScalar(conditionalEntropy, NumOps.Negate(targetEntropy))), NumOps.Zero);
         var usable = engine.TensorGreaterThan(intrinsicInfo, PreprocessingTensorOps.Tolerance<T>(1e-10));

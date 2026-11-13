@@ -78,7 +78,7 @@ public class PartialCorrelation<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, I
         {
             // Correlation matrix of [X | y] (a column whose population std is below 1e-10 correlates 0)
             var fullMatrix = engine.TensorConcatenate(new[] { X, engine.Reshape(y, new[] { n, 1 }) }, 1);
-            var corrMatrix = FeatureSelectionTensorOps.CorrelationMatrix(fullMatrix, n * 1e-20);
+            var corrMatrix = FeatureScoringTensorOps.CorrelationMatrix(fullMatrix, n * 1e-20);
             var targetColumn = engine.Reshape(
                 engine.TensorSlice(corrMatrix, new[] { 0, p }, new[] { p, 1 }), new[] { p });
 

@@ -70,7 +70,7 @@ public class DistanceCorrelation<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, 
         var engine = Engine;
 
         // Distance correlation dCor = sqrt(dCov^2 / sqrt(dVar^2(x) dVar^2(y))), 0 unless both variances exceed 1e-10
-        var dcov2 = FeatureSelectionTensorOps.SquaredDistanceCovariances(
+        var dcov2 = FeatureScoringTensorOps.SquaredDistanceCovariances(
             Tensor<T>.FromMatrix(data), Tensor<T>.FromVector(target), out var xVariances, out T yVariance);
         var zeros = new Tensor<T>(new[] { p });
         T epsilon = PreprocessingTensorOps.Tolerance<T>(1e-10);

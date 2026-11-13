@@ -128,7 +128,7 @@ public class PermutationEntropySelector<T> : TransformerBase<T, Matrix<T>, Matri
 
             // Compute entropy (bits) normalized by maximum entropy
             entropyValues[j] = maxEntropy > 0
-                ? engine.TensorDivideScalar(FeatureSelectionTensorOps.EntropyBits(patternCounts, totalPatterns), maxEntropy).Cast<T>()
+                ? engine.TensorDivideScalar(FeatureScoringTensorOps.EntropyBits(patternCounts, totalPatterns), maxEntropy).Cast<T>()
                 : new Tensor<T>(new[] { 1 });
         }
 

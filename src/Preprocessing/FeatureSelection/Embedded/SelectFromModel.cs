@@ -252,7 +252,7 @@ public class SelectFromModel<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISup
         int n = values.Length;
 
         if (n == 0) return NumOps.Zero;
-        return Engine.TensorSum(FeatureSelectionTensorOps.ColumnMedian(Engine.Reshape(values, new[] { n, 1 })));
+        return Engine.TensorSum(FeatureScoringTensorOps.ColumnMedian(Engine.Reshape(values, new[] { n, 1 })));
     }
     /// <summary>
     /// Fits and transforms the data.

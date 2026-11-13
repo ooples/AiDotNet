@@ -88,8 +88,8 @@ public class ElasticNetFeatureSelection<T> : TransformerBase<T, Matrix<T>, Matri
         var engine = Engine;
 
         // Standardize features (population std; a near-zero std is replaced by 1) and center the target
-        var X = FeatureSelectionTensorOps.Standardize(Tensor<T>.FromMatrix(data), out _);
-        var y = FeatureSelectionTensorOps.Center(Tensor<T>.FromVector(target));
+        var X = FeatureScoringTensorOps.Standardize(Tensor<T>.FromMatrix(data), out _);
+        var y = FeatureScoringTensorOps.Center(Tensor<T>.FromVector(target));
 
         // Coordinate descent for Elastic Net: beta_j = S(rho, l1) / (||x_j||^2 + l2), 0 when that denominator is
         // below 1e-10
@@ -98,11 +98,11 @@ public class ElasticNetFeatureSelection<T> : TransformerBase<T, Matrix<T>, Matri
         T floor = PreprocessingTensorOps.Tolerance<T>(1e-10);
         var none = new Tensor<T>(new[] { 1 });
         var denominators = engine.TensorAddScalar(engine.ReduceSum(engine.TensorSquare(X), new[] { 0 }, false), l2Penalty);
-        var coefficients = FeatureSelectionTensorOps.CoordinateDescent(X, y, _maxIterations, _tolerance, (rho, j) =>
+        var coefficients = FeatureScoringTensorOps.CoordinateDescent(X, y, _maxIterations, _tolerance, (rho, j) =>
         {
             var denom = engine.TensorSlice(denominators, new[] { j }, new[] { 1 });
             return engine.TensorWhere(engine.TensorLessThan(denom, floor), none,
-                engine.TensorDivide(FeatureSelectionTensorOps.SoftThreshold(rho, l1Penalty), denom));
+                engine.TensorDivide(FeatureScoringTensorOps.SoftThreshold(rho, l1Penalty), denom));
         }, out _);
         _coefficients = coefficients.ToVector();
 

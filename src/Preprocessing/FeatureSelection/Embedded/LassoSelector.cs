@@ -81,8 +81,8 @@ public class LassoSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISuper
         var engine = Engine;
 
         // Standardize data (population std; a near-zero std is replaced by 1) and center the target
-        var X = FeatureSelectionTensorOps.Standardize(Tensor<T>.FromMatrix(data), out var stds);
-        var y = FeatureSelectionTensorOps.Center(Tensor<T>.FromVector(target));
+        var X = FeatureScoringTensorOps.Standardize(Tensor<T>.FromMatrix(data), out var stds);
+        var y = FeatureScoringTensorOps.Center(Tensor<T>.FromVector(target));
 
         // Coordinate descent for Lasso: soft-threshold rho at alpha * n and divide by ||x_j||^2
         // (a column with ||x_j||^2 not above 1e-10 keeps its zero coefficient)
@@ -90,11 +90,11 @@ public class LassoSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISuper
         T threshold = NumOps.FromDouble(_alpha * n);
         T floor = PreprocessingTensorOps.Tolerance<T>(1e-10);
         var none = new Tensor<T>(new[] { 1 });
-        var beta = FeatureSelectionTensorOps.CoordinateDescent(X, y, _maxIterations, _tolerance, (rho, j) =>
+        var beta = FeatureScoringTensorOps.CoordinateDescent(X, y, _maxIterations, _tolerance, (rho, j) =>
         {
             var squaredNorm = engine.TensorSlice(Xj2, new[] { j }, new[] { 1 });
             return engine.TensorWhere(engine.TensorGreaterThan(squaredNorm, floor),
-                engine.TensorDivide(FeatureSelectionTensorOps.SoftThreshold(rho, threshold), squaredNorm), none);
+                engine.TensorDivide(FeatureScoringTensorOps.SoftThreshold(rho, threshold), squaredNorm), none);
         }, out _);
 
         // Un-standardize coefficients

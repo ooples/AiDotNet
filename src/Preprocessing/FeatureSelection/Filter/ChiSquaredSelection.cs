@@ -84,11 +84,11 @@ public class ChiSquaredSelection<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, 
         var featureBins = PreprocessingTensorOps.RangeScaledBinOneHot(Tensor<T>.FromMatrix(data), _nBins);
 
         // Chi-squared over the contingency table; df = (non-empty bins - 1) * (classes - 1)
-        var chiSquared = FeatureSelectionTensorOps.ContingencyChiSquared(featureBins, classOneHot, _nBins, out var occupiedBins);
+        var chiSquared = FeatureScoringTensorOps.ContingencyChiSquared(featureBins, classOneHot, _nBins, out var occupiedBins);
         var df = engine.TensorMultiplyScalar(engine.TensorAddScalar(occupiedBins, NumOps.FromDouble(-1)),
             NumOps.FromDouble(nClasses - 1));
         _chiSquaredScores = chiSquared.ToVector();
-        _pValues = FeatureSelectionTensorOps.ChiSquaredSurvival(chiSquared, df).ToVector();
+        _pValues = FeatureScoringTensorOps.ChiSquaredSurvival(chiSquared, df).ToVector();
 
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
         _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(chiSquared, numToSelect);

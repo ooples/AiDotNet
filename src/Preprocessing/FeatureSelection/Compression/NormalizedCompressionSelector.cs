@@ -76,9 +76,9 @@ public class NormalizedCompressionSelector<T> : TransformerBase<T, Matrix<T>, Ma
         var oneHotY = PreprocessingTensorOps.EqualWidthBinOneHot(y, _nBins, out var yVaryingMask);
         bool yVarying = PreprocessingTensorOps.CountNonZero(yVaryingMask) > 0;
         var entropyX = engine.TensorMultiply(
-            FeatureSelectionTensorOps.EntropyBits(FeatureSelectionTensorOps.BinCounts(oneHotX, _nBins), n), xVarying);
+            FeatureScoringTensorOps.EntropyBits(FeatureScoringTensorOps.BinCounts(oneHotX, _nBins), n), xVarying);
         var entropyY = yVarying
-            ? FeatureSelectionTensorOps.EntropyBits(FeatureSelectionTensorOps.BinCounts(oneHotY, _nBins), n)
+            ? FeatureScoringTensorOps.EntropyBits(FeatureScoringTensorOps.BinCounts(oneHotY, _nBins), n)
             : new Tensor<T>(new[] { 1 });
         var entropyYRow = engine.TensorBroadcastTo(entropyY, new[] { p });
 
@@ -88,8 +88,8 @@ public class NormalizedCompressionSelector<T> : TransformerBase<T, Matrix<T>, Ma
         {
             // Counted exactly (a Half matmul of the 0/1 one-hots stops counting at 2048)
             var jointCounts = engine.Reshape(
-                FeatureSelectionTensorOps.JointBinCounts(oneHotX, oneHotY, _nBins), new[] { p, _nBins * _nBins });
-            jointEntropy = engine.TensorWhere(xVarying, FeatureSelectionTensorOps.EntropyBits(jointCounts, n), entropyYRow);
+                FeatureScoringTensorOps.JointBinCounts(oneHotX, oneHotY, _nBins), new[] { p, _nBins * _nBins });
+            jointEntropy = engine.TensorWhere(xVarying, FeatureScoringTensorOps.EntropyBits(jointCounts, n), entropyYRow);
         }
         else
         {

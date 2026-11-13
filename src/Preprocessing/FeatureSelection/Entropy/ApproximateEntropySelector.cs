@@ -74,7 +74,7 @@ public class ApproximateEntropySelector<T> : TransformerBase<T, Matrix<T>, Matri
         var X = Tensor<T>.FromMatrix(data);
 
         // Tolerance r = tolerance * population std per feature; features with r below 1e-10 score 0
-        var tolerances = engine.TensorMultiplyScalar(FeatureSelectionTensorOps.ColumnStd(X), NumOps.FromDouble(_tolerance));
+        var tolerances = engine.TensorMultiplyScalar(FeatureScoringTensorOps.ColumnStd(X), NumOps.FromDouble(_tolerance));
         var degenerate = new HashSet<int>(PreprocessingTensorOps.MaskPositions(
             engine.TensorLessThan(tolerances, PreprocessingTensorOps.Tolerance<T>(1e-10))));
 
@@ -115,7 +115,7 @@ public class ApproximateEntropySelector<T> : TransformerBase<T, Matrix<T>, Matri
         if (count <= 0) return new Tensor<double>(new[] { 1 });
 
         // Counted in int (a Half sum of the 0/1 matches stops at 2048); the fractions and logs are taken in double
-        var matches = Engine.ReduceSum(FeatureSelectionTensorOps.TemplateMatches(data, m, count, r).Cast<int>(), new[] { 1 }, false);
+        var matches = Engine.ReduceSum(FeatureScoringTensorOps.TemplateMatches(data, m, count, r).Cast<int>(), new[] { 1 }, false);
         var logs = Engine.TensorLog(Engine.TensorDivideScalar(matches.Cast<double>(), (double)count));
         return Engine.ReduceMean(logs, new[] { 0 }, true);
     }

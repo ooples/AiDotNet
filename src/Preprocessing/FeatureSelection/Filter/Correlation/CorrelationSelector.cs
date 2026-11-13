@@ -163,7 +163,7 @@ public class CorrelationSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         var processSet = new HashSet<int>(columnsToProcess);
 
         // Compute full correlation matrix for analysis
-        var correlations = FeatureSelectionTensorOps.CorrelationMatrix(Tensor<T>.FromMatrix(data));
+        var correlations = FeatureScoringTensorOps.CorrelationMatrix(Tensor<T>.FromMatrix(data));
         _correlationMatrix = correlations.ToMatrix();
 
         // Flattened (i * p + j) positions of the pairs whose absolute correlation exceeds the threshold

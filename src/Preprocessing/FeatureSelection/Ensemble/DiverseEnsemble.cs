@@ -140,7 +140,7 @@ public class DiverseEnsemble<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISup
 
         var membership = PreprocessingTensorOps.ClassOneHot<T>(classIndex, k);
         // Class sizes and means counted exactly (a Half sum of the 0/1 membership stops at 2048)
-        var classMeans = FeatureSelectionTensorOps.GroupMeans(membership, X, out var counts);
+        var classMeans = FeatureScoringTensorOps.GroupMeans(membership, X, out var counts);
         var grandMean = engine.ReduceMean(X, new[] { 0 }, true);
 
         // Between-class and within-class sums of squares
@@ -172,7 +172,7 @@ public class DiverseEnsemble<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISup
         var rows = new Tensor<int>(sampleIndices, new[] { sampleSize });
 
         // Distance correlation dCor = sqrt(dCov^2 / sqrt(dVar^2(x) dVar^2(y))), 0 when a distance variance is 0
-        var dcov2 = FeatureSelectionTensorOps.SquaredDistanceCovariances(
+        var dcov2 = FeatureScoringTensorOps.SquaredDistanceCovariances(
             engine.TensorIndexSelect(X, rows, 0), engine.TensorIndexSelect(y, rows, 0), out var xVariances, out T yVariance);
         int p = dcov2.Length;
         // sqrt(a) sqrt(b) rather than sqrt(a b): the product of the two variances overflows Half's 65504 maximum

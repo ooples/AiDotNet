@@ -108,7 +108,7 @@ public class TreeBasedImportance<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, 
             var splitFeatures = new List<int>();
             var splitGains = new List<Tensor<T>>();
             BuildTree(X, classOneHot, sampleIndices, splitFeatures, splitGains, 0, random);
-            var featureImportance = FeatureSelectionTensorOps.ScatterAdd(splitFeatures, splitGains, p);
+            var featureImportance = FeatureScoringTensorOps.ScatterAdd(splitFeatures, splitGains, p);
 
             // Normalize and store
             T totalImportance = engine.TensorSum(featureImportance);
@@ -125,7 +125,7 @@ public class TreeBasedImportance<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, 
             var stacked = engine.TensorConcatenate(treeImportances, 0);
             importances = engine.ReduceMean(stacked, new[] { 0 }, false);
             // Two-pass: E[x^2] - E[x]^2 cancels to a tiny negative value (sqrt gives NaN) when the trees agree
-            _importanceStds = FeatureSelectionTensorOps.ColumnStd(stacked).ToVector();
+            _importanceStds = FeatureScoringTensorOps.ColumnStd(stacked).ToVector();
         }
         else
         {
@@ -162,10 +162,10 @@ public class TreeBasedImportance<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, 
         // Find best split (Gini decrease)
         var rows = new Tensor<int>(sampleIndices, new[] { n });
         var nodeClasses = engine.TensorIndexSelect(classOneHot, rows, 0);
-        T parentGini = FeatureSelectionTensorOps.GiniImpurity(nodeClasses);
+        T parentGini = FeatureScoringTensorOps.GiniImpurity(nodeClasses);
         var nodeX = engine.TensorIndexSelect(engine.TensorIndexSelect(data, rows, 0),
             new Tensor<int>(featureSubset, new[] { featureSubset.Length }), 1);
-        if (!FeatureSelectionTensorOps.TryBestSplit(nodeX, nodeClasses, SplitCriterion.Gini, parentGini, _minSamplesPerLeaf,
+        if (!FeatureScoringTensorOps.TryBestSplit(nodeX, nodeClasses, SplitCriterion.Gini, parentGini, _minSamplesPerLeaf,
             out int bestColumn, out T bestThreshold, out var bestGain))
             return;
 
@@ -174,7 +174,7 @@ public class TreeBasedImportance<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, 
         splitGains.Add(engine.TensorMultiplyScalar(bestGain, NumOps.FromDouble(n)));
 
         // Recursively build subtrees
-        FeatureSelectionTensorOps.PartitionRows(PreprocessingTensorOps.ColumnVector(nodeX, bestColumn), bestThreshold,
+        FeatureScoringTensorOps.PartitionRows(PreprocessingTensorOps.ColumnVector(nodeX, bestColumn), bestThreshold,
             sampleIndices, out var leftSplit, out var rightSplit);
 
         BuildTree(data, classOneHot, leftSplit, splitFeatures, splitGains, depth + 1, random);

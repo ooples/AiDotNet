@@ -87,11 +87,11 @@ public class ClusterSeparabilitySelector<T> : TransformerBase<T, Matrix<T>, Matr
         for (int iter = 0; iter < 10; iter++)
         {
             // Assign points to nearest centroid (first centroid among ties)
-            labels = FeatureSelectionTensorOps.FirstArgMinPerRow(FeatureSelectionTensorOps.SquaredDistances(X, centroids));
+            labels = FeatureScoringTensorOps.FirstArgMinPerRow(FeatureScoringTensorOps.SquaredDistances(X, centroids));
 
             // Update centroids; an empty cluster's centroid becomes 0
             var membership = PreprocessingTensorOps.ClassOneHot<T>(labels, _nClusters);
-            centroids = FeatureSelectionTensorOps.GroupMeans(membership, X, out _);
+            centroids = FeatureScoringTensorOps.GroupMeans(membership, X, out _);
         }
 
         return labels;
@@ -103,7 +103,7 @@ public class ClusterSeparabilitySelector<T> : TransformerBase<T, Matrix<T>, Matr
 
         // Cluster means and sizes
         var membership = PreprocessingTensorOps.ClassOneHot<T>(labels, _nClusters);
-        var clusterMeans = FeatureSelectionTensorOps.GroupMeans(membership, X, out var clusterCounts);
+        var clusterMeans = FeatureScoringTensorOps.GroupMeans(membership, X, out var clusterCounts);
 
         // Global mean
         var globalMean = engine.ReduceMean(X, new[] { 0 }, true);

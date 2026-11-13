@@ -85,7 +85,7 @@ public class DispersionRatio<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISup
 
         // Between-class variance sum_c n_c (mean_c - mean)^2 / n and within-class variance sum (x - mean_class)^2 / n
         T count = NumOps.FromDouble(n);
-        var classMeans = FeatureSelectionTensorOps.GroupMeans(PreprocessingTensorOps.ClassOneHot<T>(classIndex, k), X, out var classCounts);
+        var classMeans = FeatureScoringTensorOps.GroupMeans(PreprocessingTensorOps.ClassOneHot<T>(classIndex, k), X, out var classCounts);
         var overallMean = engine.TensorBroadcastTo(engine.ReduceMean(X, new[] { 0 }, true), new[] { k, p });
         var betweenVar = engine.TensorDivideScalar(engine.ReduceSum(engine.TensorMultiply(
             engine.TensorSquare(engine.TensorSubtract(classMeans, overallMean)),

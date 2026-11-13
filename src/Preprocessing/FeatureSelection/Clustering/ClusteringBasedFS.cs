@@ -80,12 +80,12 @@ public class ClusteringBasedFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IF
 
         // Select best feature from each cluster based on (sample) variance
         var scores = n > 1
-            ? engine.TensorDivideScalar(FeatureSelectionTensorOps.ColumnSumSquaredDeviations(X), NumOps.FromDouble(n - 1))
+            ? engine.TensorDivideScalar(FeatureScoringTensorOps.ColumnSumSquaredDeviations(X), NumOps.FromDouble(n - 1))
             : new Tensor<T>(new[] { p });
         _featureScores = scores.ToVector();
 
         // Select one feature per cluster with highest variance
-        _selectedIndices = FeatureSelectionTensorOps.BestPerGroup(scores, _clusterAssignments, nClusters)
+        _selectedIndices = FeatureScoringTensorOps.BestPerGroup(scores, _clusterAssignments, nClusters)
             .OrderBy(x => x).ToArray();
         IsFitted = true;
     }
@@ -123,8 +123,8 @@ public class ClusteringBasedFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IF
         for (int iter = 0; iter < _maxIterations; iter++)
         {
             // Assign features to nearest centroid (first centroid among ties)
-            var best = FeatureSelectionTensorOps.FirstArgMinPerRow(
-                FeatureSelectionTensorOps.SquaredDistances(correlations, centroids));
+            var best = FeatureScoringTensorOps.FirstArgMinPerRow(
+                FeatureScoringTensorOps.SquaredDistances(correlations, centroids));
             bool changed = !best.SequenceEqual(assignments);
             assignments = best;
 
@@ -133,7 +133,7 @@ public class ClusteringBasedFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IF
 
             // Update centroids; an empty cluster keeps its centroid
             var membership = PreprocessingTensorOps.ClassOneHot<T>(assignments, nClusters);
-            var means = FeatureSelectionTensorOps.GroupMeans(membership, correlations, out var counts);
+            var means = FeatureScoringTensorOps.GroupMeans(membership, correlations, out var counts);
             var occupied = engine.TensorBroadcastTo(
                 engine.Reshape(engine.TensorGreaterThan(counts, zero), new[] { nClusters, 1 }), new[] { nClusters, p });
             centroids = engine.TensorWhere(occupied, means, centroids);

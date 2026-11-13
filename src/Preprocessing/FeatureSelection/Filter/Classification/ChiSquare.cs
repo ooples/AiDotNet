@@ -84,10 +84,10 @@ public class ChiSquare<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervise
         var featureBins = PreprocessingTensorOps.RangeScaledBinOneHot(Tensor<T>.FromMatrix(data), _nBins);
 
         // Chi-square statistic over the contingency table and its chi2((bins - 1)(classes - 1)) p-value
-        var chiSquare = FeatureSelectionTensorOps.ContingencyChiSquared(featureBins, classOneHot, _nBins, out _);
+        var chiSquare = FeatureScoringTensorOps.ContingencyChiSquared(featureBins, classOneHot, _nBins, out _);
         var df = PreprocessingTensorOps.Filled(new[] { p }, NumOps.FromDouble((_nBins - 1) * (nClasses - 1)));
         _chiSquareScores = chiSquare.ToVector();
-        _pValues = FeatureSelectionTensorOps.ChiSquaredSurvival(chiSquare, df).ToVector();
+        _pValues = FeatureScoringTensorOps.ChiSquaredSurvival(chiSquare, df).ToVector();
 
         // Select top features by chi-square score
         int numToSelect = Math.Min(_nFeaturesToSelect, p);

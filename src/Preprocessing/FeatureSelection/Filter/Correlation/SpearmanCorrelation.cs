@@ -71,9 +71,9 @@ public class SpearmanCorrelation<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, 
         var engine = Engine;
 
         // Absolute Pearson correlation of the average ranks (0 when either rank vector is constant)
-        var targetRanks = engine.Reshape(FeatureSelectionTensorOps.AverageRanks(
+        var targetRanks = engine.Reshape(FeatureScoringTensorOps.AverageRanks(
             engine.Reshape(Tensor<T>.FromVector(target), new[] { n, 1 })), new[] { n });
-        var featureRanks = FeatureSelectionTensorOps.AverageRanks(Tensor<T>.FromMatrix(data));
+        var featureRanks = FeatureScoringTensorOps.AverageRanks(Tensor<T>.FromMatrix(data));
         var correlationScores = engine.TensorAbs(PreprocessingTensorOps.TargetCorrelations(featureRanks, targetRanks));
         _correlationScores = correlationScores.ToVector();
 

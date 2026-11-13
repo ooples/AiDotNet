@@ -117,7 +117,7 @@ public class FisherScore<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervi
 
         // Fisher Score = between-class / within-class sum of squares; when within is not above 1e-10 the score is
         // T.MaxValue if between exceeds 1e-10 (classes perfectly separated) and 0 otherwise
-        var betweenClassSum = FeatureSelectionTensorOps.ClassScatter(Tensor<T>.FromMatrix(data), classIndex,
+        var betweenClassSum = FeatureScoringTensorOps.ClassScatter(Tensor<T>.FromMatrix(data), classIndex,
             classLabels.Length, out var withinClassSum);
         var shape = new[] { p };
         T epsilon = PreprocessingTensorOps.Tolerance<T>(1e-10);

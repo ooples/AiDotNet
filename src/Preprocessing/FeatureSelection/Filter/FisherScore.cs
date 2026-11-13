@@ -73,7 +73,7 @@ public class FisherScore<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervi
         PreprocessingTensorOps.ClassLabels(target, out var classes, out var classIndex);
 
         // Fisher Score = between-class / within-class sum of squares (0 when within is not above 1e-10)
-        var betweenVar = FeatureSelectionTensorOps.ClassScatter(Tensor<T>.FromMatrix(data),
+        var betweenVar = FeatureScoringTensorOps.ClassScatter(Tensor<T>.FromMatrix(data),
             new Tensor<int>(classIndex, new[] { n }), classes.Length, out var withinVar);
         var usable = engine.TensorGreaterThan(withinVar, PreprocessingTensorOps.Tolerance<T>(1e-10));
         var fisherScores = engine.TensorWhere(usable, engine.TensorDivide(betweenVar,
