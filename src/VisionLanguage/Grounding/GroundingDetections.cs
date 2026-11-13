@@ -46,7 +46,17 @@ internal static class GroundingDetections<T>
         var candidateBoxes = engine.TensorIndexSelect(boxes.Reshape([count, 4]), candidateIndex, 0);
         var candidateConfidences = engine.TensorIndexSelect(confidences.Reshape([count]), candidateIndex, 0);
 
-        var keep = engine.Nms(candidateBoxes, candidateConfidences, iouThreshold);
+        // Suppression visits the candidates in descending confidence with ties in candidate order, as torchvision's
+        // stable sort does: the engine's NMS ranks by strictly decreasing int-counted ranks, so its own sort cannot
+        // reorder tied confidences.
+        var orderable = engine.TensorWhere(engine.TensorEquals(candidateConfidences, candidateConfidences), candidateConfidences,
+            Tensor<T>.CreateDefault([candidates.Count], MathHelper.GetNumericOperations<T>().MinValue));
+        int[] order = AnomalyTensorOps.StableOrder(orderable, descending: true).ToArray();
+        int candidateCount = order.Length;
+        var rank = new int[candidateCount];
+        for (int position = 0; position < candidateCount; position++)
+            rank[order[position]] = candidateCount - position;
+        var keep = engine.Nms(candidateBoxes, new Tensor<int>([candidateCount], Vector<int>.FromArray(rank)).Cast<T>(), iouThreshold);
         int kept = keep.Length;
         var rows = engine.TensorConcatenate(
             [
@@ -74,8 +84,13 @@ internal static class GroundingDetections<T>
         int count = scores.Length;
         if (count == 0 || maxDetections <= 0)
             return new Tensor<T>([FieldsPerDetection]);
+        var numOps = MathHelper.GetNumericOperations<T>();
         var flatScores = scores.Reshape([count]);
-        engine.TensorTopK(flatScores, count, 0, out var order);
+        // Descending with tied scores in index order (torchvision's nms sorts with stable=true); a NaN score, never
+        // eligible, sorts last.
+        var orderable = engine.TensorWhere(engine.TensorEquals(flatScores, flatScores), flatScores,
+            Tensor<T>.CreateDefault([count], numOps.MinValue));
+        var order = AnomalyTensorOps.StableOrder(orderable, descending: true);
         var orderedBoxes = engine.TensorIndexSelect(boxes.Reshape([count, 4]), order, 0);
         var orderedScores = engine.TensorIndexSelect(flatScores, order, 0);
         var eligible = engine.TensorMultiply(
