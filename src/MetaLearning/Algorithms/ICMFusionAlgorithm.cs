@@ -588,7 +588,7 @@ public partial class ICMFusionAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T,
     {
         var sizes = new Tensor<T>(new[] { _compressedDim });
         sizes.Fill(NumOps.FromDouble(_stride));
-        sizes[_compressedDim - 1] = NumOps.FromDouble(_paramDim - (_compressedDim - 1) * _stride);
+        sizes[_compressedDim - 1] = NumOps.FromDouble(_paramDim - (_compressedDim - 1) * (double)_stride);
         return sizes;
     }
 

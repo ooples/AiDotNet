@@ -101,7 +101,7 @@ public partial class FreqPromptAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T
         // B[k, d] = scale * cos(pi * (k + 1) * (2d + 1) / (2D))
         var engine = AiDotNetEngine.Current;
         var frequencies = engine.TensorArange<T>(1, _numComponents + 1, 1);
-        var positions = engine.TensorArange<T>(1, 2 * _paramDim + 1, 2);
+        var positions = engine.TensorArange<T>(1, 2.0 * _paramDim + 1, 2);
         var phase = engine.TensorMultiplyScalar(engine.TensorOuter(frequencies, positions),
             NumOps.FromDouble(Math.PI / (2.0 * _paramDim)));
         _promptBasis = engine.TensorMultiplyScalar(engine.TensorCos(phase), NumOps.FromDouble(options.PromptInitScale)).ToVector();
