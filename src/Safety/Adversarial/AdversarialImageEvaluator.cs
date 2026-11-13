@@ -219,6 +219,20 @@ public partial class AdversarialImageEvaluator<T> : NeuralNetworkBase<T>, IImage
         var engine = Engine;
         var samples = engine.Reshape(batched.Contiguous(), new[] { batch, channels * height, width });
 
+        if (typeof(T) == typeof(Half))
+        {
+            // Half overflows the squared Laplacian of a 0/255 image (Infinity / Infinity) and turns the 1e-10
+            // darkness guard into zero (0 / 0), so the features are computed in float and only the result narrowed.
+            using var wideNoGrad = new NoGradScope<float>();
+            var wide = samples.Cast<float>();
+            return engine.TensorStack(new[]
+            {
+                AdversarialImageEvaluator<float>.ComputeHighFrequencyAnomalyScore(wide),
+                AdversarialImageEvaluator<float>.ComputeHistogramAnomalyScore(wide),
+                AdversarialImageEvaluator<float>.ComputeFeatureSqueezingScore(wide)
+            }, 1).Cast<T>();
+        }
+
         // Build per-batch [batch, 3] feature tensor.
         return engine.TensorStack(new[]
         {

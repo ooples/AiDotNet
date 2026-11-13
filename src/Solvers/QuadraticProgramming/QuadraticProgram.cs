@@ -163,14 +163,9 @@ public sealed class QuadraticProgram<T>
             var asymmetric = engine.TensorGreaterThan(
                 engine.TensorAbs(engine.TensorSubtract(left, right)),
                 engine.TensorMultiplyScalar(scale, numOps.FromDouble(symmetryTolerance)));
-            var index = engine.TensorArange<T>(0, quadratic.Rows, 1);
-            var aboveDiagonal = engine.TensorGreaterThan(
-                engine.TensorSubtract(
-                    engine.Reshape(index, new[] { 1, quadratic.Rows }),
-                    engine.Reshape(index, new[] { quadratic.Rows, 1 })),
-                numOps.Zero);
-            var first = SolverTensorOps<T>.First(
-                SolverTensorOps<T>.Or(nonFinite, engine.TensorMultiply(asymmetric, aboveDiagonal)));
+            // Strictly above the diagonal by integer coordinates (indices held in T merge above 2048 for Half).
+            var asymmetricAbove = engine.TensorTriu(asymmetric, 1);
+            var first = SolverTensorOps<T>.First(SolverTensorOps<T>.Or(nonFinite, asymmetricAbove));
             if (first is not null)
             {
                 int i = first[0], j = first[1];

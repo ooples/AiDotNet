@@ -259,7 +259,10 @@ internal static class WaveletEngineOps<T>
         var denominator = Engine.TensorAdd(Engine.TensorSquare(waveletValue), Engine.TensorSquare(derivativeValue));
         var numerator = Engine.TensorAdd(Engine.TensorMultiply(a, waveletValue), Engine.TensorMultiply(d, derivativeValue));
         var usable = Engine.TensorGreaterThan(Engine.TensorAbs(denominator), NumOps.FromDouble(1e-10));
-        return Engine.TensorWhere(usable, Engine.TensorDivide(numerator, denominator), Engine.TensorAdd(a, d)).ToVector();
+
+        // Unusable denominators divide by one instead: decimal throws on 0 / 0 before the fallback is selected.
+        var safeDenominator = Engine.TensorWhere(usable, denominator, Engine.TensorOnesLike(denominator));
+        return Engine.TensorWhere(usable, Engine.TensorDivide(numerator, safeDenominator), Engine.TensorAdd(a, d)).ToVector();
     }
 
     /// <summary>

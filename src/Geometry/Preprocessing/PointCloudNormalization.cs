@@ -25,6 +25,12 @@ public static class PointCloudNormalization<T>
             return pointCloud;
         }
 
+        if (typeof(T) == typeof(Half))
+        {
+            // Half coordinate sums overflow above 65504; the centroid is taken in float.
+            return Narrow(PointCloudNormalization<float>.Center(Widen(pointCloud)), pointCloud);
+        }
+
         // Compute centroid (only for XYZ coordinates)
         var engine = AiDotNetEngine.Current;
         var positions = GeometryEngineOps<T>.Positions(pointCloud.Points);
@@ -42,6 +48,12 @@ public static class PointCloudNormalization<T>
     /// </summary>
     public static PointCloudData<T> ScaleToUnitSphere(PointCloudData<T> pointCloud, bool center = true)
     {
+        if (typeof(T) == typeof(Half))
+        {
+            // Half squared distances overflow above 255 units; the radius is measured in float.
+            return Narrow(PointCloudNormalization<float>.ScaleToUnitSphere(Widen(pointCloud), center), pointCloud);
+        }
+
         var workingCloud = center ? Center(pointCloud) : pointCloud;
         int numPoints = workingCloud.NumPoints;
 
@@ -59,7 +71,7 @@ public static class PointCloudNormalization<T>
         T maxDistSq = engine.TensorMaxValue(engine.TensorMax(finiteDistancesSq, NumOps.Zero));
 
         T maxDist = NumOps.Sqrt(maxDistSq);
-        if (NumOps.LessThan(maxDist, NumOps.FromDouble(1e-10)))
+        if (IsTiny(maxDist))
         {
             return workingCloud;
         }
@@ -75,6 +87,11 @@ public static class PointCloudNormalization<T>
     /// </summary>
     public static PointCloudData<T> ScaleToUnitCube(PointCloudData<T> pointCloud, bool center = true)
     {
+        if (typeof(T) == typeof(Half))
+        {
+            return Narrow(PointCloudNormalization<float>.ScaleToUnitCube(Widen(pointCloud), center), pointCloud);
+        }
+
         var workingCloud = center ? Center(pointCloud) : pointCloud;
         int numPoints = workingCloud.NumPoints;
 
@@ -91,7 +108,7 @@ public static class PointCloudNormalization<T>
         var ranges = engine.TensorSubtract(max, min);
         T maxRange = GeometryEngineOps<T>.PropagatingMax(ranges);
 
-        if (NumOps.LessThan(maxRange, NumOps.FromDouble(1e-10)))
+        if (IsTiny(maxRange))
         {
             return workingCloud;
         }
@@ -149,4 +166,15 @@ public static class PointCloudNormalization<T>
         var tensor = engine.TensorConcatenate(parts.ToArray(), 1);
         return new PointCloudData<T>(tensor, pointCloud.Labels);
     }
+
+    // Below 1e-10, or exactly zero: in types where 1e-10 rounds to zero the first test alone never fires.
+    private static bool IsTiny(T value)
+        => NumOps.LessThan(value, NumOps.FromDouble(1e-10)) || NumOps.Equals(value, NumOps.Zero);
+
+    private static PointCloudData<float> Widen(PointCloudData<T> cloud)
+        => new PointCloudData<float>(cloud.Points.Cast<float>());
+
+    // The float result's points in T, keeping the original labels.
+    private static PointCloudData<T> Narrow(PointCloudData<float> cloud, PointCloudData<T> original)
+        => new PointCloudData<T>(cloud.Points.Cast<T>(), original.Labels);
 }

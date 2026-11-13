@@ -279,8 +279,10 @@ internal class CLIPImageSafetyClassifier<T> : ImageSafetyModuleBase<T>
             engine.TensorDivide(delta, SafetyTensorOps<T>.Where(positiveMax, maxRgb, 1.0)), 0.0);
         var v = engine.TensorDivideScalar(maxRgb, NumOps.FromDouble(255.0));
 
-        // Compute hue (simplified — R is max for skin tones)
-        var h = engine.TensorMultiplyScalar(engine.TensorDivide(engine.TensorSubtract(g, b), delta),
+        // Compute hue (simplified — R is max for skin tones). Grey pixels (delta 0) divide by one instead: decimal
+        // throws on division by zero, and those pixels are rejected by the delta test below either way.
+        var safeDelta = SafetyTensorOps<T>.Where(SafetyTensorOps<T>.Gt(delta, 0.0), delta, 1.0);
+        var h = engine.TensorMultiplyScalar(engine.TensorDivide(engine.TensorSubtract(g, b), safeDelta),
             NumOps.FromDouble(60.0));
         h = SafetyTensorOps<T>.Where(SafetyTensorOps<T>.Lt(h, 0.0),
             engine.TensorAddScalar(h, NumOps.FromDouble(360.0)), h);

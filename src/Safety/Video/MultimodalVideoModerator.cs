@@ -457,6 +457,13 @@ public partial class MultimodalVideoModerator<T> : VideoSafetyModuleBase<T>
         int minLen = Math.Min(frame1.Length, frame2.Length);
         if (minLen == 0) return 0;
 
+        if (typeof(T) == typeof(Half))
+        {
+            // Half sums overflow at 65504 and a frame's element count overflows Half itself (196,608 for a
+            // 256x256 RGB frame becomes infinity), so the mean is taken in float.
+            return MultimodalVideoModerator<float>.ComputeFrameDifference(frame1.Cast<float>(), frame2.Cast<float>());
+        }
+
         // Mean absolute difference over the overlapping prefix
         using var noGrad = new NoGradScope<T>();
         var absDiff = AbsoluteDifference(frame1, frame2, minLen);
@@ -468,6 +475,13 @@ public partial class MultimodalVideoModerator<T> : VideoSafetyModuleBase<T>
         int minLen = Math.Min(frame1.Length, frame2.Length);
         int blockArea = blockSize * blockSize;
         if (minLen < blockArea) return 0;
+
+        if (typeof(T) == typeof(Half))
+        {
+            // Block sums and areas held in Half overflow at 65504; measured in float.
+            return MultimodalVideoModerator<float>.ComputeBlockMotionVariance(
+                frame1.Cast<float>(), frame2.Cast<float>(), blockSize);
+        }
 
         int numBlocks = minLen / blockArea;
         numBlocks = Math.Min(numBlocks, 64);

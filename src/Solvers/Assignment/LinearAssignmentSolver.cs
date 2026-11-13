@@ -234,22 +234,20 @@ public sealed class LinearAssignmentSolver<T>
         if (cost is null) throw new ArgumentNullException(nameof(cost));
         if (assignment is null) throw new ArgumentNullException(nameof(assignment));
 
-        // The matched (row, column) pairs as flat row-major positions; an index outside the matrix fails exactly as
-        // the matrix indexer does.
+        // Only the matched costs are gathered (copying the whole matrix to a tensor would cost rows * columns); an
+        // index outside the matrix fails exactly as the matrix indexer does.
         var columns = assignment.ToArray();
-        var positions = new List<int>(columns.Length);
+        var data = cost.AsSpan();
+        var matched = new List<T>(columns.Length);
         for (int i = 0; i < columns.Length; i++)
         {
             int column = columns[i];
             if (column < 0) continue;
             if (i >= cost.Rows || column >= cost.Columns) throw new IndexOutOfRangeException("Invalid matrix indices.");
-            positions.Add(i * cost.Columns + column);
+            matched.Add(data[i * cost.Columns + column]);
         }
 
-        if (positions.Count == 0) return NumOps.Zero;
-        var engine = SolverTensorOps<T>.Engine;
-        var flat = engine.Reshape(SolverTensorOps<T>.AsTensor(cost), new[] { cost.Rows * cost.Columns });
-        var picked = positions.ToArray();
-        return engine.TensorSum(engine.TensorTake(flat, new Tensor<int>(new[] { picked.Length }, new Vector<int>(picked))));
+        if (matched.Count == 0) return NumOps.Zero;
+        return SolverTensorOps<T>.Engine.TensorSum(new Tensor<T>(matched.ToArray(), new[] { matched.Count }));
     }
 }

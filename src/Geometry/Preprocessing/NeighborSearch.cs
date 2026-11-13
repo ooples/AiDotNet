@@ -26,22 +26,26 @@ public static class NeighborSearch<T>
             return result;
         }
 
-        var keys = GeometryEngineOps<T>.DenseRowRanks(
-            GeometryEngineOps<T>.PairwiseSquaredDistances(pointCloud.Points, pointCloud.Points));
         var indices = new int[numPoints];
 
-        for (int i = 0; i < numPoints; i++)
+        // Ranks are per row, so each block of query rows is ranked on its own and the full matrix is never held.
+        foreach (var (start, distancesSq) in GeometryEngineOps<T>.SquaredDistanceBlocks(pointCloud.Points, pointCloud.Points))
         {
-            for (int j = 0; j < numPoints; j++)
+            var keys = GeometryEngineOps<T>.DenseRowRanks(distancesSq);
+            int blockRows = distancesSq.Shape[0];
+            for (int r = 0; r < blockRows; r++)
             {
-                indices[j] = j;
-            }
+                for (int j = 0; j < numPoints; j++)
+                {
+                    indices[j] = j;
+                }
 
-            PartialSort(indices, keys, i * numPoints, k);
+                PartialSort(indices, keys, r * numPoints, k);
 
-            for (int n = 0; n < k; n++)
-            {
-                result[i, n] = indices[n];
+                for (int n = 0; n < k; n++)
+                {
+                    result[start + r, n] = indices[n];
+                }
             }
         }
 
@@ -68,14 +72,18 @@ public static class NeighborSearch<T>
         }
 
         var engine = AiDotNetEngine.Current;
-        var distancesSq = GeometryEngineOps<T>.PairwiseSquaredDistances(queryPoints.Points, pointCloud.Points);
-        var radiusSq = engine.TensorFullLike(distancesSq, NumOps.Multiply(radius, radius));
+        T radiusSquared = NumOps.Multiply(radius, radius);
 
-        // Nonzero pairs come back row-major, so each query's neighbours are listed in point order.
-        var pairs = GeometryEngineOps<T>.NonzeroPairs(engine.TensorLessEqual(distancesSq, radiusSq));
-        for (int p = 0; p + 1 < pairs.Length; p += 2)
+        // Nonzero pairs come back row-major, so each query's neighbours are listed in point order. Queries are
+        // processed in row blocks so the whole distance matrix is never held at once.
+        foreach (var (start, distancesSq) in GeometryEngineOps<T>.SquaredDistanceBlocks(queryPoints.Points, pointCloud.Points))
         {
-            result[pairs[p]].Add(pairs[p + 1]);
+            var radiusSq = engine.TensorFullLike(distancesSq, radiusSquared);
+            var pairs = GeometryEngineOps<T>.NonzeroPairs(engine.TensorLessEqual(distancesSq, radiusSq));
+            for (int p = 0; p + 1 < pairs.Length; p += 2)
+            {
+                result[start + pairs[p]].Add(pairs[p + 1]);
+            }
         }
 
         return result;
@@ -103,15 +111,18 @@ public static class NeighborSearch<T>
         if (numPoints > 0 && numCentroids > 0)
         {
             var engine = AiDotNetEngine.Current;
-            var distancesSq = GeometryEngineOps<T>.PairwiseSquaredDistances(centroids.Points, pointCloud.Points);
-            var radiusSq = engine.TensorFullLike(distancesSq, NumOps.Multiply(radius, radius));
-            var keys = GeometryEngineOps<T>.DenseRowRanks(distancesSq);
-            var pairs = GeometryEngineOps<T>.NonzeroPairs(engine.TensorLessEqual(distancesSq, radiusSq));
-            for (int p = 0; p + 1 < pairs.Length; p += 2)
+            T radiusSquared = NumOps.Multiply(radius, radius);
+            foreach (var (start, distancesSq) in GeometryEngineOps<T>.SquaredDistanceBlocks(centroids.Points, pointCloud.Points))
             {
-                int centroid = pairs[p];
-                int point = pairs[p + 1];
-                neighbors[centroid].Add((point, keys[centroid * numPoints + point]));
+                var radiusSq = engine.TensorFullLike(distancesSq, radiusSquared);
+                var keys = GeometryEngineOps<T>.DenseRowRanks(distancesSq);
+                var pairs = GeometryEngineOps<T>.NonzeroPairs(engine.TensorLessEqual(distancesSq, radiusSq));
+                for (int p = 0; p + 1 < pairs.Length; p += 2)
+                {
+                    int row = pairs[p];
+                    int point = pairs[p + 1];
+                    neighbors[start + row].Add((point, keys[row * numPoints + point]));
+                }
             }
         }
 

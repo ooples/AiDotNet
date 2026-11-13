@@ -818,4 +818,14 @@ public class SafetyPipelineIntegrationTests
 
         return frames;
     }
+
+    [Fact(Timeout = 120000)]
+    public async Task DecodeCharCodes_HalfCodeAbove2048_DecodesExactly()
+    {
+        await Task.Yield();
+        // 4096 is exact in Half, but a 0..65534 grid held in Half rounds 4095 up to 4096 and miscounts.
+        var codes = new Vector<Half>(new[] { (Half)4096, (Half)65 });
+
+        Assert.Equal("\u1000A", SafetyTensorOps<Half>.DecodeCharCodes(codes));
+    }
 }

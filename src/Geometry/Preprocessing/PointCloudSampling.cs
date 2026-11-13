@@ -161,7 +161,6 @@ public static class PointCloudSampling<T>
         var engine = AiDotNetEngine.Current;
         var positions = GeometryEngineOps<T>.Positions(pointCloud.Points);
         var selectedIndices = new List<int>();
-        var isSelected = new bool[numPoints];
 
         foreach (int idx in indices)
         {
@@ -170,27 +169,24 @@ public static class PointCloudSampling<T>
                 break;
             }
 
-            // Points strictly closer than the minimum distance to the candidate; it is rejected when any of
-            // them is already selected.
-            var candidate = engine.TensorSlice(positions, new[] { idx, 0 }, new[] { 1, 3 });
-            var offsets = engine.TensorSubtract(positions, engine.TensorBroadcastTo(candidate, positions.Shape.ToArray()));
-            var distancesSq = GeometryEngineOps<T>.RowSquaredNorms(offsets);
-            var near = GeometryEngineOps<T>.NonzeroPairs(engine.TensorLessThan(distancesSq, minDistSq));
-
+            // The candidate is rejected when an already selected point lies strictly closer than the minimum
+            // distance. Only the selected points are measured (the first candidate has none to check), so each
+            // candidate costs work proportional to the sample, not to the whole cloud.
             bool tooClose = false;
-            for (int p = 0; p < near.Length; p += 2)
+            if (selectedIndices.Count > 0)
             {
-                if (isSelected[near[p]])
-                {
-                    tooClose = true;
-                    break;
-                }
+                var selectedIds = selectedIndices.ToArray();
+                var selected = engine.TensorIndexSelect(
+                    positions, new Tensor<int>(new[] { selectedIds.Length }, new Vector<int>(selectedIds)), 0);
+                var candidate = engine.TensorSlice(positions, new[] { idx, 0 }, new[] { 1, 3 });
+                var offsets = engine.TensorSubtract(selected, engine.TensorBroadcastTo(candidate, selected.Shape.ToArray()));
+                var distancesSq = GeometryEngineOps<T>.RowSquaredNorms(offsets);
+                tooClose = engine.TensorCountNonzero(engine.TensorLessThan(distancesSq, minDistSq)) > 0;
             }
 
             if (!tooClose)
             {
                 selectedIndices.Add(idx);
-                isSelected[idx] = true;
             }
         }
 
@@ -219,6 +215,19 @@ public static class PointCloudSampling<T>
             throw new ArgumentException(
                 $"VoxelGridSample requires at least 3 features (xyz coordinates). Got {numFeatures} features.",
                 nameof(pointCloud));
+        }
+
+        if (typeof(T) == typeof(Half))
+        {
+            // Half voxel sums overflow above 65504 and its counts stop being exact above 2048: average in float.
+            var widened = PointCloudSampling<float>.VoxelGridSample(
+                new PointCloudData<float>(
+                    pointCloud.Points.Cast<float>(),
+                    pointCloud.Labels is null ? null : Tensor<T>.FromVector(pointCloud.Labels).Cast<float>().ToVector()),
+                NumOps.ToFloat(voxelSize));
+            return new PointCloudData<T>(
+                widened.Points.Cast<T>(),
+                widened.Labels is null ? null : Tensor<float>.FromVector(widened.Labels).Cast<T>().ToVector());
         }
 
         // Compute bounding box minimum for origin-relative voxel indexing
@@ -260,8 +269,14 @@ public static class PointCloudSampling<T>
         int numSamples = members.Count;
         var groupIndex = new Tensor<int>(groupOf, new[] { numPoints });
         var sums = engine.TensorIndexAdd(new Tensor<T>(new[] { numSamples, numFeatures }), 0, groupIndex, pointCloud.Points);
-        var ones = engine.TensorOnesLike(engine.TensorSlice(pointCloud.Points, new[] { 0, 0 }, new[] { numPoints, 1 }));
-        var counts = engine.TensorIndexAdd(new Tensor<T>(new[] { numSamples, 1 }), 0, groupIndex, ones);
+        // Member counts are taken in int (summing ones in T saturates), then converted once.
+        var countValues = new int[numSamples];
+        for (int g = 0; g < numSamples; g++)
+        {
+            countValues[g] = members[g].Count;
+        }
+
+        var counts = new Tensor<int>(countValues, new[] { numSamples, 1 }).Cast<T>();
         var tensor = engine.TensorDivide(sums, engine.TensorBroadcastTo(counts, sums.Shape.ToArray()));
 
         Vector<T>? sampledLabels = null;

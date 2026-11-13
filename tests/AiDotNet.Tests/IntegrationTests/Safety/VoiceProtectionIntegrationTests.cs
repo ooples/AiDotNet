@@ -211,4 +211,23 @@ public class VoiceProtectionIntegrationTests
     }
 
     #endregion
+
+    [Fact(Timeout = 120000)]
+    public async Task Watermark_FrameBatchesMatchOneBatch()
+    {
+        await Task.Yield();
+        // 30 frames in batches of 3: the overlap carried between batches and the global chip index must make the
+        // batched result identical to the single-batch one.
+        var protector = new WatermarkVoiceProtector<double>(watermarkStrength: 0.05, watermarkKey: 42);
+        var audio = GenerateSineWave(8000, 440.0, 16000);
+
+        var whole = protector.EmbedWatermark(audio, 16000, frameBatch: 1 << 20);
+        var batched = protector.EmbedWatermark(audio, 16000, frameBatch: 3);
+
+        Assert.Equal(whole.Length, batched.Length);
+        for (int i = 0; i < whole.Length; i++)
+        {
+            Assert.Equal(whole[i], batched[i], 12);
+        }
+    }
 }

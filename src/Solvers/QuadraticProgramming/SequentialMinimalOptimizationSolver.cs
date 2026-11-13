@@ -282,6 +282,10 @@ public sealed class SequentialMinimalOptimizationSolver<T>
     private static Tensor<T> Violations(Tensor<T> y, T[] gradient, int n)
         => Engine.TensorNegate(Engine.TensorMultiply(y, new Tensor<T>(new[] { n }, new Vector<T>(gradient))));
 
+    /// <summary>
+    /// Optimizes one pair exactly and updates the gradient incrementally.
+    /// </summary>
+    /// <returns><c>false</c> when the step is too small to represent progress.</returns>
     private bool TakeStep(
         int i,
         int j,
@@ -416,14 +420,20 @@ public sealed class SequentialMinimalOptimizationSolver<T>
         return NumOps.Zero;
     }
 
-    // 1 where alpha_k can move up along y^T alpha = const: below its bound for y > 0, above zero otherwise.
+    /// <summary>
+    /// Whether the multiplier can move in the direction that increases <c>y_i·α_i</c> without
+    /// leaving its box: 1 where alpha_k is below its bound for y &gt; 0, above zero otherwise.
+    /// </summary>
     private static Tensor<T> CanIncreaseAlongConstraint(Tensor<T> label, Tensor<T> alpha, Tensor<T> upperBound)
         => Engine.TensorWhere(
             Engine.TensorGreaterThan(label, NumOps.Zero),
             Engine.TensorLessThan(alpha, upperBound),
             Engine.TensorGreaterThan(alpha, NumOps.Zero));
 
-    // 1 where alpha_k can move down: above zero for y > 0, below its bound otherwise.
+    /// <summary>
+    /// Whether the multiplier can move in the direction that decreases <c>y_i·α_i</c> without
+    /// leaving its box: 1 where alpha_k is above zero for y &gt; 0, below its bound otherwise.
+    /// </summary>
     private static Tensor<T> CanDecreaseAlongConstraint(Tensor<T> label, Tensor<T> alpha, Tensor<T> upperBound)
         => Engine.TensorWhere(
             Engine.TensorGreaterThan(label, NumOps.Zero),

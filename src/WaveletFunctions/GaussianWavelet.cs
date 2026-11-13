@@ -267,19 +267,13 @@ public class GaussianWavelet<T> : WaveletFunctionBase<T>
             return new Vector<T>(0);
         }
 
-        var engine = AiDotNetEngine.Current;
         var x = WaveletEngineOps<T>.CenteredGrid(size);
         var waveletValue = Calculate(x);
         var derivativeValue = CalculateDerivativeValues(x, waveletValue);
-        var a = Tensor<T>.FromVector(approximation);
-        var d = WaveletEngineOps<T>.Prefix(detail, size);
 
         // Least-squares inverse of the two pointwise products: (a * w + d * w') / (w^2 + w'^2), falling back to
         // a + d where the denominator is numerically zero.
-        var denominator = engine.TensorAdd(engine.TensorSquare(waveletValue), engine.TensorSquare(derivativeValue));
-        var numerator = engine.TensorAdd(engine.TensorMultiply(a, waveletValue), engine.TensorMultiply(d, derivativeValue));
-        var usable = engine.TensorGreaterThan(engine.TensorAbs(denominator), NumOps.FromDouble(1e-10));
-        return engine.TensorWhere(usable, engine.TensorDivide(numerator, denominator), engine.TensorAdd(a, d)).ToVector();
+        return WaveletEngineOps<T>.PointwiseReconstruct(approximation, detail, waveletValue, derivativeValue);
     }
 
     /// <summary>

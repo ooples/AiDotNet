@@ -806,7 +806,8 @@ public partial class GaussianSplatting<T> : AiDotNet.NeuralNetworks.VectorModelL
         T zero = ops.Zero;
         T minScale = ops.FromDouble(MinScale);
         T multiplier = ops.FromDouble(InitialScaleMultiplier);
-        var columnIndex = engine.TensorArange<T>(0, n, 1).Reshape(1, n);
+        // Point indices are compared as int: indices held in T stop being exact above 2048 for Half.
+        var columnIndex = engine.TensorArange<int>(0, n, 1).Reshape(1, n);
         int chunk = Math.Max(1, PairBudget / Math.Max(1, n * 3));
         var parts = new List<Tensor<T>>();
         for (int start = 0; start < n; start += chunk)
@@ -821,8 +822,10 @@ public partial class GaussianSplatting<T> : AiDotNet.NeuralNetworks.VectorModelL
             var cellGap = engine.ReduceMax(
                 engine.TensorAbs(Sub(Bc(rowCells.Reshape(rows, 1, 3), shape3), Bc(cells.Reshape(1, n, 3), shape3))),
                 new[] { 2 }, false);
-            var rowIndex = engine.TensorArange<T>(start, start + rows, 1).Reshape(rows, 1);
-            var neighbour = Mul(Le(cellGap, one), Not(engine.TensorEquals(Bc(rowIndex, shape2), Bc(columnIndex, shape2))));
+            var rowIndex = engine.TensorArange<int>(start, start + rows, 1).Reshape(rows, 1);
+            var isSelf = engine.TensorEquals(
+                engine.TensorBroadcastTo(rowIndex, shape2), engine.TensorBroadcastTo(columnIndex, shape2)).Cast<T>();
+            var neighbour = Mul(Le(cellGap, one), Not(isSelf));
             var candidate = engine.TensorWhere(engine.TensorIsNan(distSq), Full(shape2, sentinel), distSq);
             candidate = Select(neighbour, candidate, Full(shape2, sentinel));
             var nearestSq = engine.TensorNegate(engine.ReduceMax(engine.TensorNegate(candidate), new[] { 1 }, false));
@@ -1244,7 +1247,7 @@ public partial class GaussianSplatting<T> : AiDotNet.NeuralNetworks.VectorModelL
         }
 
         var rows = visibleRows.Reshape(m);
-        var order = engine.TensorArgsort(engine.TensorIndexSelect(z, rows, 0), 0, false);
+        var order = StableOrder(engine.TensorIndexSelect(z, rows, 0), descending: false);
         var sorted = engine.TensorIndexSelect(rows, order, 0);
 
         minX = MaxScalar(minX, ops.Zero);
@@ -2765,7 +2768,7 @@ public partial class GaussianSplatting<T> : AiDotNet.NeuralNetworks.VectorModelL
         if (n > 0)
         {
             var engine = Engine;
-            var indices = engine.TensorArange<T>(0, n, 1).Cast<int>();
+            var indices = engine.TensorArange<int>(0, n, 1);
             var gradient = engine.TensorConcatenate(new[]
             {
                 Full(new[] { n, 1 }, NumOps.FromDouble(gradientsMagnitude)),
@@ -2793,7 +2796,7 @@ public partial class GaussianSplatting<T> : AiDotNet.NeuralNetworks.VectorModelL
         }
 
         var engine = Engine;
-        var indices = engine.TensorArange<T>(0, n, 1).Cast<int>();
+        var indices = engine.TensorArange<int>(0, n, 1);
         var world = engine.TensorConcatenate(new[] { screenGradients, new Tensor<T>(new[] { n, 1 }) }, 1);
         AccumulateDensificationStats(new List<GaussianGradient> { new GaussianGradient(indices, world, screenGradients) });
     }
@@ -2984,16 +2987,17 @@ public partial class GaussianSplatting<T> : AiDotNet.NeuralNetworks.VectorModelL
         // run stops at the first magnitude below the threshold, pruned sources are skipped, and at most cap - count
         // Gaussians are added.
         var magnitude = meanNorms;
-        var order = engine.TensorArgsort(engine.TensorNegate(magnitude), 0, false);
+        var order = StableOrder(magnitude, descending: true);
         var sortedRows = engine.TensorIndexSelect(sourceRows, order, 0);
         var sortedGrads = engine.TensorIndexSelect(sourceGrads, order, 0);
         var aboveThreshold = engine.TensorCumProd(
             Not(Lt(engine.TensorIndexSelect(magnitude, order, 0), ops.FromDouble(EffectiveGradientNormThreshold))), 0);
         var alive = engine.TensorIndexSelect(kept, sortedRows, 0);
         var candidate = engine.TensorMultiply(aboveThreshold, alive);
-        var taken = engine.TensorMultiply(candidate, Le(engine.TensorCumSum(candidate, 0), ops.FromDouble(cap - count)));
-        var takenRows = engine.TensorNonzero(taken);
-        int densified = takenRows._shape[0];
+        // The first cap - count candidates by integer position: a running count held in T saturates (Half stops
+        // at 2048), so the cumulative-sum cut would let every later candidate through.
+        var candidatePositions = engine.TensorNonzero(candidate).ToArray();
+        int densified = Math.Min(candidatePositions.Length, cap - count);
         if (densified == 0)
         {
             ResetDensificationStats();
@@ -3001,11 +3005,26 @@ public partial class GaussianSplatting<T> : AiDotNet.NeuralNetworks.VectorModelL
             return;
         }
 
-        var picked = takenRows.Reshape(densified);
+        var pickedIds = new int[densified];
+        Array.Copy(candidatePositions, pickedIds, densified);
+        var picked = new Tensor<int>(pickedIds, new[] { densified });
 
-        // Rows of the densified sources after pruning: the number of kept rows before each.
-        var newIndex = engine.TensorSubtractScalar(engine.TensorCumSum(kept, 0), ops.One);
-        var sourceIndex = engine.TensorIndexSelect(newIndex, engine.TensorIndexSelect(sortedRows, picked, 0), 0);
+        // Rows of the densified sources after pruning (the number of kept rows before each), mapped in int.
+        var keptIds = keptRows.Reshape(count).ToArray();
+        var rowAfterPrune = new int[n];
+        for (int k = 0; k < keptIds.Length; k++)
+        {
+            rowAfterPrune[keptIds[k]] = k;
+        }
+
+        var pickedSources = engine.TensorIndexSelect(sortedRows, picked, 0).ToArray();
+        var sourceIds = new int[densified];
+        for (int k = 0; k < densified; k++)
+        {
+            sourceIds[k] = rowAfterPrune[pickedSources[k]];
+        }
+
+        var sourceIndex = new Tensor<int>(sourceIds, new[] { densified });
 
         // Kerbl et al. 2023 section 5.2: under-reconstructed regions (small Gaussians) are covered by cloning, large
         // Gaussians in over-reconstructed regions are split. The scene extent is the radius of the cloud around its
@@ -3014,7 +3033,7 @@ public partial class GaussianSplatting<T> : AiDotNet.NeuralNetworks.VectorModelL
         var fromCentroid = engine.TensorSubtract(_positions, centroid);
         T sceneExtent = ops.Multiply(ops.FromDouble(1.1), engine.TensorMaxValue(
             engine.TensorSqrt(engine.ReduceSum(engine.TensorMultiply(fromCentroid, fromCentroid), new[] { 1 }, false))));
-        var largestScale = engine.ReduceMax(engine.TensorExp(engine.TensorIndexSelect(_logScales, sourceIndex.Cast<int>(), 0)), new[] { 1 }, false);
+        var largestScale = engine.ReduceMax(engine.TensorExp(engine.TensorIndexSelect(_logScales, sourceIndex, 0)), new[] { 1 }, false);
         var small = Le(largestScale, ops.Multiply(ops.FromDouble(PercentDense), sceneExtent));
         var cloneSelection = engine.TensorNonzero(small);
         int clones = cloneSelection._shape[0];
@@ -3026,14 +3045,14 @@ public partial class GaussianSplatting<T> : AiDotNet.NeuralNetworks.VectorModelL
         Tensor<T>? cloneLearningRates = null;
         if (clones > 0)
         {
-            cloneSources = engine.TensorIndexSelect(sourceIndex, cloneSelection.Reshape(clones), 0).Cast<int>();
+            cloneSources = engine.TensorIndexSelect(sourceIndex, cloneSelection.Reshape(clones), 0);
             cloneLearningRates = engine.TensorIndexSelect(_learningRateScales, cloneSources, 0);
         }
 
         if (splits > 0)
         {
             var splitSelected = splitSelection.Reshape(splits);
-            var sources = engine.TensorIndexSelect(sourceIndex, splitSelected, 0).Cast<int>();
+            var sources = engine.TensorIndexSelect(sourceIndex, splitSelected, 0);
 
             // Split direction: the normalised position gradient, or a seeded random direction when it is zero.
             var direction = NormalizeRows(engine.TensorIndexSelect(engine.TensorIndexSelect(sortedGrads, picked, 0), splitSelected, 0));
@@ -3235,6 +3254,42 @@ public partial class GaussianSplatting<T> : AiDotNet.NeuralNetworks.VectorModelL
         var tensor = new Tensor<T>(shape);
         tensor.Fill(value);
         return tensor;
+    }
+
+    /// <summary>
+    /// The indices that sort a rank-1 tensor ascending (or descending) with tied values kept in index order, as LINQ
+    /// <c>OrderBy</c> / <c>OrderByDescending</c> order them; NaN sorts as the smallest value (first ascending, last
+    /// descending), as <c>double.CompareTo</c> does. The order is read from distinct integer keys (dense value rank,
+    /// then index), so the unstable engine argsort cannot reorder ties.
+    /// </summary>
+    internal static Tensor<int> StableOrder(Tensor<T> values, bool descending)
+    {
+        int m = values.Length;
+        var order = new int[m];
+        if (m == 0)
+        {
+            return new Tensor<int>(order, new[] { 0 });
+        }
+
+        var ranks = AiDotNet.Geometry.GeometryEngineOps<T>.DenseRowRanks(values.Reshape(1, m));
+        long maxRank = -1;
+        for (int j = 0; j < m; j++)
+        {
+            maxRank = Math.Max(maxRank, ranks[j]);
+        }
+
+        var keys = new long[m];
+        for (int j = 0; j < m; j++)
+        {
+            long rank = ranks[j];
+            long ordinal = descending ? (rank < 0 ? maxRank + 1 : maxRank - rank) : rank;
+            keys[j] = ordinal * m + j;
+            order[j] = j;
+        }
+
+        // The keys are distinct, so any sort yields the one stable order.
+        Array.Sort(keys, order);
+        return new Tensor<int>(order, new[] { m });
     }
 
     private Tensor<T> Bc(Tensor<T> tensor, int[] shape) => Engine.TensorBroadcastTo(tensor, shape);

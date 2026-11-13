@@ -149,6 +149,9 @@ internal static class ImageTrainingHelpers
     /// the camera-space direction ((x - cx) / f, (y - cy) / f, 1) with cx = (width - 1) / 2, cy = (height - 1) / 2,
     /// rotated by the camera rotation and normalized (zero-length directions are left as they are).
     /// </summary>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// <paramref name="focalLength"/> is zero, negative, infinite or NaN: every ray would be NaN or degenerate.
+    /// </exception>
     internal static (Tensor<T> origins, Tensor<T> directions) GeneratePinholeRays<T>(
         IEngine engine,
         Vector<T> cameraPosition,
@@ -158,6 +161,12 @@ internal static class ImageTrainingHelpers
         T focalLength)
     {
         var numOps = MathHelper.GetNumericOperations<T>();
+        if (!numOps.GreaterThan(focalLength, numOps.Zero) || numOps.IsInfinity(focalLength))
+        {
+            // NaN fails the greater-than test as well.
+            throw new ArgumentOutOfRangeException(nameof(focalLength), "The focal length must be positive and finite.");
+        }
+
         int numRays = width * height;
         if (numRays == 0)
         {
@@ -177,9 +186,12 @@ internal static class ImageTrainingHelpers
         var directions = engine.TensorMatMul(cameraDirs, engine.TensorTranspose(rotation));
 
         var norm = engine.TensorSqrt(engine.ReduceSum(engine.TensorSquare(directions), new[] { 1 }, true));
-        var normalized = engine.TensorMultiply(
-            directions, engine.TensorBroadcastTo(engine.TensorReciprocal(norm), directions.Shape.ToArray()));
-        var positive = engine.TensorBroadcastTo(engine.TensorGreaterThan(norm, numOps.Zero), directions.Shape.ToArray());
+        var hasLength = engine.TensorGreaterThan(norm, numOps.Zero);
+
+        // Zero-length rows divide by one instead (decimal throws on division by zero) and keep their direction.
+        var safeNorm = engine.TensorWhere(hasLength, norm, engine.TensorOnesLike(norm));
+        var normalized = engine.TensorDivide(directions, engine.TensorBroadcastTo(safeNorm, directions.Shape.ToArray()));
+        var positive = engine.TensorBroadcastTo(hasLength, directions.Shape.ToArray());
         directions = engine.TensorWhere(positive, normalized, directions);
 
         var position = Tensor<T>.FromVector(cameraPosition.GetSubVector(0, 3)).Reshape(1, 3);

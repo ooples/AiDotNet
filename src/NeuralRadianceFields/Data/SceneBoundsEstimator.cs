@@ -57,8 +57,10 @@ public static class SceneBoundsEstimator
 
         // Near = smallest camera-to-centroid distance minus half-radius (surface hits before
         // reaching centroid). Far = camera-to-far-side-of-bbox from the most distant camera.
-        var forMin = engine.TensorWhere(
-            isNan, engine.TensorFullLike(distances, numOps.FromDouble(double.PositiveInfinity)), distances);
+        // NaN distances are skipped by masking them with the type's largest value (decimal has no infinity to
+        // convert). When every distance is NaN the scan never moved off +infinity, so near is +infinity.
+        bool allNan = engine.TensorCountNonzero(isNan) == distances.Length;
+        var forMin = engine.TensorWhere(isNan, engine.TensorFullLike(distances, numOps.MaxValue), distances);
         T minDist = engine.TensorMinValue(forMin);
 
         // Math.Max(0.1, value) semantics: a NaN value propagates.
@@ -71,7 +73,7 @@ public static class SceneBoundsEstimator
         return new SceneBounds(
             center: (numOps.ToDouble(centroid[0, 0]), numOps.ToDouble(centroid[0, 1]), numOps.ToDouble(centroid[0, 2])),
             radius: numOps.ToDouble(radius),
-            near: numOps.ToDouble(near),
+            near: allNan ? double.PositiveInfinity : numOps.ToDouble(near),
             far: numOps.ToDouble(far));
     }
 }

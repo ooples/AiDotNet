@@ -50,6 +50,14 @@ public class GaussianSplattingOptions : ModelOptions
     /// densified. Used when <see cref="GradientNormThreshold"/> is null.
     /// </summary>
     /// <value>0.0002 (paper τ_pos, reference densify_grad_threshold).</value>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> During training every Gaussian keeps track of how strongly the loss pulls on its
+    /// on-screen position. A Gaussian that is pulled hard, on average over the views it appeared in, is sitting in a
+    /// region the current cloud cannot yet describe, so it is cloned (if small) or split (if large) into more
+    /// Gaussians. This threshold is the cut-off for "pulled hard": lower values add Gaussians more eagerly (more
+    /// detail, more memory), higher values add fewer. The value is in normalised device coordinates, which is why
+    /// it is so small.</para>
+    /// </remarks>
     public double SplitGradientThreshold { get; set; } = 0.0002;
 
     /// <summary>Position jitter magnitude applied to split children.</summary>
@@ -111,7 +119,15 @@ public class GaussianSplattingOptions : ModelOptions
     /// small, split when large).
     /// </summary>
     /// <value>Nullable. When null, the effective threshold falls back to <see cref="SplitGradientThreshold"/> (paper default τ_pos = 0.0002).</value>
-    /// <remarks>Paper: 0.0002.</remarks>
+    /// <remarks>
+    /// <para>Paper: 0.0002.</para>
+    /// <para><b>For Beginners:</b> During training every Gaussian keeps track of how strongly the loss pulls on its
+    /// on-screen position. A Gaussian that is pulled hard, on average over the views it appeared in, is sitting in a
+    /// region the current cloud cannot yet describe, so it is cloned (if small) or split (if large) into more
+    /// Gaussians. This threshold, when set, overrides SplitGradientThreshold as the cut-off for "pulled hard": lower values add Gaussians more eagerly (more
+    /// detail, more memory), higher values add fewer. The value is in normalised device coordinates, which is why
+    /// it is so small.</para>
+    /// </remarks>
     public double? GradientNormThreshold { get; set; }
 
     /// <summary>

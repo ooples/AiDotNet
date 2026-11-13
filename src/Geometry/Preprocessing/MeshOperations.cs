@@ -171,11 +171,20 @@ public static class MeshOperations<T>
 
         T surfaceArea = NumOps.Zero;
         T signedVolume = NumOps.Zero;
-        if (numFaces > 0)
+        if (numFaces > 0 && typeof(T) == typeof(Half))
+        {
+            // Half cross products, squares and triple products overflow above about 40 units; measure in float.
+            var widened = MeshOperations<float>.ComputeStatistics(
+                new TriangleMeshData<float>(mesh.Vertices.Cast<float>(), mesh.Faces, validateIndices: false));
+            surfaceArea = NumOps.FromDouble(widened.SurfaceArea);
+            signedVolume = NumOps.FromDouble(widened.Volume);
+        }
+        else if (numFaces > 0)
         {
             var crossProducts = GeometryEngineOps<T>.FaceCrossProducts(mesh.Vertices, mesh.Faces);
             var doubleAreas = engine.TensorSqrt(GeometryEngineOps<T>.RowSquaredNorms(crossProducts));
-            surfaceArea = NumOps.Multiply(NumOps.FromDouble(0.5), engine.TensorSum(doubleAreas));
+            // Halved by division: FromDouble(0.5) is zero for integral types.
+            surfaceArea = NumOps.Divide(engine.TensorSum(doubleAreas), NumOps.FromDouble(2));
 
             // Divergence theorem: each face contributes p0 . (p1 x p2) / 6.
             var p0 = GeometryEngineOps<T>.FaceCorner(mesh.Vertices, mesh.Faces, 0);

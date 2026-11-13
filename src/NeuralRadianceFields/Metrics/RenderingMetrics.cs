@@ -89,6 +89,12 @@ public static class RenderingMetrics<T>
         double maxValue = 1.0)
     {
         ValidateShapes(predicted, groundTruth);
+        if (typeof(T) == typeof(Half))
+        {
+            // Half window sums overflow above 65504, and so does the total over many windows: measure in float.
+            return RenderingMetrics<float>.SSIM(
+                predicted.Cast<float>(), groundTruth.Cast<float>(), windowSize, k1, k2, maxValue);
+        }
 
         double c1 = (k1 * maxValue) * (k1 * maxValue);
         double c2 = (k2 * maxValue) * (k2 * maxValue);
@@ -239,7 +245,9 @@ public static class RenderingMetrics<T>
         int perWindow = x.Shape[2] * size * size;
         int blockRows = Math.Max(1, (1 << 22) / Math.Max(1, windowColumns * perWindow));
         var axes = new[] { 2, 3, 4 };
-        T unbiased = NumOps.FromDouble(perWindow - 1);
+        // A single-sample window (1x1, one channel) has no unbiased divisor; its sums are used as they are, as
+        // the global path does for one element.
+        T unbiased = NumOps.FromDouble(Math.Max(1, perWindow - 1));
         T two = NumOps.FromDouble(2);
 
         var blocks = new List<Tensor<T>>();

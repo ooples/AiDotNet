@@ -55,8 +55,13 @@ internal static class GeometryEngineOps<T>
     }
 
     /// <summary>
-    /// Scales every row to unit length; rows whose squared length is not positive become zero.
+    /// Scales every row to unit length; rows whose squared length is not positive (zero or NaN) become zero.
     /// </summary>
+    /// <remarks>
+    /// The division uses a safe denominator of one on the rows that are zeroed, so decimal never divides by zero,
+    /// and the rows are divided directly by their length (no reciprocal), so integral types keep their whole-number
+    /// quotient. Half is normalized in float: its squared lengths overflow above 255.
+    /// </remarks>
     internal static Tensor<T> NormalizeRowsOrZero(Tensor<T> rows)
     {
         if (rows.Shape[0] == 0)
@@ -64,11 +69,17 @@ internal static class GeometryEngineOps<T>
             return rows;
         }
 
+        if (typeof(T) == typeof(Half))
+        {
+            return GeometryEngineOps<float>.NormalizeRowsOrZero(rows.Cast<float>()).Cast<T>();
+        }
+
+        var shape = rows.Shape.ToArray();
         var lengthSquared = RowSquaredNorms(rows);
         var positive = Engine.TensorGreaterThan(lengthSquared, NumOps.Zero);
-        var inverseLength = Engine.TensorReciprocal(Engine.TensorSqrt(lengthSquared));
-        var factors = Engine.TensorWhere(positive, inverseLength, Engine.TensorZerosLike(lengthSquared));
-        return ScaleRows(rows, factors);
+        var safeLength = Engine.TensorWhere(positive, Engine.TensorSqrt(lengthSquared), Engine.TensorOnesLike(lengthSquared));
+        var quotient = Engine.TensorDivide(rows, Engine.TensorBroadcastTo(safeLength, shape));
+        return Engine.TensorWhere(Engine.TensorBroadcastTo(positive, shape), quotient, Engine.TensorZerosLike(rows));
     }
 
     /// <summary>
@@ -82,9 +93,15 @@ internal static class GeometryEngineOps<T>
             return rows;
         }
 
+        if (typeof(T) == typeof(Half))
+        {
+            return GeometryEngineOps<float>.NormalizeRowsAbove(rows.Cast<float>(), NumOps.ToFloat(minLength)).Cast<T>();
+        }
+
         var length = Engine.TensorBroadcastTo(Engine.TensorSqrt(RowSquaredNorms(rows)), rows.Shape.ToArray());
         var usable = Engine.TensorGreaterThan(length, minLength);
-        return Engine.TensorWhere(usable, Engine.TensorDivide(rows, length), rows);
+        var safeLength = Engine.TensorWhere(usable, length, Engine.TensorOnesLike(length));
+        return Engine.TensorWhere(usable, Engine.TensorDivide(rows, safeLength), rows);
     }
 
     /// <summary>
@@ -147,11 +164,65 @@ internal static class GeometryEngineOps<T>
     {
         int fromCount = from.Shape[0];
         int toCount = to.Shape[0];
-        var shape = new[] { fromCount, toCount, 3 };
-        var left = Engine.TensorBroadcastTo(Positions(from).Reshape(fromCount, 1, 3), shape);
-        var right = Engine.TensorBroadcastTo(Positions(to).Reshape(1, toCount, 3), shape);
-        var difference = Engine.TensorSubtract(left, right);
-        return Engine.ReduceSum(Engine.TensorSquare(difference), new[] { 2 }, false);
+        var shape = new[] { fromCount, toCount };
+        var fromPositions = Positions(from);
+        var toPositions = Positions(to);
+
+        // Accumulated one axis at a time in x, y, z order (the order the reduction over the last axis used), so
+        // only [from, to] tensors are ever allocated rather than a [from, to, 3] difference block.
+        Tensor<T>? total = null;
+        for (int axis = 0; axis < 3; axis++)
+        {
+            var left = Engine.TensorBroadcastTo(Column(fromPositions, axis).Reshape(fromCount, 1), shape);
+            var right = Engine.TensorBroadcastTo(Column(toPositions, axis).Reshape(1, toCount), shape);
+            var squared = Engine.TensorSquare(Engine.TensorSubtract(left, right));
+            total = total is null ? squared : Engine.TensorAdd(total, squared);
+        }
+
+        return total ?? new Tensor<T>(shape);
+    }
+
+    /// <summary>The most distance-matrix entries one block of rows may hold (about 32 MB of double).</summary>
+    internal const int DistanceBlockElements = 1 << 22;
+
+    /// <summary>
+    /// Yields the [from, to] squared-distance matrix in blocks of consecutive <paramref name="from"/> rows, each
+    /// with its first row index, so callers that only reduce over rows or columns never hold the whole matrix.
+    /// </summary>
+    internal static IEnumerable<(int Start, Tensor<T> Distances)> SquaredDistanceBlocks(Tensor<T> from, Tensor<T> to)
+    {
+        int fromCount = from.Shape[0];
+        int toCount = to.Shape[0];
+        int features = from.Shape[1];
+        int block = Math.Max(1, DistanceBlockElements / Math.Max(1, toCount));
+        for (int start = 0; start < fromCount; start += block)
+        {
+            int count = Math.Min(block, fromCount - start);
+            var rows = count == fromCount
+                ? from
+                : Engine.TensorSlice(from, new[] { start, 0 }, new[] { count, features });
+            yield return (start, PairwiseSquaredDistances(rows, to));
+        }
+    }
+
+    /// <summary>
+    /// Returns, for every <paramref name="from"/> point and every <paramref name="to"/> point, the smallest squared
+    /// distance to the other set, skipping NaN distances as <see cref="RowMinSkippingNan"/> does (an all-NaN row or
+    /// column reports <c>MaxValue</c>). The distance matrix is processed in row blocks.
+    /// </summary>
+    internal static (Tensor<T> FromMin, Tensor<T> ToMin) NearestSquaredDistances(Tensor<T> from, Tensor<T> to)
+    {
+        var fromMins = new List<Tensor<T>>();
+        Tensor<T>? toMin = null;
+        foreach (var (_, distances) in SquaredDistanceBlocks(from, to))
+        {
+            fromMins.Add(RowMinSkippingNan(distances));
+            var blockMin = RowMinSkippingNan(Engine.TensorTranspose(distances));
+            toMin = toMin is null ? blockMin : Engine.TensorWhere(Engine.TensorLessThan(blockMin, toMin), blockMin, toMin);
+        }
+
+        var fromMin = fromMins.Count == 1 ? fromMins[0] : Engine.TensorConcatenate(fromMins.ToArray(), 0);
+        return (fromMin, toMin ?? new Tensor<T>(new[] { to.Shape[0] }));
     }
 
     /// <summary>
@@ -279,6 +350,12 @@ internal static class GeometryEngineOps<T>
     internal static (Tensor<T> min, Tensor<T> max) PropagatingColumnBounds(Tensor<T> rows)
     {
         var (min, max) = ColumnBounds(rows);
+        // Only a type that can hold NaN reaches the replacement; decimal cannot convert NaN at all.
+        if (!AnyNan(rows))
+        {
+            return (min, max);
+        }
+
         var hasNan = ColumnHasNan(rows);
         var nan = Engine.TensorFullLike(min, NumOps.FromDouble(double.NaN));
         return (Engine.TensorWhere(hasNan, nan, min), Engine.TensorWhere(hasNan, nan, max));

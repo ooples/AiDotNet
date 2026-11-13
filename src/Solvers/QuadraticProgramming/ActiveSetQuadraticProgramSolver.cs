@@ -256,6 +256,10 @@ public sealed class ActiveSetQuadraticProgramSolver<T> : IQuadraticProgramSolver
         return flags;
     }
 
+    /// <summary>
+    /// Finds any point satisfying every constraint, by solving the feasibility problem as a linear
+    /// program with a zero objective.
+    /// </summary>
     private (LinearProgramStatus Status, Vector<T>? Point) FindFeasiblePoint(
         QuadraticProgram<T> program, List<Vector<T>> inequalityRows, Vector<T> inequalityBounds)
     {
@@ -293,6 +297,21 @@ public sealed class ActiveSetQuadraticProgramSolver<T> : IQuadraticProgramSolver
     private static Tensor<T> StackRows(List<Vector<T>> rows)
         => Engine.TensorStack(rows.Select(row => SolverTensorOps<T>.AsTensor(row)).ToArray(), 0);
 
+    /// <summary>
+    /// Solves the KKT system for the equality-constrained subproblem defined by the current working
+    /// set, returning the step and the Lagrange multipliers.
+    /// </summary>
+    /// <remarks>
+    /// The system solved is
+    /// <code>
+    ///   [ Q   Aᵀ ] [ p ]   [ -g ]
+    ///   [ A   0  ] [ λ ] = [  0 ]
+    /// </code>
+    /// where <c>A</c> stacks the equality rows and the working inequality rows, <c>g</c> is the
+    /// gradient at the current point, <c>p</c> is the step and <c>λ</c> the multipliers. Its second
+    /// block row says the step stays on every working constraint; the first says the gradient at the
+    /// new point is a combination of their normals, which is stationarity.
+    /// </remarks>
     private (Vector<T> Step, Vector<T> Multipliers)? SolveEqualityConstrainedStep(
         QuadraticProgram<T> program,
         List<Vector<T>> inequalityRows,
@@ -374,6 +393,14 @@ public sealed class ActiveSetQuadraticProgramSolver<T> : IQuadraticProgramSolver
         return (step.ToVector(), multipliers);
     }
 
+    /// <summary>
+    /// Computes how far along the step direction the point can move before a constraint outside the
+    /// working set blocks it, and which constraint that is.
+    /// </summary>
+    /// <returns>
+    /// The step length, capped at 1 (the full subproblem step), and the index of the blocking
+    /// constraint, or -1 when nothing blocks.
+    /// </returns>
     private static (T Length, int BlockingConstraint) ComputeStepLength(
         List<Vector<T>> inequalityRows,
         Vector<T> inequalityBounds,

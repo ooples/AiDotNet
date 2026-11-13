@@ -830,10 +830,8 @@ public sealed class InteriorPointSolver<T> : ILinearProgramSolver<T>, IQuadratic
         var engine = SolverTensorOps<T>.Engine;
         int m = left.Shape[0];
         var product = engine.TensorMatMul(left, engine.TensorTranspose(right));
-        var index = engine.TensorArange<T>(0, m, 1);
-        var lower = engine.TensorLessThan(
-            engine.TensorSubtract(engine.Reshape(index, new[] { 1, m }), engine.Reshape(index, new[] { m, 1 })),
-            NumOps.One);
+        // Lower triangle (diagonal included) by integer coordinates: indices held in T merge above 2048 for Half.
+        var lower = engine.TensorTril(Tensor<T>.CreateDefault(new[] { m, m }, NumOps.One));
         var mirrored = engine.TensorWhere(lower, product, engine.TensorTranspose(product));
         return engine.TensorWhere(engine.TensorEye<T>(m), engine.TensorAddScalar(mirrored, delta), mirrored)
             .Contiguous().ToMatrix();

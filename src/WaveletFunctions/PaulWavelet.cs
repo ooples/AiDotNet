@@ -334,8 +334,17 @@ public class PaulWavelet<T> : WaveletFunctionBase<T>
     /// Reconstruct(Decompose(signal)) should equal the original signal.
     /// </para>
     /// </remarks>
+    /// <exception cref="ArgumentException">
+    /// <paramref name="approximation"/> and <paramref name="detail"/> differ in length: their spectra have different
+    /// bin spacings and cannot be added.
+    /// </exception>
     public Vector<T> Reconstruct(Vector<T> approximation, Vector<T> detail)
     {
+        if (approximation.Length != detail.Length)
+        {
+            throw new ArgumentException("Approximation and detail lengths must match.", nameof(detail));
+        }
+
         // Perform FFT on both approximation and detail
         Vector<Complex<T>> approxSpectrum = _fft.Forward(approximation);
         Vector<Complex<T>> detailSpectrum = _fft.Forward(detail);

@@ -981,4 +981,139 @@ public class GeometryPreprocessingIntegrationTests
     }
 
     #endregion
+
+    #region Element-wise sweep review regressions (#2478)
+
+    [Fact(Timeout = 120000)]
+    public async Task FaceNormals_NanVertex_GivesZeroNormal()
+    {
+        await Task.Yield();
+        var vertices = new Tensor<double>(new double[] { 0, 0, 0, double.NaN, 0, 0, 0, 1, 0 }, new[] { 3, 3 });
+        var mesh = new TriangleMeshData<double>(vertices, new Tensor<int>(new[] { 0, 1, 2 }, new[] { 1, 3 }));
+
+        var normals = mesh.ComputeFaceNormals();
+
+        for (int c = 0; c < 3; c++)
+        {
+            Assert.Equal(0.0, normals[0, c]);
+        }
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task FaceNormals_IntegerCoordinates_DivideByTheLength()
+    {
+        await Task.Yield();
+        // Cross product (0, 0, 16): the reciprocal 1/16 truncates to zero in int, the quotient 16/16 does not.
+        var vertices = new Tensor<int>(new[] { 0, 0, 0, 4, 0, 0, 0, 4, 0 }, new[] { 3, 3 });
+        var mesh = new TriangleMeshData<int>(vertices, new Tensor<int>(new[] { 0, 1, 2 }, new[] { 1, 3 }));
+
+        var normals = mesh.ComputeFaceNormals();
+
+        Assert.Equal(0, normals[0, 0]);
+        Assert.Equal(0, normals[0, 1]);
+        Assert.Equal(1, normals[0, 2]);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task VertexNormals_DecimalUnusedVertex_StaysZeroWithoutDividingByZero()
+    {
+        await Task.Yield();
+        // Vertex 3 belongs to no face, so its accumulated normal is the zero row.
+        var vertices = new Tensor<decimal>(new decimal[] { 0, 0, 0, 1, 0, 0, 0, 1, 0, 5, 5, 5 }, new[] { 4, 3 });
+        var mesh = new TriangleMeshData<decimal>(vertices, new Tensor<int>(new[] { 0, 1, 2 }, new[] { 1, 3 }));
+
+        var normals = mesh.ComputeVertexNormals();
+
+        Assert.Equal(1.0, (double)normals[0, 2], 9);
+        for (int c = 0; c < 3; c++)
+        {
+            Assert.Equal(0m, normals[3, c]);
+        }
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task ComputeStatistics_DecimalMesh_ReportsBoundsAndArea()
+    {
+        await Task.Yield();
+        var vertices = new Tensor<decimal>(new decimal[] { 0, 0, 0, 2, 0, 0, 0, 2, 0 }, new[] { 3, 3 });
+        var mesh = new TriangleMeshData<decimal>(vertices, new Tensor<int>(new[] { 0, 1, 2 }, new[] { 1, 3 }));
+
+        var stats = MeshOperations<decimal>.ComputeStatistics(mesh);
+
+        Assert.Equal(2.0, (double)stats.SurfaceArea, 9);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task ComputeStatistics_IntegerMesh_KeepsIntegralArea()
+    {
+        await Task.Yield();
+        // |cross| = 4, area 2: multiplying by FromDouble(0.5) truncates to 0 * 4.
+        var vertices = new Tensor<int>(new[] { 0, 0, 0, 2, 0, 0, 0, 2, 0 }, new[] { 3, 3 });
+        var mesh = new TriangleMeshData<int>(vertices, new Tensor<int>(new[] { 0, 1, 2 }, new[] { 1, 3 }));
+
+        var stats = MeshOperations<int>.ComputeStatistics(mesh);
+
+        Assert.Equal(2, stats.SurfaceArea);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task ComputeStatistics_HalfMesh_AreaDoesNotOverflow()
+    {
+        await Task.Yield();
+        // Cross product (0, 0, 1024): its square overflows Half, the area 512 does not.
+        var vertices = new Tensor<Half>(
+            new[] { (Half)0, (Half)0, (Half)0, (Half)32, (Half)0, (Half)0, (Half)0, (Half)32, (Half)0 }, new[] { 3, 3 });
+        var mesh = new TriangleMeshData<Half>(vertices, new Tensor<int>(new[] { 0, 1, 2 }, new[] { 1, 3 }));
+
+        var stats = MeshOperations<Half>.ComputeStatistics(mesh);
+
+        Assert.Equal(512.0, (double)stats.SurfaceArea, 6);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task ChamferAndHausdorff_HalfClouds_DoNotOverflow()
+    {
+        await Task.Yield();
+        // Squared distance 300^2 = 90000 overflows Half; the distance 300 does not.
+        var source = new PointCloudData<Half>(new Tensor<Half>(new[] { (Half)0, (Half)0, (Half)0 }, new[] { 1, 3 }));
+        var target = new PointCloudData<Half>(new Tensor<Half>(new[] { (Half)300, (Half)0, (Half)0 }, new[] { 1, 3 }));
+
+        Assert.Equal(300.0, (double)GeometryMetrics<Half>.ChamferDistance(source, target), 6);
+        Assert.Equal(300.0, (double)GeometryMetrics<Half>.HausdorffDistance(source, target), 6);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task ScaleToUnitSphere_HalfCloud_DoesNotOverflow()
+    {
+        await Task.Yield();
+        // Centred coordinates +-300 square to 90000, beyond Half's 65504.
+        var cloud = new PointCloudData<Half>(new Tensor<Half>(
+            new[] { (Half)0, (Half)0, (Half)0, (Half)600, (Half)0, (Half)0 }, new[] { 2, 3 }));
+
+        var scaled = PointCloudNormalization<Half>.ScaleToUnitSphere(cloud);
+
+        Assert.Equal(-1.0, (double)scaled.Points[0, 0], 3);
+        Assert.Equal(1.0, (double)scaled.Points[1, 0], 3);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task VoxelizeMeshSurface_IntegerMesh_MatchesDoubleOccupancy()
+    {
+        await Task.Yield();
+        // Integer barycentric weights truncate to the three vertices; the double surface covers more cells.
+        var faces = new Tensor<int>(new[] { 0, 1, 2 }, new[] { 1, 3 });
+        var intMesh = new TriangleMeshData<int>(new Tensor<int>(new[] { 0, 0, 0, 64, 0, 0, 0, 64, 0 }, new[] { 3, 3 }), faces);
+        var doubleMesh = new TriangleMeshData<double>(
+            new Tensor<double>(new double[] { 0, 0, 0, 64, 0, 0, 0, 64, 0 }, new[] { 3, 3 }), faces);
+
+        var intGrid = Voxelization<int>.VoxelizeMeshSurface(intMesh, 16, padding: 0);
+        var doubleGrid = Voxelization<double>.VoxelizeMeshSurface(doubleMesh, 16, padding: 0);
+
+        int intOccupied = intGrid.Voxels.ToArray().Count(v => v != 0);
+        int doubleOccupied = doubleGrid.Voxels.ToArray().Count(v => v != 0);
+        Assert.True(doubleOccupied > 3, "fixture must cover more than the three vertex cells");
+        Assert.Equal(doubleOccupied, intOccupied);
+    }
+
+    #endregion
 }

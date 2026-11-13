@@ -91,7 +91,15 @@ public class ViTImageSafetyClassifier<T> : ImageSafetyModuleBase<T>
         int patchRows = layout.Height / _patchSize;
         int patchCols = layout.Width / _patchSize;
         int numPatches = patchRows * patchCols;
-        var patchFeatures = ExtractPatchFeatures(image, layout, patchRows, patchCols);
+        // Patch rows are processed in bands, so the per-pixel temporaries never cover more than BandPixels pixels.
+        int bandRows = Math.Max(1, BandPixels / Math.Max(1, _patchSize * _patchSize * patchCols));
+        var bands = new List<Tensor<T>>();
+        for (int firstRow = 0; firstRow < patchRows; firstRow += bandRows)
+        {
+            bands.Add(ExtractPatchFeatures(image, layout, firstRow, Math.Min(bandRows, patchRows - firstRow), patchCols));
+        }
+
+        var patchFeatures = bands.Count == 1 ? bands[0] : engine.TensorConcatenate(bands.ToArray(), 0);
 
         // Compute attention weights (based on feature magnitude — "how interesting is this patch?")
         var attentionWeights = ComputeAttentionWeights(patchFeatures);
@@ -125,11 +133,17 @@ public class ViTImageSafetyClassifier<T> : ImageSafetyModuleBase<T>
     }
 
     /// <summary>
-    /// Features of every patch, <c>[patchRows * patchCols, featureDim]</c>: channel means and
+    /// The most pixels one band of patch rows covers in <see cref="ExtractPatchFeatures"/>.
+    /// </summary>
+    internal const int BandPixels = 1 << 20;
+
+    /// <summary>
+    /// Features of the patches in patch rows <paramref name="firstRow"/> .. <paramref name="firstRow"/> +
+    /// <paramref name="patchRows"/> - 1, <c>[patchRows * patchCols, featureDim]</c>: channel means and
     /// standard deviations (0-5), skin/dark/bright/red-dominant fractions (6-9) and edge density
     /// and strength (10-11); the remaining features are zero.
     /// </summary>
-    private Tensor<T> ExtractPatchFeatures(Tensor<T> image, ImageLayout layout, int patchRows, int patchCols)
+    private Tensor<T> ExtractPatchFeatures(Tensor<T> image, ImageLayout layout, int firstRow, int patchRows, int patchCols)
     {
         var engine = Engine;
         int p = _patchSize;
@@ -140,10 +154,11 @@ public class ViTImageSafetyClassifier<T> : ImageSafetyModuleBase<T>
         // Patch-blocked planes [patchRows, p, patchCols, p] (channel c, cropped to whole patches)
         var flat = engine.Reshape(image.Contiguous(), new[] { image.Length });
         var blocked = new[] { patchRows, p, patchCols, p };
-        var raw0 = engine.Reshape(CropPlane(flat, layout, 0, patchRows * p, patchCols * p), blocked);
+        int top = firstRow * p;
+        var raw0 = engine.Reshape(CropPlane(flat, layout, 0, top, patchRows * p, patchCols * p), blocked);
         var r = raw0;
-        var g = channels >= 2 ? engine.Reshape(CropPlane(flat, layout, 1, patchRows * p, patchCols * p), blocked) : raw0;
-        var b = channels >= 3 ? engine.Reshape(CropPlane(flat, layout, 2, patchRows * p, patchCols * p), blocked) : raw0;
+        var g = channels >= 2 ? engine.Reshape(CropPlane(flat, layout, 1, top, patchRows * p, patchCols * p), blocked) : raw0;
+        var b = channels >= 3 ? engine.Reshape(CropPlane(flat, layout, 2, top, patchRows * p, patchCols * p), blocked) : raw0;
 
         // Normalize to [0,255] (decided by the red channel)
         var scaled = SafetyTensorOps<T>.Le(r, 1.0);
@@ -201,25 +216,24 @@ public class ViTImageSafetyClassifier<T> : ImageSafetyModuleBase<T>
         }, 1);
     }
 
-    /// <summary>Channel <paramref name="c"/> of the image cropped to <c>[rows, cols]</c>.</summary>
-    private static Tensor<T> CropPlane(Tensor<T> flat, ImageLayout layout, int c, int rows, int cols)
+    /// <summary>
+    /// Channel <paramref name="c"/> of the image cropped to <c>[rows, cols]</c> from row <paramref name="top"/>;
+    /// only the cropped pixels are copied.
+    /// </summary>
+    private static Tensor<T> CropPlane(Tensor<T> flat, ImageLayout layout, int c, int top, int rows, int cols)
     {
         var engine = AiDotNetEngine.Current;
         int pixels = layout.Height * layout.Width;
-        Tensor<T> plane;
         if (layout.Format == PixFmt.CHW)
         {
-            plane = engine.Reshape(engine.TensorNarrow(flat, 0, c * pixels, pixels), new[] { layout.Height, layout.Width });
-        }
-        else
-        {
-            var interleaved = engine.Reshape(engine.TensorNarrow(flat, 0, 0, pixels * layout.Channels),
-                new[] { pixels, layout.Channels });
-            plane = engine.Reshape(engine.TensorNarrow(interleaved, 1, c, 1).Contiguous(),
-                new[] { layout.Height, layout.Width });
+            var plane = engine.Reshape(engine.TensorNarrow(flat, 0, c * pixels, pixels), new[] { layout.Height, layout.Width });
+            return engine.TensorSlice(plane, new[] { top, 0 }, new[] { rows, cols }).Contiguous();
         }
 
-        return engine.TensorSlice(plane, new[] { 0, 0 }, new[] { rows, cols }).Contiguous();
+        var interleaved = engine.Reshape(engine.TensorNarrow(flat, 0, 0, pixels * layout.Channels),
+            new[] { layout.Height, layout.Width, layout.Channels });
+        var crop = engine.TensorSlice(interleaved, new[] { top, 0, c }, new[] { rows, cols, 1 }).Contiguous();
+        return engine.Reshape(crop, new[] { rows, cols });
     }
 
     private Tensor<T> ComputeAttentionWeights(Tensor<T> patchFeatures)

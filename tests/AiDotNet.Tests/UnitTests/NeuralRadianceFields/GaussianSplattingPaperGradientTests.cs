@@ -332,16 +332,22 @@ public class GaussianSplattingPaperGradientTests
 
         // Not a reset iteration: opacities stay at the initial 0.5.
         model.RunOpacityResetForTest(2999);
-        Assert.All(model.GetGaussianDiagnostics(), d => Assert.Equal(0.5, d.Opacity, 12));
+        var beforeReset = model.GetGaussianDiagnostics();
+        Assert.Equal(2, beforeReset.Count);
+        Assert.All(beforeReset, d => Assert.Equal(0.5, d.Opacity, 12));
 
         // Kerbl et al. 2023 section 5.2: every 3000 iterations alpha <- min(alpha, 0.01).
         model.RunOpacityResetForTest(3000);
-        Assert.All(model.GetGaussianDiagnostics(), d => Assert.Equal(0.01, d.Opacity, 12));
+        var resetDiagnostics = model.GetGaussianDiagnostics();
+        Assert.Equal(2, resetDiagnostics.Count);
+        Assert.All(resetDiagnostics, d => Assert.Equal(0.01, d.Opacity, 12));
 
         // After the densification window the cloud is frozen and no reset happens.
         var late = new GaussianSplatting<double>(options, cloud, cloud);
         late.RunOpacityResetForTest(18000);
-        Assert.All(late.GetGaussianDiagnostics(), d => Assert.Equal(0.5, d.Opacity, 12));
+        var lateDiagnostics = late.GetGaussianDiagnostics();
+        Assert.Equal(2, lateDiagnostics.Count);
+        Assert.All(lateDiagnostics, d => Assert.Equal(0.5, d.Opacity, 12));
     }
 
     private static GaussianSplatting<double> BuildDensifyModel(double[,] positions, double[] scales, int? accumulationWindow = null)
@@ -539,5 +545,39 @@ public class GaussianSplattingPaperGradientTests
         double tolerance = 1e-6 + 1e-4 * Math.Abs(expected);
         Assert.True(Math.Abs(expected - actual) <= tolerance,
             $"{what}: finite difference {expected:R}, analytic {actual:R}");
+    }
+
+    [Fact]
+    public void StableOrder_KeepsTiesInIndexOrder_NanFirstAscendingLastDescending()
+    {
+        var values = new Tensor<double>(new[] { 1.0, double.NaN, 1.0, 0.0, 1.0 }, new[] { 5 });
+
+        Assert.Equal(new[] { 1, 3, 0, 2, 4 }, GaussianSplatting<double>.StableOrder(values, descending: false).ToArray());
+        Assert.Equal(new[] { 0, 2, 4, 3, 1 }, GaussianSplatting<double>.StableOrder(values, descending: true).ToArray());
+    }
+
+    [Fact]
+    public void GeneratePinholeRays_RejectsNonPositiveOrNonFiniteFocalLength()
+    {
+        var engine = AiDotNet.Tensors.Engines.AiDotNetEngine.Current;
+        var rotation = new Matrix<double>(3, 3);
+        for (int i = 0; i < 3; i++) rotation[i, i] = 1.0;
+        foreach (var focal in new[] { 0.0, -1.0, double.NaN, double.PositiveInfinity })
+        {
+            Assert.Throws<ArgumentOutOfRangeException>(() =>
+                AiDotNet.NeuralRadianceFields.Helpers.ImageTrainingHelpers.GeneratePinholeRays(
+                    engine, new Vector<double>(3), rotation, 1, 1, focal));
+        }
+    }
+
+    [Fact]
+    public void Ssim_WindowSizeOne_IdenticalImagesScoreOne()
+    {
+        // One pixel per window: the unbiased divisor perWindow - 1 is zero without the singleton guard.
+        var pixels = new double[16];
+        for (int i = 0; i < pixels.Length; i++) pixels[i] = 0.05 * i;
+        var image = new Tensor<double>(pixels, new[] { 4, 4, 1 });
+
+        Assert.Equal(1.0, AiDotNet.NeuralRadianceFields.Metrics.RenderingMetrics<double>.SSIM(image, image, windowSize: 1), 9);
     }
 }

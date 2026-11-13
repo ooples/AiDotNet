@@ -35,6 +35,12 @@ public static class Voxelization<T>
                 nameof(pointCloud));
         }
 
+        if (UsesDoubleGeometry)
+        {
+            return FromDouble(Voxelization<double>.VoxelizePointCloud(
+                new PointCloudData<double>(pointCloud.Points.Cast<double>()), resolution, padding));
+        }
+
         var positions = GeometryEngineOps<T>.Positions(pointCloud.Points);
         var (origin, voxelSize) = GridLayout(positions, resolution, padding);
         var voxels = MarkCells(
@@ -75,13 +81,13 @@ public static class Voxelization<T>
         cells = engine.TensorWhere(engine.TensorIsNan(cells), engine.TensorZerosLike(cells), cells);
         cells = engine.TensorClamp(cells, NumOps.Zero, NumOps.FromDouble(resolution - 1));
 
-        // The clamped cells are whole numbers in [0, resolution), so their position in 0..resolution-1 is the index.
-        var axis = engine.TensorArange<T>(0, resolution, 1);
-        var x = GeometryEngineOps<T>.Column(cells, 0);
-        var ix = engine.TensorSearchSorted(axis, x, false);
-        var iy = engine.TensorSearchSorted(axis, GeometryEngineOps<T>.Column(cells, 1), false);
-        var iz = engine.TensorSearchSorted(axis, GeometryEngineOps<T>.Column(cells, 2), false);
-        return engine.TensorIndexPut(voxels, new[] { iz, iy, ix }, engine.TensorOnesLike(x), false);
+        // The clamped cells are whole numbers in [0, resolution), so converting them to int gives the index
+        // directly; the indices never pass through T, where Half stops being exact above 2048.
+        var cellIndices = cells.Cast<int>();
+        var ix = GeometryEngineOps<T>.Column(cellIndices, 0);
+        var iy = GeometryEngineOps<T>.Column(cellIndices, 1);
+        var iz = GeometryEngineOps<T>.Column(cellIndices, 2);
+        return engine.TensorIndexPut(voxels, new[] { iz, iy, ix }, engine.TensorOnesLike(GeometryEngineOps<T>.Column(cells, 0)), false);
     }
 
     private static VoxelGridData<T> CreateGrid(Tensor<T> voxels, Tensor<T> origin, T voxelSize)
@@ -118,6 +124,14 @@ public static class Voxelization<T>
             throw new ArgumentException(
                 $"VoxelizeMeshSurface requires at least 3 face indices per triangle. Got {(mesh.Faces.Shape.Length >= 2 ? mesh.Faces.Shape[1] : 0)} columns.",
                 nameof(mesh));
+        }
+
+        if (UsesDoubleGeometry)
+        {
+            return FromDouble(Voxelization<double>.VoxelizeMeshSurface(
+                new TriangleMeshData<double>(mesh.Vertices.Cast<double>(), mesh.Faces, validateIndices: false),
+                resolution,
+                padding));
         }
 
         var engine = AiDotNetEngine.Current;
@@ -268,12 +282,42 @@ public static class Voxelization<T>
             return mask;
         }
 
+        // The cube maximum is separable: a (2r + 1)-wide maximum along width, then height, then depth, each over the
+        // grid padded with the outside value on that axis only. Three 1-axis pools cost O(r) per voxel instead of
+        // the O(r^3) of one cubic window, and give the identical maximum.
         int size = 2 * radius + 1;
-        var padded = engine.TensorConstantPad(mask, new[] { radius, radius, radius, radius, radius, radius }, outside)
-            .Reshape(1, 1, depth + 2 * radius, height + 2 * radius, width + 2 * radius);
-        var pooled = engine.MaxPool3D(padded, new[] { size, size, size }, new[] { 1, 1, 1 }, new[] { 0, 0, 0 });
-        return pooled.Reshape(depth, height, width);
+        var current = mask;
+        for (int dim = 2; dim >= 0; dim--)
+        {
+            // Padding pairs run from the last dimension backwards.
+            var padding = new int[6];
+            padding[2 * (2 - dim)] = radius;
+            padding[2 * (2 - dim) + 1] = radius;
+            var kernel = new[] { dim == 0 ? size : 1, dim == 1 ? size : 1, dim == 2 ? size : 1 };
+            var padded = engine.TensorConstantPad(current, padding, outside).Reshape(
+                1, 1,
+                depth + (dim == 0 ? 2 * radius : 0),
+                height + (dim == 1 ? 2 * radius : 0),
+                width + (dim == 2 ? 2 * radius : 0));
+            current = engine.MaxPool3D(padded, kernel, new[] { 1, 1, 1 }, new[] { 0, 0, 0 }).Reshape(depth, height, width);
+        }
+
+        return current;
     }
+
+    /// <summary>
+    /// True for the types the grid geometry is computed for in double, as the scalar code did: integral types
+    /// (whose fractional barycentric weights and voxel sizes truncate to zero) and Half (whose ranges and
+    /// products lose the cell boundaries).
+    /// </summary>
+    private static bool UsesDoubleGeometry
+        => typeof(T) == typeof(Half) || NumOps.Equals(NumOps.FromDouble(0.5), NumOps.Zero);
+
+    private static VoxelGridData<T> FromDouble(VoxelGridData<double> grid)
+        => new VoxelGridData<T>(
+            grid.Voxels.Cast<T>(),
+            Tensor<double>.FromVector(grid.Origin).Cast<T>().ToVector(),
+            Tensor<double>.FromVector(grid.VoxelSize).Cast<T>().ToVector());
 
     private static VoxelGridData<T> CreateEmptyGrid(int resolution)
     {

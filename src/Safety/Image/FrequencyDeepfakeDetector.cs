@@ -123,9 +123,24 @@ public class FrequencyDeepfakeDetector<T> : DeepfakeDetectorBase<T>
     }
 
     /// <summary>Measures the image's row spectra, or returns null when it is too small to analyse.</summary>
-    private Analysis? Analyze(Tensor<T> image)
+    private static Analysis? Analyze(Tensor<T> image)
     {
         if (image.Length == 0) return null;
+
+        if (typeof(T) == typeof(Half))
+        {
+            // Row magnitudes of 0-255 pixels reach tens of thousands and their squares overflow Half (65504), so
+            // the spectra are measured in float and only the four results narrowed.
+            var wide = FrequencyDeepfakeDetector<float>.Analyze(image.Cast<float>());
+            if (wide is null) return null;
+            return new Analysis
+            {
+                Flatness = NumOps.FromDouble(wide.Flatness),
+                Periodic = NumOps.FromDouble(wide.Periodic),
+                HighFrequency = NumOps.FromDouble(wide.HighFrequency),
+                Score = NumOps.FromDouble(wide.Score),
+            };
+        }
 
         var layout = DetermineLayout(image._shape, image.Length);
         if (layout.Height < 8 || layout.Width < 8) return null;
@@ -137,7 +152,7 @@ public class FrequencyDeepfakeDetector<T> : DeepfakeDetectorBase<T>
         if (fftSize < 8) return null;
 
         using var noGrad = new NoGradScope<T>();
-        var engine = Engine;
+        var engine = SafetyTensorOps<T>.Engine;
 
         // Analyze multiple rows from different parts of the image: rows y = r * rowStride
         // of channel 0, first fftSize columns, as [numRows, fftSize].

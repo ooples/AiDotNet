@@ -349,8 +349,9 @@ internal static class SafetyTensorOps<T>
         var codes = Where(inRange, rounded, (double)'?');
         codes = engine.TensorWhere(engine.TensorIsNan(rounded), Full(rounded.Shape.ToArray(), nanReplacement), codes);
 
-        // Integral codes 0..65535 -> int: the number of boundaries 0..65534 strictly below each code.
-        var codePoints = engine.TensorBucketize(codes, engine.TensorArange<T>(0, 65535, 1)).ToArray();
+        // Integral codes 0..65535 convert to int exactly (a bucketize against a 0..65534 grid held in T merged
+        // boundaries above 2048 for Half and allocated the grid on every call).
+        var codePoints = codes.Cast<int>().ToArray();
         return new string(Array.ConvertAll(codePoints, code => (char)code));
     }
 
