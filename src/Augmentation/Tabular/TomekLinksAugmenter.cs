@@ -108,7 +108,6 @@ public class TomekLinksAugmenter<T> : TabularAugmenterBase<T>
         T minorityLabel)
     {
         int rows = GetSampleCount(data);
-        int cols = GetFeatureCount(data);
 
         if (rows < 2)
         {
@@ -123,40 +122,9 @@ public class TomekLinksAugmenter<T> : TabularAugmenterBase<T>
             return (data.Clone(), labels.Clone());
         }
 
-        // Create mask of samples to keep
-        var keepMask = new bool[rows];
-        for (int i = 0; i < rows; i++)
-        {
-            keepMask[i] = true;
-        }
-
-        foreach (int idx in tomekIndices)
-        {
-            keepMask[idx] = false;
-        }
-
-        // Count samples to keep
-        int keepCount = keepMask.Count(x => x);
-
-        // Create filtered data
-        var filteredData = new Matrix<T>(keepCount, cols);
-        var filteredLabels = new Vector<T>(keepCount);
-
-        int newIdx = 0;
-        for (int i = 0; i < rows; i++)
-        {
-            if (keepMask[i])
-            {
-                for (int c = 0; c < cols; c++)
-                {
-                    filteredData[newIdx, c] = data[i, c];
-                }
-                filteredLabels[newIdx] = labels[i];
-                newIdx++;
-            }
-        }
-
-        return (filteredData, filteredLabels);
+        // Keep every other sample, in the original order.
+        var keep = Enumerable.Range(0, rows).Where(i => !tomekIndices.Contains(i)).ToArray();
+        return TabularResamplingHelper<T>.Select(data, labels, keep);
     }
 
     /// <summary>
@@ -167,56 +135,32 @@ public class TomekLinksAugmenter<T> : TabularAugmenterBase<T>
     /// <param name="minorityLabel">The minority class label.</param>
     /// <returns>Set of indices to remove based on the strategy.</returns>
     /// <remarks>
-    /// <para><b>For Beginners:</b> This scans all pairs to find mutual nearest neighbors of
-    /// different classes. These form Tomek links, and some or all are marked for removal.</para>
+    /// <para>
+    /// A Tomek link is a pair of mutual nearest neighbours with different labels (Tomek 1976;
+    /// imbalanced-learn <c>TomekLinks</c>), for any two classes, not only minority versus the rest.
+    /// <see cref="RemovalStrategy.RemoveMajority"/> removes every linked sample outside the minority class
+    /// (imbalanced-learn's default 'auto' strategy), <see cref="RemovalStrategy.RemoveMinority"/> removes the
+    /// linked minority samples, and <see cref="RemovalStrategy.RemoveBoth"/> removes both ends of every link.
+    /// </para>
     /// </remarks>
     private HashSet<int> FindTomekLinkIndices(Matrix<T> data, Vector<T> labels, T minorityLabel)
     {
-        int rows = GetSampleCount(data);
         var indicesToRemove = new HashSet<int>();
-
-        // Find nearest neighbor for each sample
-        var nearestNeighbors = new int[rows];
-        for (int i = 0; i < rows; i++)
+        foreach (var (i, nn) in FindLinks(data, labels))
         {
-            nearestNeighbors[i] = FindNearestNeighbor(data, i);
-        }
-
-        // Find Tomek links
-        for (int i = 0; i < rows; i++)
-        {
-            int nn = nearestNeighbors[i];
-            if (nn < 0) continue;
-
-            // Check if they are mutual nearest neighbors
-            if (nearestNeighbors[nn] == i)
+            foreach (int member in new[] { i, nn })
             {
-                // Check if they belong to different classes
-                bool iIsMinority = NumOps.Compare(labels[i], minorityLabel) == 0;
-                bool nnIsMinority = NumOps.Compare(labels[nn], minorityLabel) == 0;
-
-                if (iIsMinority != nnIsMinority)
+                bool isMinority = IsMinority(labels, member, minorityLabel);
+                bool remove = Strategy switch
                 {
-                    // This is a Tomek link!
-                    switch (Strategy)
-                    {
-                        case RemovalStrategy.RemoveBoth:
-                            indicesToRemove.Add(i);
-                            indicesToRemove.Add(nn);
-                            break;
-                        case RemovalStrategy.RemoveMajority:
-                            if (!iIsMinority)
-                                indicesToRemove.Add(i);
-                            else
-                                indicesToRemove.Add(nn);
-                            break;
-                        case RemovalStrategy.RemoveMinority:
-                            if (iIsMinority)
-                                indicesToRemove.Add(i);
-                            else
-                                indicesToRemove.Add(nn);
-                            break;
-                    }
+                    RemovalStrategy.RemoveBoth => true,
+                    RemovalStrategy.RemoveMajority => !isMinority,
+                    RemovalStrategy.RemoveMinority => isMinority,
+                    _ => false
+                };
+                if (remove)
+                {
+                    indicesToRemove.Add(member);
                 }
             }
         }
@@ -225,43 +169,38 @@ public class TomekLinksAugmenter<T> : TabularAugmenterBase<T>
     }
 
     /// <summary>
-    /// Finds the nearest neighbor for a given sample.
+    /// The Tomek links (i, nn) with i &lt; nn: mutual nearest neighbours whose labels differ.
     /// </summary>
-    /// <param name="data">The data matrix.</param>
-    /// <param name="sampleIdx">The index of the sample.</param>
-    /// <returns>Index of the nearest neighbor, or -1 if none found.</returns>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Finds the single closest sample to the given sample using
-    /// Euclidean distance.</para>
-    /// </remarks>
-    private int FindNearestNeighbor(Matrix<T> data, int sampleIdx)
+    private List<(int, int)> FindLinks(Matrix<T> data, Vector<T> labels)
     {
+        var links = new List<(int, int)>();
         int rows = GetSampleCount(data);
-        int cols = GetFeatureCount(data);
+        if (rows < 2)
+        {
+            return links;
+        }
 
-        double minDist = double.MaxValue;
-        int nearestIdx = -1;
+        var nearest = TabularResamplingHelper<T>.NearestNeighbors(data);
+        var engine = AiDotNetEngine.Current;
+        var neighborLabels = engine.TensorIndexSelect(
+            labels.AsTensor(), new Tensor<int>((int[])nearest.Clone(), new[] { rows }), 0);
+        var differs = engine.TensorNotEquals(labels.AsTensor(), neighborLabels).Cast<int>().ToArray();
 
         for (int i = 0; i < rows; i++)
         {
-            if (i == sampleIdx) continue;
-
-            double dist = 0;
-            for (int c = 0; c < cols; c++)
+            int nn = nearest[i];
+            if (nn > i && nearest[nn] == i && differs[i] != 0)
             {
-                double diff = NumOps.ToDouble(data[sampleIdx, c]) - NumOps.ToDouble(data[i, c]);
-                dist += diff * diff;
-            }
-            dist = Math.Sqrt(dist);
-
-            if (dist < minDist)
-            {
-                minDist = dist;
-                nearestIdx = i;
+                links.Add((i, nn));
             }
         }
 
-        return nearestIdx;
+        return links;
+    }
+
+    private static bool IsMinority(Vector<T> labels, int index, T minorityLabel)
+    {
+        return NumOps.Compare(labels[index], minorityLabel) == 0;
     }
 
     /// <summary>
@@ -277,36 +216,7 @@ public class TomekLinksAugmenter<T> : TabularAugmenterBase<T>
     /// </remarks>
     public int CountTomekLinks(Matrix<T> data, Vector<T> labels, T minorityLabel)
     {
-        int rows = GetSampleCount(data);
-        var tomekLinks = new HashSet<(int, int)>();
-
-        // Find nearest neighbor for each sample
-        var nearestNeighbors = new int[rows];
-        for (int i = 0; i < rows; i++)
-        {
-            nearestNeighbors[i] = FindNearestNeighbor(data, i);
-        }
-
-        // Find Tomek links
-        for (int i = 0; i < rows; i++)
-        {
-            int nn = nearestNeighbors[i];
-            if (nn < 0) continue;
-
-            // Check if mutual nearest neighbors
-            if (nearestNeighbors[nn] == i && i < nn)  // i < nn to avoid counting twice
-            {
-                bool iIsMinority = NumOps.Compare(labels[i], minorityLabel) == 0;
-                bool nnIsMinority = NumOps.Compare(labels[nn], minorityLabel) == 0;
-
-                if (iIsMinority != nnIsMinority)
-                {
-                    tomekLinks.Add((i, nn));
-                }
-            }
-        }
-
-        return tomekLinks.Count;
+        return FindLinks(data, labels).Count;
     }
 
     /// <inheritdoc />

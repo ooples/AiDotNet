@@ -45,7 +45,6 @@ namespace AiDotNet.Augmentation.Tabular.Undersampling;
 /// <typeparam name="T">The numeric type for calculations.</typeparam>
 public class RandomUnderSampler<T> : IUnderSampler<T>
 {
-    private readonly INumericOperations<T> _numOps;
 
     /// <summary>
     /// Gets the target ratio between minority and majority samples after undersampling.
@@ -96,7 +95,6 @@ public class RandomUnderSampler<T> : IUnderSampler<T>
                 "Sampling ratio must be in range (0, 1].");
         }
 
-        _numOps = MathHelper.GetNumericOperations<T>();
         SamplingRatio = samplingRatio;
         WithReplacement = withReplacement;
         RandomSeed = randomSeed;
@@ -118,32 +116,19 @@ public class RandomUnderSampler<T> : IUnderSampler<T>
         Vector<T> labels,
         T minorityLabel)
     {
-        int rows = data.Rows;
-        int cols = data.Columns;
-
-        // Separate minority and majority indices
-        var minorityIndices = new List<int>();
-        var majorityIndices = new List<int>();
-
-        double minorityLabelVal = _numOps.ToDouble(minorityLabel);
-
-        for (int i = 0; i < rows; i++)
-        {
-            if (_numOps.ToDouble(labels[i]).Equals(minorityLabelVal))
-            {
-                minorityIndices.Add(i);
-            }
-            else
-            {
-                majorityIndices.Add(i);
-            }
-        }
+        var minorityIndices = TabularResamplingHelper<T>.IndicesOfLabel(labels, minorityLabel);
 
         // Calculate target number of majority samples
-        int targetMajority = (int)Math.Ceiling(minorityIndices.Count / SamplingRatio);
+        int targetMajority = (int)Math.Ceiling(minorityIndices.Length / SamplingRatio);
+
+        // imbalanced-learn undersamples every non-minority class on its own down to the target size;
+        // with two classes this is the single majority class.
+        var classIndices = TabularResamplingHelper<T>.OtherLabels(labels, minorityLabel)
+            .Select(label => TabularResamplingHelper<T>.IndicesOfLabel(labels, label))
+            .ToList();
 
         // If we already have fewer majority samples, no undersampling needed
-        if (majorityIndices.Count <= targetMajority)
+        if (classIndices.All(indices => indices.Length <= targetMajority))
         {
             return (data.Clone(), labels.Clone());
         }
@@ -153,39 +138,16 @@ public class RandomUnderSampler<T> : IUnderSampler<T>
             ? RandomHelper.CreateSeededRandom(RandomSeed.Value)
             : RandomHelper.CreateSecureRandom();
 
-        var selectedMajorityIndices = SelectRandomIndices(
-            majorityIndices, targetMajority, WithReplacement, rand);
-
-        // Combine selected majority with all minority
-        int totalSamples = minorityIndices.Count + selectedMajorityIndices.Count;
-        var resultData = new Matrix<T>(totalSamples, cols);
-        var resultLabels = new Vector<T>(totalSamples);
-
-        int idx = 0;
-
-        // Add all minority samples
-        foreach (int minIdx in minorityIndices)
+        // All minority samples first, then each class's selection.
+        var selected = new List<int>(minorityIndices);
+        foreach (var indices in classIndices)
         {
-            for (int c = 0; c < cols; c++)
-            {
-                resultData[idx, c] = data[minIdx, c];
-            }
-            resultLabels[idx] = labels[minIdx];
-            idx++;
+            selected.AddRange(indices.Length <= targetMajority
+                ? indices
+                : SelectRandomIndices(indices.ToList(), targetMajority, WithReplacement, rand));
         }
 
-        // Add selected majority samples
-        foreach (int majIdx in selectedMajorityIndices)
-        {
-            for (int c = 0; c < cols; c++)
-            {
-                resultData[idx, c] = data[majIdx, c];
-            }
-            resultLabels[idx] = labels[majIdx];
-            idx++;
-        }
-
-        return (resultData, resultLabels);
+        return TabularResamplingHelper<T>.Select(data, labels, selected.ToArray());
     }
 
     /// <summary>

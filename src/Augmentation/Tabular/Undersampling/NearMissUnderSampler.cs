@@ -36,7 +36,6 @@ namespace AiDotNet.Augmentation.Tabular.Undersampling;
 /// <typeparam name="T">The numeric type for calculations.</typeparam>
 public class NearMissUnderSampler<T> : IUnderSampler<T>
 {
-    private readonly INumericOperations<T> _numOps;
 
     /// <summary>
     /// NearMiss variant versions.
@@ -108,7 +107,6 @@ public class NearMissUnderSampler<T> : IUnderSampler<T>
                 "Sampling ratio must be in range (0, 1].");
         }
 
-        _numOps = MathHelper.GetNumericOperations<T>();
         Version = version;
         NNeighbors = nNeighbors;
         SamplingRatio = samplingRatio;
@@ -131,211 +129,103 @@ public class NearMissUnderSampler<T> : IUnderSampler<T>
         Vector<T> labels,
         T minorityLabel)
     {
-        int rows = data.Rows;
-        int cols = data.Columns;
+        var minorityIndices = TabularResamplingHelper<T>.IndicesOfLabel(labels, minorityLabel);
 
-        // Separate minority and majority
-        var minorityIndices = new List<int>();
-        var majorityIndices = new List<int>();
+        // imbalanced-learn handles every non-minority class on its own; with two classes this is the
+        // single majority class.
+        var classIndices = TabularResamplingHelper<T>.OtherLabels(labels, minorityLabel)
+            .Select(label => TabularResamplingHelper<T>.IndicesOfLabel(labels, label))
+            .ToList();
 
-        double minorityLabelVal = _numOps.ToDouble(minorityLabel);
-
-        for (int i = 0; i < rows; i++)
-        {
-            if (_numOps.ToDouble(labels[i]).Equals(minorityLabelVal))
-            {
-                minorityIndices.Add(i);
-            }
-            else
-            {
-                majorityIndices.Add(i);
-            }
-        }
-
-        if (minorityIndices.Count == 0 || majorityIndices.Count == 0)
+        if (minorityIndices.Length == 0 || classIndices.Count == 0)
         {
             return (data.Clone(), labels.Clone());
         }
 
         // Calculate target number of majority samples
-        int targetMajority = (int)Math.Ceiling(minorityIndices.Count / SamplingRatio);
+        int targetMajority = (int)Math.Ceiling(minorityIndices.Length / SamplingRatio);
 
-        if (majorityIndices.Count <= targetMajority)
+        if (classIndices.All(indices => indices.Length <= targetMajority))
         {
             return (data.Clone(), labels.Clone());
         }
 
-        // Select majority samples based on version
-        var selectedMajorityIndices = Version switch
+        var minorityRows = TabularResamplingHelper<T>.Rows(data, minorityIndices);
+
+        // All minority samples first, then each class's selection.
+        var selected = new List<int>(minorityIndices);
+        foreach (var majorityIndices in classIndices)
         {
-            NearMissVersion.NearMiss1 => SelectNearMiss1(data, minorityIndices, majorityIndices, targetMajority),
-            NearMissVersion.NearMiss2 => SelectNearMiss2(data, minorityIndices, majorityIndices, targetMajority),
-            NearMissVersion.NearMiss3 => SelectNearMiss3(data, minorityIndices, majorityIndices, targetMajority),
-            _ => throw new InvalidOperationException($"Unknown NearMiss version: {Version}")
-        };
-
-        // Combine selected majority with all minority
-        int totalSamples = minorityIndices.Count + selectedMajorityIndices.Count;
-        var resultData = new Matrix<T>(totalSamples, cols);
-        var resultLabels = new Vector<T>(totalSamples);
-
-        int idx = 0;
-
-        foreach (int minIdx in minorityIndices)
-        {
-            for (int c = 0; c < cols; c++)
+            if (majorityIndices.Length <= targetMajority)
             {
-                resultData[idx, c] = data[minIdx, c];
+                selected.AddRange(majorityIndices);
+                continue;
             }
-            resultLabels[idx] = labels[minIdx];
-            idx++;
-        }
 
-        foreach (int majIdx in selectedMajorityIndices)
-        {
-            for (int c = 0; c < cols; c++)
+            selected.AddRange(Version switch
             {
-                resultData[idx, c] = data[majIdx, c];
-            }
-            resultLabels[idx] = labels[majIdx];
-            idx++;
+                NearMissVersion.NearMiss1 => SelectByMinorityDistance(data, minorityRows, majorityIndices, targetMajority, farthestNeighbors: false, keepFarthest: false),
+                NearMissVersion.NearMiss2 => SelectByMinorityDistance(data, minorityRows, majorityIndices, targetMajority, farthestNeighbors: true, keepFarthest: false),
+                NearMissVersion.NearMiss3 => SelectNearMiss3(data, minorityRows, majorityIndices, targetMajority),
+                _ => throw new InvalidOperationException($"Unknown NearMiss version: {Version}")
+            });
         }
 
-        return (resultData, resultLabels);
+        return TabularResamplingHelper<T>.Select(data, labels, selected.ToArray());
     }
 
     /// <summary>
-    /// NearMiss-1: Select majority samples closest to k nearest minority samples.
+    /// Ranks the candidate majority samples by their mean distance to their k nearest (NearMiss-1, NearMiss-3)
+    /// or k farthest (NearMiss-2) minority samples and keeps <paramref name="targetCount"/> of them.
     /// </summary>
     /// <remarks>
-    /// <para><b>For Beginners:</b> For each majority sample, find its k nearest minority
-    /// neighbors and compute the average distance. Keep majority samples with smallest
-    /// average distance (closest to minority class).</para>
+    /// NearMiss-1 and NearMiss-2 keep the smallest means, NearMiss-3 the largest (imbalanced-learn's
+    /// "nearest" and "farthest" selection). Equal means keep their original order.
     /// </remarks>
-    private List<int> SelectNearMiss1(
+    private List<int> SelectByMinorityDistance(
         Matrix<T> data,
-        List<int> minorityIndices,
-        List<int> majorityIndices,
-        int targetCount)
+        Tensor<T> minorityRows,
+        int[] candidates,
+        int targetCount,
+        bool farthestNeighbors,
+        bool keepFarthest)
     {
-        int cols = data.Columns;
-        int effectiveK = Math.Min(NNeighbors, minorityIndices.Count);
-
-        var majorityScores = new List<(int Index, double AvgDistance)>();
-
-        foreach (int majIdx in majorityIndices)
+        int k = Math.Min(NNeighbors, minorityRows.Shape[0]);
+        var means = new List<T>(candidates.Length);
+        foreach (int candidate in candidates)
         {
-            // Find k nearest minority samples
-            var distances = minorityIndices
-                .Select(minIdx => (Index: minIdx, Distance: ComputeDistance(data, majIdx, minIdx, cols)))
-                .OrderBy(x => x.Distance)
-                .Take(effectiveK)
-                .ToList();
-
-            double avgDist = distances.Average(x => x.Distance);
-            majorityScores.Add((majIdx, avgDist));
+            var distances = TabularResamplingHelper<T>.DistancesTo(minorityRows, data.GetRow(candidate).AsTensor());
+            means.Add(TabularResamplingHelper<T>.MeanOfExtremes(distances, k, farthestNeighbors));
         }
 
-        // Select majority samples with smallest average distance
-        return majorityScores
-            .OrderBy(x => x.AvgDistance)
-            .Take(targetCount)
-            .Select(x => x.Index)
-            .ToList();
+        var order = TabularResamplingHelper<T>.StableOrder(new Vector<T>(means).AsTensor(), keepFarthest);
+        return order.Take(targetCount).Select(position => candidates[position]).ToList();
     }
 
     /// <summary>
-    /// NearMiss-2: Select majority samples closest to k farthest minority samples.
+    /// NearMiss-3 (Mani and Zhang 2003; imbalanced-learn): keep each minority sample's k nearest majority
+    /// samples as candidates, then keep the candidates whose mean distance to their k nearest minority
+    /// samples is largest.
     /// </summary>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> For each majority sample, find its k farthest minority
-    /// neighbors and compute the average distance. Keep majority samples with smallest
-    /// average distance (closest to even the farthest minority samples).</para>
-    /// </remarks>
-    private List<int> SelectNearMiss2(
-        Matrix<T> data,
-        List<int> minorityIndices,
-        List<int> majorityIndices,
-        int targetCount)
-    {
-        int cols = data.Columns;
-        int effectiveK = Math.Min(NNeighbors, minorityIndices.Count);
-
-        var majorityScores = new List<(int Index, double AvgDistance)>();
-
-        foreach (int majIdx in majorityIndices)
-        {
-            // Find k farthest minority samples
-            var distances = minorityIndices
-                .Select(minIdx => (Index: minIdx, Distance: ComputeDistance(data, majIdx, minIdx, cols)))
-                .OrderByDescending(x => x.Distance)
-                .Take(effectiveK)
-                .ToList();
-
-            double avgDist = distances.Average(x => x.Distance);
-            majorityScores.Add((majIdx, avgDist));
-        }
-
-        // Select majority samples with smallest average distance to farthest minority
-        return majorityScores
-            .OrderBy(x => x.AvgDistance)
-            .Take(targetCount)
-            .Select(x => x.Index)
-            .ToList();
-    }
-
-    /// <summary>
-    /// NearMiss-3: For each minority sample, keep k nearest majority samples.
-    /// </summary>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> This version surrounds each minority sample with its
-    /// k nearest majority neighbors. This preserves local structure but may select
-    /// more or fewer than targetCount samples.</para>
-    /// </remarks>
     private List<int> SelectNearMiss3(
         Matrix<T> data,
-        List<int> minorityIndices,
-        List<int> majorityIndices,
+        Tensor<T> minorityRows,
+        int[] majorityIndices,
         int targetCount)
     {
-        int cols = data.Columns;
-        int effectiveK = Math.Min(NNeighbors, majorityIndices.Count);
-
-        var selectedSet = new HashSet<int>();
-
-        foreach (int minIdx in minorityIndices)
+        int k = Math.Min(NNeighbors, majorityIndices.Length);
+        var majorityRows = TabularResamplingHelper<T>.Rows(data, majorityIndices);
+        var candidatePositions = new SortedSet<int>();
+        int minorityCount = minorityRows.Shape[0];
+        var engine = AiDotNetEngine.Current;
+        for (int m = 0; m < minorityCount; m++)
         {
-            // Find k nearest majority samples
-            var nearest = majorityIndices
-                .Select(majIdx => (Index: majIdx, Distance: ComputeDistance(data, minIdx, majIdx, cols)))
-                .OrderBy(x => x.Distance)
-                .Take(effectiveK);
-
-            foreach (var item in nearest)
-            {
-                selectedSet.Add(item.Index);
-            }
+            var row = engine.TensorSlice(minorityRows, new[] { m, 0 }, new[] { 1, minorityRows.Shape[1] });
+            var distances = TabularResamplingHelper<T>.DistancesTo(majorityRows, row);
+            candidatePositions.UnionWith(TabularResamplingHelper<T>.StableOrder(distances, descending: false).Take(k));
         }
 
-        // If we have too many, randomly subsample
-        var selectedList = selectedSet.ToList();
-        if (selectedList.Count > targetCount)
-        {
-            var rand = RandomHelper.CreateSecureRandom();
-            selectedList = selectedList
-                .OrderBy(_ => rand.Next())
-                .Take(targetCount)
-                .ToList();
-        }
-
-        return selectedList;
-    }
-
-    /// <summary>
-    /// Computes Euclidean distance between two samples.
-    /// </summary>
-    private double ComputeDistance(Matrix<T> data, int idx1, int idx2, int cols)
-    {
-        return _numOps.ToDouble(VectorHelper.EuclideanDistance(data.GetRow(idx1), data.GetRow(idx2)));
+        var candidates = candidatePositions.Select(position => majorityIndices[position]).ToArray();
+        return SelectByMinorityDistance(data, minorityRows, candidates, targetCount, farthestNeighbors: false, keepFarthest: true);
     }
 }
