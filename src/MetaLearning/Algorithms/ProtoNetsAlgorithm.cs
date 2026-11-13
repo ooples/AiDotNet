@@ -463,6 +463,11 @@ internal sealed class PrototypeEpisode<T>
         int query = queryLabels.Length;
         int rows = support + query;
 
+        // The episode outlives the training step that builds it: its selectors are reused after ComputeGradients
+        // resets the step arena. Arena tensors are reissued by element count after a reset, so a [support, rows]
+        // selector came back as a same-count [rows, support] tensor. Build every episode tensor on the heap.
+        using var heapOwned = AiDotNet.Tensors.Helpers.TensorArena.Suspend();
+
         // The selectors are the support and query row blocks of the identity over the stacked rows.
         var engine = AiDotNetEngine.Current;
         var identity = engine.TensorEye<T>(rows);
