@@ -295,8 +295,8 @@ public abstract partial class TtsModelBase<T> : NeuralNetworkBase<T>, IShapeCont
 
         var domain = GetInputDomain(new[] { length });
         bool integerIndices = domain.IsResolved && domain.Kind == LayerInputDomainKind.IntegerIndices;
-        int range = integerIndices ? Math.Max(1, domain.MaxExclusive - domain.MinInclusive) : 0;
         if (!integerIndices) return ScaledCharacterCodes(Engine, text, length);
+        int range = Math.Max(1, domain.MaxExclusive - domain.MinInclusive);
         var codes = new int[length];
         for (int i = 0; i < length; i++)
             codes[i] = domain.MinInclusive + text[i] % range;
@@ -304,10 +304,9 @@ public abstract partial class TtsModelBase<T> : NeuralNetworkBase<T>, IShapeCont
     }
 
     /// <summary>
-    /// The first <paramref name="length"/> character codes scaled by 1/128 for a continuous front end, <c>[length]</c>.
-    /// A code reaches 65535, past a 16-bit T's largest finite value (65504), so code / 128 is formed as
-    /// (code &gt;&gt; 7) + (code &amp; 127) / 128: both parts are exact in every T and their sum rounds once, as
-    /// <c>FromDouble(code / 128.0)</c> does.
+    /// The first <paramref name="length"/> character codes of <paramref name="text"/> scaled by 1/128, <c>[length]</c>.
+    /// Each code c is formed as ⌊c / 128⌋ + (c mod 128) / 128: both parts are exact in every T and their sum rounds once,
+    /// so a code above a narrow T's range (Half's 65,504; U+FFFD is 65,533) is never cast to infinity before the scaling.
     /// </summary>
     internal static Tensor<T> ScaledCharacterCodes(AiDotNet.Tensors.Engines.IEngine engine, string text, int length)
     {
@@ -321,9 +320,8 @@ public abstract partial class TtsModelBase<T> : NeuralNetworkBase<T>, IShapeCont
             fraction[i] = text[i] & 127;
         }
         var ops = MathHelper.GetNumericOperations<T>();
-        var shape = new[] { length };
-        return engine.TensorAdd(new Tensor<int>(whole, shape).Cast<T>(),
-            engine.TensorDivideScalar(new Tensor<int>(fraction, shape).Cast<T>(), ops.FromDouble(128.0)));
+        return engine.TensorAdd(new Tensor<int>(whole, new[] { length }).Cast<T>(),
+            engine.TensorDivideScalar(new Tensor<int>(fraction, new[] { length }).Cast<T>(), ops.FromDouble(128.0)));
     }
 
     /// <summary>Longest text, in tokens, the model reads.</summary>
