@@ -224,11 +224,7 @@ public partial class DoublyRobustEstimator<T> : CausalModelBase<T>
     public override void Fit(Matrix<T> features, Vector<T> treatment, Vector<T> outcome)
     {
         // Convert treatment vector to int
-        var treatmentInt = new Vector<int>(treatment.Length);
-        for (int i = 0; i < treatment.Length; i++)
-        {
-            treatmentInt[i] = (int)Math.Round(NumOps.ToDouble(treatment[i]));
-        }
+        var treatmentInt = Engine.TensorRound(treatment.AsTensor()).Cast<int>().ToVector();
 
         // Call the original fit method
         Fit(features, treatmentInt, outcome);
@@ -306,146 +302,37 @@ public partial class DoublyRobustEstimator<T> : CausalModelBase<T>
     private (Vector<T> coef1, Vector<T> coef0) FitOutcomeModels(
         Matrix<T> x, Vector<int> treatment, Vector<T> outcome)
     {
-        int p = x.Columns;
+        // Separate data by treatment group (anything but 1 is a control, as before)
+        var treatedIndices = GroupIndices(treatment, 1);
+        var controlMask = Engine.TensorNotEquals(treatment.AsTensor(), 1);
+        var controlCoordinates = Engine.TensorNonzero(controlMask);
+        var controlIndices = Engine.Reshape(controlCoordinates, new[] { controlCoordinates.Length });
 
-        // Separate data by treatment group
-        var treatedX = new List<double[]>();
-        var treatedY = new List<double>();
-        var controlX = new List<double[]>();
-        var controlY = new List<double>();
-
-        for (int i = 0; i < x.Rows; i++)
-        {
-            var features = new double[p + 1];
-            features[0] = 1.0; // intercept
-            for (int j = 0; j < p; j++)
-            {
-                features[j + 1] = NumOps.ToDouble(x[i, j]);
-            }
-
-            if (treatment[i] == 1)
-            {
-                treatedX.Add(features);
-                treatedY.Add(NumOps.ToDouble(outcome[i]));
-            }
-            else
-            {
-                controlX.Add(features);
-                controlY.Add(NumOps.ToDouble(outcome[i]));
-            }
-        }
-
-        var coef1 = FitLinearRegressionOLS(treatedX, treatedY, p + 1);
-        var coef0 = FitLinearRegressionOLS(controlX, controlY, p + 1);
-
+        var coef1 = FitLinearRegressionOLS(x, outcome, treatedIndices);
+        var coef0 = FitLinearRegressionOLS(x, outcome, controlIndices);
         return (coef1, coef0);
     }
 
     /// <summary>
-    /// Simple OLS linear regression fitting.
+    /// Least-squares outcome model of the given rows: intercept first, then one slope per covariate.
     /// </summary>
-    private Vector<T> FitLinearRegressionOLS(List<double[]> xData, List<double> yData, int numCoefs)
+    private Vector<T> FitLinearRegressionOLS(Matrix<T> x, Vector<T> outcome, Tensor<int> rows)
     {
-        if (xData.Count == 0)
+        // [intercept, slopes...]; a group with no rows gets all-zero coefficients, as before
+        int n = rows.Length;
+        if (n == 0)
         {
-            return new Vector<T>(numCoefs);
+            return new Vector<T>(x.Columns + 1);
         }
 
-        int n = xData.Count;
-        int p = numCoefs;
-
-        // X'X matrix
-        var xtx = new double[p, p];
-        var xty = new double[p];
-
-        for (int i = 0; i < n; i++)
+        // Least squares with a 1e-6 ridge for numerical stability: (A'A + 1e-6·I)c = A'y in the data's own units,
+        // which is the base ridge fit with λ = 1e-6 / n (the intercept is left unpenalised).
+        var (slopes, intercept) = FitRidgeRegression(SelectRows(x, rows), SelectElements(outcome, rows), 1e-6 / n);
+        return Engine.TensorConcatenate(new[]
         {
-            for (int j = 0; j < p; j++)
-            {
-                for (int k = 0; k < p; k++)
-                {
-                    xtx[j, k] += xData[i][j] * xData[i][k];
-                }
-                xty[j] += xData[i][j] * yData[i];
-            }
-        }
-
-        // Add small ridge for numerical stability
-        for (int j = 0; j < p; j++)
-        {
-            xtx[j, j] += 1e-6;
-        }
-
-        // Solve using simple Gaussian elimination
-        var coefs = SolveLinearSystem(xtx, xty, p);
-
-        var result = new Vector<T>(p);
-        for (int j = 0; j < p; j++)
-        {
-            result[j] = NumOps.FromDouble(coefs[j]);
-        }
-
-        return result;
-    }
-
-    /// <summary>
-    /// Solves a linear system using Gaussian elimination with partial pivoting.
-    /// </summary>
-    private double[] SolveLinearSystem(double[,] a, double[] b, int n)
-    {
-        var augmented = new double[n, n + 1];
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < n; j++)
-            {
-                augmented[i, j] = a[i, j];
-            }
-            augmented[i, n] = b[i];
-        }
-
-        // Forward elimination with partial pivoting
-        for (int k = 0; k < n; k++)
-        {
-            // Find pivot
-            int maxRow = k;
-            for (int i = k + 1; i < n; i++)
-            {
-                if (Math.Abs(augmented[i, k]) > Math.Abs(augmented[maxRow, k]))
-                {
-                    maxRow = i;
-                }
-            }
-
-            // Swap rows
-            for (int j = k; j <= n; j++)
-            {
-                (augmented[k, j], augmented[maxRow, j]) = (augmented[maxRow, j], augmented[k, j]);
-            }
-
-            // Eliminate
-            for (int i = k + 1; i < n; i++)
-            {
-                double factor = augmented[k, k] != 0 ? augmented[i, k] / augmented[k, k] : 0;
-                for (int j = k; j <= n; j++)
-                {
-                    augmented[i, j] -= factor * augmented[k, j];
-                }
-            }
-        }
-
-        // Back substitution
-        var x = new double[n];
-        for (int i = n - 1; i >= 0; i--)
-        {
-            x[i] = augmented[i, n];
-            for (int j = i + 1; j < n; j++)
-            {
-                x[i] -= augmented[i, j] * x[j];
-            }
-            x[i] = augmented[i, i] != 0 ? x[i] / augmented[i, i] : 0;
-        }
-
-        return x;
+            Tensor<T>.CreateDefault(new[] { 1 }, intercept),
+            slopes.AsTensor(),
+        }, 0).ToVector();
     }
 
     /// <summary>
@@ -453,21 +340,15 @@ public partial class DoublyRobustEstimator<T> : CausalModelBase<T>
     /// </summary>
     private Vector<T> PredictOutcome(Matrix<T> x, Vector<T> coefficients)
     {
-        var predictions = new Vector<T>(x.Rows);
-        int p = x.Columns;
-        int availableFeatures = Math.Max(0, coefficients.Length - 1);
-
-        for (int i = 0; i < x.Rows; i++)
+        if (coefficients.Length == 0)
         {
-            double pred = coefficients.Length > 0 ? NumOps.ToDouble(coefficients[0]) : 0.0; // intercept
-            for (int j = 0; j < p && j < availableFeatures; j++)
-            {
-                pred += NumOps.ToDouble(coefficients[j + 1]) * NumOps.ToDouble(x[i, j]);
-            }
-            predictions[i] = NumOps.FromDouble(pred);
+            return new Vector<T>(x.Rows);
         }
 
-        return predictions;
+        // Intercept plus as many slopes as both the coefficients and the features provide
+        int used = Math.Min(x.Columns, coefficients.Length - 1);
+        var features = Engine.TensorNarrow(Tensor<T>.FromMatrix(x), 1, 0, used).ToMatrix();
+        return PredictLinear(features, coefficients.GetSubVector(1, used), coefficients[0]);
     }
 
     /// <summary>
@@ -483,14 +364,7 @@ public partial class DoublyRobustEstimator<T> : CausalModelBase<T>
         var rawScores = PredictPropensityWithCoefficients(x, _propensityCoefficients);
 
         // Apply trimming
-        for (int i = 0; i < rawScores.Length; i++)
-        {
-            double score = NumOps.ToDouble(rawScores[i]);
-            score = Math.Max(_trimMin, Math.Min(_trimMax, score));
-            rawScores[i] = NumOps.FromDouble(score);
-        }
-
-        return rawScores;
+        return Engine.Clamp(rawScores, NumOps.FromDouble(_trimMin), NumOps.FromDouble(_trimMax));
     }
 
     /// <summary>
@@ -535,35 +409,38 @@ public partial class DoublyRobustEstimator<T> : CausalModelBase<T>
 
     private T ComputeDRATE(Matrix<T> x, Vector<int> treatment, Vector<T> outcome)
     {
-        int n = x.Rows;
         var propensityScores = EstimatePropensityScores(x);
         var mu1 = PredictOutcome(x, (_outcomeCoefficients1 ?? throw new InvalidOperationException("_outcomeCoefficients1 is null where it is required.")));
         var mu0 = PredictOutcome(x, (_outcomeCoefficients0 ?? throw new InvalidOperationException("_outcomeCoefficients0 is null where it is required.")));
 
-        double sumDR = 0;
+        return MeanDoublyRobustScore(propensityScores.AsTensor(), mu1.AsTensor(), mu0.AsTensor(), treatment, outcome);
+    }
 
-        for (int i = 0; i < n; i++)
-        {
-            double e = NumOps.ToDouble(propensityScores[i]);
-            double y = NumOps.ToDouble(outcome[i]);
-            double m1 = NumOps.ToDouble(mu1[i]);
-            double m0 = NumOps.ToDouble(mu0[i]);
-            int t = treatment[i];
+    /// <summary>
+    /// Mean of the AIPW scores (μ₁ − μ₀) + T(Y − μ₁)/e − (1 − T)(Y − μ₀)/(1 − e).
+    /// </summary>
+    private T MeanDoublyRobustScore(Tensor<T> e, Tensor<T> mu1, Tensor<T> mu0, Vector<int> treatment, Vector<T> outcome)
+    {
+        var t = treatment.AsTensor().Cast<T>();
+        var y = outcome.AsTensor();
+        var ones = Engine.TensorOnesLike(t);
 
-            // DR estimator: outcome model + IPW correction
-            double outcomeModel = m1 - m0;
-            double ipwCorrection = t * (y - m1) / e - (1 - t) * (y - m0) / (1 - e);
-
-            sumDR += outcomeModel + ipwCorrection;
-        }
-
-        return NumOps.FromDouble(sumDR / n);
+        // DR estimator: outcome model + IPW correction
+        var outcomeModel = Engine.TensorSubtract(mu1, mu0);
+        var treatedCorrection = Engine.TensorDivide(Engine.TensorMultiply(t, Engine.TensorSubtract(y, mu1)), e);
+        var controlCorrection = Engine.TensorDivide(
+            Engine.TensorMultiply(Engine.TensorSubtract(ones, t), Engine.TensorSubtract(y, mu0)),
+            Engine.TensorSubtract(Engine.TensorOnesLike(e), e));
+        return Engine.TensorMean(Engine.TensorAdd(outcomeModel, Engine.TensorSubtract(treatedCorrection, controlCorrection)));
     }
 
     private T ComputeDRATE_CrossFit(Matrix<T> x, Vector<int> treatment, Vector<T> outcome)
     {
         int n = x.Rows;
-        var random = RandomHelper.CreateSecureRandom();
+        // Seeded when the estimator has a seed, so a seeded cross-fit estimate is reproducible.
+        var random = RandomSeed.HasValue
+            ? RandomHelper.CreateSeededRandom(RandomSeed.Value)
+            : RandomHelper.CreateSecureRandom();
 
         // Create fold assignments
         var indices = Enumerable.Range(0, n).OrderBy(i => random.Next()).ToArray();
@@ -572,83 +449,51 @@ public partial class DoublyRobustEstimator<T> : CausalModelBase<T>
         {
             foldAssignment[indices[i]] = i % _numFolds;
         }
+        var folds = new Tensor<int>(foldAssignment, new[] { n });
 
-        // Store cross-fit predictions
-        var mu1CrossFit = new double[n];
-        var mu0CrossFit = new double[n];
-        var propCrossFit = new double[n];
+        // Cross-fit predictions per fold, with the rows they belong to
+        var testRows = new List<Tensor<int>>();
+        var mu1Parts = new List<Tensor<T>>();
+        var mu0Parts = new List<Tensor<T>>();
+        var propensityParts = new List<Tensor<T>>();
+        T trimMin = NumOps.FromDouble(_trimMin);
+        T trimMax = NumOps.FromDouble(_trimMax);
 
         for (int fold = 0; fold < _numFolds; fold++)
         {
             // Create train/test split
-            var trainIndices = new List<int>();
-            var testIndices = new List<int>();
-
-            for (int i = 0; i < n; i++)
+            var trainCoordinates = Engine.TensorNonzero(Engine.TensorNotEquals(folds, fold));
+            var testCoordinates = Engine.TensorNonzero(Engine.TensorEquals(folds, fold));
+            var trainIndices = Engine.Reshape(trainCoordinates, new[] { trainCoordinates.Length });
+            var testIndices = Engine.Reshape(testCoordinates, new[] { testCoordinates.Length });
+            if (testIndices.Length == 0)
             {
-                if (foldAssignment[i] == fold)
-                    testIndices.Add(i);
-                else
-                    trainIndices.Add(i);
-            }
-
-            // Create training data
-            var xTrain = new Matrix<T>(trainIndices.Count, x.Columns);
-            var tTrain = new Vector<int>(trainIndices.Count);
-            var yTrain = new Vector<T>(trainIndices.Count);
-
-            for (int i = 0; i < trainIndices.Count; i++)
-            {
-                int idx = trainIndices[i];
-                for (int j = 0; j < x.Columns; j++)
-                {
-                    xTrain[i, j] = x[idx, j];
-                }
-                tTrain[i] = treatment[idx];
-                yTrain[i] = outcome[idx];
+                continue;
             }
 
             // Fit models on training data
+            var xTrain = SelectRows(x, trainIndices);
+            var tTrain = Engine.TensorIndexSelect(treatment.AsTensor(), trainIndices, 0).ToVector();
+            var yTrain = SelectElements(outcome, trainIndices);
             var propCoefs = FitLogisticRegression(xTrain, tTrain);
             var (outCoefs1, outCoefs0) = FitOutcomeModels(xTrain, tTrain, yTrain);
 
             // Predict on test data
-            foreach (int idx in testIndices)
-            {
-                // Create single-row matrix for prediction
-                var xRow = new Matrix<T>(1, x.Columns);
-                for (int j = 0; j < x.Columns; j++)
-                {
-                    xRow[0, j] = x[idx, j];
-                }
-
-                var prop = PredictPropensityWithCoefficients(xRow, propCoefs);
-                propCrossFit[idx] = Math.Max(_trimMin, Math.Min(_trimMax, NumOps.ToDouble(prop[0])));
-
-                var m1 = PredictOutcome(xRow, outCoefs1);
-                var m0 = PredictOutcome(xRow, outCoefs0);
-                mu1CrossFit[idx] = NumOps.ToDouble(m1[0]);
-                mu0CrossFit[idx] = NumOps.ToDouble(m0[0]);
-            }
+            var xTest = SelectRows(x, testIndices);
+            testRows.Add(testIndices);
+            propensityParts.Add(Engine.Clamp(PredictPropensityWithCoefficients(xTest, propCoefs), trimMin, trimMax).AsTensor());
+            mu1Parts.Add(PredictOutcome(xTest, outCoefs1).AsTensor());
+            mu0Parts.Add(PredictOutcome(xTest, outCoefs0).AsTensor());
         }
+
+        // Every row is in exactly one test fold; put the predictions back in row order
+        var order = Engine.TensorArgsort(Engine.TensorConcatenate(testRows.ToArray(), 0), 0, false);
+        var e = Engine.TensorIndexSelect(Engine.TensorConcatenate(propensityParts.ToArray(), 0), order, 0);
+        var mu1 = Engine.TensorIndexSelect(Engine.TensorConcatenate(mu1Parts.ToArray(), 0), order, 0);
+        var mu0 = Engine.TensorIndexSelect(Engine.TensorConcatenate(mu0Parts.ToArray(), 0), order, 0);
 
         // Compute DR estimate using cross-fit predictions
-        double sumDR = 0;
-        for (int i = 0; i < n; i++)
-        {
-            double e = propCrossFit[i];
-            double y = NumOps.ToDouble(outcome[i]);
-            double m1 = mu1CrossFit[i];
-            double m0 = mu0CrossFit[i];
-            int t = treatment[i];
-
-            double outcomeModel = m1 - m0;
-            double ipwCorrection = t * (y - m1) / e - (1 - t) * (y - m0) / (1 - e);
-
-            sumDR += outcomeModel + ipwCorrection;
-        }
-
-        return NumOps.FromDouble(sumDR / n);
+        return MeanDoublyRobustScore(e, mu1, mu0, treatment, outcome);
     }
 
     /// <summary>
@@ -674,36 +519,23 @@ public partial class DoublyRobustEstimator<T> : CausalModelBase<T>
 
     private T ComputeDRATT(Matrix<T> x, Vector<int> treatment, Vector<T> outcome)
     {
-        int n = x.Rows;
-        var propensityScores = EstimatePropensityScores(x);
-        var mu0 = PredictOutcome(x, (_outcomeCoefficients0 ?? throw new InvalidOperationException("_outcomeCoefficients0 is null where it is required.")));
+        var e = EstimatePropensityScores(x).AsTensor();
+        var mu0 = PredictOutcome(x, (_outcomeCoefficients0 ?? throw new InvalidOperationException("_outcomeCoefficients0 is null where it is required."))).AsTensor();
 
-        double sumTreated = 0;
-        double sumIPW = 0;
-        int nTreated = 0;
-
-        for (int i = 0; i < n; i++)
+        var treated = Engine.TensorEquals(treatment.AsTensor(), 1).Cast<T>();
+        int nTreated = Engine.TensorCountNonzero(treated);
+        if (nTreated == 0)
         {
-            double e = NumOps.ToDouble(propensityScores[i]);
-            double y = NumOps.ToDouble(outcome[i]);
-            double m0 = NumOps.ToDouble(mu0[i]);
-            int t = treatment[i];
-
-            if (t == 1)
-            {
-                sumTreated += y - m0;
-                nTreated++;
-            }
-            else
-            {
-                // IPW correction for control group
-                double weight = e / (1 - e);
-                sumIPW += weight * (y - m0);
-            }
+            return NumOps.Zero;
         }
 
-        double att = nTreated > 0 ? (sumTreated - sumIPW) / nTreated : 0;
-        return NumOps.FromDouble(att);
+        var control = Engine.TensorSubtract(Engine.TensorOnesLike(treated), treated);
+        var residual = Engine.TensorSubtract(outcome.AsTensor(), mu0);
+
+        // Treated residuals minus the odds-weighted (e / (1 - e)) control residuals, over the treated count
+        var odds = Engine.TensorDivide(e, Engine.TensorSubtract(Engine.TensorOnesLike(e), e));
+        var contribution = Engine.TensorMultiply(Engine.TensorSubtract(treated, Engine.TensorMultiply(control, odds)), residual);
+        return NumOps.Divide(Engine.TensorSum(contribution), NumOps.FromDouble(nTreated));
     }
 
     /// <summary>
@@ -721,7 +553,6 @@ public partial class DoublyRobustEstimator<T> : CausalModelBase<T>
 
         var mu1 = PredictOutcome(x, (_outcomeCoefficients1 ?? throw new InvalidOperationException("_outcomeCoefficients1 is null where it is required.")));
         var mu0 = PredictOutcome(x, (_outcomeCoefficients0 ?? throw new InvalidOperationException("_outcomeCoefficients0 is null where it is required.")));
-        var cate = new Vector<T>(x.Rows);
 
         return Engine.Subtract(mu1, mu0);
     }
@@ -740,7 +571,6 @@ public partial class DoublyRobustEstimator<T> : CausalModelBase<T>
 
         var mu1 = PredictOutcome(x, _outcomeCoefficients1);
         var mu0 = PredictOutcome(x, _outcomeCoefficients0);
-        var effects = new Vector<T>(x.Rows);
 
         return Engine.Subtract(mu1, mu0);
     }
@@ -787,21 +617,12 @@ public partial class DoublyRobustEstimator<T> : CausalModelBase<T>
             return new Vector<T>(0);
         }
 
-        int totalLength = _propensityCoefficients.Length +
-                         _outcomeCoefficients1.Length +
-                         _outcomeCoefficients0.Length;
-
-        var parameters = new Vector<T>(totalLength);
-        int idx = 0;
-
-        for (int i = 0; i < _propensityCoefficients.Length; i++)
-            parameters[idx++] = _propensityCoefficients[i];
-        for (int i = 0; i < _outcomeCoefficients1.Length; i++)
-            parameters[idx++] = _outcomeCoefficients1[i];
-        for (int i = 0; i < _outcomeCoefficients0.Length; i++)
-            parameters[idx++] = _outcomeCoefficients0[i];
-
-        return parameters;
+        return Engine.TensorConcatenate(new[]
+        {
+            _propensityCoefficients.AsTensor(),
+            _outcomeCoefficients1.AsTensor(),
+            _outcomeCoefficients0.AsTensor(),
+        }, 0).ToVector();
     }
 
     /// <summary>
@@ -811,21 +632,18 @@ public partial class DoublyRobustEstimator<T> : CausalModelBase<T>
     {
         if (parameters.Length == 0) return;
 
-        // Assume equal split for simplicity
+        // Assume equal split for simplicity; a short vector leaves the trailing coefficients zero
         int propLength = (parameters.Length + 2) / 3;
         int outLength = propLength;
+        var padded = Engine.TensorConcatenate(new[]
+        {
+            parameters.AsTensor(),
+            new Tensor<T>(new[] { propLength + 2 * outLength - parameters.Length }),
+        }, 0).ToVector();
 
-        _propensityCoefficients = new Vector<T>(propLength);
-        _outcomeCoefficients1 = new Vector<T>(outLength);
-        _outcomeCoefficients0 = new Vector<T>(outLength);
-
-        int idx = 0;
-        for (int i = 0; i < propLength && idx < parameters.Length; i++)
-            _propensityCoefficients[i] = parameters[idx++];
-        for (int i = 0; i < outLength && idx < parameters.Length; i++)
-            _outcomeCoefficients1[i] = parameters[idx++];
-        for (int i = 0; i < outLength && idx < parameters.Length; i++)
-            _outcomeCoefficients0[i] = parameters[idx++];
+        _propensityCoefficients = padded.GetSubVector(0, propLength);
+        _outcomeCoefficients1 = padded.GetSubVector(propLength, outLength);
+        _outcomeCoefficients0 = padded.GetSubVector(propLength + outLength, outLength);
 
         NumFeatures = propLength - 1;
         IsFitted = true;

@@ -450,18 +450,7 @@ public abstract partial class CausalModelBase<T> : ICausalModel<T>, IModelShape,
         }
 
         // Check treatment is binary
-        var assignment = treatment.AsTensor();
-        var isTreated = Engine.TensorEquals(assignment, 1);
-        var isControl = Engine.TensorEquals(assignment, 0);
-        int numTreated = Engine.TensorCountNonzero(isTreated);
-        if (numTreated + Engine.TensorCountNonzero(isControl) != treatment.Length)
-        {
-            // The first offending index, in the order the old scan reported it.
-            var invalid = Engine.TensorNonzero(Engine.TensorEquals(Engine.TensorAdd(isTreated, isControl), 0));
-            int i = invalid[0, 0];
-            throw new ArgumentException(
-                $"Treatment indicators must be 0 or 1. Found {treatment[i]} at index {i}.");
-        }
+        int numTreated = CountTreatedRequiringBinary(treatment);
 
         // Check that both treatment groups have data
         if (numTreated == 0)
@@ -473,6 +462,27 @@ public abstract partial class CausalModelBase<T> : ICausalModel<T>, IModelShape,
         {
             throw new ArgumentException("No control individuals in the data.");
         }
+    }
+
+    /// <summary>
+    /// The number of treated subjects, after checking every indicator is 0 or 1 (the first offending index is
+    /// reported otherwise).
+    /// </summary>
+    private protected int CountTreatedRequiringBinary(Vector<int> treatment)
+    {
+        var assignment = treatment.AsTensor();
+        var isTreated = Engine.TensorEquals(assignment, 1);
+        var isControl = Engine.TensorEquals(assignment, 0);
+        int numTreated = Engine.TensorCountNonzero(isTreated);
+        if (numTreated + Engine.TensorCountNonzero(isControl) != treatment.Length)
+        {
+            var invalid = Engine.TensorNonzero(Engine.TensorEquals(Engine.TensorAdd(isTreated, isControl), 0));
+            int i = invalid[0, 0];
+            throw new ArgumentException(
+                $"Treatment indicators must be 0 or 1. Found {treatment[i]} at index {i}.");
+        }
+
+        return numTreated;
     }
 
     #endregion
@@ -1200,8 +1210,29 @@ public abstract partial class CausalModelBase<T> : ICausalModel<T>, IModelShape,
         return Engine.TensorWhere(Engine.TensorEquals(peak, NumOps.Zero), Engine.TensorOnesLike(peak), peak);
     }
 
+    /// <summary>
+    /// Σ w·v / Σ w for non-negative weights, both scaled by their peaks first so the products cannot overflow a
+    /// narrow T. <paramref name="hasWeight"/> is false (and the result zero) when every weight is zero.
+    /// </summary>
+    private protected T WeightedMean(Tensor<T> values, Tensor<T> weights, out bool hasWeight)
+    {
+        T weightPeak = Engine.TensorMaxValue(Engine.TensorAbs(weights));
+        hasWeight = NumOps.GreaterThan(weightPeak, NumOps.Zero);
+        if (!hasWeight)
+            return NumOps.Zero;
+
+        T valuePeak = PeakMagnitude(values);
+        var w = Engine.TensorDivideScalar(weights, weightPeak);
+        var v = Engine.TensorDivideScalar(values, valuePeak);
+        return NumOps.Multiply(valuePeak, NumOps.Divide(Engine.TensorSum(Engine.TensorMultiply(w, v)), Engine.TensorSum(w)));
+    }
+
+    /// <summary>A [length] tensor holding <paramref name="value"/> everywhere.</summary>
+    private protected static Vector<T> Constant(int length, T value)
+        => Tensor<T>.CreateDefault(new[] { length }, value).ToVector();
+
     /// <summary>Peak magnitude of a tensor, or 1 when it is all zeros.</summary>
-    private T PeakMagnitude(Tensor<T> values)
+    private protected T PeakMagnitude(Tensor<T> values)
     {
         T peak = Engine.TensorMaxValue(Engine.TensorAbs(values));
         return NumOps.GreaterThan(peak, NumOps.Zero) ? peak : NumOps.One;
