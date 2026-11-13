@@ -7767,7 +7767,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                 accumLoss = NumOps.Add(accumLoss, NumOps.Multiply(chunkLoss, chunkSamplesT));
 
                 var trainableParams = CollectModelTrainableTensors();
-                var allGrads = tape.ComputeGradients(lossTensor, sources: null);
+                var allGrads = tape.ComputeGradients(lossTensor, sources: trainableParams);
                 SparseEmbeddingOptimizerHelpers.MaterializeSparseGradients(trainableParams, allGrads, Engine);
                 // Walk both the layer-collected params AND any network-
                 // level trainable tensors so the latter actually receive
@@ -13014,10 +13014,11 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                 }
             }
 
-            // Compute all gradients then filter to trainable params.
-            // Passing sources directly can miss parameters when the tape backward
-            // can't match view tensor references through the GradFn chain.
-            var allGrads = creditGrads ?? tape!.ComputeGradients(lossForBackward, sources: null);
+            // Name the trainable parameters as sources: backward then frees each intermediate's gradient right after the
+            // step that consumes it (on the GPU, stream ordered), instead of handing every gradient back for the GC. The
+            // lookup below matches by reference either way, so the parameters found are the same as with sources: null.
+            var allGrads = creditGrads ?? tape!.ComputeGradients(lossForBackward,
+                sources: extraTrainableTensors.Count == 0 ? trainableParams : trainableParams.Concat(extraTrainableTensors).ToList());
             var grads = new Dictionary<Tensor<T>, Tensor<T>>(
                 Helpers.TensorReferenceComparer<Tensor<T>>.Instance);
             foreach (var param in trainableParams)
