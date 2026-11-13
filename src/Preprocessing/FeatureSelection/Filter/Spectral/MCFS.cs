@@ -32,13 +32,13 @@ public class MCFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IFixedCountFeat
     private readonly double _alpha;
     private readonly int? _randomState;
 
-    private double[]? _mcfsScores;
+    private Vector<T>? _mcfsScores;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
-    public double[]? MCFSScores => _mcfsScores;
+    public Vector<T>? MCFSScores => _mcfsScores;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -71,195 +71,68 @@ public class MCFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IFixedCountFeat
         _nInputFeatures = data.Columns;
         int n = data.Rows;
         int p = data.Columns;
+        var engine = Engine;
+        var x = FilterStatisticTensorOps.AsTensor(data);
 
-        // Construct k-NN affinity graph
-        var affinityMatrix = ConstructAffinityMatrix(data, n, p);
+        // k-NN affinity graph with heat-kernel weights exp(-d^2 / (2 sigma_i^2)), sigma_i the mean distance from
+        // instance i to its k neighbours (1 when that is 0); symmetrised with the larger weight. The exponent is
+        // (d / sigma_i)^2 / 2, divided before it is squared: d^2 and sigma_i^2 overflow Half once the distances pass
+        // 256 (inf / inf = NaN, and NaN times the 0 of the neighbour mask stayed NaN). The neighbour distances are
+        // picked with a where, not a mask product, and the sigma cut-off is one Half can hold (1e-10 is 0 there).
+        var distances = engine.TensorCDist(x, x, 2.0);
+        var neighbours = FeatureScoringTensorOps.KnnMask(distances, _nNeighbors);
+        var neighbourCount = engine.ReduceSum(neighbours, new[] { 1 }, false);
+        var sigma = FilterStatisticTensorOps.GuardedDivide(
+            engine.ReduceSum(FeatureScoringTensorOps.KeepOrFill(distances, neighbours, NumOps.Zero), new[] { 1 }, false),
+            neighbourCount, 0.0, NumOps.Zero);
+        sigma = engine.TensorWhere(engine.TensorLessThan(sigma, FeatureScoringTensorOps.Tiny<T>(1e-10)),
+            FilterStatisticTensorOps.FilledLike(sigma, NumOps.One), sigma);
+        var scaledDistance = engine.TensorDivide(distances, FilterStatisticTensorOps.ColumnBroadcast(sigma, n));
+        var kernel = engine.TensorExp(
+            engine.TensorMultiplyScalar(engine.TensorSquare(scaledDistance), NumOps.FromDouble(-0.5)));
+        var directed = FeatureScoringTensorOps.KeepOrFill(kernel, neighbours, NumOps.Zero);
+        var affinity = engine.TensorMax(directed, engine.TensorTranspose(directed));
 
-        // Compute normalized Laplacian
-        var laplacian = ComputeNormalizedLaplacian(affinityMatrix, n);
+        var propagation = Propagation(affinity);
 
-        // Get bottom k eigenvectors (cluster indicators)
-        var clusterIndicators = ComputeBottomEigenvectors(laplacian, n, _nClusters);
-
-        // Sparse regression to find features that predict cluster indicators
-        _mcfsScores = new double[p];
-
-        for (int j = 0; j < p; j++)
-        {
-            double score = 0;
-            for (int k = 0; k < _nClusters; k++)
-            {
-                // Compute correlation-based regression coefficient
-                double featureMean = 0, indicatorMean = 0;
-                for (int i = 0; i < n; i++)
-                {
-                    featureMean += NumOps.ToDouble(data[i, j]);
-                    indicatorMean += clusterIndicators[i, k];
-                }
-                featureMean /= n;
-                indicatorMean /= n;
-
-                double covariance = 0, featureVar = 0;
-                for (int i = 0; i < n; i++)
-                {
-                    double xDiff = NumOps.ToDouble(data[i, j]) - featureMean;
-                    double yDiff = clusterIndicators[i, k] - indicatorMean;
-                    covariance += xDiff * yDiff;
-                    featureVar += xDiff * xDiff;
-                }
-
-                if (featureVar > 1e-10)
-                {
-                    double coef = Math.Abs(covariance / featureVar);
-                    // Apply L1-style sparsity
-                    double sparseCoef = Math.Max(0, coef - _alpha / n);
-                    score += sparseCoef * sparseCoef;
-                }
-            }
-            _mcfsScores[j] = Math.Sqrt(score);
-        }
-
-        // Select top features
-        int nToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = _mcfsScores
-            .Select((s, idx) => (Score: s, Index: idx))
-            .OrderByDescending(x => x.Score)
-            .Take(nToSelect)
-            .Select(x => x.Index)
-            .OrderBy(x => x)
-            .ToArray();
-
-        IsFitted = true;
-    }
-
-    private double[,] ConstructAffinityMatrix(Matrix<T> data, int n, int p)
-    {
-        var distances = new double[n, n];
-        var affinity = new double[n, n];
-
-        // Compute pairwise distances
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = i + 1; j < n; j++)
-            {
-                double dist = 0;
-                for (int f = 0; f < p; f++)
-                {
-                    double diff = NumOps.ToDouble(data[i, f]) - NumOps.ToDouble(data[j, f]);
-                    dist += diff * diff;
-                }
-                distances[i, j] = Math.Sqrt(dist);
-                distances[j, i] = distances[i, j];
-            }
-        }
-
-        // Build k-NN graph with heat kernel weights
-        for (int i = 0; i < n; i++)
-        {
-            // Find k nearest neighbors
-            var neighbors = Enumerable.Range(0, n)
-                .Where(j => j != i)
-                .OrderBy(j => distances[i, j])
-                .Take(_nNeighbors)
-                .ToList();
-
-            // Compute local bandwidth (average distance to k neighbors)
-            double sigma = neighbors.Average(j => distances[i, j]);
-            if (sigma < 1e-10) sigma = 1;
-
-            foreach (int j in neighbors)
-            {
-                double weight = Math.Exp(-distances[i, j] * distances[i, j] / (2 * sigma * sigma));
-                affinity[i, j] = Math.Max(affinity[i, j], weight);
-                affinity[j, i] = affinity[i, j]; // Symmetrize
-            }
-        }
-
-        return affinity;
-    }
-
-    private double[,] ComputeNormalizedLaplacian(double[,] affinity, int n)
-    {
-        var degree = new double[n];
-        for (int i = 0; i < n; i++)
-            for (int j = 0; j < n; j++)
-                degree[i] += affinity[i, j];
-
-        var laplacian = new double[n, n];
-        for (int i = 0; i < n; i++)
-        {
-            double di = Math.Sqrt(degree[i] + 1e-10);
-            for (int j = 0; j < n; j++)
-            {
-                double dj = Math.Sqrt(degree[j] + 1e-10);
-                if (i == j)
-                    laplacian[i, j] = 1;
-                else
-                    laplacian[i, j] = -affinity[i, j] / (di * dj);
-            }
-        }
-
-        return laplacian;
-    }
-
-    private double[,] ComputeBottomEigenvectors(double[,] laplacian, int n, int k)
-    {
-        // Power iteration with deflation to get bottom k eigenvectors
-        var eigenvectors = new double[n, k];
+        // Bottom k eigenvectors of L (cluster indicators): power iteration on I - L from random starts
         var rand = _randomState.HasValue
             ? RandomHelper.CreateSeededRandom(_randomState.Value)
             : RandomHelper.CreateSecureRandom();
+        var starts = FeatureScoringTensorOps.CenteredUniformStarts<T>(rand, _nClusters, n);
+        var indicators = engine.TensorConcatenate(
+            FeatureScoringTensorOps.PowerIteration(propagation, starts, 100, keepPreviousOnZeroNorm: false).ToArray(), 1);
 
-        var previousVectors = new List<double[]>();
+        // Per feature and cluster indicator the regression coefficient cov / var, soft-thresholded by alpha / n;
+        // score = the norm of those coefficients over the clusters. Each feature is divided by its largest deviation
+        // s first, cov(x, u) / var(x) = cov(x / s, u) / var(x / s) / s: the raw sum of squares overflowed Half once
+        // the deviations passed a few hundred (var = inf scored the feature 0). A feature counts when its sum of
+        // squared deviations is above 1e-10, i.e. s sqrt(sum (x / s)^2) is above 1e-5.
+        var deviation = FilterStatisticTensorOps.CenterColumns(x);
+        var spread = engine.ReduceMax(engine.TensorAbs(deviation), new[] { 0 }, false);
+        var safeSpread = engine.TensorWhere(
+            engine.TensorGreaterThan(spread, NumOps.Zero), spread, FilterStatisticTensorOps.FilledLike(spread, NumOps.One));
+        var centered = engine.TensorDivide(deviation, FilterStatisticTensorOps.RowBroadcast(safeSpread, n));
+        var centeredIndicators = FilterStatisticTensorOps.CenterColumns(indicators);
+        var covariance = engine.TensorMatMul(engine.TensorTranspose(centered), centeredIndicators);
+        var variance = engine.ReduceSum(engine.TensorSquare(centered), new[] { 0 }, false);
+        var informativeFeature = engine.TensorGreaterThan(
+            engine.TensorMultiply(spread, engine.TensorSqrt(variance)), NumOps.FromDouble(1e-5));
+        var safeVariance = engine.TensorWhere(
+            engine.TensorGreaterThan(variance, NumOps.Zero), variance, FilterStatisticTensorOps.FilledLike(variance, NumOps.One));
+        var coefficient = engine.TensorAbs(engine.TensorDivide(
+            engine.TensorDivide(covariance, FilterStatisticTensorOps.ColumnBroadcast(safeVariance, _nClusters)),
+            FilterStatisticTensorOps.ColumnBroadcast(safeSpread, _nClusters)));
+        var sparse = engine.TensorMax(engine.TensorSubtractScalar(coefficient, NumOps.FromDouble(_alpha / n)), NumOps.Zero);
+        var informative = FilterStatisticTensorOps.ColumnBroadcast(informativeFeature, _nClusters);
+        var scores = engine.TensorSqrt(engine.ReduceSum(
+            engine.TensorSquare(engine.TensorMultiply(sparse, informative)), new[] { 1 }, false));
+        _mcfsScores = scores.ToVector();
 
-        for (int ev = 0; ev < k; ev++)
-        {
-            var v = new double[n];
-            for (int i = 0; i < n; i++)
-                v[i] = rand.NextDouble() - 0.5;
+        // Select top features
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(scores, Math.Min(_nFeaturesToSelect, p));
 
-            // Power iteration for smallest eigenvalue (inverse iteration concept)
-            // Use (I - L) instead of L to get largest eigenvalue which corresponds to smallest of L
-            for (int iter = 0; iter < 100; iter++)
-            {
-                var newV = new double[n];
-                for (int i = 0; i < n; i++)
-                {
-                    for (int j = 0; j < n; j++)
-                    {
-                        double val = (i == j ? 1 : 0) - laplacian[i, j];
-                        newV[i] += val * v[j];
-                    }
-                }
-
-                // Deflate against previous eigenvectors
-                foreach (var prev in previousVectors)
-                {
-                    double dot = 0;
-                    for (int i = 0; i < n; i++)
-                        dot += newV[i] * prev[i];
-                    for (int i = 0; i < n; i++)
-                        newV[i] -= dot * prev[i];
-                }
-
-                // Normalize
-                double norm = 0;
-                for (int i = 0; i < n; i++)
-                    norm += newV[i] * newV[i];
-                norm = Math.Sqrt(norm);
-                if (norm > 1e-10)
-                    for (int i = 0; i < n; i++)
-                        newV[i] /= norm;
-
-                v = newV;
-            }
-
-            previousVectors.Add(v);
-            for (int i = 0; i < n; i++)
-                eigenvectors[i, ev] = v[i];
-        }
-
-        return eigenvectors;
+        IsFitted = true;
     }
 
     public new Matrix<T> FitTransform(Matrix<T> data)
@@ -268,21 +141,30 @@ public class MCFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IFixedCountFeat
         return Transform(data);
     }
 
+    /// <summary>
+    /// I - L for the normalised Laplacian L = I - D^-1/2 A D^-1/2 of an affinity [n, n] (degrees offset by 1e-10),
+    /// scaled by rows then columns: for an isolated sample the outer product of the two 1/sqrt(eps) factors
+    /// overflows Half and 0 * inf gave NaN, and 1e-10 itself is 0 in Half.
+    /// </summary>
+    internal static Tensor<T> Propagation(Tensor<T> affinity)
+    {
+        var engine = AiDotNetEngine.Current;
+        int n = affinity.Shape[0];
+        var degreeScale = engine.TensorReciprocal(engine.TensorSqrt(
+            engine.TensorAddScalar(engine.ReduceSum(affinity, new[] { 1 }, false), FeatureScoringTensorOps.Tiny<T>(1e-10))));
+        var rows = engine.TensorMultiply(
+            affinity, engine.TensorBroadcastTo(engine.Reshape(degreeScale, new[] { n, 1 }), new[] { n, n }));
+        return engine.TensorMultiply(
+            rows, engine.TensorBroadcastTo(engine.Reshape(degreeScale, new[] { 1, n }), new[] { n, n }));
+    }
+
     /// <inheritdoc />
     protected override Matrix<T> TransformCore(Matrix<T> data)
     {
         if (_selectedIndices is null)
             throw new InvalidOperationException("MCFS has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return FilterStatisticTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

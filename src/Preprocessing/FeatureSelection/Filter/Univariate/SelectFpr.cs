@@ -33,8 +33,8 @@ public class SelectFpr<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervise
     private readonly SelectKBestScoreFunc _scoringFunction;
 
     // Fitted parameters
-    private double[]? _scores;
-    private double[]? _pValues;
+    private Vector<T>? _scores;
+    private Vector<T>? _pValues;
     private bool[]? _supportMask;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
@@ -52,12 +52,12 @@ public class SelectFpr<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervise
     /// <summary>
     /// Gets the scores for each feature.
     /// </summary>
-    public double[]? Scores => _scores;
+    public Vector<T>? Scores => _scores;
 
     /// <summary>
     /// Gets the p-values for each feature.
     /// </summary>
-    public double[]? PValues => _pValues;
+    public Vector<T>? PValues => _pValues;
 
     /// <summary>
     /// Gets the indices of selected features.
@@ -73,11 +73,11 @@ public class SelectFpr<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervise
     /// Creates a new instance of <see cref="SelectFpr{T}"/>.
     /// </summary>
     /// <param name="alpha">Significance level for feature selection. Defaults to 0.05.</param>
-    /// <param name="scoringFunction">The scoring function to use. Defaults to FRegression.</param>
+    /// <param name="scoringFunction">The scoring function to use. Defaults to FClassif, scikit-learn's default (f_classif); it must produce p-values.</param>
     /// <param name="columnIndices">The column indices to evaluate, or null for all columns.</param>
     public SelectFpr(
         double alpha = 0.05,
-        SelectKBestScoreFunc scoringFunction = SelectKBestScoreFunc.FRegression,
+        SelectKBestScoreFunc scoringFunction = SelectKBestScoreFunc.FClassif,
         int[]? columnIndices = null)
         : base(columnIndices)
     {
@@ -112,73 +112,19 @@ public class SelectFpr<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervise
         }
 
         _nInputFeatures = data.Columns;
-        int n = data.Rows;
         int p = data.Columns;
 
-        // Convert to double arrays
-        var X = new double[n, p];
-        var y = new double[n];
+        // scores and p-values of every feature (scikit-learn's univariate scoring functions)
+        var (scores, pValues) = StatisticalTestHelper.ComputeScoresWithPValues(data, target, _scoringFunction);
+        _scores = scores;
+        _pValues = pValues;
 
-        for (int i = 0; i < n; i++)
-        {
-            y[i] = NumOps.ToDouble(target[i]);
-            for (int j = 0; j < p; j++)
-            {
-                X[i, j] = NumOps.ToDouble(data[i, j]);
-            }
-        }
+        // keep every feature whose p-value is below alpha (scikit-learn's SelectFpr)
+        var keep = Engine.TensorLessThan(FilterStatisticTensorOps.AsTensor(pValues), NumOps.FromDouble(_alpha));
 
-        // Compute scores and p-values for each feature
-        _scores = new double[p];
-        _pValues = new double[p];
-
-        for (int j = 0; j < p; j++)
-        {
-            var featureValues = new double[n];
-            for (int i = 0; i < n; i++)
-            {
-                featureValues[i] = X[i, j];
-            }
-
-            var (score, pValue) = StatisticalTestHelper.ComputeScore(featureValues, y, _scoringFunction);
-            _scores[j] = score;
-            _pValues[j] = pValue;
-        }
-
-        // Select features with p-value < alpha
-        var selectedList = new List<int>();
-        for (int j = 0; j < p; j++)
-        {
-            if (_pValues[j] < _alpha)
-            {
-                selectedList.Add(j);
-            }
-        }
-
-        // Ensure at least one feature is selected
-        if (selectedList.Count == 0)
-        {
-            int bestIdx = 0;
-            double minPValue = _pValues[0];
-            for (int j = 1; j < p; j++)
-            {
-                if (_pValues[j] < minPValue)
-                {
-                    minPValue = _pValues[j];
-                    bestIdx = j;
-                }
-            }
-            selectedList.Add(bestIdx);
-        }
-
-        _selectedIndices = selectedList.OrderBy(i => i).ToArray();
-
-        // Create support mask
-        _supportMask = new bool[p];
-        foreach (int idx in _selectedIndices)
-        {
-            _supportMask[idx] = true;
-        }
+        // As in scikit-learn, no feature passing the test selects none
+        _selectedIndices = FilterStatisticTensorOps.MaskPositions(keep);
+        _supportMask = FeatureScoringTensorOps.SupportMask(_selectedIndices, p);
 
         IsFitted = true;
     }
@@ -202,19 +148,7 @@ public class SelectFpr<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervise
             throw new InvalidOperationException("SelectFpr has not been fitted.");
         }
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-        {
-            for (int j = 0; j < numCols; j++)
-            {
-                result[i, j] = data[i, _selectedIndices[j]];
-            }
-        }
-
-        return new Matrix<T>(result);
+        return FilterStatisticTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <summary>

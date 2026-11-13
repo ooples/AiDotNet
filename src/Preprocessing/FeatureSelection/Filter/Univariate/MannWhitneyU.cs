@@ -27,15 +27,15 @@ public class MannWhitneyU<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISuperv
 {
     private readonly int _nFeaturesToSelect;
 
-    private double[]? _uStatistics;
-    private double[]? _pValues;
+    private Vector<T>? _uStatistics;
+    private Vector<T>? _pValues;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
-    public double[]? UStatistics => _uStatistics;
-    public double[]? PValues => _pValues;
+    public Vector<T>? UStatistics => _uStatistics;
+    public Vector<T>? PValues => _pValues;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -65,116 +65,36 @@ public class MannWhitneyU<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISuperv
         if (data.Rows != target.Length)
             throw new ArgumentException("Target length must match rows in data.");
 
-        _nInputFeatures = data.Columns;
-        int n = data.Rows;
         int p = data.Columns;
+        var engine = Engine;
 
-        // Separate samples by class (binary)
-        var class0Indices = new List<int>();
-        var class1Indices = new List<int>();
+        // the test compares two samples (scipy.stats.mannwhitneyu): a third label would be merged into class 1
+        FilterStatisticTensorOps.ClassIndex(target, out int classCount);
+        if (classCount > 2)
+            throw new ArgumentException(
+                $"MannWhitneyU compares two classes; the target has {classCount}.", nameof(target));
 
-        for (int i = 0; i < n; i++)
-        {
-            int label = (int)Math.Round(NumOps.ToDouble(target[i]));
-            if (label == 0)
-                class0Indices.Add(i);
-            else
-                class1Indices.Add(i);
-        }
+        _nInputFeatures = p;
 
-        if (class0Indices.Count == 0 || class1Indices.Count == 0)
+        // Separate samples by class (binary): class 0 is the rounded label 0, the other label is class 1
+        var labels = engine.TensorRound(FilterStatisticTensorOps.AsTensor(target));
+        var class0 = engine.TensorEquals(labels, NumOps.Zero);
+        int n1 = engine.TensorCountNonzero(class0);
+        int n2 = data.Rows - n1;
+
+        if (n1 == 0 || n2 == 0)
             throw new ArgumentException("Both classes must have at least one sample.");
 
-        int n1 = class0Indices.Count;
-        int n2 = class1Indices.Count;
-
-        _uStatistics = new double[p];
-        _pValues = new double[p];
-
-        for (int j = 0; j < p; j++)
-        {
-            // Get values and compute ranks
-            var values = new (double Value, int Index, int Class)[n];
-            for (int i = 0; i < n; i++)
-            {
-                int classLabel = (int)Math.Round(NumOps.ToDouble(target[i]));
-                values[i] = (NumOps.ToDouble(data[i, j]), i, classLabel);
-            }
-
-            // Sort by value
-            Array.Sort(values, (a, b) => a.Value.CompareTo(b.Value));
-
-            // Assign ranks (with ties getting average rank)
-            var ranks = new double[n];
-            int pos = 0;
-            while (pos < n)
-            {
-                int tieStart = pos;
-                while (pos < n - 1 && Math.Abs(values[pos].Value - values[pos + 1].Value) < 1e-10)
-                    pos++;
-
-                double avgRank = (tieStart + pos + 2.0) / 2.0;
-                for (int i = tieStart; i <= pos; i++)
-                    ranks[values[i].Index] = avgRank;
-
-                pos++;
-            }
-
-            // Compute rank sum for class 0
-            double R1 = 0;
-            foreach (int i in class0Indices)
-                R1 += ranks[i];
-
-            // Compute U statistic for class 0
-            double U1 = R1 - (n1 * (n1 + 1.0)) / 2;
-            double U2 = (double)n1 * n2 - U1;
-
-            // Use the smaller U for the test
-            _uStatistics[j] = Math.Min(U1, U2);
-
-            // Compute p-value using normal approximation
-            double meanU = (double)n1 * n2 / 2;
-            double stdU = Math.Sqrt((double)n1 * n2 * (n1 + n2 + 1) / 12);
-
-            // Continuity correction
-            double z = Math.Abs(_uStatistics[j] - meanU) / stdU;
-            _pValues[j] = 2 * (1 - NormalCDF(z)); // Two-tailed
-        }
+        // U statistic (the smaller one) and tie-corrected normal p-value (scipy.stats.mannwhitneyu, asymptotic,
+        // continuity corrected)
+        var (u, pValues) = FeatureScoringTensorOps.MannWhitney(FilterStatisticTensorOps.AsTensor(data), class0, n1, n2);
+        _uStatistics = u.ToVector();
+        _pValues = pValues.ToVector();
 
         // Select features with smallest p-values (most significant)
-        int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = _pValues
-            .Select((pv, idx) => (PValue: pv, Index: idx))
-            .OrderBy(x => x.PValue)
-            .Take(numToSelect)
-            .Select(x => x.Index)
-            .OrderBy(x => x)
-            .ToArray();
+        _selectedIndices = PreprocessingTensorOps.BottomKIndicesSorted(pValues, Math.Min(_nFeaturesToSelect, p));
 
         IsFitted = true;
-    }
-
-    private static double NormalCDF(double z)
-    {
-        return 0.5 * (1 + Erf(z / Math.Sqrt(2)));
-    }
-
-    private static double Erf(double x)
-    {
-        double a1 = 0.254829592;
-        double a2 = -0.284496736;
-        double a3 = 1.421413741;
-        double a4 = -1.453152027;
-        double a5 = 1.061405429;
-        double p = 0.3275911;
-
-        int sign = x < 0 ? -1 : 1;
-        x = Math.Abs(x);
-
-        double t = 1.0 / (1.0 + p * x);
-        double y = 1.0 - (((((a5 * t + a4) * t) + a3) * t + a2) * t + a1) * t * Math.Exp(-x * x);
-
-        return sign * y;
     }
 
     /// <inheritdoc />
@@ -190,15 +110,7 @@ public class MannWhitneyU<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISuperv
         if (_selectedIndices is null)
             throw new InvalidOperationException("MannWhitneyU has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return FilterStatisticTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

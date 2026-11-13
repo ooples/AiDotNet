@@ -25,15 +25,15 @@ public class KruskalWallisH<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupe
 {
     private readonly int _nFeaturesToSelect;
 
-    private double[]? _hStatistics;
-    private double[]? _pValues;
+    private Vector<T>? _hStatistics;
+    private Vector<T>? _pValues;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
-    public double[]? HStatistics => _hStatistics;
-    public double[]? PValues => _pValues;
+    public Vector<T>? HStatistics => _hStatistics;
+    public Vector<T>? PValues => _pValues;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -61,140 +61,25 @@ public class KruskalWallisH<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupe
         if (data.Rows != target.Length)
             throw new ArgumentException("Target length must match rows in data.");
 
-        _nInputFeatures = data.Columns;
-        int n = data.Rows;
         int p = data.Columns;
 
-        // Get unique classes
-        var classMap = new Dictionary<double, int>();
-        for (int i = 0; i < n; i++)
-        {
-            double y = NumOps.ToDouble(target[i]);
-            if (!classMap.ContainsKey(y))
-                classMap[y] = classMap.Count;
-        }
+        // Kruskal-Wallis H of every feature across the (integer) classes, tie-corrected, with chi-squared
+        // p-values (scipy.stats.kruskal, which needs at least two groups: one class makes H = 0 and p = 1 for every
+        // feature, a selection that carries no information)
+        var classIndex = FilterStatisticTensorOps.ClassIndex(target, out int classCount);
+        if (classCount < 2)
+            throw new ArgumentException("KruskalWallisH requires at least 2 classes.", nameof(target));
 
-        int k = classMap.Count;
-        if (k < 2)
-            throw new ArgumentException("KruskalWallisH requires at least 2 classes.");
+        _nInputFeatures = p;
+        var (h, pValues) = FeatureScoringTensorOps.KruskalWallis(
+            FilterStatisticTensorOps.AsTensor(data), FilterStatisticTensorOps.ClassOneHot<T>(classIndex, classCount));
+        _hStatistics = h.ToVector();
+        _pValues = pValues.ToVector();
 
-        _hStatistics = new double[p];
-        _pValues = new double[p];
-
-        for (int j = 0; j < p; j++)
-        {
-            // Group values by class
-            var groups = new List<double>[k];
-            for (int g = 0; g < k; g++)
-                groups[g] = new List<double>();
-
-            var allValues = new List<(double Value, int Group, int OrigIdx)>();
-            for (int i = 0; i < n; i++)
-            {
-                double y = NumOps.ToDouble(target[i]);
-                double x = NumOps.ToDouble(data[i, j]);
-                int groupIdx = classMap[y];
-                groups[groupIdx].Add(x);
-                allValues.Add((x, groupIdx, i));
-            }
-
-            // Rank all values
-            allValues = allValues.OrderBy(v => v.Value).ToList();
-            var ranks = new double[n];
-
-            int i2 = 0;
-            while (i2 < n)
-            {
-                int j2 = i2;
-                while (j2 < n - 1 && Math.Abs(allValues[j2].Value - allValues[j2 + 1].Value) < 1e-10)
-                    j2++;
-
-                double avgRank = (i2 + j2) / 2.0 + 1;
-                for (int idx = i2; idx <= j2; idx++)
-                    ranks[allValues[idx].OrigIdx] = avgRank;
-
-                i2 = j2 + 1;
-            }
-
-            // Compute group rank sums
-            var groupRankSums = new double[k];
-            var groupCounts = new int[k];
-            for (int i3 = 0; i3 < n; i3++)
-            {
-                double y = NumOps.ToDouble(target[i3]);
-                int groupIdx = classMap[y];
-                groupRankSums[groupIdx] += ranks[i3];
-                groupCounts[groupIdx]++;
-            }
-
-            // Compute H statistic
-            double h = 0;
-            for (int g = 0; g < k; g++)
-            {
-                if (groupCounts[g] > 0)
-                {
-                    double meanRank = groupRankSums[g] / groupCounts[g];
-                    h += groupCounts[g] * Math.Pow(meanRank - (n + 1) / 2.0, 2);
-                }
-            }
-            h *= 12.0 / ((double)n * (n + 1));
-
-            _hStatistics[j] = h;
-
-            // Chi-square approximation for p-value (df = k - 1)
-            _pValues[j] = 1 - ChiSquareCDF(h, k - 1);
-        }
-
-        int nToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = _pValues
-            .Select((pv, idx) => (PValue: pv, Index: idx))
-            .OrderBy(x => x.PValue)
-            .Take(nToSelect)
-            .Select(x => x.Index)
-            .OrderBy(x => x)
-            .ToArray();
+        // Select the features with the smallest p-values
+        _selectedIndices = PreprocessingTensorOps.BottomKIndicesSorted(pValues, Math.Min(_nFeaturesToSelect, p));
 
         IsFitted = true;
-    }
-
-    private double ChiSquareCDF(double x, int df)
-    {
-        if (x <= 0) return 0;
-        return LowerIncompleteGamma(df / 2.0, x / 2.0) / Gamma(df / 2.0);
-    }
-
-    private double LowerIncompleteGamma(double a, double x)
-    {
-        // Series expansion for lower incomplete gamma
-        double sum = 0;
-        double term = 1.0 / a;
-        sum += term;
-
-        for (int n = 1; n < 100; n++)
-        {
-            term *= x / (a + n);
-            sum += term;
-            if (Math.Abs(term) < 1e-10)
-                break;
-        }
-
-        return Math.Pow(x, a) * Math.Exp(-x) * sum;
-    }
-
-    private double Gamma(double x)
-    {
-        // Lanczos approximation
-        double[] g = { 76.18009172947146, -86.50532032941677, 24.01409824083091,
-                      -1.231739572450155, 0.1208650973866179e-2, -0.5395239384953e-5 };
-
-        double y = x;
-        double tmp = x + 5.5;
-        tmp -= (x + 0.5) * Math.Log(tmp);
-        double ser = 1.000000000190015;
-        for (int j = 0; j < 6; j++)
-            ser += g[j] / ++y;
-
-        return Math.Exp(-tmp + Math.Log(2.5066282746310005 * ser / x));
     }
 
     /// <inheritdoc />
@@ -210,15 +95,7 @@ public class KruskalWallisH<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupe
         if (_selectedIndices is null)
             throw new InvalidOperationException("KruskalWallisH has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return FilterStatisticTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

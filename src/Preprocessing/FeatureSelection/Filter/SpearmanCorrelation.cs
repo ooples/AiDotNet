@@ -27,13 +27,13 @@ public class SpearmanCorrelation<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, 
     private readonly int _nFeaturesToSelect;
     private readonly double _minCorrelation;
 
-    private double[]? _correlations;
+    private Vector<T>? _correlations;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
-    public double[]? Correlations => _correlations;
+    public Vector<T>? Correlations => _correlations;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -66,120 +66,18 @@ public class SpearmanCorrelation<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, 
             throw new ArgumentException("Target length must match rows in data.");
 
         _nInputFeatures = data.Columns;
-        int n = data.Rows;
         int p = data.Columns;
-
-        // Rank the target
-        var targetRanks = ComputeRanks(target, n);
-
-        _correlations = new double[p];
-
-        for (int j = 0; j < p; j++)
-        {
-            // Rank the feature
-            var featureRanks = ComputeFeatureRanks(data, j, n);
-
-            // Compute Spearman correlation (Pearson on ranks)
-            _correlations[j] = ComputePearsonOnRanks(featureRanks, targetRanks, n);
-        }
-
-        // Select features above threshold or top by absolute correlation
-        var candidates = new List<int>();
-        for (int j = 0; j < p; j++)
-            if (Math.Abs(_correlations[j]) >= _minCorrelation)
-                candidates.Add(j);
-
-        if (candidates.Count >= _nFeaturesToSelect)
-        {
-            _selectedIndices = candidates
-                .OrderByDescending(j => Math.Abs(_correlations[j]))
-                .Take(_nFeaturesToSelect)
-                .OrderBy(x => x)
-                .ToArray();
-        }
-        else
-        {
-            _selectedIndices = _correlations
-                .Select((c, idx) => (Corr: Math.Abs(c), Index: idx))
-                .OrderByDescending(x => x.Corr)
-                .Take(_nFeaturesToSelect)
-                .Select(x => x.Index)
-                .OrderBy(x => x)
-                .ToArray();
-        }
-
+        // ranked and correlated in double, as master did: ranks pass 2048 and the rank sums of squares
+        // (about n^3 / 12) pass 65504 in Half once n > 91
+        var x = FeatureScoringTensorOps.ColumnAverageRanks(FilterStatisticTensorOps.AsTensor(data).Cast<double>());
+        var y = FeatureScoringTensorOps.VectorAverageRanks(FilterStatisticTensorOps.AsTensor(target).Cast<double>());
+        var (sxx, sxy, syy) = FilterStatisticTensorOps.CenteredCrossSums(x, y);
+        var correlations = FilterStatisticTensorOps.GuardedDivide(
+            sxy, Engine.TensorMultiplyScalar(Engine.TensorSqrt(sxx), Math.Sqrt(syy)), 1e-10, 0.0).Cast<T>();
+        _correlations = correlations.ToVector();
+        _selectedIndices = FilterStatisticTensorOps.CandidatesOrTopK(
+            Engine.TensorAbs(correlations), NumOps.FromDouble(_minCorrelation), Math.Min(_nFeaturesToSelect, p));
         IsFitted = true;
-    }
-
-    private double[] ComputeRanks(Vector<T> values, int n)
-    {
-        var valuesWithIndices = new List<(double Value, int Index)>();
-        for (int i = 0; i < n; i++)
-            valuesWithIndices.Add((NumOps.ToDouble(values[i]), i));
-
-        var sorted = valuesWithIndices.OrderBy(x => x.Value).ToList();
-        var ranks = new double[n];
-
-        int i2 = 0;
-        while (i2 < n)
-        {
-            int j2 = i2;
-            while (j2 < n && Math.Abs(sorted[j2].Value - sorted[i2].Value) < 1e-10)
-                j2++;
-
-            double avgRank = (i2 + j2 + 1) / 2.0;
-            for (int m = i2; m < j2; m++)
-                ranks[sorted[m].Index] = avgRank;
-
-            i2 = j2;
-        }
-
-        return ranks;
-    }
-
-    private double[] ComputeFeatureRanks(Matrix<T> data, int featureIdx, int n)
-    {
-        var valuesWithIndices = new List<(double Value, int Index)>();
-        for (int i = 0; i < n; i++)
-            valuesWithIndices.Add((NumOps.ToDouble(data[i, featureIdx]), i));
-
-        var sorted = valuesWithIndices.OrderBy(x => x.Value).ToList();
-        var ranks = new double[n];
-
-        int i2 = 0;
-        while (i2 < n)
-        {
-            int j2 = i2;
-            while (j2 < n && Math.Abs(sorted[j2].Value - sorted[i2].Value) < 1e-10)
-                j2++;
-
-            double avgRank = (i2 + j2 + 1) / 2.0;
-            for (int m = i2; m < j2; m++)
-                ranks[sorted[m].Index] = avgRank;
-
-            i2 = j2;
-        }
-
-        return ranks;
-    }
-
-    private double ComputePearsonOnRanks(double[] x, double[] y, int n)
-    {
-        double xMean = x.Average();
-        double yMean = y.Average();
-
-        double covariance = 0, xVar = 0, yVar = 0;
-        for (int i = 0; i < n; i++)
-        {
-            double xDiff = x[i] - xMean;
-            double yDiff = y[i] - yMean;
-            covariance += xDiff * yDiff;
-            xVar += xDiff * xDiff;
-            yVar += yDiff * yDiff;
-        }
-
-        double denom = Math.Sqrt(xVar * yVar);
-        return denom > 1e-10 ? covariance / denom : 0;
     }
 
     /// <inheritdoc />
@@ -195,15 +93,7 @@ public class SpearmanCorrelation<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, 
         if (_selectedIndices is null)
             throw new InvalidOperationException("SpearmanCorrelation has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return FilterStatisticTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />
