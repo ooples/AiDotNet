@@ -333,8 +333,7 @@ public partial class MegaTTS<T> : TtsModelBase<T>, IEndToEndTts<T>
             int n = previous.Count;
             var context = Engine.TensorSlice(all, new[] { 0, 0, 0 }, new[] { 1, n, h });
             var logits = Network.ProsodyLogits(previous.ToArray(), context, timbre);
-            var last = new double[_options.Codes];
-            for (int c = 0; c < last.Length; c++) last[c] = NumOps.ToDouble(logits[n - 1, c]);
+            var last = Engine.Reshape(Engine.TensorSlice(logits, new[] { n - 1, 0 }, new[] { 1, _options.Codes }), new[] { _options.Codes });
             result[i] = TopK(last, _options.TopK, random);
             previous.Add(result[i]);
         }
@@ -342,18 +341,15 @@ public partial class MegaTTS<T> : TtsModelBase<T>, IEndToEndTts<T>
     }
 
     // Top-k random sampling (Fan et al. 2018): the k largest logits, softmax, one draw.
-    private static int TopK(double[] logits, int k, Random random)
+    internal static int TopK(Tensor<T> logits, int k, Random random)
     {
-        var top = Enumerable.Range(0, logits.Length).OrderByDescending(i => logits[i]).ThenBy(i => i).Take(k).ToArray();
-        double max = logits[top[0]];
-        var weights = top.Select(i => Math.Exp(logits[i] - max)).ToArray();
-        double u = random.NextDouble() * weights.Sum();
-        for (int j = 0; j < top.Length; j++)
-        {
-            u -= weights[j];
-            if (u < 0) return top[j];
-        }
-        return top[top.Length - 1];
+        var engine = AiDotNet.Tensors.Engines.AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<T>();
+        // The k largest, ties by ascending id (OrderByDescending(...).ThenBy(i)).
+        var top = TtsSampling<T>.StableOrder(logits, descending: true).Take(k).ToArray();
+        var topLogits = engine.TensorIndexSelect(engine.Reshape(logits, new[] { logits.Length }), new Tensor<int>(top, new[] { top.Length }), 0);
+        var weights = engine.TensorExp(engine.TensorAddScalar(topLogits, ops.Negate(engine.TensorMaxValue(topLogits))));
+        return top[TtsSampling<T>.DrawPosition(weights, random.NextDouble(), inclusive: false)];
     }
 
     internal Tensor<T> Content(int[] phones) => Network.Content.Forward(Matrix(phones));
