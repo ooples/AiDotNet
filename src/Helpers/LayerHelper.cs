@@ -9797,6 +9797,11 @@ public static partial class LayerHelper<T>
         yield return new ConvolutionalLayer<T>(inputChannels, 3, 1, 1);
     }
 
+    // The numFeatures that gives RVM's published widths, and the first MobileNetV3-Large block (the stride-2 160-channel
+    // one) that RVM's backbone dilates instead of striding, keeping the last stage at 1/16.
+    private const int RvmPaperFeatures = 32;
+    private const int RvmDilatedBlockStart = 12;
+
     /// <summary>
     /// Creates default layers for RVM (Robust Video Matting, Lin et al. 2021), in the order
     /// <c>RVM</c> binds them.
@@ -9811,10 +9816,20 @@ public static partial class LayerHelper<T>
     /// conv with tanh giving the candidate.
     /// </para>
     /// <para>
-    /// The encoder is a plain ReLU6 conv stack standing in for the MobileNetV3 backbone. Channel widths scale with
-    /// <paramref name="numFeatures"/>; each decoder width is even so it splits into two equal halves. The 26 layers
-    /// are: 4 encoder convs; LR-ASPP conv, BatchNorm, gate conv; bottleneck ConvGRU ih, hh; per upsampling block
-    /// conv, BatchNorm, ConvGRU ih, hh; output conv, BatchNorm, conv, BatchNorm; projection.
+    /// The encoder is MobileNetV3-Large (Howard et al. 2019) cut into the four feature stages RVM reads: the stem
+    /// (3x3 stride-2 conv, BatchNorm, hard-swish) and the first inverted residual block at 1/2; two blocks at 1/4;
+    /// three squeeze-excitation blocks at 1/8; and the remaining nine blocks plus the 1x1 conv, BatchNorm and
+    /// hard-swish to the 960-channel features at 1/16. The blocks are the library's MobileNetV3-Large blocks
+    /// (expansion, squeeze-excitation and activation per block). As in RVM's backbone, the last stage stays at 1/16:
+    /// the reference dilates its final stride-2 block, and this block runs at stride 1 instead, since the inverted
+    /// residual block has no dilation.
+    /// </para>
+    /// <para>
+    /// Widths scale with <paramref name="numFeatures"/> as a width multiplier of <c>numFeatures / 32</c>: the default
+    /// 32 gives the paper's encoder (16, 24, 40, 960 channels), LR-ASPP (128) and decoder (80, 40, 32, 16). Each
+    /// decoder width is even so it splits into two equal halves. The 43 layers are: 21 encoder layers (4, 2, 3 and
+    /// 12 per stage); LR-ASPP conv, BatchNorm, gate conv; bottleneck ConvGRU ih, hh; per upsampling block conv,
+    /// BatchNorm, ConvGRU ih, hh; output conv, BatchNorm, conv, BatchNorm; projection.
     /// </para>
     /// <para>
     /// The list is NOT a forward chain: encoder skips feed the upsampling blocks, the LR-ASPP gate reads the pooled
@@ -9830,8 +9845,8 @@ public static partial class LayerHelper<T>
     /// <param name="inputHeight">Frame height in pixels. The convolutions are resolution-independent; this
     /// documents the expected size.</param>
     /// <param name="inputWidth">Frame width in pixels, as for <paramref name="inputHeight"/>.</param>
-    /// <param name="numFeatures">Width of the first encoder stage; every other width scales with it.</param>
-    /// <returns>The 26 layers in the order listed above.</returns>
+    /// <param name="numFeatures">Width base: 32 gives the paper's widths, and every width scales with it.</param>
+    /// <returns>The 43 layers in the order listed above.</returns>
     public static IEnumerable<ILayer<T>> CreateDefaultRVMLayers(
         int inputChannels = 3,
         int inputHeight = 512,
@@ -9843,27 +9858,46 @@ public static partial class LayerHelper<T>
         static IActivationFunction<T> Sigmoid() => new SigmoidActivation<T>();
         static IActivationFunction<T> Tanh() => new TanhActivation<T>();
 
-        // Encoder: 1/2, 1/4, 1/8, 1/16
-        yield return new ConvolutionalLayer<T>(nf, 3, 2, 1, new ReLU6Activation<T>() as IActivationFunction<T>);
-        yield return new ConvolutionalLayer<T>(nf * 2, 3, 2, 1, new ReLU6Activation<T>() as IActivationFunction<T>);
-        yield return new ConvolutionalLayer<T>(nf * 4, 3, 2, 1, new ReLU6Activation<T>() as IActivationFunction<T>);
-        yield return new ConvolutionalLayer<T>(nf * 8, 3, 2, 1, new ReLU6Activation<T>() as IActivationFunction<T>);
+        // Encoder: MobileNetV3-Large stages at 1/2, 1/4, 1/8, 1/16
+        double alpha = nf / (double)RvmPaperFeatures;
+        int Scaled(int paperWidth) => Even((int)Math.Round(paperWidth * alpha));
+        yield return new ConvolutionalLayer<T>(MakeScaledChannels(16, alpha), 3, 2, 1,
+            activationFunction: new IdentityActivation<T>());
+        yield return new BatchNormalizationLayer<T>();
+        yield return new ActivationLayer<T>(activationFunction: new HardSwishActivation<T>());
+        var blocks = GetMobileNetV3LargeBlocks(alpha).ToArray();
+        for (int i = 0; i < blocks.Length; i++)
+        {
+            var block = blocks[i];
+            yield return new InvertedResidualBlock<T>(
+                outChannels: block.outChannels,
+                expansionRatio: block.expansion,
+                stride: i >= RvmDilatedBlockStart ? 1 : block.stride,
+                useSE: block.useSE,
+                seRatio: 4,
+                activationFunction: block.useHardSwish ? new HardSwishActivation<T>() : new ReLUActivation<T>());
+        }
+
+        int encoderDepth = MakeScaledChannels(960, alpha);
+        yield return new ConvolutionalLayer<T>(encoderDepth, 1, 1, 0, activationFunction: new IdentityActivation<T>());
+        yield return new BatchNormalizationLayer<T>();
+        yield return new ActivationLayer<T>(activationFunction: new HardSwishActivation<T>());
 
         // LR-ASPP: ReLU(BN(conv1x1(x))) * sigmoid(conv1x1(avgpool(x)))
-        int aspp = Even(nf * 4);
+        int aspp = Scaled(128);
         yield return new ConvolutionalLayer<T>(aspp, 1, 1, 0, activationFunction: null, biasMode: BiasMode.Never);
         yield return new BatchNormalizationLayer<T>();
-        // The gate reads the pooled last encoder stage (nf * 8 channels), not the BatchNorm output before it in this
-        // list: its depth is declared so no shape walk binds it to the ASPP width, and it is marked as a branch root.
+        // The gate reads the pooled last encoder stage (encoderDepth channels), not the BatchNorm output before it in
+        // this list: its depth is declared so no shape walk binds it to the ASPP width, and it is marked as a branch root.
         yield return LayerGraphContract.FromDerivedInput(
-            ConvolutionalLayer<T>.WithInputDepth(nf * 8, aspp, 1, 1, 0, activationFunction: Sigmoid()), "encoder");
+            ConvolutionalLayer<T>.WithInputDepth(encoderDepth, aspp, 1, 1, 0, activationFunction: Sigmoid()), "encoder");
 
         // Bottleneck ConvGRU on half of the LR-ASPP channels
         yield return new ConvolutionalLayer<T>(aspp, 3, 1, 1, activationFunction: Sigmoid());
         yield return new ConvolutionalLayer<T>(aspp / 2, 3, 1, 1, activationFunction: Tanh());
 
         // Upsampling blocks at 1/8, 1/4, 1/2
-        foreach (int width in new[] { Even(nf * 2), Even(nf), Even(nf) })
+        foreach (int width in new[] { Scaled(80), Scaled(40), Scaled(32) })
         {
             yield return new ConvolutionalLayer<T>(width, 3, 1, 1, activationFunction: null, biasMode: BiasMode.Never);
             yield return new BatchNormalizationLayer<T>();
@@ -9872,7 +9906,7 @@ public static partial class LayerHelper<T>
         }
 
         // Output block at full resolution
-        int output = Even(nf / 2);
+        int output = Scaled(16);
         yield return new ConvolutionalLayer<T>(output, 3, 1, 1, activationFunction: null, biasMode: BiasMode.Never);
         yield return new BatchNormalizationLayer<T>();
         yield return new ConvolutionalLayer<T>(output, 3, 1, 1, activationFunction: null, biasMode: BiasMode.Never);

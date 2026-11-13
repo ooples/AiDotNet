@@ -25,8 +25,14 @@ namespace AiDotNet.Video.Matting;
 /// </remarks>
 internal sealed class RvmRecurrentNetwork<T>
 {
-    /// <summary>Number of layers the network binds.</summary>
-    internal const int LayerCount = 26;
+    /// <summary>
+    /// Layers in each MobileNetV3-Large encoder stage (1/2, 1/4, 1/8, 1/16), in
+    /// <c>LayerHelper.CreateDefaultRVMLayers</c> order.
+    /// </summary>
+    internal static readonly int[] EncoderStageLayers = { 4, 2, 3, 12 };
+
+    /// <summary>Number of layers the network binds: the encoder stages and the 22 head and decoder layers.</summary>
+    internal const int LayerCount = 43;
 
     /// <summary>Number of ConvGRU hidden states (bottleneck, 1/8, 1/4, 1/2).</summary>
     internal const int StateCount = 4;
@@ -34,7 +40,7 @@ internal sealed class RvmRecurrentNetwork<T>
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 
     private readonly IEngine _engine;
-    private readonly ConvolutionalLayer<T>[] _encoder;
+    private readonly ILayer<T>[][] _encoder;
     private readonly ConvolutionalLayer<T> _asppConv;
     private readonly BatchNormalizationLayer<T> _asppNorm;
     private readonly ConvolutionalLayer<T> _asppGate;
@@ -60,7 +66,9 @@ internal sealed class RvmRecurrentNetwork<T>
         BatchNormalizationLayer<T> Norm() => layers[index++] as BatchNormalizationLayer<T>
             ?? throw new InvalidOperationException($"RVM layer {index - 1} must be a BatchNormalizationLayer.");
 
-        _encoder = new[] { Conv(), Conv(), Conv(), Conv() };
+        _encoder = EncoderStageLayers
+            .Select(count => Enumerable.Range(0, count).Select(_ => layers[index++]).ToArray())
+            .ToArray();
         _asppConv = Conv();
         _asppNorm = Norm();
         _asppGate = Conv();
@@ -91,10 +99,10 @@ internal sealed class RvmRecurrentNetwork<T>
 
         // The encoder reads ImageNet-normalized RGB, as the reference's backbone does
         var encoded = channels == 3 ? Normalize(source) : source;
-        var f1 = _encoder[0].Forward(encoded);
-        var f2 = _encoder[1].Forward(f1);
-        var f3 = _encoder[2].Forward(f2);
-        var f4 = _encoder[3].Forward(f3);
+        var f1 = Stage(_encoder[0], encoded);
+        var f2 = Stage(_encoder[1], f1);
+        var f3 = Stage(_encoder[2], f2);
+        var f4 = Stage(_encoder[3], f3);
 
         // LR-ASPP
         var gate = _asppGate.Forward(e.ReduceMean(f4, new[] { 2, 3 }, true));
@@ -189,6 +197,18 @@ internal sealed class RvmRecurrentNetwork<T>
         var sums = _engine.AvgPool2D(padded, 2, 2, 0, false);
         var counts = _engine.AvgPool2D(coverage, 2, 2, 0, false);
         return _engine.TensorDivide(sums, _engine.TensorBroadcastTo(counts, sums.Shape.ToArray()));
+    }
+
+    // One encoder stage: its layers in order
+    private static Tensor<T> Stage(ILayer<T>[] stage, Tensor<T> input)
+    {
+        var x = input;
+        foreach (var layer in stage)
+        {
+            x = layer.Forward(x);
+        }
+
+        return x;
     }
 
     // Bilinear 2x upsampling (align_corners=False) cropped to the skip connection's size
