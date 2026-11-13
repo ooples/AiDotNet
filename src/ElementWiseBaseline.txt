@@ -4932,7 +4932,6 @@
 3	ADNELEM001|AiDotNet.NeuralNetworks.LLaVANeuralNetwork<T>.InitializeWeights()
 1	ADNELEM001|AiDotNet.NeuralNetworks.LLaVANeuralNetwork<T>.ReadMatrix(System.IO.BinaryReader)
 1	ADNELEM001|AiDotNet.NeuralNetworks.LLaVANeuralNetwork<T>.ReadTensor(System.IO.BinaryReader)
-7	ADNELEM001|AiDotNet.NeuralNetworks.LSTMNeuralNetwork<T>.BackwardLSTMCell(AiDotNet.Tensors.LinearAlgebra.Tensor<T>, AiDotNet.Tensors.LinearAlgebra.Tensor<T>?, AiDotNet.Tensors.LinearAlgebra.Tensor<T>?, AiDotNet.Tensors.LinearAlgebra.Tensor<T>, AiDotNet.Tensors.LinearAlgebra.Tensor<T>, AiDotNet.Tensors.LinearAlgebra.Tensor<T>, AiDotNet.Tensors.LinearAlgebra.Tensor<T>, AiDotNet.Tensors.LinearAlgebra.Tensor<T>, AiDotNet.Tensors.LinearAlgebra.Tensor<T>?, AiDotNet.Tensors.LinearAlgebra.Tensor<T>?, AiDotNet.Tensors.LinearAlgebra.Tensor<T>?, AiDotNet.Tensors.LinearAlgebra.Tensor<T>?, int)
 1	ADNELEM001|AiDotNet.NeuralNetworks.MatryoshkaEmbedding<T>.EmbedResized(string, int)
 4	ADNELEM001|AiDotNet.NeuralNetworks.MemoryNetwork<T>.CalculateMeanSquaredError(AiDotNet.Tensors.LinearAlgebra.Tensor<T>, AiDotNet.Tensors.LinearAlgebra.Tensor<T>)
 6	ADNELEM001|AiDotNet.NeuralNetworks.MemoryNetwork<T>.CalculateOutputGradients(AiDotNet.Tensors.LinearAlgebra.Tensor<T>, AiDotNet.Tensors.LinearAlgebra.Tensor<T>)
