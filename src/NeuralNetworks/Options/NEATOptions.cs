@@ -154,22 +154,30 @@ public class NEATOptions : ModelHyperparameterOptions
         RequireProbability(DisableInheritedRate, nameof(DisableInheritedRate));
         RequireProbability(InterspeciesMatingRate, nameof(InterspeciesMatingRate));
         RequireProbability(SurvivalThreshold, nameof(SurvivalThreshold));
-        if (double.IsNaN(CompatibilityThreshold) || CompatibilityThreshold <= 0)
-        {
-            throw new ArgumentException(
-                $"{GetType().Name}.CompatibilityThreshold is {CompatibilityThreshold}, but it must be positive.",
-                OptionsParameterName);
-        }
-        if (double.IsNaN(WeightCap) || WeightCap <= 0 || double.IsNaN(WeightPerturbPower) || WeightPerturbPower < 0)
-        {
-            throw new ArgumentException(
-                $"{GetType().Name}.WeightCap must be positive and WeightPerturbPower non-negative.",
-                OptionsParameterName);
-        }
+        RequireFinite(CompatibilityThreshold, nameof(CompatibilityThreshold), allowZero: false);
+        RequireFinite(WeightCap, nameof(WeightCap), allowZero: false);
+        RequireFinite(WeightPerturbPower, nameof(WeightPerturbPower), allowZero: true);
+        RequireFinite(ExcessCoefficient, nameof(ExcessCoefficient), allowZero: true);
+        RequireFinite(DisjointCoefficient, nameof(DisjointCoefficient), allowZero: true);
+        RequireFinite(WeightDifferenceCoefficient, nameof(WeightDifferenceCoefficient), allowZero: true);
+        RequireFinite(SigmoidSlope, nameof(SigmoidSlope), allowZero: false);
         if (GenerationsPerTrain < 1 || AddConnectionTries < 1)
         {
             throw new ArgumentException(
                 $"{GetType().Name}.GenerationsPerTrain and AddConnectionTries must be at least 1.",
+                OptionsParameterName);
+        }
+    }
+
+    // A finite value above zero (or at least zero): NaN and the infinities pass a plain comparison one way or the
+    // other, and either makes every compatibility distance or perturbation non-finite.
+    private void RequireFinite(double value, string name, bool allowZero)
+    {
+        if (double.IsNaN(value) || double.IsInfinity(value) || value < 0 || (!allowZero && value == 0))
+        {
+            throw new ArgumentException(
+                $"{GetType().Name}.{name} is {value}, but it must be finite and "
+                + (allowZero ? "non-negative." : "positive."),
                 OptionsParameterName);
         }
     }

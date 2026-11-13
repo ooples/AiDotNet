@@ -69,13 +69,15 @@ internal sealed class DomainDiscretizer<T>
         var upper = ResolveBound(upperBounds,
             () => engine.ReduceMax(x, new[] { 0 }, false));
 
-        // Width = (hi - lo) / bins; a constant column (width below 1e-10) uses width 1.
+        // Width = (hi - lo) / bins, kept as is for decoding so every decoded value stays inside [lo, hi] (a
+        // constant column decodes to its value). Encoding divides by it only where it is positive; a zero-width
+        // column puts every row in bin 0.
         var width = engine.TensorDivideScalar(engine.TensorSubtract(upper, lower), NumOps.FromDouble(numBins));
-        width = engine.TensorWhere(engine.TensorGreaterThan(width, NumOps.FromDouble(1e-10)), width,
+        var encodingWidth = engine.TensorWhere(engine.TensorGreaterThan(width, NumOps.Zero), width,
             Filled(new[] { d }, NumOps.One));
 
         var shape = new[] { n, d };
-        var scaled = engine.TensorDivide(engine.TensorSubtract(x, Broadcast(lower, shape)), Broadcast(width, shape));
+        var scaled = engine.TensorDivide(engine.TensorSubtract(x, Broadcast(lower, shape)), Broadcast(encodingWidth, shape));
         var bins = engine.TensorClamp(engine.TensorFloor(scaled), NumOps.Zero, NumOps.FromDouble(numBins - 1));
         var binsByColumn = engine.TensorTranspose(bins).Contiguous().Cast<int>();
 

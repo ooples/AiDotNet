@@ -173,4 +173,99 @@ public class AIMPaperFidelityTests
             }
         }
     }
+
+    /// <summary>
+    /// The one-way measurements cost d * alpha * rho / T. With T = 1 round for d = 2 columns and alpha = 0.9 they
+    /// would spend 1.8 rho, so Fit rejects the setting before measuring anything.
+    /// </summary>
+    [Fact]
+    public void Fit_RejectsRoundsTheOneWayMeasurementsWouldOverspend()
+    {
+        var (data, columns) = CorrelatedCategorical(50);
+        var generator = new AIMGenerator<double>(new AIMOptions<double> { Seed = 4, Rounds = 1, NumIterations = 5 });
+        Assert.Throws<InvalidOperationException>(() => generator.Fit(data, columns, 1));
+    }
+
+    /// <summary>
+    /// With MaxCells below the 3 x 3 pair, the workload keeps no marginal; the one-way cliques are still valid
+    /// candidates, so fitting completes and spends exactly rho instead of selecting from an empty set.
+    /// </summary>
+    [Fact]
+    public void Fit_WithNoWorkloadMarginal_SelectsAmongOneWayCliques()
+    {
+        var (data, columns) = CorrelatedCategorical(100);
+        var generator = new AIMGenerator<double>(new AIMOptions<double>
+        {
+            Seed = 4,
+            NumIterations = 5,
+            MaxMarginalOrder = 2,
+            MaxCells = 5
+        });
+        generator.Fit(data, columns, 1);
+        Assert.Equal(generator.Rho, generator.RhoUsed, 12);
+        Assert.All(generator.MeasurementLog, m => Assert.Single(m.Clique));
+    }
+
+    /// <summary>
+    /// The bin width used for decoding is the true width: public bounds [0, 1e-9] decode inside [0, 1e-9], and a
+    /// constant column decodes to its value (a width replaced by 1 decoded to values in [0, 1)).
+    /// </summary>
+    [Fact]
+    public void Discretizer_DecodesNarrowAndConstantColumnsInsideTheirDomain()
+    {
+        var data = new Matrix<double>(4, 2);
+        for (int i = 0; i < 4; i++)
+        {
+            data[i, 0] = 2.5e-10 * i;
+            data[i, 1] = 7.0;
+        }
+
+        var columns = new List<ColumnMetadata>
+        {
+            new ColumnMetadata("narrow", ColumnDataType.Continuous),
+            new ColumnMetadata("constant", ColumnDataType.Continuous)
+        };
+        var lower = new Vector<double>(new[] { 0.0, 7.0 });
+        var upper = new Vector<double>(new[] { 1e-9, 7.0 });
+        var discretizer = DomainDiscretizer<double>.Fit(data, columns, 32, lower, upper, out var codes);
+        var decoded = discretizer.Decode(codes, 4, new Random(3));
+        for (int i = 0; i < 4; i++)
+        {
+            Assert.InRange(decoded[i, 0], 0.0, 1e-9);
+            Assert.Equal(7.0, decoded[i, 1]);
+        }
+    }
+
+    /// <summary>The copy constructor copies every setting and gives the copy its own bound vectors.</summary>
+    [Fact]
+    public void BayesianNetworkSynthOptions_CopyConstructorCopiesEverySetting()
+    {
+        var original = new BayesianNetworkSynthOptions<double>
+        {
+            MaxParents = 2,
+            UsefulnessThreshold = 6.0,
+            DomainLowerBounds = new Vector<double>(new[] { 0.0, 1.0 }),
+            DomainUpperBounds = new Vector<double>(new[] { 10.0, 2.0 }),
+            NumBins = 7,
+            MaxIterations = 11,
+            LaplaceSmoothing = 0.5,
+            EnableDifferentialPrivacy = false,
+            PrivacyBudget = 0.3,
+            StructureBudgetFraction = 0.25
+        };
+        var copy = new BayesianNetworkSynthOptions<double>(original);
+
+        Assert.Equal(2, copy.MaxParents);
+        Assert.Equal(6.0, copy.UsefulnessThreshold);
+        Assert.Equal(7, copy.NumBins);
+        Assert.Equal(11, copy.MaxIterations);
+        Assert.Equal(0.5, copy.LaplaceSmoothing);
+        Assert.False(copy.EnableDifferentialPrivacy);
+        Assert.Equal(0.3, copy.PrivacyBudget);
+        Assert.Equal(0.25, copy.StructureBudgetFraction);
+        Assert.Equal(new[] { 0.0, 1.0 }, copy.DomainLowerBounds?.ToArray());
+        Assert.Equal(new[] { 10.0, 2.0 }, copy.DomainUpperBounds?.ToArray());
+        Assert.NotSame(original.DomainLowerBounds, copy.DomainLowerBounds);
+        Assert.Throws<ArgumentNullException>(() => new BayesianNetworkSynthOptions<double>(global::AiDotNet.Tests.TestNull.Of<BayesianNetworkSynthOptions<double>>()));
+    }
 }
