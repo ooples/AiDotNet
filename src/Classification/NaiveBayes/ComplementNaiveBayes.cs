@@ -76,7 +76,8 @@ public partial class ComplementNaiveBayes<T> : NaiveBayesBase<T>
     /// </summary>
     [AiDotNet.Attributes.FittedParameter]
     private Matrix<T>? _complementLogProbs;
-    private T[]? _featureMinShift;
+    [AiDotNet.Attributes.FittedParameter]
+    private Vector<T>? _featureMinShift;
 
     /// <summary>
     /// Whether to normalize feature weights.
@@ -111,92 +112,47 @@ public partial class ComplementNaiveBayes<T> : NaiveBayesBase<T>
             throw new InvalidOperationException("ClassLabels must be set before computing class parameters.");
         }
 
-        // Shift features to non-negative if any negatives are present.
-        _featureMinShift = new T[x.Columns];
-        bool hasNegative = false;
-        for (int f = 0; f < x.Columns; f++)
+        if (x.Rows == 0)
         {
-            T minVal = x[0, f];
-            for (int i = 1; i < x.Rows; i++)
-                if (NumOps.LessThan(x[i, f], minVal))
-                    minVal = x[i, f];
-            if (NumOps.LessThan(minVal, NumOps.Zero))
-            {
-                _featureMinShift[f] = NumOps.Negate(minVal);
-                hasNegative = true;
-            }
-            else
-            {
-                _featureMinShift[f] = NumOps.Zero;
-            }
-        }
-        if (hasNegative)
-        {
-            var xShifted = new Matrix<T>(x.Rows, x.Columns);
-            for (int i = 0; i < x.Rows; i++)
-                for (int f = 0; f < x.Columns; f++)
-                    xShifted[i, f] = NumOps.Add(x[i, f], _featureMinShift[f]);
-            x = xShifted;
+            throw new ArgumentException("Training data must contain at least one sample.", nameof(x));
         }
 
-        // Initialize complement log probabilities
-        _complementLogProbs = new Matrix<T>(NumClasses, NumFeatures);
+        // Shift features to non-negative if any negatives are present: shift_f = max(0, -min_i x[i, f])
+        var engine = Engine;
+        var features = Tensor<T>.FromMatrix(x);
+        var shift = engine.TensorClampMin(engine.ReduceMax(engine.TensorNegate(features), new[] { 0 }, false), NumOps.Zero);
+        _featureMinShift = shift.ToVector();
+
+        // CNB expects non-negative counts per Rennie et al. (2003)
+        features = engine.TensorClampMin(engine.TensorAdd(features, shift.Reshape(1, x.Columns)), NumOps.Zero);
+        if (x.Columns != NumFeatures)
+        {
+            features = features.Slice(1, 0, NumFeatures);
+        }
 
         T alpha = NumOps.FromDouble(Options.Alpha);
 
-        // Compute complement parameters for each class
-        for (int classIndex = 0; classIndex < NumClasses; classIndex++)
+        // For CNB, feature counts over all OTHER classes = all counts - this class's counts
+        var totalCounts = engine.ReduceSum(features, new[] { 0 }, true);
+        var classCounts = engine.TensorMatMul(engine.TensorTranspose(ClassMembership(y)), features);
+        var complementCounts = engine.TensorSubtract(totalCounts, classCounts);
+        var complementTotals = engine.ReduceSum(complementCounts, new[] { 1 }, true);
+
+        // Compute log probabilities with smoothing
+        // log P(feature|NOT class) = log((count + alpha) / (total + alpha * n_features))
+        var denominators = engine.TensorAddScalar(complementTotals, NumOps.Multiply(alpha, NumOps.FromDouble(NumFeatures)));
+        var logProbs = engine.TensorLog(engine.TensorDivide(engine.TensorAddScalar(complementCounts, alpha), denominators));
+
+        // If normalizing, divide by sum of absolute values (rows whose sum is zero are left as is)
+        if (_normalize)
         {
-            T classLabel = ClassLabels[classIndex];
-
-            // For CNB, we compute feature counts for all OTHER classes
-            var complementCounts = new Vector<T>(NumFeatures);
-            T complementTotal = NumOps.Zero;
-
-            for (int i = 0; i < x.Rows; i++)
-            {
-                // Include this sample if it's NOT the current class
-                if (NumOps.Compare(y[i], classLabel) != 0)
-                {
-                    for (int j = 0; j < NumFeatures; j++)
-                    {
-                        // CNB expects non-negative counts per Rennie et al. (2003)
-                        T val = x[i, j];
-                        if (NumOps.LessThan(val, NumOps.Zero)) val = NumOps.Zero;
-                        complementCounts[j] = NumOps.Add(complementCounts[j], val);
-                        complementTotal = NumOps.Add(complementTotal, val);
-                    }
-                }
-            }
-
-            // Compute log probabilities with smoothing
-            // log P(feature|NOT class) = log((count + alpha) / (total + alpha * n_features))
-            T denominator = NumOps.Add(complementTotal, NumOps.Multiply(alpha, NumOps.FromDouble(NumFeatures)));
-
-            for (int j = 0; j < NumFeatures; j++)
-            {
-                T numerator = NumOps.Add(complementCounts[j], alpha);
-                _complementLogProbs[classIndex, j] = NumOps.Log(NumOps.Divide(numerator, denominator));
-            }
-
-            // If normalizing, divide by sum of absolute values
-            if (_normalize)
-            {
-                T sumAbs = NumOps.Zero;
-                for (int j = 0; j < NumFeatures; j++)
-                {
-                    sumAbs = NumOps.Add(sumAbs, NumOps.Abs(_complementLogProbs[classIndex, j]));
-                }
-
-                if (NumOps.Compare(sumAbs, NumOps.Zero) > 0)
-                {
-                    for (int j = 0; j < NumFeatures; j++)
-                    {
-                        _complementLogProbs[classIndex, j] = NumOps.Divide(_complementLogProbs[classIndex, j], sumAbs);
-                    }
-                }
-            }
+            var sumAbs = engine.ReduceSum(engine.TensorAbs(logProbs), new[] { 1 }, true);
+            var positive = engine.TensorGreaterThan(sumAbs, NumOps.Zero);
+            var ones = engine.TensorAddScalar(engine.TensorMultiplyScalar(sumAbs, NumOps.Zero), NumOps.One);
+            logProbs = engine.TensorDivide(logProbs, engine.TensorWhere(positive, sumAbs, ones));
         }
+
+        _complementLogProbs = logProbs.ToMatrix();
     }
 
     /// <summary>
@@ -204,29 +160,40 @@ public partial class ComplementNaiveBayes<T> : NaiveBayesBase<T>
     /// </summary>
     protected override T ComputeLogLikelihood(Vector<T> sample, int classIndex)
     {
+        return SingleSampleLogLikelihood(sample, classIndex);
+    }
+
+    /// <inheritdoc/>
+    private protected override Tensor<T> ComputeLogLikelihoods(Matrix<T> input)
+    {
         if (_complementLogProbs is null)
         {
             throw new InvalidOperationException("Model has not been trained.");
         }
 
-        // For CNB, we compute NEGATIVE sum of (feature * complement_weight)
-        // because we want to minimize the complement probability.
-        T logLikelihood = NumOps.Zero;
-
-        for (int j = 0; j < NumFeatures; j++)
+        if (input.Rows == 0 || NumClasses == 0)
         {
-            // Apply the same shift used during training
-            T featureVal = sample[j];
-            if (_featureMinShift is not null && j < _featureMinShift.Length)
-                featureVal = NumOps.Add(featureVal, _featureMinShift[j]);
-            if (NumOps.LessThan(featureVal, NumOps.Zero))
-                featureVal = NumOps.Zero;
-
-            T contribution = NumOps.Multiply(featureVal, _complementLogProbs[classIndex, j]);
-            logLikelihood = NumOps.Subtract(logLikelihood, contribution);
+            return new Tensor<T>(new[] { input.Rows, NumClasses });
         }
 
-        return logLikelihood;
+        // For CNB, we compute NEGATIVE sum of (feature * complement_weight)
+        // because we want to minimize the complement probability.
+        var engine = Engine;
+        var features = Tensor<T>.FromMatrix(input);
+        if (input.Columns != NumFeatures)
+        {
+            features = features.Slice(1, 0, NumFeatures);
+        }
+
+        // Apply the same shift used during training, clamped at zero
+        if (_featureMinShift is not null)
+        {
+            features = engine.TensorAdd(features, FitToLength(_featureMinShift, NumFeatures).AsTensor().Reshape(1, NumFeatures));
+        }
+
+        features = engine.TensorClampMin(features, NumOps.Zero);
+        var weighted = engine.TensorMatMul(features, engine.TensorTranspose(Tensor<T>.FromMatrix(_complementLogProbs)));
+        return engine.TensorNegate(weighted);
     }
 
     /// <inheritdoc/>
@@ -239,35 +206,11 @@ public partial class ComplementNaiveBayes<T> : NaiveBayesBase<T>
 
     private void SerializeMatrix(Dictionary<string, object> data, string name, Matrix<T>? matrix)
     {
-        if (matrix is null) return;
-        var arr = new double[matrix.Rows * matrix.Columns];
-        int idx = 0;
-        for (int i = 0; i < matrix.Rows; i++)
-            for (int j = 0; j < matrix.Columns; j++)
-                arr[idx++] = NumOps.ToDouble(matrix[i, j]);
-        data[name] = arr;
-        data[$"{name}Rows"] = matrix.Rows;
-        data[$"{name}Cols"] = matrix.Columns;
+        SerializeMatrixValues(data, name, matrix);
     }
 
     private Matrix<T>? DeserializeMatrix(JObject obj, string name)
     {
-        var token = obj[name];
-        if (token is null) return null;
-        var arr = token.ToObject<double[]>() ?? Array.Empty<double>();
-        int rows = obj[$"{name}Rows"]?.ToObject<int>() ?? 0;
-        int cols = obj[$"{name}Cols"]?.ToObject<int>() ?? 0;
-        if (rows <= 0 || cols <= 0) return null;
-        if (arr.Length < rows * cols)
-        {
-            throw new InvalidOperationException(
-                $"Deserialization failed: {name} array length {arr.Length} is less than expected {rows}x{cols}={rows * cols}.");
-        }
-        var matrix = new Matrix<T>(rows, cols);
-        int idx = 0;
-        for (int i = 0; i < rows; i++)
-            for (int j = 0; j < cols; j++)
-                matrix[i, j] = NumOps.FromDouble(arr[idx++]);
-        return matrix;
+        return DeserializeMatrixValues(obj, name);
     }
 }

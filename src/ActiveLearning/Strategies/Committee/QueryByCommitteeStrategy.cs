@@ -53,6 +53,7 @@ namespace AiDotNet.ActiveLearning.Strategies.Committee;
 public class QueryByCommitteeStrategy<T, TInput, TOutput> : ICommitteeStrategy<T, TInput, TOutput>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
+    private static readonly T Epsilon = NumOps.FromDouble(1e-10);
 
     private readonly List<IFullModel<T, TInput, TOutput>> _committee;
     private readonly CommitteeDisagreementMeasure _disagreementMeasure;
@@ -113,15 +114,15 @@ public class QueryByCommitteeStrategy<T, TInput, TOutput> : ICommitteeStrategy<T
             return ComputeScoresWithSingleModel(model, unlabeledPool);
         }
 
-        var scores = new T[unlabeledPool.Count];
+        var scores = new List<T>(unlabeledPool.Count);
 
         for (int i = 0; i < unlabeledPool.Count; i++)
         {
             var input = unlabeledPool.GetInput(i);
-            scores[i] = ComputeDisagreement(input);
+            scores.Add(ComputeDisagreement(input));
         }
 
-        return new Vector<T>(scores);
+        return Vector<T>.FromList(scores);
     }
 
     /// <inheritdoc/>
@@ -133,14 +134,7 @@ public class QueryByCommitteeStrategy<T, TInput, TOutput> : ICommitteeStrategy<T
         var scores = ComputeScores(model, unlabeledPool);
         var batchSizeToUse = Math.Min(batchSize, unlabeledPool.Count);
 
-        var indexedScores = scores
-            .Select((score, index) => (Index: index, Score: score))
-            .OrderByDescending(x => NumOps.ToDouble(x.Score))
-            .Take(batchSizeToUse)
-            .Select(x => x.Index)
-            .ToArray();
-
-        return indexedScores;
+        return ActiveLearningEngineOps.SelectTopScoring(scores, batchSizeToUse);
     }
 
     /// <inheritdoc/>
@@ -204,23 +198,23 @@ public class QueryByCommitteeStrategy<T, TInput, TOutput> : ICommitteeStrategy<T
         IDataset<T, TInput, TOutput> unlabeledPool)
     {
         // Fallback: use entropy-based uncertainty from single model
-        var scores = new T[unlabeledPool.Count];
+        var scores = new List<T>(unlabeledPool.Count);
 
         for (int i = 0; i < unlabeledPool.Count; i++)
         {
             var input = unlabeledPool.GetInput(i);
             var prediction = model.Predict(input);
             var probabilities = ConvertToProbabilities(prediction);
-            scores[i] = ComputeEntropy(probabilities);
+            scores.Add(ComputeEntropy(Tensor<T>.FromVector(probabilities)));
         }
 
-        return new Vector<T>(scores);
+        return Vector<T>.FromList(scores);
     }
 
     private T ComputeVoteEntropy(TInput input)
     {
-        // Count votes for each class
-        var votes = new int[_numClasses];
+        // Collect the valid class votes
+        var votedClasses = new List<int>(_committee.Count);
 
         foreach (var member in _committee)
         {
@@ -228,27 +222,25 @@ public class QueryByCommitteeStrategy<T, TInput, TOutput> : ICommitteeStrategy<T
             var classIndex = GetPredictedClass(prediction);
             if (classIndex >= 0 && classIndex < _numClasses)
             {
-                votes[classIndex]++;
+                votedClasses.Add(classIndex);
             }
         }
+
+        if (votedClasses.Count == 0)
+        {
+            return NumOps.Zero;
+        }
+
+        // Count votes for each class
+        var engine = AiDotNetEngine.Current;
+        var ones = new Tensor<T>(new[] { votedClasses.Count });
+        ones.Fill(NumOps.One);
+        var votes = engine.TensorIndexAdd(
+            new Tensor<T>(new[] { _numClasses }), 0, new Tensor<int>(votedClasses.ToArray(), new[] { votedClasses.Count }), ones);
 
         // Compute entropy of vote distribution
-        T entropy = NumOps.Zero;
-        T epsilon = NumOps.FromDouble(1e-10);
-        T totalVotes = NumOps.FromDouble(_committee.Count);
-
-        for (int c = 0; c < _numClasses; c++)
-        {
-            if (votes[c] > 0)
-            {
-                var p = NumOps.Divide(NumOps.FromDouble(votes[c]), totalVotes);
-                var pClipped = NumOps.Add(p, epsilon);
-                var logP = NumOps.Log(pClipped);
-                entropy = NumOps.Subtract(entropy, NumOps.Multiply(p, logP));
-            }
-        }
-
-        return entropy;
+        var voteShares = engine.TensorDivideScalar(votes, NumOps.FromDouble(_committee.Count));
+        return ComputeEntropy(voteShares);
     }
 
     private T ComputeKLDivergence(TInput input)
@@ -259,21 +251,20 @@ public class QueryByCommitteeStrategy<T, TInput, TOutput> : ICommitteeStrategy<T
         foreach (var member in _committee)
         {
             var prediction = member.Predict(input);
-            var probabilities = ConvertToProbabilities(prediction);
-            allProbabilities.Add(probabilities);
+            allProbabilities.Add(ConvertToProbabilities(prediction));
         }
 
         // Compute consensus (average) distribution
-        var consensus = ComputeConsensusDistribution(allProbabilities);
+        var engine = AiDotNetEngine.Current;
+        var probabilities = ActiveLearningEngineOps.StackVectors(allProbabilities);
+        var consensus = ComputeConsensusDistribution(probabilities);
 
         // Compute average KL divergence from consensus
-        T totalKL = NumOps.Zero;
-
-        foreach (var probs in allProbabilities)
-        {
-            var kl = ComputeKL(probs, consensus);
-            totalKL = NumOps.Add(totalKL, kl);
-        }
+        var shape = probabilities.Shape.ToArray();
+        var q = engine.TensorBroadcastTo(consensus.Reshape(new[] { 1, shape[1] }), shape);
+        var ratio = engine.TensorDivide(engine.TensorAddScalar(probabilities, Epsilon), engine.TensorAddScalar(q, Epsilon));
+        var terms = PositiveWhere(probabilities, engine.TensorMultiply(probabilities, engine.TensorLog(ratio)));
+        T totalKL = engine.TensorSum(engine.ReduceSum(terms, new[] { 1 }, keepDims: false));
 
         return NumOps.Divide(totalKL, NumOps.FromDouble(allProbabilities.Count));
     }
@@ -286,94 +277,49 @@ public class QueryByCommitteeStrategy<T, TInput, TOutput> : ICommitteeStrategy<T
         foreach (var member in _committee)
         {
             var prediction = member.Predict(input);
-            var probabilities = ConvertToProbabilities(prediction);
-            allProbabilities.Add(probabilities);
+            allProbabilities.Add(ConvertToProbabilities(prediction));
         }
 
         // Compute variance across committee for each class
-        var consensus = ComputeConsensusDistribution(allProbabilities);
-        T totalVariance = NumOps.Zero;
-
-        for (int c = 0; c < consensus.Length; c++)
-        {
-            T classVariance = NumOps.Zero;
-            foreach (var probs in allProbabilities)
-            {
-                var diff = NumOps.Subtract(probs[c], consensus[c]);
-                classVariance = NumOps.Add(classVariance, NumOps.Multiply(diff, diff));
-            }
-            totalVariance = NumOps.Add(totalVariance, classVariance);
-        }
+        var engine = AiDotNetEngine.Current;
+        var probabilities = ActiveLearningEngineOps.StackVectors(allProbabilities);
+        var consensus = ComputeConsensusDistribution(probabilities);
+        var shape = probabilities.Shape.ToArray();
+        var diff = engine.TensorSubtract(probabilities, engine.TensorBroadcastTo(consensus.Reshape(new[] { 1, shape[1] }), shape));
+        var classVariance = engine.ReduceSum(engine.TensorMultiply(diff, diff), new[] { 0 }, keepDims: false);
+        T totalVariance = engine.TensorSum(classVariance);
 
         return NumOps.Divide(totalVariance, NumOps.FromDouble(allProbabilities.Count));
     }
 
-    private Vector<T> ComputeConsensusDistribution(List<Vector<T>> allProbabilities)
+    /// <summary>
+    /// Mean of the [members, classes] probability rows over the committee members.
+    /// </summary>
+    private static Tensor<T> ComputeConsensusDistribution(Tensor<T> probabilities)
     {
-        if (allProbabilities.Count == 0)
-        {
-            return new Vector<T>(_numClasses);
-        }
-
-        var consensus = new T[allProbabilities[0].Length];
-        for (int i = 0; i < consensus.Length; i++)
-        {
-            consensus[i] = NumOps.Zero;
-        }
-
-        foreach (var probs in allProbabilities)
-        {
-            for (int i = 0; i < consensus.Length; i++)
-            {
-                consensus[i] = NumOps.Add(consensus[i], probs[i]);
-            }
-        }
-
-        var count = NumOps.FromDouble(allProbabilities.Count);
-        for (int i = 0; i < consensus.Length; i++)
-        {
-            consensus[i] = NumOps.Divide(consensus[i], count);
-        }
-
-        return new Vector<T>(consensus);
+        var engine = AiDotNetEngine.Current;
+        var sum = engine.ReduceSum(probabilities, new[] { 0 }, keepDims: false);
+        return engine.TensorDivideScalar(sum, NumOps.FromDouble(probabilities.Shape[0]));
     }
 
-    private T ComputeKL(Vector<T> p, Vector<T> q)
+    /// <summary>
+    /// Entropy -sum(p * log(p + eps)) over the entries with p &gt; 0.
+    /// </summary>
+    private static T ComputeEntropy(Tensor<T> probabilities)
     {
-        T kl = NumOps.Zero;
-        T epsilon = NumOps.FromDouble(1e-10);
-
-        for (int i = 0; i < p.Length; i++)
-        {
-            if (NumOps.Compare(p[i], NumOps.Zero) > 0)
-            {
-                var pClipped = NumOps.Add(p[i], epsilon);
-                var qClipped = NumOps.Add(q[i], epsilon);
-                var logRatio = NumOps.Log(NumOps.Divide(pClipped, qClipped));
-                kl = NumOps.Add(kl, NumOps.Multiply(p[i], logRatio));
-            }
-        }
-
-        return kl;
+        var engine = AiDotNetEngine.Current;
+        var terms = engine.TensorMultiply(probabilities, engine.TensorLog(engine.TensorAddScalar(probabilities, Epsilon)));
+        return NumOps.Negate(engine.TensorSum(PositiveWhere(probabilities, terms)));
     }
 
-    private T ComputeEntropy(Vector<T> probabilities)
+    /// <summary>
+    /// <paramref name="terms"/> where <paramref name="probabilities"/> &gt; 0, zero elsewhere.
+    /// </summary>
+    private static Tensor<T> PositiveWhere(Tensor<T> probabilities, Tensor<T> terms)
     {
-        T entropy = NumOps.Zero;
-        T epsilon = NumOps.FromDouble(1e-10);
-
-        for (int i = 0; i < probabilities.Length; i++)
-        {
-            var p = probabilities[i];
-            if (NumOps.Compare(p, NumOps.Zero) > 0)
-            {
-                var pClipped = NumOps.Add(p, epsilon);
-                var logP = NumOps.Log(pClipped);
-                entropy = NumOps.Subtract(entropy, NumOps.Multiply(p, logP));
-            }
-        }
-
-        return entropy;
+        var engine = AiDotNetEngine.Current;
+        var positive = engine.TensorGreaterThan(probabilities, NumOps.Zero);
+        return engine.TensorWhere(positive, terms, new Tensor<T>(terms.Shape.ToArray()));
     }
 
     private int GetPredictedClass(TOutput prediction)
@@ -381,18 +327,14 @@ public class QueryByCommitteeStrategy<T, TInput, TOutput> : ICommitteeStrategy<T
         if (prediction is int intValue) return intValue;
         if (prediction is Vector<T> vectorPred)
         {
-            // Return argmax
-            int maxIndex = 0;
-            T maxValue = vectorPred[0];
-            for (int i = 1; i < vectorPred.Length; i++)
+            // Return argmax (first maximum)
+            if (vectorPred.Length == 0)
             {
-                if (NumOps.Compare(vectorPred[i], maxValue) > 0)
-                {
-                    maxValue = vectorPred[i];
-                    maxIndex = i;
-                }
+                throw new ArgumentException("Prediction vector must not be empty.", nameof(prediction));
             }
-            return maxIndex;
+
+            var row = Tensor<T>.FromVector(vectorPred).Reshape(new[] { 1, vectorPred.Length });
+            return AiDotNetEngine.Current.TensorArgMax(row, 1).GetFlat(0);
         }
         if (prediction is T numValue)
         {
@@ -417,31 +359,15 @@ public class QueryByCommitteeStrategy<T, TInput, TOutput> : ICommitteeStrategy<T
 
     private Vector<T> Softmax(Vector<T> logits)
     {
-        T maxLogit = logits[0];
-        for (int i = 1; i < logits.Length; i++)
+        if (logits.Length == 0)
         {
-            if (NumOps.Compare(logits[i], maxLogit) > 0)
-            {
-                maxLogit = logits[i];
-            }
+            throw new ArgumentException("Logits must not be empty.", nameof(logits));
         }
 
-        var expValues = new T[logits.Length];
-        T sum = NumOps.Zero;
-
-        for (int i = 0; i < logits.Length; i++)
-        {
-            var shifted = NumOps.Subtract(logits[i], maxLogit);
-            expValues[i] = NumOps.Exp(shifted);
-            sum = NumOps.Add(sum, expValues[i]);
-        }
-
-        for (int i = 0; i < expValues.Length; i++)
-        {
-            expValues[i] = NumOps.Divide(expValues[i], sum);
-        }
-
-        return new Vector<T>(expValues);
+        var engine = AiDotNetEngine.Current;
+        var values = Tensor<T>.FromVector(logits);
+        var expValues = engine.TensorExp(engine.TensorSubtractScalar(values, engine.TensorMaxValue(values)));
+        return engine.TensorDivideScalar(expValues, engine.TensorSum(expValues)).ToVector();
     }
 
     private T Sigmoid(T x)

@@ -142,14 +142,85 @@ public abstract partial class SVMBase<T> : ProbabilisticClassifierBase<T>, IDeci
     /// </summary>
     protected T ComputeRBFKernelArrays(T[] x, T[] y)
     {
-        T squaredNorm = NumOps.Zero;
-        for (int i = 0; i < x.Length; i++)
-        {
-            T d = NumOps.Subtract(x[i], y[i]);
-            squaredNorm = NumOps.Add(squaredNorm, NumOps.Multiply(d, d));
-        }
+        // exp(-gamma * ||x - y||^2)
+        var diff = Engine.Subtract(Vector<T>.Wrap(x), Vector<T>.Wrap(y));
+        T squaredNorm = Engine.DotProduct(diff, diff);
         T gamma = GetGamma();
         return NumOps.Exp(NumOps.Negate(NumOps.Multiply(gamma, squaredNorm)));
+    }
+
+    /// <summary>
+    /// The [a.Rows, b.Rows] kernel matrix K[i, j] = kernel(a_i, b_j) for the configured kernel.
+    /// </summary>
+    /// <param name="a">The first set of samples (rows).</param>
+    /// <param name="b">The second set of samples (rows).</param>
+    /// <returns>The kernel matrix.</returns>
+    private protected Tensor<T> ComputeKernelMatrix(Matrix<T> a, Matrix<T> b)
+    {
+        var engine = Engine;
+        int n = a.Rows;
+        int m = b.Rows;
+        if (n == 0 || m == 0)
+        {
+            return new Tensor<T>(new[] { n, m });
+        }
+
+        var left = Tensor<T>.FromMatrix(a);
+        var right = Tensor<T>.FromMatrix(b);
+        T gamma = GetGamma();
+        T coef0 = NumOps.FromDouble(Options.Coef0);
+
+        switch (Options.Kernel)
+        {
+            case KernelType.Polynomial:
+                return engine.TensorPower(
+                    engine.TensorAddScalar(engine.TensorMultiplyScalar(LinearKernelMatrix(left, right), gamma), coef0),
+                    NumOps.FromDouble(Options.Degree));
+            case KernelType.RBF:
+                return engine.TensorExp(engine.TensorMultiplyScalar(PairwiseReduction(left, right, squared: true), NumOps.Negate(gamma)));
+            case KernelType.Sigmoid:
+            {
+                // tanh(x) = (exp(2x) - 1) / (exp(2x) + 1)
+                var result = engine.TensorAddScalar(engine.TensorMultiplyScalar(LinearKernelMatrix(left, right), gamma), coef0);
+                var exp2x = engine.TensorExp(engine.TensorMultiplyScalar(result, NumOps.FromDouble(2.0)));
+                return engine.TensorDivide(engine.TensorSubtractScalar(exp2x, NumOps.One), engine.TensorAddScalar(exp2x, NumOps.One));
+            }
+            case KernelType.Laplacian:
+                return engine.TensorExp(engine.TensorMultiplyScalar(PairwiseReduction(left, right, squared: false), NumOps.Negate(gamma)));
+            default:
+                return LinearKernelMatrix(left, right);
+        }
+    }
+
+    /// <summary>
+    /// a * b^T.
+    /// </summary>
+    private Tensor<T> LinearKernelMatrix(Tensor<T> a, Tensor<T> b)
+    {
+        return Engine.TensorMatMul(a, Engine.TensorTranspose(b));
+    }
+
+    /// <summary>
+    /// sum_k (a_ik - b_jk)^2 (or sum_k |a_ik - b_jk|) for every pair, computed exactly in row blocks.
+    /// </summary>
+    private Tensor<T> PairwiseReduction(Tensor<T> a, Tensor<T> b, bool squared)
+    {
+        var engine = Engine;
+        int n = a.Shape[0];
+        int m = b.Shape[0];
+        int d = a.Shape[1];
+        var right = b.Reshape(1, m, d);
+        int batch = Math.Max(1, (1 << 22) / Math.Max(1, m * Math.Max(1, d)));
+        var blocks = new List<Tensor<T>>();
+        for (int start = 0; start < n; start += batch)
+        {
+            int rows = Math.Min(batch, n - start);
+            var diff = engine.TensorSubtract(a.Slice(0, start, start + rows).Reshape(rows, 1, d), right);
+            var terms = squared ? engine.TensorMultiply(diff, diff) : engine.TensorAbs(diff);
+            blocks.Add(engine.ReduceSum(terms, new[] { 2 }, false));
+        }
+
+        return blocks.Count == 1 ? blocks[0] : engine.TensorConcatenate(blocks.ToArray(), 0);
     }
 
     /// <summary>
@@ -176,14 +247,61 @@ public abstract partial class SVMBase<T> : ProbabilisticClassifierBase<T>, IDeci
     /// </summary>
     protected T ComputeLaplacianKernel(Vector<T> x, Vector<T> y)
     {
-        T manhattanNorm = NumOps.Zero;
-        for (int i = 0; i < x.Length; i++)
-        {
-            T diff = NumOps.Subtract(x[i], y[i]);
-            manhattanNorm = NumOps.Add(manhattanNorm, NumOps.Abs(diff));
-        }
+        // exp(-gamma * ||x - y||_1)
+        T manhattanNorm = x.Length == 0 ? NumOps.Zero : Engine.TensorSum(Engine.TensorAbs(Engine.Subtract(x, y).AsTensor()));
         T gamma = GetGamma();
         return NumOps.Exp(NumOps.Negate(NumOps.Multiply(gamma, manhattanNorm)));
+    }
+
+    /// <summary>
+    /// +1 for the positive class (the last class label) and -1 for every other label.
+    /// </summary>
+    private protected Vector<T> SignedTargets(Vector<T> y)
+    {
+        if (ClassLabels is null || y.Length == 0)
+        {
+            return new Vector<T>(y.Length);
+        }
+
+        var isPositive = Engine.TensorEquals(y.AsTensor(), ClassLabels[ClassLabels.Length - 1]);
+        return Engine.TensorSubtractScalar(Engine.TensorMultiplyScalar(isPositive, NumOps.FromDouble(2.0)), NumOps.One).ToVector();
+    }
+
+    /// <summary>
+    /// Indices i with values[i] &gt; threshold, in increasing order.
+    /// </summary>
+    private protected int[] IndicesAbove(Vector<T> values, T threshold)
+    {
+        if (values.Length == 0)
+        {
+            return Array.Empty<int>();
+        }
+
+        var positions = Engine.TensorNonzero(Engine.TensorGreaterThan(values.AsTensor(), threshold));
+        return positions.Length == 0 ? Array.Empty<int>() : positions.Reshape(positions.Length).ToArray();
+    }
+
+    /// <summary>
+    /// bias + sum_i coefficients[i] * kernel(input_row, train_i) for every input row, as an [input.Rows, 1] matrix.
+    /// </summary>
+    private protected Matrix<T> KernelDecisions(Matrix<T> input, Matrix<T> train, Vector<T> coefficients, T bias)
+    {
+        var engine = Engine;
+        if (input.Rows == 0)
+        {
+            return new Matrix<T>(0, 1);
+        }
+
+        if (train.Rows == 0)
+        {
+            var constant = new Tensor<T>(new[] { input.Rows, 1 });
+            engine.TensorFill(constant, bias);
+            return constant.ToMatrix();
+        }
+
+        var kernel = ComputeKernelMatrix(input, train);
+        var sums = engine.TensorMatMul(kernel, coefficients.AsTensor().Reshape(coefficients.Length, 1));
+        return engine.TensorAddScalar(sums, bias).ToMatrix();
     }
 
     /// <summary>
@@ -205,12 +323,7 @@ public abstract partial class SVMBase<T> : ProbabilisticClassifierBase<T>, IDeci
     /// </summary>
     protected Vector<T> GetRow(Matrix<T> matrix, int row)
     {
-        var vector = new Vector<T>(matrix.Columns);
-        for (int j = 0; j < matrix.Columns; j++)
-        {
-            vector[j] = matrix[row, j];
-        }
-        return vector;
+        return matrix.GetRow(row);
     }
 
     /// <summary>
@@ -221,12 +334,7 @@ public abstract partial class SVMBase<T> : ProbabilisticClassifierBase<T>, IDeci
     /// </summary>
     protected T[] GetRowArray(Matrix<T> matrix, int row)
     {
-        var arr = new T[matrix.Columns];
-        for (int j = 0; j < matrix.Columns; j++)
-        {
-            arr[j] = matrix[row, j];
-        }
-        return arr;
+        return matrix.GetRow(row).ToArray();
     }
 
     /// <inheritdoc/>

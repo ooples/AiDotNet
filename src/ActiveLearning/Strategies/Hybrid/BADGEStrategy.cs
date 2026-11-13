@@ -93,16 +93,16 @@ public class BADGEStrategy<T, TInput, TOutput> : IQueryStrategy<T, TInput, TOutp
         IDataset<T, TInput, TOutput> unlabeledPool)
     {
         // For BADGE, scores are the gradient magnitudes (uncertainty component)
-        var scores = new T[unlabeledPool.Count];
+        var scores = new List<T>(unlabeledPool.Count);
 
         for (int i = 0; i < unlabeledPool.Count; i++)
         {
             var input = unlabeledPool.GetInput(i);
             var gradientEmbedding = ComputeGradientEmbedding(model, input);
-            scores[i] = VectorHelper.L2Norm(gradientEmbedding);
+            scores.Add(VectorHelper.L2Norm(gradientEmbedding));
         }
 
-        return new Vector<T>(scores);
+        return Vector<T>.FromList(scores);
     }
 
     /// <inheritdoc/>
@@ -169,19 +169,17 @@ public class BADGEStrategy<T, TInput, TOutput> : IQueryStrategy<T, TInput, TOutp
         Vector<T> probabilities,
         int predictedClass)
     {
+        var engine = AiDotNetEngine.Current;
+
         // Create one-hot vector for predicted class
-        var oneHot = new T[probabilities.Length];
-        for (int i = 0; i < oneHot.Length; i++)
+        var oneHot = new Vector<T>(probabilities.Length);
+        if (predictedClass >= 0 && predictedClass < oneHot.Length)
         {
-            oneHot[i] = i == predictedClass ? NumOps.One : NumOps.Zero;
+            oneHot[predictedClass] = NumOps.One;
         }
 
         // Gradient indicator: p - e_y
-        var gradientIndicator = new T[probabilities.Length];
-        for (int i = 0; i < probabilities.Length; i++)
-        {
-            gradientIndicator[i] = NumOps.Subtract(probabilities[i], oneHot[i]);
-        }
+        var gradientIndicator = engine.Subtract(probabilities, oneHot);
 
         // Get feature embedding
         Vector<T> features;
@@ -201,17 +199,14 @@ public class BADGEStrategy<T, TInput, TOutput> : IQueryStrategy<T, TInput, TOutp
 
         // Outer product: gradient embedding = gradientIndicator ⊗ features
         // This creates a vector of length (numClasses * numFeatures)
-        var embedding = new T[gradientIndicator.Length * features.Length];
-        int idx = 0;
-        for (int i = 0; i < gradientIndicator.Length; i++)
+        // laid out row-major as embedding[i * numFeatures + j] = gradientIndicator[i] * features[j]
+        if (gradientIndicator.Length == 0 || features.Length == 0)
         {
-            for (int j = 0; j < features.Length; j++)
-            {
-                embedding[idx++] = NumOps.Multiply(gradientIndicator[i], features[j]);
-            }
+            return new Vector<T>(0);
         }
 
-        return new Vector<T>(embedding);
+        var outer = engine.TensorOuter(Tensor<T>.FromVector(gradientIndicator), Tensor<T>.FromVector(features));
+        return new Vector<T>(outer.ToArray());
     }
 
     private int[] KMeansPlusPlusInit(List<Vector<T>> embeddings, int k)
@@ -221,150 +216,109 @@ public class BADGEStrategy<T, TInput, TOutput> : IQueryStrategy<T, TInput, TOutp
             return Enumerable.Range(0, embeddings.Count).ToArray();
         }
 
+        var engine = AiDotNetEngine.Current;
+        var rows = ActiveLearningEngineOps.StackVectors(embeddings);
+        int n = rows.Shape[0];
+        int dim = rows.Shape[1];
         var selected = new List<int>();
-        var minDistances = new T[embeddings.Count];
-
-        // Initialize all distances to infinity
-        for (int i = 0; i < embeddings.Count; i++)
-        {
-            minDistances[i] = NumOps.MaxValue;
-        }
+        var isSelected = new bool[n];
 
         // Choose first center randomly (weighted by gradient magnitude for BADGE)
-        int firstCenter = SelectFirstCenter(embeddings);
+        int firstCenter = SelectFirstCenter(rows);
         selected.Add(firstCenter);
+        isSelected[firstCenter] = true;
 
-        // Update distances
-        for (int i = 0; i < embeddings.Count; i++)
-        {
-            var dist = ComputeSquaredDistance(embeddings[i], embeddings[firstCenter]);
-            minDistances[i] = dist;
-        }
+        // Squared distance from every embedding to its nearest center (selected entries are never sampled)
+        var minDistances = SquaredDistancesToRow(rows, firstCenter, dim);
 
         // Choose remaining k-1 centers
         while (selected.Count < k)
         {
             // Sample proportional to squared distance
-            int nextCenter = SampleProportionalToDistance(minDistances, selected);
+            int nextCenter = SampleProportionalToDistance(minDistances, isSelected);
             selected.Add(nextCenter);
+            isSelected[nextCenter] = true;
 
             // Update minimum distances
-            for (int i = 0; i < embeddings.Count; i++)
-            {
-                if (!selected.Contains(i))
-                {
-                    var dist = ComputeSquaredDistance(embeddings[i], embeddings[nextCenter]);
-                    if (NumOps.Compare(dist, minDistances[i]) < 0)
-                    {
-                        minDistances[i] = dist;
-                    }
-                }
-            }
+            minDistances = engine.TensorMin(minDistances, SquaredDistancesToRow(rows, nextCenter, dim));
         }
 
         return selected.ToArray();
     }
 
-    private int SelectFirstCenter(List<Vector<T>> embeddings)
+    private static Tensor<T> SquaredDistancesToRow(Tensor<T> rows, int index, int dim)
     {
-        // For BADGE, select first center weighted by gradient magnitude (uncertainty)
-        var magnitudes = new double[embeddings.Count];
-        double totalMag = 0;
-
-        for (int i = 0; i < embeddings.Count; i++)
-        {
-            magnitudes[i] = NumOps.ToDouble(VectorHelper.L2Norm(embeddings[i]));
-            totalMag += magnitudes[i];
-        }
-
-        if (totalMag <= 0)
-        {
-            return ThreadRandom.Next(embeddings.Count);
-        }
-
-        // Sample proportional to magnitude
-        double threshold = ThreadRandom.NextDouble() * totalMag;
-        double cumSum = 0;
-
-        for (int i = 0; i < embeddings.Count; i++)
-        {
-            cumSum += magnitudes[i];
-            if (cumSum >= threshold)
-            {
-                return i;
-            }
-        }
-
-        return embeddings.Count - 1;
+        var center = AiDotNetEngine.Current.TensorSlice(rows, new[] { index, 0 }, new[] { 1, dim });
+        return ActiveLearningEngineOps.SquaredDistances(rows, center).Reshape(new[] { rows.Shape[0] });
     }
 
-    private int SampleProportionalToDistance(T[] distances, List<int> excluded)
+    private int SelectFirstCenter(Tensor<T> rows)
     {
-        double totalDist = 0;
-        var validIndices = new List<int>();
+        // For BADGE, select first center weighted by gradient magnitude (uncertainty)
+        var engine = AiDotNetEngine.Current;
+        int n = rows.Shape[0];
+        var cumulative = engine.TensorCumSum(ActiveLearningEngineOps.RowNorms(rows), 0);
+        T totalMag = cumulative.GetFlat(n - 1);
 
-        for (int i = 0; i < distances.Length; i++)
+        if (!NumOps.GreaterThan(totalMag, NumOps.Zero))
         {
-            if (!excluded.Contains(i))
-            {
-                var d = NumOps.ToDouble(distances[i]);
-                if (d > 0 && !double.IsInfinity(d))
-                {
-                    totalDist += d;
-                    validIndices.Add(i);
-                }
-            }
+            return ThreadRandom.Next(n);
         }
 
-        if (totalDist <= 0 || validIndices.Count == 0)
+        // Sample proportional to magnitude: first sample whose cumulative magnitude reaches the threshold
+        var threshold = new Tensor<T>(new[] { 1 });
+        threshold.Fill(NumOps.Multiply(NumOps.FromDouble(ThreadRandom.NextDouble()), totalMag));
+        int index = engine.TensorSearchSorted(cumulative, threshold).GetFlat(0);
+
+        return index < n ? index : n - 1;
+    }
+
+    private int SampleProportionalToDistance(Tensor<T> distances, bool[] excluded)
+    {
+        var engine = AiDotNetEngine.Current;
+
+        // Valid candidates: not excluded, positive and finite (MaxValue is the largest finite value)
+        var positiveFinite = engine.TensorMultiply(
+            engine.TensorGreaterThan(distances, NumOps.Zero),
+            engine.ScalarMinusTensor(NumOps.One, engine.TensorGreaterThan(distances, NumOps.MaxValue)));
+        var validMask = engine.TensorMaskedFill(positiveFinite, excluded, NumOps.Zero);
+        var validIndices = engine.TensorNonzero(validMask).ToArray();
+
+        T totalDist = NumOps.Zero;
+        Tensor<T>? cumulative = null;
+        if (validIndices.Length > 0)
+        {
+            var validDistances = engine.TensorIndexSelect(distances, new Tensor<int>(validIndices, new[] { validIndices.Length }), 0);
+            cumulative = engine.TensorCumSum(validDistances, 0);
+            totalDist = cumulative.GetFlat(validIndices.Length - 1);
+        }
+
+        if (cumulative is null || !NumOps.GreaterThan(totalDist, NumOps.Zero))
         {
             // Fallback: random selection from remaining
-            var remaining = Enumerable.Range(0, distances.Length)
-                .Where(i => !excluded.Contains(i))
+            var remaining = excluded
+                .Select((isExcluded, index) => (IsExcluded: isExcluded, Index: index))
+                .Where(x => !x.IsExcluded)
+                .Select(x => x.Index)
                 .ToList();
             return remaining[ThreadRandom.Next(remaining.Count)];
         }
 
-        // Sample proportional to distance
-        double threshold = ThreadRandom.NextDouble() * totalDist;
-        double cumSum = 0;
+        // Sample proportional to distance: first valid sample whose cumulative distance reaches the threshold
+        var threshold = new Tensor<T>(new[] { 1 });
+        threshold.Fill(NumOps.Multiply(NumOps.FromDouble(ThreadRandom.NextDouble()), totalDist));
+        int position = engine.TensorSearchSorted(cumulative, threshold).GetFlat(0);
 
-        foreach (var i in validIndices)
-        {
-            cumSum += NumOps.ToDouble(distances[i]);
-            if (cumSum >= threshold)
-            {
-                return i;
-            }
-        }
-
-        return validIndices[validIndices.Count - 1];
-    }
-
-    private T ComputeSquaredDistance(Vector<T> a, Vector<T> b)
-    {
-        var engine = AiDotNetEngine.Current;
-        var diff = engine.Subtract(a, b);
-        return engine.DotProduct(diff, diff);
+        return validIndices[Math.Min(position, validIndices.Length - 1)];
     }
 
     private int GetArgMax(Vector<T> v)
     {
         if (v.Length == 0) return 0;
 
-        int maxIdx = 0;
-        T maxVal = v[0];
-
-        for (int i = 1; i < v.Length; i++)
-        {
-            if (NumOps.Compare(v[i], maxVal) > 0)
-            {
-                maxVal = v[i];
-                maxIdx = i;
-            }
-        }
-
-        return maxIdx;
+        // First maximum
+        var row = Tensor<T>.FromVector(v).Reshape(new[] { 1, v.Length });
+        return AiDotNetEngine.Current.TensorArgMax(row, 1).GetFlat(0);
     }
 
     private Vector<T> ConvertToProbabilities(TOutput prediction)
@@ -382,31 +336,15 @@ public class BADGEStrategy<T, TInput, TOutput> : IQueryStrategy<T, TInput, TOutp
 
     private Vector<T> Softmax(Vector<T> logits)
     {
-        T maxLogit = logits[0];
-        for (int i = 1; i < logits.Length; i++)
+        if (logits.Length == 0)
         {
-            if (NumOps.Compare(logits[i], maxLogit) > 0)
-            {
-                maxLogit = logits[i];
-            }
+            throw new ArgumentException("Logits must not be empty.", nameof(logits));
         }
 
-        var expValues = new T[logits.Length];
-        T sum = NumOps.Zero;
-
-        for (int i = 0; i < logits.Length; i++)
-        {
-            var shifted = NumOps.Subtract(logits[i], maxLogit);
-            expValues[i] = NumOps.Exp(shifted);
-            sum = NumOps.Add(sum, expValues[i]);
-        }
-
-        for (int i = 0; i < expValues.Length; i++)
-        {
-            expValues[i] = NumOps.Divide(expValues[i], sum);
-        }
-
-        return new Vector<T>(expValues);
+        var engine = AiDotNetEngine.Current;
+        var values = Tensor<T>.FromVector(logits);
+        var expValues = engine.TensorExp(engine.TensorSubtractScalar(values, engine.TensorMaxValue(values)));
+        return engine.TensorDivideScalar(expValues, engine.TensorSum(expValues)).ToVector();
     }
 
     private T Sigmoid(T x)

@@ -122,16 +122,12 @@ public partial class AdaBoostClassifier<T> : EnsembleClassifierBase<T>
 
         // Clear existing estimators
         Estimators.Clear();
-        _estimatorWeights = new Vector<T>(Options.NEstimators);
+        var estimatorWeights = new T[Options.NEstimators];
+        var engine = Engine;
 
         // Initialize sample weights uniformly
         int n = x.Rows;
-        var sampleWeights = new Vector<T>(n);
-        T initialWeight = NumOps.Divide(NumOps.One, NumOps.FromDouble(n));
-        for (int i = 0; i < n; i++)
-        {
-            sampleWeights[i] = initialWeight;
-        }
+        var sampleWeights = FilledVector(n, NumOps.Divide(NumOps.One, NumOps.FromDouble(n)));
 
         // Train estimators
         for (int m = 0; m < Options.NEstimators; m++)
@@ -152,58 +148,31 @@ public partial class AdaBoostClassifier<T> : EnsembleClassifierBase<T>
             // Get predictions on full training set
             var predictions = stump.Predict(x);
 
-            // Calculate weighted error
-            T error = NumOps.Zero;
-            for (int i = 0; i < n; i++)
-            {
-                if (NumOps.Compare(predictions[i], y[i]) != 0)
-                {
-                    error = NumOps.Add(error, sampleWeights[i]);
-                }
-            }
+            // Calculate weighted error (1 where the prediction is wrong)
+            var wrong = engine.TensorNotEquals(predictions.AsTensor(), y.AsTensor());
+            T error = engine.TensorSum(engine.TensorMultiply(wrong, sampleWeights.AsTensor()));
 
-            // Check if error is too high (random guessing or worse)
-            double errorDouble = NumOps.ToDouble(error);
-            if (errorDouble >= 0.5)
+            // Check if error is too high (random guessing or worse); otherwise
+            // alpha = learningRate * 0.5 * ln((1 - error) / error)
+            if (!TryComputeEstimatorWeight(error, out T alpha))
             {
                 // Skip this estimator - it's not better than random
                 continue;
             }
 
-            // Calculate estimator weight: alpha = 0.5 * ln((1 - error) / error)
-            T oneMinusError = NumOps.Subtract(NumOps.One, error);
-            T ratio = NumOps.Divide(oneMinusError, NumOps.Add(error, NumOps.FromDouble(1e-10)));
-            T logRatio = NumOps.Log(ratio);
-            T alpha = NumOps.Multiply(NumOps.FromDouble(0.5), logRatio);
-            alpha = NumOps.Multiply(alpha, NumOps.FromDouble(Options.LearningRate));
-
-            _estimatorWeights[Estimators.Count] = alpha;
+            estimatorWeights[Estimators.Count] = alpha;
             Estimators.Add(stump);
 
-            // Update sample weights
-            T sumWeights = NumOps.Zero;
-            for (int i = 0; i < n; i++)
-            {
-                T yi = y[i];
-                T pred = predictions[i];
-
-                // exp(-alpha * y * h(x))
-                // For correct predictions: y * h(x) > 0 (same sign)
-                // For incorrect predictions: y * h(x) < 0 (different signs)
-                T indicator = NumOps.Compare(yi, pred) == 0
-                    ? NumOps.Negate(NumOps.One)
-                    : NumOps.One;
-                T exponent = NumOps.Multiply(alpha, indicator);
-                sampleWeights[i] = NumOps.Multiply(sampleWeights[i], NumOps.Exp(exponent));
-                sumWeights = NumOps.Add(sumWeights, sampleWeights[i]);
-            }
+            // Update sample weights: w *= exp(alpha * indicator), indicator = -1 when correct, +1 when wrong
+            var indicator = engine.TensorSubtractScalar(engine.TensorMultiplyScalar(wrong, NumOps.FromDouble(2)), NumOps.One);
+            var updated = engine.TensorMultiply(sampleWeights.AsTensor(),
+                engine.TensorExp(engine.TensorMultiplyScalar(indicator, alpha)));
 
             // Normalize weights
-            for (int i = 0; i < n; i++)
-            {
-                sampleWeights[i] = NumOps.Divide(sampleWeights[i], sumWeights);
-            }
+            sampleWeights = engine.TensorDivideScalar(updated, engine.TensorSum(updated)).ToVector();
         }
+
+        _estimatorWeights = Vector<T>.Wrap(estimatorWeights);
 
         // Aggregate feature importances
         AggregateFeatureImportances();
@@ -241,20 +210,25 @@ public partial class AdaBoostClassifier<T> : EnsembleClassifierBase<T>
         }
 
         // Create sampled data
-        var xSample = new Matrix<T>(n, x.Columns);
-        var ySample = new Vector<T>(n);
+        return SelectSamples(x, y, indices);
+    }
 
-        for (int i = 0; i < n; i++)
+    /// <summary>
+    /// alpha = learningRate * 0.5 * ln((1 - error) / (error + 1e-10)); false when error &gt;= 0.5.
+    /// </summary>
+    private bool TryComputeEstimatorWeight(T error, out T alpha)
+    {
+        alpha = NumOps.Zero;
+        if (NumOps.ToDouble(error) >= 0.5)
         {
-            int srcIdx = indices[i];
-            for (int j = 0; j < x.Columns; j++)
-            {
-                xSample[i, j] = x[srcIdx, j];
-            }
-            ySample[i] = y[srcIdx];
+            return false;
         }
 
-        return (xSample, ySample);
+        T oneMinusError = NumOps.Subtract(NumOps.One, error);
+        T ratio = NumOps.Divide(oneMinusError, NumOps.Add(error, NumOps.FromDouble(1e-10)));
+        alpha = NumOps.Multiply(NumOps.Multiply(NumOps.FromDouble(0.5), NumOps.Log(ratio)),
+            NumOps.FromDouble(Options.LearningRate));
+        return true;
     }
 
     /// <inheritdoc/>
@@ -265,57 +239,13 @@ public partial class AdaBoostClassifier<T> : EnsembleClassifierBase<T>
             throw new InvalidOperationException("Model has not been trained.");
         }
 
-        var predictions = new Vector<T>(input.Rows);
-
-        for (int i = 0; i < input.Rows; i++)
+        if (input.Rows == 0)
         {
-            // For each sample, compute weighted votes for each class
-            var classVotes = new Dictionary<int, T>();
-            for (int c = 0; c < NumClasses; c++)
-            {
-                classVotes[c] = NumOps.Zero;
-            }
-
-            // Accumulate weighted votes from each estimator
-            for (int m = 0; m < Estimators.Count; m++)
-            {
-                var estimator = Estimators[m];
-                var sample = new Matrix<T>(1, input.Columns);
-                for (int j = 0; j < input.Columns; j++)
-                {
-                    sample[0, j] = input[i, j];
-                }
-
-                var pred = estimator.Predict(sample);
-                T weight = _estimatorWeights[m];
-
-                // Find which class was predicted
-                for (int c = 0; c < NumClasses; c++)
-                {
-                    if (NumOps.Compare(pred[0], ClassLabels[c]) == 0)
-                    {
-                        classVotes[c] = NumOps.Add(classVotes[c], weight);
-                        break;
-                    }
-                }
-            }
-
-            // Find class with maximum vote
-            int bestClass = 0;
-            T bestVote = classVotes[0];
-            for (int c = 1; c < NumClasses; c++)
-            {
-                if (NumOps.Compare(classVotes[c], bestVote) > 0)
-                {
-                    bestVote = classVotes[c];
-                    bestClass = c;
-                }
-            }
-
-            predictions[i] = ClassLabels[bestClass];
+            return new Vector<T>(0);
         }
 
-        return predictions;
+        // Class with the maximum weighted vote
+        return ClassIndicesToLabels(ArgMaxRows(ComputeWeightedVotes(input).ToMatrix()));
     }
 
     /// <inheritdoc/>
@@ -326,63 +256,42 @@ public partial class AdaBoostClassifier<T> : EnsembleClassifierBase<T>
             throw new InvalidOperationException("Model has not been trained.");
         }
 
-        var probabilities = new Matrix<T>(input.Rows, NumClasses);
-
-        for (int i = 0; i < input.Rows; i++)
+        if (input.Rows == 0)
         {
-            // Compute weighted votes for each class
-            var classVotes = new T[NumClasses];
-            for (int c = 0; c < NumClasses; c++)
-            {
-                classVotes[c] = NumOps.Zero;
-            }
-
-            T totalWeight = NumOps.Zero;
-
-            // Accumulate weighted votes
-            for (int m = 0; m < Estimators.Count; m++)
-            {
-                var estimator = Estimators[m];
-                var sample = new Matrix<T>(1, input.Columns);
-                for (int j = 0; j < input.Columns; j++)
-                {
-                    sample[0, j] = input[i, j];
-                }
-
-                var pred = estimator.Predict(sample);
-                T weight = _estimatorWeights[m];
-                totalWeight = NumOps.Add(totalWeight, NumOps.Abs(weight));
-
-                for (int c = 0; c < NumClasses; c++)
-                {
-                    if (NumOps.Compare(pred[0], ClassLabels[c]) == 0)
-                    {
-                        classVotes[c] = NumOps.Add(classVotes[c], weight);
-                        break;
-                    }
-                }
-            }
-
-            // Normalize to get probabilities
-            for (int c = 0; c < NumClasses; c++)
-            {
-                if (NumOps.Compare(totalWeight, NumOps.Zero) > 0)
-                {
-                    probabilities[i, c] = NumOps.Divide(classVotes[c], totalWeight);
-                    // Ensure non-negative
-                    if (NumOps.Compare(probabilities[i, c], NumOps.Zero) < 0)
-                    {
-                        probabilities[i, c] = NumOps.Zero;
-                    }
-                }
-                else
-                {
-                    probabilities[i, c] = NumOps.Divide(NumOps.One, NumOps.FromDouble(NumClasses));
-                }
-            }
+            return new Matrix<T>(0, NumClasses);
         }
 
-        return probabilities;
+        var engine = Engine;
+        var votes = ComputeWeightedVotes(input);
+        T totalWeight = engine.TensorSum(engine.TensorAbs(_estimatorWeights.GetSubVector(0, Estimators.Count).AsTensor()));
+
+        // Normalize to get probabilities (non-negative); uniform when no estimator carries weight
+        if (NumOps.Compare(totalWeight, NumOps.Zero) > 0)
+        {
+            return engine.TensorClampMin(engine.TensorDivideScalar(votes, totalWeight), NumOps.Zero).ToMatrix();
+        }
+
+        var uniform = new Tensor<T>(new[] { input.Rows, NumClasses });
+        engine.TensorFill(uniform, NumOps.Divide(NumOps.One, NumOps.FromDouble(NumClasses)));
+        return uniform.ToMatrix();
+    }
+
+    /// <summary>
+    /// votes[i, c] = sum of the weights of the estimators that predict class c for sample i.
+    /// </summary>
+    private Tensor<T> ComputeWeightedVotes(Matrix<T> input)
+    {
+        var engine = Engine;
+        var weights = _estimatorWeights ?? throw new InvalidOperationException("Model has not been trained.");
+        var weightValues = weights.ToArray();
+        var votes = new Tensor<T>(new[] { input.Rows, NumClasses });
+        for (int m = 0; m < Estimators.Count; m++)
+        {
+            var predicted = ClassMembership(Estimators[m].Predict(input));
+            votes = engine.TensorAdd(votes, engine.TensorMultiplyScalar(predicted, weightValues[m]));
+        }
+
+        return votes;
     }
 
     /// <inheritdoc/>

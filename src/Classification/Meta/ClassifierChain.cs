@@ -144,35 +144,31 @@ public partial class ClassifierChain<T> : MetaClassifierBase<T>
         // This preserves caller labels when Train(x, y) calls TrainMultiLabel
         if (ClassLabels is null || ClassLabels.Length != NumClasses)
         {
-            ClassLabels = new Vector<T>(NumClasses);
-            for (int c = 0; c < NumClasses; c++)
-            {
-                ClassLabels[c] = NumOps.FromDouble(c);
-            }
+            ClassLabels = NumClasses == 0 ? new Vector<T>(0) : Engine.TensorArange<T>(0, NumClasses, 1).ToVector();
         }
 
         // Determine chain order
         _order = DetermineOrder();
         _classifiers = new IClassifier<T>[NumClasses];
+        var labelColumns = new Vector<T>[NumClasses];
+        for (int c = 0; c < NumClasses; c++)
+        {
+            labelColumns[c] = yMultiLabel.GetColumn(c);
+        }
 
         // Train classifiers in chain order
+        var previous = new List<Vector<T>>(NumClasses);
         for (int i = 0; i < NumClasses; i++)
         {
             int labelIdx = _order[i];
 
-            // Create augmented features: original features + previous predictions
-            var xAugmented = CreateAugmentedFeatures(x, yMultiLabel, i);
-
-            // Get labels for this position
-            var yLabel = new Vector<T>(x.Rows);
-            for (int s = 0; s < x.Rows; s++)
-            {
-                yLabel[s] = yMultiLabel[s, labelIdx];
-            }
+            // Augmented features: original features + previous labels in chain order
+            var xAugmented = AugmentWithLabels(x, previous);
 
             // Train classifier
             _classifiers[labelIdx] = CreateBaseEstimator();
-            _classifiers[labelIdx].Train(xAugmented, yLabel);
+            _classifiers[labelIdx].Train(xAugmented, labelColumns[labelIdx]);
+            previous.Add(labelColumns[labelIdx]);
         }
     }
 
@@ -192,19 +188,7 @@ public partial class ClassifierChain<T> : MetaClassifierBase<T>
         TaskType = InferTaskType(y);
 
         // Convert to multi-label format (one-hot encoding)
-        var yMultiLabel = new Matrix<T>(y.Length, NumClasses);
-        for (int i = 0; i < y.Length; i++)
-        {
-            for (int c = 0; c < NumClasses; c++)
-            {
-                if (NumOps.Compare(y[i], ClassLabels[c]) == 0)
-                {
-                    yMultiLabel[i, c] = NumOps.One;
-                }
-            }
-        }
-
-        TrainMultiLabel(x, yMultiLabel);
+        TrainMultiLabel(x, ClassMembership(y).ToMatrix());
     }
 
     /// <summary>
@@ -252,28 +236,22 @@ public partial class ClassifierChain<T> : MetaClassifierBase<T>
     /// <summary>
     /// Creates augmented features by adding previous predictions.
     /// </summary>
-    private Matrix<T> CreateAugmentedFeatures(Matrix<T> x, Matrix<T> yPrevious, int chainPosition)
+    private Matrix<T> AugmentWithLabels(Matrix<T> x, IReadOnlyList<Vector<T>> previous)
     {
-        int numPrevLabels = chainPosition;
-        var xAugmented = new Matrix<T>(x.Rows, NumFeatures + numPrevLabels);
-
-        for (int i = 0; i < x.Rows; i++)
+        var features = LeadingColumns(x, NumFeatures);
+        if (previous.Count == 0)
         {
-            // Copy original features
-            for (int j = 0; j < NumFeatures; j++)
-            {
-                xAugmented[i, j] = x[i, j];
-            }
-
-            // Add previous labels as features
-            for (int p = 0; p < numPrevLabels; p++)
-            {
-                int prevLabelIdx = (_order ?? throw new InvalidOperationException("_order has not been initialized."))[p];
-                xAugmented[i, NumFeatures + p] = yPrevious[i, prevLabelIdx];
-            }
+            return features;
         }
 
-        return xAugmented;
+        var parts = new Tensor<T>[previous.Count + 1];
+        parts[0] = Tensor<T>.FromMatrix(features);
+        for (int p = 0; p < previous.Count; p++)
+        {
+            parts[p + 1] = previous[p].AsTensor().Reshape(x.Rows, 1);
+        }
+
+        return Engine.TensorConcatenate(parts, 1).ToMatrix();
     }
 
     /// <inheritdoc/>
@@ -281,26 +259,12 @@ public partial class ClassifierChain<T> : MetaClassifierBase<T>
     {
         // For single-label prediction, return the class with highest probability
         var probs = PredictProbabilities(input);
-        var predictions = new Vector<T>(input.Rows);
-
-        for (int i = 0; i < input.Rows; i++)
+        if (ClassLabels is null)
         {
-            int bestClass = 0;
-            T bestProb = probs[i, 0];
-
-            for (int c = 1; c < NumClasses; c++)
-            {
-                if (NumOps.Compare(probs[i, c], bestProb) > 0)
-                {
-                    bestProb = probs[i, c];
-                    bestClass = c;
-                }
-            }
-
-            predictions[i] = (ClassLabels ?? throw new InvalidOperationException("ClassLabels has not been initialized."))[bestClass];
+            throw new InvalidOperationException("ClassLabels has not been initialized.");
         }
 
-        return predictions;
+        return input.Rows == 0 ? new Vector<T>(0) : ClassIndicesToLabels(ArgMaxRows(probs));
     }
 
     /// <summary>
@@ -315,45 +279,22 @@ public partial class ClassifierChain<T> : MetaClassifierBase<T>
             throw new InvalidOperationException("Model has not been trained.");
         }
 
-        var predictions = new Matrix<T>(input.Rows, NumClasses);
+        var half = NumOps.FromDouble(0.5);
+        var predictions = Enumerable.Repeat(new Vector<T>(input.Rows), NumClasses).ToArray();
+        var previous = new List<Vector<T>>(NumClasses);
 
-        // Predict in chain order
+        // Predict in chain order, feeding previous predictions as features
         for (int i = 0; i < NumClasses; i++)
         {
             int labelIdx = _order[i];
+            var labelPreds = _classifiers[labelIdx].Predict(AugmentWithLabels(input, previous));
 
-            // Create augmented features with previous predictions
-            var xAugmented = new Matrix<T>(input.Rows, NumFeatures + i);
-
-            for (int s = 0; s < input.Rows; s++)
-            {
-                // Copy original features
-                for (int j = 0; j < NumFeatures; j++)
-                {
-                    xAugmented[s, j] = input[s, j];
-                }
-
-                // Add previous predictions as features
-                for (int p = 0; p < i; p++)
-                {
-                    int prevLabelIdx = _order[p];
-                    xAugmented[s, NumFeatures + p] = predictions[s, prevLabelIdx];
-                }
-            }
-
-            // Predict for this label
-            var labelPreds = _classifiers[labelIdx].Predict(xAugmented);
-
-            for (int s = 0; s < input.Rows; s++)
-            {
-                // Threshold at 0.5 for binary
-                predictions[s, labelIdx] = NumOps.Compare(labelPreds[s], NumOps.FromDouble(0.5)) >= 0
-                    ? NumOps.One
-                    : NumOps.Zero;
-            }
+            // Threshold at 0.5 for binary
+            predictions[labelIdx] = AtLeast(labelPreds, half);
+            previous.Add(predictions[labelIdx]);
         }
 
-        return predictions;
+        return NumClasses == 0 ? new Matrix<T>(input.Rows, 0) : StackColumns(predictions);
     }
 
     /// <inheritdoc/>
@@ -364,62 +305,34 @@ public partial class ClassifierChain<T> : MetaClassifierBase<T>
             throw new InvalidOperationException("Model has not been trained.");
         }
 
-        var predictions = new Matrix<T>(input.Rows, NumClasses);
-        var probs = new Matrix<T>(input.Rows, NumClasses);
+        var half = NumOps.FromDouble(0.5);
+        var probs = Enumerable.Repeat(new Vector<T>(input.Rows), NumClasses).ToArray();
+        var previous = new List<Vector<T>>(NumClasses);
 
-        // Predict in chain order
+        // Predict in chain order, feeding previous thresholded predictions as features
         for (int i = 0; i < NumClasses; i++)
         {
             int labelIdx = _order[i];
+            var xAugmented = AugmentWithLabels(input, previous);
 
-            // Create augmented features with previous predictions
-            var xAugmented = new Matrix<T>(input.Rows, NumFeatures + i);
-
-            for (int s = 0; s < input.Rows; s++)
-            {
-                // Copy original features
-                for (int j = 0; j < NumFeatures; j++)
-                {
-                    xAugmented[s, j] = input[s, j];
-                }
-
-                // Add previous predictions as features
-                for (int p = 0; p < i; p++)
-                {
-                    int prevLabelIdx = _order[p];
-                    xAugmented[s, NumFeatures + p] = predictions[s, prevLabelIdx];
-                }
-            }
-
-            // Get probabilities if available
+            Vector<T> labelPrediction;
             if (_classifiers[labelIdx] is IProbabilisticClassifier<T> probClassifier)
             {
+                // Get probabilities if available
                 var labelProbs = probClassifier.PredictProbabilities(xAugmented);
-                int posCol = labelProbs.Columns > 1 ? 1 : 0;
-
-                for (int s = 0; s < input.Rows; s++)
-                {
-                    probs[s, labelIdx] = labelProbs[s, posCol];
-                    predictions[s, labelIdx] = NumOps.Compare(probs[s, labelIdx], NumOps.FromDouble(0.5)) >= 0
-                        ? NumOps.One
-                        : NumOps.Zero;
-                }
+                probs[labelIdx] = labelProbs.GetColumn(labelProbs.Columns > 1 ? 1 : 0);
+                labelPrediction = AtLeast(probs[labelIdx], half);
             }
             else
             {
-                var labelPreds = _classifiers[labelIdx].Predict(xAugmented);
-
-                for (int s = 0; s < input.Rows; s++)
-                {
-                    predictions[s, labelIdx] = NumOps.Compare(labelPreds[s], NumOps.FromDouble(0.5)) >= 0
-                        ? NumOps.One
-                        : NumOps.Zero;
-                    probs[s, labelIdx] = predictions[s, labelIdx];
-                }
+                labelPrediction = AtLeast(_classifiers[labelIdx].Predict(xAugmented), half);
+                probs[labelIdx] = labelPrediction;
             }
+
+            previous.Add(labelPrediction);
         }
 
-        return probs;
+        return NumClasses == 0 ? new Matrix<T>(input.Rows, 0) : StackColumns(probs);
     }
 
     /// <inheritdoc/>
@@ -431,24 +344,8 @@ public partial class ClassifierChain<T> : MetaClassifierBase<T>
     /// <inheritdoc/>
     public override Matrix<T> PredictLogProbabilities(Matrix<T> input)
     {
-        var probs = PredictProbabilities(input);
-        var logProbs = new Matrix<T>(input.Rows, NumClasses);
-
-        for (int i = 0; i < input.Rows; i++)
-        {
-            for (int c = 0; c < NumClasses; c++)
-            {
-                T p = probs[i, c];
-                T minP = NumOps.FromDouble(1e-15);
-                if (NumOps.Compare(p, minP) < 0)
-                {
-                    p = minP;
-                }
-                logProbs[i, c] = NumOps.Log(p);
-            }
-        }
-
-        return logProbs;
+        // log(max(p, 1e-15))
+        return base.PredictLogProbabilities(input);
     }
 }
 

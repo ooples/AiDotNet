@@ -112,13 +112,8 @@ public class UncertaintySampling<T> : IActiveLearningStrategy<T>
         var predictions = model.Predict(unlabeledPool);
         var numSamples = unlabeledPool.Shape[0];
         var numClasses = predictions.Length / numSamples;
-        var scores = new Vector<T>(numSamples);
-
-        for (int i = 0; i < numSamples; i++)
-        {
-            var probs = ExtractProbabilities(predictions, i, numClasses);
-            scores[i] = ComputeUncertainty(probs);
-        }
+        var probs = ActiveLearningEngineOps.SoftmaxRows(predictions, numSamples, numClasses);
+        var scores = ComputeUncertainty(probs).ToVector();
 
         UpdateStatistics(scores);
         return scores;
@@ -136,209 +131,43 @@ public class UncertaintySampling<T> : IActiveLearningStrategy<T>
     }
 
     /// <summary>
-    /// Computes uncertainty for a single sample based on the configured measure.
+    /// Computes the uncertainty of every sample based on the configured measure.
     /// </summary>
-    private T ComputeUncertainty(Vector<T> probabilities)
+    /// <param name="probabilities">A [numSamples, numClasses] tensor of class probabilities.</param>
+    private Tensor<T> ComputeUncertainty(Tensor<T> probabilities)
     {
-        return _measure switch
+        var engine = AiDotNetEngine.Current;
+        switch (_measure)
         {
-            UncertaintyMeasure.LeastConfidence => ComputeLeastConfidence(probabilities),
-            UncertaintyMeasure.MarginSampling => ComputeMarginSampling(probabilities),
-            UncertaintyMeasure.Entropy => ComputeEntropy(probabilities),
-            _ => ComputeEntropy(probabilities)
-        };
-    }
-
-    /// <summary>
-    /// Computes least confidence: 1 - max(probabilities).
-    /// </summary>
-    private T ComputeLeastConfidence(Vector<T> probabilities)
-    {
-        var maxProb = _numOps.Zero;
-        for (int i = 0; i < probabilities.Length; i++)
-        {
-            if (_numOps.GreaterThan(probabilities[i], maxProb))
-            {
-                maxProb = probabilities[i];
-            }
+            case UncertaintyMeasure.LeastConfidence:
+                // 1 - max(probabilities)
+                return engine.ScalarMinusTensor(_numOps.One, ActiveLearningEngineOps.MaxRows(probabilities));
+            case UncertaintyMeasure.MarginSampling:
+                {
+                    // 1 - (P(1st) - P(2nd))
+                    var (first, second) = ActiveLearningEngineOps.TopTwoRows(probabilities);
+                    return engine.ScalarMinusTensor(_numOps.One, engine.TensorSubtract(first, second));
+                }
+            default:
+                // Entropy: -Σ p*log(p)
+                return ActiveLearningEngineOps.EntropyRows(probabilities, _numOps.FromDouble(1e-10));
         }
-        return _numOps.Subtract(_numOps.One, maxProb);
-    }
-
-    /// <summary>
-    /// Computes margin sampling: 1 - (P(1st) - P(2nd)).
-    /// </summary>
-    private T ComputeMarginSampling(Vector<T> probabilities)
-    {
-        var first = _numOps.Zero;
-        var second = _numOps.Zero;
-
-        for (int i = 0; i < probabilities.Length; i++)
-        {
-            if (_numOps.GreaterThan(probabilities[i], first))
-            {
-                second = first;
-                first = probabilities[i];
-            }
-            else if (_numOps.GreaterThan(probabilities[i], second))
-            {
-                second = probabilities[i];
-            }
-        }
-
-        var margin = _numOps.Subtract(first, second);
-        return _numOps.Subtract(_numOps.One, margin);
-    }
-
-    /// <summary>
-    /// Computes entropy: -Σ p*log(p).
-    /// </summary>
-    private T ComputeEntropy(Vector<T> probabilities)
-    {
-        var entropy = _numOps.Zero;
-        var epsilon = _numOps.FromDouble(1e-10);
-
-        for (int i = 0; i < probabilities.Length; i++)
-        {
-            var p = _numOps.Add(probabilities[i], epsilon);
-            var logP = _numOps.FromDouble(Math.Log(_numOps.ToDouble(p)));
-            var term = _numOps.Multiply(p, logP);
-            entropy = _numOps.Subtract(entropy, term);
-        }
-
-        return entropy;
-    }
-
-    /// <summary>
-    /// Extracts probabilities for a single sample from batch predictions.
-    /// </summary>
-    private Vector<T> ExtractProbabilities(Tensor<T> predictions, int sampleIndex, int numClasses)
-    {
-        var probs = new Vector<T>(numClasses);
-        var startIdx = sampleIndex * numClasses;
-
-        // Apply softmax to get probabilities
-        var maxLogit = _numOps.MinValue;
-        for (int c = 0; c < numClasses; c++)
-        {
-            if (_numOps.GreaterThan(predictions[startIdx + c], maxLogit))
-            {
-                maxLogit = predictions[startIdx + c];
-            }
-        }
-
-        var expSum = _numOps.Zero;
-        for (int c = 0; c < numClasses; c++)
-        {
-            var shifted = _numOps.Subtract(predictions[startIdx + c], maxLogit);
-            var expVal = _numOps.FromDouble(Math.Exp(_numOps.ToDouble(shifted)));
-            probs[c] = expVal;
-            expSum = _numOps.Add(expSum, expVal);
-        }
-
-        for (int c = 0; c < numClasses; c++)
-        {
-            probs[c] = _numOps.Divide(probs[c], expSum);
-        }
-
-        return probs;
     }
 
     /// <summary>
     /// Selects top-scoring samples without diversity consideration.
     /// </summary>
-    private int[] SelectTopScoring(Vector<T> scores, int batchSize)
+    private static int[] SelectTopScoring(Vector<T> scores, int batchSize)
     {
-        var indexedScores = new List<(int Index, T Score)>();
-        for (int i = 0; i < scores.Length; i++)
-        {
-            indexedScores.Add((i, scores[i]));
-        }
-
-        return indexedScores
-            .OrderByDescending(x => _numOps.ToDouble(x.Score))
-            .Take(batchSize)
-            .Select(x => x.Index)
-            .ToArray();
+        return ActiveLearningEngineOps.SelectTopScoring(scores, batchSize);
     }
 
     /// <summary>
     /// Selects samples considering both uncertainty and diversity.
     /// </summary>
-    private int[] SelectWithDiversity(Vector<T> scores, Tensor<T> pool, int batchSize)
+    private static int[] SelectWithDiversity(Vector<T> scores, Tensor<T> pool, int batchSize)
     {
-        var selected = new List<int>();
-        var remaining = new HashSet<int>(Enumerable.Range(0, scores.Length));
-        var featureSize = pool.Length / pool.Shape[0];
-
-        while (selected.Count < batchSize && remaining.Count > 0)
-        {
-            var best = -1;
-            var bestCombinedScore = _numOps.MinValue;
-
-            foreach (var idx in remaining)
-            {
-                var uncertaintyScore = scores[idx];
-                var diversityScore = selected.Count == 0
-                    ? _numOps.One
-                    : ComputeMinDistanceToSelected(pool, idx, selected, featureSize);
-
-                // Combined score = uncertainty * diversity
-                var combinedScore = _numOps.Multiply(uncertaintyScore, diversityScore);
-
-                if (_numOps.GreaterThan(combinedScore, bestCombinedScore))
-                {
-                    bestCombinedScore = combinedScore;
-                    best = idx;
-                }
-            }
-
-            if (best >= 0)
-            {
-                selected.Add(best);
-                remaining.Remove(best);
-            }
-        }
-
-        return [.. selected];
-    }
-
-    /// <summary>
-    /// Computes minimum distance from a sample to already selected samples.
-    /// </summary>
-    private T ComputeMinDistanceToSelected(Tensor<T> pool, int sampleIdx, List<int> selected, int featureSize)
-    {
-        var minDist = _numOps.MaxValue;
-
-        foreach (var selIdx in selected)
-        {
-            var dist = ComputeEuclideanDistance(pool, sampleIdx, selIdx, featureSize);
-            if (_numOps.LessThan(dist, minDist))
-            {
-                minDist = dist;
-            }
-        }
-
-        return minDist;
-    }
-
-    /// <summary>
-    /// Computes Euclidean distance between two samples.
-    /// </summary>
-    private T ComputeEuclideanDistance(Tensor<T> pool, int idx1, int idx2, int featureSize)
-    {
-        var sumSquared = _numOps.Zero;
-        var start1 = idx1 * featureSize;
-        var start2 = idx2 * featureSize;
-
-        for (int i = 0; i < featureSize; i++)
-        {
-            var diff = _numOps.Subtract(pool[start1 + i], pool[start2 + i]);
-            var squared = _numOps.Multiply(diff, diff);
-            sumSquared = _numOps.Add(sumSquared, squared);
-        }
-
-        return _numOps.FromDouble(Math.Sqrt(_numOps.ToDouble(sumSquared)));
+        return ActiveLearningEngineOps.SelectWithDiversity(scores, pool, batchSize);
     }
 
     /// <summary>
@@ -348,19 +177,6 @@ public class UncertaintySampling<T> : IActiveLearningStrategy<T>
     {
         if (scores.Length == 0) return;
 
-        _lastMinScore = scores[0];
-        _lastMaxScore = scores[0];
-        var sum = _numOps.Zero;
-
-        for (int i = 0; i < scores.Length; i++)
-        {
-            if (_numOps.LessThan(scores[i], _lastMinScore))
-                _lastMinScore = scores[i];
-            if (_numOps.GreaterThan(scores[i], _lastMaxScore))
-                _lastMaxScore = scores[i];
-            sum = _numOps.Add(sum, scores[i]);
-        }
-
-        _lastMeanScore = _numOps.Divide(sum, _numOps.FromDouble(scores.Length));
+        (_lastMinScore, _lastMaxScore, _lastMeanScore) = ActiveLearningEngineOps.Statistics(scores);
     }
 }

@@ -135,19 +135,12 @@ public partial class LinearSupportVectorClassifier<T> : SVMBase<T>
             : RandomHelper.CreateSeededRandom(42);
 
         // Convert labels to +1/-1 for binary classification
-        var yBinary = new Vector<T>(y.Length);
         T positiveClass = ClassLabels[ClassLabels.Length - 1];
-        for (int i = 0; i < y.Length; i++)
-        {
-            if (NumOps.Compare(y[i], positiveClass) == 0)
-            {
-                yBinary[i] = NumOps.One;
-            }
-            else
-            {
-                yBinary[i] = NumOps.Negate(NumOps.One);
-            }
-        }
+        var yBinary = y.Length == 0
+            ? new Vector<T>(0)
+            : Engine.TensorSubtractScalar(
+                Engine.TensorMultiplyScalar(Engine.TensorEquals(y.AsTensor(), positiveClass), NumOps.FromDouble(2.0)),
+                NumOps.One).ToVector();
 
         // Train using SGD with hinge loss
         TrainSGD(x, yBinary);
@@ -188,53 +181,28 @@ public partial class LinearSupportVectorClassifier<T> : SVMBase<T>
         }
 
         T prevLoss = NumOps.MaxValue;
+        var targets = y.ToArray();
+
+        // L2 regularization strength on weights (not bias)
+        T lambda = NumOps.Divide(NumOps.One, NumOps.Multiply(C, NumOps.FromDouble(n)));
 
         for (int epoch = 0; epoch < maxIter; epoch++)
         {
             // Shuffle indices
             ShuffleArray(indices);
 
-            T epochLoss = NumOps.Zero;
+            var sampleLosses = new T[n];
 
             for (int idx = 0; idx < n; idx++)
             {
                 int i = indices[idx];
-                Vector<T> xi = GetRow(x, i);
-                T yi = y[i];
-
-                // Compute margin: y * (w · x + b)
-                T margin = NumOps.Multiply(yi, ComputeLinearOutput(xi));
-
-                // Compute loss and gradients
-                if (NumOps.Compare(margin, NumOps.One) < 0)
-                {
-                    // Hinge loss is active: loss = 1 - margin
-                    T hingeLoss = NumOps.Subtract(NumOps.One, margin);
-                    epochLoss = NumOps.Add(epochLoss, hingeLoss);
-
-                    // Update weights: w = w + lr * C * y * x
-                    for (int j = 0; j < d; j++)
-                    {
-                        T grad = NumOps.Multiply(NumOps.Multiply(yi, xi[j]), C);
-                        _weights[j] = NumOps.Add(_weights[j], NumOps.Multiply(learningRate, grad));
-                    }
-
-                    // Update bias: b = b + lr * C * y
-                    _bias = NumOps.Add(_bias, NumOps.Multiply(learningRate, NumOps.Multiply(C, yi)));
-                }
-
-                // L2 regularization on weights (not bias)
-                T lambda = NumOps.Divide(NumOps.One, NumOps.Multiply(C, NumOps.FromDouble(n)));
-                for (int j = 0; j < d; j++)
-                {
-                    _weights[j] = NumOps.Multiply(_weights[j],
-                        NumOps.Subtract(NumOps.One, NumOps.Multiply(learningRate, lambda)));
-                }
+                sampleLosses[idx] = HingeStep(GetRow(x, i), targets[i], C, learningRate, lambda);
             }
 
+            T epochLoss = n == 0 ? NumOps.Zero : Engine.Sum(Vector<T>.Wrap(sampleLosses));
+
             // Check convergence
-            T lossChange = NumOps.Abs(NumOps.Subtract(epochLoss, prevLoss));
-            if (NumOps.Compare(lossChange, tolerance) < 0 && epoch > 10)
+            if (HasConverged(epochLoss, prevLoss, tolerance) && epoch > 10)
             {
                 break;
             }
@@ -242,13 +210,59 @@ public partial class LinearSupportVectorClassifier<T> : SVMBase<T>
             prevLoss = epochLoss;
 
             // Decrease learning rate
-            learningRate = NumOps.Divide(learningRate, NumOps.FromDouble(1.0 + 0.001 * epoch));
+            learningRate = DecayLearningRate(learningRate, epoch);
         }
+    }
+
+    /// <summary>
+    /// Whether the epoch loss changed by less than the tolerance.
+    /// </summary>
+    private bool HasConverged(T epochLoss, T prevLoss, T tolerance)
+    {
+        return NumOps.Compare(NumOps.Abs(NumOps.Subtract(epochLoss, prevLoss)), tolerance) < 0;
+    }
+
+    /// <summary>
+    /// learningRate / (1 + 0.001 * epoch).
+    /// </summary>
+    private T DecayLearningRate(T learningRate, int epoch)
+    {
+        return NumOps.Divide(learningRate, NumOps.FromDouble(1.0 + 0.001 * epoch));
     }
 
     /// <summary>
     /// Computes the linear output w · x + b.
     /// </summary>
+    /// <summary>
+    /// One SGD step on a sample; returns its hinge loss (0 when the margin is at least 1).
+    /// </summary>
+    private T HingeStep(Vector<T> xi, T yi, T C, T learningRate, T lambda)
+    {
+        if (_weights is null)
+        {
+            throw new InvalidOperationException("Model has not been trained.");
+        }
+
+        // Compute margin: y * (w · x + b)
+        T margin = NumOps.Multiply(yi, ComputeLinearOutput(xi));
+        T loss = NumOps.Zero;
+
+        if (NumOps.Compare(margin, NumOps.One) < 0)
+        {
+            // Hinge loss is active: loss = 1 - margin
+            loss = NumOps.Subtract(NumOps.One, margin);
+
+            // Update weights: w = w + lr * C * y * x; bias: b = b + lr * C * y
+            T step = NumOps.Multiply(learningRate, NumOps.Multiply(C, yi));
+            _weights = Engine.Add(_weights, Engine.Multiply(xi, step));
+            _bias = NumOps.Add(_bias, step);
+        }
+
+        // L2 regularization: w = w * (1 - lr * lambda)
+        _weights = Engine.Multiply(_weights, NumOps.Subtract(NumOps.One, NumOps.Multiply(learningRate, lambda)));
+        return loss;
+    }
+
     private T ComputeLinearOutput(Vector<T> x)
     {
         if (_weights is null)
@@ -286,12 +300,15 @@ public partial class LinearSupportVectorClassifier<T> : SVMBase<T>
             throw new InvalidOperationException("Model has not been trained.");
         }
 
-        var decisions = new Matrix<T>(input.Rows, 1);
-        for (int i = 0; i < input.Rows; i++)
+        // w · x + b for every row
+        if (input.Rows == 0)
         {
-            decisions[i, 0] = ComputeLinearOutput(GetRow(input, i));
+            return new Matrix<T>(0, 1);
         }
-        return decisions;
+
+        var scores = Engine.TensorAddScalar(
+            Engine.TensorMatMul(Tensor<T>.FromMatrix(input), _weights.AsTensor().Reshape(_weights.Length, 1)), _bias);
+        return scores.ToMatrix();
     }
 
     /// <inheritdoc/>
@@ -303,22 +320,17 @@ public partial class LinearSupportVectorClassifier<T> : SVMBase<T>
         }
 
         var decisions = DecisionFunction(input);
-        var predictions = new Vector<T>(input.Rows);
-
-        for (int i = 0; i < input.Rows; i++)
+        if (input.Rows == 0)
         {
-            // Positive decision -> positive class, negative -> negative class
-            if (NumOps.Compare(decisions[i, 0], NumOps.Zero) >= 0)
-            {
-                predictions[i] = ClassLabels[ClassLabels.Length - 1]; // Positive class
-            }
-            else
-            {
-                predictions[i] = ClassLabels[0]; // Negative class
-            }
+            return new Vector<T>(0);
         }
 
-        return predictions;
+        // Positive decision -> positive class, negative -> negative class
+        var engine = Engine;
+        var isPositive = AtLeast(decisions.GetColumn(0), NumOps.Zero);
+        var positive = FilledVector(input.Rows, ClassLabels[ClassLabels.Length - 1]).AsTensor();
+        var negative = FilledVector(input.Rows, ClassLabels[0]).AsTensor();
+        return engine.TensorWhere(isPositive.AsTensor(), positive, negative).ToVector();
     }
 
     /// <inheritdoc/>
@@ -326,26 +338,29 @@ public partial class LinearSupportVectorClassifier<T> : SVMBase<T>
     {
         // Use Platt scaling approximation for probability estimates
         var decisions = DecisionFunction(input);
-        var probabilities = new Matrix<T>(input.Rows, NumClasses);
-
-        for (int i = 0; i < input.Rows; i++)
+        if (input.Rows == 0 || NumClasses == 0)
         {
-            // Sigmoid transformation: p = 1 / (1 + exp(-decision))
-            T decision = decisions[i, 0];
-            T negDecision = NumOps.Negate(decision);
-            T expNeg = NumOps.Exp(negDecision);
-            T prob = NumOps.Divide(NumOps.One, NumOps.Add(NumOps.One, expNeg));
-
-            // Probability for negative class
-            probabilities[i, 0] = NumOps.Subtract(NumOps.One, prob);
-            // Probability for positive class
-            if (NumClasses > 1)
-            {
-                probabilities[i, 1] = prob;
-            }
+            return new Matrix<T>(input.Rows, NumClasses);
         }
 
-        return probabilities;
+        // Sigmoid transformation: p = 1 / (1 + exp(-decision)); columns [1 - p, p, 0, ...]
+        var engine = Engine;
+        var decision = Tensor<T>.FromMatrix(decisions);
+        var ones = new Tensor<T>(new[] { input.Rows, 1 });
+        engine.TensorFill(ones, NumOps.One);
+        var prob = engine.TensorDivide(ones, engine.TensorAddScalar(engine.TensorExp(engine.TensorNegate(decision)), NumOps.One));
+        var columns = new List<Tensor<T>> { engine.ScalarMinusTensor(NumOps.One, prob) };
+        if (NumClasses > 1)
+        {
+            columns.Add(prob);
+        }
+
+        if (NumClasses > 2)
+        {
+            columns.Add(new Tensor<T>(new[] { input.Rows, NumClasses - 2 }));
+        }
+
+        return (columns.Count == 1 ? columns[0] : engine.TensorConcatenate(columns.ToArray(), 1)).ToMatrix();
     }
 
     /// <inheritdoc/>

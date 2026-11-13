@@ -90,16 +90,15 @@ public class RankedBatchStrategy<T, TInput, TOutput> : IBatchStrategy<T, TInput,
 
         int effectiveBatchSize = Math.Min(batchSize, candidateIndices.Length);
 
-        // Create scored candidates
-        var scoredCandidates = new List<(int Index, T Score)>();
-        for (int i = 0; i < candidateIndices.Length; i++)
+        // Rank candidates by score (descending), ties in candidate order
+        var engine = AiDotNetEngine.Current;
+        var candidateScores = Tensor<T>.FromVector(scores.GetSubVector(0, candidateIndices.Length));
+        var order = ActiveLearningEngineOps.StableOrder(candidateScores, descending: true);
+        var scoredCandidates = new List<(int Index, int Rank)>(order.Length);
+        for (int r = 0; r < order.Length; r++)
         {
-            int poolIndex = candidateIndices[i];
-            scoredCandidates.Add((poolIndex, scores[i]));
+            scoredCandidates.Add((candidateIndices[order[r]], r));
         }
-
-        // Sort by score (descending)
-        scoredCandidates.Sort((a, b) => NumOps.Compare(b.Score, a.Score));
 
         // Greedy selection with diversity filtering
         var selected = new List<int>();
@@ -116,14 +115,16 @@ public class RankedBatchStrategy<T, TInput, TOutput> : IBatchStrategy<T, TInput,
 
             // Check diversity with already selected samples
             bool isDiverse = true;
-            foreach (var selectedInput in selectedInputs)
+            if (selectedInputs.Count > 0)
             {
-                var diversity = ComputeDiversity(candidate, selectedInput);
-                if (NumOps.Compare(diversity, _minDiversityThreshold) < 0)
+                var diversities = new List<T>(selectedInputs.Count);
+                foreach (var selectedInput in selectedInputs)
                 {
-                    isDiverse = false;
-                    break;
+                    diversities.Add(ComputeDiversity(candidate, selectedInput));
                 }
+
+                var tooClose = engine.TensorLessThan(Tensor<T>.FromVector(Vector<T>.FromList(diversities)), _minDiversityThreshold);
+                isDiverse = engine.TensorCountNonzero(tooClose) == 0;
             }
 
             if (isDiverse)
@@ -181,21 +182,17 @@ public class RankedBatchStrategy<T, TInput, TOutput> : IBatchStrategy<T, TInput,
             return NumOps.One;
         }
 
-        T sumSquared = NumOps.Zero;
-        T maxPossible = NumOps.Zero;
+        var engine = AiDotNetEngine.Current;
+        var prefixA = a.Length == length ? a : a.GetSubVector(0, length);
+        var prefixB = b.Length == length ? b : b.GetSubVector(0, length);
 
-        for (int i = 0; i < length; i++)
-        {
-            var diff = NumOps.Subtract(a[i], b[i]);
-            sumSquared = NumOps.Add(sumSquared, NumOps.Multiply(diff, diff));
+        var diff = engine.Subtract(prefixA, prefixB);
+        T sumSquared = engine.DotProduct(diff, diff);
 
-            // Estimate max distance based on value magnitudes
-            var absA = NumOps.Abs(a[i]);
-            var absB = NumOps.Abs(b[i]);
-            var maxVal = NumOps.Compare(absA, absB) >= 0 ? absA : absB;
-            var maxDiff = NumOps.Multiply(NumOps.FromDouble(2), maxVal);
-            maxPossible = NumOps.Add(maxPossible, NumOps.Multiply(maxDiff, maxDiff));
-        }
+        // Estimate max distance based on value magnitudes
+        var maxVal = engine.Max(engine.Abs(prefixA), engine.Abs(prefixB));
+        var maxDiff = engine.Multiply(maxVal, NumOps.FromDouble(2));
+        T maxPossible = engine.DotProduct(maxDiff, maxDiff);
 
         if (NumOps.Compare(maxPossible, NumOps.Zero) <= 0)
         {

@@ -183,19 +183,19 @@ public class ExtraTreesClassifier<T> : EnsembleClassifierBase<T>, ITreeBasedClas
         }
 
         int n = x.Rows;
-        var xSample = new Matrix<T>(n, x.Columns);
-        var ySample = new Vector<T>(n);
-
-        for (int i = 0; i < n; i++)
+        if (n == 0)
         {
-            int idx = _random.Next(n);
-            for (int j = 0; j < x.Columns; j++)
-            {
-                xSample[i, j] = x[idx, j];
-            }
-            ySample[i] = y[idx];
+            return (new Matrix<T>(0, x.Columns), new Vector<T>(0));
         }
 
+        var indices = new int[n];
+        for (int i = 0; i < n; i++)
+        {
+            indices[i] = _random.Next(n);
+        }
+
+        var xSample = x.GetRows(indices);
+        var ySample = Engine.TensorGather(y.AsTensor(), new Tensor<int>(indices, new[] { n }), 0).ToVector();
         return (xSample, ySample);
     }
 

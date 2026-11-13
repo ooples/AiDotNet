@@ -54,6 +54,7 @@ namespace AiDotNet.ActiveLearning.Strategies.Diversity;
 public class CoreSetStrategy<T, TInput, TOutput> : IDiversityStrategy<T, TInput, TOutput>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
+    private static readonly T CosineEpsilon = NumOps.FromDouble(1e-10);
 
     private readonly DistanceMetric _distanceMetric;
     private readonly ActiveLearnerConfig<T>? _config;
@@ -93,7 +94,6 @@ public class CoreSetStrategy<T, TInput, TOutput> : IDiversityStrategy<T, TInput,
     {
         // For CoreSet, we compute distances to the labeled set
         // Score = minimum distance to any labeled sample
-        var scores = new T[unlabeledPool.Count];
 
         // Extract features for unlabeled samples
         var unlabeledFeatures = ExtractFeatures(model, unlabeledPool);
@@ -101,20 +101,10 @@ public class CoreSetStrategy<T, TInput, TOutput> : IDiversityStrategy<T, TInput,
         if (_labeledFeatures == null || _labeledFeatures.Count == 0)
         {
             // No labeled samples yet - all samples get equal high scores
-            for (int i = 0; i < unlabeledPool.Count; i++)
-            {
-                scores[i] = NumOps.One;
-            }
-        }
-        else
-        {
-            for (int i = 0; i < unlabeledPool.Count; i++)
-            {
-                scores[i] = ComputeMinDistanceToLabeled(unlabeledFeatures[i]);
-            }
+            return AiDotNetEngine.Current.Fill(unlabeledPool.Count, NumOps.One);
         }
 
-        return new Vector<T>(scores);
+        return MinDistances(Stack(unlabeledFeatures), Stack(_labeledFeatures)).ToVector();
     }
 
     /// <inheritdoc/>
@@ -129,47 +119,8 @@ public class CoreSetStrategy<T, TInput, TOutput> : IDiversityStrategy<T, TInput,
         var unlabeledFeatures = ExtractFeatures(model, unlabeledPool);
         _unlabeledFeatures = unlabeledFeatures;
 
-        // Use greedy furthest-first traversal (k-center greedy)
-        var selectedIndices = new List<int>();
-        var coveredPoints = new List<Vector<T>>();
-
-        // Initialize with labeled features if available
-        if (_labeledFeatures != null)
-        {
-            coveredPoints.AddRange(_labeledFeatures);
-        }
-
-        // Greedy selection
-        for (int b = 0; b < batchSizeToUse; b++)
-        {
-            T maxMinDistance = NumOps.MinValue;
-            int bestIndex = -1;
-
-            for (int i = 0; i < unlabeledFeatures.Count; i++)
-            {
-                if (selectedIndices.Contains(i))
-                {
-                    continue;
-                }
-
-                // Compute minimum distance to all covered points
-                T minDistance = ComputeMinDistance(unlabeledFeatures[i], coveredPoints);
-
-                if (NumOps.Compare(minDistance, maxMinDistance) > 0)
-                {
-                    maxMinDistance = minDistance;
-                    bestIndex = i;
-                }
-            }
-
-            if (bestIndex >= 0)
-            {
-                selectedIndices.Add(bestIndex);
-                coveredPoints.Add(unlabeledFeatures[bestIndex]);
-            }
-        }
-
-        return selectedIndices.ToArray();
+        // Use greedy furthest-first traversal (k-center greedy), initialized with the labeled features
+        return KCenterGreedy(unlabeledFeatures, _labeledFeatures, batchSizeToUse);
     }
 
     /// <inheritdoc/>
@@ -196,14 +147,12 @@ public class CoreSetStrategy<T, TInput, TOutput> : IDiversityStrategy<T, TInput,
             return new Vector<T>(0);
         }
 
-        var weights = new T[pool.Count];
         int k = Math.Min(5, pool.Count - 1);
 
         if (k == 0)
         {
             // Only one sample, give it weight 1
-            weights[0] = NumOps.One;
-            return new Vector<T>(weights);
+            return new Vector<T>(new[] { NumOps.One });
         }
 
         // Extract features for all samples
@@ -213,54 +162,37 @@ public class CoreSetStrategy<T, TInput, TOutput> : IDiversityStrategy<T, TInput,
             features.Add(GetFeatureRepresentation(pool.GetInput(i)));
         }
 
-        // Compute density for each sample based on k-nearest neighbors
-        for (int i = 0; i < pool.Count; i++)
+        // Compute density for each sample from the sum of its k nearest-neighbor distances (self excluded)
+        var engine = AiDotNetEngine.Current;
+        var rows = Stack(features);
+        int n = rows.Shape[0];
+        int blockRows = ActiveLearningEngineOps.PairwiseBlockRows(n, rows.Shape[1]);
+        var nearestSums = new List<Tensor<T>>();
+        for (int start = 0; start < n; start += blockRows)
         {
-            // Compute distances to all other points
-            var distances = new List<(int Index, T Distance)>();
-            for (int j = 0; j < pool.Count; j++)
-            {
-                if (i != j)
-                {
-                    var dist = ComputeDistance(features[i], features[j]);
-                    distances.Add((j, dist));
-                }
-            }
-
-            // Sort by distance and take k nearest
-            distances.Sort((a, b) => NumOps.Compare(a.Distance, b.Distance));
-            var kNearest = distances.Take(k).ToList();
-
-            // Compute average distance to k nearest neighbors
-            T avgDistance = NumOps.Zero;
-            foreach (var (_, distance) in kNearest)
-            {
-                avgDistance = NumOps.Add(avgDistance, distance);
-            }
-            avgDistance = NumOps.Divide(avgDistance, NumOps.FromDouble(k));
-
-            // Density weight = 1 / (avgDistance + epsilon) for stability
-            // Higher density (smaller distance) = higher weight
-            var epsilon = NumOps.FromDouble(1e-6);
-            weights[i] = NumOps.Divide(NumOps.One, NumOps.Add(avgDistance, epsilon));
+            int count = Math.Min(blockRows, n - start);
+            var block = engine.TensorSlice(rows, new[] { start, 0 }, new[] { count, rows.Shape[1] });
+            var others = engine.TensorMaskedFill(CrossDistances(block, rows), ActiveLearningEngineOps.SelfMask(start, count, n), NumOps.MaxValue);
+            var (nearest, _) = engine.TopK(others, k, 1, false);
+            nearestSums.Add(engine.ReduceSum(nearest, new[] { 1 }, keepDims: false));
         }
+
+        var sums = nearestSums.Count == 1 ? nearestSums[0] : engine.TensorConcatenate(nearestSums.ToArray(), 0);
+
+        // Density weight = 1 / (avgDistance + epsilon) for stability
+        // Higher density (smaller distance) = higher weight
+        var avgDistance = engine.TensorDivideScalar(sums, NumOps.FromDouble(k));
+        var weights = engine.TensorReciprocal(engine.TensorAddScalar(avgDistance, NumOps.FromDouble(1e-6)));
 
         // Normalize weights to sum to 1
-        T totalWeight = NumOps.Zero;
-        foreach (var w in weights)
-        {
-            totalWeight = NumOps.Add(totalWeight, w);
-        }
+        T totalWeight = engine.TensorSum(weights);
 
         if (NumOps.Compare(totalWeight, NumOps.Zero) > 0)
         {
-            for (int i = 0; i < weights.Length; i++)
-            {
-                weights[i] = NumOps.Divide(weights[i], totalWeight);
-            }
+            weights = engine.TensorDivideScalar(weights, totalWeight);
         }
 
-        return new Vector<T>(weights);
+        return weights.ToVector();
     }
 
     /// <inheritdoc/>
@@ -313,40 +245,7 @@ public class CoreSetStrategy<T, TInput, TOutput> : IDiversityStrategy<T, TInput,
         }
 
         // Use greedy furthest-first traversal (k-center greedy)
-        var selectedIndices = new List<int>();
-
-        for (int b = 0; b < batchSizeToUse; b++)
-        {
-            T maxMinDistance = NumOps.MinValue;
-            int bestIndex = -1;
-
-            for (int i = 0; i < unlabeledFeatures.Count; i++)
-            {
-                if (selectedIndices.Contains(i))
-                {
-                    continue;
-                }
-
-                // Compute minimum distance to all covered points
-                T minDistance = coveredPoints.Count > 0
-                    ? ComputeMinDistance(unlabeledFeatures[i], coveredPoints)
-                    : NumOps.MaxValue;
-
-                if (NumOps.Compare(minDistance, maxMinDistance) > 0)
-                {
-                    maxMinDistance = minDistance;
-                    bestIndex = i;
-                }
-            }
-
-            if (bestIndex >= 0)
-            {
-                selectedIndices.Add(bestIndex);
-                coveredPoints.Add(unlabeledFeatures[bestIndex]);
-            }
-        }
-
-        return selectedIndices.ToArray();
+        return KCenterGreedy(unlabeledFeatures, coveredPoints, batchSizeToUse);
     }
 
     /// <inheritdoc/>
@@ -354,8 +253,6 @@ public class CoreSetStrategy<T, TInput, TOutput> : IDiversityStrategy<T, TInput,
         IDataset<T, TInput, TOutput> unlabeledData,
         IDataset<T, TInput, TOutput>? labeledData)
     {
-        var scores = new T[unlabeledData.Count];
-
         // Extract features from labeled data
         var labeledFeatures = new List<Vector<T>>();
         if (labeledData != null)
@@ -369,28 +266,22 @@ public class CoreSetStrategy<T, TInput, TOutput> : IDiversityStrategy<T, TInput,
         if (labeledFeatures.Count == 0)
         {
             // No labeled samples yet - all samples get equal high scores
-            for (int i = 0; i < unlabeledData.Count; i++)
-            {
-                scores[i] = NumOps.One;
-            }
-        }
-        else
-        {
-            for (int i = 0; i < unlabeledData.Count; i++)
-            {
-                var feature = GetFeatureRepresentation(unlabeledData.GetInput(i));
-                scores[i] = ComputeMinDistance(feature, labeledFeatures);
-            }
+            return AiDotNetEngine.Current.Fill(unlabeledData.Count, NumOps.One);
         }
 
-        return new Vector<T>(scores);
+        var unlabeledFeatures = new List<Vector<T>>();
+        for (int i = 0; i < unlabeledData.Count; i++)
+        {
+            unlabeledFeatures.Add(GetFeatureRepresentation(unlabeledData.GetInput(i)));
+        }
+
+        return MinDistances(Stack(unlabeledFeatures), Stack(labeledFeatures)).ToVector();
     }
 
     /// <inheritdoc/>
     public Matrix<T> ComputeDistanceMatrix(IDataset<T, TInput, TOutput> dataset)
     {
         int n = dataset.Count;
-        var distances = new Matrix<T>(n, n);
 
         // Extract all features first
         var features = new List<Vector<T>>();
@@ -399,19 +290,16 @@ public class CoreSetStrategy<T, TInput, TOutput> : IDiversityStrategy<T, TInput,
             features.Add(GetFeatureRepresentation(dataset.GetInput(i)));
         }
 
-        // Compute pairwise distances
-        for (int i = 0; i < n; i++)
+        if (n == 0)
         {
-            distances[i, i] = NumOps.Zero;
-            for (int j = i + 1; j < n; j++)
-            {
-                var dist = ComputeDistance(features[i], features[j]);
-                distances[i, j] = dist;
-                distances[j, i] = dist;
-            }
+            return new Matrix<T>(0, 0);
         }
 
-        return distances;
+        // Compute pairwise distances; the diagonal is exactly zero
+        var engine = AiDotNetEngine.Current;
+        var rows = Stack(features);
+        var all = engine.TensorMaskedFill(CrossDistances(rows, rows), ActiveLearningEngineOps.SelfMask(0, n, n), NumOps.Zero);
+        return Matrix<T>.FromMemory(all.ToArray(), n, n);
     }
 
     /// <inheritdoc/>
@@ -508,58 +396,154 @@ public class CoreSetStrategy<T, TInput, TOutput> : IDiversityStrategy<T, TInput,
         return new Vector<T>(new[] { ConvertToNumeric(prediction) });
     }
 
-    private T ComputeMinDistanceToLabeled(Vector<T> feature)
+    /// <summary>
+    /// Greedy furthest-first traversal (k-center greedy): repeatedly selects the sample whose minimum
+    /// distance to the covered points (initial points plus selections) is largest, first index on ties.
+    /// </summary>
+    private int[] KCenterGreedy(List<Vector<T>> unlabeledFeatures, List<Vector<T>>? initialCovered, int batchSize)
     {
-        if (_labeledFeatures == null || _labeledFeatures.Count == 0)
+        int n = unlabeledFeatures.Count;
+        if (n == 0 || batchSize <= 0)
         {
-            return NumOps.MaxValue;
+            return Array.Empty<int>();
         }
 
-        return ComputeMinDistance(feature, _labeledFeatures);
+        var engine = AiDotNetEngine.Current;
+        var rows = Stack(unlabeledFeatures);
+        int dim = rows.Shape[1];
+        var minDistance = initialCovered is { Count: > 0 }
+            ? MinDistances(rows, Stack(initialCovered))
+            : Filled(n, NumOps.MaxValue);
+        var selectedIndices = new List<int>();
+        var isSelected = new bool[n];
+
+        for (int b = 0; b < batchSize; b++)
+        {
+            int bestIndex = ActiveLearningEngineOps.ArgMaxAbove(minDistance.Reshape(new[] { 1, n }), isSelected, NumOps.MinValue);
+            if (bestIndex < 0)
+            {
+                break;
+            }
+
+            selectedIndices.Add(bestIndex);
+            isSelected[bestIndex] = true;
+
+            var newest = engine.TensorSlice(rows, new[] { bestIndex, 0 }, new[] { 1, dim });
+            minDistance = engine.TensorMin(minDistance, CrossDistances(rows, newest).Reshape(new[] { n }));
+        }
+
+        return selectedIndices.ToArray();
     }
 
-    private T ComputeMinDistance(Vector<T> point, List<Vector<T>> coveredPoints)
+    /// <summary>
+    /// Minimum distance from every row of <paramref name="points"/> to the rows of
+    /// <paramref name="covered"/>, capped at MaxValue (the value used when nothing is covered).
+    /// </summary>
+    /// <returns>A [m] tensor.</returns>
+    private Tensor<T> MinDistances(Tensor<T> points, Tensor<T> covered)
     {
-        if (coveredPoints.Count == 0)
+        var engine = AiDotNetEngine.Current;
+        int m = points.Shape[0];
+        int k = covered.Shape[0];
+        if (k == 0)
         {
-            return NumOps.MaxValue;
+            return Filled(m, NumOps.MaxValue);
         }
 
-        T minDist = NumOps.MaxValue;
-
-        foreach (var covered in coveredPoints)
+        int blockRows = ActiveLearningEngineOps.BlockRows(m, (long)k * Math.Max(1, points.Shape[1]));
+        var blocks = new List<Tensor<T>>();
+        for (int start = 0; start < m; start += blockRows)
         {
-            var dist = ComputeDistance(point, covered);
-            if (NumOps.Compare(dist, minDist) < 0)
+            int count = Math.Min(blockRows, m - start);
+            var block = engine.TensorSlice(points, new[] { start, 0 }, new[] { count, points.Shape[1] });
+            blocks.Add(engine.TensorAmin(CrossDistances(block, covered), new[] { 1 }, keepDims: false));
+        }
+
+        var minimum = blocks.Count == 1 ? blocks[0] : engine.TensorConcatenate(blocks.ToArray(), 0);
+        return engine.TensorMin(minimum, NumOps.MaxValue);
+    }
+
+    /// <summary>
+    /// Distances under the configured metric between every row of a [m, d] and a [k, d] tensor.
+    /// </summary>
+    /// <returns>A [m, k] tensor.</returns>
+    private Tensor<T> CrossDistances(Tensor<T> a, Tensor<T> b)
+    {
+        var engine = AiDotNetEngine.Current;
+        int m = a.Shape[0];
+        int k = b.Shape[0];
+        int d = a.Shape[1];
+        if (d != b.Shape[1])
+        {
+            throw new ArgumentException($"Vectors must have the same length. Got {d} and {b.Shape[1]}.", nameof(b));
+        }
+
+        switch (_distanceMetric)
+        {
+            case DistanceMetric.Cosine:
             {
-                minDist = dist;
+                // 1 - clamp(a.b / sqrt(|a|^2 |b|^2), -1, 1); similarity 0 when the denominator is ~0
+                var shape = new[] { m, k };
+                var dot = d == 0 ? new Tensor<T>(shape) : engine.TensorMatMul(a, engine.TensorTranspose(b));
+                var normA = engine.TensorBroadcastTo(SquaredNorms(a).Reshape(new[] { m, 1 }), shape);
+                var normB = engine.TensorBroadcastTo(SquaredNorms(b).Reshape(new[] { 1, k }), shape);
+                var denominator = engine.TensorSqrt(engine.TensorMultiply(normA, normB));
+                var similarity = engine.TensorMax(engine.TensorMin(engine.TensorDivide(dot, denominator), NumOps.One), NumOps.Negate(NumOps.One));
+                var valid = engine.TensorGreaterThan(denominator, CosineEpsilon);
+                similarity = engine.TensorWhere(valid, similarity, new Tensor<T>(shape));
+                return engine.ScalarMinusTensor(NumOps.One, similarity);
             }
-        }
 
-        return minDist;
+            case DistanceMetric.Manhattan:
+            {
+                if (d == 0 || m == 0 || k == 0)
+                {
+                    return new Tensor<T>(new[] { m, k });
+                }
+
+                var shape = new[] { m, k, d };
+                var left = engine.TensorBroadcastTo(a.Reshape(new[] { m, 1, d }), shape);
+                var right = engine.TensorBroadcastTo(b.Reshape(new[] { 1, k, d }), shape);
+                return engine.ReduceSum(engine.TensorAbs(engine.TensorSubtract(left, right)), new[] { 2 }, keepDims: false);
+            }
+
+            default:
+                return engine.TensorSqrt(ActiveLearningEngineOps.SquaredDistances(a, b));
+        }
+    }
+
+    private static Tensor<T> SquaredNorms(Tensor<T> rows)
+    {
+        var engine = AiDotNetEngine.Current;
+        return rows.Shape[1] == 0
+            ? new Tensor<T>(new[] { rows.Shape[0] })
+            : engine.ReduceSum(engine.TensorMultiply(rows, rows), new[] { 1 }, keepDims: false);
     }
 
     private T ComputeDistance(Vector<T> a, Vector<T> b)
     {
-        return _distanceMetric switch
+        if (a.Length != b.Length)
         {
-            DistanceMetric.Euclidean => VectorHelper.EuclideanDistance(a, b),
-            DistanceMetric.Cosine => CosineDistance(a, b),
-            DistanceMetric.Manhattan => ManhattanDistance(a, b),
-            _ => VectorHelper.EuclideanDistance(a, b)
-        };
+            throw new ArgumentException($"Vectors must have the same length. Got {a.Length} and {b.Length}.", nameof(b));
+        }
+
+        var left = Tensor<T>.FromVector(a).Reshape(new[] { 1, a.Length });
+        var right = Tensor<T>.FromVector(b).Reshape(new[] { 1, b.Length });
+        return CrossDistances(left, right).GetFlat(0);
     }
 
-
-    private T CosineDistance(Vector<T> a, Vector<T> b)
+    private static Tensor<T> Stack(List<Vector<T>> features)
     {
-        double similarity = VectorHelper.CosineSimilarity(a, b);
-        return NumOps.FromDouble(1.0 - similarity);
+        return features.Count == 0
+            ? new Tensor<T>(new[] { 0, 0 })
+            : ActiveLearningEngineOps.StackVectors(features);
     }
 
-    private T ManhattanDistance(Vector<T> a, Vector<T> b)
+    private static Tensor<T> Filled(int n, T value)
     {
-        return VectorHelper.ManhattanDistance(a, b);
+        var filled = new Tensor<T>(new[] { n });
+        filled.Fill(value);
+        return filled;
     }
 
     private T ConvertToNumeric(TOutput output)

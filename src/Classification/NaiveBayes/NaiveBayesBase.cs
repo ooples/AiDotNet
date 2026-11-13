@@ -97,12 +97,10 @@ public abstract partial class NaiveBayesBase<T> : ProbabilisticClassifierBase<T>
         TaskType = InferTaskType(y);
 
         // Compute class counts and priors
-        ClassCounts = new int[NumClasses];
-        for (int i = 0; i < y.Length; i++)
-        {
-            int classIdx = GetClassIndex(y[i]);
-            ClassCounts[classIdx]++;
-        }
+        var classIndices = GetClassIndexTensor(y);
+        ClassCounts = y.Length == 0
+            ? new int[NumClasses]
+            : Engine.TensorBinCount(classIndices, NumClasses).ToArray();
 
         // Compute log priors
         ComputeLogPriors(y.Length);
@@ -117,33 +115,30 @@ public abstract partial class NaiveBayesBase<T> : ProbabilisticClassifierBase<T>
     /// <param name="totalSamples">Total number of training samples.</param>
     protected virtual void ComputeLogPriors(int totalSamples)
     {
-        LogPriors = new Vector<T>(NumClasses);
-
+        var engine = Engine;
         if (Options.ClassPriors != null && Options.ClassPriors.Length == NumClasses)
         {
             // Use custom priors
+            var priors = new Vector<T>(NumClasses);
             for (int c = 0; c < NumClasses; c++)
             {
-                LogPriors[c] = NumOps.Log(NumOps.FromDouble(Options.ClassPriors[c]));
+                priors[c] = NumOps.FromDouble(Options.ClassPriors[c]);
             }
+
+            LogPriors = NumClasses == 0 ? priors : engine.TensorLog(priors.AsTensor()).ToVector();
         }
         else if (Options.FitPriors && ClassCounts != null)
         {
-            // Learn priors from data
-            for (int c = 0; c < NumClasses; c++)
-            {
-                double prior = (double)ClassCounts[c] / totalSamples;
-                LogPriors[c] = NumOps.Log(NumOps.FromDouble(prior));
-            }
+            // Learn priors from data: log(count / total)
+            var counts = ClassIndicesToValues(new Tensor<int>(ClassCounts, new[] { ClassCounts.Length }), totalSamples + 1);
+            LogPriors = counts.Length == 0
+                ? new Vector<T>(0)
+                : engine.TensorLog(engine.TensorDivideScalar(counts.AsTensor(), NumOps.FromDouble(totalSamples))).ToVector();
         }
         else
         {
             // Use uniform priors
-            T uniformLogPrior = NumOps.Log(NumOps.FromDouble(1.0 / NumClasses));
-            for (int c = 0; c < NumClasses; c++)
-            {
-                LogPriors[c] = uniformLogPrior;
-            }
+            LogPriors = FilledVector(NumClasses, NumOps.Log(NumOps.FromDouble(1.0 / NumClasses)));
         }
     }
 
@@ -165,34 +160,19 @@ public abstract partial class NaiveBayesBase<T> : ProbabilisticClassifierBase<T>
     /// <returns>A matrix of log-probabilities.</returns>
     public override Matrix<T> PredictLogProbabilities(Matrix<T> input)
     {
-        var logProbs = new Matrix<T>(input.Rows, NumClasses);
-
-        for (int i = 0; i < input.Rows; i++)
+        if (LogPriors is null)
         {
-            // Extract the row as a vector
-            var sample = new Vector<T>(input.Columns);
-            for (int j = 0; j < input.Columns; j++)
-            {
-                sample[j] = input[i, j];
-            }
-
-            // Compute unnormalized log probabilities
-            var unnormalizedLogProbs = new Vector<T>(NumClasses);
-            for (int c = 0; c < NumClasses; c++)
-            {
-                // log P(class) + log P(features|class)
-                unnormalizedLogProbs[c] = NumOps.Add((LogPriors ?? throw new InvalidOperationException("LogPriors has not been initialized."))[c], ComputeLogLikelihood(sample, c));
-            }
-
-            // Normalize using log-sum-exp trick
-            T logSum = LogSumExp(unnormalizedLogProbs);
-            for (int c = 0; c < NumClasses; c++)
-            {
-                logProbs[i, c] = NumOps.Subtract(unnormalizedLogProbs[c], logSum);
-            }
+            throw new InvalidOperationException("LogPriors has not been initialized.");
         }
 
-        return logProbs;
+        if (input.Rows == 0 || NumClasses == 0)
+        {
+            return new Matrix<T>(input.Rows, NumClasses);
+        }
+
+        // log P(class) + log P(features|class), normalized with log-sum-exp
+        var unnormalized = Engine.TensorAdd(ComputeLogLikelihoods(input), LogPriors.AsTensor().Reshape(1, NumClasses));
+        return Engine.TensorLogSoftmax(unnormalized, 1).ToMatrix();
     }
 
     /// <summary>
@@ -203,17 +183,95 @@ public abstract partial class NaiveBayesBase<T> : ProbabilisticClassifierBase<T>
     public override Matrix<T> PredictProbabilities(Matrix<T> input)
     {
         var logProbs = PredictLogProbabilities(input);
-        var probs = new Matrix<T>(input.Rows, NumClasses);
+        if (logProbs.Rows == 0 || logProbs.Columns == 0)
+        {
+            return new Matrix<T>(input.Rows, NumClasses);
+        }
 
+        return Engine.TensorExp(Tensor<T>.FromMatrix(logProbs)).ToMatrix();
+    }
+
+    /// <summary>
+    /// Computes log P(features | class) for every sample and class as an [input.Rows, NumClasses] tensor.
+    /// </summary>
+    /// <param name="input">The samples.</param>
+    /// <returns>The per-sample, per-class log-likelihoods.</returns>
+    /// <remarks>
+    /// The default evaluates <see cref="ComputeLogLikelihood"/> sample by sample; derived classes override
+    /// this with a whole-batch computation.
+    /// </remarks>
+    private protected virtual Tensor<T> ComputeLogLikelihoods(Matrix<T> input)
+    {
+        return PerSampleLogLikelihoods(input);
+    }
+
+    /// <summary>
+    /// For every sample and class, sums table[class, feature, choices[sample, feature]] over the features.
+    /// </summary>
+    /// <param name="choices">The [samples, features] chosen entries, each in [0, choicesPerFeature).</param>
+    /// <param name="table">The [classes, features, choicesPerFeature] log-probability table.</param>
+    /// <param name="choicesPerFeature">The number of entries per feature in <paramref name="table"/>.</param>
+    /// <returns>The [samples, classes] sums.</returns>
+    private protected Tensor<T> SumSelectedLogProbabilities(Tensor<int> choices, Tensor<T> table, int choicesPerFeature)
+    {
+        var engine = Engine;
+        int n = choices.Shape[0];
+        int features = choices.Shape[1];
+        if (n == 0 || NumClasses == 0 || features == 0)
+        {
+            return new Tensor<T>(new[] { n, NumClasses });
+        }
+
+        // Flat table index: (class * features + feature) * choicesPerFeature + choice
+        var flatTable = table.Reshape(NumClasses * features * choicesPerFeature);
+        var featureOffsets = engine.TensorMultiplyScalar(engine.TensorArange<int>(0, features), choicesPerFeature)
+            .Reshape(1, 1, features);
+        var classOffsets = engine.TensorMultiplyScalar(engine.TensorArange<int>(0, NumClasses), features * choicesPerFeature)
+            .Reshape(1, NumClasses, 1);
+        var offsets = engine.TensorAdd(classOffsets, featureOffsets);
+
+        int batch = Math.Max(1, (1 << 22) / Math.Max(1, NumClasses * features));
+        var blocks = new List<Tensor<T>>();
+        for (int start = 0; start < n; start += batch)
+        {
+            int rows = Math.Min(batch, n - start);
+            var index = engine.TensorAdd(choices.Slice(0, start, start + rows).Reshape(rows, 1, features), offsets);
+            var selected = engine.TensorGather(flatTable, index.Reshape(rows * NumClasses * features), 0)
+                .Reshape(rows, NumClasses, features);
+            blocks.Add(engine.ReduceSum(selected, new[] { 2 }, false));
+        }
+
+        return blocks.Count == 1 ? blocks[0] : engine.TensorConcatenate(blocks.ToArray(), 0);
+    }
+
+    /// <summary>
+    /// log P(sample | class) through the batched <see cref="ComputeLogLikelihoods"/> on a single row.
+    /// </summary>
+    /// <param name="sample">The sample's features.</param>
+    /// <param name="classIndex">The class index.</param>
+    /// <returns>The log-likelihood.</returns>
+    private protected T SingleSampleLogLikelihood(Vector<T> sample, int classIndex)
+    {
+        var row = sample.AsTensor().Reshape(1, sample.Length).ToMatrix();
+        return ComputeLogLikelihoods(row)[0, classIndex];
+    }
+
+    /// <summary>
+    /// Evaluates <see cref="ComputeLogLikelihood"/> sample by sample (for derived classes without a batch form).
+    /// </summary>
+    private Tensor<T> PerSampleLogLikelihoods(Matrix<T> input)
+    {
+        var values = new T[input.Rows * NumClasses];
         for (int i = 0; i < input.Rows; i++)
         {
+            var sample = input.GetRow(i);
             for (int c = 0; c < NumClasses; c++)
             {
-                probs[i, c] = NumOps.Exp(logProbs[i, c]);
+                values[i * NumClasses + c] = ComputeLogLikelihood(sample, c);
             }
         }
 
-        return probs;
+        return new Tensor<T>(values, new[] { input.Rows, NumClasses });
     }
 
     /// <summary>
@@ -231,24 +289,11 @@ public abstract partial class NaiveBayesBase<T> : ProbabilisticClassifierBase<T>
     /// <returns>log(sum(exp(values))).</returns>
     protected T LogSumExp(Vector<T> values)
     {
-        // Find max for numerical stability
-        T max = values[0];
-        for (int i = 1; i < values.Length; i++)
-        {
-            if (NumOps.Compare(values[i], max) > 0)
-            {
-                max = values[i];
-            }
-        }
-
-        // Compute sum of exp(x - max)
-        T sum = NumOps.Zero;
-        for (int i = 0; i < values.Length; i++)
-        {
-            sum = NumOps.Add(sum, NumOps.Exp(NumOps.Subtract(values[i], max)));
-        }
-
-        // Return max + log(sum)
+        // max + log(sum(exp(x - max))) for numerical stability
+        var engine = Engine;
+        var tensor = values.AsTensor();
+        T max = engine.TensorMaxValue(tensor);
+        T sum = engine.TensorSum(engine.TensorExp(engine.TensorSubtractScalar(tensor, max)));
         return NumOps.Add(max, NumOps.Log(sum));
     }
 
@@ -264,15 +309,13 @@ public abstract partial class NaiveBayesBase<T> : ProbabilisticClassifierBase<T>
             throw new InvalidOperationException("Model must be trained before getting class index.");
         }
 
-        for (int i = 0; i < ClassLabels.Length; i++)
+        int index = GetClassIndexFromLabel(label);
+        if (index < 0)
         {
-            if (NumOps.Compare(ClassLabels[i], label) == 0)
-            {
-                return i;
-            }
+            throw new ArgumentException($"Label {label} not found in class labels.");
         }
 
-        throw new ArgumentException($"Label {label} not found in class labels.");
+        return index;
     }
 
     /// <inheritdoc/>
@@ -309,11 +352,7 @@ public abstract partial class NaiveBayesBase<T> : ProbabilisticClassifierBase<T>
         {
             throw new ArgumentException($"Expected {NumClasses} parameters, got {parameters.Length}");
         }
-        LogPriors = new Vector<T>(parameters.Length);
-        for (int i = 0; i < parameters.Length; i++)
-        {
-            LogPriors[i] = parameters[i];
-        }
+        LogPriors = Vector<T>.Wrap(parameters.ToArray());
     }
 
     /// <inheritdoc/>

@@ -98,85 +98,106 @@ public partial class CategoricalNaiveBayes<T> : NaiveBayesBase<T>
             throw new InvalidOperationException("ClassLabels must be set before computing class parameters.");
         }
 
-        // Determine number of categories per feature
-        _numCategories = new int[NumFeatures];
-        for (int j = 0; j < NumFeatures; j++)
+        var engine = Engine;
+        var features = Tensor<T>.FromMatrix(x);
+        if (x.Columns != NumFeatures)
         {
-            int maxCategory = 0;
-            for (int i = 0; i < x.Rows; i++)
-            {
-                int category = (int)NumOps.ToDouble(x[i, j]);
-                if (category > maxCategory)
-                {
-                    maxCategory = category;
-                }
-            }
-            _numCategories[j] = maxCategory + 1; // Categories are 0-indexed
+            features = features.Slice(1, 0, NumFeatures);
         }
 
-        // Initialize category log probabilities
-        _categoryLogProbs = new Matrix<T>[NumClasses];
-        int maxCats = 0;
-        for (int j = 0; j < NumFeatures; j++)
+        // Determine number of categories per feature: floor(max value) + 1 (categories are 0-indexed, at least one)
+        int largestCategory = 0;
+        if (x.Rows > 0 && NumFeatures > 0)
         {
-            if (_numCategories[j] > maxCats)
-            {
-                maxCats = _numCategories[j];
-            }
+            largestCategory = Math.Max(0, (int)NumOps.ToDouble(engine.TensorMaxValue(features)));
+            var columnMax = engine.ReduceMax(features, new[] { 0 }, false);
+            _numCategories = engine.TensorAddScalar(
+                engine.TensorClampMin(CategoryIndices(columnMax, largestCategory), 0), 1).ToArray();
         }
+        else
+        {
+            _numCategories = Enumerable.Repeat(1, NumFeatures).ToArray();
+        }
+
+        int maxCats = NumFeatures == 0 ? 0 : _numCategories.Max();
+        int width = maxCats + 1; // extra slot collects invalid (negative) categories
+
+        // Count category occurrences per class and feature with one scatter-add
+        T alpha = NumOps.FromDouble(Options.Alpha);
+        var counts = new Tensor<T>(new[] { NumClasses * NumFeatures * width });
+        if (x.Rows > 0 && NumFeatures > 0 && NumClasses > 0)
+        {
+            var choices = CategoryChoices(features, largestCategory, maxCats);
+            var classOffsets = engine.TensorMultiplyScalar(GetClassIndexTensor(y), NumFeatures * width).Reshape(x.Rows, 1);
+            var featureOffsets = engine.TensorMultiplyScalar(engine.TensorArange<int>(0, NumFeatures), width).Reshape(1, NumFeatures);
+            var codes = engine.TensorAdd(engine.TensorAdd(choices, classOffsets), featureOffsets).Reshape(x.Rows * NumFeatures);
+            var ones = new Tensor<T>(new[] { x.Rows * NumFeatures });
+            engine.TensorFill(ones, NumOps.One);
+            counts = engine.TensorScatterAdd(counts, codes, ones, 0);
+        }
+
+        // P(category | class) = (count + alpha) / (class_count + alpha * num_categories); unused slots stay 0
+        var categoryCounts = counts.Reshape(NumClasses, NumFeatures, width).Slice(2, 0, maxCats);
+        var classCounts = ClassIndicesToValues(new Tensor<int>(ClassCounts ?? new int[NumClasses], new[] { NumClasses }), y.Length + 1);
+        var numCats = ClassIndicesToValues(new Tensor<int>(_numCategories, new[] { NumFeatures }), maxCats + 1);
+        var denominators = engine.TensorAdd(
+            classCounts.Length == 0 ? new Tensor<T>(new[] { 0, 1, 1 }) : classCounts.AsTensor().Reshape(NumClasses, 1, 1),
+            numCats.Length == 0
+                ? new Tensor<T>(new[] { 1, 0, 1 })
+                : engine.TensorMultiplyScalar(numCats.AsTensor(), alpha).Reshape(1, NumFeatures, 1));
+        var logProbs = engine.TensorLog(engine.TensorDivide(engine.TensorAddScalar(categoryCounts, alpha), denominators));
+        var zeros = new Tensor<T>(new[] { NumClasses, NumFeatures, maxCats });
+        var used = engine.TensorAdd(zeros, UsedCategorySlots(maxCats).Reshape(1, NumFeatures, maxCats));
+        var table = engine.TensorWhere(used, logProbs, zeros);
+
+        // Category log probabilities per class: [NumFeatures, maxCats]
+        _categoryLogProbs = new Matrix<T>[NumClasses];
         for (int c = 0; c < NumClasses; c++)
         {
-            _categoryLogProbs[c] = new Matrix<T>(NumFeatures, maxCats);
+            _categoryLogProbs[c] = table.Slice(0, c, c + 1).Reshape(NumFeatures, maxCats).ToMatrix();
         }
+    }
 
-        T alpha = NumOps.FromDouble(Options.Alpha);
+    /// <summary>
+    /// floor(value) for values in [0, limit), -1 below zero and limit at or above limit.
+    /// </summary>
+    private Tensor<int> CategoryIndices(Tensor<T> values, int limit)
+    {
+        var boundaries = Engine.TensorArange<T>(0, limit + 1);
+        return Engine.TensorSubtractScalar(Engine.TensorSearchSorted(boundaries, values, true), 1);
+    }
 
-        // Compute parameters for each class
-        for (int classIndex = 0; classIndex < NumClasses; classIndex++)
+    /// <summary>
+    /// The table slot of every value: its category, or <paramref name="invalidSlot"/> for categories that are
+    /// negative or not below <paramref name="invalidSlot"/>.
+    /// </summary>
+    private Tensor<int> CategoryChoices(Tensor<T> values, int limit, int invalidSlot)
+    {
+        var engine = Engine;
+        var categories = engine.TensorClampMax(CategoryIndices(values, Math.Max(limit, invalidSlot)), invalidSlot);
+        var negative = engine.TensorLessThan(categories, 0);
+        return engine.TensorAdd(categories, engine.TensorMultiplyScalar(negative, invalidSlot + 1));
+    }
+
+    /// <summary>
+    /// [NumFeatures, maxCats] 1 where category k exists for feature j (k &lt; num_categories[j]), otherwise 0.
+    /// </summary>
+    private Tensor<T> UsedCategorySlots(int maxCats)
+    {
+        var flags = new int[NumFeatures * maxCats];
+        if (_numCategories is not null)
         {
-            T classLabel = ClassLabels[classIndex];
-
-            // Count samples in this class
-            int classCount = 0;
-            for (int i = 0; i < y.Length; i++)
-            {
-                if (NumOps.Compare(y[i], classLabel) == 0)
-                {
-                    classCount++;
-                }
-            }
-
-            T classCountT = NumOps.FromDouble(classCount);
-
-            // For each feature, count category occurrences
             for (int j = 0; j < NumFeatures; j++)
             {
-                int numCats = _numCategories[j];
-                var categoryCounts = new int[numCats];
-
-                for (int i = 0; i < x.Rows; i++)
+                for (int k = 0; k < _numCategories[j] && k < maxCats; k++)
                 {
-                    if (NumOps.Compare(y[i], classLabel) == 0)
-                    {
-                        int category = (int)NumOps.ToDouble(x[i, j]);
-                        if (category >= 0 && category < numCats)
-                        {
-                            categoryCounts[category]++;
-                        }
-                    }
-                }
-
-                // Compute log probability for each category with Laplace smoothing
-                // P(category | class) = (count + alpha) / (class_count + alpha * num_categories)
-                T denominator = NumOps.Add(classCountT, NumOps.Multiply(alpha, NumOps.FromDouble(numCats)));
-
-                for (int k = 0; k < numCats; k++)
-                {
-                    T numerator = NumOps.Add(NumOps.FromDouble(categoryCounts[k]), alpha);
-                    _categoryLogProbs[classIndex][j, k] = NumOps.Log(NumOps.Divide(numerator, denominator));
+                    flags[j * maxCats + k] = 1;
                 }
             }
         }
+
+        return Engine.TensorGather(Engine.TensorArange<T>(0, 2), new Tensor<int>(flags, new[] { flags.Length }), 0)
+            .Reshape(NumFeatures, maxCats);
     }
 
     /// <summary>
@@ -184,24 +205,44 @@ public partial class CategoricalNaiveBayes<T> : NaiveBayesBase<T>
     /// </summary>
     protected override T ComputeLogLikelihood(Vector<T> sample, int classIndex)
     {
+        return SingleSampleLogLikelihood(sample, classIndex);
+    }
+
+    /// <inheritdoc/>
+    private protected override Tensor<T> ComputeLogLikelihoods(Matrix<T> input)
+    {
         if (_numCategories is null || _categoryLogProbs is null)
         {
             throw new InvalidOperationException("Model has not been trained.");
         }
 
-        T logLikelihood = NumOps.Zero;
-
-        for (int j = 0; j < NumFeatures; j++)
+        if (input.Rows == 0 || NumClasses == 0 || NumFeatures == 0)
         {
-            int category = (int)NumOps.ToDouble(sample[j]);
-            if (category >= 0 && category < _numCategories[j])
-            {
-                logLikelihood = NumOps.Add(logLikelihood, _categoryLogProbs[classIndex][j, category]);
-            }
-            // Unknown categories contribute 0 (log(1) = 0)
+            return new Tensor<T>(new[] { input.Rows, NumClasses });
         }
 
-        return logLikelihood;
+        // Sum the log probability of each feature's category; unknown categories contribute 0 (log(1) = 0)
+        var engine = Engine;
+        var features = Tensor<T>.FromMatrix(input);
+        if (input.Columns != NumFeatures)
+        {
+            features = features.Slice(1, 0, NumFeatures);
+        }
+
+        int maxCats = _categoryLogProbs[0].Columns;
+        var perClass = new Tensor<T>[NumClasses];
+        for (int c = 0; c < NumClasses; c++)
+        {
+            perClass[c] = Tensor<T>.FromMatrix(_categoryLogProbs[c]);
+        }
+
+        // Slot maxCats is zero and absorbs negative or too-large categories
+        var table = engine.TensorConcatenate(new[]
+        {
+            engine.TensorStack(perClass, 0),
+            new Tensor<T>(new[] { NumClasses, NumFeatures, 1 })
+        }, 2);
+        return SumSelectedLogProbabilities(CategoryChoices(features, maxCats, maxCats), table, maxCats + 1);
     }
 
     /// <inheritdoc/>
@@ -218,35 +259,11 @@ public partial class CategoricalNaiveBayes<T> : NaiveBayesBase<T>
 
     private void SerializeMatrix(Dictionary<string, object> data, string name, Matrix<T>? matrix)
     {
-        if (matrix is null) return;
-        var arr = new double[matrix.Rows * matrix.Columns];
-        int idx = 0;
-        for (int i = 0; i < matrix.Rows; i++)
-            for (int j = 0; j < matrix.Columns; j++)
-                arr[idx++] = NumOps.ToDouble(matrix[i, j]);
-        data[name] = arr;
-        data[$"{name}Rows"] = matrix.Rows;
-        data[$"{name}Cols"] = matrix.Columns;
+        SerializeMatrixValues(data, name, matrix);
     }
 
     private Matrix<T>? DeserializeMatrix(JObject obj, string name)
     {
-        var token = obj[name];
-        if (token is null) return null;
-        var arr = token.ToObject<double[]>() ?? Array.Empty<double>();
-        int rows = obj[$"{name}Rows"]?.ToObject<int>() ?? 0;
-        int cols = obj[$"{name}Cols"]?.ToObject<int>() ?? 0;
-        if (rows <= 0 || cols <= 0) return null;
-        if (arr.Length < rows * cols)
-        {
-            throw new InvalidOperationException(
-                $"Deserialization failed: {name} array length {arr.Length} is less than expected {rows}x{cols}={rows * cols}.");
-        }
-        var matrix = new Matrix<T>(rows, cols);
-        int idx = 0;
-        for (int i = 0; i < rows; i++)
-            for (int j = 0; j < cols; j++)
-                matrix[i, j] = NumOps.FromDouble(arr[idx++]);
-        return matrix;
+        return DeserializeMatrixValues(obj, name);
     }
 }

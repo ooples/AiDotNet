@@ -94,21 +94,10 @@ public class RandomSampling<T> : IActiveLearningStrategy<T>
         // ensuring consistency: SelectSamples(k=1) result appears in SelectSamples(k=5).
         var scores = ComputeInformativenessScores(model, unlabeledPool);
 
-        // Select top-scoring indices
-        var indexedScores = new (int index, T score)[numSamples];
-        for (int i = 0; i < numSamples; i++)
-            indexedScores[i] = (i, scores[i]);
-
-        Array.Sort(indexedScores, (a, b) =>
-        {
-            if (_numOps.GreaterThan(a.score, b.score)) return -1;
-            if (_numOps.GreaterThan(b.score, a.score)) return 1;
-            return 0;
-        });
-
+        // Select top-scoring indices (descending, ties in pool order)
+        var order = ActiveLearningEngineOps.StableOrder(Tensor<T>.FromVector(scores), descending: true);
         var result = new int[batchSize];
-        for (int i = 0; i < batchSize; i++)
-            result[i] = indexedScores[i].index;
+        Array.Copy(order, result, batchSize);
 
         return result;
     }
@@ -169,19 +158,6 @@ public class RandomSampling<T> : IActiveLearningStrategy<T>
     {
         if (scores.Length == 0) return;
 
-        _lastMinScore = scores[0];
-        _lastMaxScore = scores[0];
-        var sum = _numOps.Zero;
-
-        for (int i = 0; i < scores.Length; i++)
-        {
-            if (_numOps.LessThan(scores[i], _lastMinScore))
-                _lastMinScore = scores[i];
-            if (_numOps.GreaterThan(scores[i], _lastMaxScore))
-                _lastMaxScore = scores[i];
-            sum = _numOps.Add(sum, scores[i]);
-        }
-
-        _lastMeanScore = _numOps.Divide(sum, _numOps.FromDouble(scores.Length));
+        (_lastMinScore, _lastMaxScore, _lastMeanScore) = ActiveLearningEngineOps.Statistics(scores);
     }
 }

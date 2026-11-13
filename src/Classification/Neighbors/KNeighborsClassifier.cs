@@ -120,20 +120,8 @@ public partial class KNeighborsClassifier<T> : ProbabilisticClassifierBase<T>
         TaskType = InferTaskType(y);
 
         // Store training data
-        _xTrain = new Matrix<T>(x.Rows, x.Columns);
-        for (int i = 0; i < x.Rows; i++)
-        {
-            for (int j = 0; j < x.Columns; j++)
-            {
-                _xTrain[i, j] = x[i, j];
-            }
-        }
-
-        _yTrain = new Vector<T>(y.Length);
-        for (int i = 0; i < y.Length; i++)
-        {
-            _yTrain[i] = y[i];
-        }
+        _xTrain = x.Clone();
+        _yTrain = y.Clone();
     }
 
     /// <inheritdoc/>
@@ -144,215 +132,164 @@ public partial class KNeighborsClassifier<T> : ProbabilisticClassifierBase<T>
             throw new InvalidOperationException("Model must be trained before prediction.");
         }
 
-        var probabilities = new Matrix<T>(input.Rows, NumClasses);
-
-        for (int i = 0; i < input.Rows; i++)
+        if (input.Rows == 0 || NumClasses == 0)
         {
-            var sample = new Vector<T>(input.Columns);
-            for (int j = 0; j < input.Columns; j++)
-            {
-                sample[j] = input[i, j];
-            }
-
-            var probs = PredictSampleProbabilities(sample);
-            for (int c = 0; c < NumClasses; c++)
-            {
-                probabilities[i, c] = probs[c];
-            }
+            return new Matrix<T>(input.Rows, NumClasses);
         }
 
-        return probabilities;
+        // Process query rows in blocks so the [rows, train, features] distance tensor stays bounded
+        int perRow = Math.Max(1, _xTrain.Rows * Math.Max(1, _xTrain.Columns));
+        int batch = Math.Max(1, (1 << 22) / perRow);
+        var queries = Tensor<T>.FromMatrix(input);
+        var blocks = new List<Tensor<T>>();
+        for (int start = 0; start < input.Rows; start += batch)
+        {
+            int rows = Math.Min(batch, input.Rows - start);
+            blocks.Add(PredictBlockProbabilities(queries.Slice(0, start, start + rows)));
+        }
+
+        var probabilities = blocks.Count == 1 ? blocks[0] : Engine.TensorConcatenate(blocks.ToArray(), 0);
+        return probabilities.ToMatrix();
     }
 
     /// <summary>
-    /// Predicts class probabilities for a single sample.
+    /// Predicts class probabilities for a block of query rows.
     /// </summary>
-    private Vector<T> PredictSampleProbabilities(Vector<T> sample)
+    private Tensor<T> PredictBlockProbabilities(Tensor<T> queries)
     {
         var xTrain = _xTrain ?? throw new InvalidOperationException("_xTrain has not been initialized.");
         var yTrain = _yTrain ?? throw new InvalidOperationException("_yTrain has not been initialized.");
+        var engine = Engine;
 
+        int rows = queries.Shape[0];
         int n = xTrain.Rows;
-        int d = xTrain.Columns;
 
-        // Compute distances to all training samples, reusing a single vector
-        var distArray = new double[n];
-        var trainRow = new Vector<T>(d);
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < d; j++)
-                trainRow[j] = xTrain[i, j];
-            distArray[i] = NumOps.ToDouble(ComputeDistance(sample, trainRow));
-        }
-
-        // Partial sort: find k nearest using selection rather than full sort
+        // Distances to all training samples, then the k nearest
+        var distances = ComputeDistances(queries, Tensor<T>.FromMatrix(xTrain));
         int k = Math.Min(Options.NNeighbors, n);
-        var indices = new int[n];
-        for (int i = 0; i < n; i++) indices[i] = i;
+        var nearestIndices = SelectNearest(distances, k);
+        var nearestDistances = engine.TensorTakeAlongDim(distances, nearestIndices, 1);
+        var nearest = nearestIndices.Reshape(rows * k);
 
-        // Simple partial sort: find top-k smallest distances
-        for (int i = 0; i < k; i++)
-        {
-            int minIdx = i;
-            for (int j = i + 1; j < n; j++)
-                if (distArray[indices[j]] < distArray[indices[minIdx]])
-                    minIdx = j;
-            if (minIdx != i)
-                (indices[i], indices[minIdx]) = (indices[minIdx], indices[i]);
-        }
+        // Compute weighted votes: sum of weights of the neighbors of each class
+        var neighborClasses = engine.TensorGather(GetClassIndexTensor(yTrain), nearest, 0);
+        var oneHot = engine.TensorOneHot<T>(neighborClasses, NumClasses).Reshape(rows, k, NumClasses);
+        var weights = GetWeights(nearestDistances).Reshape(rows, k, 1);
+        var classVotes = engine.ReduceSum(engine.TensorMultiply(oneHot, weights), new[] { 1 }, false);
 
-        var sortedDistances = new List<(T distance, int index)>(k);
-        for (int i = 0; i < k; i++)
-            sortedDistances.Add((NumOps.FromDouble(distArray[indices[i]]), indices[i]));
-
-        // Compute weighted votes
-        var classVotes = new T[NumClasses];
-        for (int c = 0; c < NumClasses; c++)
-        {
-            classVotes[c] = NumOps.Zero;
-        }
-
-        foreach (var (distance, index) in sortedDistances)
-        {
-            int classIdx = GetClassIndex(yTrain[index]);
-            T weight = GetWeight(distance);
-            classVotes[classIdx] = NumOps.Add(classVotes[classIdx], weight);
-        }
-
-        // Normalize to probabilities
-        T totalWeight = NumOps.Zero;
-        for (int c = 0; c < NumClasses; c++)
-        {
-            totalWeight = NumOps.Add(totalWeight, classVotes[c]);
-        }
-
-        var probabilities = new Vector<T>(NumClasses);
-        for (int c = 0; c < NumClasses; c++)
-        {
-            if (NumOps.Compare(totalWeight, NumOps.Zero) > 0)
-            {
-                probabilities[c] = NumOps.Divide(classVotes[c], totalWeight);
-            }
-            else
-            {
-                probabilities[c] = NumOps.FromDouble(1.0 / NumClasses);
-            }
-        }
-
-        return probabilities;
+        // Normalize to probabilities (uniform when the total weight is not positive)
+        var totalWeight = engine.ReduceSum(classVotes, new[] { 1 }, true);
+        var hasWeight = engine.TensorGreaterThan(totalWeight, NumOps.Zero);
+        var uniform = new Tensor<T>(new[] { rows, NumClasses });
+        engine.TensorFill(uniform, NumOps.FromDouble(1.0 / NumClasses));
+        var normalized = engine.TensorDivide(classVotes, totalWeight);
+        var condition = engine.TensorAdd(new Tensor<T>(new[] { rows, NumClasses }), hasWeight);
+        return engine.TensorWhere(condition, normalized, uniform);
     }
 
     /// <summary>
-    /// Computes the distance between two samples based on the configured metric.
+    /// The [rows, k] indices of the k nearest training samples per row, in the order of a partial selection
+    /// sort: at step i the first strictly smallest remaining distance (in the current arrangement) is swapped
+    /// into position i. Ties are therefore resolved exactly as the per-sample selection loop resolved them.
     /// </summary>
-    private T ComputeDistance(Vector<T> a, Vector<T> b)
+    private Tensor<int> SelectNearest(Tensor<T> distances, int k)
     {
+        var engine = Engine;
+        int rows = distances.Shape[0];
+        int n = distances.Shape[1];
+        var arrangement = new int[rows * n];
+        for (int r = 0; r < rows; r++)
+        {
+            for (int j = 0; j < n; j++)
+            {
+                arrangement[r * n + j] = j;
+            }
+        }
+
+        for (int i = 0; i < k; i++)
+        {
+            // Distances in the current arrangement from position i on; argmin returns the first minimum
+            var order = new Tensor<int>(arrangement, new[] { rows, n }).Slice(1, i, n);
+            var remaining = engine.TensorTakeAlongDim(distances, order, 1);
+            var minPositions = engine.TensorArgMin(remaining, 1).ToArray();
+            for (int r = 0; r < rows; r++)
+            {
+                int minIdx = i + minPositions[r];
+                if (minIdx != i)
+                {
+                    (arrangement[r * n + i], arrangement[r * n + minIdx]) = (arrangement[r * n + minIdx], arrangement[r * n + i]);
+                }
+            }
+        }
+
+        return new Tensor<int>(arrangement, new[] { rows, n }).Slice(1, 0, k);
+    }
+
+    /// <summary>
+    /// Computes the [queries, train] distances between every query and training sample for the configured metric.
+    /// </summary>
+    private Tensor<T> ComputeDistances(Tensor<T> queries, Tensor<T> train)
+    {
+        var engine = Engine;
+        int rows = queries.Shape[0];
+        int n = train.Shape[0];
+        int d = train.Shape[1];
+
+        if (Options.Metric == DistanceMetric.Cosine)
+        {
+            return ComputeCosineDistances(queries, train);
+        }
+
+        var diff = engine.TensorSubtract(queries.Reshape(rows, 1, d), train.Reshape(1, n, d));
+        int[] featureAxis = { 2 };
         return Options.Metric switch
         {
-            DistanceMetric.Euclidean => VectorHelper.EuclideanDistance(a, b),
-            DistanceMetric.Manhattan => ComputeManhattanDistance(a, b),
-            DistanceMetric.Minkowski => ComputeMinkowskiDistance(a, b, Options.P),
-            DistanceMetric.Chebyshev => ComputeChebyshevDistance(a, b),
-            DistanceMetric.Cosine => ComputeCosineDistance(a, b),
-            _ => VectorHelper.EuclideanDistance(a, b)
-        };
-    }
-
-
-    /// <summary>
-    /// Computes Manhattan (L1) distance.
-    /// </summary>
-    private T ComputeManhattanDistance(Vector<T> a, Vector<T> b)
-    {
-        return VectorHelper.ManhattanDistance(a, b);
-    }
-
-    /// <summary>
-    /// Computes Minkowski distance with parameter p.
-    /// </summary>
-    private T ComputeMinkowskiDistance(Vector<T> a, Vector<T> b, double p)
-    {
-        T sum = NumOps.Zero;
-        for (int i = 0; i < a.Length; i++)
-        {
-            T diff = NumOps.Abs(NumOps.Subtract(a[i], b[i]));
-            sum = NumOps.Add(sum, NumOps.Power(diff, NumOps.FromDouble(p)));
-        }
-        return NumOps.Power(sum, NumOps.FromDouble(1.0 / p));
-    }
-
-    /// <summary>
-    /// Computes Chebyshev (L-infinity) distance.
-    /// </summary>
-    private T ComputeChebyshevDistance(Vector<T> a, Vector<T> b)
-    {
-        T maxDiff = NumOps.Zero;
-        for (int i = 0; i < a.Length; i++)
-        {
-            T diff = NumOps.Abs(NumOps.Subtract(a[i], b[i]));
-            if (NumOps.Compare(diff, maxDiff) > 0)
-            {
-                maxDiff = diff;
-            }
-        }
-        return maxDiff;
-    }
-
-    /// <summary>
-    /// Computes cosine distance (1 - cosine similarity).
-    /// </summary>
-    private T ComputeCosineDistance(Vector<T> a, Vector<T> b)
-    {
-        double similarity = VectorHelper.CosineSimilarity(a, b);
-        return NumOps.FromDouble(1.0 - similarity);
-    }
-
-    /// <summary>
-    /// Gets the weight for a neighbor based on the weighting scheme.
-    /// </summary>
-    private T GetWeight(T distance)
-    {
-        return Options.Weights switch
-        {
-            WeightingScheme.Uniform => NumOps.One,
-            WeightingScheme.Distance => GetDistanceWeight(distance),
-            _ => NumOps.One
+            DistanceMetric.Manhattan => engine.ReduceSum(engine.TensorAbs(diff), featureAxis, false),
+            DistanceMetric.Minkowski => engine.TensorPower(
+                engine.ReduceSum(engine.TensorPower(engine.TensorAbs(diff), NumOps.FromDouble(Options.P)), featureAxis, false),
+                NumOps.FromDouble(1.0 / Options.P)),
+            DistanceMetric.Chebyshev => engine.TensorClampMin(engine.ReduceMax(engine.TensorAbs(diff), featureAxis, false), NumOps.Zero),
+            _ => engine.TensorSqrt(engine.ReduceSum(engine.TensorMultiply(diff, diff), featureAxis, false))
         };
     }
 
     /// <summary>
-    /// Computes weight based on distance (1/distance).
+    /// 1 - cosine similarity; the similarity is clamped to [-1, 1] and is 0 when either norm is ~0.
     /// </summary>
-    private T GetDistanceWeight(T distance)
+    private Tensor<T> ComputeCosineDistances(Tensor<T> queries, Tensor<T> train)
     {
-        T epsilon = NumOps.FromDouble(1e-10);
-        if (NumOps.Compare(distance, epsilon) < 0)
-        {
-            // Very close to training point, return large weight
-            return NumOps.FromDouble(1e10);
-        }
-        return NumOps.Divide(NumOps.One, distance);
+        var engine = Engine;
+        int rows = queries.Shape[0];
+        int n = train.Shape[0];
+
+        var dot = engine.TensorMatMul(queries, engine.TensorTranspose(train));
+        var queryNorms = engine.ReduceSum(engine.TensorMultiply(queries, queries), new[] { 1 }, true);
+        var trainNorms = engine.ReduceSum(engine.TensorMultiply(train, train), new[] { 1 }, false).Reshape(1, n);
+        var denominator = engine.TensorSqrt(engine.TensorMultiply(queryNorms, trainNorms));
+        var similarity = engine.TensorClamp(engine.TensorDivide(dot, denominator), NumOps.FromDouble(-1.0), NumOps.One);
+        var valid = engine.TensorGreaterThan(denominator, NumOps.FromDouble(1e-10));
+        var zeros = new Tensor<T>(new[] { rows, n });
+        return engine.ScalarMinusTensor(NumOps.One, engine.TensorWhere(valid, similarity, zeros));
     }
 
     /// <summary>
-    /// Gets the class index for a label.
+    /// Gets the weight of every neighbor based on the weighting scheme.
     /// </summary>
-    private int GetClassIndex(T label)
+    private Tensor<T> GetWeights(Tensor<T> distances)
     {
-        if (ClassLabels == null)
+        var engine = Engine;
+        var ones = new Tensor<T>(distances.Shape.ToArray());
+        engine.TensorFill(ones, NumOps.One);
+        if (Options.Weights != WeightingScheme.Distance)
         {
-            throw new InvalidOperationException("Model must be trained before getting class index.");
+            return ones;
         }
 
-        for (int i = 0; i < ClassLabels.Length; i++)
-        {
-            if (NumOps.Compare(ClassLabels[i], label) == 0)
-            {
-                return i;
-            }
-        }
-
-        throw new ArgumentException($"Label {label} not found in class labels.");
+        // Very close to a training point (distance < 1e-10) gets a large weight, otherwise 1 / distance
+        var close = engine.TensorLessThan(distances, NumOps.FromDouble(1e-10));
+        var large = new Tensor<T>(distances.Shape.ToArray());
+        engine.TensorFill(large, NumOps.FromDouble(1e10));
+        return engine.TensorWhere(close, large, engine.TensorDivide(ones, distances));
     }
 
     /// <inheritdoc/>

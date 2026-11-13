@@ -94,12 +94,7 @@ public abstract partial class LinearClassifierBase<T> : ProbabilisticClassifierB
     protected virtual void InitializeWeights()
     {
         Weights = new Vector<T>(NumFeatures);
-        for (int i = 0; i < NumFeatures; i++)
-        {
-            Weights[i] = NumOps.Zero;
-        }
         Intercept = NumOps.Zero;
-
         Random = Options.Seed.HasValue
             ? RandomHelper.CreateSeededRandom(Options.Seed.Value)
             : RandomHelper.CreateSecureRandom();
@@ -128,17 +123,19 @@ public abstract partial class LinearClassifierBase<T> : ProbabilisticClassifierB
     /// <returns>A vector of decision function values.</returns>
     public Vector<T> DecisionFunctionBatch(Matrix<T> input)
     {
-        var decisions = new Vector<T>(input.Rows);
-        for (int i = 0; i < input.Rows; i++)
+        if (Weights is null)
         {
-            var sample = new Vector<T>(input.Columns);
-            for (int j = 0; j < input.Columns; j++)
-            {
-                sample[j] = input[i, j];
-            }
-            decisions[i] = DecisionFunction(sample);
+            throw new InvalidOperationException("Model has not been trained.");
         }
-        return decisions;
+
+        if (input.Rows == 0)
+        {
+            return new Vector<T>(0);
+        }
+
+        // w · x + b for every row in one matrix-vector product
+        var products = Engine.MatrixVectorMultiply(input, Weights);
+        return Engine.TensorAddScalar(products.AsTensor(), Intercept).ToVector();
     }
 
     /// <inheritdoc/>
@@ -149,22 +146,17 @@ public abstract partial class LinearClassifierBase<T> : ProbabilisticClassifierB
             throw new InvalidOperationException("Model has not been trained.");
         }
 
-        var predictions = new Vector<T>(input.Rows);
-        for (int i = 0; i < input.Rows; i++)
+        int n = input.Rows;
+        if (n == 0)
         {
-            var sample = new Vector<T>(input.Columns);
-            for (int j = 0; j < input.Columns; j++)
-            {
-                sample[j] = input[i, j];
-            }
-
-            T decision = DecisionFunction(sample);
-            // For binary classification: positive -> class 1, negative -> class 0
-            predictions[i] = NumOps.Compare(decision, NumOps.Zero) >= 0
-                ? ClassLabels[ClassLabels.Length - 1]
-                : ClassLabels[0];
+            return new Vector<T>(0);
         }
-        return predictions;
+
+        // For binary classification: non-negative decision -> last class, negative -> first class
+        var engine = Engine;
+        var negative = engine.TensorLessThan(DecisionFunctionBatch(input).AsTensor(), NumOps.Zero);
+        return engine.TensorWhere(negative, FilledVector(n, ClassLabels[0]).AsTensor(),
+            FilledVector(n, ClassLabels[ClassLabels.Length - 1]).AsTensor()).ToVector();
     }
 
     /// <inheritdoc/>
@@ -179,43 +171,35 @@ public abstract partial class LinearClassifierBase<T> : ProbabilisticClassifierB
                 $"Current NumClasses={NumClasses}. Use OneVsRestClassifier for multi-class problems.");
         }
 
-        // Convert decision function to probabilities using sigmoid
-        var probabilities = new Matrix<T>(input.Rows, NumClasses);
-        var decisions = DecisionFunctionBatch(input);
-
-        for (int i = 0; i < input.Rows; i++)
+        if (input.Rows == 0)
         {
-            T prob = Sigmoid(decisions[i]);
-            probabilities[i, 0] = NumOps.Subtract(NumOps.One, prob);
-            if (NumClasses > 1)
-            {
-                probabilities[i, 1] = prob;
-            }
+            return new Matrix<T>(0, NumClasses);
         }
-        return probabilities;
+
+        // Convert decision function to probabilities using sigmoid
+        var engine = Engine;
+        var prob = engine.Sigmoid(DecisionFunctionBatch(input));
+        var columns = new List<Vector<T>> { engine.ScalarMinusTensor(NumOps.One, prob.AsTensor()).ToVector() };
+        if (NumClasses > 1)
+        {
+            columns.Add(prob);
+        }
+
+        return StackColumns(columns);
     }
 
     /// <inheritdoc/>
     public override Matrix<T> PredictLogProbabilities(Matrix<T> input)
     {
         var probs = PredictProbabilities(input);
-        var logProbs = new Matrix<T>(input.Rows, NumClasses);
-
-        for (int i = 0; i < input.Rows; i++)
+        if (probs.Rows == 0)
         {
-            for (int c = 0; c < NumClasses; c++)
-            {
-                // Clamp probability to avoid log(0)
-                T p = probs[i, c];
-                T minProb = NumOps.FromDouble(1e-15);
-                if (NumOps.Compare(p, minProb) < 0)
-                {
-                    p = minProb;
-                }
-                logProbs[i, c] = NumOps.Log(p);
-            }
+            return new Matrix<T>(0, NumClasses);
         }
-        return logProbs;
+
+        // Clamp probability to avoid log(0)
+        var engine = Engine;
+        return engine.TensorLog(engine.TensorClampMin(Tensor<T>.FromMatrix(probs), NumOps.FromDouble(1e-15))).ToMatrix();
     }
 
     /// <summary>
@@ -234,17 +218,11 @@ public abstract partial class LinearClassifierBase<T> : ProbabilisticClassifierB
     /// </summary>
     protected void ApplyL1Gradient(T learningRate, T alpha)
     {
-        if (Weights is null) return;
+        if (Weights is null || Weights.Length == 0) return;
 
-        for (int j = 0; j < NumFeatures; j++)
-        {
-            // L1 gradient is sign(w) * alpha
-            T sign = NumOps.Compare(Weights[j], NumOps.Zero) > 0
-                ? NumOps.One
-                : (NumOps.Compare(Weights[j], NumOps.Zero) < 0 ? NumOps.Negate(NumOps.One) : NumOps.Zero);
-            T penalty = NumOps.Multiply(learningRate, NumOps.Multiply(alpha, sign));
-            Weights[j] = NumOps.Subtract(Weights[j], penalty);
-        }
+        // L1 gradient is sign(w) * alpha
+        var penalty = Engine.Multiply(Engine.Sign(Weights), NumOps.Multiply(learningRate, alpha));
+        Weights = Engine.Subtract(Weights, penalty);
     }
 
     /// <summary>
@@ -252,14 +230,11 @@ public abstract partial class LinearClassifierBase<T> : ProbabilisticClassifierB
     /// </summary>
     protected void ApplyL2Gradient(T learningRate, T alpha)
     {
-        if (Weights is null) return;
+        if (Weights is null || Weights.Length == 0) return;
 
-        for (int j = 0; j < NumFeatures; j++)
-        {
-            // L2 gradient is 2 * alpha * w
-            T penalty = NumOps.Multiply(learningRate, NumOps.Multiply(NumOps.FromDouble(2.0), NumOps.Multiply(alpha, Weights[j])));
-            Weights[j] = NumOps.Subtract(Weights[j], penalty);
-        }
+        // L2 gradient is 2 * alpha * w
+        T scale = NumOps.Multiply(learningRate, NumOps.Multiply(NumOps.FromDouble(2.0), alpha));
+        Weights = Engine.Subtract(Weights, Engine.Multiply(Weights, scale));
     }
 
     /// <summary>
@@ -294,17 +269,10 @@ public abstract partial class LinearClassifierBase<T> : ProbabilisticClassifierB
         }
 
         // Return weights + intercept
-        int length = Options.FitIntercept ? NumFeatures + 1 : NumFeatures;
-        var parameters = new Vector<T>(length);
-        for (int i = 0; i < NumFeatures; i++)
-        {
-            parameters[i] = Weights[i];
-        }
-        if (Options.FitIntercept)
-        {
-            parameters[NumFeatures] = Intercept;
-        }
-        return parameters;
+        var weights = FitToLength(Weights, NumFeatures);
+        return Options.FitIntercept
+            ? Vector<T>.Concatenate(weights, Vector<T>.FromArray(new[] { Intercept }))
+            : weights.Clone();
     }
 
     /// <inheritdoc/>
@@ -324,11 +292,8 @@ public abstract partial class LinearClassifierBase<T> : ProbabilisticClassifierB
             throw new ArgumentException($"Expected {expectedLength} parameters, got {parameters.Length}");
         }
 
-        Weights = new Vector<T>(NumFeatures);
-        for (int i = 0; i < NumFeatures; i++)
-        {
-            Weights[i] = parameters[i];
-        }
+        Weights = NumFeatures == 0 ? new Vector<T>(0) : parameters.GetSubVector(0, NumFeatures).Clone();
+
         if (Options.FitIntercept)
         {
             Intercept = parameters[NumFeatures];
@@ -347,12 +312,11 @@ public abstract partial class LinearClassifierBase<T> : ProbabilisticClassifierB
     public Vector<T> ComputeGradients(Matrix<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null)
     {
         // Compute gradients for linear classifier
-        if (Weights is null)
+        if (Weights is null || input.Rows == 0)
         {
             return new Vector<T>(NumFeatures);
         }
 
-        var gradients = new Vector<T>(NumFeatures);
         // Use decision function scores (continuous) instead of discrete predictions
         // for proper gradient computation
         var scores = DecisionFunctionBatch(input);
@@ -360,29 +324,54 @@ public abstract partial class LinearClassifierBase<T> : ProbabilisticClassifierB
         // Compute error vector once: error = scores - target
         var errors = Engine.Subtract(scores, target);
 
-        // Gradient: grad[j] = mean(error · x[:,j]) using Engine.DotProduct
+        // Gradient: grad[j] = mean(error · x[:,j]) = (X^T error) / n
         T invN = NumOps.FromDouble(1.0 / input.Rows);
-        for (int j = 0; j < NumFeatures; j++)
-        {
-            var column = new Vector<T>(input.Rows);
-            for (int i = 0; i < input.Rows; i++)
-                column[i] = input[i, j];
-            gradients[j] = NumOps.Multiply(Engine.DotProduct(errors, column), invN);
-        }
-
-        return gradients;
+        var gradients = Engine.Multiply(Engine.MatrixVectorMultiply(Engine.MatrixTranspose(input), errors), invN);
+        return FitToLength(gradients, NumFeatures);
     }
 
     /// <inheritdoc/>
     public void ApplyGradients(Vector<T> gradients, T learningRate)
     {
-        if (Weights is null) return;
+        if (Weights is null || Weights.Length == 0) return;
 
-        for (int j = 0; j < NumFeatures && j < gradients.Length; j++)
+        // Only the first min(NumFeatures, gradients.Length) weights are updated
+        var update = Engine.Multiply(FitToLength(FitToLength(gradients, Math.Min(NumFeatures, gradients.Length)), Weights.Length), learningRate);
+        Weights = Engine.Subtract(Weights, update);
+    }
+
+    /// <summary>
+    /// Maps labels to +1 (the last class label) and -1 (every other label).
+    /// </summary>
+    /// <param name="y">The label vector.</param>
+    /// <returns>The +1/-1 targets.</returns>
+    private protected Vector<T> SignedBinaryTargets(Vector<T> y)
+    {
+        if (ClassLabels is null || y.Length == 0)
         {
-            T update = NumOps.Multiply(learningRate, gradients[j]);
-            Weights[j] = NumOps.Subtract(Weights[j], update);
+            return new Vector<T>(y.Length);
         }
+
+        var engine = Engine;
+        var isPositive = engine.TensorEquals(y.AsTensor(), ClassLabels[ClassLabels.Length - 1]);
+        return engine.TensorSubtractScalar(engine.TensorMultiplyScalar(isPositive, NumOps.FromDouble(2)), NumOps.One).ToVector();
+    }
+
+    /// <summary>
+    /// The first <see cref="ClassifierBase{T}.NumFeatures"/> values of row <paramref name="row"/>.
+    /// </summary>
+    private protected Vector<T> GetSample(Matrix<T> x, int row)
+    {
+        return x.Columns == NumFeatures ? x.GetRow(row) : x.GetRowSegment(row, 0, NumFeatures);
+    }
+
+    /// <summary>
+    /// w = w + scale * sample.
+    /// </summary>
+    private protected void AddScaledSample(Vector<T> sample, T scale)
+    {
+        if (Weights is null) return;
+        Weights = Engine.Add(Weights, Engine.Multiply(sample, scale));
     }
 
     /// <inheritdoc/>
