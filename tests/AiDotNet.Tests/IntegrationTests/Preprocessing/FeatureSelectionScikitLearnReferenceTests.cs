@@ -213,7 +213,7 @@ public class FeatureSelectionScikitLearnReferenceTests
         await Task.Yield();
         var fdr = new SelectFdr<double>(alpha: 0.01);
         fdr.Fit(Data(X), Target(ClassTarget));
-        Assert.Equal(new[] {  }, fdr.SelectedIndices);
+        Assert.Equal(Array.Empty<int>(), fdr.SelectedIndices);
 
         var fpr = new SelectFpr<double>(alpha: 0.05);
         fpr.Fit(Data(X), Target(ClassTarget));
