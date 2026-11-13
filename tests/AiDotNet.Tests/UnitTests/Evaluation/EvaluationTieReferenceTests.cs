@@ -25,7 +25,7 @@ public class EvaluationTieReferenceTests
     public void KruskalChiSquareTail_MatchesClosedFormAndReferenceValues(double statistic, int degrees, double expected)
     {
         var survival = typeof(KruskalWallisTest<double>).GetMethod("ChiSquareSurvival",
-            System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic)!;
+            System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic) ?? throw new InvalidOperationException("Reflected method not found.");
         double actual = Assert.IsType<double>(survival.Invoke(null, new object[] { statistic, degrees }));
         if (expected == 0) Assert.Equal(0, actual);
         else Assert.InRange(actual / expected, 1 - 1e-10, 1 + 1e-10);
@@ -236,7 +236,7 @@ public class EvaluationTieReferenceTests
     {
         // NIST two-sided 95% Student-t critical values, with df = folds - 1.
         var summarize = typeof(CrossValidationEngine<double>).GetMethod("Summarize",
-            System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic)!;
+            System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic) ?? throw new InvalidOperationException("Reflected method not found.");
         var values = Enumerable.Range(0, folds).Select(x => (double)x).ToList();
         var (_, standardDeviation, margin) = Assert.IsType<(double, double, double)>(
             summarize.Invoke(null, new object[] { values }));
@@ -279,6 +279,10 @@ public class EvaluationTieReferenceTests
         double ap = new AUCPRMetric<double>().Compute(scores, labels);
 
         Assert.Equal(5.0 / 6.0, ap, 12);
+
+        // The tied pair in the other order must give the same score:
+        // sklearn.metrics.average_precision_score([0, 1, 0, 1], [0.1, 0.5, 0.5, 0.9]) == 5/6.
+        Assert.Equal(5.0 / 6.0, new AUCPRMetric<double>().Compute(scores, new[] { 0.0, 1.0, 0.0, 1.0 }), 12);
     }
 
     [Fact]

@@ -157,8 +157,8 @@ public class EvaluationNumericalMemoryTests
     public void HalfValidationSummaries_KeepLargeCountsAndSampleVarianceWide()
     {
         const System.Reflection.BindingFlags flags = System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic;
-        var cv = typeof(CrossValidationEngine<Half>).GetMethod("Summarize", flags)!;
-        var curve = typeof(LearningCurveEngine<Half>).GetMethod("MeanAndStandardDeviation", flags)!;
+        var cv = typeof(CrossValidationEngine<Half>).GetMethod("Summarize", flags) ?? throw new InvalidOperationException("Reflected method not found.");
+        var curve = typeof(LearningCurveEngine<Half>).GetMethod("MeanAndStandardDeviation", flags) ?? throw new InvalidOperationException("Reflected method not found.");
         var values = Enumerable.Repeat((Half)60000, 70000).ToList();
         Assert.Equal((60000.0, 0.0, 0.0), Assert.IsType<(double, double, double)>(cv.Invoke(null, new object[] { values })));
         Assert.Equal((60000.0, 0.0), Assert.IsType<(double, double)>(curve.Invoke(null, new object[] { values })));
@@ -320,7 +320,7 @@ public class EvaluationNumericalMemoryTests
             : Enumerable.Range(0, positives + negatives).Select(i => (double)(i % 7)).ToArray();
         var positiveMask = new Tensor<double>(Enumerable.Range(0, scores.Length).Select(i => i < positives ? 1.0 : 0.0).ToArray(), new[] { scores.Length });
         var negativeMask = new Tensor<double>(Enumerable.Range(0, scores.Length).Select(i => i < positives ? 0.0 : 1.0).ToArray(), new[] { scores.Length });
-        var method = typeof(DeLongTest<double>).GetMethod("ComputeComponents", System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic)!;
+        var method = typeof(DeLongTest<double>).GetMethod("ComputeComponents", System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic) ?? throw new InvalidOperationException("Reflected method not found.");
         var (auc, rows, columns) = Assert.IsType<(double, Tensor<double>, Tensor<double>)>(method.Invoke(null, new object[] { scores, positiveMask, negativeMask }));
         var rowSums = new double[positives];
         var columnSums = new double[negatives];
@@ -915,14 +915,37 @@ public class EvaluationNumericalMemoryTests
     }
 
     [Fact]
+    public void HalfMultiClassAucRoc_AveragesManyClassScoresWide()
+    {
+        // Each class has two positives: one scoring 1 against all-zero negatives (AUC 1) and one tied with them
+        // (AUC 1/2), so every one-vs-rest AUC is 3/4 and so is the macro average (sklearn ovr, macro).
+        const int classes = 1400;
+        int rows = 2 * classes;
+        var actuals = new Half[rows];
+        var probabilities = new Half[rows * classes];
+        for (int r = 0; r < rows; r++)
+        {
+            int label = r / 2;
+            actuals[r] = (Half)label;
+            if (r % 2 == 0) probabilities[r * classes + label] = (Half)1;
+        }
+
+        Assert.Equal((Half)0.75, new AUCROCMetric<Half>().Compute(probabilities, actuals, classes));
+    }
+
+    [Fact]
     public void Levene_RejectsInvalidGroupsAtThePublicBoundary()
     {
         var test = new LeveneTest<Half>();
-        Assert.Equal("groups", Assert.Throws<ArgumentNullException>(() => test.Test(null!)).ParamName);
+        Half[][]? missingGroups = null;
+        Half[]?[] missingGroup = { null, new[] { (Half)1 } };
+        // The nulls are deliberate: this checks the runtime guard that nullable annotations cannot enforce.
+#pragma warning disable CS8604, CS8620
+        Assert.Equal("groups", Assert.Throws<ArgumentNullException>(() => test.Test(missingGroups)).ParamName);
         Assert.Equal("groups", Assert.Throws<ArgumentException>(() =>
             test.Test(new[] { Array.Empty<Half>(), new[] { (Half)1 } })).ParamName);
-        Assert.Equal("groups", Assert.Throws<ArgumentException>(() =>
-            test.Test(new Half[][] { null!, new[] { (Half)1 } })).ParamName);
+        Assert.Equal("groups", Assert.Throws<ArgumentException>(() => test.Test(missingGroup)).ParamName);
+#pragma warning restore CS8604, CS8620
     }
 
     [Fact]
@@ -932,7 +955,7 @@ public class EvaluationNumericalMemoryTests
         var positives = new Tensor<double>(new[] { 1.0, 1.0, 0.0, 0.0 }, new[] { 4 });
         var negatives = new Tensor<double>(new[] { 0.0, 0.0, 1.0, 1.0 }, new[] { 4 });
         var method = typeof(DeLongTest<double>).GetMethod("ComputeComponents",
-            System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic)!;
+            System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic) ?? throw new InvalidOperationException("Reflected method not found.");
         var (auc, rows, columns) = Assert.IsType<(double, Tensor<double>, Tensor<double>)>(
             method.Invoke(null, new object[] { scores, positives, negatives }));
         Assert.Equal(0.5, auc);
