@@ -648,13 +648,14 @@ public abstract partial class VitsTtsModelBase<T> : TtsModelBase<T>, IEndToEndTt
                 var centred = Engine.TensorSubtractScalar(scores, Engine.TensorMean(scores));
                 double std = Math.Sqrt(Engine.TensorSumOfSquares(centred) / (n - 1));
                 var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(draw.AlignmentSeed);
-                var noise = new Tensor<double>(new[] { tokens, frames });
-                for (int i = 0; i < noise.Length; i++)
+                var draws = new double[n];
+                for (int i = 0; i < n; i++)
                 {
                     // Gaussian's draws, in its order, kept in double.
                     double u1 = 1.0 - random.NextDouble(), u2 = random.NextDouble();
-                    noise[i] = Math.Sqrt(-2 * Math.Log(u1)) * Math.Cos(2 * Math.PI * u2);
+                    draws[i] = Math.Sqrt(-2 * Math.Log(u1)) * Math.Cos(2 * Math.PI * u2);
                 }
+                var noise = new Tensor<double>(draws, new[] { tokens, frames });
                 scores = Engine.TensorAdd(scores, Engine.TensorMultiplyScalar(noise, std * noiseScale));
             }
         }
