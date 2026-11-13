@@ -53,15 +53,12 @@ internal static partial class SparseEmbeddingOptimizerHelpers
         // Generic-T fallback.
         var ops = MathHelper.GetNumericOperations<T>();
         // ‖p‖₂.
-        double pNormSq = 0.0;
-        for (int i = 0; i < param.Length; i++) { double pi = ops.ToDouble(param[i]); pNormSq += pi * pi; }
-        double pNorm = Math.Sqrt(pNormSq);
+        double pNorm = Math.Sqrt(SumOfSquares(param));
         // ‖g‖₂² over touched (= dense ‖g‖₂² since untouched g = 0).
         double gNormSq = 0.0;
         foreach (var s in sparseList)
         {
-            int n = s.NumIndices * embeddingDim;
-            for (int k = 0; k < n; k++) { double gd = ops.ToDouble(s.Values[k]); gNormSq += gd * gd; }
+            gNormSq += SumOfSquares(s.Values, s.NumIndices * embeddingDim);
         }
         double gNorm = Math.Sqrt(gNormSq);
         // Match the dense LARS small-norm guard: when either norm is below eps,

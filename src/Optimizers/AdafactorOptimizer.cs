@@ -39,16 +39,16 @@ public class AdafactorOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase
         => (AdafactorOptimizerOptions<T, TInput, TOutput>)Options;
 
     /// <summary>Per-tensor row sums of squared gradients, for parameters that are factored.</summary>
-    private readonly ConcurrentDictionary<Tensor<T>, T[]> _rows = new(TensorReferenceComparer<Tensor<T>>.Instance);
+    private readonly ConcurrentDictionary<Tensor<T>, Tensor<T>> _rows = new(TensorReferenceComparer<Tensor<T>>.Instance);
 
     /// <summary>Per-tensor column sums of squared gradients, for parameters that are factored.</summary>
-    private readonly ConcurrentDictionary<Tensor<T>, T[]> _columns = new(TensorReferenceComparer<Tensor<T>>.Instance);
+    private readonly ConcurrentDictionary<Tensor<T>, Tensor<T>> _columns = new(TensorReferenceComparer<Tensor<T>>.Instance);
 
     /// <summary>Full second moment, for parameters with too few dimensions to factor.</summary>
-    private readonly ConcurrentDictionary<Tensor<T>, T[]> _full = new(TensorReferenceComparer<Tensor<T>>.Instance);
+    private readonly ConcurrentDictionary<Tensor<T>, Tensor<T>> _full = new(TensorReferenceComparer<Tensor<T>>.Instance);
 
     /// <summary>First moment, kept only when the recipe asks for one.</summary>
-    private readonly ConcurrentDictionary<Tensor<T>, T[]> _momentum = new(TensorReferenceComparer<Tensor<T>>.Instance);
+    private readonly ConcurrentDictionary<Tensor<T>, Tensor<T>> _momentum = new(TensorReferenceComparer<Tensor<T>>.Instance);
 
     private int _step;
 
@@ -83,29 +83,21 @@ public class AdafactorOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase
     /// </remarks>
     private double StepSize(int step, double parameterRms)
     {
-        if (!_options.UseRelativeStepSize)
-        {
-            return _options.InitialLearningRate > 0
-                ? _options.InitialLearningRate
-                : NumOps.ToDouble(CurrentLearningRate);
-        }
-
-        double relative = Math.Min(1e-2, 1.0 / Math.Sqrt(step));
-        return relative * Math.Max(_options.ParameterScaleFloor, parameterRms);
+        double rate = _options.UseRelativeStepSize
+            ? Math.Min(1e-2, 1.0 / Math.Sqrt(step))
+            : _options.InitialLearningRate > 0 ? _options.InitialLearningRate : NumOps.ToDouble(CurrentLearningRate);
+        bool scaleByParameters = _options.MultiplyByParameterScale is bool explicitScale ? explicitScale : _options.UseRelativeStepSize;
+        return scaleByParameters ? rate * Math.Max(_options.ParameterScaleFloor, parameterRms) : rate;
     }
 
-    private double Rms(ReadOnlySpan<T> values)
+    /// <summary>
+    /// Root mean square of every element, from one engine sum-of-squares reduction that cannot overflow a
+    /// narrow <typeparamref name="T"/> such as Half (see <c>SparseEmbeddingOptimizerHelpers.SumOfSquares</c>).
+    /// </summary>
+    private static double Rms(Tensor<T> values)
     {
         if (values.Length == 0) return 0.0;
-
-        double total = 0.0;
-        for (int i = 0; i < values.Length; i++)
-        {
-            double v = NumOps.ToDouble(values[i]);
-            total += v * v;
-        }
-
-        return Math.Sqrt(total / values.Length);
+        return Math.Sqrt(SparseEmbeddingOptimizerHelpers.SumOfSquares(values) / values.Length);
     }
 
     /// <summary>Whether a parameter has enough structure for the factored estimate to save anything.</summary>
@@ -161,127 +153,95 @@ public class AdafactorOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase
         bool keepMomentum,
         double beta1)
     {
-        var parameterSpan = parameter.AsWritableSpan();
-        var gradientSpan = gradient.AsSpan();
-        int length = Math.Min(parameterSpan.Length, gradientSpan.Length);
+        int length = parameter.Length;
         if (length == 0) return;
+        if (gradient.Length != length)
+        {
+            throw new ArgumentException(
+                $"Gradient length ({gradient.Length}) must match parameter length ({length}).", nameof(gradient));
+        }
+
+        var engine = Engine;
+        var g = gradient._shape.SequenceEqual(parameter._shape) ? gradient : engine.Reshape(gradient, parameter._shape);
 
         // The reconstructed second moment for each element, however it was estimated.
-        var estimate = new double[length];
-
-        if (IsFactorable(parameter._shape))
-        {
-            UpdateFactoredSecondMoment(
-                parameter, gradientSpan, estimate, length, beta2, epsilon);
-        }
-        else
-        {
-            UpdateFullSecondMoment(parameter, gradientSpan, estimate, length, beta2, epsilon);
-        }
+        var estimate = _options.Factored && IsFactorable(parameter._shape)
+            ? UpdateFactoredSecondMoment(parameter, g, beta2, epsilon)
+            : UpdateFullSecondMoment(parameter, g, beta2, epsilon);
 
         // U = G / sqrt(V), then scaled down if its RMS exceeds the threshold. Clipping the
         // UPDATE rather than the gradient is what keeps this stable without a warmup.
-        var update = new double[length];
-        double sumSquares = 0.0;
-        for (int i = 0; i < length; i++)
-        {
-            double denominator = Math.Sqrt(Math.Max(estimate[i], epsilon));
-            update[i] = NumOps.ToDouble(gradientSpan[i]) / denominator;
-            sumSquares += update[i] * update[i];
-        }
-
-        double updateRms = Math.Sqrt(sumSquares / length);
+        var update = engine.TensorDivide(
+            g, engine.TensorSqrt(engine.TensorMax(estimate, NumOps.FromDouble(epsilon))));
+        double updateRms = Math.Sqrt(SparseEmbeddingOptimizerHelpers.SumOfSquares(update) / length);
         double scale = updateRms > clip && clip > 0 ? clip / updateRms : 1.0;
+        // The first moment averages the clipped update already multiplied by this step's size, as the reference
+        // implementations do (transformers' Adafactor: clip, multiply by lr, then average).
+        double alpha = StepSize(_step, Rms(parameter));
+        update = engine.TensorMultiplyScalar(update, NumOps.FromDouble(scale * alpha));
 
         if (keepMomentum)
         {
-            var moment = _momentum.GetOrAdd(parameter, _ => new T[length]);
-            for (int i = 0; i < length; i++)
-            {
-                double m = beta1 * NumOps.ToDouble(moment[i]) + (1 - beta1) * update[i];
-                moment[i] = NumOps.FromDouble(m);
-                update[i] = m;
-            }
+            var moment = _momentum.GetOrAdd(parameter, _ => new Tensor<T>(parameter._shape));
+            var m = engine.TensorAddScaled(moment, update, NumOps.FromDouble(beta1), NumOps.FromDouble(1 - beta1));
+            engine.TensorCopy(m, moment);
+            update = m;
         }
 
-        double alpha = StepSize(_step, Rms(parameterSpan));
+        var next = engine.TensorSubtract(parameter, update);
 
-        for (int i = 0; i < length; i++)
-        {
-            double current = NumOps.ToDouble(parameterSpan[i]);
-            double next = current - alpha * scale * update[i];
+        // Decoupled: applied to the weight, not folded into the gradient, so it does not
+        // enter the second-moment estimate.
+        if (applyWeightDecay)
+            next = engine.TensorSubtract(next, engine.TensorMultiplyScalar(parameter, NumOps.FromDouble(alpha * decay)));
 
-            // Decoupled: applied to the weight, not folded into the gradient, so it does not
-            // enter the second-moment estimate.
-            if (applyWeightDecay) next -= alpha * decay * current;
-
-            parameterSpan[i] = NumOps.FromDouble(next);
-        }
+        engine.TensorCopy(next, parameter);
     }
 
-    private void UpdateFactoredSecondMoment(
+    private Tensor<T> UpdateFactoredSecondMoment(
         Tensor<T> parameter,
-        ReadOnlySpan<T> gradient,
-        Span<double> estimate,
-        int length,
+        Tensor<T> gradient,
         double beta2,
         double epsilon)
     {
+        var engine = Engine;
         (int rows, int columns) = AsMatrix(parameter._shape);
-        var rowState = _rows.GetOrAdd(parameter, _ => new T[rows]);
-        var columnState = _columns.GetOrAdd(parameter, _ => new T[columns]);
+        var rowState = _rows.GetOrAdd(parameter, _ => new Tensor<T>(new[] { rows }));
+        var columnState = _columns.GetOrAdd(parameter, _ => new Tensor<T>(new[] { columns }));
 
-        // Accumulate the row and column sums of the squared gradient.
-        var rowSums = new double[rows];
-        var columnSums = new double[columns];
-        for (int i = 0; i < length; i++)
-        {
-            double g = NumOps.ToDouble(gradient[i]);
-            double squared = g * g + epsilon;
-            rowSums[i / columns] += squared;
-            columnSums[i % columns] += squared;
-        }
+        // Row and column sums of the squared gradient (plus epsilon) over the (rows, columns) view.
+        var squared = engine.TensorAddScalar(
+            engine.TensorMultiply(gradient, gradient), NumOps.FromDouble(epsilon));
+        var asMatrix = engine.Reshape(squared, new[] { rows, columns });
+        var rowSums = engine.ReduceSum(asMatrix, new[] { 1 }, keepDims: false);
+        var columnSums = engine.ReduceSum(asMatrix, new[] { 0 }, keepDims: false);
 
-        double total = 0.0;
-        for (int r = 0; r < rows; r++)
-        {
-            double updated = beta2 * NumOps.ToDouble(rowState[r]) + (1 - beta2) * rowSums[r];
-            rowState[r] = NumOps.FromDouble(updated);
-            total += updated;
-        }
-
-        for (int c = 0; c < columns; c++)
-        {
-            columnState[c] = NumOps.FromDouble(
-                beta2 * NumOps.ToDouble(columnState[c]) + (1 - beta2) * columnSums[c]);
-        }
+        T decay = NumOps.FromDouble(beta2);
+        T oneMinusDecay = NumOps.FromDouble(1 - beta2);
+        engine.TensorCopy(engine.TensorAddScaled(rowState, rowSums, decay, oneMinusDecay), rowState);
+        engine.TensorCopy(engine.TensorAddScaled(columnState, columnSums, decay, oneMinusDecay), columnState);
+        double total = NumOps.ToDouble(engine.TensorSum(rowState));
 
         // V ~= outer(R, C) / sum(R). The normalisation is what makes the rank-one
         // reconstruction agree with the true second moment in total mass.
         if (total <= 0.0) total = epsilon;
-        for (int i = 0; i < length; i++)
-        {
-            estimate[i] = NumOps.ToDouble(rowState[i / columns])
-                * NumOps.ToDouble(columnState[i % columns]) / total;
-        }
+        var reconstructed = engine.TensorDivideScalar(engine.TensorOuter(rowState, columnState), NumOps.FromDouble(total));
+        return engine.Reshape(reconstructed, parameter._shape);
     }
 
-    private void UpdateFullSecondMoment(
+    private Tensor<T> UpdateFullSecondMoment(
         Tensor<T> parameter,
-        ReadOnlySpan<T> gradient,
-        Span<double> estimate,
-        int length,
+        Tensor<T> gradient,
         double beta2,
         double epsilon)
     {
-        var state = _full.GetOrAdd(parameter, _ => new T[length]);
-        for (int i = 0; i < length; i++)
-        {
-            double g = NumOps.ToDouble(gradient[i]);
-            double updated = beta2 * NumOps.ToDouble(state[i]) + (1 - beta2) * (g * g + epsilon);
-            state[i] = NumOps.FromDouble(updated);
-            estimate[i] = updated;
-        }
+        var engine = Engine;
+        var state = _full.GetOrAdd(parameter, _ => new Tensor<T>(parameter._shape));
+        var squared = engine.TensorAddScalar(
+            engine.TensorMultiply(gradient, gradient), NumOps.FromDouble(epsilon));
+        var updated = engine.TensorAddScaled(state, squared, NumOps.FromDouble(beta2), NumOps.FromDouble(1 - beta2));
+        engine.TensorCopy(updated, state);
+        return updated;
     }
 
     /// <inheritdoc />
@@ -303,40 +263,45 @@ public class AdafactorOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase
         double epsilon = _options.Epsilon;
         double clip = _options.UpdateClippingThreshold;
 
-        if (_flatState.Length != parameters.Length) _flatState = new double[parameters.Length];
+        if (_flatState.Length != parameters.Length) _flatState = new Vector<T>(parameters.Length);
 
-        var updated = new Vector<T>(parameters.Length);
-        var update = new double[parameters.Length];
-        double sumSquares = 0.0;
+        var engine = Engine;
+        var g = gradient.AsTensor();
+        var state = _flatState.AsTensor();
+        var squared = engine.TensorAddScalar(engine.TensorMultiply(g, g), NumOps.FromDouble(epsilon));
+        var newState = engine.TensorAddScaled(state, squared, NumOps.FromDouble(beta2), NumOps.FromDouble(1 - beta2));
+        engine.TensorCopy(newState, state);
+        var update = engine.TensorDivide(
+            g, engine.TensorSqrt(engine.TensorMax(newState, NumOps.FromDouble(epsilon))));
 
-        for (int i = 0; i < parameters.Length; i++)
-        {
-            double g = NumOps.ToDouble(gradient[i]);
-            _flatState[i] = beta2 * _flatState[i] + (1 - beta2) * (g * g + epsilon);
-            update[i] = g / Math.Sqrt(Math.Max(_flatState[i], epsilon));
-            sumSquares += update[i] * update[i];
-        }
-
+        double sumSquares = parameters.Length == 0 ? 0.0 : SparseEmbeddingOptimizerHelpers.SumOfSquares(update);
         double updateRms = Math.Sqrt(sumSquares / Math.Max(1, parameters.Length));
         double scale = updateRms > clip && clip > 0 ? clip / updateRms : 1.0;
         double decay = _options.WeightDecay;
         bool applyWeightDecay = double.IsNaN(decay) || Math.Abs(decay) > 0.0;
 
-        var span = parameters.AsSpan();
-        double alpha = StepSize(_step, Rms(span));
-
-        for (int i = 0; i < parameters.Length; i++)
+        var p = parameters.AsTensor();
+        double alpha = StepSize(_step, Rms(p));
+        update = engine.TensorMultiplyScalar(update, NumOps.FromDouble(scale * alpha));
+        if (!double.IsNaN(_options.Beta1))
         {
-            double current = NumOps.ToDouble(parameters[i]);
-            double next = current - alpha * scale * update[i];
-            if (applyWeightDecay) next -= alpha * decay * current;
-            updated[i] = NumOps.FromDouble(next);
+            if (_flatMomentum.Length != parameters.Length) _flatMomentum = new Vector<T>(parameters.Length);
+            var mState = _flatMomentum.AsTensor();
+            var m = engine.TensorAddScaled(
+                mState, update, NumOps.FromDouble(_options.Beta1), NumOps.FromDouble(1 - _options.Beta1));
+            engine.TensorCopy(m, mState);
+            update = m;
         }
 
-        return updated;
+        var next = engine.TensorSubtract(p, update);
+        if (applyWeightDecay)
+            next = engine.TensorSubtract(next, engine.TensorMultiplyScalar(p, NumOps.FromDouble(alpha * decay)));
+
+        return next.AsVector();
     }
 
-    private double[] _flatState = [];
+    private Vector<T> _flatState = new Vector<T>(0);
+    private Vector<T> _flatMomentum = new Vector<T>(0);
 
     /// <inheritdoc />
     public override OptimizationResult<T, TInput, TOutput> Optimize(
@@ -353,7 +318,8 @@ public class AdafactorOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase
         _columns.Clear();
         _full.Clear();
         _momentum.Clear();
-        _flatState = [];
+        _flatState = new Vector<T>(0);
+        _flatMomentum = new Vector<T>(0);
         _step = 0;
         InitializeAdaptiveParameters();
 

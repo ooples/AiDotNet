@@ -111,12 +111,7 @@ public class GeneralizedHistogramIntersectionKernel<T> : IKernelFunction<T>
     /// </remarks>
     public T Calculate(Vector<T> x1, Vector<T> x2)
     {
-        T sum = _numOps.Zero;
-        for (int i = 0; i < x1.Length; i++)
-        {
-            sum = _numOps.Add(sum, _numOps.Power(MathHelper.Min(x1[i], x2[i]), _beta));
-        }
-
-        return sum;
+        var engine = AiDotNetEngine.Current;
+        return engine.Sum(engine.Power(engine.Min(x1, x2), _beta));
     }
 }

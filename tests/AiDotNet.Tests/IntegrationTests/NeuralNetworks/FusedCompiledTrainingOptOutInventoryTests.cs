@@ -46,7 +46,6 @@ public sealed class FusedCompiledTrainingOptOutInventoryTests
     /// </summary>
     private static readonly string[] KnownOptOuts =
     {
-        "Autoformer",
         "DifferentiableNeuralComputer",
         "DistilBERTNER",
         "GLALanguageModel",
@@ -56,6 +55,28 @@ public sealed class FusedCompiledTrainingOptOutInventoryTests
         "RWKVForecaster",
         "SAM2",
         "VideoLLaMA2",
+
+        // Kokoro reads its predicted durations back to the host and builds the token-to-frame alignment from them, so
+        // the graph's shape and the alignment follow each step's data; a traced plan trained on a NaN loss with every
+        // gradient zero.
+        "Kokoro",
+
+        // Video models whose step depends on values computed on the host from the step's own data, which a compiled
+        // plan would bake at trace time and replay for every later step (the opt-out also covers their declared and
+        // custom objectives, which would otherwise descend the first step's frozen draw):
+        // - warps, splats and correlation lookups whose sampling grids, indices or validity masks come from each
+        //   step's flow;
+        "ABME", "AMT", "BiMVFI", "EMAVFI", "FloRNN", "IFRNet", "InterpAnyClearer", "M2M", "SoftSplat", "VFIformer",
+        "XVFI",
+        // - the release objectives FLAVR and VFIT train on, which draw their batch per step;
+        "FLAVR", "VFIT",
+        // - spectral normalization's power iteration, and RealBasicVSR's cleaning passes that stop on a host read
+        //   of the residue;
+        "DAMVSR", "DualXVSR", "RealBasicVSR", "RealBasicVSRSharp", "RealESRGANVideo", "RealViformer",
+        // - diffusion and flow-matching steps that draw their timesteps, sigmas, noise and rollouts per step;
+        "FlashVSR", "MGLDVSR", "RealisVSR", "SeedVR", "StreamDiffVSR",
+        // - an agent whose choice reads host-side quality scores.
+        "Upscale4KAgent",
     };
 
     [Fact]

@@ -4,7 +4,6 @@ using AiDotNet.Audio.MusicAnalysis;
 using AiDotNet.Audio.Pitch;
 using AiDotNet.Audio.Speaker;
 using AiDotNet.Audio.SourceSeparation;
-using AiDotNet.Audio.TextToSpeech;
 using AiDotNet.Audio.VoiceActivity;
 using AiDotNet.Audio.Whisper;
 using AiDotNet.Interfaces;
@@ -451,7 +450,8 @@ public class AudioExtendedIntegrationTests
         Assert.Equal(16000, options.SampleRate);
         Assert.Equal(1.5, options.WindowDurationSeconds, Tolerance);
         Assert.Equal(0.75, options.HopDurationSeconds, Tolerance);
-        Assert.Equal(256, options.EmbeddingDimension);
+        // The diarizer embeds windows with the 512-dim x-vector of Snyder et al. 2018 (Sell et al. 2018 recipe).
+        Assert.Equal(512, options.EmbeddingDimension);
         Assert.Equal(0.65, options.ClusteringThreshold, Tolerance);
         Assert.Equal(0.5, options.MinTurnDuration, Tolerance);
         Assert.Null(options.MaxSpeakers);
@@ -485,10 +485,11 @@ public class AudioExtendedIntegrationTests
     {
         var options = new SpeakerEmbeddingOptions();
         Assert.Equal(16000, options.SampleRate);
-        Assert.Equal(512, options.FftSize);
+        // Snyder et al. 2018, section 3.2 and Table 1: 25 ms frames every 10 ms, 24 filterbanks, 512-dim x-vectors.
+        Assert.Equal(400, options.FftSize);
         Assert.Equal(160, options.HopLength);
-        Assert.Equal(40, options.NumMfcc);
-        Assert.Equal(256, options.EmbeddingDimension);
+        Assert.Equal(24, options.NumMfcc);
+        Assert.Equal(512, options.EmbeddingDimension);
         Assert.NotNull(options.OnnxOptions);
     }
 
@@ -637,6 +638,32 @@ public class AudioExtendedIntegrationTests
         Assert.Equal(LocalizationAlgorithm.MUSIC, options.Algorithm);
     }
 
+    /// <summary>
+    /// GCC-PHAT reference: when channel 2 is channel 1 delayed by d samples, the cross-correlation
+    /// sum_n x1[n + k] x2[n] peaks at lag k = -d, so the TDOA (t1 - t2) is -d / sampleRate. The
+    /// inverse FFT puts zero lag at index 0; it must be rotated to the center index before reading it.
+    /// </summary>
+    [Fact(Timeout = 120000)]
+    public async Task SoundLocalizer_EstimateTdoa_RecoversKnownDelay()
+    {
+        await Task.Yield();
+        const int length = 1024;
+        const int delay = 5;
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(17);
+        var first = new double[length];
+        for (int i = 0; i < length; i++)
+            first[i] = rng.NextDouble() * 2.0 - 1.0;
+        var second = new double[length];
+        Array.Copy(first, 0, second, delay, length - delay);
+
+        var localizer = new SoundLocalizer<double>(new double[,] { { 0, 0, 0 }, { 0.1, 0, 0 } });
+        double tdoa = localizer.EstimateTdoa(
+            new AiDotNet.Tensors.LinearAlgebra.Tensor<double>(first, [length]),
+            new AiDotNet.Tensors.LinearAlgebra.Tensor<double>(second, [length]));
+
+        Assert.Equal(-delay / 16000.0, tdoa, 12);
+    }
+
     #endregion
 
     #region ChordSegment
@@ -644,7 +671,7 @@ public class AudioExtendedIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task ChordSegment_DefaultValues()
     {
-        var segment = new ChordSegment();
+        var segment = new AiDotNet.Audio.MusicAnalysis.ChordSegment<double>();
         Assert.Equal(string.Empty, segment.Name);
         Assert.Equal(0.0, segment.StartTime, Tolerance);
         Assert.Equal(0.0, segment.EndTime, Tolerance);
@@ -654,7 +681,7 @@ public class AudioExtendedIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task ChordSegment_Duration_Computed()
     {
-        var segment = new ChordSegment
+        var segment = new AiDotNet.Audio.MusicAnalysis.ChordSegment<double>
         {
             Name = "Am",
             StartTime = 1.0,
@@ -667,56 +694,8 @@ public class AudioExtendedIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task ChordSegment_ZeroDuration()
     {
-        var segment = new ChordSegment { StartTime = 2.0, EndTime = 2.0 };
+        var segment = new AiDotNet.Audio.MusicAnalysis.ChordSegment<double> { StartTime = 2.0, EndTime = 2.0 };
         Assert.Equal(0.0, segment.Duration, Tolerance);
-    }
-
-    #endregion
-
-    #region BeatTrackingResult
-
-    [Fact(Timeout = 120000)]
-    public async Task BeatTrackingResult_DefaultValues()
-    {
-        var result = new BeatTrackingResult();
-        Assert.Equal(0.0, result.Tempo, Tolerance);
-        Assert.NotNull(result.BeatTimes);
-        Assert.Empty(result.BeatTimes);
-        Assert.Equal(0.0, result.ConfidenceScore, Tolerance);
-    }
-
-    [Fact(Timeout = 120000)]
-    public async Task BeatTrackingResult_AverageBeatInterval_120BPM()
-    {
-        var result = new BeatTrackingResult { Tempo = 120.0 };
-        Assert.Equal(0.5, result.AverageBeatInterval, Tolerance); // 60/120 = 0.5s
-    }
-
-    [Fact(Timeout = 120000)]
-    public async Task BeatTrackingResult_AverageBeatInterval_60BPM()
-    {
-        var result = new BeatTrackingResult { Tempo = 60.0 };
-        Assert.Equal(1.0, result.AverageBeatInterval, Tolerance); // 60/60 = 1s
-    }
-
-    [Fact(Timeout = 120000)]
-    public async Task BeatTrackingResult_AverageBeatInterval_ZeroTempo()
-    {
-        var result = new BeatTrackingResult { Tempo = 0.0 };
-        Assert.Equal(0.0, result.AverageBeatInterval, Tolerance);
-    }
-
-    [Fact(Timeout = 120000)]
-    public async Task BeatTrackingResult_WithBeatTimes()
-    {
-        var result = new BeatTrackingResult
-        {
-            Tempo = 120.0,
-            BeatTimes = [0.0, 0.5, 1.0, 1.5, 2.0],
-            ConfidenceScore = 0.95
-        };
-        Assert.Equal(5, result.BeatTimes.Count);
-        Assert.Equal(0.95, result.ConfidenceScore, Tolerance);
     }
 
     #endregion
@@ -726,7 +705,7 @@ public class AudioExtendedIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task KeyDetectionResult_DefaultValues()
     {
-        var result = new KeyDetectionResult();
+        var result = new AiDotNet.Audio.MusicAnalysis.KeyDetectionResult<double>();
         Assert.Equal(0, result.KeyIndex);
         Assert.Equal(string.Empty, result.Name);
         Assert.Equal(string.Empty, result.RootNote);
@@ -739,7 +718,7 @@ public class AudioExtendedIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task KeyDetectionResult_SetProperties()
     {
-        var result = new KeyDetectionResult
+        var result = new AiDotNet.Audio.MusicAnalysis.KeyDetectionResult<double>
         {
             KeyIndex = 9,
             Name = "A minor",
@@ -845,104 +824,6 @@ public class AudioExtendedIntegrationTests
             SampleRate = 22050
         };
         Assert.Equal(22050, result.SampleRate);
-    }
-
-    #endregion
-
-    #region TtsOptions
-
-    [Fact(Timeout = 120000)]
-    public async Task TtsOptions_DefaultValues()
-    {
-        var options = new TtsOptions();
-        Assert.Equal(22050, options.SampleRate);
-        Assert.Equal(1.0, options.SpeakingRate, Tolerance);
-        Assert.Equal(0.0, options.PitchShift, Tolerance);
-        Assert.Equal(1.0, options.Energy, Tolerance);
-        Assert.Null(options.SpeakerId);
-        Assert.Null(options.Language);
-        Assert.Null(options.VocoderModelPath);
-        Assert.True(options.UseGriffinLimFallback);
-        Assert.Equal(60, options.GriffinLimIterations);
-        Assert.NotNull(options.OnnxOptions);
-        Assert.Equal(80, options.NumMels);
-        Assert.Equal(1024, options.FftSize);
-        Assert.Equal(256, options.HopLength);
-    }
-
-    [Fact(Timeout = 120000)]
-    public async Task TtsOptions_CustomValues()
-    {
-        var options = new TtsOptions
-        {
-            SampleRate = 44100,
-            SpeakingRate = 1.5,
-            PitchShift = 2.0,
-            Energy = 0.8,
-            SpeakerId = 3,
-            Language = "fr",
-            VocoderModelPath = "/model/vocoder.onnx",
-            UseGriffinLimFallback = false,
-            GriffinLimIterations = 100,
-            NumMels = 128,
-            FftSize = 2048,
-            HopLength = 512
-        };
-        Assert.Equal(44100, options.SampleRate);
-        Assert.Equal(1.5, options.SpeakingRate, Tolerance);
-        Assert.Equal(2.0, options.PitchShift, Tolerance);
-        Assert.Equal(0.8, options.Energy, Tolerance);
-        Assert.Equal(3, options.SpeakerId);
-        Assert.Equal("fr", options.Language);
-        Assert.False(options.UseGriffinLimFallback);
-    }
-
-    #endregion
-
-    #region TtsResult
-
-    [Fact(Timeout = 120000)]
-    public async Task TtsResult_Properties()
-    {
-        var result = new TtsResult<double>
-        {
-            Audio = new double[] { 0.1, 0.2, 0.3, 0.4 },
-            SampleRate = 22050,
-            Duration = 2.5,
-            ProcessingTimeMs = 1200
-        };
-        Assert.Equal(4, result.Audio.Length);
-        Assert.Equal(22050, result.SampleRate);
-        Assert.Equal(2.5, result.Duration, Tolerance);
-        Assert.Equal(1200L, result.ProcessingTimeMs);
-    }
-
-    #endregion
-
-    #region TtsModelType Enum
-
-    [Fact(Timeout = 120000)]
-    public async Task TtsModelType_AllValues()
-    {
-        var values = (((TtsModelType[])Enum.GetValues(typeof(TtsModelType))));
-        Assert.Equal(3, values.Length);
-        Assert.Contains(TtsModelType.FastSpeech2, values);
-        Assert.Contains(TtsModelType.Tacotron2, values);
-        Assert.Contains(TtsModelType.VITS, values);
-    }
-
-    #endregion
-
-    #region VocoderType Enum
-
-    [Fact(Timeout = 120000)]
-    public async Task VocoderType_AllValues()
-    {
-        var values = (((VocoderType[])Enum.GetValues(typeof(VocoderType))));
-        Assert.Equal(3, values.Length);
-        Assert.Contains(VocoderType.HiFiGan, values);
-        Assert.Contains(VocoderType.WaveGlow, values);
-        Assert.Contains(VocoderType.GriffinLim, values);
     }
 
     #endregion

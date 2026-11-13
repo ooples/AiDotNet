@@ -64,8 +64,14 @@ public class TridiagonalDecomposition<T> : MatrixDecompositionBase<T>
     /// <summary>
     /// Performs the tridiagonal decomposition.
     /// </summary>
+    /// <exception cref="ArgumentException">Thrown when the matrix is not symmetric.</exception>
+    /// <remarks>
+    /// An orthogonal similarity reduces a matrix to tridiagonal form only when it is symmetric; for
+    /// general input the reduction is upper Hessenberg, and dropping its upper band would lose data.
+    /// </remarks>
     protected override void Decompose()
     {
+        ValidateSymmetric(Tensor<T>.FromMatrix(A), "Tridiagonal decomposition", "matrix");
         ComputeDecomposition(_algorithm);
     }
 
@@ -104,252 +110,66 @@ public class TridiagonalDecomposition<T> : MatrixDecompositionBase<T>
     /// </remarks>
     private void DecomposeHouseholder()
     {
-        int n = A.Rows;
-        TMatrix = A.Clone();
-        QMatrix = Matrix<T>.CreateIdentity(n);
+        var (t, q) = ReduceByHouseholderSimilarity(A);
+        QMatrix = q;
+        TMatrix = KeepTridiagonalBand(t);
+    }
 
-        for (int k = 0; k < n - 2; k++)
-        {
-            // Get the subcolumn below the diagonal
-            Vector<T> x = TMatrix.GetColumn(k).GetSubVector(k + 1, n - k - 1);
-            T xNorm = x.Norm();
-
-            // Skip if the column is already zero
-            if (NumOps.LessThan(xNorm, NumOps.FromDouble(1e-14)))
-            {
-                continue;
-            }
-
-            // Compute alpha = -sign(x[0]) * ||x||
-            // Use OPPOSITE sign to avoid cancellation: u[0] = x[0] - alpha becomes large, not small
-            T alpha = NumOps.LessThan(x[0], NumOps.Zero)
-                ? xNorm
-                : NumOps.Negate(xNorm);
-
-            // Householder vector: u = x - alpha * e_1
-            Vector<T> u = x.Clone();
-            u[0] = NumOps.Subtract(x[0], alpha);
-
-            T uNorm = u.Norm();
-            if (NumOps.LessThan(uNorm, NumOps.FromDouble(1e-14)))
-            {
-                continue; // Skip if u is essentially zero
-            }
-            u = u.Divide(uNorm);
-
-            // VECTORIZED: Construct Householder reflection matrix using outer product
-            // P = I - 2*u*u^T (applied to the submatrix)
-            Matrix<T> P = Matrix<T>.CreateIdentity(n);
-            Matrix<T> uOuter = u.OuterProduct(u).Multiply(NumOps.FromDouble(2));
-            for (int i = k + 1; i < n; i++)
-            {
-                for (int j = k + 1; j < n; j++)
-                {
-                    P[i, j] = NumOps.Subtract(P[i, j], uOuter[i - k - 1, j - k - 1]);
-                }
-            }
-
-            // Apply similarity transformation: T = P * T * P
-            TMatrix = P.Multiply(TMatrix).Multiply(P);
-            QMatrix = QMatrix.Multiply(P);
-        }
-
-        // Clean up elements outside the tridiagonal structure
-        // These values should be mathematically zero by construction
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < n; j++)
-            {
-                if (Math.Abs(i - j) > 1)
-                {
-                    TMatrix[i, j] = NumOps.Zero;
-                }
-            }
-        }
+    /// <summary>Zeroes every entry with |i - j| &gt; 1 (rounding residue of the reduction).</summary>
+    private Matrix<T> KeepTridiagonalBand(Matrix<T> matrix)
+    {
+        return Engine.TensorTriu(Engine.TensorTril(Tensor<T>.FromMatrix(matrix), 1), -1).ToMatrix();
     }
 
     /// <summary>
-    /// Performs tridiagonal decomposition using the Givens algorithm.
+    /// Performs tridiagonal decomposition with a non-negative subdiagonal (the Givens option).
     /// </summary>
     /// <remarks>
     /// <para>
-    /// <b>For Beginners:</b> The Givens algorithm uses a series of rotations to gradually transform
-    /// the matrix into tridiagonal form. Think of it like rotating parts of the matrix to
-    /// move unwanted values to zero, one element at a time.
+    /// Rotation-based reduction with Q e1 = e1 leaves r = sqrt(a^2 + b^2) &gt;= 0 on the subdiagonal. By the
+    /// implicit-Q theorem that result equals the Householder reduction rescaled to non-negative
+    /// subdiagonal signs, which is how it is computed: a dense O(n^3) Householder reduction, not one
+    /// rotation per element. <see cref="TridiagonalAlgorithmType.Givens"/> and
+    /// <see cref="TridiagonalAlgorithmType.Lanczos"/> are aliases and return the same factors.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> Givens rotations turn the matrix into tridiagonal form; this option gives
+    /// the same Q and T those rotations would produce.
     /// </para>
     /// </remarks>
     private void DecomposeGivens()
     {
-        int n = A.Rows;
-        QMatrix = Matrix<T>.CreateIdentity(n);
-        TMatrix = A.Clone();
-
-        // For each column, zero out elements below the subdiagonal
-        for (int i = 0; i < n - 2; i++)
-        {
-            for (int j = i + 2; j < n; j++)
-            {
-                T absVal = NumOps.Abs(TMatrix[j, i]);
-                if (NumOps.GreaterThan(absVal, NumOps.FromDouble(1e-14)))
-                {
-                    // Calculate Givens rotation to zero out TMatrix[j, i]
-                    T a = TMatrix[i + 1, i];
-                    T b = TMatrix[j, i];
-                    T r = NumOps.Sqrt(NumOps.Add(NumOps.Multiply(a, a), NumOps.Multiply(b, b)));
-
-                    if (NumOps.LessThan(r, NumOps.FromDouble(1e-14)))
-                    {
-                        continue;
-                    }
-
-                    T c = NumOps.Divide(a, r);
-                    T s = NumOps.Divide(b, r);
-
-                    // Apply Givens rotation from the LEFT: T = G^T * T
-                    // This transforms rows i+1 and j
-                    Vector<T> rowI1 = TMatrix.GetRow(i + 1);
-                    Vector<T> rowJ = TMatrix.GetRow(j);
-                    Vector<T> newRowI1 = rowI1.Multiply(c).Add(rowJ.Multiply(s));
-                    Vector<T> newRowJ = rowI1.Multiply(NumOps.Negate(s)).Add(rowJ.Multiply(c));
-                    TMatrix.SetRow(i + 1, newRowI1);
-                    TMatrix.SetRow(j, newRowJ);
-
-                    // Apply Givens rotation from the RIGHT: T = T * G
-                    // This transforms columns i+1 and j (for similarity transformation)
-                    Vector<T> colI1 = TMatrix.GetColumn(i + 1);
-                    Vector<T> colJ = TMatrix.GetColumn(j);
-                    Vector<T> newColI1 = colI1.Multiply(c).Add(colJ.Multiply(s));
-                    Vector<T> newColJ = colI1.Multiply(NumOps.Negate(s)).Add(colJ.Multiply(c));
-                    TMatrix.SetColumn(i + 1, newColI1);
-                    TMatrix.SetColumn(j, newColJ);
-
-                    // Accumulate Q: Q = Q * G
-                    Vector<T> qColI1 = QMatrix.GetColumn(i + 1);
-                    Vector<T> qColJ = QMatrix.GetColumn(j);
-                    Vector<T> newQColI1 = qColI1.Multiply(c).Add(qColJ.Multiply(s));
-                    Vector<T> newQColJ = qColI1.Multiply(NumOps.Negate(s)).Add(qColJ.Multiply(c));
-                    QMatrix.SetColumn(i + 1, newQColI1);
-                    QMatrix.SetColumn(j, newQColJ);
-                }
-            }
-        }
-
-        // Clean up elements outside the tridiagonal structure
-        // These values should be mathematically zero by construction
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < n; j++)
-            {
-                if (Math.Abs(i - j) > 1)
-                {
-                    TMatrix[i, j] = NumOps.Zero;
-                }
-            }
-        }
+        // Givens rotations in the (i+1, j) planes perform the same orthogonal reduction with
+        // Q e1 = e1 and leave r = sqrt(a^2 + b^2) >= 0 on the subdiagonal.
+        var (t, q) = ReduceByHouseholderSimilarity(A);
+        (t, q) = NormalizeSubdiagonalSigns(t, q);
+        QMatrix = q;
+        TMatrix = KeepTridiagonalBand(t);
     }
 
     /// <summary>
-    /// Performs tridiagonal decomposition using the Lanczos algorithm.
+    /// Performs tridiagonal decomposition with a non-negative subdiagonal (the Lanczos option).
     /// </summary>
     /// <remarks>
     /// <para>
-    /// <b>For Beginners:</b> The Lanczos algorithm is an iterative method that builds the tridiagonal
-    /// matrix step by step. It's particularly efficient for large, sparse matrices (matrices with
-    /// lots of zeros). Think of it like summarizing a large dataset by capturing only its most
-    /// important patterns.
+    /// Lanczos from q1 = e1 with full re-orthogonalization yields the same Q and T as the Givens
+    /// option (beta = ||w|| &gt;= 0 on the off-diagonals), so this option is an alias of
+    /// <see cref="TridiagonalAlgorithmType.Givens"/>. It runs the same dense O(n^3) Householder
+    /// reduction and gives no speed advantage for sparse matrices.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> Lanczos builds the tridiagonal matrix step by step; this option returns
+    /// the result that process produces, computed with a dense reduction.
     /// </para>
     /// </remarks>
     private void DecomposeLanczos()
     {
-        int n = A.Rows;
-        QMatrix = new Matrix<T>(n, n);
-        TMatrix = new Matrix<T>(n, n);
-
-        // Initialize with a unit vector
-        Vector<T> v = new Vector<T>(n);
-        v[0] = NumOps.One;
-        Vector<T> vPrev = new Vector<T>(n); // Previous v vector (initially zero)
-
-        // First iteration
-        Vector<T> w = A.Multiply(v);
-        T alpha = w.DotProduct(v);
-        w = w.Subtract(v.Multiply(alpha));
-        T beta = w.Norm();
-
-        QMatrix.SetColumn(0, v);
-        TMatrix[0, 0] = alpha;
-
-        for (int j = 1; j < n; j++)
-        {
-            // Check for breakdown
-            if (NumOps.LessThan(beta, NumOps.FromDouble(1e-14)))
-            {
-                // Generate a new orthogonal vector using Gram-Schmidt
-                Vector<T> newV = new Vector<T>(n);
-                bool found = false;
-                for (int k = 0; k < n && !found; k++)
-                {
-                    newV = new Vector<T>(n);
-                    newV[k] = NumOps.One;
-
-                    // Orthogonalize against all previous vectors
-                    for (int i = 0; i < j; i++)
-                    {
-                        Vector<T> qi = QMatrix.GetColumn(i);
-                        T dot = newV.DotProduct(qi);
-                        newV = newV.Subtract(qi.Multiply(dot));
-                    }
-
-                    T newVNorm = newV.Norm();
-                    if (NumOps.GreaterThan(newVNorm, NumOps.FromDouble(1e-10)))
-                    {
-                        v = newV.Divide(newVNorm);
-                        found = true;
-                    }
-                }
-
-                if (!found)
-                {
-                    break; // Cannot find orthogonal vector, stop
-                }
-            }
-            else
-            {
-                // Standard Lanczos three-term recurrence
-                vPrev = QMatrix.GetColumn(j - 1);
-                v = w.Divide(beta);
-            }
-
-            QMatrix.SetColumn(j, v);
-
-            // Save current beta (this is the off-diagonal T[j-1,j])
-            T betaPrev = beta;
-
-            // w = A*v - beta*v_{j-1}
-            w = A.Multiply(v).Subtract(vPrev.Multiply(beta));
-
-            // alpha = v^T * w
-            alpha = w.DotProduct(v);
-
-            // w = w - alpha*v
-            w = w.Subtract(v.Multiply(alpha));
-
-            // Re-orthogonalization (important for numerical stability)
-            for (int i = 0; i <= j; i++)
-            {
-                Vector<T> qi = QMatrix.GetColumn(i);
-                T dot = w.DotProduct(qi);
-                w = w.Subtract(qi.Multiply(dot));
-            }
-
-            // Compute new beta
-            beta = w.Norm();
-
-            // Set tridiagonal elements
-            TMatrix[j, j] = alpha;
-            TMatrix[j, j - 1] = betaPrev;
-            TMatrix[j - 1, j] = betaPrev;
-        }
+        // Lanczos from q1 = e1 with full re-orthogonalization builds the same Q (Q e1 = e1) and a
+        // tridiagonal T with beta = ‖w‖ >= 0 on the off-diagonals.
+        var (t, q) = ReduceByHouseholderSimilarity(A);
+        (t, q) = NormalizeSubdiagonalSigns(t, q);
+        QMatrix = q;
+        TMatrix = KeepTridiagonalBand(t);
     }
 
     /// <summary>

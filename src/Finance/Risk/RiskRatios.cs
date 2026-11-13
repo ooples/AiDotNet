@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using AiDotNet.Finance.Interfaces;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -83,18 +84,15 @@ public class RiskRatios<T> : IRiskRatioCalculator<T>
         }
 
         var rf = NumOps.FromDouble(riskFreePerPeriod);
-        var mean = NumOps.Zero;
-        var downsideSq = NumOps.Zero;
         var n = NumOps.FromDouble(returns.Count);
-        foreach (var r in returns)
-        {
-            var excess = NumOps.Subtract(r, rf);
-            mean = NumOps.Add(mean, excess);
-            if (!NumOps.GreaterThan(excess, NumOps.Zero))
-            {
-                downsideSq = NumOps.Add(downsideSq, NumOps.Multiply(excess, excess));
-            }
-        }
+        var engine = AiDotNetEngine.Current;
+        var excess = engine.TensorSubtractScalar(ToTensor(returns), rf);
+        var mean = engine.TensorSum(excess);
+
+        // Downside: the excesses that are not positive.
+        var downside = engine.TensorWhere(
+            engine.TensorGreaterThan(excess, NumOps.Zero), engine.TensorZerosLike(excess), excess);
+        var downsideSq = engine.TensorSumOfSquares(downside);
 
         mean = NumOps.Divide(mean, n);
         var downsideDev = NumOps.Sqrt(NumOps.Divide(downsideSq, n));
@@ -118,26 +116,18 @@ public class RiskRatios<T> : IRiskRatioCalculator<T>
             return NumOps.Zero;
         }
 
-        // Compound an equity curve, tracking the running peak and the worst drawdown.
-        var equity = 1.0;
-        var peak = 1.0;
-        var maxDrawdown = 0.0;
-        foreach (var r in returns)
-        {
-            equity *= 1.0 + NumOps.ToDouble(r);
-            if (equity > peak)
-            {
-                peak = equity;
-            }
+        // Compound an equity curve, tracking the running peak (starting from 1) and the worst drawdown.
+        var engine = AiDotNetEngine.Current;
+        var curve = engine.TensorCumProd(engine.TensorAddScalar(ToTensor(returns), NumOps.One), 0);
+        var peak = engine.TensorMax(engine.TensorCumMax(curve, 0), NumOps.One);
+        var drawdowns = engine.TensorWhere(
+            engine.TensorGreaterThan(peak, NumOps.Zero),
+            engine.TensorDivide(engine.TensorSubtract(peak, curve), peak),
+            engine.TensorZerosLike(peak));
+        var maxDrawdown = engine.TensorMaxValue(drawdowns);
+        var equity = curve.AsSpan()[returns.Count - 1];
 
-            var drawdown = peak > 0 ? (peak - equity) / peak : 0.0;
-            if (drawdown > maxDrawdown)
-            {
-                maxDrawdown = drawdown;
-            }
-        }
-
-        if (maxDrawdown <= 0.0)
+        if (!NumOps.GreaterThan(maxDrawdown, NumOps.Zero))
         {
             return NumOps.Zero;
         }
@@ -146,32 +136,24 @@ public class RiskRatios<T> : IRiskRatioCalculator<T>
         // (any period return <= -100%). Math.Pow of a non-positive base by a
         // fractional exponent is NaN, so treat a wiped-out account as a total
         // (-100%) annualized loss rather than emitting NaN.
-        var annualizedReturn = equity > 0.0
-            ? Math.Pow(equity, (double)periodsPerYear / returns.Count) - 1.0
-            : -1.0;
-        return NumOps.FromDouble(annualizedReturn / maxDrawdown);
+        var annualizedReturn = NumOps.GreaterThan(equity, NumOps.Zero)
+            ? NumOps.Subtract(NumOps.Power(equity, NumOps.FromDouble((double)periodsPerYear / returns.Count)), NumOps.One)
+            : NumOps.Negate(NumOps.One);
+        return NumOps.Divide(annualizedReturn, maxDrawdown);
     }
 
     private static (T Mean, T Std) MeanStd(IReadOnlyList<T> returns, T riskFree)
     {
-        var mean = NumOps.Zero;
-        var n = NumOps.FromDouble(returns.Count);
-        foreach (var r in returns)
-        {
-            mean = NumOps.Add(mean, NumOps.Subtract(r, riskFree));
-        }
-
-        mean = NumOps.Divide(mean, n);
-
-        var sse = NumOps.Zero;
-        foreach (var r in returns)
-        {
-            var d = NumOps.Subtract(NumOps.Subtract(r, riskFree), mean);
-            sse = NumOps.Add(sse, NumOps.Multiply(d, d));
-        }
+        var engine = AiDotNetEngine.Current;
+        var excess = engine.TensorSubtractScalar(ToTensor(returns), riskFree);
+        var mean = NumOps.Divide(engine.TensorSum(excess), NumOps.FromDouble(returns.Count));
+        var sse = engine.TensorSumOfSquares(engine.TensorSubtractScalar(excess, mean));
 
         // Sample standard deviation (n-1) — unbiased for a return sample.
         var std = NumOps.Sqrt(NumOps.Divide(sse, NumOps.FromDouble(returns.Count - 1)));
         return (mean, std);
     }
+
+    private static Tensor<T> ToTensor(IReadOnlyList<T> returns)
+        => new Tensor<T>(new[] { returns.Count }, new Vector<T>(returns.ToArray()));
 }

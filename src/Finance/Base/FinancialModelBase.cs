@@ -560,7 +560,11 @@ public abstract partial class FinancialModelBase<T> : NeuralNetworkBase<T>, IFin
         // Forecast, so none can return without it (#2147).
         RequireArchitectureAgreesWithInput();
         var forecast = ForecastCore(input, quantiles);
-        RequireArchitectureAgreesWithOutput(forecast);
+        // A point forecast is what the architecture's OutputSize describes. A quantile forecast lays Q values out per
+        // series, so its last axis is series x Q and would be refused against a correct architecture; the check waits
+        // for the first point forecast instead.
+        if (quantiles is null || quantiles.Length == 0)
+            RequireArchitectureAgreesWithOutput(forecast);
         return forecast;
     }
 
@@ -601,11 +605,8 @@ public abstract partial class FinancialModelBase<T> : NeuralNetworkBase<T>, IFin
         {
             // Calculate average loss from recent history
             int lookback = Math.Min(100, _lossHistory.Count);
-            T sum = NumOps.Zero;
-            for (int i = _lossHistory.Count - lookback; i < _lossHistory.Count; i++)
-            {
-                sum = NumOps.Add(sum, _lossHistory[i]);
-            }
+            var recent = new Vector<T>(_lossHistory.GetRange(_lossHistory.Count - lookback, lookback).ToArray());
+            T sum = Engine.TensorSum(Tensor<T>.FromVector(recent));
             metrics["AverageLoss"] = NumOps.Divide(sum, NumOps.FromDouble(lookback));
             metrics["LastLoss"] = _lastTrainingLoss;
         }
@@ -742,22 +743,43 @@ public abstract partial class FinancialModelBase<T> : NeuralNetworkBase<T>, IFin
         }
 
         int samples = Math.Max(1, head.Length / width);
-        var averaged = new Tensor<T>(perSampleShape);
-        for (int i = 0; i < samples; i++)
-        {
-            for (int k = 0; k < width; k++)
-            {
-                averaged[k] = NumOps.Add(averaged[k], head[(i * width) + k]);
-            }
-        }
 
-        var scale = NumOps.FromDouble(1.0 / samples);
-        for (int k = 0; k < width; k++)
-        {
-            averaged[k] = NumOps.Multiply(averaged[k], scale);
-        }
+        // A fresh, detached result, as before: the reduction is recorded on no tape.
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        var rows = Engine.Reshape(FlattenPrefix(head, samples * width), new[] { samples, width });
+        var summed = Engine.ReduceSum(rows, new[] { 0 }, keepDims: false);
+        var averaged = Engine.TensorMultiplyScalar(summed, NumOps.FromDouble(1.0 / samples));
+        return Engine.Reshape(averaged, (int[])perSampleShape.Clone());
+    }
 
-        return averaged;
+    /// <summary>
+    /// The first <paramref name="count"/> elements of <paramref name="tensor"/> in row-major order, as a rank-1 tensor.
+    /// </summary>
+    /// <param name="tensor">The tensor to read.</param>
+    /// <param name="count">How many leading elements to keep; at most <c>tensor.Length</c>.</param>
+    /// <returns>A rank-1 tensor of length <paramref name="count"/>.</returns>
+    private protected Tensor<T> FlattenPrefix(Tensor<T> tensor, int count)
+    {
+        var flat = Engine.Reshape(tensor, new[] { tensor.Length });
+        return count == tensor.Length ? flat : Engine.TensorSlice(flat, new[] { 0 }, new[] { count });
+    }
+
+    /// <summary>
+    /// Sums of squared and absolute differences over the first <c>min(predictions.Length, actuals.Length)</c>
+    /// elements of the two tensors in row-major order, reduced with engine ops off the tape.
+    /// </summary>
+    /// <param name="predictions">Predicted values.</param>
+    /// <param name="actuals">Observed values.</param>
+    /// <returns>The sum of squared errors, the sum of absolute errors and the number of pairs compared.</returns>
+    private protected (T SumSquared, T SumAbsolute, int Count) SumSquaredAndAbsoluteError(Tensor<T> predictions, Tensor<T> actuals)
+    {
+        int count = Math.Min(predictions.Length, actuals.Length);
+        if (count <= 0)
+            return (NumOps.Zero, NumOps.Zero, 0);
+
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        var diff = Engine.TensorSubtract(FlattenPrefix(predictions, count), FlattenPrefix(actuals, count));
+        return (Engine.TensorSumOfSquares(diff), Engine.TensorSum(Engine.TensorAbs(diff)), count);
     }
 
     #endregion
@@ -781,12 +803,9 @@ public abstract partial class FinancialModelBase<T> : NeuralNetworkBase<T>, IFin
         if (OnnxSession is null)
             throw new InvalidOperationException("ONNX session is not initialized.");
 
-        // Convert input tensor to ONNX tensor format
+        // Convert input tensor to ONNX tensor format (one bulk element-type conversion)
         var inputData = new float[input.Length];
-        for (int i = 0; i < input.Length; i++)
-        {
-            inputData[i] = Convert.ToSingle(input.Data.Span[i]);
-        }
+        NumOps.ToFloatSpan(input.Data.Span.Slice(0, input.Length), inputData);
 
         // Create ONNX input tensor
         var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input._shape);
@@ -810,10 +829,7 @@ public abstract partial class FinancialModelBase<T> : NeuralNetworkBase<T>, IFin
         // Convert back to our tensor format
         var outputShape = outputTensor.Dimensions.ToArray();
         var outputData = new T[outputTensor.Length];
-        for (int i = 0; i < outputTensor.Length; i++)
-        {
-            outputData[i] = NumOps.FromDouble(outputTensor.GetValue(i));
-        }
+        NumOps.FromFloatSpan(outputTensor.ToDenseTensor().Buffer.Span, outputData);
 
         return new Tensor<T>(outputShape, new Vector<T>(outputData));
     }

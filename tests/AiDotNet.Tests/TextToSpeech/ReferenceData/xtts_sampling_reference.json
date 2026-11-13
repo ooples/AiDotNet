@@ -1,0 +1,656 @@
+{
+  "code_revision": "dbf1a08a0d4e47fdad6172e433eeb34bc6b13b4e",
+  "author_sha256": "852f9fcdfa3756b14a4f7dc9e36fb27a54cd799c085a1e678f3e017e04b0c057",
+  "transformers_reference_version": "4.33.0",
+  "dependency_constraint": ">=4.33.0",
+  "policy_sha256": "522a70fc6dee99c38e81da5ed9bbb4a8362731a6bda3e90872394136135058a8",
+  "pipeline_sha256": "7bb7e9b7f9cfd4f524201ebcda6d3bd450b7c991f9cef984345fc7c44e3318da",
+  "wheel_sha256": "c3b7f818e90c4361bb50ad541ab94e28329aa0d97a1c45ffafa5a8b693bc73ec",
+  "torch_version": "2.6.0+cpu",
+  "prefix": [
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    6
+  ],
+  "immediate_eos_replay": {
+    "generated_codes": [
+      7
+    ],
+    "latent_frames": 1,
+    "latent_input_ids": [
+      6
+    ],
+    "latent_positions": [
+      0
+    ]
+  },
+  "cases": [
+    {
+      "name": "released-defaults",
+      "logits": [
+        3,
+        2,
+        1,
+        0,
+        -1,
+        -2,
+        1.5,
+        -0.5
+      ],
+      "history": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        6,
+        0,
+        0,
+        4
+      ],
+      "generated": [
+        0,
+        0,
+        4
+      ],
+      "temperature": 0.75,
+      "top_k": 50,
+      "top_p": 0.85,
+      "repetition_penalty": 10,
+      "probabilities": [
+        0.16928506203477267,
+        0.14815376960536325,
+        0.43048711145898705,
+        0.11347517057629487,
+        0.0,
+        0.0,
+        0.1385988863245823,
+        0.0
+      ],
+      "uniforms": [
+        1e-06,
+        0.1,
+        0.3,
+        0.5,
+        0.8,
+        0.999999
+      ]
+    },
+    {
+      "name": "topk-one-max-ties",
+      "logits": [
+        2,
+        2,
+        2,
+        1,
+        0,
+        -1,
+        -2,
+        -3
+      ],
+      "history": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        6
+      ],
+      "generated": [],
+      "temperature": 1.0,
+      "top_k": 1,
+      "top_p": 1.0,
+      "repetition_penalty": 1.0,
+      "probabilities": [
+        0.3333333333333333,
+        0.3333333333333333,
+        0.3333333333333333,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "uniforms": [
+        1e-06,
+        0.1,
+        0.3,
+        0.5,
+        0.8,
+        0.999999
+      ]
+    },
+    {
+      "name": "topk-cutoff-ties",
+      "logits": [
+        3,
+        2,
+        2,
+        2,
+        1,
+        0,
+        -1,
+        -2
+      ],
+      "history": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        6
+      ],
+      "generated": [],
+      "temperature": 1.0,
+      "top_k": 2,
+      "top_p": 1.0,
+      "repetition_penalty": 1.0,
+      "probabilities": [
+        0.4753668864186717,
+        0.17487770452710943,
+        0.17487770452710943,
+        0.17487770452710943,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "uniforms": [
+        1e-06,
+        0.1,
+        0.3,
+        0.5,
+        0.8,
+        0.999999
+      ]
+    },
+    {
+      "name": "uniform-half-nucleus",
+      "logits": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "history": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        6
+      ],
+      "generated": [],
+      "temperature": 1.0,
+      "top_k": 0,
+      "top_p": 0.5,
+      "repetition_penalty": 1.0,
+      "probabilities": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.25,
+        0.25,
+        0.25,
+        0.25
+      ],
+      "uniforms": [
+        1e-06,
+        0.1,
+        0.3,
+        0.5,
+        0.8,
+        0.999999
+      ]
+    },
+    {
+      "name": "uniform-eighth-nucleus",
+      "logits": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "history": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        6
+      ],
+      "generated": [],
+      "temperature": 1.0,
+      "top_k": 0,
+      "top_p": 0.125,
+      "repetition_penalty": 1.0,
+      "probabilities": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "uniforms": [
+        1e-06,
+        0.1,
+        0.3,
+        0.5,
+        0.8,
+        0.999999
+      ]
+    },
+    {
+      "name": "zero-nucleus",
+      "logits": [
+        3,
+        2,
+        1,
+        0,
+        -1,
+        -2,
+        -3,
+        -4
+      ],
+      "history": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        6
+      ],
+      "generated": [],
+      "temperature": 1.0,
+      "top_k": 0,
+      "top_p": 0.0,
+      "repetition_penalty": 1.0,
+      "probabilities": [
+        1.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "uniforms": [
+        1e-06,
+        0.1,
+        0.3,
+        0.5,
+        0.8,
+        0.999999
+      ]
+    },
+    {
+      "name": "positive-prefix-penalty",
+      "logits": [
+        0,
+        8,
+        0,
+        0,
+        0,
+        0,
+        2,
+        3
+      ],
+      "history": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        6
+      ],
+      "generated": [],
+      "temperature": 1.0,
+      "top_k": 1,
+      "top_p": 1.0,
+      "repetition_penalty": 10.0,
+      "probabilities": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "uniforms": [
+        1e-06,
+        0.1,
+        0.3,
+        0.5,
+        0.8,
+        0.999999
+      ],
+      "generation_trace": {
+        "generated_codes": [
+          7
+        ],
+        "latent_frames": 1,
+        "latent_input_ids": [
+          6
+        ],
+        "latent_positions": [
+          0
+        ]
+      }
+    },
+    {
+      "name": "bos-prefix-penalty",
+      "logits": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        8,
+        3
+      ],
+      "history": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        6
+      ],
+      "generated": [],
+      "temperature": 1.0,
+      "top_k": 1,
+      "top_p": 1.0,
+      "repetition_penalty": 10.0,
+      "probabilities": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "uniforms": [
+        1e-06,
+        0.1,
+        0.3,
+        0.5,
+        0.8,
+        0.999999
+      ],
+      "generation_trace": {
+        "generated_codes": [
+          7
+        ],
+        "latent_frames": 1,
+        "latent_input_ids": [
+          6
+        ],
+        "latent_positions": [
+          0
+        ]
+      }
+    },
+    {
+      "name": "negative-repeat-and-temperature",
+      "logits": [
+        -2,
+        -1,
+        -0.4,
+        -0.7,
+        -3,
+        -4,
+        -2,
+        -1.5
+      ],
+      "history": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        6,
+        2,
+        2,
+        4
+      ],
+      "generated": [
+        2,
+        2,
+        4
+      ],
+      "temperature": 1.3,
+      "top_k": 0,
+      "top_p": 1.0,
+      "repetition_penalty": 1.7,
+      "probabilities": [
+        0.10147337230615901,
+        0.12781266702357694,
+        0.2801096231048647,
+        0.2758332240122914,
+        0.009348174070363847,
+        0.021787466729320925,
+        0.03456609696991908,
+        0.14906937578350404
+      ],
+      "uniforms": [
+        1e-06,
+        0.1,
+        0.3,
+        0.5,
+        0.8,
+        0.999999
+      ]
+    },
+    {
+      "name": "immediate-eos",
+      "logits": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        5
+      ],
+      "history": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        6
+      ],
+      "generated": [],
+      "temperature": 1.0,
+      "top_k": 1,
+      "top_p": 1.0,
+      "repetition_penalty": 1.0,
+      "probabilities": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "uniforms": [
+        1e-06,
+        0.1,
+        0.3,
+        0.5,
+        0.8,
+        0.999999
+      ],
+      "generation_trace": {
+        "generated_codes": [
+          7
+        ],
+        "latent_frames": 1,
+        "latent_input_ids": [
+          6
+        ],
+        "latent_positions": [
+          0
+        ]
+      }
+    },
+    {
+      "name": "speech-then-eos",
+      "logits": [
+        8,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        3
+      ],
+      "history": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        6
+      ],
+      "generated": [],
+      "temperature": 1.0,
+      "top_k": 1,
+      "top_p": 1.0,
+      "repetition_penalty": 10.0,
+      "probabilities": [
+        1.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "uniforms": [
+        1e-06,
+        0.1,
+        0.3,
+        0.5,
+        0.8,
+        0.999999
+      ],
+      "generation_trace": {
+        "generated_codes": [
+          0,
+          7
+        ],
+        "latent_frames": 2,
+        "latent_input_ids": [
+          6,
+          0
+        ],
+        "latent_positions": [
+          0,
+          1
+        ]
+      }
+    },
+    {
+      "name": "raw-bos-at-generation-cap",
+      "logits": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        8,
+        3
+      ],
+      "history": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        6
+      ],
+      "generated": [],
+      "temperature": 1.0,
+      "top_k": 1,
+      "top_p": 1.0,
+      "repetition_penalty": 1.0,
+      "probabilities": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        1.0,
+        0.0
+      ],
+      "uniforms": [
+        1e-06,
+        0.1,
+        0.3,
+        0.5,
+        0.8,
+        0.999999
+      ],
+      "generation_trace": {
+        "generated_codes": [
+          6,
+          6,
+          6
+        ],
+        "latent_frames": 3,
+        "latent_input_ids": [
+          6,
+          6,
+          6
+        ],
+        "latent_positions": [
+          0,
+          1,
+          2
+        ]
+      }
+    }
+  ]
+}

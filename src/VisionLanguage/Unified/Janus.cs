@@ -215,7 +215,6 @@ public partial class Janus<T> : VisionLanguageModelBase<T>, IUnifiedVisionModel<
             return OnnxModel.Run(tokens);
 
         int outSize = _options.OutputImageSize;
-        int outPixels = outSize * outSize * 3;
         int numVisTokens = _options.NumVisualTokens;
         int dim = _options.DecoderDim;
 
@@ -228,17 +227,8 @@ public partial class Janus<T> : VisionLanguageModelBase<T>, IUnifiedVisionModel<
 
         // Step 2: Generation adaptor - project LLM hidden states to VQ space
         int numGenTokens = 576; // 24x24 generation grid
-        var genAdaptorOut = new double[numGenTokens];
-        for (int g = 0; g < numGenTokens; g++)
-        {
-            double val = 0;
-            for (int h = 0; h < Math.Min(hiddenDim, 64); h++)
-            {
-                double hv = NumOps.ToDouble(textHidden[h % hiddenDim]);
-                val += hv * Math.Cos((g + 1.0) * (h + 1) * 0.008);
-            }
-            genAdaptorOut[g] = val / Math.Sqrt(64);
-        }
+        // genAdaptorOut[g] = sum_h hidden[h] * cos((g + 1) * (h + 1) * 0.008) / sqrt(64), h < min(hiddenDim, 64).
+        var genAdaptorOut = WaveProjection(textHidden, numGenTokens, Math.Min(hiddenDim, 64), 0.008, useCosine: true, divisor: Math.Sqrt(64));
 
         // Step 3: Autoregressive VQ token prediction with classifier-free guidance
         var visualTokenIds = new int[numGenTokens];
@@ -247,7 +237,8 @@ public partial class Janus<T> : VisionLanguageModelBase<T>, IUnifiedVisionModel<
         for (int t = 0; t < numGenTokens; t++)
         {
             // Conditional logit from text + previous tokens
-            double condLogit = genAdaptorOut[t];
+            // Sequential: each token depends on the ones before it (see missing-ops).
+            double condLogit = NumOps.ToDouble(genAdaptorOut[t]);
             if (t > 0)
             {
                 double prevContext = 0;
@@ -276,44 +267,9 @@ public partial class Janus<T> : VisionLanguageModelBase<T>, IUnifiedVisionModel<
         if (patchSize < 1)
             patchSize = 1;
 
-        var result = new Tensor<T>([outPixels]);
-        for (int gy = 0; gy < gridSize; gy++)
-        {
-            for (int gx = 0; gx < gridSize; gx++)
-            {
-                int tokenIdx = gy * gridSize + gx;
-                if (tokenIdx >= numGenTokens)
-                    break;
-
-                int tokenId = visualTokenIds[tokenIdx];
-                double r = ((tokenId * 7 + 13) % 256) / 255.0;
-                double g = ((tokenId * 11 + 37) % 256) / 255.0;
-                double b = ((tokenId * 17 + 61) % 256) / 255.0;
-
-                for (int py = 0; py < patchSize; py++)
-                {
-                    for (int px = 0; px < patchSize; px++)
-                    {
-                        int imgY = gy * patchSize + py;
-                        int imgX = gx * patchSize + px;
-                        if (imgY >= outSize || imgX >= outSize)
-                            continue;
-                        int pixelIdx = (imgY * outSize + imgX) * 3;
-                        if (pixelIdx + 2 >= outPixels)
-                            continue;
-
-                        double smooth =
-                            0.9
-                            + 0.1
-                                * Math.Sin((double)px / patchSize * Math.PI)
-                                * Math.Sin((double)py / patchSize * Math.PI);
-                        result[pixelIdx] = NumOps.FromDouble(r * smooth);
-                        result[pixelIdx + 1] = NumOps.FromDouble(g * smooth);
-                        result[pixelIdx + 2] = NumOps.FromDouble(b * smooth);
-                    }
-                }
-            }
-        }
+        // VQ palette per token, smoothed within each patch.
+        var colors = HashTokenColors(visualTokenIds).Reshape([gridSize, gridSize, 3]);
+        var result = PaintPatchGrid(colors, SinePatchWeights(patchSize), outSize);
         return result;
     }
 
@@ -360,10 +316,7 @@ public partial class Janus<T> : VisionLanguageModelBase<T>, IUnifiedVisionModel<
             throw new InvalidOperationException("Tokenizer not initialized.");
         var encoding = _tokenizer.Encode(text);
         int seqLen = Math.Min(encoding.TokenIds.Count, _options.MaxSequenceLength);
-        var tokens = new Tensor<T>([seqLen]);
-        for (int i = 0; i < seqLen; i++)
-            tokens[i] = NumOps.FromDouble(encoding.TokenIds[i]);
-        return tokens;
+        return TokenIdsToTensor(encoding.TokenIds, seqLen);
     }
 
     /// <inheritdoc />

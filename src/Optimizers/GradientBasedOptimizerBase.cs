@@ -291,6 +291,37 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
     /// </summary>
     private protected virtual bool ClipsGradientsInStepCore => false;
 
+    /// <summary>
+    /// True when the regularization goes on after the clip (<see cref="RegularizationOrder.ClipThenRegularize"/>,
+    /// PyTorch's order), false when the clip covers it.
+    /// </summary>
+    internal bool RegularizesAfterClip =>
+        GradientOptions.RegularizationOrder == RegularizationOrder.ClipThenRegularize;
+
+    // The gradient dictionary ClipTapeGradientsAhead clipped, until the Step that consumes it.
+    private Dictionary<Tensor<T>, Tensor<T>>? _gradientsClippedAhead;
+
+    /// <summary>
+    /// True while <see cref="StepCore"/> runs on gradients <see cref="ClipTapeGradientsAhead"/> already clipped (and
+    /// then regularized): the step must not clip them again, or it would scale the regularization after all.
+    /// </summary>
+    private protected bool GradientsClippedAhead { get; private set; }
+
+    /// <summary>
+    /// Applies this optimizer's clipping options to <paramref name="gradients"/> now, ahead of <see cref="Step"/>, so
+    /// the caller can add the regularization after the clip; the next <see cref="Step"/> on the same dictionary then
+    /// skips its own clip. See <c>TapeTrainingStepper.RegularizeAndClip</c>.
+    /// </summary>
+    internal void ClipTapeGradientsAhead(IReadOnlyList<Tensor<T>> parameters, Dictionary<Tensor<T>, Tensor<T>> gradients)
+    {
+        var context = new TapeStepContext<T>(parameters, gradients, NumOps.Zero);
+        // A sparse embedding's rows join the dense dictionary first, so the norm counts them (as Adam's step does).
+        if (GradientOptions.EnableGradientClipping)
+            SparseEmbeddingOptimizerHelpers.MaterializeSparseIntoGradientsDict(context, Engine);
+        ApplyConfiguredTapeGradientClipping(context);
+        _gradientsClippedAhead = gradients;
+    }
+
     // The clipping options on the tape step, as the vector path's ApplyGradientClipping applies them. Every
     // optimizer's tape step used to ignore them except Adam's and AdamW's, so the same options trained clipped
     // through Optimize and unclipped through Train.
@@ -453,6 +484,14 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
         return NumOps.LessThan(
             NumOps.Abs(NumOps.Subtract(previous.FitnessScore, current.FitnessScore)),
             NumOps.FromDouble(tolerance));
+    }
+
+    /// <summary>The L2 norm of a whole tensor as a scalar, one engine reduction (zero for an empty tensor).</summary>
+    protected T TensorL2Norm(Tensor<T> tensor)
+    {
+        if (tensor.Length == 0) return NumOps.Zero;
+        var norm = Engine.TensorNorm(tensor);
+        return norm.Length > 0 ? norm.AsSpan()[0] : NumOps.Zero;
     }
 
     /// <summary>
@@ -1416,23 +1455,23 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
         // Tensor<T>) — that exception was the root cause of #1380's
         // "BuildAsync produces uniform output" symptom (model never
         // got past its first batch step).
-        if (Regularization is RegularizationNs.RegularizationBase<T, TInput, TOutput> regBase)
+        Vector<T> Regularize(Vector<T> g)
         {
-            gradient = regBase.Regularize(gradient, parameters);
-        }
-        else
-        {
+            if (Regularization is RegularizationNs.RegularizationBase<T, TInput, TOutput> regBase)
+                return regBase.Regularize(g, parameters);
             // External IRegularization implementations: route through the
             // shared Vector↔TOutput bridge so the wrap/unwrap logic stays
             // in one place. RegularizationBase's Vector-direct fallback
             // uses the same bridge — adding a new TOutput shape only
             // requires updating RegularizationVectorBridge.
-            gradient = RegularizationNs.RegularizationVectorBridge<T, TInput, TOutput>
-                .Invoke(Regularization, gradient, parameters);
+            return RegularizationNs.RegularizationVectorBridge<T, TInput, TOutput>
+                .Invoke(Regularization, g, parameters);
         }
 
-        // Apply gradient clipping if enabled
+        // Clip if enabled, on the configured side of the regularization (GradientBasedOptimizerOptions.RegularizationOrder).
+        if (!RegularizesAfterClip) gradient = Regularize(gradient);
         gradient = ApplyGradientClipping(gradient);
+        if (RegularizesAfterClip) gradient = Regularize(gradient);
 
         // Scale gradients for mixed-precision training
         // The gradients will be unscaled in ApplyGradientsWithMixedPrecision before the optimizer step
@@ -1490,7 +1529,8 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
 
         return GradientOptions.GradientClippingMethod switch
         {
-            GradientClippingMethod.ByNorm => GradientClippingHelper.ClipByNorm(gradient, GradientOptions.MaxGradientNorm) ?? gradient,
+            // PyTorch's coefficient, as the tape step and the fused plan apply it (see ClipByNormPyTorchCoefficient).
+            GradientClippingMethod.ByNorm => GradientClippingHelper.ClipByNormPyTorchCoefficient(gradient, GradientOptions.MaxGradientNorm),
             GradientClippingMethod.ByValue => GradientClippingHelper.ClipByValue(gradient, GradientOptions.MaxGradientValue) ?? gradient,
             _ => gradient
         };
@@ -1599,11 +1639,13 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
                 inputData.YTrain,
                 LossFunction);
 
+            var steps = ScaledBasis(n, epsilon);
+            var columns = new Matrix<T>(n, n);
+
             for (int i = 0; i < n; i++)
             {
                 // Perturb parameter i
-                var perturbedParams = parameters.Clone();
-                perturbedParams[i] = NumOps.Add(perturbedParams[i], epsilon);
+                var perturbedParams = (Vector<T>)Engine.Add(parameters, steps[i]);
 
                 var perturbedModel = InterfaceGuard.Parameterizable(model).WithParameters(perturbedParams);
 
@@ -1618,13 +1660,12 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
                     inputData.YTrain,
                     LossFunction);
 
-                // Hessian column i = (∇f(x + εe_i) - ∇f(x)) / ε
-                for (int j = 0; j < n; j++)
-                {
-                    var diff = NumOps.Subtract(perturbedGradient[j], baseGradient[j]);
-                    hessian[j, i] = NumOps.Divide(diff, epsilon);
-                }
+                // Hessian column i = (∇f(x + εe_i) - ∇f(x)) / ε, stored as row i and transposed below.
+                var column = (Vector<T>)Engine.Divide(Engine.Subtract(perturbedGradient, baseGradient), epsilon);
+                column.AsSpan().Slice(0, n).CopyTo(columns.GetRowSpan(i));
             }
+
+            hessian = Engine.MatrixTranspose(columns);
         }
         else
         {
@@ -1647,57 +1688,69 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
         IFullModel<T, TInput, TOutput> model,
         OptimizationInputData<T, TInput, TOutput> inputData)
     {
-        var parameters = InterfaceGuard.Parameterizable(model).GetParameters();
-        int n = parameters.Length;
-        var hessian = new Matrix<T>(n, n);
-        var epsilon = NumOps.FromDouble(1e-5);
+        var parameterizable = InterfaceGuard.Parameterizable(model);
+        return CentralDifferenceHessian(
+            parameterizable.GetParameters(),
+            NumOps.FromDouble(1e-5),
+            point => CalculateLoss(parameterizable.WithParameters(point), inputData));
+    }
 
+    /// <summary>
+    /// Symmetric Hessian of <paramref name="objective"/> at <paramref name="parameters"/> by central differences:
+    /// ∂²f/∂xi∂xj ≈ [f(x+h·ei+h·ej) - f(x+h·ei-h·ej) - f(x-h·ei+h·ej) + f(x-h·ei-h·ej)] / (4h²).
+    /// </summary>
+    /// <remarks>
+    /// The upper triangle (diagonal included) is evaluated one row at a time, as whole vectors of objective
+    /// values, and mirrored at the end.
+    /// </remarks>
+    private protected Matrix<T> CentralDifferenceHessian(Vector<T> parameters, T epsilon, Func<Vector<T>, T> objective)
+    {
+        int n = parameters.Length;
+        var steps = ScaledBasis(n, epsilon);
+        var denominator = NumOps.Multiply(NumOps.Multiply(NumOps.FromDouble(4.0), epsilon), epsilon);
+
+        var upper = new Matrix<T>(n, n);
         for (int i = 0; i < n; i++)
         {
-            for (int j = i; j < n; j++)  // Symmetric matrix, only compute upper triangle
-            {
-                // Compute second partial derivative ∂²f/∂xi∂xj using finite differences
-                // f''(x,y) ≈ [f(x+h,y+h) - f(x+h,y-h) - f(x-h,y+h) + f(x-h,y-h)] / (4h²)
+            var step = steps[i];
+            var lossPP = ObjectiveRow(objective, parameters, i, n, j => Engine.Add(step, steps[j]));
+            var lossPM = ObjectiveRow(objective, parameters, i, n, j => Engine.Subtract(step, steps[j]));
+            var lossMP = ObjectiveRow(objective, parameters, i, n, j => Engine.Subtract(steps[j], step));
+            var lossMM = ObjectiveRow(objective, parameters, i, n, j => Engine.Negate(Engine.Add(step, steps[j])));
 
-                var params_pp = parameters.Clone();
-                params_pp[i] = NumOps.Add(params_pp[i], epsilon);
-                params_pp[j] = NumOps.Add(params_pp[j], epsilon);
-                var model_pp = InterfaceGuard.Parameterizable(model).WithParameters(params_pp);
-                var loss_pp = CalculateLoss(model_pp, inputData);
-
-                var params_pm = parameters.Clone();
-                params_pm[i] = NumOps.Add(params_pm[i], epsilon);
-                params_pm[j] = NumOps.Subtract(params_pm[j], epsilon);
-                var model_pm = InterfaceGuard.Parameterizable(model).WithParameters(params_pm);
-                var loss_pm = CalculateLoss(model_pm, inputData);
-
-                var params_mp = parameters.Clone();
-                params_mp[i] = NumOps.Subtract(params_mp[i], epsilon);
-                params_mp[j] = NumOps.Add(params_mp[j], epsilon);
-                var model_mp = InterfaceGuard.Parameterizable(model).WithParameters(params_mp);
-                var loss_mp = CalculateLoss(model_mp, inputData);
-
-                var params_mm = parameters.Clone();
-                params_mm[i] = NumOps.Subtract(params_mm[i], epsilon);
-                params_mm[j] = NumOps.Subtract(params_mm[j], epsilon);
-                var model_mm = InterfaceGuard.Parameterizable(model).WithParameters(params_mm);
-                var loss_mm = CalculateLoss(model_mm, inputData);
-
-                // Compute second derivative
-                var numerator = NumOps.Add(
-                    NumOps.Subtract(loss_pp, loss_pm),
-                    NumOps.Subtract(loss_mm, loss_mp));
-                var denominator = NumOps.Multiply(
-                    NumOps.Multiply(NumOps.FromDouble(4.0), epsilon),
-                    epsilon);
-                var secondDerivative = NumOps.Divide(numerator, denominator);
-
-                hessian[i, j] = secondDerivative;
-                hessian[j, i] = secondDerivative;  // Symmetric
-            }
+            var numerator = Engine.Add(Engine.Subtract(lossPP, lossPM), Engine.Subtract(lossMM, lossMP));
+            var row = (Vector<T>)Engine.Divide(numerator, denominator);
+            row.AsSpan().CopyTo(upper.GetRowSpan(i).Slice(i));
         }
 
-        return hessian;
+        // Mirror the upper triangle: U + U' counts the diagonal twice, so take it off once.
+        return Engine.MatrixSubtract(
+            Engine.MatrixAdd(upper, Engine.MatrixTranspose(upper)),
+            Matrix<T>.CreateDiagonal(upper.Diagonal()));
+    }
+
+    /// <summary>
+    /// Returns epsilon * e_k for every coordinate k: the finite-difference steps along each parameter axis.
+    /// </summary>
+    private Vector<T>[] ScaledBasis(int n, T epsilon)
+    {
+        var scaledIdentity = Engine.MatrixMultiplyScalar(Matrix<T>.CreateIdentity(n), epsilon);
+        return Enumerable.Range(0, n).Select(k => scaledIdentity.GetRow(k)).ToArray();
+    }
+
+    /// <summary>
+    /// Evaluates the objective at parameters + perturbation(j) for j = start .. n-1.
+    /// </summary>
+    private Vector<T> ObjectiveRow(
+        Func<Vector<T>, T> objective,
+        Vector<T> parameters,
+        int start,
+        int n,
+        Func<int, Vector<T>> perturbation)
+    {
+        return Vector<T>.FromList(Enumerable.Range(start, n - start)
+            .Select(j => objective((Vector<T>)Engine.Add(parameters, perturbation(j))))
+            .ToList());
     }
 
     /// <summary>
@@ -1721,6 +1774,8 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
         var xTrain = inputData.XTrain;
         var yTrain = inputData.YTrain;
 
+        var minimumAlpha = NumOps.FromDouble(1e-10);
+
         var initialValue = CalculateLoss(currentSolution, inputData);
         var initialSlope = gradient.DotProduct(direction);
 
@@ -1730,24 +1785,43 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
             var newSolution = InterfaceGuard.Parameterizable(currentSolution).WithParameters(newCoefficients);
             var newValue = CalculateLoss(newSolution, inputData);
 
-            if (NumOps.LessThanOrEquals(newValue, NumOps.Add(initialValue, NumOps.Multiply(NumOps.Multiply(c1, alpha), initialSlope))))
+            if (SatisfiesArmijo(newValue, initialValue, c1, alpha, initialSlope))
             {
                 var newGradient = CalculateGradient(newSolution, xTrain, yTrain);
                 var newSlope = newGradient.DotProduct(direction);
 
-                if (NumOps.GreaterThanOrEquals(NumOps.Abs(newSlope), NumOps.Multiply(c2, NumOps.Abs(initialSlope))))
+                if (SatisfiesCurvature(newSlope, initialSlope, c2))
                 {
                     return alpha;
                 }
             }
 
-            alpha = NumOps.Multiply(alpha, NumOps.FromDouble(0.5));
-
-            if (NumOps.LessThan(alpha, NumOps.FromDouble(1e-10)))
+            if (!HalveStep(ref alpha, minimumAlpha))
             {
-                return NumOps.FromDouble(1e-10);
+                return minimumAlpha;
             }
         }
+    }
+
+    /// <summary>
+    /// Armijo sufficient decrease: f(x + t·d) ≤ f(x) + c₁·t·slope.
+    /// </summary>
+    private bool SatisfiesArmijo(T trialValue, T initialValue, T c1, T step, T slope)
+        => NumOps.LessThanOrEquals(trialValue, NumOps.Add(initialValue, NumOps.Multiply(NumOps.Multiply(c1, step), slope)));
+
+    /// <summary>
+    /// The (absolute) curvature test used by <see cref="LineSearch"/>: |slope(t)| ≥ c₂·|slope(0)|.
+    /// </summary>
+    private bool SatisfiesCurvature(T trialSlope, T initialSlope, T c2)
+        => NumOps.GreaterThanOrEquals(NumOps.Abs(trialSlope), NumOps.Multiply(c2, NumOps.Abs(initialSlope)));
+
+    /// <summary>
+    /// Halves <paramref name="step"/> in place and reports whether it is still at least <paramref name="minimum"/>.
+    /// </summary>
+    private bool HalveStep(ref T step, T minimum)
+    {
+        step = NumOps.Multiply(step, NumOps.FromDouble(0.5));
+        return !NumOps.LessThan(step, minimum);
     }
 
     /// <summary>
@@ -1791,40 +1865,32 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
         T originalLoss = context.Loss;
         T c1 = NumOps.FromDouble(1e-4);
 
-        // slope = ∇f(x)ᵀΔ for the FULL step. Armijo scales it by t, so this is computed once.
-        T slope = NumOps.Zero;
-        for (int i = 0; i < gradient.Length && i < proposedParameters.Length; i++)
-        {
-            slope = NumOps.Add(slope, NumOps.Multiply(
-                gradient[i], NumOps.Subtract(proposedParameters[i], originalParameters[i])));
-        }
+        // Δ = proposed - original over the original parameter count, and slope = ∇f(x)ᵀΔ for the FULL step
+        // (over the components both vectors have). Armijo scales it by t, so this is computed once.
+        var proposed = proposedParameters.Length == originalParameters.Length
+            ? proposedParameters
+            : Vector<T>.FromSpan(proposedParameters.AsSpan().Slice(0, originalParameters.Length));
+        var fullStep = (Vector<T>)Engine.Subtract(proposed, originalParameters);
+        int slopeLength = Math.Min(gradient.Length, fullStep.Length);
+        T slope = slopeLength == 0
+            ? NumOps.Zero
+            : Engine.DotProduct(
+                Vector<T>.FromSpan(gradient.AsSpan().Slice(0, slopeLength)),
+                Vector<T>.FromSpan(fullStep.AsSpan().Slice(0, slopeLength)));
 
         T t = NumOps.One;
         T loss = ReevaluateWithGradients(context);
 
-        // One trial vector for the whole search, overwritten per attempt. SetFlatParameters copies the
-        // values out rather than retaining the vector, so reusing it is safe — and at the default bound
-        // that is up to 20 full-length allocations per step avoided, on a path that already pays for a
-        // forward pass per attempt.
-        Vector<T>? trial = null;
-
         for (int attempt = 0; attempt < maxBacktracks; attempt++)
         {
-            T threshold = NumOps.Add(originalLoss, NumOps.Multiply(NumOps.Multiply(c1, t), slope));
-            if (NumOps.LessThanOrEquals(loss, threshold))
+            if (SatisfiesArmijo(loss, originalLoss, c1, t, slope))
             {
                 return true;
             }
 
-            t = NumOps.Divide(t, NumOps.FromDouble(2.0));
-            trial ??= new Vector<T>(originalParameters.Length);
-            for (int i = 0; i < trial.Length; i++)
-            {
-                trial[i] = NumOps.Add(originalParameters[i], NumOps.Multiply(
-                    t, NumOps.Subtract(proposedParameters[i], originalParameters[i])));
-            }
-
-            context.SetFlatParameters(trial);
+            // trial = original + t·Δ. Halving cannot fall below a minimum here, so the bound is zero.
+            HalveStep(ref t, NumOps.Zero);
+            context.SetFlatParameters((Vector<T>)Engine.Add(originalParameters, Engine.Multiply(fullStep, t)));
             loss = ReevaluateWithGradients(context);
         }
 
@@ -2011,6 +2077,12 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
             var ctx = SynthesizeTapeStepContext(nn, gradient);
             if (ctx is not null)
             {
+                // The vector already carries this optimizer's clip: CalculateGradient clipped it on the configured
+                // side of the regularization. Step must not clip it again - under ClipThenRegularize a second clip
+                // rescaled the L2 term the first had added after it, and the flat path drifted from the model step
+                // (3e-4 after nine Adam steps) once the clip engaged. The legacy UpdateParameters path never clipped.
+                if (ctx.Gradients is Dictionary<Tensor<T>, Tensor<T>> alreadyClipped)
+                    _gradientsClippedAhead = alreadyClipped;
                 Step(ctx);
                 // Step mutates the parameter tensors in place via tape semantics;
                 // since we passed the live parameter-chunk refs, the model is
@@ -2104,7 +2176,7 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
                 chunks.Add(c);
                 var gradTensor = new Tensor<T>(c.Shape.ToArray());
                 var gradSpan = gradTensor.AsWritableSpan();
-                for (int i = 0; i < len; i++) gradSpan[i] = flatGradient[offset + i];
+                flatGradient.AsSpan().Slice(offset, len).CopyTo(gradSpan);
                 gradients[c] = gradTensor;
             }
             offset += len;
@@ -2494,6 +2566,17 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
         {
             SetLearningRate(_learningRateScheduler.Step(_lastSchedulerMetric));
         }
+    }
+
+    /// <summary>
+    /// Ends an epoch on a monitored metric, such as the validation loss: the metric becomes the one a metric-driven
+    /// schedule (reduce-on-plateau) steps on, then <see cref="OnEpochEnd"/> runs.
+    /// </summary>
+    /// <param name="metric">The epoch's monitored value.</param>
+    internal void OnEpochEnd(double metric)
+    {
+        _lastSchedulerMetric = metric;
+        OnEpochEnd();
     }
 
     /// <summary>
@@ -2947,7 +3030,6 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
         var parameters = new List<Tensor<T>>(1) { parameterTensor };
         var gradients = new Dictionary<Tensor<T>, Tensor<T>> { [parameterTensor] = gradientTensor };
 
-        var reductionAxes = new[] { 0 };
 
         for (int iteration = 0; iteration < maxIterations; iteration++)
         {
@@ -2964,18 +3046,14 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
             Engine.TensorCopy(Tensor<T>.FromVector(gradient), gradientTensor);
 
             var stepContext = new TapeStepContext<T>(parameters, gradients, objective);
-            double objectiveValue = NumOps.ToDouble(objective);
-            if (double.IsNaN(objectiveValue) || double.IsInfinity(objectiveValue) ||
-                HasAnomalousTapeGradients(stepContext))
+            if (IsNonFiniteObjective(objective) || HasAnomalousTapeGradients(stepContext))
             {
                 throw new ArithmeticException(
                     $"Objective or gradient became non-finite at function-optimization iteration {iteration}.");
             }
 
             // Convergence on the infinity norm of the gradient.
-            var maxAbsoluteGradient = Engine.ReduceMax(
-                Engine.TensorAbs(gradientTensor), reductionAxes, keepDims: false);
-            if (!NumOps.GreaterThan(maxAbsoluteGradient[0], tolerance))
+            if (GradientWithinTolerance(gradient, tolerance))
             {
                 break;
             }
@@ -3090,17 +3168,22 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
     /// </remarks>
     public void Step(TapeStepContext<T> context)
     {
+        // Only the dictionary ClipTapeGradientsAhead clipped counts, so a clip-ahead whose step never ran cannot leave
+        // a later step unclipped.
+        GradientsClippedAhead = _gradientsClippedAhead is not null && ReferenceEquals(_gradientsClippedAhead, context.Gradients);
+        _gradientsClippedAhead = null;
         context = WithSparseLeavesAsValueViews(context);
         var learningRateGroups = CaptureLearningRateGroups(context);
         _stepNoGrad = new NoGradScope<T>();
         try
         {
-            if (!ClipsGradientsInStepCore) ApplyConfiguredTapeGradientClipping(context);
+            if (!ClipsGradientsInStepCore && !GradientsClippedAhead) ApplyConfiguredTapeGradientClipping(context);
             StepCore(context);
             ApplyLearningRateGroups(learningRateGroups);
         }
         finally
         {
+            GradientsClippedAhead = false;
             _stepNoGrad?.Dispose();
             _stepNoGrad = null;
         }
@@ -3165,13 +3248,15 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
         if (groups is null) return;
         foreach (var (layer, before, factor) in groups)
         {
-            var after = layer.GetParameters();
-            var scale = NumOps.FromDouble(factor);
-            var rescaled = new Vector<T>(after.Length);
-            for (int i = 0; i < after.Length; i++)
-                rescaled[i] = NumOps.Add(before[i], NumOps.Multiply(scale, NumOps.Subtract(after[i], before[i])));
-            layer.SetParameters(rescaled);
+            layer.SetParameters(RescaleChange(before, layer.GetParameters(), factor));
         }
+    }
+
+    /// <summary>Returns before + factor * (after - before).</summary>
+    private Vector<T> RescaleChange(Vector<T> before, Vector<T> after, double factor)
+    {
+        var scale = NumOps.FromDouble(factor);
+        return (Vector<T>)Engine.Add(before, Engine.Multiply(Engine.Subtract(after, before), scale));
     }
     /// <summary>The no-grad scope of the step in progress; released while the step re-evaluates.</summary>
     private NoGradScope<T>? _stepNoGrad;
@@ -3907,29 +3992,13 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
         var grads = ClippableGradients(context);
         var numOps = MathHelper.GetNumericOperations<T>();
 
-        // GPU engine: clamp on the device (clip_grad_value_), written back into each gradient tensor. The
-        // host loop below downloads every gradient and leaves the device copy to be re-uploaded.
-        if (AiDotNetEngine.Current.SupportsGpu)
-        {
-            var engine = AiDotNetEngine.Current;
-            T lo = numOps.FromDouble(-maxValue), hi = numOps.FromDouble(maxValue);
-            using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
-            foreach (var grad in grads)
-                engine.TensorCopy(engine.TensorClamp(grad, lo, hi), grad);   // in place: callers hold the tensor
-            return;
-        }
-
+        // clip_grad_value_ as one engine clamp per gradient, written back into each gradient tensor (on the
+        // device for a GPU engine, so nothing is downloaded and re-uploaded).
+        var engine = AiDotNetEngine.Current;
+        T lo = numOps.FromDouble(-maxValue), hi = numOps.FromDouble(maxValue);
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
         foreach (var grad in grads)
-        {
-            var span = grad.Data.Span;
-            for (int i = 0; i < span.Length; i++)
-            {
-                double v = numOps.ToDouble(span[i]);
-                if (v > maxValue) v = maxValue;
-                else if (v < -maxValue) v = -maxValue;
-                span[i] = numOps.FromDouble(v);
-            }
-        }
+            engine.TensorCopy(engine.TensorClamp(grad, lo, hi), grad);   // in place: callers hold the tensor
     }
 
     /// <summary>
@@ -3957,7 +4026,6 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
             if (deviceSum is not null && deviceSum.IsFinite) return false;
         }
 
-        var numOps = MathHelper.GetNumericOperations<T>();
         bool hostFast = !AiDotNetEngine.Current.SupportsGpu;
         foreach (var kvp in context.Gradients)
         {
@@ -3969,12 +4037,9 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
                 if (double.IsNaN(sq) || double.IsInfinity(sq)) return true;
                 continue;
             }
-            var span = grad.Data.Span;
-            for (int i = 0; i < span.Length; i++)
-            {
-                double v = numOps.ToDouble(span[i]);
-                if (double.IsNaN(v) || double.IsInfinity(v)) return true;
-            }
+            if (grad.Length == 0) continue;
+            using var finiteMask = AiDotNetEngine.Current.TensorIsFinite(grad);
+            if (AiDotNetEngine.Current.TensorMinValue(finiteMask) == AiDotNet.Tensors.Bit.False) return true;
         }
         return false;
     }
@@ -4041,19 +4106,7 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
         }
 
         var learningRate = NumOps.FromDouble(_currentLearningRate);
-        var updatedParameters = new Vector<T>(parameters.Length, skipZeroInit: true);
-        var parameterSpan = parameters.AsSpan();
-        var gradientSpan = gradient.AsSpan();
-        var updatedSpan = updatedParameters.AsWritableSpan();
-
-        for (int i = 0; i < updatedSpan.Length; i++)
-        {
-            updatedSpan[i] = NumOps.Subtract(
-                parameterSpan[i],
-                NumOps.Multiply(gradientSpan[i], learningRate));
-        }
-
-        return updatedParameters;
+        return (Vector<T>)Engine.Subtract(parameters, Engine.Multiply(gradient, learningRate));
     }
 
     /// <summary>
@@ -4519,21 +4572,27 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
 
     protected void EnsureFiniteEvaluation(T objective, Vector<T> gradient, int iteration, string methodName)
     {
-        double objectiveValue = NumOps.ToDouble(objective);
-        if (double.IsNaN(objectiveValue) || double.IsInfinity(objectiveValue))
+        if (IsNonFiniteObjective(objective))
         {
             throw new ArithmeticException($"Objective became non-finite at {methodName} iteration {iteration}.");
         }
 
-        for (int i = 0; i < gradient.Length; i++)
+        if (gradient.Length == 0) return;
+        using var finiteMask = Engine.TensorIsFinite(gradient.AsTensor());
+        if (Engine.TensorMinValue(finiteMask) == AiDotNet.Tensors.Bit.False)
         {
-            double value = NumOps.ToDouble(gradient[i]);
-            if (double.IsNaN(value) || double.IsInfinity(value))
-            {
-                throw new ArithmeticException(
-                    $"Gradient component {i} became non-finite at {methodName} iteration {iteration}.");
-            }
+            // ArgMin over the mask is the first false entry, i.e. the first non-finite component.
+            int i = Engine.TensorArgMin(finiteMask, 0).AsSpan()[0];
+            throw new ArithmeticException(
+                $"Gradient component {i} became non-finite at {methodName} iteration {iteration}.");
         }
+    }
+
+    /// <summary>True when the objective value is NaN or infinite.</summary>
+    private bool IsNonFiniteObjective(T objective)
+    {
+        double value = NumOps.ToDouble(objective);
+        return double.IsNaN(value) || double.IsInfinity(value);
     }
 
     /// <summary>
@@ -4544,6 +4603,47 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
         var absolute = Engine.TensorAbs(Tensor<T>.FromVector(vector));
         return Engine.ReduceMax(absolute, [0], keepDims: false)[0];
     }
+
+    /// <summary>
+    /// The first-order stopping test: true when no gradient component exceeds <paramref name="tolerance"/>.
+    /// </summary>
+    protected bool GradientWithinTolerance(Vector<T> gradient, T tolerance)
+        => !NumOps.GreaterThan(InfinityNorm(gradient), tolerance);
+
+    /// <summary>
+    /// Returns <paramref name="direction"/> and its directional derivative g'd when it is a descent direction,
+    /// and otherwise steepest descent (-g, -g'g).
+    /// </summary>
+    protected (Vector<T> Direction, T DirectionalDerivative) EnsureDescentDirection(
+        Vector<T> gradient, Vector<T> direction)
+    {
+        T directionalDerivative = gradient.DotProduct(direction);
+        if (NumOps.LessThan(directionalDerivative, NumOps.Zero))
+        {
+            return (direction, directionalDerivative);
+        }
+
+        return ((Vector<T>)Engine.Negate(gradient), NumOps.Negate(gradient.DotProduct(gradient)));
+    }
+
+    /// <summary>
+    /// Builds a <see cref="LineSearchProblem"/>, reading the objective and slope at the start point as doubles.
+    /// </summary>
+    protected LineSearchProblem CreateLineSearchProblem(
+        Vector<T> current,
+        Vector<T> direction,
+        T objective,
+        T directionalDerivative,
+        Func<Vector<T>, (T objective, Vector<T> gradient)> objectiveAndGradient,
+        Func<Vector<T>, Vector<T>>? projection,
+        int parameterCount,
+        double sufficientDecreaseConstant,
+        double curvatureConstant)
+        => new LineSearchProblem(
+            current, direction, objective,
+            objectiveAndGradient, projection, parameterCount,
+            sufficientDecreaseConstant, curvatureConstant,
+            NumOps.ToDouble(objective), NumOps.ToDouble(directionalDerivative));
 
     /// <summary>
     /// Supplies the search direction for <see cref="MinimizeWithLineSearch"/>, so the loop itself
@@ -4659,6 +4759,7 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
 
         T carriedObjective = NumOps.Zero;
         Vector<T>? carriedGradient = null;
+        T fallbackStep = NumOps.FromDouble(GradientOptions.LineSearchFallbackStep);
 
         for (int iteration = 0; iteration < maxIterations; iteration++)
         {
@@ -4686,29 +4787,22 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
             EnsureFiniteEvaluation(objective, gradient, iteration, methodName);
             Observe(current, objective);
 
-            if (!NumOps.GreaterThan(InfinityNorm(gradient), tolerance))
+            if (GradientWithinTolerance(gradient, tolerance))
             {
                 break;
             }
 
-            var direction = directions.ComputeDirection(gradient);
-            Guard.NotNull(direction);
-
-            var directionalDerivative = gradient.DotProduct(direction);
+            var proposed = directions.ComputeDirection(gradient);
+            Guard.NotNull(proposed);
 
             // A rule that has accumulated a poor picture of the surface can propose an ascent
             // direction. Steepest descent is always available and always correct.
-            if (!NumOps.LessThan(directionalDerivative, NumOps.Zero))
-            {
-                direction = (Vector<T>)Engine.Multiply(gradient, NumOps.Negate(NumOps.One));
-                directionalDerivative = NumOps.Negate(gradient.DotProduct(gradient));
-            }
+            var (direction, directionalDerivative) = EnsureDescentDirection(gradient, proposed);
 
-            var problem = new LineSearchProblem(
-                current, direction, objective,
+            var problem = CreateLineSearchProblem(
+                current, direction, objective, directionalDerivative,
                 objectiveAndGradient, projection, parameterCount,
-                GradientOptions.ArmijoConstant, GradientOptions.WolfeCurvatureConstant,
-                NumOps.ToDouble(objective), NumOps.ToDouble(directionalDerivative));
+                GradientOptions.ArmijoConstant, GradientOptions.WolfeCurvatureConstant);
 
             LineSearchOutcome? outcome = GradientOptions.UseStrongWolfeLineSearch
                 ? StrongWolfeLineSearch(problem, Observe)
@@ -4722,8 +4816,7 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
                     projection,
                     (Vector<T>)Engine.Add(
                         current,
-                        (Vector<T>)Engine.Multiply(
-                            direction, NumOps.FromDouble(GradientOptions.LineSearchFallbackStep))),
+                        (Vector<T>)Engine.Multiply(direction, fallbackStep)),
                     parameterCount);
 
                 var (fallbackObjective, fallbackGradient) = objectiveAndGradient(fallbackPoint);

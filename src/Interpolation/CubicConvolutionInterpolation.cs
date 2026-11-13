@@ -87,17 +87,10 @@ public partial class CubicConvolutionInterpolation<T> : I2DInterpolation<T>
         T dx = _numOps.Divide(_numOps.Subtract(x, _x[i]), _numOps.Subtract(_x[i + 1], _x[i]));
         T dy = _numOps.Divide(_numOps.Subtract(y, _y[j]), _numOps.Subtract(_y[j + 1], _y[j]));
 
-        // Get a 4x4 grid of points centered around the cell
-        T[,] p = new T[4, 4];
-        for (int m = -1; m <= 2; m++)
-        {
-            for (int n = -1; n <= 2; n++)
-            {
-                int row = MathHelper.Clamp(i + m, 0, _x.Length - 1);
-                int col = MathHelper.Clamp(j + n, 0, _y.Length - 1);
-                p[m + 1, n + 1] = _z[row, col];
-            }
-        }
+        // Get a 4x4 grid of points centered around the cell, repeating the edge points at the border
+        int[] rows = NeighborhoodIndices(i, _x.Length);
+        int[] columns = NeighborhoodIndices(j, _y.Length);
+        Matrix<T> p = _z.GetRows(rows).Transpose().GetRows(columns).Transpose();
 
         // Perform the bicubic interpolation
         return BicubicInterpolate(p, dx, dy);
@@ -119,17 +112,33 @@ public partial class CubicConvolutionInterpolation<T> : I2DInterpolation<T>
     /// <param name="x">The relative x-position within the grid cell (0 to 1).</param>
     /// <param name="y">The relative y-position within the grid cell (0 to 1).</param>
     /// <returns>The interpolated value at position (x,y).</returns>
-    private T BicubicInterpolate(T[,] p, T x, T y)
+    private T BicubicInterpolate(Matrix<T> p, T x, T y)
     {
         // First interpolate along y direction for each x column
-        T[] a = new T[4];
-        for (int i = 0; i < 4; i++)
-        {
-            a[i] = CubicInterpolate(p[i, 0], p[i, 1], p[i, 2], p[i, 3], y);
-        }
+        T a0 = CubicInterpolate(p[0, 0], p[0, 1], p[0, 2], p[0, 3], y);
+        T a1 = CubicInterpolate(p[1, 0], p[1, 1], p[1, 2], p[1, 3], y);
+        T a2 = CubicInterpolate(p[2, 0], p[2, 1], p[2, 2], p[2, 3], y);
+        T a3 = CubicInterpolate(p[3, 0], p[3, 1], p[3, 2], p[3, 3], y);
 
         // Then interpolate these results along the x direction
-        return CubicInterpolate(a[0], a[1], a[2], a[3], x);
+        return CubicInterpolate(a0, a1, a2, a3, x);
+    }
+
+    /// <summary>
+    /// Returns the four grid indices around a cell, clamped to the grid so edge points repeat at the border.
+    /// </summary>
+    /// <param name="index">The index of the cell's lower corner.</param>
+    /// <param name="length">The number of grid points along this axis.</param>
+    /// <returns>The indices index - 1 through index + 2, each clamped to [0, length - 1].</returns>
+    private static int[] NeighborhoodIndices(int index, int length)
+    {
+        return new[]
+        {
+            MathHelper.Clamp(index - 1, 0, length - 1),
+            MathHelper.Clamp(index, 0, length - 1),
+            MathHelper.Clamp(index + 1, 0, length - 1),
+            MathHelper.Clamp(index + 2, 0, length - 1)
+        };
     }
 
     /// <summary>

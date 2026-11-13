@@ -212,6 +212,143 @@ public class LicenseServiceIntegrationTests : IDisposable
     }
 
     [Fact(Timeout = 120000)]
+    public async Task SeatLease_A_machine_unseen_for_the_lease_frees_its_seat_and_cannot_reclaim_a_taken_one()
+    {
+        var clock = new ManualClock(new DateTimeOffset(2026, 11, 1, 0, 0, 0, TimeSpan.Zero));
+        var svc = new LicenseService(_db, NullLogger<LicenseService>.Instance, clock);
+        var key = (await svc.CreateAsync(new LicenseCreateRequest { CustomerName = "Lease", MaxSeats = 1 })).LicenseKey;
+
+        Assert.Equal(LicenseKeyStatus.Active, (await Validate(svc, key, "A")).Status);
+        Assert.Equal(LicenseKeyStatus.SeatLimitReached, (await Validate(svc, key, "B")).Status);
+
+        clock.Advance(LicenseService.ActivationLease + TimeSpan.FromMinutes(1));
+        var b = await Validate(svc, key, "B");
+        Assert.Equal(LicenseKeyStatus.Active, b.Status);
+        Assert.Equal(1, b.SeatsUsed);
+
+        // A comes back after its lease lapsed: B now holds the only seat.
+        Assert.Equal(LicenseKeyStatus.SeatLimitReached, (await Validate(svc, key, "A")).Status);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task SeatLease_Every_validation_renews_the_lease()
+    {
+        var clock = new ManualClock(new DateTimeOffset(2026, 11, 1, 0, 0, 0, TimeSpan.Zero));
+        var svc = new LicenseService(_db, NullLogger<LicenseService>.Instance, clock);
+        var key = (await svc.CreateAsync(new LicenseCreateRequest { CustomerName = "Renew", MaxSeats = 1 })).LicenseKey;
+
+        Assert.Equal(LicenseKeyStatus.Active, (await Validate(svc, key, "A")).Status);
+        clock.Advance(LicenseService.ActivationLease - TimeSpan.FromDays(1));
+        Assert.Equal(LicenseKeyStatus.Active, (await Validate(svc, key, "A")).Status);
+        clock.Advance(LicenseService.ActivationLease - TimeSpan.FromDays(1));
+
+        // Past the first validation's lease, inside the renewed one.
+        Assert.Equal(LicenseKeyStatus.SeatLimitReached, (await Validate(svc, key, "B")).Status);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task SeatLease_Ephemeral_machines_validating_once_each_do_not_exhaust_the_key()
+    {
+        // Every CI runner has a fresh machine id. Counting every activation ever seen used up a CI key in days.
+        var clock = new ManualClock(new DateTimeOffset(2026, 11, 1, 0, 0, 0, TimeSpan.Zero));
+        var svc = new LicenseService(_db, NullLogger<LicenseService>.Instance, clock);
+        var key = (await svc.CreateAsync(new LicenseCreateRequest { CustomerName = "CI", MaxSeats = 2 })).LicenseKey;
+
+        for (var runner = 0; runner < 10; runner++)
+        {
+            Assert.Equal(LicenseKeyStatus.Active, (await Validate(svc, key, $"runner-{runner}")).Status);
+            clock.Advance(LicenseService.ActivationLease / 2 + TimeSpan.FromMinutes(1));
+        }
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task SeatLease_A_rejected_validation_does_not_renew_the_lease()
+    {
+        // The seat limit used to be re-checked AFTER the renewal was saved, so a machine turned away still
+        // extended its lease, and by validating repeatedly kept holding a seat it had been refused.
+        var start = new DateTimeOffset(2026, 11, 1, 0, 0, 0, TimeSpan.Zero);
+        var clock = new ManualClock(start);
+        var svc = new LicenseService(_db, NullLogger<LicenseService>.Instance, clock);
+        var created = await svc.CreateAsync(new LicenseCreateRequest { CustomerName = "Shrunk", MaxSeats = 2 });
+
+        Assert.Equal(LicenseKeyStatus.Active, (await Validate(svc, created.LicenseKey, "A")).Status);
+        Assert.Equal(LicenseKeyStatus.Active, (await Validate(svc, created.LicenseKey, "B")).Status);
+
+        // An administrator lowers the key to one seat while both machines still hold a lease.
+        var license = await _db.LicenseKeys.SingleAsync(k => k.Id == created.Id);
+        license.MaxSeats = 1;
+        await _db.SaveChangesAsync();
+
+        clock.Advance(TimeSpan.FromDays(6));
+        var refused = await Validate(svc, created.LicenseKey, "A");
+        Assert.Equal(LicenseKeyStatus.SeatLimitReached, refused.Status);
+        Assert.Equal(2, refused.SeatsUsed);
+
+        var lastSeen = await _db.LicenseActivations.AsNoTracking()
+            .Where(a => a.LicenseKeyId == created.Id && a.MachineId == "A")
+            .Select(a => a.LastSeenAt)
+            .SingleAsync();
+        Assert.Equal(start, lastSeen);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task SeatLease_Concurrent_admissions_never_exceed_the_seat_limit()
+    {
+        // Two lapsed or new machines on a one-seat key could both read a free seat and both persist a lease.
+        // Separate contexts on one database file stand in for separate requests (or server instances).
+        var path = Path.Combine(Path.GetTempPath(), $"license_seats_{Guid.NewGuid():N}.db");
+        var connectionString = $"Data Source={path}";
+        ServingDbContext NewContext() => new(new DbContextOptionsBuilder<ServingDbContext>()
+            .UseSqlite(connectionString)
+            .Options);
+
+        try
+        {
+            string key;
+            Guid licenseId;
+            using (var setup = NewContext())
+            {
+                setup.Database.EnsureCreated();
+                var created = await new LicenseService(setup, NullLogger<LicenseService>.Instance)
+                    .CreateAsync(new LicenseCreateRequest { CustomerName = "Race", MaxSeats = 1 });
+                key = created.LicenseKey;
+                licenseId = created.Id;
+            }
+
+            const int contenders = 8;
+            var results = await Task.WhenAll(Enumerable.Range(0, contenders).Select(i => Task.Run(async () =>
+            {
+                using var context = NewContext();
+                var svc = new LicenseService(context, NullLogger<LicenseService>.Instance);
+                return await Validate(svc, key, $"machine-{i}");
+            })));
+
+            Assert.Equal(1, results.Count(r => r.Status == LicenseKeyStatus.Active));
+            Assert.Equal(contenders - 1, results.Count(r => r.Status == LicenseKeyStatus.SeatLimitReached));
+
+            using var check = NewContext();
+            Assert.Equal(1, await check.LicenseActivations.CountAsync(a => a.LicenseKeyId == licenseId && a.IsActive));
+        }
+        finally
+        {
+            Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
+            if (File.Exists(path)) File.Delete(path);
+        }
+    }
+
+    private static Task<LicenseValidationResponse> Validate(LicenseService svc, string key, string machine) =>
+        svc.ValidateAsync(new LicenseValidateRequest { Key = key, MachineId = machine });
+
+    private sealed class ManualClock(DateTimeOffset start) : TimeProvider
+    {
+        private DateTimeOffset _now = start;
+
+        public override DateTimeOffset GetUtcNow() => _now;
+
+        public void Advance(TimeSpan by) => _now += by;
+    }
+
+    [Fact(Timeout = 120000)]
     public async Task EndToEnd_EncryptWithServerToken_DecryptSucceeds()
     {
         ModelTypeRegistry.Register(typeof(StubModelSerializer).Name, typeof(StubModelSerializer));

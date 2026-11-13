@@ -56,14 +56,8 @@ public class DiceLoss<T> : LossFunctionBase<T>
 
         T intersection = Engine.DotProduct(predicted, actual);
 
-        // Sum vectors using dot product with ones vector
-        T sumPredicted = NumOps.Zero;
-        T sumActual = NumOps.Zero;
-        for (int i = 0; i < predicted.Length; i++)
-        {
-            sumPredicted = NumOps.Add(sumPredicted, predicted[i]);
-            sumActual = NumOps.Add(sumActual, actual[i]);
-        }
+        T sumPredicted = Engine.Sum(predicted);
+        T sumActual = Engine.Sum(actual);
 
         // Use NumericalStabilityHelper.SafeDiv to prevent division by zero.
         T denominator = NumOps.Add(sumPredicted, sumActual);

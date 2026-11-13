@@ -34,7 +34,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [TensorLayout(TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
 [TensorLayout(TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
 [AutoParameters]
-public partial class TiedEmbeddingHeadLayer<T> : LayerBase<T>, ILayerGraphBinding<T>, IShapeContract
+public partial class TiedEmbeddingHeadLayer<T> : LayerBase<T>, ILayerGraphBinding<T>, IShapeContract, IDetachableFusedReadoutLossLayer<T>, ISharedParameterConsumerLayer<T>
 {
     private int _sourceLayerIndex;
     private readonly int _vocabularySize;
@@ -48,6 +48,8 @@ public partial class TiedEmbeddingHeadLayer<T> : LayerBase<T>, ILayerGraphBindin
     private readonly Tensor<T>? _logitScaleTensor;
 
     [ExternalState]
+    // The embedding is owned by the network, which registers it; this head only reads its table.
+    [AiDotNet.Attributes.SharedLayerReference]
     private EmbeddingLayer<T>? _embedding;
 
     // Inference-only int8 copy of the table (GGUF Q8_0, laid out [vocabulary, hidden] = the block-Q8 kernel's [N, K]).
@@ -126,6 +128,12 @@ public partial class TiedEmbeddingHeadLayer<T> : LayerBase<T>, ILayerGraphBindin
 
     /// <summary>The embedding layer this head reads, or <c>null</c> while unbound.</summary>
     internal EmbeddingLayer<T>? Embedding => _embedding;
+
+    /// <inheritdoc/>
+    public IReadOnlyList<Tensor<T>> GetSharedTrainableParameters()
+        => _embedding is ITrainableLayer<T> trainable
+            ? trainable.GetTrainableParameters()
+            : Array.Empty<Tensor<T>>();
 
     /// <inheritdoc/>
     void ILayerGraphBinding<T>.BindToLayerGraph(IReadOnlyList<ILayer<T>> layers)
@@ -211,8 +219,7 @@ public partial class TiedEmbeddingHeadLayer<T> : LayerBase<T>, ILayerGraphBindin
 
         var flat = Engine.Reshape(input, [rows, hidden]);
         Tensor<T> logits;
-        if (!training && DenseLayer<T>.Q8SpeedFavorable && typeof(T) == typeof(float) && rows <= 16 && IsQuantizedTableCurrent(table)
-            && _tableQ8 is { } q8 && _tableScalesQ8 is { } scales)
+        if (!training && UsesQuantizedTable(rows, table) && _tableQ8 is { } q8 && _tableScalesQ8 is { } scales)
         {
             var inF = (float[])(object)flat.ToArray();
             var outArr = new float[rows * _vocabularySize];
@@ -254,11 +261,154 @@ public partial class TiedEmbeddingHeadLayer<T> : LayerBase<T>, ILayerGraphBindin
         return true;
     }
 
+    /// <summary>Whether an inference forward of <paramref name="rows"/> rows reads the int8 table instead of
+    /// <paramref name="table"/>.</summary>
+    private bool UsesQuantizedTable(int rows, Tensor<T> table) =>
+        DenseLayer<T>.Q8SpeedFavorable && typeof(T) == typeof(float) && rows <= 16 && IsQuantizedTableCurrent(table)
+        && _tableQ8 is not null && _tableScalesQ8 is not null;
+
     private void DropQuantizedTable()
     {
         _tableQ8 = null;
         _tableScalesQ8 = null;
         _tableAtQuantization = null;
+    }
+
+    [Scratch]
+    private Tensor<T>? _cachedZeroBias;
+
+    private Tensor<T> GetZeroBias(int outputSize)
+    {
+        if (_cachedZeroBias is null || _cachedZeroBias.Length != outputSize)
+            _cachedZeroBias = new Tensor<T>(new[] { outputSize });
+        return _cachedZeroBias;
+    }
+
+    private bool IsEligibleForFusedReadout(out Tensor<T> table)
+    {
+        if (GetType() != typeof(TiedEmbeddingHeadLayer<T>) || _embedding is null || !_embedding.IsInitialized
+            || BitConverter.DoubleToInt64Bits(_logitScale) != BitConverter.DoubleToInt64Bits(1.0) || LowPrecisionResident)
+        {
+            table = new Tensor<T>(new[] { 0 });
+            return false;
+        }
+        table = _embedding.GetMaterializedEmbeddingTable();
+        return table.Rank == 2 && table.Shape[0] == _vocabularySize && table.Shape[1] == _embeddingDimension
+            && _vocabularySize >= 2 && _embeddingDimension >= 1;
+    }
+
+    /// <summary>
+    /// Computes the tied language-model head fused with <see cref="AiDotNet.LossFunctions.CrossEntropyWithLogitsLoss{T}"/>
+    /// (<c>mean CE(input @ Eᵀ, ids)</c>) without materializing <c>[rows, vocabulary]</c> logits on the autodiff tape.
+    /// </summary>
+    /// <param name="input">Pre-head hidden states of shape <c>[..., embeddingDimension]</c>.</param>
+    /// <param name="target">Integer class-index targets matching the leading dimensions of <paramref name="input"/>.</param>
+    /// <param name="loss">The loss function applied to the head output.</param>
+    /// <returns>The fused scalar loss, or <c>null</c> when the decomposed path is required.</returns>
+    public Tensor<T>? TryComputeFusedLoss(Tensor<T> input, Tensor<T> target, ILossFunction<T> loss)
+    {
+        if (input is null) throw new ArgumentNullException(nameof(input));
+        if (target is null) throw new ArgumentNullException(nameof(target));
+        if (loss is null) throw new ArgumentNullException(nameof(loss));
+
+        var ids = ((IDetachableFusedReadoutLossLayer<T>)this).TryPrepareClassIndexTarget(
+            target, loss, input.Rank, input.Shape.ToArray(), out _);
+        if (ids is null) return null;
+
+        FusedReadoutPreparedState<T> unusedState = default;
+        return ((IDetachableFusedReadoutLossLayer<T>)this).TryComputeFusedLossPrepared(
+            input, ids, detachParameters: false, ref unusedState);
+    }
+
+    Tensor<int>? IDetachableFusedReadoutLossLayer<T>.TryPrepareClassIndexTarget(
+        Tensor<T> target, ILossFunction<T> loss, int inputRank, int[] inputShape, out int vocabularySize)
+    {
+        vocabularySize = 0;
+        if (!IsEligibleForFusedReadout(out _)) return null;
+        if (loss.GetType() != typeof(AiDotNet.LossFunctions.CrossEntropyWithLogitsLoss<T>)
+            || !((AiDotNet.LossFunctions.CrossEntropyWithLogitsLoss<T>)loss).ReadsClassIndexTargetsOverLastAxis(inputRank))
+            return null;
+
+        if (inputRank < 2 || inputShape.Length != inputRank || inputShape[inputRank - 1] != _embeddingDimension
+            || target.Rank != inputRank - 1)
+            return null;
+        for (int axis = 0; axis < target.Rank; axis++)
+            if (target.Shape[axis] != inputShape[axis]) return null;
+
+        var ids = FusedReadoutClassIndices.TryRead(target, _vocabularySize);
+        if (ids is null) return null;
+
+        vocabularySize = _vocabularySize;
+        return ids;
+    }
+
+    Tensor<T>? IDetachableFusedReadoutLossLayer<T>.TryComputeFusedLossPrepared(
+        Tensor<T> input,
+        Tensor<int> ids,
+        bool detachParameters,
+        ref FusedReadoutPreparedState<T> preparedState)
+    {
+        if (!IsEligibleForFusedReadout(out var table)) return null;
+        int rows = ids.Length;
+        if (input.Rank < 2 || input.Shape[input.Rank - 1] != _embeddingDimension || input.Length != rows * _embeddingDimension)
+            return null;
+
+        bool training = IsTrainingMode || AiDotNet.Tensors.Engines.Autodiff.GradientTape<T>.Current is not null
+            || AiDotNet.Tensors.Engines.Compilation.GraphMode.IsActive;
+        if (training) DropQuantizedTable();
+        // An inference forward this small reads the int8 table; the fused kernel would score the float table and
+        // disagree with the forward's logits, so the caller takes the decomposed path through the forward instead.
+        else if (UsesQuantizedTable(rows, table)) return null;
+
+        var hidden = input.Rank == 2 ? input : Engine.Reshape(input, new[] { rows, _embeddingDimension });
+        Tensor<T> weightToUse;
+        Tensor<T> biasToUse;
+        if (detachParameters)
+        {
+            if (preparedState.DetachedWeight is null)
+            {
+                if (preparedState.TracedWeight is not null)
+                {
+                    preparedState.DetachedWeight = Engine.StopGradient(preparedState.TracedWeight);
+                }
+                else
+                {
+                    using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
+                        preparedState.DetachedWeight = Engine.StopGradient(Engine.TensorTranspose(table));
+                }
+            }
+            preparedState.DetachedBias ??= GetZeroBias(_vocabularySize);
+            weightToUse = preparedState.DetachedWeight;
+            biasToUse = preparedState.DetachedBias;
+        }
+        else
+        {
+            preparedState.TracedWeight ??= Engine.TensorTranspose(table);
+            weightToUse = preparedState.TracedWeight;
+            biasToUse = GetZeroBias(_vocabularySize);
+        }
+
+        DenseLayer<T>.CountFusedReadoutLoss();
+        return Engine.FusedLinearCrossEntropyWithLogits(hidden, weightToUse, biasToUse, ids);
+    }
+
+    bool IDetachableFusedReadoutLossLayer<T>.TryGetVocabularyRowsForSampling(
+        out Tensor<T> vocabRows, out Tensor<T>? bias, out bool vocabRowsAreInputMajor)
+    {
+        if (!IsEligibleForFusedReadout(out var table))
+        {
+            vocabRows = table;
+            bias = null;
+            vocabRowsAreInputMajor = false;
+            return false;
+        }
+        if (IsTrainingMode || AiDotNet.Tensors.Engines.Autodiff.GradientTape<T>.Current is not null
+            || AiDotNet.Tensors.Engines.Compilation.GraphMode.IsActive)
+            DropQuantizedTable();
+        vocabRows = table;
+        bias = null;
+        vocabRowsAreInputMajor = false;
+        return true;
     }
 
     /// <inheritdoc/>

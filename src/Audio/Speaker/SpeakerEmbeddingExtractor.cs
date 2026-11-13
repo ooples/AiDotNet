@@ -52,6 +52,8 @@ namespace AiDotNet.Audio.Speaker;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
     [ResearchPaper("X-Vectors: Robust DNN Embeddings for Speaker Recognition", "https://doi.org/10.1109/ICASSP.2018.8461375")]
+[AiDotNet.Attributes.PreprocessesInput("XVectorNetwork transposes the [batch, frames, features] input to channel-first [B, features, frames] before the first TDNN convolution.")]
+[AiDotNet.Attributes.StackInputLayout(AiDotNet.Enums.TensorAxis.Batch, AiDotNet.Enums.TensorAxis.Channels, AiDotNet.Enums.TensorAxis.Time)]
 public partial class SpeakerEmbeddingExtractor<T> : SpeakerRecognitionBase<T>, ISpeakerEmbeddingExtractor<T>
 {
     #region Execution Mode
@@ -112,6 +114,11 @@ public partial class SpeakerEmbeddingExtractor<T> : SpeakerRecognitionBase<T>, I
     /// Number of encoder layers.
     /// </summary>
     private readonly int _numEncoderLayers;
+
+    // The paper network on the native path; null in ONNX mode or with custom layers.
+    private XVectorNetwork<T>? _network;
+
+    internal XVectorNetwork<T>? Network => _network;
 
 
     #endregion
@@ -288,33 +295,31 @@ public partial class SpeakerEmbeddingExtractor<T> : SpeakerRecognitionBase<T>, I
     protected override void InitializeLayers()
     {
         if (!_useNativeMode) return;
-
+        _network = null;
         if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
         {
             Layers.AddRange(Architecture.Layers);
+            return;
         }
-        else
-        {
-            Layers.AddRange(LayerHelper<T>.CreateDefaultSpeakerEmbeddingLayers(
-                numMels: _options.NumMfcc,
-                hiddenDim: _hiddenDim,
-                embeddingDim: EmbeddingDimension,
-                numLayers: _numEncoderLayers,
-                maxFrames: _options.MaxFrames,
-                dropoutRate: _options.DropoutRate));
-        }
+        // The x-vector network (Snyder et al. 2018, Table 1). It used to be a generic dense stack over MFCCs.
+        var layers = new List<LayerBase<T>>();
+        _network = new XVectorNetwork<T>(Engine, layers, _options.SampleRate, _options.NumMfcc, _options.FftSize, _options.HopLength,
+            _hiddenDim, _options.PoolingDim, EmbeddingDimension, _options.NumTrainingSpeakers, _options.NormalizationWindowFrames);
+        Layers.AddRange(layers);
     }
 
-    /// <summary>
-    /// Number of trailing layers that operate on the segment-level (post-pooling)
-    /// representation. The X-Vector paper (Snyder et al. ICASSP 2018) specifies a
-    /// frame-level TDNN stack, then statistics pooling across time, then segment-
-    /// level dense layers. <see cref="LayerHelper{T}.CreateDefaultSpeakerEmbeddingLayers"/>
-    /// yields three trailing DenseLayers (two post-pool transforms + the final
-    /// embedding projection); a custom Architecture.Layers list is expected to
-    /// follow the same shape contract or override <see cref="Forward"/> /
-    /// <see cref="ForwardForTraining"/> with its own pooling split point.
-    /// </summary>
+    // Features [frames, bins] (or [B, frames, bins]) of a waveform [S] (or of features passed through).
+    private Tensor<T> NetworkFeatures(Tensor<T> input)
+    {
+        var network = _network ?? throw new InvalidOperationException("No native x-vector network.");
+        if (input.Rank == 1)
+        {
+            var features = network.Features(input);
+            return Engine.Reshape(features, new[] { 1, features.Shape[0], features.Shape[1] });
+        }
+        return input.Rank == 2 ? Engine.Reshape(input, new[] { 1, input.Shape[0], input.Shape[1] }) : input;
+    }
+
     private const int SegmentLevelTrailingLayers = 3;
 
     /// <summary>
@@ -347,6 +352,11 @@ public partial class SpeakerEmbeddingExtractor<T> : SpeakerRecognitionBase<T>, I
 
     private Tensor<T> ForwardWithTemporalPool(Tensor<T> input)
     {
+        if (_network is not null)
+        {
+            var xvectors = _network.Embed(NetworkFeatures(input), IsTrainingMode);
+            return input.Rank == 3 ? xvectors : Engine.Reshape(xvectors, new[] { EmbeddingDimension });
+        }
         Tensor<T> x = input;
         int segCount = System.Math.Min(SegmentLevelTrailingLayers, Layers.Count);
         int frameCount = Layers.Count - segCount;
@@ -497,6 +507,13 @@ public partial class SpeakerEmbeddingExtractor<T> : SpeakerRecognitionBase<T>, I
         }
         else
         {
+            if (_network is not null)
+            {
+                bool wasTraining = IsTrainingMode;
+                if (wasTraining) SetTrainingMode(false);
+                try { return PostprocessOutput(ForwardWithTemporalPool(input)); }
+                finally { if (wasTraining) SetTrainingMode(true); }
+            }
             // Native forward pass
             var preprocessed = PreprocessAudio(input);
             Tensor<T> output = preprocessed;
@@ -513,6 +530,27 @@ public partial class SpeakerEmbeddingExtractor<T> : SpeakerRecognitionBase<T>, I
     /// write on every parameter surface, so the guard is stated once here instead of being
     /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
     protected override bool SupportsParameterMutation => _useNativeMode;
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// With a speaker classifier (<see cref="SpeakerEmbeddingOptions.NumTrainingSpeakers"/>), a target that is one
+    /// distribution over the training speakers per input trains the x-vector network as the paper does (section 2.2):
+    /// the cross-entropy of the softmax over speakers. Any other target falls back to the standard regression step.
+    /// </remarks>
+    protected override bool TryApplyLearningRule(Tensor<T> input, Tensor<T> target)
+    {
+        var network = _network;
+        if (network?.Classifier is null || target.Shape[^1] != _options.NumTrainingSpeakers) return false;
+        int speakers = _options.NumTrainingSpeakers;
+        var weights = Engine.TensorMultiplyScalar(Engine.Reshape(target, new[] { target.Length / speakers, speakers }), NumOps.FromDouble(-1.0));
+        TrainWithCustomLoss(input, _ =>
+        {
+            var logits = network.SpeakerLogits(network.Embed(NetworkFeatures(input), training: true));
+            var loss = Engine.ReduceSum(Engine.TensorMultiply(Engine.TensorLogSoftmax(logits, axis: -1), weights), new[] { 0, 1 }, keepDims: false);
+            return Engine.TensorMultiplyScalar(loss, NumOps.FromDouble(1.0 / logits.Shape[0]));
+        }, _optimizer);
+        return true;
+    }
     /// <summary>
     /// Gets metadata about the model.
     /// </summary>

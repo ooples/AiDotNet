@@ -49,7 +49,7 @@ public class SincInterpolation<T> : IInterpolation<T>
     /// <param name="y">The y-values at each data point.</param>
     /// <param name="cutoffFrequency">
     /// The cutoff frequency that controls the bandwidth of the interpolation.
-    /// Default is 1.0.
+    /// The two-argument constructor uses 1.
     /// </param>
     /// <exception cref="ArgumentException">
     /// Thrown when the input collections have different lengths.
@@ -71,19 +71,29 @@ public class SincInterpolation<T> : IInterpolation<T>
     /// If it's too smooth and misses important details, try increasing it.
     /// </para>
     /// </remarks>
-    public SincInterpolation(IEnumerable<double> x, IEnumerable<double> y, double cutoffFrequency = 1.0)
+    public SincInterpolation(Vector<T> x, Vector<T> y, T cutoffFrequency)
     {
-        _numOps = MathHelper.GetNumericOperations<T>();
-
-        var xList = x.ToList();
-        var yList = y.ToList();
-
-        if (xList.Count != yList.Count)
+        Guard.NotNull(x);
+        Guard.NotNull(y);
+        if (x.Length != y.Length)
             throw new ArgumentException("Input vectors must have the same length.");
 
-        _x = new Vector<T>(xList.Select(val => _numOps.FromDouble(val)));
-        _y = new Vector<T>(yList.Select(val => _numOps.FromDouble(val)));
-        _cutoffFrequency = _numOps.FromDouble(cutoffFrequency);
+        _numOps = MathHelper.GetNumericOperations<T>();
+        // Snapshot the inputs so later changes to the caller's vectors do not alter this interpolator
+        _x = x.Clone();
+        _y = y.Clone();
+        _cutoffFrequency = cutoffFrequency;
+    }
+
+    /// <summary>
+    /// Creates a Sinc interpolation with a cutoff frequency of 1.
+    /// </summary>
+    /// <param name="x">The x-coordinates of the data points.</param>
+    /// <param name="y">The y-coordinates (values) of the data points.</param>
+    /// <exception cref="ArgumentException">Thrown when the input vectors have different lengths.</exception>
+    public SincInterpolation(Vector<T> x, Vector<T> y)
+        : this(x, y, MathHelper.GetNumericOperations<T>().One)
+    {
     }
 
     /// <summary>
@@ -111,22 +121,23 @@ public class SincInterpolation<T> : IInterpolation<T>
     /// </remarks>
     public T Interpolate(T x)
     {
-        T result = _numOps.Zero;
-
-        for (int i = 0; i < _x.Length; i++)
+        if (_x.Length == 0)
         {
-            T diff = _numOps.Subtract(x, _x[i]);
-            T sincValue = Sinc(_numOps.Multiply(_cutoffFrequency, diff));
-            result = _numOps.Add(result, _numOps.Multiply(_y[i], sincValue));
+            return _numOps.Zero;
         }
 
-        return result;
+        // sum over i of y[i] * sinc(cutoff * (x - x[i]))
+        var engine = AiDotNetEngine.Current;
+        Tensor<T> diff = engine.ScalarMinusTensor(x, _x.AsTensor());
+        Tensor<T> sincValues = Sinc(engine.TensorMultiplyScalar(diff, _cutoffFrequency));
+
+        return engine.TensorSum(engine.TensorMultiply(_y.AsTensor(), sincValues));
     }
 
     /// <summary>
     /// Calculates the Sinc function value: sin(px)/(px).
     /// </summary>
-    /// <param name="x">The input value.</param>
+    /// <param name="x">The input values.</param>
     /// <returns>The Sinc function value.</returns>
     /// <remarks>
     /// <para>
@@ -142,14 +153,20 @@ public class SincInterpolation<T> : IInterpolation<T>
     /// to your query point have more influence than points farther away.
     /// </para>
     /// </remarks>
-    private T Sinc(T x)
+    private Tensor<T> Sinc(Tensor<T> x)
     {
-        if (_numOps.Equals(x, _numOps.Zero))
-        {
-            return _numOps.One;
-        }
+        // sin(pi x) / (pi x), with the removable singularity at x = 0 filled by 1
+        var engine = AiDotNetEngine.Current;
+        Tensor<T> atZero = engine.TensorEquals(x, _numOps.Zero);
+        Tensor<T> piX = engine.TensorMultiplyScalar(x, MathHelper.Pi<T>());
 
-        T piX = _numOps.Multiply(MathHelper.Pi<T>(), x);
-        return _numOps.Divide(MathHelper.Sin(piX), piX);
+        // piX is exactly 0 wherever atZero is 1, so adding the mask only replaces the zero denominators
+        // (a decimal 0 / 0 throws); the mask overrides those entries below
+        Tensor<T> ratio = engine.TensorDivide(engine.TensorSin(piX), engine.TensorAdd(piX, atZero));
+
+        return engine.TensorWhere(
+            atZero,
+            Tensor<T>.CreateDefault(new[] { x.Length }, _numOps.One),
+            ratio);
     }
 }

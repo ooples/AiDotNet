@@ -51,66 +51,29 @@ public class RgbToHls<T> : ImageAugmenterBase<T>
             OriginalRange = data.OriginalRange
         };
 
-        for (int y = 0; y < data.Height; y++)
-        {
-            for (int x = 0; x < data.Width; x++)
-            {
-                double r = NumOps.ToDouble(data.GetPixel(y, x, 0));
-                double g = NumOps.ToDouble(data.GetPixel(y, x, 1));
-                double b = NumOps.ToDouble(data.GetPixel(y, x, 2));
+        var engine = Engine;
+        var image = data.ToPlanarTensor();
 
-                if (!data.IsNormalized)
-                {
-                    r /= 255.0;
-                    g /= 255.0;
-                    b /= 255.0;
-                }
+        var (r, g, b) = ImageTensor<T>.UnitRgbPlanes(image, data.IsNormalized);
+        var max = engine.TensorMax(r, engine.TensorMax(g, b));
+        var min = engine.TensorMin(r, engine.TensorMin(g, b));
+        var delta = engine.TensorSubtract(max, min);
+        var sum = engine.TensorAdd(max, min);
 
-                double max = Math.Max(r, Math.Max(g, b));
-                double min = Math.Min(r, Math.Min(g, b));
-                double delta = max - min;
+        // Lightness
+        var l = engine.TensorDivideScalar(sum, NumOps.FromDouble(2.0));
 
-                // Lightness
-                double l = (max + min) / 2.0;
+        // Saturation: 0 when achromatic, delta / (max + min) when l <= 0.5, else delta / (2 - max - min)
+        var dark = engine.TensorDivide(delta, sum);
+        var light = engine.TensorDivide(delta, engine.ScalarMinusTensor(NumOps.FromDouble(2.0), sum));
+        var bright = engine.TensorGreaterThan(l, NumOps.FromDouble(0.5));
+        var achromatic = engine.TensorLessThan(delta, NumOps.FromDouble(1e-10));
+        var s = engine.TensorWhere(achromatic, new Tensor<T>(max._shape), engine.TensorWhere(bright, light, dark));
 
-                // Saturation
-                double s;
-                s = delta < 1e-10
-                    ? 0
-                    : l <= 0.5 ? delta / (max + min) : delta / (2.0 - max - min);
+        // Hue
+        var h = ImageTensor<T>.HexconeHue(r, g, b, max, delta);
 
-                // Hue
-                double h;
-                if (delta < 1e-10)
-                {
-                    h = 0;
-                }
-                else if (Math.Abs(max - r) < 1e-10)
-                {
-                    h = 60.0 * (((g - b) / delta) % 6.0);
-                }
-                else if (Math.Abs(max - g) < 1e-10)
-                {
-                    h = 60.0 * (((b - r) / delta) + 2.0);
-                }
-                else
-                {
-                    h = 60.0 * (((r - g) / delta) + 4.0);
-                }
-
-                if (h < 0) h += 360.0;
-                h /= 360.0; // Normalize to [0, 1]
-
-                result.SetPixel(y, x, 0, NumOps.FromDouble(h));
-                result.SetPixel(y, x, 1, NumOps.FromDouble(l));
-                result.SetPixel(y, x, 2, NumOps.FromDouble(s));
-
-                for (int c = 3; c < data.Channels; c++)
-                {
-                    result.SetPixel(y, x, c, data.GetPixel(y, x, c));
-                }
-            }
-        }
+        result.SetFromPlanarTensor(ImageTensor<T>.ReplaceLeadingChannels(image, h, l, s));
 
         return result;
     }

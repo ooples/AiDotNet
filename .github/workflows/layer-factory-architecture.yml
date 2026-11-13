@@ -1,0 +1,32 @@
+name: Layer factory architecture contracts
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+    paths:
+      - '.github/workflows/layer-factory-architecture.yml'
+      - 'src/Helpers/LayerHelper*.cs'
+      - 'tools/LayerFactoryArchitectureAudit/**'
+      - 'tests/AiDotNet.Tests/UnitTests/Helpers/LayerFactoryArchitectureTests.cs'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  audit:
+    if: ${{ github.event.pull_request.draft != true }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - name: Verify the syntax instrument
+        run: dotnet run --project tools/LayerFactoryArchitectureAudit -c Release -- --self-test
+      - name: Reject active factories that ignore the architecture
+        run: dotnet run --project tools/LayerFactoryArchitectureAudit -c Release --no-build -- --fail-on-active-unused > architecture-inventory.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: layer-factory-architecture-inventory
+          path: architecture-inventory.json
+          retention-days: 7

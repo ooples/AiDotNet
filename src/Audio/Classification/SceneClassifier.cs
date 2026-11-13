@@ -19,8 +19,15 @@ namespace AiDotNet.Audio.Classification;
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
 /// <para>
-/// Classifies audio recordings by their acoustic environment or scene context.
-/// Based on DCASE (Detection and Classification of Acoustic Scenes and Events) challenge.
+/// Classifies audio recordings by their acoustic environment or scene context with the DCASE 2017 Task 1 baseline
+/// system (Mesaros et al. 2017, sections 2.2 and 3): log mel-band energies in 40 ms frames with 50% overlap over
+/// 40 bands from 0 to 22050 Hz, a 5-frame context (a 200-value vector), and a multilayer perceptron of two dense
+/// layers of 50 units with 20% dropout under a softmax over the 15 TUT Acoustic Scenes 2017 classes, trained with
+/// Adam at a learning rate of 0.001. A recording's label is the majority vote of its frame decisions.
+/// </para>
+/// <para>
+/// The baseline also standardizes features with training-set statistics; feed standardized context vectors to
+/// <c>Train</c> and <c>Predict</c> when your recordings' levels vary widely.
 /// </para>
 /// <para><b>For Beginners:</b> Scene classification answers "Where was this recorded?":
 /// <list type="bullet">
@@ -38,7 +45,7 @@ namespace AiDotNet.Audio.Classification;
 ///
 /// Usage for training:
 /// <code>
-/// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(inputFeatures: 60, outputSize: 30);
+/// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(inputFeatures: 200, outputSize: 15);
 /// var classifier = new SceneClassifier&lt;float&gt;(architecture);
 /// classifier.Train(features, labels);
 /// var result = classifier.Classify(newAudio);
@@ -51,7 +58,7 @@ namespace AiDotNet.Audio.Classification;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ResearchPaper("A Large-Scale Evaluation of Acoustic and Subjective Music-Similarity Measures", "https://doi.org/10.1016/j.csl.2017.01.007", Year = 2017, Authors = "Annamaria Mesaros, Toni Heittola, Tuomas Virtanen")]
+[ResearchPaper("DCASE 2017 Challenge Setup: Tasks, Datasets and Baseline System", "https://dcase.community/documents/workshop2017/proceedings/DCASE2017Workshop_Mesaros_100.pdf", Year = 2017, Authors = "Annamaria Mesaros, Toni Heittola, Aleksandr Diment, Benjamin Elizalde, Ankit Shah, Emmanuel Vincent, Bhiksha Raj, Tuomas Virtanen")]
 public partial class SceneClassifier<T> : AudioClassifierBase<T>, ISceneClassifier<T>
 {
     #region Fields
@@ -67,20 +74,9 @@ public partial class SceneClassifier<T> : AudioClassifierBase<T>, ISceneClassifi
     /// <summary>Standard acoustic scene labels (DCASE-style).</summary>
     public static readonly string[] StandardScenes =
     [
-        // Indoor scenes
-        "airport", "shopping_mall", "metro_station", "street_pedestrian",
-        "public_square", "street_traffic", "tram", "bus", "metro", "park",
-
-        // Extended scenes
-        "office", "home", "restaurant", "cafe", "library", "classroom",
-        "hospital", "gym", "church", "theater",
-
-        // Outdoor scenes
-        "beach", "forest", "mountain", "countryside", "city_center",
-        "residential_area", "construction_site", "industrial_area",
-
-        // Transportation
-        "car", "train", "airplane", "boat"
+        // The 15 classes of TUT Acoustic Scenes 2017 (section 3).
+        "bus", "cafe_restaurant", "car", "city_center", "forest_path", "grocery_store", "home", "beach",
+        "library", "metro_station", "office", "residential_area", "train", "tram", "park"
     ];
 
     /// <summary>Scene category mapping.</summary>
@@ -90,7 +86,8 @@ public partial class SceneClassifier<T> : AudioClassifierBase<T>, ISceneClassifi
         { "office", "indoor" }, { "home", "indoor" }, { "restaurant", "indoor" },
         { "cafe", "indoor" }, { "library", "indoor" }, { "classroom", "indoor" },
         { "hospital", "indoor" }, { "gym", "indoor" }, { "church", "indoor" },
-        { "theater", "indoor" }, { "shopping_mall", "indoor" },
+        { "theater", "indoor" }, { "shopping_mall", "indoor" }, { "cafe_restaurant", "indoor" },
+        { "grocery_store", "indoor" },
 
         // Outdoor urban
         { "street_pedestrian", "outdoor_urban" }, { "street_traffic", "outdoor_urban" },
@@ -101,7 +98,7 @@ public partial class SceneClassifier<T> : AudioClassifierBase<T>, ISceneClassifi
         // Outdoor nature
         { "park", "outdoor_nature" }, { "beach", "outdoor_nature" },
         { "forest", "outdoor_nature" }, { "mountain", "outdoor_nature" },
-        { "countryside", "outdoor_nature" },
+        { "countryside", "outdoor_nature" }, { "forest_path", "outdoor_nature" },
 
         // Transportation
         { "airport", "transportation" }, { "metro_station", "transportation" },
@@ -155,7 +152,8 @@ public partial class SceneClassifier<T> : AudioClassifierBase<T>, ISceneClassifi
         _options = options ?? new SceneClassifierOptions();
         Options = _options;
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        // The baseline trains with Adam at a learning rate of 0.001, the optimizer's default.
+        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
 
         // Set base class properties
         base.SampleRate = _options.SampleRate;
@@ -200,7 +198,7 @@ public partial class SceneClassifier<T> : AudioClassifierBase<T>, ISceneClassifi
             // ONNX inference mode" and the model could neither train nor infer. Build the trainable stack
             // (matching the native architecture ctor) so a from-options SceneClassifier can be trained.
             _useNativeMode = true;
-            _optimizer = new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+            _optimizer = new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
             InitializeLayers();
         }
     }
@@ -209,10 +207,8 @@ public partial class SceneClassifier<T> : AudioClassifierBase<T>, ISceneClassifi
     {
         var opts = options ?? new SceneClassifierOptions();
         var scenes = opts.CustomScenes ?? StandardScenes;
-        int numMfccs = opts.NumMfccs;
-        // Features: MFCC mean + std + delta + spectral features + band energies
-        int inputFeatures = numMfccs * 3 + 7 + 6;
-        return new NeuralNetworkArchitecture<T>(inputFeatures: inputFeatures, outputSize: scenes.Length);
+        // One context vector: ContextFrames frames of NumMels log mel-band energies.
+        return new NeuralNetworkArchitecture<T>(inputFeatures: opts.NumMels * opts.ContextFrames, outputSize: scenes.Length);
     }
 
     private MelSpectrogram<T> CreateMelSpectrogram()
@@ -224,7 +220,9 @@ public partial class SceneClassifier<T> : AudioClassifierBase<T>, ISceneClassifi
             hopLength: _options.HopLength,
             fMin: 0,
             fMax: _options.SampleRate / 2,
-            logMel: true);
+            logMel: true,
+            // Log mel-band ENERGIES, log(mel + eps), as the baseline computes them, rather than decibels.
+            logOffset: 2.220446049250313e-16);
     }
 
     private MfccExtractor<T> CreateMfccExtractor()
@@ -320,12 +318,13 @@ public partial class SceneClassifier<T> : AudioClassifierBase<T>, ISceneClassifi
             return;
         }
 
-        // Create default scene classification layers
-        var layers = LayerHelper<T>.CreateDefaultLayers(Architecture);
-        foreach (var layer in layers)
+        // The baseline MLP: dense layers of 50 ReLU units, each followed by 20% dropout, then the class layer.
+        for (int i = 0; i < _options.NumHiddenLayers; i++)
         {
-            Layers.Add(layer);
+            Layers.Add(new DenseLayer<T>(_options.HiddenUnits, (IActivationFunction<T>)new ReLUActivation<T>()));
+            Layers.Add(new DropoutLayer<T>(_options.DropoutRate));
         }
+        Layers.Add(new DenseLayer<T>(ClassLabels.Count, (IActivationFunction<T>)new IdentityActivation<T>()));
 
         // NOTE: no in-graph softmax layer is appended. The classification head emits LINEAR logits and
         // every probability path (Classify / GetSceneProbabilities / PostprocessOutput) applies softmax
@@ -347,15 +346,9 @@ public partial class SceneClassifier<T> : AudioClassifierBase<T>, ISceneClassifi
     {
         ThrowIfDisposed();
 
-        // Extract features
+        // Descriptive features for the result; the decision is the frame majority vote.
         var featureStruct = ExtractFeaturesInternal(audio);
-        var featureTensor = CreateFeatureTensor(featureStruct);
-
-        // Get predictions
-        // Feed LOGITS (not the softmaxed Predict output) to ApplySoftmax so scene probabilities are
-        // softmaxed exactly once (PredictCore now returns probabilities for the inference contract).
-        var output = ForwardLogits(featureTensor);
-        var probabilities = ApplySoftmax(output);
+        var probabilities = VoteShares(audio);
 
         // Find best prediction
         var (predictedScene, confidence) = GetPrediction(probabilities);
@@ -411,14 +404,50 @@ public partial class SceneClassifier<T> : AudioClassifierBase<T>, ISceneClassifi
     {
         ThrowIfDisposed();
 
-        var featureStruct = ExtractFeaturesInternal(audio);
-        var featureTensor = CreateFeatureTensor(featureStruct);
-        // Feed LOGITS (not the softmaxed Predict output) to ApplySoftmax so scene probabilities are
-        // softmaxed exactly once (PredictCore now returns probabilities for the inference contract).
-        var output = ForwardLogits(featureTensor);
-        var probabilities = ApplySoftmax(output);
+        return VoteShares(audio);
+    }
 
-        return probabilities;
+    /// <summary>
+    /// Each scene's share of the frame decisions: every context frame is classified and the recording takes the
+    /// majority label (section 3: "Frame-based decisions were combined using majority voting").
+    /// </summary>
+    private Dictionary<string, T> VoteShares(Tensor<T> audio)
+    {
+        var logits = ForwardLogits(ContextFeatures(audio));
+        int classes = ClassLabels.Count, frames = Math.Max(1, logits.Length / classes);
+        var votes = new int[classes];
+        var span = logits.Data.Span;
+        for (int f = 0; f < frames; f++)
+        {
+            int best = 0;
+            for (int c = 1; c < classes; c++) if (NumOps.ToDouble(span[f * classes + c]) > NumOps.ToDouble(span[f * classes + best])) best = c;
+            votes[best]++;
+        }
+        var shares = new Dictionary<string, T>();
+        for (int c = 0; c < classes; c++) shares[ClassLabels[c]] = NumOps.FromDouble(votes[c] / (double)frames);
+        return shares;
+    }
+
+    /// <summary>
+    /// The classifier input of a recording, <c>[frames, ContextFrames * NumMels]</c>: per frame, the log mel-band
+    /// energies of the <see cref="SceneClassifierOptions.ContextFrames"/> frames centred on it (edges repeat the first
+    /// and last frame).
+    /// </summary>
+    public Tensor<T> ContextFeatures(Tensor<T> audio)
+    {
+        var waveform = audio.Length < _options.FftSize
+            ? Engine.TensorConcatenate(new[] { Engine.Reshape(audio, new[] { audio.Length }), new Tensor<T>(new[] { _options.FftSize - audio.Length }) }, 0)
+            : Engine.Reshape(audio, new[] { audio.Length });
+        var mel = _melSpectrogram.Forward(waveform);
+        int frames = mel.Shape[0], bands = mel.Shape[1], context = Math.Max(1, _options.ContextFrames), half = context / 2;
+        var features = new Tensor<T>(new[] { frames, context * bands });
+        for (int f = 0; f < frames; f++)
+            for (int k = 0; k < context; k++)
+            {
+                int source = Math.Min(frames - 1, Math.Max(0, f - half + k));
+                for (int b = 0; b < bands; b++) features[f, k * bands + b] = mel[source, b];
+            }
+        return features;
     }
 
     /// <summary>
@@ -465,14 +494,11 @@ public partial class SceneClassifier<T> : AudioClassifierBase<T>, ISceneClassifi
         string? previousScene = null;
         int position = 0;
 
+        var flatAudio = AudioEngineOps.Flatten(Engine, audio);
         while (position + segmentSamples <= totalSamples)
         {
             // Extract segment
-            var segment = new Tensor<T>([segmentSamples]);
-            for (int i = 0; i < segmentSamples; i++)
-            {
-                segment[i] = audio[position + i];
-            }
+            var segment = Engine.TensorSlice(flatAudio, [position], [segmentSamples]);
 
             // Classify segment
             var result = Classify(segment);
@@ -535,11 +561,7 @@ public partial class SceneClassifier<T> : AudioClassifierBase<T>, ISceneClassifi
     /// <summary>
     /// Extracts acoustic features used for scene classification.
     /// </summary>
-    public Tensor<T> ExtractAcousticFeatures(Tensor<T> audio)
-    {
-        var features = ExtractFeaturesInternal(audio);
-        return CreateFeatureTensor(features);
-    }
+    public Tensor<T> ExtractAcousticFeatures(Tensor<T> audio) => ContextFeatures(audio);
 
     #endregion
 
@@ -555,15 +577,15 @@ public partial class SceneClassifier<T> : AudioClassifierBase<T>, ISceneClassifi
         // PyTorch convention (the forward/loss path uses raw logits; inference applies softmax). Training
         // is unaffected — the tape forward (base ForwardForTraining) walks the layers directly and never
         // calls PredictCore, so softmaxing here does NOT double-softmax the CrossEntropyWithLogits loss.
-        // The internal probability paths (Classify / GetSceneProbabilities) call ForwardLogits + a single
-        // ApplySoftmax, so they still softmax exactly once. softmax of the uniform rule-based fallback is
-        // a no-op, and the ONNX logits become probabilities too, keeping all three paths consistent.
+        // The recording-level paths (Classify / GetSceneProbabilities) take the argmax of each frame's
+        // logits and vote, so they never softmax at all, and the ONNX logits become probabilities too,
+        // keeping all three paths consistent.
         return PostprocessOutput(ForwardLogits(input));
     }
 
     /// <summary>
-    /// Native forward to per-scene LOGITS (or the ONNX graph's logits, or the uniform rule-based
-    /// fallback). The linear classifier head is intentionally not soft-maxed here: <see cref="PredictCore"/>
+    /// Native forward to per-scene LOGITS (or the ONNX graph's logits). Without a loaded ONNX
+    /// encoder or native layers there is no model to score with, so it throws. The linear classifier head is intentionally not soft-maxed here: <see cref="PredictCore"/>
     /// softmaxes for inference and the training tape (base ForwardForTraining) consumes these logits
     /// directly via CrossEntropyWithLogitsLoss.
     /// </summary>
@@ -577,8 +599,10 @@ public partial class SceneClassifier<T> : AudioClassifierBase<T>, ISceneClassifi
         // Native mode - use layers
         if (!_useNativeMode || Layers.Count == 0)
         {
-            // Fallback to rule-based classification (a uniform distribution; softmax leaves it unchanged).
-            return ClassifyWithRulesAsTensor(input);
+            // No model to score with: report it instead of returning uniform scores that would still
+            // name a scene.
+            throw new InvalidOperationException(
+                "Scene classification requires a loaded ONNX model or initialized native layers.");
         }
 
         var current = input;
@@ -599,9 +623,7 @@ public partial class SceneClassifier<T> : AudioClassifierBase<T>, ISceneClassifi
     /// </summary>
     protected override Tensor<T> PreprocessAudio(Tensor<T> rawAudio)
     {
-        // Extract features from raw audio
-        var features = ExtractFeaturesInternal(rawAudio);
-        return CreateFeatureTensor(features);
+        return ContextFeatures(rawAudio);
     }
 
     /// <summary>
@@ -609,31 +631,16 @@ public partial class SceneClassifier<T> : AudioClassifierBase<T>, ISceneClassifi
     /// </summary>
     protected override Tensor<T> PostprocessOutput(Tensor<T> modelOutput)
     {
-        // Apply softmax for scene classification (single-label)
+        // Softmax over the scenes of each frame (single-label).
         var result = new Tensor<T>(modelOutput._shape);
-
-        // Find max for numerical stability
-        double maxVal = double.MinValue;
-        for (int i = 0; i < modelOutput.Length; i++)
+        int classes = modelOutput.Rank == 0 ? 1 : modelOutput.Shape[^1], rows = modelOutput.Length / Math.Max(1, classes);
+        for (int r = 0; r < rows; r++)
         {
-            double val = NumOps.ToDouble(modelOutput[i]);
-            if (val > maxVal) maxVal = val;
+            double maxVal = double.MinValue, sum = 0;
+            for (int c = 0; c < classes; c++) maxVal = Math.Max(maxVal, NumOps.ToDouble(modelOutput[r * classes + c]));
+            for (int c = 0; c < classes; c++) sum += Math.Exp(NumOps.ToDouble(modelOutput[r * classes + c]) - maxVal);
+            for (int c = 0; c < classes; c++) result[r * classes + c] = NumOps.FromDouble(Math.Exp(NumOps.ToDouble(modelOutput[r * classes + c]) - maxVal) / sum);
         }
-
-        // Compute softmax
-        double sum = 0;
-        var expValues = new double[modelOutput.Length];
-        for (int i = 0; i < modelOutput.Length; i++)
-        {
-            expValues[i] = Math.Exp(NumOps.ToDouble(modelOutput[i]) - maxVal);
-            sum += expValues[i];
-        }
-
-        for (int i = 0; i < modelOutput.Length; i++)
-        {
-            result[i] = NumOps.FromDouble(expValues[i] / sum);
-        }
-
         return result;
     }
 
@@ -645,8 +652,8 @@ public partial class SceneClassifier<T> : AudioClassifierBase<T>, ISceneClassifi
         var metadata = new ModelMetadata<T>
         {
             Name = _useNativeMode ? "SceneClassifier-Native" : "SceneClassifier-ONNX",
-            Description = "Acoustic scene classification model (DCASE-style)",
-            FeatureCount = _options.NumMfccs,  // Input feature count, not output class count
+            Description = "Acoustic scene classification: the DCASE 2017 baseline MLP over log mel-band energies",
+            FeatureCount = _options.NumMels * _options.ContextFrames,  // Input feature count, not output class count
             Complexity = 1
         };
         metadata.AdditionalInfo["SampleRate"] = _options.SampleRate.ToString();
@@ -701,46 +708,14 @@ public partial class SceneClassifier<T> : AudioClassifierBase<T>, ISceneClassifi
             };
         }
 
-        var mfccMean = new double[numCoeffs];
-        var mfccStd = new double[numCoeffs];
-        var mfccDelta = new double[numCoeffs];
-
-        for (int c = 0; c < numCoeffs; c++)
-        {
-            double sum = 0;
-            for (int t = 0; t < numFrames; t++)
-            {
-                if (t < mfccs.Shape[0] && c < mfccs.Shape[1])
-                {
-                    sum += NumOps.ToDouble(mfccs[t, c]);
-                }
-            }
-            mfccMean[c] = sum / numFrames;
-
-            double sumSq = 0;
-            for (int t = 0; t < numFrames; t++)
-            {
-                if (t < mfccs.Shape[0] && c < mfccs.Shape[1])
-                {
-                    double diff = NumOps.ToDouble(mfccs[t, c]) - mfccMean[c];
-                    sumSq += diff * diff;
-                }
-            }
-            mfccStd[c] = Math.Sqrt(sumSq / numFrames);
-
-            // Delta (first derivative)
-            double sumDelta = 0;
-            for (int t = 1; t < numFrames && t < mfccs.Shape[0]; t++)
-            {
-                if (c < mfccs.Shape[1])
-                {
-                    double prev = NumOps.ToDouble(mfccs[t - 1, c]);
-                    double curr = NumOps.ToDouble(mfccs[t, c]);
-                    sumDelta += Math.Abs(curr - prev);
-                }
-            }
-            mfccDelta[c] = numFrames > 1 ? sumDelta / (numFrames - 1) : 0.0;
-        }
+        // Per-coefficient population mean / std over frames and mean absolute frame-to-frame delta.
+        // SceneFeatures is double-typed, so each statistic vector is converted once at the end.
+        var (meanTensor, stdTensor) = AudioEngineOps.ColumnMeanStd(Engine, mfccs);
+        var mfccMean = meanTensor.Cast<double>().ToArray();
+        var mfccStd = stdTensor.Cast<double>().ToArray();
+        var mfccDelta = numFrames > 1
+            ? Engine.TensorDivideScalar(AudioEngineOps.ColumnAbsDiffSum(Engine, mfccs), NumOps.FromDouble(numFrames - 1)).Cast<double>().ToArray()
+            : new double[numCoeffs];
 
         // Compute spectral features
         double spectralCentroid = ComputeSpectralCentroid(melSpec);
@@ -770,27 +745,6 @@ public partial class SceneClassifier<T> : AudioClassifierBase<T>, ISceneClassifi
             EnergyVariance = energyVariance,
             BandEnergies = bandEnergies
         };
-    }
-
-    private Tensor<T> CreateFeatureTensor(SceneFeatures features)
-    {
-        int numFeatures = features.MfccMean.Length * 3 + 7 + features.BandEnergies.Length;
-        var input = new Tensor<T>([1, numFeatures]);
-
-        int idx = 0;
-        foreach (var val in features.MfccMean) input[0, idx++] = NumOps.FromDouble(val);
-        foreach (var val in features.MfccStd) input[0, idx++] = NumOps.FromDouble(val);
-        foreach (var val in features.MfccDelta) input[0, idx++] = NumOps.FromDouble(val);
-        input[0, idx++] = NumOps.FromDouble(features.SpectralCentroid / 100);
-        input[0, idx++] = NumOps.FromDouble(features.SpectralBandwidth / 100);
-        input[0, idx++] = NumOps.FromDouble(features.SpectralFlatness);
-        input[0, idx++] = NumOps.FromDouble(features.SpectralContrast);
-        input[0, idx++] = NumOps.FromDouble(features.RmsEnergy * 10);
-        input[0, idx++] = NumOps.FromDouble(features.ZeroCrossingRate * 100);
-        input[0, idx++] = NumOps.FromDouble(features.EnergyVariance);
-        foreach (var val in features.BandEnergies) input[0, idx++] = NumOps.FromDouble(val);
-
-        return input;
     }
 
     private AcousticCharacteristics<T> ExtractAcousticCharacteristics(SceneFeatures features)
@@ -825,66 +779,24 @@ public partial class SceneClassifier<T> : AudioClassifierBase<T>, ISceneClassifi
     #region Spectral Feature Computation
 
     private double ComputeSpectralCentroid(Tensor<T> melSpec)
-    {
-        double weightedSum = 0;
-        double totalSum = 0;
-
-        for (int t = 0; t < melSpec.Shape[0]; t++)
-        {
-            for (int f = 0; f < melSpec.Shape[1]; f++)
-            {
-                double mag = NumOps.ToDouble(melSpec[t, f]);
-                weightedSum += f * mag;
-                totalSum += mag;
-            }
-        }
-
-        return totalSum > 0 ? weightedSum / totalSum : 0;
-    }
+        => AudioEngineOps.SpectralCentroidBins(Engine, melSpec);
 
     private double ComputeSpectralBandwidth(Tensor<T> melSpec, double centroid)
     {
-        double sum = 0;
-        double totalMag = 0;
+        int bins = melSpec.Shape[1];
+        if (melSpec.Shape[0] == 0 || bins == 0) return 0;
 
-        for (int t = 0; t < melSpec.Shape[0]; t++)
-        {
-            for (int f = 0; f < melSpec.Shape[1]; f++)
-            {
-                double mag = NumOps.ToDouble(melSpec[t, f]);
-                double diff = f - centroid;
-                sum += diff * diff * mag;
-                totalMag += mag;
-            }
-        }
+        // sum_f (f - centroid)^2 * sum_t mag[t, f], over the total magnitude.
+        var binTotals = Engine.ReduceSum(melSpec, [0], keepDims: false);
+        var offsets = Engine.TensorSubtractScalar(Engine.TensorArange<T>(0, bins), NumOps.FromDouble(centroid));
+        double sum = NumOps.ToDouble(Engine.TensorSum(Engine.TensorMultiply(Engine.TensorSquare(offsets), binTotals)));
+        double totalMag = NumOps.ToDouble(Engine.TensorSum(binTotals));
 
         return totalMag > 0 ? Math.Sqrt(sum / totalMag) : 0;
     }
 
     private double ComputeSpectralFlatness(Tensor<T> melSpec)
-    {
-        double logSum = 0;
-        double sum = 0;
-        int count = 0;
-
-        for (int t = 0; t < melSpec.Shape[0]; t++)
-        {
-            for (int f = 0; f < melSpec.Shape[1]; f++)
-            {
-                double mag = Math.Max(NumOps.ToDouble(melSpec[t, f]), 1e-10);
-                logSum += Math.Log(mag);
-                sum += mag;
-                count++;
-            }
-        }
-
-        if (count == 0) return 0;
-
-        double geometricMean = Math.Exp(logSum / count);
-        double arithmeticMean = sum / count;
-
-        return arithmeticMean > 0 ? geometricMean / arithmeticMean : 0;
-    }
+        => AudioEngineOps.SpectralFlatness(Engine, melSpec);
 
     private double ComputeSpectralContrast(Tensor<T> melSpec)
     {
@@ -895,35 +807,26 @@ public partial class SceneClassifier<T> : AudioClassifierBase<T>, ISceneClassifi
         if (numBins == 0 || melSpec.Shape[0] == 0) return 0;
 
         int bandSize = Math.Max(1, numBins / numBands);
+        int frames = melSpec.Shape[0];
 
-        double totalContrast = 0;
-
-        for (int t = 0; t < melSpec.Shape[0]; t++)
+        // Per frame and band: peak minus valley over the band's bins, summed over frames and bands.
+        // Bands that start past the last bin are empty and contribute nothing.
+        var totalContrast = new Tensor<T>([1]);
+        for (int band = 0; band < numBands; band++)
         {
-            for (int band = 0; band < numBands; band++)
-            {
-                int startBin = band * bandSize;
-                int endBin = Math.Min((band + 1) * bandSize, numBins);
+            int startBin = band * bandSize;
+            int endBin = Math.Min((band + 1) * bandSize, numBins);
+            if (endBin <= startBin) continue;
 
-                double maxVal = double.MinValue;
-                double minVal = double.MaxValue;
-
-                for (int f = startBin; f < endBin; f++)
-                {
-                    double val = NumOps.ToDouble(melSpec[t, f]);
-                    if (val > maxVal) maxVal = val;
-                    if (val < minVal) minVal = val;
-                }
-
-                if (maxVal > double.MinValue && minVal < double.MaxValue)
-                {
-                    totalContrast += maxVal - minVal;
-                }
-            }
+            var bandBins = Engine.TensorSlice(melSpec, [0, startBin], [frames, endBin - startBin]);
+            var range = Engine.TensorSubtract(
+                Engine.ReduceMax(bandBins, [1], keepDims: false),
+                Engine.TensorAmin(bandBins, [1], keepDims: false));
+            totalContrast = Engine.TensorAdd(totalContrast, Engine.ReduceSum(range, [0], keepDims: true));
         }
 
-        int denominator = melSpec.Shape[0] * numBands;
-        return denominator > 0 ? totalContrast / denominator : 0;
+        int denominator = frames * numBands;
+        return denominator > 0 ? NumOps.ToDouble(Engine.TensorSum(totalContrast)) / denominator : 0;
     }
 
     private double ComputeRmsEnergy(Tensor<T> audio)
@@ -931,12 +834,7 @@ public partial class SceneClassifier<T> : AudioClassifierBase<T>, ISceneClassifi
         // Guard against division by zero for empty audio
         if (audio.Length == 0) return 0;
 
-        double sum = 0;
-        for (int i = 0; i < audio.Length; i++)
-        {
-            double val = NumOps.ToDouble(audio[i]);
-            sum += val * val;
-        }
+        double sum = NumOps.ToDouble(AudioEngineOps.SumOfSquares(Engine, audio));
         return Math.Sqrt(sum / audio.Length);
     }
 
@@ -945,14 +843,7 @@ public partial class SceneClassifier<T> : AudioClassifierBase<T>, ISceneClassifi
         // Guard against division by zero for empty audio
         if (audio.Length == 0) return 0;
 
-        int crossings = 0;
-        for (int i = 1; i < audio.Length; i++)
-        {
-            double prev = NumOps.ToDouble(audio[i - 1]);
-            double curr = NumOps.ToDouble(audio[i]);
-            if ((prev >= 0 && curr < 0) || (prev < 0 && curr >= 0))
-                crossings++;
-        }
+        int crossings = AudioEngineOps.ZeroCrossingCount(Engine, audio);
         return (double)crossings / audio.Length;
     }
 
@@ -961,24 +852,10 @@ public partial class SceneClassifier<T> : AudioClassifierBase<T>, ISceneClassifi
         // Guard against division by zero for empty input
         if (melSpec.Shape[0] == 0) return 0;
 
-        var frameEnergies = new double[melSpec.Shape[0]];
-
-        for (int t = 0; t < melSpec.Shape[0]; t++)
-        {
-            double sum = 0;
-            for (int f = 0; f < melSpec.Shape[1]; f++)
-            {
-                sum += NumOps.ToDouble(melSpec[t, f]);
-            }
-            frameEnergies[t] = sum;
-        }
-
-        double mean = frameEnergies.Length > 0 ? frameEnergies.Average() : 0;
-        double variance = frameEnergies.Length > 0
-            ? frameEnergies.Sum(e => (e - mean) * (e - mean)) / frameEnergies.Length
-            : 0;
-
-        return variance;
+        // Population variance of the per-frame energies (sum over bins).
+        var frameEnergies = Engine.ReduceSum(melSpec, [1], keepDims: false);
+        var deviation = Engine.TensorSubtractScalar(frameEnergies, Engine.TensorMean(frameEnergies));
+        return NumOps.ToDouble(Engine.TensorMean(Engine.TensorSquare(deviation)));
     }
 
     private double[] ComputeBandEnergies(Tensor<T> melSpec)
@@ -986,55 +863,26 @@ public partial class SceneClassifier<T> : AudioClassifierBase<T>, ISceneClassifi
         int numBands = 6;
         int numBins = melSpec.Shape[1];
         int bandSize = numBins / numBands;
-        var bandEnergies = new double[numBands];
+        int frames = melSpec.Shape[0];
 
+        // Mean magnitude of each band's bins over all frames (0 for an empty band); SceneFeatures is
+        // double-typed, so the six means are converted together.
+        var bandMeans = new Tensor<T>[numBands];
         for (int band = 0; band < numBands; band++)
         {
             int startBin = band * bandSize;
             int endBin = Math.Min((band + 1) * bandSize, numBins);
-            double sum = 0;
-            int count = 0;
-
-            for (int t = 0; t < melSpec.Shape[0]; t++)
-            {
-                for (int f = startBin; f < endBin; f++)
-                {
-                    sum += NumOps.ToDouble(melSpec[t, f]);
-                    count++;
-                }
-            }
-
-            bandEnergies[band] = count > 0 ? sum / count : 0;
+            bandMeans[band] = frames > 0 && endBin > startBin
+                ? Engine.Reshape(Engine.ReduceMean(Engine.TensorSlice(melSpec, [0, startBin], [frames, endBin - startBin]), [0, 1], keepDims: false), [1])
+                : new Tensor<T>([1]);
         }
 
-        return bandEnergies;
+        return Engine.Concat(bandMeans, 0).Cast<double>().ToArray();
     }
 
     #endregion
 
-    #region Rule-Based Classification
-
-    private Tensor<T> ClassifyWithRulesAsTensor(Tensor<T> features)
-    {
-        // Extract feature values from tensor for rule-based classification
-        var scenes = ClassLabels;
-        var probs = new double[scenes.Count];
-
-        // Simple rule-based scoring based on feature position
-        // This is a fallback when no neural network is available
-        for (int i = 0; i < scenes.Count; i++)
-        {
-            probs[i] = 1.0 / scenes.Count; // Uniform distribution as fallback
-        }
-
-        var result = new Tensor<T>([scenes.Count]);
-        for (int i = 0; i < scenes.Count; i++)
-        {
-            result[i] = NumOps.FromDouble(probs[i]);
-        }
-
-        return result;
-    }
+    #region Scene Categories
 
     private static string GetCategory(string scene)
     {

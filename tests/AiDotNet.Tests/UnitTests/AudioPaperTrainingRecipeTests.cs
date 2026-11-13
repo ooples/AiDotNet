@@ -1,5 +1,4 @@
 using System.Reflection;
-using AiDotNet.Audio.TextToSpeech;
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -21,12 +20,18 @@ namespace AiDotNet.Tests.UnitTests.Audio;
 public class AudioPaperTrainingRecipeTests
 {
     [Fact]
-    public void ConvTransformer_DefaultOptimizerMatchesConformerRecipe()
+    public void ConvTransformer_DefaultOptimizerMatchesItsPapersRecipe()
     {
-        var options = CreateConvTransformerOptions();
-        using var model = new ConvTransformer<double>(CreateArchitecture(), options);
-
-        AssertTransformerAdamRecipe(model, options.EncoderDim, options.WarmupSteps, options.LearningRateFactor, options.WeightDecay);
+        // Mohamed et al. 2019 ("Transformers with convolutional context for ASR"), section 3.1: AdaDelta with a fixed
+        // learning rate of 1.0, no warmup, gradient clipping at 10.0. The earlier Noam recipe belonged to the Conformer
+        // paper the class used to cite by mistake.
+        using var model = new ConvTransformer<double>(CreateArchitecture(), CreateConvTransformerOptions());
+        var field = model.GetType().GetField("_optimizer", BindingFlags.Instance | BindingFlags.NonPublic);
+        var optimizer = Assert.IsType<AdaDeltaOptimizer<double, Tensor<double>, Tensor<double>>>(field?.GetValue(model));
+        var optimizerOptions = Assert.IsType<AdaDeltaOptimizerOptions<double, Tensor<double>, Tensor<double>>>(optimizer.GetOptions());
+        Assert.Equal(1.0, optimizerOptions.InitialLearningRate, 12);
+        Assert.True(optimizerOptions.EnableGradientClipping);
+        Assert.Equal(10.0, optimizerOptions.MaxGradientNorm, 12);
     }
 
     [Fact]
@@ -36,41 +41,6 @@ public class AudioPaperTrainingRecipeTests
         using var model = new EfficientConformer<double>(CreateArchitecture(), options);
 
         AssertTransformerAdamRecipe(model, options.EncoderDim * 2, options.WarmupSteps, options.LearningRateFactor, options.WeightDecay);
-    }
-
-    [Fact]
-    public void KyutaiMoshi_DefaultOptimizerMatchesOfficialFineTuningRecipe()
-    {
-        var options = new KyutaiMoshiOptions
-        {
-            EncoderDim = 4,
-            NumEncoderLayers = 1,
-            NumAttentionHeads = 1,
-            NumMels = 8, // two stride-2 3x3 subsampling convolutions need at least 7 bins
-            VocabSize = 4,
-            DropoutRate = 0.0,
-        };
-        using var model = new KyutaiMoshi<double>(CreateArchitecture(), options);
-
-        var field = typeof(KyutaiMoshi<double>).GetField("_optimizer", BindingFlags.Instance | BindingFlags.NonPublic);
-        var optimizer = Assert.IsType<AdamWOptimizer<double, Tensor<double>, Tensor<double>>>(field?.GetValue(model));
-        var optimizerOptions = Assert.IsType<AdamWOptimizerOptions<double, Tensor<double>, Tensor<double>>>(optimizer.GetOptions());
-        var scheduler = Assert.IsType<OneCycleLRScheduler>(optimizerOptions.LearningRateScheduler);
-
-        Assert.Equal(options.LearningRate, scheduler.MaxLearningRate, 15);
-        Assert.Equal(options.TotalTrainingSteps, scheduler.TotalSteps);
-        Assert.Equal(options.WarmupFraction, scheduler.PctStart, 15);
-        Assert.Equal(0.9, optimizerOptions.Beta1, 12);
-        Assert.Equal(0.95, optimizerOptions.Beta2, 12);
-        Assert.Equal(1e-8, optimizerOptions.Epsilon, 15);
-        Assert.Equal(options.WeightDecay, optimizerOptions.WeightDecay, 12);
-        Assert.True(optimizerOptions.EnableGradientClipping);
-        Assert.Equal(options.MaxGradientNorm, optimizerOptions.MaxGradientNorm, 12);
-        Assert.False(optimizerOptions.UseAdaptiveLearningRate);
-        Assert.False(optimizerOptions.UseAdaptiveBetas);
-        Assert.False(optimizerOptions.UseAMSGrad);
-        Assert.Equal(SchedulerStepMode.StepPerBatch, optimizerOptions.SchedulerStepMode);
-        Assert.Equal(scheduler.CurrentLearningRate, optimizerOptions.InitialLearningRate, 15);
     }
 
     [Fact]
@@ -205,6 +175,7 @@ public class AudioPaperTrainingRecipeTests
             NumHeads = 1,
             DropoutRate = 0.0,
             VocabSize = 16,
+            EmbeddingDim = 4,
             PrenetDim = 4,
             AttentionRnnDim = 4,
             DecoderRnnDim = 4,
@@ -215,7 +186,7 @@ public class AudioPaperTrainingRecipeTests
             OutputsPerStep = 1,
         };
         using var model = new Tacotron2<double>(CreateArchitecture(), options);
-        var field = typeof(Tacotron2Model<double>).GetField("_optimizer", BindingFlags.Instance | BindingFlags.NonPublic);
+        var field = typeof(Tacotron2<double>).GetField("_optimizer", BindingFlags.Instance | BindingFlags.NonPublic);
         var optimizer = Assert.IsType<AdamOptimizer<double, Tensor<double>, Tensor<double>>>(field?.GetValue(model));
         var optimizerOptions = Assert.IsType<AdamOptimizerOptions<double, Tensor<double>, Tensor<double>>>(optimizer.GetOptions());
 
@@ -227,8 +198,11 @@ public class AudioPaperTrainingRecipeTests
         Assert.False(optimizerOptions.UseAdaptiveMomentum);
         Assert.False(optimizerOptions.UseAdaptiveBetas);
         Assert.False(optimizerOptions.UseAMSGrad);
-        Assert.False(optimizerOptions.EnableGradientClipping);
-        Assert.Null(optimizerOptions.LearningRateScheduler);
+        // §3.1: 1e-3 "exponentially decaying to 1e-5 starting after 50,000 iterations" (the halving rate is
+        // Rayhane-mamah/Tacotron-2's reading); gradient norms clipped at 1 (NVIDIA tacotron2 grad_clip_thresh).
+        Assert.True(optimizerOptions.EnableGradientClipping);
+        Assert.Equal(1.0, optimizerOptions.MaxGradientNorm, 15);
+        Assert.NotNull(optimizerOptions.LearningRateScheduler);
         var regularization = Assert.IsType<L2Regularization<double, Tensor<double>, Tensor<double>>>(
             optimizerOptions.Regularization);
         Assert.Equal(1e-6, regularization.GetOptions().Strength, 15);
@@ -273,11 +247,11 @@ public class AudioPaperTrainingRecipeTests
     {
         EncoderDim = 4,
         NumEncoderLayers = 1,
+        NumDecoderLayers = 1,
         NumAttentionHeads = 1,
-        FeedForwardDim = 8,
-        NumMels = 4,
+        DecoderEmbeddingDim = 4,
+        NumMels = 8,
         VocabSize = 4,
-        DropoutRate = 0.0,
     };
 
     private static EfficientConformerOptions CreateEfficientConformerOptions() => new()

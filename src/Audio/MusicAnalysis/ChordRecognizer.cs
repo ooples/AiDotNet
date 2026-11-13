@@ -45,6 +45,7 @@ public class ChordRecognizer<T> : MusicAnalysisBase<T>
     private readonly ChromaExtractor<T> _chromaExtractor;
     private readonly ChordRecognizerOptions _options;
     private readonly Dictionary<string, double[]> _chordTemplates;
+    private Tensor<T>? _chordTemplateTensor;
 
     // Chord quality names
     private static readonly string[] NoteNames = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
@@ -77,7 +78,7 @@ public class ChordRecognizer<T> : MusicAnalysisBase<T>
     /// </summary>
     /// <param name="audio">Audio samples as a tensor.</param>
     /// <returns>List of recognized chord segments.</returns>
-    public List<ChordSegment> Recognize(Tensor<T> audio)
+    public List<ChordSegment<T>> Recognize(Tensor<T> audio)
     {
         // Extract chroma features
         var chroma = _chromaExtractor.Extract(audio);
@@ -96,13 +97,9 @@ public class ChordRecognizer<T> : MusicAnalysisBase<T>
     /// </summary>
     /// <param name="audio">Audio samples as a vector.</param>
     /// <returns>List of recognized chord segments.</returns>
-    public List<ChordSegment> Recognize(Vector<T> audio)
+    public List<ChordSegment<T>> Recognize(Vector<T> audio)
     {
-        var tensor = new Tensor<T>([audio.Length]);
-        for (int i = 0; i < audio.Length; i++)
-        {
-            tensor[i] = audio[i];
-        }
+        var tensor = new Tensor<T>([audio.Length], audio);
         return Recognize(tensor);
     }
 
@@ -173,130 +170,150 @@ public class ChordRecognizer<T> : MusicAnalysisBase<T>
         return template;
     }
 
-    private List<(string chord, double confidence)> ClassifyFrames(Tensor<T> chroma)
+    private List<(string chord, T confidence)> ClassifyFrames(Tensor<T> chroma)
     {
         int numFrames = chroma.Shape[0];
-        var frameChords = new List<(string chord, double confidence)>();
+        var frameChords = new List<(string chord, T confidence)>();
+        if (numFrames == 0)
+            return frameChords;
+
+        var templates = _chordTemplates.ToList();
+        int numChords = templates.Count;
+        var frameShape = new[] { numFrames, 1 };
+
+        // Chroma vectors [frames, 12]; frames whose max(0, max chroma) is below MinChromaEnergy are
+        // "no chord" (a NaN chroma value never counts as low energy)
+        var chromaVectors = Engine.TensorSlice(chroma, [0, 0], [numFrames, 12]);
+        var hasNaN = Engine.ReduceSum(
+            Engine.TensorWhere(Engine.TensorIsNan(chromaVectors), Tensor<T>.CreateDefault([numFrames, 12], NumOps.One), new Tensor<T>([numFrames, 12])),
+            [1], keepDims: true);
+        var rowMax = Engine.ReduceMax(chromaVectors, [1], keepDims: true);
+        var lowEnergy = _options.MinChromaEnergy > 0
+            ? Engine.TensorMultiply(
+                Engine.TensorLessThan(rowMax, NumOps.FromDouble(_options.MinChromaEnergy)),
+                Engine.TensorEquals(hasNaN, NumOps.Zero))
+            : new Tensor<T>(frameShape);
+
+        // Normalize each frame by its sum when that sum is positive
+        var rowSum = Engine.ReduceSum(chromaVectors, [1], keepDims: true);
+        var divisor = Engine.TensorWhere(
+            Engine.TensorGreaterThan(rowSum, NumOps.Zero), rowSum, Tensor<T>.CreateDefault(frameShape, NumOps.One));
+        var normalized = Engine.TensorDivide(chromaVectors, Engine.TensorBroadcastTo(divisor, [numFrames, 12]));
+
+        // Cosine similarity with every chord template (0 where the norms' product is not above
+        // CosineEpsilon); the best chord is the first holding the largest score above MinConfidence
+        // Confidence per frame: 1 for a no-chord (low energy) frame, else the winning score, else MinConfidence
+        var minConfidence = Tensor<T>.CreateDefault(frameShape, NumOps.FromDouble(_options.MinConfidence));
+        // BuildChordTemplates always yields templates (at least "N"), so there is always a chord to score.
+        var scoreShape = new[] { numFrames, numChords };
+        var templateMatrix = ChordTemplateTensor(templates);
+        var dot = Engine.TensorMatMul(normalized, Engine.TensorTranspose(templateMatrix));
+        var normA = Engine.TensorSqrt(Engine.ReduceSum(Engine.TensorSquare(normalized), [1], keepDims: true));
+        var normB = Engine.TensorSqrt(Engine.ReduceSum(Engine.TensorSquare(templateMatrix), [1], keepDims: true));
+        var denom = Engine.TensorMultiply(
+            Engine.TensorBroadcastTo(normA, scoreShape),
+            Engine.TensorBroadcastTo(Engine.Reshape(normB, [1, numChords]), scoreShape));
+        var scores = Engine.TensorWhere(
+            Engine.TensorGreaterThan(denom, NumOps.FromDouble(CosineEpsilon)),
+            Engine.TensorDivide(dot, denom),
+            new Tensor<T>(scoreShape));
+
+        // NaN scores never win: rank them below every number (only floating types hold NaN, so the
+        // -inf substitute is only built when a NaN is present)
+        var scoreNaN = Engine.TensorIsNan(scores);
+        var ranked = Engine.TensorCountNonzero(scoreNaN) > 0
+            ? Engine.TensorWhere(scoreNaN, Tensor<T>.CreateDefault(scoreShape, AudioEngineOps.NegativeInfinityOrMin<T>()), scores)
+            : scores;
+        var best = Engine.ReduceMax(ranked, [1], keepDims: true);
+        var chordIndex = Engine.TensorBroadcastTo(Engine.Reshape(Engine.TensorArange<T>(0, numChords, 1), [1, numChords]), scoreShape);
+        var firstBest = Engine.TensorAmin(
+            Engine.TensorWhere(
+                Engine.TensorEquals(ranked, Engine.TensorBroadcastTo(best, scoreShape)),
+                chordIndex,
+                Tensor<T>.CreateDefault(scoreShape, NumOps.FromDouble(numChords))),
+            [1], keepDims: true);
+        var wins = Engine.TensorGreaterThan(best, NumOps.FromDouble(_options.MinConfidence));
+        var winner = Engine.TensorWhere(wins, firstBest, Tensor<T>.CreateDefault(frameShape, NumOps.FromDouble(-1)));
+        var frameConfidence = Engine.TensorWhere(wins, best, minConfidence);
+        int[] bestChords = winner.Cast<int>().ToArray();
+
+        T[] confidences = Engine.TensorWhere(lowEnergy, Tensor<T>.CreateDefault(frameShape, NumOps.One), frameConfidence).ToArray();
+        var noChord = Engine.TensorNonzero(lowEnergy).ToArray();
+        var isLow = new bool[numFrames];
+        for (int k = 0; k < noChord.Length; k += 2) isLow[noChord[k]] = true;
 
         for (int f = 0; f < numFrames; f++)
         {
-            // Extract chroma vector for this frame
-            var chromaVector = new double[12];
-            double maxChroma = 0;
-
-            for (int c = 0; c < 12; c++)
+            if (isLow[f])
             {
-                chromaVector[c] = NumOps.ToDouble(chroma[f, c]);
-                maxChroma = Math.Max(maxChroma, chromaVector[c]);
-            }
-
-            // Check if frame has enough energy
-            if (maxChroma < _options.MinChromaEnergy)
-            {
-                frameChords.Add(("N", 1.0)); // No chord
+                frameChords.Add(("N", confidences[f])); // No chord
                 continue;
             }
 
-            // Normalize
-            double sum = chromaVector.Sum();
-            if (sum > 0)
-            {
-                for (int c = 0; c < 12; c++)
-                {
-                    chromaVector[c] /= sum;
-                }
-            }
-
-            // Find best matching template
-            string bestChord = "N";
-            double bestScore = _options.MinConfidence;
-
-            foreach (var (chordName, template) in _chordTemplates)
-            {
-                double score = CosineSimilarity(chromaVector, template);
-
-                if (score > bestScore)
-                {
-                    bestScore = score;
-                    bestChord = chordName;
-                }
-            }
-
-            frameChords.Add((bestChord, bestScore));
+            int chord = bestChords[f];
+            frameChords.Add((chord >= 0 ? templates[chord].Key : "N", confidences[f]));
         }
 
         return frameChords;
     }
 
-    private static double CosineSimilarity(double[] a, double[] b)
+    /// <summary>The fixed chord templates as a <c>[chords, 12]</c> tensor, converted to T once, in bulk.</summary>
+    private Tensor<T> ChordTemplateTensor(List<KeyValuePair<string, double[]>> templates)
     {
-        double dot = 0, normA = 0, normB = 0;
-        for (int i = 0; i < a.Length; i++)
+        if (_chordTemplateTensor is null)
         {
-            dot += a[i] * b[i];
-            normA += a[i] * a[i];
-            normB += b[i] * b[i];
+            var values = new double[templates.Count * 12];
+            for (int k = 0; k < templates.Count; k++)
+                Array.Copy(templates[k].Value, 0, values, k * 12, 12);
+            _chordTemplateTensor = new Tensor<double>(values, [templates.Count, 12]).Cast<T>();
         }
-        double denom = Math.Sqrt(normA) * Math.Sqrt(normB);
-        return denom > CosineEpsilon ? dot / denom : 0;
+        return _chordTemplateTensor;
     }
 
-    private List<ChordSegment> MergeIntoSegments(List<(string chord, double confidence)> frameChords)
+    private List<ChordSegment<T>> MergeIntoSegments(List<(string chord, T confidence)> frameChords)
     {
-        var segments = new List<ChordSegment>();
+        var segments = new List<ChordSegment<T>>();
         if (frameChords.Count == 0) return segments;
 
         double frameRate = _options.SampleRate / (double)_options.HopLength;
 
-        string currentChord = frameChords[0].chord;
-        int startFrame = 0;
-        double totalConfidence = frameChords[0].confidence;
-        int count = 1;
-
-        for (int i = 1; i < frameChords.Count; i++)
+        // Runs of consecutive frames with the same chord
+        int numFrames = frameChords.Count;
+        var runOfFrame = new int[numFrames];
+        var runStarts = new List<int> { 0 };
+        var frameConfidence = new T[numFrames];
+        frameConfidence[0] = frameChords[0].confidence;
+        for (int i = 1; i < numFrames; i++)
         {
-            var (chord, confidence) = frameChords[i];
-
-            if (chord == currentChord)
-            {
-                totalConfidence += confidence;
-                count++;
-            }
-            else
-            {
-                // Save current segment
-                double duration = (i - startFrame) / frameRate;
-                if (duration >= _options.MinSegmentDuration && currentChord != "N")
-                {
-                    segments.Add(new ChordSegment
-                    {
-                        Name = currentChord,
-                        StartTime = startFrame / frameRate,
-                        EndTime = i / frameRate,
-                        Confidence = totalConfidence / count
-                    });
-                }
-
-                // Start new segment
-                currentChord = chord;
-                startFrame = i;
-                totalConfidence = confidence;
-                count = 1;
-            }
+            if (frameChords[i].chord != frameChords[i - 1].chord)
+                runStarts.Add(i);
+            runOfFrame[i] = runStarts.Count - 1;
+            frameConfidence[i] = frameChords[i].confidence;
         }
 
-        // Save last segment
-        if (currentChord != "N")
+        // Mean confidence of each run: the sum of its frames' confidences over its frame count
+        int numRuns = runStarts.Count;
+        var runLength = new int[numRuns];
+        for (int r = 0; r < numRuns; r++)
+            runLength[r] = (r + 1 < numRuns ? runStarts[r + 1] : numFrames) - runStarts[r];
+        var runSums = Engine.ScatterAdd(
+            new Tensor<T>(frameConfidence, [numFrames]), new Tensor<int>(runOfFrame, [numFrames]), 0, numRuns);
+        T[] runMeans = Engine.TensorDivide(runSums, new Tensor<int>(runLength, [numRuns]).Cast<T>()).ToArray();
+
+        for (int r = 0; r < numRuns; r++)
         {
-            double duration = (frameChords.Count - startFrame) / frameRate;
-            if (duration >= _options.MinSegmentDuration)
+            string chord = frameChords[runStarts[r]].chord;
+            int startFrame = runStarts[r];
+            int endFrame = startFrame + runLength[r];
+            double duration = (endFrame - startFrame) / frameRate;
+            if (duration >= _options.MinSegmentDuration && chord != "N")
             {
-                segments.Add(new ChordSegment
+                segments.Add(new ChordSegment<T>
                 {
-                    Name = currentChord,
+                    Name = chord,
                     StartTime = startFrame / frameRate,
-                    EndTime = frameChords.Count / frameRate,
-                    Confidence = totalConfidence / count
+                    EndTime = endFrame / frameRate,
+                    Confidence = runMeans[r]
                 });
             }
         }

@@ -5666,6 +5666,10 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
         //     all, so the push is pure dead weight that accumulates one entry
         //     per Forward call indefinitely.
         //
+        //   - A NoGradScope with training mode on: no tape records and no eager backward follows, so each forward
+        //     pushed one tensor per layer for good. A finite-difference gradient check (thousands of training-mode
+        //     objective evaluations under NoGradScope) grew DemucsNoise past 13 GB and killed the CI runner.
+        //
         //   - JIT graph capture (IsCapturing == true): Forward is recording
         //     operations into a computation graph rather than executing the
         //     eager activation derivative, so ApplyActivationDerivativeFromOutput
@@ -5674,7 +5678,7 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
         //     isn't sufficient.
         //
         // Only push when we know the eager backward will drain it: training
-        // mode ON, not capturing, not inside an inference scope, no tape recording.
+        // mode ON, not capturing, not inside an inference or no-grad scope, no tape recording.
         // The tape path already preserves the pre-activation reference through its
         // recorded GradFn closures; the capture path encodes it into the graph node;
         // an InferenceMode scope guarantees no backward at all — all three make the
@@ -5684,6 +5688,7 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
             IsTrainingMode
             && !IsCapturing
             && !InferenceMode.IsActive
+            && !NoGradScope<T>.IsSuppressed
             && GradientTape<T>.Current is null;
         if (eagerBackwardWillRun)
         {
@@ -6039,23 +6044,14 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
             int vectorLength = input.Shape[input.Shape.Length - 1];
             int batchElements = input.Length / vectorLength;
             var flatDerivative = derivative.Reshape(new[] { batchElements, vectorLength, vectorLength });
-            var flatOutputGrad = outputGradient.Reshape(new[] { batchElements, vectorLength });
-            var flatInputGrad = new Tensor<T>(new[] { batchElements, vectorLength });
+            var flatOutputGrad = outputGradient.Reshape(new[] { batchElements, vectorLength, 1 });
 
-            // Batched matrix-vector multiply: inputGrad[i] = derivative[i] @ gradient[i]
-            for (int i = 0; i < batchElements; i++)
+            // Batched matrix-vector multiply: inputGrad[i] = derivative[i] @ gradient[i]. The result is a
+            // fresh buffer, detached from the tape as the per-row copy into a new tensor was.
+            Tensor<T> flatInputGrad;
+            using (new NoGradScope<T>())
             {
-                // Extract [vectorLength, vectorLength] slice and [vectorLength, 1] column
-                var derivSlice = flatDerivative.Slice(0, i, i + 1).Reshape(vectorLength, vectorLength);
-                var gradCol = flatOutputGrad.Slice(0, i, i + 1).Reshape(vectorLength, 1);
-                var result = Engine.TensorMatMul(derivSlice, gradCol).Reshape(vectorLength);
-
-                // Copy result into output
-                int offset = i * vectorLength;
-                for (int j = 0; j < vectorLength; j++)
-                {
-                    flatInputGrad[offset + j] = result[j];
-                }
+                flatInputGrad = Engine.TensorBatchMatMul(flatDerivative, flatOutputGrad);   // [batch, V, 1]
             }
 
             return flatInputGrad.Reshape(input._shape);
@@ -6934,6 +6930,61 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
             return snapshot;
         }
 
+        /// <summary>
+        /// Writes every scalar of this slot, in <see cref="ReadScalar"/> order, into the start of
+        /// <paramref name="destination"/>.
+        /// </summary>
+        internal void CopyTo(Span<T> destination)
+        {
+            if (_lowPrecisionTensor is not null)
+            {
+                MathHelper.GetNumericOperations<T>().FromHalfSpan(
+                    _lowPrecisionTensor.AsSpan(), destination.Slice(0, _lowPrecisionTensor.Length));
+                return;
+            }
+
+            if (_tensor is null)
+                throw new InvalidOperationException("A parameter value slot has no active storage.");
+            if (_tensor is SparseTensor<T> sparse)
+            {
+                sparse.DataVector.AsSpan().Slice(0, sparse.NonZeroCount).CopyTo(destination);
+                return;
+            }
+
+            _tensor.Contiguous().AsSpan().CopyTo(destination);
+        }
+
+        /// <summary>
+        /// Writes <paramref name="source"/> (exactly <see cref="ScalarCount"/> values, in
+        /// <see cref="ReadScalar"/> order) into this slot's storage and marks the storage written.
+        /// </summary>
+        internal void CopyFrom(ReadOnlySpan<T> source)
+        {
+            if (source.Length != ScalarCount)
+            {
+                throw new ArgumentException(
+                    $"Source span has {source.Length} values but the parameter slot requires {ScalarCount}.",
+                    nameof(source));
+            }
+
+            if (_lowPrecisionTensor is not null)
+            {
+                MathHelper.GetNumericOperations<T>().ToHalfSpan(source, _lowPrecisionTensor.AsWritableSpan());
+                _lowPrecisionTensor.IncrementVersion();
+                return;
+            }
+
+            if (_tensor is null)
+                throw new InvalidOperationException("A parameter value slot has no active storage.");
+            if (_tensor is SparseTensor<T> sparse)
+                source.CopyTo(sparse.DataVector.AsWritableSpan());
+            else if (_tensor.IsContiguous)
+                source.CopyTo(_tensor.AsWritableSpan());
+            else
+                AiDotNet.Training.TensorCheckpoint<T>.CopyValues(new Tensor<T>(source.ToArray(), _tensor._shape), _tensor);
+            _tensor.IncrementVersion();
+        }
+
         internal void CopyFrom(Tensor<T> source)
         {
             if (source is null) throw new ArgumentNullException(nameof(source));
@@ -6944,10 +6995,14 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
                     nameof(source));
             }
 
+            // Span and data-vector writes do not bump a tensor's version, and the engine's derived caches (packed
+            // GEMM weights, resident device copies) and compiled plans compare versions: without the bump a clone
+            // or checkpoint load kept computing with whatever weights were packed before it.
             if (_lowPrecisionTensor is not null)
             {
                 MathHelper.GetNumericOperations<T>().ToHalfSpan(
                     source.AsSpan(), _lowPrecisionTensor.AsWritableSpan());
+                _lowPrecisionTensor.IncrementVersion();
                 return;
             }
 
@@ -6955,11 +7010,15 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
                 throw new InvalidOperationException("A parameter value slot has no active storage.");
             if (_tensor is SparseTensor<T> sparse)
             {
-                for (int i = 0; i < sparse.NonZeroCount; i++)
-                    sparse.DataVector[i] = source.GetFlat(i);
+                // Logical (row-major) order, as GetFlat read it, then one bulk copy into the stored values.
+                source.Contiguous().AsSpan().Slice(0, sparse.NonZeroCount)
+                    .CopyTo(sparse.DataVector.AsWritableSpan());
+                sparse.IncrementVersion();
                 return;
             }
             AiDotNet.Training.TensorCheckpoint<T>.CopyValues(source, _tensor);
+            // Writes through the slot must invalidate version-keyed caches, as the sparse and half paths above do.
+            _tensor.IncrementVersion();
         }
     }
 
@@ -6971,17 +7030,6 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
         DeclaredParameterComponent component)
         => component.LowPrecisionTensor?.Length
             ?? (component.Tensor is null ? 0 : TrainableScalarCount(component.Tensor));
-
-    private static T ReadParameterComponentScalar(
-        DeclaredParameterComponent component,
-        int index)
-        => ValueSlot(component).ReadScalar(index);
-
-    private static void WriteParameterComponentScalar(
-        DeclaredParameterComponent component,
-        int index,
-        T value)
-        => ValueSlot(component).WriteScalar(index, value);
 
     /// <summary>
     /// Returns this layer's own trainable slots in generated manifest order. Child layers are
@@ -7092,8 +7140,7 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
                     $"requires {owner.Parameters.Length}.", nameof(source));
             }
 
-            var span = source.AsSpan();
-            for (int i = 0; i < span.Length; i++) owner.Parameters[i] = span[i];
+            source.AsSpan().CopyTo(owner.Parameters.AsWritableSpan());
         }
     }
 
@@ -7575,8 +7622,8 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
             {
                 int count = ParameterComponentScalarCount(component);
                 if (dest is null) { offset += count; continue; }
-                for (int j = 0; j < count; j++)
-                    dest[offset++] = ReadParameterComponentScalar(component, j);
+                ValueSlot(component).CopyTo(dest.AsWritableSpan().Slice(offset, count));
+                offset += count;
                 continue;
             }
 
@@ -7590,8 +7637,8 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
             {
                 var subParameters = sub.GetParameters();
                 if (dest is null) { offset += subParameters.Length; continue; }
-                for (int j = 0; j < subParameters.Length; j++)
-                    dest[offset++] = subParameters[j];
+                subParameters.AsSpan().CopyTo(dest.AsWritableSpan().Slice(offset, subParameters.Length));
+                offset += subParameters.Length;
             }
         }
 
@@ -8143,8 +8190,20 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
                 or DeclaredParameterComponentKind.Buffer)
             {
                 int count = ParameterComponentScalarCount(component);
-                for (int j = 0; j < count; j++)
-                    WriteParameterComponentScalar(component, j, source[offset++]);
+                if (component.LowPrecisionTensor is null && component.Tensor is { } dense
+                    && dense is not SparseTensor<T> && dense.Length == count)
+                {
+                    // One span copy for a dense slot, as the slot's own CopyFrom does. Writing it a scalar at a time
+                    // through SetFlat cost about 150 ns per value: 1.6 s to load ResNet-18's 11.7M weights.
+                    source.AsSpan().Slice(offset, count).CopyTo(dense.AsWritableSpan());
+                    // A span write does not bump the tensor's version, and observers of parameter changes (policy
+                    // ownership, compiled-plan caches) compare versions: mark the slot written, as SetFlat did.
+                    dense.IncrementVersion();
+                    offset += count;
+                    continue;
+                }
+                ValueSlot(component).CopyFrom(source.AsSpan().Slice(offset, count));
+                offset += count;
                 continue;
             }
 
@@ -8163,7 +8222,8 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
             int take = subLayer.GetParameters().Length;
             if (take <= 0) continue;
             var slice = new Vector<T>(take);
-            for (int j = 0; j < take; j++) slice[j] = source[offset++];
+            source.AsSpan().Slice(offset, take).CopyTo(slice.AsWritableSpan());
+            offset += take;
             subLayer.SetParameters(slice);
         }
 
@@ -8988,8 +9048,7 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
             // Readonly generated buffers cannot be rebound, but preflight proved their existing
             // tensor has the exact source shape. Copying into it preserves independence and state.
             var existing = destinationBuffers[entry.Name];
-            for (int value = 0; value < entry.Tensor.Length; value++)
-                existing[value] = entry.Tensor[value];
+            Engine.TensorCopy(entry.Tensor, existing);
         }
     }
 
@@ -10455,6 +10514,17 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
         // The lazy contract still works here because the WithSeededRandom /
         // EagerInitializationStrategy branch below handles both lazy and
         // non-lazy strategies uniformly when RandomSeed is set.
+        // A strategy that cannot be re-seeded is used as configured even under a pinned seed: one that loads external
+        // weights (FromFile) keeps its per-layer cursor only on the shared instance, so a seeded clone made every layer
+        // load weights_0 while its biases advanced; and a custom IInitializationStrategy outside InitializationStrategyBase
+        // has no WithSeededRandom, so replacing it with seeded Xavier discarded the caller's distribution.
+        if (InitializationStrategy is { IsLazy: false } configured
+            && (configured.LoadFromExternal || configured is not Initialization.InitializationStrategyBase<T>))
+        {
+            configured.InitializeWeights(tensor, fanIn, fanOut);
+            return;
+        }
+
         if (RandomSeed.HasValue)
         {
             // Mix the tensor shape (fanIn, fanOut) into the derivation alongside

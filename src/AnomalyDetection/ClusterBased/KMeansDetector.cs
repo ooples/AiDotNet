@@ -121,158 +121,79 @@ public partial class KMeansDetector<T> : AnomalyDetectorBase<T>
     {
         ValidateInput(X);
 
-        var scores = new Vector<T>(X.Rows);
-
-        for (int i = 0; i < X.Rows; i++)
+        var centroids = _centroids;
+        if (centroids == null)
         {
-            // Find distance to nearest centroid and which cluster it belongs to
-            T minDist = NumOps.MaxValue;
-            int nearestCluster = 0;
-
-            var point = new Vector<T>(X.Columns);
-            for (int j = 0; j < X.Columns; j++)
-            {
-                point[j] = X[i, j];
-            }
-
-            var centroids = _centroids;
-            if (centroids == null)
-            {
-                throw new InvalidOperationException("Model not properly fitted.");
-            }
-
-            for (int c = 0; c < centroids.Rows; c++)
-            {
-                var centroid = new Vector<T>(centroids.Columns);
-                for (int j = 0; j < centroids.Columns; j++)
-                {
-                    centroid[j] = centroids[c, j];
-                }
-
-                T dist = StatisticsHelper<T>.EuclideanDistance(point, centroid);
-                if (NumOps.LessThan(dist, minDist))
-                {
-                    minDist = dist;
-                    nearestCluster = c;
-                }
-            }
-
-            // Weight the distance by inverse cluster size fraction.
-            // Points in small clusters (e.g., a singleton outlier that became its own centroid)
-            // get amplified scores. A point with distance 0 in a singleton cluster gets
-            // a high score because being in a tiny cluster is itself anomalous.
-            T clusterFraction = _clusterSizes != null && _clusterSizes[nearestCluster] > 0
-                ? NumOps.Divide(NumOps.FromDouble(_clusterSizes[nearestCluster]), NumOps.FromDouble(_totalSamples))
-                : NumOps.One;
-
-            // Score = distance + penalty for small clusters
-            // The penalty term ensures singleton cluster members get high scores even with distance 0
-            T smallClusterPenalty = NumOps.Subtract(NumOps.One, clusterFraction);
-            T score = NumOps.Add(minDist, smallClusterPenalty);
-
-            scores[i] = score;
+            throw new InvalidOperationException("Model not properly fitted.");
         }
 
-        return scores;
+        var engine = Engine;
+        int k = centroids.Rows;
+
+        // Distance to the nearest centroid (first on ties) and that cluster
+        var distances = AnomalyTensorOps.PairwiseDistances(AnomalyTensorOps.ToTensor(X), AnomalyTensorOps.ToTensor(centroids));
+        var nearestCluster = AnomalyTensorOps.FirstArgMinRows(distances);
+        var minDist = engine.TensorAmin(distances, new[] { 1 }, false);
+
+        // Weight the distance by inverse cluster size fraction.
+        // Points in small clusters (e.g., a singleton outlier that became its own centroid)
+        // get amplified scores. A point with distance 0 in a singleton cluster gets
+        // a high score because being in a tiny cluster is itself anomalous.
+        var sizes = _clusterSizes != null
+            ? Tensor<int>.FromVector(Vector<int>.Wrap(_clusterSizes), new[] { k }).Cast<T>()
+            : Tensor<T>.CreateZeros(new[] { k });
+        var fractions = engine.TensorDivideScalar(sizes, NumOps.FromDouble(_totalSamples));
+        var clusterFraction = engine.TensorWhere(engine.TensorGreaterThan(sizes, NumOps.Zero), fractions,
+            Tensor<T>.CreateOnes(new[] { k }));
+
+        // Score = distance + penalty for small clusters
+        // The penalty term ensures singleton cluster members get high scores even with distance 0
+        var smallClusterPenalty = engine.ScalarMinusTensor(NumOps.One, engine.TensorGather(clusterFraction, nearestCluster, 0));
+        return engine.TensorAdd(minDist, smallClusterPenalty).ToVector();
     }
 
     private Matrix<T> RunKMeans(Matrix<T> X, out int[] clusterSizes)
     {
         var random = RandomHelper.CreateSeededRandom(_randomSeed);
         int n = X.Rows;
-        int d = X.Columns;
+        int k = _k;
+        var engine = Engine;
+        var points = AnomalyTensorOps.ToTensor(X);
 
         // Initialize centroids using K-Means++
-        var centroids = InitializeCentroids(X, random);
+        var centroids = AnomalyTensorOps.ToTensor(InitializeCentroids(X, random));
 
         // Assignment array
         var assignments = new int[n];
 
         for (int iter = 0; iter < _maxIterations; iter++)
         {
-            // Assignment step: assign each point to nearest centroid
+            // Assignment step: assign each point to nearest centroid (first on ties)
+            var nearest = AnomalyTensorOps.FirstArgMinRows(AnomalyTensorOps.PairwiseDistances(points, centroids)).ToArray();
             bool changed = false;
             for (int i = 0; i < n; i++)
             {
-                int nearestCentroid = 0;
-                T minDist = NumOps.MaxValue;
-
-                var point = new Vector<T>(d);
-                for (int j = 0; j < d; j++)
+                if (assignments[i] != nearest[i])
                 {
-                    point[j] = X[i, j];
-                }
-
-                for (int c = 0; c < _k; c++)
-                {
-                    var centroid = new Vector<T>(d);
-                    for (int j = 0; j < d; j++)
-                    {
-                        centroid[j] = centroids[c, j];
-                    }
-
-                    T dist = StatisticsHelper<T>.EuclideanDistance(point, centroid);
-                    if (NumOps.LessThan(dist, minDist))
-                    {
-                        minDist = dist;
-                        nearestCentroid = c;
-                    }
-                }
-
-                if (assignments[i] != nearestCentroid)
-                {
-                    assignments[i] = nearestCentroid;
+                    assignments[i] = nearest[i];
                     changed = true;
                 }
             }
 
             if (!changed) break;
 
-            // Update step: recalculate centroids
-            var newCentroids = new Matrix<T>(_k, d);
-            var counts = new int[_k];
-
-            for (int i = 0; i < n; i++)
-            {
-                int cluster = assignments[i];
-                counts[cluster]++;
-                for (int j = 0; j < d; j++)
-                {
-                    newCentroids[cluster, j] = NumOps.Add(newCentroids[cluster, j], X[i, j]);
-                }
-            }
-
-            for (int c = 0; c < _k; c++)
-            {
-                if (counts[c] > 0)
-                {
-                    for (int j = 0; j < d; j++)
-                    {
-                        newCentroids[c, j] = NumOps.Divide(newCentroids[c, j], NumOps.FromDouble(counts[c]));
-                    }
-                }
-                else
-                {
-                    // Re-initialize empty cluster
-                    int randomIdx = random.Next(n);
-                    for (int j = 0; j < d; j++)
-                    {
-                        newCentroids[c, j] = X[randomIdx, j];
-                    }
-                }
-            }
-
-            centroids = newCentroids;
+            // Update step: recalculate centroids, re-initializing empty clusters from a random point
+            centroids = AnomalyTensorOps.KMeansUpdate(points, assignments, k, random);
         }
 
         // Compute final cluster sizes for anomaly scoring
-        clusterSizes = new int[_k];
-        for (int i = 0; i < n; i++)
+        clusterSizes = new int[k];
+        foreach (int cluster in assignments)
         {
-            clusterSizes[assignments[i]]++;
+            clusterSizes[cluster]++;
         }
 
-        return centroids;
+        return centroids.ToMatrix();
     }
 
     private Matrix<T> InitializeCentroids(Matrix<T> X, Random random)

@@ -80,11 +80,12 @@ public partial class DINO<T> : ObjectDetectorBase<T>, IDetectionTrainingModel<T>
         if (_dino.NumQueries <= 0) throw new ArgumentException("NumQueries must be positive.", nameof(options));
         if (_dino.NumDecoderLayers <= 0) throw new ArgumentException("DINO needs at least one decoder layer.", nameof(options));
 
-        // ModelSize selects the paper's backbone: ResNet-50 4-scale, Swin-L 4-scale, or Swin-L 5-scale.
+        // ModelSize selects the paper's backbone: ResNet-50 4-scale, Swin-L 4-scale, or Swin-L 5-scale. Below
+        // Large, options.Backbone may name another ResNet (see ResNetBackboneSelection); otherwise ResNet-50.
         bool fiveScale = options.Size == ModelSize.XLarge;
         Backbone = options.Size is ModelSize.Large or ModelSize.XLarge
             ? new SwinTransformer<T>(new SwinTransformerOptions { Variant = SwinVariant.SwinLarge })
-            : new ResNet<T>(options: new ResNetBackboneOptions { Variant = ResNetVariant.ResNet50 });
+            : new ResNet<T>(options: new ResNetBackboneOptions { Variant = ResNetBackboneSelection.Resolve(options.Backbone) });
         _backboneTaps = fiveScale ? new[] { 0, 1, 2, 3 } : new[] { 1, 2, 3 };
         var channels = _backboneTaps.Select(tap => Backbone.OutputChannels[tap]).ToArray();
 

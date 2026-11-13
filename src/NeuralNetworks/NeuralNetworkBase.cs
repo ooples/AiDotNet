@@ -209,6 +209,21 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     internal IReadOnlyList<ILayer<T>> LayersReadOnly => _layers;
 
     /// <summary>
+    /// Every top-level layer the model runs: <see cref="Layers"/> followed by the trainable layers it owns outside that
+    /// stack (<see cref="GetExtraTrainableLayers"/>), each once, in a stable order.
+    /// </summary>
+    /// <remarks>A walk over <see cref="Layers"/> alone misses a model's component sub-networks — a post-net's
+    /// BatchNorm, a duration predictor — which take part in training, mode switching and serialization.</remarks>
+    internal IEnumerable<ILayer<T>> LayersIncludingComponents()
+    {
+        var seen = new HashSet<ILayer<T>>(ReferenceEqualityComparer<ILayer<T>>.Instance);
+        foreach (var layer in _layers)
+            if (seen.Add(layer)) yield return layer;
+        foreach (var layer in GetExtraTrainableLayers())
+            if (layer is not null && seen.Add(layer)) yield return layer;
+    }
+
+    /// <summary>
     /// Inserts a layer into the internal layer collection and invalidates the parameter count cache.
     /// </summary>
     /// <remarks>
@@ -753,7 +768,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     /// <summary>
     /// Gets whether gradient checkpointing is enabled.
     /// </summary>
-    public bool IsGradientCheckpointingEnabled => _memoryManager?.IsCheckpointingEnabled ?? false;
+    public bool IsGradientCheckpointingEnabled => GradientCheckpointingSegmentSize > 0 || (_memoryManager?.IsCheckpointingEnabled ?? false);
 
     /// <summary>
     /// Gets whether mixed-precision training is enabled.
@@ -1594,6 +1609,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         {
             Training.TensorCheckpoint<T>.CopyValues(source, destination);
         }
+        InvalidateCheckpointParameterCache();
         OnParametersRestored();
     }
 
@@ -5116,6 +5132,25 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             matched += gradient.Length;
         }
 
+        // Trainable registered components are trained through the same tape (CollectModelTrainableTensors), so their
+        // gradients belong on the surface too; a step that trains only a component otherwise published nothing.
+        foreach (var tensor in TrainableComponentTensors())
+        {
+            if (tensor is null || tensor.Length == 0 ||
+                !grads.TryGetValue(tensor, out var gradient) || gradient is null ||
+                gradient.Length != tensor.Length)
+            {
+                continue;
+            }
+
+            extras ??= new Dictionary<Tensor<T>, Vector<T>>(
+                Helpers.TensorReferenceComparer<Tensor<T>>.Instance);
+            var copy = new Vector<T>(gradient.Length);
+            gradient.AsSpan().CopyTo(copy.AsWritableSpan());
+            extras[tensor] = copy;
+            matched += gradient.Length;
+        }
+
         _publishedExtraTensorGradients = extras;
         _hasPublishedParameterGradients = matched > 0;
         return matched;
@@ -5159,6 +5194,21 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     /// </remarks>
     protected virtual IReadOnlyList<Tensor<T>> SelectTrainableParametersForTraining(
         IReadOnlyList<Tensor<T>> parameters) => parameters;
+
+    /// <summary>
+    /// Parameter groups whose gradients a custom-objective training step clips to <c>MaxGradNorm</c> separately, or
+    /// null to clip the layer-owned parameters as one group.
+    /// </summary>
+    /// <remarks>Some papers clip parts of a model independently — Grad-TTS clips its encoder's and its decoder's
+    /// gradients to norm 1 each. Each group's norm is computed over that group alone and only its gradients are scaled.</remarks>
+    protected virtual IReadOnlyList<IReadOnlyList<Tensor<T>>>? GradientClippingGroups(IReadOnlyList<Tensor<T>> trainableParameters)
+        => null;
+
+    /// <summary>
+    /// A bound applied to every gradient component after the norm clip in a custom-objective training step, or 0 for
+    /// none. Deep Voice 3 states both a maximum gradient norm (100) and a gradient clipping value (5).
+    /// </summary>
+    protected virtual double GradientValueClip => 0.0;
 
     private bool? _hasCustomTrainableParameterSelection;
 
@@ -5218,8 +5268,27 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         }
         foreach (var tensor in GetExtraTrainableTensors())
             Add(tensor);
+        foreach (var tensor in TrainableComponentTensors())
+            Add(tensor);
 
         return SelectTrainableParametersForTraining(allParameters);
+    }
+
+    // The live tensors of registered parameter components whose role is Trainable. They are part of
+    // GetParameters and the finite-difference walk, so leaving them out made ComputeGradients write an
+    // exact zero for every one of them and Train() leave them where they started. Frozen, buffer and
+    // learned-state components stay out, and so does a component whose layout is not resolved yet (its
+    // weights do not exist, as with a lazy layer before its first forward) or that exposes only a copy.
+    private IEnumerable<Tensor<T>> TrainableComponentTensors()
+    {
+        var components = ParameterComponents;
+        if (components.Count == 0 || !_parameterRegistry.HasOptimizerUpdatableComponents
+            || !_parameterRegistry.ParameterLayout.ParameterCount.HasValue)
+            return Array.Empty<Tensor<T>>();
+        return _parameterRegistry.GetParameterStateChunks()
+            .Where(chunk => chunk.Role == AiDotNet.Models.Parameters.ParameterSlotRole.Trainable && chunk.IsWritableInPlace)
+            .Select(chunk => chunk.SourceTensor)
+            .ToList();
     }
 
     private IReadOnlyList<Tensor<T>>? CollectFusedExtraTrainableTensors()
@@ -5356,6 +5425,25 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             else if (_hasPublishedParameterGradients)
             {
                 allGradients.Add(new Vector<T>(tensor.Length));
+            }
+        }
+
+        // The registered components are GetParameters' tail, chunk by chunk in the registry's order: a published
+        // gradient where the step produced one, zero for frozen chunks and chunks it did not reach.
+        if (_hasPublishedParameterGradients && _parameterRegistry.HasComponents)
+        {
+            foreach (var chunk in _parameterRegistry.GetParameterStateChunks())
+            {
+                if (_publishedExtraTensorGradients is not null && chunk.SourceTensor is not null &&
+                    _publishedExtraTensorGradients.TryGetValue(chunk.SourceTensor, out var gradient) &&
+                    gradient.Length == chunk.Tensor.Length)
+                {
+                    allGradients.Add(gradient);
+                }
+                else
+                {
+                    allGradients.Add(new Vector<T>(chunk.Tensor.Length));
+                }
             }
         }
 
@@ -7403,6 +7491,14 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     }
 
     /// <summary>
+    /// Resets the inference recycle arena with nothing carried: for an iterative forward (an autoregressive sampler)
+    /// whose step leaves no arena tensor live, only host values such as the sampled index, and whose carried state is
+    /// GC-owned. Without it every step's scratch stays live until <see cref="Predict"/> returns. No-op outside an
+    /// authorized inference recycle arena, like <see cref="DetachAndRecycleBetweenLayers"/>.
+    /// </summary>
+    private protected static void RecycleInferenceScratch() => _inferenceRecycleArena?.Reset();
+
+    /// <summary>
     /// Copies <paramref name="output"/> out of the active <c>TensorArena</c> into a GC-owned
     /// tensor so it survives the arena's <c>Dispose</c> (which recycles Rent-backed buffers).
     /// <c>ToArray()</c> materializes any GPU/lazy result and always returns a fresh plain array
@@ -7655,13 +7751,22 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                 var yChunk = SliceAlongAxis0(target, start, end);
 
                 using var tape = new GradientTape<T>();
-                var prediction = ForwardForTraining(xChunk);
+                Tensor<T> lossTensor;
+                if (FusedReadoutForTraining() is { } fusedChunkReadout)
+                {
+                    var readoutIn = ForwardForTrainingToReadout(xChunk);
+                    lossTensor = FusedReadoutObjective(fusedChunkReadout, readoutIn, yChunk, loss, xChunk);
+                }
+                else
+                {
+                    var prediction = ForwardForTraining(xChunk);
 
-                // Align target to prediction shape — same policy as TrainWithTape.
-                var alignedTarget = AlignTargetToOutputShape(prediction, yChunk);
+                    // Align target to prediction shape — same policy as TrainWithTape.
+                    var alignedTarget = AlignTargetToOutputShape(prediction, yChunk);
 
-                var lossTensor = ApplyCompositeObjective(
-                    loss.ComputeTapeLoss(prediction, alignedTarget), xChunk);
+                    lossTensor = ApplyCompositeObjective(
+                        loss.ComputeTapeLoss(prediction, alignedTarget), xChunk);
+                }
                 T chunkLoss = lossTensor.Length > 0 ? lossTensor[0] : NumOps.Zero;
 
                 // Weight each chunk's loss by its sample count so a final
@@ -7739,14 +7844,13 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             // probe caught exactly this). Clips over the layer-collected
             // params only — the same set TrainWithTape clips — using the
             // deterministic list order for the norm reduction.
-            // The optimizer's regularization goes on BEFORE the clip, as its flat path orders it.
-            ApplyOptimizerRegularization(optimizer, paramsList, avgGrads);
+            // The optimizer's regularization goes on the side of the clips its RegularizationOrder chooses.
             double maxGradNorm = MaxGradNormValue;
-            if (maxGradNorm > 0.0 && avgGrads.Count > 0)
-            {
-                var clipParameters = CollectLayerOwnedTrainableTensorsForClipping(paramsList);
-                ApplyGradientClipping(avgGrads, maxGradNorm, clipParameters);
-            }
+            Training.TapeTrainingStepper<T>.RegularizeAndClip(optimizer, paramsList, avgGrads,
+                OptimizerRegularizer(optimizer),
+                maxGradNorm > 0.0 && avgGrads.Count > 0
+                    ? g => ApplyGradientClipping(g, maxGradNorm, CollectLayerOwnedTrainableTensorsForClipping(paramsList))
+                    : null);
             PublishParameterGradients(avgGrads);
             // Include extra trainable tensors in the optimizer's
             // parameter list too, so its update step (and any per-
@@ -8211,8 +8315,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     {
         if (Layers.Count < 2 || Layers[^1] is not IFusedReadoutLossLayer<T> head) return null;
         if (Layers[^1] is Layers.LayerBase<T> { IsInitialized: false }) return null;
-        if (_weightLifetimeConfigured || GradientCheckpointingSegmentSize > 0
-            || (_memoryManager is not null && _memoryManager.IsCheckpointingEnabled) || this is ICompositeLoss<T>)
+        if (_weightLifetimeConfigured || this is ICompositeLoss<T>)
             return null;
         if (_forwardForTrainingOverridden < 0)
         {
@@ -8226,8 +8329,15 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     private Tensor<T> ForwardForTrainingToReadout(Tensor<T> input)
     {
         EnsureLayerRandomSeedsWired();
+        int prefixCount = Layers.Count - 1;
+        int segmentSize = GetEffectiveCheckpointSegmentSize(prefixCount);
+        if (segmentSize > 0 && prefixCount > segmentSize && CanUseGradientCheckpointingForCurrentLayerGraph())
+        {
+            return RunCheckpointedForward(prefixCount, segmentSize, input);
+        }
+
         var current = input;
-        for (int i = 0; i < Layers.Count - 1; i++)
+        for (int i = 0; i < prefixCount; i++)
         {
             var layerInput = current;
             current = Layers[i].Forward(current);
@@ -8248,11 +8358,13 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     private Tensor<T> FusedReadoutObjective(IFusedReadoutLossLayer<T> head, Tensor<T> readoutInput, Tensor<T> target,
         ILossFunction<T> loss, Tensor<T> compositeInput)
     {
-        if (head.TryComputeFusedLoss(readoutInput, target, loss) is { } fused)
+        if (loss is LossFunctions.LossFunctionBase<T> && head.TryComputeFusedLoss(readoutInput, target, loss) is { } fused)
             return ApplyCompositeObjective(fused, compositeInput);
         var prediction = Layers[^1].Forward(readoutInput);
-        return ApplyCompositeObjective(loss.ComputeTapeLoss(prediction, AlignTargetToOutputShape(prediction, target)),
-            compositeInput);
+        var baseLoss = loss.ComputeTapeLoss(prediction, AlignTargetToOutputShape(prediction, target));
+        return loss is LossFunctions.LossFunctionBase<T>
+            ? ApplyCompositeObjective(baseLoss, compositeInput)
+            : baseLoss;
     }
 
     public virtual Tensor<T> ForwardForTraining(Tensor<T> input)
@@ -8279,59 +8391,10 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         // wins when both specify a segment size; the memory-manager fallback
         // preserves behavior for users who configured via EnableMemoryManagement
         // directly without touching the builder.
-        int segmentSize = GradientCheckpointingSegmentSize;
-        if (segmentSize <= 0 && _memoryManager is not null && _memoryManager.IsCheckpointingEnabled)
-        {
-            // Memory-manager-enabled but builder-set size is 0 → use the
-            // existing default heuristic based on sqrt(N), where N is the
-            // current layer count. sqrt(N) gives the optimal memory/compute
-            // tradeoff: ~sqrt(N) checkpoints with ~33% extra compute.
-            segmentSize = Math.Max(1, (int)Math.Sqrt(Math.Max(1, Layers.Count)));
-        }
+        int segmentSize = GetEffectiveCheckpointSegmentSize(Layers.Count);
         if (segmentSize > 0 && Layers.Count > segmentSize && CanUseGradientCheckpointingForCurrentLayerGraph())
         {
-            // Cache the layer-forward delegate array so checkpointed training
-            // doesn't allocate N closures + a delegate array on every call.
-            // Rebuild only when the layer graph changes (structure version
-            // bump). Saves ~Layers.Count delegate allocations per training step.
-            if (_checkpointLayerFunctions is null
-                || _checkpointFunctionsVersion != _layerStructureVersion)
-            {
-                var fns = new Func<Tensor<T>, Tensor<T>>[Layers.Count];
-                for (int i = 0; i < Layers.Count; i++)
-                {
-                    // Use the method group directly so the delegate binds to the
-                    // layer instance's Forward method with no captured local —
-                    // no per-layer closure allocation. The delegate holds a
-                    // reference to the layer (its implicit Target) but no
-                    // extra heap closure is created.
-                    //
-                    // Training-mode correctness: SetTrainingMode(true) is called
-                    // by the caller (TrainWithTape) for the entire training step,
-                    // and layer.Forward reads IsTrainingMode internally to select
-                    // training-time behavior (e.g. Dropout applies masks, LayerNorm
-                    // uses batch stats). Since the mode flag is set ONCE per step
-                    // and stays true across both the original forward and the
-                    // checkpoint recomputation, both code paths see identical
-                    // training-time behavior for mode-aware layers.
-                    //
-                    // Note on stochastic/stateful layers: if a segment contains
-                    // Dropout or BatchNormalization, the recomputation during
-                    // backward generates a NEW dropout mask / updates the running
-                    // stats AGAIN. This is a known property of activation
-                    // checkpointing (identical to PyTorch's checkpoint without
-                    // preserve_rng_state) — callers who need bit-exact gradients
-                    // across recomputation should either disable checkpointing or
-                    // restrict it to segments without stochastic/stateful layers.
-                    // The checkpoint segment-size contract is unchanged; this is
-                    // documented behavior, not a bug in the delegate binding.
-                    fns[i] = Layers[i].Forward;
-                }
-                _checkpointLayerFunctions = fns;
-                _checkpointFunctionsVersion = _layerStructureVersion;
-            }
-            return AiDotNet.Tensors.Engines.Autodiff.GradientCheckpointing<T>.Checkpoint(
-                _checkpointLayerFunctions, input, segmentSize);
+            return RunCheckpointedForward(Layers.Count, segmentSize, input);
         }
 
         // Streaming-aware training forward (#1222 / #185). When weight
@@ -8428,7 +8491,59 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     internal int GradientCheckpointingSegmentSize { get; private set; }
 
     private Func<Tensor<T>, Tensor<T>>[]? _checkpointLayerFunctions;
+    private IReadOnlyList<Tensor<T>>[]? _checkpointSegmentParameters;
+    private HashSet<Tensor<T>>? _checkpointSingleTouchParameters;
+    private Func<IReadOnlyList<Tensor<T>>>? _checkpointAllParametersFactory;
     private int _checkpointFunctionsVersion = -1;
+    private int _checkpointCachedLayerCount = -1;
+    private int _checkpointCachedSegmentSize = -1;
+    private bool _checkpointCachedParamsResolved;
+    private int _checkpointParameterSurfaceEpoch = -1;
+    private Func<Tensor<T>, Tensor<T>, bool>? _activeCheckpointGradientConsumer;
+
+    private void InvalidateCheckpointParameterCache()
+    {
+        _checkpointSegmentParameters = null;
+        _checkpointSingleTouchParameters = null;
+        _checkpointAllParametersFactory = null;
+    }
+
+    private IReadOnlyList<Tensor<T>> CollectCheckpointedLayerParameters(int layerCount)
+    {
+        var all = new List<Tensor<T>>();
+        var seen = new HashSet<Tensor<T>>(Helpers.TensorReferenceComparer<Tensor<T>>.Instance);
+        for (int i = 0; i < layerCount; i++)
+        {
+            Training.TapeTrainingStep<T>.CollectLayerReferencedParameters(Layers[i], all, seen, materializedOnly: true);
+        }
+        return all;
+    }
+
+    /// <summary>
+    /// Enables activation gradient checkpointing during training with the specified segment size,
+    /// or <c>0</c> to select <c>max(1, floor(sqrt(Layers.Count)))</c> automatically.
+    /// </summary>
+    /// <param name="segmentSize">Layers per checkpointed segment, or <c>0</c> for <c>sqrt(N)</c>.</param>
+    public void EnableGradientCheckpointing(int segmentSize = 0)
+    {
+        if (segmentSize < 0)
+            throw new ArgumentOutOfRangeException(nameof(segmentSize),
+                "Segment size must be non-negative. Pass 0 to select floor(sqrt(Layers.Count)) automatically.");
+        GradientCheckpointingSegmentSize = segmentSize > 0
+            ? segmentSize
+            : Math.Max(1, (int)Math.Sqrt(Math.Max(1, Layers.Count)));
+    }
+
+    /// <summary>Disables activation gradient checkpointing previously enabled on this network.</summary>
+    public void DisableGradientCheckpointing()
+    {
+        GradientCheckpointingSegmentSize = 0;
+        // EnableMemoryManagement can turn checkpointing on through the memory manager's configuration, which
+        // IsGradientCheckpointingEnabled also reads; clearing only the segment size would leave it on. Activation pooling
+        // and the manager's other settings stay as configured.
+        if (_memoryManager is not null)
+            _memoryManager.Config.UseGradientCheckpointing = false;
+    }
 
     internal void SetGradientCheckpointingSegmentSize(int segmentSize)
     {
@@ -8436,6 +8551,375 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             throw new ArgumentOutOfRangeException(nameof(segmentSize),
                 "Segment size must be non-negative. Use 0 to disable checkpointing.");
         GradientCheckpointingSegmentSize = segmentSize;
+    }
+
+    private int GetEffectiveCheckpointSegmentSize(int layerCount)
+    {
+        int segmentSize = GradientCheckpointingSegmentSize;
+        if (segmentSize <= 0 && _memoryManager is not null && _memoryManager.IsCheckpointingEnabled)
+        {
+            int configured = _memoryManager.Config.CheckpointEveryNLayers;
+            segmentSize = configured > 0
+                ? configured
+                : Math.Max(1, (int)Math.Sqrt(Math.Max(1, layerCount)));
+        }
+        return segmentSize;
+    }
+
+    /// <summary>
+    /// Sets every gradient index assigned on a tensor the tape recorded to -1 and returns the previous values, so a nested
+    /// backward over that tape starts from unindexed tensors and the caller can restore the outer pass's indices.
+    /// </summary>
+    private static List<(Tensor<T> Tensor, int Index)> SuspendCheckpointGradIndices(
+        AiDotNet.Tensors.Engines.Autodiff.GradientTape<T> tape)
+    {
+        var saved = new List<(Tensor<T>, int)>();
+        var entries = tape.Entries;
+        for (int i = 0; i < entries.Count; i++)
+        {
+            ref var entry = ref entries[i];
+            Suspend(entry.Output, saved);
+            Suspend(entry.Input0, saved);
+            if (entry.InputCount >= 2) Suspend(entry.Input1, saved);
+            if (entry.InputCount >= 3) Suspend(entry.Input2, saved);
+            if (entry.InputsOverflow is not null)
+            {
+                foreach (var extra in entry.InputsOverflow)
+                    Suspend(extra, saved);
+            }
+        }
+        return saved;
+
+        static void Suspend(Tensor<T>? tensor, List<(Tensor<T>, int)> into)
+        {
+            if (tensor is null || tensor._gradIndex < 0) return;
+            into.Add((tensor, tensor._gradIndex));
+            tensor._gradIndex = -1;
+        }
+    }
+
+    private Tensor<T> RunCheckpointedForward(int layerCount, int segmentSize, Tensor<T> input)
+    {
+        bool paramsResolved = !AnyLayerNeedsShapeResolution() && !AnyLayerHasUnmaterializedParameters();
+        if (_checkpointLayerFunctions is null
+            || _checkpointSegmentParameters is null
+            || _checkpointSingleTouchParameters is null
+            || _checkpointAllParametersFactory is null
+            || _checkpointFunctionsVersion != _layerStructureVersion
+            || _checkpointCachedLayerCount != layerCount
+            || _checkpointCachedSegmentSize != segmentSize
+            || (_checkpointCachedParamsResolved != paramsResolved && paramsResolved)
+            // A parameter-buffer swap replaces layer tensors with buffer views without changing the layer structure;
+            // the cached segment lists would still name the replaced tensors, which the forward no longer reads.
+            || _checkpointParameterSurfaceEpoch != LayerBase<T>.ParameterSurfaceEpoch)
+        {
+            var fns = new Func<Tensor<T>, Tensor<T>>[layerCount];
+            for (int i = 0; i < layerCount; i++)
+            {
+                fns[i] = Layers[i].Forward;
+            }
+
+            int numSegments = (layerCount + segmentSize - 1) / segmentSize;
+            var segParams = new IReadOnlyList<Tensor<T>>[numSegments];
+            var touchCounts = new Dictionary<Tensor<T>, int>(Helpers.TensorReferenceComparer<Tensor<T>>.Instance);
+            var allSegSeen = new HashSet<Tensor<T>>(Helpers.TensorReferenceComparer<Tensor<T>>.Instance);
+            var allSegList = new List<Tensor<T>>();
+
+            for (int seg = 0; seg < numSegments; seg++)
+            {
+                int start = seg * segmentSize;
+                int end = Math.Min(start + segmentSize, layerCount);
+                var list = new List<Tensor<T>>();
+                var segSeen = new HashSet<Tensor<T>>(Helpers.TensorReferenceComparer<Tensor<T>>.Instance);
+                for (int i = start; i < end; i++)
+                {
+                    Training.TapeTrainingStep<T>.CollectLayerReferencedParameters(Layers[i], list, segSeen, materializedOnly: true);
+                }
+                segParams[seg] = list;
+                foreach (var p in list)
+                {
+                    touchCounts[p] = touchCounts.TryGetValue(p, out int c) ? c + 1 : 1;
+                    if (allSegSeen.Add(p))
+                        allSegList.Add(p);
+                }
+            }
+
+            // Any parameter also referenced by trailing readout layers [layerCount .. Layers.Count) or extra network
+            // layers/tensors (e.g. TiedEmbeddingHeadLayer / TiedTokenEmbedding shared with a fused terminal readout)
+            // has touchCount >= 2 and must NOT be consumed inside a single segment's backward recomputation.
+            var trailingSeen = new HashSet<Tensor<T>>(Helpers.TensorReferenceComparer<Tensor<T>>.Instance);
+            var trailingList = new List<Tensor<T>>();
+            for (int i = layerCount; i < Layers.Count; i++)
+            {
+                Training.TapeTrainingStep<T>.CollectLayerReferencedParameters(Layers[i], trailingList, trailingSeen, materializedOnly: true);
+            }
+            foreach (var extraLayer in GetExtraTrainableLayers())
+            {
+                if (extraLayer is null) continue;
+                Training.TapeTrainingStep<T>.CollectLayerReferencedParameters(extraLayer, trailingList, trailingSeen, materializedOnly: true);
+            }
+            foreach (var extraTensor in GetExtraTrainableTensors())
+            {
+                if (extraTensor is not null && extraTensor.Length > 0 && trailingSeen.Add(extraTensor))
+                    trailingList.Add(extraTensor);
+            }
+            foreach (var p in trailingList)
+            {
+                touchCounts[p] = touchCounts.TryGetValue(p, out int c) ? c + 1 : 1;
+            }
+
+            var singleTouch = new HashSet<Tensor<T>>(Helpers.TensorReferenceComparer<Tensor<T>>.Instance);
+            if (paramsResolved)
+            {
+                foreach (var kv in touchCounts)
+                {
+                    if (kv.Value == 1)
+                        singleTouch.Add(kv.Key);
+                }
+            }
+
+            int capturedCount = layerCount;
+            _checkpointLayerFunctions = fns;
+            _checkpointSegmentParameters = segParams;
+            _checkpointSingleTouchParameters = singleTouch;
+            _checkpointAllParametersFactory = paramsResolved
+                ? () => allSegList
+                : () => CollectCheckpointedLayerParameters(capturedCount);
+            _checkpointFunctionsVersion = _layerStructureVersion;
+            _checkpointCachedLayerCount = layerCount;
+            _checkpointCachedSegmentSize = segmentSize;
+            _checkpointCachedParamsResolved = paramsResolved;
+            _checkpointParameterSurfaceEpoch = LayerBase<T>.ParameterSurfaceEpoch;
+        }
+
+        Func<Tensor<T>, Tensor<T>, bool>? consumer = null;
+        if (_checkpointSingleTouchParameters.Count > 0)
+        {
+            var singleSet = _checkpointSingleTouchParameters;
+            consumer = (param, grad) =>
+                _activeCheckpointGradientConsumer is { } active
+                && singleSet.Contains(param)
+                && active(param, grad);
+        }
+
+        Tensor<T> output = s_checkpointSegmentsDelegate is { } checkpointSegments
+            ? checkpointSegments(_checkpointLayerFunctions, input, _checkpointSegmentParameters, segmentSize, consumer)
+            : CheckpointSegmentsFallback(_checkpointLayerFunctions, input, _checkpointSegmentParameters, _checkpointAllParametersFactory, segmentSize, consumer);
+        if (!_firstForwardCompleted)
+        {
+            _firstForwardCompleted = true;
+            TryAutoEnableWeightStreaming();
+        }
+
+        return output;
+    }
+
+    private static readonly Func<
+        IReadOnlyList<Func<Tensor<T>, Tensor<T>>>,
+        Tensor<T>,
+        IReadOnlyList<IReadOnlyList<Tensor<T>>>,
+        int,
+        Func<Tensor<T>, Tensor<T>, bool>?,
+        Tensor<T>>? s_checkpointSegmentsDelegate = ResolveCheckpointSegmentsDelegate();
+
+    private static Func<
+        IReadOnlyList<Func<Tensor<T>, Tensor<T>>>,
+        Tensor<T>,
+        IReadOnlyList<IReadOnlyList<Tensor<T>>>,
+        int,
+        Func<Tensor<T>, Tensor<T>, bool>?,
+        Tensor<T>>? ResolveCheckpointSegmentsDelegate()
+    {
+        var method = typeof(AiDotNet.Tensors.Engines.Autodiff.GradientCheckpointing<T>).GetMethod(
+            "CheckpointSegments",
+            System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static,
+            binder: null,
+            types: new[]
+            {
+                typeof(IReadOnlyList<Func<Tensor<T>, Tensor<T>>>),
+                typeof(Tensor<T>),
+                typeof(IReadOnlyList<IReadOnlyList<Tensor<T>>>),
+                typeof(int),
+                typeof(Func<Tensor<T>, Tensor<T>, bool>)
+            },
+            modifiers: null);
+        if (method is null) return null;
+        return (Func<
+            IReadOnlyList<Func<Tensor<T>, Tensor<T>>>,
+            Tensor<T>,
+            IReadOnlyList<IReadOnlyList<Tensor<T>>>,
+            int,
+            Func<Tensor<T>, Tensor<T>, bool>?,
+            Tensor<T>>)Delegate.CreateDelegate(typeof(Func<
+                IReadOnlyList<Func<Tensor<T>, Tensor<T>>>,
+                Tensor<T>,
+                IReadOnlyList<IReadOnlyList<Tensor<T>>>,
+                int,
+                Func<Tensor<T>, Tensor<T>, bool>?,
+                Tensor<T>>), method);
+    }
+
+    private Tensor<T> CheckpointSegmentsFallback(
+        IReadOnlyList<Func<Tensor<T>, Tensor<T>>> functions,
+        Tensor<T> input,
+        IReadOnlyList<IReadOnlyList<Tensor<T>>> segmentParameters,
+        Func<IReadOnlyList<Tensor<T>>> allParametersFactory,
+        int segmentSize,
+        Func<Tensor<T>, Tensor<T>, bool>? tryConsumeParameterGradient)
+    {
+        if (functions.Count == 0) return input;
+        var tape = AiDotNet.Tensors.Engines.Autodiff.GradientTape<T>.Current;
+        if (tape is null)
+        {
+            var cur = input;
+            foreach (var fn in functions) cur = fn(cur);
+            return cur;
+        }
+
+        var engine = Engine;
+        int numSegments = (functions.Count + segmentSize - 1) / segmentSize;
+        var current = input;
+        bool resolved = _checkpointCachedParamsResolved;
+
+        for (int seg = 0; seg < numSegments; seg++)
+        {
+            int startIdx = seg * segmentSize;
+            int endIdx = Math.Min(startIdx + segmentSize, functions.Count);
+            var segmentInput = current;
+
+            Tensor<T> segmentOutput;
+            using (var segmentGpuScope = TensorScope.Begin())
+            using (AiDotNet.Tensors.Helpers.TensorArena.Create(poolWhenNested: true))
+            using (AiDotNet.Tensors.Engines.Autodiff.GradientTape<T>.NoGrad())
+            {
+                segmentOutput = segmentInput;
+                for (int i = startIdx; i < endIdx; i++)
+                    segmentOutput = functions[i](segmentOutput);
+                segmentOutput = segmentGpuScope.Keep(CloneCheckpointBoundaryFallback(segmentOutput, engine));
+            }
+
+            IReadOnlyList<Tensor<T>> selected = resolved && seg < segmentParameters.Count
+                ? segmentParameters[seg]
+                : allParametersFactory();
+
+            var unique = new HashSet<Tensor<T>>(Helpers.TensorReferenceComparer<Tensor<T>>.Instance);
+            var checkpointInputs = new Tensor<T>[selected.Count + 1];
+            checkpointInputs[0] = segmentInput;
+            int write = 1;
+            for (int i = 0; i < selected.Count; i++)
+            {
+                var parameter = selected[i];
+                if (parameter is not null && !ReferenceEquals(parameter, segmentInput) && unique.Add(parameter))
+                    checkpointInputs[write++] = parameter;
+            }
+            if (write != checkpointInputs.Length)
+                Array.Resize(ref checkpointInputs, write);
+
+            int capturedStart = startIdx;
+            int capturedEnd = endIdx;
+            var capturedFunctions = functions;
+
+            AiDotNet.Tensors.Engines.Autodiff.BackwardFunction<T> backward = (gradOutput, inputs, output, savedState, eng, grads) =>
+            {
+                var reInput = inputs[0];
+                List<(Tensor<T> Key, Tensor<T> Gradient)> detachedGradients;
+                using (var recomputeGpuScope = TensorScope.Begin())
+                using (AiDotNet.Tensors.Helpers.TensorArena.Create(poolWhenNested: true))
+                using (var recomputeTape = new AiDotNet.Tensors.Engines.Autodiff.GradientTape<T>(
+                    new AiDotNet.Tensors.Engines.Autodiff.GradientTapeOptions { Persistent = false, SuppressArenaScope = true }))
+                {
+                    var reInputDetached = eng.StopGradient(reInput);
+                    var reOutput = reInputDetached;
+                    for (int i = capturedStart; i < capturedEnd; i++)
+                        reOutput = capturedFunctions[i](reOutput);
+
+                    var weighted = eng.TensorMultiply(reOutput, gradOutput);
+                    var pseudoLoss = eng.ReduceSum(weighted);
+
+                    var recomputeSources = new Tensor<T>[inputs.Length];
+                    recomputeSources[0] = reInputDetached;
+                    for (int i = 1; i < inputs.Length; i++) recomputeSources[i] = inputs[i];
+
+                    var savedIndexedGrads = AiDotNet.Tensors.Engines.Autodiff.DifferentiableOps._indexedGrads;
+                    var savedSparseGrads = AiDotNet.Tensors.Engines.Autodiff.DifferentiableOps._indexedSparseGrads;
+                    // The tables are addressed by each tensor's _gradIndex, so those are suspended too. A parameter shared
+                    // with the outer pass keeps the index that pass assigned: the nested walk would not reassign it (a new
+                    // nested tensor could take the same slot and the two would accumulate into one), and its cleanup sets
+                    // every index it touched to -1 (the outer pass would lose the parameter's indexed and sparse
+                    // gradients). Clear them for the nested pass and restore them afterwards.
+                    var savedGradIndices = SuspendCheckpointGradIndices(recomputeTape);
+                    AiDotNet.Tensors.Engines.Autodiff.DifferentiableOps.ClearIndexedGrads();
+                    AiDotNet.Tensors.Engines.Autodiff.DifferentiableOps.ClearIndexedSparseGrads();
+                    Dictionary<Tensor<T>, Tensor<T>> segGrads;
+                    try
+                    {
+                        segGrads = recomputeTape.ComputeGradients(pseudoLoss, recomputeSources);
+                    }
+                    finally
+                    {
+                        AiDotNet.Tensors.Engines.Autodiff.DifferentiableOps._indexedGrads = savedIndexedGrads;
+                        AiDotNet.Tensors.Engines.Autodiff.DifferentiableOps._indexedSparseGrads = savedSparseGrads;
+                        foreach (var (tensor, index) in savedGradIndices)
+                            tensor._gradIndex = index;
+                    }
+
+                    detachedGradients = new List<(Tensor<T>, Tensor<T>)>(segGrads.Count);
+                    bool hasInputGrad = false;
+                    foreach (var kvp in segGrads)
+                    {
+                        if (ReferenceEquals(kvp.Key, gradOutput) || kvp.Value is null) continue;
+                        bool isSegmentInput = ReferenceEquals(kvp.Key, reInputDetached);
+                        if (isSegmentInput)
+                        {
+                            hasInputGrad = true;
+                        }
+                        else if (tryConsumeParameterGradient is not null)
+                        {
+                            bool consumed;
+                            using (TensorScope.Suspend())
+                            {
+                                consumed = tryConsumeParameterGradient(kvp.Key, kvp.Value);
+                            }
+                            if (consumed) continue;
+                        }
+                        var key = isSegmentInput ? reInput : kvp.Key;
+                        var copied = recomputeGpuScope.Keep(CloneCheckpointBoundaryFallback(kvp.Value, eng));
+                        detachedGradients.Add((key, copied));
+                    }
+
+                    if (!hasInputGrad && ReferenceEquals(reOutput, reInputDetached))
+                    {
+                        var copied = recomputeGpuScope.Keep(CloneCheckpointBoundaryFallback(gradOutput, eng));
+                        detachedGradients.Add((reInput, copied));
+                    }
+                }
+
+                foreach (var (key, gradient) in detachedGradients)
+                {
+                    AiDotNet.Tensors.Engines.Autodiff.DifferentiableOps.AccumulateGrad(grads, key, gradient, eng);
+                }
+            };
+
+            AiDotNet.Tensors.Engines.Autodiff.DifferentiableOps.RecordIfActive<T>(
+                $"Checkpoint_seg{seg}", segmentOutput, checkpointInputs, backward);
+            current = segmentOutput;
+        }
+
+        return current;
+    }
+
+    private static Tensor<T> CloneCheckpointBoundaryFallback(Tensor<T> source, IEngine engine)
+    {
+        if (engine is DirectGpuTensorEngine && source.TryGetGpuBuffer() is not null)
+        {
+            using (AiDotNet.Tensors.Engines.Autodiff.GradientTape<T>.NoGrad())
+            {
+                var gpuContiguous = source.IsContiguous ? source : source.Contiguous();
+                return engine.StopGradient(gpuContiguous);
+            }
+        }
+        var contiguous = source.IsContiguous ? source : source.Contiguous();
+        return new Tensor<T>(contiguous.AsSpan().ToArray(), source.Shape.ToArray());
     }
 
     /// <summary>
@@ -11251,6 +11735,11 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         Guard.NotNull(input);
         Guard.NotNull(expectedOutput);
         ThrowIfCannotTrain();
+        // Seed the stochastic layers before any step runs. ForwardForTraining wires them, but a learning rule that
+        // runs its own forwards (CLAP's two towers through the shared stepper) never reached it, so its dropout,
+        // SpecAugment and fusion draws came from an unseeded generator and the same model trained differently in
+        // every process: CLAP's first contrastive loss measured 1.15, 0.75 and 0.62 in three identical runs.
+        EnsureLayerRandomSeedsWired();
         RequireArchitectureAgreesWithInput();
         // Once training has begun, the loss is locked (see SetLossFunction) so the loss reported in metrics
         // matches the loss actually optimized.
@@ -11887,6 +12376,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
 
         if (_streamingOptimizerState is null || _streamingOptimizerKey != key)
         {
+            (_streamingOptimizerState as IDisposable)?.Dispose();
             _streamingOptimizerState = Training.StreamingOptimizerResolver<T>.Create(
                 resolvedOptimizer,
                 useStreamingDefaults,
@@ -11925,10 +12415,67 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         if (double.IsNaN(maxValue) || maxValue <= 0.0 || double.IsInfinity(maxValue)) return;
         T upper = NumOps.FromDouble(maxValue);
         T lower = NumOps.FromDouble(-maxValue);
+        if (Engine is DirectGpuTensorEngine)
+        {
+            using var noGrad = new NoGradScope<T>();
+            using var scope = TensorScope.Begin();
+            var clamped = Engine.TensorClamp(grad, lower, upper);
+            Engine.TensorCopy(clamped, grad);
+            return;
+        }
         var span = grad.Data.Span;
         int len = grad.Length;
         for (int i = 0; i < len; i++)
             span[i] = MathHelper.Max(lower, MathHelper.Min(upper, span[i]));
+    }
+
+    private double ComputeStreamingGradNormSquared(Tensor<T> grad)
+    {
+        if (grad.Length == 0) return 0.0;
+        if (Engine is DirectGpuTensorEngine)
+        {
+            using var noGrad = new NoGradScope<T>();
+            using var scope = TensorScope.Begin();
+            var sq = Engine.TensorMultiply(grad, grad);
+            var axes = Enumerable.Range(0, sq.Rank).ToArray();
+            var sum = Engine.ReduceSum(sq, axes, keepDims: false);
+            double deviceNormSq = NumOps.ToDouble(sum[0]);
+            if (!double.IsNaN(deviceNormSq) && !double.IsInfinity(deviceNormSq))
+                return deviceNormSq;
+            return RescaledStreamingGradNormSquared(grad);
+        }
+
+        ReadOnlySpan<T> span = grad.Data.Span.Slice(0, grad.Length);
+        double normSq = NumOps.ToDouble(NumOps.Dot(span, span));
+        if (!double.IsNaN(normSq) && !double.IsInfinity(normSq))
+            return normSq;
+        return RescaledStreamingGradNormSquared(grad);
+    }
+
+    /// <summary>
+    /// The squared L2 norm of a gradient whose T-typed sum of squares overflowed: a finite float gradient such as 2e19f
+    /// squares past float.MaxValue, and an infinite norm made exact clipping compute a zero scale and erase it. The
+    /// gradient is divided by its largest magnitude first, so every square is at most 1 and the sum cannot overflow,
+    /// and the result is scaled back in double.
+    /// </summary>
+    private double RescaledStreamingGradNormSquared(Tensor<T> grad)
+    {
+        using var noGrad = new NoGradScope<T>();
+        using var scope = TensorScope.Begin();
+        double maxAbs = NumOps.ToDouble(Engine.TensorMaxValue(Engine.TensorAbs(grad)));
+        // A NaN or infinite element makes the norm itself non-finite; nothing can rescale that.
+        if (double.IsNaN(maxAbs) || double.IsInfinity(maxAbs) || maxAbs <= 0.0)
+            return maxAbs <= 0.0 ? 0.0 : maxAbs * maxAbs;
+        var scaled = Engine.TensorMultiplyScalar(grad, NumOps.FromDouble(1.0 / maxAbs));
+        ReadOnlySpan<T> span = scaled.Data.Span.Slice(0, scaled.Length);
+        return NumOps.ToDouble(NumOps.Dot(span, span)) * maxAbs * maxAbs;
+    }
+
+    private void ScaleStreamingGradInPlace(Tensor<T> grad, T scale)
+    {
+        if (grad.Length == 0) return;
+        using var noGrad = new NoGradScope<T>();
+        Engine.TensorMultiplyScalarInPlace(grad, scale);
     }
 
     protected void TrainWithTapeStreaming(
@@ -11985,37 +12532,37 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                     StreamingGraphRetention = StreamingGraphRetentionMode.RetainUntilTapeDisposal
                 }
                 : null);
-        var output = ForwardForTraining(input);
-
-        // Align target rank to the tape-tracked output (reshape the leaf target,
-        // never the tape output) — same policy as the eager TrainWithTape path.
-        if (output.Rank > expected.Rank && output.Shape[0] == 1 && output.Length == expected.Length)
+        Tensor<T> lossTensor;
+        if (FusedReadoutForTraining() is { } fusedStreamingReadout)
         {
-            expected = Engine.Reshape(expected, output._shape);
+            var readoutInput = ForwardForTrainingToReadout(input);
+            lossTensor = FusedReadoutObjective(fusedStreamingReadout, readoutInput, expected, loss, input);
         }
-        else if (expected.Rank > output.Rank && expected.Shape[0] == 1 && expected.Length == output.Length)
+        else
         {
-            expected = Engine.Reshape(expected, output._shape);
+            var output = ForwardForTraining(input);
+
+            // Align target rank to the tape-tracked output (reshape the leaf target,
+            // never the tape output) — same policy as the eager TrainWithTape path.
+            if (output.Rank > expected.Rank && output.Shape[0] == 1 && output.Length == expected.Length)
+            {
+                expected = Engine.Reshape(expected, output._shape);
+            }
+            else if (expected.Rank > output.Rank && expected.Shape[0] == 1 && expected.Length == output.Length)
+            {
+                expected = Engine.Reshape(expected, output._shape);
+            }
+
+            lossTensor = loss.ComputeTapeLoss(output, expected);
+            lossTensor = ApplyCompositeObjective(lossTensor, input);
         }
-
-        var lossTensor = loss.ComputeTapeLoss(output, expected);
-
-        lossTensor = ApplyCompositeObjective(lossTensor, input);
 
         LastLoss = lossTensor.Length > 0 ? lossTensor[0] : NumOps.Zero;
         // Sources = layer-owned trainable params + network-level extras
         // (cls/pos tokens, etc.), exactly the set the eager path optimizes.
         var sources = CollectModelTrainableTensors().ToList();
+        var sourceSet = new HashSet<Tensor<T>>(sources, Helpers.TensorReferenceComparer<Tensor<T>>.Instance);
 
-        // #1662 lever #1 (§5a): use the BIT-IDENTICAL full-precision streaming optimizer when the
-        // user has explicitly opted into streaming (ForceOn) for an UNCLIPPED model whose optimizer
-        // has a full-precision variant. This is the single-pass fused optimizer-in-backward that
-        // beats classic collect-then-step on memory + cache locality while matching its trajectory
-        // exactly. The Auto path stays on the 8-bit OOM-survival variant for now; flipping the
-        // unclipped-fitting Auto default to this FP path is gated on the §5d PyTorch-CPU proof.
-        // Precision is independent of clipping: clip only selects single-pass (unclipped) vs
-        // two-pass-norm (clipped); both use the bit-identical full-precision optimizer when the
-        // user opts in (ForceOn) and a full-precision variant exists.
         bool fullPrecisionStreaming =
             StreamingTraining == StreamingTrainingMode.ForceOn
             && Training.StreamingOptimizerResolver<T>.SupportsFullPrecision(resolvedOptimizer, useStreamingDefaults);
@@ -12026,38 +12573,45 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             fullPrecisionStreaming);
         streamingOptimizer.BeginStep();
 
-        // The optimizer's regularization joins each gradient before the clip norm and the update, as in the eager
-        // path (ApplyOptimizerRegularization) - streaming used to drop it, so ForceOn trained a different objective.
+        // The optimizer's regularization joins each gradient on the side of the clips its RegularizationOrder chooses,
+        // as in the eager path (TapeTrainingStepper.RegularizeAndClip) - streaming used to drop it, so ForceOn trained a
+        // different objective. Before the clip it also counts in the clip norm; after it, it does not.
         var regularization = OptimizerRegularizationOf(resolvedOptimizer);
+        bool regularizeAfterClip = clippingOptimizer?.RegularizesAfterClip == true;
+        // Collected on the first gradient, after the forward has materialized any lazily sized parameters.
+        HashSet<Tensor<T>>? decayExcluded = null;
+        Tensor<T> Regularize(Tensor<T> source, Tensor<T> grad)
+            => regularization is null ? grad : RegularizeGradient(regularization, source, grad, decayExcluded ??= DecayExcludedParameters());
 
         if (!clip)
         {
-            // Memory-bounded optimizer-in-backward: tape.ComputeGradientsStreaming
-            // (AiDotNet.Tensors#564) hands each parameter's gradient to the callback
-            // at its topological last-use and releases it immediately, so the full
-            // gradient set is NEVER resident. The same backward walk also rehydrates
-            // streamed (paged-out) input weights before each step and lets the pool
-            // evict them again afterward — so neither the full gradient set nor the
-            // full weight set has to fit in RAM, which is what makes a model whose
-            // gradients exceed memory trainable at all. The 8-bit StreamingAdam
-            // epilogue runs inside the callback at each gradient's release point.
-            tape.ComputeGradientsStreaming(lossTensor, sources,
-                (source, grad) =>
-                {
-                    if (grad is null || grad.Length == 0) return;
-                    RetainStreamingGradient(source, grad);
-                    if (regularization is not null) grad = RegularizeGradient(regularization, source, grad);
-                    ClampStreamingGradientByValue(grad, optimizerClipValue);
-                    // Streaming optimizer writes this source's weights in place (#1624 OOM-retry gate).
-                    MarkTrainMutationStarted();
-                    streamingOptimizer.Apply(source, grad);
-                    // GPU resident-weight coherence: the streaming optimizer just mutated this
-                    // weight's CPU backing in place; invalidate its resident device buffer so the
-                    // next forward re-uploads current weights (parity with the eager/fused fixes).
-                    // A device-side streaming update leaves the device copy authoritative: keep it (see the eager step).
-                    if (Engine is DirectGpuTensorEngine _sg && !source.HasPendingGpuData)
-                        _sg.InvalidateResidentWeightBuffer(source);
-                });
+            void ApplyUnclipped(Tensor<T> source, Tensor<T> grad)
+            {
+                if (grad is null || grad.Length == 0) return;
+                RetainStreamingGradient(source, grad);
+                if (!regularizeAfterClip) grad = Regularize(source, grad);
+                ClampStreamingGradientByValue(grad, optimizerClipValue);
+                if (regularizeAfterClip) grad = Regularize(source, grad);
+                MarkTrainMutationStarted();
+                streamingOptimizer.Apply(source, grad);
+                if (Engine is DirectGpuTensorEngine _sg && !source.HasPendingGpuData)
+                    _sg.InvalidateResidentWeightBuffer(source);
+            }
+
+            _activeCheckpointGradientConsumer = (source, grad) =>
+            {
+                if (!sourceSet.Contains(source) || grad is null || grad.Length == 0) return false;
+                ApplyUnclipped(source, grad);
+                return true;
+            };
+            try
+            {
+                tape.ComputeGradientsStreaming(lossTensor, sources, ApplyUnclipped);
+            }
+            finally
+            {
+                _activeCheckpointGradientConsumer = null;
+            }
         }
         else if (twoPass)
         {
@@ -12068,9 +12622,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                 CollectLayerOwnedTrainableTensorsForClipping(sources),
                 Helpers.TensorReferenceComparer<Tensor<T>>.Instance);
 
-            // Pass 1 — accumulate the global L2 norms, streaming so nothing is retained. (Each gradient
-            // is released right after we read it.) The clip set feeds the network clip; every gradient
-            // feeds the optimizer's clip, which in the eager Step runs over all of them.
+            // Pass 1 — accumulate the global L2 norms, streaming so nothing is retained.
             double totalNormSq = 0.0;
             double outsideClipSetNormSq = 0.0;
             tape.ComputeGradientsStreaming(lossTensor, sources,
@@ -12080,26 +12632,15 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                     if (grad is null || grad.Length == 0) return;
                     bool inClipSet = clipSet.Contains(source);
                     if (!inClipSet && optimizerClipNorm <= 0.0) return;
-                    if (regularization is not null) grad = RegularizeGradient(regularization, source, grad);
-                    var span = grad.Data.Span;
-                    int len = grad.Length;
-                    double normSq = 0.0;
-                    for (int i = 0; i < len; i++)
-                    {
-                        double v = NumOps.ToDouble(span[i]);
-                        normSq += v * v;
-                    }
+                    if (!regularizeAfterClip) grad = Regularize(source, grad);
+                    double normSq = ComputeStreamingGradNormSquared(grad);
                     if (inClipSet) totalNormSq += normSq;
                     else outsideClipSetNormSq += normSq;
                 });
 
-            // Match ApplyGradientClipping exactly: only scale down when the norm
-            // exceeds the cap; the +1e-6 mirrors PyTorch's clip_grad_norm_ denominator.
             double totalNorm = Math.Sqrt(totalNormSq);
             bool networkClips = maxGradNorm > 0.0 && totalNormSq > 0.0 && totalNorm > maxGradNorm;
             double networkScale = networkClips ? maxGradNorm / (totalNorm + 1e-6) : 1.0;
-            // Then the optimizer's own clip, over the network-clipped gradients, as its Step sees them:
-            // scale by maxNorm / globalNorm, with no epsilon (ApplyGlobalNormGradientClipping).
             bool optimizerClips = false;
             double optimizerScale = 1.0;
             if (optimizerClipNorm > 0.0)
@@ -12113,45 +12654,34 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             T scale = NumOps.FromDouble(networkScale * optimizerScale);
             T outsideClipSetScale = NumOps.FromDouble(optimizerScale);
 
-            // Pass 2 — re-run the streaming backward and fold the clip scale into each
-            // clip-set gradient before the optimizer epilogue (extras pass through
-            // unscaled, exactly as the eager path leaves them). Peak memory stays
-            // bounded in this pass too.
+            // Pass 2 — re-run the streaming backward and fold the clip scale into each gradient.
             tape.ComputeGradientsStreaming(lossTensor, sources,
                 (source, grad) =>
                 {
                     if (grad is null || grad.Length == 0) return;
                     RetainStreamingGradient(source, grad);
-                    if (regularization is not null) grad = RegularizeGradient(regularization, source, grad);
+                    if (!regularizeAfterClip) grad = Regularize(source, grad);
                     if (scaleDown)
                     {
-                        // Extras skip the network clip, as in the eager path, but not the optimizer's.
                         T sourceScale = clipSet.Contains(source) ? scale : outsideClipSetScale;
-                        var span = grad.Data.Span;
-                        int len = grad.Length;
-                        for (int i = 0; i < len; i++)
-                            span[i] = NumOps.Multiply(span[i], sourceScale);
+                        ScaleStreamingGradInPlace(grad, sourceScale);
                     }
                     ClampStreamingGradientByValue(grad, optimizerClipValue);
+                    if (regularizeAfterClip) grad = Regularize(source, grad);
                     // Streaming optimizer writes this source's weights in place (#1624 OOM-retry gate).
                     MarkTrainMutationStarted();
                     streamingOptimizer.Apply(source, grad);
+                    if (Engine is DirectGpuTensorEngine _sg && !source.HasPendingGpuData)
+                        _sg.InvalidateResidentWeightBuffer(source);
                 });
         }
         else
         {
-            // #1662 lever #1 (§5c) FAST-CLIP — opt-in, NOT bit-identical. Clip with an EMA of the
-            // PREVIOUS step's global grad-norm so the whole step is a SINGLE streaming pass even
-            // when clipping (no 2× backward). The exact current-step norm is accumulated in the
-            // same pass and folded into the EMA for next step. First step (no EMA): don't clip,
-            // just seed. NFNet-style adaptive clipping (Brock et al. 2021); documented approximation.
+            // #1662 lever #1 (§5c) FAST-CLIP — single-pass EMA global grad-norm clipping.
             var clipSet = new HashSet<Tensor<T>>(
                 CollectLayerOwnedTrainableTensorsForClipping(sources),
                 Helpers.TensorReferenceComparer<Tensor<T>>.Instance);
 
-            // One estimated norm drives one scale, so the two clips collapse to the tighter bound (two successive
-            // global-norm clips over the same set equal one at the smaller bound). Like the EMA itself this is an
-            // approximation: the optimizer's clip also covers the extras, which this single scale leaves alone.
             double fastClipBound = maxGradNorm > 0.0 && optimizerClipNorm > 0.0
                 ? Math.Min(maxGradNorm, optimizerClipNorm)
                 : Math.Max(maxGradNorm, optimizerClipNorm);
@@ -12163,34 +12693,77 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                 : NumOps.One;
 
             double curNormSq = 0.0;
-            tape.ComputeGradientsStreaming(lossTensor, sources,
-                (source, grad) =>
+            bool gpuAccumNorm = Engine is DirectGpuTensorEngine;
+            Tensor<T>? gpuNormSqAcc = null;
+            void ApplyFastClipped(Tensor<T> source, Tensor<T> grad)
+            {
+                if (grad is null || grad.Length == 0) return;
+                RetainStreamingGradient(source, grad);
+                if (!regularizeAfterClip) grad = Regularize(source, grad);
+                if (clipSet.Contains(source))
                 {
-                    if (grad is null || grad.Length == 0) return;
-                    RetainStreamingGradient(source, grad);
-                    if (regularization is not null) grad = RegularizeGradient(regularization, source, grad);
-                    if (clipSet.Contains(source))
+                    if (gpuAccumNorm)
                     {
-                        var span = grad.Data.Span;
-                        int len = grad.Length;
-                        for (int i = 0; i < len; i++)
+                        using var noGrad = new NoGradScope<T>();
+                        var sq = Engine.TensorMultiply(grad, grad);
+                        var axes = Enumerable.Range(0, sq.Rank).ToArray();
+                        var sum = Engine.ReduceSum(sq, axes, keepDims: false);
+                        sq.Dispose();
+                        if (gpuNormSqAcc is null)
                         {
-                            double v = NumOps.ToDouble(span[i]); // unscaled — feeds the true-norm EMA
-                            curNormSq += v * v;
-                            if (scaleDown) span[i] = NumOps.Multiply(span[i], scale);
+                            gpuNormSqAcc = TensorScope.Detach(sum);
+                        }
+                        else
+                        {
+                            var nextAcc = TensorScope.Detach(Engine.TensorAdd(gpuNormSqAcc, sum));
+                            sum.Dispose();
+                            gpuNormSqAcc.Dispose();
+                            gpuNormSqAcc = nextAcc;
                         }
                     }
-                    ClampStreamingGradientByValue(grad, optimizerClipValue);
-                    // Streaming optimizer writes this source's weights in place (#1624 OOM-retry gate).
-                    MarkTrainMutationStarted();
-                    streamingOptimizer.Apply(source, grad);
-                });
+                    else
+                    {
+                        curNormSq += ComputeStreamingGradNormSquared(grad);
+                    }
+                    if (scaleDown) ScaleStreamingGradInPlace(grad, scale);
+                }
+                ClampStreamingGradientByValue(grad, optimizerClipValue);
+                if (regularizeAfterClip) grad = Regularize(source, grad);
+                MarkTrainMutationStarted();
+                streamingOptimizer.Apply(source, grad);
+                if (Engine is DirectGpuTensorEngine _sg && !source.HasPendingGpuData)
+                    _sg.InvalidateResidentWeightBuffer(source);
+            }
 
-            // Fold this step's exact norm into the EMA for the next step's clip estimate.
+            _activeCheckpointGradientConsumer = (source, grad) =>
+            {
+                if (!sourceSet.Contains(source) || grad is null || grad.Length == 0) return false;
+                ApplyFastClipped(source, grad);
+                return true;
+            };
+            try
+            {
+                tape.ComputeGradientsStreaming(lossTensor, sources, ApplyFastClipped);
+                if (gpuNormSqAcc is not null)
+                {
+                    curNormSq += NumOps.ToDouble(gpuNormSqAcc[0]);
+                }
+            }
+            finally
+            {
+                _activeCheckpointGradientConsumer = null;
+                gpuNormSqAcc?.Dispose();
+            }
             double curNorm = Math.Sqrt(curNormSq);
-            _fastClipEmaNorm = haveEma
-                ? FastClipEmaBeta * emaNorm + (1.0 - FastClipEmaBeta) * curNorm
-                : curNorm;
+            // The device accumulator sums squares in T, which overflows for finite float gradients near 1.8e19. This
+            // step's updates are already applied; an infinite (or NaN) norm folded into the EMA would pin every later
+            // bound at zero scale, so a non-finite step leaves the EMA as it was.
+            if (!double.IsNaN(curNorm) && !double.IsInfinity(curNorm))
+            {
+                _fastClipEmaNorm = haveEma
+                    ? FastClipEmaBeta * emaNorm + (1.0 - FastClipEmaBeta) * curNorm
+                    : curNorm;
+            }
         }
 
         // Post-step hook: first-order optimizers already updated each parameter in place during
@@ -12310,7 +12883,18 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             ExtraParameters = parameters,
             Selection = parameters,
             ModelGradientClip = MaxGradNormValue,
+            ExcludesParametersFromWeightDecay = () => DecayExcludedParameters().Count > 0,
+            // The eager fallback regularizes as TrainWithTape does, sparing the parameters excluded from weight decay.
+            RegularizeGradients = OptimizerRegularizer(resolvedOptimizer),
             OnGradients = ScatterFusedGradients,
+            // The opt-out TryTrainWithFusedOptimizer honours applies to custom and declared-objective steps as well: a
+            // model whose step builds its batch on the host (a posterior sample, timesteps, noise or flows drawn per
+            // step) would otherwise replay the first step's draw for the whole run and descend a frozen objective.
+            // Parent-owned components may run an explicit custom objective (GAN generator/discriminator steps).
+            // Only their ordinary independent Train path must defer to the parent graph.
+            GraphBreakReason = !SupportsFusedCompiledTraining
+                ? "model opts out of fused compiled training (per-step host state)"
+                : null,
         };
 
         // Both the plan and the eager step write the weights in place; an OOM from here on must not be retried.
@@ -12371,9 +12955,10 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             ?? (_baseTrainOptimizerExplicitlyConfigured && _baseTrainOptimizer is not null
                 ? _baseTrainOptimizer
                 : optimizer ?? TrainingOptimizer ?? _baseTrainOptimizer);
-        bool useStreamingDefaults = configuredOptimizer is null;
         var resolvedOptimizer = configuredOptimizer ?? GetOrCreateBaseOptimizer();
-
+        bool useStreamingDefaults = configuredOptimizer is null
+            && resolvedOptimizer is not Optimizers.Adam8BitOptimizer<T, Tensor<T>, Tensor<T>>
+            && ReferenceEquals(resolvedOptimizer, _baseTrainOptimizer);
         // Memory-bounded streaming training path (optimizer-in-backward). The
         // autotuner engages it only when the model's estimated full-precision
         // training footprint (weights + grads + optimizer moments) would not
@@ -13046,19 +13631,16 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             // GraFPrint at batch=1) can produce single-step Adam explosions
             // that drive loss up by orders of magnitude on the very first
             // iteration. Skipped when MaxGradNorm <= 0 (the default).
-            // The optimizer's regularization goes on BEFORE the clip, as its flat path orders it.
-            ApplyOptimizerRegularization(opt, trainableParams, grads);
+            // The optimizer's regularization goes on the side of the clips its RegularizationOrder chooses.
             double maxGradNorm = MaxGradNormValue;
-            if (maxGradNorm > 0.0)
-            {
-                // Pass trainableParams as the iteration-order key so the
-                // total-norm sum is computed in a deterministic order
-                // (Dictionary iteration order is bucket-order, which uses
-                // the per-process-randomized identity hash for tensor
-                // keys → different sum-order per process → different
-                // clip scale per process → non-deterministic training).
-                ApplyGradientClipping(grads, maxGradNorm, trainableParams);
-            }
+            // Pass trainableParams as the iteration-order key so the
+            // total-norm sum is computed in a deterministic order
+            // (Dictionary iteration order is bucket-order, which uses
+            // the per-process-randomized identity hash for tensor
+            // keys → different sum-order per process → different
+            // clip scale per process → non-deterministic training).
+            Training.TapeTrainingStepper<T>.RegularizeAndClip(opt, trainableParams, grads, OptimizerRegularizer(opt),
+                maxGradNorm > 0.0 ? g => ApplyGradientClipping(g, maxGradNorm, trainableParams) : null);
 
             // Publish after loss-scale removal and global clipping so the surface is the exact
             // derivative field handed to the optimizer, not a scaled or unclipped intermediate.
@@ -13906,6 +14488,17 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         if (!SupportsFusedCompiledTraining || _parentOwnedTrainingGraph)
             return EmitFusedMissAndFallback(
                 "model opts out of fused compiled training (dynamic/stateful forward)");
+        if (IsGradientCheckpointingEnabled)
+        {
+            // Same rule as the configuration gate below: a committed plan's optimizer moments cannot move to the eager
+            // optimizer, so turning checkpointing on after the fused step committed would silently change the trajectory.
+            if (FusedSession.IsCommitted)
+                throw new InvalidOperationException(
+                    $"Gradient checkpointing was enabled on {GetType().Name} after fused training had committed. The " +
+                    "compiled plan's optimizer moments cannot move to the eager optimizer, so the switch would change the " +
+                    "training trajectory. Enable checkpointing before the first Train call.");
+            return EmitFusedMissAndFallback("gradient checkpointing enabled (requires eager/streaming tape)");
+        }
         if (FusedTrainingDisabledByConfiguration)
         {
             // A committed plan owns the optimizer moments, which cannot move to the eager optimizer: turning the fused step
@@ -14032,6 +14625,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             ExtraParameters = fusedExtraParameters,
             Selection = selectedParameters,
             ModelGradientClip = MaxGradNormValue,
+            ExcludesParametersFromWeightDecay = () => DecayExcludedParameters().Count > 0,
             OnGradients = ScatterFusedGradients,
         };
 
@@ -14307,7 +14901,9 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         Tensor<T> input,
         Tensor<T> target,
         Func<Tensor<T>, Tensor<T>, Tensor<T>> recomputeForward,
-        Func<Tensor<T>, Tensor<T>, Tensor<T>> recomputeLoss)
+        Func<Tensor<T>, Tensor<T>, Tensor<T>> recomputeLoss,
+        bool clipCustomObjective = false,
+        IReadOnlyList<Func<Tensor<T>>>? objectiveTerms = null)
     {
         var probe = TapeReachabilityProbe<T>.Current;
         var hooks = new Training.TapeTrainingStepper<T>.EagerStepHooks
@@ -14334,8 +14930,9 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             CollectModelTrainableTensors,
             context =>
             {
+                Training.TapeTrainingStepper<T>.RegularizeAndClip(opt, context.Parameters, context.Gradients,
+                    OptimizerRegularizer(opt), clipCustomObjective ? ClipCustomObjectiveGradients : null);
                 MarkTrainMutationStarted();
-                ApplyOptimizerRegularization(opt, context);
                 opt.Step(context);
                 InvalidateWeightCachesAfterSuccessfulWeightUpdate();
                 StepSchedulerIfSupported(opt);
@@ -14344,10 +14941,95 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             target,
             recomputeForward,
             recomputeLoss,
-            hooks);
+            hooks, objectiveTerms);
         LastLoss = lossValue;
         return lossValue;
     }
+
+    /// <summary>
+    /// Clips a custom objective's gradients the way the other entry points clip theirs: global norm at
+    /// <c>MaxGradNorm</c> over the layer-owned set (per <see cref="GradientClippingGroups"/> group when the model names
+    /// groups), then each component to <see cref="GradientValueClip"/>.
+    /// </summary>
+    /// <remarks>This path used to skip clipping, so a model trained through its own objective (FastSpeech 2, AlignTTS,
+    /// AdaSpeech) took unclipped steps that every other entry point would have clipped.</remarks>
+    private void ClipCustomObjectiveGradients(Dictionary<Tensor<T>, Tensor<T>> grads)
+    {
+        if (grads.Count == 0) return;
+        double maxGradNorm = MaxGradNormValue;
+        if (maxGradNorm > 0.0)
+        {
+            var trainableParams = CollectModelTrainableTensors();
+            var groups = GradientClippingGroups(trainableParams);
+            if (groups is null)
+            {
+                ApplyGradientClipping(grads, maxGradNorm, CollectLayerOwnedTrainableTensorsForClipping(trainableParams));
+            }
+            else
+            {
+                foreach (var group in groups)
+                    ApplyGradientClipping(grads, maxGradNorm, group);
+            }
+            PublishParameterGradients(grads);
+        }
+        double clipValue = GradientValueClip;
+        if (clipValue > 0.0)
+        {
+            T lower = NumOps.FromDouble(-clipValue), upper = NumOps.FromDouble(clipValue);
+            foreach (var g in grads.Values)
+            {
+                if (g is null || g.Length == 0) continue;
+                var span = g.Data.Span;
+                for (int i = 0; i < span.Length; i++)
+                {
+                    if (NumOps.LessThan(span[i], lower)) span[i] = lower;
+                    else if (NumOps.GreaterThan(span[i], upper)) span[i] = upper;
+                }
+            }
+            PublishParameterGradients(grads);
+        }
+    }
+
+    /// <summary>Trains the sum of independently recomputable loss terms, retaining one term's graph at a time.</summary>
+    /// <remarks>All terms read the same pre-update parameters. Their gradients are summed before clipping,
+    /// regularization, publication and one optimizer/scheduler update. Terms must replay fixed random draws.</remarks>
+    protected T TrainWithSummedCustomObjectives(
+        Tensor<T> input, Tensor<T> expected, IReadOnlyList<Func<Tensor<T>>> objectives,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null)
+    {
+        Guard.NotNull(input);
+        Guard.NotNull(expected);
+        Guard.NotNull(objectives);
+        if (objectives.Count == 0) throw new ArgumentException("Provide at least one loss term.", nameof(objectives));
+        using var trainSentinel = AcquireTrainSentinel();
+        SetTrainingMode(true);
+        try
+        {
+            var terms = objectives.Select(term => (Func<Tensor<T>>)(() =>
+            {
+                EnsureLayerRandomSeedsWired();
+                var value = term();
+                if (value is null || value.Length != 1
+                    || double.IsNaN(NumOps.ToDouble(value[0])) || double.IsInfinity(NumOps.ToDouble(value[0])))
+                    throw new InvalidOperationException("A custom training objective must return a finite scalar loss.");
+                return value;
+            })).ToArray();
+            Tensor<T> Sum()
+            {
+                var total = terms[0]();
+                for (int i = 1; i < terms.Length; i++) total = Engine.TensorAdd(total, terms[i]());
+                return total;
+            }
+            using var stepArena = AiDotNet.Tensors.Helpers.TensorArena.Create();
+            return StepOnSharedTape(Sum, optimizer ?? GetOrCreateBaseOptimizer(), input, expected,
+                (_, _) => Sum(), (value, _) => value, clipCustomObjective: true, objectiveTerms: terms);
+        }
+        finally
+        {
+            SetTrainingMode(false);
+        }
+    }
+
 
     /// <summary>
     /// Trains an objective with a branched or multi-input forward without changing the public
@@ -14386,13 +15068,20 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                 return result;
             }
 
+            // The step's own arena, as TrainWithTape has: the top-level tape's Dispose Resets the CURRENT arena
+            // (Tensors #1804), and without a step arena that was the caller's. A model that runs several steps on the
+            // same inputs in one Train call (a GAN's discriminator then generator step, VITS's discriminator, generator
+            // and duration steps) then had those inputs recycled between steps: the arena's tensor ring re-issued the
+            // same Tensor objects and reshaped them in place. Tensors escaping a nested arena are never re-issued.
+            using var stepArena = AiDotNet.Tensors.Helpers.TensorArena.Create();
             return StepOnSharedTape(
                 () => RecomputeObjective(input, expected),
                 optimizer ?? GetOrCreateBaseOptimizer(),
                 input,
                 expected,
                 RecomputeObjective,
-                (objective, _) => objective);
+                (objective, _) => objective,
+                clipCustomObjective: true);
         }
         finally
         {
@@ -14466,7 +15155,8 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
 
         // Tape optimizer step writes weights in place (#1624 OOM-retry gate).
         MarkTrainMutationStarted();
-        ApplyOptimizerRegularization(opt, context);
+        Training.TapeTrainingStepper<T>.RegularizeAndClip(opt, context.Parameters, context.Gradients,
+            OptimizerRegularizer(opt), modelClip: null);
         opt.Step(context);
         // GPU weight-cache coherence after the precomputed-loss step.
         // See InvalidateWeightCachesAfterSuccessfulWeightUpdate.
@@ -14769,6 +15459,19 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             var gradients = tape.ComputeGradients(lossTensor, union, false);
             T lossValue = lossTensor.Length > 0 ? lossTensor[0] : members[0].Network.NumOps.Zero;
 
+            // A member regularizing before the clip does it ahead of the group clip, which then covers its term; one
+            // regularizing after the clip (PyTorch's order) does it after both clips, in the loop below.
+            var memberOptimizers = new IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>[members.Count];
+            for (int i = 0; i < members.Count; i++)
+            {
+                var network = members[i].Network;
+                var optimizer = members[i].Optimizer ?? network.GetOrCreateBaseOptimizer();
+                memberOptimizers[i] = optimizer;
+                if (optimizer is Optimizers.GradientBasedOptimizerBase<T, Tensor<T>, Tensor<T>> { RegularizesAfterClip: true })
+                    continue;
+                network.OptimizerRegularizer(optimizer)?.Invoke(memberParameters[i], gradients);
+            }
+
             if (groupMaxGradientNorm > 0.0)
             {
                 // One norm over every member's parameters, then one scale applied to all of them in place, so each
@@ -14785,7 +15488,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             for (int i = 0; i < members.Count; i++)
             {
                 var network = members[i].Network;
-                var optimizer = members[i].Optimizer ?? network.GetOrCreateBaseOptimizer();
+                var optimizer = memberOptimizers[i];
 
                 // The gradient dictionary holds every member's tensors; publishing looks up only this
                 // network's own, so each member's gradient surface reports exactly its share.
@@ -14801,6 +15504,11 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                 foreach (var parameter in memberParameters[i])
                 {
                     if (gradients.TryGetValue(parameter, out var gradient)) ownGradients[parameter] = gradient;
+                }
+                if (optimizer is Optimizers.GradientBasedOptimizerBase<T, Tensor<T>, Tensor<T>> { RegularizesAfterClip: true })
+                {
+                    Training.TapeTrainingStepper<T>.RegularizeAndClip(optimizer, memberParameters[i], ownGradients,
+                        network.OptimizerRegularizer(optimizer), modelClip: null);
                 }
                 var context = new AiDotNet.Tensors.Engines.Autodiff.TapeStepContext<T>(
                     memberParameters[i], ownGradients, lossValue);
@@ -15260,13 +15968,16 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         => Training.FusedTrainingSession<T>.OptimizerRegularizationOf(optimizer);
 
     /// <summary>
-    /// Applies the optimizer's regularization to the tape gradients before <c>Step</c> - which clips - so the eager
-    /// training step regularizes exactly as the optimizer's flat path does (gradient first, then clip). Train used to
-    /// ignore the optimizer's regularization entirely while the facade applied it, so the same optimizer trained
-    /// differently depending on how training was invoked. L2 runs as device tensor ops.
+    /// The optimizer's regularization as a gradient update for <c>TapeTrainingStepper.RegularizeAndClip</c>, which adds
+    /// it on the side of the clips the optimizer's RegularizationOrder chooses, as its flat path does; null when it
+    /// has none. Train used to ignore the optimizer's regularization entirely while the facade applied it, so the same
+    /// optimizer trained differently depending on how training was invoked. L2 runs as device tensor ops.
     /// </summary>
-    private void ApplyOptimizerRegularization(IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> optimizer, TapeStepContext<T> context)
-        => ApplyOptimizerRegularization(optimizer, context.Parameters, context.Gradients);
+    private Action<IReadOnlyList<Tensor<T>>, Dictionary<Tensor<T>, Tensor<T>>>? OptimizerRegularizer(
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> optimizer)
+        => OptimizerRegularizationOf(optimizer) is null
+            ? null
+            : (parameters, gradients) => ApplyOptimizerRegularization(optimizer, parameters, gradients);
 
     private void ApplyOptimizerRegularization(
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> optimizer,
@@ -15275,11 +15986,35 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     {
         if (OptimizerRegularizationOf(optimizer) is not { } regularization) return;
         SparseEmbeddingOptimizerHelpers.MaterializeSparseGradients(parameters, gradients, Engine);
+        var decayExcluded = DecayExcludedParameters();
         foreach (var parameter in parameters)
         {
             if (!gradients.TryGetValue(parameter, out var gradient) || gradient is null) continue;
-            gradients[parameter] = RegularizeGradient(regularization, parameter, gradient);
+            gradients[parameter] = RegularizeGradient(regularization, parameter, gradient, decayExcluded);
         }
+    }
+
+    /// <summary>
+    /// Whether <paramref name="layer"/>'s parameters are excluded from the optimizer's L2 term (coupled weight decay).
+    /// False by default: the decay reaches every parameter, as PyTorch's <c>weight_decay</c> does. A model whose paper
+    /// decays only some parameters (TF EfficientNet adds its L2 loss over every variable outside batch normalization)
+    /// overrides it.
+    /// </summary>
+    protected virtual bool ExcludesFromWeightDecay(ILayer<T> layer) => false;
+
+    /// <summary>
+    /// The parameters of the layers <see cref="ExcludesFromWeightDecay"/> names, collected for the step at hand. Not
+    /// cached: lazily sized layers replace their parameter tensors on the first forward without a structure change, so a
+    /// set kept from before it would name the discarded placeholders and exclude nothing.
+    /// </summary>
+    private HashSet<Tensor<T>> DecayExcludedParameters()
+    {
+        var excluded = new List<Tensor<T>>();
+        var seen = new HashSet<Tensor<T>>(Helpers.TensorReferenceComparer<Tensor<T>>.Instance);
+        foreach (var layer in Layers)
+            if (layer is not null && ExcludesFromWeightDecay(layer))
+                Training.TapeTrainingStep<T>.CollectLayerParameters(layer, excluded, seen, materializedOnly: false);
+        return seen;
     }
 
     /// <summary>One parameter's gradient with the regularization term added (L2 as device tensor ops).</summary>
@@ -15291,13 +16026,15 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     /// weight elements whose gradient had been zero, and the DNC's parameters turned NaN on its third Train call.
     /// </remarks>
     private Tensor<T> RegularizeGradient(
-        IRegularization<T, Tensor<T>, Tensor<T>> regularization, Tensor<T> parameter, Tensor<T> gradient)
+        IRegularization<T, Tensor<T>, Tensor<T>> regularization, Tensor<T> parameter, Tensor<T> gradient, HashSet<Tensor<T>>? decayExcluded)
     {
         using var noGrad = new NoGradScope<T>();
         var theta = parameter._shape.SequenceEqual(gradient._shape) ? parameter : Engine.Reshape(parameter, gradient._shape);
-        return regularization is AiDotNet.Regularization.L2Regularization<T, Tensor<T>, Tensor<T>> l2
-            ? Engine.TensorAdd(gradient, Engine.TensorMultiplyScalar(theta, NumOps.FromDouble(l2.GetOptions().Strength)))
-            : regularization.Regularize(gradient, theta);
+        if (regularization is AiDotNet.Regularization.L2Regularization<T, Tensor<T>, Tensor<T>> l2)
+            return decayExcluded is not null && decayExcluded.Contains(parameter)
+                ? gradient
+                : Engine.TensorAdd(gradient, Engine.TensorMultiplyScalar(theta, NumOps.FromDouble(l2.GetOptions().Strength)));
+        return regularization.Regularize(gradient, theta);
     }
 
     /// <param name="updatedOnDevice">
@@ -19159,6 +19896,17 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             }
         }
 
+        return ObservedLayerActivations(input, activations);
+    }
+
+    /// <summary>
+    /// The activations of every layer call made by <see cref="Predict"/> on <paramref name="input"/>, keyed by the
+    /// layer's position in <see cref="Layers"/> (or its call order when it is not a top-level layer).
+    /// </summary>
+    /// <remarks>For models whose forward is not a fold of <see cref="Layers"/> and whose family base folds anyway.</remarks>
+    protected Dictionary<string, Tensor<T>> ObservedLayerActivations(Tensor<T> input, Dictionary<string, Tensor<T>>? activations = null)
+    {
+        activations ??= new Dictionary<string, Tensor<T>>();
         // The observer is already wired into LayerBase.Forward and composes with an enclosing trace,
         // so this asks the model to run itself and writes down what actually happened. Correct for a
         // branched model, a custom PredictCore, and a plain chain alike.
@@ -19472,6 +20220,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         InvalidateWeightCachesAfterSuccessfulWeightUpdate();
 
         // Last, so a model that derives state from its weights can rebuild it.
+        InvalidateCheckpointParameterCache();
         OnParametersRestored();
     }
 
@@ -19915,6 +20664,16 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         // streaming snapshots that must be promoted before its weights participate in backward.
         var pair = PrepareTrainingPair(input, target, _trainingPairDraws);
         var pairedTarget = pair.Target ?? target;
+        var resolved = lossFunction ?? LossFunction;
+        if (resolved is LossFunctions.LossFunctionBase<T> && FusedReadoutForTraining() is { } fusedReadout)
+        {
+            SetTrainingMode(true);
+            var trainingInput = ForwardForTrainingOwnsPublicInputPreparation()
+                ? pair.Input
+                : PrepareInputForTraining(pair.Input);
+            var readoutInput = ForwardForTrainingToReadout(trainingInput);
+            return FusedReadoutObjective(fusedReadout, readoutInput, pairedTarget, resolved, pair.Input);
+        }
         var prediction = ForwardPreparedForTraining(pair.Input, pairTransformed: true);
         return ComputeObjectiveFromPrediction(pair.Input, prediction, pairedTarget, lossFunction);
     }
@@ -20413,6 +21172,9 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         {
             _lastDeviceGradientNorm?.Dispose();
             _lastDeviceGradientNorm = null;
+            (_streamingOptimizerState as IDisposable)?.Dispose();
+            _streamingOptimizerState = null;
+            _streamingOptimizerKey = null;
             // Release inference plans plus training plans/caches before layer disposal.
             // CompiledTapeTrainingStep keeps this model's plan (keyed by the model) and
             // the plan captures the live layer parameter tensors. Leaving that plan alive
