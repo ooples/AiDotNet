@@ -319,7 +319,7 @@ namespace AiDotNet.NeuralNetworks
                     var scores = Engine.TensorMatMul(queryBlock, Engine.TensorTranspose(documentBlock));
                     var floor = new Tensor<T>(scores._shape);
                     floor.Fill(NumOps.MinValue);
-                    scores = Engine.TensorWhere(Engine.TensorIsNan(scores.Cast<double>()), floor, scores);
+                    scores = Engine.TensorWhere(Engine.TensorIsNan(scores), floor, scores);
                     best = Engine.TensorMax(best, Engine.ReduceMax(scores, new[] { 1 }, false));
                     documentStart += documentCount;
                 }

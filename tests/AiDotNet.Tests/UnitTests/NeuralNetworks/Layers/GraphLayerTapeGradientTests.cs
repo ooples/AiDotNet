@@ -133,6 +133,49 @@ public class GraphLayerTapeGradientTests
         return layer;
     }
 
+    /// <summary>
+    /// Two node types of equal width on a 4-node graph (a, b, a, b). With <paramref name="useBasis"/> three
+    /// edge types share two bases, so the basis matrices and per-edge coefficients are the edge weights.
+    /// </summary>
+    private static HeterogeneousGraphLayer<double> TinyHeterogeneous(Random rng, bool useBasis)
+    {
+        var metadata = new HeterogeneousGraphMetadata
+        {
+            NodeTypes = new[] { "a", "b" },
+            EdgeTypes = useBasis ? new[] { "ab", "ba", "aa" } : new[] { "ab", "ba" },
+            NodeTypeFeatures = new Dictionary<string, int> { ["a"] = 3, ["b"] = 3 },
+            EdgeTypeSchema = new Dictionary<string, (string SourceType, string TargetType)>
+            {
+                ["ab"] = ("a", "b"),
+                ["ba"] = ("b", "a"),
+                ["aa"] = ("a", "a"),
+            },
+        };
+        var layer = new HeterogeneousGraphLayer<double>(metadata, outputFeatures: 2, useBasis: useBasis, numBases: 2);
+        var adjacencies = new Dictionary<string, Tensor<double>>();
+        foreach (var edgeType in metadata.EdgeTypes)
+        {
+            var adjacency = RandomTensor(rng, 4, 4);
+            var span = adjacency.AsWritableSpan();
+            for (int i = 0; i < span.Length; i++) span[i] = span[i] > -0.2 ? 1.0 : 0.0;
+            adjacencies[edgeType] = adjacency;
+        }
+        layer.SetAdjacencyMatrices(adjacencies);
+        layer.SetNodeTypeMap(new Dictionary<int, string> { [0] = "a", [1] = "b", [2] = "a", [3] = "b" });
+        return layer;
+    }
+
+    private static DirectionalGraphLayer<double> TinyDirectional()
+    {
+        var layer = new DirectionalGraphLayer<double>(inputFeatures: 3, outputFeatures: 2, useGating: true);
+        // A directed 4-node graph: adjacency[i, j] = 1 for the edge j -> i.
+        var adjacency = new Tensor<double>(new[] { 4, 4 });
+        foreach (var (i, j) in new[] { (1, 0), (2, 1), (3, 2), (0, 3), (2, 0) })
+            adjacency[i, j] = 1.0;
+        layer.SetAdjacencyMatrix(adjacency);
+        return layer;
+    }
+
     [Fact]
     public void PositiveControl_DenseLayer_EveryParameterReceivesGradient()
     {
@@ -194,6 +237,81 @@ public class GraphLayerTapeGradientTests
         var rng = RandomHelper.CreateSeededRandom(32);
         var layer = TinyEdgeConditional(rng);
         AssertMatchesFiniteDifferences(layer, RandomTensor(rng, 3, 3), RandomTensor(rng, 3, 2));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void HeterogeneousGraphLayer_EveryTrainableParameterReceivesGradient(bool useBasis)
+    {
+        // The self-loop weights and biases were written into the output in place (off the tape), and the
+        // basis reconstruction ran in a no-grad scope, so those parameters never trained.
+        var rng = RandomHelper.CreateSeededRandom(useBasis ? 52 : 51);
+        var layer = TinyHeterogeneous(rng, useBasis);
+        AssertEveryParameterReached(layer, RandomTensor(rng, 4, 3), RandomTensor(rng, 4, 2));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void HeterogeneousGraphLayer_TapeGradientMatchesFiniteDifferences(bool useBasis)
+    {
+        var rng = RandomHelper.CreateSeededRandom(useBasis ? 54 : 53);
+        var layer = TinyHeterogeneous(rng, useBasis);
+        AssertMatchesFiniteDifferences(layer, RandomTensor(rng, 4, 3), RandomTensor(rng, 4, 2));
+    }
+
+    [Fact]
+    public void DirectionalGraphLayer_Gated_EveryTrainableParameterReceivesGradient()
+    {
+        // The concatenation of the three branches and the gating ran in no-grad scopes, so the incoming,
+        // outgoing and self weights and biases, and the gate parameters, never trained.
+        var rng = RandomHelper.CreateSeededRandom(61);
+        var layer = TinyDirectional();
+        AssertEveryParameterReached(layer, RandomTensor(rng, 4, 3), RandomTensor(rng, 4, 2));
+    }
+
+    [Fact]
+    public void DirectionalGraphLayer_Gated_TapeGradientMatchesFiniteDifferences()
+    {
+        var rng = RandomHelper.CreateSeededRandom(62);
+        var layer = TinyDirectional();
+        AssertMatchesFiniteDifferences(layer, RandomTensor(rng, 4, 3), RandomTensor(rng, 4, 2));
+    }
+
+    [Fact]
+    public void DeformableConvolutionalLayer_EveryTrainableParameterReceivesGradient()
+    {
+        // The main, offset and mask biases were added in place outside the tape, so they never trained.
+        var rng = RandomHelper.CreateSeededRandom(71);
+        var layer = new DeformableConvolutionalLayer<double>(outputChannels: 2, kernelSize: 3, stride: 1, padding: 1);
+        var input = RandomTensor(rng, 1, 2, 5, 5);
+        _ = layer.Forward(input);
+        var projection = RandomTensor(rng, 1, 2, 5, 5);
+        AssertEveryParameterReached(layer, input, projection);
+    }
+
+    [Fact]
+    public void DeformableConvolutionalLayer_OutputBiasGradientIsProjectionSumPerChannel()
+    {
+        // d(sum(p * (conv + b[c])))/db[c] = sum over batch and space of p[:, c].
+        var rng = RandomHelper.CreateSeededRandom(72);
+        var layer = new DeformableConvolutionalLayer<double>(outputChannels: 2, kernelSize: 3, stride: 1, padding: 1);
+        var input = RandomTensor(rng, 1, 2, 5, 5);
+        _ = layer.Forward(input);
+        var projection = RandomTensor(rng, 1, 2, 5, 5);
+        var (parameters, gradients) = TapeGradients(layer, input, projection);
+        var bias = parameters.Single(p => p.Shape.Length == 1 && p.Shape[0] == 2);
+        Assert.True(gradients.TryGetValue(bias, out var gradient) && gradient is not null,
+            "the output bias received no gradient");
+        for (int c = 0; c < 2; c++)
+        {
+            double expected = 0;
+            for (int h = 0; h < 5; h++)
+                for (int w = 0; w < 5; w++)
+                    expected += projection[0, c, h, w];
+            Assert.Equal(expected, gradient[c], 10);
+        }
     }
 
     [Fact]

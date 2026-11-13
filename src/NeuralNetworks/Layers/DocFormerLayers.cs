@@ -146,16 +146,21 @@ public partial class DocFormerSpatialEmbeddingLayer<T> : LayerBase<T>, IShapeCon
         Tensor<T> pe;
         using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
         {
-            var pairBase = new Tensor<int>(Enumerable.Range(0, _hidden).Select(c => c - (c % 2)).ToArray(), new[] { _hidden }).Cast<T>();
-            var inverseFrequency = Engine.TensorExp(
-                Engine.TensorMultiplyScalar(pairBase, NumOps.FromDouble(-Math.Log(10000.0) / _hidden)));
-            var angles = Engine.TensorOuter(Engine.TensorArange<T>(0, s), inverseFrequency);   // [s, hidden]
-            var oddColumns = new Tensor<int>(Enumerable.Range(0, _hidden).Select(c => c % 2).ToArray(), new[] { 1, _hidden }).Cast<T>();
-            var columnOnes = new Tensor<T>(new[] { 1, _hidden });
-            columnOnes.Fill(NumOps.One);
+            // A constant built in double (angles reach s radians, beyond what float or Half carries to
+            // sin/cos) and rounded to T once, as the per-element double math was.
+            var pairBase = new Tensor<int>(Enumerable.Range(0, _hidden).Select(c => c - (c % 2)).ToArray(), new[] { _hidden }).Cast<double>();
+            var tenThousands = new Tensor<double>(new[] { _hidden });
+            tenThousands.Fill(10000.0);
+            var frequencyDivisor = Engine.TensorPower(tenThousands, Engine.TensorDivideScalar(pairBase, (double)_hidden));
+            var angles = Engine.TensorDivide(
+                Engine.TensorBroadcastTo(Engine.Reshape(Engine.TensorArange<double>(0, s), new[] { s, 1 }), new[] { s, _hidden }),
+                Engine.TensorBroadcastTo(Engine.Reshape(frequencyDivisor, new[] { 1, _hidden }), new[] { s, _hidden }));   // [s, hidden]
+            var oddColumns = new Tensor<int>(Enumerable.Range(0, _hidden).Select(c => c % 2).ToArray(), new[] { 1, _hidden }).Cast<double>();
+            var columnOnes = new Tensor<double>(new[] { 1, _hidden });
+            columnOnes.Fill(1.0);
             pe = Engine.TensorAdd(
                 Engine.TensorMultiply(Engine.TensorSin(angles), Engine.TensorSubtract(columnOnes, oddColumns)),
-                Engine.TensorMultiply(Engine.TensorCos(angles), oddColumns));
+                Engine.TensorMultiply(Engine.TensorCos(angles), oddColumns)).Cast<T>();
         }
         return Engine.TensorAdd(Engine.TensorAdd(Axis(0), Axis(1)), pe);
     }

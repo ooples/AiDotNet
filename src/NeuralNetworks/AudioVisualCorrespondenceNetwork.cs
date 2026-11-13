@@ -241,19 +241,21 @@ public partial class AudioVisualCorrespondenceNetwork<T> : MultimodalModelLayout
         int width = _embeddingDimension;
         if (maxLength == 0 || width == 0) return new Tensor<T>([maxLength, width]);
 
-        var positions = Engine.TensorArange<T>(0, maxLength);
-        var divTerms = Engine.TensorExp(
-            Engine.TensorMultiplyScalar(Engine.TensorArange<T>(0, width), NumOps.FromDouble(-Math.Log(10000.0) / width)));
+        // The table is a constant: built in double (angles reach maxLength radians, beyond what float or
+        // Half can carry to the sin/cos) and rounded to T once, as the per-element double math was.
+        var positions = Engine.TensorArange<double>(0, maxLength);
+        var divTerms = Engine.TensorExp(Engine.TensorDivideScalar(
+            Engine.TensorMultiplyScalar(Engine.TensorArange<double>(0, width), -Math.Log(10000.0)), width));
         var angles = Engine.TensorOuter(positions, divTerms); // [maxLength, width]
 
         // 1 in even columns, 0 in odd ones; sin * even + cos * (1 - even) picks one exactly.
-        var evenColumns = new Tensor<int>(Enumerable.Range(0, width).Select(i => 1 - i % 2).ToArray(), new[] { 1, width }).Cast<T>();
-        var ones = new Tensor<T>(new[] { 1, width });
-        ones.Fill(NumOps.One);
+        var evenColumns = new Tensor<int>(Enumerable.Range(0, width).Select(i => 1 - i % 2).ToArray(), new[] { 1, width }).Cast<double>();
+        var ones = new Tensor<double>(new[] { 1, width });
+        ones.Fill(1.0);
         var oddColumns = Engine.TensorSubtract(ones, evenColumns);
         return Engine.TensorAdd(
             Engine.TensorMultiply(Engine.TensorSin(angles), evenColumns),
-            Engine.TensorMultiply(Engine.TensorCos(angles), oddColumns));
+            Engine.TensorMultiply(Engine.TensorCos(angles), oddColumns)).Cast<T>();
     }
 
     #endregion

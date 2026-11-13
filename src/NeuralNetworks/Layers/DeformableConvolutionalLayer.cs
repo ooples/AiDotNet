@@ -556,15 +556,12 @@ public partial class DeformableConvolutionalLayer<T> : LayerBase<T>, IShapeContr
     {
         int channels = output.Shape[1];
 
-        // Adds bias[c] to channel c in place, outside the tape as the raw buffer write was.
-        using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
-        {
-            var channelBias = _engine.Reshape(
-                _engine.TensorSlice(_engine.Reshape(bias, new[] { bias.Length }), new[] { 0 }, new[] { channels }),
-                new[] { 1, channels, 1, 1 });
-            _engine.TensorAdd(output, channelBias).CopyTo(output.AsWritableSpan());
-        }
-        return output;
+        // Adds bias[c] to channel c as a broadcast add recorded on the tape, so the main, offset and
+        // mask biases all receive gradient (an in-place write would detach them).
+        var channelBias = _engine.Reshape(
+            _engine.TensorSlice(_engine.Reshape(bias, new[] { bias.Length }), new[] { 0 }, new[] { channels }),
+            new[] { 1, channels, 1, 1 });
+        return _engine.TensorAdd(output, channelBias);
     }
 
     private static Tensor<T> EnsureBatchDimension(Tensor<T> tensor)

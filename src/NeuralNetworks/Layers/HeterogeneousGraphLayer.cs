@@ -526,7 +526,9 @@ public partial class HeterogeneousGraphLayer<T> : LayerBase<T>, IGraphConvolutio
             output = Engine.TensorAdd(output, convOutput);
         }
 
-        // Add self-loops and biases
+        // Add self-loops and biases. Each node's [batch, outputFeatures] term is stacked along the node
+        // axis and added on the tape, so the self-loop weights and biases receive gradient.
+        var selfTerms = new Tensor<T>[processNumNodes];
         for (int i = 0; i < processNumNodes; i++)
         {
             string nodeType = _nodeTypeMap[i];
@@ -543,9 +545,10 @@ public partial class HeterogeneousGraphLayer<T> : LayerBase<T>, IGraphConvolutio
             // Broadcast bias across batch
             var biasBroadcast = BroadcastBias(bias, batchSize);
 
-            // Add to output at this node position
-            output = AddNodeOutput(output, selfOutput, biasBroadcast, batchSize, i, _outputFeatures);
+            selfTerms[i] = Engine.TensorAdd(selfOutput, biasBroadcast);
         }
+        if (processNumNodes > 0 && batchSize > 0 && _outputFeatures > 0)
+            output = Engine.TensorAdd(output, Engine.TensorStack(selfTerms, 1));
 
         var result = ApplyActivation(output);
 
@@ -620,25 +623,22 @@ public partial class HeterogeneousGraphLayer<T> : LayerBase<T>, IGraphConvolutio
     }
 
     /// <summary>
-    /// W_r = sum_b a_rb * V_b over the [numBases, InputFeatures, outputFeatures] basis, as a plain value
-    /// (off the tape), as the copied-basis accumulation was.
+    /// W_r = sum_b a_rb * V_b over the [numBases, InputFeatures, outputFeatures] basis, recorded on the
+    /// tape so both the bases and the coefficients receive gradient.
     /// </summary>
     private Tensor<T> ReconstructBasisWeights(Tensor<T> basisMatrices, Tensor<T> coefficients)
     {
         int width = InputFeatures * _outputFeatures;
         if (_numBases == 0 || width == 0) return new Tensor<T>([InputFeatures, _outputFeatures]);
 
-        using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
-        {
-            var bases = Engine.Reshape(
-                Engine.TensorSlice(basisMatrices, [0, 0, 0], [_numBases, InputFeatures, _outputFeatures]),
-                [_numBases, width]);
-            var coefficientColumn = Engine.Reshape(
-                Engine.TensorSlice(Engine.Reshape(coefficients, [coefficients.Length]), [0], [_numBases]), [_numBases, 1]);
-            return Engine.Reshape(
-                Engine.ReduceSum(Engine.TensorMultiply(bases, coefficientColumn), new[] { 0 }, keepDims: false),
-                [InputFeatures, _outputFeatures]);
-        }
+        var bases = Engine.Reshape(
+            Engine.TensorSlice(basisMatrices, [0, 0, 0], [_numBases, InputFeatures, _outputFeatures]),
+            [_numBases, width]);
+        var coefficientColumn = Engine.Reshape(
+            Engine.TensorSlice(Engine.Reshape(coefficients, [coefficients.Length]), [0], [_numBases]), [_numBases, 1]);
+        return Engine.Reshape(
+            Engine.ReduceSum(Engine.TensorMultiply(bases, coefficientColumn), new[] { 0 }, keepDims: false),
+            [InputFeatures, _outputFeatures]);
     }
 
     /// <summary>
@@ -646,17 +646,15 @@ public partial class HeterogeneousGraphLayer<T> : LayerBase<T>, IGraphConvolutio
     /// </summary>
     private Tensor<T> ExtractInputFeatures(Tensor<T> input, int batchSize, int numNodes, int inFeatures)
     {
-        // The first min(inFeatures, available) features, zero-padded to inFeatures; a plain copy (off the tape).
+        // The first min(inFeatures, available) features, zero-padded to inFeatures; on the tape so the
+        // input gradient flows back through the edge-type convolutions.
         int kept = Math.Min(inFeatures, input.Shape[2]);
         if (batchSize == 0 || numNodes == 0 || kept <= 0) return new Tensor<T>([batchSize, numNodes, inFeatures]);
 
-        using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
-        {
-            var head = Engine.TensorSlice(input, [0, 0, 0], [batchSize, numNodes, kept]);
-            return kept == inFeatures
-                ? head.Clone()
-                : Engine.TensorConcatenate(new[] { head, new Tensor<T>([batchSize, numNodes, inFeatures - kept]) }, 2);
-        }
+        var head = Engine.TensorSlice(input, [0, 0, 0], [batchSize, numNodes, kept]);
+        return kept == inFeatures
+            ? head
+            : Engine.TensorConcatenate(new[] { head, new Tensor<T>([batchSize, numNodes, inFeatures - kept]) }, 2);
     }
 
     /// <summary>
@@ -715,18 +713,16 @@ public partial class HeterogeneousGraphLayer<T> : LayerBase<T>, IGraphConvolutio
     /// </summary>
     private Tensor<T> ExtractNodeInput(Tensor<T> input, int batchSize, int nodeIndex, int inFeatures)
     {
-        // Node nodeIndex's first min(inFeatures, available) features per sample, zero-padded; a plain copy.
+        // Node nodeIndex's first min(inFeatures, available) features per sample, zero-padded; on the tape
+        // so the input gradient flows back through the self-loop term.
         int kept = Math.Min(inFeatures, input.Shape[2]);
         if (batchSize == 0 || kept <= 0) return new Tensor<T>([batchSize, inFeatures]);
 
-        using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
-        {
-            var head = Engine.Reshape(
-                Engine.TensorSlice(input, [0, nodeIndex, 0], [batchSize, 1, kept]), [batchSize, kept]);
-            return kept == inFeatures
-                ? head.Clone()
-                : Engine.TensorConcatenate(new[] { head, new Tensor<T>([batchSize, inFeatures - kept]) }, 1);
-        }
+        var head = Engine.Reshape(
+            Engine.TensorSlice(input, [0, nodeIndex, 0], [batchSize, 1, kept]), [batchSize, kept]);
+        return kept == inFeatures
+            ? head
+            : Engine.TensorConcatenate(new[] { head, new Tensor<T>([batchSize, inFeatures - kept]) }, 1);
     }
 
     /// <summary>
@@ -736,28 +732,6 @@ public partial class HeterogeneousGraphLayer<T> : LayerBase<T>, IGraphConvolutio
     {
         var biasReshaped = bias.Reshape([1, bias.Length]);
         return Engine.TensorTile(biasReshaped, [batchSize, 1]);
-    }
-
-    /// <summary>
-    /// Adds node output and bias to the overall output tensor.
-    /// </summary>
-    private Tensor<T> AddNodeOutput(Tensor<T> output, Tensor<T> nodeOutput, Tensor<T> bias,
-        int batchSize, int nodeIndex, int outputFeatures)
-    {
-        if (batchSize == 0 || outputFeatures == 0) return output;
-
-        // output[:, nodeIndex, :] += nodeOutput + bias, written in place (not recorded on the tape),
-        // as the element-wise update was.
-        using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
-        {
-            var value = Engine.TensorAdd(
-                Engine.TensorSlice(nodeOutput, [0, 0], [batchSize, outputFeatures]),
-                Engine.TensorSlice(bias, [0, 0], [batchSize, outputFeatures]));
-            var current = Engine.Reshape(
-                Engine.TensorSlice(output, [0, nodeIndex, 0], [batchSize, 1, outputFeatures]), [batchSize, outputFeatures]);
-            output.SetSlice(1, nodeIndex, Engine.TensorAdd(current, value));
-        }
-        return output;
     }
 
     /// <summary>

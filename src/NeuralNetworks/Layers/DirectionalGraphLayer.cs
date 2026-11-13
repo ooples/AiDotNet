@@ -548,15 +548,13 @@ public partial class DirectionalGraphLayer<T> : LayerBase<T>, IGraphConvolutionL
         if (batchSize == 0 || numNodes == 0 || outputFeatures == 0)
             return new Tensor<T>([batchSize, numNodes, 3 * outputFeatures]);
 
-        // [incoming | outgoing | self] along the features, a plain copy (off the tape), as before.
+        // [incoming | outgoing | self] along the features. Recorded on the tape so the gradient of the
+        // combination reaches the incoming, outgoing and self weights and biases.
         int[] start = [0, 0, 0];
         int[] size = [batchSize, numNodes, outputFeatures];
-        using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
-        {
-            return Engine.TensorConcatenate(
-                new[] { Engine.TensorSlice(incoming, start, size), Engine.TensorSlice(outgoing, start, size), Engine.TensorSlice(self, start, size) },
-                2);
-        }
+        return Engine.TensorConcatenate(
+            new[] { Engine.TensorSlice(incoming, start, size), Engine.TensorSlice(outgoing, start, size), Engine.TensorSlice(self, start, size) },
+            2);
     }
 
     /// <summary>
@@ -576,14 +574,11 @@ public partial class DirectionalGraphLayer<T> : LayerBase<T>, IGraphConvolutionL
         if (batchSize == 0 || numNodes == 0 || outputFeatures == 0)
             return new Tensor<T>(combined._shape);
 
-        // Group k of the features (incoming, outgoing, self) is scaled by gate k; a plain value (off the
-        // tape), as the element-wise products were.
-        using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
-        {
-            return Engine.TensorMultiply(
-                Engine.TensorSlice(combined, [0, 0, 0], [batchSize, numNodes, 3 * outputFeatures]),
-                ExpandGates(gates, batchSize, numNodes, outputFeatures));
-        }
+        // Group k of the features (incoming, outgoing, self) is scaled by gate k. Recorded on the tape so
+        // the gate weights and biases, and the three branches, all receive gradient.
+        return Engine.TensorMultiply(
+            Engine.TensorSlice(combined, [0, 0, 0], [batchSize, numNodes, 3 * outputFeatures]),
+            ExpandGates(gates, batchSize, numNodes, outputFeatures));
     }
 
     /// <summary>Repeats each of the three gates per node outputFeatures times: [B, N, 3] to [B, N, 3 * F].</summary>

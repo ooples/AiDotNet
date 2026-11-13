@@ -110,9 +110,12 @@ public partial class ALiBiPositionalBiasLayer<T> : LayerBase<T>, IShapeContract
         _maxSequenceLength = maxSequenceLength;
 
         // Compute per-head slopes: slope_h = 2^(-8/numHeads * (h+1))
-        // 2^(-8/numHeads * (h+1)) = exp((h+1) * (-8/numHeads) * ln 2).
-        _slopes = Engine.TensorExp(Engine.TensorMultiplyScalar(
-            Engine.TensorArange<T>(1, numHeads + 1), NumOps.FromDouble(-8.0 / numHeads * Math.Log(2.0))));
+        // Evaluated as a power of two in double and rounded once to T, so the slopes are the exact
+        // powers of two of the paper (an exp of an arange in T drifts, and in Half rounds the exponent).
+        var exponents = Engine.TensorMultiplyScalar(Engine.TensorArange<double>(1, numHeads + 1), -8.0 / numHeads);
+        var twos = new Tensor<double>(new[] { numHeads });
+        twos.Fill(2.0);
+        _slopes = Engine.TensorPower(twos, exponents).Cast<T>();
         RegisterBuffer(_slopes, nameof(_slopes));
     }
 
