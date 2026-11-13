@@ -20902,6 +20902,7 @@ AiDotNet.Finance.Graph.RelationalGCN<T>.RelationalGCN(AiDotNet.NeuralNetworks.Ne
 override AiDotNet.Finance.Graph.RelationalGCN<T>.ConsumeAuxiliaryTapeLoss() -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>?
 override AiDotNet.Finance.Graph.RelationalGCN<T>.ForwardNativeForTraining(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 override AiDotNet.Finance.Graph.RelationalGCN<T>.GetExtraTrainableTensors() -> System.Collections.Generic.IEnumerable<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>!
+override AiDotNet.Finance.Graph.RelationalGCN<T>.OnMutableConstructorConfigurationRestored() -> void
 override AiDotNet.Finance.Graph.RelationalGCN<T>.SetTrainingMode(bool isTraining) -> void
 AiDotNet.Safety.Watermarking.ImageWatermarkerBase<T>.ImageWatermarkerBase(double watermarkStrength, string? key) -> void
 AiDotNet.Safety.Watermarking.ImageWatermarkerBase<T>.UsesPublicKey.get -> bool
