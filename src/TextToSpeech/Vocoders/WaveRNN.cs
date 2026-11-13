@@ -137,8 +137,8 @@ public partial class WaveRNN<T> : SegmentVocoderBase<T>
         var flat = new double[rows.Length];
         Buffer.BlockCopy(rows, 0, flat, 0, rows.Length * sizeof(double));
         var engine = AiDotNetEngine.Current;
-        return engine.Reshape(engine.TensorTranspose(new Tensor<double>(flat, new[] { frames, bands })), new[] { 1, bands, frames })
-            .Cast<T>();
+        return TensorCopyHelper.CastLogical<double, T>(
+            engine.Reshape(engine.TensorTranspose(new Tensor<double>(flat, new[] { frames, bands })), new[] { 1, bands, frames }));
     }
 
     /// <summary>The 16-bit value (0..65535) of a sample in [−1, 1].</summary>
@@ -158,7 +158,7 @@ public partial class WaveRNN<T> : SegmentVocoderBase<T>
             0.0, 65535.0);
         var high = Engine.TensorFloor(Engine.TensorDivideScalar(sixteen, 256.0));
         var low = Engine.TensorSubtract(sixteen, Engine.TensorMultiplyScalar(high, 256.0));
-        return (high.Cast<int>().ToArray(), low.Cast<int>().ToArray());
+        return (TensorCopyHelper.CastLogical<double, int>(high).ToArray(), TensorCopyHelper.CastLogical<double, int>(low).ToArray());
     }
 
     // Bytes b as b / 127.5 - 1 in T, shaped [1, channels, count] (§2: "encoded as scalars in [0, 255] and scaled to
@@ -168,7 +168,7 @@ public partial class WaveRNN<T> : SegmentVocoderBase<T>
         var engine = AiDotNetEngine.Current;
         var values = engine.TensorAddScalar(
             engine.TensorDivideScalar(new Tensor<int>(bytes, new[] { 1, channels, bytes.Length / channels }).Cast<double>(), 127.5), -1.0);
-        return values.Cast<T>();
+        return TensorCopyHelper.CastLogical<double, T>(values);
     }
 
     private Tensor<T> Condition(Tensor<T> mel, int samples)

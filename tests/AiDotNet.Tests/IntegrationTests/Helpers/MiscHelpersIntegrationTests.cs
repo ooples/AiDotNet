@@ -221,6 +221,27 @@ public class MiscHelpersIntegrationTests
             TensorCopyHelper.CopySample(source, dest, 0, 0));
     }
 
+    [Fact(Timeout = 120000)]
+    public async Task TensorCopyHelper_CastLogical_ReadsViewsInLogicalOrder()
+    {
+        await Task.Yield();
+        // Tensor.Cast reads the backing storage from index 0, ignoring a view's offset and strides; CastLogical
+        // casts the logical elements. source = [[1, 2, 3], [4, 5, 6]].
+        var engine = AiDotNetEngine.Current;
+        var source = new Tensor<double>(new[] { 2, 3 }, new Vector<double>(new double[] { 1, 2, 3, 4, 5, 6 }));
+
+        // Offset view (row 1)
+        Assert.Equal(new[] { 4, 5, 6 }, TensorCopyHelper.CastLogical<double, int>(engine.TensorNarrow(source, 0, 1, 1)).ToArray());
+
+        // Strided view (columns 1..2)
+        Assert.Equal(new[] { 2, 3, 5, 6 }, TensorCopyHelper.CastLogical<double, int>(engine.TensorNarrow(source, 1, 1, 2)).ToArray());
+
+        // Permuted view (transpose)
+        var permuted = TensorCopyHelper.CastLogical<double, float>(engine.TensorPermute(source, new[] { 1, 0 }));
+        Assert.Equal(new[] { 3, 2 }, permuted.Shape.ToArray());
+        Assert.Equal(new[] { 1f, 4f, 2f, 5f, 3f, 6f }, permuted.ToArray());
+    }
+
     #endregion
 
     #region DataAggregationHelper

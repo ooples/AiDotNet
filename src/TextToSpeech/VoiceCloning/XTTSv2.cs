@@ -307,7 +307,7 @@ public partial class XTTSv2<T> : TtsModelBase<T>, ICodecTts<T>
         var weighted = Engine.TensorMatMul(Engine.TensorExp(Engine.TensorMultiply(logMel, stats)), Engine.TensorTranspose(weights));
         var denominator = Engine.TensorClampMin(Engine.ReduceSum(weights, new[] { 1 }, false), 1e-12);
         var ratio = Engine.TensorDivide(weighted, Engine.TensorBroadcastTo(Engine.Reshape(denominator, new[] { 1, bins }), new[] { frames, bins }));
-        var magnitude = Engine.TensorSqrt(Engine.TensorClampMin(ratio, 1e-10)).Cast<T>();
+        var magnitude = TensorCopyHelper.CastLogical<double, T>(Engine.TensorSqrt(Engine.TensorClampMin(ratio, 1e-10)));
         var griffinLim = new AiDotNet.Diffusion.Audio.GriffinLim<T>(_options.DvaeFftSize, _options.DvaeHopSize,
             new XttsHannWindow(_options.DvaeWindowSize), iterations: 16, momentum: 0, seed: _options.SamplingSeed);
         var wave22050 = griffinLim.Reconstruct(magnitude);

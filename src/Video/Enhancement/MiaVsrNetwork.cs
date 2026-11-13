@@ -1022,7 +1022,7 @@ internal sealed class MiaVsrNetwork<T>
             var engine = AiDotNetEngine.Current;
             var u = engine.TensorClamp(new Tensor<double>(draws, shape), 1e-10, 1 - 1e-10);
             var complement = engine.TensorSubtract(engine.TensorOnesLike(u), u);
-            return engine.TensorSubtract(engine.TensorLog(u), engine.TensorLog(complement)).Cast<T>();
+            return TensorCopyHelper.CastLogical<double, T>(engine.TensorSubtract(engine.TensorLog(u), engine.TensorLog(complement)));
         }
 
         private static Tensor<T> Blend(IEngine engine, Tensor<T> fresh, Tensor<T> previous, Tensor<T> keep)

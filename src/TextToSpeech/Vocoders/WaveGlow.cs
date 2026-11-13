@@ -94,8 +94,8 @@ public partial class WaveGlow<T> : SegmentVocoderBase<T>
         int frames = rows.GetLength(0), bands = rows.GetLength(1);
         var flat = new double[rows.Length];
         Buffer.BlockCopy(rows, 0, flat, 0, rows.Length * sizeof(double));
-        return Engine.Reshape(Engine.TensorTranspose(new Tensor<double>(flat, new[] { frames, bands })), new[] { 1, bands, frames })
-            .Cast<T>();
+        return TensorCopyHelper.CastLogical<double, T>(
+            Engine.Reshape(Engine.TensorTranspose(new Tensor<double>(flat, new[] { frames, bands })), new[] { 1, bands, frames }));
     }
 
     /// <inheritdoc />

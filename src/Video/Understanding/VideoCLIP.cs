@@ -877,9 +877,9 @@ public partial class VideoCLIP<T> : NeuralNetworkBase<T>
         int seqLen = tokenIds.Shape.Length > 1 ? tokenIds.Shape[1] : _textMaxLength;
 
         // Token ids clamped to the vocabulary, then token embedding + positional embedding per position
-        var ids = Engine.TensorClamp(
+        var ids = TensorCopyHelper.CastLogical<T, int>(Engine.TensorClamp(
             Engine.Reshape(Engine.TensorNarrow(Engine.Reshape(tokenIds, [batchSize, tokenIds.Length / batchSize]), 1, 0, seqLen), [batchSize * seqLen]),
-            NumOps.Zero, NumOps.FromDouble(_vocabSize - 1)).Cast<int>();
+            NumOps.Zero, NumOps.FromDouble(_vocabSize - 1)));
         var tokens = Engine.TensorIndexSelect(_tokenEmbeddingTable, ids, 0);                      // [B*S, D]
         var positions = Engine.TensorNarrow(_positionalEmbeddingTable, 0, 0, seqLen);            // [S, D]
         var embedded = Engine.TensorAdd(

@@ -285,7 +285,7 @@ public abstract partial class OpticalFlowBase<T> : VideoNeuralNetworkBase<T>, IS
         // The flat index y * width + x is built in int: the clamped coordinates are exact in T, but their product
         // and sum are not (a float rounds 23,040,001 to 23,040,000 and picks the neighbouring pixel).
         var target = Engine.Reshape(
-            Engine.TensorAdd(Engine.TensorMultiplyScalar(tgtY.Cast<int>(), width), tgtX.Cast<int>()),
+            Engine.TensorAdd(Engine.TensorMultiplyScalar(TensorCopyHelper.CastLogical<T, int>(tgtY), width), TensorCopyHelper.CastLogical<T, int>(tgtX)),
             [pixels]);
 
         // Backward flow at target position
