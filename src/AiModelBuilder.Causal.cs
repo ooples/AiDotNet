@@ -56,7 +56,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     /// var outcome = new Vector&lt;double&gt;(new double[] { 3.1, 7.2, 2.8, 8.0, 3.4, 7.6 });
     ///
     /// var result = new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
-    ///     .ConfigureModel(new TLearner&lt;double&gt;(maxIterations: 100, learningRate: 0.1))
+    ///     .ConfigureModel(new TLearner&lt;double&gt;(lambda: 0.01))
     ///     .Build(covariates, treatment, outcome);
     ///
     /// var (ate, se) = result.EstimateATE(covariates, treatment, outcome);

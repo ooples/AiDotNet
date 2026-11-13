@@ -221,6 +221,47 @@ public class MiscHelpersIntegrationTests
             TensorCopyHelper.CopySample(source, dest, 0, 0));
     }
 
+    [Fact(Timeout = 120000)]
+    public async Task TensorCopyHelper_CastLogical_MaterializesALazyGraphModeResult()
+    {
+        await Task.Yield();
+        // Under GraphMode an engine result is a lazy placeholder whose storage is filled only when it is realized.
+        // Tensor.Cast reads that storage without realizing it (zeros); CastLogical goes through ToArray, which
+        // realizes first. [1, 2, 3] + [10, 20, 30] = [11, 22, 33].
+        var engine = AiDotNetEngine.Current;
+        var a = new Tensor<float>(new[] { 3 }, new Vector<float>(new float[] { 1, 2, 3 }));
+        var b = new Tensor<float>(new[] { 3 }, new Vector<float>(new float[] { 10, 20, 30 }));
+        int[] cast;
+        using (AiDotNet.Tensors.Engines.Compilation.GraphMode.Enable())
+        {
+            var lazy = engine.TensorAdd(a, b);
+            cast = TensorCopyHelper.CastLogical<float, int>(lazy).ToArray();
+        }
+
+        Assert.Equal(new[] { 11, 22, 33 }, cast);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task TensorCopyHelper_CastLogical_ReadsViewsInLogicalOrder()
+    {
+        await Task.Yield();
+        // Tensor.Cast reads the backing storage from index 0, ignoring a view's offset and strides; CastLogical
+        // casts the logical elements. source = [[1, 2, 3], [4, 5, 6]].
+        var engine = AiDotNetEngine.Current;
+        var source = new Tensor<double>(new[] { 2, 3 }, new Vector<double>(new double[] { 1, 2, 3, 4, 5, 6 }));
+
+        // Offset view (row 1)
+        Assert.Equal(new[] { 4, 5, 6 }, TensorCopyHelper.CastLogical<double, int>(engine.TensorNarrow(source, 0, 1, 1)).ToArray());
+
+        // Strided view (columns 1..2)
+        Assert.Equal(new[] { 2, 3, 5, 6 }, TensorCopyHelper.CastLogical<double, int>(engine.TensorNarrow(source, 1, 1, 2)).ToArray());
+
+        // Permuted view (transpose)
+        var permuted = TensorCopyHelper.CastLogical<double, float>(engine.TensorPermute(source, new[] { 1, 0 }));
+        Assert.Equal(new[] { 3, 2 }, permuted.Shape.ToArray());
+        Assert.Equal(new[] { 1f, 4f, 2f, 5f, 3f, 6f }, permuted.ToArray());
+    }
+
     #endregion
 
     #region DataAggregationHelper

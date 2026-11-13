@@ -31,6 +31,32 @@ public class FiganComponentTests
     }
 
     [Fact]
+    public void ContentLossOfEmptyInputIsNaN()
+    {
+        // A mean over zero elements is undefined: torch.nn.L1Loss/MSELoss (reduction="mean") give nan, and so did
+        // the per-element loops here (0.0 / 0). Returning 0 reports a perfect score for no data.
+        var empty = new Vector<double>(0);
+        var features = new Vector<double>(new[] { 1.0 });
+        Assert.True(double.IsNaN(FiganLoss<double>.Content(empty, empty)));
+        Assert.True(double.IsNaN(FiganLoss<double>.Content(features, features, empty, empty)));
+    }
+
+    [Fact]
+    public void ContentLossIsComputedInDouble()
+    {
+        // |3e38 - (-3e38)| = 6e38 overflows float to infinity; the double result is 6e38 (and the feature term
+        // 0.001 * 6e38^2 = 3.6e74 is finite in double too).
+        var predicted = new Vector<float>(new[] { 3e38f });
+        var target = new Vector<float>(new[] { -3e38f });
+        double l1 = FiganLoss<float>.Content(predicted, target);
+        Assert.Equal(6e38, l1, 6e38 * 1e-6);
+
+        var zero = new Vector<float>(new[] { 0f });
+        double feature = FiganLoss<float>.Content(zero, zero, predicted, target);
+        Assert.Equal(0.001 * 6e38 * 6e38, feature, 0.001 * 6e38 * 6e38 * 1e-6);
+    }
+
+    [Fact]
     public void ContentLossAddsTheVggTermSquaredAndWeighted()
     {
         // Identical pixels so L1 = 0, isolating the perceptual term. Feature deltas of 2 and 4 give a
