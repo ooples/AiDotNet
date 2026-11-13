@@ -22921,7 +22921,3 @@ AiDotNet.Enums.MixtureOfExpertsGatingNoise.SoftplusOfRouterLogits = 1 -> AiDotNe
 AiDotNet.Enums.ObliviousTreeChoiceFunction
 AiDotNet.Enums.ObliviousTreeChoiceFunction.Entmax15 = 0 -> AiDotNet.Enums.ObliviousTreeChoiceFunction
 AiDotNet.Enums.ObliviousTreeChoiceFunction.SoftmaxSigmoid = 1 -> AiDotNet.Enums.ObliviousTreeChoiceFunction
-*REMOVED*AiDotNet.Evaluation.Statistics.NemenyiResult<T>.AverageRanks.get -> double[]!
-AiDotNet.Evaluation.Statistics.NemenyiResult<T>.AverageRanks.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>!
-*REMOVED*AiDotNet.Evaluation.Statistics.KruskalWallisTest<T>.DunnPostHoc(T[]![]! groups) -> System.Collections.Generic.Dictionary<(int, int), double>!
-AiDotNet.Evaluation.Statistics.KruskalWallisTest<T>.DunnPostHoc(T[]![]! groups) -> System.Collections.Generic.Dictionary<(int, int), T>!

@@ -579,8 +579,8 @@ public class EvaluationNumericalMemoryTests
         const int size = 65504, group = size / 2;
         var values = new Tensor<Half>(Enumerable.Range(0, size).Select(i => (Half)(i / group)).ToArray(), new[] { size });
         var ranks = EvaluationTensorOps<Half>.MidRanks(values);
-        Assert.Equal((Half)((group + 1.0) / 2), ranks.GetFlat(0));
-        Assert.Equal((Half)((group + 1.0 + size) / 2), ranks.GetFlat(size - 1));
+        Assert.Equal((group + 1.0) / 2, ranks.GetFlat(0));
+        Assert.Equal((group + 1.0 + size) / 2, ranks.GetFlat(size - 1));
     }
 
     [Fact]
@@ -596,8 +596,8 @@ public class EvaluationNumericalMemoryTests
         {
             int end = start + 1;
             while (end < size && values[end] == values[start]) end++;
-            Half ascendingRank = (Half)((start + 1.0 + end) / 2);
-            Half descendingRank = (Half)((size - end + 1.0 + size - start) / 2);
+            double ascendingRank = (start + 1.0 + end) / 2;
+            double descendingRank = (size - end + 1.0 + size - start) / 2;
             for (int index = start; index < end; index++)
             {
                 Assert.Equal(ascendingRank, ranks.GetFlat(index));
@@ -743,7 +743,7 @@ public class EvaluationNumericalMemoryTests
         Assert.Equal((Half)0, friedman.Statistic);
         Assert.Equal((Half)1, friedman.PValue);
         var nemenyi = new NemenyiPostHocTest<Half>().Test(samples);
-        Assert.Equal(new[] { (Half)2, (Half)2, (Half)2 }, nemenyi.AverageRanks.ToArray());
+        Assert.Equal(new[] { 2.0, 2.0, 2.0 }, nemenyi.AverageRanks);
         Assert.Empty(nemenyi.GetSignificantPairs());
     }
 
@@ -756,7 +756,7 @@ public class EvaluationNumericalMemoryTests
         var result = test.Test(groups);
         Assert.Equal((Half)0, result.Statistic);
         Assert.Equal((Half)1, result.PValue);
-        Assert.Equal((Half)1, test.DunnPostHoc(groups)[(0, 1)]);
+        Assert.Equal(1.0, test.DunnPostHoc(groups)[(0, 1)]);
         var ordered = test.Test(new[]
         {
             new[] { (Half)1, (Half)2, (Half)3 },

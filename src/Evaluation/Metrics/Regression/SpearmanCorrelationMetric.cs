@@ -51,10 +51,10 @@ public class SpearmanCorrelationMetric<T> : IRegressionMetric<T>
 
         var engine = AiDotNetEngine.Current;
         using var noGrad = new NoGradScope<T>();
-        var pred = EvaluationTensorOps<T>.ToTensor(predictions).Cast<double>();
-        var actual = EvaluationTensorOps<T>.ToTensor(actuals).Cast<double>();
-        var predictedRanks = EvaluationTensorOps<double>.MidRanks(pred);
-        var actualRanks = EvaluationTensorOps<double>.MidRanks(actual);
+        var pred = EvaluationTensorOps<T>.ToTensor(predictions);
+        var actual = EvaluationTensorOps<T>.ToTensor(actuals);
+        var predictedRanks = EvaluationTensorOps<T>.MidRanks(pred);
+        var actualRanks = EvaluationTensorOps<T>.MidRanks(actual);
         var dp = engine.TensorSubtractScalar(predictedRanks, engine.TensorMean(predictedRanks));
         var da = engine.TensorSubtractScalar(actualRanks, engine.TensorMean(actualRanks));
         double covariance = engine.TensorSum(engine.TensorMultiply(dp, da));

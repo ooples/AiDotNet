@@ -12,6 +12,167 @@ namespace AiDotNet.Tests.UnitTests.Evaluation;
 /// </summary>
 public class EvaluationTieReferenceTests
 {
+    [Theory]
+    [InlineData(0.0, 1, 1.0)]
+    [InlineData(1.0, 1, 0.31731050786291415)]
+    [InlineData(3.841458820694124, 1, 0.05)]
+    [InlineData(1000.0, 1, 1.7958327848006388e-219)]
+    [InlineData(100.0, 2, 1.9287498479639178e-22)]
+    [InlineData(100.0, 4, 9.836624224615988e-21)]
+    [InlineData(1000.0, 1000, 0.49405285382923964)]
+    [InlineData(10.0, 10, 0.44049328506521257)]
+    [InlineData(double.PositiveInfinity, 1, 0.0)]
+    public void KruskalChiSquareTail_MatchesClosedFormAndReferenceValues(double statistic, int degrees, double expected)
+    {
+        var survival = typeof(KruskalWallisTest<double>).GetMethod("ChiSquareSurvival",
+            System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic)!;
+        double actual = Assert.IsType<double>(survival.Invoke(null, new object[] { statistic, degrees }));
+        if (expected == 0) Assert.Equal(0, actual);
+        else Assert.InRange(actual / expected, 1 - 1e-10, 1 + 1e-10);
+    }
+
+    [Fact]
+    public void KruskalOrderedGroups_ReturnATinyPositiveTailWithoutFullUniqueScanning()
+    {
+        var previous = AiDotNetEngine.Current;
+        try
+        {
+            AiDotNetEngine.Current = new NoFullUniqueEngine();
+            double[][] groups =
+            {
+                Enumerable.Range(0, 667).Select(x => (double)x).ToArray(),
+                Enumerable.Range(667, 667).Select(x => (double)x).ToArray()
+            };
+            var result = new KruskalWallisTest<double>().Test(groups);
+            Assert.Equal(3.0 * 667 * 667 / 1335, result.Statistic, 9);
+            // df=1 survival is erfc(sqrt(H/2)); independently evaluated with Python's math.erfc.
+            Assert.InRange(result.PValue / 2.034626876138803e-219, 1 - 1e-9, 1 + 1e-9);
+            Assert.True(result.IsSignificant);
+        }
+        finally { AiDotNetEngine.Current = previous; }
+    }
+
+    [Fact]
+    public void Dunn_TiedObservationsUseTheCorrectedVariance()
+    {
+        double[][] groups = { new[] { 1.0, 1, 2 }, new[] { 2.0, 3, 3 } };
+        // Ranks are [1.5,1.5,3.5] and [3.5,5.5,5.5]; tie sum=18, variance=3.2, z^2=10/3.
+        const double expected = 0.06788915486182903;
+        var test = new KruskalWallisTest<double>();
+        Assert.Equal(expected, test.DunnPostHoc(groups)[(0, 1)], 9);
+        Assert.Equal(10.0 / 3, test.Test(groups).Statistic, 12);
+        Assert.Equal(expected, test.Test(groups).PValue, 12);
+        decimal origin = 10000000000000000m;
+        var nativeGroups = groups.Select(group => group.Select(value => origin + (decimal)value).ToArray()).ToArray();
+        Assert.Equal(expected, new KruskalWallisTest<decimal>().DunnPostHoc(nativeGroups)[(0, 1)], 9);
+        Assert.Equal(1, test.DunnPostHoc(new[] { new[] { 1.0, 1 }, new[] { 1.0, 1 } })[(0, 1)]);
+    }
+
+    [Fact]
+    public void Dunn_RejectsMissingOrEmptyGroupsBeforeDividingByTheirSizes()
+    {
+        var test = new KruskalWallisTest<double>();
+        Assert.Throws<ArgumentException>(() => test.DunnPostHoc(new[] { new[] { 1.0 } }));
+        Assert.Throws<ArgumentException>(() => test.DunnPostHoc(new[] { Array.Empty<double>(), new[] { 1.0 } }));
+    }
+
+
+    [Fact]
+    public void RankMetrics_KeepAdjacentDecimalAndInt64ValuesDistinct()
+    {
+        decimal origin = 10000000000000000m;
+        var decimalScore = new AiDotNet.Evaluation.Metrics.Regression.SpearmanCorrelationMetric<decimal>().Compute(
+            new[] { origin + 1, origin, origin + 3, origin + 1 },
+            new[] { origin + 3, origin + 1, origin, origin + 1 });
+        Assert.Equal(-0.5m, decimalScore);
+        long large = 9007199254740992L;
+        var integerRanks = new NemenyiPostHocTest<long>().Test(new[]
+        {
+            new[] { large, large + 1, large + 2 }, new[] { large + 1, large + 2, large + 3 }
+        });
+        Assert.Equal(new[] { 2.0, 1.0 }, integerRanks.AverageRanks);
+    }
+
+    [Fact]
+    public void Nemenyi_ReportsFractionalDoubleRanksForIntegralInputs()
+    {
+        var result = new NemenyiPostHocTest<int>().Test(new[] { new[] { 1, 2, 3 }, new[] { 1, 2, 3 } });
+        Assert.Equal(new[] { 1.5, 1.5 }, Assert.IsType<double[]>(result.AverageRanks));
+    }
+
+    [Fact]
+    public void DatasetRanks_PreserveDecimalOrderingAndTheNativeTieTolerance()
+    {
+        decimal origin = 10000000000000000m;
+        decimal[][] samples =
+        {
+            new[] { origin + 2, origin, origin + 1 },
+            new[] { origin + 1, origin + 2, origin + 1 },
+            new[] { origin, origin + 1, origin + 2 }
+        };
+        var result = new NemenyiPostHocTest<decimal>().Test(samples);
+        Assert.Equal(6.5 / 3, result.AverageRanks[0], 12);
+        Assert.Equal(5.5 / 3, result.AverageRanks[1], 12);
+        Assert.Equal(2, result.AverageRanks[2], 12);
+        Assert.Equal(2.0 / 35, (double)new FriedmanTest<decimal>().Test(samples).Statistic, 12);
+        var near = new NemenyiPostHocTest<decimal>().Test(new[]
+        {
+            Enumerable.Repeat(origin, 3).ToArray(),
+            Enumerable.Repeat(origin + 0.00000000001m, 3).ToArray()
+        });
+        Assert.Equal(new[] { 1.5, 1.5 }, near.AverageRanks);
+        var extremes = new NemenyiPostHocTest<decimal>().Test(new[]
+        {
+            Enumerable.Repeat(decimal.MinValue, 3).ToArray(),
+            Enumerable.Repeat(decimal.MaxValue, 3).ToArray()
+        });
+        Assert.Equal(new[] { 2.0, 1.0 }, extremes.AverageRanks);
+    }
+
+    [Fact]
+    public void KruskalAndDunn_PreserveDecimalOrderingAndDoubleProbabilityContracts()
+    {
+        decimal origin = 10000000000000000m;
+        decimal[][] groups = { new[] { origin, origin + 1, origin + 2 }, new[] { origin + 3, origin + 4, origin + 5 } };
+        var test = new KruskalWallisTest<decimal>();
+        Assert.Equal(27.0 / 7, (double)test.Test(groups).Statistic, 12);
+        System.Collections.Generic.Dictionary<(int, int), double> probabilities = test.DunnPostHoc(groups);
+        Assert.Equal(0.04953461343562674, probabilities[(0, 1)], 9);
+        var integer = new KruskalWallisTest<int>().DunnPostHoc(new[] { new[] { 1, 2, 3 }, new[] { 4, 5, 6 } });
+        Assert.Equal(0.04953461343562674, integer[(0, 1)], 9);
+    }
+
+    [Fact]
+    public void Wilcoxon_KeepsNativeDifferencesBeforeRanking()
+    {
+        decimal origin = 10000000000000000m;
+        Assert.Equal(5m, new WilcoxonSignedRankTest<decimal>().Test(
+            new[] { origin + 1, origin + 2, origin + 3, origin + 4, origin + 5 },
+            new[] { origin, origin, origin, origin, origin + 10 }).Statistic);
+        long large = 9007199254740992L;
+        Assert.Equal(5L, new WilcoxonSignedRankTest<long>().Test(
+            new[] { large + 1, large + 2, large + 3, large + 4, large + 5 },
+            new[] { large, large, large, large, large + 10 }).Statistic);
+    }
+
+    [Fact]
+    public void Wilcoxon_HandlesFullDecimalAndIntegerDifferenceRangesExactly()
+    {
+        decimal high = decimal.MaxValue, low = decimal.MinValue;
+        Assert.Equal(7m, new WilcoxonSignedRankTest<decimal>().Test(
+            new[] { high, high - 1, high - 2, low, low + 1 },
+            new[] { low, low, low, high, high }).Statistic);
+        long maximum = long.MaxValue, minimum = long.MinValue;
+        Assert.Equal(7L, new WilcoxonSignedRankTest<long>().Test(
+            new[] { maximum, maximum - 1, maximum - 2, minimum, minimum + 1 },
+            new[] { minimum, minimum, minimum, maximum, maximum }).Statistic);
+        ulong maxUnsigned = ulong.MaxValue;
+        Assert.Equal(7UL, new WilcoxonSignedRankTest<ulong>().Test(
+            new[] { maxUnsigned, maxUnsigned - 1, maxUnsigned - 2, 0UL, 1UL },
+            new[] { 0UL, 0UL, 0UL, maxUnsigned, maxUnsigned }).Statistic);
+    }
+
+
     [Fact]
     public void MulticlassMcc_MatchesBalancedConfusionReferenceIncludingNaNLabels()
     {

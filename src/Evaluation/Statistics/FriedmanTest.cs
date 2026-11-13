@@ -61,10 +61,10 @@ public class FriedmanTest<T> : IMultipleSampleTest<T>
         // Transpose to results[dataset, algorithm]
         var engine = AiDotNetEngine.Current;
         using var noGrad = new NoGradScope<T>();
-        var results = engine.TensorPermute(EvaluationTensorOps<T>.StackRows(samples, n).Cast<double>(), new[] { 1, 0 });
+        var results = engine.TensorPermute(EvaluationTensorOps<T>.StackRows(samples, n), new[] { 1, 0 });
 
         // Rank each dataset (higher value = rank 1 for performance metrics), then average over datasets
-        var datasetRanks = EvaluationTensorOps<double>.RowRanksDescending(results, 1e-10);
+        var datasetRanks = EvaluationTensorOps<T>.RowRanksDescending(results, 1e-10);
         var ranks = engine.TensorDivideScalar(engine.ReduceSum(datasetRanks, new[] { 0 }, false), (double)n);
 
         // Friedman statistic (chi-squared approximation)

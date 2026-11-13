@@ -64,8 +64,8 @@ public class NemenyiPostHocTest<T>
         // Calculate average ranks (same as Friedman)
         var engine = AiDotNetEngine.Current;
         using var noGrad = new NoGradScope<T>();
-        var results = engine.TensorPermute(EvaluationTensorOps<T>.StackRows(samples, n).Cast<double>(), new[] { 1, 0 });
-        var datasetRanks = EvaluationTensorOps<double>.RowRanksDescending(results, 1e-10);
+        var results = engine.TensorPermute(EvaluationTensorOps<T>.StackRows(samples, n), new[] { 1, 0 });
+        var datasetRanks = EvaluationTensorOps<T>.RowRanksDescending(results, 1e-10);
         var ranks = engine.TensorDivideScalar(engine.ReduceSum(datasetRanks, new[] { 0 }, false), (double)n);
 
         // Perform pairwise comparisons: |rank_i - rank_j| > CD (the diagonal difference is 0, never above CD)
@@ -80,7 +80,7 @@ public class NemenyiPostHocTest<T>
         return new NemenyiResult<T>
         {
             CriticalDifference = cd,
-            AverageRanks = ranks.Cast<T>().ToVector(),
+            AverageRanks = ranks.ToArray(),
             SignificantDifferences = pairwise,
             Alpha = alpha,
             NumAlgorithms = k,
@@ -102,7 +102,7 @@ public class NemenyiResult<T>
     /// <summary>
     /// Average ranks for each algorithm.
     /// </summary>
-    public Vector<T> AverageRanks { get; init; } = new Vector<T>(0);
+    public double[] AverageRanks { get; init; } = Array.Empty<double>();
 
     /// <summary>
     /// Matrix of significant differences: true if algorithms i and j differ significantly.

@@ -221,17 +221,19 @@ internal static class EvaluationTensorOps<T>
     /// 1-based ranks with tied values sharing the mean of their positions (scipy's <c>rankdata</c>, method
     /// "average").
     /// </summary>
-    internal static Tensor<T> MidRanks(Tensor<T> values)
+    internal static Tensor<double> MidRanks(Tensor<T> values) => MidRanksWithTies(values).Ranks;
+
+    internal static (Tensor<double> Ranks, Tensor<int> TieSizes) MidRanksWithTies(Tensor<T> values)
     {
         using var noGrad = new NoGradScope<T>();
         var engine = AiDotNetEngine.Current;
         var sorted = engine.TensorSort(values).Values;
-        // A value's ties occupy sorted positions [below, atOrBelow); their mean 1-based rank is (below + atOrBelow + 1) / 2.
         var below = engine.TensorSearchSorted(sorted, values, false);
         var atOrBelow = engine.TensorSearchSorted(sorted, values, true);
         var doubled = engine.TensorAddScalar(engine.TensorAdd(below.Cast<double>(), atOrBelow.Cast<double>()), 1.0);
-        return engine.TensorMultiplyScalar(doubled, 0.5).Cast<T>();
+        return (engine.TensorMultiplyScalar(doubled, 0.5), engine.TensorSubtract(atOrBelow, below));
     }
+
 
     /// <summary>The entries of <paramref name="values"/> where the 1/0 <paramref name="mask"/> is 1, in order.</summary>
     internal static Tensor<T> Select(Tensor<T> values, Tensor<T> mask)
@@ -246,25 +248,59 @@ internal static class EvaluationTensorOps<T>
     /// run, a run being consecutive sorted values whose neighbouring gaps are below <paramref name="tolerance"/>.
     /// </summary>
     /// <returns>The sorted values, the source index of each sorted position, and the rank of each sorted position.</returns>
-    internal static (Tensor<T> Sorted, Tensor<int> Order, Tensor<T> Ranks) SortedRunRanks(Tensor<T> values, double tolerance)
+    internal static (Tensor<T> Sorted, Tensor<int> Order, Tensor<double> Ranks) SortedRunRanks(Tensor<T> values, double tolerance)
     {
         using var noGrad = new NoGradScope<T>();
         var engine = AiDotNetEngine.Current;
         var (sorted, order) = engine.TensorSort(values);
-        var runStart = new Tensor<double>(new[] { 1 });
-        if (values.Length > 1)
-        {
-            // A gap that is not below the tolerance (NaN included) starts a new run.
-            var gaps = engine.TensorAbs(engine.TensorDiff(sorted.Cast<double>(), 1, 0));
-            runStart = engine.TensorConcatenate(new[] { runStart, EvaluationTensorOps<double>.Not(engine.TensorLessThan(gaps, tolerance)) }, 0);
-        }
+        var runStart = RankRunStarts(sorted, 0, tolerance);
 
         // Run ids are non-decreasing, so a run occupies sorted positions [below, atOrBelow) of its id.
         var runId = engine.TensorCumSum(runStart, 0);
         var below = engine.TensorSearchSorted(runId, runId, false);
         var atOrBelow = engine.TensorSearchSorted(runId, runId, true);
         var doubled = engine.TensorAddScalar(engine.TensorAdd(below.Cast<double>(), atOrBelow.Cast<double>()), 1.0);
-        return (sorted, order, engine.TensorMultiplyScalar(doubled, 0.5).Cast<T>());
+        return (sorted, order, engine.TensorMultiplyScalar(doubled, 0.5));
+    }
+
+    private static Tensor<double> RankRunStarts(Tensor<T> sorted, int axis, double tolerance)
+    {
+        int columns = sorted.Shape[axis];
+        int rows = axis == 0 ? 1 : sorted.Shape[0];
+        var type = Type.GetTypeCode(typeof(T));
+        if (type is TypeCode.Decimal or TypeCode.Byte or TypeCode.SByte or TypeCode.Int16 or
+            TypeCode.UInt16 or TypeCode.Int32 or TypeCode.UInt32 or TypeCode.Int64 or TypeCode.UInt64)
+        {
+            // Decimal arithmetic retains adjacent large labels; it also holds every Int64/UInt64 exactly.
+            // A decimal gap that overflows is necessarily larger than the ranking tolerance.
+            var values = sorted.AsSpan();
+            var starts = new double[sorted.Length];
+            decimal threshold = (decimal)tolerance;
+            for (int row = 0; row < rows; row++)
+            {
+                for (int column = 0; column < columns; column++)
+                {
+                    int index = row * columns + column;
+                    starts[index] = 1;
+                    if (column == 0) continue;
+                    try
+                    {
+                        decimal gap = Math.Abs(Convert.ToDecimal(values[index]) - Convert.ToDecimal(values[index - 1]));
+                        if (gap < threshold) starts[index] = 0;
+                    }
+                    catch (OverflowException) { /* Distinct extreme values start a new run. */ }
+                }
+            }
+            return new Tensor<double>(starts, axis == 0 ? new[] { columns } : new[] { rows, columns });
+        }
+
+        var engine = AiDotNetEngine.Current;
+        var first = Tensor<double>.CreateDefault(axis == 0 ? new[] { 1 } : new[] { rows, 1 }, 1.0);
+        if (columns <= 1) return first;
+        // Casting floating-point values to double is exact; NaN gaps continue to start new runs.
+        var gaps = engine.TensorAbs(engine.TensorDiff(sorted.Cast<double>(), 1, axis));
+        var startsAfterFirst = EvaluationTensorOps<double>.Not(engine.TensorLessThan(gaps, tolerance));
+        return engine.TensorConcatenate(new[] { first, startsAfterFirst }, axis);
     }
 
     /// <summary>Stacks equal-length rows into a [rows.Length, length] tensor.</summary>
@@ -285,27 +321,19 @@ internal static class EvaluationTensorOps<T>
     /// sorted values whose neighbouring gaps are below <paramref name="tolerance"/> sharing its mean rank.
     /// </summary>
     /// <returns>The [n, k] ranks in the matrix's own positions.</returns>
-    internal static Tensor<T> RowRanksDescending(Tensor<T> matrix, double tolerance)
+    internal static Tensor<double> RowRanksDescending(Tensor<T> matrix, double tolerance)
     {
         using var noGrad = new NoGradScope<T>();
         var engine = AiDotNetEngine.Current;
-        int rows = matrix.Shape[0];
-        int columns = matrix.Shape[1];
         var (sorted, order) = engine.TensorSort(matrix, 1, true);
-        var runStart = new Tensor<double>(new[] { rows, 1 });
-        if (columns > 1)
-        {
-            // A gap that is not below the tolerance (NaN included) starts a new run.
-            var gaps = engine.TensorAbs(engine.TensorDiff(sorted.Cast<double>(), 1, 1));
-            runStart = engine.TensorConcatenate(new[] { runStart, EvaluationTensorOps<double>.Not(engine.TensorLessThan(gaps, tolerance)) }, 1);
-        }
+        var runStart = RankRunStarts(sorted, 1, tolerance);
 
         // Per row, run ids are non-decreasing, so a run occupies sorted positions [below, atOrBelow) of its id.
         var runId = engine.TensorCumSum(runStart, 1);
         var below = engine.TensorSearchSorted(runId, runId, false);
         var atOrBelow = engine.TensorSearchSorted(runId, runId, true);
         var doubled = engine.TensorAddScalar(engine.TensorAdd(below.Cast<double>(), atOrBelow.Cast<double>()), 1.0);
-        var sortedRanks = engine.TensorMultiplyScalar(doubled, 0.5).Cast<T>();
+        var sortedRanks = engine.TensorMultiplyScalar(doubled, 0.5);
 
         // Back to the matrix positions: the inverse of each row's sort permutation.
         var inverse = engine.TensorArgsort(order, 1, false);
@@ -455,14 +483,21 @@ internal static class EvaluationTensorOps<T>
     /// </summary>
     internal static (Tensor<double> Pooled, Tensor<int> GroupIndex, Tensor<double> Sizes) PoolGroups(T[][] groups)
     {
+        using var noGrad = new NoGradScope<double>();
+        var (pooled, groupIndex, sizes) = PoolNativeGroups(groups);
+        return (pooled.Cast<double>(), groupIndex, sizes);
+    }
+
+    internal static (Tensor<T> Pooled, Tensor<int> GroupIndex, Tensor<double> Sizes) PoolNativeGroups(T[][] groups)
+    {
         using var wideNoGrad = new NoGradScope<double>();
 
-        var parts = new Tensor<double>[groups.Length];
+        var parts = new Tensor<T>[groups.Length];
         var sizes = new int[groups.Length];
         int total = 0;
         for (int g = 0; g < groups.Length; g++)
         {
-            parts[g] = new Tensor<T>(groups[g], new[] { groups[g].Length }).Cast<double>();
+            parts[g] = new Tensor<T>(groups[g], new[] { groups[g].Length });
             sizes[g] = groups[g].Length;
             total += sizes[g];
         }

@@ -56,8 +56,8 @@ public class KruskalWallisTest<T> : IMultipleComparisonTest<T>
         // Pool all observations and compute ranks (tied values share their average rank)
         var engine = AiDotNetEngine.Current;
         using var noGrad = new NoGradScope<T>();
-        var (pooled, groupIndex, sizes) = EvaluationTensorOps<T>.PoolGroups(groups);
-        var ranks = EvaluationTensorOps<double>.MidRanks(pooled);
+        var (pooled, groupIndex, sizes) = EvaluationTensorOps<T>.PoolNativeGroups(groups);
+        var (ranks, tieSizes) = EvaluationTensorOps<T>.MidRanksWithTies(pooled);
 
         // Compute rank sums for each group
         var rankSums = EvaluationTensorOps<double>.GroupSums(ranks, groupIndex, k);
@@ -67,18 +67,16 @@ public class KruskalWallisTest<T> : IMultipleComparisonTest<T>
         double H = (12.0 / ((double)N * (N + 1))) * sumRankSquaredOverN - 3.0 * (N + 1);
 
         // Tie correction: sum of t^3 - t over the groups of t equal values (singletons add 0)
-        var tieCounts = engine.TensorUniqueWithInfo(pooled, true, false, true).Counts;
-        if (tieCounts is not null && tieCounts.Length < N)
+        // Each tie of size t contributes t copies of t^2 - 1, totaling t^3 - t.
+        double tieSum = engine.TensorSum(engine.TensorSquare(tieSizes.Cast<double>())) - N;
+        if (tieSum > 0)
         {
-            var t = tieCounts.Cast<double>();
-            double tieSum = engine.TensorSum(engine.TensorSubtract(engine.TensorMultiply(engine.TensorSquare(t), t), t));
             double tieCorrection = 1 - tieSum / ((double)N * N * N - N);
-            if (tieCorrection > 1e-10)
-                H /= tieCorrection;
+            if (tieCorrection > 1e-10) H /= tieCorrection;
         }
 
         int df = k - 1;
-        double pValue = 1 - ChiSquareCDF(H, df);
+        double pValue = ChiSquareSurvival(H, df);
 
         // Compute median for each group
         var medians = groups.Select(g => Median(g)).ToArray();
@@ -100,22 +98,34 @@ public class KruskalWallisTest<T> : IMultipleComparisonTest<T>
     /// <summary>
     /// Performs Dunn's post-hoc test for pairwise comparisons.
     /// </summary>
-    public Dictionary<(int, int), T> DunnPostHoc(T[][] groups)
+    public Dictionary<(int, int), double> DunnPostHoc(T[][] groups)
     {
         int k = groups.Length;
+        if (k < 2) throw new ArgumentException("Need at least 2 groups for Dunn's test.", nameof(groups));
+        if (groups.Any(group => group.Length == 0))
+            throw new ArgumentException("Each group must contain at least one observation.", nameof(groups));
         int N = groups.Sum(g => g.Length);
-        var results = new Dictionary<(int, int), T>();
+        var results = new Dictionary<(int, int), double>();
 
         // Pool and rank (same as main test)
         var engine = AiDotNetEngine.Current;
         using var noGrad = new NoGradScope<T>();
-        var (pooled, groupIndex, sizes) = EvaluationTensorOps<T>.PoolGroups(groups);
-        var ranks = EvaluationTensorOps<double>.MidRanks(pooled);
+        var (pooled, groupIndex, sizes) = EvaluationTensorOps<T>.PoolNativeGroups(groups);
+        var (ranks, tieSizes) = EvaluationTensorOps<T>.MidRanksWithTies(pooled);
+
+        double tieSum = engine.TensorSum(engine.TensorSquare(tieSizes.Cast<double>())) - N;
+        double variance = Math.Max(0, (double)N * (N + 1) / 12.0 - tieSum / (12.0 * (N - 1)));
+        if (variance == 0)
+        {
+            for (int i = 0; i < k; i++)
+                for (int j = i + 1; j < k; j++) results[(i, j)] = 1.0;
+            return results;
+        }
 
         // Compute mean ranks per group: each observation's rank goes to its own group
         var meanRanks = engine.TensorDivide(EvaluationTensorOps<double>.GroupSums(ranks, groupIndex, k), sizes);
 
-        // Pairwise comparisons: z = |R_i - R_j| / sqrt(N (N + 1) / 12 * (1 / n_i + 1 / n_j)), p = 2 * (1 - Phi(z))
+        // Pairwise comparisons use Dunn's tie-corrected rank variance.
         var shape = new[] { k, k };
         var column = new[] { k, 1 };
         var row = new[] { 1, k };
@@ -126,12 +136,12 @@ public class KruskalWallisTest<T> : IMultipleComparisonTest<T>
         var inverseSizeSum = engine.TensorAdd(
             engine.TensorBroadcastTo(engine.Reshape(inverseSizes, column), shape),
             engine.TensorBroadcastTo(engine.Reshape(inverseSizes, row), shape));
-        var standardError = engine.TensorSqrt(engine.TensorMultiplyScalar(inverseSizeSum, (double)N * (N + 1) / 12.0));
+        var standardError = engine.TensorSqrt(engine.TensorMultiplyScalar(inverseSizeSum, variance));
         var z = engine.TensorDivide(rankGap, standardError);
         var pValues = engine.TensorMultiplyScalar(engine.TensorNdtr(engine.TensorNegate(z)), 2.0);
 
         int cell = 0;
-        foreach (T pValue in pValues.Cast<T>())
+        foreach (double pValue in pValues)
         {
             int i = cell / k, j = cell % k;
             if (i < j) results[(i, j)] = pValue;
@@ -150,41 +160,62 @@ public class KruskalWallisTest<T> : IMultipleComparisonTest<T>
         return n % 2 == 0 ? (lower + upper) / 2 : upper;
     }
 
-    private double ChiSquareCDF(double x, int df)
+    private static double ChiSquareSurvival(double statistic, int degreesOfFreedom)
     {
-        if (x <= 0) return 0;
-        double a = df / 2.0;
-        double x2 = x / 2.0;
-        return LowerIncompleteGamma(a, x2) / GammaFunction(a);
+        if (degreesOfFreedom <= 0) throw new ArgumentOutOfRangeException(nameof(degreesOfFreedom));
+        if (double.IsNaN(statistic)) return double.NaN;
+        if (statistic <= 0) return 1;
+        if (double.IsPositiveInfinity(statistic)) return 0;
+        double shape = degreesOfFreedom / 2.0, x = statistic / 2.0;
+        double logScale = shape * Math.Log(x) - x - LogGamma(shape);
+        const double epsilon = 2e-15, tiny = 1e-300;
+        const int maxIterations = 100000;
+        if (x < shape + 1)
+        {
+            // The lower-tail series converges here; subtraction is safe while that tail is small.
+            double sum = 1 / shape, term = sum;
+            for (int n = 1; n <= maxIterations; n++)
+            {
+                term *= x / (shape + n);
+                sum += term;
+                if (Math.Abs(term) <= epsilon * Math.Abs(sum))
+                    return Math.Max(0, Math.Min(1, 1 - Math.Exp(logScale) * sum));
+            }
+        }
+        else
+        {
+            // Evaluate the upper tail directly with a continued fraction, avoiding 1 - CDF cancellation.
+            double b = x + 1 - shape, c = 1 / tiny, d = 1 / b, fraction = d;
+            for (int n = 1; n <= maxIterations; n++)
+            {
+                double numerator = -n * (n - shape);
+                b += 2;
+                d = numerator * d + b;
+                if (Math.Abs(d) < tiny) d = d < 0 ? -tiny : tiny;
+                c = b + numerator / c;
+                if (Math.Abs(c) < tiny) c = c < 0 ? -tiny : tiny;
+                d = 1 / d;
+                double change = d * c;
+                fraction *= change;
+                if (Math.Abs(change - 1) <= epsilon)
+                    return Math.Max(0, Math.Min(1, Math.Exp(logScale) * fraction));
+            }
+        }
+        throw new ArithmeticException("The chi-square tail calculation did not converge.");
     }
 
-    private double LowerIncompleteGamma(double a, double x)
+    private static double LogGamma(double value)
     {
-        if (x <= 0) return 0;
-        double sum = 1.0 / a;
-        double term = 1.0 / a;
-        for (int n = 1; n < 100; n++)
+        // Lanczos approximation, evaluated in log space so large degrees of freedom stay finite.
+        double[] coefficients =
         {
-            term *= x / (a + n);
-            sum += term;
-            if (Math.Abs(term) < 1e-10 * Math.Abs(sum)) break;
-        }
-        return Math.Exp(-x + a * Math.Log(x)) * sum;
+            676.5203681218851, -1259.1392167224028, 771.32342877765313, -176.61502916214059,
+            12.507343278686905, -0.13857109526572012, 9.9843695780195716e-6, 1.5056327351493116e-7
+        };
+        double z = value - 1, sum = 0.99999999999980993;
+        for (int i = 0; i < coefficients.Length; i++) sum += coefficients[i] / (z + i + 1);
+        double t = z + 7.5;
+        return 0.9189385332046727 + (z + 0.5) * Math.Log(t) - t + Math.Log(sum);
     }
 
-    private double GammaFunction(double x)
-    {
-        double[] c = { 76.18009172947146, -86.50532032941677, 24.01409824083091,
-            -1.231739572450155, 0.1208650973866179e-2, -0.5395239384953e-5 };
-        double y = x;
-        double tmp = x + 5.5;
-        tmp -= (x + 0.5) * Math.Log(tmp);
-        double sum = 1.000000000190015;
-        for (int j = 0; j < 6; j++)
-        {
-            y += 1;
-            sum += c[j] / y;
-        }
-        return Math.Exp(-tmp + Math.Log(2.5066282746310005 * sum / x));
-    }
 }
