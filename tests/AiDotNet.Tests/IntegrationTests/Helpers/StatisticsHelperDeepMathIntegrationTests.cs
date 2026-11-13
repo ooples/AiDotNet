@@ -908,6 +908,250 @@ public class ElementwiseSweepRegressionTests
         Assert.Equal(offset + 2, interval.Lower);
         Assert.Equal(offset + 10, interval.Upper);
     }
+
+    private static readonly System.Reflection.BindingFlags PrivateInstance =
+        System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic;
+
+    private static Vector<Half> HalfRepeat(params (double Value, int Count)[] runs) =>
+        new(runs.SelectMany(run => Enumerable.Repeat((Half)run.Value, run.Count)).ToArray());
+
+    [Fact]
+    public void HalfChiSquare_CountsCategoriesPastTheHalfIntegerRange()
+    {
+        var left = HalfRepeat((0, 3000), (1, 1000));
+        var right = HalfRepeat((0, 1000), (1, 3000));
+        var result = StatisticsHelper<Half>.ChiSquareTest(left, right);
+        Assert.Equal(new[] { (Half)3000, (Half)1000 }, result.LeftObserved.ToArray());
+        Assert.Equal(new[] { (Half)1000, (Half)3000 }, result.RightObserved.ToArray());
+    }
+
+    [Fact]
+    public void HalfMultiClassPrecisionRecall_CountsPastTheHalfIntegerRange()
+    {
+        // Class 0: tp 3000 of 3100 predicted and 3000 actual; class 1: tp 2900 of 2900 predicted and 3000 actual.
+        var actual = HalfRepeat((0, 3000), (1, 3000));
+        var predicted = HalfRepeat((0, 3000), (1, 2900), (0, 100));
+        var (precision, recall, _) = StatisticsHelper<Half>.CalculatePrecisionRecallF1(
+            actual, predicted, AiDotNet.Enums.PredictionType.MultiClass);
+        double expectedPrecision = (3000.0 / 3100 + 1) / 2;
+        double expectedRecall = (1 + 2900.0 / 3000) / 2;
+        Assert.InRange((double)precision, expectedPrecision - 2e-3, expectedPrecision + 2e-3);
+        Assert.InRange((double)recall, expectedRecall - 2e-3, expectedRecall + 2e-3);
+    }
+
+    [Fact]
+    public void HalfRocCurve_CountsPastTheHalfIntegerRange()
+    {
+        // 3000 of the 4000 positives score 0.9 and everything else 0.1: at threshold 0.9, fpr = 0 and tpr = 0.75.
+        var actual = HalfRepeat((1, 4000), (0, 4000));
+        var predicted = HalfRepeat((0.9, 3000), (0.1, 5000));
+        var (fpr, tpr) = StatisticsHelper<Half>.CalculateROCCurve(actual, predicted);
+        Assert.Equal((Half)0, fpr[0]);
+        Assert.InRange((double)tpr[0], 0.75 - 1e-3, 0.75 + 1e-3);
+    }
+
+    [Fact]
+    public void HalfPrecisionRecallAuc_CountsPastTheHalfIntegerRange()
+    {
+        // Every positive outranks every negative, so precision stays 1 over the whole recall range.
+        var actual = HalfRepeat((1, 3000), (0, 1000));
+        var predicted = HalfRepeat((1, 3000), (0, 1000));
+        double auc = (double)StatisticsHelper<Half>.CalculatePrecisionRecallAUC(actual, predicted);
+        Assert.InRange(auc, 1 - 2e-3, 1 + 2e-3);
+    }
+
+    [Fact]
+    public void HalfMeanAveragePrecision_CountsPastTheHalfIntegerRange()
+    {
+        var actual = HalfRepeat((1, 3000), (0, 1000));
+        var predicted = HalfRepeat((1, 3000), (0, 1000));
+        double map = (double)StatisticsHelper<Half>.CalculateMeanAveragePrecision(actual, predicted, 4000);
+        Assert.InRange(map, 1 - 2e-3, 1 + 2e-3);
+    }
+
+    [Fact]
+    public void HalfCrps_ZeroStdDevReducesToTheAbsoluteError()
+    {
+        var crps = StatisticsHelper<Half>.CalculateCRPS(
+            new Vector<Half>(new[] { (Half)3 }), new Vector<Half>(new[] { (Half)1 }), new Vector<Half>(new[] { (Half)0 }));
+        Assert.Equal((Half)2, crps);
+    }
+
+    [Fact]
+    public void HalfBetaBoundaryCompression_StaysFinitePastTheHalfRange()
+    {
+        const int n = 70000;
+        var y = HalfRepeat((0, 1), (0.5, n - 1));
+        var compressed = ValidationHelper<Half>.ValidateProportionTarget(y, "BetaRegression", allowBoundaryCompression: true);
+        Assert.InRange((double)compressed[0], 0.5 / n - 1e-7, 0.5 / n + 1e-7);
+        Assert.Equal((Half)0.5, compressed[1]);
+    }
+
+    [Fact]
+    public void HalfSlerpNoise_NormsPastTheHalfRangeKeepTheAngle()
+    {
+        // 70000 entries: a = all 1, b = 1 on 3/4 and -1 on 1/4, so cos(theta) = 0.5 and theta = pi / 3.
+        const int n = 70000;
+        var a = new Tensor<Half>(HalfRepeat((1, n)).ToArray(), new[] { n });
+        var b = new Tensor<Half>(HalfRepeat((1, 3 * n / 4), (-1, n / 4)).ToArray(), new[] { n });
+        var mixed = DiffusionNoiseHelper<Half>.SlerpNoise(a, b, 0.5).ToArray();
+        double scale = Math.Sin(Math.PI / 6) / Math.Sin(Math.PI / 3);
+        Assert.InRange((double)mixed[0], 2 * scale - 2e-3, 2 * scale + 2e-3);
+        Assert.InRange((double)mixed[n - 1], -2e-3, 2e-3);
+    }
+
+    private static void AssertSinusoid(Half[] actual, double position, int half, double logScale)
+    {
+        for (int i = 0; i < half; i++)
+        {
+            double angle = position * Math.Exp(-i * logScale);
+            Assert.InRange((double)actual[i], Math.Sin(angle) - 2e-3, Math.Sin(angle) + 2e-3);
+            Assert.InRange((double)actual[i + half], Math.Cos(angle) - 2e-3, Math.Cos(angle) + 2e-3);
+        }
+    }
+
+    [Fact]
+    public void HalfTimestepEmbeddings_FormTheAnglesWide()
+    {
+        AssertSinusoid(DiffusionNoiseHelper<Half>.ComputeTimestepEmbeddings(new[] { 999 }, 16).ToArray(), 999, 8, Math.Log(10000.0) / 7);
+        AssertSinusoid(DiffusionNoiseHelper<Half>.ComputeTimestepEmbedding(999, 16).ToArray(), 999, 8, Math.Log(10000.0) / 7);
+    }
+
+    private static TabDDPMGenerator<Half> CreateHalfTabDDPM(int timestepDim = 4) => new(
+        new NeuralNetworkArchitecture<Half>(inputType: AiDotNet.Enums.InputType.OneDimensional,
+            taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, inputSize: 1, outputSize: 1),
+        new TabDDPMOptions<Half> { NumTimesteps = 2, NumCategoricalDiffusionSteps = 2,
+            MLPDimensions = new[] { 4 }, TimestepEmbeddingDimension = timestepDim, Seed = 7 });
+
+    [Fact]
+    public void HalfTabDDPMTimestepEmbedding_FormsTheAnglesWide()
+    {
+        using var model = CreateHalfTabDDPM(timestepDim: 16);
+        var embedding = (Tensor<Half>)Required(Required(typeof(TabDDPMGenerator<Half>)
+            .GetMethod("BuildRawTimestepEmbedding", PrivateInstance)).Invoke(model, new object[] { 999 }));
+        AssertSinusoid(embedding.ToArray(), 999, 8, Math.Log(10000.0) / 8);
+    }
+
+    [Fact]
+    public void HalfTabFlowTimeEmbedding_FormsTheAnglesWide()
+    {
+        using var model = new TabFlowGenerator<Half>(
+            new NeuralNetworkArchitecture<Half>(inputType: AiDotNet.Enums.InputType.OneDimensional,
+                taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, inputSize: 1, outputSize: 1),
+            new TabFlowOptions<Half> { TimeEmbeddingDimension = 16, Seed = 7 });
+        // Without the projection layers the embedding is the raw [sin | cos] of 1000 t * f_i.
+        ((System.Collections.IList)Required(typeof(TabFlowGenerator<Half>)
+            .GetField("_timeProjectionLayers", PrivateInstance)?.GetValue(model))).Clear();
+        var embedding = (Vector<Half>)Required(Required(typeof(TabFlowGenerator<Half>)
+            .GetMethod("CreateTimeEmbedding", PrivateInstance)).Invoke(model, new object[] { 0.999 }));
+        AssertSinusoid(embedding.ToArray(), 999, 8, Math.Log(10000.0) / 8);
+    }
+
+    private static REaLTabFormerGenerator<Half> CreateHalfREaLTabFormer(int d = 8) => new(
+        new NeuralNetworkArchitecture<Half>(AiDotNet.Enums.InputType.OneDimensional,
+            AiDotNet.Enums.NeuralNetworkTaskType.Generative, inputSize: d, outputSize: d),
+        new REaLTabFormerOptions<Half> { EmbeddingDimension = d, Seed = 7 });
+
+    [Fact]
+    public void HalfREaLTabFormerPositionEncoding_FormsTheAnglesWide()
+    {
+        const int length = 1500, d = 8;
+        using var model = CreateHalfREaLTabFormer(d);
+        // Single-token vocabularies zero the token term, leaving the position encoding.
+        ((List<int>)Required(typeof(REaLTabFormerGenerator<Half>).GetField("_vocabSizes", PrivateInstance)?.GetValue(model)))
+            .AddRange(Enumerable.Repeat(1, length));
+        var embedding = ((Vector<Half>)Required(Required(typeof(REaLTabFormerGenerator<Half>)
+            .GetMethod("ComputeEmbeddings", PrivateInstance)).Invoke(model, new object[] { new int[length], length }))).ToArray();
+        for (int pos = 0; pos < length; pos++)
+        {
+            for (int j = 0; j < d; j++)
+            {
+                double angle = pos * Math.Exp(-(j - j % 2) * Math.Log(10000.0) / d);
+                double expected = j % 2 == 0 ? Math.Sin(angle) : Math.Cos(angle);
+                Assert.InRange((double)embedding[pos * d + j], expected - 2e-3, expected + 2e-3);
+            }
+        }
+    }
+
+    [Fact]
+    public void HalfREaLTabFormerSafeGradient_NormPastTheHalfRangeRescales()
+    {
+        using var model = CreateHalfREaLTabFormer();
+        // |(300, 300)| = 424.26: the squares alone pass 65504.
+        var gradient = new Tensor<Half>(new[] { (Half)300, (Half)300 }, new[] { 2 });
+        var clipped = (Tensor<Half>)Required(Required(typeof(REaLTabFormerGenerator<Half>)
+            .GetMethod("SafeGradient", PrivateInstance)).Invoke(model, new object[] { gradient, 1.0 }));
+        Assert.All(clipped.ToArray(), value => Assert.InRange((double)value, Math.Sqrt(0.5) - 1e-3, Math.Sqrt(0.5) + 1e-3));
+    }
+
+    [Fact]
+    public void HalfREaLTabFormerSampling_ReachesTokensPastTheHalfIntegerRange()
+    {
+        const int vocab = 5000;
+        using var model = CreateHalfREaLTabFormer();
+        var sample = Required(typeof(REaLTabFormerGenerator<Half>).GetMethod("SampleFromLogits", PrivateInstance));
+        var logits = new Tensor<Half>(new[] { vocab });
+        // Equal logits make every draw uniform over all 5000 tokens; 40 draws all below 2100 has chance 0.42^40.
+        int highest = Enumerable.Range(0, 40)
+            .Max(_ => (int)Required(sample.Invoke(model, new object[] { logits, 1.0 })));
+        Assert.True(highest > 2100, $"highest sampled token {highest}");
+    }
+
+    [Fact]
+    public void HalfColumnStatistics_MomentsPastTheHalfRange()
+    {
+        using var model = CreateHalfTabDDPM();
+        var data = new Matrix<Half>(new[,] { { (Half)30000 }, { (Half)30000 }, { (Half)30016 }, { (Half)30016 } });
+        var meta = new ColumnMetadata("value", ColumnDataType.Continuous);
+        Required(typeof(TabDDPMGenerator<Half>).GetMethod("ComputeColumnStatistics", PrivateInstance))
+            .Invoke(model, new object[] { data, 0, meta });
+        Assert.Equal(30008.0, meta.Mean);
+        Assert.InRange(meta.Std, Math.Sqrt(256.0 / 3) - 1e-3, Math.Sqrt(256.0 / 3) + 1e-3);
+    }
+
+    [Fact]
+    public void HalfTabDDPMPreprocessing_StdPastTheHalfRangeStandardizes()
+    {
+        using var model = CreateHalfTabDDPM();
+        var columns = new[] { new ColumnMetadata("value", ColumnDataType.Continuous) };
+        Required(typeof(TabDDPMGenerator<Half>).GetMethod("AnalyzeColumns", PrivateInstance)).Invoke(model, new object[] { columns });
+        // Deviations of +/-300 over 4 rows: the squares sum to 360000 and the sample std is 346.41.
+        var data = new Matrix<Half>(new[,] { { (Half)300 }, { (Half)300 }, { (Half)(-300) }, { (Half)(-300) } });
+        var prepared = (ValueTuple<Matrix<Half>, Matrix<Half>>)Required(Required(typeof(TabDDPMGenerator<Half>)
+            .GetMethod("PreprocessData", PrivateInstance)).Invoke(model, new object[] { data, columns }));
+        double expected = 300 / Math.Sqrt(360000.0 / 3);
+        Assert.InRange((double)prepared.Item1[0, 0], expected - 2e-3, expected + 2e-3);
+        Assert.InRange((double)prepared.Item1[3, 0], -expected - 2e-3, -expected + 2e-3);
+    }
+
+    [Fact]
+    public void HalfRwkvTimeMixing_KeyPastTheHalfExponentRangeStaysFinite()
+    {
+        // First frame, no projections: k = v = r = 12, so wkv = v = 12 and the output is 12 * sigmoid(12).
+        var mixing = new AiDotNet.SpeechRecognition.ConformerFamily.RwkvTimeMixing<Half>(1, 0.5, 0.0, 1.0);
+        var output = mixing.Step(new Vector<Half>(new[] { (Half)12 }));
+        double expected = 12 / (1 + Math.Exp(-12));
+        Assert.InRange((double)output[0], expected - 1e-2, expected + 1e-2);
+    }
+
+    [Fact]
+    public void FloatKeywordSpotting_AbsentKeywordKeepsTheLogFloor()
+    {
+        var architecture = new NeuralNetworkArchitecture<float>(
+            inputType: AiDotNet.Enums.InputType.TwoDimensional,
+            taskType: AiDotNet.Enums.NeuralNetworkTaskType.MultiClassClassification,
+            inputHeight: 2, inputWidth: 3, inputDepth: 1, outputSize: 3);
+        using var model = new AiDotNet.SpeechRecognition.Specialized.KeywordSpotting<float>(architecture,
+            new AiDotNet.SpeechRecognition.Specialized.KeywordSpottingOptions { Vocabulary = new[] { "filler", "okay", "google" } });
+        // Only the filler label fires, so both keyword peaks are 0 and floored at 1e-300:
+        // confidence = exp((2 ln 1e-300) / 2) = 1e-300.
+        var posteriors = new Tensor<float>(new[] { 1f, 0f, 0f }, new[] { 1, 3 });
+        var decoded = (ValueTuple<List<int>, double>)Required(Required(
+            typeof(AiDotNet.SpeechRecognition.Specialized.KeywordSpotting<float>)
+                .GetMethod("DecodeKeywordPosteriors", PrivateInstance)).Invoke(model, new object[] { posteriors }));
+        Assert.Empty(decoded.Item1);
+        Assert.InRange(decoded.Item2 / 1e-300, 1 - 1e-9, 1 + 1e-9);
+    }
 }
 
 public class CtcGreedyDecodingTests
