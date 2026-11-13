@@ -983,7 +983,7 @@ public partial class TSMixer<T> : ForecastingModelBase<T>
             int channels = _instanceMean.Shape[2];
             int rank = input.Rank;
             bool instancesMatch = rank >= 3 ? input.Shape[0] == batch : batch == 1 || rank == 1;
-            bool channelsMatch = rank >= 2 ? input.Shape[rank - 1] == channels : true;
+            bool channelsMatch = rank < 2 || input.Shape[rank - 1] == channels;
             if (channels <= 0 || !instancesMatch || !channelsMatch || input.Length % (batch * channels) != 0)
             {
                 throw new InvalidOperationException(
