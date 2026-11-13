@@ -294,7 +294,9 @@ public abstract partial class NeuralProcessBase<T, TInput, TOutput> : MetaLearne
 
             var queryLoss = ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput);
             losses.Add(queryLoss);
-            metaGradients.Add(ClipGradients(ComputeGradients(MetaModel, task.QueryInput, task.QueryOutput)));
+            // The installed parameters are scale * initParams, so the chain rule scales the gradient before clipping.
+            metaGradients.Add(ClipGradients(
+                ScaleVector(ComputeGradients(MetaModel, task.QueryInput, task.QueryOutput), scale)));
         }
 
         ApplyOuterUpdate(initParams, metaGradients, outerLR);

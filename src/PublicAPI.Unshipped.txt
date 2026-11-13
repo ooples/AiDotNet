@@ -467,7 +467,6 @@ AiDotNet.TextToSpeech.Latest.KaniTTSOptions.WeightDecay.set -> void
 *REMOVED*static System.MathPolyfill.Log2(double value) -> double
 AiDotNet.Memory.InferenceContext<T>.InferenceContext() -> void
 AiDotNet.Memory.InferenceContext<T>.InferenceContext(int maxPoolSizeMB) -> void
-AiDotNet.MetaLearning.Algorithms.PerParameterOptimizer<T, TInput, TOutput>.UpdateMetaParameters(AiDotNet.Tensors.LinearAlgebra.Vector<T>! metaGradients, double metaLearningRate) -> void
 AiDotNet.MetaLearning.MetaLearnerBase<T, TInput, TOutput>.ApplyInnerGradients(AiDotNet.Tensors.LinearAlgebra.Vector<T>! parameters, AiDotNet.Tensors.LinearAlgebra.Vector<T>! gradients, double innerLearningRate) -> AiDotNet.Tensors.LinearAlgebra.Vector<T>!
 AiDotNet.MetaLearning.MetaLearnerBase<T, TInput, TOutput>.ApplyInnerGradients(AiDotNet.Tensors.LinearAlgebra.Vector<T>! parameters, AiDotNet.Tensors.LinearAlgebra.Vector<T>! gradients, double innerLearningRate, bool firstStep) -> AiDotNet.Tensors.LinearAlgebra.Vector<T>!
 AiDotNet.MetaLearning.MetaLearnerBase<T, TInput, TOutput>.ApplyInnerGradients(double innerLearningRate, params (AiDotNet.Tensors.LinearAlgebra.Vector<T>! Parameters, AiDotNet.Tensors.LinearAlgebra.Vector<T>! Gradients)[]! groups) -> AiDotNet.Tensors.LinearAlgebra.Vector<T>![]!

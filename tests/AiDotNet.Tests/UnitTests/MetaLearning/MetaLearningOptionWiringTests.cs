@@ -257,4 +257,15 @@ public class MetaLearningOptionWiringTests
 
         Assert.True(alpha[0] != alpha[1] || alpha[1] != alpha[2], "alpha must be drawn per parameter, not shared.");
     }
+
+    [Fact]
+    public void MetaSGD_DirectMetaTrainAdvancesTheSchedule()
+    {
+        // Manual batches (no data loader) call MetaTrain directly; each call is one meta-iteration of the schedule,
+        // so warmup ends and decay starts instead of every update using the first warmup rate.
+        var learner = MetaSgd(schedule: true);
+        learner.MetaTrain(Batch());
+        learner.MetaTrain(Batch());
+        Assert.Equal(2, learner.CurrentIteration);
+    }
 }
