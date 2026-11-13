@@ -1044,7 +1044,10 @@ public partial class SpikingLayer<T> : LayerBase<T>, IShapeContract
             var u = _recoveryVariable;
             var input = Engine.Reshape(current, shape);
 
-            var quadratic = Engine.TensorMultiplyScalar(Engine.TensorMultiply(v, v), NumOps.FromDouble(0.04));
+            // 0.04 v^2 as (0.04 v) * v, the reference's evaluation order: scaling first keeps the term finite
+            // in Half for |v| up to about 1279, where v * v alone overflows past |v| = 255 and turns a finite
+            // step into a spurious spike.
+            var quadratic = Engine.TensorMultiply(Engine.TensorMultiplyScalar(v, NumOps.FromDouble(0.04)), v);
             var linear = Engine.TensorMultiplyScalar(v, NumOps.FromDouble(5.0));
             var dv = Engine.TensorAdd(
                 Engine.TensorSubtract(Engine.TensorAddScalar(Engine.TensorAdd(quadratic, linear), NumOps.FromDouble(140.0)), u),
