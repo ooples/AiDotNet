@@ -1,5 +1,5 @@
 using System;
-using System.Reflection;
+using System.Linq;
 using System.Threading.Tasks;
 using AiDotNet.Enums;
 using AiDotNet.NeuralNetworks;
@@ -35,7 +35,7 @@ namespace AiDotNet.Tests.UnitTests.Video;
 /// <para>
 /// Each test fails on the code before this change: the warps sampled with the align_corners=False shim or the
 /// wrong padding, the noise estimate omitted the sqrt(20) Laplacian gain, E2FGVI added 1e-3 x mean(mask) to the
-/// first output pixel, RVM blended its hidden state into the caller's frame, GMFlow compared the round trip with a
+/// first output pixel, RVM had no recurrent decoder and blended its output into the caller's frame, GMFlow compared the round trip with a
 /// fixed 1-pixel threshold, and the E2FGVI/ProPainter activations were element transforms the tape never saw.
 /// </para>
 /// </remarks>
@@ -229,20 +229,116 @@ public class VideoWarpAndMaskReferenceTests
         }
     }
 
-    [Fact(Timeout = 120000)]
-    public async Task RvmPredictDoesNotOverwriteTheCallersFrame()
+    private static double[] Varied(int length, double phase)
     {
+        var values = new double[length];
+        for (int i = 0; i < length; i++) values[i] = 0.5 + (0.4 * Math.Sin((0.37 * i) + phase));
+        return values;
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task RvmCarriesConvGruStateAcrossFramesAndResetsIt()
+    {
+        // RVM's recurrent decoder (Lin et al. 2021): the ConvGRU hidden states from frame t condition frame t + 1,
+        // so the same frame seen twice is matted differently the second time, and ResetState returns to the
+        // first-frame result. The old network was a feed-forward conv stack whose "hidden state" (its own 4-channel
+        // output) never matched the 3-channel input it was blended with, so a repeated frame gave the identical
+        // matte and the first assertion fails on it.
         await Task.Yield();
         var model = new RVM<double>(Arch());
-        var frame = Tensor<double>.CreateDefault(new[] { 1, 3, 32, 32 }, 0.5);
-        var hidden = typeof(RVM<double>).GetField("_hiddenState", BindingFlags.NonPublic | BindingFlags.Instance);
-        Assert.NotNull(hidden);
-        hidden?.SetValue(model, Tensor<double>.CreateDefault(new[] { 1, 3, 32, 32 }, 1.0));
+        var frame = new Tensor<double>(Varied(3 * 32 * 32, 0.0), new[] { 1, 3, 32, 32 });
+        var before = frame.ToArray();
 
-        model.Predict(frame);
+        var first = model.Predict(frame).ToArray();
+        var second = model.Predict(frame).ToArray();
+        Assert.Equal(first.Length, second.Length);
+        Assert.Contains(Enumerable.Range(0, first.Length), i => Math.Abs(first[i] - second[i]) > 1e-12);
 
-        // The temporal blend 0.9 frame + 0.1 hidden used to be written into the frame itself (0.55 here).
-        foreach (var value in frame.ToArray()) Assert.Equal(0.5, value);
+        model.ResetState();
+        var afterReset = model.Predict(frame).ToArray();
+        for (int i = 0; i < first.Length; i++) Assert.Equal(first[i], afterReset[i], 12);
+
+        // The caller's frame is never written to (it used to receive the temporal blend in place).
+        Assert.Equal(before, frame.ToArray());
+
+        // Alpha and foreground are clamped to [0, 1].
+        Assert.All(first, value => Assert.InRange(value, 0.0, 1.0));
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task E2fgviUpsamplesFlowBilinearlyAndRescalesIt()
+    {
+        // E2FGVI's SPyNet: F.interpolate(flow, mode="bilinear", align_corners=False), dx *= W'/W, dy *= H'/H.
+        // dx = [0, 2] per row resized from width 2 to 4 samples at x' = -0.25, 0.25, 0.75, 1.25 (clamped), giving
+        // [0, 0.5, 1.5, 2], times 2 = [0, 1, 3, 4]. Nearest-pixel resizing (the old code) gave [0, 0, 4, 4].
+        await Task.Yield();
+        var model = new E2FGVI<double>(Arch());
+        var flow = new Tensor<double>(new[] { 0.0, 2.0, 0.0, 2.0, 1.0, 1.0, 1.0, 1.0 }, new[] { 1, 2, 2, 2 });
+
+        var upsampled = model.UpsampleFlow(flow, 2, 4).ToArray();
+
+        Assert.Equal(16, upsampled.Length);
+        var expectedDx = new[] { 0.0, 1.0, 3.0, 4.0 };
+        for (int y = 0; y < 2; y++)
+        {
+            for (int x = 0; x < 4; x++)
+            {
+                Assert.Equal(expectedDx[x], upsampled[(y * 4) + x], 9);
+                Assert.Equal(1.0, upsampled[8 + (y * 4) + x], 9);
+            }
+        }
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task VideoClipTextAttentionIsBidirectionalOverRealTokens()
+    {
+        // VideoCLIP's text tower is BERT (Xu et al., EMNLP 2021): every token attends to every real token, so the
+        // first position responds to a change in the last one. The old causal mask made position 0 blind to it, so
+        // the first assertion fails on that code. Padding keys stay excluded: with the last position marked as
+        // padding, changing it leaves every real position unchanged.
+        await Task.Yield();
+        const int hidden = 48, sequence = 6;
+        var arch = new NeuralNetworkArchitecture<double>(
+            inputType: InputType.ThreeDimensional,
+            taskType: NeuralNetworkTaskType.MultiClassClassification,
+            inputHeight: 32, inputWidth: 32, inputDepth: 3, outputSize: 4);
+        var options = new VideoCLIPVideoOptions
+        {
+            HiddenDimension = hidden,
+            NumSpatialBlocks = 1,
+            NumTemporalBlocks = 1,
+            NumTextBlocks = 1,
+            NumFrames = 4,
+            EmbeddingDim = 4,
+            TextMaxLength = sequence,
+            VocabSize = 64,
+        };
+        using var model = new AiDotNet.Video.Understanding.VideoCLIP<double>(arch, options: options);
+
+        var values = Varied(hidden * sequence, 0.3);
+        var changed = (double[])values.Clone();
+        for (int c = 0; c < hidden; c++) changed[(c * sequence) + sequence - 1] += 1.0;
+        var original = new Tensor<double>(values, new[] { 1, hidden, 1, sequence });
+        var perturbed = new Tensor<double>(changed, new[] { 1, hidden, 1, sequence });
+
+        double MaxChangeAt(Tensor<double> a, Tensor<double> b, int position)
+        {
+            var x = a.ToArray();
+            var y = b.ToArray();
+            double largest = 0;
+            for (int c = 0; c < hidden; c++)
+                largest = Math.Max(largest, Math.Abs(x[(c * sequence) + position] - y[(c * sequence) + position]));
+            return largest;
+        }
+
+        var full = model.TextMultiHeadAttention(original, 0, sequence);
+        var fullChanged = model.TextMultiHeadAttention(perturbed, 0, sequence);
+        Assert.True(MaxChangeAt(full, fullChanged, 0) > 1e-9, "Position 0 did not attend to the last token.");
+
+        var padded = model.TextMultiHeadAttention(original, 0, sequence - 1);
+        var paddedChanged = model.TextMultiHeadAttention(perturbed, 0, sequence - 1);
+        for (int position = 0; position < sequence - 1; position++)
+            Assert.Equal(0.0, MaxChangeAt(padded, paddedChanged, position), 12);
     }
 
     private static double[] TapeGradient(Func<Tensor<double>, Tensor<double>> activation, double[] values)
