@@ -265,11 +265,38 @@ public abstract class ContinualLearningStrategyBase<T, TInput, TOutput> : IConti
     protected Vector<T> CloneVector(Vector<T> source)
     {
         var result = new Vector<T>(source.Length);
-        for (int i = 0; i < source.Length; i++)
-        {
-            result[i] = source[i];
-        }
+        source.AsSpan().CopyTo(result.AsWritableSpan());
         return result;
+    }
+
+    /// <summary>
+    /// Mean of <paramref name="vector"/> reported as a double metric, accumulated in double as master did:
+    /// a sum in T saturates or overflows (Half stops counting at 2048 and tops out at 65504), so a Half
+    /// importance mean would be meaningless. An empty vector gives NaN, master's 0 / 0.
+    /// </summary>
+    internal static double MeanAsDouble(Vector<T> vector)
+    {
+        if (vector.Length == 0)
+        {
+            return double.NaN;
+        }
+
+        return Engine.TensorMean(vector.AsTensor().Cast<double>());
+    }
+
+    /// <summary>
+    /// Returns a zero-copy rank-1 tensor view over the first <paramref name="count"/> elements of a vector,
+    /// so engine operations can work on the same prefix an index loop bounded by <paramref name="count"/> would.
+    /// Writes through the view change the vector.
+    /// </summary>
+    /// <param name="vector">The source vector.</param>
+    /// <param name="count">The number of leading elements to view.</param>
+    /// <returns>A tensor of shape [count] sharing the vector's memory.</returns>
+    private protected static Tensor<T> Head(Vector<T> vector, int count)
+    {
+        return count == vector.Length
+            ? vector.AsTensor()
+            : Tensor<T>.FromMemory(vector.AsWritableMemory().Slice(0, count), new[] { count });
     }
 
     /// <summary>

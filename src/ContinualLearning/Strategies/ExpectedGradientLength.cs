@@ -175,11 +175,7 @@ public class ExpectedGradientLength<T, TInput, TOutput> : ContinualLearningStrat
     {
         // Initialize gradient length accumulator for the new task
         int numParams = (int)InterfaceGuard.Parameterizable(model).ParameterCount;
-        _gradientLengthSum = new Vector<T>(numParams);
-        for (int i = 0; i < numParams; i++)
-        {
-            _gradientLengthSum[i] = NumOps.Zero;
-        }
+        _gradientLengthSum = Engine.Fill(numParams, NumOps.Zero);
         _gradientCount = 0;
 
         RecordMetric($"Task{TaskCount}_PrepareTime", DateTime.UtcNow);
@@ -197,16 +193,11 @@ public class ExpectedGradientLength<T, TInput, TOutput> : ContinualLearningStrat
             throw new InvalidOperationException(
                 $"Parameter dimension mismatch: current={currentParams.Length}, stored={_previousParameters.Length}");
 
-        T loss = NumOps.Zero;
-
         // EGL loss: (lambda/2) * sum_i Omega_i * (theta_i - theta*_i)^2
-        for (int i = 0; i < currentParams.Length; i++)
-        {
-            var diff = NumOps.Subtract(currentParams[i], _previousParameters[i]);
-            var squaredDiff = NumOps.Multiply(diff, diff);
-            var weightedDiff = NumOps.Multiply(_importance[i], squaredDiff);
-            loss = NumOps.Add(loss, weightedDiff);
-        }
+        var diff = Engine.TensorSubtract(currentParams.AsTensor(), _previousParameters.AsTensor());
+        var weightedDiff = Engine.TensorMultiply(
+            Head(_importance, currentParams.Length), Engine.TensorMultiply(diff, diff));
+        T loss = Engine.TensorSum(weightedDiff);
 
         // Multiply by lambda/2
         var halfLambda = NumOps.Divide(_lambda, NumOps.FromDouble(2.0));
@@ -219,21 +210,16 @@ public class ExpectedGradientLength<T, TInput, TOutput> : ContinualLearningStrat
         // Accumulate gradient lengths
         if (_gradientLengthSum != null && _gradientCount < _numSamples)
         {
-            for (int i = 0; i < Math.Min(gradients.Length, _gradientLengthSum.Length); i++)
+            int count = Math.Min(gradients.Length, _gradientLengthSum.Length);
+            if (count > 0)
             {
-                T gradLength;
-                if (_useSquaredLength)
-                {
-                    // Use squared gradient: |∂L/∂θᵢ|²
-                    gradLength = NumOps.Multiply(gradients[i], gradients[i]);
-                }
-                else
-                {
-                    // Use absolute gradient: |∂L/∂θᵢ|
-                    double absVal = Math.Abs(Convert.ToDouble(gradients[i]));
-                    gradLength = NumOps.FromDouble(absVal);
-                }
-                _gradientLengthSum[i] = NumOps.Add(_gradientLengthSum[i], gradLength);
+                var g = Head(gradients, count);
+
+                // Squared gradient |∂L/∂θᵢ|² or absolute gradient |∂L/∂θᵢ|
+                var gradLength = _useSquaredLength
+                    ? Engine.TensorMultiply(g, g)
+                    : Engine.TensorAbs(g);
+                Engine.TensorAdd(Head(_gradientLengthSum, count), gradLength).AsSpan().CopyTo(Head(_gradientLengthSum, count).AsWritableSpan());
             }
             _gradientCount++;
         }
@@ -283,17 +269,11 @@ public class ExpectedGradientLength<T, TInput, TOutput> : ContinualLearningStrat
             throw new InvalidOperationException("No gradients were accumulated for importance computation");
         }
 
-        var importance = new Vector<T>(_gradientLengthSum.Length);
         var sampleCount = NumOps.FromDouble(_gradientCount);
 
-        for (int i = 0; i < _gradientLengthSum.Length; i++)
-        {
-            // Average gradient length = Expected gradient length
-            var avgLength = NumOps.Divide(_gradientLengthSum[i], sampleCount);
-            importance[i] = NumOps.Add(avgLength, _minImportanceValue);
-        }
-
-        return importance;
+        // Average gradient length = Expected gradient length
+        var avgLength = Engine.TensorDivideScalar(_gradientLengthSum.AsTensor(), sampleCount);
+        return Engine.TensorAddScalar(avgLength, _minImportanceValue).AsVector();
     }
 
     /// <summary>
@@ -304,23 +284,32 @@ public class ExpectedGradientLength<T, TInput, TOutput> : ContinualLearningStrat
         // Online update: Ω = γ * Ω_old + Ω_new
         // Parameters: θ* = (γ * Ω_old * θ*_old + Ω_new * θ_new) / (γ * Ω_old + Ω_new)
 
-        for (int i = 0; i < (_importance ?? throw new InvalidOperationException("_importance has not been initialized.")).Length; i++)
+        var importance = _importance ?? throw new InvalidOperationException("_importance has not been initialized.");
+        int n = importance.Length;
+        if (n == 0)
         {
-            var decayedOldImportance = NumOps.Multiply(_decayFactor, _importance[i]);
-            var newTotalImportance = NumOps.Add(decayedOldImportance, taskImportance[i]);
-
-            // Weighted average of parameters
-            var weightedOld = NumOps.Multiply(decayedOldImportance, (_previousParameters ?? throw new InvalidOperationException("_previousParameters has not been initialized."))[i]);
-            var weightedNew = NumOps.Multiply(taskImportance[i], currentParams[i]);
-            var numerator = NumOps.Add(weightedOld, weightedNew);
-
-            // Avoid division by zero
-            var safeDenom = NumOps.Add(newTotalImportance, _minImportanceValue);
-            _previousParameters[i] = NumOps.Divide(numerator, safeDenom);
-
-            // Update accumulated importance
-            _importance[i] = newTotalImportance;
+            return;
         }
+
+        var previous = _previousParameters
+            ?? throw new InvalidOperationException("_previousParameters has not been initialized.");
+        var omegaNew = Head(taskImportance, n);
+
+        var decayedOldImportance = Engine.TensorMultiplyScalar(importance.AsTensor(), _decayFactor);
+        var newTotalImportance = Engine.TensorAdd(decayedOldImportance, omegaNew);
+
+        // Weighted average of parameters
+        var weightedOld = Engine.TensorMultiply(decayedOldImportance, Head(previous, n));
+        var weightedNew = Engine.TensorMultiply(omegaNew, Head(currentParams, n));
+        var numerator = Engine.TensorAdd(weightedOld, weightedNew);
+
+        // Avoid division by zero
+        var safeDenom = Engine.TensorAddScalar(newTotalImportance, _minImportanceValue);
+        var merged = Engine.TensorDivide(numerator, safeDenom);
+
+        // Written back in place, like master
+        merged.AsSpan().CopyTo(previous.AsWritableSpan());
+        newTotalImportance.AsSpan().CopyTo(importance.AsWritableSpan());
     }
 
     /// <summary>
@@ -375,12 +364,7 @@ public class ExpectedGradientLength<T, TInput, TOutput> : ContinualLearningStrat
     /// </summary>
     private double ComputeMean(Vector<T> vector)
     {
-        double sum = 0;
-        for (int i = 0; i < vector.Length; i++)
-        {
-            sum += Convert.ToDouble(vector[i]);
-        }
-        return sum / vector.Length;
+        return MeanAsDouble(vector);
     }
 
     /// <summary>
@@ -388,12 +372,6 @@ public class ExpectedGradientLength<T, TInput, TOutput> : ContinualLearningStrat
     /// </summary>
     private T ComputeMax(Vector<T> vector)
     {
-        T max = vector[0];
-        for (int i = 1; i < vector.Length; i++)
-        {
-            if (Convert.ToDouble(vector[i]) > Convert.ToDouble(max))
-                max = vector[i];
-        }
-        return max;
+        return Engine.TensorMaxValue(vector.AsTensor());
     }
 }

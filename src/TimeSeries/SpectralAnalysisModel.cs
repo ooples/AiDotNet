@@ -97,12 +97,7 @@ public partial class SpectralAnalysisModel<T> : TimeSeriesModelBase<T>
         // Generate sinusoidal predictions using the dominant frequency component
         // for each input row (time index). This provides a time-domain reconstruction
         // from the spectral analysis.
-        var predictions = new Vector<T>(input.Rows);
-        for (int i = 0; i < input.Rows; i++)
-        {
-            predictions[i] = PredictSingle(input.GetRow(i));
-        }
-        return predictions;
+        return TimeSeriesEngineOps<T>.PredictRows(input, PredictSingle);
     }
 
     /// <summary>
@@ -182,11 +177,10 @@ public partial class SpectralAnalysisModel<T> : TimeSeriesModelBase<T>
     /// </remarks>
     private Vector<Complex<T>> ComputeFFT(Vector<T> signal, int nfft)
     {
-        Vector<Complex<T>> padded = new Vector<Complex<T>>(nfft);
-        for (int i = 0; i < signal.Length; i++)
-        {
-            padded[i] = new Complex<T>(signal[i], NumOps.Zero);
-        }
+        // The signal as complex values (zero imaginary part), zero-padded to nfft points
+        T zero = NumOps.Zero;
+        var complexSignal = new Vector<Complex<T>>(signal.Select(value => new Complex<T>(value, zero)).ToArray());
+        Vector<Complex<T>> padded = Vector<Complex<T>>.Concatenate(complexSignal, new Vector<Complex<T>>(nfft - signal.Length));
 
         return FFT(padded);
     }
@@ -372,40 +366,24 @@ public partial class SpectralAnalysisModel<T> : TimeSeriesModelBase<T>
         Vector<Complex<T>> fft = ComputeFFT(windowedSignal, nfft);
 
         // Compute periodogram
-        _periodogram = new Vector<T>(nfft / 2 + 1);
-        for (int i = 0; i < _periodogram.Length; i++)
-        {
-            T magnitude = NumOps.Sqrt(NumOps.Add(
-                NumOps.Multiply(fft[i].Real, fft[i].Real),
-                NumOps.Multiply(fft[i].Imaginary, fft[i].Imaginary)
-            ));
+        int bins = nfft / 2 + 1;
+        var spectrum = fft.Take(bins).ToArray();
+        var real = new Vector<T>(Array.ConvertAll(spectrum, c => c.Real));
+        var imaginary = new Vector<T>(Array.ConvertAll(spectrum, c => c.Imaginary));
 
-            // Scale by 1/n for proper normalization
-            _periodogram[i] = NumOps.Divide(NumOps.Multiply(magnitude, magnitude), NumOps.FromDouble(n));
-        }
+        // |X|² / n, with the magnitude sqrt(re² + im²) squared back
+        var magnitude = Engine.Sqrt(Engine.Add(Engine.Multiply(real, real), Engine.Multiply(imaginary, imaginary)));
+        // Scale by 1/n for proper normalization
+        _periodogram = Engine.Divide(Engine.Multiply(magnitude, magnitude), NumOps.FromDouble(n));
 
-        // Compute frequencies
-        _frequencies = new Vector<T>(nfft / 2 + 1);
-        for (int i = 0; i < _frequencies.Length; i++)
-        {
-            // Normalize frequency by sampling rate if provided, otherwise use normalized frequency
-            if (NumOps.GreaterThan(NumOps.FromDouble(_spectralOptions.SamplingRate), NumOps.Zero))
-            {
-                _frequencies[i] = NumOps.Multiply(
-                    NumOps.Divide(NumOps.FromDouble(i), NumOps.FromDouble(nfft)),
-                    NumOps.FromDouble(_spectralOptions.SamplingRate)
-                );
-            }
-            else
-            {
-                _frequencies[i] = NumOps.Divide(NumOps.FromDouble(i), NumOps.FromDouble(nfft));
-            }
-        }
+        // Compute frequencies: i / nfft, scaled by the sampling rate if provided
+        var normalized = Engine.Divide(Engine.TensorArange<T>(0, bins, 1).ToVector(), NumOps.FromDouble(nfft));
+        _frequencies = NumOps.GreaterThan(NumOps.FromDouble(_spectralOptions.SamplingRate), NumOps.Zero)
+            ? Engine.Multiply(normalized, NumOps.FromDouble(_spectralOptions.SamplingRate))
+            : normalized;
 
         // Populate ModelParameters from periodogram for GetParameters()
-        ModelParameters = new Vector<T>(_periodogram.Length);
-        for (int i = 0; i < _periodogram.Length; i++)
-            ModelParameters[i] = _periodogram[i];
+        ModelParameters = _periodogram.Clone();
     }
 
     /// <summary>
@@ -565,14 +543,12 @@ public partial class SpectralAnalysisModel<T> : TimeSeriesModelBase<T>
             // Find dominant frequency (excluding DC component at index 0)
             int dominantIndex = 0;
             T maxPower = NumOps.Zero;
-
-            for (int i = 1; i < _periodogram.Length; i++)
+            int strongest = TimeSeriesEngineOps<T>.FirstStrictMaximumAbove(
+                _periodogram.GetSubVector(1, _periodogram.Length - 1), maxPower);
+            if (strongest >= 0)
             {
-                if (NumOps.GreaterThan(_periodogram[i], maxPower))
-                {
-                    maxPower = _periodogram[i];
-                    dominantIndex = i;
-                }
+                dominantIndex = strongest + 1;
+                maxPower = _periodogram[dominantIndex];
             }
 
             // Add frequency statistics
@@ -583,23 +559,21 @@ public partial class SpectralAnalysisModel<T> : TimeSeriesModelBase<T>
             metadata.AdditionalInfo["DominantFrequencyPower"] = Convert.ToDouble(maxPower);
 
             // Calculate the total power (sum of periodogram)
-            T totalPower = NumOps.Zero;
-            for (int i = 0; i < _periodogram.Length; i++)
-            {
-                totalPower = NumOps.Add(totalPower, _periodogram[i]);
-            }
+            T totalPower = Engine.Sum(_periodogram);
             metadata.AdditionalInfo["TotalPower"] = Convert.ToDouble(totalPower);
 
-            // Calculate the spectral entropy as a measure of randomness
+            // Calculate the spectral entropy as a measure of randomness: -Σ_{p > 0} q log q with q = p / total
             T logSum = NumOps.Zero;
-            for (int i = 0; i < _periodogram.Length; i++)
+            var powers = Tensor<T>.FromVector(_periodogram);
+            var positive = Engine.TensorGreaterThan(powers, NumOps.Zero);
+            if (Engine.TensorCountNonzero(positive) > 0)
             {
-                if (NumOps.GreaterThan(_periodogram[i], NumOps.Zero))
-                {
-                    T normalizedPower = NumOps.Divide(_periodogram[i], totalPower);
-                    T logPower = NumOps.Log(normalizedPower);
-                    logSum = NumOps.Subtract(logSum, NumOps.Multiply(normalizedPower, logPower));
-                }
+                // Non-positive powers are replaced by the total (q = 1, q log q = 0) and then masked out.
+                var safe = Engine.TensorWhere(positive, powers, Engine.TensorFullLike(powers, totalPower));
+                var normalizedPower = Engine.TensorDivideScalar(safe, totalPower);
+                var terms = Engine.TensorMultiply(normalizedPower, Engine.TensorLog(normalizedPower));
+                var masked = Engine.TensorWhere(positive, terms, Engine.TensorZerosLike(terms));
+                logSum = NumOps.Subtract(logSum, Engine.TensorSum(masked));
             }
             metadata.AdditionalInfo["SpectralEntropy"] = Convert.ToDouble(logSum);
         }

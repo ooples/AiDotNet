@@ -26,9 +26,9 @@ public partial class NLinearModel<T> : TimeSeriesModelBase<T>
     private readonly Random _random;
     private readonly int _l;
     [TrainableParameter]
-    private readonly double[] _w;
+    private readonly Vector<T> _w;
     [TrainableParameter]
-    private double _b;
+    private T _b;
     private readonly IGradientBasedOptimizer<T, Matrix<T>, Vector<T>> _optimizer;
 
     // StandardScaler statistics (LTSF-Linear reference pipeline: the series is z-score normalized before
@@ -38,13 +38,13 @@ public partial class NLinearModel<T> : TimeSeriesModelBase<T>
     // training converge independent of the series magnitude (Adam can't otherwise move the bias/weights far
     // enough on large-scale targets within the epoch budget).
     [Buffer]
-    private double _xMean;
+    private T _xMean;
     [Buffer]
-    private double _xStd = 1.0;
+    private T _xStd;
     [Buffer]
-    private double _yMean;
+    private T _yMean;
     [Buffer]
-    private double _yStd = 1.0;
+    private T _yStd;
 
     /// <param name="options">Model configuration (window, horizon, epochs, batch size, learning rate).</param>
     /// <param name="optimizer">
@@ -62,55 +62,51 @@ public partial class NLinearModel<T> : TimeSeriesModelBase<T>
         Options = _options;
         _random = RandomHelper.CreateSeededRandom(SeedOr(42));
         _l = Math.Max(2, _options.LookbackWindow);
-        _w = new double[_l];
-        for (int j = 0; j < _l; j++) { _w[j] = 1.0 / _l; }
+        _w = Engine.Fill(_l, NumOps.FromDouble(1.0 / _l));
+        _b = NumOps.Zero;
+        _xMean = NumOps.Zero;
+        _xStd = NumOps.One;
+        _yMean = NumOps.Zero;
+        _yStd = NumOps.One;
         _optimizer = optimizer ?? new AdamOptimizer<T, Matrix<T>, Vector<T>>(
             this, new AdamOptimizerOptions<T, Matrix<T>, Vector<T>> { InitialLearningRate = _options.LearningRate });
     }
 
-    private static bool IsFiniteValue(double v) => !double.IsNaN(v) && !double.IsInfinity(v);
-
-    private static double[] LastWindow(int l, Func<int, double> get, int count)
+    // The x-normalized last-L window of every row of a RAW [batch, cols] tensor. Each entry is normalized
+    // BEFORE the non-finite clamp to 0.0, and short rows are zero-padded on the right in normalized space.
+    //
+    // Normalizing before the clamp is what keeps training and inference imputing in the SAME space: a
+    // non-finite entry maps to 0.0 in normalized terms (the mean in raw terms) both while training and at
+    // inference. Clamping raw values first would map it to (0 - _xMean) / _xStd instead, a gap that grows
+    // with _xMean.
+    private Tensor<T> NormalizedWindow(Tensor<T> raw)
     {
-        var x = new double[l];
-        int start = Math.Max(0, count - l);
-        for (int j = 0; j < l; j++)
+        int batch = raw.Shape[0];
+        int count = raw.Shape[1];
+        int start = Math.Max(0, count - _l);
+        int take = Math.Min(_l, count);
+        var window = take > 0
+            ? Engine.TensorSlice(raw, new[] { 0, start }, new[] { batch, take })
+            : new Tensor<T>(new[] { batch, 0 });
+        window = Engine.TensorDivideScalar(Engine.TensorSubtractScalar(window, _xMean), _xStd);
+        window = Engine.TensorNanToNum(window, 0.0, 0.0, 0.0);
+        if (take < _l)
         {
-            int idx = start + j;
-            double v = idx < count ? get(idx) : 0.0;
-            x[j] = IsFiniteValue(v) ? v : 0.0;
+            window = Engine.TensorConcatenate(new[] { window, new Tensor<T>(new[] { batch, _l - take }) }, 1);
         }
 
-        return x;
+        return window;
     }
 
     // NLinear in the model's normalized space: subtract-last on the normalized window, linear map, add last
-    // back. Operates on an ALREADY x-normalized window and returns a y-normalized prediction.
-    private double ForecastNormalized(double[] windowNorm)
+    // back. Returns the window minus its last value ([batch, L]) and the y-normalized prediction ([batch, 1]).
+    private (Tensor<T> Centered, Tensor<T> Prediction) ForecastNormalized(Tensor<T> windowNorm)
     {
-        double last = windowNorm[_l - 1];
-        double pred = _b + last;
-        for (int j = 0; j < _l; j++)
-        {
-            pred += _w[j] * (windowNorm[j] - last);
-        }
-
-        return pred;
-    }
-
-    // Full forecast from a RAW series accessor: x-normalize each entry BEFORE the window's
-    // non-finite clamp, run the normalized NLinear map, then y-denormalize.
-    //
-    // Normalizing inside the accessor is what keeps training and inference imputing in the SAME
-    // space. LastWindow clamps a non-finite entry to 0.0 wherever it is applied: applied to
-    // normalized values (as TrainCore does) that means the mean in raw terms, but applied to raw
-    // values it meant (0 - _xMean) / _xStd once normalized afterwards. The same corrupt input
-    // therefore mapped to a different value at inference than during training, and the gap grows
-    // with _xMean.
-    private double Forecast(Func<int, double> rawAt, int count)
-    {
-        var windowNorm = LastWindow(_l, j => (rawAt(j) - _xMean) / _xStd, count);
-        return ForecastNormalized(windowNorm) * _yStd + _yMean;
+        int batch = windowNorm.Shape[0];
+        var last = Engine.TensorSlice(windowNorm, new[] { 0, _l - 1 }, new[] { batch, 1 });
+        var centered = Engine.TensorSubtract(windowNorm, Engine.TensorBroadcastTo(last, new[] { batch, _l }));
+        var pred = Engine.TensorMatMul(centered, Tensor<T>.FromVector(_w, new[] { _l, 1 }));
+        return (centered, Engine.TensorAddScalar(Engine.TensorAdd(pred, last), _b));
     }
 
 
@@ -118,7 +114,6 @@ public partial class NLinearModel<T> : TimeSeriesModelBase<T>
     protected override void TrainCore(Matrix<T> x, Vector<T> y)
     {
         int n = x.Rows;
-        int cols = x.Columns;
 
         // StandardScaler fit (LTSF-Linear reference pipeline): z-score the inputs and targets so the
         // regression is solved in a magnitude-free space. This is what lets training converge on any series
@@ -127,113 +122,94 @@ public partial class NLinearModel<T> : TimeSeriesModelBase<T>
         // the same amount, since the normalized problem is unchanged). Separate x/y scalers: for a genuine
         // forecast x and y are the same series so they coincide (plain NLinear), but keeping them independent
         // is what makes the equivariance exact when only the target is transformed.
-        FitScalers(x, y, n, cols);
+        var rows = Tensor<T>.FromMatrix(x);
+        var targets = Tensor<T>.FromVector(y, new[] { n, 1 });
+        FitScalers(rows, targets);
+
+        // x-normalized windows and y-normalized targets — the whole regression runs in scaler space.
+        var windows = NormalizedWindow(rows);
+        var targetsNorm = Engine.TensorDivideScalar(Engine.TensorSubtractScalar(targets, _yMean), _yStd);
 
         // Start each fit from clean optimizer state so repeated Train() calls are reproducible.
         _optimizer.Reset();
 
         // Parameter vector theta = [w_0 .. w_{l-1}, b]. The pluggable optimizer (Adam by default, per the
         // LTSF-Linear reference) owns the update rule.
-        var theta = new Vector<T>(_l + 1);
-        for (int j = 0; j < _l; j++) { theta[j] = NumOps.FromDouble(_w[j]); }
-        theta[_l] = NumOps.FromDouble(_b);
+        var theta = Vector<T>.Concatenate(_w, new Vector<T>(new[] { _b }));
 
         for (int epoch = 0; epoch < _options.Epochs; epoch++)
         {
             TrainingCancellationToken.ThrowIfCancellationRequested();
-            var order = Enumerable.Range(0, n).OrderBy(_ => _random.Next()).ToList();
+            var order = Enumerable.Range(0, n).OrderBy(_ => _random.Next()).ToArray();
 
             for (int batchStart = 0; batchStart < n; batchStart += _options.BatchSize)
             {
                 int batchEnd = Math.Min(batchStart + _options.BatchSize, n);
-                int bs = batchEnd - batchStart;
-                var g = new double[_l];
-                double gb = 0;
-
-                for (int bi = batchStart; bi < batchEnd; bi++)
-                {
-                    int i = order[bi];
-                    // x-normalized window and y-normalized target — the whole regression runs in scaler space.
-                    var window = LastWindow(_l, c => (Convert.ToDouble(x[i, c]) - _xMean) / _xStd, cols);
-                    double last = window[_l - 1];
-                    double predNorm = ForecastNormalized(window);
-                    double targetNorm = (Convert.ToDouble(y[i]) - _yMean) / _yStd;
-                    double err = predNorm - targetNorm;
-                    for (int j = 0; j < _l; j++)
-                    {
-                        g[j] += err * (window[j] - last);
-                    }
-
-                    gb += err;
-                }
-
-                // Mean gradient of the 0.5*err^2 objective (dL/dw_j = err*(window_j - last), dL/db = err).
-                double inv = bs > 0 ? 1.0 / bs : 0.0;
-                var grad = new Vector<T>(_l + 1);
-                for (int j = 0; j < _l; j++) { grad[j] = NumOps.FromDouble(g[j] * inv); }
-                grad[_l] = NumOps.FromDouble(gb * inv);
-
-                theta = _optimizer.UpdateParameters(theta, grad);
-
-                // Mirror the updated parameters back into the double working weights Forecast reads.
-                for (int j = 0; j < _l; j++) { _w[j] = Convert.ToDouble(theta[j]); }
-                _b = Convert.ToDouble(theta[_l]);
+                var batch = new Tensor<int>(new[] { batchEnd - batchStart }, new Vector<int>(
+                    new ArraySegment<int>(order, batchStart, batchEnd - batchStart)));
+                theta = TrainBatch(windows, targetsNorm, batch, theta);
             }
         }
 
     }
 
-    // Fit z-score scalers over the training inputs (all window values) and targets. A (near-)constant series
-    // has zero variance; guard the std to 1 so normalization is a pure mean-shift and never divides by zero.
-    private void FitScalers(Matrix<T> x, Vector<T> y, int n, int cols)
+    // One optimizer step on the mean gradient of the 0.5*err^2 objective over the rows at `batch`
+    // (dL/dw_j = err*(window_j - last), dL/db = err); mirrors the result into the working weights.
+    private Vector<T> TrainBatch(Tensor<T> windows, Tensor<T> targetsNorm, Tensor<int> batch, Vector<T> theta)
     {
-        const double eps = 1e-8;
+        int bs = batch.Length;
+        var (centered, predNorm) = ForecastNormalized(Engine.TensorIndexSelect(windows, batch, 0));
+        var err = Engine.TensorSubtract(predNorm, Engine.TensorIndexSelect(targetsNorm, batch, 0));
 
-        double xSum = 0; long xCount = 0;
-        for (int i = 0; i < n; i++)
-            for (int c = 0; c < cols; c++)
-            {
-                double v = Convert.ToDouble(x[i, c]);
-                if (IsFiniteValue(v)) { xSum += v; xCount++; }
-            }
-        _xMean = xCount > 0 ? xSum / xCount : 0.0;
-        double xVar = 0;
-        for (int i = 0; i < n; i++)
-            for (int c = 0; c < cols; c++)
-            {
-                double v = Convert.ToDouble(x[i, c]);
-                if (IsFiniteValue(v)) { double d = v - _xMean; xVar += d * d; }
-            }
-        _xStd = xCount > 0 ? Math.Sqrt(xVar / xCount) : 1.0;
-        if (_xStd < eps) _xStd = 1.0;
+        T inv = NumOps.FromDouble(bs > 0 ? 1.0 / bs : 0.0);
+        var g = Engine.TensorMatMul(Engine.TensorTranspose(centered), err).ToVector();
+        var grad = Vector<T>.Concatenate(
+            Engine.Multiply(g, inv), new Vector<T>(new[] { NumOps.Multiply(Engine.TensorSum(err), inv) }));
 
-        double ySum = 0; long yCount = 0;
-        for (int i = 0; i < n; i++)
+        var updated = _optimizer.UpdateParameters(theta, grad);
+
+        // Mirror the updated parameters back into the working weights the forecast reads.
+        updated.GetSubVector(0, _l).CopyTo(_w.AsWritableSpan());
+        _b = updated[_l];
+        return updated;
+    }
+
+    // Fit z-score scalers over the training inputs (all window values) and targets.
+    private void FitScalers(Tensor<T> x, Tensor<T> y)
+    {
+        (_xMean, _xStd) = FitScaler(x);
+        (_yMean, _yStd) = FitScaler(y);
+    }
+
+    // Mean and population std of the finite entries (identity scaler when there are none). A (near-)constant
+    // series has zero variance; guard the std to 1 so normalization is a pure mean-shift and never divides
+    // by zero.
+    private (T Mean, T Std) FitScaler(Tensor<T> values)
+    {
+        // Accumulated in double: a Half sum of the training values overflows past 65504, and the
+        // 1e-8 floor would round to zero in Half.
+        var v = values.Cast<double>();
+        var finite = Engine.TensorIsFinite(v);
+        var zeros = Engine.TensorZerosLike(v);
+        int count = Engine.TensorCountNonzero(Engine.TensorWhere(finite, Engine.TensorOnesLike(v), zeros));
+        if (count == 0)
         {
-            double v = Convert.ToDouble(y[i]);
-            if (IsFiniteValue(v)) { ySum += v; yCount++; }
+            return (NumOps.Zero, NumOps.One);
         }
-        _yMean = yCount > 0 ? ySum / yCount : 0.0;
-        double yVar = 0;
-        for (int i = 0; i < n; i++)
-        {
-            double v = Convert.ToDouble(y[i]);
-            if (IsFiniteValue(v)) { double d = v - _yMean; yVar += d * d; }
-        }
-        _yStd = yCount > 0 ? Math.Sqrt(yVar / yCount) : 1.0;
-        if (_yStd < eps) _yStd = 1.0;
+
+        double mean = Engine.TensorSum(Engine.TensorWhere(finite, v, zeros)) / count;
+        var deviations = Engine.TensorWhere(finite, Engine.TensorSubtractScalar(v, mean), zeros);
+        double std = Math.Sqrt(Engine.TensorSum(Engine.TensorMultiply(deviations, deviations)) / count);
+        return (NumOps.FromDouble(mean), NumOps.FromDouble(std < 1e-8 ? 1.0 : std));
     }
 
     /// <inheritdoc />
     public override T PredictSingle(Vector<T> input)
     {
-        double pred = Forecast(j => Convert.ToDouble(input[j]), input.Length);
-        return NumOps.FromDouble(IsFiniteValue(pred) ? pred : 0.0);
+        var window = NormalizedWindow(Tensor<T>.FromVector(input, new[] { 1, input.Length }));
+        T pred = NumOps.Add(NumOps.Multiply(ForecastNormalized(window).Prediction[0, 0], _yStd), _yMean);
+        return NumOps.IsNaN(pred) || NumOps.IsInfinity(pred) ? NumOps.Zero : pred;
     }
-
-
-
-
 
     /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata()

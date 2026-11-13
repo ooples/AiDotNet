@@ -343,18 +343,16 @@ public class LearningWithoutForgetting<T, TInput, TOutput>
         var softTeacher = SoftmaxWithTemperature(teacherLogits, _temperature);
         var softStudent = SoftmaxWithTemperature(studentLogits, _temperature);
 
-        T kl = NumOps.Zero;
-        for (int i = 0; i < softTeacher.Length; i++)
-        {
-            var teacherProb = Convert.ToDouble(softTeacher[i]);
-            if (teacherProb > 1e-10)
-            {
-                var studentProb = Math.Max(Convert.ToDouble(softStudent[i]), 1e-10);
-                var logRatio = Math.Log(teacherProb / studentProb);
-                var term = teacherProb * logRatio;
-                kl = NumOps.Add(kl, NumOps.FromDouble(term));
-            }
-        }
+        // sum over teacher probabilities above 1e-10 of t * (log t - log max(s, 1e-10)); the log
+        // difference avoids the ratio t / s, which overflows Half when s is tiny
+        var teacher = softTeacher.AsTensor();
+        var terms = Engine.TensorMultiply(teacher,
+            Engine.TensorSubtract(Engine.TensorLog(teacher), FlooredLog(softStudent)));
+        var kept = Engine.TensorWhere(
+            Engine.TensorGreaterThan(teacher, NumOps.FromDouble(1e-10)),
+            terms,
+            new Tensor<T>(new[] { teacher.Length }));
+        T kl = Engine.TensorSum(kept);
 
         // Scale by T^2 (gradient scaling factor)
         var tempSquared = NumOps.Multiply(_temperature, _temperature);
@@ -369,13 +367,7 @@ public class LearningWithoutForgetting<T, TInput, TOutput>
         var softTeacher = SoftmaxWithTemperature(teacherLogits, _temperature);
         var softStudent = SoftmaxWithTemperature(studentLogits, _temperature);
 
-        T mse = NumOps.Zero;
-        for (int i = 0; i < softTeacher.Length; i++)
-        {
-            var diff = NumOps.Subtract(softTeacher[i], softStudent[i]);
-            var squared = NumOps.Multiply(diff, diff);
-            mse = NumOps.Add(mse, squared);
-        }
+        T mse = Engine.TensorSumOfSquares(Engine.Subtract(softTeacher, softStudent).AsTensor());
 
         return NumOps.Divide(mse, NumOps.FromDouble(softTeacher.Length));
     }
@@ -388,16 +380,23 @@ public class LearningWithoutForgetting<T, TInput, TOutput>
         var softTeacher = SoftmaxWithTemperature(teacherLogits, _temperature);
         var softStudent = SoftmaxWithTemperature(studentLogits, _temperature);
 
-        T ce = NumOps.Zero;
-        for (int i = 0; i < softTeacher.Length; i++)
-        {
-            var studentProb = Math.Max(Convert.ToDouble(softStudent[i]), 1e-10);
-            var teacherProb = Convert.ToDouble(softTeacher[i]);
-            var term = -teacherProb * Math.Log(studentProb);
-            ce = NumOps.Add(ce, NumOps.FromDouble(term));
-        }
+        // -sum t * log(max(s, 1e-10))
+        var weightedLog = Engine.TensorMultiply(softTeacher.AsTensor(), FlooredLog(softStudent));
+        return NumOps.Negate(Engine.TensorSum(weightedLog));
+    }
 
-        return ce;
+    /// <summary>
+    /// <c>log(max(p, 1e-10))</c> for every probability. The floor is applied in the log domain: 1e-10
+    /// rounds to zero in Half, where <c>max(p, floor)</c> would leave <c>log 0 = -inf</c>, while
+    /// <c>log 1e-10 ≈ -23.03</c> is representable in every T.
+    /// </summary>
+    internal static Tensor<T> FlooredLog(Vector<T> probabilities)
+    {
+        var p = probabilities.AsTensor();
+        return Engine.TensorWhere(
+            Engine.TensorGreaterThan(p, NumOps.FromDouble(1e-10)),
+            Engine.TensorLog(p),
+            Engine.TensorFullLike(p, NumOps.FromDouble(Math.Log(1e-10))));
     }
 
     /// <summary>
@@ -469,34 +468,9 @@ public class LearningWithoutForgetting<T, TInput, TOutput>
     /// </summary>
     private Vector<T> SoftmaxWithTemperature(Vector<T> logits, T temperature)
     {
-        var scaled = new T[logits.Length];
-
-        // Find max for numerical stability
-        T maxLogit = logits[0];
-        for (int i = 1; i < logits.Length; i++)
-        {
-            if (Convert.ToDouble(logits[i]) > Convert.ToDouble(maxLogit))
-                maxLogit = logits[i];
-        }
-
-        // Compute exp((logit - max) / T) and sum
-        T sum = NumOps.Zero;
-        for (int i = 0; i < logits.Length; i++)
-        {
-            var shifted = NumOps.Subtract(logits[i], maxLogit);
-            var divided = NumOps.Divide(shifted, temperature);
-            var expValue = NumOps.FromDouble(Math.Exp(Convert.ToDouble(divided)));
-            scaled[i] = expValue;
-            sum = NumOps.Add(sum, expValue);
-        }
-
-        // Normalize
-        for (int i = 0; i < scaled.Length; i++)
-        {
-            scaled[i] = NumOps.Divide(scaled[i], sum);
-        }
-
-        return new Vector<T>(scaled);
+        // softmax((x - max) / T): subtracting the max before dividing by T only shifts every exponent
+        // by the same amount, so this is softmax(x / T), which the engine computes max-shifted.
+        return Engine.Softmax(Engine.Divide(logits, temperature));
     }
 
     /// <summary>

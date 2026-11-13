@@ -24393,3 +24393,8 @@ AiDotNet.ReinforcementLearning.Common.Trajectory<T>.ChainCuts() -> bool[]!
 AiDotNet.ReinforcementLearning.Environments.EnvironmentInfoKeys
 const AiDotNet.ReinforcementLearning.Environments.EnvironmentInfoKeys.Truncated = "truncated" -> string!
 static AiDotNet.ReinforcementLearning.Environments.EnvironmentInfoKeys.IsTruncated(System.Collections.Generic.IReadOnlyDictionary<string!, object!>? info) -> bool
+*REMOVED*AiDotNet.Models.InterventionEffect<T>.Effect.get -> double
+AiDotNet.Models.InterventionEffect<T>.Effect.get -> T
+*REMOVED*AiDotNet.TimeSeries.InterventionAnalysisModel<T>.GetInterventionEffects() -> System.Collections.Generic.Dictionary<string!, double>!
+AiDotNet.TimeSeries.InterventionAnalysisModel<T>.GetInterventionEffects() -> System.Collections.Generic.Dictionary<string!, T>!
+AiDotNet.TimeSeries.TimeSeriesModelBase<T>.GuardPredictions(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! values, double maxAbsValue = -1) -> AiDotNet.Tensors.LinearAlgebra.Vector<T>!

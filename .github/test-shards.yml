@@ -1746,6 +1746,7 @@ shard:
       FullyQualifiedName~AiDotNet.Tests.Performance.Phase2GateTests.|
       FullyQualifiedName~AiDotNet.Tests.Pruning.PruningStrategyTests.|
       FullyQualifiedName~AiDotNet.Tests.SelfSupervisedLearning.ContrastiveObjectiveGradientTests.|
+      FullyQualifiedName~AiDotNet.Tests.SelfSupervisedLearning.SelfSupervisedLearningMetricsTests.|
       FullyQualifiedName~AiDotNet.Tests.SelfSupervisedLearning.SelfSupervisedTrainingContractTests.|
       FullyQualifiedName~AiDotNet.Tests.Diffusion.Causal3DVAEReferenceTests.|
       FullyQualifiedName~AiDotNet.Tests.Diffusion.AudioVAEReferenceTests.|

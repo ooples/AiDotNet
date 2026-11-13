@@ -1,5 +1,6 @@
 using AiDotNet.Helpers;
 using AiDotNet.Tensors.Engines;
+using AiDotNet.SelfSupervisedLearning.Losses;
 
 namespace AiDotNet.SelfSupervisedLearning.Evaluation;
 
@@ -36,34 +37,12 @@ public class SelfSupervisedLearningMetrics<T>
     /// </remarks>
     public T ComputeRepresentationStd(Tensor<T> representations)
     {
-        var batchSize = representations.Shape[0];
-        var dim = representations.Shape[1];
-
-        T totalStd = NumOps.Zero;
-
-        for (int d = 0; d < dim; d++)
-        {
-            // Compute mean
-            T mean = NumOps.Zero;
-            for (int b = 0; b < batchSize; b++)
-            {
-                mean = NumOps.Add(mean, representations[b, d]);
-            }
-            mean = NumOps.Divide(mean, NumOps.FromDouble(batchSize));
-
-            // Compute variance
-            T variance = NumOps.Zero;
-            for (int b = 0; b < batchSize; b++)
-            {
-                var diff = NumOps.Subtract(representations[b, d], mean);
-                variance = NumOps.Add(variance, NumOps.Multiply(diff, diff));
-            }
-            variance = NumOps.Divide(variance, NumOps.FromDouble(batchSize));
-
-            totalStd = NumOps.Add(totalStd, NumOps.Sqrt(variance));
-        }
-
-        return NumOps.Divide(totalStd, NumOps.FromDouble(dim));
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        // Population std per dimension, averaged over dimensions
+        var centered = Engine.TensorSubtract(representations,
+            Engine.ReduceMean(representations, new[] { 0 }, keepDims: true));
+        var variance = Engine.ReduceMean(Engine.TensorSquare(centered), new[] { 0 }, keepDims: false);
+        return Engine.TensorMean(Engine.TensorSqrt(variance));
     }
 
     /// <summary>
@@ -78,27 +57,12 @@ public class SelfSupervisedLearningMetrics<T>
     /// </remarks>
     public T ComputeAlignment(Tensor<T> z1, Tensor<T> z2)
     {
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
         var batchSize = z1.Shape[0];
-        var dim = z1.Shape[1];
 
-        // Normalize representations
-        var z1Norm = L2Normalize(z1);
-        var z2Norm = L2Normalize(z2);
-
-        T totalDist = NumOps.Zero;
-
-        for (int b = 0; b < batchSize; b++)
-        {
-            // Extract rows and compute difference, then squared norm via dot product
-            var diff = new Vector<T>(dim);
-            for (int d = 0; d < dim; d++)
-            {
-                diff[d] = NumOps.Subtract(z1Norm[b, d], z2Norm[b, d]);
-            }
-            totalDist = NumOps.Add(totalDist, Engine.DotProduct(diff, diff));
-        }
-
-        return NumOps.Divide(totalDist, NumOps.FromDouble(batchSize));
+        // Mean over the batch of the squared distance between normalized pairs
+        var diff = Engine.TensorSubtract(L2Normalize(z1), L2Normalize(z2));
+        return NumOps.Divide(Engine.TensorSumOfSquares(diff), NumOps.FromDouble(batchSize));
     }
 
     /// <summary>
@@ -114,37 +78,25 @@ public class SelfSupervisedLearningMetrics<T>
     /// </remarks>
     public T ComputeUniformity(Tensor<T> representations, double t = 2.0)
     {
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
         var batchSize = representations.Shape[0];
         var dim = representations.Shape[1];
 
         // Normalize representations
         var zNorm = L2Normalize(representations);
 
-        T sum = NumOps.Zero;
-        int count = 0;
+        // Pairwise squared distances from explicit differences: [n, n]
+        var diff = Engine.TensorSubtract(zNorm.Reshape(batchSize, 1, dim), zNorm.Reshape(1, batchSize, dim));
+        var dist = Engine.ReduceSum(Engine.TensorSquare(diff), new[] { 2 }, keepDims: false);
 
-        for (int i = 0; i < batchSize; i++)
-        {
-            for (int j = i + 1; j < batchSize; j++)
-            {
-                // Compute squared distance using Engine.DotProduct
-                var diff = new Vector<T>(dim);
-                for (int d = 0; d < dim; d++)
-                {
-                    diff[d] = NumOps.Subtract(zNorm[i, d], zNorm[j, d]);
-                }
-                T dist = Engine.DotProduct(diff, diff);
-
-                // Add exp(-t * dist)
-                sum = NumOps.Add(sum,
-                    NumOps.Exp(NumOps.Multiply(NumOps.FromDouble(-t), dist)));
-                count++;
-            }
-        }
+        // exp(-t * dist) summed over the strict upper triangle (pairs i < j)
+        var kernel = Engine.TensorExp(Engine.TensorMultiplyScalar(dist, NumOps.FromDouble(-t)));
+        T sum = Engine.TensorSum(Engine.TensorTriu(kernel, 1));
+        int count = batchSize * (batchSize - 1) / 2;
 
         // Return log of average
         var avg = NumOps.Divide(sum, NumOps.FromDouble(Math.Max(count, 1)));
-        return NumOps.Log(NumOps.Add(avg, NumOps.FromDouble(1e-8)));
+        return NumOps.Log(NumOps.Add(avg, ObjectiveOps.Epsilon<T>(1e-8)));
     }
 
     /// <summary>
@@ -159,130 +111,48 @@ public class SelfSupervisedLearningMetrics<T>
     /// </remarks>
     public T ComputeEffectiveRank(Tensor<T> representations)
     {
-        var dim = representations.Shape[1];
-
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
         // Compute covariance matrix
         var cov = ComputeCovarianceMatrix(representations);
 
-        // Compute eigenvalues using Jacobi eigenvalue algorithm for symmetric matrices
-        var eigenvalues = ComputeEigenvaluesJacobi(cov, dim);
+        // Eigenvalues of the symmetric covariance matrix
+        var eigenvalues = ComputeEigenvalues(cov);
 
-        // Sum eigenvalues (for normalization)
-        T sumEig = NumOps.Zero;
-        for (int i = 0; i < dim; i++)
-        {
-            eigenvalues[i] = NumOps.Abs(eigenvalues[i]);
-            eigenvalues[i] = NumOps.Add(eigenvalues[i], NumOps.FromDouble(1e-8));
-            sumEig = NumOps.Add(sumEig, eigenvalues[i]);
-        }
+        // |lambda| + 1e-8, normalized to a probability distribution
+        var magnitudes = Engine.TensorAddScalar(Engine.TensorAbs(eigenvalues), ObjectiveOps.Epsilon<T>(1e-8));
+        var p = Engine.TensorDivideScalar(magnitudes, Engine.TensorSum(magnitudes));
 
-        // Normalize to get probability distribution and compute entropy
-        T entropy = NumOps.Zero;
-        for (int i = 0; i < dim; i++)
-        {
-            var p = NumOps.Divide(eigenvalues[i], sumEig);
-            if (NumOps.GreaterThan(p, NumOps.FromDouble(1e-10)))
-            {
-                entropy = NumOps.Subtract(entropy,
-                    NumOps.Multiply(p, NumOps.Log(p)));
-            }
-        }
+        T entropy = EntropyAboveFloor(p);
 
         // Effective rank = exp(entropy)
         return NumOps.Exp(entropy);
     }
 
     /// <summary>
-    /// Computes eigenvalues of a symmetric matrix using the Jacobi eigenvalue algorithm.
+    /// Shannon entropy <c>-sum p log p</c> over the probabilities above 1e-10, as master's loop skipped the
+    /// rest. The skipped terms are selected to zero rather than multiplied by a 0/1 mask: a probability
+    /// that underflows to 0 has <c>p log p = 0 * -inf = NaN</c>, and <c>0 * NaN</c> is still NaN.
     /// </summary>
-    private T[] ComputeEigenvaluesJacobi(Tensor<T> matrix, int n, int maxIterations = 100)
+    internal static T EntropyAboveFloor(Tensor<T> p)
     {
-        // Copy matrix to work array (algorithm modifies in place)
-        var A = new double[n, n];
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < n; j++)
-            {
-                A[i, j] = NumOps.ToDouble(matrix[i, j]);
-            }
-        }
+        var terms = Engine.TensorWhere(
+            Engine.TensorGreaterThan(p, NumOps.FromDouble(1e-10)),
+            Engine.TensorMultiply(p, Engine.TensorLog(p)),
+            Engine.TensorZerosLike(p));
+        return NumOps.Negate(Engine.TensorSum(terms));
+    }
 
-        const double tolerance = 1e-10;
-
-        for (int iter = 0; iter < maxIterations; iter++)
-        {
-            // Find largest off-diagonal element
-            int p = 0, q = 1;
-            double maxOffDiag = Math.Abs(A[0, 1]);
-
-            for (int i = 0; i < n; i++)
-            {
-                for (int j = i + 1; j < n; j++)
-                {
-                    if (Math.Abs(A[i, j]) > maxOffDiag)
-                    {
-                        maxOffDiag = Math.Abs(A[i, j]);
-                        p = i;
-                        q = j;
-                    }
-                }
-            }
-
-            // Check convergence
-            if (maxOffDiag < tolerance)
-            {
-                break;
-            }
-
-            // Compute rotation angle using Jacobi rotation formula
-            double theta;
-            if (Math.Abs(A[p, p] - A[q, q]) < 1e-15)
-            {
-                theta = Math.PI / 4;
-            }
-            else
-            {
-                theta = 0.5 * Math.Atan2(2 * A[p, q], A[p, p] - A[q, q]);
-            }
-
-            double c = Math.Cos(theta);
-            double s = Math.Sin(theta);
-
-            // Apply Givens rotation: A' = G^T * A * G
-            // Store old values needed for update
-            double app = A[p, p];
-            double aqq = A[q, q];
-            double apq = A[p, q];
-
-            // Update diagonal elements
-            A[p, p] = c * c * app + s * s * aqq - 2 * s * c * apq;
-            A[q, q] = s * s * app + c * c * aqq + 2 * s * c * apq;
-            A[p, q] = 0; // By construction
-            A[q, p] = 0;
-
-            // Update other elements
-            for (int k = 0; k < n; k++)
-            {
-                if (k != p && k != q)
-                {
-                    double akp = A[k, p];
-                    double akq = A[k, q];
-                    A[k, p] = c * akp - s * akq;
-                    A[p, k] = A[k, p];
-                    A[k, q] = s * akp + c * akq;
-                    A[q, k] = A[k, q];
-                }
-            }
-        }
-
-        // Eigenvalues are on the diagonal
-        var eigenvalues = new T[n];
-        for (int i = 0; i < n; i++)
-        {
-            eigenvalues[i] = NumOps.FromDouble(A[i, i]);
-        }
-
-        return eigenvalues;
+    /// <summary>
+    /// Computes the eigenvalues of a symmetric matrix with a symmetric eigensolver.
+    /// </summary>
+    /// <remarks>
+    /// This replaces a hand-rolled Jacobi iteration whose rotation angle had the wrong sign, so it
+    /// never zeroed the pivot and returned values that were not eigenvalues (for
+    /// [[3, 1.5], [1.5, 1]] it gave 1.31 and 2.69 instead of 2 +/- sqrt(13)/2).
+    /// </remarks>
+    private static Tensor<T> ComputeEigenvalues(Tensor<T> matrix)
+    {
+        return LinalgDispatch<T>.Eigh(matrix).Values;
     }
 
     /// <summary>
@@ -321,92 +191,32 @@ public class SelfSupervisedLearningMetrics<T>
     /// </summary>
     public T ComputeCosineSimilarity(Tensor<T> z1, Tensor<T> z2)
     {
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
         var batchSize = z1.Shape[0];
-        var dim = z1.Shape[1];
 
-        var z1Norm = L2Normalize(z1);
-        var z2Norm = L2Normalize(z2);
-
-        T totalSim = NumOps.Zero;
-
-        for (int b = 0; b < batchSize; b++)
-        {
-            // Extract rows as Vector<T> for Engine.DotProduct
-            var row1 = new Vector<T>(dim);
-            var row2 = new Vector<T>(dim);
-            for (int d = 0; d < dim; d++)
-            {
-                row1[d] = z1Norm[b, d];
-                row2[d] = z2Norm[b, d];
-            }
-            totalSim = NumOps.Add(totalSim, Engine.DotProduct(row1, row2));
-        }
-
-        return NumOps.Divide(totalSim, NumOps.FromDouble(batchSize));
+        // Mean over the batch of the dot product of normalized pairs
+        var products = Engine.TensorMultiply(L2Normalize(z1), L2Normalize(z2));
+        return NumOps.Divide(Engine.TensorSum(products), NumOps.FromDouble(batchSize));
     }
 
     private Tensor<T> L2Normalize(Tensor<T> tensor)
     {
-        var batchSize = tensor.Shape[0];
-        var dim = tensor.Shape[1];
-        var result = new T[batchSize * dim];
-
-        for (int i = 0; i < batchSize; i++)
-        {
-            // Extract row as Vector<T> for Engine.DotProduct
-            var row = new Vector<T>(dim);
-            for (int j = 0; j < dim; j++)
-            {
-                row[j] = tensor[i, j];
-            }
-
-            var sumSquared = Engine.DotProduct(row, row);
-            var norm = NumOps.Sqrt(NumOps.Add(sumSquared, NumOps.FromDouble(1e-8)));
-
-            for (int j = 0; j < dim; j++)
-            {
-                result[i * dim + j] = NumOps.Divide(row[j], norm);
-            }
-        }
-
-        return new Tensor<T>(result, [batchSize, dim]);
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        // x / sqrt(sum(x^2) + 1e-8) per row
+        var sumSquared = Engine.ReduceSum(Engine.TensorSquare(tensor), new[] { 1 }, keepDims: true);
+        var norm = Engine.TensorSqrt(Engine.TensorAddScalar(sumSquared, ObjectiveOps.Epsilon<T>(1e-8)));
+        return Engine.TensorDivide(tensor, norm);
     }
 
     private Tensor<T> ComputeCovarianceMatrix(Tensor<T> representations)
     {
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
         var batchSize = representations.Shape[0];
-        var dim = representations.Shape[1];
 
-        // Compute mean
-        var mean = new T[dim];
-        for (int d = 0; d < dim; d++)
-        {
-            for (int b = 0; b < batchSize; b++)
-            {
-                mean[d] = NumOps.Add(mean[d], representations[b, d]);
-            }
-            mean[d] = NumOps.Divide(mean[d], NumOps.FromDouble(batchSize));
-        }
-
-        // Compute covariance
-        var cov = new T[dim * dim];
-        for (int i = 0; i < dim; i++)
-        {
-            for (int j = 0; j <= i; j++)
-            {
-                T sum = NumOps.Zero;
-                for (int b = 0; b < batchSize; b++)
-                {
-                    var diff_i = NumOps.Subtract(representations[b, i], mean[i]);
-                    var diff_j = NumOps.Subtract(representations[b, j], mean[j]);
-                    sum = NumOps.Add(sum, NumOps.Multiply(diff_i, diff_j));
-                }
-
-                cov[i * dim + j] = NumOps.Divide(sum, NumOps.FromDouble(batchSize - 1));
-                cov[j * dim + i] = cov[i * dim + j]; // Symmetric
-            }
-        }
-
-        return new Tensor<T>(cov, [dim, dim]);
+        // (X - mean)^T (X - mean) / (batchSize - 1)
+        var centered = Engine.TensorSubtract(representations,
+            Engine.ReduceMean(representations, new[] { 0 }, keepDims: true));
+        var scatter = Engine.TensorMatMul(Engine.TensorTranspose(centered), centered);
+        return Engine.TensorDivideScalar(scatter, NumOps.FromDouble(batchSize - 1));
     }
 }
