@@ -71,7 +71,7 @@ public partial class LinearEmbeddingModel : ModelBase<double, Matrix<double>, Te
         _inputDim = inputDim;
         _embeddingDim = embeddingDim;
         _learningRate = learningRate;
-        int parameterCount = ParameterCount(inputDim, embeddingDim);
+        int parameterCount = CheckedParameterCount(inputDim, embeddingDim);
         // Distinct values, so every embedding coordinate responds differently to the input from the start.
         _parameters = AiDotNetEngine.Current.TensorMultiplyScalar(
             AiDotNetEngine.Current.TensorArange<double>(1.0, parameterCount + 1.0, 1.0), 0.01).ToVector();
@@ -81,7 +81,7 @@ public partial class LinearEmbeddingModel : ModelBase<double, Matrix<double>, Te
     /// Number of parameters (W then b), computed in 64-bit so a shape whose count cannot fit in one vector is
     /// rejected instead of wrapping to a smaller int.
     /// </summary>
-    private static int ParameterCount(int inputDim, int embeddingDim)
+    private static int CheckedParameterCount(int inputDim, int embeddingDim)
     {
         long count = (long)embeddingDim * inputDim + embeddingDim;
         if (count > int.MaxValue)
@@ -287,7 +287,7 @@ public partial class LinearEmbeddingModel : ModelBase<double, Matrix<double>, Te
         }
 
         var parts = content.Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries);
-        int expectedCount = ParameterCount(_inputDim, _embeddingDim);
+        int expectedCount = CheckedParameterCount(_inputDim, _embeddingDim);
         if (parts.Length != expectedCount)
         {
             throw new InvalidDataException(
