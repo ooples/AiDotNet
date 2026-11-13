@@ -172,15 +172,16 @@ public static class SegmentationTensorOps
         if (sigma <= 0) throw new ArgumentOutOfRangeException(nameof(sigma), "Must be positive.");
 
         var engine = AiDotNetEngine.Current;
-        var numOps = MathHelper.GetNumericOperations<T>();
 
-        // exp(-(dx^2 + dy^2) / (2 sigma^2)) with dx a column ramp and dy a row ramp, broadcast to [H, W].
-        var dx = engine.TensorSubtractScalar(engine.TensorArange<T>(0, width, 1), numOps.FromDouble(cx));
-        var dy = engine.TensorSubtractScalar(engine.TensorArange<T>(0, height, 1), numOps.FromDouble(cy));
+        // exp(-(dx^2 + dy^2) / (2 sigma^2)) with dx a column ramp and dy a row ramp, broadcast to [H, W]. The
+        // pixel coordinates are evaluated in double and the finished mask is converted to T once: a coordinate
+        // ramp held in T loses whole pixels in half precision past 2048 (2049 rounds to 2048).
+        var dx = engine.TensorSubtractScalar(engine.TensorArange<double>(0, width, 1), cx);
+        var dy = engine.TensorSubtractScalar(engine.TensorArange<double>(0, height, 1), cy);
         var dx2 = engine.TensorBroadcastTo(engine.Reshape(engine.TensorSquare(dx), [1, width]), [height, width]);
         var dy2 = engine.TensorBroadcastTo(engine.Reshape(engine.TensorSquare(dy), [height, 1]), [height, width]);
-        var scaled = engine.TensorMultiplyScalar(engine.TensorAdd(dx2, dy2), numOps.FromDouble(-1.0 / (2.0 * sigma * sigma)));
-        return engine.TensorExp(scaled);
+        var scaled = engine.TensorMultiplyScalar(engine.TensorAdd(dx2, dy2), -1.0 / (2.0 * sigma * sigma));
+        return engine.TensorExp(scaled).Cast<T>();
     }
 
     /// <summary>
