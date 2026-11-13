@@ -268,14 +268,7 @@ public partial class AlignTTS<T> : TtsModelBase<T>, IAcousticModel<T>, ITraining
         return Engine.TensorMultiplyScalar(Engine.TensorAddScalar(sum, log2pi), NumOps.FromDouble(-0.5));
     }
 
-    private int[] ViterbiDurations(Tensor<T> logLikelihood)
-    {
-        int characters = logLikelihood.Shape[0], frames = logLikelihood.Shape[1];
-        var scores = new double[characters, frames];
-        for (int s = 0; s < characters; s++)
-            for (int t = 0; t < frames; t++) scores[s, t] = NumOps.ToDouble(logLikelihood[s, t]);
-        return MonotonicAlignment.MaximumPath(scores);
-    }
+    private int[] ViterbiDurations(Tensor<T> logLikelihood) => MonotonicDurations(logLikelihood);
 
     /// <inheritdoc />
     protected override bool TryApplyLearningRule(Tensor<T> input, Tensor<T> expected)

@@ -799,6 +799,90 @@ public abstract partial class TtsModelBase<T> : NeuralNetworkBase<T>, IShapeCont
     }
 
     /// <summary>
+    /// The Glow-TTS search scores <c>−½ ‖y_j − μ_i‖²</c> <c>[tokens, frames]</c> of token means <c>[tokens, ≥ C]</c>
+    /// against frames <c>[frames, C]</c> (the first C channels of the means), off the gradient tape.
+    /// </summary>
+    protected Tensor<T> AlignmentScores(Tensor<T> means, Tensor<T> frames)
+    {
+        Guard.NotNull(means);
+        Guard.NotNull(frames);
+        int tokens = means.Shape[0], count = frames.Shape[0], channels = frames.Shape[1];
+        using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
+        {
+            var mu = Engine.TensorSlice(means, new[] { 0, 0 }, new[] { tokens, channels });
+            // [tokens, frames, C] pairwise differences, squared and summed over the channels.
+            var tiledMeans = Engine.TensorTile(Engine.Reshape(mu, new[] { tokens, 1, channels }), new[] { 1, count, 1 });
+            var tiledFrames = Engine.TensorTile(Engine.Reshape(frames, new[] { 1, count, channels }), new[] { tokens, 1, 1 });
+            var squared = Engine.ReduceSum(Engine.TensorSquare(Engine.TensorSubtract(tiledFrames, tiledMeans)), new[] { 2 }, keepDims: false);
+            return Engine.TensorMultiplyScalar(squared, NumOps.FromDouble(-0.5));
+        }
+    }
+
+    /// <summary>
+    /// Monotonic alignment search (Glow-TTS, Kim et al. 2020, Alg. 1): the durations of the monotonic, surjective
+    /// alignment of <c>[tokens, frames]</c> scores with the highest total. Q[i, j] = s[i, j] + max(Q[i, j−1], Q[i−1, j−1])
+    /// one frame at a time with engine ops, a tie staying on the same token; then the path is traced back from the last
+    /// token at the last frame.
+    /// </summary>
+    protected int[] MonotonicDurations(Tensor<T> scores) => MonotonicDurations(Engine, scores);
+
+    /// <summary>The search of <see cref="MonotonicDurations(Tensor{T})"/> on <paramref name="engine"/>.</summary>
+    internal static int[] MonotonicDurations(AiDotNet.Tensors.Engines.IEngine engine, Tensor<T> scores)
+    {
+        Guard.NotNull(engine);
+        var ops = MathHelper.GetNumericOperations<T>();
+        Guard.NotNull(scores);
+        if (scores.Rank != 2) throw new ArgumentException("Expected [tokens, frames] scores.", nameof(scores));
+        int tokens = scores.Shape[0], frames = scores.Shape[1];
+        if (tokens == 0 || frames < tokens)
+            throw new ArgumentException($"A monotonic alignment of {tokens} tokens needs at least that many frames; got {frames}.", nameof(scores));
+
+        // The band of cells reachable from (0, 0) that can still reach (tokens − 1, frames − 1), frame-major.
+        var bandBits = new int[frames * tokens];
+        for (int frame = 0; frame < frames; frame++)
+            for (int token = Math.Max(0, tokens - frames + frame); token <= Math.Min(tokens - 1, frame); token++)
+                bandBits[frame * tokens + token] = 1;
+        var band = new Tensor<int>(bandBits, new[] { frames, tokens }).Cast<T>();
+        var byFrame = engine.TensorTranspose(scores);                                                   // [frames, tokens]
+        // x − x is NaN exactly where x is NaN or infinite; only the band's scores are read.
+        var nonFinite = engine.TensorWhere(band, engine.TensorSubtract(byFrame, byFrame), Tensor<T>.CreateDefault(new[] { frames, tokens }, ops.Zero));
+        if (ops.IsNaN(engine.TensorSum(nonFinite)))
+            throw new ArgumentException("Alignment scores must be finite.", nameof(scores));
+
+        T negativeInfinity = ops.FromDouble(double.NegativeInfinity);
+        var unreachable = Tensor<T>.CreateDefault(new[] { tokens }, negativeInfinity);
+        var firstPredecessor = Tensor<T>.CreateDefault(new[] { 1 }, negativeInfinity);
+        var start = engine.TensorWhere(engine.TensorEquals(engine.TensorArange<T>(0, tokens), ops.Zero),
+            Tensor<T>.CreateDefault(new[] { tokens }, ops.Zero), unreachable);                     // [0, −∞, …]
+        var previous = unreachable;
+        var moves = new Tensor<T>[frames];
+        for (int frame = 0; frame < frames; frame++)
+        {
+            var step = tokens == 1
+                ? firstPredecessor
+                : engine.TensorConcatenate(new[] { firstPredecessor, engine.TensorSlice(previous, new[] { 0 }, new[] { tokens - 1 }) }, 0);
+            var advance = engine.TensorGreaterThan(step, previous);
+            var best = frame == 0 ? start : engine.TensorWhere(advance, step, previous);
+            var inBand = engine.Reshape(engine.TensorSlice(band, new[] { frame, 0 }, new[] { 1, tokens }), new[] { tokens });
+            var score = engine.Reshape(engine.TensorSlice(byFrame, new[] { frame, 0 }, new[] { 1, tokens }), new[] { tokens });
+            previous = engine.TensorWhere(inBand, engine.TensorAdd(score, best), unreachable);
+            moves[frame] = engine.TensorMultiply(advance, inBand);
+        }
+
+        var advances = engine.TensorStack(moves, 0).Cast<int>().ToArray();                              // [frames, tokens]
+        var durations = new int[tokens];
+        int activeToken = tokens - 1;
+        for (int frame = frames - 1; frame >= 0; frame--)
+        {
+            durations[activeToken]++;
+            if (advances[frame * tokens + activeToken] != 0) activeToken--;
+        }
+        if (activeToken != 0 || durations.Any(d => d <= 0))
+            throw new InvalidOperationException("Monotonic alignment failed to cover every token.");
+        return durations;
+    }
+
+    /// <summary>
     /// L2-normalizes a tensor.
     /// </summary>
     /// <param name="tensor">Tensor to normalize.</param>
