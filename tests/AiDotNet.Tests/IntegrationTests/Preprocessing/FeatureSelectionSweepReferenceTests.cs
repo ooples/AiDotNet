@@ -442,4 +442,525 @@ public class FeatureSelectionSweepReferenceTests
 
         Assert.Equal(Math.Pow(2, -11), std.GetFlat(0), Tolerance);
     }
+
+    // ---- Review fixes: Half (and other narrow-T) traps in the converted selectors ----
+
+    private static Matrix<TNum> Build<TNum>(int n, Func<double, TNum> convert, params Func<int, double>[] columns)
+    {
+        var m = new Matrix<TNum>(n, columns.Length);
+        for (int i = 0; i < n; i++)
+            for (int j = 0; j < columns.Length; j++)
+                m[i, j] = convert(columns[j](i));
+        return m;
+    }
+
+    private static Vector<TNum> BuildVector<TNum>(int n, Func<double, TNum> convert, Func<int, double> value)
+    {
+        var v = new Vector<TNum>(n);
+        for (int i = 0; i < n; i++)
+            v[i] = convert(value(i));
+        return v;
+    }
+
+    private static Matrix<Half> HalfMatrix(int n, params Func<int, double>[] columns) => Build(n, d => (Half)d, columns);
+    private static Vector<Half> HalfVector(int n, Func<int, double> value) => BuildVector(n, d => (Half)d, value);
+    private static Matrix<double> DoubleMatrix(int n, params Func<int, double>[] columns) => Build(n, d => d, columns);
+    private static Vector<double> DoubleVector(int n, Func<int, double> value) => BuildVector(n, d => d, value);
+
+    private static double[] ToDoubles(Vector<Half>? values)
+    {
+        Assert.NotNull(values);
+        return values.ToArray().Select(h => (double)h).ToArray();
+    }
+
+    private static void AssertAllClose(double[] expected, double[] actual, double tolerance)
+    {
+        Assert.Equal(expected.Length, actual.Length);
+        for (int j = 0; j < expected.Length; j++)
+            Assert.True(Math.Abs(expected[j] - actual[j]) <= tolerance,
+                $"[{j}]: expected {expected[j]}, actual {actual[j]} (tolerance {tolerance})");
+    }
+
+    // 500 rows of class 0 then 2500 of class 1 (the ImbalancedClasses split) as a target vector
+    private static double ImbalancedLabel(int i) => i < 500 ? 0 : 1;
+
+    private static readonly double[] RidgeColumn0 = { 1, 2, 3, 4, 5, 6 };
+    private static readonly double[] RidgeColumn1 = { 2, 1, 2, 1, 2, 1 };
+    private static readonly double[] RidgeTarget = { 1, 3, 2, 5, 4, 6 };
+
+    [Fact(Timeout = 120000)]
+    public async Task RidgeFS_Half_SolvesTheNormalEquationsInsteadOfThrowing()
+    {
+        // numpy.linalg.solve(Xc'Xc + I, Xc'yc) for the centred data = [0.761364, -0.943182]. The engine Cholesky
+        // runs only in float and double; a Half system threw NotSupportedException.
+        await Task.CompletedTask;
+        var selector = new AiDotNet.Preprocessing.FeatureSelection.Embedded.RidgeFS<Half>(nFeaturesToSelect: 1, alpha: 1.0);
+        selector.Fit(HalfMatrix(6, i => RidgeColumn0[i], i => RidgeColumn1[i]), HalfVector(6, i => RidgeTarget[i]));
+
+        AssertAllClose(new[] { 0.761364, -0.943182 }, ToDoubles(selector.Coefficients), 2e-3);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task RidgeSelector_Half_MatchesTheDoubleSolveInsteadOfThrowing()
+    {
+        // The LU solve runs only in float and double; a Half system threw NotSupportedException.
+        await Task.CompletedTask;
+        var reference = new RidgeSelector(nFeaturesToSelect: 1, alpha: 1.0);
+        reference.Fit(DoubleMatrix(6, i => RidgeColumn0[i], i => RidgeColumn1[i]), DoubleVector(6, i => RidgeTarget[i]));
+        var selector = new AiDotNet.Preprocessing.FeatureSelection.Embedded.RidgeSelector<Half>(nFeaturesToSelect: 1, alpha: 1.0);
+        selector.Fit(HalfMatrix(6, i => RidgeColumn0[i], i => RidgeColumn1[i]), HalfVector(6, i => RidgeTarget[i]));
+
+        Assert.NotNull(reference.Coefficients);
+        AssertAllClose(reference.Coefficients.ToArray(), ToDoubles(selector.Coefficients), 1e-2);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task PartialCorrelation_Half_MatchesTheDoublePrecisionMatrix()
+    {
+        // The precision matrix comes from an LU factorization, which ran in T and threw for Half.
+        await Task.CompletedTask;
+        double[] a = { 1, 2, 3, 4, 5, 6, 7, 8 };
+        double[] b = { 2, 1, 4, 3, 6, 5, 8, 7 };
+        double[] c = { 1, 1, 2, 3, 5, 8, 13, 21 };
+        double[] y = { 3, 2, 6, 7, 9, 12, 16, 22 };
+        var reference = new AiDotNet.Preprocessing.FeatureSelection.Filter.Correlation.PartialCorrelation<double>(nFeaturesToSelect: 1);
+        reference.Fit(DoubleMatrix(8, i => a[i], i => b[i], i => c[i]), DoubleVector(8, i => y[i]));
+        var selector = new AiDotNet.Preprocessing.FeatureSelection.Filter.Correlation.PartialCorrelation<Half>(nFeaturesToSelect: 1);
+        selector.Fit(HalfMatrix(8, i => a[i], i => b[i], i => c[i]), HalfVector(8, i => y[i]));
+
+        Assert.NotNull(reference.PartialCorrelations);
+        AssertAllClose(reference.PartialCorrelations.ToArray(), ToDoubles(selector.PartialCorrelations), 1e-2);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task SpearmanCorrelation_Half_RanksPastTheHalfSumOfSquaresLimit()
+    {
+        // scipy.stats.spearmanr(range(400), range(400)) = 1. The centred rank sum of squares n (n^2 - 1) / 12 =
+        // 5.3e6 overflows Half (max 65504), which turned the correlation into inf / inf = NaN.
+        await Task.CompletedTask;
+        var selector = new AiDotNet.Preprocessing.FeatureSelection.Filter.Correlation.SpearmanCorrelation<Half>(nFeaturesToSelect: 1);
+        selector.Fit(HalfMatrix(400, i => i), HalfVector(400, i => i));
+
+        Assert.Equal(1.0, ToDoubles(selector.CorrelationScores)[0], 2e-3);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task CorrelationHelpers_Half_DoNotOverflowTheSumsOfSquares()
+    {
+        // numpy.corrcoef(range(400), 2 * range(400)) = 1; sum (x - mean)^2 = 5.3e6 overflows Half.
+        await Task.CompletedTask;
+        var x = HalfTensor(new[] { 400, 1 }, i => i);
+        var y = HalfTensor(new[] { 400 }, i => i);
+        var pair = HalfTensor(new[] { 400, 2 }, i => (i % 2 + 1) * (i / 2));
+
+        Assert.Equal(1.0, (double)AiDotNet.Preprocessing.PreprocessingTensorOps.CorrelationsWithDenominatorGuard(x, y).GetFlat(0), 2e-3);
+        Assert.Equal(1.0, (double)AiDotNet.Preprocessing.FeatureSelection.FeatureSelectionTensorOps.CorrelationMatrix(pair).GetFlat(1), 2e-3);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task ColumnStd_Half_SumsMoreThan2048Deviations()
+    {
+        // numpy.std([0, 2] * 1500) = 1 and the sum of squared deviations is 3000. Summed in Half the unit squares
+        // stop growing at 2048 (2049 rounds back to 2048).
+        await Task.CompletedTask;
+        var x = HalfTensor(new[] { 3000, 1 }, i => 2 * (i % 2));
+
+        Assert.Equal(3000.0, (double)AiDotNet.Preprocessing.FeatureSelection.FeatureSelectionTensorOps.ColumnSumSquaredDeviations(x).GetFlat(0), 2.0);
+        Assert.Equal(1.0, (double)AiDotNet.Preprocessing.FeatureSelection.FeatureSelectionTensorOps.ColumnStd(x).GetFlat(0), 1e-3);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task DistanceCorrelation_Half_VarianceProductDoesNotOverflow()
+    {
+        // dCor(x, x) = 1 (Szekely, Rizzo and Bakirov 2007). For x = 0..99, dVar^2(x) = 444.56, so the product of the
+        // two distance variances (197630) overflows Half, and the mean of the 10000 squared centred distances
+        // (sum 4.4e6) overflowed before that.
+        await Task.CompletedTask;
+        var correlationSelector = new AiDotNet.Preprocessing.FeatureSelection.Filter.Correlation.DistanceCorrelation<Half>(nFeaturesToSelect: 1);
+        correlationSelector.Fit(HalfMatrix(100, i => i), HalfVector(100, i => i));
+        var filterSelector = new AiDotNet.Preprocessing.FeatureSelection.Filter.DistanceCorrelation<Half>(nFeaturesToSelect: 1);
+        filterSelector.Fit(HalfMatrix(100, i => i), HalfVector(100, i => i));
+
+        Assert.Equal(1.0, ToDoubles(correlationSelector.DistCorrelations)[0], 2e-3);
+        Assert.Equal(1.0, ToDoubles(filterSelector.DistanceCorrelations)[0], 2e-3);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task DiverseEnsemble_Half_DistanceCorrelationMethodCounts()
+    {
+        // Two features, so every method normalizes to exactly 1 for the better feature and 0 for the other. x0 = y
+        // wins the correlation, mutual information and distance correlation methods; the F test (100 classes, no
+        // within-class degrees of freedom) and the variance (x1 is a permutation of x0) have zero range and are
+        // skipped. Average over the 5 methods: x0 = 3 / 5. The Half distance correlation overflowed to NaN and
+        // dropped out, giving 2 / 5.
+        await Task.CompletedTask;
+        var selector = new AiDotNet.Preprocessing.FeatureSelection.Ensemble.DiverseEnsemble<Half>(nFeaturesToSelect: 1, randomState: 7);
+        selector.Fit(HalfMatrix(100, i => i, i => (i * 37) % 100), HalfVector(100, i => i));
+
+        var scores = ToDoubles(selector.AggregatedScores);
+        Assert.Equal(0.6, scores[0], 1e-3);
+        Assert.Equal(0.0, scores[1], 1e-3);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task BootstrapSelector_Half_CorrelationDenominatorDoesNotOverflow()
+    {
+        // x1 = y = +/-17, so corr(x1, y) = 1 on every bootstrap sample; x0 = 0, 0.1, 0.2 repeating is nearly
+        // uncorrelated with y. The variance product 289 * 289 = 83521 overflows Half, which made corr(x1, y) = 0 and
+        // let x0 win every bootstrap.
+        await Task.CompletedTask;
+        var selector = new AiDotNet.Preprocessing.FeatureSelection.CrossValidation.BootstrapSelector<Half>(
+            nFeaturesToSelect: 1, nBootstraps: 20, sampleRatio: 0.8, randomState: 1);
+        selector.Fit(HalfMatrix(60, i => 0.1 * (i % 3), i => i % 2 == 0 ? 17 : -17), HalfVector(60, i => i % 2 == 0 ? 17 : -17));
+
+        AssertAllClose(new[] { 0.0, 1.0 }, ToDoubles(selector.StabilityScores), 1e-9);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task EmbeddedPermutationImportance_Half_DefaultScorerDoesNotOverflow()
+    {
+        // y = x (0..49 twice) is predicted exactly, so R^2 = 1. sxx = syy = 20825 and their product overflows Half,
+        // which zeroed the weights and gave R^2 = 0.
+        await Task.CompletedTask;
+        var selector = new AiDotNet.Preprocessing.FeatureSelection.Embedded.PermutationImportance<Half>(
+            nFeaturesToSelect: 1, nRepeats: 1, randomState: 42);
+        selector.Fit(HalfMatrix(100, i => i % 50), HalfVector(100, i => i % 50));
+
+        Assert.Equal(1.0, (double)selector.BaselineScore, 1e-2);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task DropColumnImportance_Half_CrossValidatedR2DoesNotOverflow()
+    {
+        // y = x (0..49 twice): every fold's predictor is exact, so the mean R^2 is 1. sxx * yVar * nTrain
+        // (16660 * 208 * 80) overflows Half, which zeroed the correlations and gave a negative R^2.
+        await Task.CompletedTask;
+        var selector = new AiDotNet.Preprocessing.FeatureSelection.Embedded.DropColumnImportance<Half>(nFeaturesToSelect: 1);
+        selector.Fit(HalfMatrix(100, i => i % 50), HalfVector(100, i => i % 50));
+
+        Assert.Equal(1.0, (double)selector.BaselineScore, 1e-2);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task NormalizedCompressionSelector_Half_CountsTheJointHistogramPast2048()
+    {
+        // x = y = class (500 / 2500): MI = H(y) = 0.650022 bits. The Half joint-count matmul stopped at 2048.
+        await Task.CompletedTask;
+        var selector = new NormalizedCompressionSelector<Half>(nFeaturesToSelect: 1, nBins: 2);
+        selector.Fit(HalfMatrix(3000, ImbalancedLabel), HalfVector(3000, ImbalancedLabel));
+
+        Assert.Equal(0.650022, ToDoubles(selector.NCDScores)[0], 2e-3);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task TextFeatureSelector_Half_CountsDocumentsPast2048()
+    {
+        // The term occurs in the 2500 class-1 documents: document frequency 2500 / 3000 = 0.833333 and, perfectly
+        // associated with the class, chi^2 = n phi^2 = 3000 (scipy.stats.chi2_contingency(correction=False)). Half
+        // sums of the 0/1 presence stopped at 2048.
+        await Task.CompletedTask;
+        var selector = new AiDotNet.Preprocessing.FeatureSelection.DomainSpecific.TextFeatureSelector<Half>(nFeaturesToSelect: 1);
+        selector.Fit(HalfMatrix(3000, ImbalancedLabel), HalfVector(3000, ImbalancedLabel));
+
+        Assert.Equal(2500.0 / 3000.0, ToDoubles(selector.DocumentFrequencies)[0], 1e-3);
+        Assert.Equal(3000.0, ToDoubles(selector.FeatureScores)[0], 2.0);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task FClassification_Half_CountsClassSizesPast2048()
+    {
+        // Class 0: 500 rows of 1. Class 1: 2500 rows of 0 except 10, -10, 10, -10.
+        // sklearn.feature_selection.f_classif gives F = 3122.916667. A Half class size of 2048 gives 3028.8.
+        await Task.CompletedTask;
+        var selector = new AiDotNet.Preprocessing.FeatureSelection.Filter.Classification.FClassification<Half>(nFeaturesToSelect: 1);
+        selector.Fit(HalfMatrix(3000, i => i < 500 ? 1 : i < 504 ? (i % 2 == 0 ? 10 : -10) : 0), HalfVector(3000, ImbalancedLabel));
+
+        Assert.Equal(3122.916667, ToDoubles(selector.FScores)[0], 10.0);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task MutualInfoClassification_Half_CountsClassSizesPast2048()
+    {
+        // x = class: MI = H(y) = 0.450561 nats. A Half class probability of 2048 / 3000 gave 0.617.
+        await Task.CompletedTask;
+        var selector = new AiDotNet.Preprocessing.FeatureSelection.Filter.Classification.MutualInfoClassification<Half>(nFeaturesToSelect: 1);
+        selector.Fit(HalfMatrix(3000, ImbalancedLabel), HalfVector(3000, ImbalancedLabel));
+
+        Assert.Equal(0.450561, ToDoubles(selector.MIScores)[0], 2e-3);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task GiniImpuritySelection_Half_CountsSplitSidesPast2048()
+    {
+        // Class 0: 250 rows at 0, 250 at 1. Class 1: 100 at 0, 2400 at 1. Every threshold splits {0} | {1}:
+        // parent Gini 0.277778 minus the weighted child Gini 0.198563 = 0.079215. A Half class total of 2048
+        // gives 0.082452.
+        await Task.CompletedTask;
+        var selector = new AiDotNet.Preprocessing.FeatureSelection.Filter.GiniImpuritySelection<Half>(nFeaturesToSelect: 1);
+        selector.Fit(HalfMatrix(3000, i => i < 250 || (i >= 500 && i < 600) ? 0 : 1), HalfVector(3000, ImbalancedLabel));
+
+        Assert.Equal(0.079215, ToDoubles(selector.GiniReductionScores)[0], 5e-4);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task KnockoffFilter_Half_CountsTheKnockoffPlusTermsPast2048()
+    {
+        // W = 1 for 2300 features and -1 for 200. At t = 1 the knockoff+ estimate is (1 + 200) / 2300 = 0.0874 <=
+        // fdr = 0.09, so the threshold is 1. A Half count of 2048 positives gives 201 / 2048 = 0.098 > 0.09 and no
+        // valid threshold.
+        await Task.CompletedTask;
+        const int p = 2500;
+        var importances = new Vector<Half>(2 * p);
+        for (int j = 0; j < p; j++)
+        {
+            importances[j] = (Half)(j < 2300 ? 1 : 0);
+            importances[p + j] = (Half)(j < 2300 ? 0 : 1);
+        }
+
+        var selector = new AiDotNet.Preprocessing.FeatureSelection.Filter.HighDimensional.KnockoffFilter<Half>(
+            fdr: 0.09, importanceFunc: (_, _) => importances, randomState: 3);
+        var data = new Matrix<Half>(2, p);
+        for (int j = 0; j < p; j++)
+            data[1, j] = (Half)1;
+        selector.Fit(data, HalfVector(2, i => i));
+
+        Assert.Equal(1.0, (double)selector.Threshold, Tolerance);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task EnsembleFS_Half_RanksPast2048StayExact()
+    {
+        // Each of the 4 base methods votes for exactly its top 2060 ranks, so the votes sum to 4 * 2060 = 8240.
+        // Ranks held in Half round 2059 up to 2060, so only 2059 ranks per method passed rank < 2060.
+        await Task.CompletedTask;
+        const int p = 2100;
+        var selector = new AiDotNet.Preprocessing.FeatureSelection.Ensemble.EnsembleFS<Half>(nFeaturesToSelect: 2060);
+        selector.Fit(new Matrix<Half>(10, p), HalfVector(10, i => i));
+
+        Assert.Equal(8240.0, ToDoubles(selector.AggregatedScores).Sum(), Tolerance);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task EnsembleFeatureSelector_Half_BordaPointsPast2048StayExact()
+    {
+        // One selection [1, 0, 2, 3, ...] of length 2100: feature 1 gets 2100 Borda points and feature 0 gets
+        // 2099. In Half 2099 rounds to 2100, the two tie, and the lower index (0) was selected.
+        await Task.CompletedTask;
+        const int p = 2100;
+        var order = new[] { 1, 0 }.Concat(Enumerable.Range(2, p - 2)).ToArray();
+        var selector = new AiDotNet.Preprocessing.FeatureSelection.Ensemble.EnsembleFeatureSelector<Half>(
+            nFeaturesToSelect: 1, selectors: new System.Collections.Generic.List<Func<Matrix<Half>, Vector<Half>, int[]>> { (_, _) => order });
+        selector.Fit(new Matrix<Half>(2, p), HalfVector(2, i => i));
+
+        Assert.Equal(new[] { 1 }, selector.SelectedIndices);
+    }
+
+    // 1 at every 10th position, else 0
+    private static double SparseSpikes(int i) => i % 10 == 0 ? 1 : 0;
+
+    [Fact(Timeout = 120000)]
+    public async Task ApproximateEntropySelector_Half_CountsTemplateMatchesPast2048()
+    {
+        // Pincus (1991) ApEn(m = 2, r = 0.2 std) of 3000 samples of the spike train = 0.301062 (direct double
+        // evaluation). About 2400 templates match the all-zero template; summed in Half that stopped at 2048 (0.19).
+        await Task.CompletedTask;
+        var selector = new AiDotNet.Preprocessing.FeatureSelection.Entropy.ApproximateEntropySelector<Half>(nFeaturesToSelect: 1);
+        selector.Fit(HalfMatrix(3000, SparseSpikes));
+
+        Assert.Equal(0.301062, ToDoubles(selector.ApEnValues)[0], 2e-3);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task SampleEntropySelector_Half_CountsTemplatePairsPast2048()
+    {
+        // Richman and Moorman (2000) SampEn(m = 2, r = 0.2 std) of the first 300 spike-train samples = 0.233166
+        // (direct double evaluation). Both pair counts exceed 2048; summed in Half they stopped at the same value
+        // and gave -ln(1) = 0.
+        await Task.CompletedTask;
+        var selector = new AiDotNet.Preprocessing.FeatureSelection.Entropy.SampleEntropySelector<Half>(nFeaturesToSelect: 1);
+        selector.Fit(HalfMatrix(300, SparseSpikes));
+
+        Assert.Equal(0.233166, ToDoubles(selector.SampEnValues)[0], 2e-3);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task PermutationEntropySelector_Half_CountsPatternsPast2048()
+    {
+        // x = i mod 10 (3000 samples, m = 3): 2400 increasing windows and 299 / 299 of the two wrap-around patterns.
+        // Normalized permutation entropy (Bandt and Pompe 2002) = 0.356031. The increasing-pattern count stopped at
+        // 2048 in Half.
+        await Task.CompletedTask;
+        var selector = new AiDotNet.Preprocessing.FeatureSelection.Entropy.PermutationEntropySelector<Half>(nFeaturesToSelect: 1);
+        selector.Fit(HalfMatrix(3000, i => i % 10));
+
+        Assert.Equal(0.356031, ToDoubles(selector.EntropyValues)[0], 1e-3);
+    }
+
+    // Quadratic residues mod 11: an integer series exact in Half with an irregular pattern
+    private static double QuadraticResidue(int i) => (double)((long)i * i % 11);
+
+    [Fact(Timeout = 120000)]
+    public async Task LyapunovSelector_Half_MatchesDoubleBeyond2048Points()
+    {
+        // About 10000 divergence terms are averaged: counted in Half they stopped at 2048, and time indices above
+        // 2048 held in Half broke the temporal separation test.
+        await Task.CompletedTask;
+        const int n = 2200;
+        var reference = new AiDotNet.Preprocessing.FeatureSelection.Complexity.LyapunovSelector<double>(nFeaturesToSelect: 1);
+        reference.Fit(DoubleMatrix(n, QuadraticResidue));
+        var selector = new AiDotNet.Preprocessing.FeatureSelection.Complexity.LyapunovSelector<Half>(nFeaturesToSelect: 1);
+        selector.Fit(HalfMatrix(n, QuadraticResidue));
+
+        Assert.NotNull(reference.LyapunovValues);
+        AssertAllClose(reference.LyapunovValues.ToArray(), ToDoubles(selector.LyapunovValues), 1e-2);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task FractalDimensionSelector_Half_CurveLengthNormalizerDoesNotOverflow()
+    {
+        // Higuchi's normalizer (n - 1) / (k^2 numSegments): at k = 10, k^2 numSegments = 100 * 699 = 69900
+        // overflows Half, which made L(10) = 0 and the log-log slope non-finite.
+        await Task.CompletedTask;
+        const int n = 7000;
+        var reference = new AiDotNet.Preprocessing.FeatureSelection.Complexity.FractalDimensionSelector<double>(nFeaturesToSelect: 1);
+        reference.Fit(DoubleMatrix(n, QuadraticResidue));
+        var selector = new AiDotNet.Preprocessing.FeatureSelection.Complexity.FractalDimensionSelector<Half>(nFeaturesToSelect: 1);
+        selector.Fit(HalfMatrix(n, QuadraticResidue));
+
+        Assert.NotNull(reference.FractalDimensions);
+        AssertAllClose(reference.FractalDimensions.ToArray(), ToDoubles(selector.FractalDimensions), 3e-2);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task StabilitySelection_Half_CountsSelectionsPast2048Iterations()
+    {
+        // The base selector always picks feature 0, so its selection probability is 2100 / 2100 = 1. A Half count
+        // stopped at 2048 (0.975).
+        await Task.CompletedTask;
+        var selector = new AiDotNet.Preprocessing.FeatureSelection.Ensemble.StabilitySelection<Half>(
+            nFeaturesToSelect: 1, nIterations: 2100, baseSelector: (_, _, _) => new[] { 0 }, randomState: 5);
+        selector.Fit(HalfMatrix(4, i => i, i => -i), HalfVector(4, i => i));
+
+        Assert.Equal(1.0, ToDoubles(selector.SelectionProbabilities)[0], Tolerance);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task HierarchicalFS_Half_MergeIndicesPast2048StayExact()
+    {
+        // Features 2049 and 2051 are identical (distance 0) and merge first; feature 5 = 10 v + noise is next closest
+        // to that cluster, so the second merge adds 5 and leaves feature 2048 (an unrelated low-variance column) on its
+        // own. Positions held in Half map 2049 to 2048, so the first merge also overwrote feature 2048's distances
+        // with the cluster's, merged 5 with 2048, and dropped 2048 for the higher-variance 5.
+        await Task.CompletedTask;
+        const int n = 12;
+        const int p = 2052;
+        var random = RandomHelper.CreateSeededRandom(11);
+        var values = new double[n, p];
+        for (int i = 0; i < n; i++)
+            for (int j = 0; j < p; j++)
+                values[i, j] = random.NextDouble() * 2 - 1;
+        for (int i = 0; i < n; i++)
+        {
+            values[i, 2051] = values[i, 2049];
+            values[i, 5] = 10 * values[i, 2049] + values[i, 7];
+            values[i, 2048] *= 0.1;
+        }
+
+        var data = new Matrix<Half>(n, p);
+        for (int i = 0; i < n; i++)
+            for (int j = 0; j < p; j++)
+                data[i, j] = (Half)values[i, j];
+
+        var selector = new AiDotNet.Preprocessing.FeatureSelection.Clustering.HierarchicalFS<Half>(nFeaturesToSelect: p - 2);
+        selector.Fit(data);
+
+        Assert.NotNull(selector.SelectedIndices);
+        Assert.Contains(2048, selector.SelectedIndices);
+        Assert.Contains(5, selector.SelectedIndices);
+        Assert.DoesNotContain(2049, selector.SelectedIndices);
+        Assert.DoesNotContain(2051, selector.SelectedIndices);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task ImageFeatureSelector_Half_PixelIndicesPast2048StayExact()
+    {
+        // 50 x 50 image. Pixel 2049 = y scores 1.0, its neighbour 2048 = y / 2 scores 0.85 and pixel 0 = y / 4 scores
+        // 0.775 (0.7 |r| + 0.3 std). Picking 2049 penalizes 2048 to 0.85 (1 - exp(-0.5) / 2) = 0.592, so the top two
+        // are 0 and 2049. Positions held in Half map 2049 to 2048, so 2048 was marked picked and never penalized.
+        await Task.CompletedTask;
+        const int p = 2500;
+        var data = new Matrix<Half>(2, p);
+        data[1, 2049] = (Half)2;
+        data[1, 2048] = (Half)1;
+        data[1, 0] = (Half)0.5;
+        var selector = new AiDotNet.Preprocessing.FeatureSelection.DomainSpecific.ImageFeatureSelector<Half>(
+            nFeaturesToSelect: 2, imageWidth: 50, imageHeight: 50);
+        selector.Fit(data, HalfVector(2, i => 2 * i));
+
+        Assert.Equal(new[] { 0, 2049 }, selector.SelectedIndices);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task GenomicFeatureSelector_Half_ClassMeansDoNotOverflow()
+    {
+        // Class 0 (500 rows) at 15, class 1 (2500 rows) alternating 29 / 31: log2 fold change log2(30 / 15) = 1.
+        // The Half class-1 sum (75000) overflowed to infinity.
+        await Task.CompletedTask;
+        var selector = new AiDotNet.Preprocessing.FeatureSelection.DomainSpecific.GenomicFeatureSelector<Half>(nFeaturesToSelect: 1);
+        selector.Fit(HalfMatrix(3000, i => i < 500 ? 15 : (i % 2 == 0 ? 29 : 31)), HalfVector(3000, ImbalancedLabel));
+
+        Assert.Equal(1.0, ToDoubles(selector.FoldChanges)[0], 2e-3);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task PointBiserial_Half_ClassMeansDoNotOverflow()
+    {
+        // Class 0 alternates 0 / 2 (500 rows), class 1 alternates 30 / 32 (2500 rows): r_pb = 0.996024
+        // (|m1 - m0| / std * sqrt(n0 n1) / n). The Half class-1 sum (77500) overflowed to infinity.
+        await Task.CompletedTask;
+        var selector = new AiDotNet.Preprocessing.FeatureSelection.Filter.Correlation.PointBiserial<Half>(nFeaturesToSelect: 1);
+        selector.Fit(HalfMatrix(3000, i => i < 500 ? 2 * (i % 2) : 30 + 2 * (i % 2)), HalfVector(3000, ImbalancedLabel));
+
+        Assert.Equal(0.996024, ToDoubles(selector.Correlations)[0], 2e-3);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task NaiveBayesSelector_Half_ClassMeansDoNotOverflow()
+    {
+        // Class 0: {0, 2, 0, 2} (mean 1, variance 1). Class 1: 2500 rows alternating 30 / 32 (mean 31, variance 1).
+        // Symmetric Gaussian KL = 0.5 (KL01 + KL10) = (31 - 1)^2 / 2 = 450. The Half class-1 sum (77500) overflowed.
+        await Task.CompletedTask;
+        const int n = 2504;
+        var selector = new AiDotNet.Preprocessing.FeatureSelection.Classification.NaiveBayesSelector<Half>(nFeaturesToSelect: 1);
+        selector.Fit(HalfMatrix(n, i => i < 4 ? 2 * (i % 2) : 30 + 2 * (i % 2)), HalfVector(n, i => i < 4 ? 0 : 1));
+
+        Assert.NotNull(selector.DiscriminativePower);
+        Assert.Equal(450.0, (double)selector.DiscriminativePower[0], 1.0);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task SilhouetteBasedSelector_Half_CountsClassSizesPast2048()
+    {
+        // Class 0: two rows at 3. Class 1: 1500 rows at 0 and 1000 at 1.
+        // sklearn.metrics.silhouette_score = 0.800080. A Half class size of 2048 gives 0.756.
+        await Task.CompletedTask;
+        const int n = 2502;
+        var selector = new SilhouetteBasedSelector<Half>(nFeaturesToSelect: 1);
+        selector.Fit(HalfMatrix(n, i => i < 2 ? 3 : i < 1502 ? 0 : 1), HalfVector(n, i => i < 2 ? 0 : 1));
+
+        Assert.Equal(0.800080, ToDoubles(selector.SilhouetteScores)[0], 2e-3);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task FairFeatureSelector_Half_CountsGroupsPast2048()
+    {
+        // Protected 0 for 2500 rows (median 0, so they form the lower group) and 1 for 500. Feature mean: lower
+        // 1000 / 2500 = 0.4, upper 400 / 500 = 0.8, disparate impact min(0.5, 2) = 0.5. A Half group size of 2048
+        // gives 0.4883 / 0.8 = 0.61.
+        await Task.CompletedTask;
+        var data = HalfMatrix(3000, i => i < 2500 ? 0 : 1, i => i < 100 ? 10 : i >= 2500 && i < 2600 ? 4 : 0);
+        var selector = new FairFeatureSelector<Half>(nFeaturesToSelect: 1, protectedAttributeIndex: 0);
+
+        Assert.Equal(0.5, (double)selector.GetDisparateImpact(data, 1), 1e-3);
+    }
 }
