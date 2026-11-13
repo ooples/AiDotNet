@@ -137,6 +137,28 @@ public class ContinualLearningHalfPrecisionTests
         }
     }
 
+    [Fact]
+    public void GemState_TaskGradients_AreWrittenAsDoubleArrays()
+    {
+        // Master's state format: LoadStateFromSerialization reads each gradient element with GetDouble.
+        var gem = new GradientEpisodicMemory<Half, Tensor<Half>, Tensor<Half>>(new MeanSquaredErrorLoss<Half>());
+        var type = gem.GetType();
+        var gradientsField = type.GetField("_taskGradients", BindingFlags.NonPublic | BindingFlags.Instance);
+        Assert.NotNull(gradientsField);
+        var gradients = gradientsField?.GetValue(gem) as System.Collections.Generic.List<Vector<Half>>;
+        Assert.NotNull(gradients);
+        gradients?.Add(new Vector<Half>(new[] { (Half)1.5f, (Half)(-0.25f), (Half)300.0f }));
+
+        var getState = type.GetMethod("GetStateForSerialization", BindingFlags.NonPublic | BindingFlags.Instance);
+        Assert.NotNull(getState);
+        var state = getState?.Invoke(gem, Array.Empty<object>()) as System.Collections.Generic.Dictionary<string, object>;
+        Assert.NotNull(state);
+
+        var written = Assert.IsType<System.Collections.Generic.List<double[]>>(state?["TaskGradients"]);
+        Assert.Single(written);
+        Assert.Equal(new[] { 1.5, -0.25, 300.0 }, written[0]);
+    }
+
     private static double[] Softmax(double[] logits)
     {
         double max = double.NegativeInfinity;

@@ -582,8 +582,9 @@ public class GradientEpisodicMemory<T, TInput, TOutput>
         state["AverageProjectionMagnitude"] = _averageProjectionMagnitude;
 
         // Save task gradients
-        // Written as JSON number arrays in the model's own numeric type
-        state["TaskGradients"] = _taskGradients.Select(g => g.ToArray()).ToList();
+        // Written as double arrays, master's format: LoadStateFromSerialization reads them with GetDouble,
+        // and an arbitrary T (Half, or a polyfilled numeric type) need not serialize as a JSON number.
+        state["TaskGradients"] = _taskGradients.Select(g => g.AsTensor().Cast<double>().ToArray()).ToList();
 
         return state;
     }
