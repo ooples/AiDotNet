@@ -22565,3 +22565,5 @@ override AiDotNet.Diffusion.LatentDiffusionModelBase<T>.IsBatchedTrainingSample(
 virtual AiDotNet.Diffusion.DiffusionModelBase<T>.IsBatchedTrainingSample(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! sample) -> bool
 *REMOVED*AiDotNet.Document.Options.DocBankOptions.LearningRate.get -> double
 AiDotNet.Document.Options.DocBankOptions.LearningRate.get -> double?
+override AiDotNet.LearningRateSchedulers.LambdaLRScheduler.Reset() -> void
+override AiDotNet.LearningRateSchedulers.TriStageScheduler.Reset() -> void

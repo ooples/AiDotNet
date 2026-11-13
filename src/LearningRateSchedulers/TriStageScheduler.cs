@@ -80,6 +80,21 @@ public class TriStageScheduler : LearningRateSchedulerBase
 
         _totalSteps = totalSteps;
         _decayPower = decayPower;
+        // The first batch runs at the ramp's first point, as every later batch follows the formula; the base
+        // class's default start (the peak) put the first update at the full rate and then dropped it.
+        _currentLearningRate = Math.Max(_minLearningRate, RateAt(0));
+    }
+
+    internal int WarmupSteps => _warmupSteps;
+    internal int HoldSteps => _holdSteps;
+    internal int TotalSteps => _totalSteps;
+    internal double DecayPower => _decayPower;
+
+    /// <inheritdoc/>
+    public override void Reset()
+    {
+        base.Reset();
+        _currentLearningRate = Math.Max(_minLearningRate, RateAt(0));
     }
 
     /// <summary>Creates a tri-stage schedule from the fractions a paper usually states.</summary>
@@ -102,7 +117,10 @@ public class TriStageScheduler : LearningRateSchedulerBase
                decayPower);
 
     /// <inheritdoc/>
-    protected override double ComputeLearningRate(int step)
+    protected override double ComputeLearningRate(int step) => RateAt(step);
+
+    // Non-virtual so the constructor can compute the starting rate without calling an overridable member.
+    private double RateAt(int step)
     {
         if (step < _warmupSteps)
         {

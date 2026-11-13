@@ -512,106 +512,28 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
     /// <see cref="Fused.IFusedOptimizerSpec"/> implementations. Shared so the
     /// per-optimizer specs don't each repeat the mapping.
     /// <para>
-    /// Returns <c>false</c> for a per-batch scheduler of an UNKNOWN type and for
-    /// <see cref="SchedulerStepMode.WarmupThenEpoch"/> (so a configured schedule is
-    /// never silently dropped — the caller falls back to eager). A null scheduler or
-    /// a constant scheduler yields <c>true</c> with <paramref name="schedule"/> = null
-    /// (constant LR; the spec's <c>GetCurrentLearningRate</c> supplies the rate). A
-    /// per-epoch scheduler of any type yields an external schedule that holds the
-    /// optimizer's current rate (SetLearningRate keeps it there) and that a checkpointed
-    /// plan can restore. The per-batch set mirrors
-    /// the fused kernel's implemented schedule shapes; new shapes are added here
-    /// alongside their kernel support.
+    /// Every scheduler runs fused. A null or constant scheduler yields <paramref name="schedule"/> = null (the spec's
+    /// <c>GetCurrentLearningRate</c> supplies the rate). A per-batch scheduler maps to the plan schedule of the same
+    /// formula (<see cref="FusedLrScheduleMapper"/>), bit-identical to the eager sequence. Everything else - per-epoch
+    /// and warmup-then-epoch stepping, metric-driven schedules, stateful custom schedulers, a scheduler already part-way
+    /// through - gets an external schedule holding the optimizer's current rate: the fused step ends with
+    /// <see cref="OnBatchEnd"/>, which steps the scheduler exactly as the eager loop does, and
+    /// <see cref="SetLearningRate"/> hands the new rate to the plan before its next step.
     /// </para>
     /// </summary>
     protected bool TryGetFusedLrSchedule(out Tensors.Engines.Compilation.LrSchedule? schedule)
     {
         schedule = null;
-        if (_learningRateScheduler is null or LearningRateSchedulers.ConstantLRScheduler)
+        if (_learningRateScheduler is null
+            || (_learningRateScheduler.GetType() == typeof(LearningRateSchedulers.ConstantLRScheduler)))
             return true;
 
-
-        // The plan evaluates its schedule once per optimizer step, which is StepPerBatch. StepPerEpoch (the default)
-        // holds the rate for the whole epoch, so the plan reads the rate the scheduler holds instead of advancing a
-        // mapped shape every batch. WarmupThenEpoch steps per batch during warmup, and a fused step does not advance
-        // the host scheduler, so it stays on the eager tape.
-        if (_schedulerStepMode == SchedulerStepMode.StepPerEpoch)
-        {
-            schedule = _epochLrSchedule ??= Tensors.Engines.Compilation.LrSchedule.External(GetCurrentLearningRate());
+        if (_schedulerStepMode == SchedulerStepMode.StepPerBatch
+            && LearningRateSchedulers.FusedLrScheduleMapper.TryMap(_learningRateScheduler, out schedule))
             return true;
-        }
-        if (_schedulerStepMode != SchedulerStepMode.StepPerBatch)
-            return false;
 
-        switch (_learningRateScheduler)
-        {
-            case LearningRateSchedulers.CosineAnnealingLRScheduler cosine:
-                // Denominator reconciliation: eager CosineAnnealing uses
-                // cos(π·(N-1)/tMax) on batch N, but the fused CosineLr uses
-                // cos(π·(s-1)/(totalSteps-1)). Passing totalSteps = tMax+1 makes
-                // (s-1)/(totalSteps-1) = (N-1)/tMax, so the fused per-step
-                // sequence is bit-identical to eager (previously off by ~4e-6/
-                // step from passing tMax directly).
-                schedule = Tensors.Engines.Compilation.LrSchedule.Cosine(
-                    cosine.BaseLearningRate, cosine.TMax + 1, cosine.EtaMin);
-                return true;
-            case LearningRateSchedulers.ExponentialLRScheduler expo:
-                schedule = Tensors.Engines.Compilation.LrSchedule.Exponential(
-                    expo.BaseLearningRate, expo.Gamma);
-                return true;
-            case LearningRateSchedulers.NoamSchedule noam:
-                // Vaswani-2017 warmup + inverse-sqrt. The fused kernel evaluates
-                // GetLr(step) per optimizer step, so the Noam ramp runs on the
-                // fused fast path with the SAME per-step LR sequence as the eager
-                // NoamSchedule (both use t = step, 1-based) — no eager fallback,
-                // no constant-rate freeze (AiDotNet#1470).
-                schedule = Tensors.Engines.Compilation.LrSchedule.Noam(
-                    noam.ModelDimension, noam.WarmupSteps, noam.Factor);
-                return true;
-            case LearningRateSchedulers.LinearWarmupScheduler warmup:
-                // Linear warmup → Constant/Linear/Cosine decay (Vaswani/most modern
-                // foundation-model recipes start with a warmup ramp). The fused
-                // kernel evaluates GetLr(step) per optimizer step, so the warmup
-                // ramp runs on the fused fast path with the SAME per-step LR sequence
-                // as the eager LinearWarmupScheduler — batch 1 = warmupInitLr, batch n
-                // = max(endLr, ComputeLearningRate(n-1)). Without this case the warmup
-                // recipe fell through to `default` → eager tape → no CUDA-graph capture
-                // (a 14–23× slowdown on the GPU-captured training path). Requires the
-                // general LrSchedule.LinearWarmup + WarmupDecayMode API published in
-                // AiDotNet.Tensors 0.106.1.
-                schedule = Tensors.Engines.Compilation.LrSchedule.LinearWarmup(
-                    warmup.BaseLearningRate,
-                    warmup.WarmupSteps,
-                    warmup.TotalSteps,
-                    warmup.WarmupInitLr,
-                    warmup.CurrentDecayMode switch
-                    {
-                        LearningRateSchedulers.LinearWarmupScheduler.DecayMode.Linear
-                            => Tensors.Engines.Compilation.WarmupDecayMode.Linear,
-                        LearningRateSchedulers.LinearWarmupScheduler.DecayMode.Cosine
-                            => Tensors.Engines.Compilation.WarmupDecayMode.Cosine,
-                        _ => Tensors.Engines.Compilation.WarmupDecayMode.Constant,
-                    },
-                    warmup.EndLr);
-                return true;
-            case LearningRateSchedulers.StepLRScheduler stepLr:
-                // lr0 · gamma^decayCount. The Tensors StepLr's max(0, step-1)/stepSize
-                // exactly matches the eager (N-1)/stepSize decay count on batch N.
-                schedule = Tensors.Engines.Compilation.LrSchedule.Step(
-                    stepLr.BaseLearningRate, stepLr.StepSize, stepLr.Gamma);
-                return true;
-            case LearningRateSchedulers.CyclicLRScheduler cyclic
-                    when cyclic.Mode == LearningRateSchedulers.CyclicLRScheduler.CyclicMode.Triangular
-                         && cyclic.StepSizeUp == cyclic.StepSizeDown:
-                // Fused Cyclic is symmetric-triangular only (single stepSize).
-                // Triangular2 / ExponentialRange / asymmetric up≠down have no
-                // fused equivalent → fall through to eager.
-                schedule = Tensors.Engines.Compilation.LrSchedule.Cyclic(
-                    cyclic.BaseLearningRate, cyclic.MaxLearningRate, cyclic.StepSizeUp);
-                return true;
-            default:
-                return false;
-        }
+        schedule = _epochLrSchedule ??= Tensors.Engines.Compilation.LrSchedule.External(GetCurrentLearningRate());
+        return true;
     }
 
     /// <summary>
