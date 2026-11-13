@@ -157,17 +157,40 @@ public partial class OWLv2<T> : VisionLanguageModelBase<T>, IVisualGroundingMode
         if (IsOnnxMode && OnnxModel is not null)
             return OnnxModel.Run(PreprocessImage(image));
 
-        // Backbone: the image tokens the grounding head reads.
-        var visualFeatures = PreprocessImage(image);
-        for (int i = 0; i < _encoderLayerEnd; i++)
-            visualFeatures = Layers[i].Forward(visualFeatures);
-
         // OWLv2 (Minderer et al. 2023): the OWL-ViT per-token box and class heads plus an objectness head.
-        var head = _groundingHead ?? throw new InvalidOperationException("The grounding head is not initialized.");
-        var prediction = head.Forward(visualFeatures, head.EmbedQuery(TokenIds(textQuery)));
+        var prediction = Detect(image, textQuery);
         var scores = Engine.TensorSigmoid(prediction.Logits.Reshape(new[] { prediction.Logits.Shape[0] }));
         return GroundingDetections<T>.Ranked(Engine, GroundingHeadModule<T>.Corners(Engine, prediction.Boxes), scores,
             _options.ConfidenceThreshold, _options.MaxDetections, _options.NmsThreshold);
+    }
+
+    /// <summary>
+    /// The training loss of one image (OWL-ViT section 3.2, DETR's bipartite matching loss with a focal sigmoid class
+    /// loss): the per-token predictions matched one-to-one to the ground-truth boxes of the query, then focal, L1 and GIoU.
+    /// </summary>
+    /// <param name="image">The image.</param>
+    /// <param name="textQuery">The text query.</param>
+    /// <param name="targetBoxes">The query's ground-truth boxes <c>[G, 4]</c>, normalized (cx, cy, w, h).</param>
+    internal GroundingSetLossTerms<T> GroundingLoss(Tensor<T> image, string textQuery, Tensor<T> targetBoxes)
+    {
+        ThrowIfDisposed();
+        if (targetBoxes is null) throw new ArgumentNullException(nameof(targetBoxes));
+        var prediction = Detect(image, textQuery);
+        var labels = Tensor<T>.CreateDefault(new[] { targetBoxes.Shape[0], 1 }, NumOps.One);
+        return new GroundingSetLoss<T>(Engine).Compute(prediction.Boxes, prediction.Logits, targetBoxes, labels);
+    }
+
+    // ViT backbone with a class token (OWL-ViT section 3.1): the patch embedding, the learned class token ahead of the
+    // patch tokens, then the transformer over the one sequence; then the head against the embedded query.
+    private OwlPrediction<T> Detect(Tensor<T> image, string textQuery)
+    {
+        var head = _groundingHead ?? throw new InvalidOperationException("The grounding head is not initialized.");
+        var patches = GroundingHeadModule<T>.AsRows(Engine, Layers[0].Forward(PreprocessImage(image)));
+        var visualFeatures = Engine.TensorConcatenate(new[] { head.ClassToken(), patches }, 0);
+        visualFeatures = visualFeatures.Reshape(new[] { 1, visualFeatures.Shape[0], visualFeatures.Shape[1] });
+        for (int i = 1; i < _encoderLayerEnd; i++)
+            visualFeatures = Layers[i].Forward(visualFeatures);
+        return head.Forward(visualFeatures, head.EmbedQuery(TokenIds(textQuery)));
     }
 
     /// <inheritdoc />

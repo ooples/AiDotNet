@@ -148,16 +148,35 @@ public partial class DINOX<T> : VisionLanguageModelBase<T>, IVisualGroundingMode
         if (IsOnnxMode && OnnxModel is not null)
             return OnnxModel.Run(PreprocessImage(image));
 
-        // Backbone: the image tokens the detection head reads.
+        var prediction = Detect(image, TokenIds(textQuery));
+        return GroundingDetections<T>.Ranked(Engine, GroundingHeadModule<T>.Corners(Engine, prediction.Boxes),
+            prediction.Scores(Engine), _options.ConfidenceThreshold, _options.MaxDetections, _options.NmsThreshold);
+    }
+
+    /// <summary>
+    /// The training loss of one image (Grounding DINO section 3.5): the head's queries matched one-to-one to the
+    /// ground-truth boxes by the Hungarian algorithm, then the contrastive focal loss, L1 and GIoU.
+    /// </summary>
+    /// <param name="image">The image.</param>
+    /// <param name="textQuery">The text prompt.</param>
+    /// <param name="targetBoxes">The ground-truth boxes <c>[G, 4]</c>, normalized (cx, cy, w, h).</param>
+    /// <param name="targetTokens">Each box's phrase as 0/1 over the prompt's tokens <c>[G, L]</c>.</param>
+    internal GroundingSetLossTerms<T> GroundingLoss(Tensor<T> image, string textQuery, Tensor<T> targetBoxes, Tensor<T> targetTokens)
+    {
+        ThrowIfDisposed();
+        var prediction = Detect(image, TokenIds(textQuery));
+        return new GroundingSetLoss<T>(Engine).Compute(prediction.Boxes, prediction.Logits, targetBoxes, targetTokens);
+    }
+
+    // The backbone's image tokens, then the feature enhancer, language-guided query selection, cross-modality decoder
+    // and box / contrastive heads.
+    private GroundingQueryPrediction<T> Detect(Tensor<T> image, IReadOnlyList<int> tokenIds)
+    {
         var visualFeatures = PreprocessImage(image);
         for (int i = 0; i < _encoderLayerEnd; i++)
             visualFeatures = Layers[i].Forward(visualFeatures);
-
-        // Feature enhancer, language-guided query selection, cross-modality decoder and box / contrastive heads.
         var head = _groundingHead ?? throw new InvalidOperationException("The grounding head is not initialized.");
-        var prediction = head.Forward(visualFeatures, TokenIds(textQuery));
-        return GroundingDetections<T>.Ranked(Engine, GroundingHeadModule<T>.Corners(Engine, prediction.Boxes),
-            prediction.Scores(Engine), _options.ConfidenceThreshold, _options.MaxDetections, _options.NmsThreshold);
+        return head.Forward(visualFeatures, tokenIds);
     }
 
     /// <inheritdoc />

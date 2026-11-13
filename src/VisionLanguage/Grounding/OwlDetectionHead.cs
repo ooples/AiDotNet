@@ -25,8 +25,9 @@ internal sealed record OwlPrediction<T>(Tensor<T> Boxes, Tensor<T> Logits, Tenso
 /// and scale (<c>(cos + shift) · (elu(scale) + 1)</c>); the text query is the CLIP text transformer's end-of-text
 /// output projected into that space. OWLv2 adds an objectness head (an MLP like the box head, on detached features).
 /// </summary>
-/// <remarks>The vision backbones these models run carry no class token, so the reference's merge of the class token
-/// into the patch tokens is not applied; the head's layer normalization of the tokens is.</remarks>
+/// <remarks>The vision transformer reads a learned class token ahead of the patch tokens (<see cref="ClassToken"/>);
+/// the head merges the class token's output into every patch token and normalizes the result (the reference's
+/// <c>image_embeds[:, 1:] * image_embeds[:, :1]</c> then <c>layer_norm</c>, <see cref="MergeClassToken"/>).</remarks>
 internal sealed class OwlDetectionHead<T> : GroundingHeadModule<T>
 {
     // compute_box_bias: log(x + 1e-4) - log1p(-x + 1e-4).
@@ -46,6 +47,7 @@ internal sealed class OwlDetectionHead<T> : GroundingHeadModule<T>
     private readonly List<GroundingTransformerBlock<T>> _textBlocks = new();
     private readonly LayerNormalizationLayer<T> _textFinalNorm;
     private readonly DenseLayer<T> _textProjection;
+    private readonly DenseLayer<T> _classToken;
 
     public OwlDetectionHead(IEngine engine, List<ILayer<T>> stream, int imageWidth, OwlDetectionHeadConfiguration configuration)
         : base(engine, stream)
@@ -65,6 +67,7 @@ internal sealed class OwlDetectionHead<T> : GroundingHeadModule<T>
             _textBlocks.Add(Block(c.TextWidth, c.TextHeads, 4 * c.TextWidth, cross: false, causal: true));
         _textFinalNorm = Norm();
         _textProjection = Linear(c.QueryWidth, bias: false);
+        _classToken = Linear(imageWidth, bias: false);
     }
 
     public OwlDetectionHeadConfiguration Configuration { get; }
@@ -113,13 +116,31 @@ internal sealed class OwlDetectionHead<T> : GroundingHeadModule<T>
             Engine.TensorLog(Engine.TensorAddScalar(Engine.ScalarMinusTensor(NumOps.One, clipped), eps)));
     }
 
+    /// <summary>The learned class token <c>[1, imageWidth]</c> the vision transformer reads ahead of the patch tokens.</summary>
+    public Tensor<T> ClassToken() => Rows(_classToken, OneHot(new[] { 0 }, 1));
+
+    /// <summary>
+    /// OWL-ViT's class-token merge: the backbone's output rows <c>[1 + n, d]</c> (class token first) become the
+    /// <c>[n, d]</c> patch tokens times the class token, layer-normalized.
+    /// </summary>
+    internal Tensor<T> MergeClassToken(Tensor<T> backboneTokens)
+    {
+        if (backboneTokens is null) throw new ArgumentNullException(nameof(backboneTokens));
+        var rows = AsRows(Engine, backboneTokens);
+        int n = rows.Shape[0] - 1, d = rows.Shape[1];
+        if (n <= 0) throw new ArgumentException("The backbone output needs the class token and at least one patch token.", nameof(backboneTokens));
+        var classToken = Engine.TensorBroadcastTo(Engine.TensorSlice(rows, new[] { 0, 0 }, new[] { 1, d }), new[] { n, d });
+        var patches = Engine.TensorSlice(rows, new[] { 1, 0 }, new[] { n, d });
+        return Rows(_imageNorm, Engine.TensorMultiply(patches, classToken));
+    }
+
     /// <summary>Predicts a box, class logits against <paramref name="queries"/> <c>[Q, QueryWidth]</c> and (OWLv2) an
     /// objectness logit for every image token <c>[N, d]</c> in row-major grid order.</summary>
     public OwlPrediction<T> Forward(Tensor<T> imageTokens, Tensor<T> queries)
     {
         if (imageTokens is null) throw new ArgumentNullException(nameof(imageTokens));
         if (queries is null) throw new ArgumentNullException(nameof(queries));
-        var image = Rows(_imageNorm, AsRows(Engine, imageTokens));
+        var image = MergeClassToken(imageTokens);
         int n = image.Shape[0];
         var grid = TokenGrid(n);
         var boxes = Engine.TensorSigmoid(Engine.TensorAdd(Mlp(_boxHead, image, x => Engine.GELU(x)), BoxBias(grid.H, grid.W)));

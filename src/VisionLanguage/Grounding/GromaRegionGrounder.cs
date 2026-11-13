@@ -19,13 +19,19 @@ internal sealed record GromaRegionGrounderConfiguration(int Width, int ProposerW
 /// end of the answer (§3.2). A referred region's box is the proposal its token names; its score is the probability
 /// the model gives that token.
 /// </summary>
-/// <remarks>The region encoder pools by averaging the image tokens whose grid cell centre lies in the box (the token
-/// nearest the box centre when none does), in place of the reference's multi-scale RoIAlign on DINOv2 feature maps,
-/// which these models' single-scale backbones do not produce.</remarks>
+/// <remarks>The proposer is a Deformable DETR (multi-scale deformable encoder and decoder) on the backbone's simple
+/// feature pyramid. The region encoder builds its own pyramid of the backbone's map, takes each box's RoIAlign
+/// (7x7 bins, 2x2 samples per bin, aligned) on every level, averages the bins and the levels, and projects the result
+/// through a two-layer MLP into the language model's width.</remarks>
 internal sealed class GromaRegionGrounder<T> : GroundingHeadModule<T>
 {
     private readonly GroundingQueryDecoder<T> _proposer;
+    private readonly FeaturePyramidLayers<T> _regionPyramid;
     private readonly DenseLayer<T>[] _regionEncoder;
+
+    // torchvision MultiScaleRoIAlign's defaults in Mask R-CNN's box head: 7x7 bins, 2x2 samples per bin.
+    private const int RoiSize = 7;
+    private const int RoiSamples = 2;
     private readonly DenseLayer<T> _textEmbedding;
     private readonly DenseLayer<T> _head;
 
@@ -37,7 +43,9 @@ internal sealed class GromaRegionGrounder<T> : GroundingHeadModule<T>
             throw new ArgumentException("The grounder needs a positive width, proposal count, vocabulary and text length.", nameof(configuration));
         Configuration = c;
         _proposer = new GroundingQueryDecoder<T>(engine, stream, new GroundingQueryDecoderConfiguration(
-            c.ProposerWidth, c.ProposerHeads, 8 * c.ProposerWidth, EnhancerLayers: 0, c.ProposerLayers, c.Proposals, VocabSize: 0, MaxTextLength: 1));
+            c.ProposerWidth, c.ProposerHeads, 8 * c.ProposerWidth, EnhancerLayers: c.ProposerLayers, c.ProposerLayers, c.Proposals,
+            VocabSize: 0, MaxTextLength: 1));
+        _regionPyramid = PyramidLayers(c.Width, 4);
         _regionEncoder = new[] { Linear(c.Width), Linear(c.Width) };
         _textEmbedding = Linear(c.Width, bias: false);
         _head = Linear(c.Proposals + 1, bias: false);
@@ -56,40 +64,58 @@ internal sealed class GromaRegionGrounder<T> : GroundingHeadModule<T>
     }
 
     /// <summary>
-    /// Each box's pooling weights over the image tokens of an <c>h x w</c> grid <c>[k, h·w]</c>: 1 for the tokens whose
-    /// cell centre lies in the box (x1 &lt;= x &lt;= x2, y1 &lt;= y &lt;= y2), divided by their count; a box that holds no
-    /// centre takes the token nearest its centre.
+    /// The proposer's training loss (Deformable DETR's class-agnostic set loss): its queries matched one-to-one to the
+    /// image's ground-truth regions <c>[G, 4]</c> (normalized cx, cy, w, h) by the Hungarian algorithm, then the focal
+    /// objectness loss, L1 and GIoU.
     /// </summary>
-    internal Tensor<T> PoolingWeights(Tensor<T> corners, int h, int w)
+    internal GroundingSetLossTerms<T> ProposalLoss(Tensor<T> imageTokens, Tensor<T> targetBoxes)
     {
-        int k = corners.Shape[0], n = h * w;
-        var centres = GridCentres(Engine, h, w);
-        Tensor<T> Tokens(int axis) => Engine.TensorBroadcastTo(Engine.TensorSlice(centres, new[] { 0, axis }, new[] { n, 1 }).Reshape(new[] { 1, n }), new[] { k, n });
-        Tensor<T> Box(int column) => Engine.TensorBroadcastTo(Engine.TensorSlice(corners, new[] { 0, column }, new[] { k, 1 }), new[] { k, n });
-        var x = Tokens(0);
-        var y = Tokens(1);
-        var one = Tensor<T>.CreateDefault(new[] { k, n }, NumOps.One);
-        Tensor<T> NotBelow(Tensor<T> a, Tensor<T> b) => Engine.TensorSubtract(one, Engine.TensorLessThan(a, b));
-        var inside = Engine.TensorMultiply(Engine.TensorMultiply(NotBelow(x, Box(0)), NotBelow(Box(2), x)),
-            Engine.TensorMultiply(NotBelow(y, Box(1)), NotBelow(Box(3), y)));
-
-        var half = NumOps.FromDouble(0.5);
-        var dx = Engine.TensorSubtract(x, Engine.TensorMultiplyScalar(Engine.TensorAdd(Box(0), Box(2)), half));
-        var dy = Engine.TensorSubtract(y, Engine.TensorMultiplyScalar(Engine.TensorAdd(Box(1), Box(3)), half));
-        var nearest = Engine.TensorOneHot<T>(Engine.TensorArgMin(Engine.TensorAdd(Engine.TensorMultiply(dx, dx), Engine.TensorMultiply(dy, dy)), 1), n);
-        var count = Engine.ReduceSum(inside, new[] { 1 }, true);
-        var empty = Engine.TensorBroadcastTo(Engine.TensorEquals(count, NumOps.Zero), new[] { k, n });
-        var weights = Engine.TensorAdd(inside, Engine.TensorMultiply(empty, nearest));
-        var total = Engine.TensorBroadcastTo(Engine.ReduceSum(weights, new[] { 1 }, true), new[] { k, n });
-        return Engine.TensorDivide(weights, total);
+        if (targetBoxes is null) throw new ArgumentNullException(nameof(targetBoxes));
+        var prediction = _proposer.Forward(imageTokens, null);
+        var labels = Tensor<T>.CreateDefault(new[] { targetBoxes.Shape[0], 1 }, NumOps.One);
+        return new GroundingSetLoss<T>(Engine).Compute(prediction.Boxes, prediction.Logits, targetBoxes, labels);
     }
 
-    /// <summary>The region tokens <c>[k, Width]</c> of boxes <c>[k, 4]</c> (x1, y1, x2, y2) over the image tokens.</summary>
+    /// <summary>
+    /// RoIAlign (He et al. 2017; torchvision's <c>roi_align</c>, aligned) of every box on one feature map: the
+    /// <c>[n, d]</c> tokens of an <c>h x w</c> grid, the boxes as normalized corners <c>[K, 4]</c>; each box's
+    /// <c>[d]</c> feature is the mean of its 7x7 bins.
+    /// </summary>
+    internal Tensor<T> AlignedRegions(Tensor<T> tokens, int h, int w, Tensor<T> corners)
+    {
+        if (tokens is null) throw new ArgumentNullException(nameof(tokens));
+        if (corners is null) throw new ArgumentNullException(nameof(corners));
+        int k = corners.Shape[0], d = tokens.Shape[1];
+        var map = Engine.Reshape(Engine.TensorTranspose(tokens), new[] { 1, d, h, w });
+        var scale = new Tensor<T>(new[] { 1, 4 }, Vector<T>.FromArray(new[]
+        {
+            NumOps.FromDouble(w), NumOps.FromDouble(h), NumOps.FromDouble(w), NumOps.FromDouble(h),
+        }));
+        var boxes = Engine.TensorConcatenate(new[]
+        {
+            new Tensor<T>(new[] { k, 1 }),
+            Engine.TensorMultiply(corners, Engine.TensorBroadcastTo(scale, new[] { k, 4 })),
+        }, 1);
+        var aligned = Engine.RoIAlign(map, boxes, RoiSize, RoiSize, 1f, RoiSamples, true);
+        return Engine.ReduceMean(aligned, new[] { 2, 3 }, false);
+    }
+
+    /// <summary>
+    /// The region token of every box <c>[K, Width]</c>: its RoIAlign feature on every level of the backbone's feature
+    /// pyramid, averaged over the levels, through the region encoder's MLP.
+    /// </summary>
     public Tensor<T> RegionTokens(Tensor<T> imageTokens, Tensor<T> corners)
     {
-        var rows = AsRows(Engine, imageTokens);
-        var grid = TokenGrid(rows.Shape[0]);
-        var pooled = Engine.TensorMatMul(PoolingWeights(corners, grid.H, grid.W), rows);
+        var levels = Pyramid(_regionPyramid, imageTokens);
+        int d = levels.Tokens.Shape[1];
+        var perLevel = new Tensor<T>[levels.Count];
+        for (int level = 0; level < levels.Count; level++)
+        {
+            var (h, w) = levels.Shapes[level];
+            var tokens = Engine.TensorSlice(levels.Tokens, new[] { levels.Starts[level], 0 }, new[] { h * w, d });
+            perLevel[level] = AlignedRegions(tokens, h, w, corners);
+        }
+        var pooled = Engine.ReduceMean(Engine.TensorStack(perLevel, 0), new[] { 0 }, false);
         return Mlp(_regionEncoder, pooled, x => Engine.GELU(x));
     }
 

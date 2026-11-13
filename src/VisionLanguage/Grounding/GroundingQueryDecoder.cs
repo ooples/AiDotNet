@@ -9,14 +9,17 @@ namespace AiDotNet.VisionLanguage.Grounding;
 /// <param name="Queries">Queries the language-guided query selection keeps (900).</param>
 /// <param name="VocabSize">Text vocabulary size; 0 for a class-agnostic head without text.</param>
 /// <param name="MaxTextLength">Longest text the head embeds (256).</param>
+/// <param name="Levels">Feature-pyramid levels the deformable attention samples (4).</param>
+/// <param name="Points">Sampling points per head and level of the deformable attention (4).</param>
 internal sealed record GroundingQueryDecoderConfiguration(int Width, int Heads, int FeedForward, int EnhancerLayers,
-    int DecoderLayers, int Queries, int VocabSize, int MaxTextLength);
+    int DecoderLayers, int Queries, int VocabSize, int MaxTextLength, int Levels = 4, int Points = 4);
 
 /// <summary>What a <see cref="GroundingQueryDecoder{T}"/> predicts for one image.</summary>
 /// <param name="Boxes">The last decoder layer's boxes <c>[k, 4]</c> as normalized (cx, cy, w, h).</param>
 /// <param name="Logits">Per query, its contrastive logit against every text token <c>[k, L]</c>, or its objectness
 /// logit <c>[k, 1]</c> for a class-agnostic head.</param>
-/// <param name="Selected">The image-token indices <c>[k]</c> the query selection kept, in selection order.</param>
+/// <param name="Selected">The indices <c>[k]</c> into the multi-scale tokens (finest level first) the query selection
+/// kept, in selection order.</param>
 internal sealed record GroundingQueryPrediction<T>(Tensor<T> Boxes, Tensor<T> Logits, Tensor<int> Selected)
 {
     /// <summary>Each query's score: the sigmoid of its largest logit (Grounding DINO's <c>predict</c>).</summary>
@@ -33,30 +36,35 @@ internal sealed record GroundingQueryPrediction<T>(Tensor<T> Boxes, Tensor<T> Lo
 /// selection (positional queries from the selected tokens' boxes, learnable content queries).
 /// </summary>
 /// <remarks>
-/// <para>The selected tokens' first boxes follow DINO's two-stage proposals: each token's grid cell (centre, side
-/// 0.05) in logit space plus the encoder box head's offset. The decoder's positional query is the sine embedding of
-/// the current box through a two-layer MLP (DINO's <c>ref_point_head</c>). Attention over the image is standard
-/// multi-head attention over the given image tokens rather than multi-scale deformable attention, which needs a
-/// multi-scale feature pyramid the models' backbones do not produce.</para>
+/// <para>The backbone's single-scale map becomes four levels through ViTDet's simple feature pyramid (strides 8 to 64
+/// for a stride-16 backbone), each projected and normalized and tagged with a learned level embedding. Image
+/// self-attention in the enhancer and the decoder's attention to the image are multi-scale deformable attention
+/// (Deformable DETR): encoder tokens sample around their own centre, decoder queries around their current box. The
+/// selected tokens' first boxes follow DINO's two-stage proposals: each token's cell (centre, side 0.05 * 2^level) in
+/// logit space plus the encoder box head's offset. The decoder's positional query is the sine embedding of the current
+/// box through a two-layer MLP (DINO's <c>ref_point_head</c>).</para>
 /// <para>With <see cref="GroundingQueryDecoderConfiguration.VocabSize"/> 0 the head is class-agnostic (Groma's
 /// region proposer): no text, the query selection ranks tokens by an objectness head, and each query's logit is its
 /// objectness.</para>
 /// </remarks>
 internal sealed class GroundingQueryDecoder<T> : GroundingHeadModule<T>
 {
-    private sealed record Enhancer(GroundingTransformerBlock<T> Image, GroundingTransformerBlock<T> Text,
-        LayerNormalizationLayer<T> ImageToTextNorm, MultiHeadAttentionLayer<T> ImageToText,
-        LayerNormalizationLayer<T> TextToImageNorm, MultiHeadAttentionLayer<T> TextToImage);
+    private sealed record ImageEncoderLayer(LayerNormalizationLayer<T> SelfNorm, DeformableAttentionLayers<T> SelfAttention,
+        LayerNormalizationLayer<T> FeedForwardNorm, DenseLayer<T> FeedForwardUp, DenseLayer<T> FeedForwardDown);
+
+    private sealed record Enhancer(ImageEncoderLayer Image, GroundingTransformerBlock<T>? Text,
+        LayerNormalizationLayer<T>? ImageToTextNorm, MultiHeadAttentionLayer<T>? ImageToText,
+        LayerNormalizationLayer<T>? TextToImageNorm, MultiHeadAttentionLayer<T>? TextToImage);
 
     private sealed record Decoder(MultiHeadAttentionLayer<T> SelfAttention, LayerNormalizationLayer<T> SelfNorm,
         MultiHeadAttentionLayer<T>? TextAttention, LayerNormalizationLayer<T>? TextNorm,
-        MultiHeadAttentionLayer<T> ImageAttention, LayerNormalizationLayer<T> ImageNorm,
+        DeformableAttentionLayers<T> ImageAttention, LayerNormalizationLayer<T> ImageNorm,
         DenseLayer<T> FeedForwardUp, DenseLayer<T> FeedForwardDown, LayerNormalizationLayer<T> FeedForwardNorm);
 
-    // DINO's proposal side for single-level features: 0.05 * 2^0.
+    // DINO's proposal side of the finest level; it doubles per level (0.05 * 2^level).
     private const double ProposalSide = 0.05;
 
-    private readonly DenseLayer<T> _imageProjection;
+    private readonly FeaturePyramidLayers<T> _pyramid;
     private readonly DenseLayer<T>? _tokenEmbedding;
     private readonly DenseLayer<T>? _positionEmbedding;
     private readonly List<Enhancer> _enhancers = new();
@@ -78,14 +86,22 @@ internal sealed class GroundingQueryDecoder<T> : GroundingHeadModule<T>
         if (c.Width < 4) throw new ArgumentException("The head width must be at least 4.", nameof(configuration));
         if (c.Queries <= 0) throw new ArgumentException("The head needs at least one query.", nameof(configuration));
         Configuration = c;
-        _imageProjection = Linear(c.Width);
+        if (c.Levels <= 0 || c.Points <= 0)
+            throw new ArgumentException("The deformable attention needs at least one level and one point.", nameof(configuration));
+        _pyramid = PyramidLayers(c.Width, c.Levels);
         if (HasText)
         {
             _tokenEmbedding = Linear(c.Width, bias: false);
             _positionEmbedding = Linear(c.Width, bias: false);
-            for (int i = 0; i < c.EnhancerLayers; i++)
-                _enhancers.Add(new Enhancer(Block(c.Width, c.Heads, c.FeedForward, cross: false), Block(c.Width, c.Heads, c.FeedForward, cross: false),
-                    Norm(), Attention(c.Width, c.Heads), Norm(), Attention(c.Width, c.Heads)));
+        }
+        for (int i = 0; i < c.EnhancerLayers; i++)
+        {
+            var image = new ImageEncoderLayer(Norm(), DeformableAttention(c.Width, c.Heads, c.Levels, c.Points), Norm(),
+                Linear(c.FeedForward), Linear(c.Width));
+            _enhancers.Add(HasText
+                ? new Enhancer(image, Block(c.Width, c.Heads, c.FeedForward, cross: false),
+                    Norm(), Attention(c.Width, c.Heads), Norm(), Attention(c.Width, c.Heads))
+                : new Enhancer(image, null, null, null, null, null));
         }
         _encoderOutput = Linear(c.Width);
         _encoderOutputNorm = Norm();
@@ -96,7 +112,7 @@ internal sealed class GroundingQueryDecoder<T> : GroundingHeadModule<T>
         for (int i = 0; i < c.DecoderLayers; i++)
             _decoders.Add(new Decoder(Attention(c.Width, c.Heads), Norm(),
                 HasText ? Attention(c.Width, c.Heads) : null, HasText ? Norm() : null,
-                Attention(c.Width, c.Heads), Norm(), Linear(c.FeedForward), Linear(c.Width), Norm()));
+                DeformableAttention(c.Width, c.Heads, c.Levels, c.Points), Norm(), Linear(c.FeedForward), Linear(c.Width), Norm()));
         _decoderNorm = Norm();
         _boxHead = new[] { Linear(c.Width), Linear(c.Width), Linear(4) };
         if (!HasText) _objectnessHead = Linear(1);
@@ -127,30 +143,42 @@ internal sealed class GroundingQueryDecoder<T> : GroundingHeadModule<T>
     {
         if (imageTokens is null) throw new ArgumentNullException(nameof(imageTokens));
         var c = Configuration;
-        var image = Rows(_imageProjection, AsRows(Engine, imageTokens));
+        var levels = Pyramid(_pyramid, imageTokens);
+        var image = levels.Tokens;
         int n = image.Shape[0];
-        Tensor<T>? text = null;
-        if (HasText)
+        // Every token's cell on its level: centre and DINO's side 0.05 * 2^level.
+        var proposals = Engine.TensorConcatenate(new[]
         {
-            text = EmbedText(tokenIds ?? throw new ArgumentNullException(nameof(tokenIds)));
-            foreach (var e in _enhancers)
+            levels.Centres,
+            Engine.TensorConcatenate(levels.Shapes.Select((shape, level) => Tensor<T>.CreateDefault(
+                new[] { shape.H * shape.W, 2 }, NumOps.FromDouble(ProposalSide * Math.Pow(2, level)))).ToArray(), 0),
+        }, 1);
+        // Deformable DETR's encoder position: the sine embedding of each token's centre plus its level embedding.
+        var tokenPosition = Engine.TensorAdd(CentrePosition(levels.Centres), levels.LevelEmbedding);
+        Tensor<T>? text = HasText ? EmbedText(tokenIds ?? throw new ArgumentNullException(nameof(tokenIds))) : null;
+        foreach (var e in _enhancers)
+        {
+            if (text is not null && e.Text is not null && e.ImageToText is not null && e.ImageToTextNorm is not null
+                && e.TextToImage is not null && e.TextToImageNorm is not null)
             {
-                // Bi-directional cross-attention (§3.1): image-to-text and text-to-image, then self-attention and FFN.
+                // Bi-directional cross-attention (section 3.1): image-to-text and text-to-image, then each side's self-attention.
                 var imageUpdate = CrossAttend(e.ImageToText, Rows(e.ImageToTextNorm, image), text);
                 var textUpdate = CrossAttend(e.TextToImage, Rows(e.TextToImageNorm, text), image);
-                image = Run(e.Image, Engine.TensorAdd(image, imageUpdate), null);
+                image = Engine.TensorAdd(image, imageUpdate);
                 text = Run(e.Text, Engine.TensorAdd(text, textUpdate), null);
             }
+
+            // Deformable self-attention of the image tokens: each samples the pyramid around its own centre.
+            var normed = Rows(e.Image.SelfNorm, image);
+            image = Engine.TensorAdd(image, Deform(e.Image.SelfAttention, Engine.TensorAdd(normed, tokenPosition),
+                levels.Centres, levels with { Tokens = normed }));
+            var hidden = Rows(e.Image.FeedForwardDown, Engine.ReLU(Rows(e.Image.FeedForwardUp, Rows(e.Image.FeedForwardNorm, image))));
+            image = Engine.TensorAdd(image, hidden);
         }
+        var imageLevels = levels with { Tokens = image };
 
         // Language-guided query selection (Eq. 1-2): each image token's largest similarity to any text token, top k.
         var memory = Rows(_encoderOutputNorm, Rows(_encoderOutput, image));
-        var grid = TokenGrid(n);
-        var proposals = Engine.TensorConcatenate(new[]
-        {
-            GridCentres(Engine, grid.H, grid.W),
-            Tensor<T>.CreateDefault(new[] { n, 2 }, NumOps.FromDouble(ProposalSide)),
-        }, 1);
         var tokenScores = text is not null
             ? Engine.ReduceMax(Engine.TensorMatMul(memory, Engine.TensorTranspose(text)), new[] { 1 }, false)
             : Rows(_encoderObjectness ?? throw new InvalidOperationException("The objectness head is missing."), memory).Reshape(new[] { n });
@@ -170,7 +198,9 @@ internal sealed class GroundingQueryDecoder<T> : GroundingHeadModule<T>
             queries = Rows(layer.SelfNorm, Engine.TensorAdd(queries, SelfAttendValues(layer.SelfAttention, withPosition, queries)));
             if (layer.TextAttention is not null && layer.TextNorm is not null && text is not null)
                 queries = Rows(layer.TextNorm, Engine.TensorAdd(queries, CrossAttend(layer.TextAttention, queries, text)));
-            queries = Rows(layer.ImageNorm, Engine.TensorAdd(queries, CrossAttend(layer.ImageAttention, Engine.TensorAdd(queries, position), image)));
+            // Deformable cross-attention to the pyramid around each query's current box.
+            queries = Rows(layer.ImageNorm, Engine.TensorAdd(queries,
+                Deform(layer.ImageAttention, Engine.TensorAdd(queries, position), reference, imageLevels)));
             var hidden = Rows(layer.FeedForwardDown, Engine.ReLU(Rows(layer.FeedForwardUp, queries)));
             queries = Rows(layer.FeedForwardNorm, Engine.TensorAdd(queries, hidden));
 
@@ -194,19 +224,29 @@ internal sealed class GroundingQueryDecoder<T> : GroundingHeadModule<T>
         return Engine.Reshape(attention.Forward(q, q, Engine.Reshape(values, new[] { 1, n, d })), new[] { n, d });
     }
 
+    // The sine embedding of [S, 2] centres: D/2 features per coordinate, zero-padded to D when D is not a multiple of 4.
+    private Tensor<T> CentrePosition(Tensor<T> centres)
+    {
+        var embedding = SineEmbedding(centres);
+        int s = centres.Shape[0], missing = Configuration.Width - embedding.Shape[1];
+        return missing > 0
+            ? Engine.TensorConcatenate(new[] { embedding, new Tensor<T>(new[] { s, missing }) }, 1)
+            : embedding;
+    }
+
     /// <summary>
-    /// DINO's <c>gen_sineembed_for_position</c> of boxes <c>[k, 4]</c>: per coordinate, D/2 features
-    /// <c>sin</c> then <c>cos</c> of <c>2π·v / 10000^(2i/(D/2))</c>, concatenated to <c>[k, 2D]</c>.
+    /// DINO's <c>gen_sineembed_for_position</c> of positions <c>[k, c]</c> (boxes: c = 4): per coordinate, D/2 features
+    /// <c>sin</c> then <c>cos</c> of <c>2π·v / 10000^(2i/(D/2))</c>, concatenated to <c>[k, c·D/2]</c>.
     /// </summary>
     internal Tensor<T> SineEmbedding(Tensor<T> boxes)
     {
-        int k = boxes.Shape[0], half = Configuration.Width / 2, quarter = half / 2;
+        int k = boxes.Shape[0], coordinates = boxes.Shape[1], half = Configuration.Width / 2, quarter = half / 2;
         // Frequencies 10000^(2i/half) for i < half/2, as a [1, quarter] row.
         var exponents = Engine.TensorMultiplyScalar(Engine.TensorArange<T>(0, quarter, 1), NumOps.FromDouble(2.0 / half));
         var frequencies = Engine.TensorPower(Tensor<T>.CreateDefault(new[] { quarter }, NumOps.FromDouble(10000)), exponents).Reshape(new[] { 1, quarter });
         var twoPi = NumOps.FromDouble(2 * Math.PI);
-        var parts = new List<Tensor<T>>(8);
-        for (int coordinate = 0; coordinate < 4; coordinate++)
+        var parts = new List<Tensor<T>>(2 * coordinates);
+        for (int coordinate = 0; coordinate < coordinates; coordinate++)
         {
             var angle = Engine.TensorDivide(
                 Engine.TensorBroadcastTo(Engine.TensorMultiplyScalar(Engine.TensorSlice(boxes, new[] { 0, coordinate }, new[] { k, 1 }), twoPi), new[] { k, quarter }),
