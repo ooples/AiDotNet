@@ -7,8 +7,14 @@ namespace AiDotNet.MetaLearning.Algorithms;
 /// <remarks>
 /// <para>
 /// A modulation vector m of length L scales a parameter vector p of length n cyclically:
-/// p'[i] = p[i] * m[i mod L] (numpy: <c>p * np.resize(m, n)</c>). The factors are kept in the
-/// model's numeric type T so the scaling never round-trips through double.
+/// p'[i] = p[i] * m[i mod L] (numpy: <c>p * np.resize(m, n)</c>). The factors are returned in the
+/// model's numeric type T and the scaling itself (<see cref="Apply"/>) runs in T.
+/// </para>
+/// <para>
+/// The two factor reductions are the exception: <see cref="MeanAbsGate"/> and <see cref="MeanClampedRatio"/>
+/// reduce their inputs in double and convert the one-element result back to T. Their means run over every
+/// feature, and a Half running sum stops growing past 2048 (70000 ratios of 2 would no longer average to 2),
+/// so the wider accumulator is kept on purpose.
 /// </para>
 /// </remarks>
 internal static class ParameterModulation
@@ -52,11 +58,9 @@ internal static class ParameterModulation
     /// </summary>
     internal static Vector<T> MeanAbsGate<T>(IEngine engine, Vector<T> weights)
     {
-        var numOps = MathHelper.GetNumericOperations<T>();
-        T half = numOps.FromDouble(0.5);
-        T meanAbs = engine.Mean(engine.Abs(weights));
-        var gate = engine.Sigmoid(new Vector<T>(new[] { numOps.Subtract(meanAbs, numOps.One) }));
-        return engine.Add(engine.Multiply(gate, half), engine.Fill(1, half));
+        double meanAbs = engine.Mean(engine.Abs(weights.AsTensor().Cast<double>().ToVector()));
+        var gate = engine.Sigmoid(new Vector<double>(new[] { meanAbs - 1.0 }));
+        return engine.Add(engine.Multiply(gate, 0.5), engine.Fill(1, 0.5)).AsTensor().Cast<T>().ToVector();
     }
 
     /// <summary>
@@ -74,28 +78,22 @@ internal static class ParameterModulation
             return null;
         }
 
-        var rawT = Tensor<T>.FromVector(raw.Length == n ? raw : raw.GetSubVector(0, n));
-        var adaptedT = Tensor<T>.FromVector(adapted.Length == n ? adapted : adapted.GetSubVector(0, n));
+        var rawT = Tensor<T>.FromVector(raw.Length == n ? raw : raw.GetSubVector(0, n)).Cast<double>();
+        var adaptedT = Tensor<T>.FromVector(adapted.Length == n ? adapted : adapted.GetSubVector(0, n)).Cast<double>();
 
         // 1 where |raw| > threshold (NaN compares false, so NaN entries are skipped like the scalar check).
-        var mask = engine.TensorGreaterThan(engine.TensorAbs(rawT), numOps.FromDouble(threshold));
-
-        // Count with an integer op: a sum of the mask in T stops being exact past 2048 under Half.
-        int count = engine.TensorCountNonzero(mask);
-        if (count == 0)
+        var mask = engine.TensorGreaterThan(engine.TensorAbs(rawT), threshold);
+        double count = engine.TensorSum(mask);
+        if (!(count > 0))
         {
             return null;
         }
 
         var safeRaw = engine.TensorWhere(mask, rawT, engine.TensorOnesLike(rawT));
         var ratio = engine.TensorClamp(
-            engine.TensorDivide(adaptedT, safeRaw), numOps.FromDouble(lower), numOps.FromDouble(upper));
-
-        // The mean as the sum of ratio / count: every term is at most upper / count, so the sum stays near the mean
-        // instead of growing to upper * count, which overflows Half (max 65504) for large feature vectors.
-        var masked = engine.TensorWhere(mask, ratio, engine.TensorZerosLike(rawT));
-        T mean = engine.TensorSum(engine.TensorMultiplyScalar(masked, numOps.FromDouble(1.0 / count)));
-        return new Vector<T>(new[] { mean });
+            engine.TensorDivide(adaptedT, safeRaw), lower, upper);
+        double sum = engine.TensorSum(engine.TensorWhere(mask, ratio, engine.TensorZerosLike(rawT)));
+        return new Vector<T>(new[] { numOps.FromDouble(sum / count) });
     }
 
     /// <summary>
