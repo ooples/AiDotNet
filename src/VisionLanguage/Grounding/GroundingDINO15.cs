@@ -154,17 +154,18 @@ public partial class GroundingDINO15<T> : VisionLanguageModelBase<T>, IVisualGro
 
     /// <summary>
     /// The training loss of one image (Grounding DINO section 3.5): the head's queries matched one-to-one to the
-    /// ground-truth boxes by the Hungarian algorithm, then the contrastive focal loss, L1 and GIoU.
+    /// ground-truth boxes by the Hungarian algorithm, then the contrastive focal loss, L1 and GIoU, on the last decoder
+    /// layer, every earlier decoder layer (auxiliary losses) and the encoder proposals.
     /// </summary>
     /// <param name="image">The image.</param>
     /// <param name="textQuery">The text prompt.</param>
     /// <param name="targetBoxes">The ground-truth boxes <c>[G, 4]</c>, normalized (cx, cy, w, h).</param>
     /// <param name="targetTokens">Each box's phrase as 0/1 over the prompt's tokens <c>[G, L]</c>.</param>
-    internal GroundingSetLossTerms<T> GroundingLoss(Tensor<T> image, string textQuery, Tensor<T> targetBoxes, Tensor<T> targetTokens)
+    internal GroundingDetectorLoss<T> GroundingLoss(Tensor<T> image, string textQuery, Tensor<T> targetBoxes, Tensor<T> targetTokens)
     {
         ThrowIfDisposed();
         var prediction = Detect(image, TokenIds(textQuery));
-        return new GroundingSetLoss<T>(Engine).Compute(prediction.Boxes, prediction.Logits, targetBoxes, targetTokens);
+        return new GroundingSetLoss<T>(Engine).Compute(prediction, targetBoxes, targetTokens);
     }
 
     // The backbone's image tokens, then the feature enhancer, language-guided query selection, cross-modality decoder

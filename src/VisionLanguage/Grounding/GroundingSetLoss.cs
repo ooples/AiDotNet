@@ -12,6 +12,14 @@ namespace AiDotNet.VisionLanguage.Grounding;
 internal sealed record GroundingSetLossTerms<T>(Tensor<T> Total, Tensor<T> Classification, Tensor<T> Box,
     Tensor<T> GeneralizedIoU, int[] QueryOfTarget);
 
+/// <summary>The loss of a DETR-style detector over all its outputs.</summary>
+/// <param name="Total">The sum of every output's weighted loss, a one-element tensor.</param>
+/// <param name="Final">The last decoder layer's terms.</param>
+/// <param name="Auxiliary">The earlier decoder layers' terms, first to last.</param>
+/// <param name="Encoder">The two-stage encoder proposals' terms.</param>
+internal sealed record GroundingDetectorLoss<T>(Tensor<T> Total, GroundingSetLossTerms<T> Final,
+    IReadOnlyList<GroundingSetLossTerms<T>> Auxiliary, GroundingSetLossTerms<T> Encoder);
+
 /// <summary>
 /// The set-prediction loss of the DETR-family grounding detectors (DETR, Carion et al. 2020, section 3.1; Deformable
 /// DETR / DINO's focal variant; Grounding DINO, Liu et al. 2023, section 3.5; OWL-ViT, Minderer et al. 2022,
@@ -47,6 +55,23 @@ internal sealed class GroundingSetLoss<T>
     public double GIoUWeight { get; init; } = 2.0;
     public double FocalAlpha { get; init; } = 0.25;
     public double FocalGamma { get; init; } = 2.0;
+
+    /// <summary>
+    /// The full training loss of a <see cref="GroundingQueryDecoder{T}"/> on one image, as DINO and Grounding DINO
+    /// train it: the set loss of the last decoder layer, plus the auxiliary set loss of every earlier decoder layer,
+    /// plus the set loss of the encoder's two-stage proposals; each output is matched to the targets on its own.
+    /// </summary>
+    public GroundingDetectorLoss<T> Compute(GroundingQueryPrediction<T> prediction, Tensor<T> targetBoxes, Tensor<T> targetLabels)
+    {
+        if (prediction is null) throw new ArgumentNullException(nameof(prediction));
+        var final = Compute(prediction.Boxes, prediction.Logits, targetBoxes, targetLabels);
+        var auxiliary = new List<GroundingSetLossTerms<T>>();
+        for (int layer = 0; layer < prediction.LayerBoxes.Count - 1; layer++)
+            auxiliary.Add(Compute(prediction.LayerBoxes[layer], prediction.LayerLogits[layer], targetBoxes, targetLabels));
+        var encoder = Compute(prediction.EncoderBoxes, prediction.EncoderLogits, targetBoxes, targetLabels);
+        var total = auxiliary.Aggregate(_engine.TensorAdd(final.Total, encoder.Total), (sum, terms) => _engine.TensorAdd(sum, terms.Total));
+        return new GroundingDetectorLoss<T>(total, final, auxiliary, encoder);
+    }
 
     /// <summary>The loss of one image's predictions.</summary>
     /// <param name="boxes">Predicted boxes <c>[Q, 4]</c>, normalized (cx, cy, w, h).</param>

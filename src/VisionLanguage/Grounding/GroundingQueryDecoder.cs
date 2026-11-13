@@ -20,7 +20,12 @@ internal sealed record GroundingQueryDecoderConfiguration(int Width, int Heads, 
 /// logit <c>[k, 1]</c> for a class-agnostic head.</param>
 /// <param name="Selected">The indices <c>[k]</c> into the multi-scale tokens (finest level first) the query selection
 /// kept, in selection order.</param>
-internal sealed record GroundingQueryPrediction<T>(Tensor<T> Boxes, Tensor<T> Logits, Tensor<int> Selected)
+/// <param name="LayerBoxes">Every decoder layer's boxes, first to last (the last is <paramref name="Boxes"/>).</param>
+/// <param name="LayerLogits">Every decoder layer's logits from the shared class head, first to last.</param>
+/// <param name="EncoderBoxes">The two-stage proposals of the selected tokens <c>[k, 4]</c> (the decoder's first boxes).</param>
+/// <param name="EncoderLogits">The selected tokens' encoder logits: their similarity to the text, or their objectness.</param>
+internal sealed record GroundingQueryPrediction<T>(Tensor<T> Boxes, Tensor<T> Logits, Tensor<int> Selected,
+    IReadOnlyList<Tensor<T>> LayerBoxes, IReadOnlyList<Tensor<T>> LayerLogits, Tensor<T> EncoderBoxes, Tensor<T> EncoderLogits)
 {
     /// <summary>Each query's score: the sigmoid of its largest logit (Grounding DINO's <c>predict</c>).</summary>
     public Tensor<T> Scores(IEngine engine)
@@ -188,6 +193,12 @@ internal sealed class GroundingQueryDecoder<T> : GroundingHeadModule<T>
         var selectedProposals = Engine.TensorIndexSelect(proposals, selected, 0);
         var reference = Engine.TensorSigmoid(Engine.TensorAdd(
             Mlp(_encoderBoxHead, selectedMemory, x => Engine.ReLU(x)), InverseSigmoid(Engine, selectedProposals)));
+        var encoderBoxes = reference;
+        var encoderLogits = text is not null
+            ? Engine.TensorMatMul(selectedMemory, Engine.TensorTranspose(text))
+            : Rows(_encoderObjectness ?? throw new InvalidOperationException("The objectness head is missing."), selectedMemory);
+        var layerBoxes = new List<Tensor<T>>(_decoders.Count);
+        var layerLogits = new List<Tensor<T>>(_decoders.Count);
 
         // Mixed query selection: learnable content queries, positional queries from the selected boxes.
         var queries = Rows(_contentQueries, OneHot(Enumerable.Range(0, k).ToList(), c.Queries));
@@ -204,17 +215,23 @@ internal sealed class GroundingQueryDecoder<T> : GroundingHeadModule<T>
             var hidden = Rows(layer.FeedForwardDown, Engine.ReLU(Rows(layer.FeedForwardUp, queries)));
             queries = Rows(layer.FeedForwardNorm, Engine.TensorAdd(queries, hidden));
 
-            // Layer-by-layer refinement with the shared box head: sigmoid(offset + logit(previous box)).
-            reference = Engine.TensorSigmoid(Engine.TensorAdd(
-                Mlp(_boxHead, Rows(_decoderNorm, queries), x => Engine.ReLU(x)), InverseSigmoid(Engine, reference)));
+            // Layer-by-layer refinement with the shared box head: sigmoid(offset + logit(previous box)); every layer's
+            // boxes and class logits are predicted for the auxiliary losses.
+            var output = Rows(_decoderNorm, queries);
+            reference = Engine.TensorSigmoid(Engine.TensorAdd(Mlp(_boxHead, output, x => Engine.ReLU(x)), InverseSigmoid(Engine, reference)));
+            layerBoxes.Add(reference);
+            layerLogits.Add(ClassLogits(output, text));
         }
 
-        var output = Rows(_decoderNorm, queries);
-        var logits = text is not null
+        var logits = layerLogits.Count > 0 ? layerLogits[layerLogits.Count - 1] : ClassLogits(Rows(_decoderNorm, queries), text);
+        return new GroundingQueryPrediction<T>(reference, logits, selected, layerBoxes, layerLogits, encoderBoxes, encoderLogits);
+    }
+
+    // The shared class head: contrastive logits against the text tokens, or objectness for a class-agnostic head.
+    private Tensor<T> ClassLogits(Tensor<T> output, Tensor<T>? text)
+        => text is not null
             ? Engine.TensorMatMul(output, Engine.TensorTranspose(text))
             : Rows(_objectnessHead ?? throw new InvalidOperationException("The objectness head is missing."), output);
-        return new GroundingQueryPrediction<T>(reference, logits, selected);
-    }
 
     // Self-attention whose queries and keys carry the positional query and whose values do not (DETR).
     private Tensor<T> SelfAttendValues(MultiHeadAttentionLayer<T> attention, Tensor<T> withPosition, Tensor<T> values)

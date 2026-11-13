@@ -195,7 +195,7 @@ public partial class FerretV2<T> : VisionLanguageModelBase<T>, IVisualGroundingM
         if (_groundingHead is null)
         {
             _groundingHead = new CoordinateTokenDecoder<T>(Engine, _groundingHeadLayers, new CoordinateTokenDecoderConfiguration(
-                _options.DecoderDim, _options.VocabSize, _options.MaxSequenceLength, Bins: 1000, Divisor: 1000));
+                _options.DecoderDim, _options.VocabSize, _options.MaxSequenceLength, Bins: 1000, Divisor: 1000, CoordinateSpelling.Integer));
             RegisterAuxiliaryEncoderStream(_groundingHeadLayers);
         }
     }
