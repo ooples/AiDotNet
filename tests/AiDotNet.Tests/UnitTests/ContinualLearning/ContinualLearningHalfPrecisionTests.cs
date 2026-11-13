@@ -111,6 +111,32 @@ public class ContinualLearningHalfPrecisionTests
         }
     }
 
+    [Fact]
+    public void SynapticIntelligenceLayerStatistics_Half_ChunkMeansBeyondHalfRange()
+    {
+        // 50000 importances: 10 chunks of 5000. Master's double chunk means are 1, 2, ..., 10; a Half
+        // sum of a 5000-element chunk stops growing at 2048 (or loses its low bits).
+        var importance = new Vector<Half>(50000);
+        for (int chunk = 0; chunk < 10; chunk++)
+        {
+            for (int i = 0; i < 5000; i++)
+            {
+                importance[chunk * 5000 + i] = (Half)(chunk + 1.0f);
+            }
+        }
+
+        var si = new SynapticIntelligence<Half, Tensor<Half>, Tensor<Half>>(new MeanSquaredErrorLoss<Half>());
+        var method = si.GetType().GetMethod("ComputeLayerStatistics", BindingFlags.NonPublic | BindingFlags.Instance);
+        Assert.NotNull(method);
+        method?.Invoke(si, new object[] { importance });
+
+        Assert.Equal(10, si.LayerImportance.Count);
+        for (int chunk = 0; chunk < 10; chunk++)
+        {
+            Assert.Equal(chunk + 1.0, si.LayerImportance[chunk], 12);
+        }
+    }
+
     private static double[] Softmax(double[] logits)
     {
         double max = double.NegativeInfinity;

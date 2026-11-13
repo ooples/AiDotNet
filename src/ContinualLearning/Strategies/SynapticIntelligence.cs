@@ -527,8 +527,10 @@ public class SynapticIntelligence<T, TInput, TOutput> : ContinualLearningStrateg
         int chunkSize = Math.Max(1, importance.Length / 10);
         int fullChunks = importance.Length / chunkSize;
         int remainder = importance.Length - fullChunks * chunkSize;
-        var values = importance.AsTensor();
-        var chunkMeans = new List<T>();
+        // Chunk means are double metrics accumulated in double, as master did: a sum in T saturates
+        // (Half stops counting at 2048), so a Half chunk mean would be meaningless.
+        var values = importance.AsTensor().Cast<double>();
+        var chunkMeans = new List<double>();
 
         if (fullChunks > 0)
         {
@@ -548,7 +550,7 @@ public class SynapticIntelligence<T, TInput, TOutput> : ContinualLearningStrateg
         int layerIndex = 0;
         foreach (var mean in chunkMeans)
         {
-            _layerImportance[layerIndex] = Convert.ToDouble(mean);
+            _layerImportance[layerIndex] = mean;
             layerIndex++;
         }
     }
