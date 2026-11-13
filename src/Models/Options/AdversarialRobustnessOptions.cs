@@ -121,8 +121,8 @@ public class AdversarialRobustnessOptions<T> : ModelOptions
     /// <summary>
     /// Gets or sets the norm type for perturbation constraints.
     /// </summary>
-    /// <value>"L-infinity", "L2", or "L1"</value>
-    public string AttackNormType { get; set; } = "L-infinity";
+    /// <value>Defaults to <see cref="AdversarialNormType.LInfinity"/>.</value>
+    public AdversarialNormType AttackNormType { get; set; } = AdversarialNormType.LInfinity;
 
     /// <summary>
     /// Gets or sets whether to use targeted attacks.

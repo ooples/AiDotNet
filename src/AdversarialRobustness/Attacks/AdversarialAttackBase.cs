@@ -1,4 +1,5 @@
 using System.Text;
+using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
 using AiDotNet.Tensors.Engines;
@@ -277,17 +278,111 @@ public abstract partial class AdversarialAttackBase<T, TInput, TOutput> : IAdver
     /// </summary>
     protected T ComputeLInfinityNorm(Vector<T> vector)
     {
-        var absVector = Engine.Abs<T>(vector);
-        // Find max of absolute values
-        T maxValue = NumOps.Zero;
-        for (int i = 0; i < absVector.Length; i++)
+        if (vector.Length == 0)
         {
-            if (NumOps.GreaterThan(absVector[i], maxValue))
-            {
-                maxValue = absVector[i];
-            }
+            return NumOps.Zero;
         }
-        return maxValue;
+
+        // max(|v|) with the running maximum seeded at zero, as a single engine reduction.
+        var absVector = Engine.Abs<T>(vector).AsTensor();
+        return Engine.TensorMaxValue(Engine.TensorMax(absVector, NumOps.Zero));
+    }
+
+    /// <summary>
+    /// Estimates d loss(model(x)) / dx with central finite differences for black-box models.
+    /// </summary>
+    /// <remarks>
+    /// Each probe x +/- delta*e_i is clamped to the valid input domain [0, 1], and the difference is
+    /// divided by the actual clamped step width; a coordinate whose width collapses gets a zero gradient.
+    /// The probes need one model call each, so the loop runs over model calls, never over arithmetic.
+    /// </remarks>
+    /// <param name="vectorInput">The point at which to estimate the gradient.</param>
+    /// <param name="referenceInput">An input used to rebuild the model's input type from a vector.</param>
+    /// <param name="targetModel">The black-box model.</param>
+    /// <param name="lossOfOutput">The loss as a function of the model output.</param>
+    /// <param name="delta">The finite-difference step.</param>
+    protected Vector<T> EstimateInputGradient(
+        Vector<T> vectorInput,
+        TInput referenceInput,
+        IFullModel<T, TInput, TOutput> targetModel,
+        Func<Vector<T>, T> lossOfOutput,
+        T delta)
+    {
+        int n = vectorInput.Length;
+        var plusAll = Engine.Clamp<T>(Engine.Add<T>(vectorInput, Engine.Fill<T>(n, delta)), NumOps.Zero, NumOps.One);
+        var minusAll = Engine.Clamp<T>(Engine.Subtract<T>(vectorInput, Engine.Fill<T>(n, delta)), NumOps.Zero, NumOps.One);
+
+        var plusLosses = new List<T>(n);
+        var minusLosses = new List<T>(n);
+        for (int i = 0; i < n; i++)
+        {
+            plusLosses.Add(LossAtProbe(vectorInput, plusAll, i, referenceInput, targetModel, lossOfOutput));
+            minusLosses.Add(LossAtProbe(vectorInput, minusAll, i, referenceInput, targetModel, lossOfOutput));
+        }
+
+        var width = Engine.Subtract<T>(plusAll, minusAll).AsTensor();
+        var lossDiff = Engine.Subtract<T>(new Vector<T>(plusLosses), new Vector<T>(minusLosses)).AsTensor();
+        var positive = Engine.TensorGreaterThan(width, NumOps.Zero);
+        var zeros = new Tensor<T>(width.Shape.ToArray());
+        var safeWidth = Engine.TensorWhere(positive, width, Engine.TensorAddScalar(zeros, NumOps.One));
+        return Engine.TensorWhere(positive, Engine.TensorDivide(lossDiff, safeWidth), zeros).ToVector();
+    }
+
+    /// <summary>
+    /// Evaluates the loss with coordinate <paramref name="index"/> of the input replaced by the probe value.
+    /// </summary>
+    private static T LossAtProbe(
+        Vector<T> vectorInput,
+        Vector<T> probeValues,
+        int index,
+        TInput referenceInput,
+        IFullModel<T, TInput, TOutput> targetModel,
+        Func<Vector<T>, T> lossOfOutput)
+    {
+        var probe = vectorInput.Clone();
+        probeValues.AsSpan().Slice(index, 1).CopyTo(probe.AsWritableSpan().Slice(index, 1));
+        var modelInput = ConversionsHelper.ConvertVectorToInput<T, TInput>(probe, referenceInput);
+        var output = ConversionsHelper.ConvertToVector<T, TOutput>(targetModel.Predict(modelInput));
+        return lossOfOutput(output);
+    }
+
+    /// <summary>
+    /// The small constant added to a norm before dividing by it (torchattacks uses 1e-10).
+    /// </summary>
+    /// <remarks>
+    /// 1e-10 underflows to zero in narrow types such as Half; there the guard falls back to the
+    /// library's default stability epsilon, which still is a positive value of T.
+    /// </remarks>
+    protected static T DivisionGuard()
+    {
+        var guard = NumOps.FromDouble(1e-10);
+        return NumOps.GreaterThan(guard, NumOps.Zero)
+            ? guard
+            : NumOps.FromDouble(NumericalStabilityHelper.DefaultEpsilon);
+    }
+
+    /// <summary>
+    /// Mean squared error between a model output and a target vector, as engine reductions.
+    /// </summary>
+    protected T ComputeMeanSquaredError(Vector<T> output, Vector<T> target)
+    {
+        var diff = Engine.Subtract<T>(output, target);
+        return NumOps.Divide(Engine.DotProduct<T>(diff, diff), NumOps.FromDouble(diff.Length));
+    }
+
+    /// <summary>
+    /// Index of the largest entry (first one on ties), or 0 for an empty vector.
+    /// </summary>
+    protected int ArgMaxIndex(Vector<T> values)
+    {
+        if (values.Length == 0)
+        {
+            return 0;
+        }
+
+        // TensorArgMax returns the first maximal index, matching a strict ">" scan from index 0.
+        var index = Engine.TensorArgMax(values.AsTensor(), 0);
+        return index.Data.Span[0];
     }
 
     /// <summary>

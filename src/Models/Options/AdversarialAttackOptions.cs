@@ -51,14 +51,13 @@ public class AdversarialAttackOptions<T> : ModelOptions
     /// <summary>
     /// Gets or sets the norm type for perturbation constraints.
     /// </summary>
-    /// <value>The norm type, defaulting to "L-infinity".</value>
+    /// <value>The norm type, defaulting to <see cref="AdversarialNormType.LInfinity"/>.</value>
     /// <remarks>
     /// <para><b>For Beginners:</b> This defines what "small change" means:
     /// - L-infinity: No single value changes by more than epsilon
-    /// - L2: The total change size is limited by epsilon
-    /// - L1: The sum of all changes is limited by epsilon</para>
+    /// - L2: The total change size is limited by epsilon</para>
     /// </remarks>
-    public string NormType { get; set; } = "L-infinity";
+    public AdversarialNormType NormType { get; set; } = AdversarialNormType.LInfinity;
 
     /// <summary>
     /// Gets or sets whether to use targeted or untargeted attacks.
@@ -96,4 +95,30 @@ public class AdversarialAttackOptions<T> : ModelOptions
     /// </summary>
     /// <value>The random seed, defaulting to 42.</value>
     public int RandomSeed { get; set; } = 42;
+
+    /// <summary>
+    /// Gets or sets the Carlini-Wagner trade-off constant c between distortion and the attack loss.
+    /// </summary>
+    /// <value>Defaults to 1, the torchattacks CW default.</value>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Larger values push harder to fool the model at the cost of a
+    /// bigger change to the input.</para>
+    /// </remarks>
+    public double CWConstant { get; set; } = 1.0;
+
+    /// <summary>
+    /// Gets or sets the Carlini-Wagner confidence margin kappa.
+    /// </summary>
+    /// <value>Defaults to 0, as in the paper's L2 attack.</value>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> The attack keeps going until the wrong class wins by at least this
+    /// margin in the model's logits; higher values give adversarial examples that transfer better.</para>
+    /// </remarks>
+    public double CWConfidence { get; set; } = 0.0;
+
+    /// <summary>
+    /// Gets or sets the Adam learning rate the Carlini-Wagner attack uses in tanh space.
+    /// </summary>
+    /// <value>Defaults to 0.01, the paper's and torchattacks' value.</value>
+    public double CWLearningRate { get; set; } = 0.01;
 }

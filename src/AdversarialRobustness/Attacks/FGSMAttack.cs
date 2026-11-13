@@ -155,53 +155,15 @@ public class FGSMAttack<T, TInput, TOutput> : AdversarialAttackBase<T, TInput, T
         TInput referenceInput,
         IFullModel<T, TInput, TOutput> targetModel)
     {
-        const double delta = 1e-4;
-        var gradient = new Vector<T>(vectorInput.Length);
-
-        for (int i = 0; i < vectorInput.Length; i++)
-        {
-            // Forward: x + delta * e_i (clamped to [0,1] valid input domain)
-            var plusInput = Engine.Add<T>(vectorInput, Engine.FillZero<T>(vectorInput.Length));
-            plusInput[i] = NumOps.Add(plusInput[i], NumOps.FromDouble(delta));
-            double plusVal = Math.Min(1.0, Math.Max(0.0, NumOps.ToDouble(plusInput[i])));
-            plusInput[i] = NumOps.FromDouble(plusVal);
-            var plusModelInput = ConversionsHelper.ConvertVectorToInput<T, TInput>(plusInput, referenceInput);
-            var plusOutput = ConversionsHelper.ConvertToVector<T, TOutput>(targetModel.Predict(plusModelInput));
-            var plusLoss = ComputeMseLoss(plusOutput, vectorLabel);
-
-            // Backward: x - delta * e_i (clamped to [0,1])
-            var minusInput = Engine.Add<T>(vectorInput, Engine.FillZero<T>(vectorInput.Length));
-            minusInput[i] = NumOps.Subtract(minusInput[i], NumOps.FromDouble(delta));
-            double minusVal = Math.Min(1.0, Math.Max(0.0, NumOps.ToDouble(minusInput[i])));
-            minusInput[i] = NumOps.FromDouble(minusVal);
-            var minusModelInput = ConversionsHelper.ConvertVectorToInput<T, TInput>(minusInput, referenceInput);
-            var minusOutput = ConversionsHelper.ConvertToVector<T, TOutput>(targetModel.Predict(minusModelInput));
-            var minusLoss = ComputeMseLoss(minusOutput, vectorLabel);
-
-            // Central difference using actual clamped step width
-            double actualDelta = plusVal - minusVal;
-            gradient[i] = actualDelta > 1e-10
-                ? NumOps.FromDouble((NumOps.ToDouble(plusLoss) - NumOps.ToDouble(minusLoss)) / actualDelta)
-                : NumOps.Zero;
-        }
-
-        return gradient;
+        // Central differences on the MSE loss, each probe clamped to [0, 1].
+        return EstimateInputGradient(
+            vectorInput,
+            referenceInput,
+            targetModel,
+            output => ComputeMeanSquaredError(output, vectorLabel),
+            NumOps.FromDouble(1e-4));
     }
 
-    /// <summary>
-    /// Computes the mean squared error loss between output and target vectors.
-    /// </summary>
-    private T ComputeMseLoss(Vector<T> output, Vector<T> target)
-    {
-        var diff = Engine.Subtract<T>(output, target);
-        var squared = new Vector<T>(diff.Length);
-        for (int i = 0; i < diff.Length; i++)
-            squared[i] = NumOps.Multiply(diff[i], diff[i]);
-        var sum = NumOps.Zero;
-        for (int i = 0; i < squared.Length; i++)
-        {
-            sum = NumOps.Add(sum, squared[i]);
-        }
         return NumOps.Divide(sum, NumOps.FromDouble(squared.Length));
     }
 

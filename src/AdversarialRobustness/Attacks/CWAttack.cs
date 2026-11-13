@@ -3,6 +3,7 @@ using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
+using AiDotNet.Tensors.Engines.Autodiff;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 
@@ -74,294 +75,277 @@ public class CWAttack<T, TInput, TOutput> : AdversarialAttackBase<T, TInput, TOu
             throw new ArgumentNullException(nameof(targetModel));
         }
 
-        // Convert to vector representation
         var vectorInput = ConversionsHelper.ConvertToVector<T, TInput>(input);
         var vectorLabel = ConversionsHelper.ConvertToVector<T, TOutput>(trueLabel);
+        int trueLabelIndex = ArgMaxIndex(vectorLabel);
 
-        var c = 1.0; // Confidence parameter
-        var learningRate = 0.01;
-        var bestAdversarial = CloneVector(vectorInput);
-        var bestPerturbation = double.PositiveInfinity;
+        var state = new OptimizationState(this, vectorInput);
+        int abortCheckInterval = Math.Max(Options.Iterations / 10, 1);
 
-        // Extract class index from label vector
-        var trueLabelIndex = GetClassIndex(vectorLabel);
-
-        // Initialize perturbation variable (in tanh space for box constraints)
-        var w = new double[vectorInput.Length];
-        for (int i = 0; i < vectorInput.Length; i++)
-        {
-            // Initialize w such that tanh(w) approximately equals x
-            var x = NumOps.ToDouble(vectorInput[i]);
-            var twoXMinusOne = 2.0 * x - 1.0;
-            w[i] = MathHelper.Atanh(MathHelper.Clamp(twoXMinusOne, -0.9999, 0.9999));
-        }
-
-        // Optimization loop
         for (int iteration = 0; iteration < Options.Iterations; iteration++)
         {
-            // Convert from tanh space to valid input range [0, 1]
-            var adversarial = TanhSpaceToInputSpace(w);
+            // x' = (tanh(w) + 1) / 2 keeps every candidate inside the [0, 1] box.
+            var adversarial = state.CurrentInput();
+            var outputVector = ConversionsHelper.ConvertToVector<T, TOutput>(
+                targetModel.Predict(ConversionsHelper.ConvertVectorToInput<T, TInput>(adversarial, input)));
+            int realIndex = RealClassIndex(outputVector.Length, trueLabelIndex);
 
-            // Compute objective and gradient
-            var modelInput = ConversionsHelper.ConvertVectorToInput<T, TInput>(adversarial, input);
-            var output = targetModel.Predict(modelInput);
-            var outputVector = ConversionsHelper.ConvertToVector<T, TOutput>(output);
-            var (_, gradient) = ComputeObjectiveAndGradient(w, vectorInput, outputVector, trueLabelIndex, c, input, targetModel);
+            var attackLossGradient = ComputeAttackLossInputGradient(adversarial, outputVector, realIndex, input, targetModel);
+            T cost = state.Step(adversarial, outputVector, realIndex, attackLossGradient);
 
-            // Update w using gradient descent
-            for (int i = 0; i < w.Length; i++)
+            state.TrackBest(adversarial, IsSuccessfulAttack(outputVector, trueLabelIndex));
+
+            // torchattacks CW: every tenth of the run, stop once the objective stops decreasing.
+            if (iteration % abortCheckInterval == 0 && state.ObjectiveStoppedDecreasing(cost))
             {
-                w[i] -= learningRate * gradient[i];
-            }
-
-            // Track best solution
-            var perturbation = Engine.Subtract<T>(adversarial, vectorInput);
-            var perturbationNorm = NumOps.ToDouble(ComputeL2Norm(perturbation));
-            if (IsSuccessfulAttack(outputVector, trueLabelIndex) && perturbationNorm < bestPerturbation)
-            {
-                bestAdversarial = CloneVector(adversarial);
-                bestPerturbation = perturbationNorm;
+                break;
             }
         }
 
-        return ConversionsHelper.ConvertVectorToInput<T, TInput>(bestAdversarial, input);
+        return ConversionsHelper.ConvertVectorToInput<T, TInput>(state.BestAdversarial, input);
     }
 
     /// <summary>
-    /// Converts from tanh space (w) to valid input space [0, 1].
+    /// The logit the attack loss pushes down (untargeted: the true class) or up (targeted: the target class).
     /// </summary>
-    private Vector<T> TanhSpaceToInputSpace(double[] w)
+    private int RealClassIndex(int classCount, int trueLabelIndex)
     {
-        var result = new Vector<T>(w.Length);
-        for (int i = 0; i < w.Length; i++)
-        {
-            var tanhW = Math.Tanh(w[i]);
-            result[i] = NumOps.FromDouble((tanhW + 1.0) / 2.0);
-        }
-        return result;
+        return Options.IsTargeted
+            ? MathHelper.Clamp(Options.TargetClass, 0, Math.Max(classCount - 1, 0))
+            : trueLabelIndex;
     }
 
     /// <summary>
-    /// Clones a vector using vectorized operations.
-    /// </summary>
-    private Vector<T> CloneVector(Vector<T> input)
-    {
-        var zeros = Engine.FillZero<T>(input.Length);
-        return Engine.Add<T>(input, zeros);
-    }
-
-    /// <summary>
-    /// Computes the objective function and its gradient.
+    /// The paper's attack loss f_6 on the logits Z.
     /// </summary>
     /// <remarks>
-    /// <para>
-    /// When the target model implements <see cref="IInputGradientComputable{T}"/>, this method uses
-    /// analytic gradient computation via backpropagation, which is more accurate and efficient
-    /// than finite-difference approximation.
-    /// </para>
-    /// <para>
-    /// Falls back to finite-difference approximation for models that don't support analytic gradients.
-    /// </para>
+    /// With other = max over i != real of Z_i: untargeted f = max(Z_real - other, -kappa), targeted
+    /// f = max(other - Z_target, -kappa) (Carlini and Wagner 2017, f_6; torchattacks CW.f).
+    /// Minimizing f lowers the true logit below the best other one (untargeted) or raises the target
+    /// logit above every other one (targeted).
     /// </remarks>
-    private (double objective, double[] gradient) ComputeObjectiveAndGradient(
-        double[] w,
-        Vector<T> original,
-        Vector<T> output,
-        int trueLabel,
-        double c,
+    private T ComputeAttackLoss(Vector<T> logits, int realIndex)
+    {
+        T margin = Margin(logits, realIndex, out _);
+        T floor = NumOps.Negate(NumOps.FromDouble(Options.CWConfidence));
+        return NumOps.GreaterThan(margin, floor) ? margin : floor;
+    }
+
+    /// <summary>
+    /// The unclipped margin of f: Z_real - other (untargeted) or other - Z_target (targeted).
+    /// </summary>
+    private T Margin(Vector<T> logits, int realIndex, out int otherIndex)
+    {
+        otherIndex = realIndex;
+        if (logits.Length < 2)
+        {
+            return NumOps.Zero;
+        }
+
+        // Largest logit among the other classes (first index on ties): mask the real class to the lowest value.
+        var tensor = logits.AsTensor();
+        var isReal = Vector<T>.CreateStandardBasis(logits.Length, realIndex).AsTensor();
+        var lowest = Engine.TensorAddScalar(new Tensor<T>(tensor.Shape.ToArray()), NumOps.MinValue);
+        otherIndex = Engine.TensorArgMax(Engine.TensorWhere(isReal, lowest, tensor), 0).Data.Span[0];
+
+        var span = logits.AsSpan();
+        T realLogit = span[realIndex];
+        T otherLogit = span[otherIndex];
+        return Options.IsTargeted
+            ? NumOps.Subtract(otherLogit, realLogit)
+            : NumOps.Subtract(realLogit, otherLogit);
+    }
+
+    /// <summary>
+    /// d f / d x' at the current candidate.
+    /// </summary>
+    /// <remarks>
+    /// f is piecewise linear in the logits: above its -kappa floor, d f / d Z is +1 and -1 on the two
+    /// logits of the margin. Neural networks back-propagate that vector through a recorded forward pass;
+    /// other models are differentiated with central finite differences of f.
+    /// </remarks>
+    private Vector<T> ComputeAttackLossInputGradient(
+        Vector<T> adversarial,
+        Vector<T> logits,
+        int realIndex,
         TInput referenceInput,
         IFullModel<T, TInput, TOutput> targetModel)
     {
-        var objective = ComputeObjective(w, original, output, trueLabel, c);
-
-        // Check if the model supports analytic gradients
-        if (targetModel is IInputGradientComputable<T> gradientComputable)
+        if (targetModel is NeuralNetworks.NeuralNetworkBase<T> nnModel)
         {
-        }
-
-        // Fallback: approximate gradient in w-space using finite differences
-        return (objective, ComputeFiniteDifferenceGradient(w, original, trueLabel, c, referenceInput, targetModel));
-    }
-
-    /// <summary>
-    /// Computes the gradient of the attack loss with respect to the model output.
-    /// </summary>
-    /// <remarks>
-    /// For untargeted attacks: maximize max_other - true_logit, so gradient is -1 at true class, +1 at max other.
-    /// For targeted attacks: maximize target_logit - max_other, so gradient is +1 at target, -1 at max other.
-    /// </remarks>
-    private Vector<T> ComputeAttackLossGradient(Vector<T> output, int trueLabel)
-    {
-        var gradient = Engine.FillZero<T>(output.Length);
-        var trueLogit = NumOps.ToDouble(output[trueLabel]);
-
-        // Find the maximum logit that isn't the true class
-        var maxOtherLogit = double.NegativeInfinity;
-        var maxOtherIndex = -1;
-        for (int i = 0; i < output.Length; i++)
-        {
-            if (i == trueLabel)
-                continue;
-
-            var logit = NumOps.ToDouble(output[i]);
-            if (logit > maxOtherLogit)
+            var logitGradient = AttackLossLogitGradient(logits, realIndex);
+            var inputTensor = Tensor<T>.FromVector(adversarial);
+            using var tape = new GradientTape<T>();
+            var outputTensor = nnModel.ForwardForTraining(inputTensor);
+            var weights = Engine.Reshape(Tensor<T>.FromVector(logitGradient), outputTensor.Shape.ToArray());
+            var product = Engine.TensorMultiply(outputTensor, weights);
+            var allAxes = Enumerable.Range(0, product.Shape.Length).ToArray();
+            var loss = Engine.ReduceSum(product, allAxes, keepDims: false);
+            var grads = tape.ComputeGradients(loss, [inputTensor]);
+            if (!grads.TryGetValue(inputTensor, out var gradient))
             {
-                maxOtherLogit = logit;
-                maxOtherIndex = i;
+                throw new InvalidOperationException(
+                    "C&W: gradient computation failed - no gradient for input tensor.");
             }
+
+            return gradient.ToVector();
         }
 
-        if (Options.IsTargeted)
-        {
-            var targetIndex = MathHelper.Clamp(Options.TargetClass, 0, output.Length - 1);
-            var targetLogit = NumOps.ToDouble(output[targetIndex]);
-
-            // Loss = max(0, max_other - target), derivative is non-zero only when loss > 0
-            if (maxOtherLogit > targetLogit)
-            {
-                gradient[maxOtherIndex] = NumOps.FromDouble(1.0);
-                gradient[targetIndex] = NumOps.FromDouble(-1.0);
-            }
-        }
-        else
-        {
-            // Loss = max(0, max_other - true), derivative is non-zero only when loss > 0
-            if (maxOtherLogit > trueLogit && maxOtherIndex >= 0)
-            {
-                gradient[maxOtherIndex] = NumOps.FromDouble(1.0);
-                gradient[trueLabel] = NumOps.FromDouble(-1.0);
-            }
-        }
-
-        return gradient;
+        return EstimateInputGradient(
+            adversarial,
+            referenceInput,
+            targetModel,
+            output => ComputeAttackLoss(output, realIndex),
+            NumOps.FromDouble(1e-4));
     }
 
     /// <summary>
-    /// Computes the gradient using finite-difference approximation as a fallback.
+    /// d f / d Z: zero on the -kappa floor, otherwise +1 / -1 on the two logits of the margin.
     /// </summary>
-    private double[] ComputeFiniteDifferenceGradient(
-        double[] w,
-        Vector<T> original,
-        int trueLabel,
-        double c,
-        TInput referenceInput,
-        IFullModel<T, TInput, TOutput> targetModel)
+    private Vector<T> AttackLossLogitGradient(Vector<T> logits, int realIndex)
     {
-        var gradient = new double[w.Length];
-        const double delta = 0.001;
-
-        // Compute base objective
-        var baseAdv = TanhSpaceToInputSpace(w);
-        var baseModelInput = ConversionsHelper.ConvertVectorToInput<T, TInput>(baseAdv, referenceInput);
-        var baseOutput = targetModel.Predict(baseModelInput);
-        var baseOutputVector = ConversionsHelper.ConvertToVector<T, TOutput>(baseOutput);
-        var baseObjective = ComputeObjective(w, original, baseOutputVector, trueLabel, c);
-
-        for (int i = 0; i < w.Length; i++)
+        T margin = Margin(logits, realIndex, out int otherIndex);
+        T floor = NumOps.Negate(NumOps.FromDouble(Options.CWConfidence));
+        if (otherIndex == realIndex || !NumOps.GreaterThan(margin, floor))
         {
-            var wPerturbed = (double[])w.Clone();
-            wPerturbed[i] += delta;
-
-            var advPerturbed = TanhSpaceToInputSpace(wPerturbed);
-
-            var perturbedModelInput = ConversionsHelper.ConvertVectorToInput<T, TInput>(advPerturbed, referenceInput);
-            var outputPerturbed = targetModel.Predict(perturbedModelInput);
-            var outputPerturbedVector = ConversionsHelper.ConvertToVector<T, TOutput>(outputPerturbed);
-            var perturbedObjective = ComputeObjective(wPerturbed, original, outputPerturbedVector, trueLabel, c);
-            gradient[i] = (perturbedObjective - baseObjective) / delta;
+            return new Vector<T>(logits.Length);
         }
 
-        return gradient;
+        var real = Vector<T>.CreateStandardBasis(logits.Length, realIndex);
+        var other = Vector<T>.CreateStandardBasis(logits.Length, otherIndex);
+        return Options.IsTargeted ? Engine.Subtract<T>(other, real) : Engine.Subtract<T>(real, other);
     }
 
     /// <summary>
-    /// Computes the objective value for a given w.
-    /// </summary>
-    private double ComputeObjective(double[] w, Vector<T> original, Vector<T> output, int trueLabel, double c)
-    {
-        var adversarial = TanhSpaceToInputSpace(w);
-
-        // Use vectorized subtraction for perturbation
-        var perturbation = Engine.Subtract<T>(adversarial, original);
-        var l2Distance = NumOps.ToDouble(ComputeL2Norm(perturbation));
-        var l2DistanceSquared = l2Distance * l2Distance;
-
-        var attackLoss = ComputeAttackLoss(output, trueLabel);
-        return l2DistanceSquared + c * attackLoss;
-    }
-
-    /// <summary>
-    /// Computes the attack loss for C and W.
-    /// </summary>
-    private double ComputeAttackLoss(Vector<T> output, int trueLabel)
-    {
-        var trueLogit = NumOps.ToDouble(output[trueLabel]);
-
-        // Find the maximum logit that isn't the true class
-        var maxOtherLogit = double.NegativeInfinity;
-        for (int i = 0; i < output.Length; i++)
-        {
-            if (i == trueLabel)
-                continue;
-
-            maxOtherLogit = Math.Max(maxOtherLogit, NumOps.ToDouble(output[i]));
-        }
-
-        // Untargeted: maximize maxOther - true. Targeted: maximize true - target (i.e., push toward target).
-        if (Options.IsTargeted)
-        {
-            var targetIndex = MathHelper.Clamp(Options.TargetClass, 0, output.Length - 1);
-            var targetLogit = NumOps.ToDouble(output[targetIndex]);
-            return Math.Max(maxOtherLogit - targetLogit, 0.0);
-        }
-
-        return Math.Max(maxOtherLogit - trueLogit, 0.0);
-    }
-
-    /// <summary>
-    /// Checks if the attack was successful.
+    /// Checks if an attack was successful based on the model's output.
     /// </summary>
     private bool IsSuccessfulAttack(Vector<T> output, int trueLabel)
     {
-        var predictedClass = 0;
-        var maxValue = NumOps.ToDouble(output[0]);
-
-        for (int i = 1; i < output.Length; i++)
-        {
-            var v = NumOps.ToDouble(output[i]);
-            if (v > maxValue)
-            {
-                maxValue = v;
-                predictedClass = i;
-            }
-        }
-
+        int predictedClass = ArgMaxIndex(output);
         return Options.IsTargeted
             ? predictedClass == Options.TargetClass
             : predictedClass != trueLabel;
     }
 
     /// <summary>
-    /// Gets the class index from a label vector (argmax for one-hot or probability vectors).
+    /// Adam optimization of the tanh-space variable w, plus the best successful candidate so far.
     /// </summary>
-    private int GetClassIndex(Vector<T> label)
+    private sealed class OptimizationState
     {
-        if (label == null || label.Length == 0)
+        private const double Beta1 = 0.9;
+        private const double Beta2 = 0.999;
+        private const double AdamEpsilon = 1e-8;
+
+        private readonly CWAttack<T, TInput, TOutput> _attack;
+        private readonly Vector<T> _original;
+        private readonly T _c;
+        private readonly T _learningRate;
+        private Vector<T> _w;
+        private Vector<T> _firstMoment;
+        private Vector<T> _secondMoment;
+        private int _step;
+        private T _bestSquaredDistance;
+        private T _previousCost;
+        private bool _hasPreviousCost;
+
+        public OptimizationState(CWAttack<T, TInput, TOutput> attack, Vector<T> original)
         {
-            return 0;
+            _attack = attack;
+            _original = original;
+            _c = NumOps.FromDouble(attack.Options.CWConstant);
+            _learningRate = NumOps.FromDouble(attack.Options.CWLearningRate);
+
+            // w = atanh(2x - 1), clipped away from +-1 so pixels at the box edges stay finite.
+            var engine = attack.Engine;
+            var bound = NumOps.FromDouble(0.9999);
+            var scaled = engine.Subtract<T>(
+                engine.Multiply<T>(original, NumOps.FromDouble(2.0)),
+                engine.Fill<T>(original.Length, NumOps.One));
+            _w = engine.Atanh<T>(engine.Clamp<T>(scaled, NumOps.Negate(bound), bound));
+            _firstMoment = new Vector<T>(original.Length);
+            _secondMoment = new Vector<T>(original.Length);
+            BestAdversarial = original.Clone();
+            _bestSquaredDistance = NumOps.MaxValue;
+            _previousCost = NumOps.MaxValue;
         }
 
-        int maxIndex = 0;
-        T maxValue = label[0];
-        for (int i = 1; i < label.Length; i++)
+        public Vector<T> BestAdversarial { get; private set; }
+
+        /// <summary>x' = (tanh(w) + 1) / 2.</summary>
+        public Vector<T> CurrentInput()
         {
-            if (NumOps.GreaterThan(label[i], maxValue))
+            var engine = _attack.Engine;
+            var shifted = engine.Add<T>(engine.Tanh<T>(_w), engine.Fill<T>(_w.Length, NumOps.One));
+            return engine.Multiply<T>(shifted, NumOps.FromDouble(0.5));
+        }
+
+        /// <summary>
+        /// One Adam step on ||x' - x||^2 + c * f(x'); returns the objective at the pre-step point.
+        /// </summary>
+        public T Step(Vector<T> adversarial, Vector<T> logits, int realIndex, Vector<T> attackLossGradient)
+        {
+            var engine = _attack.Engine;
+            var diff = engine.Subtract<T>(adversarial, _original);
+            T attackLoss = _attack.ComputeAttackLoss(logits, realIndex);
+            T cost = NumOps.Add(engine.DotProduct<T>(diff, diff), NumOps.Multiply(_c, attackLoss));
+
+            // d/dx' = 2 (x' - x) + c * df/dx';  dx'/dw = (1 - tanh(w)^2) / 2.
+            var inputGradient = engine.Add<T>(
+                engine.Multiply<T>(diff, NumOps.FromDouble(2.0)),
+                engine.Multiply<T>(attackLossGradient, _c));
+            var tanhW = engine.Tanh<T>(_w);
+            var jacobian = engine.Multiply<T>(
+                engine.Subtract<T>(engine.Fill<T>(_w.Length, NumOps.One), engine.Multiply<T>(tanhW, tanhW)),
+                NumOps.FromDouble(0.5));
+            var gradient = engine.Multiply<T>(inputGradient, jacobian);
+
+            // Adam (Kingma and Ba 2015) with PyTorch's defaults, as torchattacks CW uses.
+            _step++;
+            _firstMoment = engine.Add<T>(
+                engine.Multiply<T>(_firstMoment, NumOps.FromDouble(Beta1)),
+                engine.Multiply<T>(gradient, NumOps.FromDouble(1.0 - Beta1)));
+            _secondMoment = engine.Add<T>(
+                engine.Multiply<T>(_secondMoment, NumOps.FromDouble(Beta2)),
+                engine.Multiply<T>(engine.Multiply<T>(gradient, gradient), NumOps.FromDouble(1.0 - Beta2)));
+            T firstCorrection = NumOps.FromDouble(1.0 - Math.Pow(Beta1, _step));
+            T secondCorrection = NumOps.FromDouble(1.0 - Math.Pow(Beta2, _step));
+            var denominator = engine.Add<T>(
+                engine.Sqrt<T>(engine.Divide<T>(_secondMoment, secondCorrection)),
+                engine.Fill<T>(_w.Length, NumOps.FromDouble(AdamEpsilon)));
+            var update = engine.Divide<T>(engine.Divide<T>(_firstMoment, firstCorrection), denominator);
+            _w = engine.Subtract<T>(_w, engine.Multiply<T>(update, _learningRate));
+            return cost;
+        }
+
+        /// <summary>Keeps the successful candidate with the smallest L2 distance.</summary>
+        public void TrackBest(Vector<T> adversarial, bool successful)
+        {
+            if (!successful)
             {
-                maxValue = label[i];
-                maxIndex = i;
+                return;
+            }
+
+            var diff = _attack.Engine.Subtract<T>(adversarial, _original);
+            T squaredDistance = _attack.Engine.DotProduct<T>(diff, diff);
+            if (NumOps.LessThan(squaredDistance, _bestSquaredDistance))
+            {
+                _bestSquaredDistance = squaredDistance;
+                BestAdversarial = adversarial.Clone();
             }
         }
-        return maxIndex;
+
+        /// <summary>True when the objective rose since the previous check (the torchattacks early abort).</summary>
+        public bool ObjectiveStoppedDecreasing(T cost)
+        {
+            if (_hasPreviousCost && NumOps.GreaterThan(cost, _previousCost))
+            {
+                return true;
+            }
+
+            _previousCost = cost;
+            _hasPreviousCost = true;
+            return false;
+        }
     }
 
     /// <inheritdoc/>

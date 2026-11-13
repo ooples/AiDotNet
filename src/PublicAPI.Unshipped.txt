@@ -22921,3 +22921,28 @@ AiDotNet.Enums.MixtureOfExpertsGatingNoise.SoftplusOfRouterLogits = 1 -> AiDotNe
 AiDotNet.Enums.ObliviousTreeChoiceFunction
 AiDotNet.Enums.ObliviousTreeChoiceFunction.Entmax15 = 0 -> AiDotNet.Enums.ObliviousTreeChoiceFunction
 AiDotNet.Enums.ObliviousTreeChoiceFunction.SoftmaxSigmoid = 1 -> AiDotNet.Enums.ObliviousTreeChoiceFunction
+*REMOVED*AiDotNet.Models.Options.AdversarialAttackOptions<T>.NormType.get -> string!
+*REMOVED*AiDotNet.Models.Options.AdversarialAttackOptions<T>.NormType.set -> void
+*REMOVED*AiDotNet.Models.Options.AdversarialRobustnessOptions<T>.AttackNormType.get -> string!
+*REMOVED*AiDotNet.Models.Options.AdversarialRobustnessOptions<T>.AttackNormType.set -> void
+*REMOVED*AiDotNet.Models.RobustnessStats<T>.NormType.get -> string!
+*REMOVED*AiDotNet.Models.RobustnessStats<T>.NormType.set -> void
+*REMOVED*AiDotNet.Models.RobustnessStats<T>.AveragePerturbationSize.get -> double
+*REMOVED*AiDotNet.Models.RobustnessStats<T>.AveragePerturbationSize.set -> void
+AiDotNet.Enums.AdversarialNormType
+AiDotNet.Enums.AdversarialNormType.LInfinity = 0 -> AiDotNet.Enums.AdversarialNormType
+AiDotNet.Enums.AdversarialNormType.L2 = 1 -> AiDotNet.Enums.AdversarialNormType
+AiDotNet.Models.Options.AdversarialAttackOptions<T>.NormType.get -> AiDotNet.Enums.AdversarialNormType
+AiDotNet.Models.Options.AdversarialRobustnessOptions<T>.AttackNormType.get -> AiDotNet.Enums.AdversarialNormType
+AiDotNet.Models.RobustnessStats<T>.NormType.get -> AiDotNet.Enums.AdversarialNormType
+AiDotNet.Models.RobustnessStats<T>.AveragePerturbationSize.get -> T
+AiDotNet.Models.Options.AdversarialAttackOptions<T>.CWConstant.get -> double
+AiDotNet.Models.Options.AdversarialAttackOptions<T>.CWConstant.set -> void
+AiDotNet.Models.Options.AdversarialAttackOptions<T>.CWConfidence.get -> double
+AiDotNet.Models.Options.AdversarialAttackOptions<T>.CWConfidence.set -> void
+AiDotNet.Models.Options.AdversarialAttackOptions<T>.CWLearningRate.get -> double
+AiDotNet.Models.Options.AdversarialAttackOptions<T>.CWLearningRate.set -> void
+AiDotNet.AdversarialRobustness.Attacks.AdversarialAttackBase<T, TInput, TOutput>.EstimateInputGradient(AiDotNet.Tensors.LinearAlgebra.Vector<T>! vectorInput, TInput referenceInput, AiDotNet.Interfaces.IFullModel<T, TInput, TOutput>! targetModel, System.Func<AiDotNet.Tensors.LinearAlgebra.Vector<T>!, T>! lossOfOutput, T delta) -> AiDotNet.Tensors.LinearAlgebra.Vector<T>!
+AiDotNet.AdversarialRobustness.Attacks.AdversarialAttackBase<T, TInput, TOutput>.ComputeMeanSquaredError(AiDotNet.Tensors.LinearAlgebra.Vector<T>! output, AiDotNet.Tensors.LinearAlgebra.Vector<T>! target) -> T
+AiDotNet.AdversarialRobustness.Attacks.AdversarialAttackBase<T, TInput, TOutput>.ArgMaxIndex(AiDotNet.Tensors.LinearAlgebra.Vector<T>! values) -> int
+static AiDotNet.AdversarialRobustness.Attacks.AdversarialAttackBase<T, TInput, TOutput>.DivisionGuard() -> T

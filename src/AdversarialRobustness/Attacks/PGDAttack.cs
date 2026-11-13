@@ -109,9 +109,7 @@ public class PGDAttack<T, TInput, TOutput> : AdversarialAttackBase<T, TInput, TO
                 gradient = ComputeNumericalGradient(adversarial, vectorLabel, input, targetModel);
             }
 
-            // Compute perturbation: stepSize * sign(gradient)
-            var signedGradient = SignVector(gradient);
-            var perturbation = Engine.Multiply<T>(signedGradient, stepSize);
+            var perturbation = SteepestAscentStep(gradient, stepSize);
 
             // For targeted attacks, negate the perturbation (move towards target class)
             if (Options.IsTargeted)
@@ -130,6 +128,24 @@ public class PGDAttack<T, TInput, TOutput> : AdversarialAttackBase<T, TInput, TO
         }
 
         return ConversionsHelper.ConvertVectorToInput<T, TInput>(adversarial, input);
+    }
+
+    /// <summary>
+    /// The steepest-ascent step for the attack's norm (Madry et al. 2018; torchattacks PGD and PGDL2).
+    /// </summary>
+    /// <remarks>
+    /// L-infinity steps by stepSize * sign(gradient); L2 steps by stepSize * gradient / ||gradient||_2,
+    /// so each L2 step has length stepSize instead of stepSize * sqrt(d).
+    /// </remarks>
+    private Vector<T> SteepestAscentStep(Vector<T> gradient, T stepSize)
+    {
+        if (Options.NormType == AdversarialNormType.L2)
+        {
+            var scale = NumOps.Divide(stepSize, NumOps.Add(ComputeL2Norm(gradient), DivisionGuard()));
+            return Engine.Multiply<T>(gradient, scale);
+        }
+
+        return Engine.Multiply<T>(SignVector(gradient), stepSize);
     }
 
     /// <summary>
@@ -154,17 +170,25 @@ public class PGDAttack<T, TInput, TOutput> : AdversarialAttackBase<T, TInput, TO
     /// </remarks>
     private Vector<T> RandomStartingPoint(Vector<T> input, T epsilon)
     {
-        // Generate random perturbation using Engine
-        var perturbation = Engine.GenerateGaussianNoise<T>(
-            input.Length,
-            NumOps.Zero,
-            epsilon,
-            Options.RandomSeed);
-
-        // Project to appropriate norm ball
-        perturbation = Options.NormType == "L2"
-            ? ProjectL2(perturbation, epsilon)
-            : ProjectLInfinity(perturbation, epsilon);
+        // Each call draws from the attack's own seeded stream, so repeated calls explore different starts
+        // while a fixed RandomSeed still reproduces the whole sequence.
+        Vector<T> perturbation;
+        if (Options.NormType == AdversarialNormType.L2)
+        {
+            // torchattacks PGDL2: a Gaussian direction scaled to radius r * epsilon with r ~ U(0, 1).
+            var direction = Engine.GenerateGaussianNoise<T>(input.Length, NumOps.Zero, NumOps.One, Random.Next());
+            var radius = Engine.TensorRandomUniformRange(new[] { 1 }, NumOps.Zero, NumOps.One, Random.Next()).ToVector();
+            var scale = NumOps.Divide(
+                NumOps.Multiply(radius.AsSpan()[0], epsilon),
+                NumOps.Add(ComputeL2Norm(direction), DivisionGuard()));
+            perturbation = Engine.Multiply<T>(direction, scale);
+        }
+        else
+        {
+            // Madry et al. 2018 / torchattacks PGD: delta ~ U(-epsilon, epsilon) per coordinate.
+            perturbation = Engine.TensorRandomUniformRange(
+                new[] { input.Length }, NumOps.Negate(epsilon), epsilon, Random.Next()).ToVector();
+        }
 
         // randomStart = input + perturbation
         var randomStart = Engine.Add<T>(input, perturbation);
@@ -182,7 +206,7 @@ public class PGDAttack<T, TInput, TOutput> : AdversarialAttackBase<T, TInput, TO
         var perturbation = Engine.Subtract<T>(adversarial, original);
 
         // Project based on norm type
-        perturbation = Options.NormType == "L2"
+        perturbation = Options.NormType == AdversarialNormType.L2
             ? ProjectL2(perturbation, epsilon)
             : ProjectLInfinity(perturbation, epsilon);
 
@@ -226,53 +250,15 @@ public class PGDAttack<T, TInput, TOutput> : AdversarialAttackBase<T, TInput, TO
         TInput referenceInput,
         IFullModel<T, TInput, TOutput> targetModel)
     {
-        const double delta = 1e-4;
-        var gradient = new Vector<T>(vectorInput.Length);
-
-        for (int i = 0; i < vectorInput.Length; i++)
-        {
-            // Forward: x + delta * e_i (clamped to [0,1] valid input domain)
-            var plusInput = Engine.Add<T>(vectorInput, Engine.FillZero<T>(vectorInput.Length));
-            plusInput[i] = NumOps.Add(plusInput[i], NumOps.FromDouble(delta));
-            double plusVal = Math.Min(1.0, Math.Max(0.0, NumOps.ToDouble(plusInput[i])));
-            plusInput[i] = NumOps.FromDouble(plusVal);
-            var plusModelInput = ConversionsHelper.ConvertVectorToInput<T, TInput>(plusInput, referenceInput);
-            var plusOutput = ConversionsHelper.ConvertToVector<T, TOutput>(targetModel.Predict(plusModelInput));
-            var plusLoss = ComputeMseLoss(plusOutput, vectorLabel);
-
-            // Backward: x - delta * e_i (clamped to [0,1])
-            var minusInput = Engine.Add<T>(vectorInput, Engine.FillZero<T>(vectorInput.Length));
-            minusInput[i] = NumOps.Subtract(minusInput[i], NumOps.FromDouble(delta));
-            double minusVal = Math.Min(1.0, Math.Max(0.0, NumOps.ToDouble(minusInput[i])));
-            minusInput[i] = NumOps.FromDouble(minusVal);
-            var minusModelInput = ConversionsHelper.ConvertVectorToInput<T, TInput>(minusInput, referenceInput);
-            var minusOutput = ConversionsHelper.ConvertToVector<T, TOutput>(targetModel.Predict(minusModelInput));
-            var minusLoss = ComputeMseLoss(minusOutput, vectorLabel);
-
-            // Central difference using actual clamped step width
-            double actualDelta = plusVal - minusVal;
-            gradient[i] = actualDelta > 1e-10
-                ? NumOps.FromDouble((NumOps.ToDouble(plusLoss) - NumOps.ToDouble(minusLoss)) / actualDelta)
-                : NumOps.Zero;
-        }
-
-        return gradient;
+        // Central differences on the MSE loss, each probe clamped to [0, 1].
+        return EstimateInputGradient(
+            vectorInput,
+            referenceInput,
+            targetModel,
+            output => ComputeMeanSquaredError(output, vectorLabel),
+            NumOps.FromDouble(1e-4));
     }
 
-    /// <summary>
-    /// Computes the mean squared error loss between output and target vectors.
-    /// </summary>
-    private T ComputeMseLoss(Vector<T> output, Vector<T> target)
-    {
-        var diff = Engine.Subtract<T>(output, target);
-        var squared = new Vector<T>(diff.Length);
-        for (int i = 0; i < diff.Length; i++)
-            squared[i] = NumOps.Multiply(diff[i], diff[i]);
-        var sum = NumOps.Zero;
-        for (int i = 0; i < squared.Length; i++)
-        {
-            sum = NumOps.Add(sum, squared[i]);
-        }
         return NumOps.Divide(sum, NumOps.FromDouble(squared.Length));
     }
 
