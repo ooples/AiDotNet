@@ -265,12 +265,10 @@ public partial class RodimusLayer<T> : LayerBase<T>, IShapeContract
         // Temperature bias initialized so softplus(bias) ~ baseTemperature
         // softplus(x) = ln(1 + exp(x)), so x ~ ln(exp(temp) - 1)
         T tempBiasVal = NumOps.FromDouble(Math.Log(Math.Exp(_baseTemperature) - 1.0 + 1e-8));
-        for (int i = 0; i < _temperatureBias.Length; i++)
-            _temperatureBias[i] = tempBiasVal;
+        _temperatureBias.Fill(tempBiasVal);
         InitializeTensor2D(_forgetGateWeights);
         // Forget gate bias ~ 2 so sigmoid(2) ~ 0.88 -> strong initial memory retention
-        for (int i = 0; i < _forgetGateBias.Length; i++)
-            _forgetGateBias[i] = NumOps.FromDouble(2.0);
+        _forgetGateBias.Fill(NumOps.FromDouble(2.0));
         InitializeTensor2D(_outputGateWeights);
         _outputGateBias.Fill(NumOps.Zero);
         InitializeTensor2D(_outputProjectionWeights);

@@ -135,10 +135,6 @@ public partial class LinearRecurrentUnitLayer<T> : LayerBase<T>, IShapeContract
 
     // Cached values for backward pass
     [Scratch]
-    private Tensor<T>? _lastHiddenStatesReal;
-    [Scratch]
-    private Tensor<T>? _lastHiddenStatesImag;
-    [Scratch]
     private Tensor<T>? _lastLambdaReal;
     [Scratch]
     private Tensor<T>? _lastLambdaImag;
@@ -395,188 +391,6 @@ public partial class LinearRecurrentUnitLayer<T> : LayerBase<T>, IShapeContract
         return Engine.Reshape(output, new[] { batchSize, seqLen, _modelDimension });
     }
 
-    /// <summary>
-    /// Backward pass through the diagonal complex recurrence.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// Computes gradients for all recurrence parameters (nu, theta, B, C, D) by
-    /// backpropagating through time. The gradient of lambda with respect to nu and theta
-    /// requires the chain rule through the double-exponential parameterization:
-    ///   d_lambda/d_nu = lambda * (-exp(nu))     (magnitude gradient)
-    ///   d_lambda/d_theta = i * lambda * exp(theta) (phase gradient)
-    /// </para>
-    /// </remarks>
-    private Tensor<T> DiagonalComplexRecurrenceBackward(
-        Tensor<T> dOutput, Tensor<T> u, int batchSize, int seqLen)
-    {
-        var dU = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _modelDimension });
-
-        // Initialize gradient accumulators
-        _nuGradient = new Tensor<T>(new[] { _stateDimension });
-        _thetaGradient = new Tensor<T>(new[] { _stateDimension });
-        _bRealGradient = new Tensor<T>(new[] { _modelDimension, _stateDimension });
-        _bImagGradient = new Tensor<T>(new[] { _modelDimension, _stateDimension });
-        _cRealGradient = new Tensor<T>(new[] { _stateDimension, _modelDimension });
-        _cImagGradient = new Tensor<T>(new[] { _stateDimension, _modelDimension });
-        _dParamGradient = new Tensor<T>(new[] { _modelDimension });
-
-        var lambdaReal = _lastLambdaReal
-            ?? throw new InvalidOperationException("Forward pass must be called before backward pass.");
-        var lambdaImag = _lastLambdaImag
-            ?? throw new InvalidOperationException("Forward pass must be called before backward pass.");
-        var hiddenStatesReal = _lastHiddenStatesReal
-            ?? throw new InvalidOperationException("Forward pass must be called before backward pass.");
-        var hiddenStatesImag = _lastHiddenStatesImag
-            ?? throw new InvalidOperationException("Forward pass must be called before backward pass.");
-
-        // Running gradient of hidden state (complex): dL/dh[t]
-        var dhReal = TensorAllocator.Rent<T>(new[] { batchSize, _stateDimension });
-        var dhImag = TensorAllocator.Rent<T>(new[] { batchSize, _stateDimension });
-
-        for (int t = seqLen - 1; t >= 0; t--)
-        {
-            // Gradient from output: y[t,d] = sum_n Re(C[n,d] * x[t,n]) + D[d] * u[t,d]
-            // dh_real[n] += sum_d C_real[n,d] * dOut[t,d]
-            // dh_imag[n] -= sum_d C_imag[n,d] * dOut[t,d]  (from Re(C*h) = Cr*hr - Ci*hi)
-            // dC_real[n,d] += h_real[t,n] * dOut[t,d]
-            // dC_imag[n,d] -= h_imag[t,n] * dOut[t,d]
-            // dD[d] += u[t,d] * dOut[t,d]
-            // dU[t,d] += D[d] * dOut[t,d]
-
-            for (int bi = 0; bi < batchSize; bi++)
-            {
-                for (int d = 0; d < _modelDimension; d++)
-                {
-                    T dOutVal = dOutput[new[] { bi, t, d }];
-                    T uVal = u[new[] { bi, t, d }];
-
-                    // dD gradient
-                    _dParamGradient[d] = NumOps.Add(_dParamGradient[d],
-                        NumOps.Multiply(uVal, dOutVal));
-
-                    // dU from skip connection
-                    dU[new[] { bi, t, d }] = NumOps.Add(dU[new[] { bi, t, d }],
-                        NumOps.Multiply(_dParam[d], dOutVal));
-
-                    for (int n = 0; n < _stateDimension; n++)
-                    {
-                        T hR = hiddenStatesReal[new[] { bi, t + 1, n }];
-                        T hI = hiddenStatesImag[new[] { bi, t + 1, n }];
-
-                        // dh from output
-                        dhReal[new[] { bi, n }] = NumOps.Add(dhReal[new[] { bi, n }],
-                            NumOps.Multiply(_cReal[new[] { n, d }], dOutVal));
-                        dhImag[new[] { bi, n }] = NumOps.Add(dhImag[new[] { bi, n }],
-                            NumOps.Negate(NumOps.Multiply(_cImag[new[] { n, d }], dOutVal)));
-
-                        // dC gradient
-                        _cRealGradient[new[] { n, d }] = NumOps.Add(
-                            _cRealGradient[new[] { n, d }],
-                            NumOps.Multiply(hR, dOutVal));
-                        _cImagGradient[new[] { n, d }] = NumOps.Add(
-                            _cImagGradient[new[] { n, d }],
-                            NumOps.Negate(NumOps.Multiply(hI, dOutVal)));
-                    }
-                }
-
-                // Backprop through state update: h[t] = lambda * h[t-1] + B * u[t]
-                // dh_prev = conj(lambda) * dh  (conjugate transpose for complex)
-                // d_lambda += dh * conj(h_prev)
-                // dB += dh * u[t]  (complex B, real u)
-                // dU[t] += Re(conj(B) * dh)  (chain rule back to real input)
-
-                for (int n = 0; n < _stateDimension; n++)
-                {
-                    T dhR = dhReal[new[] { bi, n }];
-                    T dhI = dhImag[new[] { bi, n }];
-                    T hPrevR = hiddenStatesReal[new[] { bi, t, n }];
-                    T hPrevI = hiddenStatesImag[new[] { bi, t, n }];
-                    T lR = lambdaReal[n];
-                    T lI = lambdaImag[n];
-
-                    // d_lambda_real += dhR * hPrevR + dhI * hPrevI
-                    // d_lambda_imag += dhI * hPrevR - dhR * hPrevI
-                    T dLambdaR = NumOps.Add(
-                        NumOps.Multiply(dhR, hPrevR),
-                        NumOps.Multiply(dhI, hPrevI));
-                    T dLambdaI = NumOps.Subtract(
-                        NumOps.Multiply(dhI, hPrevR),
-                        NumOps.Multiply(dhR, hPrevI));
-
-                    // Chain rule: lambda = mag * (cos(angle) + i*sin(angle))
-                    // where mag = exp(-exp(nu)), angle = exp(theta)
-                    //
-                    // d_nu: d_loss/d_nu = Re(d_loss/d_lambda * d_lambda/d_nu)
-                    //   d_lambda/d_nu = lambda * (-exp(nu))
-                    //   Re(dLambda^* * lambda * (-exp(nu)))
-                    //   = -exp(nu) * Re(dLambda^* * lambda)
-                    //   = -exp(nu) * (dLambdaR * lR + dLambdaI * lI)
-                    double nuVal = NumOps.ToDouble(_nu[n]);
-                    double expNu = Math.Exp(nuVal);
-                    T nuChain = NumOps.Multiply(
-                        NumOps.FromDouble(-expNu),
-                        NumOps.Add(
-                            NumOps.Multiply(dLambdaR, lR),
-                            NumOps.Multiply(dLambdaI, lI)));
-                    _nuGradient[n] = NumOps.Add(_nuGradient[n], nuChain);
-
-                    // d_theta: d_loss/d_theta = Re(d_loss/d_lambda * d_lambda/d_theta)
-                    //   d_lambda/d_theta = i * lambda * exp(theta)
-                    //   Re(dLambda^* * i * lambda * exp(theta))
-                    //   = exp(theta) * Re(dLambda^* * i * lambda)
-                    //   = exp(theta) * (dLambdaR * (-lI) + dLambdaI * lR)
-                    double thetaVal = NumOps.ToDouble(_theta[n]);
-                    double expTheta = Math.Exp(thetaVal);
-                    T thetaChain = NumOps.Multiply(
-                        NumOps.FromDouble(expTheta),
-                        NumOps.Add(
-                            NumOps.Multiply(dLambdaR, NumOps.Negate(lI)),
-                            NumOps.Multiply(dLambdaI, lR)));
-                    _thetaGradient[n] = NumOps.Add(_thetaGradient[n], thetaChain);
-
-                    // dB gradient and dU from B path
-                    // h[t] += B * u, where B is complex and u is real
-                    // dB_real[d,n] += dhR * u[t,d], dB_imag[d,n] += dhI * u[t,d]
-                    // dU[t,d] += B_real[d,n] * dhR + B_imag[d,n] * dhI
-                    for (int d = 0; d < _modelDimension; d++)
-                    {
-                        T uVal = u[new[] { bi, t, d }];
-
-                        _bRealGradient[new[] { d, n }] = NumOps.Add(
-                            _bRealGradient[new[] { d, n }],
-                            NumOps.Multiply(dhR, uVal));
-                        _bImagGradient[new[] { d, n }] = NumOps.Add(
-                            _bImagGradient[new[] { d, n }],
-                            NumOps.Multiply(dhI, uVal));
-
-                        // dU from B: Re(conj(B) * dh) = B_real * dhR + B_imag * dhI
-                        dU[new[] { bi, t, d }] = NumOps.Add(dU[new[] { bi, t, d }],
-                            NumOps.Add(
-                                NumOps.Multiply(_bReal[new[] { d, n }], dhR),
-                                NumOps.Multiply(_bImag[new[] { d, n }], dhI)));
-                    }
-
-                    // Propagate dh to previous timestep through lambda multiplication
-                    // dh_prev = conj(lambda) * dh
-                    // conj(lambda) = (lR - i*lI)
-                    // (lR - i*lI)(dhR + i*dhI) = (lR*dhR + lI*dhI) + i*(lR*dhI - lI*dhR)
-                    T newDhR = NumOps.Add(
-                        NumOps.Multiply(lR, dhR),
-                        NumOps.Multiply(lI, dhI));
-                    T newDhI = NumOps.Subtract(
-                        NumOps.Multiply(lR, dhI),
-                        NumOps.Multiply(lI, dhR));
-
-                    dhReal[new[] { bi, n }] = newDhR;
-                    dhImag[new[] { bi, n }] = newDhI;
-                }
-            }
-        }
-
-        return dU;
-    }
-
     #region Parameter Management
 
     /// <inheritdoc />
@@ -639,8 +453,6 @@ public partial class LinearRecurrentUnitLayer<T> : LayerBase<T>, IShapeContract
     /// <inheritdoc />
     public override void ResetState()
     {
-        _lastHiddenStatesReal = null;
-        _lastHiddenStatesImag = null;
         _lastLambdaReal = null;
         _lastLambdaImag = null;
         _originalInputShape = null;

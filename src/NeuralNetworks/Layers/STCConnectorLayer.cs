@@ -404,15 +404,8 @@ public partial class STCConnectorLayer<T> : LayerBase<T>, IShapeContract
         var vectors = layers
             .Select(layer => gradients ? layer.GetParameterGradients() : layer.GetParameters())
             .ToArray();
-        int total = checked(vectors.Sum(vector => vector.Length));
-        var result = new Vector<T>(total);
-        int offset = 0;
-        foreach (var vector in vectors)
-        {
-            for (int i = 0; i < vector.Length; i++)
-                result[offset++] = vector[i];
-        }
-        return result;
+        _ = checked(vectors.Sum(vector => vector.Length));
+        return Vector<T>.Concatenate(vectors);
     }
 
     /// <inheritdoc/>

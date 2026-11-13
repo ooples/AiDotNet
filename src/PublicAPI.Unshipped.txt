@@ -24369,3 +24369,5 @@ AiDotNet.TextToSpeech.TtsModelBase<T>.DurationAlignment(int[]! durations) -> AiD
 AiDotNet.TextToSpeech.TtsModelBase<T>.AlignmentScores(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! means, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! frames) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 AiDotNet.TextToSpeech.TtsModelBase<T>.MonotonicDurations(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! scores) -> int[]!
 AiDotNet.Models.Options.BayesianNetworkSynthOptions<T>.BayesianNetworkSynthOptions(AiDotNet.Models.Options.BayesianNetworkSynthOptions<T>! other) -> void
+*REMOVED*static AiDotNet.NeuralNetworks.Layers.SSM.SSMQuantizationHelper<T>.ComputeQuantizationError(AiDotNet.Interfaces.ILayer<T>! layer, int bitWidth) -> double
+static AiDotNet.NeuralNetworks.Layers.SSM.SSMQuantizationHelper<T>.ComputeQuantizationError(AiDotNet.Interfaces.ILayer<T>! layer, int bitWidth) -> T

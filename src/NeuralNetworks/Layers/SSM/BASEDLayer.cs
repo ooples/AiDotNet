@@ -130,12 +130,6 @@ public partial class BASEDLayer<T> : LayerBase<T>, IShapeContract
     private Tensor<T> _outputProjectionBias;
 
     // Cached forward pass values
-    [Scratch]
-    private Tensor<T>? _lastLinearFeatureQ;
-    [Scratch]
-    private Tensor<T>? _lastLinearFeatureK;
-    [Scratch]
-    private Tensor<T>? _lastWindowScores;
     private int[]? _originalInputShape;
 
     // Gradients
@@ -294,13 +288,11 @@ public partial class BASEDLayer<T> : LayerBase<T>, IShapeContract
         InitializeTensor2D(_windowValueWeights);
 
         // Feature map scale initialized to 1.0 (identity scaling)
-        for (int i = 0; i < _featureMapScale.Length; i++)
-            _featureMapScale[i] = NumOps.One;
+        _featureMapScale.Fill(NumOps.One);
 
         InitializeTensor2D(_mixingGateWeights);
         // Bias initialized to 0.5 so sigmoid(0.5) ~ 0.62, slightly favoring linear attention initially
-        for (int i = 0; i < _mixingGateBias.Length; i++)
-            _mixingGateBias[i] = NumOps.FromDouble(0.5);
+        _mixingGateBias.Fill(NumOps.FromDouble(0.5));
 
         InitializeTensor2D(_outputProjectionWeights);
         _outputProjectionBias.Fill(NumOps.Zero);
@@ -427,277 +419,6 @@ public partial class BASEDLayer<T> : LayerBase<T>, IShapeContract
         return Engine.TensorConcatenate(parts, axis: 3);
     }
 
-    /// <summary>
-    /// Applies the Taylor expansion feature map: phi(x) = [x, x * x / sqrt(2)] (scaled by learned parameters).
-    /// The constant term is handled implicitly in the state accumulation.
-    /// </summary>
-    private void ApplyFeatureMap(
-        T[] headVector, int headIndex, T[] featureOutput)
-    {
-        // The Taylor expansion of exp(q*k) around 0 gives: 1 + q*k + (q*k)^2/2 + ...
-        // For the feature map: phi(x) = [1, x, x (tensor) x / sqrt(2)]
-        // We use a simplified version: phi(x) = [x * scale, x * x * scale / sqrt(2)]
-        // where scale is learned per-head
-
-        T sqrtTwo = NumOps.Sqrt(NumOps.FromDouble(2.0));
-        int halfExpanded = _headDimension;
-
-        for (int d = 0; d < _headDimension; d++)
-        {
-            T scaleVal = _featureMapScale[new[] { headIndex, d }];
-            T scaled = NumOps.Multiply(headVector[d], scaleVal);
-
-            // First-order term: x * scale
-            featureOutput[d] = scaled;
-
-            // Second-order term: (x * scale)^2 / sqrt(2)
-            if (_featureExpansion >= 2 && d < halfExpanded)
-            {
-                featureOutput[_headDimension + d] = NumOps.Divide(
-                    NumOps.Multiply(scaled, scaled), sqrtTwo);
-            }
-        }
-    }
-
-    /// <summary>
-    /// Linear attention forward pass using the causal linear attention recurrence with Taylor feature map.
-    /// For each position t: S_t = S_{t-1} + phi(k_t) * v_t^T, z_t = z_{t-1} + phi(k_t)
-    /// output_t = (S_t * phi(q_t)) / (z_t^T * phi(q_t) + epsilon)
-    /// </summary>
-    private Tensor<T> LinearAttentionForward(
-        Tensor<T> q, Tensor<T> k, Tensor<T> v,
-        int batchSize, int seqLen)
-    {
-        var output = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _modelDimension });
-        T epsilon = NumOps.FromDouble(1e-6);
-        T keyScale = NumOps.FromDouble(1.0 / Math.Sqrt(_headDimension));
-
-        // Per-head feature dimension
-        int featureDim = _expandedDimension;
-
-        // Allocate feature map buffers
-        var phiQ = new T[featureDim];
-        var phiK = new T[featureDim];
-
-        // State and normalizer per batch and head
-        // S: [featureDim, headDim] - the running key-value state
-        // z: [featureDim] - the running normalizer
-        var stateS = new T[batchSize, _numHeads, featureDim, _headDimension];
-        var stateZ = new T[batchSize, _numHeads, featureDim];
-
-        // Initialize states to zero
-        for (int bi = 0; bi < batchSize; bi++)
-            for (int hi = 0; hi < _numHeads; hi++)
-            {
-                for (int fi = 0; fi < featureDim; fi++)
-                {
-                    stateZ[bi, hi, fi] = NumOps.Zero;
-                    for (int di = 0; di < _headDimension; di++)
-                        stateS[bi, hi, fi, di] = NumOps.Zero;
-                }
-            }
-
-        // Cache feature maps for backward pass
-        var featureQCache = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _numHeads, featureDim });
-        var featureKCache = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _numHeads, featureDim });
-        _lastLinearFeatureQ = featureQCache;
-        _lastLinearFeatureK = featureKCache;
-
-        for (int t = 0; t < seqLen; t++)
-        {
-            for (int bi = 0; bi < batchSize; bi++)
-            {
-                for (int hi = 0; hi < _numHeads; hi++)
-                {
-                    int dimStart = hi * _headDimension;
-
-                    // Extract head vectors and apply key scaling
-                    var qHead = new T[_headDimension];
-                    var kHead = new T[_headDimension];
-                    var vHead = new T[_headDimension];
-
-                    for (int d = 0; d < _headDimension; d++)
-                    {
-                        int flatD = dimStart + d;
-                        qHead[d] = NumOps.Multiply(q[new[] { bi, t, flatD }], keyScale);
-                        kHead[d] = NumOps.Multiply(k[new[] { bi, t, flatD }], keyScale);
-                        vHead[d] = v[new[] { bi, t, flatD }];
-                    }
-
-                    // Apply Taylor feature map
-                    for (int i = 0; i < featureDim; i++)
-                    {
-                        phiQ[i] = NumOps.Zero;
-                        phiK[i] = NumOps.Zero;
-                    }
-                    ApplyFeatureMap(qHead, hi, phiQ);
-                    ApplyFeatureMap(kHead, hi, phiK);
-
-                    // Cache features
-                    for (int fi = 0; fi < featureDim; fi++)
-                    {
-                        featureQCache[new[] { bi, t, hi, fi }] = phiQ[fi];
-                        featureKCache[new[] { bi, t, hi, fi }] = phiK[fi];
-                    }
-
-                    // Update state: S += phi(k) * v^T
-                    for (int fi = 0; fi < featureDim; fi++)
-                    {
-                        for (int di = 0; di < _headDimension; di++)
-                        {
-                            stateS[bi, hi, fi, di] = NumOps.Add(
-                                stateS[bi, hi, fi, di],
-                                NumOps.Multiply(phiK[fi], vHead[di]));
-                        }
-                        // Update normalizer: z += phi(k)
-                        stateZ[bi, hi, fi] = NumOps.Add(stateZ[bi, hi, fi], phiK[fi]);
-                    }
-
-                    // Compute output: o = S^T * phi(q), norm = z^T * phi(q)
-                    T norm = epsilon;
-                    for (int fi = 0; fi < featureDim; fi++)
-                        norm = NumOps.Add(norm, NumOps.Multiply(stateZ[bi, hi, fi], phiQ[fi]));
-
-                    for (int di = 0; di < _headDimension; di++)
-                    {
-                        T oVal = NumOps.Zero;
-                        for (int fi = 0; fi < featureDim; fi++)
-                            oVal = NumOps.Add(oVal, NumOps.Multiply(stateS[bi, hi, fi, di], phiQ[fi]));
-
-                        int flatD = dimStart + di;
-                        output[new[] { bi, t, flatD }] = NumOps.Divide(oVal, norm);
-                    }
-                }
-            }
-        }
-
-        return output;
-    }
-
-    /// <summary>
-    /// Sliding window causal attention: standard softmax attention restricted to a local window.
-    /// For each position t, attends only to positions max(0, t-w+1) through t.
-    /// </summary>
-    private Tensor<T> SlidingWindowAttentionForward(
-        Tensor<T> q, Tensor<T> k, Tensor<T> v,
-        int batchSize, int seqLen)
-    {
-        var output = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _modelDimension });
-        T scale = NumOps.FromDouble(1.0 / Math.Sqrt(_headDimension));
-
-        // Store attention scores for backward pass: [batch, seqLen, numHeads, windowSize]
-        var scores = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _numHeads, _windowSize });
-        _lastWindowScores = scores;
-
-        for (int bi = 0; bi < batchSize; bi++)
-        {
-            for (int t = 0; t < seqLen; t++)
-            {
-                int windowStart = Math.Max(0, t - _windowSize + 1);
-                int windowLen = t - windowStart + 1;
-
-                for (int hi = 0; hi < _numHeads; hi++)
-                {
-                    int dimStart = hi * _headDimension;
-
-                    // Compute attention scores within the window
-                    var rawScores = new T[windowLen];
-                    for (int wi = 0; wi < windowLen; wi++)
-                    {
-                        int srcT = windowStart + wi;
-                        T dot = NumOps.Zero;
-                        for (int d = 0; d < _headDimension; d++)
-                        {
-                            int flatD = dimStart + d;
-                            dot = NumOps.Add(dot,
-                                NumOps.Multiply(q[new[] { bi, t, flatD }], k[new[] { bi, srcT, flatD }]));
-                        }
-                        rawScores[wi] = NumOps.Multiply(dot, scale);
-                    }
-
-                    // Softmax over the window
-                    T maxScore = rawScores[0];
-                    for (int wi = 1; wi < windowLen; wi++)
-                    {
-                        if (NumOps.GreaterThan(rawScores[wi], maxScore))
-                            maxScore = rawScores[wi];
-                    }
-
-                    var expScores = new T[windowLen];
-                    T sumExp = NumOps.Zero;
-                    for (int wi = 0; wi < windowLen; wi++)
-                    {
-                        expScores[wi] = NumOps.Exp(NumOps.Subtract(rawScores[wi], maxScore));
-                        sumExp = NumOps.Add(sumExp, expScores[wi]);
-                    }
-
-                    T sumExpInv = NumOps.Divide(NumOps.One, NumOps.Add(sumExp, NumOps.FromDouble(1e-10)));
-                    var attnWeights = new T[windowLen];
-                    for (int wi = 0; wi < windowLen; wi++)
-                    {
-                        attnWeights[wi] = NumOps.Multiply(expScores[wi], sumExpInv);
-                        // Store for backward pass
-                        if (wi < _windowSize)
-                            scores[new[] { bi, t, hi, wi }] = attnWeights[wi];
-                    }
-
-                    // Weighted sum of values
-                    for (int d = 0; d < _headDimension; d++)
-                    {
-                        int flatD = dimStart + d;
-                        T val = NumOps.Zero;
-                        for (int wi = 0; wi < windowLen; wi++)
-                        {
-                            int srcT = windowStart + wi;
-                            val = NumOps.Add(val,
-                                NumOps.Multiply(attnWeights[wi], v[new[] { bi, srcT, flatD }]));
-                        }
-                        output[new[] { bi, t, flatD }] = val;
-                    }
-                }
-            }
-        }
-
-        return output;
-    }
-
-    /// <summary>
-    /// Combines linear attention and window attention outputs using learned per-head mixing gate.
-    /// output = alpha * linear_output + (1 - alpha) * window_output
-    /// Alpha is expanded from [batch, seq, numHeads] to [batch, seq, modelDim] by repeating per head.
-    /// </summary>
-    private Tensor<T> CombineAttentionOutputs(
-        Tensor<T> linearOutput, Tensor<T> windowOutput,
-        Tensor<T> alpha, int batchSize, int seqLen)
-    {
-        var combined = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _modelDimension });
-
-        for (int bi = 0; bi < batchSize; bi++)
-        {
-            for (int t = 0; t < seqLen; t++)
-            {
-                for (int hi = 0; hi < _numHeads; hi++)
-                {
-                    T alphaVal = alpha[new[] { bi, t, hi }];
-                    T oneMinusAlpha = NumOps.Subtract(NumOps.One, alphaVal);
-                    int dimStart = hi * _headDimension;
-
-                    for (int d = 0; d < _headDimension; d++)
-                    {
-                        int flatD = dimStart + d;
-                        T linVal = linearOutput[new[] { bi, t, flatD }];
-                        T winVal = windowOutput[new[] { bi, t, flatD }];
-                        combined[new[] { bi, t, flatD }] = NumOps.Add(
-                            NumOps.Multiply(alphaVal, linVal),
-                            NumOps.Multiply(oneMinusAlpha, winVal));
-                    }
-                }
-            }
-        }
-
-        return combined;
-    }
-
     private Tensor<T> CreateOnesLike(Tensor<T> template)
     {
         var ones = new Tensor<T>(template._shape);
@@ -763,9 +484,6 @@ public partial class BASEDLayer<T> : LayerBase<T>, IShapeContract
     /// <inheritdoc />
     public override void ResetState()
     {
-        _lastLinearFeatureQ = null;
-        _lastLinearFeatureK = null;
-        _lastWindowScores = null;
         _originalInputShape = null;
         _linearQueryWeightsGradient = null;
         _linearKeyWeightsGradient = null;

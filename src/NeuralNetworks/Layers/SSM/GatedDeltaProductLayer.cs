@@ -264,8 +264,7 @@ public partial class GatedDeltaProductLayer<T> : LayerBase<T>, IShapeContract
         _betaBias.Fill(NumOps.FromDouble(0.1));
         InitializeTensor2D(_alphaWeights);
         // Alpha bias ~ 2 so sigmoid(2) ~ 0.88 -> strong initial memory retention
-        for (int i = 0; i < _alphaBias.Length; i++)
-            _alphaBias[i] = NumOps.FromDouble(2.0);
+        _alphaBias.Fill(NumOps.FromDouble(2.0));
         InitializeHouseholderWeights();
         InitializeTensor2D(_outputGateWeights);
         _outputGateBias.Fill(NumOps.Zero);
@@ -503,38 +502,6 @@ public partial class GatedDeltaProductLayer<T> : LayerBase<T>, IShapeContract
             Engine.Reshape(value, new[] { batchSize, _numHeads, seqLen, _headDimension }),
             new[] { 0, 2, 1, 3 }),
             new[] { batchSize, seqLen, _modelDimension });
-
-    /// <summary>
-    /// Computes input gradient contribution from Householder vectors.
-    /// </summary>
-    private Tensor<T> ComputeHouseholderInputGradient(
-        Tensor<T> dHVecs, int batchSize, int seqLen)
-    {
-        int total = batchSize * seqLen;
-        var dInput = TensorAllocator.Rent<T>(new[] { total, _modelDimension });
-
-        for (int mi = 0; mi < _numHouseholders; mi++)
-        {
-            for (int pos = 0; pos < total; pos++)
-            {
-                for (int hi = 0; hi < _numHeads; hi++)
-                {
-                    for (int d = 0; d < _headDimension; d++)
-                    {
-                        T dH = dHVecs[new[] { pos, mi, hi, d }];
-                        for (int j = 0; j < _modelDimension; j++)
-                        {
-                            dInput[new[] { pos, j }] = NumOps.Add(
-                                dInput[new[] { pos, j }],
-                                NumOps.Multiply(dH, _householderWeights[new[] { mi, j, d }]));
-                        }
-                    }
-                }
-            }
-        }
-
-        return dInput;
-    }
 
     private Tensor<T> ComputeSiLUDerivative(Tensor<T> x)
     {

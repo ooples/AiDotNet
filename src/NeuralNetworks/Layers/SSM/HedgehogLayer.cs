@@ -262,44 +262,6 @@ public partial class HedgehogLayer<T> : LayerBase<T>, IShapeContract
         InitializeLayerWeights(tensor, fanIn, fanOut);
     }
 
-    /// <summary>
-    /// Applies the trainable feature map MLP: phi(x) = W2 * GELU(W1 * x + b1) + b2
-    /// </summary>
-    private void ApplyFeatureMap(
-        T[] headVector, int headIndex, T[] featureOutput,
-        T[] preActivation, T[] hiddenOutput)
-    {
-        // Layer 1: hidden = GELU(W1 * x + b1)
-        for (int hi = 0; hi < _featureMapHiddenDim; hi++)
-        {
-            T sum = _featureMapB1[new[] { headIndex, hi }];
-            for (int di = 0; di < _headDimension; di++)
-            {
-                sum = NumOps.Add(sum,
-                    NumOps.Multiply(headVector[di], _featureMapW1[new[] { headIndex, di, hi }]));
-            }
-            preActivation[hi] = sum;
-
-            // GELU approximation: x * sigmoid(1.702 * x)
-            T scaled = NumOps.Multiply(NumOps.FromDouble(1.702), sum);
-            T expNeg = NumOps.Exp(NumOps.Negate(scaled));
-            T sigmoid = NumOps.Divide(NumOps.One, NumOps.Add(NumOps.One, expNeg));
-            hiddenOutput[hi] = NumOps.Multiply(sum, sigmoid);
-        }
-
-        // Layer 2: output = W2 * hidden + b2
-        for (int di = 0; di < _headDimension; di++)
-        {
-            T sum = _featureMapB2[new[] { headIndex, di }];
-            for (int hi = 0; hi < _featureMapHiddenDim; hi++)
-            {
-                sum = NumOps.Add(sum,
-                    NumOps.Multiply(hiddenOutput[hi], _featureMapW2[new[] { headIndex, hi, di }]));
-            }
-            featureOutput[di] = sum;
-        }
-    }
-
     /// <inheritdoc />
     protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
@@ -415,76 +377,6 @@ public partial class HedgehogLayer<T> : LayerBase<T>, IShapeContract
                 new[] { batchSize, seqLen, _numHeads, _featureMapHiddenDim }),
             Engine.Reshape(hidden,
                 new[] { batchSize, seqLen, _numHeads, _featureMapHiddenDim }));
-    }
-
-    /// <summary>
-    /// Causal linear attention with learned feature maps.
-    /// S_t = S_{t-1} + phi(k_t) * v_t^T, z_t = z_{t-1} + phi(k_t)
-    /// o_t = (S_t * phi(q_t)) / (z_t^T * phi(q_t) + eps)
-    /// </summary>
-    private Tensor<T> LinearAttentionForward(
-        Tensor<T> phiQ, Tensor<T> phiK, Tensor<T> v,
-        int batchSize, int seqLen)
-    {
-        var output = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _modelDimension });
-        T epsilon = NumOps.FromDouble(1e-6);
-
-        // Store denominators for backward pass
-        var denominators = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _numHeads });
-
-        // Per-head state: S[headDim, headDim] and z[headDim]
-        var stateS = new T[batchSize, _numHeads, _headDimension, _headDimension];
-        var stateZ = new T[batchSize, _numHeads, _headDimension];
-
-        for (int t = 0; t < seqLen; t++)
-        {
-            for (int bi = 0; bi < batchSize; bi++)
-            {
-                for (int hi = 0; hi < _numHeads; hi++)
-                {
-                    int dimStart = hi * _headDimension;
-
-                    // Update state: S += phi(k) * v^T
-                    for (int di = 0; di < _headDimension; di++)
-                    {
-                        T phiKVal = phiK[new[] { bi, t, dimStart + di }];
-                        stateZ[bi, hi, di] = NumOps.Add(stateZ[bi, hi, di], phiKVal);
-
-                        for (int dj = 0; dj < _headDimension; dj++)
-                        {
-                            T vVal = v[new[] { bi, t, dimStart + dj }];
-                            stateS[bi, hi, di, dj] = NumOps.Add(
-                                stateS[bi, hi, di, dj],
-                                NumOps.Multiply(phiKVal, vVal));
-                        }
-                    }
-
-                    // Compute normalizer: z^T * phi(q)
-                    T denom = epsilon;
-                    for (int di = 0; di < _headDimension; di++)
-                    {
-                        T phiQVal = phiQ[new[] { bi, t, dimStart + di }];
-                        denom = NumOps.Add(denom, NumOps.Multiply(stateZ[bi, hi, di], phiQVal));
-                    }
-                    denominators[new[] { bi, t, hi }] = denom;
-
-                    // Compute output: o = S * phi(q) / denom
-                    for (int di = 0; di < _headDimension; di++)
-                    {
-                        T oVal = NumOps.Zero;
-                        for (int dj = 0; dj < _headDimension; dj++)
-                        {
-                            T phiQVal = phiQ[new[] { bi, t, dimStart + dj }];
-                            oVal = NumOps.Add(oVal,
-                                NumOps.Multiply(stateS[bi, hi, di, dj], phiQVal));
-                        }
-                        output[new[] { bi, t, dimStart + di }] = NumOps.Divide(oVal, denom);
-                    }
-                }
-            }
-        }
-
-        return output;
     }
 
     private Tensor<T> ComputeSiLUDerivative(Tensor<T> x)

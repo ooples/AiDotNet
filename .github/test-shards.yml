@@ -1478,6 +1478,8 @@ shard:
       FullyQualifiedName~AiDotNet.Tests.Video.ShiftNetPaperTests.|
       FullyQualifiedName~AiDotNet.Tests.Video.UDVDPaperTests.|
       FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.Layers.ConvolutionalLayerGroupsTests.|
+      FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.Layers.Elementwise02RegressionTests.|
+      FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.Layers.ReservoirSpectralRadiusTests.|
       FullyQualifiedName~AiDotNet.Tests.Helpers.ZlibDeflateTests.|
       FullyQualifiedName~AiDotNet.Tests.NeuralNetworks.Lfm2ReferenceTests.|
       FullyQualifiedName~AiDotNet.Tests.Video.FloRNNPaperTests.|

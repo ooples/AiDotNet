@@ -260,14 +260,6 @@ public partial class InteractingLayer<T> : LayerBase<T>, IShapeContract
 
     }
 
-    private static void CopyTensorToVector(Tensor<T> tensor, Vector<T> vector, ref int offset)
-    {
-        for (int i = 0; i < tensor.Length; i++)
-        {
-            vector[offset++] = tensor[i];
-        }
-    }
-
     /// <summary>
     /// Resets internal state.
     /// </summary>

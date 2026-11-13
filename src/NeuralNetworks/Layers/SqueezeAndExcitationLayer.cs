@@ -777,84 +777,6 @@ public partial class SqueezeAndExcitationLayer<T> : LayerBase<T>, IAuxiliaryLoss
     }
 
     /// <summary>
-    /// Applies the derivative of the activation function for backpropagation.
-    /// </summary>
-    /// <param name="input">The input tensor.</param>
-    /// <param name="isFirstActivation">Indicates whether to use the first or second activation function.</param>
-    /// <returns>The tensor with derivatives applied.</returns>
-    private Tensor<T> ApplyTensorActivationDerivative(Tensor<T> input, bool isFirstActivation)
-    {
-        int rows = input.Shape[0];
-        int cols = input.Shape[1];
-        var result = TensorAllocator.Rent<T>(input._shape);
-
-        if (isFirstActivation)
-        {
-            if (_firstVectorActivation != null)
-            {
-                for (int i = 0; i < rows; i++)
-                {
-                    var row = new Vector<T>(cols);
-                    for (int j = 0; j < cols; j++)
-                        row[j] = input[i, j];
-                    var gradMatrix = _firstVectorActivation.Derivative(row);
-                    for (int j = 0; j < cols; j++)
-                        result[i, j] = gradMatrix[j, j]; // Diagonal element
-                }
-                return result;
-            }
-            else if (_firstActivation != null)
-            {
-                for (int i = 0; i < rows; i++)
-                {
-                    for (int j = 0; j < cols; j++)
-                    {
-                        result[i, j] = _firstActivation.Derivative(input[i, j]);
-                    }
-                }
-                return result;
-            }
-        }
-        else
-        {
-            if (_secondVectorActivation != null)
-            {
-                for (int i = 0; i < rows; i++)
-                {
-                    var row = new Vector<T>(cols);
-                    for (int j = 0; j < cols; j++)
-                        row[j] = input[i, j];
-                    var gradMatrix = _secondVectorActivation.Derivative(row);
-                    for (int j = 0; j < cols; j++)
-                        result[i, j] = gradMatrix[j, j]; // Diagonal element
-                }
-                return result;
-            }
-            else if (_secondActivation != null)
-            {
-                for (int i = 0; i < rows; i++)
-                {
-                    for (int j = 0; j < cols; j++)
-                    {
-                        result[i, j] = _secondActivation.Derivative(input[i, j]);
-                    }
-                }
-                return result;
-            }
-        }
-
-        // If no activation function, derivative is 1
-        for (int i = 0; i < rows; i++)
-        {
-            for (int j = 0; j < cols; j++)
-            {
-                result[i, j] = NumOps.One;
-            }
-        }
-        return result;
-    }
-
-    /// <summary>
     /// Updates the layer's parameters using the calculated gradients and the specified learning rate.
     /// </summary>
     /// <param name="learningRate">The learning rate that controls the size of the parameter updates.</param>
@@ -971,23 +893,13 @@ public partial class SqueezeAndExcitationLayer<T> : LayerBase<T>, IAuxiliaryLoss
 
         // Compute L2 regularization on excitation weights
         // This penalizes large excitation values and encourages sparse channel attention
-        T attentionLoss = NumOps.Zero;
         int batchSize = _lastExcitationWeights.Shape[0];
         int channels = _lastExcitationWeights.Shape[1];
 
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int c = 0; c < channels; c++)
-            {
-                T weight = _lastExcitationWeights[b, c];
-                // L2 regularization: sum of squared weights
-                attentionLoss = NumOps.Add(attentionLoss, NumOps.Multiply(weight, weight));
-            }
-        }
-
-        // Average across batch and channels
-        int totalElements = batchSize * channels;
-        attentionLoss = NumOps.Divide(attentionLoss, NumOps.FromDouble(totalElements));
+        // L2 regularization: mean of the squared [batch, channel] excitation weights
+        var weights = _lastExcitationWeights;
+        T attentionLoss = NumOps.Divide(
+            Engine.TensorSum(Engine.TensorMultiply(weights, weights)), NumOps.FromDouble(batchSize * channels));
 
         // Store unweighted loss for diagnostics
         _lastChannelAttentionLoss = attentionLoss;

@@ -123,15 +123,13 @@ public partial class LearnedPositionalEmbeddingLayer<T> : LayerBase<T>
         var indexShape = new int[rank - 1];
         for (int i = 0; i < rank - 1; i++) indexShape[i] = input.Shape[i];
 
-        var positions = new Tensor<T>(indexShape);
-        var span = positions.Data.Span;
-        for (int i = 0; i < span.Length; i++)
-        {
-            // Position within the sequence; wraps per batch row. Sequences longer than the table
-            // reuse its last row rather than throwing — a caller who feeds 600 tokens to a
-            // 512-position model gets a degraded tail, not a crash mid-inference.
-            span[i] = NumOps.FromDouble(Math.Min(i % seqLen, _maxSequenceLength - 1));
-        }
+        // Position within the sequence; repeats per batch row (broadcast over the leading axes).
+        // Sequences longer than the table reuse its last row rather than throwing — a caller who
+        // feeds 600 tokens to a 512-position model gets a degraded tail, not a crash mid-inference.
+        var sequencePositions = Engine.TensorClampMax(
+            Engine.TensorArange<T>(0, seqLen, 1),
+            NumOps.FromDouble(_maxSequenceLength - 1));
+        var positions = Engine.TensorBroadcastTo(sequencePositions, indexShape);
 
         return Engine.TensorAdd(input, _positionTable.Forward(positions));
     }

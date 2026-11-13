@@ -362,15 +362,12 @@ public partial class RWKVLayer<T> : LayerBase<T>, IShapeContract
     private void InitializeParameters()
     {
         // Token shift mixing coefficients: initialized to 0.5 (equal mix of current and previous)
-        for (int i = 0; i < _modelDimension; i++)
-        {
-            T halfVal = NumOps.FromDouble(0.5);
-            _timeMixR[i] = halfVal;
-            _timeMixK[i] = halfVal;
-            _timeMixV[i] = halfVal;
-            _channelMixR[i] = halfVal;
-            _channelMixK[i] = halfVal;
-        }
+        T halfVal = NumOps.FromDouble(0.5);
+        _timeMixR.Fill(halfVal);
+        _timeMixK.Fill(halfVal);
+        _timeMixV.Fill(halfVal);
+        _channelMixR.Fill(halfVal);
+        _channelMixK.Fill(halfVal);
 
         InitializeTensor(_receptanceWeights);
         InitializeTensor(_keyWeights);

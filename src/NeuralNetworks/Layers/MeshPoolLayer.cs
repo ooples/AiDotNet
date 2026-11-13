@@ -263,28 +263,23 @@ public partial class MeshPoolLayer<T> : LayerBase<T>, IShapeContract
 
         var sortedIndices = SortEdgesByImportance(importanceScores, numEdges);
 
-        RemainingEdgeIndices = new int[numToKeep];
+        var remaining = new int[numToKeep];
         for (int i = 0; i < numToKeep; i++)
         {
-            RemainingEdgeIndices[i] = sortedIndices[numEdges - 1 - i];
+            remaining[i] = sortedIndices[numEdges - 1 - i];
         }
-        Array.Sort(RemainingEdgeIndices);
+        Array.Sort(remaining);
+        RemainingEdgeIndices = remaining;
 
-        var outputData = new T[numToKeep * InputChannels];
-        for (int i = 0; i < numToKeep; i++)
+        UpdatedAdjacency = UpdateAdjacency(_lastEdgeAdjacency, remaining, numToKeep);
+
+        // Gather the kept edge rows in one op. The output was a freshly built tensor (off the
+        // gradient tape), so the gather stays off the tape too.
+        var keptRows = new Tensor<int>((int[])remaining.Clone(), [numToKeep]);
+        using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
         {
-            int srcEdge = RemainingEdgeIndices[i];
-            for (int c = 0; c < InputChannels; c++)
-            {
-                outputData[i * InputChannels + c] = input[srcEdge, c];
-            }
+            return Engine.TensorGather(input, keptRows, 0);
         }
-
-        UpdatedAdjacency = UpdateAdjacency(_lastEdgeAdjacency, RemainingEdgeIndices, numToKeep);
-
-        var output = new Tensor<T>(outputData, [numToKeep, InputChannels]);
-
-        return output;
     }
 
     /// <summary>
@@ -339,20 +334,9 @@ public partial class MeshPoolLayer<T> : LayerBase<T>, IShapeContract
     /// </remarks>
     private int[] SortEdgesByImportance(Tensor<T> importanceScores, int numEdges)
     {
-        var indices = Enumerable.Range(0, numEdges).ToArray();
-
-        // Extract scores to array in one operation
-        var scoresArray = importanceScores.ToArray();
-        var scoreValues = new double[numEdges];
-
-        // Convert to double for sorting (vectorized when possible)
-        for (int i = 0; i < numEdges; i++)
-        {
-            scoreValues[i] = NumOps.ToDouble(scoresArray[i]);
-        }
-
-        Array.Sort(scoreValues, indices);
-        return indices;
+        // Stable O(N log N) ordering without allocating pairwise N-by-N rank grids.
+        var values = importanceScores.Reshape(new[] { numEdges }).ToArray();
+        return Enumerable.Range(0, numEdges).OrderBy(i => values[i], Comparer<T>.Create(NumOps.Compare)).ToArray();
     }
 
     /// <summary>
