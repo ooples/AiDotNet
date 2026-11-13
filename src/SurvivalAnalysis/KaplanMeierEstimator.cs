@@ -169,10 +169,10 @@ public partial class KaplanMeierEstimator<T> : SurvivalModelBase<T>
 
         // Kaplan-Meier product-limit estimator; a time with nobody at risk leaves the curve unchanged.
         var survivalFraction = engine.TensorWhere(
-            engine.TensorGreaterThan(atRisk, NumOps.Zero),
+            engine.TensorGreaterThan(atRisk, 0.0),
             engine.TensorDivide(engine.TensorSubtract(atRisk, deaths), atRisk),
-            Tensor<T>.CreateDefault(new[] { numTimes }, NumOps.One));
-        _survivalProbabilities = engine.TensorCumProd(survivalFraction, 0).ToVector();
+            Tensor<double>.CreateDefault(new[] { numTimes }, 1.0));
+        _survivalProbabilities = engine.TensorCumProd(survivalFraction, 0).Cast<T>().ToVector();
 
         BaselineSurvivalFunction = _survivalProbabilities;
     }

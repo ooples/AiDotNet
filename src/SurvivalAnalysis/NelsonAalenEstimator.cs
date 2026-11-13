@@ -116,23 +116,23 @@ public partial class NelsonAalenEstimator<T> : SurvivalModelBase<T>
         var (atRisk, eventsAtTime) = CountAtRiskAndEvents(times, events, TrainedEventTimes);
 
         // A time with nobody at risk adds nothing; divide by 1 there to keep 0/0 out of the sums.
-        var hasRisk = engine.TensorGreaterThan(atRisk, NumOps.Zero);
+        var hasRisk = engine.TensorGreaterThan(atRisk, 0.0);
         var safeRisk = engine.TensorWhere(hasRisk, atRisk,
-            Tensor<T>.CreateDefault(new[] { TrainedEventTimes.Length }, NumOps.One));
+            Tensor<double>.CreateDefault(new[] { TrainedEventTimes.Length }, 1.0));
 
         // Nelson-Aalen increment: d(t)/n(t)
         var hazardIncrement = engine.TensorMultiply(hasRisk, engine.TensorDivide(eventsAtTime, safeRisk));
 
-        // Variance increment: d(t)/n(t)^2, squared in T so a large cohort cannot overflow int.
+        // Variance increment: d(t)/n(t)^2, accumulated in double even for low-precision storage.
         var varianceIncrement = engine.TensorMultiply(hasRisk,
             engine.TensorDivide(eventsAtTime, engine.TensorMultiply(safeRisk, safeRisk)));
 
         var cumulativeHazard = engine.TensorCumSum(hazardIncrement, 0);
-        _cumulativeHazard = cumulativeHazard.ToVector();
-        _variance = engine.TensorCumSum(varianceIncrement, 0).ToVector();
+        _cumulativeHazard = cumulativeHazard.Cast<T>().ToVector();
+        _variance = engine.TensorCumSum(varianceIncrement, 0).Cast<T>().ToVector();
 
         // Survival from cumulative hazard: S(t) = exp(-H(t))
-        BaselineSurvivalFunction = engine.TensorExp(engine.TensorNegate(cumulativeHazard)).ToVector();
+        BaselineSurvivalFunction = engine.TensorExp(engine.TensorNegate(cumulativeHazard)).Cast<T>().ToVector();
     }
 
     /// <summary>

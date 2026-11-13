@@ -63,6 +63,11 @@ public static class RankingMetrics<T>
         int n = predictedScores.Length;
         if (n == 0) return NumOps.Zero;
 
+        if (typeof(T) != typeof(double))
+            return NumOps.FromDouble(RankingMetrics<double>.NdcgAtK(
+                predictedScores.AsTensor().Cast<double>().ToVector(),
+                trueRelevance.AsTensor().Cast<double>().ToVector(), k, useExponentialGain));
+
         int cutoff = (k <= 0 || k > n) ? n : k;
 
         var engine = AiDotNetEngine.Current;

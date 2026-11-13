@@ -79,6 +79,13 @@ internal static class KernelVectorOps<T>
     /// </summary>
     public static bool TryCholeskyLogDeterminant(Matrix<T> matrix, double scale, out T logDeterminant)
     {
+        if (typeof(T) != typeof(float) && typeof(T) != typeof(double))
+        {
+            bool success = KernelVectorOps<double>.TryCholeskyLogDeterminant(
+                Tensor<T>.FromMatrix(matrix).Cast<double>().ToMatrix(), scale, out double wide);
+            logDeterminant = NumOps.FromDouble(wide);
+            return success;
+        }
         var engine = AiDotNetEngine.Current;
         var (factor, info) = LinalgDispatch<T>.CholeskyEx(Tensor<T>.FromMatrix(matrix));
         if (info.GetFlatIndexValue(0) != 0)
