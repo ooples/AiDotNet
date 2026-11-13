@@ -68,6 +68,10 @@ public class SelectFPR<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervise
     {
         if (alpha <= 0 || alpha >= 1)
             throw new ArgumentException("Alpha must be between 0 and 1.", nameof(alpha));
+        if (scoreFunction == SelectKBestScoreFunc.MutualInfoRegression)
+            throw new ArgumentException(
+                $"The {scoreFunction} scoring function produces no p-values; SelectFPR needs one that does.",
+                nameof(scoreFunction));
         _alpha = alpha;
         _scoreFunction = scoreFunction;
     }
@@ -108,7 +112,6 @@ public class SelectFPR<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervise
         if (data.Rows != target.Length)
             throw new ArgumentException("Target length must match rows in data.");
 
-        _nInputFeatures = data.Columns;
         int p = data.Columns;
 
         Vector<T> scores;
@@ -126,11 +129,13 @@ public class SelectFPR<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervise
             (scores, pValues) = StatisticalTestHelper.ComputeScores(data, target, _scoreFunction);
         }
 
-        _scores = scores;
-        _pValues = pValues;
-
+        // validated before any fitted state changes, so a failed refit keeps the previous fit whole
         if (pValues is null)
             throw new InvalidOperationException("SelectFPR needs a scoring function that returns p-values.");
+
+        _nInputFeatures = p;
+        _scores = scores;
+        _pValues = pValues;
 
         // keep every feature whose p-value is below alpha (scikit-learn's SelectFpr); none passing selects none
         _selectedIndices = FilterStatisticTensorOps.MaskPositions(
