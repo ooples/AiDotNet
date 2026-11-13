@@ -316,9 +316,7 @@ public partial class SelfTrainingClassifier<T> : SemiSupervisedClassifierBase<T>
 
         // Candidates: confidence >= threshold, sorted by confidence descending (stable, as OrderByDescending).
         var confidenceValues = Tensor<T>.FromVector(confidenceScores);
-        T threshold = NumOps.FromDouble(_confidenceThreshold);
-        var eligible = engine.TensorAdd(
-            engine.TensorGreaterThan(confidenceValues, threshold), engine.TensorEquals(confidenceValues, threshold));
+        var eligible = AtLeast(confidenceValues, _confidenceThreshold);
         var predictedValues = predictions.ToArray();
         var confidenceArray = confidenceScores.ToArray();
         var candidates = engine.TensorNonzero(eligible).ToArray()
@@ -350,12 +348,13 @@ public partial class SelfTrainingClassifier<T> : SemiSupervisedClassifierBase<T>
                 break;
 
             case SelectionCriterion.TopKPerClass:
-                var perClassCounts = new Dictionary<T, int>();
+                // Keyed by the label value; ValueTuple<T> satisfies Dictionary's notnull key constraint.
+                var perClassCounts = new Dictionary<ValueTuple<T>, int>();
                 int perClassLimit = Math.Max(1, maxToAdd / NumClasses);
 
                 foreach (var (index, label, confidence) in candidates)
                 {
-                    if (!perClassCounts.TryGetValue(label, out int count))
+                    if (!perClassCounts.TryGetValue(new ValueTuple<T>(label), out int count))
                     {
                         count = 0;
                     }
@@ -365,13 +364,32 @@ public partial class SelfTrainingClassifier<T> : SemiSupervisedClassifierBase<T>
                         selectedIndices.Add(index);
                         selectedLabels.Add(label);
                         selectedConfidences.Add(confidence);
-                        perClassCounts[label] = count + 1;
+                        perClassCounts[new ValueTuple<T>(label)] = count + 1;
                     }
                 }
                 break;
         }
 
         return (selectedIndices, selectedLabels, selectedConfidences);
+    }
+
+    /// <summary>
+    /// 1 where <paramref name="values"/> is at least the double <paramref name="threshold"/>, else 0, decided exactly
+    /// as the double comparison <c>value &gt;= threshold</c> master made.
+    /// </summary>
+    /// <remarks>
+    /// Comparing against the threshold rounded to <typeparamref name="T"/> is not the same test: when the rounding
+    /// went down (0.7 becomes 0.699999988 in float) a value equal to the rounded threshold is below the real one
+    /// and must be rejected, so the comparison becomes strict.
+    /// </remarks>
+    internal static Tensor<T> AtLeast(Tensor<T> values, double threshold)
+    {
+        var ops = MathHelper.GetNumericOperations<T>();
+        var engine = AiDotNetEngine.Current;
+        T rounded = ops.FromDouble(threshold);
+        return ops.ToDouble(rounded) < threshold
+            ? engine.TensorGreaterThan(values, rounded)
+            : engine.TensorGreaterEqual(values, engine.TensorFullLike(values, rounded));
     }
 
     /// <summary>
