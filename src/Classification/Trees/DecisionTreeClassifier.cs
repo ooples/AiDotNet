@@ -238,7 +238,10 @@ public partial class DecisionTreeClassifier<T> : ProbabilisticClassifierBase<T>,
         var column = engine.Reshape(
             engine.TensorSlice(engine.TensorGather(x, rows, 0), new[] { 0, node.FeatureIndex }, new[] { n, 1 }), new[] { n });
         var goesRight = engine.TensorGreaterThan(column, node.Threshold);
-        int rightCount = NumOps.ToInt32(engine.TensorSum(goesRight));
+        // Counted and keyed in int: T may not hold the row count or n + position exactly (Half is exact only to 2048),
+        // which miscounts the right rows and lets a right row's key collide with a left row's.
+        var goesRightIndex = goesRight.Cast<int>();
+        int rightCount = engine.TensorSum(goesRightIndex);
         var left = node.Left ?? throw new InvalidOperationException("node.Left is null where it is required.");
         var right = node.Right ?? throw new InvalidOperationException("node.Right is null where it is required.");
         if (rightCount == 0)
@@ -254,7 +257,7 @@ public partial class DecisionTreeClassifier<T> : ProbabilisticClassifierBase<T>,
         }
 
         // key = goesRight * n + position puts the left rows first, then the right rows, each in order.
-        var key = engine.TensorAdd(engine.TensorMultiplyScalar(goesRight, NumOps.FromDouble(n)), engine.TensorArange<T>(0, n, 1));
+        var key = engine.TensorAdd(engine.TensorMultiplyScalar(goesRightIndex, n), engine.TensorArange<int>(0, n, 1));
         var arranged = engine.TensorGather(rows, engine.TensorArgsort(key, 0, false), 0);
         int leftCount = n - rightCount;
         RouteRows(left, x, engine.TensorSlice(arranged, new[] { 0 }, new[] { leftCount }), blocks, positions);

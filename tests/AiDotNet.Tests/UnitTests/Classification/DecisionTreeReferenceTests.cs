@@ -123,4 +123,34 @@ public class DecisionTreeReferenceTests
             Assert.Equal(1.0 - expected, (double)probabilities[i, 0], 1e-6);
         }
     }
+
+    [Fact]
+    [Trait("category", "unit")]
+    public void Half_midpoint_that_rounds_onto_the_upper_value_still_splits()
+    {
+        // 1.0009765625 and 1.001953125 are adjacent Halves; their midpoint rounds (ties to even) onto the upper one, so
+        // both values compared at most it and the only split was rejected. The threshold falls back to the lower value.
+        var x = new Matrix<Half>(new[,] { { (Half)1.0009765625 }, { (Half)1.001953125 } });
+        var y = new Vector<Half>(new[] { (Half)0, (Half)1 });
+        var tree = new DecisionTreeClassifier<Half>();
+        tree.Train(x, y);
+
+        Assert.Equal(2, tree.LeafCount);
+        Assert.Equal(new[] { (Half)0, (Half)1 }, tree.Predict(x).ToArray());
+    }
+
+    [Fact]
+    [Trait("category", "unit")]
+    public void A_genuine_minimum_value_is_not_taken_for_a_missing_value()
+    {
+        // NaN is sorted as MinValue. Feature 1 separates the NaN row; the node left holding MinValue and 0 must still
+        // split on feature 0, which it cannot if MinValue shares NaN's rank and reads as missing.
+        var x = new Matrix<double>(new[,] { { double.NaN, 0.0 }, { double.MinValue, 1.0 }, { 0.0, 1.0 } });
+        var y = new Vector<double>(new[] { 0.0, 0.0, 1.0 });
+        var tree = new DecisionTreeClassifier<double>();
+        tree.Train(x, y);
+
+        Assert.Equal(3, tree.LeafCount);
+        Assert.Equal(new[] { 0.0, 0.0, 1.0 }, tree.Predict(x).ToArray());
+    }
 }

@@ -245,18 +245,14 @@ public partial class DecisionTreeClassifier<T>
         int featureCount = SelectDenseFeatures();
         var ranks = _denseData.Ranks;
 
-        // Per candidate: its feature, the ranks on either side, where those values sit in DistinctValues, and the
-        // class counts of the rows ranked at most the lower (leftLow) or the upper (leftHigh) value.
-        var candidateFeature = new List<int>();
-        var lowerRank = new List<int>();
-        var upperRank = new List<int>();
-        var lowerValue = new List<int>();
-        var upperValue = new List<int>();
-        var leftLow = new List<int>();
-        var leftHigh = new List<int>();
+        // Per candidate: its feature, its lower rank, where the values on either side sit in DistinctValues, and the
+        // class counts of the rows ranked at most the lower value. Candidates are scored in batches of bounded size so
+        // the class-count tables never cover every threshold of every feature at once (rows x features x classes).
+        var batch = new CandidateBatch(classes);
         var running = new int[classes];
         var runRanks = new List<int>();
         var runCounts = new List<int>();
+        var best = (Feature: -1, Threshold: NumOps.Zero, ThresholdRank: 0, Gain: NumOps.Zero, Found: false);
 
         for (int s = 0; s < featureCount; s++)
         {
@@ -293,38 +289,75 @@ public partial class DecisionTreeClassifier<T>
             int offset = _denseData.ValueOffsets[feature];
             for (int k = 0; k + 1 < runRanks.Count; k++)
             {
-                candidateFeature.Add(feature);
-                lowerRank.Add(runRanks[k]);
-                upperRank.Add(runRanks[k + 1]);
-                lowerValue.Add(offset + runRanks[k]);
-                upperValue.Add(offset + runRanks[k + 1]);
-                leftLow.AddRange(runCounts.GetRange(k * classes, classes));
-                leftHigh.AddRange(runCounts.GetRange((k + 1) * classes, classes));
+                batch.Feature.Add(feature);
+                batch.LowerRank.Add(runRanks[k]);
+                batch.LowerValue.Add(offset + runRanks[k]);
+                batch.UpperValue.Add(offset + runRanks[k + 1]);
+                batch.LeftCounts.AddRange(runCounts.GetRange(k * classes, classes));
             }
+
+            if (batch.LeftCounts.Count >= CandidateCountBudget)
+                best = Better(best, ScoreCandidates(batch, count, totalCounts));
         }
 
-        int candidates = candidateFeature.Count;
+        return Better(best, ScoreCandidates(batch, count, totalCounts));
+    }
+
+    // Class counts (ints) one candidate batch holds before it is scored: 4 MB, whatever the rows, features and classes.
+    private const int CandidateCountBudget = 1 << 20;
+
+    /// <summary>Split candidates gathered for one scoring batch.</summary>
+    private sealed class CandidateBatch
+    {
+        internal CandidateBatch(int classes) => Classes = classes;
+        internal int Classes { get; }
+        internal List<int> Feature { get; } = new List<int>();
+        internal List<int> LowerRank { get; } = new List<int>();
+        internal List<int> LowerValue { get; } = new List<int>();
+        internal List<int> UpperValue { get; } = new List<int>();
+        internal List<int> LeftCounts { get; } = new List<int>();
+
+        internal void Clear()
+        {
+            Feature.Clear();
+            LowerRank.Clear();
+            LowerValue.Clear();
+            UpperValue.Clear();
+            LeftCounts.Clear();
+        }
+    }
+
+    // The earlier batch keeps a tie, so the first candidate with the largest gain wins as it did in one batch.
+    private (int Feature, T Threshold, int ThresholdRank, T Gain, bool Found) Better(
+        (int Feature, T Threshold, int ThresholdRank, T Gain, bool Found) current,
+        (int Feature, T Threshold, int ThresholdRank, T Gain, bool Found) next)
+        => next.Found && (!current.Found || NumOps.GreaterThan(next.Gain, current.Gain)) ? next : current;
+
+    /// <summary>
+    /// The best candidate of <paramref name="batch"/> (its first with the largest gain), scored as one batch of engine
+    /// work in T; the batch is cleared afterwards.
+    /// </summary>
+    private (int Feature, T Threshold, int ThresholdRank, T Gain, bool Found) ScoreCandidates(
+        CandidateBatch batch, int count, int[] totalCounts)
+    {
+        int classes = batch.Classes;
+        int candidates = batch.Feature.Count;
         if (candidates == 0)
             return (-1, NumOps.Zero, 0, NumOps.Zero, false);
 
         var engine = AiDotNetEngine.Current;
         var countShape = new[] { candidates, classes };
 
-        // threshold = lower/2 + upper/2 (the midpoint without overflowing a narrow T). It can round onto the upper
-        // value, which then also compares <= the threshold, so those rows go left too.
-        var lower = engine.TensorTake(_denseData.DistinctValues, new Tensor<int>(lowerValue.ToArray(), new[] { candidates }));
-        var upper = engine.TensorTake(_denseData.DistinctValues, new Tensor<int>(upperValue.ToArray(), new[] { candidates }));
+        // threshold = lower/2 + upper/2 (the midpoint without overflowing a narrow T). When rounding lands it on the
+        // upper value (adjacent values in a narrow T) it is the lower value instead, as scikit-learn's splitter does,
+        // so the split still separates the two runs and the rows at most the lower value are exactly the left side.
+        var lower = engine.TensorTake(_denseData.DistinctValues, new Tensor<int>(batch.LowerValue.ToArray(), new[] { candidates }));
+        var upper = engine.TensorTake(_denseData.DistinctValues, new Tensor<int>(batch.UpperValue.ToArray(), new[] { candidates }));
         T half = NumOps.FromDouble(0.5);
-        var thresholds = engine.TensorAdd(engine.TensorMultiplyScalar(lower, half), engine.TensorMultiplyScalar(upper, half));
-        var roundsUp = engine.TensorGreaterEqual(thresholds, upper).Cast<int>();
-        var lowRanks = new Tensor<int>(lowerRank.ToArray(), new[] { candidates });
-        var thresholdRanks = engine.TensorAdd(lowRanks, engine.TensorMultiply(
-            roundsUp, engine.TensorSubtract(new Tensor<int>(upperRank.ToArray(), new[] { candidates }), lowRanks)));
+        var midpoints = engine.TensorAdd(engine.TensorMultiplyScalar(lower, half), engine.TensorMultiplyScalar(upper, half));
+        var thresholds = engine.TensorWhere(engine.TensorGreaterEqual(midpoints, upper), lower, midpoints);
 
-        var low = new Tensor<int>(leftLow.ToArray(), countShape);
-        var left = engine.TensorAdd(low, engine.TensorMultiply(
-            engine.TensorBroadcastTo(engine.Reshape(roundsUp, new[] { candidates, 1 }), countShape),
-            engine.TensorSubtract(new Tensor<int>(leftHigh.ToArray(), countShape), low)));
+        var left = new Tensor<int>(batch.LeftCounts.ToArray(), countShape);
         var totals = engine.TensorBroadcastTo(new Tensor<int>((int[])totalCounts.Clone(), new[] { 1, classes }), countShape);
         var right = engine.TensorSubtract(totals, left);
         var leftSizes = engine.ReduceSum(left, new[] { 1 }, false);
@@ -353,7 +386,10 @@ public partial class DecisionTreeClassifier<T>
         var usable = engine.TensorMultiply(allowed, notNan.Cast<int>());
         int usableCount = engine.TensorSum(usable);
         if (usableCount == 0)
+        {
+            batch.Clear();
             return (-1, NumOps.Zero, 0, NumOps.Zero, false);
+        }
 
         var lowest = engine.TensorFullLike(gains, NumOps.MinValue);
         var masked = engine.TensorWhere(usable.Cast<T>(), gains, lowest);
@@ -365,7 +401,9 @@ public partial class DecisionTreeClassifier<T>
             Enumerable.Range(0, candidates).Select(i => candidates - i).ToArray(), new[] { candidates }));
         int best = engine.TensorArgMax(priority, 0).GetFlat(0);
 
-        return (candidateFeature[best], thresholds.GetFlat(best), thresholdRanks.GetFlat(best), bestGain, true);
+        var result = (batch.Feature[best], thresholds.GetFlat(best), batch.LowerRank[best], bestGain, true);
+        batch.Clear();
+        return result;
     }
 
     /// <summary>

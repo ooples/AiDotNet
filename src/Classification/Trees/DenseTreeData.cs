@@ -13,8 +13,9 @@ namespace AiDotNet.Classification.Trees;
 /// </para>
 /// <para>
 /// The ranking is engine work: each feature column is sorted, a new rank starts wherever the sorted value changes, and
-/// the ranks are put back in row order through the inverse permutation. NaN sorts below every number (it is ranked as
-/// <c>MinValue</c>) and all NaNs of a feature share one rank, <see cref="NanRank"/>.
+/// the ranks are put back in row order through the inverse permutation. All NaNs of a feature share one rank,
+/// <see cref="NanRank"/>, which is <see cref="Rows"/>: above every numeric rank, so a NaN is never taken for a genuine
+/// <c>MinValue</c> (the value NaN is sorted as).
 /// </para>
 /// </remarks>
 internal sealed class DenseTreeData<T>
@@ -84,6 +85,9 @@ internal sealed class DenseTreeData<T>
 
         var sortedRanks = engine.TensorSubtractScalar(engine.TensorCumSum(starts, 1), 1);
         var ranks = engine.TensorTakeAlongDim(sortedRanks, engine.TensorArgsort(order, 1, false), 1);
+        // NaN sorted as MinValue and so shares its rank with a genuine MinValue; give the NaNs their own rank, rows,
+        // which no numeric rank reaches.
+        ranks = engine.TensorWhere(nanMask, engine.TensorFullLike(ranks, rows), ranks);
         Ranks = ranks.ToArray();
 
         // The distinct values are the sorted values at the rank starts, feature after feature.
@@ -106,7 +110,7 @@ internal sealed class DenseTreeData<T>
             engine.TensorSubtractScalar(engine.TensorAdd(engine.TensorMultiply(ranks, nanMask), nanMask), 1),
             new[] { 1 }, false).ToArray();
 
-        int maxRank = distinctCounts.Max() - 1;
+        int maxRank = Math.Max(distinctCounts.Max() - 1, NanRank.Max());
         int bits = 0;
         while (bits < 31 && (maxRank >> bits) != 0) bits++;
         RankBits = bits;
