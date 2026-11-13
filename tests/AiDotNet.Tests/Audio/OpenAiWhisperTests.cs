@@ -213,4 +213,20 @@ public class OpenAiWhisperTests
             SameWords(e["words"]!, a.Words, $"segment {i}");
         }
     }
+
+    // whisper clamps the mel power at 1e-10 before log10, so silence reads (log10(1e-10) + 4) / 4 = -1.5 in every
+    // frame. In Half the scaled floor 1e-10 / s^2 rounds to 0 and log10(0) is -inf, so the floor must be applied as
+    // -10 after the log; the double result is the same.
+    [Fact(Timeout = 120000)]
+    public async Task LogMel_SilenceReadsWhispersFloor_InHalfAndDouble()
+    {
+        await Task.Yield();
+        var half = OpenAiWhisperTranscriber<Half>.LogMelSpectrogram(new double[1600], 80);
+        var ops = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<Half>();
+        Assert.Equal(80, half.Shape[0]);
+        Assert.Equal(10, half.Shape[1]);
+        foreach (var v in half.Contiguous().ToArray()) Assert.Equal(-1.5, ops.ToDouble(v));
+        var full = OpenAiWhisperTranscriber<double>.LogMelSpectrogram(new double[1600], 80);
+        foreach (var v in full.Contiguous().ToArray()) Assert.Equal(-1.5, v);
+    }
 }

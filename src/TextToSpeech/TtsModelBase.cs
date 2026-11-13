@@ -296,12 +296,34 @@ public abstract partial class TtsModelBase<T> : NeuralNetworkBase<T>, IShapeCont
         var domain = GetInputDomain(new[] { length });
         bool integerIndices = domain.IsResolved && domain.Kind == LayerInputDomainKind.IntegerIndices;
         int range = integerIndices ? Math.Max(1, domain.MaxExclusive - domain.MinInclusive) : 0;
+        if (!integerIndices) return ScaledCharacterCodes(Engine, text, length);
         var codes = new int[length];
         for (int i = 0; i < length; i++)
-            codes[i] = integerIndices ? domain.MinInclusive + text[i] % range : text[i];
-        var tokens = new Tensor<int>(codes, new[] { length }).Cast<T>();
-        // Character codes are scaled by 1/128 (a power of two, so exact in every T) for a continuous front end.
-        return integerIndices ? tokens : Engine.TensorDivideScalar(tokens, NumOps.FromDouble(128.0));
+            codes[i] = domain.MinInclusive + text[i] % range;
+        return new Tensor<int>(codes, new[] { length }).Cast<T>();
+    }
+
+    /// <summary>
+    /// The first <paramref name="length"/> character codes scaled by 1/128 for a continuous front end, <c>[length]</c>.
+    /// A code reaches 65535, past a 16-bit T's largest finite value (65504), so code / 128 is formed as
+    /// (code &gt;&gt; 7) + (code &amp; 127) / 128: both parts are exact in every T and their sum rounds once, as
+    /// <c>FromDouble(code / 128.0)</c> does.
+    /// </summary>
+    internal static Tensor<T> ScaledCharacterCodes(AiDotNet.Tensors.Engines.IEngine engine, string text, int length)
+    {
+        Guard.NotNull(engine);
+        Guard.NotNull(text);
+        var whole = new int[length];
+        var fraction = new int[length];
+        for (int i = 0; i < length; i++)
+        {
+            whole[i] = text[i] >> 7;
+            fraction[i] = text[i] & 127;
+        }
+        var ops = MathHelper.GetNumericOperations<T>();
+        var shape = new[] { length };
+        return engine.TensorAdd(new Tensor<int>(whole, shape).Cast<T>(),
+            engine.TensorDivideScalar(new Tensor<int>(fraction, shape).Cast<T>(), ops.FromDouble(128.0)));
     }
 
     /// <summary>Longest text, in tokens, the model reads.</summary>

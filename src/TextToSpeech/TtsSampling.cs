@@ -43,8 +43,11 @@ internal static class TtsSampling<T>
     /// <summary>
     /// The position a multinomial draw lands on over non-negative <paramref name="weights"/> (in visiting order):
     /// with <c>d = u · Σw</c>, the first position whose running sum exceeds d (<paramref name="inclusive"/>: reaches d,
-    /// skipping zero weights); the last position (inclusive: the last positive weight) when rounding leaves none.
+    /// skipping zero weights); the last positive weight when rounding leaves none, so a zero-weight (removed) position
+    /// is never drawn, as with <c>torch.multinomial</c>.
     /// </summary>
+    /// <remarks>Σw is the running sum's last value, so d is compared with the very sums it was scaled from; a total
+    /// summed in another order can round above the last running sum and leave every position below d.</remarks>
     public static int DrawPosition(Tensor<T> weights, double u, bool inclusive)
     {
         if (weights is null) throw new ArgumentNullException(nameof(weights));
@@ -53,16 +56,20 @@ internal static class TtsSampling<T>
         if (n == 0) throw new ArgumentException("There is nothing to draw from.", nameof(weights));
         var flat = engine.Reshape(weights, new[] { n });
         var running = engine.TensorCumSum(flat, 0);
-        T draw = Ops.Multiply(Ops.FromDouble(u), engine.TensorSum(flat));
+        T total = engine.TensorSlice(running, new[] { n - 1 }, new[] { 1 }).ToArray()[0];
+        T draw = Ops.Multiply(Ops.FromDouble(u), total);
         if (!inclusive)
         {
             int below = n - engine.TensorGreaterThan(running, draw).Cast<int>().ToArray().Sum();
-            return Math.Min(below, n - 1);
+            if (below < n) return below;
         }
-        int before = engine.TensorLessThan(running, draw).Cast<int>().ToArray().Sum();
         var positive = engine.TensorGreaterThan(flat, Ops.Zero).Cast<int>().ToArray();
-        for (int j = before; j < n; j++)
-            if (positive[j] != 0) return j;
+        if (inclusive)
+        {
+            int before = engine.TensorLessThan(running, draw).Cast<int>().ToArray().Sum();
+            for (int j = before; j < n; j++)
+                if (positive[j] != 0) return j;
+        }
         int last = Array.LastIndexOf(positive, 1);
         return last >= 0 ? last : n - 1;
     }

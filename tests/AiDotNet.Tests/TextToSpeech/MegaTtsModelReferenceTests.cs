@@ -124,4 +124,51 @@ public class MegaTtsModelReferenceTests
         Assert.Equal(first.Length, mel.Shape[0] * options.HopSize);
         Assert.Equal(mel.ToArray(), model.Predict(model.TextToTokens("Good morning.")).ToArray());
     }
+
+    // librosa.stft(center=True, pad_mode="constant") as librosa_wav2spec calls it: fft/2 zeros each side and
+    // 1 + (n + 2 (fft/2) - fft) / hop frames. For an odd FFT size the old frame count 1 + n / hop is one too many
+    // (here 5 instead of 4), and its last frame read past the padded signal.
+    [Fact(Timeout = 120000)]
+    public async Task LogMel_OddFftSize_MatchesLibrosaFraming()
+    {
+        await Task.Yield();
+        const int rate = 8000, fft = 63, hop = 16, win = 48, mels = 8, n = 64;
+        var x = new double[n];
+        for (int i = 0; i < n; i++) x[i] = Math.Sin(2 * Math.PI * 440 * i / rate) + 0.3 * Math.Cos(2 * Math.PI * 1900 * i / rate);
+        var mel = new MegaTtsMel<double>(rate, fft, hop, win, mels, 0, rate / 2.0)
+            .LogMel(new Tensor<double>(new[] { n }, new Vector<double>((double[])x.Clone())));
+
+        int pad = fft / 2, bins = fft / 2 + 1, frames = 1 + (n + 2 * pad - fft) / hop;
+        Assert.Equal(4, frames);
+        Assert.Equal(2, mel.Shape.Length);
+        Assert.Equal(frames, mel.Shape[0]);
+        Assert.Equal(mels, mel.Shape[1]);
+        var padded = new double[n + 2 * pad];
+        Array.Copy(x, 0, padded, pad, n);
+        var window = new double[fft];
+        for (int i = 0; i < win; i++) window[(fft - win) / 2 + i] = 0.5 - 0.5 * Math.Cos(2 * Math.PI * i / win);
+        var basis = AiDotNet.Audio.Features.MelFilterbanks.Slaney(rate, fft, mels, 0, rate / 2.0);
+        for (int f = 0; f < frames; f++)
+        {
+            var magnitude = new double[bins];
+            for (int k = 0; k < bins; k++)
+            {
+                double re = 0, im = 0;
+                for (int t = 0; t < fft; t++)
+                {
+                    double v = padded[f * hop + t] * window[t], angle = 2 * Math.PI * k * t / fft;
+                    re += v * Math.Cos(angle);
+                    im -= v * Math.Sin(angle);
+                }
+                magnitude[k] = Math.Sqrt(re * re + im * im);
+            }
+            for (int m = 0; m < mels; m++)
+            {
+                double sum = 0;
+                for (int k = 0; k < bins; k++) sum += basis[m, k] * magnitude[k];
+                double expected = Math.Log10(Math.Max(1e-6, sum));
+                Assert.True(Math.Abs(expected - mel[f, m]) <= 1e-9, $"frame {f}, mel {m}: {expected} vs {mel[f, m]}");
+            }
+        }
+    }
 }

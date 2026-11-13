@@ -41,10 +41,9 @@ internal static class EngineStft<T>
     /// <summary>
     /// The centred STFT magnitude <c>[frames, fftSize / 2 + 1]</c> of a signal, padded by fftSize / 2 with
     /// <paramref name="padMode"/> on each side. The components are divided by the largest one before they are
-    /// squared, and the magnitude multiplied back, so a 16-bit T cannot overflow; <paramref name="epsilon"/>
-    /// is added under the square root (torch's <c>sqrt(re² + im² + eps)</c>), 0 for the plain magnitude.
+    /// squared, and the magnitude multiplied back, so a 16-bit T cannot overflow.
     /// </summary>
-    public static Tensor<T> Magnitude(Tensor<T> audio, int fftSize, int hop, Tensor<T> window, EnginePadMode padMode, double epsilon = 0.0)
+    public static Tensor<T> Magnitude(Tensor<T> audio, int fftSize, int hop, Tensor<T> window, EnginePadMode padMode)
     {
         if (audio is null) throw new ArgumentNullException(nameof(audio));
         var engine = AiDotNetEngine.Current;
@@ -61,8 +60,6 @@ internal static class EngineStft<T>
         T scale = Ops.GreaterThan(peak, Ops.Zero) ? peak : Ops.One;
         var squares = engine.TensorAdd(engine.TensorSquare(engine.TensorDivideScalar(re, scale)),
             engine.TensorSquare(engine.TensorDivideScalar(im, scale)));
-        if (epsilon != 0.0)
-            squares = engine.TensorAddScalar(squares, Ops.Divide(Ops.Divide(Ops.FromDouble(epsilon), scale), scale));
         return engine.TensorMultiplyScalar(engine.TensorSqrt(squares), scale);
     }
 }

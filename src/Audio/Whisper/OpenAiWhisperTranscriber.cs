@@ -205,9 +205,9 @@ internal sealed class OpenAiWhisperTranscriber<T>
     /// <summary><c>log_mel_spectrogram(audio, n_mels, padding)</c>: a centred, reflect-padded 400-point STFT (hop 160,
     /// periodic Hann), its power without the last frame, the mel filter bank, log10 above 1e-10, floored 8 below the
     /// maximum, then (x + 4) / 4: <c>[mels, frames]</c>.</summary>
-    /// <remarks>The power is scaled by the square of the largest STFT component before the filter bank and the scale
-    /// is added back in the log domain (log10(max(m s^2, 1e-10)) = log10(max(m, 1e-10 / s^2)) + 2 log10 s), so a
-    /// 16-bit float never forms the overflowing squares.</remarks>
+    /// <remarks>The power is scaled by the square of the largest STFT component before the filter bank, and the scale
+    /// and the floor are applied in the log domain (log10(max(m s^2, 1e-10)) = max(log10 m + 2 log10 s, -10)), so a
+    /// 16-bit float never forms the overflowing squares, nor a 1e-10 / s^2 floor that rounds to 0.</remarks>
     public static Tensor<T> LogMelSpectrogram(Tensor<T> audio, int mels, int padding = 0)
     {
         if (audio is null) throw new ArgumentNullException(nameof(audio));
@@ -230,9 +230,9 @@ internal sealed class OpenAiWhisperTranscriber<T>
             engine.TensorSquare(engine.TensorDivideScalar(im, scale)));
         var filters = mels == 80 ? Filters.Value.Mel80 : Filters.Value.Mel128;
         var mel = engine.TensorMatMul(filters, engine.TensorTranspose(power));
-        T floor = NumOps.Divide(NumOps.Divide(NumOps.FromDouble(1e-10), scale), scale);
         T offset = NumOps.Multiply(NumOps.FromDouble(2.0 / Math.Log(10.0)), NumOps.Log(scale));
-        var log = engine.TensorAddScalar(engine.TensorLog10(engine.TensorMax(mel, floor)), offset);
+        // log10(0) is -inf, which the -10 floor (log10 of whisper's 1e-10 clamp) lifts exactly in every T.
+        var log = engine.TensorMax(engine.TensorAddScalar(engine.TensorLog10(mel), offset), NumOps.FromDouble(-10.0));
         T max = engine.TensorMaxValue(log);
         var clipped = engine.TensorMax(log, NumOps.Subtract(max, NumOps.FromDouble(8.0)));
         return engine.TensorDivideScalar(engine.TensorAddScalar(clipped, NumOps.FromDouble(4.0)), NumOps.FromDouble(4.0));
