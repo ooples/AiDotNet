@@ -517,7 +517,8 @@ public partial class RandomSurvivalForest<T> : SurvivalModelBase<T>
     private static Tensor<T> UniqueEventTimes(IEngine engine, Tensor<T> times, Tensor<T> events)
     {
         var observed = engine.TensorIndexSelect(times, Positions(engine, events), 0);
-        if (observed.Length == 0)
+        // A single event time is already unique; TensorDiff needs two entries (its narrow is empty below that).
+        if (observed.Length <= 1)
             return observed;
 
         var sorted = engine.TensorSort(observed, 0, false).Values;
