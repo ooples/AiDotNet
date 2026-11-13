@@ -457,6 +457,11 @@ public abstract partial class MetaLearnerBase<T, TInput, TOutput> : ModelBase<T,
         Guard.NotNull(model);
         MetaModel = model;
 
+        // The cached parameter view and the registered components still point at the old model; drop both so
+        // GetParameters, SetParameters and Serialize read the replacement.
+        _cachedParamModel = null;
+        InvalidateParameterComponents();
+
         // Reset optimizer state when the model changes to avoid stale momentum/velocity vectors
         // from the previous model's parameter space
         ResetOptimizerState();
@@ -524,6 +529,9 @@ public abstract partial class MetaLearnerBase<T, TInput, TOutput> : ModelBase<T,
         if (MetaModel is not IModelSerializer serializer)
             throw new NotSupportedException("The meta-model does not support serialization.");
         serializer.LoadModel(filePath);
+
+        // A legacy file carries no iteration of its own: start from zero unless a valid sidecar supplies one.
+        _currentIteration = 0;
         var metaPath = filePath + ".meta";
         if (File.Exists(metaPath))
         {

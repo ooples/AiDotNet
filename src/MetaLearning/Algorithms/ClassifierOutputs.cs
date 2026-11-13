@@ -31,6 +31,11 @@ internal static class ClassifierOutputs<T>
     private static readonly INumericOperations<T> Ops = MathHelper.GetNumericOperations<T>();
 
     /// <summary>
+    /// How far a label may sit from the nearest whole number and still count as that class index.
+    /// </summary>
+    private const double FractionalLabelTolerance = 1e-9;
+
+    /// <summary>
     /// A model output as one row per example, <c>[rows, width]</c>. A vector or a rank-1 tensor holds one scalar
     /// per example, so it becomes <c>[rows, 1]</c>.
     /// </summary>
@@ -62,7 +67,15 @@ internal static class ClassifierOutputs<T>
     /// </summary>
     internal static Tensor<T> Labels(object? labels, int numClasses)
     {
-        Tensor<T> flat = labels switch
+        var flat = FlatLabels(labels);
+        ValidateLabels(flat, numClasses);
+        return flat;
+    }
+
+    /// <summary>The labels as one <c>[rows]</c> tensor, not yet validated.</summary>
+    private static Tensor<T> FlatLabels(object? labels)
+    {
+        return labels switch
         {
             Tensor<T> tensor => tensor.Reshape(tensor.Length),
             Vector<T> vector => Tensor<T>.FromVector(vector),
@@ -71,7 +84,11 @@ internal static class ClassifierOutputs<T>
                 $"Class labels must be a Tensor<T>, Vector<T> or Matrix<T> of class indices, not "
                 + $"'{labels?.GetType().Name ?? "null"}'."),
         };
+    }
 
+    /// <summary>Throws unless every label is a whole number in <c>[0, numClasses)</c>.</summary>
+    private static void ValidateLabels(Tensor<T> flat, int numClasses)
+    {
         // 1 where a label is negative, at or above numClasses, or not a whole number (NaN compares false, as before).
         var engine = AiDotNetEngine.Current;
         var wide = flat.Cast<double>();
@@ -79,7 +96,7 @@ internal static class ClassifierOutputs<T>
         var negative = engine.TensorLessThan(wide, 0.0);
         var tooLarge = engine.TensorAdd(engine.TensorGreaterThan(wide, classCount), engine.TensorEquals(wide, classCount));
         var fractional = engine.TensorGreaterThan(
-            engine.TensorAbs(engine.TensorSubtract(wide, engine.TensorRound(wide))), 1e-9);
+            engine.TensorAbs(engine.TensorSubtract(wide, engine.TensorRound(wide))), FractionalLabelTolerance);
         var invalid = engine.TensorAdd(engine.TensorAdd(negative, tooLarge), fractional);
         if (engine.TensorSum(invalid) > 0)
         {
@@ -87,10 +104,8 @@ internal static class ClassifierOutputs<T>
             double value = Ops.ToDouble(flat[i]);
             throw new ArgumentException(
                 $"Label {value} at position {i} is not a class index in [0, {numClasses}). Classifier "
-                + "meta-learners take one class index per example.", nameof(labels));
+                + "meta-learners take one class index per example.", "labels");
         }
-
-        return flat;
     }
 
     /// <summary>
@@ -133,20 +148,32 @@ internal static class ClassifierOutputs<T>
 
         if (support is Tensor<T> supportTensor && query is Tensor<T> queryTensor)
         {
-            // Flat row-major: the support's elements, then the query's, in the support's trailing shape.
+            // Row-major: the support's examples, then the query's, in the support's trailing shape. A narrower
+            // query example is zero-padded at the end of its own row (as the matrix branch does), so no query
+            // example spills into the next one.
             var shape = supportTensor.Shape.ToArray();
-            shape[0] += queryTensor.Shape[0];
-            var flat = Vector<T>.Concatenate(supportTensor.ToVector(), queryTensor.ToVector());
-            int length = 1;
-            foreach (int dimension in shape) length *= dimension;
-            if (flat.Length > length)
+            int supportRows = shape[0];
+            int queryRows = queryTensor.Shape.Length == 0 ? 0 : queryTensor.Shape[0];
+            shape[0] += queryRows;
+            int width = 1;
+            for (int axis = 1; axis < shape.Length; axis++) width *= shape[axis];
+            int queryWidth = queryRows == 0 ? 0 : queryTensor.Length / queryRows;
+            if (queryWidth > width)
             {
                 throw new ArgumentException("Query examples are larger than the support examples they are stacked after.", nameof(query));
             }
 
-            if (flat.Length < length) flat = Vector<T>.Concatenate(flat, new Vector<T>(length - flat.Length));
+            var engine = AiDotNetEngine.Current;
+            var queryRowsTensor = engine.Reshape(queryTensor, new[] { queryRows, queryWidth });
+            if (queryWidth < width)
+            {
+                queryRowsTensor = engine.Concat(
+                    new[] { queryRowsTensor, new Tensor<T>(new[] { queryRows, width - queryWidth }) }, 1);
+            }
 
-            return (TInput)(object)new Tensor<T>(shape, flat);
+            var stacked = engine.Concat(
+                new[] { engine.Reshape(supportTensor, new[] { supportRows, width }), queryRowsTensor }, 0);
+            return (TInput)(object)engine.Reshape(stacked, shape);
         }
 
         throw new NotSupportedException(
@@ -161,9 +188,10 @@ internal static class ClassifierOutputs<T>
     /// </summary>
     internal static T ProbabilityLoss(ILossFunction<T> loss, object? predictions, object? expected)
     {
-        var labels = Labels(expected, int.MaxValue);
+        var labels = FlatLabels(expected);
         if (predictions is Vector<T> predictedClasses)
         {
+            ValidateLabels(labels, int.MaxValue);
             return ErrorRate(predictedClasses, labels);
         }
 
@@ -178,8 +206,10 @@ internal static class ClassifierOutputs<T>
         // two elementwise and threw "Tensor shapes must match. Got [rows, classes] and [rows]". One-hot is the
         // form every loss here understands, and for the index-consuming case it is the same number:
         // -sum_c y_c log p_c collapses to -log p(true class).
-        // A label outside [0, classes) leaves its row all zero.
+        // A label outside [0, classes) would leave its one-hot row all zero and silently drop that example, so
+        // the labels are checked against the probability columns.
         int classes = logProbabilities.Shape.Length > 1 ? logProbabilities.Shape[1] : 1;
+        ValidateLabels(labels, classes);
         var shape = new[] { labels.Length, classes };
         var columns = new Tensor<int>(Enumerable.Range(0, classes).ToArray(), new[] { 1, classes }).Cast<double>();
         var oneHot = engine.TensorEquals(

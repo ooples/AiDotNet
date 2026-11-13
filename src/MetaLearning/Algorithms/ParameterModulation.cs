@@ -7,8 +7,14 @@ namespace AiDotNet.MetaLearning.Algorithms;
 /// <remarks>
 /// <para>
 /// A modulation vector m of length L scales a parameter vector p of length n cyclically:
-/// p'[i] = p[i] * m[i mod L] (numpy: <c>p * np.resize(m, n)</c>). The factors are kept in the
-/// model's numeric type T so the scaling never round-trips through double.
+/// p'[i] = p[i] * m[i mod L] (numpy: <c>p * np.resize(m, n)</c>). The factors are returned in the
+/// model's numeric type T and the scaling itself (<see cref="Apply"/>) runs in T.
+/// </para>
+/// <para>
+/// The two factor reductions are the exception: <see cref="MeanAbsGate"/> and <see cref="MeanClampedRatio"/>
+/// reduce their inputs in double and convert the one-element result back to T. Their means run over every
+/// feature, and a Half running sum stops growing past 2048 (70000 ratios of 2 would no longer average to 2),
+/// so the wider accumulator is kept on purpose.
 /// </para>
 /// </remarks>
 internal static class ParameterModulation

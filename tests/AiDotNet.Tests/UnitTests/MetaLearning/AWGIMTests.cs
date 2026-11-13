@@ -84,6 +84,10 @@ public class AWGIMTests
             encoder.SaveModel(path);
             if (metadata is not null) File.WriteAllText(path + ".meta", metadata);
             var restored = CreateLearner(0);
+            // A learner that has already trained must not keep its old iteration after a legacy load.
+            (typeof(AiDotNet.MetaLearning.MetaLearnerBase<double, Matrix<double>, Tensor<double>>)
+                .GetField("_currentIteration", BindingFlags.Instance | BindingFlags.NonPublic)
+                ?? throw new InvalidOperationException("iteration")).SetValue(restored, 9);
             restored.Load(path);
             Assert.Equal(parameters.ToArray(), Assert.IsType<LinearEmbeddingModel>(restored.BaseModel).GetParameters().ToArray());
             Assert.Equal(iteration, restored.CurrentIteration);

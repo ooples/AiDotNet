@@ -102,6 +102,12 @@ public partial class FEATAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
     private readonly FEATOptions<T, TInput, TOutput> _featOptions;
 
     /// <summary>
+    /// Elements (rows x n) of the attention matrix held at once by <see cref="AdaptPrototypes"/>; larger inputs are
+    /// processed in blocks of rows.
+    /// </summary>
+    private const int AttentionBlockElements = 1 << 20;
+
+    /// <summary>
     /// Parameters for the set-to-set transformer that adapts prototypes.
     /// </summary>
     [AiDotNet.Attributes.TrainableParameter]
@@ -354,8 +360,11 @@ public partial class FEATAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
 
         // Attention weights are read from the transformer parameters in (layer, i, j) order; once they
         // run out, every remaining pair uses the constant weight 0.01.
+        // The n x n attention is processed in blocks of rows, each reading its own slice of the parameter stream,
+        // so peak memory is O(block * n) rather than O(n^2) while every row's result is unchanged.
         int paramIdx = 0;
-        int pairCount = n * n;
+        long pairCount = (long)n * n;
+        int blockRows = Math.Max(1, Math.Min(n, AttentionBlockElements / n));
         double invSqrtN = 1.0 / Math.Sqrt(n);
         const double maxScore = 10.0;
         double normCount = n;
@@ -368,27 +377,43 @@ public partial class FEATAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
             // Frozen layer input (avoid in-place mutation)
             var x = Tensor<T>.FromVector(prototypes).Cast<double>();
 
-            int available = Math.Max(0, Math.Min(pairCount, _transformerParams.Length - paramIdx));
-            var layerWeights = available == pairCount
-                ? _transformerParams.GetSubVector(paramIdx, pairCount)
-                : Vector<T>.Concatenate(
-                    available > 0 ? _transformerParams.GetSubVector(paramIdx, available) : new Vector<T>(0),
-                    Engine.Fill(pairCount - available, fallbackWeight));
+            int available = (int)Math.Max(0, Math.Min(pairCount, (long)_transformerParams.Length - paramIdx));
+            var xColumn = Engine.Reshape(x, new[] { n, 1 });
+            var attendedBlocks = new List<Tensor<double>>((n + blockRows - 1) / blockRows);
+            for (int start = 0; start < n; start += blockRows)
+            {
+                int rows = Math.Min(blockRows, n - start);
+                int blockPairs = rows * n;
+
+                // This block's weights w[start .. start + rows, 0 .. n): stream entries from offset start * n,
+                // the ones past the end of the parameters taking the fallback weight.
+                long blockOffset = (long)start * n;
+                int blockAvailable = (int)Math.Max(0, Math.Min(blockPairs, available - blockOffset));
+                var blockWeights = blockAvailable == blockPairs
+                    ? _transformerParams.GetSubVector(paramIdx + (int)blockOffset, blockPairs)
+                    : Vector<T>.Concatenate(
+                        blockAvailable > 0
+                            ? _transformerParams.GetSubVector(paramIdx + (int)blockOffset, blockAvailable)
+                            : new Vector<T>(0),
+                        Engine.Fill(blockPairs - blockAvailable, fallbackWeight));
+
+                // score[i, j] = x_i * x_j * w_ij / sqrt(n); weight = exp(min(score, 10))
+                var xRows = Engine.TensorSlice(x, new[] { start }, new[] { rows });
+                var pairWeights = Engine.Reshape(Tensor<T>.FromVector(blockWeights).Cast<double>(), new[] { rows, n });
+                var scores = Engine.TensorMultiplyScalar(
+                    Engine.TensorMultiply(Engine.TensorOuter(xRows, x), pairWeights), invSqrtN);
+                var weights = Engine.TensorExp(Engine.TensorMin(scores, maxScore));
+                var totalWeight = Engine.ReduceSum(weights, new[] { 1 }, false);
+                var weightedSum = Engine.Reshape(Engine.TensorMatMul(weights, xColumn), new[] { rows });
+
+                // Rows whose total weight underflows keep their input value.
+                var valid = Engine.TensorGreaterThan(totalWeight, minTotalWeight);
+                var safeTotal = Engine.TensorWhere(valid, totalWeight, Engine.TensorOnesLike(totalWeight));
+                attendedBlocks.Add(Engine.TensorWhere(valid, Engine.TensorDivide(weightedSum, safeTotal), xRows));
+            }
+
             paramIdx += available;
-
-            // score[i, j] = x_i * x_j * w_ij / sqrt(n); weight = exp(min(score, 10))
-            var pairWeights = Engine.Reshape(Tensor<T>.FromVector(layerWeights).Cast<double>(), new[] { n, n });
-            var scores = Engine.TensorMultiplyScalar(
-                Engine.TensorMultiply(Engine.TensorOuter(x, x), pairWeights), invSqrtN);
-            var weights = Engine.TensorExp(Engine.TensorMin(scores, maxScore));
-            var totalWeight = Engine.ReduceSum(weights, new[] { 1 }, false);
-            var weightedSum = Engine.Reshape(
-                Engine.TensorMatMul(weights, Engine.Reshape(x, new[] { n, 1 })), new[] { n });
-
-            // Rows whose total weight underflows keep their input value.
-            var valid = Engine.TensorGreaterThan(totalWeight, minTotalWeight);
-            var safeTotal = Engine.TensorWhere(valid, totalWeight, Engine.TensorOnesLike(totalWeight));
-            var attended = Engine.TensorWhere(valid, Engine.TensorDivide(weightedSum, safeTotal), x);
+            var attended = attendedBlocks.Count == 1 ? attendedBlocks[0] : Engine.Concat(attendedBlocks.ToArray(), 0);
 
             // Residual connection (uses frozen layer input)
             var residual = Engine.TensorAdd(attended, x).ToVector();

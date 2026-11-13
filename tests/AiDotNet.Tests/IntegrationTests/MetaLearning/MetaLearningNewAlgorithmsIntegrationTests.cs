@@ -553,12 +553,13 @@ public class MetaLearningNewAlgorithmsIntegrationTests
         var algorithm = new FEATAlgorithm<double, Matrix<double>, Vector<double>>(options);
         options.NumTransformerLayers = 0;
 
-        var prototypes = new Vector<double>(new[] { 0.5, -1.25, 2.0 });
+        var expected = new[] { 0.5, -1.25, 2.0 };
+        var prototypes = new Vector<double>((double[])expected.Clone());
         var adapted = algorithm.AdaptPrototypes(prototypes);
 
-        Assert.Equal(prototypes.Length, adapted.Length);
-        for (int i = 0; i < prototypes.Length; i++)
-            Assert.Equal(prototypes[i], adapted[i]);
+        // Fixed expected values, so an in-place change to the returned vector cannot pass by comparing it with itself.
+        Assert.Equal(expected, adapted.ToArray());
+        Assert.Equal(expected, prototypes.ToArray());
     }
 
     [Fact(Timeout = 120000)]

@@ -274,12 +274,15 @@ public partial class DKTAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInpu
     /// </summary>
     private Tensor<T> KernelMatrix(Tensor<T> a, Tensor<T> aMask, Tensor<T> b, Tensor<T> bMask)
     {
-        // sum_k ma mb (a - b)^2 = (a o a) mb^T + ma (b o b)^T - 2 a b^T, the padded entries being zero
-        var squaredDistance = Engine.TensorSubtract(
+        // sum_k ma mb (a - b)^2 = (a o a) mb^T + ma (b o b)^T - 2 a b^T, the padded entries being zero. The
+        // expansion can round below zero (mostly for float and large norms), which would push k above 1 and break
+        // positive definiteness, so it is clamped at zero as scikit-learn's euclidean_distances does.
+        var expandedDistance = Engine.TensorSubtract(
             Engine.TensorAdd(
                 Engine.TensorMatMul(Engine.TensorSquare(a), Engine.TensorTranspose(bMask)),
                 Engine.TensorMatMul(aMask, Engine.TensorTranspose(Engine.TensorSquare(b)))),
             Engine.TensorMultiplyScalar(Engine.TensorMatMul(a, Engine.TensorTranspose(b)), NumOps.FromDouble(2.0)));
+        var squaredDistance = Engine.TensorClampMin(expandedDistance, NumOps.Zero);
         T lengthScale = NumOps.Exp(_kernelParams[0]);
         T scale = NumOps.Negate(NumOps.Divide(NumOps.One,
             NumOps.Multiply(NumOps.FromDouble(2.0), NumOps.Multiply(lengthScale, lengthScale))));

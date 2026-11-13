@@ -36,6 +36,27 @@ public class Elementwise11RegressionTests
     }
 
     [Fact]
+    public void ProbabilityLoss_RejectsALabelBeyondTheProbabilityColumns()
+    {
+        // Two probability columns: label 2 matches no column and would silently leave an all-zero one-hot row.
+        var probabilities = new Tensor<double>(new[] { 0.6, 0.4, 0.3, 0.7 }, new[] { 2, 2 });
+        var labels = new Vector<double>(new[] { 0.0, 2.0 });
+        Assert.Throws<ArgumentException>(() => ClassifierOutputs<double>.ProbabilityLoss(
+            new MeanSquaredErrorLoss<double>(), probabilities, labels));
+    }
+
+    [Fact]
+    public void StackRows_PadsEachNarrowerQueryTensorRow()
+    {
+        // Support [1, 3], query [2, 2]: each query row is zero-padded on its own, as the matrix branch does.
+        var support = new Tensor<double>(new[] { 1.0, 2.0, 3.0 }, new[] { 1, 3 });
+        var query = new Tensor<double>(new[] { 11.0, 12.0, 21.0, 22.0 }, new[] { 2, 2 });
+        var stacked = ClassifierOutputs<double>.StackRows(support, query);
+        Assert.Equal(new[] { 3, 3 }, stacked.Shape.ToArray());
+        Assert.Equal(new[] { 1.0, 2.0, 3.0, 11.0, 12.0, 0.0, 21.0, 22.0, 0.0 }, stacked.ToArray());
+    }
+
+    [Fact]
     public void HalfClassificationError_LargeCount_DoesNotOverflow()
     {
         var predicted = new Vector<Half>(Enumerable.Repeat((Half)1, 70000).ToArray());

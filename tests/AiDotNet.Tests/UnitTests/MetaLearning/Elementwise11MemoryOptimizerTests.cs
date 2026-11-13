@@ -125,8 +125,9 @@ public class Elementwise11MemoryOptimizerTests
         Field(algorithm, "_deepEmdOptions", options);
         var zero = new Vector<Half>(new[] { (Half)0 });
         Assert.Equal((Half)20.25, Assert.IsType<Half>(Call(algorithm, "ComputeEMDScore", zero, new Vector<Half>(new[] { (Half)4.5 }))));
-        // Below the existing stability threshold, the marginal is retained rather than divided by a tiny sum.
-        Assert.Equal((Half)0, Assert.IsType<Half>(Call(algorithm, "ComputeEMDScore", zero, new Vector<Half>(new[] { (Half)5 }))));
+        // exp(-25) underflows the plain Sinkhorn sums; one node per side still has to move its whole unit of mass,
+        // so the transport cost is the squared distance 25.
+        Assert.Equal((Half)25, Assert.IsType<Half>(Call(algorithm, "ComputeEMDScore", zero, new Vector<Half>(new[] { (Half)5 }))));
         options.NumNodes = 2;
         var extreme = new Vector<Half>(new[] { (Half)(-60000), (Half)60000 });
         Assert.Equal((Half)0, Assert.IsType<Half>(Call(algorithm, "ComputeEMDScore", extreme, extreme)));
@@ -244,6 +245,109 @@ public class Elementwise11MemoryOptimizerTests
             Assert.InRange(second[1], 1e-12, 1e-9);
         }
         Assert.Equal((Half)((double)(Half)0.99 * 0.99), parameters[0]);
+    }
+
+    [Fact]
+    public void Feat_RowBlockedAttentionMatchesTheScalarReference()
+    {
+        // n = 1100 exceeds one 2^20-element block, and the parameters run out partway through the second block,
+        // so the block offsets and the fallback weight 0.01 are both exercised.
+        const int n = 1100;
+        int parameterCount = n * 600 + 37;
+        var algorithm = Uninitialized<FEATAlgorithm<double, Matrix<double>, Vector<double>>>();
+        var options = Uninitialized<FEATOptions<double, Matrix<double>, Vector<double>>>();
+        options.NumTransformerLayers = 1;
+        Field(algorithm, "_featOptions", options);
+        var weights = new double[parameterCount];
+        for (int k = 0; k < parameterCount; k++) weights[k] = 0.1 * Math.Cos(k);
+        Field(algorithm, "_transformerParams", new Vector<double>(weights));
+        var x = new double[n];
+        for (int i = 0; i < n; i++) x[i] = 0.5 * Math.Sin(i);
+
+        var expected = new double[n];
+        for (int i = 0; i < n; i++)
+        {
+            double total = 0, sum = 0;
+            for (int j = 0; j < n; j++)
+            {
+                long index = (long)i * n + j;
+                double w = index < parameterCount ? weights[index] : 0.01;
+                double weight = Math.Exp(Math.Min(x[i] * x[j] * w / Math.Sqrt(n), 10.0));
+                total += weight;
+                sum += x[j] * weight;
+            }
+            expected[i] = (total > 1e-10 ? sum / total : x[i]) + x[i];
+        }
+        double mean = expected.Average();
+        double variance = expected.Select(v => (v - mean) * (v - mean)).Sum() / n;
+        double std = Math.Sqrt(variance + 1e-5);
+
+        var result = Assert.IsType<Vector<double>>(Call(algorithm, "AdaptPrototypes", new Vector<double>(x)));
+        for (int i = 0; i < n; i++) Assert.Equal((expected[i] - mean) / std, result[i], 9);
+    }
+
+    [Fact]
+    public void BayTransProto_FloatKlKeepsATinyMeanShift()
+    {
+        // KL(N(m, I) || N(0, I)) = 0.5 * |m|^2. With m = (1e-4, 0) the variance part is exactly zero, so the
+        // squared shift 1e-8 must not be added to a running sum near D = 2, where float would drop it.
+        var algorithm = Uninitialized<BayTransProtoAlgorithm<float, Matrix<float>, Vector<float>>>();
+        Field(algorithm, "_logVar", new Vector<float>(2));
+        var mean = new Vector<float>(new[] { 1e-4f, 0f });
+        float kl = Assert.IsType<float>(Call(algorithm, "DiagonalGaussianKL", mean, new Vector<float>(2)));
+        Assert.Equal(0.5f * (1e-4f * 1e-4f), kl);
+    }
+
+    [Fact]
+    public void Dkt_FloatKernelOfLargeNormRowsNeverExceedsOne()
+    {
+        // The expanded |a|^2 + |b|^2 - 2 a.b can round below zero for float rows with large norms; clamped at
+        // zero (scikit-learn euclidean_distances), every RBF entry stays in [0, 1] and the diagonal stays at 1 up
+        // to the rounding of a nonnegative distance.
+        var algorithm = Uninitialized<DKTAlgorithm<float, Matrix<float>, Vector<float>>>();
+        Field(algorithm, "_kernelParams", new Vector<float>(2));
+        const int rows = 6;
+        const int width = 5;
+        var values = new float[rows * width];
+        for (int i = 0; i < values.Length; i++) values[i] = 1000f + 0.137f * i + 0.011f * (i % 3);
+        var a = new Tensor<float>(values, new[] { rows, width });
+        var mask = Tensor<float>.CreateDefault(new[] { rows, width }, 1f);
+        var kernel = Assert.IsType<Tensor<float>>(Call(algorithm, "KernelMatrix", a, mask, a, mask));
+        for (int i = 0; i < rows; i++)
+        {
+            Assert.InRange(kernel[i, i], 0.999f, 1f);
+            for (int j = 0; j < rows; j++) Assert.InRange(kernel[i, j], 0f, 1f);
+        }
+    }
+
+    [Fact]
+    public void SetMetaModel_ParametersAndCheckpointReadTheReplacementModel()
+    {
+        using var persistence = AiDotNet.Helpers.ModelPersistenceGuard.InternalOperation();
+        var first = new HalfCheckpointEncoder();
+        first.SetParameters(new Vector<Half>(new[] { (Half)0.75 }));
+        var learner = new MAMLAlgorithm<Half, Tensor<Half>, Tensor<Half>>(
+            new MAMLOptions<Half, Tensor<Half>, Tensor<Half>>(first));
+        Assert.Equal(new[] { (Half)0.75 }, learner.GetParameters().ToArray());
+
+        var replacement = new HalfCheckpointEncoder();
+        replacement.SetParameters(new Vector<Half>(new[] { (Half)0.25 }));
+        learner.SetMetaModel(replacement);
+        Assert.Equal(new[] { (Half)0.25 }, learner.GetParameters().ToArray());
+
+        string path = System.IO.Path.GetTempFileName();
+        try
+        {
+            learner.Save(path);
+            var restored = new MAMLAlgorithm<Half, Tensor<Half>, Tensor<Half>>(
+                new MAMLOptions<Half, Tensor<Half>, Tensor<Half>>(new HalfCheckpointEncoder()));
+            restored.Load(path);
+            Assert.Equal(new[] { (Half)0.25 }, restored.GetParameters().ToArray());
+        }
+        finally
+        {
+            System.IO.File.Delete(path);
+        }
     }
 }
 

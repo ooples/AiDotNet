@@ -143,6 +143,16 @@ public abstract partial class ModelBase<T, TInput, TOutput> : IFullModel<T, TInp
     }
 
     /// <summary>
+    /// Drops the registered parameter components, so the next parameter access registers them again against the
+    /// fields as they are now (used when a component, such as a meta-learner's inner model, is replaced).
+    /// </summary>
+    private protected void InvalidateParameterComponents()
+    {
+        _parameterRegistry = new ParameterComponentRegistry<T>();
+        _componentsRegistered = false;
+    }
+
+    /// <summary>
     /// Declare state here that <see cref="GetParameters"/> does not carry -- a retained training set,
     /// fitted knots, kernel centres, an ensemble's children.
     /// </summary>
