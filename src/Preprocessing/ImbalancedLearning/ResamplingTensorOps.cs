@@ -59,10 +59,22 @@ internal static class ResamplingTensorOps
             return new Tensor<T>(new[] { 0 });
 
         var engine = AiDotNetEngine.Current;
-        int p = data.Shape[1];
         var rows = engine.TensorIndexSelect(data, new Tensor<int>((int[])candidates.Clone(), new[] { m }), 0);
-        var sample = PreprocessingTensorOps.Row(data, sampleIndex);
-        var diff = engine.TensorSubtract(rows, engine.TensorBroadcastTo(sample, new[] { m, p }).Contiguous());
+        // A gathered copy, not a slice view: Tensor.Cast reads the backing storage from its start
+        var sample = engine.TensorIndexSelect(data, new Tensor<int>(new[] { sampleIndex }, new[] { 1 }), 0);
+
+        // Half is reduced in float (see ScalerTensorOps.ReducesInFloat): the squared gap of coordinates 256 apart
+        // overflows Half, which made every distant candidate tie at infinity.
+        return ScalerTensorOps.ReducesInFloat<T>()
+            ? EuclideanDistances(rows.Cast<float>(), sample.Cast<float>()).Cast<T>()
+            : EuclideanDistances(rows, sample);
+    }
+
+    /// <summary>The Euclidean distance [m] of every row of <paramref name="rows"/> ([m, p]) from <paramref name="sample"/> ([1, p]).</summary>
+    private static Tensor<TW> EuclideanDistances<TW>(Tensor<TW> rows, Tensor<TW> sample)
+    {
+        var engine = AiDotNetEngine.Current;
+        var diff = engine.TensorSubtract(rows, engine.TensorBroadcastTo(sample, rows.Shape.ToArray()).Contiguous());
         return engine.TensorSqrt(engine.ReduceSum(engine.TensorMultiply(diff, diff), new[] { 1 }, false));
     }
 

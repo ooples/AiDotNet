@@ -117,9 +117,7 @@ public class ZScoreClipper<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         }
         else
         {
-            var x = Tensor<T>.FromMatrix(data);
-            mean = ScalerTensorOps.NanColumnMean(x);
-            std = Engine.TensorSqrt(ScalerTensorOps.NanColumnVariance(x, mean));
+            (mean, std, _) = ScalerTensorOps.NanColumnMoments(Tensor<T>.FromMatrix(data));
         }
 
         _means = ScalerTensorOps.MaskedParameters(mask, mean, NumOps.Zero);

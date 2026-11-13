@@ -78,8 +78,7 @@ public class GlobalContrastScaler<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
 
         // Column mean and population standard deviation (NaN is treated as missing); a zero std becomes 1.
         var x = Tensor<T>.FromMatrix(data);
-        var mean = ScalerTensorOps.NanColumnMean(x);
-        var std = Engine.TensorSqrt(ScalerTensorOps.NanColumnVariance(x, mean));
+        var (mean, std, _) = ScalerTensorOps.NanColumnMoments(x);
         var zeroStd = Engine.TensorEquals(std, NumOps.Zero);
         std = Engine.TensorWhere(zeroStd, PreprocessingTensorOps.Filled(std.Shape.ToArray(), NumOps.One), std);
 

@@ -273,10 +273,12 @@ public class QuantileTransformer<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
 
         if (!inverse && normal)
         {
-            var clipBounds = Engine.TensorNdtri(new Tensor<T>(
-                new[] { NumOps.FromDouble(BoundsThreshold - Float64Spacing), NumOps.FromDouble(1 - (BoundsThreshold - Float64Spacing)) },
-                new[] { 2 })).AsSpan().ToArray();
-            y = Engine.TensorClamp(Engine.TensorNdtri(y), clipBounds[0], clipBounds[1]);
+            // scikit-learn computes the clip bounds in float64 (+/-5.1993...) and clips the T data to them. In T,
+            // 1 - (1e-7 - eps) rounds to 1 for Half (an infinite upper bound) and to 1 - 2^-23 for float (5.16).
+            var clipBounds = Engine.TensorNdtri(new Tensor<double>(
+                new[] { BoundsThreshold - Float64Spacing, 1 - (BoundsThreshold - Float64Spacing) }, new[] { 2 }))
+                .AsSpan().ToArray();
+            y = Engine.TensorClamp(Engine.TensorNdtri(y), NumOps.FromDouble(clipBounds[0]), NumOps.FromDouble(clipBounds[1]));
         }
 
         return Engine.TensorWhere(nanMask, column, y);

@@ -99,18 +99,15 @@ public class StandardScaler<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         // scikit-learn semantics: NaN is missing (ignored by the statistics), the variance is the biased
         // (ddof = 0) estimator, and a column whose variance is within floating-point error of zero is constant.
         var x = Tensor<T>.FromMatrix(data);
-        var mean = ScalerTensorOps.NanColumnMean(x);
-        _mean = ScalerTensorOps.MaskedParameters(mask, mean, NumOps.Zero);
-
         if (!_withStd)
         {
+            _mean = ScalerTensorOps.MaskedParameters(mask, ScalerTensorOps.NanColumnMean(x), NumOps.Zero);
             _stdDev = ScalerTensorOps.FilledVector(numColumns, NumOps.One);
             return;
         }
 
-        var variance = ScalerTensorOps.NanColumnVariance(x, mean);
-        var constant = ScalerTensorOps.ConstantFeatureMask(variance, mean, ScalerTensorOps.NanColumnCount(x));
-        var std = Engine.TensorSqrt(Engine.TensorMax(variance, NumOps.Zero));
+        var (mean, std, constant) = ScalerTensorOps.NanColumnMoments(x);
+        _mean = ScalerTensorOps.MaskedParameters(mask, mean, NumOps.Zero);
         _stdDev = ScalerTensorOps.MaskedParameters(mask, ScalerTensorOps.HandleZerosInScale(std, constant), NumOps.One);
     }
 

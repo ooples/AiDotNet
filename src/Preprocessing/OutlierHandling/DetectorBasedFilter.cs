@@ -157,7 +157,7 @@ public class DetectorBasedFilter<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
 
             // Median of an even count is the average of the two middle values (linear interpolation).
             var x = Tensor<T>.FromMatrix(data);
-            _columnMeans = Engine.ReduceMean(x, new[] { 0 }, false).ToVector();
+            _columnMeans = ScalerTensorOps.ColumnMean(x).ToVector();
             _columnMedians = Engine.TensorQuantile(x, 0.5, 0, false, QuantileInterpolation.Linear).ToVector();
         }
     }

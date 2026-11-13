@@ -150,10 +150,21 @@ public class LpNormScaler<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
 
         // Lp-norm of each column: (sum |x|^p)^(1/p); a norm that is zero up to rounding (below 10 * eps, as
         // scikit-learn's normalize(axis=0) treats it) becomes 1, i.e. no scaling.
+        // Half is reduced in float (see ScalerTensorOps.ReducesInFloat): |x|^p of entries past 65504^(1/p) and
+        // the column sums overflow Half even when the norm itself is representable.
         var x = Tensor<T>.FromMatrix(data);
-        var powered = Engine.TensorPower(Engine.TensorAbs(x), NumOps.FromDouble(_p));
-        var norms = Engine.TensorPower(Engine.ReduceSum(powered, new[] { 0 }, false), NumOps.FromDouble(1.0 / _p));
+        var norms = ScalerTensorOps.ReducesInFloat<T>()
+            ? ComputeColumnNorms(x.Cast<float>()).Cast<T>()
+            : ComputeColumnNorms(x);
         _columnNorms = ScalerTensorOps.MaskedParameters(mask, ScalerTensorOps.HandleZerosInScale(norms), NumOps.One);
+    }
+
+    /// <summary>The Lp-norm <c>(sum |x|^p)^(1/p)</c> of every column of <paramref name="x"/>, as [p].</summary>
+    private Tensor<TW> ComputeColumnNorms<TW>(Tensor<TW> x)
+    {
+        var ops = MathHelper.GetNumericOperations<TW>();
+        var powered = Engine.TensorPower(Engine.TensorAbs(x), ops.FromDouble(_p));
+        return Engine.TensorPower(Engine.ReduceSum(powered, new[] { 0 }, false), ops.FromDouble(1.0 / _p));
     }
 
     /// <summary>

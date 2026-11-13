@@ -108,17 +108,32 @@ public class Normalizer<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         // Row norms over the selected columns; like scikit-learn's normalize, a norm below 10 * eps is treated
         // as 1 so an all-zero row stays zero.
         var x = Tensor<T>.FromMatrix(data);
-        // Unselected entries are replaced by 0, not multiplied by it: NaN * 0 and Inf * 0 are NaN, which would
-        // poison the norm of the selected columns.
-        var selected = Engine.TensorWhere(
-            ScalerTensorOps.BroadcastRow(mask, numRows), x, new Tensor<T>(new[] { numRows, numColumns }));
-        var norm = ScalerTensorOps.HandleZerosInScale(CalculateRowNorms(selected));
-        var normalized = Engine.TensorDivide(x, Engine.TensorBroadcastTo(norm, new[] { numRows, numColumns }));
+        // Half is normalized in float (see ScalerTensorOps.ReducesInFloat): the squares of entries past 256 and
+        // row sums past 65504 overflow Half, which zeroed rows whose unit-norm values are representable.
+        var normalized = ScalerTensorOps.ReducesInFloat<T>()
+            ? NormalizeRows(x.Cast<float>(), mask.Cast<float>()).Cast<T>()
+            : NormalizeRows(x, mask);
         return ScalerTensorOps.MergeColumns(mask, normalized, data);
     }
 
+    /// <summary>
+    /// Every row of <paramref name="x"/> ([n, p]) divided by its norm over the columns selected by the 0/1
+    /// <paramref name="columnMask"/> ([p]).
+    /// </summary>
+    private Tensor<TW> NormalizeRows<TW>(Tensor<TW> x, Tensor<TW> columnMask)
+    {
+        var shape = x.Shape.ToArray();
+        // Unselected entries are replaced by 0, not multiplied by it: NaN * 0 and Inf * 0 are NaN, which would
+        // poison the norm of the selected columns.
+        var selected = Engine.TensorWhere(ScalerTensorOps.BroadcastRow(columnMask, shape[0]), x, new Tensor<TW>(shape));
+        // scikit-learn's _handle_zeros_in_scale with the eps of the data's dtype T, not of the wider TW
+        var norm = ScalerTensorOps.HandleZerosInScale(
+            CalculateRowNorms(selected), null, ScalerTensorOps.MachineEpsilon<T>());
+        return Engine.TensorDivide(x, Engine.TensorBroadcastTo(norm, shape));
+    }
+
     /// <summary>The <see cref="NormType"/> norm of every row of <paramref name="x"/>, as [n, 1].</summary>
-    private Tensor<T> CalculateRowNorms(Tensor<T> x)
+    private Tensor<TW> CalculateRowNorms<TW>(Tensor<TW> x)
     {
         var axis = new[] { 1 };
         switch (_normType)

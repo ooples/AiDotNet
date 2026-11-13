@@ -68,7 +68,8 @@ public class LogMeanVarianceScaler<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     public LogMeanVarianceScaler(int[]? columnIndices = null)
         : base(columnIndices)
     {
-        _epsilon = NumOps.FromDouble(1e-10);
+        // 1e-10 rounds to 0 in Half, which would leave a constant column with a zero standard deviation
+        _epsilon = PreprocessingTensorOps.Tolerance<T>(1e-10);
     }
 
     /// <summary>
@@ -98,11 +99,11 @@ public class LogMeanVarianceScaler<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             Engine.TensorAddScalar(Engine.TensorNegate(min), NumOps.Add(NumOps.One, _epsilon)));
 
         var logValues = Engine.TensorLog(Engine.TensorAdd(x, ScalerTensorOps.BroadcastRow(shift, data.Rows)));
-        var logMean = ScalerTensorOps.NanColumnMean(logValues);
-        var variance = ScalerTensorOps.NanColumnVariance(logValues, logMean);
-        var floor = PreprocessingTensorOps.Filled(variance.Shape.ToArray(), _epsilon);
-        var logStdDev = Engine.TensorSqrt(
-            Engine.TensorWhere(Engine.TensorGreaterThan(variance, _epsilon), variance, floor));
+        // The variance is floored at epsilon: sqrt(variance > eps ? variance : eps) = (std > sqrt(eps) ? std : sqrt(eps))
+        var (logMean, std, _) = ScalerTensorOps.NanColumnMoments(logValues);
+        T stdFloor = NumOps.Sqrt(_epsilon);
+        var logStdDev = Engine.TensorWhere(
+            Engine.TensorGreaterThan(std, stdFloor), std, PreprocessingTensorOps.Filled(std.Shape.ToArray(), stdFloor));
 
         _shift = ScalerTensorOps.MaskedParameters(mask, shift, NumOps.Zero);
         _logMean = ScalerTensorOps.MaskedParameters(mask, logMean, NumOps.Zero);

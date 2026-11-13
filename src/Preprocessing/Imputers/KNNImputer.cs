@@ -113,8 +113,13 @@ public class KNNImputer<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
 
         // scikit-learn KNNImputer: nan_euclidean distances between the query rows and the training rows;
         // for each missing entry the donors are the n_neighbors nearest training rows that have that
-        // column, averaged uniformly or by inverse distance.
-        var distances = _fitData.Rows == 0 ? null : NanEuclideanDistances(x, missing, fit, fitMissing);
+        // column, averaged uniformly or by inverse distance. The distances are computed in float64, as
+        // scikit-learn's euclidean_distances does for float32 data (_euclidean_distances_upcast): the
+        // a^2 + b^2 - 2ab expansion cancels catastrophically in a narrow T, and for Half the squares of
+        // values past 256 overflow (inf - inf is NaN, which left every donor unusable).
+        var distances = _fitData.Rows == 0
+            ? null
+            : NanEuclideanDistances(AsDouble(x), AsDouble(missing), AsDouble(fit), AsDouble(fitMissing));
         var columns = new List<Tensor<T>>(numColumns);
         var processSet = new HashSet<int>(GetColumnsToProcess(numColumns));
         for (int col = 0; col < numColumns; col++)
@@ -140,7 +145,7 @@ public class KNNImputer<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     /// <summary>
     /// The imputed values of column <paramref name="col"/> for the <paramref name="receivers"/> rows.
     /// </summary>
-    private Tensor<T> ImputeColumn(int col, int[] receivers, Tensor<T>? distances, Tensor<T> fit, Tensor<T> fitMissing)
+    private Tensor<T> ImputeColumn(int col, int[] receivers, Tensor<double>? distances, Tensor<T> fit, Tensor<T> fitMissing)
     {
         var fitColumn = PreprocessingTensorOps.ColumnVector(fit, col);
         var donors = PreprocessingTensorOps.MaskPositions(
@@ -184,29 +189,37 @@ public class KNNImputer<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     /// <c>sqrt(p / present * sum over coordinates present in both of (a - b)^2)</c>, NaN when the rows share no
     /// present coordinate. Returns [queries, training rows].
     /// </summary>
-    private Tensor<T> NanEuclideanDistances(Tensor<T> x, Tensor<T> missing, Tensor<T> fit, Tensor<T> fitMissing)
+    private Tensor<double> NanEuclideanDistances(
+        Tensor<double> x, Tensor<double> missing, Tensor<double> fit, Tensor<double> fitMissing)
     {
-        T zero = NumOps.Zero;
+        const double zero = 0.0;
         var present = PreprocessingTensorOps.Not(missing);
         var fitPresent = PreprocessingTensorOps.Not(fitMissing);
-        var x0 = Engine.TensorWhere(missing, new Tensor<T>(x.Shape.ToArray()), x);
-        var f0 = Engine.TensorWhere(fitMissing, new Tensor<T>(fit.Shape.ToArray()), fit);
+        var x0 = Engine.TensorWhere(missing, new Tensor<double>(x.Shape.ToArray()), x);
+        var f0 = Engine.TensorWhere(fitMissing, new Tensor<double>(fit.Shape.ToArray()), fit);
 
         // sum present(a)present(b)(a - b)^2 = (a0^2) . present(b) + present(a) . (b0^2) - 2 a0 . b0
         var sumSq = Engine.TensorAdd(
             Engine.TensorMatMul(Engine.TensorSquare(x0), Engine.TensorTranspose(fitPresent)),
             Engine.TensorMatMul(present, Engine.TensorTranspose(Engine.TensorSquare(f0))));
         sumSq = Engine.TensorSubtract(
-            sumSq, Engine.TensorMultiplyScalar(Engine.TensorMatMul(x0, Engine.TensorTranspose(f0)), NumOps.FromDouble(2.0)));
+            sumSq, Engine.TensorMultiplyScalar(Engine.TensorMatMul(x0, Engine.TensorTranspose(f0)), 2.0));
         sumSq = Engine.TensorMax(sumSq, zero);
 
         var count = Engine.TensorMatMul(present, Engine.TensorTranspose(fitPresent));
         var noOverlap = Engine.TensorEquals(count, zero);
-        var safeCount = Engine.TensorWhere(noOverlap, PreprocessingTensorOps.Filled(count.Shape.ToArray(), NumOps.One), count);
-        var scaled = Engine.TensorDivide(Engine.TensorMultiplyScalar(sumSq, NumOps.FromDouble(x.Shape[1])), safeCount);
+        var safeCount = Engine.TensorWhere(noOverlap, PreprocessingTensorOps.Filled(count.Shape.ToArray(), 1.0), count);
+        var scaled = Engine.TensorDivide(Engine.TensorMultiplyScalar(sumSq, (double)x.Shape[1]), safeCount);
         return Engine.TensorWhere(
-            noOverlap, PreprocessingTensorOps.Filled(count.Shape.ToArray(), NumOps.FromDouble(double.NaN)), Engine.TensorSqrt(scaled));
+            noOverlap, PreprocessingTensorOps.Filled(count.Shape.ToArray(), double.NaN), Engine.TensorSqrt(scaled));
     }
+
+    /// <summary>
+    /// <paramref name="t"/> as float64. Only called on freshly built tensors: <see cref="Tensor{T}.Cast{TOut}"/>
+    /// reads the backing storage from its start, which is wrong for slice and broadcast views.
+    /// </summary>
+    private static Tensor<double> AsDouble(Tensor<T> t) =>
+        t is Tensor<double> d ? d : t.Cast<double>();
 
     /// <summary>
     /// One imputed value (as a [1] tensor) from the distances to the donors and their values: the
@@ -214,7 +227,7 @@ public class KNNImputer<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     /// inverse-distance weights where donors at distance 0 get weight 1 and the others 0 (scikit-learn's
     /// <c>_get_weights</c>). With no usable donor, the column mean.
     /// </summary>
-    private Tensor<T> ImputeValue(Tensor<T> donorDistances, Tensor<T> donorValues, T columnMean)
+    private Tensor<T> ImputeValue(Tensor<double> donorDistances, Tensor<T> donorValues, T columnMean)
     {
         var usable = PreprocessingTensorOps.Not(ScalerTensorOps.NanMask(donorDistances));
         if (PreprocessingTensorOps.CountNonZero(usable) == 0)
@@ -223,29 +236,30 @@ public class KNNImputer<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         }
 
         int k = Math.Min(_nNeighbors, donorDistances.Length);
-        var order = PreprocessingTensorOps.StableOrder(ScalerTensorOps.FillNan(donorDistances, NumOps.MaxValue), descending: false);
+        var order = PreprocessingTensorOps.StableOrder(ScalerTensorOps.FillNan(donorDistances, double.MaxValue), descending: false);
         var nearest = new Tensor<int>(order.AsSpan().Slice(0, k).ToArray(), new[] { k });
         var distances = Engine.TensorIndexSelect(donorDistances, nearest, 0);
-        var values = Engine.TensorIndexSelect(donorValues, nearest, 0);
+        var values = AsDouble(Engine.TensorIndexSelect(donorValues, nearest, 0));
         var weights = Engine.TensorIndexSelect(usable, nearest, 0);
 
         if (_weights == KNNWeights.Distance)
         {
-            var atZero = Engine.TensorMultiply(weights, Engine.TensorEquals(distances, NumOps.Zero));
+            var atZero = Engine.TensorMultiply(weights, Engine.TensorEquals(distances, 0.0));
             if (PreprocessingTensorOps.CountNonZero(atZero) > 0)
             {
                 weights = atZero;
             }
             else
             {
-                var safe = Engine.TensorWhere(weights, distances, PreprocessingTensorOps.Filled(new[] { k }, NumOps.One));
+                var safe = Engine.TensorWhere(weights, distances, PreprocessingTensorOps.Filled(new[] { k }, 1.0));
                 weights = Engine.TensorMultiply(weights, Engine.TensorReciprocal(safe));
             }
         }
 
-        var numerator = Engine.ReduceSum(Engine.TensorMultiply(weights, values), new[] { 0 }, true);
-        var denominator = Engine.ReduceSum(weights, new[] { 0 }, true);
-        return Engine.TensorDivide(numerator, denominator);
+        // The weighted mean in float64 too: Half sums of a few large donor values overflow past 65504
+        double numerator = Engine.TensorSum(Engine.TensorMultiply(weights, values));
+        double denominator = Engine.TensorSum(weights);
+        return PreprocessingTensorOps.Filled(new[] { 1 }, NumOps.FromDouble(numerator / denominator));
     }
 
     /// <summary>Mean of the training column over its non-missing rows (0 when there are none).</summary>
@@ -256,7 +270,8 @@ public class KNNImputer<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             return NumOps.Zero;
         }
 
-        return Engine.TensorMean(Engine.TensorIndexSelect(fitColumn, new Tensor<int>(donors, new[] { donors.Length }), 0));
+        return ScalerTensorOps.Mean(
+            Engine.TensorIndexSelect(fitColumn, new Tensor<int>(donors, new[] { donors.Length }), 0));
     }
 
     /// <summary>
