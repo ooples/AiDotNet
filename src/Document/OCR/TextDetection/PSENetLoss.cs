@@ -39,14 +39,13 @@ public sealed class PSENetLoss<T> : LossFunctionBase<T>
     public override T CalculateLoss(Vector<T> predicted, Vector<T> actual)
     {
         ValidateVectorLengths(predicted, actual);
-        double inter = 0, pp = 0, aa = 0;
-        for (int i = 0; i < predicted.Length; i++)
-        {
-            double s = 1.0 / (1.0 + Math.Exp(-NumOps.ToDouble(predicted[i])));
-            double g = NumOps.ToDouble(actual[i]);
-            inter += s * g; pp += s * s; aa += g * g;
-        }
-        return NumOps.FromDouble(1.0 - 2.0 * inter / (pp + Smooth + aa + Smooth));
+        var s = Engine.Sigmoid(predicted.AsTensor());
+        var g = actual.AsTensor();
+        T inter = Engine.TensorSum(Engine.TensorMultiply(s, g));
+        T smooth = NumOps.FromDouble(Smooth);
+        T denominator = NumOps.Add(NumOps.Add(Engine.TensorSum(Engine.TensorMultiply(s, s)), smooth),
+            NumOps.Add(Engine.TensorSum(Engine.TensorMultiply(g, g)), smooth));
+        return NumOps.Subtract(NumOps.One, NumOps.Divide(NumOps.Multiply(NumOps.FromDouble(2.0), inter), denominator));
     }
 
     /// <inheritdoc />
@@ -70,7 +69,7 @@ public sealed class PSENetLoss<T> : LossFunctionBase<T>
 
         int batch = shape[0], kernels = shape[1];
         var scores = Engine.Sigmoid(predicted);
-        var mask = BuildMask(scores.ToArray(), target.ToArray(), shape);
+        var mask = BuildMask(predicted, scores, target, shape);
 
         var s = Engine.TensorMultiply(scores, mask);
         var g = Engine.TensorMultiply(target, mask);
@@ -82,64 +81,53 @@ public sealed class PSENetLoss<T> : LossFunctionBase<T>
 
         // One weight per (image, kernel): lambda on the complete map, (1 - lambda) shared by the shrunk
         // kernels, each averaged over the batch. The weights sum to 1, so L = 1 - sum(w * D).
-        var weights = new Tensor<T>(new[] { batch, kernels });
-        for (int b = 0; b < batch; b++)
-            for (int k = 0; k < kernels; k++)
-            {
-                double w = kernels == 1 ? 1.0
-                    : k == kernels - 1 ? CompleteMapWeight : (1.0 - CompleteMapWeight) / (kernels - 1);
-                weights[b, k] = NumOps.FromDouble(w / batch);
-            }
+        var kernelWeights = Enumerable.Range(0, kernels)
+            .Select(k => (kernels == 1 ? 1.0 : k == kernels - 1 ? CompleteMapWeight : (1.0 - CompleteMapWeight) / (kernels - 1)) / batch)
+            .Select(NumOps.FromDouble).ToArray();
+        var weights = Engine.TensorBroadcastTo(new Tensor<T>(new[] { 1, kernels }, new Vector<T>(kernelWeights)), new[] { batch, kernels });
 
         var weighted = Engine.ReduceSum(Engine.TensorMultiply(dice, weights), new[] { 0, 1 }, keepDims: false);
         return Engine.ScalarMinusTensor(NumOps.One, Engine.Reshape(weighted, new[] { 1 }));
     }
 
-    private Tensor<T> BuildMask(T[] scores, T[] target, int[] shape)
+    // The masks are constants: they are built from detached copies, so gradient flows through the scores alone.
+    private Tensor<T> BuildMask(Tensor<T> logits, Tensor<T> scores, Tensor<T> target, int[] shape)
     {
         int batch = shape[0], kernels = shape[1], plane = shape[2] * shape[3];
-        var mask = new Tensor<T>(shape);
-        for (int b = 0; b < batch; b++)
-        {
-            int complete = (b * kernels + kernels - 1) * plane;
-            var ohem = OhemMask(scores, target, complete, plane);
-            for (int p = 0; p < plane; p++)
-            {
-                mask[complete + p] = ohem[p] ? NumOps.One : NumOps.Zero;
-                // Shrunk kernels count only inside the predicted text region.
-                var text = NumOps.ToDouble(scores[complete + p]) > 0.5 ? NumOps.One : NumOps.Zero;
-                for (int k = 0; k < kernels - 1; k++)
-                    mask[(b * kernels + k) * plane + p] = text;
-            }
-        }
-        return mask;
+        var flatShape = new[] { batch, plane };
+        Tensor<T> Complete(Tensor<T> x) => Engine.Reshape(
+            Engine.TensorSlice(Engine.Reshape(Engine.StopGradient(x), new[] { batch, kernels, plane }), new[] { 0, kernels - 1, 0 }, new[] { batch, 1, plane }),
+            flatShape);
+
+        var ohem = OhemMask(Complete(logits), Complete(target), batch, plane);
+        // Shrunk kernels count only inside the predicted text region (S_n > 0.5, i.e. a positive logit).
+        var text = Engine.TensorGreaterThan(Complete(scores), NumOps.FromDouble(0.5));
+        var parts = Enumerable.Repeat(text, kernels - 1).Append(ohem)
+            .Select(m => Engine.Reshape(m, new[] { batch, 1, plane })).ToArray();
+        return Engine.Reshape(Engine.TensorConcatenate(parts, 1), shape);
     }
 
-    // Reference ohem_single: every positive plus the NegativeRatio x as many highest-scoring negatives; every
-    // pixel when there are no positives or no negatives to rank.
-    private bool[] OhemMask(T[] scores, T[] target, int offset, int plane)
+    // Reference ohem_single (whai362/PSENet): every positive plus the pixels scoring at least the k-th hardest
+    // negative, k = min(NegativeRatio x positives, negatives); every pixel when there are no positives or no
+    // negatives to rank. Negatives are ranked by the raw logits the reference passes in, not by the sigmoid,
+    // whose saturation at 1.0 would tie the hardest negatives and keep more than k of them.
+    private Tensor<T> OhemMask(Tensor<T> logits, Tensor<T> target, int batch, int plane)
     {
-        var keep = new bool[plane];
-        int positives = 0;
-        var negatives = new List<double>();
-        for (int p = 0; p < plane; p++)
-        {
-            if (NumOps.ToDouble(target[offset + p]) > 0.5) positives++;
-            else negatives.Add(NumOps.ToDouble(scores[offset + p]));
-        }
-        int negativeCount = Math.Min(positives * NegativeRatio, negatives.Count);
-        if (positives == 0 || negativeCount == 0)
-        {
-            for (int p = 0; p < plane; p++) keep[p] = true;
-            return keep;
-        }
-        negatives.Sort((x, y) => y.CompareTo(x));
-        // Every negative scoring >= the k-th hardest is kept, so ties at the threshold can keep more than
-        // NegativeRatio x positives (common when sigmoids saturate at 1.0). This matches the reference
-        // implementation's ohem_single, which uses the same >= threshold, and is kept for parity.
-        double threshold = negatives[negativeCount - 1];
-        for (int p = 0; p < plane; p++)
-            keep[p] = NumOps.ToDouble(target[offset + p]) > 0.5 || NumOps.ToDouble(scores[offset + p]) >= threshold;
-        return keep;
+        var shape = new[] { batch, plane };
+        var positive = Engine.TensorGreaterThan(target, NumOps.FromDouble(0.5));
+        int[] positives = Engine.ReduceSum(positive, new[] { 1 }, false).Cast<int>().ToArray();
+        int[] rank = positives.Select(p => Math.Min(p * NegativeRatio, plane - p)).ToArray();
+        var useAll = DocumentTensorOps.IntTensor<T>(positives.Select((p, b) => p == 0 || rank[b] == 0 ? 1 : 0).ToArray());
+
+        // Hardest negatives first: positives are pushed below every negative before sorting each image.
+        T floor = AiDotNet.Audio.AudioEngineOps.NegativeInfinityOrMin<T>();
+        var negatives = Engine.TensorWhere(positive, Tensor<T>.CreateDefault(shape, floor), logits);
+        var (sorted, _) = Engine.TensorSort(negatives, 1, true);
+        var kth = DocumentTensorOps.OneHot<T>(Engine, rank.Select(k => Math.Max(k, 1) - 1).ToArray(), plane);
+        var threshold = Engine.ReduceSum(Engine.TensorWhere(kth, sorted, Tensor<T>.CreateDefault(shape, NumOps.Zero)), new[] { 1 }, true);
+        var hard = Engine.TensorGreaterEqual(logits, Engine.TensorBroadcastTo(threshold, shape));
+        var keep = Engine.TensorMax(positive, hard);
+        var all = Engine.TensorBroadcastTo(Engine.Reshape(useAll, new[] { batch, 1 }), shape);
+        return Engine.TensorMax(keep, all);
     }
 }

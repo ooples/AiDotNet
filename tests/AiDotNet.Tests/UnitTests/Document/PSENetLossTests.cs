@@ -52,6 +52,34 @@ public sealed class PSENetLossTests
     }
 
     [Fact]
+    public void Ohem_RanksNegativesByLogit_SoSaturatedSigmoidsDoNotTie()
+    {
+        // One positive, so k = 3 of the four negatives. Their sigmoids are all exactly 1.0 in double, but the
+        // reference ohem_single ranks the raw logits: the threshold is the 3rd largest logit (41), so the
+        // negative at 40 is dropped. Ranking by the saturated sigmoid ties all four and keeps it.
+        double[] logits = { 5.0, 40.0, 41.0, 42.0, 43.0 };
+        double[] gt = { 1, 0, 0, 0, 0 };
+        var loss = new PSENetLoss<double>().ComputeTapeLoss(
+            new Tensor<double>(new[] { 1, 1, 1, 5 }, new Vector<double>(logits)),
+            new Tensor<double>(new[] { 1, 1, 1, 5 }, new Vector<double>(gt)));
+
+        var s = logits.Select(Sigmoid).ToArray();
+        bool[] kept = { true, false, true, true, true };
+        Assert.Equal(1 - Dice(s, gt, kept), loss[0], 10);
+    }
+
+    [Fact]
+    public void FlatVector_IsTheSmoothedDiceOfTheSigmoid()
+    {
+        double[] logits = { 2.0, -1.0, 0.5, -3.0 };
+        double[] gt = { 1, 0, 1, 0 };
+        var loss = new PSENetLoss<double>().CalculateLoss(new Vector<double>(logits), new Vector<double>(gt));
+
+        var s = logits.Select(Sigmoid).ToArray();
+        Assert.Equal(1 - Dice(s, gt, Enumerable.Repeat(true, 4).ToArray()), loss, 10);
+    }
+
+    [Fact]
     public void Kernels_AreWeightedPointThreeAndScoredOnlyInsideThePredictedText()
     {
         // Two kernels: channel 0 shrunk, channel 1 complete. Complete-map logits mark pixels 0-1 as text.

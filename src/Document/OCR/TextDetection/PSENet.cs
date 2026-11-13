@@ -296,139 +296,135 @@ public partial class PSENet<T> : DocumentNeuralNetworkBase<T>, ITextDetector<T>
         var preprocessed = PreprocessDocument(image);
         var output = _useNativeMode ? Forward(preprocessed) : RunOnnxInference(preprocessed);
 
-        // Return the largest kernel (full text region)
-        int outH = output.Shape.Length > 2 ? output.Shape[2] : ImageSize;
-        int outW = output.Shape.Length > 3 ? output.Shape[3] : ImageSize;
-        var probMap = Tensor<T>.CreateDefault([outH, outW], NumOps.Zero);
-
-        for (int h = 0; h < outH; h++)
-        {
-            for (int w = 0; w < outW; w++)
-            {
-                // Use the last kernel (largest scale)
-                probMap[h, w] = output[0, _numKernels - 1, h, w];
-            }
-        }
-
-        return probMap;
+        // The sigmoid of the largest kernel (the complete text map) of the first image: the network emits logits.
+        var (maps, outH, outW) = KernelMaps(output);
+        return Engine.Reshape(Engine.Sigmoid(
+            Engine.TensorSlice(maps, new[] { _numKernels - 1, 0 }, new[] { 1, outH * outW })), new[] { outH, outW });
     }
 
-    private List<TextRegion<T>> ParsePSENetOutput(Tensor<T> output, double threshold)
+    /// <summary>The first image's kernel logits as <c>[kernels, H * W]</c>, with the map height and width.</summary>
+    private (Tensor<T> Maps, int Height, int Width) KernelMaps(Tensor<T> output)
+    {
+        int outH = output.Shape.Length > 2 ? output.Shape[2] : ImageSize;
+        int outW = output.Shape.Length > 3 ? output.Shape[3] : ImageSize;
+        var first = Engine.TensorSlice(Engine.Reshape(output, new[] { output.Length / (_numKernels * outH * outW), _numKernels, outH * outW }),
+            new[] { 0, 0, 0 }, new[] { 1, _numKernels, outH * outW });
+        return (Engine.Reshape(first, new[] { _numKernels, outH * outW }), outH, outW);
+    }
+
+    /// <summary>
+    /// PSENet's progressive scale expansion (Wang et al. 2019, Algorithm 1; the reference <c>pse</c>):
+    /// kernels are the sigmoid maps above 0.5, each shrunk kernel restricted to the complete text map. The
+    /// smallest kernel's 4-connected components seed the instances; each larger kernel in turn grows them by
+    /// breadth-first search from every labelled pixel, first come first served, so instances meeting at a
+    /// boundary split it. An instance is kept when it has at least <see cref="MinRegionArea"/> pixels and its
+    /// mean complete-map probability reaches <paramref name="threshold"/>.
+    /// </summary>
+    internal List<TextRegion<T>> ParsePSENetOutput(Tensor<T> output, double threshold)
     {
         var regions = new List<TextRegion<T>>();
 
-        // PSENet output: [batch, numKernels, H, W]
-        // Kernels are ordered from smallest (index 0) to largest (index numKernels-1)
-        // Progressive Scale Expansion: start from smallest kernel and expand
+        // PSENet output: [batch, numKernels, H, W], kernels ordered from smallest (0) to largest (numKernels-1).
+        var (maps, outH, outW) = KernelMaps(output);
+        int plane = outH * outW;
+        var probabilities = Engine.Sigmoid(maps);
+        var text = Engine.TensorSlice(probabilities, new[] { _numKernels - 1, 0 }, new[] { 1, plane });
+        var inside = Engine.TensorBroadcastTo(Engine.TensorGreaterThan(text, NumOps.FromDouble(0.5)), new[] { _numKernels, plane });
+        int[] kernels = Engine.TensorMultiply(Engine.TensorGreaterThan(probabilities, NumOps.FromDouble(0.5)), inside)
+            .Cast<int>().ToArray();
 
-        int outH = output.Shape.Length > 2 ? output.Shape[2] : ImageSize;
-        int outW = output.Shape.Length > 3 ? output.Shape[3] : ImageSize;
-
-        // Step 1: Find connected components on smallest kernel (text centers)
-        var labels = new int[outH, outW];
-        var componentPixels = new Dictionary<int, List<(int y, int x)>>();
-        var componentScores = new Dictionary<int, double>();
-        int nextLabel = 1;
-
-        // Binarize smallest kernel
-        for (int y = 0; y < outH; y++)
+        // Step 1: 4-connected components of the smallest kernel seed the text instances.
+        var labels = new int[plane];
+        var queue = new Queue<int>();
+        int count = 0;
+        for (int p = 0; p < plane; p++)
         {
-            for (int x = 0; x < outW; x++)
+            if (kernels[p] == 0 || labels[p] != 0) continue;
+            labels[p] = ++count;
+            queue.Enqueue(p);
+            while (queue.Count > 0)
             {
-                double score = NumOps.ToDouble(output[0, 0, y, x]);
-                if (score >= threshold)
+                int q = queue.Dequeue();
+                foreach (int n in Neighbours(q, outH, outW))
                 {
-                    // Check neighbors for existing labels
-                    int label = 0;
-                    if (y > 0 && labels[y - 1, x] > 0) label = labels[y - 1, x];
-                    else if (x > 0 && labels[y, x - 1] > 0) label = labels[y, x - 1];
-
-                    if (label == 0)
+                    if (kernels[n] != 0 && labels[n] == 0)
                     {
-                        label = nextLabel++;
-                        componentPixels[label] = [];
-                        componentScores[label] = 0;
+                        labels[n] = count;
+                        queue.Enqueue(n);
                     }
-
-                    labels[y, x] = label;
-                    componentPixels[label].Add((y, x));
-                    componentScores[label] = Math.Max(componentScores[label], score);
                 }
             }
         }
 
-        // Step 2: Progressive scale expansion through remaining kernels
+        // Step 2: progressive scale expansion through the larger kernels, seeded in raster order.
+        var frontier = new Queue<int>(Enumerable.Range(0, plane).Where(p => labels[p] != 0));
         for (int k = 1; k < _numKernels; k++)
         {
-            var expanded = true;
-            while (expanded)
+            int offset = k * plane;
+            var edge = new Queue<int>();
+            while (frontier.Count > 0)
             {
-                expanded = false;
-                for (int y = 0; y < outH; y++)
+                int q = frontier.Dequeue();
+                bool isEdge = true;
+                foreach (int n in Neighbours(q, outH, outW))
                 {
-                    for (int x = 0; x < outW; x++)
-                    {
-                        if (labels[y, x] == 0)
-                        {
-                            double score = NumOps.ToDouble(output[0, k, y, x]);
-                            if (score >= threshold * 0.5) // Lower threshold for expansion
-                            {
-                                // Check 4-connected neighbors for existing labels
-                                int neighborLabel = 0;
-                                if (y > 0 && labels[y - 1, x] > 0) neighborLabel = labels[y - 1, x];
-                                else if (y < outH - 1 && labels[y + 1, x] > 0) neighborLabel = labels[y + 1, x];
-                                else if (x > 0 && labels[y, x - 1] > 0) neighborLabel = labels[y, x - 1];
-                                else if (x < outW - 1 && labels[y, x + 1] > 0) neighborLabel = labels[y, x + 1];
-
-                                if (neighborLabel > 0)
-                                {
-                                    labels[y, x] = neighborLabel;
-                                    componentPixels[neighborLabel].Add((y, x));
-                                    expanded = true;
-                                }
-                            }
-                        }
-                    }
+                    if (kernels[offset + n] == 0 || labels[n] != 0) continue;
+                    labels[n] = labels[q];
+                    frontier.Enqueue(n);
+                    isEdge = false;
                 }
+                if (isEdge) edge.Enqueue(q);
             }
+            frontier = edge;
         }
 
-        // Step 3: Extract bounding boxes and polygons from expanded components
+        // Step 3: area filter, mean complete-map score, bounding box and polygon of each instance.
+        var pixels = Enumerable.Range(0, count + 1).Select(_ => new List<(int y, int x)>()).ToArray();
+        for (int p = 0; p < plane; p++)
+            if (labels[p] != 0) pixels[labels[p]].Add((p / outW, p % outW));
+
+        var labelMap = DocumentTensorOps.IntTensor<T>(labels);
+        var textScores = Engine.Reshape(text, new[] { plane });
+        var none = Tensor<T>.CreateDefault(new[] { plane }, NumOps.Zero);
+        var labelValues = DocumentTensorOps.ToT<T>(Enumerable.Range(0, count + 1).ToArray());
+        var areas = DocumentTensorOps.ToT<T>(pixels.Select(list => Math.Max(1, list.Count)).ToArray());
+        T minimumScore = NumOps.FromDouble(threshold);
         int regionId = 0;
-        foreach (var (label, pixels) in componentPixels)
+        for (int label = 1; label <= count; label++)
         {
-            if (pixels.Count < 10) continue; // Filter tiny components
+            var instance = pixels[label];
+            if (instance.Count < MinRegionArea) continue;
 
-            // Get bounding box
-            int minY = pixels.Min(p => p.y);
-            int maxY = pixels.Max(p => p.y);
-            int minX = pixels.Min(p => p.x);
-            int maxX = pixels.Max(p => p.x);
+            var sum = Engine.TensorSum(Engine.TensorWhere(Engine.TensorEquals(labelMap, labelValues[label]), textScores, none));
+            var mean = Engine.TensorDivideScalar(Tensor<T>.CreateDefault(new[] { 1 }, sum), areas[label]);
+            if (Engine.TensorCountNonzero(DocumentTensorOps.AtLeast(Engine, mean, minimumScore)) == 0) continue;
 
-            // Extract convex hull for polygon (simplified: use bounding corners)
-            var polygon = ExtractConvexHull(pixels);
-
-            double avgScore = componentScores[label];
-
+            var polygon = ExtractConvexHull(instance);
+            T[] box = DocumentTensorOps.ToT<T>(new[] { instance.Min(p => p.x), instance.Min(p => p.y), instance.Max(p => p.x), instance.Max(p => p.y) });
+            T[] corners = DocumentTensorOps.ToT<T>(polygon.SelectMany(c => new[] { c.x, c.y }).ToArray());
             regions.Add(new TextRegion<T>
             {
-                Confidence = NumOps.FromDouble(avgScore),
-                ConfidenceValue = avgScore,
-                BoundingBox = new Vector<T>([
-                    NumOps.FromDouble(minX),
-                    NumOps.FromDouble(minY),
-                    NumOps.FromDouble(maxX),
-                    NumOps.FromDouble(maxY)
-                ]),
-                PolygonPoints = polygon.Select(p => new Vector<T>([
-                    NumOps.FromDouble(p.x),
-                    NumOps.FromDouble(p.y)
-                ])).ToList(),
+                Confidence = mean.ToArray()[0],
+                BoundingBox = new Vector<T>(box),
+                PolygonPoints = Enumerable.Range(0, polygon.Count).Select(i => new Vector<T>(new[] { corners[2 * i], corners[(2 * i) + 1] })).ToList(),
                 Index = regionId++
             });
         }
 
         return regions;
+    }
+
+    /// <summary>Instances with fewer pixels than this are dropped as noise.</summary>
+    private const int MinRegionArea = 10;
+
+    /// <summary>The in-bounds 4-connected neighbours of row-major pixel <paramref name="p"/>, in the reference order.</summary>
+    private static IEnumerable<int> Neighbours(int p, int height, int width)
+    {
+        int y = p / width, x = p % width;
+        if (y > 0) yield return p - width;
+        if (y < height - 1) yield return p + width;
+        if (x > 0) yield return p - 1;
+        if (x < width - 1) yield return p + 1;
     }
 
     /// <summary>
@@ -502,43 +498,8 @@ public partial class PSENet<T> : DocumentNeuralNetworkBase<T>, ITextDetector<T>
     /// mean=[0.485, 0.456, 0.406] and std=[0.229, 0.224, 0.225], with /255 scaling.
     /// </remarks>
     protected override Tensor<T> ApplyDefaultPreprocessing(Tensor<T> rawImage)
-    {
-        var image = EnsureBatchDimension(rawImage);
-        int batchSize = image.Shape[0];
-        int channels = image.Shape[1];
-        int height = image.Shape[2];
-        int width = image.Shape[3];
-
-        var normalized = new Tensor<T>(image._shape);
-        // ImageNet channel statistics are defined on the [0,1] pixel scale (mean 0.485 / std 0.229,
-        // Simonyan & Zisserman; He et al.). The input tensor is expected to ALREADY be in [0,1] — the
-        // /255 uint8→float conversion is the caller's ToTensor step (PyTorch convention: the model
-        // receives normalized-range tensors, transforms.Normalize is applied to [0,1] data). Applying
-        // /255 HERE as well double-scaled the input: any [0,1] image was crushed to ~[0,0.004] before
-        // the mean subtraction, so two very different constant pages (0.1 vs 0.9) both mapped to
-        // ~-2.11 and the deep ResNet+FPN+BN stack washed the <1 % residual to a bit-identical output
-        // (DifferentInputs_AfterTraining L2 = 0). Normalize on the [0,1] scale directly.
-        double[] means = [0.485, 0.456, 0.406];
-        double[] stds = [0.229, 0.224, 0.225];
-
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int c = 0; c < channels; c++)
-            {
-                double mean = c < means.Length ? means[c] : 0.5;
-                double std = c < stds.Length ? stds[c] : 0.5;
-                for (int h = 0; h < height; h++)
-                {
-                    for (int w = 0; w < width; w++)
-                    {
-                        int idx = b * channels * height * width + c * height * width + h * width + w;
-                        normalized.Data.Span[idx] = NumOps.FromDouble((NumOps.ToDouble(image.Data.Span[idx]) - mean) / std);
-                    }
-                }
-            }
-        }
-        return normalized;
-    }
+        => DocumentTensorOps.NormalizeChannels(Engine, EnsureBatchDimension(rawImage),
+            DocumentTensorOps.ImageNetMean, DocumentTensorOps.ImageNetStd);
 
     /// <summary>
     /// Applies PSENet's industry-standard postprocessing: pass-through (kernel maps are already final).
