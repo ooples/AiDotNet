@@ -1244,6 +1244,50 @@ public abstract partial class CausalModelBase<T> : ICausalModel<T>, IModelShape,
         return rounded.Cast<int>().ToVector();
     }
 
+    /// <summary>
+    /// For each query propensity score, the reference outcomes (rows where <paramref name="referenceMask"/> is 1)
+    /// averaged with Gaussian weights <c>exp(-(e_query - e_ref)² / 0.1)</c>, with the weight sums; the mean is 0
+    /// where no reference row carries weight. Queries are processed in blocks so the [block, n] kernel stays bounded.
+    /// </summary>
+    private protected (Tensor<T> Mean, Tensor<T> SumWeight) PropensityKernelMean(
+        Tensor<T> queryScores, Tensor<T> referenceScores, Tensor<T> referenceMask, Vector<T> outcome)
+    {
+        int m = queryScores.Length;
+        int n = referenceScores.Length;
+        if (m == 0)
+            return (new Tensor<T>(new[] { 0 }), new Tensor<T>(new[] { 0 }));
+
+        var inGroup = Engine.Reshape(referenceMask, new[] { 1, n });
+        T outcomeScale = PeakMagnitude(outcome.AsTensor());
+        var scaledOutcome = Engine.Reshape(Engine.TensorDivideScalar(outcome.AsTensor(), outcomeScale), new[] { n, 1 });
+        var reference = Engine.Reshape(referenceScores, new[] { 1, n });
+        T bandwidth = NumOps.FromDouble(0.1);
+
+        int blockRows = Math.Max(1, (1 << 22) / Math.Max(1, n));
+        var weightBlocks = new List<Tensor<T>>();
+        var outcomeBlocks = new List<Tensor<T>>();
+        for (int start = 0; start < m; start += blockRows)
+        {
+            int rows = Math.Min(blockRows, m - start);
+            var query = Engine.Reshape(Engine.TensorNarrow(queryScores, 0, start, rows), new[] { rows, 1 });
+            var distance = Engine.TensorSubtract(
+                Engine.TensorBroadcastTo(query, new[] { rows, n }), Engine.TensorBroadcastTo(reference, new[] { rows, n }));
+            var kernel = Engine.TensorMultiply(
+                Engine.TensorExp(Engine.TensorNegate(Engine.TensorDivideScalar(Engine.TensorSquare(distance), bandwidth))),
+                Engine.TensorBroadcastTo(inGroup, new[] { rows, n }));
+
+            weightBlocks.Add(Engine.ReduceSum(kernel, new[] { 1 }, false));
+            outcomeBlocks.Add(Engine.Reshape(Engine.TensorMatMul(kernel, scaledOutcome), new[] { rows }));
+        }
+
+        var sumWeight = Engine.TensorConcatenate(weightBlocks.ToArray(), 0);
+        var sumOutcome = Engine.TensorConcatenate(outcomeBlocks.ToArray(), 0);
+        var weighted = Engine.TensorGreaterThan(sumWeight, NumOps.Zero);
+        var safeWeight = Engine.TensorWhere(weighted, sumWeight, Engine.TensorOnesLike(sumWeight));
+        var mean = Engine.TensorMultiply(weighted, Engine.TensorMultiplyScalar(Engine.TensorDivide(sumOutcome, safeWeight), outcomeScale));
+        return (mean, sumWeight);
+    }
+
     /// <summary>A [length] tensor holding <paramref name="value"/> everywhere.</summary>
     private protected static Vector<T> Constant(int length, T value)
         => Tensor<T>.CreateDefault(new[] { length }, value).ToVector();

@@ -312,39 +312,11 @@ public partial class InverseProbabilityWeighting<T> : CausalModelBase<T>
         Matrix<T> features, Matrix<T> cachedFeatures, Vector<int> cachedTreatment, Vector<T> cachedOutcome,
         int group, string groupName)
     {
-        var queryScores = EstimatePropensityScores(features).AsTensor();
-        var referenceScores = EstimatePropensityScores(cachedFeatures).AsTensor();
-        int m = queryScores.Length;
-        int n = referenceScores.Length;
+        var inGroup = Engine.TensorEquals(cachedTreatment.AsTensor(), group).Cast<T>();
+        var (mean, sumWeight) = PropensityKernelMean(
+            EstimatePropensityScores(features).AsTensor(), EstimatePropensityScores(cachedFeatures).AsTensor(),
+            inGroup, cachedOutcome);
 
-        var inGroup = Engine.Reshape(Engine.TensorEquals(cachedTreatment.AsTensor(), group).Cast<T>(), new[] { 1, n });
-        T outcomeScale = PeakMagnitude(cachedOutcome.AsTensor());
-        var scaledOutcome = Engine.Reshape(Engine.TensorDivideScalar(cachedOutcome.AsTensor(), outcomeScale), new[] { n, 1 });
-        var reference = Engine.Reshape(referenceScores, new[] { 1, n });
-        T bandwidth = NumOps.FromDouble(0.1);
-
-        if (m == 0)
-            return new Vector<T>(0);
-
-        // Queries are processed in blocks so the [block, n] kernel stays a bounded size.
-        int blockRows = Math.Max(1, (1 << 22) / Math.Max(1, n));
-        var weightBlocks = new List<Tensor<T>>();
-        var outcomeBlocks = new List<Tensor<T>>();
-        for (int start = 0; start < m; start += blockRows)
-        {
-            int rows = Math.Min(blockRows, m - start);
-            var query = Engine.Reshape(Engine.TensorNarrow(queryScores, 0, start, rows), new[] { rows, 1 });
-            var distance = Engine.TensorSubtract(
-                Engine.TensorBroadcastTo(query, new[] { rows, n }), Engine.TensorBroadcastTo(reference, new[] { rows, n }));
-            var kernel = Engine.TensorMultiply(
-                Engine.TensorExp(Engine.TensorNegate(Engine.TensorDivideScalar(Engine.TensorSquare(distance), bandwidth))),
-                Engine.TensorBroadcastTo(inGroup, new[] { rows, n }));
-
-            weightBlocks.Add(Engine.ReduceSum(kernel, new[] { 1 }, false));
-            outcomeBlocks.Add(Engine.Reshape(Engine.TensorMatMul(kernel, scaledOutcome), new[] { rows }));
-        }
-
-        var sumWeight = Engine.TensorConcatenate(weightBlocks.ToArray(), 0);
         var empty = Engine.TensorNonzero(Engine.TensorEquals(sumWeight, NumOps.Zero));
         if (empty.Length > 0)
         {
@@ -352,8 +324,7 @@ public partial class InverseProbabilityWeighting<T> : CausalModelBase<T>
                 $"No {groupName} matches available for prediction at index {empty[0, 0]}.");
         }
 
-        var sumOutcome = Engine.TensorConcatenate(outcomeBlocks.ToArray(), 0);
-        return Engine.TensorMultiplyScalar(Engine.TensorDivide(sumOutcome, sumWeight), outcomeScale).ToVector();
+        return mean.ToVector();
     }
 
     private void ValidateFitData(Matrix<T> x, Vector<int> treatment)
