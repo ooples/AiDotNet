@@ -128,11 +128,22 @@ public partial class KeywordSpotting<T> : AudioNeuralNetworkBase<T>, ISpeechReco
             throw new ArgumentException("Keyword posterior tensor must have a positive trailing label axis.", nameof(logits));
 
         int frameCount = logits.Length / labelCount;
+
+        // Decoded in double, as the per-frame scan it replaces did: the 1e-300 log floor below rounds to 0 in
+        // float or Half, and a Half frame sum cannot resolve the 1e-4 distribution tolerance.
+        return DecodePosteriorsWide(
+            typeof(T) == typeof(double) ? (Tensor<double>)(object)logits : logits.Cast<double>(),
+            frameCount, labelCount, _options.MaxTextLength);
+    }
+
+    private static (List<int> tokens, double confidence) DecodePosteriorsWide(
+        Tensor<double> logits, int frameCount, int labelCount, int maxTextLength)
+    {
         var engine = AiDotNetEngine.Current;
         var shape = new[] { frameCount, labelCount };
 
         // Decoding only reads the posteriors; nothing here belongs on a gradient tape.
-        using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
+        using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<double>())
         {
             // Frame f, label l is flat element f * labelCount + l.
             var values = logits.Reshape(frameCount, labelCount);
@@ -142,14 +153,14 @@ public partial class KeywordSpotting<T> : AudioNeuralNetworkBase<T>, ISpeechReco
             // A frame that is already a distribution (every value in [0, 1], summing to 1 within 1e-4) is kept
             // as is; any other frame is softmax-normalized. NaN is outside [0, 1].
             var outsideUnit = engine.TensorAdd(
-                engine.TensorAdd(engine.TensorLessThan(values, NumOps.Zero), engine.TensorGreaterThan(values, NumOps.One)),
+                engine.TensorAdd(engine.TensorLessThan(values, 0.0), engine.TensorGreaterThan(values, 1.0)),
                 engine.TensorWhere(engine.TensorIsNan(values), ones, zeros));
-            var bounded = engine.TensorEquals(engine.ReduceMax(outsideUnit, new[] { 1 }, true), NumOps.Zero);
+            var bounded = engine.TensorEquals(engine.ReduceMax(outsideUnit, new[] { 1 }, true), 0.0);
             var rawSum = engine.ReduceSum(values, new[] { 1 }, true);
             var sumOff = engine.TensorGreaterThan(
-                engine.TensorAbs(engine.TensorSubtractScalar(rawSum, NumOps.One)), NumOps.FromDouble(1e-4));
+                engine.TensorAbs(engine.TensorSubtractScalar(rawSum, 1.0)), 1e-4);
             var alreadyProbabilities = engine.TensorBroadcastTo(
-                engine.TensorMultiply(bounded, engine.ScalarMinusTensor(NumOps.One, sumOff)), shape);
+                engine.TensorMultiply(bounded, engine.ScalarMinusTensor(1.0, sumOff)), shape);
 
             var maximum = engine.TensorBroadcastTo(engine.ReduceMax(values, new[] { 1 }, true), shape);
             var exponentials = engine.TensorExp(engine.TensorSubtract(values, maximum));
@@ -167,12 +178,12 @@ public partial class KeywordSpotting<T> : AudioNeuralNetworkBase<T>, ISpeechReco
                     engine.TensorConcatenate(
                         new[]
                         {
-                            new Tensor<T>(new[] { SmoothingWindow, labelCount }),
+                            new Tensor<double>(new[] { SmoothingWindow, labelCount }),
                             engine.TensorNarrow(runningTotal, 0, 0, frameCount - SmoothingWindow),
                         },
                         0))
                 : runningTotal;
-            var windowLength = engine.TensorMin(engine.TensorArange<T>(1, frameCount + 1), NumOps.FromDouble(SmoothingWindow));
+            var windowLength = engine.TensorMin(engine.TensorArange<double>(1, frameCount + 1), (double)SmoothingWindow);
             var smoothed = engine.TensorDivide(
                 windowTotal, engine.TensorBroadcastTo(windowLength.Reshape(frameCount, 1), shape));
 
@@ -186,7 +197,7 @@ public partial class KeywordSpotting<T> : AudioNeuralNetworkBase<T>, ISpeechReco
 
             // Label zero is the paper's non-keyword/filler label. Collapse repeated frame
             // decisions only for presentation; confidence below still uses every frame.
-            var keywordFrames = CtcGreedyDecoding.EmittedFrames(bestLabel, _options.MaxTextLength);
+            var keywordFrames = CtcGreedyDecoding.EmittedFrames(bestLabel, maxTextLength);
             var tokens = keywordFrames.Length == 0
                 ? new List<int>()
                 : new List<int>(engine.TensorIndexSelect(
@@ -208,11 +219,11 @@ public partial class KeywordSpotting<T> : AudioNeuralNetworkBase<T>, ISpeechReco
             // past the floor.
             var isNaN = engine.TensorIsNan(window);
             var cleanWindow = engine.TensorWhere(isNaN, engine.TensorZerosLike(window), window);
-            var nanCarrier = engine.ReduceSum(engine.TensorMultiplyScalar(window, NumOps.Zero), new[] { 0 }, false);
-            var peak = engine.TensorMax(engine.ReduceMax(cleanWindow, new[] { 0 }, false), NumOps.Zero);
+            var nanCarrier = engine.ReduceSum(engine.TensorMultiplyScalar(window, 0.0), new[] { 0 }, false);
+            var peak = engine.TensorMax(engine.ReduceMax(cleanWindow, new[] { 0 }, false), 0.0);
             var logPeak = engine.TensorAdd(
-                engine.TensorLog(engine.TensorMax(peak, NumOps.FromDouble(1e-300))), nanCarrier);
-            double sumLogPeak = NumOps.ToDouble(engine.TensorSum(logPeak));
+                engine.TensorLog(engine.TensorMax(peak, 1e-300)), nanCarrier);
+            double sumLogPeak = engine.TensorSum(logPeak);
 
             double confidence = Math.Exp(sumLogPeak / (labelCount - 1));
             return (tokens, confidence);
