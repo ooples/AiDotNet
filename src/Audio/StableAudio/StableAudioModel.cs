@@ -756,10 +756,17 @@ public partial class StableAudioModel<T> : AudioNeuralNetworkBase<T>, IAudioGene
     /// <summary>
     /// Creates timing conditioning for the given duration.
     /// </summary>
-    private Tensor<T> CreateTimingConditioning(double durationSeconds)
+    private Tensor<T> CreateTimingConditioning(double durationSeconds) => TimingEmbedding(Engine, _ditHiddenDim, durationSeconds);
+
+    /// <summary>
+    /// The sinusoidal timing embedding [1, D] of a clip of <paramref name="durationSeconds"/> seconds starting at 0.
+    /// Layout: sin(d f) at [0, q), cos(d f) at [q, 2q), sin((s+e) f) at [D/2, D/2+q), cos((s+e) f) at [3D/4, 3D/4+q),
+    /// with q = D/4 and f_i = 10000^(-2i / (D/2)). The angles are formed and evaluated in double and rounded to
+    /// <typeparamref name="T"/> once: in Half an angle of 47 s has a spacing of 2^-5, so forming it in T moves
+    /// the sinusoids by up to 0.03.
+    /// </summary>
+    internal static Tensor<T> TimingEmbedding(IEngine engine, int embeddingDim, double durationSeconds)
     {
-        // Stable Audio uses sinusoidal embeddings for timing
-        int embeddingDim = _ditHiddenDim;
         int quarter = embeddingDim / 4;
         if (quarter == 0)
         {
@@ -770,27 +777,23 @@ public partial class StableAudioModel<T> : AudioNeuralNetworkBase<T>, IAudioGene
         double startSeconds = 0.0;
         double endSeconds = durationSeconds;
 
-        // freq_i = 10000^(-2i / (D/2)), i < D/4
         int halfDim = embeddingDim / 2;
-        var freqs = SinusoidFrequencies(quarter, halfDim);
-        var durationPhase = Engine.TensorMultiplyScalar(freqs, NumOps.FromDouble(durationSeconds));
-        var spanPhase = Engine.TensorAdd(
-            Engine.TensorMultiplyScalar(freqs, NumOps.FromDouble(startSeconds)),
-            Engine.TensorMultiplyScalar(freqs, NumOps.FromDouble(endSeconds)));
+        var freqs = SinusoidFrequencies(engine, quarter, halfDim);
+        var durationPhase = engine.TensorMultiplyScalar(freqs, durationSeconds);
+        var spanPhase = engine.TensorMultiplyScalar(freqs, startSeconds + endSeconds);
 
-        // Layout: sin(d f) at [0, q), cos(d f) at [q, 2q), sin((s+e) f) at [D/2, D/2+q), cos((s+e) f) at [3D/4, 3D/4+q).
         int threeQuarter = 3 * embeddingDim / 4;
-        var parts = new List<Tensor<T>>
+        var parts = new List<Tensor<double>>
         {
-            Engine.TensorSin(durationPhase),
-            Engine.TensorCos(durationPhase),
-            new Tensor<T>(new int[] { halfDim - 2 * quarter }),
-            Engine.TensorSin(spanPhase),
-            new Tensor<T>(new int[] { threeQuarter - halfDim - quarter }),
-            Engine.TensorCos(spanPhase),
-            new Tensor<T>(new int[] { embeddingDim - threeQuarter - quarter }),
+            engine.TensorSin(durationPhase),
+            engine.TensorCos(durationPhase),
+            new Tensor<double>(new int[] { halfDim - 2 * quarter }),
+            engine.TensorSin(spanPhase),
+            new Tensor<double>(new int[] { threeQuarter - halfDim - quarter }),
+            engine.TensorCos(spanPhase),
+            new Tensor<double>(new int[] { embeddingDim - threeQuarter - quarter }),
         };
-        return Engine.Concat(parts, 0).Reshape(new int[] { 1, embeddingDim });
+        return engine.Concat(parts, 0).Reshape(new int[] { 1, embeddingDim }).Cast<T>();
     }
 
     /// <summary>
@@ -831,33 +834,38 @@ public partial class StableAudioModel<T> : AudioNeuralNetworkBase<T>, IAudioGene
     /// <summary>
     /// Creates a timestep tensor with sinusoidal embedding.
     /// </summary>
-    private Tensor<T> CreateTimestepTensor(double timestep)
+    private Tensor<T> CreateTimestepTensor(double timestep) => TimestepEmbedding(Engine, _ditHiddenDim, timestep);
+
+    /// <summary>
+    /// The sinusoidal timestep embedding [1, D]: sin(1000 t f_i) at [0, D/2), cos(1000 t f_i) at [D/2, D),
+    /// f_i = 10000^(-2i / D). The angles (up to 1000) are formed and evaluated in double and rounded to
+    /// <typeparamref name="T"/> once; in Half their spacing near 1000 is 0.5.
+    /// </summary>
+    internal static Tensor<T> TimestepEmbedding(IEngine engine, int embeddingDim, double timestep)
     {
-        int embeddingDim = _ditHiddenDim;
         int half = embeddingDim / 2;
         if (half == 0)
         {
             return new Tensor<T>(new int[] { 1, embeddingDim });
         }
 
-        // sin(1000 t f_i) at [0, D/2), cos(1000 t f_i) at [D/2, D), f_i = 10000^(-2i / D)
-        var phase = Engine.TensorMultiplyScalar(SinusoidFrequencies(half, embeddingDim), NumOps.FromDouble(timestep * 1000));
-        var parts = new List<Tensor<T>>
+        var phase = engine.TensorMultiplyScalar(SinusoidFrequencies(engine, half, embeddingDim), timestep * 1000);
+        var parts = new List<Tensor<double>>
         {
-            Engine.TensorSin(phase),
-            Engine.TensorCos(phase),
-            new Tensor<T>(new int[] { embeddingDim - 2 * half }),
+            engine.TensorSin(phase),
+            engine.TensorCos(phase),
+            new Tensor<double>(new int[] { embeddingDim - 2 * half }),
         };
-        return Engine.Concat(parts, 0).Reshape(new int[] { 1, embeddingDim });
+        return engine.Concat(parts, 0).Reshape(new int[] { 1, embeddingDim }).Cast<T>();
     }
 
     /// <summary>
-    /// Frequencies 10000^(-2i / <paramref name="denominator"/>) for i in [0, <paramref name="count"/>).
+    /// Frequencies 10000^(-2i / <paramref name="denominator"/>) for i in [0, <paramref name="count"/>), in double.
     /// </summary>
-    private Tensor<T> SinusoidFrequencies(int count, int denominator)
+    private static Tensor<double> SinusoidFrequencies(IEngine engine, int count, int denominator)
     {
-        var index = Engine.TensorArange<T>(0, count, 1);
-        return Engine.TensorExp(Engine.TensorMultiplyScalar(index, NumOps.FromDouble(-2.0 * Math.Log(10000) / denominator)));
+        var index = engine.TensorArange<double>(0, count, 1);
+        return engine.TensorExp(engine.TensorMultiplyScalar(index, -2.0 * Math.Log(10000) / denominator));
     }
 
     /// <summary>

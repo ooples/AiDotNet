@@ -182,29 +182,33 @@ public partial class RNNTransducer<T> : AudioNeuralNetworkBase<T>, ISpeechRecogn
     private TranscriptionResult<T> Decode(Tensor<T> audio, int beamWidth, string? language, bool? includeTimestamps)
     {
         ThrowIfDisposed();
-        var waveform = PreprocessAudio(audio);
         List<int> tokens;
         if (_network is null)
         {
             // An ONNX graph or custom layers carry no separate prediction network to step, so their frame
-            // outputs are read per frame.
-            var logits = IsOnnxMode && OnnxEncoder is not null ? OnnxEncoder.Run(waveform) : Predict(waveform);
+            // outputs are read per frame from the log-mel features.
+            var features = PreprocessAudio(audio);
+            var logits = IsOnnxMode && OnnxEncoder is not null ? OnnxEncoder.Run(features) : Predict(features);
             tokens = SpeechRecognitionEngineOps.CollapseCtcFrames(SpeechRecognitionEngineOps.FrameArgMax(logits), 0);
         }
         else
         {
-            tokens = DecodeTransducer(_network, waveform, beamWidth);
+            // The transcription network computes its own log-mel features from the waveform.
+            tokens = DecodeTransducer(_network, audio, beamWidth);
         }
 
         var text = TokensToText(tokens);
-        double duration = audio.Length > 0 ? (double)audio.Shape[0] / SampleRate : 0;
+        // The input is a waveform [samples] or a batch [batch, samples] whose first row is decoded, so the time
+        // axis is the last one: Shape[0] of a batch is the batch size.
+        int samples = audio.Rank >= 2 && audio.Shape[0] > 0 ? audio.Length / audio.Shape[0] : audio.Length;
+        double duration = samples > 0 ? (double)samples / SampleRate : 0;
         return new TranscriptionResult<T>
         {
             Text = text,
             Language = language ?? _options.Language,
             Confidence = NumOps.FromDouble(tokens.Count > 0 ? 0.9 : 0.0),
             DurationSeconds = duration,
-            Segments = ResolveReturnTimestamps(includeTimestamps) ? ExtractSegments(tokens, text, audio.Shape[0]) : Array.Empty<TranscriptionSegment<T>>()
+            Segments = ResolveReturnTimestamps(includeTimestamps) ? ExtractSegments(tokens, text, samples) : Array.Empty<TranscriptionSegment<T>>()
         };
     }
 
