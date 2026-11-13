@@ -489,7 +489,7 @@ public partial class SlowFast<T> : NeuralNetworkBase<T>
                     nameof(input));
         }
 
-        var inputData = input.Cast<float>().ToArray();
+        var inputData = TensorCopyHelper.CastLogical<T, float>(input).ToArray();
 
         var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input._shape);
         var inputs = new List<NamedOnnxValue> { NamedOnnxValue.CreateFromTensor(inputName, onnxInput) };

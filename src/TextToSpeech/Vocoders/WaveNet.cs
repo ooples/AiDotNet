@@ -1,3 +1,4 @@
+using AiDotNet.Helpers;
 using AiDotNet.Enums;
 using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
@@ -112,7 +113,7 @@ public partial class WaveNet<T> : SegmentVocoderBase<T>
     public int[] Quantize(Tensor<T> audio)
     {
         int levels = PaperOptions.MuLawLevels;
-        return Array.ConvertAll(audio.Cast<double>().ToArray(), x => MuLaw.Encode(x, levels));
+        return Array.ConvertAll(TensorCopyHelper.CastLogical<T, double>(audio).ToArray(), x => MuLaw.Encode(x, levels));
     }
 
     /// <summary>The log-probabilities <c>[1, classes, samples]</c> of every sample's class given the previous samples

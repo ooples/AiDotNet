@@ -795,7 +795,7 @@ public partial class BasicVSRPlusPlus<T> : VideoSuperResolutionBase<T>
             throw new InvalidOperationException("ONNX session is not initialized.");
 
         // Convert to ONNX format
-        var inputData = frames.Cast<float>().ToArray();
+        var inputData = TensorCopyHelper.CastLogical<T, float>(frames).ToArray();
 
         var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, frames._shape);
         var inputMeta = _onnxSession.InputMetadata;

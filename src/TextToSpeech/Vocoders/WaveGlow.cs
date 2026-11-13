@@ -1,3 +1,4 @@
+using AiDotNet.Helpers;
 using AiDotNet.Enums;
 using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
@@ -89,7 +90,7 @@ public partial class WaveGlow<T> : SegmentVocoderBase<T>
     /// <remarks>Tacotron 2's log-mel spectrogram (reference <c>mel2samp.py</c>).</remarks>
     protected override Tensor<T> ComputeInputMel(Tensor<T> audio)
     {
-        var rows = RequiredFeatures.LogMel(audio.Cast<double>().ToArray());
+        var rows = RequiredFeatures.LogMel(TensorCopyHelper.CastLogical<T, double>(audio).ToArray());
         int frames = rows.GetLength(0), bands = rows.GetLength(1);
         var flat = new double[rows.Length];
         Buffer.BlockCopy(rows, 0, flat, 0, rows.Length * sizeof(double));

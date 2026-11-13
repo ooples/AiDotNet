@@ -1,3 +1,4 @@
+using AiDotNet.Helpers;
 using AiDotNet.Audio.Generation;
 using AiDotNet.Audio.Resampling;
 using AiDotNet.NeuralNetworks.Layers;
@@ -114,8 +115,8 @@ public partial class MetaVoice1B<T>
         if (firstStageTextTokens is null) text = MetaVoiceText.Normalize(text);
         if (speaker is not null) speaker = Engine.Reshape(speaker, new[] { 1, SpeakerEmbeddingDim });
         var firstTokens = MetaVoiceGeneration.FirstStage(firstStageTextTokens ?? _firstTokenizer.Encode(text), _options.MaximumNewTokens,
-            _options.FirstStageContext, (prefix, conditioned) => _first.Forward(new[] { prefix }, conditioned ? speaker : null,
-                lastOnly: true).Logits[0].Cast<double>().ToArray(), _ => Uniform(random), speaker is not null,
+            _options.FirstStageContext, (prefix, conditioned) => Doubles(_first.Forward(new[] { prefix }, conditioned ? speaker : null,
+                lastOnly: true).Logits[0]), _ => Uniform(random), speaker is not null,
             _options.FirstStageTemperature, _options.FirstStageTopK, _options.FirstStageTopP,
             speaker is null ? null : (_options.SpeakerGuidance, _options.PromptGuidance));
         var firstAudio = MetaVoiceTokenAdapters.Decode(new[] { firstTokens }, true).Audio;
@@ -151,7 +152,7 @@ public partial class MetaVoice1B<T>
         return FromPcm(MetaVoiceOutputPolicy.EnhancedPcm(Doubles(enhanced)));
     }
 
-    private static double[] Doubles(Tensor<T> values) => values.Cast<double>().ToArray();
+    private static double[] Doubles(Tensor<T> values) => TensorCopyHelper.CastLogical<T, double>(values).ToArray();
 
     private static Tensor<T> FromDoubles(double[] values) => new Tensor<double>(values, new[] { values.Length }).Cast<T>();
 

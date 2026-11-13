@@ -300,8 +300,8 @@ public partial class XTTSv2<T> : TtsModelBase<T>, ICodecTts<T>
         var basis = PowerMelTransform(_options.DvaeFftSize, _options.DvaeHopSize, _options.DvaeWindowSize).MelFilterbank;
         // |S| = sqrt(max(1e-10, sum_m w[bin, m] exp(mel[frame, m] * stats[m]) / max(1e-12, sum_m w[bin, m]))), in double
         int bands = _options.MelChannels;
-        var weights = Engine.TensorNarrow(Engine.TensorNarrow(basis.Cast<double>(), 0, 0, bins), 1, 0, bands);   // [bins, bands]
-        var logMel = Engine.TensorNarrow(Engine.TensorNarrow(mel.Cast<double>(), 0, 0, frames), 1, 0, bands);
+        var weights = Engine.TensorNarrow(Engine.TensorNarrow(TensorCopyHelper.CastLogical<T, double>(basis), 0, 0, bins), 1, 0, bands);   // [bins, bands]
+        var logMel = Engine.TensorNarrow(Engine.TensorNarrow(TensorCopyHelper.CastLogical<T, double>(mel), 0, 0, frames), 1, 0, bands);
         var stats = Engine.TensorBroadcastTo(
             new Tensor<double>((double[])_melStats.Clone(), new[] { 1, bands }), new[] { frames, bands });
         var weighted = Engine.TensorMatMul(Engine.TensorExp(Engine.TensorMultiply(logMel, stats)), Engine.TensorTranspose(weights));

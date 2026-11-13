@@ -644,7 +644,7 @@ public partial class RealESRGAN<T> : VideoSuperResolutionBase<T>
             throw new InvalidOperationException("ONNX session is not initialized.");
 
         // Convert input tensor to ONNX tensor format
-        var inputData = input.Cast<float>().ToArray();
+        var inputData = TensorCopyHelper.CastLogical<T, float>(input).ToArray();
 
         // Create ONNX input tensor with shape [batch, channels, height, width]
         var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input._shape);

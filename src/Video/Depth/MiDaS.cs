@@ -261,7 +261,7 @@ public partial class MiDaS<T> : NeuralNetworkBase<T>
         if (_onnxSession is null)
             throw new InvalidOperationException("ONNX session is not initialized.");
 
-        var inputData = input.Cast<float>().ToArray();
+        var inputData = TensorCopyHelper.CastLogical<T, float>(input).ToArray();
 
         var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input._shape);
         var inputMeta = _onnxSession.InputMetadata;

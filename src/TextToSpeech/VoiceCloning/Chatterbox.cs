@@ -98,7 +98,7 @@ public partial class Chatterbox<T> : CosyVoiceBase<T>
     internal Tensor<T> Watermarked(Tensor<T> waveform)
     {
         if (!_options.Watermark || waveform.Length == 0) return waveform;
-        return FromDoubles(Watermarker.Apply(waveform.Cast<double>().ToArray(), _options.SampleRate));
+        return FromDoubles(Watermarker.Apply(TensorCopyHelper.CastLogical<T, double>(waveform).ToArray(), _options.SampleRate));
     }
 
     protected override CosyVoiceFamilyOptions Settings => _options;
@@ -539,7 +539,7 @@ public partial class Chatterbox<T> : CosyVoiceBase<T>
     // when its loudness cannot be measured (silence), as the release's try/except does.
     private Tensor<T> NormalizeLoudness(Tensor<T> audio, double target)
     {
-        var values = audio.Cast<double>().ToArray();
+        var values = TensorCopyHelper.CastLogical<T, double>(audio).ToArray();
         double loudness = AiDotNet.Audio.Effects.LoudnessMeter.IntegratedLoudness(values, _options.SampleRate);
         double gain = Math.Pow(10.0, (target - loudness) / 20.0);
         if (double.IsNaN(gain) || double.IsInfinity(gain) || gain <= 0) return audio;
@@ -554,7 +554,7 @@ public partial class Chatterbox<T> : CosyVoiceBase<T>
 
     private Tensor<T> LibrosaResample(Tensor<T> audio, int from, int to)
     {
-        return FromDoubles(SoxrResampler.LibrosaResample(audio.Cast<double>().ToArray(), from, to));
+        return FromDoubles(SoxrResampler.LibrosaResample(TensorCopyHelper.CastLogical<T, double>(audio).ToArray(), from, to));
     }
 
     private static Tensor<T> FromDoubles(double[] values) => new Tensor<double>(values, new[] { values.Length }).Cast<T>();

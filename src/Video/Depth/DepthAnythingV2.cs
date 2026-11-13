@@ -294,7 +294,7 @@ public partial class DepthAnythingV2<T> : NeuralNetworkBase<T>
             throw new InvalidOperationException("ONNX session is not initialized.");
 
         // Convert input tensor to float array
-        var inputData = input.Cast<float>().ToArray();
+        var inputData = TensorCopyHelper.CastLogical<T, float>(input).ToArray();
 
         // Create ONNX input tensor
         var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input._shape);
