@@ -75,11 +75,16 @@ public partial class VeRAAdapter<T> : LoRAAdapterBase<T>
     private static readonly object _initLock = new object();
 
     /// <summary>
+    /// Initial value of the rank-sized scaling vector (the paper's and PEFT's d_initial).
+    /// </summary>
+    private const double InitialRankScaling = 0.1;
+
+    /// <summary>
     /// Scaling vector d (outputSize) - trainable per-layer parameter.
     /// </summary>
     /// <remarks>
-    /// This vector scales the output of the shared matrices on a per-dimension basis.
-    /// It is initialized to ones so VeRA has no effect initially.
+    /// This vector scales the output of the shared matrices on a per-dimension basis (the paper's b).
+    /// It is initialized to zero, as in Kopiczko et al. (2024) and PEFT, so VeRA has no effect initially.
     /// Reassigned with correct size in CreateLoRALayer() which is called by the base constructor.
     /// </remarks>
     [AiDotNet.Attributes.TrainableParameter]
@@ -89,8 +94,8 @@ public partial class VeRAAdapter<T> : LoRAAdapterBase<T>
     /// Scaling vector b (rank) - trainable per-layer parameter.
     /// </summary>
     /// <remarks>
-    /// This vector scales the intermediate rank-dimensional representation.
-    /// It is initialized to ones so VeRA has no effect initially.
+    /// This vector scales the intermediate rank-dimensional representation (the paper's d).
+    /// It is initialized to d_initial = 0.1, as in Kopiczko et al. (2024) and PEFT.
     /// Reassigned with correct size in CreateLoRALayer() which is called by the base constructor.
     /// </remarks>
     [AiDotNet.Attributes.TrainableParameter]
@@ -269,9 +274,10 @@ public partial class VeRAAdapter<T> : LoRAAdapterBase<T>
         // IMPORTANT: Initialize scaling vectors here because this is called from the base constructor
         // BEFORE ParameterCount is accessed. If we wait until the VeRAAdapter constructor body,
         // the base constructor will try to access ParameterCount which uses these vectors, causing NullReferenceException.
-        _scalingVectorD = Tensor<T>.CreateDefault([outputSize], NumOps.One);
-        _scalingVectorB = Tensor<T>.CreateDefault([rank], NumOps.One);
-
+        // The output-sized vector starts at zero so the adapter starts as the base layer; the
+        // rank-sized vector starts at d_initial so the output-sized vector receives a gradient.
+        _scalingVectorD = new Tensor<T>([outputSize]);
+        _scalingVectorB = Tensor<T>.CreateDefault([rank], NumOps.FromDouble(InitialRankScaling));
 
         return new LoRALayer<T>(inputSize, outputSize, rank, alpha);
     }

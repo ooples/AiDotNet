@@ -18,7 +18,7 @@ namespace AiDotNet.LoRA.Adapters;
 /// <b>Mathematical Formulation:</b>
 /// Given pre-trained weights W, DoRA decomposes them as:
 /// - W = m * d, where m is magnitude (scalar per neuron) and d is direction (unit vector)
-/// - W' = m * normalize(d + LoRA_delta)
+/// - W' = m * normalize(W + LoRA_delta), the norm taken per output neuron
 /// - LoRA_delta = (alpha/rank) * B * A
 ///
 /// This ensures that LoRA adaptations primarily affect the direction of weights, not their magnitude,
@@ -233,6 +233,24 @@ public partial class DoRAAdapter<T> : LoRAAdapterBase<T>
     }
 
     /// <summary>
+    /// The DoRA weights in [outputSize, inputSize] form: W' = m * (W0 + ΔW) / ||W0 + ΔW||, with the
+    /// norm taken per output neuron (over the input axis) and ΔW = (alpha / rank) * (A * B)^T.
+    /// </summary>
+    /// <remarks>
+    /// This is equation (5) of Liu et al. (2024) and the PEFT implementation: the LoRA update is added
+    /// to the pre-trained weights W0 themselves, not to the unit direction W0 / ||W0||, and the sum is
+    /// then renormalized and rescaled by the learned magnitude.
+    /// </remarks>
+    private Matrix<T> ComputeAdaptedWeights(Vector<T> baseParams, int outputSize, int inputSize, int weightCount)
+    {
+        Matrix<T> baseWeights = ExtractOutputMajorWeights(baseParams, outputSize, inputSize, weightCount);
+
+        // MergeWeights() is [inputSize, outputSize]; its transpose lines up with the output-major W0.
+        Matrix<T> adaptedWeights = Engine.MatrixAdd(baseWeights, Engine.MatrixTranspose(_loraLayer.MergeWeights()));
+        return RecomposeWeights(NormalizeRows(adaptedWeights));
+    }
+
+    /// <summary>
     /// Normalizes a matrix row-wise (each row becomes a unit vector).
     /// </summary>
     /// <param name="matrix">The matrix to normalize.</param>
@@ -273,11 +291,10 @@ public partial class DoRAAdapter<T> : LoRAAdapterBase<T>
     /// <para>
     /// The DoRA forward pass:
     /// 1. Gets base layer weights W
-    /// 2. Computes direction: d = W / ||W||
-    /// 3. Applies LoRA to direction: d' = d + LoRA(input)
-    /// 4. Normalizes adapted direction: d_norm = d' / ||d'||
-    /// 5. Recomposes weights: W' = m * d_norm
-    /// 6. Computes output: y = input @ W'^T
+    /// 2. Adds the LoRA weight delta: V = W + ΔW
+    /// 3. Takes the direction of the sum: d = V / ||V|| (per output neuron)
+    /// 4. Recomposes weights: W' = m * d
+    /// 5. Computes output: y = input @ W'^T
     /// </para>
     /// <para>
     /// <b>For Beginners:</b> This is where DoRA's magic happens during prediction.
@@ -292,7 +309,7 @@ public partial class DoRAAdapter<T> : LoRAAdapterBase<T>
     ///
     /// The key difference from standard LoRA:
     /// - Standard LoRA: output = base_output + lora_output
-    /// - DoRA: output = input @ (m * normalize(d + lora_output))
+    /// - DoRA: output = input @ (m * normalize(W + lora_delta))^T
     ///
     /// DoRA's approach gives more stable training because we control magnitude separately.
     /// </para>
@@ -305,30 +322,10 @@ public partial class DoRAAdapter<T> : LoRAAdapterBase<T>
         int outputSize = GetOutputLayerShape().RequireConcrete("Sizing a LoRA adapter's low-rank factors")[0];
         int weightCount = inputSize * outputSize;
 
-        // Extract weight matrix from base layer (assuming weights come first)
-        Matrix<T> baseWeights = ExtractOutputMajorWeights(baseParams, outputSize, inputSize, weightCount);
-
-        // Compute base direction (W / ||W||)
-        Matrix<T> baseDirection = NormalizeRows(baseWeights);
-
-        // Get LoRA weight contribution as matrix (A × B)
-        // We don't call _loraLayer.Forward() here since we only need the weight delta, not the output
-        // loraWeightDelta is [inputSize, outputSize] from MergeWeights()
-        // baseDirection is [outputSize, inputSize]
-        // So we access loraWeightDelta[j, i] = loraWeightDelta[inputIdx, outputIdx]
-        Matrix<T> loraWeightDelta = _loraLayer.MergeWeights();
-
         int batchSize = input.Shape[0];
 
-        // Add LoRA delta to base direction: d' = d + delta
-        Matrix<T> adaptedDirection = Engine.MatrixAdd(baseDirection, Engine.MatrixTranspose(loraWeightDelta));
-
-
-        // Normalize the adapted direction: d_norm = d' / ||d'||
-        Matrix<T> normalizedDirection = NormalizeRows(adaptedDirection);
-
-        // Recompose weights: W' = m * d_norm
-        Matrix<T> finalWeights = RecomposeWeights(normalizedDirection);
+        // W' = m * (W0 + ΔW) / ||W0 + ΔW|| (row-wise norm over the input axis)
+        Matrix<T> finalWeights = ComputeAdaptedWeights(baseParams, outputSize, inputSize, weightCount);
 
         // Compute output: y = input @ W'^T
         // Matrix multiply: [batchSize, inputSize] @ [inputSize, outputSize]
@@ -380,8 +377,8 @@ public partial class DoRAAdapter<T> : LoRAAdapterBase<T>
     /// <remarks>
     /// <para>
     /// This method creates a final layer with the DoRA adaptations baked in.
-    /// The merged weights are: W' = m * normalize(d + LoRA_delta)
-    /// where m is magnitude, d is base direction, and LoRA_delta is the LoRA contribution.
+    /// The merged weights are: W' = m * normalize(W + LoRA_delta)
+    /// where m is magnitude, W is the base weight matrix, and LoRA_delta is the LoRA contribution.
     /// </para>
     /// <para>
     /// <b>For Beginners:</b> This "bakes in" your DoRA adaptation for deployment.
@@ -414,25 +411,9 @@ public partial class DoRAAdapter<T> : LoRAAdapterBase<T>
         // Get base layer weights
         Vector<T> baseParams = _baseLayer.GetParameters();
         int weightCount = inputSize * outputSize;
-        Matrix<T> baseWeights = ExtractOutputMajorWeights(baseParams, outputSize, inputSize, weightCount);
 
-        // Compute base direction
-        Matrix<T> baseDirection = NormalizeRows(baseWeights);
-
-        // Get LoRA weight contribution
-        // loraWeights from MergeWeights() is [inputSize, outputSize]
-        // baseDirection is [outputSize, inputSize]
-        // So we access loraWeights[j, i] = loraWeights[inputIdx, outputIdx]
-        Matrix<T> loraWeights = _loraLayer.MergeWeights();
-
-        // Add LoRA to direction and normalize
-        Matrix<T> adaptedDirection = Engine.MatrixAdd(baseDirection, Engine.MatrixTranspose(loraWeights));
-
-
-        Matrix<T> normalizedDirection = NormalizeRows(adaptedDirection);
-
-        // Recompose with magnitude: W' = m * d_norm
-        Matrix<T> finalWeights = RecomposeWeights(normalizedDirection);
+        // W' = m * (W0 + ΔW) / ||W0 + ΔW||, the same weights the forward pass applies
+        Matrix<T> finalWeights = ComputeAdaptedWeights(baseParams, outputSize, inputSize, weightCount);
 
         // Create merged parameters: merged weights (row-major) then biases unchanged
         var flatWeights = (_baseLayer is DenseLayer<T> ? Engine.MatrixTranspose(finalWeights) : finalWeights).ToRowVector();

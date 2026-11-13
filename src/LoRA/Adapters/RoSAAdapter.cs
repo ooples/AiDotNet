@@ -319,10 +319,16 @@ public partial class RoSAAdapter<T> : LoRAAdapterBase<T>
     public double GetSparsity()
     {
         int totalWeights = _sparseWeights.Shape[0] * _sparseWeights.Shape[1];
-        // Count zero and near-zero (|w| < 1e-10) elements
-        T zeroCount = Engine.TensorSum(Engine.TensorLessThan(Engine.TensorAbs(_sparseWeights), NumOps.FromDouble(1e-10)));
+        // Count zero and near-zero (|w| < 1e-10) elements. The count is an integer (a 0/1 sum in T
+        // saturates in Half past 2048), and a type whose 1e-10 rounds to zero counts exact zeros.
+        T tolerance = NumOps.FromDouble(1e-10);
+        Tensor<T> magnitudes = Engine.TensorAbs(_sparseWeights);
+        Tensor<T> nearZero = NumOps.GreaterThan(tolerance, NumOps.Zero)
+            ? Engine.TensorLessThan(magnitudes, tolerance)
+            : Engine.TensorEquals(magnitudes, NumOps.Zero);
+        long zeroCount = Engine.TensorCountNonzero(nearZero);
 
-        return NumOps.ToDouble(zeroCount) / totalWeights;
+        return (double)zeroCount / totalWeights;
     }
 
     /// <summary>

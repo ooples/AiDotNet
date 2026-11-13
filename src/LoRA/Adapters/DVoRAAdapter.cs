@@ -21,8 +21,8 @@ namespace AiDotNet.LoRA.Adapters;
 /// <b>Mathematical Formulation:</b>
 /// Given pre-trained weights W, DVoRA:
 /// 1. Decomposes: W = m * d (magnitude and direction)
-/// 2. Applies VeRA to direction: d' = d + d_scale * (B * A * input) * b_scale
-/// 3. Normalizes direction: d_norm = d' / ||d'||
+/// 2. Adds the VeRA weight delta to the weights: V = W + ΔW, ΔW = d_scale * (B * A) * b_scale
+/// 3. Takes the direction of the sum: d_norm = V / ||V|| (per output neuron)
 /// 4. Recomposes: W' = m * d_norm
 ///
 /// Where:
@@ -105,6 +105,11 @@ public partial class DVoRAAdapter<T> : LoRAAdapterBase<T>
     /// Lock object for thread-safe shared matrix initialization.
     /// </summary>
     private static readonly object _initLock = new object();
+
+    /// <summary>
+    /// Initial value of the rank-sized VeRA scaling vector (the paper's and PEFT's d_initial).
+    /// </summary>
+    private const double InitialRankScaling = 0.1;
 
     /// <summary>
     /// Magnitude component of the decomposed weights (scalar per output neuron).
@@ -221,9 +226,11 @@ public partial class DVoRAAdapter<T> : LoRAAdapterBase<T>
         _magnitude = new Tensor<T>([outputSize]);
         DecomposeWeights();
 
-        // Initialize scaling vectors to ones (VeRA component - no initial effect)
-        _scalingVectorD = Tensor<T>.CreateDefault([outputSize], NumOps.One);
-        _scalingVectorB = Tensor<T>.CreateDefault([rank], NumOps.One);
+        // VeRA scaling vectors as in Kopiczko et al. (2024) and PEFT: the output-sized vector applied
+        // after B starts at zero, so the VeRA delta (and with it the DVoRA change) is zero at
+        // initialization, and the rank-sized vector applied after A starts at d_initial = 0.1.
+        _scalingVectorD = new Tensor<T>([outputSize]);
+        _scalingVectorB = Tensor<T>.CreateDefault([rank], NumOps.FromDouble(InitialRankScaling));
 
 
         // DVoRA owns the magnitude/scaling tensors above and uses shared frozen matrices instead of
@@ -441,7 +448,7 @@ public partial class DVoRAAdapter<T> : LoRAAdapterBase<T>
     /// The DVoRA forward pass combines DoRA and VeRA:
     /// 1. Gets base layer weights W
     /// 2. Computes direction: d = W / ||W|| (DoRA)
-    /// 3. Applies VeRA to direction: d' = d + d_scale * (B * A * input) * b_scale (VeRA)
+    /// 3. Adds the VeRA weight delta to the weights: V = W + ΔW (VeRA)
     /// 4. Normalizes adapted direction: d_norm = d' / ||d'|| (DoRA)
     /// 5. Recomposes weights: W' = m * d_norm (DoRA)
     /// 6. Computes output: y = input @ W'^T
@@ -479,9 +486,6 @@ public partial class DVoRAAdapter<T> : LoRAAdapterBase<T>
         // Extract weight matrix from base layer
         Matrix<T> baseWeights = ExtractOutputMajorWeights(baseParams, outputSize, inputSize, weightCount);
 
-        // Compute base direction (W / ||W||) - DoRA component
-        Matrix<T> baseDirection = NormalizeRows(baseWeights);
-
         // Apply VeRA to get direction delta
         int batchSize = input.Shape[0];
         int rank = _scalingVectorB.Length;
@@ -491,8 +495,8 @@ public partial class DVoRAAdapter<T> : LoRAAdapterBase<T>
         T scaling = NumOps.Divide(NumOps.FromDouble(Alpha), NumOps.FromDouble(Rank));
         Matrix<T> veraWeightDelta = ComputeVeraWeightDelta(inputSize, outputSize, rank, scaling);
 
-        // Add VeRA delta to base direction: d' = d + delta
-        Matrix<T> adaptedDirection = Engine.MatrixAdd(baseDirection, veraWeightDelta);
+        // Add the VeRA delta to the weights themselves (DoRA eq. 5): V = W + ΔW
+        Matrix<T> adaptedDirection = Engine.MatrixAdd(baseWeights, veraWeightDelta);
 
 
         // Normalize the adapted direction: d_norm = d' / ||d'|| - DoRA component
@@ -562,14 +566,14 @@ public partial class DVoRAAdapter<T> : LoRAAdapterBase<T>
     /// <para>
     /// This method creates a final layer with the DVoRA adaptations baked in.
     /// The merged weights combine DoRA's magnitude-direction decomposition with VeRA's adaptation:
-    /// W' = m * normalize(d + VeRA_contribution)
+    /// W' = m * normalize(W + VeRA_contribution)
     /// </para>
     /// <para><b>For Beginners:</b> This "bakes in" your DVoRA adaptation for deployment.
     ///
     /// After training with DVoRA, you probably want to deploy a simpler model without
     /// all the DVoRA machinery. This method creates that simpler model by:
-    /// 1. Computing the VeRA contribution to direction
-    /// 2. Adding it to the base direction
+    /// 1. Computing the VeRA weight contribution
+    /// 2. Adding it to the base weights
     /// 3. Normalizing the result (DoRA)
     /// 4. Multiplying by magnitude (DoRA)
     /// 5. Creating a new layer with these merged weights
@@ -602,15 +606,12 @@ public partial class DVoRAAdapter<T> : LoRAAdapterBase<T>
         int weightCount = inputSize * outputSize;
         Matrix<T> baseWeights = ExtractOutputMajorWeights(baseParams, outputSize, inputSize, weightCount);
 
-        // Compute base direction
-        Matrix<T> baseDirection = NormalizeRows(baseWeights);
-
         // Compute VeRA weight contribution: d * B * A * b * scaling, transposed to [outputSize, inputSize]
         T scaling = NumOps.Divide(NumOps.FromDouble(Alpha), NumOps.FromDouble(Rank));
         Matrix<T> veraWeightsTransposed = ComputeVeraWeightDelta(inputSize, outputSize, rank, scaling);
 
-        // Add VeRA contribution to base direction
-        Matrix<T> adaptedDirection = Engine.MatrixAdd(baseDirection, veraWeightsTransposed);
+        // Add the VeRA contribution to the weights themselves (DoRA eq. 5): V = W + ΔW
+        Matrix<T> adaptedDirection = Engine.MatrixAdd(baseWeights, veraWeightsTransposed);
 
         // Normalize the adapted direction
         Matrix<T> normalizedDirection = NormalizeRows(adaptedDirection);

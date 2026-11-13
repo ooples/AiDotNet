@@ -363,13 +363,9 @@ public partial class AdaLoRAAdapter<T> : LoRAAdapterBase<T>
     /// </summary>
     private int FirstNonZeroIndex(Tensor<T> flags)
     {
-        int count = flags.Length;
-        Tensor<T> flat = Engine.Reshape(flags, [count]);
-        Tensor<T> positions = Engine.TensorArange<T>(0, count, 1);
-        T first = Engine.TensorMinValue(Engine.TensorWhere(
-            Engine.TensorNotEquals(flat, NumOps.Zero), positions, Tensor<T>.CreateDefault([count], NumOps.FromDouble(count))));
-        int index = (int)Math.Round(NumOps.ToDouble(first));
-        return index < count ? index : -1;
+        // Coordinates of the non-zero entries, row-major, as ints (positions past 2048 are not exact in Half)
+        Tensor<int> nonZero = Engine.TensorNonzero(Engine.Reshape(flags, [flags.Length]));
+        return nonZero.Length == 0 ? -1 : nonZero.ToArray()[0];
     }
 
     /// <summary>
@@ -400,23 +396,13 @@ public partial class AdaLoRAAdapter<T> : LoRAAdapterBase<T>
     private void PruneRank()
     {
         // Sort active indices by their importance score (descending, ties keep the active-list
-        // order). The sort key is (number of active scores strictly greater, position), which is
-        // unique per position, so the engine argsort needs no stability guarantee.
+        // order, as the stable LINQ OrderByDescending did). The stable order breaks ties on an int
+        // position, so no index or count is ever held in T.
         int activeCount = _activeIndices.Count;
         int[] activeArray = _activeIndices.ToArray();
         Tensor<T> activeScores = Engine.TensorIndexSelect(
             Tensor<T>.FromVector(_importanceScores), new Tensor<int>(activeArray, [activeCount]), 0);
-        // greaterCount[i] = #{ j : score[j] > score[i] }
-        Tensor<T> columnScores = Engine.TensorBroadcastTo(
-            Engine.Reshape(activeScores, [activeCount, 1]), [activeCount, activeCount]);
-        Tensor<T> rowScores = Engine.TensorBroadcastTo(
-            Engine.Reshape(activeScores, [1, activeCount]), [activeCount, activeCount]);
-        Tensor<T> greaterCount = Engine.ReduceSum(Engine.TensorGreaterThan(rowScores, columnScores), [1], false);
-
-        Tensor<T> sortKey = Engine.TensorAdd(
-            Engine.TensorMultiplyScalar(greaterCount, NumOps.FromDouble(activeCount)),
-            Engine.TensorArange<T>(0, activeCount, 1));
-        int[] sortedPositions = Engine.TensorArgsort(sortKey, 0, false).ToArray();
+        int[] sortedPositions = AiDotNet.AnomalyDetection.AnomalyTensorOps.StableOrder(activeScores, descending: true).ToArray();
 
         // Determine new rank (prune bottom threshold fraction). _minRank is a floor.
         int componentsToKeep = Math.Max(_minRank, (int)(_currentRank * (1.0 - _rankPruningThreshold)));
