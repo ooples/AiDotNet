@@ -1122,12 +1122,14 @@ public partial class RWKV7Block<T> : LayerBase<T>, IShapeContract
             for (int t = 0; t < seqLen; t++)
             {
                 // a and bk index the state row di, v indexes the state column vi.
+                // The decay broadcasts along the columns inside the multiply, and bk v^T is a batched outer product,
+                // so no full-state copy of a, bk or v is made per token.
                 var a = Engine.Reshape(Engine.TensorSlice(decay, [0, t, 0], [batchSize, 1, _modelDimension]), [batchSize, _numHeads, hd, 1]);
-                var bk = Engine.Reshape(Engine.TensorSlice(injection, [0, t, 0], [batchSize, 1, _modelDimension]), [batchSize, _numHeads, hd, 1]);
-                var v = Engine.Reshape(Engine.TensorSlice(vAll, [0, t, 0], [batchSize, 1, _modelDimension]), [batchSize, _numHeads, 1, hd]);
+                var bk = Engine.Reshape(Engine.TensorSlice(injection, [0, t, 0], [batchSize, 1, _modelDimension]), [batchSize * _numHeads, hd, 1]);
+                var v = Engine.Reshape(Engine.TensorSlice(vAll, [0, t, 0], [batchSize, 1, _modelDimension]), [batchSize * _numHeads, 1, hd]);
                 s = Engine.TensorAdd(
-                    Engine.TensorMultiply(s, Engine.TensorBroadcastTo(a, stateShape)),
-                    Engine.TensorMultiply(Engine.TensorBroadcastTo(bk, stateShape), Engine.TensorBroadcastTo(v, stateShape)));
+                    Engine.TensorMultiply(s, a),
+                    Engine.Reshape(Engine.BatchMatMul(bk, v), stateShape));
             }
 
             return s;

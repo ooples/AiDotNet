@@ -261,11 +261,11 @@ public partial class S5Layer<T> : LayerBase<T>, IShapeContract
         // Real part: -0.5 (controls decay rate, placing eigenvalues in the stable left half-plane)
         // Imaginary part: n*pi (logarithmically spaced frequencies for multi-scale pattern capture)
         // S4D-Lin initialization: A_n = -1/2 + i * pi * (n + 1). The frequencies are formed in double and
-        // rounded to T once: pi rounded to T first would be off by an ulp per entry.
+        // rounded to T once: pi rounded to T first would be off by an ulp per entry. Plain double arithmetic, not
+        // an engine op: a GPU engine may evaluate a double tensor in float.
         _aReal.Fill(NumOps.FromDouble(-0.5));
-        Engine.TensorCopy(
-            Engine.TensorMultiplyScalar(Engine.TensorArange<double>(1, _stateDimension + 1, 1), Math.PI).Cast<T>(),
-            _aImag);
+        var frequencies = Enumerable.Range(1, _stateDimension).Select(n => n * Math.PI).ToArray();
+        Engine.TensorCopy(new Tensor<double>(frequencies, new[] { _stateDimension }).Cast<T>(), _aImag);
 
         // B initialized with Xavier/Glorot for both real and imaginary parts
         // This ensures proper signal scaling through the MIMO input mapping

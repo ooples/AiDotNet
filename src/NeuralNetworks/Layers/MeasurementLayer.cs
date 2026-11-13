@@ -167,10 +167,12 @@ public partial class MeasurementLayer<T> : LayerBase<T>, IShapeContract
             int[] shape2D = [batchSize, stateSize];
             var magnitude = Engine.TensorMultiply(input2D, input2D);
             var rowSum = Engine.TensorBroadcastTo(Engine.ReduceSum(magnitude, [1], keepDims: true), shape2D);
-            probabilities = Engine.TensorWhere(
-                Engine.TensorEquals(rowSum, NumOps.Zero),
-                new Tensor<T>(shape2D),
-                Engine.TensorDivide(magnitude, rowSum));
+            var zeroRow = Engine.TensorEquals(rowSum, NumOps.Zero);
+
+            // The division runs before the selection, so a zero row divides by one instead (decimal division by
+            // zero throws); the selection then puts zeros there.
+            var divisor = Engine.TensorWhere(zeroRow, Engine.TensorOnesLike(rowSum), rowSum);
+            probabilities = Engine.TensorWhere(zeroRow, new Tensor<T>(shape2D), Engine.TensorDivide(magnitude, divisor));
         }
 
         if (input.Rank == 1)

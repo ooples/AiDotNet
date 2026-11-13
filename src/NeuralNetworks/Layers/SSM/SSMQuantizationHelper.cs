@@ -197,6 +197,13 @@ public static class SSMQuantizationHelper<T>
         if (parameters.Length == 0)
             return parameters;
 
+        // 32-bit is a no-op: quantize-dequantize would not meaningfully change values. Checked before the double
+        // round trip below, which would change decimal and long values double cannot hold.
+        if (bitWidth >= 32)
+        {
+            return parameters.Clone();
+        }
+
         // Find min and max for scaling
         if (typeof(T) != typeof(double))
             return SSMQuantizationHelper<double>.QuantizeVector(parameters.AsTensor().Cast<double>().ToVector(), bitWidth)
@@ -211,12 +218,6 @@ public static class SSMQuantizationHelper<T>
         if (NumOps.LessThan(range, NumOps.FromDouble(1e-10)))
         {
             // All values are essentially the same, nothing to quantize
-            return parameters.Clone();
-        }
-
-        // 32-bit is a no-op: quantize-dequantize would not meaningfully change values
-        if (bitWidth >= 32)
-        {
             return parameters.Clone();
         }
 
