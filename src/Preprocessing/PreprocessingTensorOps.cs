@@ -20,6 +20,14 @@ internal static class PreprocessingTensorOps
     public static T Tolerance<T>(double epsilon) =>
         MathHelper.GetNumericOperations<T>().FromDouble(typeof(T) == typeof(Half) ? Math.Max(epsilon, HalfSmallestNormal) : epsilon);
 
+    /// <summary>
+    /// Whether <typeparamref name="T"/> is a 16-bit float (Half or BFloat16). Sums of squares and their products
+    /// overflow Half's 65504 maximum and lose BFloat16's 8-bit mantissa, so second-moment statistics are evaluated in
+    /// float for these types and cast back once.
+    /// </summary>
+    public static bool IsNarrowFloat<T>() =>
+        typeof(T) == typeof(Half) || typeof(T) == typeof(AiDotNet.Tensors.NumericOperations.BFloat16);
+
     /// <summary>Gathers the given columns of <paramref name="data"/> into a new matrix, in the given order.</summary>
     public static Matrix<T> SelectColumns<T>(Matrix<T> data, int[] columns)
     {
@@ -161,6 +169,9 @@ internal static class PreprocessingTensorOps
     /// </summary>
     public static Tensor<T> TargetCorrelations<T>(Tensor<T> x, Tensor<T> y, double epsilon = 1e-10)
     {
+        if (IsNarrowFloat<T>())
+            return TargetCorrelations(x.Cast<float>(), y.Cast<float>(), epsilon).Cast<T>();
+
         var engine = AiDotNetEngine.Current;
         var ops = MathHelper.GetNumericOperations<T>();
         int n = x.Shape[0];
@@ -183,6 +194,9 @@ internal static class PreprocessingTensorOps
     /// </summary>
     public static Tensor<T> CorrelationsWithDenominatorGuard<T>(Tensor<T> x, Tensor<T> y, double epsilon = 1e-10)
     {
+        if (IsNarrowFloat<T>())
+            return CorrelationsWithDenominatorGuard(x.Cast<float>(), y.Cast<float>(), epsilon).Cast<T>();
+
         var engine = AiDotNetEngine.Current;
         var ops = MathHelper.GetNumericOperations<T>();
         int n = x.Shape[0];
@@ -350,6 +364,14 @@ internal static class PreprocessingTensorOps
         return AiDotNetEngine.Current.TensorOneHot<T>(
             new Tensor<int>((int[])classIndex.Clone(), new[] { classIndex.Length }), classCount);
     }
+
+    /// <summary>
+    /// 0/1 indicator [<paramref name="length"/>] of a single position, built from the int position (comparing a
+    /// <see cref="Range{T}"/> in T against the position fails in Half above 2048, where integers are not all exact).
+    /// </summary>
+    public static Tensor<T> PositionOneHot<T>(int position, int length) =>
+        AiDotNetEngine.Current.Reshape(
+            AiDotNetEngine.Current.TensorOneHot<T>(new Tensor<int>(new[] { position }, new[] { 1 }), length), new[] { length });
 
     /// <summary>Row <paramref name="row"/> of a 2-D tensor as a [1, columns] tensor.</summary>
     public static Tensor<T> Row<T>(Tensor<T> x, int row) =>

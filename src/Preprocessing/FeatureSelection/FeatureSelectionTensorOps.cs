@@ -17,6 +17,12 @@ internal static class FeatureSelectionTensorOps
     private static bool IsDouble<T>() => typeof(T) == typeof(double);
 
     /// <summary>
+    /// Whether the engine's linear-algebra factorizations (Cholesky, LU, SVD) run in <typeparamref name="T"/>. They
+    /// support only float and double; Half, BFloat16 and decimal systems are solved in double and cast back.
+    /// </summary>
+    private static bool HasNativeLinalg<T>() => typeof(T) == typeof(float) || typeof(T) == typeof(double);
+
+    /// <summary>
     /// Sum of squared differences between every row of <paramref name="a"/> ([m, p]) and every row of
     /// <paramref name="b"/> ([k, p]), as [m, k]. Uses the difference form (not the expanded dot-product form) so
     /// the values match a direct per-pair loop.
@@ -91,6 +97,10 @@ internal static class FeatureSelectionTensorOps
     /// </summary>
     public static Tensor<T> ColumnSumSquaredDeviations<T>(Tensor<T> x)
     {
+        // A Half column sum stalls once it passes 2048 times the values' spacing and overflows at 65504
+        if (PreprocessingTensorOps.IsNarrowFloat<T>())
+            return ColumnSumSquaredDeviations(x.Cast<float>()).Cast<T>();
+
         var engine = AiDotNetEngine.Current;
         var centered = engine.TensorSubtract(x, engine.TensorBroadcastTo(
             engine.ReduceMean(x, new[] { 0 }, true), x.Shape.ToArray()));
@@ -492,6 +502,9 @@ internal static class FeatureSelectionTensorOps
     /// </summary>
     public static Tensor<T> RidgeCoefficients<T>(Tensor<T> x, Tensor<T> y, double alpha)
     {
+        if (!HasNativeLinalg<T>())
+            return RidgeCoefficients(x.Cast<double>(), y.Cast<double>(), alpha).Cast<T>();
+
         var engine = AiDotNetEngine.Current;
         var ops = MathHelper.GetNumericOperations<T>();
         int n = x.Shape[0];
@@ -513,6 +526,9 @@ internal static class FeatureSelectionTensorOps
     /// </summary>
     public static Tensor<T> RegularizedNormalSolve<T>(Tensor<T> x, Tensor<T> y, double alpha)
     {
+        if (!HasNativeLinalg<T>())
+            return RegularizedNormalSolve(x.Cast<double>(), y.Cast<double>(), alpha).Cast<T>();
+
         var engine = AiDotNetEngine.Current;
         var ops = MathHelper.GetNumericOperations<T>();
         int n = x.Shape[0];
@@ -764,6 +780,15 @@ internal static class FeatureSelectionTensorOps
     /// </summary>
     public static Tensor<T> SquaredDistanceCovariances<T>(Tensor<T> x, Tensor<T> y, out Tensor<T> xVariances, out T yVariance)
     {
+        if (PreprocessingTensorOps.IsNarrowFloat<T>())
+        {
+            // Products of squared distances overflow Half's 65504 maximum: evaluate in float and cast back once
+            var wide = SquaredDistanceCovariances(x.Cast<float>(), y.Cast<float>(), out var wideVariances, out float wideYVariance);
+            xVariances = wideVariances.Cast<T>();
+            yVariance = new Tensor<float>(new[] { wideYVariance }, new[] { 1 }).Cast<T>().GetFlat(0);
+            return wide.Cast<T>();
+        }
+
         var engine = AiDotNetEngine.Current;
         int p = x.Shape[1];
         var b = DoubleCentredDistances(y);
@@ -847,6 +872,9 @@ internal static class FeatureSelectionTensorOps
     /// <summary>Population standard deviation of every column of <paramref name="x"/> ([n, p]).</summary>
     public static Tensor<T> ColumnStd<T>(Tensor<T> x)
     {
+        if (PreprocessingTensorOps.IsNarrowFloat<T>())
+            return ColumnStd(x.Cast<float>()).Cast<T>();
+
         var engine = AiDotNetEngine.Current;
         var ops = MathHelper.GetNumericOperations<T>();
         return engine.TensorSqrt(engine.TensorDivideScalar(ColumnSumSquaredDeviations(x), ops.FromDouble(x.Shape[0])));
@@ -911,6 +939,9 @@ internal static class FeatureSelectionTensorOps
     /// </summary>
     public static Tensor<T> CorrelationMatrix<T>(Tensor<T> x, double epsilon = 1e-10)
     {
+        if (PreprocessingTensorOps.IsNarrowFloat<T>())
+            return CorrelationMatrix(x.Cast<float>(), epsilon).Cast<T>();
+
         var engine = AiDotNetEngine.Current;
         var ops = MathHelper.GetNumericOperations<T>();
         int p = x.Shape[1];
