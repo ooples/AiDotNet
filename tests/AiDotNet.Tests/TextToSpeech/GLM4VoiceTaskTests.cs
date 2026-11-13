@@ -130,7 +130,7 @@ public class GLM4VoiceTaskTests
         await Task.Yield();
         // Probabilities 0.5, 0.3, 0.15, 0.05, ascending cumulative 0.05, 0.2, 0.5, 1: top-p 0.75 drops those at most 0.25
         // (keeping the first two), 0.81 those at most 0.19 (keeping three).
-        var logits = new[] { Math.Log(0.5), Math.Log(0.3), Math.Log(0.15), Math.Log(0.05) };
+        var logits = new Tensor<double>(new[] { 4 }, new Vector<double>(new[] { Math.Log(0.5), Math.Log(0.3), Math.Log(0.15), Math.Log(0.05) }));
         var random = new Random(3);
         var seen = Enumerable.Range(0, 400).Select(_ => GLM4Voice<double>.Sample(logits, 1.0, 0.75, null, random)).Distinct().OrderBy(i => i).ToArray();
         Assert.Equal(new[] { 0, 1 }, seen);

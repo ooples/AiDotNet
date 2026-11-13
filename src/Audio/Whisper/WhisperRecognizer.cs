@@ -34,10 +34,7 @@ internal sealed class WhisperRecognizer<T>
         var samples = new double[OpenAiWhisperTranscriber<T>.ChunkSamples];
         Array.Copy(audio, samples, Math.Min(audio.Length, samples.Length));
         var mel = OpenAiWhisperTranscriber<T>.LogMelSpectrogram(samples, mels);
-        var window = new Tensor<T>(new[] { mels, frames });
-        for (int m = 0; m < mels; m++)
-            for (int f = 0; f < Math.Min(frames, mel.GetLength(1)); f++) window[m, f] = NumOps.FromDouble(mel[m, f]);
-        return window;
+        return OpenAiWhisperTranscriber<T>.Window(mel, 0, frames);
     }
 
     /// <summary>The decoder's start: start of transcript, language, transcribe, no timestamps.</summary>

@@ -93,11 +93,11 @@ public class NaturalSpeech2ReferenceTests
         var pitch = Doubles(r.GetProperty("pitch"));
         var prior = r.GetProperty("prior");
         var (hidden, logDurations) = core.Phonemes(phonemes, prompt, false, null);
-        var (condition, logPitch) = core.Condition(hidden, durations, pitch, prompt, false, null);
+        var (condition, logPitch) = core.Condition(hidden, durations, new Tensor<double>(pitch, new[] { pitch.Length }), prompt, false, null);
         Close(Doubles(prior.GetProperty("dur_pred_log")), logDurations, 1e-10, "dur_pred_log");
         Close(Doubles(prior.GetProperty("pitch_pred_log")), logPitch, 1e-10, "pitch_pred_log");
         Close(Doubles(prior.GetProperty("prior_out")), condition, 1e-10, "prior_out");
-        Assert.Equal(Ints(prior.GetProperty("pitch_token")), pitch.Select(core.PitchToken).ToArray());
+        Assert.Equal(Ints(prior.GetProperty("pitch_token")), core.PitchTokens(new Tensor<double>(pitch, new[] { pitch.Length })).ToArray());
         double durationLoss = Enumerable.Range(0, durations.Length).Average(i => Math.Abs(logDurations[i] - Math.Log(1 + durations[i])));
         double pitchLoss = Enumerable.Range(0, pitch.Length).Average(f => Math.Abs(logPitch[f] - Math.Log(pitch[f])));
         Assert.Equal(prior.GetProperty("dur_loss").GetDouble(), durationLoss, 6);

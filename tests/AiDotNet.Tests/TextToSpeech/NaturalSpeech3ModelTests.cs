@@ -91,7 +91,7 @@ public class NaturalSpeech3ModelTests
             Tokens = Ids(3, 17, 40, 86, 52, 9, 66, 30),
             Durations = durations,
             Audio = Tone(frames * 4, 0.05),
-            Pitch = Enumerable.Range(0, frames).Select(f => f % 5 == 4 ? 0.0 : 120.0 + 10 * Math.Sin(f)).ToArray(),
+            Pitch = new Tensor<double>(new[] { frames }, new Vector<double>(Enumerable.Range(0, frames).Select(f => f % 5 == 4 ? 0.0 : 120.0 + 10 * Math.Sin(f)).ToArray())),
             SpeakerId = 1,
         };
     }

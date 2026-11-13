@@ -9,55 +9,31 @@ namespace AiDotNet.TextToSpeech.Latest;
 /// NATSpeech's log-mel spectrogram (<c>librosa_wav2spec</c>): a centred STFT padded with zeros (periodic Hann window),
 /// its magnitude through librosa's Slaney mel filterbank, and <c>log10(max(1e-6, x))</c>: <c>[frames, mels]</c>.
 /// </summary>
-internal sealed class MegaTtsMel
+internal sealed class MegaTtsMel<T>
 {
-    private readonly double[] _window;
-    private readonly double[,] _basis;
+    private static readonly INumericOperations<T> Ops = MathHelper.GetNumericOperations<T>();
+    private readonly Tensor<T> _window;
+    private readonly Tensor<T> _basis;
 
     public MegaTtsMel(int sampleRate, int fftSize, int hopSize, int windowSize, int mels, double fMin, double fMax)
     {
         FftSize = fftSize;
         HopSize = hopSize;
         Mels = mels;
-        _window = new double[fftSize];
-        int offset = (fftSize - windowSize) / 2;
-        for (int i = 0; i < windowSize; i++) _window[offset + i] = 0.5 - 0.5 * Math.Cos(2 * Math.PI * i / windowSize);
-        _basis = MelFilterbanks.Slaney(sampleRate, fftSize, mels, fMin, fMax);
+        _window = EngineStft<T>.CenteredHann(fftSize, windowSize);
+        _basis = AiDotNetEngine.Current.TensorTranspose(EngineStft<T>.Table(MelFilterbanks.Slaney(sampleRate, fftSize, mels, fMin, fMax)));
     }
 
     public int FftSize { get; }
     public int HopSize { get; }
     public int Mels { get; }
 
-    public double[,] LogMel(double[] audio)
+    /// <summary>The log10 mel spectrogram <c>[frames, mels]</c> of a waveform.</summary>
+    public Tensor<T> LogMel(Tensor<T> audio)
     {
-        int pad = FftSize / 2, frames = 1 + audio.Length / HopSize, bins = FftSize / 2 + 1;
-        var padded = new double[audio.Length + 2 * pad];
-        Array.Copy(audio, 0, padded, pad, audio.Length);
-        var re = new double[frames * FftSize];
-        for (int f = 0; f < frames; f++)
-            for (int k = 0; k < FftSize; k++) re[f * FftSize + k] = padded[f * HopSize + k] * _window[k];
-        AiDotNet.Tensors.Engines.AiDotNetEngine.Current.FFT(new Tensor<double>(new[] { frames, FftSize }, new Vector<double>(re)),
-            new Tensor<double>(new[] { frames, FftSize }), out var outRe, out var outIm);
-        var sRe = outRe.AsSpan();
-        var sIm = outIm.AsSpan();
-        var mel = new double[frames, Mels];
-        var magnitude = new double[bins];
-        for (int f = 0; f < frames; f++)
-        {
-            for (int k = 0; k < bins; k++)
-            {
-                double a = sRe[f * FftSize + k], b = sIm[f * FftSize + k];
-                magnitude[k] = Math.Sqrt(a * a + b * b);
-            }
-            for (int m = 0; m < Mels; m++)
-            {
-                double acc = 0;
-                for (int k = 0; k < bins; k++) acc += _basis[m, k] * magnitude[k];
-                mel[f, m] = Math.Log10(Math.Max(1e-6, acc));
-            }
-        }
-        return mel;
+        var engine = AiDotNetEngine.Current;
+        var magnitude = EngineStft<T>.Magnitude(audio, FftSize, HopSize, _window, AiDotNet.Tensors.Engines.PadMode.Constant);
+        return engine.TensorLog10(engine.TensorMax(engine.TensorMatMul(magnitude, _basis), Ops.FromDouble(1e-6)));
     }
 }
 

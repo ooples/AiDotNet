@@ -85,10 +85,7 @@ public class OpenAiWhisperTests
     private static Tensor<double> Window(double[] audio, int mels)
     {
         var mel = OpenAiWhisperTranscriber<double>.LogMelSpectrogram(audio, mels, OpenAiWhisperTranscriber<double>.ChunkSamples);
-        var window = new Tensor<double>(new[] { mels, OpenAiWhisperTranscriber<double>.ChunkFrames });
-        for (int m = 0; m < mels; m++)
-            for (int t = 0; t < OpenAiWhisperTranscriber<double>.ChunkFrames; t++) window[m, t] = mel[m, t];
-        return window;
+        return OpenAiWhisperTranscriber<double>.Window(mel, 0, OpenAiWhisperTranscriber<double>.ChunkFrames);
     }
 
     private static void SameWords(JToken expected, IReadOnlyList<WhisperWordTiming> actual, string what)
@@ -111,10 +108,8 @@ public class OpenAiWhisperTests
         var f = Reference();
         int mels = (int)f["dims"]!["n_mels"]!;
         var mel = OpenAiWhisperTranscriber<double>.LogMelSpectrogram(Floats(f["short_audio"]!), mels);
-        var flat = new double[mel.Length];
-        int frames = mel.GetLength(1);
-        for (int m = 0; m < mels; m++) for (int t = 0; t < frames; t++) flat[m * frames + t] = mel[m, t];
-        Close(Values(f["short_mel"]!), flat, "mel");
+        Assert.Equal(mels, mel.Shape[0]);
+        Close(Values(f["short_mel"]!), mel.Contiguous().ToArray(), "mel");
     }
 
     [Fact(Timeout = 600000)]

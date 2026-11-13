@@ -210,7 +210,7 @@ public abstract class VarianceAdaptorTtsModelBase<T> : TtsModelBase<T>
             throw new ArgumentException(
                 $"The durations sum to {durations.Sum()} frames but the mel spectrogram has {frames}.", nameof(sample));
 
-        double[]? continuousF0 = null;
+        Tensor<T>? continuousF0 = null;
         Tensor<T>? pitchTarget = null, statisticsTarget = null, energyTarget = null;
         if (adaptor.UsePitch)
         {
@@ -218,26 +218,26 @@ public abstract class VarianceAdaptorTtsModelBase<T> : TtsModelBase<T>
                 $"{GetType().Name} trains on frame pitch: supply the recording or Pitch.", nameof(sample));
             // FastSpeech 2 App. C.2: fill unvoiced frames, log, normalize per utterance, 10-scale CWT.
             var (_, contLogF0) = PitchWaveletTransform.ContinuousLogF0(pitch);
-            double mean = contLogF0.Average();
-            double std = Math.Sqrt(contLogF0.Select(v => (v - mean) * (v - mean)).Average());
-            var normalized = contLogF0.Select(v => std > 0 ? (v - mean) / std : 0.0).ToArray();
-            var spectrogram = PitchWaveletTransform.Forward(normalized);
-            continuousF0 = contLogF0.Select(Math.Exp).ToArray();
-            pitchTarget = new Tensor<T>(new[] { frames, PitchWaveletTransform.ScaleCount });
-            for (int t = 0; t < frames; t++)
-                for (int s = 0; s < PitchWaveletTransform.ScaleCount; s++)
-                    pitchTarget[t, s] = NumOps.FromDouble(spectrogram[t, s]);
-            statisticsTarget = ToTensor(new[] { mean, std });
+            T mean = Engine.TensorMean(contLogF0);
+            var centred = Engine.TensorSubtractScalar(contLogF0, mean);
+            T std = NumOps.Sqrt(Engine.TensorMean(Engine.TensorMultiply(centred, centred)));
+            var normalized = NumOps.GreaterThan(std, NumOps.Zero)
+                ? Engine.TensorDivideScalar(centred, std)
+                : new Tensor<T>(new[] { contLogF0.Length });
+            pitchTarget = PitchWaveletTransform.Forward(normalized);                       // [frames, scales]
+            continuousF0 = Engine.TensorExp(contLogF0);
+            statisticsTarget = new Tensor<T>(new[] { mean, std }, new[] { 2 });
         }
         if (adaptor.UseEnergy)
         {
             var energy = targets.Energy ?? throw new ArgumentException(
                 $"{GetType().Name} trains on frame energy: supply the recording or Energy.", nameof(sample));
-            energyTarget = ToTensor(energy);
+            energyTarget = Engine.Reshape(energy, new[] { energy.Length });
         }
 
-        var adaptorTargets = new VarianceTargets { Durations = durations, Pitch = continuousF0, Energy = targets.Energy };
-        var logDurationTarget = ToTensor(durations.Select(d => Math.Log(d + 1.0)).ToArray());
+        var adaptorTargets = new VarianceTargets<T> { Durations = durations, Pitch = continuousF0, Energy = targets.Energy };
+        var logDurationTarget = Engine.TensorLog(Engine.TensorAddScalar(
+            new Tensor<int>(durations, new[] { durations.Length }).Cast<T>(), NumOps.One));
 
         Tensor<T> Objective(Tensor<T> tokens, Tensor<T> mel)
         {
@@ -261,13 +261,6 @@ public abstract class VarianceAdaptorTtsModelBase<T> : TtsModelBase<T>
         }
 
         return (sample.Tokens, targets.Mel, Objective);
-    }
-
-    private Tensor<T> ToTensor(double[] values)
-    {
-        var t = new Tensor<T>(new[] { values.Length });
-        for (int i = 0; i < values.Length; i++) t[i] = NumOps.FromDouble(values[i]);
-        return t;
     }
 
     /// <summary>Mean absolute error over every element.</summary>

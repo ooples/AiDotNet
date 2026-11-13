@@ -199,43 +199,50 @@ internal sealed class FACodecModel<T>
     /// an 80-band log-mel spectrogram (n_fft 1024, hop 200, window 800 Hann, 0-8 kHz Slaney mel, reflect-padded by 412,
     /// uncentred; magnitude √(re² + im² + 1e-9), log(max(·, 1e-5))) as <c>[1, mels, frames]</c>.
     /// </summary>
-    public Tensor<T> ProsodyFeature(IReadOnlyList<double> wave)
+    /// <remarks>The DFT, the power with its 1e-9 and the magnitude run in double and only the magnitude is narrowed to
+    /// T: in half precision re² + im² overflows unscaled and, scaled down to avoid that, underflows for quiet frames
+    /// (the scaled 1e-9 is not representable at all).</remarks>
+    public Tensor<T> ProsodyFeature(Tensor<T> wave)
     {
+        if (wave is null) throw new ArgumentNullException(nameof(wave));
         const int nFft = 1024, hop = 200, win = 800, mels = 80;
         _melBasis ??= Slaney(nFft, mels);
         _melWindow ??= Enumerable.Range(0, win).Select(n => 0.5 - 0.5 * Math.Cos(2 * Math.PI * n / win)).ToArray();
-        int pad = (nFft - hop) / 2, length = wave.Count + 2 * pad, frames = (length - nFft) / hop + 1, binsCount = nFft / 2 + 1;
-        double Sample(int i)
-        {
-            int j = i - pad;
-            if (j < 0) j = -j;
-            if (j >= wave.Count) j = 2 * (wave.Count - 1) - j;
-            return wave[j];
-        }
-        var feature = new Tensor<T>(new[] { 1, _c.ProsodyMels, frames });
-        var magnitude = new double[binsCount];
-        int offset = (nFft - win) / 2;
+        int count = wave.Length, pad = (nFft - hop) / 2;
+        if (count <= pad) throw new ArgumentException($"Reflect padding needs more than {pad} samples.", nameof(wave));
+        int length = count + 2 * pad, frames = (length - nFft) / hop + 1, bins = nFft / 2 + 1, offset = (nFft - win) / 2;
+        int prosodyMels = _c.ProsodyMels;
+        // Fixed tables: the window, the DFT kernels cos/sin(2π (k (offset + n) mod N) / N) [win, bins] (torch.stft
+        // centres the 800-point window in the 1024-point frame), and the first mel filters [mels', bins].
+        var window = new double[win];
+        for (int n = 0; n < win; n++) window[n] = _melWindow[n];
+        var cos = new double[win, bins];
+        var sin = new double[win, bins];
+        for (int n = 0; n < win; n++)
+            for (int k = 0; k < bins; k++)
+            {
+                int index = (int)((long)k * (offset + n) % nFft);
+                cos[n, k] = Math.Cos(2 * Math.PI * index / nFft);
+                sin[n, k] = Math.Sin(2 * Math.PI * index / nFft);
+            }
+        var basis = new double[prosodyMels, bins];
+        for (int m = 0; m < prosodyMels; m++)
+            for (int k = 0; k < bins; k++) basis[m, k] = _melBasis[m, k];
+        var positions = new int[frames * win];
         for (int f = 0; f < frames; f++)
-        {
-            for (int k = 0; k < binsCount; k++)
-            {
-                double re = 0, im = 0;
-                for (int n = 0; n < win; n++)
-                {
-                    double v = Sample(f * hop + offset + n) * _melWindow[n], angle = -2 * Math.PI * k * (offset + n) / nFft;
-                    re += v * Math.Cos(angle);
-                    im += v * Math.Sin(angle);
-                }
-                magnitude[k] = Math.Sqrt(re * re + im * im + 1e-9);
-            }
-            for (int m = 0; m < _c.ProsodyMels; m++)
-            {
-                double s = 0;
-                for (int k = 0; k < binsCount; k++) s += _melBasis[m, k] * magnitude[k];
-                feature[0, m, f] = NumOps.FromDouble(Math.Log(Math.Max(s, 1e-5)));
-            }
-        }
-        return feature;
+            for (int n = 0; n < win; n++) positions[f * win + n] = f * hop + offset + n;
+
+        var padded = _engine.PadNd(_engine.Reshape(wave, new[] { count }), new[] { pad, pad }, AiDotNet.Tensors.Engines.PadMode.Reflect, NumOps.Zero);
+        var framed = _engine.Reshape(_engine.TensorIndexSelect(padded, new Tensor<int>(positions, new[] { frames * win }), 0), new[] { frames, win });
+        var windowed = _engine.TensorMultiply(TensorCopyHelper.CastLogical<T, double>(framed),
+            _engine.TensorBroadcastTo(new Tensor<double>(window, new[] { 1, win }), new[] { frames, win }));
+        var re = _engine.TensorMatMul(windowed, AiDotNet.Audio.Features.EngineStft<double>.Table(cos));
+        var im = _engine.TensorMatMul(windowed, AiDotNet.Audio.Features.EngineStft<double>.Table(sin));
+        var power = _engine.TensorAddScalar(_engine.TensorAdd(_engine.TensorMultiply(re, re), _engine.TensorMultiply(im, im)), 1e-9);
+        var magnitude = _engine.TensorSqrt(power).Cast<T>();                                                          // [frames, bins]
+        var mel = _engine.TensorMatMul(AiDotNet.Audio.Features.EngineStft<T>.Table(basis), _engine.TensorTranspose(magnitude)); // [mels', frames]
+        var log = _engine.TensorLog(_engine.TensorMax(mel, NumOps.FromDouble(1e-5)));
+        return _engine.Reshape(log, new[] { 1, prosodyMels, frames });
     }
 
     private double[,] Slaney(int nFft, int mels) =>

@@ -310,14 +310,7 @@ public abstract partial class CosyVoiceBase<T> : TtsModelBase<T>, ICodecTts<T>
         if (released is not null) return released;
         using var _ = new NoGradScope<T>();
         var audio = ResampleAudio(recording, sampleRate, PromptSampleRate);
-        var samples = new double[audio.Length];
-        for (int i = 0; i < samples.Length; i++) samples[i] = NumOps.ToDouble(audio[i]);
-        var logMel = S3Tokenizer<T>.LogMel(samples);
-        int bands = logMel.GetLength(0), frames = logMel.GetLength(1);
-        var mel = new Tensor<T>(new[] { bands, frames });
-        for (int m = 0; m < bands; m++)
-            for (int f = 0; f < frames; f++) mel[m, f] = NumOps.FromDouble(logMel[m, f]);
-        return SpeechTokenizer.Tokenize(mel);
+        return SpeechTokenizer.Tokenize(S3Tokenizer<T>.LogMel(audio));
     }
 
     /// <summary>
@@ -402,17 +395,15 @@ public abstract partial class CosyVoiceBase<T> : TtsModelBase<T>, ICodecTts<T>
     /// <summary>Ids as a tensor <c>[count]</c>.</summary>
     protected Tensor<T> Ids(IReadOnlyList<int> ids)
     {
-        var tensor = new Tensor<T>(new[] { ids.Count });
-        for (int i = 0; i < ids.Count; i++) tensor[i] = NumOps.FromDouble(ids[i]);
-        return tensor;
+        if (ids is null) throw new ArgumentNullException(nameof(ids));
+        return new Tensor<int>(ids.ToArray(), new[] { ids.Count }).Cast<T>();
     }
 
     /// <summary>The ids a tensor holds.</summary>
     protected int[] IdsOf(Tensor<T> tensor)
     {
-        var ids = new int[tensor.Length];
-        for (int i = 0; i < ids.Length; i++) ids[i] = (int)Math.Round(NumOps.ToDouble(tensor[i]));
-        return ids;
+        if (tensor is null) throw new ArgumentNullException(nameof(tensor));
+        return Engine.TensorRound(tensor).Cast<int>().ToArray();
     }
 
     // ---------------------------------------------------------------- synthesis
@@ -627,60 +618,60 @@ public abstract partial class CosyVoiceBase<T> : TtsModelBase<T>, ICodecTts<T>
         var o = Settings;
         var recording = sample.Audio ?? throw new ArgumentException("The vocoder trains on the recording; set Audio.", nameof(sample));
         int segment = o.VocoderSegmentLength, length = recording.Length;
-        var audio = new Tensor<T>(new[] { segment });
         int start = length > segment ? random.Next(length - segment + 1) : 0;
-        for (int i = 0; i < Math.Min(segment, length); i++) audio[i] = recording[start + i];
+        int taken = Math.Min(segment, length);
+        // The segment, zero-padded past the end of a short recording.
+        var audio = Engine.TensorSlice(Engine.Reshape(recording, new[] { length }), new[] { start }, new[] { taken });
+        if (taken < segment) audio = Engine.PadNd(audio, new[] { 0, segment - taken }, AiDotNet.Tensors.Engines.PadMode.Constant, NumOps.Zero);
 
         Tensor<T> features;
         using (new NoGradScope<T>()) features = MelSpectrogram(audio);
         int frames = features.Shape[0];
         var mel = Engine.Reshape(Engine.TensorTranspose(features), new[] { 1, o.MelChannels, frames });
 
-        double[] f0;
+        Tensor<T> pitch;
         if (sample.Pitch is { } given)
         {
             if (given.Length != frames) throw new ArgumentException($"Pitch needs one value per mel frame ({frames}).", nameof(sample));
-            f0 = given;
+            pitch = Engine.Reshape(given, new[] { frames });
         }
         else
         {
-            f0 = Resize(HarvestF0(audio), frames);
+            pitch = Resize(Engine, HarvestF0(audio), frames);
         }
-        var pitch = new Tensor<T>(new[] { frames });
-        for (int i = 0; i < frames; i++) pitch[i] = NumOps.FromDouble(f0[i]);
         return (audio, mel, pitch);
     }
 
     // compute_f0: pw.harvest at the mel's frame period, pw.dio if harvest finds fewer than five voiced frames, then
     // pw.stonemask.
-    private double[] HarvestF0(Tensor<T> audio)
+    private Tensor<T> HarvestF0(Tensor<T> audio)
     {
         var o = Settings;
-        var x = new double[audio.Length];
-        for (int i = 0; i < x.Length; i++) x[i] = NumOps.ToDouble(audio[i]);
         double period = o.HopSize * 1000.0 / o.SampleRate;
         var detector = new AiDotNet.Audio.Pitch.WorldPitchDetector<T>(o.SampleRate);
-        var (f0, positions) = detector.Harvest(x, period);
-        if (f0.Count(v => v != 0) < 5)
-            (f0, positions) = new AiDotNet.Audio.Pitch.WorldPitchDetector<T>(o.SampleRate, refineWithStoneMask: false).EstimateF0(x, period);
-        return detector.StoneMask(x, f0, positions);
+        var (f0, positions) = detector.Harvest(audio, period);
+        if (Engine.TensorCountNonzero(f0) < 5)
+            (f0, positions) = new AiDotNet.Audio.Pitch.WorldPitchDetector<T>(o.SampleRate, refineWithStoneMask: false).EstimateF0(audio, period);
+        return detector.StoneMask(audio, f0, positions);
     }
 
-    // F.interpolate(mode='linear', align_corners=False) of a contour to `size` points.
-    internal static double[] Resize(double[] values, int size)
+    // F.interpolate(mode='linear', align_corners=False) of a contour to `size` points: source = max(0, (i + 0.5) L / size
+    // − 0.5), read as (1 − w) v[⌊source⌋] + w v[⌊source⌋ + 1] with both indices clamped to the contour.
+    internal static Tensor<T> Resize(IEngine engine, Tensor<T> values, int size)
     {
-        var result = new double[size];
+        var ops = MathHelper.GetNumericOperations<T>();
         int length = values.Length;
-        double scale = (double)length / size;
-        for (int i = 0; i < size; i++)
-        {
-            double source = Math.Max(0.0, scale * (i + 0.5) - 0.5);
-            int low = Math.Min((int)source, length - 1);
-            int high = low < length - 1 ? low + 1 : low;
-            double weight = source - low;
-            result[i] = (1 - weight) * values[low] + weight * values[high];
-        }
-        return result;
+        var flat = engine.Reshape(values, new[] { length });
+        // Source positions in double (index arithmetic), as the reference computes them in float.
+        var source = engine.TensorMax(engine.TensorAddScalar(engine.TensorMultiplyScalar(engine.TensorAddScalar(
+            engine.TensorArange<double>(0, size, 1), 0.5), (double)length / size), -0.5), 0.0);
+        var low = engine.TensorMin(engine.TensorFloor(source).Cast<int>(), length - 1);
+        var high = engine.TensorMin(engine.TensorAddScalar(low, 1), length - 1);
+        var weight = engine.TensorSubtract(source, low.Cast<double>()).Cast<T>();
+        var a = engine.TensorIndexSelect(flat, low, 0);
+        var b = engine.TensorIndexSelect(flat, high, 0);
+        var keep = engine.TensorAddScalar(engine.TensorNegate(weight), ops.One);
+        return engine.TensorAdd(engine.TensorMultiply(keep, a), engine.TensorMultiply(weight, b));
     }
 
     /// <summary>Creates the optimizer declared for one native component; inference-only releases can supply a configured training rule.</summary>

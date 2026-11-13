@@ -236,7 +236,6 @@ public partial class NaturalSpeech3<T> : TtsModelBase<T>, IEndToEndTts<T>
         return Wave(TextToPhonemes(text).Select(i => (double)i).ToArray());
     }
 
-    private static double[] Doubles(Tensor<T> x) => x.ToArray().Select(v => Ops.ToDouble(v)).ToArray();
 
     private static Tensor<T> Wave(IReadOnlyList<double> samples) =>
         new(new[] { samples.Count }, new Vector<T>(samples.Select(v => Ops.FromDouble(v)).ToArray()));
@@ -262,7 +261,7 @@ public partial class NaturalSpeech3<T> : TtsModelBase<T>, IEndToEndTts<T>
     {
         using var _ = new NoGradScope<T>();
         var wave = AsWave(audio);
-        var prosody = _options.MelProsody ? Codec.ProsodyFeature(Doubles(audio)) : null;
+        var prosody = _options.MelProsody ? Codec.ProsodyFeature(audio) : null;
         var latent = Codec.Encoder.Forward(wave);
         foreach (var q in Codec.Quantizers) q.SetTrainingMode(false);
         return Codec.Factorize(latent, prosody, false, null);

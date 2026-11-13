@@ -102,13 +102,10 @@ public partial class VITS2<T> : VitsTtsModelBase<T>
     protected override Tensor<T>? JointDurationLoss(Tensor<T> hidden, Tensor<T>? speaker, Tensor<T>? language, int[] durations, Random random) => null;
 
     /// <inheritdoc />
-    protected override double[] PredictDurations(Tensor<T> hidden, Tensor<T>? speaker, Tensor<T>? language, Random random)
+    protected override Tensor<T> PredictDurations(Tensor<T> hidden, Tensor<T>? speaker, Tensor<T>? language, Random random)
     {
         var noise = Gaussian(new[] { 1, 1, hidden.Shape[2] }, random, PaperOptions.DurationNoiseScale);
-        var logDurations = _durationPredictor!.Forward(hidden, speaker, language, noise);
-        var durations = new double[logDurations.Length];
-        for (int i = 0; i < durations.Length; i++) durations[i] = Math.Exp(NumOps.ToDouble(logDurations[i]));
-        return durations;
+        return Engine.TensorExp(_durationPredictor!.Forward(hidden, speaker, language, noise));
     }
 
     /// <inheritdoc />
@@ -150,8 +147,8 @@ public partial class VITS2<T> : VitsTtsModelBase<T>
         VitsAlignment alignment;
         using (new NoGradScope<T>()) alignment = Align(data, draw, training: true);
         int tokens = alignment.Durations.Length;
-        var logDurations = new Tensor<T>(new[] { 1, 1, tokens });
-        for (int i = 0; i < tokens; i++) logDurations[0, 0, i] = NumOps.FromDouble(Math.Log(alignment.Durations[i] + 1e-6));
+        var frameCounts = new Tensor<int>(alignment.Durations, new[] { 1, 1, tokens }).Cast<T>();
+        var logDurations = Engine.TensorLog(Engine.TensorAddScalar(frameCounts, NumOps.FromDouble(1e-6)));
         var hidden = new Tensor<T>(alignment.Hidden._shape, alignment.Hidden.ToVector());
         var speaker = alignment.Speaker is null ? null : new Tensor<T>(alignment.Speaker._shape, alignment.Speaker.ToVector());
         var language = alignment.Language is null ? null : new Tensor<T>(alignment.Language._shape, alignment.Language.ToVector());

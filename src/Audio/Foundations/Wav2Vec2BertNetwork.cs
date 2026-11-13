@@ -47,6 +47,14 @@ internal sealed record Wav2Vec2BertConfiguration
 /// <remarks>The reference casts the waveform to float32 before the filterbank; this works in the model's precision.</remarks>
 internal sealed class Wav2Vec2BertFeatures<T>
 {
+    // Decoded 16 kHz samples as a tensor, cast to T once.
+    private static Tensor<T> Samples(IReadOnlyList<double> audio)
+    {
+        if (audio is null) throw new ArgumentNullException(nameof(audio));
+        var values = audio as double[] ?? audio.ToArray();
+        return new Tensor<double>(new[] { values.Length }, new Vector<double>((double[])values.Clone())).Cast<T>();
+    }
+
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
     private readonly IEngine _engine;
     private readonly KaldiFbank<T> _fbank;
@@ -63,10 +71,13 @@ internal sealed class Wav2Vec2BertFeatures<T>
     public int Rows(int samples) => _fbank.Frames(samples) / _stride;
 
     /// <summary>The features <c>[rows, mels · stride]</c> of a 16 kHz waveform.</summary>
-    public Tensor<T> Forward(IReadOnlyList<double> audio)
+    public Tensor<T> Forward(IReadOnlyList<double> audio) => Forward(Samples(audio));
+
+    /// <summary>The features <c>[rows, mels · stride]</c> of a 16 kHz waveform tensor.</summary>
+    public Tensor<T> Forward(Tensor<T> audio)
     {
-        var scaled = new Tensor<T>(new[] { audio.Count });
-        for (int i = 0; i < audio.Count; i++) scaled[i] = NumOps.FromDouble(audio[i] * 32768.0);
+        if (audio is null) throw new ArgumentNullException(nameof(audio));
+        var scaled = _engine.TensorMultiplyScalar(_engine.Reshape(audio, new[] { audio.Length }), NumOps.FromDouble(32768.0));
         var fbank = _fbank.Forward(scaled);                                                                  // [F, mels]
         int frames = fbank.Shape[0], mels = fbank.Shape[1];
         if (frames < 2) throw new ArgumentException("The waveform needs at least two filterbank frames.", nameof(audio));
@@ -86,10 +97,14 @@ internal sealed class Wav2Vec2BertFeatures<T>
     /// <c>pad_to_multiple_of=2</c>): the normalized frames padded with <paramref name="paddingValue"/> to a whole number of
     /// rows (w2v-BERT 2.0's <c>padding_value</c> is 1), a row real when its last frame is (false for a padded one).
     /// </summary>
-    public (Tensor<T> Features, bool[] Mask) ForwardPadded(IReadOnlyList<double> audio, double paddingValue = 1.0)
+    public (Tensor<T> Features, bool[] Mask) ForwardPadded(IReadOnlyList<double> audio, double paddingValue = 1.0) =>
+        ForwardPadded(Samples(audio), paddingValue);
+
+    /// <summary><see cref="ForwardPadded(IReadOnlyList{double}, double)"/> of a waveform tensor.</summary>
+    public (Tensor<T> Features, bool[] Mask) ForwardPadded(Tensor<T> audio, double paddingValue = 1.0)
     {
-        var scaled = new Tensor<T>(new[] { audio.Count });
-        for (int i = 0; i < audio.Count; i++) scaled[i] = NumOps.FromDouble(audio[i] * 32768.0);
+        if (audio is null) throw new ArgumentNullException(nameof(audio));
+        var scaled = _engine.TensorMultiplyScalar(_engine.Reshape(audio, new[] { audio.Length }), NumOps.FromDouble(32768.0));
         var fbank = _fbank.Forward(scaled);
         int frames = fbank.Shape[0], mels = fbank.Shape[1];
         if (frames < 2) throw new ArgumentException("The waveform needs at least two filterbank frames.", nameof(audio));
@@ -102,9 +117,7 @@ internal sealed class Wav2Vec2BertFeatures<T>
         int padded = (frames + _stride - 1) / _stride * _stride;
         if (padded != frames)
         {
-            var fill = new Tensor<T>(new[] { padded - frames, mels });
-            for (int r = 0; r < padded - frames; r++)
-                for (int c = 0; c < mels; c++) fill[r, c] = NumOps.FromDouble(paddingValue);
+            var fill = Tensor<T>.CreateDefault(new[] { padded - frames, mels }, NumOps.FromDouble(paddingValue));
             normalized = _engine.TensorConcatenate(new[] { normalized, fill }, 0);
         }
         int rows = padded / _stride;
