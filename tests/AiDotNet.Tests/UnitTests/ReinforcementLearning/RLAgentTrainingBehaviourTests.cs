@@ -184,6 +184,24 @@ public class RLAgentTrainingBehaviourTests
         Assert.True(with > without + 1e-6, $"log-std {with} with the bonus vs {without} without.");
     }
 
+    // A continuous REINFORCE head emits [mean | log-std] (Williams 1992 with a Gaussian policy). Like A3C above,
+    // the log-std slice once took twice the half width, which ran past the output and threw instead of training.
+    [Fact]
+    public void REINFORCE_Continuous_TrainsOnTheLogStdHalf()
+    {
+        var agent = new AiDotNet.ReinforcementLearning.Agents.REINFORCE.REINFORCEAgent<double>(new REINFORCEOptions<double>
+        {
+            StateSize = StateSize,
+            ActionSize = 2,
+            IsContinuous = true,
+        });
+        Feed(agent, 16, 2, seed: 7);
+
+        double loss = agent.Train();
+
+        Assert.False(double.IsNaN(loss) || double.IsInfinity(loss), $"REINFORCE loss {loss} is not finite.");
+    }
+
     // ── PPO gradient-norm clipping (Schulman et al. 2017 reference settings: max_grad_norm 0.5) ──────────────────
 
     [Fact]

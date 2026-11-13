@@ -2763,7 +2763,12 @@ public partial class AiModelBuilder<T, TInput, TOutput>
                 }
 
                 // Store experience
-                rlAgent.StoreExperience(state, action, reward, nextState, isDone);
+                // Termination vs truncation (Gymnasium): an environment time limit, or the MaxStepsPerEpisode cap
+                // reached in a non-terminal state, truncates the episode, and the agent bootstraps V(nextState).
+                bool truncated = AiDotNet.ReinforcementLearning.Environments.EnvironmentInfoKeys.IsTruncated(info)
+                    || (!isDone && steps + 1 >= _rlOptions.MaxStepsPerEpisode);
+                bool terminated = isDone && !truncated;
+                rlAgent.StoreExperience(state, action, reward, nextState, terminated, truncated);
 
                 // Train agent
                 var loss = rlAgent.Train();

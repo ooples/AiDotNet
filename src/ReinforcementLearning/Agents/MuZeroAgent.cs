@@ -320,10 +320,11 @@ public partial class MuZeroAgent<T> : DeepReinforcementLearningAgentBase<T>
     {
         int actions = _options.ActionSize;
         var priors = new double[actions];
+        var logitValues = RLTensorOps.Head(logits, actions).AsTensor().Cast<double>().ToVector().ToArray();
         double max = double.NegativeInfinity;
         for (int a = 0; a < actions; a++)
         {
-            double z = NumOps.ToDouble(logits[a]);
+            double z = logitValues[a];
             if (!double.IsNaN(z) && !double.IsInfinity(z) && z > max) max = z;
         }
 
@@ -336,7 +337,7 @@ public partial class MuZeroAgent<T> : DeepReinforcementLearningAgentBase<T>
         double total = 0.0;
         for (int a = 0; a < actions; a++)
         {
-            double z = NumOps.ToDouble(logits[a]);
+            double z = logitValues[a];
             priors[a] = double.IsNaN(z) || double.IsInfinity(z) ? 0.0 : Math.Exp(z - max);
             total += priors[a];
         }
@@ -406,44 +407,56 @@ public partial class MuZeroAgent<T> : DeepReinforcementLearningAgentBase<T>
         {
             var (pathNode, pathAction) = path[i];
 
-            // Compute the backed-up value first (reward + gamma * child_value)
-            // This is the value we'll use to update Q
-            T backedUpValue = value;
-            if (pathNode.Rewards.ContainsKey(pathAction))
-            {
-                var reward = pathNode.Rewards[pathAction];
-                backedUpValue = NumOps.Add(reward, NumOps.Multiply(DiscountFactor, value));
-            }
-            else
-            {
-                // If no reward stored, just discount (for root node initial actions)
-                backedUpValue = NumOps.Multiply(DiscountFactor, value);
-            }
-
-            // Initialize visit counts and Q-values if this is first visit
-            // This should only happen for root node on first simulation
-            if (!pathNode.VisitCounts.ContainsKey(pathAction))
-            {
-                pathNode.VisitCounts[pathAction] = 0;
-                pathNode.QValues[pathAction] = NumOps.Zero;
-            }
-
-            // Increment visit counts
-            pathNode.VisitCounts[pathAction]++;
-            pathNode.TotalVisits++;
-
-            // Update Q-value using incremental mean: Q_new = Q_old + (backed_up_value - Q_old) / n
-            // This is mathematically equivalent to: Q = (Q * (n-1) + backed_up_value) / n
-            var oldQ = pathNode.QValues[pathAction];
-            var n = NumOps.FromDouble(pathNode.VisitCounts[pathAction]);
-            var diff = NumOps.Subtract(backedUpValue, oldQ);
-            var update = NumOps.Divide(diff, n);
-            pathNode.QValues[pathAction] = NumOps.Add(oldQ, update);
-
-            // Propagate the backed-up value to parent for next iteration
-            value = backedUpValue;
+            value = BackupEdge(pathNode, pathAction, value);
         }
     }
+
+    /// <summary>
+    /// Backs <paramref name="value"/> up one tree edge: returns r + gamma * value (gamma * value with no stored reward)
+    /// after folding it into the edge's visit count and incremental-mean Q.
+    /// </summary>
+    private T BackupEdge(MCTSNode<T> pathNode, int pathAction, T value)
+    {
+        // Compute the backed-up value first (reward + gamma * child_value)
+        // This is the value we'll use to update Q
+        T backedUpValue = value;
+        if (pathNode.Rewards.ContainsKey(pathAction))
+        {
+            var reward = pathNode.Rewards[pathAction];
+            backedUpValue = NumOps.Add(reward, NumOps.Multiply(DiscountFactor, value));
+        }
+        else
+        {
+            // If no reward stored, just discount (for root node initial actions)
+            backedUpValue = NumOps.Multiply(DiscountFactor, value);
+        }
+
+        // Initialize visit counts and Q-values if this is first visit
+        // This should only happen for root node on first simulation
+        if (!pathNode.VisitCounts.ContainsKey(pathAction))
+        {
+            pathNode.VisitCounts[pathAction] = 0;
+            pathNode.QValues[pathAction] = NumOps.Zero;
+        }
+
+        // Increment visit counts
+        pathNode.VisitCounts[pathAction]++;
+        pathNode.TotalVisits++;
+
+        // Update Q-value using incremental mean: Q_new = Q_old + (backed_up_value - Q_old) / n
+        // This is mathematically equivalent to: Q = (Q * (n-1) + backed_up_value) / n
+        var oldQ = pathNode.QValues[pathAction];
+        var n = NumOps.FromDouble(pathNode.VisitCounts[pathAction]);
+        var diff = NumOps.Subtract(backedUpValue, oldQ);
+        var update = NumOps.Divide(diff, n);
+        pathNode.QValues[pathAction] = NumOps.Add(oldQ, update);
+
+        return backedUpValue;
+    }
+
+    /// <summary>Q(s, a) as a double, 0 for an unvisited action.</summary>
+    private double QValueAsDouble(MCTSNode<T> node, int action)
+        => node.QValues.TryGetValue(action, out var q) ? NumOps.ToDouble(q) : 0.0;
 
     private int SelectActionPUCT(MCTSNode<T> node)
     {
@@ -462,11 +475,7 @@ public partial class MuZeroAgent<T> : DeepReinforcementLearningAgentBase<T>
 
         for (int action = 0; action < _options.ActionSize; action++)
         {
-            double qValue = 0;
-            if (node.QValues.ContainsKey(action))
-            {
-                qValue = NumOps.ToDouble(node.QValues[action]);
-            }
+            double qValue = QValueAsDouble(node, action);
 
             int visitCount = node.VisitCounts.ContainsKey(action) ? node.VisitCounts[action] : 0;
             double prior = nodePriors[action];
@@ -486,8 +495,7 @@ public partial class MuZeroAgent<T> : DeepReinforcementLearningAgentBase<T>
     private MCTSNode<T> ExpandNode(MCTSNode<T> parent, int action)
     {
         // Use dynamics network to predict next hidden state and reward
-        var actionVec = new Vector<T>(_options.ActionSize);
-        actionVec[action] = NumOps.One;
+        var actionVec = RLTensorOps.OneHot<T>(_options.ActionSize, action);
 
         if (parent.HiddenState is null)
             throw new InvalidOperationException("Parent MCTS node HiddenState must be set before expansion.");
@@ -498,11 +506,7 @@ public partial class MuZeroAgent<T> : DeepReinforcementLearningAgentBase<T>
 
         // Extract next hidden state and reward
         // Dynamics output: [hidden_state (latentStateSize), reward (1)]
-        var nextHiddenState = new Vector<T>(_options.LatentStateSize);
-        for (int i = 0; i < _options.LatentStateSize; i++)
-        {
-            nextHiddenState[i] = dynamicsOutput[i];
-        }
+        var nextHiddenState = dynamicsOutput.GetSubVector(0, _options.LatentStateSize);
 
         // Extract predicted reward (last element of dynamics output)
         var predictedReward = dynamicsOutput[_options.LatentStateSize];
@@ -526,12 +530,7 @@ public partial class MuZeroAgent<T> : DeepReinforcementLearningAgentBase<T>
 
     private Vector<T> ExtractPolicy(Vector<T> predictionOutput)
     {
-        var policy = new Vector<T>(_options.ActionSize);
-        for (int i = 0; i < _options.ActionSize; i++)
-        {
-            policy[i] = predictionOutput[i];
-        }
-        return policy;
+        return predictionOutput.GetSubVector(0, _options.ActionSize);
     }
 
     private T ExtractValue(Vector<T> predictionOutput)
@@ -644,16 +643,12 @@ public partial class MuZeroAgent<T> : DeepReinforcementLearningAgentBase<T>
 
     private bool SameVector(Vector<T> a, Vector<T> b)
     {
-        if (a.Length != b.Length) return false;
-        for (int i = 0; i < a.Length; i++) if (!NumOps.Equals(a[i], b[i])) return false;
-        return true;
+        return RLTensorOps.SameValues(a, b);
     }
 
     private int GetDiscreteActionIndex(Vector<T> action)
     {
-        int best = 0;
-        for (int i = 1; i < action.Length; i++) if (NumOps.GreaterThan(action[i], action[best])) best = i;
-        return best;
+        return RLTensorOps.ArgMax(action);
     }
 
     /// <summary>The stored policy target of every transition, in buffer-slot order.</summary>
@@ -771,44 +766,19 @@ public partial class MuZeroAgent<T> : DeepReinforcementLearningAgentBase<T>
         // Per step: action (dynamics input), policy target, value target, reward target, step mask.
         int perStep = 2 * actionDim + 3;
         int perSequence = stateDim + unroll * perStep;
-        var data = new Vector<T>(sequences.Count * perSequence + 1);
-        int realElements = 0;
-        for (int s = 0; s < sequences.Count; s++)
-        {
-            var seq = sequences[s];
-            int steps = Math.Min(unroll, seq.Count);
-            var bootValueCache = new System.Collections.Generic.Dictionary<int, T>();
-            int offset = s * perSequence;
-            for (int i = 0; i < stateDim; i++) data[offset + i] = seq[0].State[i];
-            for (int k = 0; k < steps; k++)
-            {
-                int at = offset + stateDim + k * perStep;
-                var action = seq[k].Action;
-                for (int i = 0; i < actionDim; i++) data[at + i] = i < action.Length ? action[i] : NumOps.Zero;
-                var policyTarget = _policyTargets[(sampledSlots[s] + k) % _replayBuffer.Capacity] ?? OneHotTarget(action);
-                for (int i = 0; i < actionDim; i++) data[at + actionDim + i] = NumOps.FromDouble(policyTarget[i]);
-                int scalars = at + 2 * actionDim;
-                data[scalars] = NStepValueTarget(seq, k, nStep, gamma, bootValueCache);
-                data[scalars + 1] = seq[k].Reward;
-                // The step mask carries the sequence's importance weight 1/(N P(i)), normalised by the batch
-                // maximum, which scales each of its loss terms as the paper scales that sample's loss.
-                data[scalars + 2] = NumOps.FromDouble(importanceWeights[s]);
-                // Three loss terms per step: policy cross-entropy, value and reward squared errors.
-                realElements += 3;
-            }
-        }
-        data[data.Length - 1] = NumOps.FromDouble(1.0 / realElements);
+        // Each window packs in sampling order (its value targets reuse a per-window bootstrap cache).
+        var packedWindows = Enumerable.Range(0, sequences.Count)
+            .Select(w => PackWindow(sequences[w], sampledSlots[w], importanceWeights[w], stateDim, unroll, nStep, gamma))
+            .ToList();
+        int realElements = 3 * sequences.Sum(seq => Math.Min(unroll, seq.Count));
+        var data = RLTensorOps.Concat(packedWindows.Select(window => window.Data)
+            .Concat(new[] { Vector<T>.CreateDefault(1, NumOps.FromDouble(1.0 / realElements)) }).ToArray());
 
         // New priorities, from the current network before this step: p = |v(o_0) - z_0|, the gap between the
         // predicted value of the window's first state and its n-step value target.
-        var newPriorities = new double[sequences.Count];
-        for (int s = 0; s < sequences.Count; s++)
-        {
-            int at = s * perSequence + stateDim;
-            var latentState = _representationNetwork.Predict(Tensor<T>.FromVector(sequences[s][0].State)).ToVector();
-            var predicted = ExtractValue(_predictionNetwork.Predict(Tensor<T>.FromVector(latentState)).ToVector());
-            newPriorities[s] = Math.Abs(NumOps.ToDouble(predicted) - NumOps.ToDouble(data[at + 2 * actionDim])) + PriorityFloor;
-        }
+        var newPriorities = Enumerable.Range(0, sequences.Count)
+            .Select(w => WindowPriority(sequences[w][0].State, packedWindows[w].FirstValueTarget))
+            .ToArray();
         var packed = Tensor<T>.FromVector(data);
         int sequenceCount = sequences.Count;
 
@@ -893,10 +863,49 @@ public partial class MuZeroAgent<T> : DeepReinforcementLearningAgentBase<T>
     // ── K-step unroll helpers (#1756, Schrittwieser et al. 2020) ───────────────────────────────
     private Tensor<T> ScalarTensor(T value) => new Tensor<T>(new[] { 1 }, new Vector<T>(new[] { value }));
 
+    /// <summary>
+    /// One sampled window packed as o_0 then, per unrolled step, the action, the policy target, the n-step value target,
+    /// the reward and the step mask (the window's normalised importance weight); steps past the window's end stay zero.
+    /// </summary>
+    private (Vector<T> Data, T FirstValueTarget) PackWindow(
+        System.Collections.Generic.List<Experience<T, Vector<T>, Vector<T>>> seq, int slot, double importanceWeight,
+        int stateDim, int unroll, int nStep, T gamma)
+    {
+        int actionDim = _options.ActionSize;
+        int perStep = 2 * actionDim + 3;
+        int steps = Math.Min(unroll, seq.Count);
+        var bootValueCache = new System.Collections.Generic.Dictionary<int, T>();
+        T mask = NumOps.FromDouble(importanceWeight);
+        var valueTargets = Enumerable.Range(0, steps).Select(k => NStepValueTarget(seq, k, nStep, gamma, bootValueCache)).ToList();
+        var stepBlocks = Enumerable.Range(0, steps).Select(k => RLTensorOps.Concat(
+            ActionTensor(seq[k].Action, actionDim).ToVector(),
+            PolicyTargetVector(_policyTargets[(slot + k) % _replayBuffer.Capacity] ?? OneHotTarget(seq[k].Action), actionDim),
+            Vector<T>.FromEnumerable(new[] { valueTargets[k], seq[k].Reward, mask })));
+        var data = RLTensorOps.Concat(new[] { RLTensorOps.Head(seq[0].State, stateDim) }
+            .Concat(stepBlocks)
+            .Concat(new[] { new Vector<T>((unroll - steps) * perStep) })
+            .ToArray());
+        return (data, valueTargets.Count > 0 ? valueTargets[0] : NumOps.Zero);
+    }
+
+    /// <summary>The first <paramref name="actionDim"/> entries of a stored visit distribution, as T.</summary>
+    private static Vector<T> PolicyTargetVector(double[] policyTarget, int actionDim)
+        => RLTensorOps.Head(Vector<double>.FromArray(policyTarget), actionDim).AsTensor().Cast<T>().ToVector();
+
+    /// <summary>The replay priority |v(o_0) - z_0| + floor of a window, from the current networks.</summary>
+    private double WindowPriority(Vector<T> firstState, T firstValueTarget)
+    {
+        var latentState = _representationNetwork.Predict(Tensor<T>.FromVector(firstState)).ToVector();
+        var predicted = ExtractValue(_predictionNetwork.Predict(Tensor<T>.FromVector(latentState)).ToVector());
+        return Math.Abs(NumOps.ToDouble(predicted) - NumOps.ToDouble(firstValueTarget)) + PriorityFloor;
+    }
+
     private Tensor<T> ActionTensor(Vector<T> action, int actionDim)
     {
-        var v = new Vector<T>(actionDim);
-        for (int i = 0; i < actionDim; i++) v[i] = i < action.Length ? action[i] : NumOps.Zero;
+        // The first actionDim entries, zero-padded when the action is shorter.
+        var v = action.Length >= actionDim
+            ? action.GetSubVector(0, actionDim)
+            : RLTensorOps.Concat(action, new Vector<T>(actionDim - action.Length));
         return Tensor<T>.FromVector(v);
     }
 
@@ -956,33 +965,12 @@ public partial class MuZeroAgent<T> : DeepReinforcementLearningAgentBase<T>
         });
     private Vector<T> ConcatenateVectors(Vector<T> a, Vector<T> b)
     {
-        var result = new Vector<T>(a.Length + b.Length);
-        for (int i = 0; i < a.Length; i++)
-        {
-            result[i] = a[i];
-        }
-        for (int i = 0; i < b.Length; i++)
-        {
-            result[a.Length + i] = b[i];
-        }
-        return result;
+        return RLTensorOps.Concat(a, b);
     }
 
     private int ArgMax(Vector<T> values)
     {
-        int maxIndex = 0;
-        T maxValue = values[0];
-
-        for (int i = 1; i < values.Length; i++)
-        {
-            if (NumOps.GreaterThan(values[i], maxValue))
-            {
-                maxValue = values[i];
-                maxIndex = i;
-            }
-        }
-
-        return maxIndex;
+        return RLTensorOps.ArgMax(values);
     }
 
     /// <inheritdoc />
