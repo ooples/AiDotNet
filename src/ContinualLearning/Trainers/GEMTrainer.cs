@@ -192,7 +192,7 @@ public class GEMTrainer<T, TInput, TOutput> : ContinualLearnerBase<T, TInput, TO
         var epochsPerTask = Configuration.EpochsPerTask;
 
         var lossHistory = new List<T>();
-        var constraintViolationHistory = new List<T>();
+        var constraintViolationHistory = new List<double>();
 
         var memoryStrength = _options.MemoryStrength ?? 0.5;
         var projectionMargin = _options.ProjectionMargin ?? 0.0;
@@ -213,7 +213,7 @@ public class GEMTrainer<T, TInput, TOutput> : ContinualLearnerBase<T, TInput, TO
         for (int epoch = 0; epoch < epochsPerTask; epoch++)
         {
             T epochLoss = NumOps.Zero;
-            T epochViolations = NumOps.Zero;
+            double epochViolations = 0.0;
             int batchCount = 0;
             var batchLosses = new List<T>();
             int violatedBatches = 0;
@@ -314,7 +314,7 @@ public class GEMTrainer<T, TInput, TOutput> : ContinualLearnerBase<T, TInput, TO
             if (batchCount > 0)
             {
                 epochLoss = Engine.Mean(new Vector<T>(batchLosses));
-                epochViolations = NumOps.FromDouble((double)violatedBatches / batchCount);
+                epochViolations = (double)violatedBatches / batchCount;
             }
 
             lossHistory.Add(epochLoss);
@@ -369,7 +369,7 @@ public class GEMTrainer<T, TInput, TOutput> : ContinualLearnerBase<T, TInput, TO
             averagePreviousTaskAccuracy: ComputeAveragePreviousTaskAccuracy(),
             trainingTime: TimeSpan.Zero, // Will be set by base class
             lossHistory: new Vector<T>(lossHistory.ToArray()),
-            regularizationLossHistory: new Vector<T>(constraintViolationHistory.ToArray()))
+            regularizationLossHistory: new Vector<double>(constraintViolationHistory.ToArray()).AsTensor().Cast<T>().ToVector())
         {
             ValidationLoss = validationData != null ? finalValidationResult.Loss : default,
             ValidationAccuracy = validationData != null ? finalValidationResult.Accuracy : default,
