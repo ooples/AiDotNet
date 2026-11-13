@@ -166,7 +166,7 @@ public class EvaluationNumericalMemoryTests
         var (mean, std, margin) = Assert.IsType<(double, double, double)>(cv.Invoke(null, new object[] { values }));
         Assert.Equal(0.0, mean);
         Assert.Equal(Math.Sqrt(7200000000.0), std, 8);
-        Assert.Equal(240000.0, margin, 8);
+        Assert.Equal(60000 * 12.706204736432095, margin, 2);
         var (curveMean, curveStd) = Assert.IsType<(double, double)>(curve.Invoke(null, new object[] { values }));
         Assert.Equal(mean, curveMean);
         Assert.Equal(std, curveStd);

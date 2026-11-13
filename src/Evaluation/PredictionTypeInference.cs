@@ -50,19 +50,23 @@ internal static class PredictionTypeInference
             return PredictionType.Regression;
         }
 
-        var classes = engine.TensorUniqueWithInfo(rounded).Values;
-        int classCount = classes.Length;
-        int minClass = (int)numOps.ToDouble(engine.TensorMinValue(classes));
-        int maxClass = (int)numOps.ToDouble(engine.TensorMaxValue(classes));
+        // Classification inference needs at most 511 distinct integer labels.
+        // Stop tracking at the regression threshold rather than materializing every unique value.
+        var classes = new HashSet<int>();
+        int minClass = int.MaxValue, maxClass = int.MinValue;
+        foreach (double value in wideRounded)
+        {
+            int label = (int)value;
+            classes.Add(label);
+            minClass = Math.Min(minClass, label);
+            maxClass = Math.Max(maxClass, label);
+            if (classes.Count >= maxTrackedClasses) return PredictionType.Regression;
+        }
+        int classCount = classes.Count;
 
         if (classCount <= 2 && minClass >= 0 && maxClass <= 1)
         {
             return PredictionType.BinaryClassification;
-        }
-
-        if (classCount >= maxTrackedClasses)
-        {
-            return PredictionType.Regression;
         }
 
         // Heuristic: integer-valued targets are common in regression (e.g. counts, prices, IDs).

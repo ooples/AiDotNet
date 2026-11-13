@@ -179,8 +179,10 @@ public class CrossValidationEngine<T>
             : 0;
         double std = Math.Sqrt(variance);
 
-        // Calculate 95% CI using t-distribution approximation.
-        double tValue = count < 30 ? 2.0 + 4.0 / count : 1.96;
+        // Use the Student-t quantile with one degree of freedom lost to the sample mean.
+        double tValue = count > 1
+            ? new AiDotNet.Distributions.StudentTDistribution<double>(count - 1.0).InverseCdf(0.975)
+            : 0;
         return (mean, std, std * (tValue / Math.Sqrt(count)));
     }
 

@@ -13,6 +13,81 @@ namespace AiDotNet.Tests.UnitTests.Evaluation;
 public class EvaluationTieReferenceTests
 {
     [Fact]
+    public void MulticlassMcc_MatchesBalancedConfusionReferenceIncludingNaNLabels()
+    {
+        // Three correct predictions, equal marginals of two per class: (3*6-12)/(36-12) = 1/4.
+        Assert.Equal(0.25, new MatthewsCorrelationCoefficientMetric<double>().Compute(
+            new[] { 0.0, 1, 1, double.NaN, double.NaN, 0 },
+            new[] { 0.0, 0, 1, 1, double.NaN, double.NaN }), 12);
+        decimal origin = 10000000000000000m;
+        Assert.Equal(-0.5m, new MatthewsCorrelationCoefficientMetric<decimal>().Compute(
+            new[] { origin + 1, origin + 2, origin }, new[] { origin, origin + 1, origin + 2 }));
+        Assert.Equal(-1.0, new MatthewsCorrelationCoefficientMetric<double>(3).Compute(
+            new[] { 2.0, 3 }, new[] { 3.0, 2 }));
+        Assert.Equal(0.0, new MatthewsCorrelationCoefficientMetric<double>().Compute(
+            new[] { 2.0, 3 }, new[] { 3.0, 2 }));
+    }
+
+    [Fact]
+    public void MulticlassMcc_LargePermutationKeepsLinearHistograms()
+    {
+        const int classes = 10000;
+        var actual = Enumerable.Range(0, classes).Select(x => (double)x).ToArray();
+        var predicted = Enumerable.Range(0, classes).Select(x => (double)((x + 1) % classes)).ToArray();
+        Assert.Equal(-1.0 / (classes - 1),
+            new MatthewsCorrelationCoefficientMetric<double>().Compute(predicted, actual), 12);
+    }
+
+    private sealed class NoFullUniqueEngine : AiDotNet.Tensors.Engines.CpuEngine
+    {
+        public override (Tensor<T> Values, Tensor<int>? Inverse, Tensor<int>? Counts) TensorUniqueWithInfo<T>(
+            Tensor<T> input, bool sorted = true, bool returnInverse = false, bool returnCounts = false)
+            => throw new InvalidOperationException("Target inference must bound distinct-label tracking.");
+    }
+
+    [Fact]
+    public void TargetInference_StopsAtClassLimitWithoutFullUniqueMaterialization()
+    {
+        var previous = AiDotNetEngine.Current;
+        try
+        {
+            AiDotNetEngine.Current = new NoFullUniqueEngine();
+            foreach (int classes in new[] { 2, 511, 512, 100000 })
+            {
+                var values = Enumerable.Range(0, classes * 4).Select(x => (double)(x % classes)).ToArray();
+                var expected = classes == 2 ? AiDotNet.Enums.PredictionType.BinaryClassification
+                    : classes < 512 ? AiDotNet.Enums.PredictionType.MultiClass : AiDotNet.Enums.PredictionType.Regression;
+                Assert.Equal(expected, AiDotNet.Evaluation.PredictionTypeInference.Infer(new Vector<double>(values)));
+            }
+        }
+        finally { AiDotNetEngine.Current = previous; }
+    }
+
+
+    [Theory]
+    [InlineData(2, 12.706204736432095)]
+    [InlineData(3, 4.302652729696142)]
+    [InlineData(5, 2.7764451051977987)]
+    [InlineData(10, 2.2621571628540993)]
+    [InlineData(30, 2.045229642132703)]
+    [InlineData(100, 1.9842169515086827)]
+    public void CrossValidationIntervals_UseStudentTReferenceQuantiles(int folds, double criticalValue)
+    {
+        // NIST two-sided 95% Student-t critical values, with df = folds - 1.
+        var summarize = typeof(CrossValidationEngine<double>).GetMethod("Summarize",
+            System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic)!;
+        var values = Enumerable.Range(0, folds).Select(x => (double)x).ToList();
+        var (_, standardDeviation, margin) = Assert.IsType<(double, double, double)>(
+            summarize.Invoke(null, new object[] { values }));
+        Assert.Equal(criticalValue, margin * Math.Sqrt(folds) / standardDeviation, 6);
+        var (_, singletonDeviation, singletonMargin) = Assert.IsType<(double, double, double)>(
+            summarize.Invoke(null, new object[] { new List<double> { 1 } }));
+        Assert.Equal(0, singletonDeviation);
+        Assert.Equal(0, singletonMargin);
+    }
+
+
+    [Fact]
     public void AucRoc_TiedScoresAcrossClasses_CountHalf()
     {
         // sklearn.metrics.roc_auc_score([0, 0, 1, 1], [0.1, 0.5, 0.5, 0.9]) == 0.875
