@@ -504,7 +504,8 @@ public partial class Pix2Struct<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T
                 total += w;
             }
 
-            if (total != 0.0)
+            // The tent weights are non-negative, so a zero total means the row covers no input
+            if (total > 0.0)
             {
                 for (int j = first; j < end; j++)
                     weights[i * inputs + j] /= total;
