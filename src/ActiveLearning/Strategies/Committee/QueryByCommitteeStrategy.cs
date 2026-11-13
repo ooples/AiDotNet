@@ -53,7 +53,7 @@ namespace AiDotNet.ActiveLearning.Strategies.Committee;
 public class QueryByCommitteeStrategy<T, TInput, TOutput> : ICommitteeStrategy<T, TInput, TOutput>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
-    private static readonly T Epsilon = NumOps.FromDouble(1e-10);
+    private static readonly T Epsilon = ActiveLearningEngineOps.Tolerance<T>(1e-10);
 
     private readonly List<IFullModel<T, TInput, TOutput>> _committee;
     private readonly CommitteeDisagreementMeasure _disagreementMeasure;

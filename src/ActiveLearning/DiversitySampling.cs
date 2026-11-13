@@ -270,7 +270,7 @@ public class DiversitySampling<T> : IActiveLearningStrategy<T>
 
         // Compute average distance to estimate bandwidth
         var avgDist = ComputeAverageNearestNeighborDistance(rows, norms, k: 5);
-        var minBandwidth = _numOps.FromDouble(1e-10);
+        var minBandwidth = ActiveLearningEngineOps.Tolerance<T>(1e-10);
         var bandwidth = _numOps.GreaterThan(avgDist, minBandwidth) ? avgDist : minBandwidth;
         var denominator = _numOps.Multiply(_numOps.Multiply(_numOps.FromDouble(2), bandwidth), bandwidth);
 
@@ -365,7 +365,7 @@ public class DiversitySampling<T> : IActiveLearningStrategy<T>
         }
 
         // Density is inverse of distance
-        var epsilon = _numOps.FromDouble(1e-10);
+        var epsilon = ActiveLearningEngineOps.Tolerance<T>(1e-10);
         return engine.TensorReciprocal(engine.TensorAddScalar(avgDist, epsilon)).ToVector();
     }
 
@@ -471,7 +471,7 @@ public class DiversitySampling<T> : IActiveLearningStrategy<T>
         var cosineSim = engine.TensorDivide(dotProduct, engine.TensorMultiply(norm1, norm2));
         var distance = engine.ScalarMinusTensor(_numOps.One, cosineSim);
 
-        var epsilon = _numOps.FromDouble(1e-10);
+        var epsilon = ActiveLearningEngineOps.Tolerance<T>(1e-10);
         var degenerate = engine.TensorMax(engine.TensorLessThan(norm1, epsilon), engine.TensorLessThan(norm2, epsilon));
         var ones = new Tensor<T>(shape);
         ones.Fill(_numOps.One);

@@ -229,7 +229,7 @@ public class HybridSampling<T> : IActiveLearningStrategy<T>
     private Vector<T> CombineProduct(List<Vector<T>> allScores, int numSamples)
     {
         var engine = AiDotNetEngine.Current;
-        var epsilon = _numOps.FromDouble(1e-10);
+        var epsilon = ActiveLearningEngineOps.Tolerance<T>(1e-10);
 
         // Initialize with ones
         var result = new Tensor<T>(new[] { numSamples });
@@ -373,7 +373,7 @@ public class HybridSampling<T> : IActiveLearningStrategy<T>
         var min = engine.TensorMinValue(scores);
         var max = engine.TensorMaxValue(scores);
         var range = _numOps.Subtract(max, min);
-        var epsilon = _numOps.FromDouble(1e-10);
+        var epsilon = ActiveLearningEngineOps.Tolerance<T>(1e-10);
 
         // If all scores are the same, return 0.5 for all
         if (_numOps.LessThan(range, epsilon))

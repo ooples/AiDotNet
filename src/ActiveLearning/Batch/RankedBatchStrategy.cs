@@ -203,7 +203,7 @@ public class RankedBatchStrategy<T, TInput, TOutput> : IBatchStrategy<T, TInput,
         var maxDistance = NumOps.Sqrt(maxPossible);
 
         // Normalize to [0, 1]
-        return NumOps.Divide(distance, NumOps.Add(maxDistance, NumOps.FromDouble(1e-10)));
+        return NumOps.Divide(distance, NumOps.Add(maxDistance, ActiveLearningEngineOps.Tolerance<T>(1e-10)));
     }
 
     #endregion

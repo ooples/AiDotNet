@@ -103,7 +103,7 @@ public class EntropySampling<T> : IActiveLearningStrategy<T>
         var numSamples = unlabeledPool.Shape[0];
         var numClasses = predictions.Length / numSamples;
         var probs = ActiveLearningEngineOps.SoftmaxRows(predictions, numSamples, numClasses);
-        var scores = ActiveLearningEngineOps.EntropyRows(probs, _numOps.FromDouble(1e-10)).ToVector();
+        var scores = ActiveLearningEngineOps.EntropyRows(probs, ActiveLearningEngineOps.Tolerance<T>(1e-10)).ToVector();
 
         UpdateStatistics(scores);
         return scores;

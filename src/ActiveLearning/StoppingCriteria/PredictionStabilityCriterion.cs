@@ -198,7 +198,7 @@ public class PredictionStabilityCriterion<T> : IStoppingCriterion<T>
 
         T denominator = NumOps.Multiply(NumOps.Sqrt(denomPrev), NumOps.Sqrt(denomCurr));
 
-        if (NumOps.Compare(denominator, NumOps.FromDouble(1e-10)) < 0)
+        if (NumOps.Compare(denominator, ActiveLearningEngineOps.Tolerance<T>(1e-10)) < 0)
         {
             return NumOps.One; // No variance means perfect stability
         }

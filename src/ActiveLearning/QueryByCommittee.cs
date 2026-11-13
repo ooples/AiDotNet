@@ -185,7 +185,7 @@ public class QueryByCommittee<T> : IActiveLearningStrategy<T>
         // Compute entropy of vote distribution over classes with p > epsilon
         var p = engine.TensorDivideScalar(votes, _numOps.FromDouble(_committee.Count));
         var terms = engine.TensorMultiply(p, engine.TensorLog(p));
-        var counted = engine.TensorGreaterThan(p, _numOps.FromDouble(1e-10));
+        var counted = engine.TensorGreaterThan(p, ActiveLearningEngineOps.Tolerance<T>(1e-10));
         var kept = engine.TensorWhere(counted, terms, new Tensor<T>(new[] { numSamples, numClasses }));
         return engine.TensorNegate(engine.ReduceSum(kept, new[] { 1 }, keepDims: false));
     }
@@ -196,7 +196,7 @@ public class QueryByCommittee<T> : IActiveLearningStrategy<T>
     private Tensor<T> ComputeAverageKL(List<Tensor<T>> allPredictions, int numSamples, int numClasses)
     {
         var engine = AiDotNetEngine.Current;
-        var epsilon = _numOps.FromDouble(1e-10);
+        var epsilon = ActiveLearningEngineOps.Tolerance<T>(1e-10);
         var committeeSize = _numOps.FromDouble(_committee.Count);
         var memberProbs = SoftmaxAll(allPredictions, numSamples, numClasses);
 

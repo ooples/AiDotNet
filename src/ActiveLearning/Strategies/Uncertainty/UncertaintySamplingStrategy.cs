@@ -174,7 +174,7 @@ public class UncertaintySamplingStrategy<T, TInput, TOutput> : IUncertaintyStrat
         // H(p) = -Σ p_i * log(p_i + eps) over the entries with p_i > 0
         var engine = AiDotNetEngine.Current;
         var p = Tensor<T>.FromVector(probabilities);
-        var terms = engine.TensorMultiply(p, engine.TensorLog(engine.TensorAddScalar(p, NumOps.FromDouble(1e-10))));
+        var terms = engine.TensorMultiply(p, engine.TensorLog(engine.TensorAddScalar(p, ActiveLearningEngineOps.Tolerance<T>(1e-10))));
         var positive = engine.TensorGreaterThan(p, NumOps.Zero);
         return NumOps.Negate(engine.TensorSum(engine.TensorWhere(positive, terms, new Tensor<T>(p.Shape.ToArray()))));
     }

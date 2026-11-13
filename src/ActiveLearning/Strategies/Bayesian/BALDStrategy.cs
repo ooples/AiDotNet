@@ -51,7 +51,7 @@ public class BALDStrategy<T, TInput, TOutput> : IBayesianStrategy<T, TInput, TOu
     private static Random ThreadRandom => _random ??= RandomHelper.CreateSecureRandom();
 
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
-    private static readonly T EntropyEpsilon = NumOps.FromDouble(1e-10);
+    private static readonly T EntropyEpsilon = ActiveLearningEngineOps.Tolerance<T>(1e-10);
 
     private readonly int _mcSamples;
     private readonly T _dropoutRate;
@@ -266,7 +266,7 @@ public class BALDStrategy<T, TInput, TOutput> : IBayesianStrategy<T, TInput, TOu
             // Ensure non-negative
             if (NumOps.Compare(noisy[i], NumOps.Zero) < 0)
             {
-                noisy[i] = NumOps.FromDouble(1e-10);
+                noisy[i] = ActiveLearningEngineOps.Tolerance<T>(1e-10);
             }
             sum = NumOps.Add(sum, noisy[i]);
         }

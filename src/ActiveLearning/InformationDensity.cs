@@ -133,7 +133,7 @@ public class InformationDensity<T> : IActiveLearningStrategy<T>
 
         // Compute uncertainty scores (using entropy)
         var probs = ActiveLearningEngineOps.SoftmaxRows(predictions, numSamples, numClasses);
-        var uncertaintyScores = ActiveLearningEngineOps.EntropyRows(probs, _numOps.FromDouble(1e-10));
+        var uncertaintyScores = ActiveLearningEngineOps.EntropyRows(probs, ActiveLearningEngineOps.Tolerance<T>(1e-10));
 
         // Compute average similarity to pool
         var avgSimilarities = ComputeAverageSimilarities(unlabeledPool, numSamples, featureSize);
@@ -225,7 +225,7 @@ public class InformationDensity<T> : IActiveLearningStrategy<T>
         // Normalize from [-1, 1] to [0, 1]; pairs with a (near) zero norm get similarity 0
         var cosineSim = engine.TensorDivide(dotProduct, normProduct);
         var normalized = engine.TensorDivideScalar(engine.TensorAddScalar(cosineSim, _numOps.One), _numOps.FromDouble(2.0));
-        var degenerate = engine.TensorLessThan(normProduct, _numOps.FromDouble(1e-10));
+        var degenerate = engine.TensorLessThan(normProduct, ActiveLearningEngineOps.Tolerance<T>(1e-10));
         return engine.TensorWhere(degenerate, new Tensor<T>(shape), normalized);
     }
 

@@ -7,6 +7,18 @@ namespace AiDotNet.ActiveLearning;
 internal static class ActiveLearningEngineOps
 {
     /// <summary>
+    /// <paramref name="epsilon"/> as a T, raised to Half's smallest positive normal value (2^-14) for Half,
+    /// where 1e-10 and similar guards would otherwise round to zero (turning "+ epsilon" denominators and
+    /// log(p + epsilon) back into divisions by zero and log(0)); float, double and decimal keep it unchanged.
+    /// </summary>
+    internal static T Tolerance<T>(double epsilon)
+    {
+        const double HalfSmallestNormal = 6.103515625e-05;
+        return MathHelper.GetNumericOperations<T>().FromDouble(
+            typeof(T) == typeof(Half) ? Math.Max(epsilon, HalfSmallestNormal) : epsilon);
+    }
+
+    /// <summary>
     /// Returns the first <paramref name="rows"/> x <paramref name="cols"/> elements of
     /// <paramref name="data"/> (row-major) as a [rows, cols] tensor.
     /// </summary>
@@ -363,7 +375,7 @@ internal static class ActiveLearningEngineOps
     {
         var numOps = MathHelper.GetNumericOperations<T>();
         var engine = AiDotNetEngine.Current;
-        var epsilon = numOps.FromDouble(1e-10);
+        var epsilon = ActiveLearningEngineOps.Tolerance<T>(1e-10);
 
         // Sum the per-pass probabilities and entropies across MC samples
         Tensor<T>? probSum = null;

@@ -54,7 +54,7 @@ namespace AiDotNet.ActiveLearning.Strategies.Diversity;
 public class CoreSetStrategy<T, TInput, TOutput> : IDiversityStrategy<T, TInput, TOutput>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
-    private static readonly T CosineEpsilon = NumOps.FromDouble(1e-10);
+    private static readonly T CosineEpsilon = ActiveLearningEngineOps.Tolerance<T>(1e-10);
 
     private readonly DistanceMetric _distanceMetric;
     private readonly ActiveLearnerConfig<T>? _config;

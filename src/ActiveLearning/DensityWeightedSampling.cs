@@ -120,7 +120,7 @@ public class DensityWeightedSampling<T> : IActiveLearningStrategy<T>
 
         // Compute uncertainty scores (using entropy)
         var probs = ActiveLearningEngineOps.SoftmaxRows(predictions, numSamples, numClasses);
-        var uncertaintyScores = ActiveLearningEngineOps.EntropyRows(probs, _numOps.FromDouble(1e-10));
+        var uncertaintyScores = ActiveLearningEngineOps.EntropyRows(probs, ActiveLearningEngineOps.Tolerance<T>(1e-10));
 
         // Compute density scores
         var densityScores = ComputeDensityScores(unlabeledPool, numSamples, featureSize);
@@ -180,7 +180,7 @@ public class DensityWeightedSampling<T> : IActiveLearningStrategy<T>
 
         // Convert to density (inverse of average distance)
         // Add small epsilon to avoid division by zero
-        var density = engine.TensorReciprocal(engine.TensorAddScalar(avgDist, _numOps.FromDouble(1e-10)));
+        var density = engine.TensorReciprocal(engine.TensorAddScalar(avgDist, ActiveLearningEngineOps.Tolerance<T>(1e-10)));
 
         // Normalize density scores to [0, 1]
         return NormalizeDensityScores(density);
@@ -198,7 +198,7 @@ public class DensityWeightedSampling<T> : IActiveLearningStrategy<T>
 
         var engine = AiDotNetEngine.Current;
         var maxDensity = engine.TensorMaxValue(scores);
-        return _numOps.GreaterThan(maxDensity, _numOps.FromDouble(1e-10))
+        return _numOps.GreaterThan(maxDensity, ActiveLearningEngineOps.Tolerance<T>(1e-10))
             ? engine.TensorDivideScalar(scores, maxDensity)
             : scores;
     }

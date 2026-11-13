@@ -240,7 +240,7 @@ public class CoreSetSelection<T> : IActiveLearningStrategy<T>
         var cosineDistance = engine.ScalarMinusTensor(_numOps.One, engine.TensorDivide(dotProduct, normProduct));
         var ones = new Tensor<T>(new[] { numSamples });
         ones.Fill(_numOps.One);
-        var degenerate = engine.TensorLessThan(normProduct, _numOps.FromDouble(1e-10));
+        var degenerate = engine.TensorLessThan(normProduct, ActiveLearningEngineOps.Tolerance<T>(1e-10));
         return engine.TensorWhere(degenerate, ones, cosineDistance);
     }
 

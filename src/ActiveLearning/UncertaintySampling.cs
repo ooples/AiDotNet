@@ -150,7 +150,7 @@ public class UncertaintySampling<T> : IActiveLearningStrategy<T>
                 }
             default:
                 // Entropy: -Σ p*log(p)
-                return ActiveLearningEngineOps.EntropyRows(probabilities, _numOps.FromDouble(1e-10));
+                return ActiveLearningEngineOps.EntropyRows(probabilities, ActiveLearningEngineOps.Tolerance<T>(1e-10));
         }
     }
 
