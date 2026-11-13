@@ -50,6 +50,13 @@ public partial class NPAlgorithm<T, TInput, TOutput> : NeuralProcessBase<T, TInp
     [AiDotNet.Attributes.TrainableParameter]
     private Vector<T> _latentEncoderParams;
 
+    // Relative step of the feature-path perturbation: probe = FeaturePathProbeScale (1 + |theta|) / sqrt(n).
+    private const double FeaturePathProbeScale = 1e-3;
+
+    // Seed of the posterior draws shared by every loss evaluation of one SPSA step, so the paired losses differ by
+    // the perturbation alone and not by Monte Carlo noise; null outside an SPSA step.
+    private int? _spsaDrawSeed;
+
     /// <inheritdoc/>
     public override MetaLearningAlgorithmType AlgorithmType => MetaLearningAlgorithmType.NP;
 
@@ -71,8 +78,9 @@ public partial class NPAlgorithm<T, TInput, TOutput> : NeuralProcessBase<T, TInp
     /// Garnelo et al. (2018), Eq. 4: each task minimises the negative ELBO
     /// -E_{q(z|C,T)}[log p(y_T | z, x_T)] + KL(q(z|C,T) || q(z|C)). The expectation is a Monte Carlo average over
     /// <see cref="NPOptions{T, TInput, TOutput}.NumLatentSamples"/> reparameterised posterior draws; the decoder
-    /// (backbone) gradient is the gradient of that reconstruction average, because the KL term does not depend on
-    /// the decoder. The latent encoder is trained on the full negative ELBO.
+    /// (backbone) gradient covers both of its roles: the decoder path exactly and the feature path (through both
+    /// latent distributions and the KL term) by a paired perturbation over the same draws. The encoders are trained
+    /// on the full negative ELBO, with every evaluation of one SPSA step replaying the same draws.
     /// </remarks>
     public override T MetaTrain(TaskBatch<T, TInput, TOutput> taskBatch)
     {
@@ -83,7 +91,7 @@ public partial class NPAlgorithm<T, TInput, TOutput> : NeuralProcessBase<T, TInp
         foreach (var task in taskBatch.Tasks)
         {
             InterfaceGuard.Parameterizable(MetaModel).SetParameters(initParams);
-            var (loss, gradient) = NegativeElbo(task, initParams, withGradient: true);
+            var (loss, gradient) = NegativeElbo(task, initParams, withGradient: true, RandomGenerator.Next());
             losses.Add(loss);
             if (gradient is not null) metaGradients.Add(gradient);
         }
@@ -91,8 +99,17 @@ public partial class NPAlgorithm<T, TInput, TOutput> : NeuralProcessBase<T, TInp
         ApplyOuterUpdate(initParams, metaGradients, _npOptions.OuterLearningRate);
 
         // Update auxiliary params
-        UpdateAuxiliaryParamsSPSA(taskBatch, ref EncoderParams, _npOptions.OuterLearningRate, ComputeAuxLoss);
-        UpdateAuxiliaryParamsSPSA(taskBatch, ref _latentEncoderParams, _npOptions.OuterLearningRate, ComputeAuxLoss);
+        _spsaDrawSeed = RandomGenerator.Next();
+        try
+        {
+            UpdateAuxiliaryParamsSPSA(taskBatch, ref EncoderParams, _npOptions.OuterLearningRate, ComputeAuxLoss);
+            _spsaDrawSeed = RandomGenerator.Next();
+            UpdateAuxiliaryParamsSPSA(taskBatch, ref _latentEncoderParams, _npOptions.OuterLearningRate, ComputeAuxLoss);
+        }
+        finally
+        {
+            _spsaDrawSeed = null;
+        }
 
         return ComputeMean(losses);
     }
@@ -114,12 +131,48 @@ public partial class NPAlgorithm<T, TInput, TOutput> : NeuralProcessBase<T, TInp
     }
 
     /// <summary>
-    /// The task's negative ELBO and, when requested, the decoder gradient of its reconstruction term, each averaged
-    /// over <see cref="NPOptions{T, TInput, TOutput}.NumLatentSamples"/> posterior draws.
+    /// The task's negative ELBO and, when requested, its gradient with respect to the backbone parameters, each
+    /// averaged over <see cref="NPOptions{T, TInput, TOutput}.NumLatentSamples"/> posterior draws taken from
+    /// <paramref name="drawSeed"/>.
     /// </summary>
+    /// <remarks>
+    /// The backbone is both the decoder and the feature extractor of both latent distributions. The decoder path is
+    /// differentiated exactly (the installed parameters are scale * initParams, so each draw's gradient carries its
+    /// scale). The feature path, through the posterior draw, the modulation scale and the KL term, has no tape here;
+    /// a two-sided simultaneous-perturbation estimate over the same draws (Spall 1992) supplies it, with the decoder
+    /// held at <paramref name="initParams"/>.
+    /// </remarks>
     private (T Loss, Vector<T>? Gradient) NegativeElbo(
-        IMetaLearningTask<T, TInput, TOutput> task, Vector<T> initParams, bool withGradient)
+        IMetaLearningTask<T, TInput, TOutput> task, Vector<T> initParams, bool withGradient, int drawSeed)
     {
+        var (loss, decoderGradient) = SampledObjective(task, initParams, initParams, drawSeed, withGradient);
+        if (!withGradient || decoderGradient is null) return (loss, null);
+
+        int n = initParams.Length;
+        var signs = Enumerable.Range(0, n).Select(_ => RandomGenerator.NextDouble() > 0.5 ? 1.0 : -1.0).ToArray();
+        var direction = TensorCopyHelper.CastLogical<double, T>(new Tensor<double>(signs, new[] { n })).ToVector();
+        double probe = FeaturePathProbeScale * (1.0 + NumOps.ToDouble(Engine.Norm(initParams))) / Math.Sqrt(Math.Max(n, 1));
+        var step = Engine.Multiply(direction, NumOps.FromDouble(probe));
+        T plus = SampledObjective(task, Engine.Add(initParams, step), initParams, drawSeed, false).Loss;
+        T minus = SampledObjective(task, Engine.Subtract(initParams, step), initParams, drawSeed, false).Loss;
+        double slope = (NumOps.ToDouble(plus) - NumOps.ToDouble(minus)) / (2.0 * probe);
+        var featureGradient = Engine.Multiply(direction, NumOps.FromDouble(slope));
+
+        ParamModel.SetParameters(initParams);
+        return (loss, ClipGradients(Engine.Add(decoderGradient, featureGradient)));
+    }
+
+    /// <summary>
+    /// The negative ELBO with the latent distributions encoded by <paramref name="featureParams"/> and the targets
+    /// decoded by <paramref name="decoderParams"/> modulated by each draw, and (when requested) the gradient of its
+    /// reconstruction term with respect to <paramref name="decoderParams"/>.
+    /// </summary>
+    private (T Loss, Vector<T>? Gradient) SampledObjective(
+        IMetaLearningTask<T, TInput, TOutput> task, Vector<T> featureParams, Vector<T> decoderParams, int drawSeed,
+        bool withGradient)
+    {
+        ParamModel.SetParameters(featureParams);
+
         // Encode context (support)
         var supportFeatures = ConvertToVector(MetaModel.Predict(task.SupportInput));
         var supportLabels = ConvertToVector(task.SupportOutput);
@@ -136,17 +189,21 @@ public partial class NPAlgorithm<T, TInput, TOutput> : NeuralProcessBase<T, TInp
             ConcatVectors(supportLabels, queryLabels)));
         var (postMean, postLogVar) = ComputeLatentDistribution(fullRep);
 
+        var draws = RandomHelper.CreateSeededRandom(drawSeed);
+        var location = Tensor<T>.FromVector(postMean);
+        var spread = Tensor<T>.FromVector(Engine.Exp(Engine.Multiply(postLogVar, NumOps.FromDouble(0.5))));
         int samples = Math.Max(1, _npOptions.NumLatentSamples);
         var reconstruction = new List<T>(samples);
         var gradients = new List<Vector<T>>(samples);
         for (int s = 0; s < samples; s++)
         {
             // z ~ q(z | C, T) by reparameterisation, then decode the targets with it
-            var z = ReparameterizeSample(postMean, postLogVar);
-            ModulateParameters(initParams, ComputeModScale(z));
+            var z = Engine.TensorNormal(location, spread, draws.Next()).ToVector();
+            double scale = ComputeModScale(z);
+            ModulateParameters(decoderParams, scale);
             reconstruction.Add(ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput));
             if (withGradient)
-                gradients.Add(ClipGradients(ComputeGradients(MetaModel, task.QueryInput, task.QueryOutput)));
+                gradients.Add(ScaleVector(ComputeGradients(MetaModel, task.QueryInput, task.QueryOutput), scale));
         }
 
         var kl = GaussianKL(postMean, postLogVar, priorMean, priorLogVar);
@@ -211,11 +268,12 @@ public partial class NPAlgorithm<T, TInput, TOutput> : NeuralProcessBase<T, TInp
     {
         var initParams = InterfaceGuard.Parameterizable(MetaModel).GetParameters();
         var losses = new List<T>();
+        int drawSeed = _spsaDrawSeed ?? RandomGenerator.Next();
 
         foreach (var task in taskBatch.Tasks)
         {
             InterfaceGuard.Parameterizable(MetaModel).SetParameters(initParams);
-            losses.Add(NegativeElbo(task, initParams, withGradient: false).Loss);
+            losses.Add(NegativeElbo(task, initParams, withGradient: false, drawSeed).Loss);
         }
 
         InterfaceGuard.Parameterizable(MetaModel).SetParameters(initParams);

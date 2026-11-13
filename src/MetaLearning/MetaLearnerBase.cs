@@ -277,8 +277,10 @@ public abstract partial class MetaLearnerBase<T, TInput, TOutput> : ModelBase<T,
         var taskBatch = CreateTaskBatch(tasks);
 
         // Perform meta-training
+        // An algorithm whose MetaTrain advances the iteration itself (for its own schedule) is not counted twice.
+        int previousIteration = _currentIteration;
         var metaLoss = MetaTrain(taskBatch);
-        _currentIteration++;
+        if (_currentIteration == previousIteration) _currentIteration++;
 
         stopwatch.Stop();
 
@@ -314,8 +316,10 @@ public abstract partial class MetaLearnerBase<T, TInput, TOutput> : ModelBase<T,
         var taskBatch = sampler.SampleBatch(batchSize);
         if (taskBatch.Tasks.Length == 0)
             throw new InvalidOperationException("Sampler returned an empty task batch.");
+        // An algorithm whose MetaTrain advances the iteration itself (for its own schedule) is not counted twice.
+        int previousIteration = _currentIteration;
         var metaLoss = MetaTrain(taskBatch);
-        _currentIteration++;
+        if (_currentIteration == previousIteration) _currentIteration++;
 
         stopwatch.Stop();
 

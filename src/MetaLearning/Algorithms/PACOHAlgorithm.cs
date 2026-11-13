@@ -73,6 +73,13 @@ public partial class PACOHAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
 
     private readonly int _paramDim;
 
+    // Seed of the posterior draws shared by every loss evaluation of one SPSA step, so the paired losses differ by
+    // the perturbation alone and not by Monte Carlo noise; null outside an SPSA step.
+    private int? _spsaDrawSeed;
+
+    // The posterior-draw source of the current loss evaluation; null means the learner's own generator.
+    private Random? _posteriorDraws;
+
     /// <inheritdoc/>
     public override MetaLearningAlgorithmType AlgorithmType => MetaLearningAlgorithmType.PACOH;
 
@@ -82,7 +89,7 @@ public partial class PACOHAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
                options, options.DataLoader, options.MetaOptimizer, options.InnerOptimizer,
                optimizerUse: MetaLearnerOptimizerUse.InnerAndOuter)
     {
-        if (options.Delta <= 0 || options.Delta >= 1)
+        if (double.IsNaN(options.Delta) || options.Delta <= 0 || options.Delta >= 1)
             throw new ArgumentOutOfRangeException(nameof(options), "Delta must lie in (0, 1).");
 
         _algoOptions = options;
@@ -125,7 +132,16 @@ public partial class PACOHAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
         }
 
         // Update prior log-variance via SPSA
-        UpdateAuxiliaryParamsSPSA(taskBatch, ref _priorLogVar, _algoOptions.OuterLearningRate * 0.1, ComputePACOHLoss);
+        _spsaDrawSeed = RandomGenerator.Next();
+        try
+        {
+            UpdateAuxiliaryParamsSPSA(taskBatch, ref _priorLogVar, _algoOptions.OuterLearningRate * 0.1, ComputePACOHLoss);
+        }
+        finally
+        {
+            _spsaDrawSeed = null;
+            _posteriorDraws = null;
+        }
 
         // Add PAC-Bayes regularization to reported loss
         return NumOps.Add(ComputeMean(losses), pacBayesLoss);
@@ -180,7 +196,7 @@ public partial class PACOHAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
 
         for (int s = 0; s < samples; s++)
         {
-            ParamModel.SetParameters(Engine.TensorNormal(location, scale, RandomGenerator.Next()).ToVector());
+            ParamModel.SetParameters(Engine.TensorNormal(location, scale, (_posteriorDraws ?? RandomGenerator).Next()).ToVector());
             losses.Add(ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput));
             if (withGradient)
                 gradients.Add(ClipGradients(ComputeGradients(MetaModel, task.QueryInput, task.QueryOutput)));
@@ -236,6 +252,9 @@ public partial class PACOHAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
 
     private double ComputePACOHLoss(TaskBatch<T, TInput, TOutput> taskBatch)
     {
+        // Every evaluation of one SPSA step replays the same posterior draws.
+        if (_spsaDrawSeed is int seed) _posteriorDraws = RandomHelper.CreateSeededRandom(seed);
+
         var losses = new List<T>();
         var adapted = new List<Vector<T>>();
 

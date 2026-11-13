@@ -274,6 +274,9 @@ public partial class MetaSGDAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, T
         ParamModel.SetParameters(theta);
         _optimizer.UpdateMetaParameters(coefficientGradient ?? new Vector<T>(0), metaLearningRate);
 
+        // The schedule reads _currentIteration, so a direct MetaTrain call (no data loader) advances it too; the
+        // base MetaTrainStep wrappers then leave it as it is instead of counting the update twice.
+        _currentIteration++;
         return ComputeMean(losses);
     }
 
@@ -307,16 +310,17 @@ public partial class MetaSGDAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, T
         switch (_metaSGDOptions.LearningRateSchedule)
         {
             case MetaSGDLearningRateScheduleType.StepDecay:
-                return rate * Math.Pow(0.5, Math.Min(3, Math.Floor(4 * progress)));
+                return rate * Math.Pow(StepDecayFactor,
+                    Math.Min(ScheduleIntervals - 1, Math.Floor(ScheduleIntervals * progress)));
             case MetaSGDLearningRateScheduleType.Exponential:
-                return rate * Math.Pow(0.01, progress);
+                return rate * Math.Pow(ExponentialFinalFraction, progress);
             case MetaSGDLearningRateScheduleType.CosineAnnealing:
                 return rate * 0.5 * (1 + Math.Cos(Math.PI * progress));
             case MetaSGDLearningRateScheduleType.Cyclical:
             {
-                double phase = 4 * progress - Math.Floor(4 * progress);
+                double phase = ScheduleIntervals * progress - Math.Floor(ScheduleIntervals * progress);
                 double triangle = 1 - Math.Abs(2 * phase - 1);
-                return rate * (0.1 + 0.9 * triangle);
+                return rate * (CyclicalMinimumFraction + (1 - CyclicalMinimumFraction) * triangle);
             }
             default:
                 return rate;
@@ -575,6 +579,23 @@ public partial class MetaSGDAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, T
     private const double AdaDeltaRho = 0.95;
     private const double AdaDeltaEpsilon = 1e-6;
 
+    // Outer-rate schedule policy (see ScheduledMetaLearningRate): StepDecay halves the rate at each of four equal
+    // intervals (PyTorch StepLR, gamma 0.5) and Cyclical runs four triangular cycles; Exponential ends at 1% of the
+    // rate; Cyclical's trough is 10% of it (Smith 2017).
+    private const int ScheduleIntervals = 4;
+    private const double StepDecayFactor = 0.5;
+    private const double ExponentialFinalFraction = 0.01;
+    private const double CyclicalMinimumFraction = 0.1;
+
+    // Relative finite-difference step of the Hessian-vector product: h = HessianProbeScale (1 + |at|) / |v|.
+    private const double HessianProbeScale = 1e-5;
+
+    // Starting value of every learned momentum coefficient (the common SGD-momentum default).
+    private const double InitialMomentum = 0.9;
+
+    // Layer-wise decay treats the flat parameter vector as this many equal layers: rate * decay^(L i / n).
+    private const double ApproximateLayerCount = 10.0;
+
     /// <summary>1 - v, element-wise.</summary>
     private Vector<T> OneMinus(Vector<T> v) => Engine.Negate(v) + NumOps.One;
 
@@ -830,7 +851,7 @@ public partial class MetaSGDAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, T
         if (NumOps.Equals(vNorm, NumOps.Zero)) return new Vector<T>(v.Length);
 
         T h = NumOps.Divide(
-            NumOps.Multiply(NumOps.FromDouble(1e-5), NumOps.Add(NumOps.One, Engine.Norm(at))), vNorm);
+            NumOps.Multiply(NumOps.FromDouble(HessianProbeScale), NumOps.Add(NumOps.One, Engine.Norm(at))), vNorm);
         var offset = Engine.Multiply(v, h);
 
         var parameters = InterfaceGuard.Parameterizable(model);
@@ -930,7 +951,7 @@ public partial class MetaSGDAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, T
         // Initialize momentum if enabled
         if (_metaSGDOptions.LearnMomentum)
         {
-            _optimizer.Momentums = Vector<T>.CreateDefault(numParams, NumOps.FromDouble(0.9));
+            _optimizer.Momentums = Vector<T>.CreateDefault(numParams, NumOps.FromDouble(InitialMomentum));
         }
 
         // Initialize direction if enabled
@@ -959,10 +980,10 @@ public partial class MetaSGDAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, T
         {
             case MetaSGDLearningRateInitialization.LayerBased when _metaSGDOptions.UseLayerWiseDecay:
             {
-                // Approximate layer from parameter index: baseLR * decay^(10 i / n) = baseLR * exp(i * 10 ln(decay) / n)
+                // Approximate layer from parameter index: baseLR * decay^(L i / n) = baseLR * exp(i * L ln(decay) / n)
                 var exponent = Engine.TensorMultiplyScalar(
                     Engine.TensorArange<T>(0, totalParams, 1),
-                    NumOps.FromDouble(10.0 * Math.Log(_metaSGDOptions.LayerDecayFactor) / totalParams));
+                    NumOps.FromDouble(ApproximateLayerCount * Math.Log(_metaSGDOptions.LayerDecayFactor) / totalParams));
                 return Engine.Multiply(Engine.TensorExp(exponent).ToVector(), NumOps.FromDouble(baseLR));
             }
 
@@ -1277,10 +1298,14 @@ public class PerParameterOptimizer<T, TInput, TOutput>
     /// scheduled rate of the current meta-iteration.
     /// </summary>
     /// <param name="metaGradients">Gradients for the meta-parameters, in <see cref="GetMetaParameterCount"/> layout.</param>
-    /// <param name="metaLearningRate">The step size of this update.</param>
-    public void UpdateMetaParameters(Vector<T> metaGradients, double metaLearningRate)
+    /// <param name="metaLearningRate">The step size of this update; zero (a schedule's endpoint) is allowed.</param>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="metaLearningRate"/> is not finite.</exception>
+    internal void UpdateMetaParameters(Vector<T> metaGradients, double metaLearningRate)
     {
         if (metaGradients is null) throw new ArgumentNullException(nameof(metaGradients));
+        if (double.IsNaN(metaLearningRate) || double.IsInfinity(metaLearningRate))
+            throw new ArgumentOutOfRangeException(nameof(metaLearningRate), metaLearningRate,
+                "The meta learning rate must be finite.");
         int n = _numParameters;
         int index = 0;
         T metaLR = NumOps.FromDouble(metaLearningRate);

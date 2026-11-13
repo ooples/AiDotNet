@@ -87,7 +87,7 @@ public partial class MetaPACOHAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T,
                options, options.DataLoader, options.MetaOptimizer, options.InnerOptimizer,
                optimizerUse: MetaLearnerOptimizerUse.InnerAndOuter)
     {
-        if (options.Delta <= 0 || options.Delta >= 1)
+        if (double.IsNaN(options.Delta) || options.Delta <= 0 || options.Delta >= 1)
             throw new ArgumentOutOfRangeException(nameof(options), "Delta must lie in (0, 1).");
 
         _algoOptions = options;
