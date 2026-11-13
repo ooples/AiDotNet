@@ -225,9 +225,7 @@ public partial class Llasa<T> : TtsModelBase<T>, ICodecTts<T>
 
     // ---------------------------------------------------------------- the codec
 
-    private static double[] Doubles(Tensor<T> audio) => audio.ToArray().Select(v => Ops.ToDouble(v)).ToArray();
 
-    private static Tensor<T> Wave(double[] samples) => new(new[] { samples.Length }, new Vector<T>(samples.Select(v => Ops.FromDouble(v)).ToArray()));
 
     /// <inheritdoc />
     /// <remarks>The codes of a 16 kHz recording as X-codec2 makes them (<c>encode_code</c>): <c>[frames, 1]</c>, each in
@@ -236,7 +234,7 @@ public partial class Llasa<T> : TtsModelBase<T>, ICodecTts<T>
     {
         ThrowIfDisposed();
         if (!HasPaperLayers) throw NotNative();
-        var codes = Codec.Encode(Doubles(audio));
+        var codes = Codec.Encode(audio);
         return new Tensor<int>((int[])codes.Clone(), new[] { codes.Length, 1 }).Cast<T>();
     }
 
@@ -247,7 +245,7 @@ public partial class Llasa<T> : TtsModelBase<T>, ICodecTts<T>
         ThrowIfDisposed();
         if (!HasPaperLayers) throw NotNative();
         var codes = CodesOf(tokens);
-        return Wave(codes.Length == 0 ? Array.Empty<double>() : Codec.Decode(codes));
+        return codes.Length == 0 ? new Tensor<T>(new[] { 0 }) : Codec.Decode(codes);
     }
 
     private static int[] CodesOf(Tensor<T> tokens)
@@ -287,7 +285,7 @@ public partial class Llasa<T> : TtsModelBase<T>, ICodecTts<T>
         if (text is null) throw new ArgumentNullException(nameof(text));
         if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(PreprocessText(text));
         if (!HasPaperLayers) return base.Synthesize(text);
-        return Wave(Decode(LlasaTokens.ReadCodes(Generate(LlasaTokens.Prompt(Tokenizer, text, ChatDate, Array.Empty<int>())))));
+        return (Decode(LlasaTokens.ReadCodes(Generate(LlasaTokens.Prompt(Tokenizer, text, ChatDate, Array.Empty<int>())))));
     }
 
     /// <summary>
@@ -304,14 +302,15 @@ public partial class Llasa<T> : TtsModelBase<T>, ICodecTts<T>
         if (promptAudio is null) throw new ArgumentNullException(nameof(promptAudio));
         if (promptText is null) throw new ArgumentNullException(nameof(promptText));
         if (!HasPaperLayers) throw NotNative();
-        var prefix = Codec.Encode(Doubles(promptAudio));
+        var prefix = Codec.Encode(promptAudio);
         var generated = LlasaTokens.ReadCodes(Generate(LlasaTokens.Prompt(Tokenizer, promptText + " " + text, ChatDate, prefix)));
         var audio = Decode(prefix.Concat(generated).ToArray());
-        if (_options.IncludePromptAudio) return Wave(audio);
-        return Wave(audio.Skip(Math.Min(promptAudio.Length, audio.Length)).ToArray());
+        if (_options.IncludePromptAudio) return audio;
+        int skip = Math.Min(promptAudio.Length, audio.Length);
+        return Engine.TensorSlice(audio, new[] { skip }, new[] { audio.Length - skip }).Contiguous();
     }
 
-    private double[] Decode(IReadOnlyList<int> codes) => codes.Count == 0 ? Array.Empty<double>() : Codec.Decode(codes);
+    private Tensor<T> Decode(IReadOnlyList<int> codes) => codes.Count == 0 ? new Tensor<T>(new[] { 0 }) : Codec.Decode(codes);
 
     /// <inheritdoc />
     /// <remarks><paramref name="input"/> is a text's token ids (<see cref="PreprocessText"/>); the waveform
@@ -487,7 +486,7 @@ public partial class Llasa<T> : TtsModelBase<T>, ICodecTts<T>
             var audio = sample.Audio ?? throw new ArgumentException($"{GetType().Name} trains on the recording or its codes; set Audio or CodecTokens.", nameof(sample));
             if (!_codes.TryGetValue(audio, out codes!))
             {
-                codes = Codec.Encode(Doubles(audio));
+                codes = Codec.Encode(audio);
                 if (_codes.Count > 64) _codes.Clear();
                 _codes[audio] = codes;
             }
