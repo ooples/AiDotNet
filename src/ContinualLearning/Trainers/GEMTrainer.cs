@@ -209,8 +209,6 @@ public class GEMTrainer<T, TInput, TOutput> : ContinualLearnerBase<T, TInput, TO
         // Track accumulated task gradient for storing after training
         Vector<T>? accumulatedTaskGradient = null;
         int gradientAccumulationCount = 0;
-        var violatedFlag = NumOps.FromDouble(1.0);
-        var satisfiedFlag = NumOps.Zero;
 
         for (int epoch = 0; epoch < epochsPerTask; epoch++)
         {
@@ -218,7 +216,7 @@ public class GEMTrainer<T, TInput, TOutput> : ContinualLearnerBase<T, TInput, TO
             T epochViolations = NumOps.Zero;
             int batchCount = 0;
             var batchLosses = new List<T>();
-            var batchViolationFlags = new List<T>();
+            int violatedBatches = 0;
 
             // Shuffle indices for this epoch
             var indices = Enumerable.Range(0, numSamples)
@@ -284,7 +282,10 @@ public class GEMTrainer<T, TInput, TOutput> : ContinualLearnerBase<T, TInput, TO
                         totalConstraintViolations++;
                     }
                 }
-                batchViolationFlags.Add(violatedConstraint ? violatedFlag : satisfiedFlag);
+                if (violatedConstraint)
+                {
+                    violatedBatches++;
+                }
 
                 // Adjust gradients using strategy (GEM projects gradients if they violate constraints)
                 var adjustedGradients = Strategy.AdjustGradients(Model, batchGradients);
@@ -309,11 +310,11 @@ public class GEMTrainer<T, TInput, TOutput> : ContinualLearnerBase<T, TInput, TO
                 batchCount++;
             }
 
-            // Average epoch losses; the violation rate is the mean of the per-batch 0/1 flags
+            // Average epoch losses; the violation rate is counted in int (a 0/1 sum in T saturates)
             if (batchCount > 0)
             {
                 epochLoss = Engine.Mean(new Vector<T>(batchLosses));
-                epochViolations = Engine.Mean(new Vector<T>(batchViolationFlags));
+                epochViolations = NumOps.FromDouble((double)violatedBatches / batchCount);
             }
 
             lossHistory.Add(epochLoss);
