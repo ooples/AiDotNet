@@ -320,6 +320,17 @@ public class ConcertoObjectiveReferenceTests
     }
 
     [Fact]
+    public void PretrainEpochLoss_Half_SmallLossesDoNotUnderflowWhenScaled()
+    {
+        // 10000 samples at loss 0.001: scaled by the full 1 / count first, each loss became 1e-7, a Half subnormal
+        // whose step is 6e-8, so every term rounded up to 1.19e-7 and the mean came out 0.00119 (19% high).
+        var losses = new Half[10000];
+        for (int i = 0; i < losses.Length; i++) losses[i] = (Half)0.001f;
+
+        Assert.Equal(0.001, (double)(float)Concerto<Half>.MeanOfLosses(losses), 2e-5);
+    }
+
+    [Fact]
     public void CrossModalLoss_Half_ManyMatchedPatchesAveragesInDouble()
     {
         // A 64 x 64 grid with one point per pixel, every point and patch feature (1, 0): all 4096 similarities are

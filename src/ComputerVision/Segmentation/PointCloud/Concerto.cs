@@ -340,18 +340,24 @@ public partial class Concerto<T> : Common.SemanticSegmentationBase<T>
     #region Private Methods
 
     /// <summary>
-    /// The mean of <paramref name="losses"/>, each pre-scaled by <c>1 / count</c> before the sum so the running
-    /// total stays near the mean: summing first overflows a narrow <typeparamref name="T"/> such as Half once the
-    /// losses add up past 65504 (6554 samples at a loss of 10).
+    /// The mean of <paramref name="losses"/>. Each loss is scaled by <c>1 / sqrt(count)</c> before the sum and the
+    /// sum by <c>1 / sqrt(count)</c> after it, so the total stays near <c>sqrt(count)</c> times the mean.
     /// </summary>
+    /// <remarks>
+    /// Summing first overflows a narrow <typeparamref name="T"/> such as Half once the losses add up past 65504
+    /// (6554 samples at a loss of 10). Scaling each loss by the full <c>1 / count</c> first instead pushes small
+    /// losses into Half's subnormal range: 10000 losses of 0.001 become 1e-7 each, a step of 6e-8, and the mean
+    /// comes out about 19% high.
+    /// </remarks>
     internal static T MeanOfLosses(T[] losses)
     {
         var numOps = MathHelper.GetNumericOperations<T>();
         if (losses.Length == 0) return numOps.Zero;
         var engine = AiDotNet.Tensors.Engines.AiDotNetEngine.Current;
+        T scale = numOps.FromDouble(1.0 / Math.Sqrt(losses.Length));
         var scaled = engine.TensorMultiplyScalar(
-            new Tensor<T>(new[] { losses.Length }, new Vector<T>(losses)), numOps.FromDouble(1.0 / losses.Length));
-        return engine.TensorSum(scaled);
+            new Tensor<T>(new[] { losses.Length }, new Vector<T>(losses)), scale);
+        return numOps.Multiply(engine.TensorSum(scaled), scale);
     }
 
     /// <summary>
