@@ -196,9 +196,7 @@ public partial class DPGNAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
                 if (refinedDistributions.Length > 0)
                 {
                     // Mean confidence 0.5 + 0.5 * sigmoid(d) over the refined distributions scales the backbone.
-                    T half = NumOps.FromDouble(0.5);
-                    T avgConf = NumOps.Add(half, NumOps.Multiply(half, Engine.Mean(Engine.Sigmoid(refinedDistributions))));
-                    ParamModel.SetParameters(Engine.Multiply(ParamModel.GetParameters(), avgConf));
+                    ParamModel.SetParameters(Engine.Multiply(ParamModel.GetParameters(), MeanConfidence(refinedDistributions)));
                 }
             }
 
@@ -265,6 +263,14 @@ public partial class DPGNAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
             Tensor<T>.FromVector(Engine.Add(Engine.Multiply(aggregated, wProj), Engine.Fill(n, bProj))), NumOps.Zero);
         return Engine.Add(nodes, projected.ToVector());
     }
+
+    /// <summary>
+    /// The mean confidence 0.5 + 0.5 * mean(sigmoid(d)) over the refined distributions. The sigmoids are taken in T
+    /// and their mean accumulated in double, as the scalar loop did: a Half running sum over more than 2048 nodes
+    /// stops growing.
+    /// </summary>
+    private T MeanConfidence(Vector<T> refinedDistributions)
+        => NumOps.FromDouble(0.5 + 0.5 * WideReduction.Mean(Engine, Engine.Sigmoid(refinedDistributions)));
 
     /// <summary>
     /// Performs multi-layer dual graph propagation: alternating point graph (feature refinement)

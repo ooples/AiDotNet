@@ -95,7 +95,7 @@ public partial class ACLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInpu
         var losses = new List<T>();
         var metaGradients = new List<Vector<T>>();
         var initParams = ParamModel.GetParameters();
-        var (decay, keep, protection, learningRate) = ProtectionConstants();
+        var (decay, rootKeep, protection, learningRate) = ProtectionConstants();
 
         foreach (var task in taskBatch.Tasks)
         {
@@ -108,7 +108,7 @@ public partial class ACLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInpu
                 var grad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
 
                 // Update importance: EMA of squared gradients
-                _importance = Engine.Add(Engine.Multiply(_importance, decay), Engine.Multiply(Engine.Multiply(grad, grad), keep));
+                _importance = UpdateImportance(_importance, grad, decay, rootKeep);
 
                 // Apply gradient with per-parameter protected learning rate lr / (1 + strength * importance)
                 adaptedParams = ProtectedStep(adaptedParams, grad, _importance, protection, learningRate);
@@ -134,7 +134,7 @@ public partial class ACLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInpu
     {
         var initParams = ParamModel.GetParameters();
         var adaptedParams = initParams.Clone();
-        var (decay, keep, protection, learningRate) = ProtectionConstants();
+        var (decay, rootKeep, protection, learningRate) = ProtectionConstants();
 
         // Use local copy of importance so Adapt doesn't mutate shared training state
         var localImportance = _importance.Clone();
@@ -144,7 +144,7 @@ public partial class ACLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInpu
             ParamModel.SetParameters(adaptedParams);
             var grad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
 
-            localImportance = Engine.Add(Engine.Multiply(localImportance, decay), Engine.Multiply(Engine.Multiply(grad, grad), keep));
+            localImportance = UpdateImportance(localImportance, grad, decay, rootKeep);
             adaptedParams = ProtectedStep(adaptedParams, grad, localImportance, protection, learningRate);
         }
 
@@ -152,10 +152,24 @@ public partial class ACLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInpu
         return new AdaptedMetaModel<T, TInput, TOutput>(MetaModel, adaptedParams);
     }
 
-    /// <summary>The importance EMA decay, its complement, the protection strength and the inner learning rate in T.</summary>
-    private (T Decay, T Keep, T Protection, T LearningRate) ProtectionConstants()
-        => (NumOps.FromDouble(_algoOptions.ImportanceDecay), NumOps.FromDouble(1.0 - _algoOptions.ImportanceDecay),
+    /// <summary>
+    /// The importance EMA decay, the square root of its complement, the protection strength and the inner learning
+    /// rate in T.
+    /// </summary>
+    private (T Decay, T RootKeep, T Protection, T LearningRate) ProtectionConstants()
+        => (NumOps.FromDouble(_algoOptions.ImportanceDecay), NumOps.FromDouble(Math.Sqrt(1.0 - _algoOptions.ImportanceDecay)),
             NumOps.FromDouble(_algoOptions.ProtectionStrength), NumOps.FromDouble(_algoOptions.InnerLearningRate));
+
+    /// <summary>
+    /// The importance EMA decay * importance + (1 - decay) * g^2, with (1 - decay) * g^2 formed as
+    /// (sqrt(1 - decay) * g)^2: the gradient is scaled before it is squared, so a Half gradient of 256 or more
+    /// does not overflow to infinity (which would freeze that parameter) where the scalar loop's double did not.
+    /// </summary>
+    private Vector<T> UpdateImportance(Vector<T> importance, Vector<T> gradient, T decay, T rootKeep)
+    {
+        var scaled = Engine.Multiply(gradient, rootKeep);
+        return Engine.Add(Engine.Multiply(importance, decay), Engine.Multiply(scaled, scaled));
+    }
 
     /// <summary>theta - lr * g / (1 + strength * importance), element-wise.</summary>
     private Vector<T> ProtectedStep(Vector<T> parameters, Vector<T> gradient, Vector<T> importance, T protection, T learningRate)

@@ -189,15 +189,13 @@ public partial class BayProNetAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T,
     /// <summary>
     /// KL(N(μ_post, σ²_post) || N(μ_prior, I)) = 0.5 * Σ_d [σ²_d + (μ_post_d - μ_prior_d)² - 1 - log(σ²_d)]
     /// </summary>
+    /// <remarks>
+    /// Summed per dimension as expm1(log v) - log v plus the squared shift, accumulated in double: the form
+    /// sum(v) + |shift|^2 - (D + sum(log v)) subtracts two sums near D, which loses a small KL to rounding in
+    /// float and, for Half, saturates both sums at 2048 (D itself overflows past 65504).
+    /// </remarks>
     private T ComputeAdaptedKL(Vector<T> posterior, Vector<T> prior)
-    {
-        var logVar = _posteriorLogVar.Length == _paramDim ? _posteriorLogVar : _posteriorLogVar.GetSubVector(0, _paramDim);
-        var diff = Engine.Subtract(posterior.GetSubVector(0, _paramDim), prior.GetSubVector(0, _paramDim));
-        T kl = NumOps.Subtract(
-            NumOps.Add(Engine.Sum(Engine.Exp(logVar)), Engine.DotProduct(diff, diff)),
-            NumOps.Add(NumOps.FromDouble(_paramDim), Engine.Sum(logVar)));
-        return NumOps.Multiply(NumOps.FromDouble(0.5), kl);
-    }
+        => WideReduction.DiagonalGaussianKL(Engine, _posteriorLogVar, posterior, prior, _paramDim);
 
     /// <summary>The KL penalty as the double the SPSA objective accumulates.</summary>
     private double ComputeAdaptedKLValue(Vector<T> posterior, Vector<T> prior)

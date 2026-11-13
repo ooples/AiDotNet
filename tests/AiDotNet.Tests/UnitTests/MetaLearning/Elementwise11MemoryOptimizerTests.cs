@@ -298,6 +298,129 @@ public class Elementwise11MemoryOptimizerTests
         Assert.Equal(0.5f * (1e-4f * 1e-4f), kl);
     }
 
+    // The scalar loops these members replaced accumulated in double. A Half running sum stalls once it reaches
+    // 2048 (1024 when the terms are 0.5, which then tie-round to even) and a Half sum of squares overflows past
+    // 65504, so each fixture below is sized past those limits and checked against the double-accumulated value.
+
+    [Fact]
+    public void BayProNet_HalfKlOfAnUnmovedUnitPosteriorIsZero()
+    {
+        // logVar = 0 and mean = prior: every term v - 1 - log v + shift^2 is exactly zero. Summing exp(logVar) and
+        // subtracting D lost the answer: the Half sum stalled at 2048 while D = 4096, giving -1024.
+        const int d = 4096;
+        var algorithm = Uninitialized<BayProNetAlgorithm<Half, Matrix<Half>, Vector<Half>>>();
+        Field(algorithm, "_paramDim", d);
+        Field(algorithm, "_posteriorLogVar", new Vector<Half>(d));
+        var mean = new Vector<Half>(Enumerable.Repeat((Half)0.5, d).ToArray());
+        Assert.Equal((Half)0, Assert.IsType<Half>(Call(algorithm, "ComputeAdaptedKL", mean, mean)));
+    }
+
+    [Fact]
+    public void BayesianPrototypeKl_HalfSumsEveryParameter()
+    {
+        // logVar = -1 everywhere: 0.5 * D * (e^-1 - 1 + 1) = 0.5 * 20000 * 0.3679 = 3678.8, which a Half running sum
+        // of 0.3679-sized terms cannot reach.
+        const int d = 20000;
+        double expected = 0.5 * d * Math.Exp(-1);
+        var logVar = new Vector<Half>(Enumerable.Repeat((Half)(-1), d).ToArray());
+        var zero = new Vector<Half>(d);
+
+        var proNet = Uninitialized<BayProNetAlgorithm<Half, Matrix<Half>, Vector<Half>>>();
+        Field(proNet, "_paramDim", d);
+        Field(proNet, "_posteriorLogVar", logVar);
+        Assert.InRange((double)Assert.IsType<Half>(Call(proNet, "ComputeAdaptedKL", zero, zero)), expected - 4, expected + 4);
+
+        var transProto = Uninitialized<BayTransProtoAlgorithm<Half, Matrix<Half>, Vector<Half>>>();
+        Field(transProto, "_paramDim", d);
+        Field(transProto, "_logVar", logVar);
+        Assert.InRange((double)Assert.IsType<Half>(Call(transProto, "DiagonalGaussianKL", zero, zero)), expected - 4, expected + 4);
+    }
+
+    [Fact]
+    public void Awgim_HalfNormClipRescalesALargeGradient()
+    {
+        // ||(300, 400)|| = 500 clipped to 1 is (0.6, 0.8). A Half sum of squares overflowed to infinity, and the
+        // factor 1 / infinity zeroed the gradient.
+        var algorithm = Uninitialized<AWGIMAlgorithm<Half, Matrix<Half>, Tensor<Half>>>();
+        var options = Uninitialized<AWGIMOptions<Half, Matrix<Half>, Tensor<Half>>>();
+        options.GradientNormClipThreshold = 1.0;
+        Field(algorithm, "_awgimOptions", options);
+        var clipped = Assert.IsType<Vector<Half>>(Call(algorithm, "Clip",
+            new Vector<Half>(new[] { (Half)300, (Half)400 }), new[] { (0, 2) }));
+        Assert.InRange((double)clipped[0], 0.599, 0.601);
+        Assert.InRange((double)clipped[1], 0.799, 0.801);
+    }
+
+    [Fact]
+    public void Acl_HalfImportanceOfALargeGradientStaysFinite()
+    {
+        // (1 - 0.99) * 300^2 = 900. Squaring 300 in Half first overflows to infinity, which froze the parameter.
+        var algorithm = Uninitialized<ACLAlgorithm<Half, Matrix<Half>, Vector<Half>>>();
+        var importance = Assert.IsType<Vector<Half>>(Call(algorithm, "UpdateImportance",
+            new Vector<Half>(1), new Vector<Half>(new[] { (Half)300 }), (Half)0.99, (Half)Math.Sqrt(0.01)));
+        Assert.InRange((double)importance[0], 898, 902);
+    }
+
+    [Fact]
+    public void Feat_HalfContrastiveLossAveragesEveryEntry()
+    {
+        // ||1 - 0||^2 / D = 1 for D = 3000; a Half running sum of the squares stalled at 2048 (0.68).
+        const int d = 3000;
+        var algorithm = Uninitialized<FEATAlgorithm<Half, Matrix<Half>, Vector<Half>>>();
+        var adapted = new Vector<Half>(Enumerable.Repeat((Half)1, d).ToArray());
+        Assert.Equal((Half)1, Assert.IsType<Half>(Call(algorithm, "ContrastiveLoss", adapted, new Vector<Half>(d))));
+    }
+
+    [Fact]
+    public void Dpgn_HalfMeanConfidenceAveragesEveryNode()
+    {
+        // sigmoid(0) = 0.5 on 4096 nodes: 0.5 + 0.5 * 0.5 = 0.75. The Half sum of halves stalled at 1024 (0.625).
+        var algorithm = Uninitialized<DPGNAlgorithm<Half, Matrix<Half>, Vector<Half>>>();
+        Assert.Equal((Half)0.75, Assert.IsType<Half>(Call(algorithm, "MeanConfidence", new Vector<Half>(4096))));
+    }
+
+    [Fact]
+    public void DeepEmd_HalfSupportModulationAveragesEveryFeature()
+    {
+        // mean|support| = 0.5 at temperature 1: 0.5 + 0.5 * 0.5 / 1.5 = 0.6667 (the stalled Half mean gave 0.6).
+        var algorithm = Uninitialized<DeepEMDAlgorithm<Half, Matrix<Half>, Vector<Half>>>();
+        var options = Uninitialized<DeepEMDOptions<Half, Matrix<Half>, Vector<Half>>>();
+        options.Temperature = 1.0;
+        Field(algorithm, "_deepEmdOptions", options);
+        var support = new Vector<Half>(Enumerable.Repeat((Half)0.5, 4096).ToArray());
+        var factor = Assert.IsType<Vector<Half>>(Call(algorithm, "SupportModulation", support));
+        Assert.InRange((double)factor[0], 0.666, 0.667);
+    }
+
+    [Fact]
+    public void FewTure_HalfSupportCentroidAveragesEveryFeature()
+    {
+        // q * mean(support) / (u + 1e-6) with q = 1, mean = 0.5 and u = sigmoid(0.01 * 0.01) = 0.5: weight 1.
+        // The stalled Half mean gave 0.5.
+        var algorithm = Uninitialized<FewTUREAlgorithm<Half, Matrix<Half>, Vector<Half>>>();
+        Field(algorithm, "_uncertaintyParams", new Vector<Half>(0));
+        var support = new Vector<Half>(Enumerable.Repeat((Half)0.5, 4096).ToArray());
+        var weights = Assert.IsType<Vector<Half>>(Call(algorithm, "ComputeUncertaintyWeights",
+            support, new Vector<Half>(new[] { (Half)1 })));
+        Assert.InRange((double)weights[0], 0.99, 1.01);
+    }
+
+    [Fact]
+    public void LaplacianShot_HalfSupportSimilaritySumsEveryFeature()
+    {
+        // One query node of 0.001 and no smoothing: support[0] * sigmoid(0.001 * sum(support)) with
+        // sum = 4096 * 0.5 = 2048 is 0.5 * sigmoid(2.048) = 0.4429. The stalled Half sum (1024) gave 0.3679.
+        var algorithm = Uninitialized<LaplacianShotAlgorithm<Half, Matrix<Half>, Vector<Half>>>();
+        var options = Uninitialized<LaplacianShotOptions<Half, Matrix<Half>, Vector<Half>>>();
+        options.KernelBandwidth = 1.0;
+        Field(algorithm, "_lapShotOptions", options);
+        var support = new Vector<Half>(Enumerable.Repeat((Half)0.5, 4096).ToArray());
+        var refined = Assert.IsType<Vector<Half>>(Call(algorithm, "LaplacianRefine",
+            support, new Vector<Half>(new[] { (Half)0.001 })));
+        double expected = 0.5 / (1 + Math.Exp(-0.001 * 2048));
+        Assert.InRange((double)refined[0], expected - 0.002, expected + 0.002);
+    }
+
     [Fact]
     public void Dkt_FloatKernelOfLargeNormRowsNeverExceedsOne()
     {

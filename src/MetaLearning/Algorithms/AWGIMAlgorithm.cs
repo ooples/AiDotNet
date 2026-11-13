@@ -302,14 +302,16 @@ public partial class AWGIMAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
         if (_awgimOptions.GradientNormClipThreshold is double normBound)
         {
             // One scale per tensor range (1 when its norm is within the bound), laid out over the whole vector.
-            T limit = NumOps.FromDouble(normBound);
+            // The norm accumulates in double, as the scalar loop did: a Half sum of squares overflows to infinity
+            // past 65504 (a single entry of 256 is enough), and normBound / infinity would zero the gradient
+            // instead of rescaling it.
             var scales = new List<Vector<T>>();
             int position = 0;
             foreach (var (offset, length) in tensors.OrderBy(range => range.Offset))
             {
                 if (offset > position) scales.Add(Engine.Fill(offset - position, NumOps.One));
-                T norm = Engine.Norm(clipped.GetSubVector(offset, length));
-                T factor = NumOps.LessThanOrEquals(norm, limit) ? NumOps.One : NumOps.Divide(limit, norm);
+                double norm = Math.Sqrt(WideReduction.SumOfSquares(Engine, clipped.GetSubVector(offset, length)));
+                T factor = norm <= normBound ? NumOps.One : NumOps.FromDouble(normBound / norm);
                 scales.Add(Engine.Fill(length, factor));
                 position = offset + length;
             }

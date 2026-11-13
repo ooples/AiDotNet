@@ -225,13 +225,7 @@ public partial class FEATAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
             T contrastiveLoss = NumOps.Zero;
             if (_featOptions.ContrastiveWeight > 0 && adaptedPrototypes != null && supportFeatures != null)
             {
-                int minLen = Math.Min(supportFeatures.Length, adaptedPrototypes.Length);
-                if (minLen > 0)
-                {
-                    var diff = Engine.Subtract(
-                        adaptedPrototypes.GetSubVector(0, minLen), supportFeatures.GetSubVector(0, minLen));
-                    contrastiveLoss = NumOps.Divide(Engine.DotProduct(diff, diff), NumOps.FromDouble(minLen));
-                }
+                contrastiveLoss = ContrastiveLoss(adaptedPrototypes, supportFeatures);
             }
 
             // Combined loss = classification + contrastive
@@ -312,6 +306,22 @@ public partial class FEATAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
 
         ParamModel.SetParameters(initParams);
         return totalLoss / Math.Max(taskBatch.Tasks.Length, 1);
+    }
+
+    /// <summary>
+    /// ||adapted - raw||^2 / dim over the first min(adapted.Length, raw.Length) entries (zero when that is none).
+    /// The squares accumulate in double, as the scalar loop did: a Half running sum stops growing past 2048.
+    /// </summary>
+    private T ContrastiveLoss(Vector<T> adapted, Vector<T> raw)
+    {
+        int minLen = Math.Min(raw.Length, adapted.Length);
+        if (minLen == 0)
+        {
+            return NumOps.Zero;
+        }
+
+        var diff = Engine.Subtract(adapted.GetSubVector(0, minLen), raw.GetSubVector(0, minLen));
+        return NumOps.FromDouble(WideReduction.SumOfSquares(Engine, diff) / minLen);
     }
 
     /// <summary>

@@ -540,13 +540,17 @@ public abstract partial class MetaLearnerBase<T, TInput, TOutput> : ModelBase<T,
                 if (int.TryParse(File.ReadAllText(metaPath), out int iteration))
                     _currentIteration = iteration;
             }
-            catch (IOException)
+            catch (IOException ex)
             {
                 // Legacy iteration metadata is optional; encoder restoration has already succeeded.
+                System.Diagnostics.Trace.TraceWarning(
+                    $"Meta-learner legacy checkpoint: the iteration sidecar could not be read; starting from 0. {ex}");
             }
-            catch (UnauthorizedAccessException)
+            catch (UnauthorizedAccessException ex)
             {
                 // Preserve legacy loading when only the optional sidecar is inaccessible.
+                System.Diagnostics.Trace.TraceWarning(
+                    $"Meta-learner legacy checkpoint: the iteration sidecar is not accessible; starting from 0. {ex}");
             }
         }
         ResetOptimizerState();

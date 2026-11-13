@@ -36,6 +36,16 @@ public class Elementwise11RegressionTests
     }
 
     [Fact]
+    public void Labels_ReportTheFirstInvalidPosition()
+    {
+        // Position 1 is out of range (one failed check); position 2 is negative and fractional (two). The scalar
+        // scan named position 1; an arg-max over the failure counts named position 2.
+        var labels = new Vector<double>(new[] { 0.0, 5.0, -0.5 });
+        var error = Assert.Throws<ArgumentException>(() => ClassifierOutputs<double>.Labels(labels, 3));
+        Assert.Contains("Label 5 at position 1", error.Message);
+    }
+
+    [Fact]
     public void ProbabilityLoss_RejectsALabelBeyondTheProbabilityColumns()
     {
         // Two probability columns: label 2 matches no column and would silently leave an all-zero one-hot row.

@@ -220,8 +220,9 @@ public partial class LaplacianShotAlgorithm<T, TInput, TOutput> : MetaLearnerBas
         // Compute degree and Laplacian L = D - W
         var degree = Engine.ReduceSum(weights, new[] { 1 }, false).ToVector();
 
-        // Initial logits from support-query similarity: q * sum(support)
-        var logits = Engine.Multiply(queries, Engine.Sum(supportFeatures));
+        // Initial logits from support-query similarity: q * sum(support), the sum accumulated in double as the
+        // scalar loop did (a Half running sum over the support features stops growing past 2048)
+        var logits = Engine.Multiply(queries, NumOps.FromDouble(WideReduction.Sum(Engine, supportFeatures)));
 
         // Iterative Laplacian smoothing: y <- y - alpha * (lambda * (D y - W y) + (y - logits))
         var refined = logits.Clone();

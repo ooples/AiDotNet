@@ -232,8 +232,9 @@ public partial class FewTUREAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, T
         var uncertainty = UncertaintyScores(
             queryFeatures, Engine.TensorBroadcastTo(firstRow, new[] { numQuery, 4 }));
 
-        // Similarity to the support centroid: q * mean(support)
-        T supportMean = supportFeatures.Length > 0 ? Engine.Mean(supportFeatures) : NumOps.Zero;
+        // Similarity to the support centroid: q * mean(support), the mean accumulated in double as the scalar loop
+        // did (a Half running sum over the support features stops growing past 2048)
+        T supportMean = NumOps.FromDouble(WideReduction.Mean(Engine, supportFeatures));
         var sim = Engine.Multiply(queryFeatures, supportMean);
 
         // Weight = similarity / (uncertainty + eps)

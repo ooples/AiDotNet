@@ -203,20 +203,43 @@ public partial class DeepEMDAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, T
         Vector<T>? modulationFactors = null;
         if (supportFeatures != null && supportFeatures.Length > 0)
         {
-            T meanAbs = Engine.Mean(Engine.Abs(supportFeatures));
-            T tempScale = NumOps.FromDouble(1.0 / Math.Max(_deepEmdOptions.Temperature, NumericalEpsilon));
-            T minModulation = NumOps.FromDouble(MinModulationFactor);
-            T unclamped = NumOps.Add(minModulation, NumOps.Divide(
-                NumOps.Multiply(NumOps.Multiply(minModulation, tempScale), meanAbs),
-                NumOps.Add(NumOps.One, meanAbs)));
-            modulationFactors = Engine.Clamp(
-                new Vector<T>(new[] { unclamped }), minModulation, NumOps.FromDouble(MaxModulationFactor));
+            modulationFactors = SupportModulation(supportFeatures);
         }
 
         return new DeepEMDModel<T, TInput, TOutput>(
             MetaModel, currentParams, supportFeatures,
             _deepEmdOptions.Temperature, _deepEmdOptions.SinkhornIterations,
             _deepEmdOptions.SinkhornRegularization, modulationFactors);
+    }
+
+    /// <summary>
+    /// The adapted model's one-element modulation from temperature-scaled support magnitudes:
+    /// clamp(min + min * (1 / temperature) * m / (1 + m), min, max) with m = mean|support|. The mean accumulates in
+    /// double, as the scalar loop did: a Half running sum over the support features stops growing past 2048.
+    /// </summary>
+    private Vector<T> SupportModulation(Vector<T> supportFeatures)
+    {
+        T meanAbs = NumOps.FromDouble(WideReduction.Mean(Engine, Engine.Abs(supportFeatures)));
+        T tempScale = NumOps.FromDouble(1.0 / Math.Max(_deepEmdOptions.Temperature, NumericalEpsilon));
+        T minModulation = NumOps.FromDouble(MinModulationFactor);
+        T unclamped = NumOps.Add(minModulation, NumOps.Divide(
+            NumOps.Multiply(NumOps.Multiply(minModulation, tempScale), meanAbs),
+            NumOps.Add(NumOps.One, meanAbs)));
+        return Engine.Clamp(
+            new Vector<T>(new[] { unclamped }), minModulation, NumOps.FromDouble(MaxModulationFactor));
+    }
+
+    /// <summary>
+    /// EMD-derived modulation as a one-element factor: low EMD (similar) gives a factor near 1.0, high EMD
+    /// (dissimilar) a smaller one; clamp(min + 1 / (1 + emd * temperature), min, max).
+    /// </summary>
+    private Vector<T> EmdModulationFactor(T emdScore)
+    {
+        T modFactor = NumOps.Divide(NumOps.One,
+            NumOps.Add(NumOps.One, NumOps.Multiply(emdScore, NumOps.FromDouble(_deepEmdOptions.Temperature))));
+        return Engine.Clamp(
+            new Vector<T>(new[] { NumOps.Add(NumOps.FromDouble(MinModulationFactor), modFactor) }),
+            NumOps.FromDouble(MinModulationFactor), NumOps.FromDouble(MaxModulationFactor));
     }
 
     /// <summary>
@@ -243,19 +266,6 @@ public partial class DeepEMDAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, T
     /// alternating row and column normalization of a "soft" matching matrix.
     /// </para>
     /// </remarks>
-    /// <summary>
-    /// EMD-derived modulation as a one-element factor: low EMD (similar) gives a factor near 1.0, high EMD
-    /// (dissimilar) a smaller one; clamp(min + 1 / (1 + emd * temperature), min, max).
-    /// </summary>
-    private Vector<T> EmdModulationFactor(T emdScore)
-    {
-        T modFactor = NumOps.Divide(NumOps.One,
-            NumOps.Add(NumOps.One, NumOps.Multiply(emdScore, NumOps.FromDouble(_deepEmdOptions.Temperature))));
-        return Engine.Clamp(
-            new Vector<T>(new[] { NumOps.Add(NumOps.FromDouble(MinModulationFactor), modFactor) }),
-            NumOps.FromDouble(MinModulationFactor), NumOps.FromDouble(MaxModulationFactor));
-    }
-
     private T ComputeEMDScore(Vector<T> features1, Vector<T> features2)
     {
         int numNodes = _deepEmdOptions.NumNodes;

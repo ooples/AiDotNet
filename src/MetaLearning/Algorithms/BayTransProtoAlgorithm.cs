@@ -204,11 +204,9 @@ public partial class BayTransProtoAlgorithm<T, TInput, TOutput> : MetaLearnerBas
     {
         // Per dimension v_d - 1 - log v_d = expm1(log v_d) - log v_d is nonnegative and near zero when log v_d is,
         // so it is summed first; adding the squared mean shift to that small sum (rather than to a sum near D)
-        // keeps a tiny shift visible when T is float.
-        var diff = Engine.Subtract(mean, prior);
-        T varianceTerm = Engine.Sum(Engine.Subtract(Engine.ExpM1(_logVar), _logVar));
-        T kl = NumOps.Add(varianceTerm, Engine.DotProduct(diff, diff));
-        return NumOps.Multiply(NumOps.FromDouble(0.5), kl);
+        // keeps a tiny shift visible when T is float. Both sums accumulate in double: a Half running sum over the
+        // parameter vector stops growing past 2048.
+        return WideReduction.DiagonalGaussianKL(Engine, _logVar, mean, prior, _logVar.Length);
     }
 
     /// <summary>

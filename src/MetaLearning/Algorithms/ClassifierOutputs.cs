@@ -100,7 +100,9 @@ internal static class ClassifierOutputs<T>
         var invalid = engine.TensorAdd(engine.TensorAdd(negative, tooLarge), fractional);
         if (engine.TensorSum(invalid) > 0)
         {
-            int i = engine.TensorArgMax(invalid, 0).ToArray()[0];
+            // The first invalid label, as the scalar scan reported. invalid counts the failed checks (a fractional
+            // negative label fails two), so the arg-max is taken over the 0/1 flag rather than over the counts.
+            int i = engine.TensorArgMax(engine.TensorGreaterThan(invalid, 0.0), 0).ToArray()[0];
             double value = Ops.ToDouble(flat[i]);
             throw new ArgumentException(
                 $"Label {value} at position {i} is not a class index in [0, {numClasses}). Classifier "
