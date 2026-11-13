@@ -95,9 +95,12 @@ internal static class TieBreakArgMax
         var rowMax = engine.TensorBroadcastTo(engine.ReduceMax(clean, new[] { 1 }, true), new[] { rows, cols });
         var isMax = engine.TensorMultiply(engine.TensorEquals(clean, rowMax), eligible);
 
-        var rank = engine.TensorAdd(engine.TensorMultiplyScalar(isMax, ops.FromDouble(2.0)), fallbackRank);
-        var reversedColumn = engine.TensorArange<T>(cols - 1, -1, -1).Reshape(1, cols);
-        var key = engine.TensorAdd(engine.TensorMultiplyScalar(rank, ops.FromDouble(cols)), reversedColumn);
+        // The rank (0..3) is exact in every T; the key is built in long because rank * cols + column would
+        // lose integers in T (Half above 2048, float above 2^24) and tie distinct columns.
+        var rank = engine.TensorAdd(engine.TensorMultiplyScalar(isMax, ops.FromDouble(2.0)), fallbackRank).Cast<long>();
+        var reversedColumn = engine.TensorBroadcastTo(
+            engine.TensorArange<long>(cols - 1, -1, -1).Reshape(1, cols), new[] { rows, cols });
+        var key = engine.TensorAdd(engine.TensorMultiplyScalar(rank, (long)cols), reversedColumn);
         var best = engine.TensorArgMax(key, 1).Reshape(rows);
 
         if (scan != ArgMaxScan.GreaterThanFromFirst)
@@ -179,12 +182,14 @@ internal static class TieBreakArgMax
             engine.TensorMultiply(bothValid, engine.TensorEquals(cleanL, cleanJ)),
             engine.TensorMultiply(invalidL, invalidJ));
 
-        var column = engine.TensorArange<T>(0, cols);
+        // Columns, the tie-break and the rank are int: in T, Half loses column indices and stops counting at
+        // 2048, which ties distinct elements.
+        var column = engine.TensorArange<int>(0, cols);
         var columnJ = engine.TensorBroadcastTo(column.Reshape(1, cols, 1), pairShape);
         var columnL = engine.TensorBroadcastTo(column.Reshape(1, 1, cols), pairShape);
         var lEarlier = engine.TensorLessThan(columnL, columnJ);
 
-        var before = engine.TensorAdd(lStrictlyBefore, engine.TensorMultiply(lEqual, lEarlier));
+        var before = engine.TensorAdd(lStrictlyBefore.Cast<int>(), engine.TensorMultiply(lEqual.Cast<int>(), lEarlier));
         var rank = engine.ReduceSum(before, new[] { 2 }, false);
         return engine.TensorArgsort(rank, 1, false);
     }
