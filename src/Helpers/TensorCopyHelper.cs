@@ -133,19 +133,4 @@ public static class TensorCopyHelper
         if (source is null) throw new ArgumentNullException(nameof(source));
         return new Tensor<T>(source.ToArray(), source.Shape.ToArray()).Cast<TOut>();
     }
-
-    /// <summary>
-    /// Converts <paramref name="source"/> to <typeparamref name="TOut"/> element by element in LOGICAL order.
-    /// </summary>
-    /// <remarks>
-    /// AiDotNet.Tensors' <c>Tensor.Cast</c> reads the backing storage from index 0, ignoring a view's storage offset
-    /// and strides and not realizing a pending lazy result: a narrowed, sliced or permuted view converts the wrong
-    /// elements while every shape check still passes. <c>ToArray</c> realizes the tensor and walks the view in
-    /// logical order, so the cast runs on a fresh row-major copy.
-    /// </remarks>
-    internal static Tensor<TOut> CastLogical<T, TOut>(Tensor<T> source)
-    {
-        if (source is null) throw new ArgumentNullException(nameof(source));
-        return new Tensor<T>(source.ToArray(), source.Shape.ToArray()).Cast<TOut>();
-    }
 }
