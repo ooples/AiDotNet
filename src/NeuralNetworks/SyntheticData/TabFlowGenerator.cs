@@ -472,12 +472,14 @@ public partial class TabFlowGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
         }
         else
         {
+            // The angles are formed in double: in a narrow T such as Half, 1000 t * frequency is off by up to
+            // half a radian.
             var frequencies = Engine.TensorExp(Engine.TensorMultiplyScalar(
-                Engine.TensorArange<T>(0, halfDim, 1), NumOps.FromDouble(-Math.Log(10000.0) / halfDim)));
-            var angles = Engine.TensorMultiplyScalar(frequencies, NumOps.FromDouble(t * 1000.0));
+                Engine.TensorArange<double>(0, halfDim, 1), -Math.Log(10000.0) / halfDim));
+            var angles = Engine.TensorMultiplyScalar(frequencies, t * 1000.0);
             var parts = dim % 2 == 0
-                ? new[] { Engine.TensorSin(angles), Engine.TensorCos(angles) }
-                : new[] { Engine.TensorSin(angles), Engine.TensorCos(angles), new Tensor<T>([1]) };
+                ? new[] { Engine.TensorSin(angles).Cast<T>(), Engine.TensorCos(angles).Cast<T>() }
+                : new[] { Engine.TensorSin(angles).Cast<T>(), Engine.TensorCos(angles).Cast<T>(), new Tensor<T>([1]) };
             current = Engine.TensorConcatenate(parts, 0);
         }
 
@@ -724,18 +726,28 @@ public partial class TabFlowGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
         }
 
         var column = Tensor<T>.FromVector(data.GetColumn(colIndex));
-        T meanT = Engine.TensorMean(column);
-        double mean = NumOps.ToDouble(meanT);
+
+        // The moments of a narrow T (Half, BFloat16) are taken in float: its sums overflow past 65504.
+        var (mean, sumSqDiff) = typeof(T) == typeof(Half) || typeof(T) == typeof(AiDotNet.Tensors.NumericOperations.BFloat16)
+            ? ColumnMoments(column.Cast<float>())
+            : ColumnMoments(column);
 
         // Sample standard deviation (n - 1), floored at 1e-10.
-        T sumSqDiff = Engine.TensorSumOfSquares(Engine.TensorSubtractScalar(column, meanT));
-        double std = n > 1 ? Math.Sqrt(NumOps.ToDouble(sumSqDiff) / (n - 1)) : 1.0;
+        double std = n > 1 ? Math.Sqrt(sumSqDiff / (n - 1)) : 1.0;
         if (std < 1e-10) std = 1e-10;
 
         meta.Min = NumOps.ToDouble(Engine.TensorMinValue(column));
         meta.Max = NumOps.ToDouble(Engine.TensorMaxValue(column));
         meta.Mean = mean;
         meta.Std = std;
+    }
+
+    /// <summary>The mean of a column and the sum of its squared deviations from that mean.</summary>
+    private (double Mean, double SumOfSquaredDeviations) ColumnMoments<TValue>(Tensor<TValue> column)
+    {
+        var ops = MathHelper.GetNumericOperations<TValue>();
+        TValue mean = Engine.TensorMean(column);
+        return (ops.ToDouble(mean), ops.ToDouble(Engine.TensorSumOfSquares(Engine.TensorSubtractScalar(column, mean))));
     }
 
     #endregion

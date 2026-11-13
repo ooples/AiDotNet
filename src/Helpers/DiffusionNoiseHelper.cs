@@ -181,7 +181,7 @@ public static class DiffusionNoiseHelper<T>
             throw new ArgumentException("Embedding dimension must be positive and even.", nameof(embeddingDim));
 
         var halfDim = embeddingDim / 2;
-        var steps = new Tensor<int>((int[])timesteps.Clone(), new[] { timesteps.Length }).Cast<T>();
+        var steps = new Tensor<int>((int[])timesteps.Clone(), new[] { timesteps.Length }).Cast<double>();
 
         // [batch, embeddingDim] = [sin(t * freq) | cos(t * freq)]
         return SinusoidalEmbedding(steps, halfDim);
@@ -199,8 +199,8 @@ public static class DiffusionNoiseHelper<T>
             throw new ArgumentException("Embedding dimension must be positive and even.", nameof(embeddingDim));
 
         var halfDim = embeddingDim / 2;
-        var step = new Tensor<T>(new[] { 1 });
-        step.SetFlat(0, NumOps.FromDouble(timestep));
+        var step = new Tensor<double>(new[] { 1 });
+        step.SetFlat(0, timestep);
 
         return SinusoidalEmbedding(step, halfDim).ToVector();
     }
@@ -208,16 +208,17 @@ public static class DiffusionNoiseHelper<T>
     /// <summary>
     /// Sinusoidal embeddings of the given timesteps: row b is
     /// [sin(t_b * f_0), ..., sin(t_b * f_{h-1}), cos(t_b * f_0), ..., cos(t_b * f_{h-1})] with
-    /// f_i = exp(-i * ln(10000) / (h - 1)).
+    /// f_i = exp(-i * ln(10000) / (h - 1)). The angles are formed in double and only the sines and cosines are
+    /// converted to <typeparamref name="T"/>: in a narrow T such as Half, t * f_i is off by up to half a radian.
     /// </summary>
-    private static Tensor<T> SinusoidalEmbedding(Tensor<T> steps, int halfDim)
+    private static Tensor<T> SinusoidalEmbedding(Tensor<double> steps, int halfDim)
     {
-        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<double>();
         var engine = AiDotNetEngine.Current;
         var logScale = Math.Log(10000.0) / (halfDim - 1);
-        var exponents = engine.TensorMultiplyScalar(engine.TensorArange<T>(0, halfDim, 1), NumOps.FromDouble(-logScale));
+        var exponents = engine.TensorMultiplyScalar(engine.TensorArange<double>(0, halfDim, 1), -logScale);
         var angles = engine.TensorOuter(steps, engine.TensorExp(exponents));
-        return engine.TensorConcatenate(new[] { engine.TensorSin(angles), engine.TensorCos(angles) }, 1);
+        return engine.TensorConcatenate(new[] { engine.TensorSin(angles), engine.TensorCos(angles) }, 1).Cast<T>();
     }
 
     /// <summary>
@@ -280,9 +281,12 @@ public static class DiffusionNoiseHelper<T>
 
         // Compute norms and dot product over the flattened tensors
         var flat2 = noise2.Reshape(noise1._shape);
-        double norm1 = Math.Sqrt(NumOps.ToDouble(engine.TensorSum(engine.TensorMultiply(noise1, noise1))));
-        double norm2 = Math.Sqrt(NumOps.ToDouble(engine.TensorSum(engine.TensorMultiply(flat2, flat2))));
-        double dot = NumOps.ToDouble(engine.TensorSum(engine.TensorMultiply(noise1, flat2)));
+        // A narrow T (Half, BFloat16) is reduced in float: its sums overflow past 65504.
+        var (squared1, squared2, dot) = typeof(T) == typeof(Half) || typeof(T) == typeof(AiDotNet.Tensors.NumericOperations.BFloat16)
+            ? Products(engine, noise1.Cast<float>(), flat2.Cast<float>())
+            : Products(engine, noise1, flat2);
+        double norm1 = Math.Sqrt(squared1);
+        double norm2 = Math.Sqrt(squared2);
 
         // Normalize dot product
         dot = dot / (norm1 * norm2 + 1e-10);
@@ -304,6 +308,16 @@ public static class DiffusionNoiseHelper<T>
         return engine.TensorAdd(
             engine.TensorMultiplyScalar(noise1, NumOps.FromDouble(scale1)),
             engine.TensorMultiplyScalar(flat2, NumOps.FromDouble(scale2)));
+    }
+
+    /// <summary>The sums a.a, b.b and a.b over the flattened tensors.</summary>
+    private static (double AA, double BB, double AB) Products<TValue>(IEngine engine, Tensor<TValue> a, Tensor<TValue> b)
+    {
+        var ops = MathHelper.GetNumericOperations<TValue>();
+        return (
+            ops.ToDouble(engine.TensorSum(engine.TensorMultiply(a, a))),
+            ops.ToDouble(engine.TensorSum(engine.TensorMultiply(b, b))),
+            ops.ToDouble(engine.TensorSum(engine.TensorMultiply(a, b))));
     }
 
     /// <summary>

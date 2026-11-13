@@ -1175,18 +1175,28 @@ public partial class TabSynGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>
         }
 
         var column = Tensor<T>.FromVector(data.GetColumn(colIndex));
-        T meanT = Engine.TensorMean(column);
-        double mean = NumOps.ToDouble(meanT);
+
+        // The moments of a narrow T (Half, BFloat16) are taken in float: its sums overflow past 65504.
+        var (mean, sumSqDiff) = typeof(T) == typeof(Half) || typeof(T) == typeof(AiDotNet.Tensors.NumericOperations.BFloat16)
+            ? ColumnMoments(column.Cast<float>())
+            : ColumnMoments(column);
 
         // Sample standard deviation (n - 1), floored at 1e-10.
-        T sumSqDiff = Engine.TensorSumOfSquares(Engine.TensorSubtractScalar(column, meanT));
-        double std = n > 1 ? Math.Sqrt(NumOps.ToDouble(sumSqDiff) / (n - 1)) : 1.0;
+        double std = n > 1 ? Math.Sqrt(sumSqDiff / (n - 1)) : 1.0;
         if (std < 1e-10) std = 1e-10;
 
         meta.Min = NumOps.ToDouble(Engine.TensorMinValue(column));
         meta.Max = NumOps.ToDouble(Engine.TensorMaxValue(column));
         meta.Mean = mean;
         meta.Std = std;
+    }
+
+    /// <summary>The mean of a column and the sum of its squared deviations from that mean.</summary>
+    private (double Mean, double SumOfSquaredDeviations) ColumnMoments<TValue>(Tensor<TValue> column)
+    {
+        var ops = MathHelper.GetNumericOperations<TValue>();
+        TValue mean = Engine.TensorMean(column);
+        return (ops.ToDouble(mean), ops.ToDouble(Engine.TensorSumOfSquares(Engine.TensorSubtractScalar(column, mean))));
     }
 
     #endregion

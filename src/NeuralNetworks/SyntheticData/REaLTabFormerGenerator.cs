@@ -464,15 +464,16 @@ public partial class REaLTabFormerGenerator<T> : NeuralSyntheticTabularGenerator
             Engine.TensorGreaterThan(vocab, NumOps.One), scaled, Engine.TensorZerosLike(scaled));
 
         // Position encoding: sin(pos / 10000^(j/d)) on even j, cos(pos / 10000^((j-1)/d)) on odd j.
+        // The angles are formed in double: in a narrow T such as Half, pos * scale is off by up to half a radian.
         var pairIndex = new Tensor<int>(
-            Enumerable.Range(0, d).Select(j => j - (j % 2)).ToArray(), new[] { 1, d }).Cast<T>();
+            Enumerable.Range(0, d).Select(j => j - (j % 2)).ToArray(), new[] { 1, d }).Cast<double>();
         var inverseScale = Engine.TensorExp(
-            Engine.TensorMultiplyScalar(pairIndex, NumOps.FromDouble(-Math.Log(10000.0) / d)));
+            Engine.TensorMultiplyScalar(pairIndex, -Math.Log(10000.0) / d));
         var angles = Engine.TensorMatMul(
-            Engine.Reshape(Engine.TensorArange<T>(0, length, 1), new[] { length, 1 }), inverseScale);       // [length, d]
+            Engine.Reshape(Engine.TensorArange<double>(0, length, 1), new[] { length, 1 }), inverseScale);  // [length, d]
         var isEven = Engine.TensorBroadcastTo(new Tensor<int>(
-            Enumerable.Range(0, d).Select(j => j % 2 == 0 ? 1 : 0).ToArray(), new[] { 1, d }).Cast<T>(), new[] { length, d });
-        var positionEncoding = Engine.TensorWhere(isEven, Engine.TensorSin(angles), Engine.TensorCos(angles));
+            Enumerable.Range(0, d).Select(j => j % 2 == 0 ? 1 : 0).ToArray(), new[] { 1, d }).Cast<double>(), new[] { length, d });
+        var positionEncoding = Engine.TensorWhere(isEven, Engine.TensorSin(angles), Engine.TensorCos(angles)).Cast<T>();
 
         // Combine token and position
         var combined = Engine.TensorAdd(
@@ -599,15 +600,29 @@ public partial class REaLTabFormerGenerator<T> : NeuralSyntheticTabularGenerator
         int vocabSize = logits.Length;
         if (vocabSize == 0) return 0;
 
-        // Temperature-scaled, max-shifted exponentials; the token is the first whose running sum reaches
-        // u * total for one uniform draw u.
-        var scaled = Engine.TensorDivideScalar(
-            Engine.Reshape(logits, new[] { vocabSize }), NumOps.FromDouble(Math.Max(temperature, 1e-10)));
+        // A narrow T (Half, BFloat16) is sampled in float: its running sums lose whole tokens' weight and the
+        // 1e-10 temperature floor rounds to 0.
+        var flat = Engine.Reshape(logits, new[] { vocabSize });
+        double draw = _random.NextDouble();
+        return typeof(T) == typeof(Half) || typeof(T) == typeof(AiDotNet.Tensors.NumericOperations.BFloat16)
+            ? SampleIndex(flat.Cast<float>(), temperature, draw)
+            : SampleIndex(flat, temperature, draw);
+    }
+
+    /// <summary>
+    /// Temperature-scaled, max-shifted exponentials; the token is the first whose running sum reaches
+    /// <paramref name="draw"/> * total.
+    /// </summary>
+    private int SampleIndex<TValue>(Tensor<TValue> logits, double temperature, double draw)
+    {
+        var ops = MathHelper.GetNumericOperations<TValue>();
+        int vocabSize = logits.Length;
+        var scaled = Engine.TensorDivideScalar(logits, ops.FromDouble(Math.Max(temperature, 1e-10)));
         var weights = Engine.TensorExp(Engine.TensorSubtractScalar(scaled, Engine.TensorMaxValue(scaled)));
         var cumulative = Engine.TensorCumSum(weights, 0);
-        T total = cumulative.GetFlatIndexValue(vocabSize - 1);
-        T u = NumOps.Multiply(NumOps.FromDouble(_random.NextDouble()), total);
-        int index = Engine.TensorSearchSorted(cumulative, new Tensor<T>(new[] { u }, new[] { 1 }))[0];
+        TValue total = cumulative.GetFlatIndexValue(vocabSize - 1);
+        TValue u = ops.Multiply(ops.FromDouble(draw), total);
+        int index = Engine.TensorSearchSorted(cumulative, new Tensor<TValue>(new[] { u }, new[] { 1 }))[0];
         return Math.Min(index, vocabSize - 1);
     }
 
@@ -679,11 +694,14 @@ public partial class REaLTabFormerGenerator<T> : NeuralSyntheticTabularGenerator
     {
         // Non-finite entries become 0; the result is rescaled to maxNorm when its norm exceeds it.
         var result = Engine.TensorWhere(Engine.TensorIsFinite(grad), grad, Engine.TensorZerosLike(grad));
-        T norm = NumOps.Sqrt(NumOps.Add(Engine.TensorSumOfSquares(result), NumOps.FromDouble(1e-12)));
-        T limit = NumOps.FromDouble(maxNorm);
-        if (NumOps.GreaterThan(norm, limit))
+
+        // A narrow T (Half, BFloat16) is squared and summed in float: its sum of squares overflows past 65504.
+        double norm = Math.Sqrt((typeof(T) == typeof(Half) || typeof(T) == typeof(AiDotNet.Tensors.NumericOperations.BFloat16)
+            ? (double)Engine.TensorSumOfSquares(result.Cast<float>())
+            : NumOps.ToDouble(Engine.TensorSumOfSquares(result))) + 1e-12);
+        if (norm > maxNorm)
         {
-            result = Engine.TensorMultiplyScalar(result, NumOps.Divide(limit, norm));
+            result = Engine.TensorMultiplyScalar(result, NumOps.FromDouble(maxNorm / norm));
         }
 
         return result;
