@@ -109,6 +109,43 @@ public class StreamingOptimizerParityTests
             return p - Lr * (st[0] / c1) / (Math.Sqrt(st[1] / c2) + 1e-8);
         }, 2, 0.05);
 
+    // A parameter shorter than min8BitSize keeps FP32 moments on the CPU path too, so it tracks the fp64 reference far
+    // more tightly than the 8-bit layout can.
+    [Fact] public void Adam_BelowMin8BitSize_KeepsFp32Moments()
+        => RunParity("Adam (FP32 moments)", new StreamingAdam8Bit<double>(Lr, min8BitSize: N + 1), (p, g, st, t) =>
+        {
+            st[0] = 0.9 * st[0] + 0.1 * g; st[1] = 0.999 * st[1] + 0.001 * g * g;
+            double c1 = 1 - Math.Pow(0.9, t), c2 = 1 - Math.Pow(0.999, t);
+            return p - Lr * (st[0] / c1) / (Math.Sqrt(st[1] / c2) + 1e-8);
+        }, 2, 1e-4);
+
+    [Fact] public void Adam_Bf16Moments_TracksFp64()
+        => RunParity("Adam (BF16 moments)", new StreamingAdam8Bit<double>(Lr, useBf16Moments: true), (p, g, st, t) =>
+        {
+            st[0] = 0.9 * st[0] + 0.1 * g; st[1] = 0.999 * st[1] + 0.001 * g * g;
+            double c1 = 1 - Math.Pow(0.9, t), c2 = 1 - Math.Pow(0.999, t);
+            return p - Lr * (st[0] / c1) / (Math.Sqrt(st[1] / c2) + 1e-8);
+        }, 2, 0.01);
+
+    // Coupled (L2) decay adds wd * param to the gradient before the moments see it; FP32 moments isolate the decay rule.
+    [Fact] public void Adam_CoupledWeightDecay_TracksFp64()
+        => RunParity("Adam (coupled decay)", new StreamingAdam8Bit<double>(Lr, weightDecay: 0.1, decoupledWeightDecay: false, min8BitSize: N + 1), (p, g, st, t) =>
+        {
+            double ge = g + 0.1 * p;
+            st[0] = 0.9 * st[0] + 0.1 * ge; st[1] = 0.999 * st[1] + 0.001 * ge * ge;
+            double c1 = 1 - Math.Pow(0.9, t), c2 = 1 - Math.Pow(0.999, t);
+            return p - Lr * (st[0] / c1) / (Math.Sqrt(st[1] / c2) + 1e-8);
+        }, 2, 1e-4);
+
+    [Fact] public void AmsGrad_CoupledWeightDecay_TracksFp64()
+        => RunParity("AMSGrad (coupled decay)", new StreamingAMSGrad8Bit<double>(Lr, 0.9, 0.999, 1e-8, 0.1, decoupledWeightDecay: false, min8BitSize: N + 1), (p, g, st, t) =>
+        {
+            double ge = g + 0.1 * p;
+            st[0] = 0.9 * st[0] + 0.1 * ge; st[1] = 0.999 * st[1] + 0.001 * ge * ge; st[2] = Math.Max(st[2], st[1]);
+            double c1 = 1 - Math.Pow(0.9, t), c2 = 1 - Math.Pow(0.999, t);
+            return p - Lr * (st[0] / c1) / (Math.Sqrt(st[2] / c2) + 1e-8);
+        }, 3, 1e-4);
+
     [Fact] public void AmsGrad_TracksFp64()
         => RunParity("AMSGrad", new StreamingAMSGrad8Bit<double>(Lr, 0.9, 0.999, 1e-8, 0.0), (p, g, st, t) =>
         {
