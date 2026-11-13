@@ -271,6 +271,7 @@ public partial class SDXLVAEModel<T> : VAEModelBase<T>
         if (layer == null) return;
         var p = layer.GetParameters();
         parameters.AddRange(p);
+    }
 
     private static void SetLayerParams(ILayer<T>? layer, Vector<T> parameters, ref int index)
     {
@@ -291,10 +292,12 @@ public partial class SDXLVAEModel<T> : VAEModelBase<T>
         {
             var g = layer.GetParameterGradients();
             gradients.AddRange(g);
+        }
         foreach (var layer in _decoderLayers)
         {
             var g = layer.GetParameterGradients();
             gradients.AddRange(g);
+        }
         return new Vector<T>(gradients.ToArray());
     }
     /// <inheritdoc />

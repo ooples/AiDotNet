@@ -941,6 +941,7 @@ public partial class TemporalVAE<T> : VAEModelBase<T>
         if (layer == null) return;
         var g = layer.GetParameterGradients();
         gradients.AddRange(g);
+    }
     /// <inheritdoc />
     /// <remarks>
     /// This concrete VAE does not implement layer-level backprop yet, so the

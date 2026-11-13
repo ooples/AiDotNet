@@ -296,10 +296,12 @@ public partial class ImprovedVideoVAE<T> : VAEModelBase<T>
         {
             var g = layer.GetParameterGradients();
             gradients.AddRange(g);
+        }
         foreach (var layer in _decoderLayers)
         {
             var g = layer.GetParameterGradients();
             gradients.AddRange(g);
+        }
         return new Vector<T>(gradients.ToArray());
     }
     /// <inheritdoc />

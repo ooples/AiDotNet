@@ -791,6 +791,7 @@ public partial class StandardVAE<T> : VAEModelBase<T>
         if (layer == null) return;
         var g = layer.GetParameterGradients();
         gradients.AddRange(g);
+    }
 
     #endregion
     /// <inheritdoc />
