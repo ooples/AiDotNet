@@ -10,6 +10,7 @@ namespace AiDotNet.Tests.UnitTests.KnowledgeDistillation;
 
 public class DistillationNumericalMemoryTests
 {
+#if NET5_0_OR_GREATER
     [Theory]
     [InlineData(0.5, 60000)]
     [InlineData(2.0, 60000)]
@@ -90,6 +91,8 @@ public class DistillationNumericalMemoryTests
         Assert.True(!double.IsNaN(actual) && !double.IsInfinity(actual));
         Assert.True(Math.Abs(actual - expected) <= 0.002 * Math.Max(1, Math.Abs(expected)));
     }
+
+#endif
 
     private static Vector<double>[] Rows(int count, int dimensions, double phase, bool normalize = true, double offset = 0)
     {

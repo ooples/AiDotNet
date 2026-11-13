@@ -180,7 +180,9 @@ public partial class DoRAAdapter<T> : LoRAAdapterBase<T>
         Vector<T> flat = available == weightCount
             ? baseParams.GetSubVector(0, weightCount)
             : Vector<T>.Concatenate(baseParams.GetSubVector(0, available), new Vector<T>(weightCount - available));
-        return Engine.Reshape(Tensor<T>.FromVector(flat), [outputSize, inputSize]).ToMatrix();
+        bool inputMajor = _baseLayer is DenseLayer<T>;
+        var weights = Engine.Reshape(Tensor<T>.FromVector(flat), inputMajor ? [inputSize, outputSize] : [outputSize, inputSize]).ToMatrix();
+        return inputMajor ? Engine.MatrixTranspose(weights) : weights;
     }
 
     /// <summary>
@@ -330,9 +332,15 @@ public partial class DoRAAdapter<T> : LoRAAdapterBase<T>
 
         // Compute output: y = input @ W'^T
         // Matrix multiply: [batchSize, inputSize] @ [inputSize, outputSize]
-        return Engine.TensorMatMul(
+        var output = Engine.TensorMatMul(
             Engine.Reshape(input, [batchSize, inputSize]),
             Tensor<T>.FromMatrix(Engine.MatrixTranspose(finalWeights)));
+        int biasCount = Math.Max(0, Math.Min(outputSize, baseParams.Length - weightCount));
+        if (biasCount == 0) return output;
+        var bias = baseParams.GetSubVector(weightCount, biasCount);
+        if (biasCount < outputSize) bias = Vector<T>.Concatenate(bias, new Vector<T>(outputSize - biasCount));
+        return Engine.TensorAdd(output, Engine.TensorBroadcastTo(
+            Engine.Reshape(Tensor<T>.FromVector(bias), [1, outputSize]), [batchSize, outputSize]));
     }
 
     /// <summary>
@@ -427,10 +435,11 @@ public partial class DoRAAdapter<T> : LoRAAdapterBase<T>
         Matrix<T> finalWeights = RecomposeWeights(normalizedDirection);
 
         // Create merged parameters: merged weights (row-major) then biases unchanged
+        var flatWeights = (_baseLayer is DenseLayer<T> ? Engine.MatrixTranspose(finalWeights) : finalWeights).ToRowVector();
         int biasCount = baseParams.Length - weightCount;
         Vector<T> mergedParams = biasCount > 0
-            ? Vector<T>.Concatenate(finalWeights.ToRowVector(), baseParams.GetSubVector(weightCount, biasCount))
-            : finalWeights.ToRowVector();
+            ? Vector<T>.Concatenate(flatWeights, baseParams.GetSubVector(weightCount, biasCount))
+            : flatWeights;
 
         // Use helper method to clone base layer and preserve activation function
         return CreateMergedLayerWithClone(mergedParams);

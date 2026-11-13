@@ -402,8 +402,8 @@ public partial class TiedLoRAAdapter<T> : LoRAAdapterBase<T>
 
             // Apply layer-specific scaling and alpha/rank scaling
             T scaling = NumOps.Divide(NumOps.FromDouble(Alpha), NumOps.FromDouble(Rank));
-            T totalScaling = NumOps.Multiply(_layerScaling[0], scaling);
-            Tensor<T> tiedLoraOutput = Engine.TensorMultiplyScalar(afterB, totalScaling);
+            Tensor<T> tiedLoraOutput = Engine.TensorMultiply(
+                Engine.TensorMultiplyScalar(afterB, scaling), Engine.Reshape(_layerScaling, [1, 1]));
 
             // Sum base output and Tied-LoRA output
             Tensor<T> result = Engine.TensorAdd(baseOutput, tiedLoraOutput);

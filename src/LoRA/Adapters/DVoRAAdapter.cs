@@ -351,7 +351,9 @@ public partial class DVoRAAdapter<T> : LoRAAdapterBase<T>
         Vector<T> flat = available == weightCount
             ? baseParams.GetSubVector(0, weightCount)
             : Vector<T>.Concatenate(baseParams.GetSubVector(0, available), new Vector<T>(weightCount - available));
-        return Engine.Reshape(Tensor<T>.FromVector(flat), [outputSize, inputSize]).ToMatrix();
+        bool inputMajor = _baseLayer is DenseLayer<T>;
+        var weights = Engine.Reshape(Tensor<T>.FromVector(flat), inputMajor ? [inputSize, outputSize] : [outputSize, inputSize]).ToMatrix();
+        return inputMajor ? Engine.MatrixTranspose(weights) : weights;
     }
 
     /// <summary>
@@ -617,10 +619,11 @@ public partial class DVoRAAdapter<T> : LoRAAdapterBase<T>
         Matrix<T> finalWeights = RecomposeWeights(normalizedDirection);
 
         // Create merged parameters: merged weights (row-major) then biases unchanged
+        var flatWeights = (_baseLayer is DenseLayer<T> ? Engine.MatrixTranspose(finalWeights) : finalWeights).ToRowVector();
         int biasCount = baseParams.Length - weightCount;
         Vector<T> mergedParams = biasCount > 0
-            ? Vector<T>.Concatenate(finalWeights.ToRowVector(), baseParams.GetSubVector(weightCount, biasCount))
-            : finalWeights.ToRowVector();
+            ? Vector<T>.Concatenate(flatWeights, baseParams.GetSubVector(weightCount, biasCount))
+            : flatWeights;
 
         // Use helper method to clone base layer and preserve activation function
         return CreateMergedLayerWithClone(mergedParams);
