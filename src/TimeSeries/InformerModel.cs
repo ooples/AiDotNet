@@ -163,12 +163,9 @@ public partial class InformerModel<T> : TimeSeriesModelBase<T>, ISupportsLossFun
         ModelParameters = new Vector<T>(1);
         ModelParameters[0] = _numOps.FromDouble(y.Length);
 
-        // Population mean and standard deviation of the training series.
+        // Population mean and standard deviation of the training series, accumulated in double as master did.
         var series = Tensor<T>.FromVector(y);
-        T mean = Engine.TensorMean(series);
-        T variance = Engine.TensorMean(Engine.TensorSquare(Engine.TensorSubtractScalar(series, mean)));
-        _scaleMean = _numOps.ToDouble(mean);
-        _scaleStd = Math.Sqrt(_numOps.ToDouble(variance));
+        (_scaleMean, _scaleStd) = TimeSeriesEngineOps<T>.PopulationMeanStd(y);
         if (_scaleStd < 1e-12) _scaleStd = 1.0;
         // Every window of the scaled series: [samples, the history and then the target values of each sample].
         var windows = Engine.TensorUnfold(ScaleAll(series), 0, lookback + horizon, 1);

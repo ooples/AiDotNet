@@ -386,6 +386,24 @@ internal static class TimeSeriesEngineOps<T>
         return counts.Cast<T>().ToVector();
     }
 
+    /// <summary>
+    /// Population mean and standard deviation of <paramref name="v"/>, accumulated in double. The results are
+    /// doubles, and a reduction in T overflows or stalls (a Half sum tops out at 65504 and stops growing by
+    /// small steps past 2048), so the values are cast once and reduced in double.
+    /// </summary>
+    public static (double Mean, double Std) PopulationMeanStd(Vector<T> v)
+    {
+        if (v.Length == 0)
+        {
+            return (double.NaN, double.NaN);
+        }
+
+        var values = Tensor<T>.FromVector(v).Cast<double>();
+        double mean = Engine.TensorMean(values);
+        double variance = Engine.TensorMean(Engine.TensorSquare(Engine.TensorSubtractScalar(values, mean)));
+        return (mean, Math.Sqrt(variance));
+    }
+
     /// <summary>Element-wise <c>(v[i] - mean) / scale</c>.</summary>
     public static Vector<T> Standardize(Vector<T> v, T mean, T scale)
         => Engine.TensorDivideScalar(Engine.TensorSubtractScalar(Tensor<T>.FromVector(v), mean), scale).ToVector();

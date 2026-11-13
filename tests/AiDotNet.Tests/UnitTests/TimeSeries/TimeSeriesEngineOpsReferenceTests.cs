@@ -266,6 +266,23 @@ public class TimeSeriesEngineOpsCountTests
     }
 
     [Fact]
+    public void PopulationMeanStd_Half_AccumulatesInDouble()
+    {
+        // Autoformer and Informer standardize with these. 5000 values alternating 100 and 102: mean 101,
+        // population std 1 (master, in double). Their Half sum, 505000, is far past Half's 65504.
+        var series = new Vector<Half>(5000);
+        for (int i = 0; i < series.Length; i++)
+        {
+            series[i] = (Half)(i % 2 == 0 ? 100.0f : 102.0f);
+        }
+
+        var (mean, std) = TimeSeriesEngineOps<Half>.PopulationMeanStd(series);
+
+        Assert.Equal(101.0, mean, 10);
+        Assert.Equal(1.0, std, 10);
+    }
+
+    [Fact]
     public void StlMovingAverage_Half_EdgeAverageDividesByTrueCount()
     {
         // Window 4999 over 5000 points: position 0 averages [0, 2499], i.e. 2500 points, one of them 1.
