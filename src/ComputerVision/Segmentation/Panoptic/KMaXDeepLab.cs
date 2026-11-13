@@ -30,10 +30,12 @@ namespace AiDotNet.ComputerVision.Segmentation.Panoptic;
 /// </para>
 /// <para>
 /// <b>Technical Details:</b>
-/// - k-means cross-attention replacing standard cross-attention
-/// - Cluster centers as mask queries updated iteratively
-/// - Pixel-path and cluster-path dual decoder
-/// - State-of-the-art panoptic quality on COCO and Cityscapes
+/// - k-means cross-attention replacing standard cross-attention: every pixel is assigned to its argmax cluster and
+///   the assigned pixel values update the cluster centers
+/// - Each decoder stage: k-means cross-attention, self-attention among the centers and an FFN, each with learnable
+///   projections, residual connections and BatchNorm (deeplab2's kMaXTransformerLayer)
+/// - Trained with the PQ-style loss, the mask-ID cross-entropy, the pixel-wise instance discrimination loss and an
+///   auxiliary semantic loss, every decoder stage supervised (weights in <see cref="KMaXDeepLabOptions"/>)
 /// </para>
 /// <para>
 /// <b>Reference:</b> Yu et al., "k-means Mask Transformer", ECCV 2022.
@@ -92,6 +94,10 @@ public partial class KMaXDeepLab<T> : Common.PanopticSegmentationBase<T>
     private readonly int _numClusters;
     private readonly int _pixelDim;
     private readonly int _kMeansIterations;
+    private readonly Common.KMaXDecoderShape _decoderShape;
+    private readonly Common.KMaXLossSettings _lossSettings;
+    // Draws the auxiliary losses' pixel samples (Gumbel top-k); seeded from Options.Seed when one is set.
+    private readonly Random _lossRandom;
     // True when no loss function was supplied: training then uses the paper's set-prediction loss.
     private readonly bool _usesSetPredictionLoss;
     #endregion
@@ -109,8 +115,9 @@ public partial class KMaXDeepLab<T> : Common.PanopticSegmentationBase<T>
     /// </summary>
     /// <param name="architecture">Neural network architecture defining input dimensions.</param>
     /// <param name="optimizer">Gradient-based optimizer (default: AdamW).</param>
-    /// <param name="lossFunction">Loss function. When null, training uses kMaX-DeepLab's set-prediction loss (Hungarian
-    /// matching, PQ-style loss and mask-ID cross-entropy); a supplied loss is applied to the semantic scores.</param>
+    /// <param name="lossFunction">Loss function. When null, training uses kMaX-DeepLab's loss (Hungarian matching,
+    /// PQ-style loss, mask-ID cross-entropy, pixel-wise instance discrimination and the auxiliary semantic loss, with
+    /// the weights of <see cref="KMaXDeepLabOptions"/>); a supplied loss is applied to the semantic scores.</param>
     /// <param name="options">Optional model options.</param>
     /// <remarks>
     /// <para>
@@ -133,6 +140,7 @@ public partial class KMaXDeepLab<T> : Common.PanopticSegmentationBase<T>
         if (architecture.InputWidth <= 0) _width = 640;
         _modelSize = _options.ModelSize; _dropRate = _options.DropRate;
         (_numClusters, _pixelDim, _kMeansIterations) = ValidateHead(_options);
+        (_decoderShape, _lossSettings, _lossRandom) = DecoderSettings(_options, _pixelDim);
         (_channelDims, _depths, _decoderDim) = GetModelConfig(_options.ModelSize);
         _usesSetPredictionLoss = lossFunction is null;
         InitializeLayers();
@@ -166,6 +174,7 @@ public partial class KMaXDeepLab<T> : Common.PanopticSegmentationBase<T>
         if (architecture.InputWidth <= 0) _width = 640;
         _modelSize = _options.ModelSize; _dropRate = _options.DropRate;
         (_numClusters, _pixelDim, _kMeansIterations) = ValidateHead(_options);
+        (_decoderShape, _lossSettings, _lossRandom) = DecoderSettings(_options, _pixelDim);
         (_channelDims, _depths, _decoderDim) = GetModelConfig(_options.ModelSize);
         InitializeLayers();
     }
@@ -192,8 +201,8 @@ public partial class KMaXDeepLab<T> : Common.PanopticSegmentationBase<T>
     protected override Tensor<T> PredictCore(Tensor<T> input) => Forward(input);
 
     /// <summary>
-    /// Trains with kMaX-DeepLab's set-prediction loss (Hungarian matching, PQ-style loss and mask-ID cross-entropy)
-    /// when no loss function was given to the constructor.
+    /// Trains with kMaX-DeepLab's loss (Hungarian matching, PQ-style loss, mask-ID cross-entropy, pixel-wise instance
+    /// discrimination and the auxiliary semantic loss) when no loss function was given to the constructor.
     /// </summary>
     /// <remarks>
     /// The target is the semantic segmentation <c>[B, K, H, W]</c> (or a <c>[B, H, W]</c> class-index map); every class
@@ -208,7 +217,16 @@ public partial class KMaXDeepLab<T> : Common.PanopticSegmentationBase<T>
         return true;
     }
 
-    /// <summary>kMaX-DeepLab's set-prediction loss of one training batch, recomputed from the input.</summary>
+    /// <summary>
+    /// kMaX-DeepLab's training loss of one batch, recomputed from the input: for every decoder stage's prediction and
+    /// the final one, <c>w_PQ * L_PQ + w_ID * L_maskID + w_insdis * L_insdis</c> (each matched on its own), plus
+    /// <c>w_sem * L_semantic</c> of the auxiliary semantic head.
+    /// </summary>
+    /// <remarks>
+    /// The cluster logits and pixel features of every prediction are bilinearly upsampled to the input (the pixel
+    /// features re-normalized) before they meet the ground truth. The instance discrimination loss reads the same
+    /// sampled pixels for every prediction of an image.
+    /// </remarks>
     internal Tensor<T> SetPredictionLoss(Tensor<T> input, Tensor<T> expected)
     {
         if (input is null) throw new ArgumentNullException(nameof(input));
@@ -216,16 +234,122 @@ public partial class KMaXDeepLab<T> : Common.PanopticSegmentationBase<T>
         bool hasBatch = input.Rank == 4;
         var batched = hasBatch ? input : AddBatchDimension(input);
         var target = hasBatch ? expected : Engine.Reshape(expected, new[] { 1 }.Concat(expected.Shape.ToArray()).ToArray());
-        var (classLogits, maskLogits, h, w) = Heads(batched);
-        var segments = Common.MaskSetPredictionLoss.SemanticSegments(target, _numClasses, batched.Shape[0], h, w);
-        return Common.MaskSetPredictionLoss.KMaX(classLogits, maskLogits, segments);
+        var decoded = Decode(batched);
+        int b = batched.Shape[0], h = decoded.Height, w = decoded.Width;
+        var segments = Common.MaskSetPredictionLoss.SemanticSegments(target, _numClasses, b, h, w);
+        var settings = _lossSettings;
+
+        int[][]? instanceSamples = settings.InstanceDiscriminationWeight > 0
+            ? segments.Select(s => Common.MaskSetPredictionLoss.SamplePixels(
+                s, settings.InstanceDiscriminationSampleCount, settings.InstanceDiscriminationSampleTemperature, _lossRandom)).ToArray()
+            : null;
+        var discriminationWeight = NumOps.FromDouble(settings.InstanceDiscriminationWeight / b);
+        Tensor<T>? total = null;
+        foreach (var prediction in decoded.Predictions)
+        {
+            var masks = ToInputResolution(prediction.MaskLogits, prediction.Height, prediction.Width, h, w);
+            var term = Common.MaskSetPredictionLoss.KMaX(prediction.ClassLogits, masks, segments, settings);
+            if (instanceSamples is not null && prediction.PixelFeatures is not null)
+            {
+                var features = Common.MaskClassificationOps.NormalizeAxis(
+                    ToInputResolution(prediction.PixelFeatures, prediction.Height, prediction.Width, h, w), 1);
+                int d = features.Shape[1];
+                Tensor<T>? discrimination = null;
+                for (int i = 0; i < b; i++)
+                {
+                    var image = Engine.Reshape(Engine.TensorSlice(features, new[] { i, 0, 0 }, new[] { 1, d, h * w }), new[] { d, h * w });
+                    var loss = Common.MaskSetPredictionLoss.InstanceDiscrimination(
+                        image, segments[i], instanceSamples[i], settings.InstanceDiscriminationTemperature);
+                    discrimination = discrimination is null ? loss : Engine.TensorAdd(discrimination, loss);
+                }
+
+                if (discrimination is not null)
+                    term = Engine.TensorAdd(term, Engine.TensorMultiplyScalar(discrimination, discriminationWeight));
+            }
+
+            total = total is null ? term : Engine.TensorAdd(total, term);
+        }
+
+        if (total is null) throw new InvalidOperationException("kMaX-DeepLab's decoder produced no prediction.");
+        if (decoded.SemanticLogits is not null && settings.SemanticWeight > 0)
+        {
+            var semantic = decoded.SemanticLogits;
+            int k = semantic.Shape[1], sh = semantic.Shape[2], sw = semantic.Shape[3];
+            var logits = ToInputResolution(Engine.Reshape(semantic, new[] { b, k, sh * sw }), sh, sw, h, w);
+            Tensor<T>? semanticLoss = null;
+            for (int i = 0; i < b; i++)
+            {
+                var sampled = Common.MaskSetPredictionLoss.SamplePixels(
+                    segments[i], settings.SemanticSampleCount, settings.SemanticSampleTemperature, _lossRandom);
+                var image = Engine.Reshape(Engine.TensorSlice(logits, new[] { i, 0, 0 }, new[] { 1, k, h * w }), new[] { k, h * w });
+                var loss = Common.MaskSetPredictionLoss.SemanticCrossEntropy(image, segments[i], sampled);
+                semanticLoss = semanticLoss is null ? loss : Engine.TensorAdd(semanticLoss, loss);
+            }
+
+            if (semanticLoss is not null)
+                total = Engine.TensorAdd(total, Engine.TensorMultiplyScalar(semanticLoss, NumOps.FromDouble(settings.SemanticWeight / b)));
+        }
+
+        return total;
     }
+
+    /// <summary>The decoder's layers (the initial centers, every stage and the final heads), in model order.</summary>
+    /// <remarks>A method, not a property: the layers already live in <c>Layers</c>, and a layer-collection property
+    /// would be surfaced a second time by the parameter generator.</remarks>
+    internal IReadOnlyList<ILayer<T>> GetDecoderLayers()
+        => _useNativeMode
+            ? Layers.Skip(DecoderStart).Take(Common.KMaXTransformerDecoder.LayerCount(_kMeansIterations)).ToList()
+            : new List<ILayer<T>>();
 
     #endregion
 
     #region Private Methods
     /// <summary>Backbone stages the pixel decoder reads: strides 4, 8, 16 and 32 (Yu et al. 2022, Fig. 2).</summary>
     private const int PyramidLevels = 4;
+
+    /// <summary>Index of the auxiliary semantic head, after the backbone and the pixel decoder.</summary>
+    private int SemanticHeadIndex => _encoderLayerEnd + 2 * PyramidLevels;
+
+    /// <summary>Index of the kMaX decoder's first layer (the initial cluster centers).</summary>
+    private int DecoderStart => SemanticHeadIndex + 1;
+
+    private static (Common.KMaXDecoderShape Shape, Common.KMaXLossSettings Loss, Random Random) DecoderSettings(
+        KMaXDeepLabOptions options, int pixelDim)
+    {
+        if (options.QueryDimension < 2 || options.QueryDimension % 2 != 0)
+            throw new ArgumentException("QueryDimension must be a positive even number (the keys take half of it).", nameof(options));
+        if (options.NumAttentionHeads < 1 || (options.QueryDimension / 2) % options.NumAttentionHeads != 0)
+            throw new ArgumentException("NumAttentionHeads must divide QueryDimension / 2.", nameof(options));
+        if (options.FeedForwardDimension < 1)
+            throw new ArgumentException("FeedForwardDimension must be positive.", nameof(options));
+        if (!(options.PanopticQualityLossWeight >= 0) || !(options.MaskIdLossWeight >= 0)
+            || !(options.InstanceDiscriminationLossWeight >= 0) || !(options.SemanticLossWeight >= 0))
+            throw new ArgumentException("The loss weights must be non-negative.", nameof(options));
+        if (!(options.InstanceDiscriminationTemperature > 0) || !(options.InstanceDiscriminationSampleTemperature >= 0)
+            || !(options.SemanticSampleTemperature >= 0))
+            throw new ArgumentException(
+                "The instance discrimination temperature must be positive and the sampling temperatures non-negative.", nameof(options));
+        if (options.InstanceDiscriminationSampleCount < 1 || options.SemanticSampleCount < 1)
+            throw new ArgumentException("The auxiliary losses must sample at least one pixel.", nameof(options));
+        var shape = new Common.KMaXDecoderShape(pixelDim, options.QueryDimension, options.NumAttentionHeads,
+            options.FeedForwardDimension, options.NumClasses + 1);
+        var loss = new Common.KMaXLossSettings
+        {
+            PanopticQualityWeight = options.PanopticQualityLossWeight,
+            MaskIdWeight = options.MaskIdLossWeight,
+            InstanceDiscriminationWeight = options.InstanceDiscriminationLossWeight,
+            InstanceDiscriminationTemperature = options.InstanceDiscriminationTemperature,
+            InstanceDiscriminationSampleCount = options.InstanceDiscriminationSampleCount,
+            InstanceDiscriminationSampleTemperature = options.InstanceDiscriminationSampleTemperature,
+            SemanticWeight = options.SemanticLossWeight,
+            SemanticSampleCount = options.SemanticSampleCount,
+            SemanticSampleTemperature = options.SemanticSampleTemperature,
+        };
+        var random = options.Seed.HasValue
+            ? AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(options.Seed.Value)
+            : AiDotNet.Tensors.Helpers.RandomHelper.CreateSecureRandom();
+        return (shape, loss, random);
+    }
 
     private static (int NumClusters, int PixelDim, int Iterations) ValidateHead(KMaXDeepLabOptions options)
     {
@@ -239,21 +363,54 @@ public partial class KMaXDeepLab<T> : Common.PanopticSegmentationBase<T>
     }
 
     /// <summary>
-    /// The mask-classification heads of a batched image: class logits <c>[B, N, K + 1]</c> and cluster logits
+    /// The final mask-classification heads of a batched image: class logits <c>[B, N, K + 1]</c> and cluster logits
     /// <c>[B, N, H*W]</c> at the input resolution.
+    /// </summary>
+    private (Tensor<T> ClassLogits, Tensor<T> MaskLogits, int Height, int Width) Heads(Tensor<T> batched)
+    {
+        var decoded = Decode(batched);
+        var final = decoded.Predictions[decoded.Predictions.Count - 1];
+        return (final.ClassLogits,
+            ToInputResolution(final.MaskLogits, final.Height, final.Width, decoded.Height, decoded.Width),
+            decoded.Height, decoded.Width);
+    }
+
+    /// <summary>The decoder's predictions and the auxiliary semantic logits of a batched image.</summary>
+    private sealed class DecodedImage
+    {
+        internal DecodedImage(IReadOnlyList<Common.KMaXPrediction<T>> predictions, Tensor<T>? semanticLogits, int height, int width)
+        {
+            Predictions = predictions;
+            SemanticLogits = semanticLogits;
+            Height = height;
+            Width = width;
+        }
+
+        internal IReadOnlyList<Common.KMaXPrediction<T>> Predictions { get; }
+        internal Tensor<T>? SemanticLogits { get; }
+        internal int Height { get; }
+        internal int Width { get; }
+    }
+
+    /// <summary>
+    /// Runs the backbone, the pixel decoder and the kMaX decoder on a batched image.
     /// </summary>
     /// <remarks>
     /// <para>
     /// The pixel decoder is a top-down pathway over the backbone's stride-4, 8, 16 and 32 stages. The kMaX decoder's
-    /// k-means cross-attention layers read its stride-32, 16 and 8 features, coarse to fine (with the default six
-    /// layers, two per scale), and the final centers are compared with the stride-4 features to give the mask
-    /// logits, which are bilinearly upsampled to the input (Yu et al. 2022, Sec. 3.3). The class head classifies the
-    /// final centers.
+    /// stages read its stride-32, 16 and 8 features, coarse to fine (with the default six stages, two per scale), and
+    /// the final predictor reads the stride-4 features (Yu et al. 2022, Sec. 3.3). The auxiliary semantic head
+    /// classifies the stride-4 features. In ONNX mode the graph's final heads are the only prediction.
     /// </para>
     /// </remarks>
-    private (Tensor<T> ClassLogits, Tensor<T> MaskLogits, int Height, int Width) Heads(Tensor<T> batched)
+    private DecodedImage Decode(Tensor<T> batched)
     {
-        if (!_useNativeMode) return OnnxHeads(batched);
+        if (!_useNativeMode)
+        {
+            var (classLogits, maskLogits, h, w) = OnnxHeads(batched);
+            return new DecodedImage(new[] { new Common.KMaXPrediction<T>(classLogits, maskLogits, null, h, w) }, null, h, w);
+        }
+
         int b = batched.Shape[0], height = batched.Shape[2], width = batched.Shape[3];
         var (_, taps) = Common.FeaturePyramidOps.RunAndTapStages(Layers, 0, _encoderLayerEnd, batched);
         int levelCount = Math.Min(PyramidLevels, taps.Count);
@@ -269,22 +426,27 @@ public partial class KMaXDeepLab<T> : Common.PanopticSegmentationBase<T>
         }
 
         var levels = Common.FeaturePyramidOps.TopDown(stages, lateral, output);                      // finest first
-        var flat = levels.Select(level => Engine.Reshape(level, new[] { b, _pixelDim, level.Shape[2] * level.Shape[3] })).ToList();
-        // The decoder stages read the coarser levels, coarsest first; the masks use the finest level.
+        var flat = levels.Select(level => (
+            Features: Engine.Reshape(level, new[] { b, _pixelDim, level.Shape[2] * level.Shape[3] }),
+            Height: level.Shape[2], Width: level.Shape[3])).ToList();
+        // The decoder stages read the coarser levels, coarsest first; the final predictor reads the finest level.
         var decoderScales = levelCount == 1 ? flat : Enumerable.Reverse(flat.Skip(1)).ToList();
-        var identity = Engine.TensorOneHot<T>(
-            new Tensor<int>(Enumerable.Range(0, _numClusters).ToArray(), new[] { _numClusters }), _numClusters);
-        var initialCenters = Layers[_encoderLayerEnd + 2 * PyramidLevels].Forward(identity);         // [N, D]
-        var (centers, maskLogits) = Common.MaskClassificationOps.KMeansDecoder(
-            decoderScales, _kMeansIterations, initialCenters, flat[0]);
-        var classLogits = Engine.Reshape(
-            Layers[_encoderLayerEnd + 2 * PyramidLevels + 1].Forward(Engine.Reshape(centers, new[] { b * _numClusters, _pixelDim })),
-            new[] { b, _numClusters, _numClasses + 1 });
-        var finest = levels[0];
+        var finest = flat[0];
+        var predictions = Common.KMaXTransformerDecoder.Run(
+            Layers, DecoderStart, _decoderShape, decoderScales, _kMeansIterations,
+            finest.Features, finest.Height, finest.Width, _numClusters);
+        var semanticLogits = Layers[SemanticHeadIndex].Forward(levels[0]);                            // [B, K, h4, w4]
+        return new DecodedImage(predictions, semanticLogits, height, width);
+    }
+
+    /// <summary>Bilinearly upsamples <c>[B, C, h * w]</c> to <c>[B, C, H * W]</c> (unchanged when the sizes match).</summary>
+    private Tensor<T> ToInputResolution(Tensor<T> flat, int h, int w, int height, int width)
+    {
+        if (h == height && w == width) return flat;
+        int b = flat.Shape[0], c = flat.Shape[1];
         var upsampled = Engine.Interpolate(
-            Engine.Reshape(maskLogits, new[] { b, _numClusters, finest.Shape[2], finest.Shape[3] }),
-            new[] { height, width }, InterpolateMode.Bilinear, false);
-        return (classLogits, Engine.Reshape(upsampled, new[] { b, _numClusters, height * width }), height, width);
+            Engine.Reshape(flat, new[] { b, c, h, w }), new[] { height, width }, InterpolateMode.Bilinear, false);
+        return Engine.Reshape(upsampled, new[] { b, c, height * width });
     }
 
     /// <summary>The two heads read from the ONNX graph's outputs (class logits, then cluster logits).</summary>
@@ -361,8 +523,10 @@ public partial class KMaXDeepLab<T> : Common.PanopticSegmentationBase<T>
     /// </para>
     /// <para>
     /// After the backbone (or the architecture's own layers, which then act as the backbone) come the pixel
-    /// decoder's four lateral 1x1 convolutions and four output 3x3 convolutions (to the D-wide pixel features),
-    /// the learnable initial cluster centers (a dense layer read on the identity) and the class head on the centers.
+    /// decoder's four lateral 1x1 convolutions and four output 3x3 convolutions (to the D-wide pixel features), the
+    /// auxiliary semantic head (a 1x1 convolution to the classes) and the kMaX transformer decoder
+    /// (<see cref="Common.KMaXTransformerDecoder"/>: the learnable initial cluster centers, every decoder stage's
+    /// projections and BatchNorms, and the final class and mask heads).
     /// </para>
     /// </remarks>
     protected override void InitializeLayers()
@@ -379,8 +543,8 @@ public partial class KMaXDeepLab<T> : Common.PanopticSegmentationBase<T>
         var identity = new IdentityActivation<T>() as IActivationFunction<T>;
         for (int i = 0; i < PyramidLevels; i++) Layers.Add(new ConvolutionalLayer<T>(_decoderDim, 1, 1, 0, identity));
         for (int i = 0; i < PyramidLevels; i++) Layers.Add(new ConvolutionalLayer<T>(_pixelDim, 3, 1, 1, identity));
-        Layers.Add(new DenseLayer<T>(_pixelDim));
-        Layers.Add(new DenseLayer<T>(_numClasses + 1));
+        Layers.Add(new ConvolutionalLayer<T>(_numClasses, 1, 1, 0, identity));
+        Layers.AddRange(Common.KMaXTransformerDecoder.CreateLayers<T>(_decoderShape, _kMeansIterations));
     }
 
     private bool _lazyShapesResolved;

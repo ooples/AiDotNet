@@ -11,132 +11,15 @@ namespace AiDotNet.ComputerVision.Segmentation.Common;
 /// <remarks>
 /// <para>
 /// A mask-classification model predicts <c>N</c> masks and one class distribution per mask instead of a
-/// class per pixel (MaskFormer, Cheng et al. 2021). ODISE's head works in "assignment space": the decoder's
-/// last convolution emits the pixel embedding <c>P</c> (<c>D</c> channels), the initial mask logits
-/// <c>L0 = C0 P</c> of the <c>N</c> learnable cluster centers / queries <c>C0</c> (the convolution's weight
-/// rows), and per-pixel class projections. A center update <c>C &lt;- C + A P^T</c> then changes the mask
-/// logits by <c>(A P^T) P</c>, so the cross-attention runs without materializing the centers. kMaX-DeepLab reads
-/// several pixel-feature scales, so its decoder keeps the centers explicit.
+/// class per pixel (MaskFormer, Cheng et al. 2021). The query decoders that produce them (kMaX-DeepLab's k-means
+/// decoder and Mask2Former's masked-attention decoder, which ODISE uses) are in <see cref="KMaXTransformerDecoder"/>
+/// and <see cref="Mask2FormerTransformerDecoder"/>.
 /// </para>
 /// </remarks>
 internal static class MaskClassificationOps
 {
     /// <summary>Added before taking the logarithm of a probability, as MaskFormer-family code does.</summary>
     internal const double LogEpsilon = 1e-8;
-
-    /// <summary>
-    /// kMaX-DeepLab's transformer decoder (Yu et al. 2022, Sec. 3.2-3.3): the cluster centers run k-means
-    /// cross-attention (Eq. 4) against the pixel decoder's multi-scale features, coarse to fine, and the final
-    /// centers give the mask logits on the finest pixel features.
-    /// </summary>
-    /// <param name="scales">The pixel features <c>[B, D, h_s * w_s]</c> the decoder stages read, in reading order
-    /// (strides 32, 16, 8 in the paper).</param>
-    /// <param name="iterations">Number of k-means cross-attention updates (the kMaX decoder layers, 6 in the paper);
-    /// update <c>t</c> reads scale <c>floor(t * S / iterations)</c>, so the paper's 6 layers over 3 scales read
-    /// each scale twice.</param>
-    /// <param name="initialCenters">The learnable initial cluster centers <c>[N, D]</c>.</param>
-    /// <param name="finest">The finest pixel features <c>[B, D, HW]</c> (stride 4 in the paper).</param>
-    /// <returns>The final cluster centers <c>[B, N, D]</c> and the mask logits <c>[B, N, HW]</c>.</returns>
-    /// <remarks>
-    /// Every pixel feature is L2-normalized along <c>D</c>. An update assigns each pixel to the center with the
-    /// largest affinity (argmax over the <c>N</c> centers, a hard assignment) and adds to every center the sum of
-    /// the pixel features assigned to it: <c>C &lt;- C + argmax_N(C P) P^T</c>. The argmax is not differentiable
-    /// (as in the paper); gradients reach the network through the summed pixel features.
-    /// </remarks>
-    internal static (Tensor<T> Centers, Tensor<T> MaskLogits) KMeansDecoder<T>(
-        IReadOnlyList<Tensor<T>> scales, int iterations, Tensor<T> initialCenters, Tensor<T> finest)
-    {
-        if (scales is null) throw new ArgumentNullException(nameof(scales));
-        if (initialCenters is null) throw new ArgumentNullException(nameof(initialCenters));
-        if (finest is null) throw new ArgumentNullException(nameof(finest));
-        if (scales.Count == 0) throw new ArgumentException("At least one pixel-feature scale is required.", nameof(scales));
-        if (iterations < 1) throw new ArgumentOutOfRangeException(nameof(iterations), "At least one k-means update is required.");
-        if (initialCenters.Rank != 2) throw new ArgumentException("The initial centers must be [N, D].", nameof(initialCenters));
-        int n = initialCenters.Shape[0], d = initialCenters.Shape[1], b = finest.Shape[0];
-        foreach (var scale in scales)
-        {
-            if (scale.Rank != 3 || scale.Shape[0] != b || scale.Shape[1] != d)
-                throw new ArgumentException($"Every pixel-feature scale must be [{b}, {d}, hw].", nameof(scales));
-        }
-
-        var engine = AiDotNetEngine.Current;
-        var centers = engine.TensorBroadcastTo(engine.Reshape(initialCenters, new[] { 1, n, d }), new[] { b, n, d });
-        for (int t = 0; t < iterations; t++)
-        {
-            var pixel = NormalizeAxis(scales[(int)((long)t * scales.Count / iterations)], 1);           // [B, D, hw]
-            var affinity = engine.TensorMatMul(centers, pixel);                                         // [B, N, hw]
-            // Hard cluster assignment: one-hot of the argmax over the N centers, [B, N, hw].
-            var assignment = engine.TensorPermute(
-                engine.TensorOneHot<T>(engine.TensorArgMax(affinity, 1), n), new[] { 0, 2, 1 });
-            centers = engine.TensorAdd(centers, engine.TensorMatMul(assignment, engine.TensorPermute(pixel, new[] { 0, 2, 1 })));
-        }
-
-        return (centers, engine.TensorMatMul(centers, NormalizeAxis(finest, 1)));
-    }
-
-    /// <summary>
-    /// Mask2Former's masked cross-attention (Cheng et al. 2022), the transformer decoder ODISE uses: each query
-    /// attends (softmax over pixels) only to the pixels its previous mask marks as foreground
-    /// (<c>sigmoid(logit) &gt;= 0.5</c>), and attends to every pixel when that mask is empty.
-    /// </summary>
-    /// <param name="raw">Decoder output <c>[B, D + N + E + 1, H, W]</c>: pixel embedding, initial query
-    /// mask logits, per-pixel text-space embeddings (<c>E</c>) and a per-pixel void score.</param>
-    /// <param name="pixelDim">Pixel embedding width <c>D</c>.</param>
-    /// <param name="numQueries">Number of queries <c>N</c>.</param>
-    /// <param name="embeddingDim">Text-space embedding width <c>E</c>.</param>
-    /// <param name="iterations">Number of decoder layers.</param>
-    /// <returns>Mask logits <c>[B, N, HW]</c>, query embeddings <c>[B, N, E]</c> (the attention-weighted
-    /// text-space features summed over the layers) and void logits <c>[B, N, 1]</c>.</returns>
-    internal static (Tensor<T> MaskLogits, Tensor<T> QueryEmbeddings, Tensor<T> VoidLogits) MaskedAttention<T>(
-        Tensor<T> raw, int pixelDim, int numQueries, int embeddingDim, int iterations)
-    {
-        if (raw is null) throw new ArgumentNullException(nameof(raw));
-        if (raw.Rank != 4) throw new ArgumentException("The head input must be [B, C, H, W].", nameof(raw));
-        if (iterations < 1) throw new ArgumentOutOfRangeException(nameof(iterations), "At least one decoder layer is required.");
-        int b = raw.Shape[0], c = raw.Shape[1], hw = raw.Shape[2] * raw.Shape[3];
-        if (pixelDim < 1 || numQueries < 1 || embeddingDim < 1 || c != pixelDim + numQueries + embeddingDim + 1)
-            throw new ArgumentException(
-                $"The head input has {c} channels; it needs {pixelDim} pixel, {numQueries} query, {embeddingDim} " +
-                "embedding channels and one void channel.", nameof(raw));
-
-        var engine = AiDotNetEngine.Current;
-        var ops = MathHelper.GetNumericOperations<T>();
-        var flat = engine.Reshape(raw, new[] { b, c, hw });
-        var pixel = engine.TensorSlice(flat, new[] { 0, 0, 0 }, new[] { b, pixelDim, hw });
-        var logits = engine.TensorSlice(flat, new[] { 0, pixelDim, 0 }, new[] { b, numQueries, hw });
-        var embedding = engine.TensorSlice(flat, new[] { 0, pixelDim + numQueries, 0 }, new[] { b, embeddingDim, hw });
-        var voidScore = engine.TensorSlice(flat, new[] { 0, pixelDim + numQueries + embeddingDim, 0 }, new[] { b, 1, hw });
-        var pixelT = engine.TensorPermute(pixel, new[] { 0, 2, 1 });
-        var embeddingT = engine.TensorPermute(embedding, new[] { 0, 2, 1 });
-        var voidT = engine.TensorPermute(voidScore, new[] { 0, 2, 1 });
-        var blocked = Tensor<T>.CreateDefault(new[] { b, numQueries, hw }, ops.FromDouble(-1e9));
-        var zeros = Tensor<T>.CreateDefault(new[] { b, numQueries, hw }, ops.Zero);
-        var one = ops.One;
-
-        Tensor<T>? queryEmbeddings = null;
-        Tensor<T>? voidLogits = null;
-        for (int t = 0; t < iterations; t++)
-        {
-            // 1 where the query may not attend: background of a non-empty previous mask.
-            var foreground = engine.TensorGreaterEqual(logits, zeros);
-            var anyForeground = engine.ReduceMax(foreground, new[] { 2 }, true);
-            var masked = engine.TensorMultiply(
-                engine.ScalarMinusTensor(one, foreground),
-                engine.TensorBroadcastTo(anyForeground, foreground.Shape.ToArray()));
-
-            var weights = engine.TensorSoftmax(engine.TensorWhere(masked, blocked, logits), 2); // [B, N, HW]
-            var queryUpdate = engine.TensorMatMul(weights, pixelT);                                 // [B, N, D]
-            logits = engine.TensorAdd(logits, engine.TensorMatMul(queryUpdate, pixel));
-            var embeddingUpdate = engine.TensorMatMul(weights, embeddingT);                         // [B, N, E]
-            var voidUpdate = engine.TensorMatMul(weights, voidT);                                   // [B, N, 1]
-            queryEmbeddings = queryEmbeddings is null ? embeddingUpdate : engine.TensorAdd(queryEmbeddings, embeddingUpdate);
-            voidLogits = voidLogits is null ? voidUpdate : engine.TensorAdd(voidLogits, voidUpdate);
-        }
-
-        return (logits,
-            queryEmbeddings ?? throw new InvalidOperationException("No decoder layer ran."),
-            voidLogits ?? throw new InvalidOperationException("No decoder layer ran."));
-    }
 
     /// <summary>
     /// MaskFormer's semantic inference: <c>semseg[k, p] = sum_n classProb[n, k] * maskProb[n, p]</c>, returned

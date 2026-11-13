@@ -11,9 +11,11 @@ using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Engines.Autodiff;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Tests.Helpers;
+using AiDotNet.Training;
 using Xunit;
 
 namespace AiDotNet.Tests.UnitTests.ComputerVision;
@@ -40,21 +42,16 @@ public class PanopticVideoFewShotSegmentationReferenceTests
     }
 
     [Fact]
-    public void KMeansDecoder_ReadsTheScalesCoarseToFineWithArgmaxAssignments()
+    public void KMaXHardAssignment_SendsEveryPixelToItsArgmaxClusterAndSumsTheValues()
     {
-        // D = 2, N = 2, initial centers c0 = (1, 0), c1 = (0, 1). Two updates over two scales: update 0 reads the
-        // coarse scale (one pixel (3, 4) -> (0.6, 0.8)), update 1 the fine scale (pixels (1, 0) and (0, 2) -> (0, 1)).
-        var coarse = T(new[] { 1, 2, 1 }, 3, 4);
-        var fine = T(new[] { 1, 2, 2 }, 1, 0, 0, 2);
+        // Two clusters, three pixels: cluster logits [1, 0, 5] and [0, 2, 4], so pixels 0 and 2 go to cluster 0 and
+        // pixel 1 to cluster 1 (the cluster-wise argmax of k-means cross-attention).
+        var assignment = KMaXTransformerDecoder.HardAssignment(T(new[] { 1, 2, 3 }, 1, 0, 5, 0, 2, 4));
+        AssertValues(assignment, 1, 0, 1, 0, 1, 0);
 
-        var (centers, masks) = MaskClassificationOps.KMeansDecoder(
-            new[] { coarse, fine }, 2, T(new[] { 2, 2 }, 1, 0, 0, 1), fine);
-
-        // Update 0: affinities [0.6, 0.8] -> c1 += (0.6, 0.8) = (0.6, 1.8).
-        // Update 1: (1, 0) has affinities [1, 0.6] -> c0 += (1, 0) = (2, 0); (0, 1) has [0, 1.8] -> c1 = (0.6, 2.8).
-        AssertValues(centers, 2, 0, 0.6, 2.8);
-        // Mask logits on the normalized finest pixels (1, 0), (0, 1): c0 -> [2, 0], c1 -> [0.6, 2.8].
-        AssertValues(masks, 2, 0, 0.6, 2.8);
+        // The k-means update sums the assigned pixel values (1, 2), (3, 4), (5, 6) into each cluster.
+        var update = AiDotNetEngine.Current.TensorMatMul(assignment, T(new[] { 1, 3, 2 }, 1, 2, 3, 4, 5, 6));
+        AssertValues(update, 6, 8, 3, 4);
     }
 
     [Fact]
@@ -233,18 +230,19 @@ public class PanopticVideoFewShotSegmentationReferenceTests
         var model = new ODISE<double>(Architecture(2, 32, 2), new DeterministicTextEncoder<double>(2), clip, options: new ODISEOptions
         {
             NumClasses = 2, NumQueries = 1, PixelEmbeddingDimension = 1, NumDecoderLayers = 1, Temperature = 0.5,
-            InVocabularyClassNames = new[] { "class 0" },
+            NumAttentionHeads = 1, FeedForwardDimension = 4, InVocabularyClassNames = new[] { "class 0" },
         });
-        // Two pixels a, b: P = [1, -2], query logits [1, -1], text-space embeddings (1, 0) and (0, 1), void 0.
-        // The query attends only to a, so its embedding is (1, 0) and its logits become [2, -3]: the mask is {a}.
-        var raw = T(new[] { 1, 5, 1, 2 }, 1, -2, 1, -1, 1, 0, 0, 1, 0, 0);
+        // Two pixels a, b. The decoder's query has mask logits [2, -3] (its mask is {a}), class embedding (1, 0) and
+        // void similarity 0.
+        var prediction = new Mask2FormerPrediction<double>(
+            T(new[] { 1, 1, 2 }, 2, -3), T(new[] { 1, 1, 2 }, 1, 0), T(new[] { 1, 1, 1 }, 0), 1, 2);
         var text = TextEmbeddingClassifier.NormalizeRows(T(new[] { 2, 2 }, 1, 0, 0, 1));
         // Pixel a is pure channel 0 and b pure channel 1, so the masked image embeds to (1, 0) in CLIP space.
         var image = T(new[] { 1, 2, 1, 2 }, 1, 0, 0, 1);
         var weights = model.ClipWeights(new[] { "class 0", "class 1" });
 
-        var (_, trained) = model.ClassifyQueries(raw, text, weights, null);
-        var (_, fused) = model.ClassifyQueries(raw, text, weights, image);
+        var (_, trained) = model.ClassifyQueries(prediction, text, weights, null);
+        var (_, fused) = model.ClassifyQueries(prediction, text, weights, image);
 
         // Diffusion logits: learned scale 1 / 0.5 = 2 times cos = [2, 0]; with the void logit 0 the training
         // distribution is softmax([2, 0, 0]) = [0.786986, 0.106507, 0.106507].
@@ -589,5 +587,383 @@ public class PanopticVideoFewShotSegmentationReferenceTests
         var upsampled = UniverSeg<double>.Upsample(T(new[] { 1, 1, 1, 2 }, 0, 1), new[] { 1, 4 });
 
         AssertValues(upsampled, 0, 1.0 / 3.0, 2.0 / 3.0, 1);
+    }
+
+    // ---- Learnable kMaX and Mask2Former decoders, kMaX auxiliary losses, Dice sums in float for Half ----
+
+    /// <summary>A small kMaX decoder: pixel width 4, query width 8 (keys 4, values 8), 2 heads, FFN 16, 2 classes + void.</summary>
+    private static readonly KMaXDecoderShape SmallKMaX = new(pixelDim: 4, queryDim: 8, heads: 2, feedForwardDim: 16, classes: 3);
+
+    /// <summary>
+    /// The small kMaX decoder's trainable parameter count, from deeplab2's kMaXTransformerLayer and kMaXPredictor
+    /// (bias-free convolutions before a BatchNorm of 2 * C parameters, biased pixel key projection and class head).
+    /// Per stage: pixel bottleneck 4*8 + 16, query projection 8*8 + 16, value projection 8*8 + 16, predictor (key
+    /// 8*4 + 4 + 8, mask kernel 8*4 + 8, cluster-logit BN 2, class head 8*3 + 3) = 113, retrieved value BN 16, k-means
+    /// output 8*8 + 16, fused Q/K/V 8*16 + 32, similarity BN 2*2, retrieved value BN 16, attention output 8*8 + 16,
+    /// FFN 8*16 + 32 and 16*8 + 16: 981. Initial centers 3*8 = 24; final class and mask projections 2 * (8*8 + 16) and
+    /// a predictor on the 4-wide finest features (key 4*4 + 4 + 8, mask kernel 32 + 8, BN 2, class head 27): 257.
+    /// </summary>
+    private const int SmallKMaXParameters = 24 + 2 * 981 + 257;
+
+    private static IReadOnlyList<KMaXPrediction<double>> RunKMaX(IReadOnlyList<ILayer<double>> layers, int stages)
+    {
+        var coarse = Pattern(11, 1, 4, 2);
+        var fine = Pattern(12, 1, 4, 6);
+        var scales = stages == 1 ? new[] { (fine, 2, 3) } : new[] { (coarse, 1, 2), (fine, 2, 3) };
+        return KMaXTransformerDecoder.Run<double>(layers, 0, SmallKMaX, scales, stages, Pattern(13, 1, 4, 12), 3, 4, 3);
+    }
+
+    private static void Randomize(IEnumerable<Tensor<double>> parameters, int seed)
+    {
+        var random = RandomHelper.CreateSeededRandom(seed);
+        foreach (var parameter in parameters)
+        {
+            for (int i = 0; i < parameter.Length; i++) parameter[i] = random.NextDouble() - 0.5;
+            AiDotNetEngine.Current.InvalidatePersistentTensor(parameter);
+        }
+    }
+
+    /// <summary>A weighted sum of <paramref name="x"/> with fixed weights (a plain sum through a BatchNorm has no gradient).</summary>
+    private static Tensor<double> WeightedSum(Tensor<double> x, int seed)
+    {
+        var engine = AiDotNetEngine.Current;
+        return engine.ReduceSum(engine.TensorMultiply(x, Pattern(seed, x.Shape.ToArray())), null);
+    }
+
+    private static void AssertGradientReaches(
+        Dictionary<Tensor<double>, Tensor<double>> gradients, IReadOnlyList<ILayer<double>> layers, int index, string name)
+    {
+        var weights = TapeTrainingStep<double>.CollectParameters(new[] { layers[index] }, -1)[0];
+        Assert.True(gradients.TryGetValue(weights, out var gradient) && gradient.ToArray().Any(v => Math.Abs(v) > 1e-12),
+            $"No gradient reached {name} (layer {index}).");
+    }
+
+    [Fact]
+    public void KMaXDecoder_HasTheReferenceShapesAndParameterCount()
+    {
+        var layers = KMaXTransformerDecoder.CreateLayers<double>(SmallKMaX, 2).ToList();
+        var predictions = RunKMaX(layers, 2);
+
+        Assert.Equal(KMaXTransformerDecoder.LayerCount(2), layers.Count);
+        // One prediction per stage (read at the stage's scale), then the final one on the finest features.
+        Assert.Equal(3, predictions.Count);
+        Assert.Equal(new[] { 1, 3, 3 }, predictions[0].ClassLogits.Shape.ToArray());
+        Assert.Equal(new[] { 1, 3, 2 }, predictions[0].MaskLogits.Shape.ToArray());
+        Assert.Equal(new[] { 1, 3, 6 }, predictions[1].MaskLogits.Shape.ToArray());
+        Assert.Equal(new[] { 1, 3, 3 }, predictions[2].ClassLogits.Shape.ToArray());
+        Assert.Equal(new[] { 1, 3, 12 }, predictions[2].MaskLogits.Shape.ToArray());
+        Assert.True(predictions[2].PixelFeatures is { } features && features.Shape.ToArray().SequenceEqual(new[] { 1, 4, 12 }));
+        Assert.Equal(SmallKMaXParameters, TapeTrainingStep<double>.CollectParameters(layers, -1).Sum(p => p.Length));
+    }
+
+    [Fact]
+    public void KMaXDecoder_GradientReachesTheCrossAttentionSelfAttentionAndFfnProjections()
+    {
+        var layers = KMaXTransformerDecoder.CreateLayers<double>(SmallKMaX, 1).ToList();
+        RunKMaX(layers, 1);                                                   // sizes the lazy layers
+        var parameters = TapeTrainingStep<double>.CollectParameters(layers, -1);
+        // Also replaces the zero-initialized residual BatchNorm scales, which would block the gradient at the start.
+        Randomize(parameters, 23);
+
+        Dictionary<Tensor<double>, Tensor<double>> gradients;
+        using (var tape = new GradientTape<double>())
+        {
+            Tensor<double>? loss = null;
+            int seed = 30;
+            foreach (var prediction in RunKMaX(layers, 1))
+            {
+                var term = AiDotNetEngine.Current.TensorAdd(
+                    WeightedSum(prediction.ClassLogits, seed++), WeightedSum(prediction.MaskLogits, seed++));
+                loss = loss is null ? term : AiDotNetEngine.Current.TensorAdd(loss, term);
+            }
+
+            gradients = tape.ComputeGradients(loss ?? throw new InvalidOperationException("No prediction."), parameters);
+        }
+
+        // The stage starts at layer 1 (layer 0 is the initial centers).
+        AssertGradientReaches(gradients, layers, 0, "the initial cluster centers");
+        AssertGradientReaches(gradients, layers, 1, "the pixel bottleneck projection");
+        AssertGradientReaches(gradients, layers, 3, "the query projection");
+        AssertGradientReaches(gradients, layers, 5, "the k-means value projection");
+        AssertGradientReaches(gradients, layers, 7, "the predictor's pixel key projection");
+        AssertGradientReaches(gradients, layers, 9, "the predictor's mask kernel projection");
+        AssertGradientReaches(gradients, layers, 14, "the k-means output projection");
+        AssertGradientReaches(gradients, layers, 16, "the self-attention Q/K/V projection");
+        AssertGradientReaches(gradients, layers, 20, "the self-attention output projection");
+        AssertGradientReaches(gradients, layers, 22, "the FFN up projection");
+        AssertGradientReaches(gradients, layers, 24, "the FFN down projection");
+    }
+
+    [Fact]
+    public void KMaXInstanceDiscrimination_IsTheCrossEntropyAgainstTheSameSegmentPixels()
+    {
+        // Pixels 0 and 1 are segment A, pixel 2 segment B; normalized features (1, 0), (0.6, 0.8), (0, 1); tau = 0.3.
+        // Similarities / tau: column 0 [3.3333, 2, 0], column 1 [2, 3.3333, 2.6667], column 2 [0, 2.6667, 3.3333].
+        // Targets: columns 0 and 1 put 1/2 on pixels 0 and 1, column 2 all on pixel 2. The cross-entropies over the
+        // rows are 0.9284701, 1.2416012 and 0.4376684, all non-zero, so the loss is their mean.
+        var features = T(new[] { 2, 3 }, 1, 0.6, 0, 0, 0.8, 1);
+        var segments = new MaskSetPredictionLoss.Segments<double>(T(new[] { 2, 3 }, 1, 1, 0, 0, 0, 1), new[] { 0, 1 });
+
+        var loss = MaskSetPredictionLoss.InstanceDiscrimination(features, segments, new[] { 0, 1, 2 }, 0.3);
+
+        AssertValues(loss, 0.8692466);
+    }
+
+    [Fact]
+    public void KMaXSemanticLoss_IsTheMeanCrossEntropyOfTheSampledPixels()
+    {
+        // Two classes, two pixels: pixel 0 is class 0 with logits (1, 0), pixel 1 class 1 with logits (0, 0).
+        // CE = log(1 + e^-1) = 0.3132617 and ln 2 = 0.6931472; mean 0.5032044.
+        var logits = T(new[] { 2, 2 }, 1, 0, 0, 0);
+        var segments = new MaskSetPredictionLoss.Segments<double>(T(new[] { 2, 2 }, 1, 0, 0, 1), new[] { 0, 1 });
+
+        var loss = MaskSetPredictionLoss.SemanticCrossEntropy(logits, segments, new[] { 0, 1 });
+
+        AssertValues(loss, 0.5032044);
+    }
+
+    [Fact]
+    public void KMaXSamplePixels_TakesEveryCoveredPixelUpToTheBudgetAndDrawsDistinctPixelsBeyondIt()
+    {
+        // Segment 0 covers pixels 0-2, segment 1 pixel 4; pixel 3 is void and never sampled.
+        var segments = new MaskSetPredictionLoss.Segments<double>(T(new[] { 2, 5 }, 1, 1, 1, 0, 0, 0, 0, 0, 0, 1), new[] { 0, 1 });
+        var random = RandomHelper.CreateSeededRandom(5);
+
+        Assert.Equal(new[] { 0, 1, 2, 4 }, MaskSetPredictionLoss.SamplePixels(segments, 4096, 1.5, random));
+        var drawn = MaskSetPredictionLoss.SamplePixels(segments, 2, 1.5, random);
+        Assert.Equal(2, drawn.Distinct().Count());
+        Assert.DoesNotContain(3, drawn);
+    }
+
+    private static NeuralNetworkArchitecture<double> TinyBackbone(int size)
+    {
+        IActivationFunction<double> identity = new IdentityActivation<double>();
+        return new NeuralNetworkArchitecture<double>(
+            inputType: InputType.ThreeDimensional,
+            taskType: NeuralNetworkTaskType.MultiClassClassification,
+            inputHeight: size, inputWidth: size, inputDepth: 3, outputSize: 2,
+            layers: new List<ILayer<double>>
+            {
+                new ConvolutionalLayer<double>(4, 3, 2, 1, identity),
+                new ConvolutionalLayer<double>(4, 3, 2, 1, identity),
+            });
+    }
+
+    private static KMaXDeepLabOptions SmallKMaXOptions(double instanceDiscriminationWeight, double semanticWeight) => new()
+    {
+        NumClasses = 2, NumClusterCenters = 3, PixelEmbeddingDimension = 4, NumKMeansIterations = 2, QueryDimension = 8,
+        NumAttentionHeads = 2, FeedForwardDimension = 16, Seed = 7,
+        InstanceDiscriminationLossWeight = instanceDiscriminationWeight, SemanticLossWeight = semanticWeight,
+    };
+
+    [Fact]
+    public void KMaXDeepLab_RegistersTheDecoderAndAddsTheAuxiliaryLosses()
+    {
+        var full = new KMaXDeepLab<double>(TinyBackbone(8), options: SmallKMaXOptions(1.0, 1.0));
+        var mainOnly = new KMaXDeepLab<double>(TinyBackbone(8), options: SmallKMaXOptions(0.0, 0.0));
+        var input = Pattern(51, 1, 3, 8, 8);
+        full.Predict(input);
+        mainOnly.Predict(input);
+        mainOnly.SetParameters(full.GetParameters());
+
+        // The decoder's layers sit in the model's layer list, so its parameters, serialization and optimizer see them.
+        var decoder = full.GetDecoderLayers();
+        Assert.Equal(KMaXTransformerDecoder.LayerCount(2), decoder.Count);
+        Assert.All(decoder, layer => Assert.Contains(layer, full.Layers));
+        Assert.Equal(SmallKMaXParameters, TapeTrainingStep<double>.CollectParameters(decoder, -1).Sum(p => p.Length));
+
+        // Class 0 on the left half, class 1 on the right: the instance discrimination and semantic losses are
+        // positive, so the full loss exceeds the PQ-style and mask-ID terms alone.
+        var target = T(new[] { 1, 8, 8 }, Enumerable.Range(0, 64).Select(i => i % 8 < 4 ? 0.0 : 1.0).ToArray());
+        double withAuxiliary = full.SetPredictionLoss(input, target).ToArray()[0];
+        double without = mainOnly.SetPredictionLoss(input, target).ToArray()[0];
+        Assert.False(double.IsNaN(withAuxiliary) || double.IsInfinity(withAuxiliary) || double.IsNaN(without) || double.IsInfinity(without));
+        Assert.True(withAuxiliary > without + 1e-6, $"{withAuxiliary} should exceed {without}.");
+    }
+
+    [Fact]
+    public void Mask2FormerAttentionMask_BlocksBackgroundUnlessTheMaskIsEmpty()
+    {
+        // Query 0's mask is pixels 0 and 2 (logit >= 0, sigmoid >= 0.5); query 1's mask is empty, so it attends to all.
+        var mask = Mask2FormerTransformerDecoder.AttentionMask(T(new[] { 1, 2, 3 }, 1, -1, 0, -1, -2, -3));
+
+        AssertValues(mask, 0, 1, 0, 0, 0, 0);
+    }
+
+    [Fact]
+    public void Mask2FormerAttention_LeavesBlockedPixelsOutOfTheSoftmax()
+    {
+        // One head of width 1: q = 1, keys 0, 1, 2, values 10, 20, 30; key 1 is blocked, so the weights are
+        // softmax([0, 2]) = [0.1192029, 0.8807971] over keys 0 and 2: 10 * 0.1192029 + 30 * 0.8807971.
+        var output = Mask2FormerTransformerDecoder.Attend(
+            T(new[] { 1, 1, 1 }, 1), T(new[] { 1, 3, 1 }, 0, 1, 2), T(new[] { 1, 3, 1 }, 10, 20, 30), 1, T(new[] { 1, 1, 3 }, 0, 1, 0));
+
+        AssertValues(output, 27.6159416);
+    }
+
+    /// <summary>
+    /// The small Mask2Former decoder's parameter count (D = 4, FFN 8, text space E, N = 2 queries, one layer), as
+    /// PyTorch counts it: query features and positions 2 * 2*4, decoder norm 8, class embedding 4*E + E, mask MLP
+    /// 3 * (4*4 + 4), null embedding E; per layer two nn.MultiheadAttention (in_proj 3*16 + 12, out_proj 16 + 4) = 160,
+    /// three LayerNorms 24 and the FFN 4*8 + 8 + 8*4 + 4 = 76.
+    /// </summary>
+    private static int SmallMask2FormerParameters(int e) => 2 * 8 + 8 + (4 * e + e) + 3 * 20 + e + 160 + 24 + 76;
+
+    [Fact]
+    public void Mask2FormerDecoder_HasTheReferenceShapesAndParameterCount()
+    {
+        var layers = Mask2FormerTransformerDecoder.CreateLayers<double>(4, 8, 3, 1).ToList();
+        var predictions = Mask2FormerTransformerDecoder.Run<double>(layers, 0, 2, 2, 1, Pattern(31, 1, 4, 16), 4, 4);
+
+        Assert.Equal(Mask2FormerTransformerDecoder.LayerCount(1), layers.Count);
+        // The initial queries' prediction, then one per decoder layer.
+        Assert.Equal(2, predictions.Count);
+        foreach (var prediction in predictions)
+        {
+            Assert.Equal(new[] { 1, 2, 16 }, prediction.MaskLogits.Shape.ToArray());
+            Assert.Equal(new[] { 1, 2, 3 }, prediction.ClassEmbeddings.Shape.ToArray());
+            Assert.Equal(new[] { 1, 2, 1 }, prediction.VoidSimilarity.Shape.ToArray());
+        }
+
+        Assert.Equal(SmallMask2FormerParameters(3), TapeTrainingStep<double>.CollectParameters(layers, -1).Sum(p => p.Length));
+    }
+
+    [Fact]
+    public void Mask2FormerDecoder_GradientReachesTheCrossAttentionSelfAttentionAndFfnProjections()
+    {
+        var layers = Mask2FormerTransformerDecoder.CreateLayers<double>(4, 8, 3, 1).ToList();
+        var pixel = Pattern(31, 1, 4, 16);
+        Mask2FormerTransformerDecoder.Run<double>(layers, 0, 2, 2, 1, pixel, 4, 4);
+        var parameters = TapeTrainingStep<double>.CollectParameters(layers, -1);
+        Randomize(parameters, 33);
+
+        Dictionary<Tensor<double>, Tensor<double>> gradients;
+        using (var tape = new GradientTape<double>())
+        {
+            var predictions = Mask2FormerTransformerDecoder.Run<double>(layers, 0, 2, 2, 1, pixel, 4, 4);
+            var final = predictions[predictions.Count - 1];
+            var loss = AiDotNetEngine.Current.TensorAdd(
+                AiDotNetEngine.Current.TensorAdd(WeightedSum(final.MaskLogits, 40), WeightedSum(final.ClassEmbeddings, 41)),
+                WeightedSum(final.VoidSimilarity, 42));
+            gradients = tape.ComputeGradients(loss, parameters);
+        }
+
+        // Layers 0-7 are the query features, query positions and prediction heads; the decoder layer starts at 8 with
+        // the cross-attention (Mask2Former runs it first), then the self-attention at 13 and the FFN at 18.
+        string[] names = { "cross Q", "cross K", "cross V", "cross output" };
+        for (int i = 0; i < 4; i++) AssertGradientReaches(gradients, layers, 8 + i, names[i]);
+        names = new[] { "self Q", "self K", "self V", "self output" };
+        for (int i = 0; i < 4; i++) AssertGradientReaches(gradients, layers, 13 + i, names[i]);
+        AssertGradientReaches(gradients, layers, 18, "the FFN up projection");
+        AssertGradientReaches(gradients, layers, 19, "the FFN down projection");
+        AssertGradientReaches(gradients, layers, 0, "the query features");
+        AssertGradientReaches(gradients, layers, 1, "the query positions");
+        AssertGradientReaches(gradients, layers, 7, "the null embedding");
+    }
+
+    private static ODISE<double> SmallOdise() => new(
+        Architecture(2, 32, 2), new DeterministicTextEncoder<double>(2),
+        new DeterministicVisualEncoder<double>(embeddingDimension: 2, channels: 2, imageSize: 2),
+        options: new ODISEOptions
+        {
+            NumClasses = 2, NumQueries = 2, PixelEmbeddingDimension = 4, NumDecoderLayers = 1, NumAttentionHeads = 2,
+            FeedForwardDimension = 8,
+        });
+
+    [Fact]
+    public void Odise_RegistersTheMask2FormerDecoderInItsParametersAndSerialization()
+    {
+        var model = SmallOdise();
+        var input = Pattern(41, 1, 2, 32, 32);
+        var before = model.Predict(input).ToArray();
+
+        var decoder = model.GetDecoderLayers();
+        Assert.Equal(Mask2FormerTransformerDecoder.LayerCount(1), decoder.Count);
+        Assert.All(decoder, layer => Assert.Contains(layer, model.Layers));
+        Assert.Equal(SmallMask2FormerParameters(2), TapeTrainingStep<double>.CollectParameters(decoder, -1).Sum(p => p.Length));
+
+        // SetParameters reaches the decoder: shifting every model parameter shifts the decoder's.
+        var firstDecoderLayer = decoder[0].GetParameters().ToArray();
+        var shifted = model.GetParameters().ToArray().Select(v => v + 0.25).ToArray();
+        model.SetParameters(new Vector<double>(shifted));
+        var moved = decoder[0].GetParameters().ToArray();
+        Assert.Equal(firstDecoderLayer.Length, moved.Length);
+        for (int i = 0; i < moved.Length; i++) Assert.Equal(firstDecoderLayer[i] + 0.25, moved[i], 9);
+
+        // A serialized copy predicts the same.
+        var expected = model.Predict(input).ToArray();
+        Assert.Contains(Enumerable.Range(0, expected.Length), i => Math.Abs(expected[i] - before[i]) > 1e-12);
+        var copy = SmallOdise();
+        copy.Deserialize(model.Serialize());
+        var actual = copy.Predict(input).ToArray();
+        Assert.Equal(expected.Length, actual.Length);
+        for (int i = 0; i < expected.Length; i++) Assert.Equal(expected[i], actual[i], 9);
+    }
+
+    [Fact]
+    public void Mask2FormerLoss_HalfSumsTheDiceAndBceTermsInFloat()
+    {
+        // One query on 5000 pixels with mask logit 0 (sigmoid 0.5) and one class-0 segment over every pixel. Class:
+        // NLL ln 2 (matched, weight 1), times 2. BCE: ln 2, times 5. Dice: 1 - (2 * 2500 + 1) / (2500 + 5000 + 1)
+        // = 0.3332889, times 5. Total 6.5184747. Summed in Half the 0.5s stopped at 1024 (Dice 0.66) and the BCE at 2048.
+        const int hw = 5000;
+        var classLogits = H(new[] { 1, 1, 2 }, new[] { 0.0, 0.0 });
+        var maskLogits = H(new[] { 1, 1, hw }, Enumerable.Repeat(0.0, hw));
+        var segments = new[] { new MaskSetPredictionLoss.Segments<Half>(H(new[] { 1, hw }, Enumerable.Repeat(1.0, hw)), new[] { 0 }) };
+
+        double loss = D(MaskSetPredictionLoss.Mask2Former(classLogits, maskLogits, segments))[0];
+
+        Assert.True(Math.Abs(loss - 6.5184747) < 0.02, $"Half loss {loss}, expected 6.5184747.");
+    }
+
+    [Fact]
+    public void KMaXLoss_HalfSumsTheDiceAndMaskIdTermsInFloat()
+    {
+        // Two clusters on 5000 pixels with equal logits (softmax masks 0.5 each), class logits zero (p = 0.5) and one
+        // class-0 segment over every pixel. Both clusters have Dice 2 * 2500 / 7500 = 2/3; cluster 0 is matched.
+        // L_pos = -(0.5 * 2/3 + 2/3 * ln 0.5) = 0.1287651, L_neg = ln 2, L_PQ = 0.75 L_pos + 0.25 L_neg;
+        // mask-ID CE = ln 2. Total 3 L_PQ + 0.3 ln 2 = 1.0175253. In Half the cluster sums stopped at 1024.
+        const int hw = 5000;
+        var classLogits = H(new[] { 1, 2, 2 }, new[] { 0.0, 0.0, 0.0, 0.0 });
+        var maskLogits = H(new[] { 1, 2, hw }, Enumerable.Repeat(0.0, 2 * hw));
+        var segments = new[] { new MaskSetPredictionLoss.Segments<Half>(H(new[] { 1, hw }, Enumerable.Repeat(1.0, hw)), new[] { 0 }) };
+
+        double loss = D(MaskSetPredictionLoss.KMaX(classLogits, maskLogits, segments))[0];
+
+        Assert.True(Math.Abs(loss - 1.0175253) < 0.01, $"Half loss {loss}, expected 1.0175253.");
+    }
+
+    [Fact]
+    public void PairwiseDice_HalfSumsPast1024()
+    {
+        // A 5000-pixel segment against a 0.5 mask: 2 * 2500 / (5000 + 2500) = 2/3.
+        const int hw = 5000;
+        var dice = D(MaskSetPredictionLoss.PairwiseDice(
+            H(new[] { 1, hw }, Enumerable.Repeat(1.0, hw)), H(new[] { 1, hw }, Enumerable.Repeat(0.5, hw))));
+
+        Assert.True(Math.Abs(dice[0] - 2.0 / 3.0) < 1e-3, $"Half Dice {dice[0]}, expected 2/3.");
+    }
+
+    [Fact]
+    public void WideRowSums_HalfGradientIsTheUpstreamGradientOfEachRow()
+    {
+        // y = row sums of a [2, 3600] Half tensor; loss = y0 + 2 y1, so every element of row 0 gets 1 and of row 1 gets 2.
+        var engine = AiDotNetEngine.Current;
+        var x = H(new[] { 2, 3600 }, Enumerable.Repeat(0.5, 7200));
+        double[] sums;
+        Tensor<Half> gradient;
+        using (var tape = new GradientTape<Half>())
+        {
+            var y = MaskSetPredictionLoss.WideRowSums(x);
+            sums = D(y);
+            var loss = engine.ReduceSum(engine.TensorMultiply(y, H(new[] { 2 }, new[] { 1.0, 2.0 })), null);
+            gradient = tape.ComputeGradients(loss, new[] { x })[x];
+        }
+
+        // 3600 * 0.5 = 1800 for each row; a Half accumulation stopped at 1024.
+        Assert.Equal(new[] { 1800.0, 1800.0 }, sums);
+        var values = D(gradient);
+        Assert.All(values.Take(3600), v => Assert.Equal(1.0, v));
+        Assert.All(values.Skip(3600), v => Assert.Equal(2.0, v));
     }
 }

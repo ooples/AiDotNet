@@ -42,6 +42,18 @@ public class KMaXDeepLabOptions : SegmentationModelOptions
         OverlapThreshold = other.OverlapThreshold;
         ReorderClassWeight = other.ReorderClassWeight;
         ReorderMaskWeight = other.ReorderMaskWeight;
+        QueryDimension = other.QueryDimension;
+        NumAttentionHeads = other.NumAttentionHeads;
+        FeedForwardDimension = other.FeedForwardDimension;
+        PanopticQualityLossWeight = other.PanopticQualityLossWeight;
+        MaskIdLossWeight = other.MaskIdLossWeight;
+        InstanceDiscriminationLossWeight = other.InstanceDiscriminationLossWeight;
+        InstanceDiscriminationTemperature = other.InstanceDiscriminationTemperature;
+        InstanceDiscriminationSampleCount = other.InstanceDiscriminationSampleCount;
+        InstanceDiscriminationSampleTemperature = other.InstanceDiscriminationSampleTemperature;
+        SemanticLossWeight = other.SemanticLossWeight;
+        SemanticSampleCount = other.SemanticSampleCount;
+        SemanticSampleTemperature = other.SemanticSampleTemperature;
     }
 
     /// <summary>
@@ -75,10 +87,56 @@ public class KMaXDeepLabOptions : SegmentationModelOptions
     public int PixelEmbeddingDimension { get; set; } = 128;
 
     /// <summary>
-    /// Gets or sets the number of k-means cross-attention updates. Default: 6 (the kMaX decoder's
-    /// <c>DEC_LAYERS = [2, 2, 2]</c>).
+    /// Gets or sets the number of kMaX transformer decoder stages (each a k-means cross-attention, a self-attention
+    /// among the cluster centers and an FFN). Default: 6 (the kMaX decoder's <c>DEC_LAYERS = [2, 2, 2]</c>).
     /// </summary>
     public int NumKMeansIterations { get; set; } = 6;
+
+    /// <summary>
+    /// Gets or sets the width of the cluster centers (the decoder's query and bottleneck width). Default: 256
+    /// (<c>in_channel_query = 256</c>; the keys take half of it, the values all of it, as base_filters 128 with key
+    /// expansion 1 and value expansion 2 give).
+    /// </summary>
+    public int QueryDimension { get; set; } = 256;
+
+    /// <summary>Gets or sets the self-attention heads among the cluster centers. Default: 8.</summary>
+    public int NumAttentionHeads { get; set; } = 8;
+
+    /// <summary>Gets or sets the hidden width of the cluster centers' FFN. Default: 2048.</summary>
+    public int FeedForwardDimension { get; set; } = 2048;
+
+    /// <summary>Gets or sets the weight of the PQ-style loss. Default: 3.0 (Yu et al. 2022).</summary>
+    public double PanopticQualityLossWeight { get; set; } = 3.0;
+
+    /// <summary>Gets or sets the weight of the mask-ID cross-entropy. Default: 0.3.</summary>
+    public double MaskIdLossWeight { get; set; } = 0.3;
+
+    /// <summary>
+    /// Gets or sets the weight of the pixel-wise instance discrimination loss (MaX-DeepLab's auxiliary loss, kept by
+    /// kMaX-DeepLab). Default: 1.0.
+    /// </summary>
+    public double InstanceDiscriminationLossWeight { get; set; } = 1.0;
+
+    /// <summary>Gets or sets the instance discrimination similarity temperature. Default: 0.3.</summary>
+    public double InstanceDiscriminationTemperature { get; set; } = 0.3;
+
+    /// <summary>Gets or sets how many pixels per image the instance discrimination loss samples. Default: 4096.</summary>
+    public int InstanceDiscriminationSampleCount { get; set; } = 4096;
+
+    /// <summary>
+    /// Gets or sets the temperature of the instance discrimination pixel sampling (pixels are drawn with probability
+    /// proportional to their segment's inverse area raised to this power). Default: 1.5.
+    /// </summary>
+    public double InstanceDiscriminationSampleTemperature { get; set; } = 1.5;
+
+    /// <summary>Gets or sets the weight of the auxiliary semantic segmentation loss. Default: 1.0.</summary>
+    public double SemanticLossWeight { get; set; } = 1.0;
+
+    /// <summary>Gets or sets how many pixels per image the auxiliary semantic loss samples. Default: 4096.</summary>
+    public int SemanticSampleCount { get; set; } = 4096;
+
+    /// <summary>Gets or sets the temperature of the auxiliary semantic loss's pixel sampling. Default: 2.0.</summary>
+    public double SemanticSampleTemperature { get; set; } = 2.0;
 
     /// <summary>
     /// Gets or sets the minimum class probability of a thing cluster in the panoptic merge. Default: 0.7.

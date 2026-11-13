@@ -2,6 +2,7 @@ using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Solvers.Assignment;
 using AiDotNet.Tensors.Engines.Autodiff;
+using AiDotNet.Tensors.NumericOperations;
 
 namespace AiDotNet.ComputerVision.Segmentation.Common;
 
@@ -20,7 +21,8 @@ namespace AiDotNet.ComputerVision.Segmentation.Common;
 /// <c>KMaX</c> is kMaX-DeepLab's loss (Yu et al. 2022, following MaX-DeepLab, Wang et al. 2021): masks are
 /// a softmax over the cluster centers, segments are matched by maximizing <c>p(c) * Dice</c>, and the loss is the
 /// PQ-style loss (weight 3.0; <c>alpha = 0.75</c> between matched and unmatched predictions) plus the mask-ID
-/// cross-entropy (weight 0.3).
+/// cross-entropy (weight 0.3); the model adds the pixel-wise instance discrimination loss
+/// (<c>InstanceDiscrimination</c>, weight 1.0) and the auxiliary semantic loss (<c>SemanticCrossEntropy</c>, weight 1.0).
 /// </para>
 /// <para>
 /// Ground-truth segments come from a semantic target: one segment per class present in the image, the class map
@@ -135,14 +137,17 @@ internal static class MaskSetPredictionLoss
                 engine.TensorMatMul(y, engine.TensorTranspose(maskLogits))),
             ops.FromDouble(1.0 / hw));
 
-        var sigmoid = engine.TensorSigmoid(maskLogits);
-        var overlap = engine.TensorMatMul(y, engine.TensorTranspose(sigmoid));                             // [M, N]
+        // The matching cost carries no gradient, so the Dice sums run in double and are rounded to T once: summed in
+        // Half, 0.5-valued sigmoids stop adding at 1024.
+        var sigmoid = engine.TensorSigmoid(maskLogits).Cast<double>();
+        var truth = y.Cast<double>();
+        var overlap = engine.TensorMatMul(truth, engine.TensorTranspose(sigmoid));                         // [M, N]
         var denominator = engine.TensorAdd(
-            engine.TensorBroadcastTo(engine.Reshape(TruthAreas(y), new[] { m, 1 }), new[] { m, n }),
+            engine.TensorBroadcastTo(engine.Reshape(engine.ReduceSum(truth, new[] { 1 }, false), new[] { m, 1 }), new[] { m, n }),
             engine.TensorBroadcastTo(engine.Reshape(engine.ReduceSum(sigmoid, new[] { 1 }, false), new[] { 1, n }), new[] { m, n }));
-        var dice = engine.ScalarMinusTensor(ops.One, engine.TensorDivide(
-            engine.TensorAddScalar(engine.TensorMultiplyScalar(overlap, ops.FromDouble(2.0)), ops.One),
-            engine.TensorAddScalar(denominator, ops.One)));
+        var dice = engine.ScalarMinusTensor(1.0, engine.TensorDivide(
+            engine.TensorAddScalar(engine.TensorMultiplyScalar(overlap, 2.0), 1.0),
+            engine.TensorAddScalar(denominator, 1.0))).Cast<T>();
 
         return engine.TensorAdd(
             engine.TensorMultiplyScalar(probability, ops.FromDouble(-Mask2FormerClassWeight)),
@@ -197,14 +202,14 @@ internal static class MaskSetPredictionLoss
             if (segment.Length == 0) continue;
             matchedTotal += segment.Length;
             var (x, y) = MatchedPairs(masks, segments[i], segment, prediction, n);
+            // The per-pixel BCE and the Dice numerator and denominator are summed in float for Half and BFloat16
+            // (WideRowSums): summed in Half, 0.5-valued sigmoids stop adding at 1024.
             var bce = engine.TensorMultiplyScalar(
-                engine.ReduceSum(engine.TensorSubtract(engine.Softplus(x), engine.TensorMultiply(x, y)), null),
-                perPixel);
+                WideSum(engine.TensorSubtract(engine.Softplus(x), engine.TensorMultiply(x, y))), perPixel);
             var sigmoid = engine.TensorSigmoid(x);
             var numerator = engine.TensorAddScalar(
-                engine.TensorMultiplyScalar(engine.ReduceSum(engine.TensorMultiply(sigmoid, y), new[] { 1 }, false), two), ops.One);
-            var denominator = engine.TensorAddScalar(
-                engine.TensorAdd(engine.ReduceSum(sigmoid, new[] { 1 }, false), TruthAreas(y)), ops.One);
+                engine.TensorMultiplyScalar(WideRowSums(engine.TensorMultiply(sigmoid, y)), two), ops.One);
+            var denominator = engine.TensorAddScalar(engine.TensorAdd(WideRowSums(sigmoid), TruthAreas(y)), ops.One);
             var dice = engine.ReduceSum(engine.ScalarMinusTensor(ops.One, engine.TensorDivide(numerator, denominator)), null);
             maskCrossEntropy = Accumulate(engine, maskCrossEntropy, bce);
             maskDice = Accumulate(engine, maskDice, dice);
@@ -240,28 +245,35 @@ internal static class MaskSetPredictionLoss
         return engine.TensorMultiply(probability, PairwiseDice(segments.Masks, engine.TensorSoftmax(maskLogits, 0)));
     }
 
+    /// <summary>kMaX-DeepLab's PQ-style and mask-ID terms over a batch with the paper's weights.</summary>
+    internal static Tensor<T> KMaX<T>(Tensor<T> classLogits, Tensor<T> maskLogits, IReadOnlyList<Segments<T>> segments)
+        => KMaX(classLogits, maskLogits, segments, KMaXLossSettings.Default);
+
     /// <summary>
-    /// kMaX-DeepLab's loss over a batch: <c>3 * L_PQ + 0.3 * L_maskID</c>, where
-    /// <c>L_PQ = 0.75 * L_pos + 0.25 * L_neg</c>,
+    /// kMaX-DeepLab's loss over a batch: <c>w_PQ * L_PQ + w_ID * L_maskID</c>, where
+    /// <c>L_PQ = alpha * L_pos + (1 - alpha) * L_neg</c>,
     /// <c>L_pos = mean_i [ -sg(p_i) * Dice_i - sg(Dice_i) * log p_i ]</c> over the matched segments and
     /// <c>L_neg = mean_j [ -log p_j(no object) ]</c> over the unmatched clusters.
     /// </summary>
     /// <param name="classLogits">Class logits <c>[B, N, K + 1]</c> (no-object last).</param>
     /// <param name="maskLogits">Cluster logits <c>[B, N, HW]</c> (softmax over N gives the masks).</param>
     /// <param name="segments">Each image's ground-truth segments.</param>
-    internal static Tensor<T> KMaX<T>(Tensor<T> classLogits, Tensor<T> maskLogits, IReadOnlyList<Segments<T>> segments)
+    /// <param name="settings">The loss weights (paper: 3.0, 0.3, alpha = 0.75).</param>
+    internal static Tensor<T> KMaX<T>(
+        Tensor<T> classLogits, Tensor<T> maskLogits, IReadOnlyList<Segments<T>> segments, KMaXLossSettings settings)
     {
+        if (settings is null) throw new ArgumentNullException(nameof(settings));
         var engine = AiDotNetEngine.Current;
         var ops = MathHelper.GetNumericOperations<T>();
         int b = classLogits.Shape[0], n = classLogits.Shape[1], c = classLogits.Shape[2], hw = maskLogits.Shape[2];
         if (segments.Count != b) throw new ArgumentException("Give one segment set per image.", nameof(segments));
 
         Tensor<T>? total = null;
-        var allVoidWeight = ops.FromDouble(KMaXPanopticQualityWeight * (1 - KMaXPositiveWeight) / n);
-        var positiveWeight = ops.FromDouble(KMaXPositiveWeight);
-        var negativeWeight = ops.FromDouble(1 - KMaXPositiveWeight);
-        var panopticQualityWeight = ops.FromDouble(KMaXPanopticQualityWeight);
-        var maskIdWeight = ops.FromDouble(KMaXMaskIdWeight);
+        var allVoidWeight = ops.FromDouble(settings.PanopticQualityWeight * (1 - settings.PositiveWeight) / n);
+        var positiveWeight = ops.FromDouble(settings.PositiveWeight);
+        var negativeWeight = ops.FromDouble(1 - settings.PositiveWeight);
+        var panopticQualityWeight = ops.FromDouble(settings.PanopticQualityWeight);
+        var maskIdWeight = ops.FromDouble(settings.MaskIdWeight);
         for (int i = 0; i < b; i++)
         {
             var cls = engine.Reshape(engine.TensorSlice(classLogits, new[] { i, 0, 0 }, new[] { 1, n, c }), new[] { n, c });
@@ -306,12 +318,12 @@ internal static class MaskSetPredictionLoss
             }
 
             // Mask-ID cross-entropy: every pixel of a matched segment is classified (softmax over the clusters) as
-            // the cluster matched to its segment.
+            // the cluster matched to its segment. The pixel sum runs in float for Half and BFloat16.
             var pixelTarget = engine.TensorMatMul(engine.TensorTranspose(querySelect), y);                     // [N, HW]
             // Counted in int: the 0/1 sum in T stops at 2048 in Half.
             int coveredPixels = Math.Max(1, engine.TensorSum(y.Cast<int>()));
-            var maskId = engine.TensorDivide(engine.TensorNegate(engine.ReduceSum(
-                engine.TensorMultiply(pixelTarget, engine.TensorLogSoftmax(logits, 0)), null)), Count<T>(coveredPixels));
+            var maskId = engine.TensorDivide(engine.TensorNegate(
+                WideSum(engine.TensorMultiply(pixelTarget, engine.TensorLogSoftmax(logits, 0)))), Count<T>(coveredPixels));
 
             imageLoss = engine.TensorAdd(
                 engine.TensorMultiplyScalar(panopticQuality, panopticQualityWeight),
@@ -323,29 +335,161 @@ internal static class MaskSetPredictionLoss
             total ?? throw new InvalidOperationException("The batch is empty."), ops.FromDouble(1.0 / b));
     }
 
-    /// <summary>Dice coefficient <c>2 sum(a b) / (sum a + sum b)</c> of every row pair <c>[M, N]</c>.</summary>
+    /// <summary>
+    /// The pixels a kMaX auxiliary loss reads in one image (MaX-DeepLab / kMaX-DeepLab): every pixel covered by a
+    /// segment when there are at most <paramref name="count"/>, otherwise <paramref name="count"/> of them drawn without
+    /// replacement with probability proportional to <c>(HW / area of the pixel's segment)^temperature</c> (Gumbel top-k
+    /// on <c>temperature * log(inverse area)</c>), so small segments are not drowned out by large ones.
+    /// </summary>
+    internal static int[] SamplePixels<T>(Segments<T> segments, int count, double temperature, Random random)
+    {
+        if (random is null) throw new ArgumentNullException(nameof(random));
+        if (count < 1) throw new ArgumentOutOfRangeException(nameof(count), "At least one pixel must be sampled.");
+        if (segments.Classes.Length == 0) return Array.Empty<int>();
+        var engine = AiDotNetEngine.Current;
+        var masks = segments.Masks.Cast<int>();                                                               // [M, HW]
+        int hw = masks.Shape[1];
+        int[] areas = engine.ReduceSum(masks, new[] { 1 }, false).ToArray();
+        int[] owner = engine.TensorArgMax(masks, 0).ToArray();
+        int[] covered = engine.ReduceMax(masks, new[] { 0 }, false).ToArray();
+        var candidates = new List<int>(hw);
+        for (int p = 0; p < hw; p++)
+        {
+            if (covered[p] > 0) candidates.Add(p);
+        }
+
+        if (candidates.Count <= count) return candidates.ToArray();
+        var keys = new double[candidates.Count];
+        var order = candidates.ToArray();
+        for (int i = 0; i < order.Length; i++)
+        {
+            double logit = temperature * Math.Log((double)hw / areas[owner[order[i]]]);
+            double gumbel = -Math.Log(-Math.Log(random.NextDouble()));
+            keys[i] = -(logit + gumbel);
+        }
+
+        Array.Sort(keys, order);
+        var sampled = order.Take(count).ToArray();
+        Array.Sort(sampled);
+        return sampled;
+    }
+
+    /// <summary>
+    /// MaX-DeepLab's pixel-wise instance discrimination loss for one image (kept by kMaX-DeepLab): over the sampled
+    /// pixels, the target of pixel <c>j</c> spreads evenly over the sampled pixels of its own segment and the prediction
+    /// is <c>softmax_k(f_k . f_j / tau)</c> of the L2-normalized pixel features; the loss is the cross-entropy, averaged
+    /// over the pixels whose loss is not zero.
+    /// </summary>
+    /// <param name="features">L2-normalized pixel features <c>[D, HW]</c>.</param>
+    /// <param name="segments">The image's ground-truth segments.</param>
+    /// <param name="sampled">The sampled pixels (<see cref="SamplePixels"/>).</param>
+    /// <param name="temperature">The similarity temperature tau (0.3).</param>
+    internal static Tensor<T> InstanceDiscrimination<T>(Tensor<T> features, Segments<T> segments, int[] sampled, double temperature)
+    {
+        if (features is null) throw new ArgumentNullException(nameof(features));
+        if (sampled is null) throw new ArgumentNullException(nameof(sampled));
+        if (!(temperature > 0)) throw new ArgumentOutOfRangeException(nameof(temperature), "The temperature must be positive.");
+        var engine = AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<T>();
+        if (sampled.Length == 0) return Tensor<T>.CreateDefault(new[] { 1 }, ops.Zero);
+        var index = new Tensor<int>(sampled, new[] { sampled.Length });
+        var f = engine.TensorIndexSelect(features, index, 1);                                                  // [D, S]
+        // The target is a constant of the loss, built in double and rounded once: column totals count up to S.
+        var y = engine.TensorIndexSelect(segments.Masks, index, 1).Cast<double>();                            // [M, S]
+        var same = engine.TensorMatMul(engine.TensorTranspose(y), y);                                          // [S, S]
+        var columnTotals = engine.TensorClampMin(engine.ReduceSum(same, new[] { 0 }, true), 1.0);
+        var target = engine.TensorDivide(same, engine.TensorBroadcastTo(columnTotals, same.Shape.ToArray())).Cast<T>();
+        var similarity = engine.TensorMultiplyScalar(
+            engine.TensorMatMul(engine.TensorTranspose(f), f), ops.FromDouble(1.0 / temperature));              // [S, S]
+        // Cross-entropy of column j over the rows k (PyTorch's class axis 1 of [B, S, S]).
+        var losses = engine.TensorNegate(WideRowSums(engine.TensorTranspose(
+            engine.TensorMultiply(target, engine.TensorLogSoftmax(similarity, 0)))));                          // [S]
+        int nonZero = engine.TensorSum(engine.TensorGreaterThan(engine.StopGradient(losses), ops.Zero).Cast<int>());
+        return engine.TensorDivide(WideSum(losses), Count<T>(Math.Max(1, nonZero)));
+    }
+
+    /// <summary>
+    /// kMaX-DeepLab's auxiliary semantic segmentation loss for one image: the cross-entropy of the semantic head's
+    /// logits at the sampled pixels against each pixel's class, averaged over them.
+    /// </summary>
+    /// <param name="logits">Semantic logits <c>[K, HW]</c>.</param>
+    /// <param name="segments">The image's ground-truth segments.</param>
+    /// <param name="sampled">The sampled pixels (<see cref="SamplePixels"/>; void pixels are never sampled).</param>
+    internal static Tensor<T> SemanticCrossEntropy<T>(Tensor<T> logits, Segments<T> segments, int[] sampled)
+    {
+        if (logits is null) throw new ArgumentNullException(nameof(logits));
+        if (sampled is null) throw new ArgumentNullException(nameof(sampled));
+        var engine = AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<T>();
+        if (sampled.Length == 0) return Tensor<T>.CreateDefault(new[] { 1 }, ops.Zero);
+        int k = logits.Shape[0];
+        int[] owner = engine.TensorArgMax(segments.Masks.Cast<int>(), 0).ToArray();
+        var labels = new int[sampled.Length];
+        for (int i = 0; i < labels.Length; i++) labels[i] = segments.Classes[owner[sampled[i]]];
+        var picked = engine.TensorIndexSelect(logits, new Tensor<int>(sampled, new[] { sampled.Length }), 1);  // [K, S]
+        var oneHot = engine.TensorTranspose(engine.TensorOneHot<T>(new Tensor<int>(labels, new[] { labels.Length }), k));
+        var losses = engine.TensorNegate(WideRowSums(engine.TensorTranspose(
+            engine.TensorMultiply(oneHot, engine.TensorLogSoftmax(picked, 0)))));                              // [S]
+        return engine.TensorDivide(WideSum(losses), Count<T>(sampled.Length));
+    }
+
+    /// <summary>
+    /// Dice coefficient <c>2 sum(a b) / (sum a + sum b)</c> of every row pair <c>[M, N]</c>. Only the matching reads it
+    /// (no gradient), so it is computed in double and rounded to T once.
+    /// </summary>
     internal static Tensor<T> PairwiseDice<T>(Tensor<T> truth, Tensor<T> predicted)
     {
         var engine = AiDotNetEngine.Current;
-        var ops = MathHelper.GetNumericOperations<T>();
         int m = truth.Shape[0], n = predicted.Shape[0];
-        var overlap = engine.TensorMatMul(truth, engine.TensorTranspose(predicted));
+        var a = truth.Cast<double>();
+        var p = predicted.Cast<double>();
+        var overlap = engine.TensorMatMul(a, engine.TensorTranspose(p));
         var denominator = engine.TensorAdd(
-            engine.TensorBroadcastTo(engine.Reshape(TruthAreas(truth), new[] { m, 1 }), new[] { m, n }),
-            engine.TensorBroadcastTo(engine.Reshape(engine.ReduceSum(predicted, new[] { 1 }, false), new[] { 1, n }), new[] { m, n }));
-        return engine.TensorDivide(engine.TensorMultiplyScalar(overlap, ops.FromDouble(2.0)),
-            engine.TensorClampMin(denominator, ops.FromDouble(DiceEpsilon)));
+            engine.TensorBroadcastTo(engine.Reshape(engine.ReduceSum(a, new[] { 1 }, false), new[] { m, 1 }), new[] { m, n }),
+            engine.TensorBroadcastTo(engine.Reshape(engine.ReduceSum(p, new[] { 1 }, false), new[] { 1, n }), new[] { m, n }));
+        return engine.TensorDivide(engine.TensorMultiplyScalar(overlap, 2.0), engine.TensorClampMin(denominator, DiceEpsilon)).Cast<T>();
     }
 
-    /// <summary>Dice coefficient of aligned rows <c>[P]</c>.</summary>
+    /// <summary>Dice coefficient of aligned rows <c>[P]</c>; the sums run in float for Half and BFloat16.</summary>
     private static Tensor<T> Dice<T>(Tensor<T> predicted, Tensor<T> truth)
     {
         var engine = AiDotNetEngine.Current;
         var ops = MathHelper.GetNumericOperations<T>();
-        var overlap = engine.ReduceSum(engine.TensorMultiply(predicted, truth), new[] { 1 }, false);
-        var denominator = engine.TensorAdd(engine.ReduceSum(predicted, new[] { 1 }, false), TruthAreas(truth));
+        var overlap = WideRowSums(engine.TensorMultiply(predicted, truth));
+        var denominator = engine.TensorAdd(WideRowSums(predicted), TruthAreas(truth));
         return engine.TensorDivide(engine.TensorMultiplyScalar(overlap, ops.FromDouble(2.0)),
             engine.TensorClampMin(denominator, ops.FromDouble(DiceEpsilon)));
+    }
+
+    /// <summary>True for the 16-bit floating types, whose sums stall: Half stops adding 0.5 at 1024.</summary>
+    private static bool IsNarrowFloat<T>() => typeof(T) == typeof(Half) || typeof(T) == typeof(BFloat16);
+
+    /// <summary>
+    /// The row sums <c>[P]</c> of <paramref name="x"/> <c>[P, L]</c>. For Half and BFloat16 the sums accumulate in float
+    /// and are rounded to T once (the gradient, a broadcast of the upstream gradient, is recorded on the tape); other
+    /// types sum in T as before.
+    /// </summary>
+    internal static Tensor<T> WideRowSums<T>(Tensor<T> x)
+    {
+        if (x is null) throw new ArgumentNullException(nameof(x));
+        if (x.Rank != 2) throw new ArgumentException("Row sums need a [rows, columns] tensor.", nameof(x));
+        var engine = AiDotNetEngine.Current;
+        if (!IsNarrowFloat<T>()) return engine.ReduceSum(x, new[] { 1 }, false);
+        int rows = x.Shape[0], columns = x.Shape[1];
+        var sums = engine.ReduceSum(x.Cast<float>(), new[] { 1 }, false).Cast<T>();
+        DifferentiableOps.RecordUnary("WideRowSums", sums, x, (gradOutput, inputs, _, _, eng, grads) =>
+            DifferentiableOps.AccumulateGrad(grads, inputs[0],
+                eng.TensorBroadcastTo(eng.Reshape(gradOutput, new[] { rows, 1 }), new[] { rows, columns }), eng));
+        return sums;
+    }
+
+    /// <summary>The sum of every element, accumulated in float for Half and BFloat16.</summary>
+    internal static Tensor<T> WideSum<T>(Tensor<T> x)
+    {
+        if (x is null) throw new ArgumentNullException(nameof(x));
+        var engine = AiDotNetEngine.Current;
+        if (!IsNarrowFloat<T>()) return engine.ReduceSum(x, null);
+        return WideRowSums(engine.Reshape(x, new[] { 1, x.Length }));
     }
 
     /// <summary>A count as a one-element tensor <c>[1]</c> of T, the divisor of a summed loss term.</summary>
@@ -378,4 +522,27 @@ internal static class MaskSetPredictionLoss
 
     private static Tensor<T> Accumulate<T>(IEngine engine, Tensor<T>? sum, Tensor<T> term)
         => sum is null ? term : engine.TensorAdd(sum, term);
+}
+
+/// <summary>
+/// The weights and sampling of kMaX-DeepLab's training loss (Yu et al. 2022, following MaX-DeepLab, Wang et al.
+/// 2021). The defaults are the reference's: PQ-style loss 3.0 with alpha 0.75, mask-ID cross-entropy 0.3, pixel-wise
+/// instance discrimination 1.0 (temperature 0.3; 4096 pixels sampled at sampling temperature 1.5) and the auxiliary
+/// semantic loss 1.0 (4096 pixels at sampling temperature 2.0).
+/// </summary>
+internal sealed class KMaXLossSettings
+{
+    /// <summary>The paper's weights.</summary>
+    internal static readonly KMaXLossSettings Default = new KMaXLossSettings();
+
+    internal double PanopticQualityWeight { get; init; } = MaskSetPredictionLoss.KMaXPanopticQualityWeight;
+    internal double PositiveWeight { get; init; } = MaskSetPredictionLoss.KMaXPositiveWeight;
+    internal double MaskIdWeight { get; init; } = MaskSetPredictionLoss.KMaXMaskIdWeight;
+    internal double InstanceDiscriminationWeight { get; init; } = 1.0;
+    internal double InstanceDiscriminationTemperature { get; init; } = 0.3;
+    internal int InstanceDiscriminationSampleCount { get; init; } = 4096;
+    internal double InstanceDiscriminationSampleTemperature { get; init; } = 1.5;
+    internal double SemanticWeight { get; init; } = 1.0;
+    internal int SemanticSampleCount { get; init; } = 4096;
+    internal double SemanticSampleTemperature { get; init; } = 2.0;
 }

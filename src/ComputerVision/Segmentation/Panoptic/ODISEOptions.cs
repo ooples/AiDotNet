@@ -41,6 +41,8 @@ public class ODISEOptions : SegmentationModelOptions
         NumQueries = other.NumQueries;
         PixelEmbeddingDimension = other.PixelEmbeddingDimension;
         NumDecoderLayers = other.NumDecoderLayers;
+        NumAttentionHeads = other.NumAttentionHeads;
+        FeedForwardDimension = other.FeedForwardDimension;
         ObjectMaskThreshold = other.ObjectMaskThreshold;
         OverlapThreshold = other.OverlapThreshold;
     }
@@ -106,6 +108,15 @@ public class ODISEOptions : SegmentationModelOptions
 
     /// <summary>Gets or sets the number of masked-attention decoder layers. Default: 9 (Mask2Former).</summary>
     public int NumDecoderLayers { get; set; } = 9;
+
+    /// <summary>
+    /// Gets or sets the attention heads of the Mask2Former decoder's cross- and self-attention. Default: 8 (Mask2Former's
+    /// <c>NHEADS</c>, as ODISE uses).
+    /// </summary>
+    public int NumAttentionHeads { get; set; } = 8;
+
+    /// <summary>Gets or sets the hidden width of the Mask2Former decoder's FFN. Default: 2048 (<c>DIM_FEEDFORWARD</c>).</summary>
+    public int FeedForwardDimension { get; set; } = 2048;
 
     /// <summary>
     /// Gets or sets the minimum class probability of a query kept by the panoptic merge. Default: 0.8 (Mask2Former).
