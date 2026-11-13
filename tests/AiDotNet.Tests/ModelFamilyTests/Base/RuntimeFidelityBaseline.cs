@@ -2631,6 +2631,7 @@ public static class RuntimeFidelityBaseline
             { "AiDotNet.NeuralNetworks.SyntheticData.DPCTGANGenerator`1::Epochs", OptionSensitivityOutcome.Insensitive },
             { "AiDotNet.NeuralNetworks.SyntheticData.DPCTGANGenerator`1::Epsilon", OptionSensitivityOutcome.Insensitive },
             { "AiDotNet.NeuralNetworks.SyntheticData.DPCTGANGenerator`1::GradientPenaltyWeight", OptionSensitivityOutcome.Insensitive },
+            { "AiDotNet.NeuralNetworks.SyntheticData.DPCTGANGenerator`1::GumbelTemperature", OptionSensitivityOutcome.Insensitive },
             { "AiDotNet.NeuralNetworks.SyntheticData.DPCTGANGenerator`1::LearningRate", OptionSensitivityOutcome.Insensitive },
             { "AiDotNet.NeuralNetworks.SyntheticData.DPCTGANGenerator`1::MaxGradNorm", OptionSensitivityOutcome.Insensitive },
             { "AiDotNet.NeuralNetworks.SyntheticData.DPCTGANGenerator`1::NoiseMultiplier", OptionSensitivityOutcome.Insensitive },
