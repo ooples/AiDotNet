@@ -140,30 +140,87 @@ namespace AiDotNet.PhysicsInformed.PDEs
         }
 
         /// <summary>
-        /// Computes the PDE residual using tape-differentiable engine operations.
-        /// Override this method to enable tape-based autodiff training for this PDE.
+        /// The highest input-derivative order <see cref="ComputeTapeResidual"/> reads (1 to 3).
         /// </summary>
-        /// <param name="prediction">Network output at collocation points [N, OutputDim].</param>
-        /// <param name="coordinates">Spatial/temporal coordinates [N, InputDim].</param>
-        /// <param name="engine">Engine providing tape-tracked tensor operations.</param>
-        /// <returns>Residual tensor that should be minimized toward zero.</returns>
         /// <remarks>
-        /// Implementations should use engine ops (TensorAdd, TensorMultiply, etc.) so gradients
-        /// flow automatically via the gradient tape. For spatial derivatives (du/dx), use nested
-        /// GradientTape inside the implementation.
+        /// A PINN computes this many orders of derivatives through the gradient tape at its collocation points.
+        /// Second order (diffusion, wave and Poisson terms) is the default; first-order systems (Maxwell) override
+        /// it with 1, third-order equations (Korteweg-de Vries) with 3.
         /// </remarks>
-        public virtual Tensor<T> ComputeTapeResidual(
-            Tensor<T> prediction,
-            Tensor<T> coordinates,
-            AiDotNet.Tensors.Engines.IEngine engine)
+        public virtual int DerivativeOrder => 2;
+
+        /// <summary>
+        /// Computes the PDE residual at a batch of points with tape-differentiable engine operations.
+        /// </summary>
+        /// <param name="inputs">The coordinates [N, InputDimension].</param>
+        /// <param name="outputs">The network outputs at those coordinates [N, OutputDimension].</param>
+        /// <param name="derivatives">
+        /// The batched input derivatives of the outputs: first [N, out, in], second [N, out, in, in] and third
+        /// [N, out, in, in, in], up to <see cref="DerivativeOrder"/>.
+        /// </param>
+        /// <returns>The residual at every point, [N].</returns>
+        /// <remarks>
+        /// This is the residual f of Raissi et al. (2019) evaluated for a whole batch of collocation points, so a
+        /// PINN can minimise mean(f^2) on the gradient tape. It must agree with <see cref="ComputeResidual"/> point by
+        /// point. Implementations read the derivative entries with <see cref="Output"/>, <see cref="D1"/>,
+        /// <see cref="D2"/> and <see cref="D3"/> and combine them with engine operations so the gradient reaches the
+        /// network.
+        /// </remarks>
+        public virtual Tensor<T> ComputeTapeResidual(Tensor<T> inputs, Tensor<T> outputs, PDEDerivatives<T> derivatives)
         {
             throw new NotSupportedException(
-                $"PDE '{Name}' does not implement tape-differentiable residual. " +
-                "This is a deliberate non-override: subclasses that want autodiff support must " +
-                "override ComputeTapeResidual using engine ops (rather than scalar math) so that " +
-                "the residual graph composes with the outer training tape. PDEs that only need " +
-                "evaluation (no training) can leave this unoverridden and use the non-tape " +
-                "ComputeResidual variant from their PINN solver.");
+                $"PDE '{Name}' does not implement a tape-differentiable residual. Override ComputeTapeResidual with " +
+                "engine operations so a PINN can train on it.");
+        }
+
+        /// <summary>The engine the tape residual helpers use.</summary>
+        protected static IEngine TapeEngine => AiDotNetEngine.Current;
+
+        /// <summary>Output component <paramref name="k"/> of a batch, [N].</summary>
+        protected static Tensor<T> Output(Tensor<T> outputs, int k)
+            => PinnAutodiff<T>.Column(TapeEngine, outputs, k);
+
+        /// <summary>Input coordinate <paramref name="i"/> of a batch, [N].</summary>
+        protected static Tensor<T> Coordinate(Tensor<T> inputs, int i)
+            => PinnAutodiff<T>.Column(TapeEngine, inputs, i);
+
+        /// <summary>du_k/dx_i over a batch, [N].</summary>
+        protected Tensor<T> D1(PDEDerivatives<T> derivatives, int k, int i)
+            => Entry(derivatives.FirstDerivatives, "first", new[] { k, i });
+
+        /// <summary>d2u_k/(dx_i dx_j) over a batch, [N].</summary>
+        protected Tensor<T> D2(PDEDerivatives<T> derivatives, int k, int i, int j)
+            => Entry(derivatives.SecondDerivatives, "second", new[] { k, i, j });
+
+        /// <summary>d3u_k/(dx_i dx_j dx_l) over a batch, [N].</summary>
+        protected Tensor<T> D3(PDEDerivatives<T> derivatives, int k, int i, int j, int l)
+            => Entry(derivatives.ThirdDerivatives, "third", new[] { k, i, j, l });
+
+        private Tensor<T> Entry(Tensor<T>? batched, string order, int[] index)
+        {
+            if (batched is null)
+            {
+                throw new ArgumentException($"{Name} requires batched {order}-order derivatives.");
+            }
+
+            if (batched.Rank != index.Length + 1)
+            {
+                throw new ArgumentException(
+                    $"Batched {order}-order derivatives must have rank {index.Length + 1}; got {batched.Rank}.");
+            }
+
+            int n = batched.Shape[0];
+            var start = new int[index.Length + 1];
+            var length = new int[index.Length + 1];
+            length[0] = n;
+            for (int axis = 0; axis < index.Length; axis++)
+            {
+                start[axis + 1] = index[axis];
+                length[axis + 1] = 1;
+            }
+
+            var engine = TapeEngine;
+            return engine.Reshape(engine.TensorSlice(batched, start, length), new[] { n });
         }
     }
 }

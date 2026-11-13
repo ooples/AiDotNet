@@ -91,9 +91,9 @@ namespace AiDotNet.PhysicsInformed.Interfaces
         public PDEResidualGradient(int outputDimension, int inputDimension)
         {
             OutputGradients = new Vector<T>(outputDimension);
-            FirstDerivatives = new T[outputDimension, inputDimension];
-            SecondDerivatives = new T[outputDimension, inputDimension, inputDimension];
-            ThirdDerivatives = new T[outputDimension, inputDimension, inputDimension, inputDimension];
+            FirstDerivatives = new Tensor<T>(new[] { outputDimension, inputDimension });
+            SecondDerivatives = new Tensor<T>(new[] { outputDimension, inputDimension, inputDimension });
+            ThirdDerivatives = new Tensor<T>(new[] { outputDimension, inputDimension, inputDimension, inputDimension });
         }
 
         /// <summary>
@@ -102,20 +102,21 @@ namespace AiDotNet.PhysicsInformed.Interfaces
         public Vector<T> OutputGradients { get; }
 
         /// <summary>
-        /// Gradient of residual with respect to first derivatives.
+        /// Gradient of residual with respect to first derivatives, shape [output_dim, input_dim].
         /// </summary>
-        public T[,] FirstDerivatives { get; }
+        public Tensor<T> FirstDerivatives { get; }
 
         /// <summary>
-        /// Gradient of residual with respect to second derivatives.
+        /// Gradient of residual with respect to second derivatives, shape [output_dim, input_dim, input_dim].
         /// </summary>
-        public T[,,] SecondDerivatives { get; }
+        public Tensor<T> SecondDerivatives { get; }
 
         /// <summary>
         /// Gradient of residual with respect to third derivatives.
         /// Used for higher-order PDEs like Korteweg-de Vries equation.
+        /// Shape [output_dim, input_dim, input_dim, input_dim].
         /// </summary>
-        public T[,,,] ThirdDerivatives { get; }
+        public Tensor<T> ThirdDerivatives { get; }
     }
 
     /// <summary>
@@ -128,6 +129,12 @@ namespace AiDotNet.PhysicsInformed.Interfaces
     /// - First derivatives (gradient): How fast the solution changes in each direction
     /// - Second derivatives (Hessian): How fast the rate of change itself is changing
     /// These are computed automatically using automatic differentiation.
+    /// <para>
+    /// The point-wise APIs (<see cref="IPDESpecification{T}.ComputeResidual"/>, boundary residuals) read the
+    /// shapes listed on each property. The batched, tape-differentiable residual
+    /// (<c>PDESpecificationBase.ComputeTapeResidual</c>) reads the same layout with a leading batch axis:
+    /// [batch, output_dim, input_dim] for the gradient, [batch, output_dim, input_dim, input_dim] for the Hessian.
+    /// </para>
     /// </remarks>
     public class PDEDerivatives<T>
     {
@@ -135,25 +142,25 @@ namespace AiDotNet.PhysicsInformed.Interfaces
         /// First-order derivatives (gradient) of the output with respect to each input dimension.
         /// Shape: [output_dim, input_dim]
         /// </summary>
-        public T[,]? FirstDerivatives { get; set; }
+        public Tensor<T>? FirstDerivatives { get; set; }
 
         /// <summary>
         /// Second-order derivatives (Hessian) of the output with respect to input dimensions.
         /// Shape: [output_dim, input_dim, input_dim]
         /// </summary>
-        public T[,,]? SecondDerivatives { get; set; }
+        public Tensor<T>? SecondDerivatives { get; set; }
 
         /// <summary>
         /// Third-order derivatives of the output with respect to input dimensions.
         /// Shape: [output_dim, input_dim, input_dim, input_dim]
         /// Used for higher-order PDEs like Korteweg-de Vries equation.
         /// </summary>
-        public T[,,,]? ThirdDerivatives { get; set; }
+        public Tensor<T>? ThirdDerivatives { get; set; }
 
         /// <summary>
         /// Higher-order derivatives (4th order and above) if needed for the specific PDE.
         /// </summary>
-        public T[,,,]? HigherDerivatives { get; set; }
+        public Tensor<T>? HigherDerivatives { get; set; }
     }
 
     /// <summary>
