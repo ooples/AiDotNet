@@ -2,6 +2,7 @@ using AiDotNet.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Enums;
 using AiDotNet.Attributes;
+using AiDotNet.Preprocessing.FeatureSelection.Helpers;
 
 namespace AiDotNet.Preprocessing.FeatureSelection.ModelAgnostic;
 
@@ -26,15 +27,15 @@ namespace AiDotNet.Preprocessing.FeatureSelection.ModelAgnostic;
 public class DropColumnImportance<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFeatureSelector<T>, IFixedCountFeatureSelector<T>
 {
     private readonly int _nFeaturesToSelect;
-    private readonly Func<Matrix<T>, Vector<T>, double>? _scorer;
+    private readonly Func<Matrix<T>, Vector<T>, T>? _scorer;
 
-    private double[]? _importanceScores;
+    private Vector<T>? _importanceScores;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
-    public double[]? ImportanceScores => _importanceScores;
+    public Vector<T>? ImportanceScores => _importanceScores;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -42,7 +43,7 @@ public class DropColumnImportance<T> : TransformerBase<T, Matrix<T>, Matrix<T>>,
 
     public DropColumnImportance(
         int nFeaturesToSelect = 10,
-        Func<Matrix<T>, Vector<T>, double>? scorer = null,
+        Func<Matrix<T>, Vector<T>, T>? scorer = null,
         int[]? columnIndices = null)
         : base(columnIndices)
     {
@@ -67,91 +68,49 @@ public class DropColumnImportance<T> : TransformerBase<T, Matrix<T>, Matrix<T>>,
             throw new ArgumentException("Target length must match rows in data.");
 
         _nInputFeatures = data.Columns;
-        int n = data.Rows;
         int p = data.Columns;
+        var engine = Engine;
 
         var scorer = _scorer ?? DefaultScorer;
 
         // Compute baseline score with all features
-        double baselineScore = scorer(data, target);
+        var baselineScore = PreprocessingTensorOps.Filled(new[] { 1 }, scorer(data, target));
 
-        _importanceScores = new double[p];
-
-        // For each feature, drop it and measure performance
+        // For each feature, drop it, refit and measure performance
+        var drops = new Tensor<T>[p];
         for (int dropIdx = 0; dropIdx < p; dropIdx++)
         {
-            // Create data without this feature
-            var reducedData = new T[n, p - 1];
-            for (int i = 0; i < n; i++)
-            {
-                int col = 0;
-                for (int j = 0; j < p; j++)
-                {
-                    if (j == dropIdx) continue;
-                    reducedData[i, col++] = data[i, j];
-                }
-            }
-
-            // Score without this feature
-            double droppedScore = scorer(new Matrix<T>(reducedData), target);
+            int dropped = dropIdx;
+            var kept = Enumerable.Range(0, p).Where(j => j != dropped).ToArray();
+            var reducedData = PreprocessingTensorOps.SelectColumns(data, kept);
 
             // Importance = drop in score when feature is removed
-            _importanceScores[dropIdx] = baselineScore - droppedScore;
+            drops[dropIdx] = engine.TensorSubtract(
+                baselineScore, PreprocessingTensorOps.Filled(new[] { 1 }, scorer(reducedData, target)));
         }
+
+        var importanceScores = p == 0 ? new Tensor<T>(new[] { 0 }) : engine.TensorConcatenate(drops, 0);
+        _importanceScores = importanceScores.ToVector();
 
         // Select top features by importance
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = _importanceScores
-            .Select((imp, idx) => (Importance: imp, Index: idx))
-            .OrderByDescending(x => x.Importance)
-            .Take(numToSelect)
-            .Select(x => x.Index)
-            .OrderBy(x => x)
-            .ToArray();
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(importanceScores, numToSelect);
 
         IsFitted = true;
     }
 
-    private double DefaultScorer(Matrix<T> data, Vector<T> target)
+    /// <summary>
+    /// Default score: the training R^2 of a least-squares linear model with intercept (ridge 1e-6) refitted on
+    /// the given columns; 0 without columns or for a constant target.
+    /// </summary>
+    internal static T DefaultScorer(Matrix<T> data, Vector<T> target)
     {
-        // Use R-squared as default score
-        int n = data.Rows;
-        int p = data.Columns;
+        if (data.Columns == 0)
+            return MathHelper.GetNumericOperations<T>().Zero;
 
-        if (p == 0) return 0;
-
-        double yMean = 0;
-        for (int i = 0; i < n; i++)
-            yMean += NumOps.ToDouble(target[i]);
-        yMean /= n;
-
-        var xMeans = new double[p];
-        for (int j = 0; j < p; j++)
-        {
-            for (int i = 0; i < n; i++)
-                xMeans[j] += NumOps.ToDouble(data[i, j]);
-            xMeans[j] /= n;
-        }
-
-        double ssTotal = 0;
-        double ssResidual = 0;
-
-        for (int i = 0; i < n; i++)
-        {
-            double yTrue = NumOps.ToDouble(target[i]);
-            double yPred = yMean;
-
-            for (int j = 0; j < p; j++)
-            {
-                double xVal = NumOps.ToDouble(data[i, j]);
-                yPred += 0.1 * (xVal - xMeans[j]);
-            }
-
-            ssTotal += (yTrue - yMean) * (yTrue - yMean);
-            ssResidual += (yTrue - yPred) * (yTrue - yPred);
-        }
-
-        return ssTotal > 0 ? 1 - (ssResidual / ssTotal) : 0;
+        var x = Tensor<T>.FromMatrix(data);
+        var y = Tensor<T>.FromVector(target);
+        return PopulationSearchOps.Value(SubsetRegressionOps.LinearRSquared(x, y, SubsetRegressionOps.FitLinear(x, y)));
     }
 
     /// <inheritdoc />
@@ -167,15 +126,7 @@ public class DropColumnImportance<T> : TransformerBase<T, Matrix<T>, Matrix<T>>,
         if (_selectedIndices is null)
             throw new InvalidOperationException("DropColumnImportance has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />
