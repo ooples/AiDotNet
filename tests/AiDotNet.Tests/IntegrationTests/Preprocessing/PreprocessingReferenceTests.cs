@@ -742,4 +742,304 @@ public class PreprocessingReferenceTests
             Assert.Equal(doubleResult[i, 0], (double)halfResult[i, 0], 5e-3);
         }
     }
+
+    // ---- Review fixes for the element-wise sweep (#2514) ----
+
+    private static Matrix<Half> HalfAlternating(int rows, double even, double odd) =>
+        HalfColumn(rows, i => i % 2 == 0 ? even : odd);
+
+    // numpy reduces float16 with float32 intermediates (np.mean / np.var / np.nanmean): 3000 Half samples of
+    // 100 and 300 have mean 200 and std 100. Summed in Half the column total overflows past 65504.
+    [Fact(Timeout = 120000)]
+    public async Task HalfColumnStatistics_ManySamples_MatchNumpy()
+    {
+        await Task.CompletedTask;
+        var data = HalfAlternating(3000, 100, 300);
+
+        var standard = new StandardScaler<Half>();
+        standard.Fit(data);
+        Assert.Equal(200.0, (double)(standard.Mean?[0] ?? Half.NaN), 1e-6);
+        Assert.Equal(100.0, (double)(standard.StandardDeviation?[0] ?? Half.NaN), 1e-6);
+        Assert.Equal(1.0, (double)standard.Transform(HalfColumn(1, _ => 300))[0, 0], 1e-6);
+
+        var global = new GlobalContrastScaler<Half>();
+        global.Fit(data);
+        Assert.Equal(200.0, (double)(global.Mean?[0] ?? Half.NaN), 1e-6);
+        Assert.Equal(100.0, (double)(global.StdDev?[0] ?? Half.NaN), 1e-6);
+
+        var clipper = new ZScoreClipper<Half>(threshold: 1.0);
+        clipper.Fit(data);
+        Assert.Equal(200.0, (double)(clipper.Means?[0] ?? Half.NaN), 1e-6);
+        Assert.Equal(100.0, (double)(clipper.StandardDeviations?[0] ?? Half.NaN), 1e-6);
+
+        var imputer = new SimpleImputer<Half>(ImputationStrategy.Mean);
+        imputer.Fit(data);
+        Assert.Equal(200.0, (double)(imputer.Statistics?[0] ?? Half.NaN), 1e-6);
+    }
+
+    // The 1e-10 variance floor of LogMeanVarianceScaler is 0 in Half; a constant column then divided by a zero
+    // standard deviation and transformed every other value to infinity.
+    [Fact(Timeout = 120000)]
+    public async Task LogMeanVarianceScaler_Half_ConstantColumn_TransformsToFiniteValues()
+    {
+        await Task.CompletedTask;
+        var scaler = new LogMeanVarianceScaler<Half>();
+        scaler.Fit(HalfColumn(4, _ => 5));
+
+        var result = scaler.Transform(HalfColumn(1, _ => 6));
+
+        Assert.True(Half.IsFinite(result[0, 0]));
+    }
+
+    // scikit-learn SimpleImputer(strategy="most_frequent") returns the smallest of the most frequent values and
+    // is sort-based (O(n log n)); a column of 400000 distinct values must not take a quadratic per-value count.
+    [Fact(Timeout = 60000)]
+    public async Task SimpleImputer_MostFrequent_ManyDistinctValues_IsSortBased()
+    {
+        await Task.CompletedTask;
+        var tie = new SimpleImputer<double>(ImputationStrategy.MostFrequent);
+        tie.Fit(M(new double[,] { { 3 }, { 1 }, { 3 }, { 1 }, { 2 }, { double.NaN } }));
+        Assert.Equal(1.0, tie.Statistics?[0] ?? double.NaN, Tolerance);
+
+        const int rows = 400000;
+        var data = new double[rows, 1];
+        for (int i = 0; i < rows; i++)
+        {
+            data[i, 0] = rows - i;
+        }
+
+        data[rows - 1, 0] = 7;
+        var imputer = new SimpleImputer<double>(ImputationStrategy.MostFrequent);
+        imputer.Fit(M(data));
+        Assert.Equal(7.0, imputer.Statistics?[0] ?? double.NaN, Tolerance);
+    }
+
+    // sklearn.impute.KNNImputer(n_neighbors=1) computes nan_euclidean distances with wide intermediates: the
+    // nearest donor of [302, nan] is [300, 1], so the imputed value is 1. In Half the squares overflowed
+    // (inf - inf = NaN), no donor was usable and the column mean 34.33 was used.
+    [Fact(Timeout = 120000)]
+    public async Task KNNImputer_Half_LargeValues_UsesNearestDonor()
+    {
+        await Task.CompletedTask;
+        var train = new Matrix<Half>(new[,]
+        {
+            { (Half)300, (Half)1 }, { (Half)310, (Half)2 }, { (Half)1000, (Half)100 }
+        });
+        var imputer = new KNNImputer<Half>(nNeighbors: 1);
+        imputer.Fit(train);
+
+        var result = imputer.Transform(new Matrix<Half>(new[,] { { (Half)302, Half.NaN } }));
+
+        Assert.Equal(1.0, (double)result[0, 1], 1e-6);
+    }
+
+    // imbalanced-learn's NearestNeighbors computes Euclidean distances in float64; in Half the squared gaps of
+    // 1000 and 300 both overflowed to infinity and tied, so the farther candidate (first in order) won.
+    [Fact(Timeout = 120000)]
+    public async Task ResamplingNearest_Half_LargeGaps_PicksTheNearest()
+    {
+        await Task.CompletedTask;
+        var values = new[] { 0.0, 1000.0, 300.0 };
+        var data = Tensor<Half>.FromMatrix(HalfColumn(3, i => values[i]));
+
+        var nearest = ResamplingTensorOps.Nearest(data, 0, new[] { 1, 2 }, 1);
+
+        Assert.Equal(new[] { 2 }, nearest);
+    }
+
+    // sklearn.preprocessing.normalize([[300, 400]], norm="l2") = [[0.6, 0.8]]; in Half 300^2 overflowed.
+    [Fact(Timeout = 120000)]
+    public async Task Normalizer_Half_LargeValues_MatchesSklearn()
+    {
+        await Task.CompletedTask;
+        var result = new Normalizer<Half>(NormType.L2).FitTransform(
+            new Matrix<Half>(new[,] { { (Half)300, (Half)400 } }));
+
+        Assert.Equal(0.6, (double)result[0, 0], 1e-3);
+        Assert.Equal(0.8, (double)result[0, 1], 1e-3);
+    }
+
+    // The L2 norm of the column [300, 400] is 500; in Half 300^2 + 400^2 overflowed to infinity.
+    [Fact(Timeout = 120000)]
+    public async Task LpNormScaler_Half_LargeValues_HasTheColumnNorm()
+    {
+        await Task.CompletedTask;
+        var scaler = new LpNormScaler<Half>(2.0);
+        scaler.Fit(HalfColumn(2, i => i == 0 ? 300 : 400));
+
+        Assert.Equal(500.0, (double)(scaler.ColumnNorms?[0] ?? Half.NaN), 1e-6);
+    }
+
+    // sklearn IterativeImputer(estimator=LinearRegression(), max_iter=10, tol=0.0229) stops when
+    // np.linalg.norm(Xt - Xt_previous, ord=np.inf) (the largest ROW SUM of absolute changes, not the largest
+    // element) drops below tol * max|X observed|; it runs n_iter_ = 4 rounds on this data and returns these
+    // values. Comparing the largest element stopped one round early.
+    [Fact(Timeout = 120000)]
+    public async Task IterativeImputer_Convergence_UsesMatrixInfinityNorm()
+    {
+        await Task.CompletedTask;
+        var data = M(new double[,]
+        {
+            { 5, 0, -1 }, { 6, double.NaN, 4 }, { -7, 0, -2 }, { 1, 4, 0 }, { double.NaN, -8, double.NaN }, { 4, 0, -1 }
+        });
+        var imputer = new IterativeImputer<double>(
+            maxIterations: 10, tolerance: 0.0229, estimator: IterativeImputerEstimator.LinearRegression);
+
+        var result = imputer.FitTransform(data);
+
+        Assert.Equal(-7.924393756742558, result[1, 1], 1e-9);
+        Assert.Equal(5.333282926154977, result[4, 0], 1e-9);
+        Assert.Equal(3.0288912480644274, result[4, 2], 1e-9);
+    }
+
+    // sklearn IterativeImputer(estimator=LinearRegression()) with exactly collinear predictors b = 2a: lstsq
+    // returns the minimum-norm coefficients, which predict 2.273333333333333 for [2.5, 4]. Keeping the
+    // rounding-noise eigenvalue of the collinear direction blows the coefficients up.
+    [Fact(Timeout = 120000)]
+    public async Task IterativeImputer_LinearRegression_CollinearFeatures_IsMinimumNorm()
+    {
+        await Task.CompletedTask;
+        var data = M(new double[,]
+        {
+            { 1, 2, 3 }, { 2, 4, 1 }, { 3, 6, 4 }, { 4, 8, 1 }, { 5, 10, 5 }, { 6, 12, 9 }, { 2.5, 4, double.NaN }
+        });
+        var imputer = new IterativeImputer<double>(estimator: IterativeImputerEstimator.LinearRegression);
+
+        var result = imputer.FitTransform(data);
+
+        Assert.Equal(2.273333333333333, result[6, 2], 1e-9);
+    }
+
+    // sklearn QuantileTransformer(output_distribution="normal") clips to
+    // norm.ppf(1 - (1e-7 - np.spacing(1))) = 5.199337582605575, computed in float64 for every dtype.
+    [Fact(Timeout = 120000)]
+    public async Task QuantileTransformer_Normal_ClipBoundIsComputedInFloat64()
+    {
+        await Task.CompletedTask;
+        var floatData = new Matrix<float>(10, 1);
+        for (int i = 0; i < 10; i++)
+        {
+            floatData[i, 0] = i;
+        }
+
+        var floatTransformer = new QuantileTransformer<float>(OutputDistributionType.Normal, nQuantiles: 10);
+        floatTransformer.Fit(floatData);
+        var floatResult = floatTransformer.Transform(new Matrix<float>(new[,] { { 100f }, { -100f } }));
+        Assert.Equal(5.199337582605575, floatResult[0, 0], 1e-5);
+        Assert.Equal(-5.199337582605575, floatResult[1, 0], 1e-5);
+
+        var halfTransformer = new QuantileTransformer<Half>(OutputDistributionType.Normal, nQuantiles: 10);
+        halfTransformer.Fit(HalfColumn(10, i => i));
+        var halfResult = halfTransformer.Transform(HalfColumn(2, i => i == 0 ? 100 : -100));
+        Assert.Equal(5.199337582605575, (double)halfResult[0, 0], 5e-3);
+        Assert.Equal(-5.199337582605575, (double)halfResult[1, 0], 5e-3);
+    }
+
+    // sklearn PowerTransformer: a constant feature gets lambda 1 for Yeo-Johnson (_is_constant_feature), so
+    // [[2], [3]] standardizes against mean 2, scale 1 to [0, 1]; Box-Cox raises "Data must not be constant."
+    [Fact(Timeout = 120000)]
+    public async Task PowerTransformer_ConstantFeature_MatchesSklearn()
+    {
+        await Task.CompletedTask;
+        var constant = M(new double[,] { { 2 }, { 2 }, { 2 }, { 2 } });
+        var yeoJohnson = new PowerTransformer<double>(PowerTransformMethod.YeoJohnson);
+        yeoJohnson.Fit(constant);
+
+        Assert.Equal(1.0, yeoJohnson.Lambdas?[0] ?? double.NaN, Tolerance);
+        var result = yeoJohnson.Transform(M(new double[,] { { 2 }, { 3 } }));
+        Assert.Equal(0.0, result[0, 0], Tolerance);
+        Assert.Equal(1.0, result[1, 0], Tolerance);
+
+        var boxCox = new PowerTransformer<double>(PowerTransformMethod.BoxCox);
+        Assert.Throws<ArgumentException>(() => boxCox.Fit(constant));
+    }
+
+    // The Yeo-Johnson log-likelihood reduces in float64 (scipy); in Half the variance of 3000 transformed
+    // values near 300 overflowed and the lambda search returned a wrong optimum.
+    [Fact(Timeout = 120000)]
+    public async Task PowerTransformer_Half_ManySamples_MatchesDoubleLambda()
+    {
+        await Task.CompletedTask;
+        const int rows = 3000;
+        Func<int, double> value = i => (double)(Half)(i * 0.1);
+        var half = new PowerTransformer<Half>(PowerTransformMethod.YeoJohnson);
+        half.Fit(HalfColumn(rows, value));
+
+        var doubleData = new double[rows, 1];
+        for (int i = 0; i < rows; i++)
+        {
+            doubleData[i, 0] = value(i);
+        }
+
+        var reference = new PowerTransformer<double>(PowerTransformMethod.YeoJohnson);
+        reference.Fit(M(doubleData));
+
+        Assert.Equal(reference.Lambdas?[0] ?? double.NaN, (double)(half.Lambdas?[0] ?? Half.NaN), 1e-2);
+    }
+
+    private sealed class FirstRowAnomalyDetector : AiDotNet.AnomalyDetection.AnomalyDetectorBase<Half>
+    {
+        public override void Fit(Matrix<Half> X)
+        {
+        }
+
+        public override Vector<Half> ScoreAnomalies(Matrix<Half> X) => new Vector<Half>(X.Rows);
+
+        public override Vector<Half> Predict(Matrix<Half> X)
+        {
+            var labels = new Half[X.Rows];
+            for (int i = 0; i < labels.Length; i++)
+            {
+                labels[i] = i == 0 ? (Half)(-1) : (Half)1;
+            }
+
+            return new Vector<Half>(labels);
+        }
+    }
+
+    // ReplaceWithMean replaces an anomalous row by the column mean, 200 for 3000 Half samples of 100 and 300;
+    // averaged in Half the column total overflowed.
+    [Fact(Timeout = 120000)]
+    public async Task DetectorBasedFilter_Half_ReplaceWithMean_ManySamples()
+    {
+        await Task.CompletedTask;
+        var data = HalfAlternating(3000, 100, 300);
+        var filter = new DetectorBasedFilter<Half>(new FirstRowAnomalyDetector(), FilterMode.ReplaceWithMean);
+
+        var result = filter.FitTransform(data);
+
+        Assert.Equal(200.0, (double)result[0, 0], 1e-6);
+        Assert.Equal(300.0, (double)result[1, 0], 1e-6);
+    }
+
+    // sklearn _handle_zeros_in_scale(scale, constant_mask=...) only replaces the features flagged constant:
+    // StandardScaler().fit([[1e-16], [2e-16]]).scale_ = 5e-17 and the transform is [-1, 1].
+    [Fact(Timeout = 120000)]
+    public async Task StandardScaler_TinyNonConstantFeature_KeepsItsScale()
+    {
+        await Task.CompletedTask;
+        var scaler = new StandardScaler<double>();
+
+        var result = scaler.FitTransform(M(new double[,] { { 1e-16 }, { 2e-16 } }));
+
+        Assert.Equal(5e-17, scaler.StandardDeviation?[0] ?? double.NaN, 1e-30);
+        Assert.Equal(-1.0, result[0, 0], Tolerance);
+        Assert.Equal(1.0, result[1, 0], Tolerance);
+    }
+
+    // _handle_zeros_in_scale uses 10 * np.finfo(scale.dtype).eps: a float32 scale of 1e-7 is below it and
+    // becomes 1, and a Half all-zero column gets scale 1 (10 * float64 eps is 0 in Half, which left 0 / 0 = NaN).
+    [Fact(Timeout = 120000)]
+    public async Task MaxAbsScaler_ZeroScaleThreshold_UsesTheDataTypeEpsilon()
+    {
+        await Task.CompletedTask;
+        var floatScaler = new MaxAbsScaler<float>();
+        floatScaler.Fit(new Matrix<float>(new[,] { { 1e-7f }, { 5e-8f } }));
+        Assert.Equal(1f, floatScaler.MaxAbsolute?[0] ?? float.NaN);
+        Assert.Equal(1e-7f, floatScaler.Transform(new Matrix<float>(new[,] { { 1e-7f } }))[0, 0]);
+
+        var halfScaler = new MaxAbsScaler<Half>();
+        var zeros = halfScaler.FitTransform(HalfColumn(3, _ => 0));
+        Assert.Equal(0.0, (double)zeros[0, 0]);
+    }
 }
