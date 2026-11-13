@@ -223,6 +223,46 @@ public sealed class ModelStateRegistryTests
         return destination;
     }
 
+    [Fact]
+    public void HalfState_RoundTripsThroughTheDoublePayload()
+    {
+        // Half is not IConvertible, so Convert.ToDouble threw for every Half vector, matrix, tensor and scalar.
+        var vector = new Vector<Half>(new[] { (Half)1.5, (Half)(-2.25), (Half)0.125 });
+        var tensor = new Tensor<Half>(new[] { 2, 2 }, new Vector<Half>(new[] { (Half)1, (Half)2, (Half)(-3), (Half)0.5 }));
+        Half scalar = (Half)0.75;
+        var writing = new ModelStateRegistry<Half>();
+        writing.Declare("v", () => (Vector<Half>?)vector, (Vector<Half>? _) => { });
+        writing.Declare("t", () => (Tensor<Half>?)tensor, (Tensor<Half>? _) => { });
+        writing.DeclareScalar("s", () => scalar, _ => { });
+
+        var stream = new MemoryStream();
+        using (var writer = new BinaryWriter(stream, System.Text.Encoding.UTF8, leaveOpen: true))
+        {
+            writing.WriteAll(writer);
+            writer.Flush();
+        }
+
+        stream.Position = 0;
+        Vector<Half>? restoredVector = null;
+        Tensor<Half>? restoredTensor = null;
+        Half restoredScalar = default;
+        var reading = new ModelStateRegistry<Half>();
+        reading.Declare("v", () => restoredVector, (Vector<Half>? value) => restoredVector = value);
+        reading.Declare("t", () => restoredTensor, (Tensor<Half>? value) => restoredTensor = value);
+        reading.DeclareScalar("s", () => restoredScalar, value => restoredScalar = value);
+        using (var reader = new BinaryReader(stream, System.Text.Encoding.UTF8, leaveOpen: true))
+        {
+            reading.ReadAll(reader);
+        }
+
+        Assert.NotNull(restoredVector);
+        Assert.NotNull(restoredTensor);
+        Assert.Equal(vector.ToArray(), restoredVector?.ToArray());
+        Assert.Equal(tensor.ToArray(), restoredTensor?.ToArray());
+        Assert.Equal(new[] { 2, 2 }, restoredTensor?.Shape.ToArray());
+        Assert.Equal(scalar, restoredScalar);
+    }
+
     private static MemoryStream Write(ModelStateRegistry<double> registry)
     {
         var stream = new MemoryStream();
