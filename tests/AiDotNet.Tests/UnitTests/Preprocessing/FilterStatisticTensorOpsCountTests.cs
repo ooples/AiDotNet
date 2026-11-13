@@ -74,4 +74,16 @@ public class FilterStatisticTensorOpsCountTests
 
         Assert.Equal(0.5, (double)FilterStatisticTensorOps.FSurvival(f, 1000, 1000).ToArray()[0], 1e-3);
     }
+
+    // scipy.stats.t.sf(300, 1) * 2 = 2 / pi * atan(1 / 300) = 0.0021220. t^2 = 90000 overflowed Half, the beta
+    // argument became 0 and the p-value 0, which passed a 0.001 threshold.
+    [Fact(Timeout = 60000)]
+    public async Task StudentTTwoSided_Half_SquaredStatisticPast65504()
+    {
+        await Task.Yield();
+        var t = new Tensor<Half>(new[] { (Half)300 }, new[] { 1 });
+
+        Assert.Equal(2.0 / Math.PI * Math.Atan(1.0 / 300.0),
+            (double)FilterStatisticTensorOps.StudentTTwoSided(t, 1.0).ToArray()[0], 1e-5);
+    }
 }

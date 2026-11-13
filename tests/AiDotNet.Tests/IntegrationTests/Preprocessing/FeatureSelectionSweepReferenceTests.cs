@@ -1292,4 +1292,53 @@ public class FeatureSelectionSweepReferenceTests
 
         Assert.Equal(1.0, selector.Threshold, Tolerance);
     }
+
+    // Points 0, 300, 700 and 1200 with k = 1 and kernel width 1000 (coefficient 1 / (2 * 1000^2)): every squared
+    // distance (90000 and up) passed Half's 65504, so the Half weights were exp(-inf) = 0 and every distance tied.
+    // Evaluated in float, the Half affinity matches double (exp(-0.045) = 0.956 for the 0-300 pair).
+    [Fact(Timeout = 60000)]
+    public async Task KnnGaussianAffinity_Half_MatchesDoublePastSquaredRange()
+    {
+        await Task.Yield();
+        var points = new[] { 0.0, 300, 700, 1200 };
+        double coefficient = 1.0 / (2 * 1000.0 * 1000.0);
+        var wide = AiDotNet.Preprocessing.FeatureSelection.FeatureScoringTensorOps.KnnGaussianAffinity(
+            new Tensor<double>(points, new[] { 4, 1 }), 1, coefficient);
+        var narrow = AiDotNet.Preprocessing.FeatureSelection.FeatureScoringTensorOps.KnnGaussianAffinity(
+            new Tensor<Half>(Array.ConvertAll(points, v => (Half)v), new[] { 4, 1 }), 1, coefficient);
+
+        Assert.Equal(Math.Exp(-0.045), wide[0, 1], 12);
+        for (int i = 0; i < 4; i++)
+            for (int j = 0; j < 4; j++)
+                Assert.Equal(wide[i, j], (double)narrow[i, j], 2);
+    }
+
+    // 65536 pair weights of 2^-14 on differences of 1 sum to 4. Accumulated in Half the small terms were lost once
+    // the running total grew; in float the Half result matches double.
+    [Fact(Timeout = 60000)]
+    public async Task PairWeightedDifference_Half_KeepsManySmallTerms()
+    {
+        await Task.Yield();
+        const int n = 65536;
+        double weight = Math.Pow(2, -14);
+        var weights = new double[n];
+        var halfWeights = new Half[n];
+        for (int j = 0; j < n; j++)
+        {
+            weights[j] = weight;
+            halfWeights[j] = (Half)weight;
+        }
+
+        var wide = AiDotNet.Preprocessing.FeatureSelection.FeatureScoringTensorOps.PairWeightedDifference(
+            new Tensor<double>(new[] { 1.0 }, new[] { 1, 1 }),
+            new Tensor<double>(new double[n], new[] { n, 1 }),
+            new Tensor<double>(weights, new[] { 1, n }));
+        var narrow = AiDotNet.Preprocessing.FeatureSelection.FeatureScoringTensorOps.PairWeightedDifference(
+            new Tensor<Half>(new[] { (Half)1 }, new[] { 1, 1 }),
+            new Tensor<Half>(new Half[n], new[] { n, 1 }),
+            new Tensor<Half>(halfWeights, new[] { 1, n }));
+
+        Assert.Equal(4.0, wide[0], 12);
+        Assert.Equal(wide[0], (double)narrow[0], 3);
+    }
 }

@@ -380,10 +380,15 @@ internal static class FeatureScoringTensorOps
     /// <summary>
     /// <c>sum_{i, j} pairWeight[i, j] |rows[i, a] - x[j, a]|</c> for every feature a, with <paramref name="rows"/>
     /// ([b, p]) a block of the instances of <paramref name="x"/> ([n, p]) and a [b, n] pair weighting ([p]).
-    /// Evaluated one feature at a time so only b x n values are held.
+    /// Evaluated one feature at a time so only b x n values are held. Half and BFloat16 accumulate in float: the
+    /// SURF-family pair weights are about 1 / (n * count), and summed in Half those small terms are lost once the
+    /// running total grows (65536 terms of 2^-14 stall near 0.25 instead of reaching 4).
     /// </summary>
     public static Tensor<T> PairWeightedDifference<T>(Tensor<T> rows, Tensor<T> x, Tensor<T> pairWeight)
     {
+        if (PreprocessingTensorOps.IsNarrowFloat<T>())
+            return PairWeightedDifference(rows.Cast<float>(), x.Cast<float>(), pairWeight.Cast<float>()).Cast<T>();
+
         var engine = AiDotNetEngine.Current;
         int b = rows.Shape[0];
         int n = x.Shape[0];
@@ -460,10 +465,14 @@ internal static class FeatureScoringTensorOps
     /// <summary>
     /// A symmetric k-nearest-neighbour graph with Gaussian weights: <c>W[i, j] = exp(-coefficient d_ij^2)</c>
     /// (squared Euclidean d) when j is among the <paramref name="k"/> nearest neighbours of i or i among those of j
-    /// (ties to the lower index), 0 otherwise and on the diagonal ([n, n]).
+    /// (ties to the lower index), 0 otherwise and on the diagonal ([n, n]). Half and BFloat16 are evaluated in
+    /// float: d^2 passes 65504 once d passes 256, which made every such weight 0 and every distance tie.
     /// </summary>
     public static Tensor<T> KnnGaussianAffinity<T>(Tensor<T> x, int k, double coefficient)
     {
+        if (PreprocessingTensorOps.IsNarrowFloat<T>())
+            return KnnGaussianAffinity(x.Cast<float>(), k, coefficient).Cast<T>();
+
         var engine = AiDotNetEngine.Current;
         var ops = MathHelper.GetNumericOperations<T>();
         int n = x.Shape[0];
