@@ -41,10 +41,11 @@ namespace AiDotNet.Video.Matting;
 /// </para>
 /// <para>
 /// <b>Technical Details:</b>
-/// - MobileNetV3 backbone for efficiency
-/// - Recurrent architecture for temporal consistency
-/// - Deep guided filter for detail refinement
-/// - Multi-resolution processing
+/// - A four-stage stride-2 encoder (a ReLU6 conv stack standing in for MobileNetV3) with an LR-ASPP head
+/// - The paper's recurrent decoder: a ConvGRU at the bottleneck and in each of the three upsampling blocks, on half
+///   of the channels, carrying temporal state from frame to frame (reset with <see cref="ResetState"/>)
+/// - Output: alpha and a foreground residual added to the source frame, both clamped to [0, 1]
+/// - The deep guided filter for high-resolution refinement is not included; frames are matted at input resolution
 /// </para>
 /// <para>
 /// <b>Reference:</b> "Robust High-Resolution Video Matting with Temporal Guidance"
@@ -80,9 +81,10 @@ public partial class RVM<T> : NeuralNetworkBase<T>
     private readonly int _imageHeight;
     private readonly int _imageWidth;
 
-    // Recurrent hidden state
+    // ConvGRU hidden states (bottleneck, 1/8, 1/4, 1/2) carried from frame to frame; null entries start at zero.
     [Scratch]
-    private Tensor<T>? _hiddenState;
+    [KeepsActivation("The ConvGRU hidden states are the recurrent input of the next frame (Lin et al. 2021); they are copied out of the engine buffers and cleared by ResetState.")]
+    private Tensor<T>?[] _recurrentState = new Tensor<T>?[RvmRecurrentNetwork<T>.StateCount];
 
     #endregion
 
@@ -214,28 +216,40 @@ public partial class RVM<T> : NeuralNetworkBase<T>
     /// </summary>
     public Tensor<T> CompositeWithBackground(Tensor<T> foreground, Tensor<T> alpha, Tensor<T> background)
     {
-        int h = foreground.Rank == 4 ? foreground.Shape[2] : foreground.Shape[1];
-        int w = foreground.Rank == 4 ? foreground.Shape[3] : foreground.Shape[2];
+        if (foreground is null) throw new ArgumentNullException(nameof(foreground));
+        if (alpha is null) throw new ArgumentNullException(nameof(alpha));
+        if (background is null) throw new ArgumentNullException(nameof(background));
+        if (foreground.Rank != 3 && foreground.Rank != 4)
+            throw new ArgumentException("The foreground must be [C, H, W] or [B, C, H, W].", nameof(foreground));
 
-        var composite = new Tensor<T>(foreground._shape);
+        // comp = a * fg + (1 - a) * bg = bg + a * (fg - bg), for every sample and every channel. Compositing only the
+        // first sample's RGB returned zeros for the rest of a batch.
+        bool batched = foreground.Rank == 4;
+        var fg = batched ? foreground : Engine.Reshape(foreground, [1, foreground.Shape[0], foreground.Shape[1], foreground.Shape[2]]);
+        int batch = fg.Shape[0], channels = fg.Shape[1], h = fg.Shape[2], w = fg.Shape[3];
+        int[] full = [batch, channels, h, w];
 
-        for (int y = 0; y < h; y++)
+        var a = Engine.TensorBroadcastTo(Fit(alpha, 1, nameof(alpha)), full);
+        var bg = Engine.TensorBroadcastTo(Fit(background, channels, nameof(background)), full);
+        var composite = Engine.TensorAdd(bg, Engine.TensorMultiply(a, Engine.TensorSubtract(fg, bg)));
+        return batched ? composite : Engine.Reshape(composite, [channels, h, w]);
+
+        // A rank-3 or rank-4 tensor as [batch or 1, channels, h, w]: the leading channels and the top-left h x w,
+        // so a larger background is cropped as before.
+        Tensor<T> Fit(Tensor<T> t, int wanted, string name)
         {
-            for (int x = 0; x < w; x++)
+            if (t.Rank != 3 && t.Rank != 4)
+                throw new ArgumentException($"{name} must be [C, H, W] or [B, C, H, W].", name);
+            var t4 = t.Rank == 4 ? t : Engine.Reshape(t, [1, t.Shape[0], t.Shape[1], t.Shape[2]]);
+            if ((t4.Shape[0] != 1 && t4.Shape[0] != batch) || t4.Shape[1] < wanted || t4.Shape[2] < h || t4.Shape[3] < w)
             {
-                double a = Convert.ToDouble(alpha[0, 0, y, x]);
-
-                for (int c = 0; c < 3; c++)
-                {
-                    double fg = Convert.ToDouble(foreground[0, c, y, x]);
-                    double bg = Convert.ToDouble(background[0, c, y, x]);
-                    double comp = a * fg + (1 - a) * bg;
-                    composite[0, c, y, x] = NumOps.FromDouble(comp);
-                }
+                throw new ArgumentException(
+                    $"{name} shaped [{string.Join(", ", t.Shape.ToArray())}] does not cover {batch} sample(s) of " +
+                    $"{wanted} channel(s) at {h}x{w}.", name);
             }
-        }
 
-        return composite;
+            return Engine.TensorNarrow(Engine.TensorNarrow(Engine.TensorNarrow(t4, 1, 0, wanted), 2, 0, h), 3, 0, w);
+        }
     }
 
     /// <summary>
@@ -243,7 +257,7 @@ public partial class RVM<T> : NeuralNetworkBase<T>
     /// </summary>
     public new void ResetState()
     {
-        _hiddenState = null;
+        _recurrentState = new Tensor<T>?[RvmRecurrentNetwork<T>.StateCount];
         base.ResetState();
     }
 
@@ -267,16 +281,12 @@ public partial class RVM<T> : NeuralNetworkBase<T>
         int w = foreground.Rank == 4 ? foreground.Shape[3] : foreground.Shape[2];
 
         // Create green background
-        var greenBg = new Tensor<T>([1, 3, h, w]);
-        for (int y = 0; y < h; y++)
+        var greenBg = Engine.TensorConcatenate(new[]
         {
-            for (int x = 0; x < w; x++)
-            {
-                greenBg[0, 0, y, x] = NumOps.Zero;
-                greenBg[0, 1, y, x] = NumOps.FromDouble(1.0); // Green
-                greenBg[0, 2, y, x] = NumOps.Zero;
-            }
-        }
+            new Tensor<T>([1, 1, h, w]),
+            Tensor<T>.CreateDefault([1, 1, h, w], NumOps.One), // Green
+            new Tensor<T>([1, 1, h, w]),
+        }, 1);
 
         return CompositeWithBackground(foreground, alpha, greenBg);
     }
@@ -285,37 +295,61 @@ public partial class RVM<T> : NeuralNetworkBase<T>
 
     #region Inference
 
+    /// <summary>
+    /// Runs the recurrent network on a frame <c>[C, H, W]</c> or <c>[B, C, H, W]</c>, or on a clip
+    /// <c>[B, T, C, H, W]</c> frame by frame, carrying the ConvGRU states from the previous call; returns
+    /// alpha then foreground RGB in the input's layout.
+    /// </summary>
     private Tensor<T> Forward(Tensor<T> input)
     {
-        var result = input;
+        var (output, state) = Run(input, _recurrentState);
+        _recurrentState = state;
+        return output;
+    }
 
-        // Use hidden state for temporal consistency if available
-        if (_hiddenState != null && _hiddenState._shape.SequenceEqual(input._shape))
+    /// <inheritdoc />
+    /// <remarks>Each training sample starts from a zero recurrent state and leaves the inference state alone; a clip
+    /// <c>[B, T, C, H, W]</c> is unrolled through time, as the paper trains on sequences.</remarks>
+    public override Tensor<T> ForwardForTraining(Tensor<T> input)
+        => _useNativeMode ? Run(input, null).Output : base.ForwardForTraining(input);
+
+    private (Tensor<T> Output, Tensor<T>?[] State) Run(Tensor<T> input, Tensor<T>?[]? state)
+    {
+        var network = new RvmRecurrentNetwork<T>(Engine, Layers);
+        var current = state ?? new Tensor<T>?[RvmRecurrentNetwork<T>.StateCount];
+
+        if (input.Rank == 5)
         {
-            // Blend with previous state for temporal smoothing
-            for (int i = 0; i < Math.Min(result.Length, _hiddenState.Length); i++)
+            int batch = input.Shape[0], frames = input.Shape[1];
+            var outputs = new Tensor<T>[frames];
+            for (int t = 0; t < frames; t++)
             {
-                double curr = Convert.ToDouble(result.Data.Span[i]);
-                double prev = Convert.ToDouble(_hiddenState.Data.Span[i]);
-                result.Data.Span[i] = NumOps.FromDouble(curr * 0.9 + prev * 0.1);
+                var frame = Engine.Reshape(Engine.TensorNarrow(input, 1, t, 1),
+                    [batch, input.Shape[2], input.Shape[3], input.Shape[4]]);
+                var (matte, next) = network.Forward(frame, current);
+                outputs[t] = matte;
+                current = next;
             }
+
+            return (Engine.TensorStack(outputs, 1), Detached(current));
         }
 
-        foreach (var layer in Layers) result = layer.Forward(result);
-
-        // Update hidden state for next frame
-        _hiddenState = new Tensor<T>(result._shape);
-        result.Data.Span.CopyTo(_hiddenState.Data.Span);
-
-        return result;
+        bool batched = input.Rank == 4;
+        var source = batched ? input : Engine.Reshape(input, [1, input.Shape[0], input.Shape[1], input.Shape[2]]);
+        var (output, nextState) = network.Forward(source, current);
+        return (batched ? output : Engine.Reshape(output, [output.Shape[1], output.Shape[2], output.Shape[3]]),
+            Detached(nextState));
     }
+
+    // The hidden states are kept across calls, so they are copied out of the engine's buffers.
+    private static Tensor<T>?[] Detached(IReadOnlyList<Tensor<T>?> state)
+        => state.Select(h => h?.Clone()).ToArray();
 
     private Tensor<T> PredictOnnx(Tensor<T> input)
     {
         if (_onnxSession is null) throw new InvalidOperationException("ONNX session is not initialized.");
 
-        var inputData = new float[input.Length];
-        for (int i = 0; i < input.Length; i++) inputData[i] = Convert.ToSingle(input.Data.Span[i]);
+        var inputData = TensorCopyHelper.CastLogical<T, float>(input).ToArray();
 
         var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input._shape);
         var inputs = new List<NamedOnnxValue> { NamedOnnxValue.CreateFromTensor(_onnxSession.InputMetadata.Keys.First(), onnxInput) };
@@ -323,14 +357,14 @@ public partial class RVM<T> : NeuralNetworkBase<T>
         using var results = _onnxSession.Run(inputs);
         var outputTensor = results.First().AsTensor<float>();
 
-        var outputData = new T[outputTensor.Length];
-        for (int i = 0; i < outputTensor.Length; i++) outputData[i] = NumOps.FromDouble(outputTensor.GetValue(i));
+        var outputData = new Tensor<float>(outputTensor.ToDenseTensor().Buffer.ToArray(), [(int)outputTensor.Length])
+            .Cast<T>().ToArray();
 
         return new Tensor<T>(outputTensor.Dimensions.ToArray(), new Vector<T>(outputData));
     }
 
     /// <inheritdoc />
-    protected override Tensor<T> PredictCore(Tensor<T> input) => Forward(input);
+    protected override Tensor<T> PredictCore(Tensor<T> input) => _useNativeMode ? Forward(input) : PredictOnnx(input);
 
     #endregion
 
@@ -347,6 +381,9 @@ public partial class RVM<T> : NeuralNetworkBase<T>
             int ch = Architecture.InputDepth > 0 ? Architecture.InputDepth : 3;
             Layers.AddRange(LayerHelper<T>.CreateDefaultRVMLayers(ch, _imageHeight, _imageWidth, _numFeatures));
         }
+
+        // Bind once here so a custom layer list that does not follow CreateDefaultRVMLayers fails at construction.
+        _ = new RvmRecurrentNetwork<T>(Engine, Layers);
     }
 
     /// <inheritdoc />

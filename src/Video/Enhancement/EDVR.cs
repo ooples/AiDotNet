@@ -218,8 +218,7 @@ public partial class EDVR<T> : VideoSuperResolutionBase<T>
     {
         if (_onnxSession is null) throw new InvalidOperationException("ONNX session is not initialized.");
 
-        var inputData = new float[input.Length];
-        for (int i = 0; i < input.Length; i++) inputData[i] = Convert.ToSingle(input.Data.Span[i]);
+        var inputData = TensorCopyHelper.CastLogical<T, float>(input).ToArray();
 
         var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input._shape);
         var inputs = new List<NamedOnnxValue> { NamedOnnxValue.CreateFromTensor(_onnxSession.InputMetadata.Keys.First(), onnxInput) };
@@ -227,8 +226,8 @@ public partial class EDVR<T> : VideoSuperResolutionBase<T>
         using var results = _onnxSession.Run(inputs);
         var outputTensor = results.First().AsTensor<float>();
 
-        var outputData = new T[outputTensor.Length];
-        for (int i = 0; i < outputTensor.Length; i++) outputData[i] = NumOps.FromDouble(outputTensor.GetValue(i));
+        var outputData = new Tensor<float>(outputTensor.ToDenseTensor().Buffer.ToArray(), [(int)outputTensor.Length])
+            .Cast<T>().ToArray();
 
         return new Tensor<T>(outputTensor.Dimensions.ToArray(), new Vector<T>(outputData));
     }

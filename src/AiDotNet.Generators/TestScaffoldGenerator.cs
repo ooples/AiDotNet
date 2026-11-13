@@ -6156,7 +6156,7 @@ public partial class TestScaffoldGenerator : IIncrementalGenerator
                     "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.MultiClassClassification, " +
                     "inputHeight: 32, inputWidth: 32, inputDepth: 3, outputSize: 4), " +
-                    "options: new AiDotNet.Video.Options.VideoCLIPVideoOptions { NumFrames = 4, EmbeddingDim = 4, TextMaxLength = 8, VocabSize = 64, HiddenDimension = 32, " +
+                    "options: new AiDotNet.Video.Options.VideoCLIPVideoOptions { NumFrames = 4, EmbeddingDim = 4, TextMaxLength = 8, VocabSize = 64, HiddenDimension = 24, " +
                     "NumSpatialBlocks = 1, NumTemporalBlocks = 1, NumTextBlocks = 1, " +
                     // Paper warm-up is 1000 optimizer steps and the model keeps that default.
                     // These invariants train for one or two steps, where a 1000-step linear

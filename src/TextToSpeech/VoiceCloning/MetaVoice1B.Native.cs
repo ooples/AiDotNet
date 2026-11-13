@@ -1,3 +1,4 @@
+using AiDotNet.Helpers;
 using AiDotNet.Audio.Generation;
 using AiDotNet.Audio.Resampling;
 using AiDotNet.NeuralNetworks.Layers;
@@ -72,7 +73,7 @@ public partial class MetaVoice1B<T>
     {
         if (!HasPaperPipeline) return base.PreprocessText(text);
         var ids = EncodeText(text);
-        return new Tensor<T>(new[] { ids.Length }, new Vector<T>(ids.Select(id => NumOps.FromDouble(id))));
+        return new Tensor<int>(ids, new[] { ids.Length }).Cast<T>();
     }
 
     private Tensor<T>? ResolveVoice()
@@ -92,11 +93,10 @@ public partial class MetaVoice1B<T>
         if (_speaker is null || !_speakerLoaded) throw new InvalidOperationException("Load the released speaker encoder checkpoint.");
         if (sampleRate <= 0 || referenceAudio.Length == 0) throw new ArgumentException("A nonempty mono reference and valid sample rate are required.", nameof(referenceAudio));
         using var noGrad = new NoGradScope<T>();
-        var values = referenceAudio.ToArray().Select(x => NumOps.ToDouble(x)).ToArray();
+        var values = Doubles(referenceAudio);
         if (sampleRate != 16000) values = SoxrResampler.LibrosaResample(values, sampleRate, 16000);
         values = ChatterboxVoiceEncoder<T>.TrimSilence(values, 20);
-        return Engine.Reshape(_speaker.EmbedPreprocessed(new Tensor<T>(new[] { values.Length },
-            new Vector<T>(values.Select(x => NumOps.FromDouble(x))))), new[] { SpeakerEmbeddingDim });
+        return Engine.Reshape(_speaker.EmbedPreprocessed(FromDoubles(values)), new[] { SpeakerEmbeddingDim });
     }
 
     private double Uniform(Random random) => SamplingUniformForAudit?.Invoke() ?? random.NextDouble();
@@ -115,15 +115,15 @@ public partial class MetaVoice1B<T>
         if (firstStageTextTokens is null) text = MetaVoiceText.Normalize(text);
         if (speaker is not null) speaker = Engine.Reshape(speaker, new[] { 1, SpeakerEmbeddingDim });
         var firstTokens = MetaVoiceGeneration.FirstStage(firstStageTextTokens ?? _firstTokenizer.Encode(text), _options.MaximumNewTokens,
-            _options.FirstStageContext, (prefix, conditioned) => _first.Forward(new[] { prefix }, conditioned ? speaker : null,
-                lastOnly: true).Logits[0].ToArray().Select(x => NumOps.ToDouble(x)).ToArray(), _ => Uniform(random), speaker is not null,
+            _options.FirstStageContext, (prefix, conditioned) => Doubles(_first.Forward(new[] { prefix }, conditioned ? speaker : null,
+                lastOnly: true).Logits[0]), _ => Uniform(random), speaker is not null,
             _options.FirstStageTemperature, _options.FirstStageTopK, _options.FirstStageTopP,
             speaker is null ? null : (_options.SpeakerGuidance, _options.PromptGuidance));
         var firstAudio = MetaVoiceTokenAdapters.Decode(new[] { firstTokens }, true).Audio;
         if (firstAudio[0].Length == 0) throw new InvalidOperationException("MetaVoice generated no paired audio codebooks.");
         var input = MetaVoiceGeneration.SecondStageInput(_secondTokenizer.Encode(text), firstAudio, _options.SecondStageContext);
         var logits = _second.Forward(input, speaker).Logits;
-        var arrays = logits.Select(x => x.ToArray().Select(value => NumOps.ToDouble(value)).ToArray()).ToArray();
+        var arrays = logits.Select(Doubles).ToArray();
         var predicted = MetaVoiceGeneration.NonCausal(6, _options.SecondStageContext,
             (head, frame) => arrays[head].Skip(frame * 1025).Take(1025).ToArray(), (_, _) => Uniform(random),
             _options.SecondStageTemperature, _options.SecondStageTopK);
@@ -133,34 +133,37 @@ public partial class MetaVoice1B<T>
         for (int q = 0; q < 8; q++) for (int t = 0; t < audio[0].Length; t++) codes[q, t] = audio[q][t];
         Tensor<T> Gaussian(int[] shape) => DiffusionGaussianForAudit?.Invoke(shape)
             ?? new Tensor<T>(shape, TorchParameters.Gaussian<T>(random, shape.Aggregate(1, (a, b) => a * b), 1));
-        var waveform = DecoderForAudit is { } audit ? audit(codes) : _decoder!.Decode(codes,
-            (_, shape) => Gaussian(shape), (_, _, shape) => Gaussian(shape));
+        var decoder = _decoder;
+        var waveform = DecoderForAudit is { } audit ? audit(codes) : decoder is not null ? decoder.Decode(codes,
+            (_, shape) => Gaussian(shape), (_, _, shape) => Gaussian(shape))
+            : throw new InvalidOperationException("Load the EnCodec and four-band diffusion checkpoints before synthesis.");
         waveform = Engine.Reshape(waveform, new[] { waveform.Length });
         if (_options.RawDecoderOutput) return waveform;
-        var normalized = MetaVoiceOutputPolicy.Normalize(waveform.ToArray().Select(x => NumOps.ToDouble(x)).ToArray());
-        ObserveOutputForAudit?.Invoke("normalized", new Tensor<T>(new[] { normalized.Length }, new Vector<T>(normalized.Select(x => NumOps.FromDouble(x)))));
-        var pcm = MetaVoiceOutputPolicy.DecoderPcm(normalized);
-        waveform = new Tensor<T>(new[] { pcm.Length }, new Vector<T>(pcm.Select(x => NumOps.FromDouble(x / 32768.0))));
+        var normalized = MetaVoiceOutputPolicy.Normalize(Doubles(waveform));
+        ObserveOutputForAudit?.Invoke("normalized", FromDoubles(normalized));
+        waveform = FromPcm(MetaVoiceOutputPolicy.DecoderPcm(normalized));
         if (!_options.EnhanceOutput) return waveform;
         // The pinned legacy sinc_fast alias effectively selects Kaiser in Torchaudio 2.1.
         waveform = new MetaVoiceSincFastResample<T>(Engine).Forward(waveform);
         ObserveOutputForAudit?.Invoke("resampled", waveform);
-        var enhanced = _enhancer!.Enhance48k(waveform);
+        var enhancer = _enhancer ?? throw new InvalidOperationException("Load the original DeepFilterNet3 checkpoint before released-output synthesis.");
+        var enhanced = enhancer.Enhance48k(waveform);
         ObserveOutputForAudit?.Invoke("enhanced", enhanced);
-        var finalPcm = MetaVoiceOutputPolicy.EnhancedPcm(enhanced.ToArray().Select(x => NumOps.ToDouble(x)).ToArray());
-        return new Tensor<T>(new[] { finalPcm.Length }, new Vector<T>(finalPcm.Select(x => NumOps.FromDouble(x / 32768.0))));
+        return FromPcm(MetaVoiceOutputPolicy.EnhancedPcm(Doubles(enhanced)));
     }
+
+    private static double[] Doubles(Tensor<T> values) => TensorCopyHelper.CastLogical<T, double>(values).ToArray();
+
+    private static Tensor<T> FromDoubles(double[] values) => new Tensor<double>(values, new[] { values.Length }).Cast<T>();
+
+    // 16-bit PCM as samples x / 32768.
+    private static Tensor<T> FromPcm(short[] pcm) => FromDoubles(Array.ConvertAll(pcm, x => x / 32768.0));
 
     private int[] IntegerIds(Tensor<T> values)
     {
-        var result = new int[values.Length];
-        for (int i = 0; i < result.Length; i++)
-        {
-            double value = NumOps.ToDouble(values[i]);
-            if (double.IsNaN(value) || double.IsInfinity(value) || value != Math.Truncate(value) || value < 0 || value > int.MaxValue)
-                throw new ArgumentException("Expected integer token IDs.", nameof(values));
-            result[i] = (int)value;
-        }
-        return result;
+        var ids = Doubles(values);
+        if (ids.Any(value => double.IsNaN(value) || double.IsInfinity(value) || value != Math.Truncate(value) || value < 0 || value > int.MaxValue))
+            throw new ArgumentException("Expected integer token IDs.", nameof(values));
+        return Array.ConvertAll(ids, value => (int)value);
     }
 }

@@ -44,8 +44,11 @@ namespace AiDotNet.TextToSpeech.Vocoders;
 public partial class FreGrad<T> : DiffusionVocoderBase<T>
 {
     private DiffWaveNetwork<T>? _network;
+    private DiffWaveNetwork<T> RequiredNetwork => _network ?? throw new InvalidOperationException("The network has not been created.");
     private DifferentiableMel<T>? _features;
+    private DifferentiableMel<T> RequiredFeatures => _features ?? throw new InvalidOperationException("The network has not been created.");
     private MultiResolutionStftLoss<T>? _stftLoss;
+    private MultiResolutionStftLoss<T> RequiredStftLoss => _stftLoss ?? throw new InvalidOperationException("The network has not been created.");
 
     /// <summary>Creates a FreGrad that runs an exported ONNX graph.</summary>
     public FreGrad(NeuralNetworkArchitecture<T> architecture, string modelPath, FreGradOptions? options = null)
@@ -104,13 +107,13 @@ public partial class FreGrad<T> : DiffusionVocoderBase<T>
     }
 
     /// <inheritdoc />
-    protected override Tensor<T> Denoise(Tensor<T> noisy, double level, Tensor<T> mel) => _network!.Forward(noisy, level, mel);
+    protected override Tensor<T> Denoise(Tensor<T> noisy, double level, Tensor<T> mel) => RequiredNetwork.Forward(noisy, level, mel);
 
     /// <inheritdoc />
     /// <remarks>The natural-log mel spectrogram <c>ln(max(mel, 1e-5))</c> of the HiFi-GAN pipeline.</remarks>
     protected override Tensor<T> ComputeInputMel(Tensor<T> audio)
     {
-        var rows = _features!.Forward(audio);
+        var rows = RequiredFeatures.Forward(audio);
         return Engine.Reshape(Engine.TensorTranspose(rows), new[] { 1, PaperOptions.MelChannels, rows.Shape[0] });
     }
 
@@ -165,8 +168,8 @@ public partial class FreGrad<T> : DiffusionVocoderBase<T>
         using (new NoGradScope<T>())
             inverse = Engine.TensorReciprocal(PriorStd(mel));
         int n = noise.Shape[2];
-        Tensor<T>? total = null;
-        for (int band = 0; band < 2; band++)
+        var weight = NumOps.FromDouble(PaperOptions.MagnitudeLossWeight);
+        Tensor<T> Term(int band)
         {
             var start = new[] { 0, band, 0 };
             var length = new[] { 1, 1, n };
@@ -174,11 +177,10 @@ public partial class FreGrad<T> : DiffusionVocoderBase<T>
             var p = Engine.TensorSlice(predicted, start, length);
             var d = Engine.TensorMultiply(Engine.TensorSubtract(e, p), Engine.TensorSlice(inverse, start, length));
             var diffusion = Mean(Engine.TensorMultiply(d, d));
-            var magnitude = _stftLoss!.Forward(new[] { Engine.Reshape(p, new[] { n }) }, new[] { Engine.Reshape(e, new[] { n }) }).LogMagnitude;
-            var term = Engine.TensorAdd(diffusion, Engine.TensorMultiplyScalar(magnitude, NumOps.FromDouble(PaperOptions.MagnitudeLossWeight)));
-            total = total is null ? term : Engine.TensorAdd(total, term);
+            var magnitude = RequiredStftLoss.Forward(new[] { Engine.Reshape(p, new[] { n }) }, new[] { Engine.Reshape(e, new[] { n }) }).LogMagnitude;
+            return Engine.TensorAdd(diffusion, Engine.TensorMultiplyScalar(magnitude, weight));
         }
-        return total!;
+        return Engine.TensorAdd(Term(0), Term(1));
     }
 
     /// <inheritdoc />

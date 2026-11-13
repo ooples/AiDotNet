@@ -277,6 +277,12 @@ public partial class VideoCLIP<T> : NeuralNetworkBase<T>
 
         int effectiveHiddenDim = options is null ? _options.HiddenDim : _options.HiddenDimension;
         Guard.Positive(effectiveHiddenDim, nameof(_options.HiddenDim));
+        if (effectiveHiddenDim % VideoCLIPVideoOptions.TextAttentionHeads != 0)
+        {
+            throw new ArgumentException(
+                $"The hidden width ({effectiveHiddenDim}) must be a multiple of the text tower's " +
+                $"{VideoCLIPVideoOptions.TextAttentionHeads} attention heads.", nameof(options));
+        }
         _hiddenDim = effectiveHiddenDim;
         _textHiddenDim = effectiveHiddenDim;
         int numSpatialBlocks = _options.NumSpatialBlocks;
@@ -408,7 +414,13 @@ public partial class VideoCLIP<T> : NeuralNetworkBase<T>
     /// Text with similar meaning will have similar embeddings.
     /// </para>
     /// </remarks>
-    public Tensor<T> EncodeText(Tensor<T> tokenIds)
+    public Tensor<T> EncodeText(Tensor<T> tokenIds) => EncodeText(tokenIds, null);
+
+    /// <summary>
+    /// <see cref="EncodeText(Tensor{T})"/> with each sample's count of real tokens; the positions after it are
+    /// padding, excluded as attention keys and from the pooled mean. Null treats every supplied token as real.
+    /// </summary>
+    private Tensor<T> EncodeText(Tensor<T> tokenIds, int[]? validLengths)
     {
         bool hasBatch = tokenIds.Rank == 2;
         if (!hasBatch)
@@ -418,23 +430,21 @@ public partial class VideoCLIP<T> : NeuralNetworkBase<T>
 
         int batchSize = tokenIds.Shape[0];
         int seqLen = Math.Min(tokenIds.Shape[1], _textMaxLength);
-
-        // Pad to max length if needed
-        var paddedTokens = new Tensor<T>([batchSize, _textMaxLength]);
-        for (int b = 0; b < batchSize; b++)
+        if (validLengths is not null && validLengths.Length != batchSize)
         {
-            for (int i = 0; i < _textMaxLength; i++)
-            {
-                if (i < seqLen)
-                {
-                    paddedTokens[b, i] = tokenIds[b, i];
-                }
-                else
-                {
-                    paddedTokens[b, i] = NumOps.Zero; // Padding token
-                }
-            }
+            throw new ArgumentException(
+                $"{validLengths.Length} token length(s) given for {batchSize} sample(s).", nameof(validLengths));
         }
+
+        var lengths = new int[batchSize];
+        for (int b = 0; b < batchSize; b++)
+            lengths[b] = Math.Max(1, Math.Min(validLengths?[b] ?? seqLen, seqLen));
+
+        // Truncate or zero-pad (the padding token) to the max length
+        var kept = Engine.TensorNarrow(tokenIds, 1, 0, seqLen);
+        var paddedTokens = seqLen == _textMaxLength
+            ? kept
+            : Engine.TensorConcatenate(new[] { kept, new Tensor<T>([batchSize, _textMaxLength - seqLen]) }, 1);
 
         // Token embedding lookup with positional embeddings (proper CLIP style)
         var features = LookupTokenEmbeddings(paddedTokens);
@@ -446,8 +456,8 @@ public partial class VideoCLIP<T> : NeuralNetworkBase<T>
             // Pre-LayerNorm
             var normed = TextLayerNorm(features);
 
-            // Multi-head self-attention with causal mask
-            var attnOut = TextMultiHeadAttention(normed, layer);
+            // Bidirectional multi-head self-attention over the real tokens (BERT, as VideoCLIP's text encoder)
+            var attnOut = TextMultiHeadAttention(normed, layer, lengths);
 
             // Residual connection
             features = AddTensors(features, attnOut);
@@ -469,7 +479,9 @@ public partial class VideoCLIP<T> : NeuralNetworkBase<T>
             features,
             [0, 0, 0, 0],
             [batchSize, features.Shape[1], features.Shape[2], seqLen]);
-        var pooledText = GlobalAveragePool(validFeatures);
+        var pooledText = Array.TrueForAll(lengths, length => length == seqLen)
+            ? GlobalAveragePool(validFeatures)
+            : MeanOverValidTokens(validFeatures, lengths);
 
         // Project to embedding space
         var embedding = _textProjection.Forward(pooledText);
@@ -521,8 +533,8 @@ public partial class VideoCLIP<T> : NeuralNetworkBase<T>
         var textEmbeds = new List<Tensor<T>>();
         foreach (var text in classTexts)
         {
-            var tokenIds = Tokenize(text);
-            var textEmbed = EncodeText(tokenIds);
+            var (tokenIds, length) = Tokenize(text);
+            var textEmbed = EncodeText(tokenIds, [length]);
             textEmbeds.Add(textEmbed);
         }
 
@@ -559,8 +571,8 @@ public partial class VideoCLIP<T> : NeuralNetworkBase<T>
         List<Tensor<T>> videoEmbeddings,
         int topK = 10)
     {
-        var tokenIds = Tokenize(query);
-        var queryEmbed = EncodeText(tokenIds);
+        var (tokenIds, length) = Tokenize(query);
+        var queryEmbed = EncodeText(tokenIds, [length]);
 
         var results = new List<(int, double)>();
         for (int i = 0; i < videoEmbeddings.Count; i++)
@@ -589,8 +601,8 @@ public partial class VideoCLIP<T> : NeuralNetworkBase<T>
         var results = new List<(string, double)>();
         foreach (var text in candidateTexts)
         {
-            var tokenIds = Tokenize(text);
-            var textEmbed = EncodeText(tokenIds);
+            var (tokenIds, length) = Tokenize(text);
+            var textEmbed = EncodeText(tokenIds, [length]);
             double sim = ComputeSimilarity(videoEmbed, textEmbed);
             results.Add((text, sim));
         }
@@ -624,18 +636,16 @@ public partial class VideoCLIP<T> : NeuralNetworkBase<T>
             textEmbeds.Add(EncodeText(text));
         }
 
-        // Compute similarity matrix
-        var simMatrix = new Tensor<T>([batchSize, batchSize]);
-        for (int i = 0; i < batchSize; i++)
+        // Compute similarity matrix: (i, j) = <video_i, text_j> / temperature
+        if (batchSize == 0)
         {
-            for (int j = 0; j < batchSize; j++)
-            {
-                double sim = ComputeSimilarity(videoEmbeds[i], textEmbeds[j]);
-                simMatrix[i, j] = NumOps.FromDouble(sim / Temperature);
-            }
+            return new Tensor<T>([0, 0]);
         }
 
-        return simMatrix;
+        Tensor<T> Rows(List<Tensor<T>> embeddings) => Engine.TensorStack(
+            embeddings.Select(e => Engine.Reshape(e, [e.Length])).ToArray(), 0);
+        var similarity = Engine.TensorMatMul(Rows(videoEmbeds), Engine.TensorTranspose(Rows(textEmbeds)));
+        return Engine.TensorMultiplyScalar(similarity, NumOps.FromDouble(1.0 / Temperature));
     }
 
     /// <inheritdoc/>
@@ -674,20 +684,7 @@ public partial class VideoCLIP<T> : NeuralNetworkBase<T>
         for (int t = 0; t < numFrames; t++)
         {
             // Extract frame
-            var frame = new Tensor<T>([batchSize, channels, height, width]);
-            for (int b = 0; b < batchSize; b++)
-            {
-                for (int c = 0; c < channels; c++)
-                {
-                    for (int h = 0; h < height; h++)
-                    {
-                        for (int w = 0; w < width; w++)
-                        {
-                            frame[b, c, h, w] = videoFrames[b, t, c, h, w];
-                        }
-                    }
-                }
-            }
+            var frame = Engine.Reshape(Engine.TensorNarrow(videoFrames, 1, t, 1), [batchSize, channels, height, width]);
 
             // Apply spatial encoder
             var features = frame;
@@ -801,7 +798,7 @@ public partial class VideoCLIP<T> : NeuralNetworkBase<T>
     /// - Truncation for long texts
     /// </para>
     /// </remarks>
-    private Tensor<T> Tokenize(string text)
+    private (Tensor<T> Ids, int Length) Tokenize(string text)
     {
         if (_tokenizer is null)
             throw new InvalidOperationException("Tokenizer is not initialized.");
@@ -810,22 +807,37 @@ public partial class VideoCLIP<T> : NeuralNetworkBase<T>
         var encoded = _tokenizer.Encode(text, _encodingOptions);
         var tokenIds = encoded.TokenIds;
 
-        // Convert to tensor with padding
-        var tokens = new Tensor<T>([_textMaxLength]);
-        for (int i = 0; i < _textMaxLength; i++)
+        // Convert to tensor, truncated or padded with the padding token 0
+        var ids = new int[_textMaxLength];
+        int count = Math.Min(tokenIds.Count, _textMaxLength);
+        for (int i = 0; i < count; i++)
         {
-            if (i < tokenIds.Count)
-            {
-                tokens[i] = NumOps.FromDouble(tokenIds[i]);
-            }
-            else
-            {
-                // Pad with padding token (typically 0 or the pad_token_id)
-                tokens[i] = NumOps.Zero;
-            }
+            ids[i] = tokenIds[i];
         }
 
-        return tokens;
+        return (new Tensor<int>(ids, [_textMaxLength]).Cast<T>(), count);
+    }
+
+    /// <summary>
+    /// Mean of <paramref name="features"/> <c>[B, C, H, S]</c> over each sample's first <paramref name="lengths"/>
+    /// positions, as <c>[B, C, 1, 1]</c> (the shape <c>GlobalAveragePool</c> gives).
+    /// </summary>
+    private Tensor<T> MeanOverValidTokens(Tensor<T> features, int[] lengths)
+    {
+        int batchSize = features.Shape[0], rows = features.Shape[2], seqLen = features.Shape[3];
+        var mask = new int[batchSize * seqLen];
+        var inverseCounts = new double[batchSize];
+        for (int b = 0; b < batchSize; b++)
+        {
+            for (int j = 0; j < lengths[b]; j++) mask[(b * seqLen) + j] = 1;
+            inverseCounts[b] = 1.0 / ((double)lengths[b] * rows);
+        }
+
+        var masked = Engine.TensorMultiply(features, Engine.TensorBroadcastTo(
+            new Tensor<int>(mask, [batchSize, 1, 1, seqLen]).Cast<T>(), features._shape));
+        var sums = Engine.ReduceSum(masked, [2, 3], true);
+        return Engine.TensorMultiply(sums, Engine.TensorBroadcastTo(
+            new Tensor<double>(inverseCounts, [batchSize, 1, 1, 1]).Cast<T>(), sums._shape));
     }
 
     private Tensor<T> ApplyGELU(Tensor<T> input)
@@ -844,14 +856,14 @@ public partial class VideoCLIP<T> : NeuralNetworkBase<T>
         // For embeddings: fan_in = 1, fan_out = embeddingDim
         double limit = Math.Sqrt(6.0 / (1 + embeddingDim));
 
-        for (int i = 0; i < numEmbeddings; i++)
+        // One uniform draw per entry in row-major order, mapped to [-limit, limit)
+        var draws = new double[numEmbeddings * embeddingDim];
+        for (int i = 0; i < draws.Length; i++)
         {
-            for (int j = 0; j < embeddingDim; j++)
-            {
-                double val = (random.NextDouble() * 2 - 1) * limit;
-                table[i, j] = NumOps.FromDouble(val);
-            }
+            draws[i] = (random.NextDouble() * 2 - 1) * limit;
         }
+
+        new Tensor<double>(draws, [draws.Length]).Cast<T>().Data.Span.CopyTo(table.Data.Span);
     }
 
     /// <summary>
@@ -864,128 +876,97 @@ public partial class VideoCLIP<T> : NeuralNetworkBase<T>
         int batchSize = tokenIds.Shape[0];
         int seqLen = tokenIds.Shape.Length > 1 ? tokenIds.Shape[1] : _textMaxLength;
 
-        var output = new Tensor<T>([batchSize, _textHiddenDim, 1, seqLen]);
-
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int pos = 0; pos < seqLen; pos++)
-            {
-                // Get token ID and clamp to valid range
-                int tokenId = Math.Min(Math.Max(0, (int)NumOps.ToDouble(tokenIds[b, pos])), _vocabSize - 1);
-
-                // Lookup embedding from table and add positional embedding
-                for (int d = 0; d < _textHiddenDim; d++)
-                {
-                    double tokenEmbed = NumOps.ToDouble(_tokenEmbeddingTable[tokenId, d]);
-                    double posEmbed = NumOps.ToDouble(_positionalEmbeddingTable[pos, d]);
-                    output[b, d, 0, pos] = NumOps.FromDouble(tokenEmbed + posEmbed);
-                }
-            }
-        }
-
-        return output;
+        // Token ids clamped to the vocabulary, then token embedding + positional embedding per position
+        var ids = TensorCopyHelper.CastLogical<T, int>(Engine.TensorClamp(
+            Engine.Reshape(Engine.TensorNarrow(Engine.Reshape(tokenIds, [batchSize, tokenIds.Length / batchSize]), 1, 0, seqLen), [batchSize * seqLen]),
+            NumOps.Zero, NumOps.FromDouble(_vocabSize - 1)));
+        var tokens = Engine.TensorIndexSelect(_tokenEmbeddingTable, ids, 0);                      // [B*S, D]
+        var positions = Engine.TensorNarrow(_positionalEmbeddingTable, 0, 0, seqLen);            // [S, D]
+        var embedded = Engine.TensorAdd(
+            Engine.Reshape(tokens, [batchSize, seqLen, _textHiddenDim]),
+            Engine.TensorBroadcastTo(Engine.Reshape(positions, [1, seqLen, _textHiddenDim]), [batchSize, seqLen, _textHiddenDim]));
+        return Engine.Reshape(Engine.TensorPermute(embedded, [0, 2, 1]), [batchSize, _textHiddenDim, 1, seqLen]);
     }
 
     /// <summary>
-    /// Text transformer multi-head self-attention following CLIP architecture.
+    /// Text transformer multi-head self-attention: bidirectional, as in VideoCLIP's BERT text encoder (Xu et al.,
+    /// EMNLP 2021, Sec. 3.1), with the padding positions at and after <paramref name="validLength"/> excluded as keys
+    /// (BERT's attention mask).
     /// </summary>
-    private Tensor<T> TextMultiHeadAttention(Tensor<T> input, int layerIdx)
+    /// <remarks>
+    /// This used to apply CLIP's causal mask, so a token never saw the tokens after it; VideoCLIP's text tower is a
+    /// BERT encoder that attends in both directions.
+    /// </remarks>
+    internal Tensor<T> TextMultiHeadAttention(Tensor<T> input, int layerIdx, int validLength)
+    {
+        var lengths = new int[input.Shape[0]];
+        for (int b = 0; b < lengths.Length; b++) lengths[b] = validLength;
+        return TextMultiHeadAttention(input, layerIdx, lengths);
+    }
+
+    /// <summary>
+    /// <see cref="TextMultiHeadAttention(Tensor{T}, int, int)"/> with one count of real tokens per sample.
+    /// </summary>
+    private Tensor<T> TextMultiHeadAttention(Tensor<T> input, int layerIdx, int[] validLengths)
     {
         int batchSize = input.Shape[0];
         int channels = input.Shape[1];
         int seqLen = input.Shape[3];
-        int numHeads = 12;
+        int numHeads = VideoCLIPVideoOptions.TextAttentionHeads;
         int headDim = channels / numHeads;
         double scale = 1.0 / Math.Sqrt(headDim);
 
         // Compute QKV projections
         var qkv = _textTransformerQKV[layerIdx].Forward(input);
 
-        // Split into Q, K, V
-        var query = new Tensor<T>([batchSize, channels, 1, seqLen]);
-        var key = new Tensor<T>([batchSize, channels, 1, seqLen]);
-        var value = new Tensor<T>([batchSize, channels, 1, seqLen]);
+        // Split into Q, K, V: [B, C, S] each
+        Tensor<T> Part(int index) => Engine.Reshape(
+            Engine.TensorNarrow(qkv, 1, index * channels, channels), [batchSize, channels, seqLen]);
 
+        // Heads [B * heads, headDim, S] over the first heads x headDim channels
+        int headed = numHeads * headDim;
+        Tensor<T> Heads(Tensor<T> part) => Engine.Reshape(
+            Engine.TensorNarrow(part, 1, 0, headed), [batchSize * numHeads, headDim, seqLen]);
+        var query = Heads(Part(0));
+        var key = Heads(Part(1));
+        var value = Heads(Part(2));
+
+        // Every query attends to every real token; padding keys are set to -1e9 before the softmax
+        var scores = Engine.TensorMultiplyScalar(
+            Engine.BatchMatMul(Engine.TensorPermute(query, [0, 2, 1]), key), NumOps.FromDouble(scale));
+        // One mask per sample: the heads of sample b are rows [b * heads, (b + 1) * heads) of the scores
+        var padding = new int[batchSize * seqLen];
+        bool anyPadding = false;
         for (int b = 0; b < batchSize; b++)
         {
-            for (int pos = 0; pos < seqLen; pos++)
+            int valid = Math.Max(1, Math.Min(validLengths[b], seqLen));
+            for (int j = valid; j < seqLen; j++)
             {
-                for (int c = 0; c < channels; c++)
-                {
-                    query[b, c, 0, pos] = qkv[b, c, 0, pos];
-                    key[b, c, 0, pos] = qkv[b, channels + c, 0, pos];
-                    value[b, c, 0, pos] = qkv[b, 2 * channels + c, 0, pos];
-                }
+                padding[(b * seqLen) + j] = 1;
+                anyPadding = true;
             }
         }
 
-        // Multi-head attention with causal mask (for autoregressive text)
-        var output = new Tensor<T>([batchSize, channels, 1, seqLen]);
-
-        for (int b = 0; b < batchSize; b++)
+        if (anyPadding)
         {
-            for (int head = 0; head < numHeads; head++)
-            {
-                int headStart = head * headDim;
-
-                // Compute attention scores for this head
-                var attnScores = new double[seqLen, seqLen];
-                for (int i = 0; i < seqLen; i++)
-                {
-                    for (int j = 0; j <= i; j++) // Causal mask: can only attend to past positions
-                    {
-                        double score = 0;
-                        for (int d = 0; d < headDim; d++)
-                        {
-                            double q = NumOps.ToDouble(query[b, headStart + d, 0, i]);
-                            double k = NumOps.ToDouble(key[b, headStart + d, 0, j]);
-                            score += q * k;
-                        }
-                        attnScores[i, j] = score * scale;
-                    }
-                    // Masked positions get very negative value
-                    for (int j = i + 1; j < seqLen; j++)
-                    {
-                        attnScores[i, j] = -1e9;
-                    }
-                }
-
-                // Softmax over each row
-                for (int i = 0; i < seqLen; i++)
-                {
-                    double maxScore = double.NegativeInfinity;
-                    for (int j = 0; j < seqLen; j++)
-                    {
-                        maxScore = Math.Max(maxScore, attnScores[i, j]);
-                    }
-
-                    double sumExp = 0;
-                    for (int j = 0; j < seqLen; j++)
-                    {
-                        attnScores[i, j] = Math.Exp(attnScores[i, j] - maxScore);
-                        sumExp += attnScores[i, j];
-                    }
-                    for (int j = 0; j < seqLen; j++)
-                    {
-                        attnScores[i, j] /= sumExp;
-                    }
-                }
-
-                // Weighted sum of values
-                for (int i = 0; i < seqLen; i++)
-                {
-                    for (int d = 0; d < headDim; d++)
-                    {
-                        double sum = 0;
-                        for (int j = 0; j < seqLen; j++)
-                        {
-                            sum += attnScores[i, j] * NumOps.ToDouble(value[b, headStart + d, 0, j]);
-                        }
-                        output[b, headStart + d, 0, i] = NumOps.FromDouble(sum);
-                    }
-                }
-            }
+            var paddingKeys = Engine.Reshape(
+                Engine.TensorBroadcastTo(
+                    new Tensor<int>(padding, [batchSize, 1, 1, seqLen]).Cast<T>(), [batchSize, numHeads, seqLen, seqLen]),
+                [batchSize * numHeads, seqLen, seqLen]);
+            scores = Engine.TensorWhere(paddingKeys, Tensor<T>.CreateDefault(scores._shape, NumOps.FromDouble(-1e9)), scores);
         }
+
+        var probabilities = Engine.TensorSoftmax(scores, 2);
+
+        // Weighted sum of values: out[d, i] = sum_j p[i, j] v[d, j]
+        var attended = Engine.Reshape(
+            Engine.BatchMatMul(value, Engine.TensorPermute(probabilities, [0, 2, 1])), [batchSize, headed, seqLen]);
+        if (headed < channels)
+        {
+            attended = Engine.TensorConcatenate(new[] { attended, new Tensor<T>([batchSize, channels - headed, seqLen]) }, 1);
+        }
+
+        var output = Engine.Reshape(attended, [batchSize, channels, 1, seqLen]);
 
         // Output projection
         return _textTransformerAttnProj[layerIdx].Forward(output);
@@ -1009,12 +990,8 @@ public partial class VideoCLIP<T> : NeuralNetworkBase<T>
     /// </summary>
     private Tensor<T> ApplyQuickGELU(Tensor<T> input)
     {
-        return input.Transform((v, _) =>
-        {
-            double x = NumOps.ToDouble(v);
-            double quickGelu = x * (1.0 / (1.0 + Math.Exp(-1.702 * x)));
-            return NumOps.FromDouble(quickGelu);
-        });
+        // x * sigmoid(1.702 x), recorded on the tape (the element transform it replaces was not)
+        return Engine.TensorMultiply(input, Engine.TensorSigmoid(Engine.TensorMultiplyScalar(input, NumOps.FromDouble(1.702))));
     }
 
     /// <summary>
@@ -1025,41 +1002,23 @@ public partial class VideoCLIP<T> : NeuralNetworkBase<T>
         int batchSize = input.Shape[0];
         int channels = input.Shape[1];
         int seqLen = input.Shape[3];
-        var output = new Tensor<T>(input._shape);
-        double eps = 1e-5;
-
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int pos = 0; pos < seqLen; pos++)
-            {
-                // Compute mean and variance across channels
-                double sum = 0.0;
-                for (int c = 0; c < channels; c++)
-                {
-                    sum += NumOps.ToDouble(input[b, c, 0, pos]);
-                }
-                double mean = sum / channels;
-
-                double varSum = 0.0;
-                for (int c = 0; c < channels; c++)
-                {
-                    double diff = NumOps.ToDouble(input[b, c, 0, pos]) - mean;
-                    varSum += diff * diff;
-                }
-                double variance = varSum / channels;
-                double invStd = 1.0 / Math.Sqrt(variance + eps);
-
-                // Normalize
-                for (int c = 0; c < channels; c++)
-                {
-                    double val = NumOps.ToDouble(input[b, c, 0, pos]);
-                    double normalized = (val - mean) * invStd;
-                    output[b, c, 0, pos] = NumOps.FromDouble(normalized);
-                }
-            }
-        }
-
-        return output;
+        // Normalize each position over the channels with the biased variance and eps = 1e-5. The deviations are
+        // scaled by their peak before squaring so the variance cannot overflow T.
+        int[] channelAxis = [1];
+        var centered = Engine.TensorSubtract(
+            input, Engine.TensorBroadcastTo(Engine.ReduceMean(input, channelAxis, true), input._shape));
+        var peak = Engine.ReduceMax(Engine.TensorAbs(centered), channelAxis, true);
+        // The whole calculation stays in scaled units, x/s over sqrt(var/s^2 + eps/s^2), with s = max(peak, 1):
+        // squaring the peak itself overflows a float for a peak near 1e20 even where the variance is representable.
+        var scale = Engine.TensorWhere(
+            Engine.TensorGreaterThan(peak, NumOps.One), peak, Engine.TensorOnesLike(peak));
+        var unit = Engine.TensorDivide(centered, Engine.TensorBroadcastTo(scale, input._shape));
+        var inverseScale = Engine.TensorReciprocal(scale);
+        var scaledEpsilon = Engine.TensorMultiplyScalar(
+            Engine.TensorMultiply(inverseScale, inverseScale), NumOps.FromDouble(1e-5));
+        var std = Engine.TensorSqrt(Engine.TensorAdd(
+            Engine.ReduceMean(Engine.TensorMultiply(unit, unit), channelAxis, true), scaledEpsilon));
+        return Engine.TensorDivide(unit, Engine.TensorBroadcastTo(std, input._shape));
     }
 
     /// <summary>

@@ -52,50 +52,25 @@ internal static class VideoPixelInputDomain
 
         public void Validate<T>(Tensor<T> input, string ownerName, string portName)
         {
-            var operations = MathHelper.GetNumericOperations<T>();
-            for (int i = 0; i < input.Length; i++)
-            {
-                double value = operations.ToDouble(input[i]);
-                if (!double.IsNaN(value) && !double.IsInfinity(value)
-                    && value >= 0.0 && value <= 255.0)
-                    continue;
+            int bad = PixelRange.FirstOutOfRange(input, 255.0);
+            if (bad < 0)
+                return;
 
-                throw new InputContractViolationException(
-                    $"{ownerName}.{portName} requires raw pixel values in [0, 255], "
-                    + $"but element {i} is {value}.",
-                    portName);
-            }
+            double value = MathHelper.GetNumericOperations<T>().ToDouble(input[bad]);
+            throw new InputContractViolationException(
+                $"{ownerName}.{portName} requires raw pixel values in [0, 255], "
+                + $"but element {bad} is {value}.",
+                portName);
         }
 
         public Tensor<T> CreateValid<T>(int[] shape, Random random)
-        {
-            var tensor = new Tensor<T>(shape);
-            var operations = MathHelper.GetNumericOperations<T>();
-            for (int i = 0; i < tensor.Length; i++)
-                tensor[i] = operations.FromDouble(random.NextDouble() * 255.0);
-            return tensor;
-        }
+            => PixelRange.Uniform<T>(shape, random, 255.0);
 
         public Tensor<T> CreateNearby<T>(Tensor<T> input, double epsilon)
-        {
-            var nearby = new Tensor<T>(input.Shape.ToArray());
-            var operations = MathHelper.GetNumericOperations<T>();
-            for (int i = 0; i < input.Length; i++)
-            {
-                double value = Math.Min(Math.Max(operations.ToDouble(input[i]) + epsilon, 0.0), 255.0);
-                nearby[i] = operations.FromDouble(value);
-            }
-            return nearby;
-        }
+            => PixelRange.Shifted(input, epsilon, 255.0);
 
         public Tensor<T> CreateInvalid<T>(int[] shape)
-        {
-            var tensor = new Tensor<T>(shape);
-            var invalid = MathHelper.GetNumericOperations<T>().FromDouble(-1.0);
-            for (int i = 0; i < tensor.Length; i++)
-                tensor[i] = invalid;
-            return tensor;
-        }
+            => Tensor<T>.CreateDefault(shape, MathHelper.GetNumericOperations<T>().FromDouble(-1.0));
     }
 
     private sealed class NormalizedPixelProvider : IInputDomainProvider
@@ -109,49 +84,61 @@ internal static class VideoPixelInputDomain
 
         public void Validate<T>(Tensor<T> input, string ownerName, string portName)
         {
-            var operations = MathHelper.GetNumericOperations<T>();
-            for (int i = 0; i < input.Length; i++)
-            {
-                double value = operations.ToDouble(input[i]);
-                if (!double.IsNaN(value) && !double.IsInfinity(value)
-                    && value >= 0.0 && value <= 1.0)
-                    continue;
+            int bad = PixelRange.FirstOutOfRange(input, 1.0);
+            if (bad < 0)
+                return;
 
-                throw new InputContractViolationException(
-                    $"{ownerName}.{portName} requires normalized pixel values in [0, 1], "
-                    + $"but element {i} is {value}.",
-                    portName);
-            }
+            double value = MathHelper.GetNumericOperations<T>().ToDouble(input[bad]);
+            throw new InputContractViolationException(
+                $"{ownerName}.{portName} requires normalized pixel values in [0, 1], "
+                + $"but element {bad} is {value}.",
+                portName);
         }
 
         public Tensor<T> CreateValid<T>(int[] shape, Random random)
-        {
-            var tensor = new Tensor<T>(shape);
-            var operations = MathHelper.GetNumericOperations<T>();
-            for (int i = 0; i < tensor.Length; i++)
-                tensor[i] = operations.FromDouble(random.NextDouble());
-            return tensor;
-        }
+            => PixelRange.Uniform<T>(shape, random, 1.0);
 
         public Tensor<T> CreateNearby<T>(Tensor<T> input, double epsilon)
-        {
-            var nearby = new Tensor<T>(input.Shape.ToArray());
-            var operations = MathHelper.GetNumericOperations<T>();
-            for (int i = 0; i < input.Length; i++)
-            {
-                double value = Math.Min(Math.Max(operations.ToDouble(input[i]) + epsilon, 0.0), 1.0);
-                nearby[i] = operations.FromDouble(value);
-            }
-            return nearby;
-        }
+            => PixelRange.Shifted(input, epsilon, 1.0);
 
         public Tensor<T> CreateInvalid<T>(int[] shape)
+            => Tensor<T>.CreateDefault(shape, MathHelper.GetNumericOperations<T>().FromDouble(-1.0));
+    }
+
+    /// <summary>Element-wise pixel range checks and generators shared by the two providers.</summary>
+    private static class PixelRange
+    {
+        /// <summary>Index of the first element that is not a finite value in [0, <paramref name="high"/>], or -1.</summary>
+        public static int FirstOutOfRange<T>(Tensor<T> input, double high)
         {
-            var tensor = new Tensor<T>(shape);
-            var invalid = MathHelper.GetNumericOperations<T>().FromDouble(-1.0);
-            for (int i = 0; i < tensor.Length; i++)
-                tensor[i] = invalid;
-            return tensor;
+            var engine = AiDotNetEngine.Current;
+            var operations = MathHelper.GetNumericOperations<T>();
+            var flat = engine.Reshape(input, new[] { input.Length });
+            var outside = engine.TensorAdd(
+                engine.TensorLessThan(flat, operations.Zero), engine.TensorGreaterThan(flat, operations.FromDouble(high)));
+            var bad = engine.TensorWhere(engine.TensorIsFinite(flat), outside, engine.TensorOnesLike(flat));
+            var coordinates = engine.TensorNonzero(bad);
+            return coordinates.Length == 0 ? -1 : coordinates[0, 0];
+        }
+
+        /// <summary>One uniform draw per element, in element order, scaled to [0, <paramref name="high"/>).</summary>
+        public static Tensor<T> Uniform<T>(int[] shape, Random random, double high)
+        {
+            int length = 1;
+            foreach (int extent in shape) length *= extent;
+            var draws = new double[length];
+            for (int i = 0; i < length; i++)
+                draws[i] = random.NextDouble() * high;
+            return new Tensor<double>(draws, shape).Cast<T>();
+        }
+
+        /// <summary>The input shifted by <paramref name="epsilon"/> and clamped back into [0, <paramref name="high"/>].</summary>
+        public static Tensor<T> Shifted<T>(Tensor<T> input, double epsilon, double high)
+        {
+            var engine = AiDotNetEngine.Current;
+            var operations = MathHelper.GetNumericOperations<T>();
+            return engine.TensorClamp(
+                engine.TensorAddScalar(input, operations.FromDouble(epsilon)), operations.Zero, operations.FromDouble(high));
         }
     }
 }

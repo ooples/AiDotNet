@@ -666,7 +666,7 @@ public class VideoExtendedIntegrationTests
             inputHeight: 32, inputWidth: 32, inputDepth: 3, outputSize: 4);
         var options = new VideoCLIPVideoOptions
         {
-            HiddenDimension = 32,
+            HiddenDimension = 24, // a multiple of the text tower's 12 heads
             NumSpatialBlocks = 1,
             NumTemporalBlocks = 1,
             NumTextBlocks = 1,

@@ -321,12 +321,7 @@ public abstract partial class CausalModelBase<T> : ICausalModel<T>, IModelShape,
         if (effects.Length == 0)
             throw new InvalidOperationException("Treatment effect estimation returned empty results.");
 
-        T sum = NumOps.Zero;
-        for (int i = 0; i < effects.Length; i++)
-        {
-            sum = NumOps.Add(sum, effects[i]);
-        }
-        return NumOps.Divide(sum, NumOps.FromDouble(effects.Length));
+        return Engine.Mean(effects);
     }
 
     /// <summary>
@@ -418,34 +413,19 @@ public abstract partial class CausalModelBase<T> : ICausalModel<T>, IModelShape,
                 $"Number of samples in X ({x.Rows}) must match number of treatments ({treatment.Length}).");
         }
 
-        var propensityScores = EstimatePropensityScores(x);
+        var scores = EstimatePropensityScores(x).AsTensor();
 
-        T treatmentMin = NumOps.MaxValue;
-        T treatmentMax = NumOps.MinValue;
-        T controlMin = NumOps.MaxValue;
-        T controlMax = NumOps.MinValue;
+        // An empty group keeps the sentinels (MaxValue for its min, MinValue for its max), as before.
+        var treated = Engine.TensorEquals(treatment.AsTensor(), 1).Cast<T>();
+        var control = Engine.TensorSubtract(Engine.TensorOnesLike(treated), treated);
+        var lowFill = Tensor<T>.CreateDefault(scores._shape, NumOps.MinValue);
+        var highFill = Tensor<T>.CreateDefault(scores._shape, NumOps.MaxValue);
 
-        for (int i = 0; i < treatment.Length; i++)
-        {
-            T score = propensityScores[i];
-
-            if (treatment[i] == 1)
-            {
-                if (NumOps.Compare(score, treatmentMin) < 0)
-                    treatmentMin = score;
-                if (NumOps.Compare(score, treatmentMax) > 0)
-                    treatmentMax = score;
-            }
-            else
-            {
-                if (NumOps.Compare(score, controlMin) < 0)
-                    controlMin = score;
-                if (NumOps.Compare(score, controlMax) > 0)
-                    controlMax = score;
-            }
-        }
-
-        return (treatmentMin, treatmentMax, controlMin, controlMax);
+        return (
+            Engine.TensorMinValue(Engine.TensorWhere(treated, scores, highFill)),
+            Engine.TensorMaxValue(Engine.TensorWhere(treated, scores, lowFill)),
+            Engine.TensorMinValue(Engine.TensorWhere(control, scores, highFill)),
+            Engine.TensorMaxValue(Engine.TensorWhere(control, scores, lowFill)));
     }
 
     #endregion
@@ -470,22 +450,9 @@ public abstract partial class CausalModelBase<T> : ICausalModel<T>, IModelShape,
         }
 
         // Check treatment is binary
-        for (int i = 0; i < treatment.Length; i++)
-        {
-            if (treatment[i] != 0 && treatment[i] != 1)
-            {
-                throw new ArgumentException(
-                    $"Treatment indicators must be 0 or 1. Found {treatment[i]} at index {i}.");
-            }
-        }
+        int numTreated = CountTreatedRequiringBinary(treatment);
 
         // Check that both treatment groups have data
-        int numTreated = 0;
-        for (int i = 0; i < treatment.Length; i++)
-        {
-            numTreated += treatment[i];
-        }
-
         if (numTreated == 0)
         {
             throw new ArgumentException("No treated individuals in the data.");
@@ -495,6 +462,27 @@ public abstract partial class CausalModelBase<T> : ICausalModel<T>, IModelShape,
         {
             throw new ArgumentException("No control individuals in the data.");
         }
+    }
+
+    /// <summary>
+    /// The number of treated subjects, after checking every indicator is 0 or 1 (the first offending index is
+    /// reported otherwise).
+    /// </summary>
+    private protected int CountTreatedRequiringBinary(Vector<int> treatment)
+    {
+        var assignment = treatment.AsTensor();
+        var isTreated = Engine.TensorEquals(assignment, 1);
+        var isControl = Engine.TensorEquals(assignment, 0);
+        int numTreated = Engine.TensorCountNonzero(isTreated);
+        if (numTreated + Engine.TensorCountNonzero(isControl) != treatment.Length)
+        {
+            var invalid = Engine.TensorNonzero(Engine.TensorEquals(Engine.TensorAdd(isTreated, isControl), 0));
+            int i = invalid[0, 0];
+            throw new ArgumentException(
+                $"Treatment indicators must be 0 or 1. Found {treatment[i]} at index {i}.");
+        }
+
+        return numTreated;
     }
 
     #endregion
@@ -637,13 +625,7 @@ public abstract partial class CausalModelBase<T> : ICausalModel<T>, IModelShape,
         var supplied = System.Threading.Interlocked.Exchange(ref _suppliedTreatment, null);
         if (supplied is not null && supplied.Length == y.Length && x.Rows == y.Length)
         {
-            var treatmentAsT = new Vector<T>(supplied.Length);
-            for (int i = 0; i < supplied.Length; i++)
-            {
-                treatmentAsT[i] = NumOps.FromDouble(supplied[i]);
-            }
-
-            Fit(x, treatmentAsT, y);
+            Fit(x, supplied.AsTensor().Cast<T>().ToVector(), y);
             return;
         }
 
@@ -678,16 +660,9 @@ public abstract partial class CausalModelBase<T> : ICausalModel<T>, IModelShape,
                 nameof(y));
         }
 
-        int n = x.Rows;
-        int p = x.Columns - 1;
-        var features = new Matrix<T>(n, p);
-        var treatment = new Vector<T>(n);
-        for (int i = 0; i < n; i++)
-        {
-            treatment[i] = x[i, 0];
-            for (int j = 0; j < p; j++)
-                features[i, j] = x[i, j + 1];
-        }
+        var layout = Tensor<T>.FromMatrix(x);
+        var treatment = Engine.Reshape(Engine.TensorNarrow(layout, 1, 0, 1), new[] { x.Rows }).ToVector();
+        var features = Engine.TensorNarrow(layout, 1, 1, x.Columns - 1).ToMatrix();
 
         Fit(features, treatment, y);
     }
@@ -710,16 +685,7 @@ public abstract partial class CausalModelBase<T> : ICausalModel<T>, IModelShape,
 
         if (input.Columns == NumFeatures + 1)
         {
-            int n = input.Rows;
-            var covariates = new Matrix<T>(n, NumFeatures);
-            for (int i = 0; i < n; i++)
-            {
-                for (int j = 0; j < NumFeatures; j++)
-                {
-                    covariates[i, j] = input[i, j + 1];
-                }
-            }
-            return covariates;
+            return DropLeadingColumn(input);
         }
 
         throw new ArgumentException(
@@ -973,8 +939,11 @@ public abstract partial class CausalModelBase<T> : ICausalModel<T>, IModelShape,
         var random = RandomSeed.HasValue
             ? Tensors.Helpers.RandomHelper.CreateSeededRandom(RandomSeed.Value)
             : Tensors.Helpers.RandomHelper.CreateSecureRandom();
-        var estimates = new List<double>();
+        var estimates = new List<T>();
         int n = x.Rows;
+        var rows = Tensor<T>.FromMatrix(x);
+        var assignment = treatment.AsTensor();
+        var outcomes = outcome.AsTensor();
 
         int attempts = 0;
         int maxAttempts = numBootstraps * 5;
@@ -982,7 +951,7 @@ public abstract partial class CausalModelBase<T> : ICausalModel<T>, IModelShape,
         {
             attempts++;
 
-            // Bootstrap sample
+            // Bootstrap sample, drawn in the same order as before so a seed reproduces it.
             var indices = new int[n];
             for (int i = 0; i < n; i++)
             {
@@ -990,24 +959,14 @@ public abstract partial class CausalModelBase<T> : ICausalModel<T>, IModelShape,
             }
 
             // Create bootstrapped data
-            var xBoot = new Matrix<T>(n, x.Columns);
-            var treatmentBoot = new Vector<int>(n);
-            var outcomeBoot = new Vector<T>(n);
-
-            for (int i = 0; i < n; i++)
-            {
-                for (int j = 0; j < x.Columns; j++)
-                {
-                    xBoot[i, j] = x[indices[i], j];
-                }
-                treatmentBoot[i] = treatment[indices[i]];
-                outcomeBoot[i] = outcome[indices[i]];
-            }
+            var draw = new Tensor<int>(indices, new[] { n });
+            var xBoot = Engine.TensorIndexSelect(rows, draw, 0).ToMatrix();
+            var treatmentBoot = Engine.TensorIndexSelect(assignment, draw, 0).ToVector();
+            var outcomeBoot = Engine.TensorIndexSelect(outcomes, draw, 0).ToVector();
 
             try
             {
-                T estimate = estimator(xBoot, treatmentBoot, outcomeBoot);
-                estimates.Add(NumOps.ToDouble(estimate));
+                estimates.Add(estimator(xBoot, treatmentBoot, outcomeBoot));
             }
             catch (InvalidOperationException)
             {
@@ -1029,30 +988,40 @@ public abstract partial class CausalModelBase<T> : ICausalModel<T>, IModelShape,
             return NumOps.Zero;
         }
 
-        // Calculate standard deviation of estimates
-        double mean = estimates.Average();
-        double sumSqDiff = estimates.Sum(e => (e - mean) * (e - mean));
-        double variance = sumSqDiff / (estimates.Count - 1);
-        double se = Math.Sqrt(variance);
-
-        return NumOps.FromDouble(se);
+        // Standard deviation of the estimates (n - 1 denominator).
+        var values = new Vector<T>(estimates);
+        return SampleStandardDeviation(values, Engine.Mean(values));
     }
 
     /// <summary>
-    /// Fits a simple logistic regression for propensity score estimation.
+    /// Fits a logistic regression for propensity score estimation.
     /// </summary>
+    /// <param name="x">Covariates, one row per subject.</param>
+    /// <param name="treatment">1 for treated subjects, 0 for controls.</param>
+    /// <param name="maxIterations">Cap on Newton (IRLS) iterations; the fit usually converges in under ten.</param>
+    /// <param name="inverseRegularization">
+    /// Inverse L2 strength C, as in scikit-learn's <c>LogisticRegression</c>: the fit minimises
+    /// <c>C·Σ log-loss + ½‖β‖²</c> with the intercept unpenalised. The default 1.0 is scikit-learn's default, which is
+    /// the propensity model DoWhy uses.
+    /// </param>
+    /// <returns>The intercept followed by one coefficient per covariate.</returns>
     /// <remarks>
     /// <para>
     /// <b>For Beginners:</b> Logistic regression predicts the probability of treatment
     /// based on covariates. The coefficients tell us how each feature affects the
     /// likelihood of receiving treatment.
     /// </para>
+    /// <para>
+    /// The fit is solved to convergence with Newton's method rather than a fixed number of small gradient steps, so
+    /// the propensity scores do not depend on the scale of the covariates (100 steps of 0.1 left raw covariates such as
+    /// ages far from the maximum-likelihood fit).
+    /// </para>
     /// </remarks>
     protected Vector<T> FitLogisticRegression(
         Matrix<T> x,
         Vector<int> treatment,
         int maxIterations = 100,
-        double learningRate = 0.1)
+        double inverseRegularization = 1.0)
     {
         int n = x.Rows;
         int p = x.Columns;
@@ -1061,47 +1030,59 @@ public abstract partial class CausalModelBase<T> : ICausalModel<T>, IModelShape,
             throw new ArgumentException("Training data cannot be empty (n == 0).", nameof(x));
         if (treatment.Length != n)
             throw new ArgumentException($"Treatment vector length ({treatment.Length}) must match data rows ({n}).", nameof(treatment));
+        if (!(inverseRegularization > 0))
+            throw new ArgumentOutOfRangeException(nameof(inverseRegularization), "The inverse regularization strength must be positive.");
 
-        // Initialize coefficients to zero
-        var coefficients = new Vector<T>(p + 1); // +1 for intercept
+        // Work on columns scaled into [-1, 1] (so X'WX cannot overflow a narrow T) with the whole objective divided by
+        // n; the penalty ½Σβ² becomes ½Σ v²/s² in the scaled coefficients v = β·s.
+        var columnScale = ColumnScale(Tensor<T>.FromMatrix(x));
+        var design = Engine.TensorConcatenate(new[]
+        {
+            Tensor<T>.CreateDefault(new[] { n, 1 }, NumOps.One),
+            Engine.TensorDivide(Tensor<T>.FromMatrix(x), Engine.TensorBroadcastTo(columnScale, new[] { n, p })),
+        }, 1);
+        var designTransposed = Engine.TensorTranspose(design);
+        var labels = Engine.Reshape(treatment.AsTensor().Cast<T>(), new[] { n, 1 });
 
+        T c = NumOps.FromDouble(inverseRegularization);
+        T invN = NumOps.FromDouble(1.0 / n);
+        var inverseScaleSquared = Engine.TensorReciprocal(Engine.TensorSquare(Engine.Reshape(columnScale, new[] { p })));
+        var penaltyDiagonal = Engine.TensorMultiplyScalar(Engine.TensorConcatenate(new[]
+        {
+            new Tensor<T>(new[] { 1 }),
+            inverseScaleSquared,
+        }, 0), invN);
+        var penalty = Engine.TensorDiag(penaltyDiagonal);
+        T tolerance = NumOps.FromDouble(Math.Max(1e-10, Math.Pow(2.0, -NumOps.PrecisionBits)));
+
+        var coefficients = new Tensor<T>(new[] { p + 1, 1 });
+        T scaledC = NumOps.Multiply(c, invN);
         for (int iter = 0; iter < maxIterations; iter++)
         {
-            // Compute predicted probabilities
-            var probs = new Vector<T>(n);
-            for (int i = 0; i < n; i++)
-            {
-                double logit = NumOps.ToDouble(coefficients[0]); // intercept
-                for (int j = 0; j < p; j++)
-                {
-                    logit += NumOps.ToDouble(coefficients[j + 1]) * NumOps.ToDouble(x[i, j]);
-                }
-                probs[i] = NumOps.FromDouble(Sigmoid(logit));
-            }
+            var probabilities = Engine.TensorSigmoid(Engine.TensorMatMul(design, coefficients));
+            var weights = Engine.TensorMultiply(probabilities, Engine.TensorSubtract(Engine.TensorOnesLike(probabilities), probabilities));
 
-            // Compute gradient
-            var gradient = new Vector<T>(p + 1);
-            for (int i = 0; i < n; i++)
-            {
-                double error = treatment[i] - NumOps.ToDouble(probs[i]);
+            var gradient = Engine.TensorAdd(
+                Engine.TensorMultiplyScalar(Engine.TensorMatMul(designTransposed, Engine.TensorSubtract(probabilities, labels)), scaledC),
+                Engine.TensorMatMul(penalty, coefficients));
+            var weightedDesign = Engine.TensorMultiply(design, Engine.TensorBroadcastTo(weights, new[] { n, p + 1 }));
+            var hessian = Engine.TensorAdd(
+                Engine.TensorMultiplyScalar(Engine.TensorMatMul(designTransposed, weightedDesign), scaledC),
+                penalty);
 
-                gradient[0] = NumOps.Add(gradient[0], NumOps.FromDouble(error)); // intercept
-                for (int j = 0; j < p; j++)
-                {
-                    gradient[j + 1] = NumOps.Add(gradient[j + 1],
-                        NumOps.FromDouble(error * NumOps.ToDouble(x[i, j])));
-                }
-            }
-
-            // Update coefficients
-            for (int j = 0; j <= p; j++)
-            {
-                coefficients[j] = NumOps.Add(coefficients[j],
-                    NumOps.FromDouble(learningRate * NumOps.ToDouble(gradient[j]) / n));
-            }
+            var step = LinalgDispatch<T>.Solve(hessian, gradient);
+            coefficients = Engine.TensorSubtract(coefficients, step);
+            if (Engine.TensorCountNonzero(Engine.TensorGreaterThan(Engine.TensorAbs(step), tolerance)) == 0)
+                break;
         }
 
-        return coefficients;
+        // Back to the original covariate scale: β = v / s (the intercept is unscaled).
+        var unscale = Engine.TensorConcatenate(new[]
+        {
+            Tensor<T>.CreateDefault(new[] { 1 }, NumOps.One),
+            Engine.Reshape(columnScale, new[] { p }),
+        }, 0);
+        return Engine.TensorDivide(Engine.Reshape(coefficients, new[] { p + 1 }), unscale).ToVector();
     }
 
     /// <summary>
@@ -1109,37 +1090,214 @@ public abstract partial class CausalModelBase<T> : ICausalModel<T>, IModelShape,
     /// </summary>
     protected Vector<T> PredictPropensityWithCoefficients(Matrix<T> x, Vector<T> coefficients)
     {
-        int n = x.Rows;
-        int p = x.Columns;
-        var probs = new Vector<T>(n);
-
-        for (int i = 0; i < n; i++)
-        {
-            double logit = NumOps.ToDouble(coefficients[0]); // intercept
-            for (int j = 0; j < p; j++)
-            {
-                logit += NumOps.ToDouble(coefficients[j + 1]) * NumOps.ToDouble(x[i, j]);
-            }
-            probs[i] = NumOps.FromDouble(Sigmoid(logit));
-        }
-
-        return probs;
+        var slopes = coefficients.GetSubVector(1, x.Columns);
+        return Engine.Sigmoid(PredictLinear(x, slopes, coefficients[0]));
     }
 
     /// <summary>
-    /// Sigmoid function for logistic regression.
+    /// Fits ridge regression, the base learner of the meta-learners, solved exactly.
     /// </summary>
-    private static double Sigmoid(double x)
+    /// <param name="x">Covariates, one row per subject.</param>
+    /// <param name="y">Targets.</param>
+    /// <param name="lambda">L2 strength on the slopes (the intercept is unpenalised).</param>
+    /// <returns>The slopes and intercept minimising <c>(1/2n)‖Xw + b − y‖² + (λ/2)‖w‖²</c>.</returns>
+    /// <remarks>
+    /// This is the minimiser that the earlier fixed-step gradient descent was approaching; solving it directly means
+    /// the fit no longer diverges (or stalls) with the scale of the covariates. It equals scikit-learn's
+    /// <c>Ridge(alpha = n·λ)</c>.
+    /// </remarks>
+    private protected (Vector<T> Weights, T Bias) FitRidgeRegression(Matrix<T> x, Vector<T> y, double lambda)
     {
-        if (x >= 0)
+        int n = x.Rows;
+        int p = x.Columns;
+        if (n == 0)
+            throw new ArgumentException("Training data cannot be empty (n == 0).", nameof(x));
+        if (y.Length != n)
+            throw new ArgumentException($"Target length ({y.Length}) must match data rows ({n}).", nameof(y));
+        if (lambda < 0)
+            throw new ArgumentOutOfRangeException(nameof(lambda), "The L2 strength cannot be negative.");
+
+        var target = y.AsTensor();
+        T targetMean = Engine.TensorMean(target);
+        if (p == 0)
+            return (new Vector<T>(0), targetMean);
+
+        var features = Tensor<T>.FromMatrix(x);
+        var columnMean = Engine.ReduceMean(features, new[] { 0 }, true);
+        var centered = Engine.TensorSubtract(features, Engine.TensorBroadcastTo(columnMean, new[] { n, p }));
+        var centeredTarget = Engine.TensorSubtractScalar(target, targetMean);
+
+        // Pre-scale so nothing squared can overflow a narrow T: X_c = √n·Z·S and y_c = √n·m·t, so the slopes are
+        // w = m·S⁻¹v with (Z'Z + λS⁻²)v = Z't.
+        var columnScale = ColumnScale(centered);
+        T targetScale = PeakMagnitude(centeredTarget);
+        T rootN = NumOps.Sqrt(NumOps.FromDouble(n));
+        var z = Engine.TensorDivideScalar(Engine.TensorDivide(centered, Engine.TensorBroadcastTo(columnScale, new[] { n, p })), rootN);
+        var t = Engine.Reshape(Engine.TensorDivideScalar(Engine.TensorDivideScalar(centeredTarget, targetScale), rootN), new[] { n, 1 });
+        var zTransposed = Engine.TensorTranspose(z);
+
+        var scale = Engine.Reshape(columnScale, new[] { p });
+        var ridge = Engine.TensorDiag(Engine.TensorMultiplyScalar(Engine.TensorReciprocal(Engine.TensorSquare(scale)), NumOps.FromDouble(lambda)));
+        var v = LinalgDispatch<T>.Solve(Engine.TensorAdd(Engine.TensorMatMul(zTransposed, z), ridge), Engine.TensorMatMul(zTransposed, t));
+
+        var weights = Engine.TensorMultiplyScalar(Engine.TensorDivide(Engine.Reshape(v, new[] { p }), scale), targetScale).ToVector();
+        T bias = NumOps.Subtract(targetMean, Engine.DotProduct(Engine.Reshape(columnMean, new[] { p }).ToVector(), weights));
+        return (weights, bias);
+    }
+
+    /// <summary>Linear predictions <c>X·w + b</c>.</summary>
+    private protected Vector<T> PredictLinear(Matrix<T> x, Vector<T> weights, T bias)
+        => Engine.TensorAddScalar(Engine.MatrixVectorMultiply(x, weights).AsTensor(), bias).ToVector();
+
+    /// <summary>Hard 0/1 treatment indicators: 1 where the value exceeds 0.5.</summary>
+    private protected Vector<int> BinarizeTreatment(Vector<T> treatment)
+        => Engine.TensorGreaterThan(treatment.AsTensor(), NumOps.FromDouble(0.5)).Cast<int>().ToVector();
+
+    /// <summary>Ascending row indices whose treatment equals <paramref name="group"/>.</summary>
+    private protected Tensor<int> GroupIndices(Vector<int> treatment, int group)
+    {
+        var coordinates = Engine.TensorNonzero(Engine.TensorEquals(treatment.AsTensor(), group));
+        return Engine.Reshape(coordinates, new[] { coordinates.Length });
+    }
+
+    /// <summary>The rows of <paramref name="x"/> at <paramref name="rows"/>, in that order.</summary>
+    private protected Matrix<T> SelectRows(Matrix<T> x, Tensor<int> rows)
+        => Engine.TensorIndexSelect(Tensor<T>.FromMatrix(x), rows, 0).ToMatrix();
+
+    /// <summary>The entries of <paramref name="values"/> at <paramref name="indices"/>, in that order.</summary>
+    private protected Vector<T> SelectElements(Vector<T> values, Tensor<int> indices)
+        => Engine.TensorIndexSelect(values.AsTensor(), indices, 0).ToVector();
+
+    /// <summary>Every column but the first (the [treatment | covariates] layout's covariates).</summary>
+    private protected Matrix<T> DropLeadingColumn(Matrix<T> input)
+        => Engine.TensorNarrow(Tensor<T>.FromMatrix(input), 1, 1, input.Columns - 1).ToMatrix();
+
+    /// <summary>
+    /// The mean of <paramref name="values"/> and its standard error, sd/√n with the n − 1 sample deviation
+    /// (0 for fewer than two values).
+    /// </summary>
+    private protected (T Mean, T StandardError) MeanWithStandardError(Vector<T> values)
+    {
+        T mean = Engine.Mean(values);
+        T sd = SampleStandardDeviation(values, mean);
+        return (mean, NumOps.Divide(sd, NumOps.Sqrt(NumOps.FromDouble(values.Length))));
+    }
+
+    /// <summary>
+    /// Sample standard deviation (n − 1 denominator) of <paramref name="values"/> about <paramref name="mean"/>; 0 for
+    /// fewer than two values, NaN when the mean is NaN. Deviations are scaled by their peak before squaring.
+    /// </summary>
+    private protected T SampleStandardDeviation(Vector<T> values, T mean)
+    {
+        int n = values.Length;
+        if (NumOps.IsNaN(mean))
+            return mean;
+        if (n < 2)
+            return NumOps.Zero;
+
+        var deviations = Engine.TensorSubtractScalar(values.AsTensor(), mean);
+        T peak = Engine.TensorMaxValue(Engine.TensorAbs(deviations));
+        if (!NumOps.GreaterThan(peak, NumOps.Zero))
+            return NumOps.Zero;
+
+        T sumSquares = Engine.TensorSum(Engine.TensorSquare(Engine.TensorDivideScalar(deviations, peak)));
+        return NumOps.Multiply(peak, NumOps.Sqrt(NumOps.Divide(sumSquares, NumOps.FromDouble(n - 1))));
+    }
+
+    /// <summary>Per-column peak magnitude of a [n, p] tensor as [1, p], with 1 for an all-zero column.</summary>
+    private Tensor<T> ColumnScale(Tensor<T> columns)
+    {
+        var peak = Engine.ReduceMax(Engine.TensorAbs(columns), new[] { 0 }, true);
+        return Engine.TensorWhere(Engine.TensorEquals(peak, NumOps.Zero), Engine.TensorOnesLike(peak), peak);
+    }
+
+    /// <summary>
+    /// Σ w·v / Σ w for non-negative weights, both scaled by their peaks first so the products cannot overflow a
+    /// narrow T. <paramref name="hasWeight"/> is false (and the result zero) when every weight is zero.
+    /// </summary>
+    private protected T WeightedMean(Tensor<T> values, Tensor<T> weights, out bool hasWeight)
+    {
+        T weightPeak = Engine.TensorMaxValue(Engine.TensorAbs(weights));
+        hasWeight = NumOps.GreaterThan(weightPeak, NumOps.Zero);
+        if (!hasWeight)
+            return NumOps.Zero;
+
+        T valuePeak = PeakMagnitude(values);
+        var w = Engine.TensorDivideScalar(weights, weightPeak);
+        var v = Engine.TensorDivideScalar(values, valuePeak);
+        return NumOps.Multiply(valuePeak, NumOps.Divide(Engine.TensorSum(Engine.TensorMultiply(w, v)), Engine.TensorSum(w)));
+    }
+
+    /// <summary>
+    /// Treatment values as 0/1 ints, rejecting anything more than 1e-6 from 0 or 1.
+    /// </summary>
+    private protected Vector<int> RoundBinaryTreatment(Vector<T> treatment)
+    {
+        var raw = treatment.AsTensor();
+        var rounded = Engine.TensorRound(raw);
+        var offInteger = Engine.TensorGreaterThan(Engine.TensorAbs(Engine.TensorSubtract(raw, rounded)), NumOps.FromDouble(1e-6));
+        var binary = Engine.TensorAdd(Engine.TensorEquals(rounded, NumOps.Zero), Engine.TensorEquals(rounded, NumOps.One));
+        if (Engine.TensorCountNonzero(offInteger) > 0 || Engine.TensorCountNonzero(binary) != treatment.Length)
         {
-            return 1.0 / (1.0 + Math.Exp(-x));
+            throw new ArgumentException("Treatment indicators must be 0 or 1.", nameof(treatment));
         }
-        else
+
+        return rounded.Cast<int>().ToVector();
+    }
+
+    /// <summary>
+    /// For each query propensity score, the reference outcomes (rows where <paramref name="referenceMask"/> is 1)
+    /// averaged with Gaussian weights <c>exp(-(e_query - e_ref)² / 0.1)</c>, with the weight sums; the mean is 0
+    /// where no reference row carries weight. Queries are processed in blocks so the [block, n] kernel stays bounded.
+    /// </summary>
+    private protected (Tensor<T> Mean, Tensor<T> SumWeight) PropensityKernelMean(
+        Tensor<T> queryScores, Tensor<T> referenceScores, Tensor<T> referenceMask, Vector<T> outcome)
+    {
+        int m = queryScores.Length;
+        int n = referenceScores.Length;
+        if (m == 0)
+            return (new Tensor<T>(new[] { 0 }), new Tensor<T>(new[] { 0 }));
+
+        var inGroup = Engine.Reshape(referenceMask, new[] { 1, n });
+        T outcomeScale = PeakMagnitude(outcome.AsTensor());
+        var scaledOutcome = Engine.Reshape(Engine.TensorDivideScalar(outcome.AsTensor(), outcomeScale), new[] { n, 1 });
+        var reference = Engine.Reshape(referenceScores, new[] { 1, n });
+        T bandwidth = NumOps.FromDouble(0.1);
+
+        int blockRows = Math.Max(1, (1 << 22) / Math.Max(1, n));
+        var weightBlocks = new List<Tensor<T>>();
+        var outcomeBlocks = new List<Tensor<T>>();
+        for (int start = 0; start < m; start += blockRows)
         {
-            double exp = Math.Exp(x);
-            return exp / (1.0 + exp);
+            int rows = Math.Min(blockRows, m - start);
+            var query = Engine.Reshape(Engine.TensorNarrow(queryScores, 0, start, rows), new[] { rows, 1 });
+            var distance = Engine.TensorSubtract(
+                Engine.TensorBroadcastTo(query, new[] { rows, n }), Engine.TensorBroadcastTo(reference, new[] { rows, n }));
+            var kernel = Engine.TensorMultiply(
+                Engine.TensorExp(Engine.TensorNegate(Engine.TensorDivideScalar(Engine.TensorSquare(distance), bandwidth))),
+                Engine.TensorBroadcastTo(inGroup, new[] { rows, n }));
+
+            weightBlocks.Add(Engine.ReduceSum(kernel, new[] { 1 }, false));
+            outcomeBlocks.Add(Engine.Reshape(Engine.TensorMatMul(kernel, scaledOutcome), new[] { rows }));
         }
+
+        var sumWeight = Engine.TensorConcatenate(weightBlocks.ToArray(), 0);
+        var sumOutcome = Engine.TensorConcatenate(outcomeBlocks.ToArray(), 0);
+        var weighted = Engine.TensorGreaterThan(sumWeight, NumOps.Zero);
+        var safeWeight = Engine.TensorWhere(weighted, sumWeight, Engine.TensorOnesLike(sumWeight));
+        var mean = Engine.TensorMultiply(weighted, Engine.TensorMultiplyScalar(Engine.TensorDivide(sumOutcome, safeWeight), outcomeScale));
+        return (mean, sumWeight);
+    }
+
+    /// <summary>A [length] tensor holding <paramref name="value"/> everywhere.</summary>
+    private protected static Vector<T> Constant(int length, T value)
+        => Tensor<T>.CreateDefault(new[] { length }, value).ToVector();
+
+    /// <summary>Peak magnitude of a tensor, or 1 when it is all zeros.</summary>
+    private protected T PeakMagnitude(Tensor<T> values)
+    {
+        T peak = Engine.TensorMaxValue(Engine.TensorAbs(values));
+        return NumOps.GreaterThan(peak, NumOps.Zero) ? peak : NumOps.One;
     }
 
     #endregion

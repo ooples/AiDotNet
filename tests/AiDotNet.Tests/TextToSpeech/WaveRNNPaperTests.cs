@@ -1,5 +1,6 @@
 using System;
 using System.Linq;
+using System.Reflection;
 using System.Threading.Tasks;
 using AiDotNet.Enums;
 using AiDotNet.NeuralNetworks;
@@ -107,6 +108,34 @@ public class WaveRNNPaperTests
         for (int i = 0; i < 6; i++) model.Train(mel, audio);
         // Z = 0.5 of each gate's 4×4 blocks after S = 4 steps.
         Assert.Equal(0.5, model.RecurrentSparsity, 6);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task PruningMask_IsBuiltOutsideTheCallersArena()
+    {
+        // The mask is reapplied on every step until the next pruning interval, but the facade trains inside a
+        // TensorArena that is reset between steps. A mask rented from that arena (the old code) is reissued after the
+        // reset, so the next step's allocations overwrite it and prune unintended weights.
+        await Task.Yield();
+        var model = CreateModel(sparsity: 0.5);
+        var afterStep = typeof(WaveRNN<double>).GetMethod("AfterTrainingStep", BindingFlags.Instance | BindingFlags.NonPublic);
+        var maskField = typeof(WaveRNN<double>).GetField("_mask", BindingFlags.Instance | BindingFlags.NonPublic);
+        Assert.NotNull(afterStep);
+        Assert.NotNull(maskField);
+
+        using var arena = AiDotNet.Tensors.Helpers.TensorArena.Create();
+        afterStep.Invoke(model, new object[] { 2 });
+        var mask = Assert.IsType<Tensor<double>>(maskField.GetValue(model));
+        var before = mask.ToArray();
+        Assert.False(AiDotNet.Tensors.Helpers.TensorArena.IsArenaIssued(mask.GetDataArray()));
+
+        // A step boundary, then the next step's allocations of the mask's size
+        arena.Reset();
+        var engine = AiDotNetEngine.Current;
+        for (int i = 0; i < 4; i++)
+            engine.TensorAddScalar(Tensor<double>.CreateDefault(mask.Shape.ToArray(), 0.0), 7.0);
+
+        Assert.Equal(before, mask.ToArray());
     }
 
     [Fact(Timeout = 120000)]
