@@ -119,6 +119,21 @@ public partial class XLearner<T> : CausalModelBase<T>
     public double Lambda { get; }
 
     /// <summary>
+    /// The removed gradient-descent signature, kept only so that a positional call such as <c>new XLearner&lt;T&gt;(100)</c>
+    /// fails to compile instead of silently binding the integer to <c>lambda</c>.
+    /// </summary>
+    /// <param name="maxIterations">No longer used: the outcome models are solved exactly.</param>
+    /// <remarks>
+    /// Only the one-integer form needs a guard: the old two- and three-argument calls match no constructor and
+    /// already fail to compile.
+    /// </remarks>
+    [Obsolete("The iteration count and learning rate are gone: the outcome models are ridge regressions solved " +
+        "exactly. Use XLearner(lambda: ...).", error: true)]
+    public XLearner(int maxIterations) : this()
+    {
+    }
+
+    /// <summary>
     /// Creates a new X-Learner.
     /// </summary>
     /// <param name="lambda">L2 regularization of the ridge outcome and effect models (default: 0.01).</param>

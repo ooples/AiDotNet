@@ -87,6 +87,21 @@ public partial class SLearner<T> : CausalModelBase<T>
     public double Lambda { get; }
 
     /// <summary>
+    /// The removed gradient-descent signature, kept only so that a positional call such as <c>new SLearner&lt;T&gt;(100)</c>
+    /// fails to compile instead of silently binding the integer to <c>lambda</c>.
+    /// </summary>
+    /// <param name="maxIterations">No longer used: the outcome models are solved exactly.</param>
+    /// <remarks>
+    /// Only the one-integer form needs a guard: the old two- and three-argument calls match no constructor and
+    /// already fail to compile.
+    /// </remarks>
+    [Obsolete("The iteration count and learning rate are gone: the outcome models are ridge regressions solved " +
+        "exactly. Use SLearner(lambda: ...).", error: true)]
+    public SLearner(int maxIterations) : this()
+    {
+    }
+
+    /// <summary>
     /// Creates a new S-Learner.
     /// </summary>
     /// <param name="lambda">L2 regularization of the ridge outcome model (default: 0.01).</param>
@@ -110,13 +125,16 @@ public partial class SLearner<T> : CausalModelBase<T>
         int p = features.Columns;
         NumFeatures = p;
 
-        ValidateCausalData(features, BinarizeTreatment(treatment), outcome);
+        // Fit the same 0/1 indicator that validation accepts and prediction evaluates at; fitting the raw magnitudes
+        // (e.g. 0.2 and 0.8) would scale the treatment coefficient away from the 0-to-1 contrast.
+        var indicator = BinarizeTreatment(treatment);
+        ValidateCausalData(features, indicator, outcome);
 
         // Augmented feature matrix with treatment as the last column
         var augmentedFeatures = Engine.TensorConcatenate(new[]
         {
             Tensor<T>.FromMatrix(features),
-            Engine.Reshape(treatment.AsTensor(), new[] { n, 1 }),
+            Engine.Reshape(indicator.AsTensor().Cast<T>(), new[] { n, 1 }),
         }, 1).ToMatrix();
 
         var (weights, bias) = FitRidgeRegression(augmentedFeatures, outcome, Lambda);

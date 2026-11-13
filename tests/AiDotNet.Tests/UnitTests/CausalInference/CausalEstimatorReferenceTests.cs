@@ -180,4 +180,52 @@ public class CausalEstimatorReferenceTests
             Assert.Equal(N / 2, structureRows.Length + estimationRows.Length);
         }
     }
+
+    [Fact]
+    public void CausalForest_SameSeed_DrawsTheSameSamples()
+    {
+        // Disjointness alone would hold if the seed were ignored; two instances with one seed must agree draw by draw.
+        var first = new CausalForest<double>(numTrees: 1, honest: true, honestFraction: 0.5, seed: 5);
+        var second = new CausalForest<double>(numTrees: 1, honest: true, honestFraction: 0.5, seed: 5);
+
+        for (int draw = 0; draw < 20; draw++)
+        {
+            var (firstStructure, firstEstimation) = first.DrawTreeSamples(N);
+            var (secondStructure, secondEstimation) = second.DrawTreeSamples(N);
+            Assert.Equal(firstStructure.ToArray(), secondStructure.ToArray());
+            Assert.Equal(firstEstimation.ToArray(), secondEstimation.ToArray());
+        }
+    }
+
+    [Fact]
+    public void CausalForest_PartitionsTooSmallForBothGroups_AreRejected()
+    {
+        // 40 rows at sampleFraction 0.05 is a 2-row subsample, one row per honest partition: no partition can hold a
+        // treated and a control row, and every tree used to predict exactly zero.
+        var (x, t, y) = Data();
+        var forest = new CausalForest<double>(numTrees: 2, honest: true, honestFraction: 0.5, seed: 5, sampleFraction: 0.05);
+
+        Assert.Throws<ArgumentException>(() => forest.Fit(x, t, y));
+    }
+
+    [Fact]
+    public void SLearner_FitsTheBinarizedIndicator()
+    {
+        // Treatment given as 0.2 / 0.8 is control / treated. The outcome jumps by 6 between the groups, so the
+        // effect is 6; fitting the raw 0.2/0.8 magnitudes made the treatment coefficient 6 / 0.6 = 10.
+        var x = new Matrix<double>(N, 1);
+        var treatment = new Vector<double>(N);
+        var outcome = new Vector<double>(N);
+        for (int i = 0; i < N; i++)
+        {
+            x[i, 0] = i % 3;
+            treatment[i] = i % 2 == 0 ? 0.2 : 0.8;
+            outcome[i] = i % 2 == 0 ? 0.0 : 6.0;
+        }
+
+        var learner = new SLearner<double>(lambda: 1e-9);
+        learner.Fit(x, treatment, outcome);
+
+        Assert.Equal(6.0, learner.PredictTreatmentEffect(x).Average(), 4);
+    }
 }

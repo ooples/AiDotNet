@@ -252,9 +252,22 @@ public partial class CausalForest<T> : CausalModelBase<T>
             Engine.TensorEquals(treatment.AsTensor(), 1).Cast<T>(),
             outcome.AsTensor());
 
+        // Every tree estimates a treated-minus-control contrast from each partition of its subsample, so each
+        // partition needs room for both groups; a smaller one made every tree predict exactly zero.
+        int size = TreeSampleSize(n);
+        int structureSize = _honest ? (int)(size * _honestFraction) : size;
+        if (structureSize < 2 || size - structureSize < (_honest ? 2 : 0))
+        {
+            throw new ArgumentException(
+                $"Each tree subsamples {size} of {n} row(s) (sampleFraction {_sampleFraction}), split " +
+                $"{structureSize}/{size - structureSize} into structure/estimation rows; every partition needs at " +
+                "least 2 rows to hold both a treated and a control row. Use more rows or a larger sampleFraction.",
+                nameof(x));
+        }
+
         for (int t = 0; t < _numTrees; t++)
         {
-            var (structureIndices, estimationIndices) = DrawTreeSamples(n);
+            var (structureIndices, estimationIndices) = DrawUsableTreeSamples(data, n);
 
             CausalTree tree;
             if (_honest)
@@ -279,7 +292,7 @@ public partial class CausalForest<T> : CausalModelBase<T>
     /// </summary>
     internal (Tensor<int> Structure, Tensor<int> Estimation) DrawTreeSamples(int n)
     {
-        int size = Math.Max(1, Math.Min(n, (int)(n * _sampleFraction)));
+        int size = TreeSampleSize(n);
         var permutation = Enumerable.Range(0, n).ToArray();
         for (int i = 0; i < size; i++)
         {
@@ -291,6 +304,37 @@ public partial class CausalForest<T> : CausalModelBase<T>
         var structure = new Tensor<int>(permutation.Take(splitPoint).ToArray(), new[] { splitPoint });
         var estimation = new Tensor<int>(permutation.Skip(splitPoint).Take(size - splitPoint).ToArray(), new[] { size - splitPoint });
         return (structure, estimation);
+    }
+
+    /// <summary>Rows each tree subsamples: <c>sampleFraction</c> of <paramref name="n"/>, at least one.</summary>
+    private int TreeSampleSize(int n) => Math.Max(1, Math.Min(n, (int)(n * _sampleFraction)));
+
+    /// <summary>
+    /// Draws a tree's samples until every partition it estimates from holds both treatment groups. A partition
+    /// with one group has no contrast to estimate; with imbalanced treatment a random subsample can miss the rarer
+    /// group, so it is redrawn rather than silently estimated as zero.
+    /// </summary>
+    private (Tensor<int> Structure, Tensor<int> Estimation) DrawUsableTreeSamples(TreeData data, int n)
+    {
+        const int maxDraws = 100;
+        for (int draw = 0; draw < maxDraws; draw++)
+        {
+            var samples = DrawTreeSamples(n);
+            if (HasBothGroups(data, samples.Structure) && (!_honest || HasBothGroups(data, samples.Estimation)))
+                return samples;
+        }
+
+        throw new ArgumentException(
+            $"{maxDraws} subsamples in a row lacked a treated or a control row in a structure or estimation " +
+            "partition. The treatment is too imbalanced for this sampleFraction; use more rows or a larger one.");
+    }
+
+    /// <summary>True when <paramref name="indices"/> holds at least one treated and one control row.</summary>
+    private bool HasBothGroups(TreeData data, Tensor<int> indices)
+    {
+        if (indices.Length < 2) return false;
+        int treated = Engine.TensorCountNonzero(Engine.TensorIndexSelect(data.Treatment, indices, 0));
+        return treated > 0 && treated < indices.Length;
     }
 
     /// <summary>
@@ -420,7 +464,7 @@ public partial class CausalForest<T> : CausalModelBase<T>
         var tree = BuildTree(data, structureIndices, featuresPerSplit, 0);
 
         // Re-estimate treatment effects using estimation data
-        ReEstimateLeafEffects(tree, data, estimationIndices);
+        EstimateHonestly(tree, data, estimationIndices);
 
         return tree;
     }
@@ -596,7 +640,13 @@ public partial class CausalForest<T> : CausalModelBase<T>
         int flat = best[0, 0];
         int row = flat / k;
         int position = flat % k;
-        T threshold = NumOps.Divide(NumOps.Add(sorted[row, position], sorted[row, position + 1]), NumOps.FromDouble(2.0));
+        // a/2 + b/2 cannot overflow; if rounding lands the midpoint on the upper value, Partition would route both
+        // values left, so fall back to the lower one (scikit-learn's rule).
+        T lower = sorted[row, position], upper = sorted[row, position + 1];
+        T half = NumOps.FromDouble(0.5);
+        T threshold = NumOps.Add(NumOps.Multiply(lower, half), NumOps.Multiply(upper, half));
+        if (!NumOps.LessThan(threshold, upper))
+            threshold = lower;
         return (selectedFeatures[row], threshold, true);
     }
 
@@ -637,53 +687,30 @@ public partial class CausalForest<T> : CausalModelBase<T>
     }
 
     /// <summary>
-    /// Re-estimates leaf effects using estimation sample (for honest estimation).
+    /// Honest estimation: every node's effect comes from the estimation rows that reach it, never from the structure
+    /// rows that chose its split. A split whose estimation rows leave either child without both treatment groups is
+    /// pruned, and the node predicts its own estimate, as grf's honesty pruning does. Keeping the structure estimate
+    /// in such a leaf (or zeroing it) leaked the split-selecting outcomes into predictions.
     /// </summary>
-    private void ReEstimateLeafEffects(
-        CausalTree tree,
-        TreeData data,
-        Tensor<int> estimationIndices)
+    /// <param name="indices">Estimation rows reaching <paramref name="node"/>; they hold both groups.</param>
+    private void EstimateHonestly(CausalTree node, TreeData data, Tensor<int> indices)
     {
-        // For each leaf, find which estimation samples fall into it and re-estimate
-        var leafAssignments = new Dictionary<CausalTree, Tensor<int>>();
-        AssignToLeaves(tree, data.Features, estimationIndices, leafAssignments);
+        node.TreatmentEffect = EstimateLeafEffect(data, indices);
+        node.NumSamples = indices.Length;
+        if (node.IsLeaf) return;
 
-        foreach (var kvp in leafAssignments)
+        var (leftIndices, rightIndices) = Partition(data.Features, indices, node.FeatureIndex, node.Threshold);
+        if (node.Left is null || node.Right is null
+            || !HasBothGroups(data, leftIndices) || !HasBothGroups(data, rightIndices))
         {
-            if (kvp.Value.Length > 0)
-            {
-                kvp.Key.TreatmentEffect = EstimateLeafEffect(data, kvp.Value);
-                kvp.Key.NumSamples = kvp.Value.Length;
-            }
-        }
-    }
-
-    /// <summary>
-    /// Assigns samples to leaf nodes.
-    /// </summary>
-    private void AssignToLeaves(
-        CausalTree tree,
-        Tensor<T> features,
-        Tensor<int> indices,
-        Dictionary<CausalTree, Tensor<int>> assignments)
-    {
-        if (tree.IsLeaf)
-        {
-            assignments[tree] = indices;
+            node.IsLeaf = true;
+            node.Left = null;
+            node.Right = null;
             return;
         }
 
-        var (leftIndices, rightIndices) = Partition(features, indices, tree.FeatureIndex, tree.Threshold);
-
-        if (tree.Left is not null)
-        {
-            AssignToLeaves(tree.Left, features, leftIndices, assignments);
-        }
-
-        if (tree.Right is not null)
-        {
-            AssignToLeaves(tree.Right, features, rightIndices, assignments);
-        }
+        EstimateHonestly(node.Left, data, leftIndices);
+        EstimateHonestly(node.Right, data, rightIndices);
     }
 
     /// <summary>

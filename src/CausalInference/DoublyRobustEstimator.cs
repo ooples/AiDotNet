@@ -345,10 +345,18 @@ public partial class DoublyRobustEstimator<T> : CausalModelBase<T>
             return new Vector<T>(x.Rows);
         }
 
-        // Intercept plus as many slopes as both the coefficients and the features provide
-        int used = Math.Min(x.Columns, coefficients.Length - 1);
-        var features = Engine.TensorNarrow(Tensor<T>.FromMatrix(x), 1, 0, used).ToMatrix();
-        return PredictLinear(features, coefficients.GetSubVector(1, used), coefficients[0]);
+        // The coefficients are [intercept, one slope per covariate]. A [treatment | covariates] matrix (the layout
+        // Train and Predict use) drops its treatment column first; any other width is an error. Truncating to the
+        // shorter of the two shifted every covariate onto its neighbour's slope without a word.
+        var covariates = x.Columns == coefficients.Length - 1 ? x : ExtractCovariates(x);
+        if (covariates.Columns != coefficients.Length - 1)
+        {
+            throw new ArgumentException(
+                $"The outcome model has {coefficients.Length - 1} slope(s) but the input has {x.Columns} column(s).",
+                nameof(x));
+        }
+
+        return PredictLinear(covariates, coefficients.GetSubVector(1, covariates.Columns), coefficients[0]);
     }
 
     /// <summary>
@@ -632,18 +640,21 @@ public partial class DoublyRobustEstimator<T> : CausalModelBase<T>
     {
         if (parameters.Length == 0) return;
 
-        // Assume equal split for simplicity; a short vector leaves the trailing coefficients zero
-        int propLength = (parameters.Length + 2) / 3;
-        int outLength = propLength;
-        var padded = Engine.TensorConcatenate(new[]
+        // Three blocks of NumFeatures + 1 (intercept and slopes): propensity, treated outcome, control outcome.
+        // A vector that does not split into three equal blocks of at least an intercept is rejected rather than
+        // zero-padded, which silently zeroed the trailing control-outcome coefficients.
+        if (parameters.Length % 3 != 0)
         {
-            parameters.AsTensor(),
-            new Tensor<T>(new[] { propLength + 2 * outLength - parameters.Length }),
-        }, 0).ToVector();
+            throw new ArgumentException(
+                $"A doubly robust parameter vector holds three equal coefficient blocks; {parameters.Length} " +
+                "values do not split into three.", nameof(parameters));
+        }
 
-        _propensityCoefficients = padded.GetSubVector(0, propLength);
-        _outcomeCoefficients1 = padded.GetSubVector(propLength, outLength);
-        _outcomeCoefficients0 = padded.GetSubVector(propLength + outLength, outLength);
+        int propLength = parameters.Length / 3;
+        int outLength = propLength;
+        _propensityCoefficients = parameters.GetSubVector(0, propLength);
+        _outcomeCoefficients1 = parameters.GetSubVector(propLength, outLength);
+        _outcomeCoefficients0 = parameters.GetSubVector(propLength + outLength, outLength);
 
         NumFeatures = propLength - 1;
         IsFitted = true;

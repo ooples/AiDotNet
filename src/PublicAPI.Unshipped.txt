@@ -5,14 +5,17 @@ AiDotNet.CausalInference.CausalModelBase<T>.FitLogisticRegression(AiDotNet.Tenso
 *REMOVED*AiDotNet.CausalInference.SLearner<T>.MaxIterations.get -> int
 *REMOVED*AiDotNet.CausalInference.SLearner<T>.SLearner(int maxIterations = 100, double learningRate = 0.1, double lambda = 0.01) -> void
 AiDotNet.CausalInference.SLearner<T>.SLearner(double lambda = 0.01) -> void
+AiDotNet.CausalInference.SLearner<T>.SLearner(int maxIterations) -> void
 *REMOVED*AiDotNet.CausalInference.TLearner<T>.LearningRate.get -> double
 *REMOVED*AiDotNet.CausalInference.TLearner<T>.MaxIterations.get -> int
 *REMOVED*AiDotNet.CausalInference.TLearner<T>.TLearner(int maxIterations = 100, double learningRate = 0.1, double lambda = 0.01) -> void
 AiDotNet.CausalInference.TLearner<T>.TLearner(double lambda = 0.01) -> void
+AiDotNet.CausalInference.TLearner<T>.TLearner(int maxIterations) -> void
 *REMOVED*AiDotNet.CausalInference.XLearner<T>.LearningRate.get -> double
 *REMOVED*AiDotNet.CausalInference.XLearner<T>.MaxIterations.get -> int
 *REMOVED*AiDotNet.CausalInference.XLearner<T>.XLearner(int maxIterations = 100, double learningRate = 0.1, double lambda = 0.01) -> void
 AiDotNet.CausalInference.XLearner<T>.XLearner(double lambda = 0.01) -> void
+AiDotNet.CausalInference.XLearner<T>.XLearner(int maxIterations) -> void
 *REMOVED*AiDotNet.CausalInference.CausalForest<T>.CausalForest(int numTrees = 100, int maxDepth = 10, int minSamplesLeaf = 5, int? maxFeatures = null, bool honest = true, double honestFraction = 0.5, int? seed = null) -> void
 AiDotNet.CausalInference.CausalForest<T>.CausalForest(int numTrees = 100, int maxDepth = 10, int minSamplesLeaf = 5, int? maxFeatures = null, bool honest = true, double honestFraction = 0.5, int? seed = null, double sampleFraction = 0.5) -> void
 override AiDotNet.TextToSpeech.Vocoders.VocosOptions.HiddenDim.get -> int
