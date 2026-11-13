@@ -86,7 +86,7 @@ public class CIoULoss<T> : LossFunctionBase<T>
     private T MeanLoss(Tensor<T> predictedBoxes, Tensor<T> targetBoxes)
     {
         var perBox = Engine.ScalarMinusTensor(NumOps.One, BoxOverlap<T>.CIoU(predictedBoxes, targetBoxes));
-        return NumOps.Divide(Engine.TensorSum(perBox), NumOps.FromDouble(predictedBoxes.Shape[0]));
+        return CvTensorOps<T>.Mean(perBox);
     }
 
     /// <summary>

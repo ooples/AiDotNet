@@ -76,7 +76,7 @@ public class DETRSetLoss<T> : LossFunctionBase<T>
         ValidateVectorLengths(predicted, actual);
         var difference = Engine.TensorAbs(Engine.TensorSubtract(
             new Tensor<T>(new[] { predicted.Length }, predicted), new Tensor<T>(new[] { actual.Length }, actual)));
-        return NumOps.Divide(Engine.TensorSum(difference), NumOps.FromDouble(predicted.Length));
+        return CvTensorOps<T>.Mean(difference);
     }
 
     /// <summary>Evaluates structured predictions against -1-padded DETR targets.</summary>
