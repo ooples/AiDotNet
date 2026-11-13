@@ -405,7 +405,7 @@ public partial class RocketClassifier<T> : ClassifierBase<T>, ITimeSeriesClassif
                         engine.Conv1D(rowSeries, kernelWeights, 1, padding, dilation),
                         engine.TensorBroadcastTo(biases, new[] { batch, count, outputLength }));
                     var max = engine.ReduceMax(output, new[] { 2 }, true);
-                    var ppv = engine.ReduceMean(engine.TensorGreaterThan(output, NumOps.Zero), new[] { 2 }, true);
+                    var ppv = ProportionOfOnes(engine.TensorGreaterThan(output, NumOps.Zero), 2, outputLength, true);
                     batches.Add(engine.TensorConcatenate(new[] { max, ppv }, 2));
                 }
 
@@ -421,6 +421,18 @@ public partial class RocketClassifier<T> : ClassifierBase<T>, ITimeSeriesClassif
         // [rows, kernels, 2] -> [samples, channels * kernels * 2]: channel, then kernel, then (max, PPV).
         var stacked = engine.TensorConcatenate(features, 1);
         return engine.Reshape(stacked, new[] { numSamples, numChannels * numKernels * 2 }).ToMatrix();
+    }
+
+    /// <summary>
+    /// The share of ones along <paramref name="axis"/> (of size <paramref name="length"/>) of a 0/1 tensor: ROCKET's
+    /// and MiniRocket's proportion of positive values. The ones are counted in int: a running 0/1 sum in a narrow T
+    /// stops growing at 2048 (Half), which capped the PPV of every output longer than that.
+    /// </summary>
+    internal static Tensor<T> ProportionOfOnes(Tensor<T> indicators, int axis, int length, bool keepDims)
+    {
+        var engine = AiDotNetEngine.Current;
+        var counts = engine.ReduceSum(indicators.Cast<int>(), new[] { axis }, keepDims);
+        return engine.TensorDivideScalar(counts.Cast<T>(), MathHelper.GetNumericOperations<T>().FromDouble(length));
     }
 }
 

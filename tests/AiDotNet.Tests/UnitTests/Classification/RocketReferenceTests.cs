@@ -209,6 +209,121 @@ public class RocketReferenceTests
         Assert.Equal(expected.ToArray(), copy.PredictSequences(sequences).ToArray());
     }
 
+    [Fact]
+    [Trait("category", "unit")]
+    public void Rocket_half_ppv_counts_outputs_longer_than_half_can_count()
+    {
+        // A zero series makes every kernel's output its bias, so the PPV is exactly 1 for a positive bias and 0 for a
+        // negative one and the max is the bias. A 0/1 mean summed in Half stops at 2048, which reported about
+        // 2048 / 3000 for every positive-bias kernel.
+        const int samples = 2, length = 3000;
+        var sequences = new Tensor<Half>(new[] { samples, length });
+        var classifier = new RocketClassifier<Half>(new RocketOptions<Half>
+        {
+            NumKernels = 16, KernelLengths = new[] { 9 }, RandomSeed = 11
+        });
+        classifier.TrainOnSequences(sequences, new Vector<Half>(new[] { (Half)0, (Half)1 }));
+        var kernels = classifier.KernelSpecifications;
+        var features = classifier.TransformSequences(sequences);
+
+        Assert.Contains(kernels, k => k.Bias > 0);
+        for (int s = 0; s < samples; s++)
+        {
+            for (int k = 0; k < kernels.Count; k++)
+            {
+                Assert.Equal((double)(Half)kernels[k].Bias, (double)features[s, 2 * k]);
+                Assert.Equal(kernels[k].Bias > 0 ? 1.0 : 0.0, (double)features[s, (2 * k) + 1]);
+            }
+        }
+    }
+
+    [Fact]
+    [Trait("category", "unit")]
+    public void MiniRocket_half_features_match_the_reference_transform()
+    {
+        // sktime's MiniRocket transform over the fitted biases: kernel k at dilation index d convolves the zero-padded
+        // series ("same" length) and takes the PPV over the whole output when (d + k) is even, over the unpadded
+        // middle otherwise. The series are small integers, so every Half output is exact and the reference sees the
+        // same values; only the final count / length rounds in Half. Outputs here are 2600 long: a 0/1 mean summed
+        // in Half stopped counting at 2048.
+        const int samples = 2, length = 2600, numKernels = 84;
+        var sequences = new Tensor<Half>(new[] { samples, length });
+        for (int s = 0; s < samples; s++)
+        {
+            for (int t = 0; t < length; t++)
+            {
+                sequences[s, t] = (Half)((((7 * t) + (3 * s)) % 11) - 5);
+            }
+        }
+
+        var classifier = new MiniRocketClassifier<Half>(new MiniRocketOptions<Half>
+        {
+            Seed = 3, NumFeatures = numKernels * 2, MaxDilationsPerKernel = 2
+        });
+        classifier.TrainOnSequences(sequences, new Vector<Half>(new[] { (Half)0, (Half)1 }));
+        var features = classifier.Transform(sequences);
+        var plan = classifier.DilationPlan;
+        var biases = classifier.FittedBiases;
+
+        var patterns = new List<int[]>();
+        for (int a = 0; a < 7; a++)
+            for (int b = a + 1; b < 8; b++)
+                for (int c = b + 1; c < 9; c++)
+                {
+                    var weights = Enumerable.Repeat(-1, 9).ToArray();
+                    weights[a] = 2;
+                    weights[b] = 2;
+                    weights[c] = 2;
+                    patterns.Add(weights);
+                }
+
+        bool anyAboveHalfCount = false;
+        for (int s = 0; s < samples; s++)
+        {
+            int column = 0;
+            for (int d = 0; d < plan.Dilations.Length; d++)
+            {
+                int dilation = plan.Dilations[d];
+                int padding = (8 * dilation) / 2;
+                var output = new double[length];
+                for (int k = 0; k < numKernels; k++)
+                {
+                    for (int i = 0; i < length; i++)
+                    {
+                        double sum = 0;
+                        for (int j = 0; j < 9; j++)
+                        {
+                            int index = i + ((j - 4) * dilation);
+                            if (index >= 0 && index < length) sum += patterns[k][j] * (double)sequences[s, index];
+                        }
+
+                        output[i] = sum;
+                    }
+
+                    bool full = (d + k) % 2 == 0;
+                    int from = full ? 0 : padding;
+                    int to = full ? length : length - padding;
+                    for (int f = 0; f < plan.FeaturesPerDilation[d]; f++)
+                    {
+                        double bias = (double)biases[d][k, f];
+                        int above = 0;
+                        for (int i = from; i < to; i++)
+                        {
+                            if (output[i] > bias) above++;
+                        }
+
+                        anyAboveHalfCount |= above > 2048;
+                        Assert.Equal(above / (double)(to - from), (double)features[s, column++], 2e-3);
+                    }
+                }
+            }
+
+            Assert.Equal(features.Columns, column);
+        }
+
+        Assert.True(anyAboveHalfCount, "the fixture must have PPV counts above Half's 2048 to discriminate");
+    }
+
     // sktime's apply_kernel: zero padding, output = bias + sum(w_j * x[i + j * d]); (max, proportion > 0).
     private static (double Max, double Ppv) ApplyKernelReference(
         Tensor<double> sequences, int sample, int length, (double[] Weights, int Dilation, double Bias, int Padding) kernel)

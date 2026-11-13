@@ -446,7 +446,7 @@ public partial class UnobservedComponentsModel<T, TInput, TOutput> : TimeSeriesM
     /// 5% below average, while Saturdays are 10% above average. These patterns repeat
     /// every period (e.g., every week), creating the seasonal component.
     /// </remarks>
-    private Vector<T> InitializeSeasonal(Vector<T> y, Vector<T> trend)
+    internal Vector<T> InitializeSeasonal(Vector<T> y, Vector<T> trend)
     {
         var engine = AiDotNetEngine.Current;
         int n = y.Length;
@@ -456,11 +456,14 @@ public partial class UnobservedComponentsModel<T, TInput, TOutput> : TimeSeriesM
         var shape = new[] { cycles, period };
 
         // Seasonal index i: the mean detrended value over positions i, i + period, ...; laid out as [cycle, position]
-        // with the incomplete last cycle zero-padded and the counts taken from a padded mask of ones.
+        // with the incomplete last cycle zero-padded. Position i occurs in every cycle but the last unless the last
+        // reaches it; the counts are integers (a 0/1 sum in a narrow T stops at 2048 in Half).
         var detrended = engine.TensorSubtract(y.AsTensor(), trend.AsTensor());
         var pad = new Tensor<T>(new[] { padded - n });
         var sums = engine.ReduceSum(engine.Reshape(PadEnd(detrended, pad), shape), new[] { 0 }, false);
-        var counts = engine.ReduceSum(engine.Reshape(PadEnd(engine.TensorOnesLike(detrended), pad), shape), new[] { 0 }, false);
+        int lastCycle = n - ((cycles - 1) * period);
+        var counts = new Tensor<int>(
+            Enumerable.Range(0, period).Select(i => i < lastCycle ? cycles : cycles - 1).ToArray(), new[] { period }).Cast<T>();
         var seasonalIndices = engine.TensorDivide(sums, counts);
 
         // Normalize seasonal indices to sum to zero

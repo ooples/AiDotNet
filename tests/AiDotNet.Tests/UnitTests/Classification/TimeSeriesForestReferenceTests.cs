@@ -147,6 +147,60 @@ public class TimeSeriesForestReferenceTests
         Assert.Equal(labels.ToArray(), classifier.PredictSequences(sequences).ToArray());
     }
 
+    [Fact]
+    [Trait("category", "unit")]
+    public void Half_leaf_distribution_counts_more_rows_than_half_can_count()
+    {
+        // MinSamplesSplit above the row count makes every tree one leaf holding all 3000 rows, 2500 : 500. Counting the
+        // classes as a 0/1 sum in Half stopped at 2048, giving 2048 / 3000 = 0.683 for the larger class.
+        const int samples = 3000, length = 4;
+        var sequences = new Tensor<Half>(new[] { samples, length });
+        var labels = new Vector<Half>(samples);
+        for (int s = 0; s < samples; s++)
+        {
+            labels[s] = s < 2500 ? (Half)0 : (Half)1;
+            for (int t = 0; t < length; t++)
+                sequences[s, t] = (Half)((s % 7) + t);
+        }
+
+        var classifier = new TimeSeriesForestClassifier<Half>(new TimeSeriesForestOptions<Half>
+        {
+            NumTrees = 1, Seed = 3, MinSamplesSplit = samples + 1
+        });
+        classifier.TrainOnSequences(sequences, labels);
+
+        var probabilities = classifier.PredictSequenceProbabilities(sequences);
+        for (int s = 0; s < samples; s += 499)
+        {
+            Assert.Equal(2500.0 / 3000.0, (double)probabilities[s, 0], 1e-3);
+            Assert.Equal(500.0 / 3000.0, (double)probabilities[s, 1], 1e-3);
+        }
+    }
+
+    [Fact]
+    [Trait("category", "unit")]
+    public void Half_split_search_offers_no_threshold_between_equal_values()
+    {
+        // Feature 0 is constant, so it cannot split. The 1e-10 "distinct values" guard rounds to zero in Half, which let
+        // every gap between its equal values score as a split (gain up to 1 bit, at least the 0.311 feature 1 offers)
+        // and won on the earlier feature. Feature 1's only split, at 0.5, must be chosen.
+        var x = new Tensor<Half>(new[] { 4, 2 });
+        var oneHot = new Tensor<Half>(new[] { 4, 2 });
+        Half[] second = { (Half)0, (Half)1, (Half)1, (Half)1 };
+        for (int i = 0; i < 4; i++)
+        {
+            x[i, 0] = (Half)1;
+            x[i, 1] = second[i];
+            oneHot[i, i < 2 ? 0 : 1] = (Half)1;
+        }
+
+        var (feature, threshold, found) = TimeSeriesForestClassifier<Half>.FindBestSplit(x, oneHot);
+
+        Assert.True(found);
+        Assert.Equal(1, feature);
+        Assert.Equal(0.5, (double)threshold);
+    }
+
     private static Tensor<double> Series(int samples, int length)
     {
         var sequences = new Tensor<double>(new[] { samples, length });

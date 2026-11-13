@@ -79,6 +79,27 @@ public class UnobservedComponentsReferenceTests
 
     [Fact]
     [Trait("category", "unit")]
+    public void Half_seasonal_indices_divide_by_the_true_occurrence_counts()
+    {
+        // Period 2 over 5000 points: each position occurs 2500 times. Position 0 is 1 at its first 100 occurrences and
+        // 0 after, position 1 always 0, so the indices are 100 / 2500 = 0.04 and 0, centred to +0.02 / -0.02. Counting
+        // the occurrences as a 0/1 sum in Half stopped at 2048 and gave +-0.0244.
+        const int n = 5000;
+        var model = new UnobservedComponentsModel<Half, Matrix<Half>, Vector<Half>>(
+            new AiDotNet.Models.Options.UnobservedComponentsOptions<Half, Matrix<Half>, Vector<Half>> { SeasonalPeriod = 2 });
+        var y = new Vector<Half>(n);
+        for (int t = 0; t < 200; t += 2) y[t] = (Half)1;
+
+        var seasonal = model.InitializeSeasonal(y, new Vector<Half>(n));
+
+        for (int t = 0; t < n; t += 997)
+        {
+            Assert.Equal(t % 2 == 0 ? 0.02 : -0.02, (double)seasonal[t], 1e-3);
+        }
+    }
+
+    [Fact]
+    [Trait("category", "unit")]
     public void Band_pass_keeps_both_halves_of_the_spectrum_as_numpy()
     {
         // X = np.fft.fft(x); f = np.minimum(k, n - k) / n; np.real(np.fft.ifft(X * ((f >= 1/8) & (f <= 1/4)))).

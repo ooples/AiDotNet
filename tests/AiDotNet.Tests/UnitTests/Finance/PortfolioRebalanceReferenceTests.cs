@@ -66,4 +66,30 @@ public class PortfolioRebalanceReferenceTests
         Assert.Equal(500.0, positions[1], 6);
         Assert.Equal(0.0, Convert.ToDouble(info["cash"]), 6);
     }
+
+    [Fact]
+    [Trait("category", "unit")]
+    public void Portfolio_manager_environment_skips_an_asset_with_a_missing_price()
+    {
+        // Asset 1's price is missing (NaN). As the per-asset loop always did, that asset is simply not traded: asset 0
+        // still reaches its 50% target (500 units at 100) and the cash stays finite at 50,000. Rejecting the step
+        // would end the episode on any gap in the price data.
+        var prices = new List<double[]>
+        {
+            Enumerable.Repeat(100.0, 20).ToArray(),
+            Enumerable.Repeat(double.NaN, 20).ToArray()
+        };
+        var env = new PortfolioManagerEnvironment<double>(
+            prices, null, windowSize: 4, initialCapital: 100_000, reward: new TotalReturnReward(),
+            maxLeverage: 2.0, transactionCost: 0.0, slippageCoefficient: 0.0, annualBorrowCost: 0.0,
+            annualHoldingCost: 0.0, allowShortSelling: true);
+
+        env.Reset();
+        var (_, _, _, info) = env.Step(new Vector<double>(new[] { 0.5, 0.5 }));
+
+        var positions = (Vector<double>)info["positions"];
+        Assert.Equal(500.0, positions[0], 6);
+        Assert.Equal(0.0, positions[1]);
+        Assert.Equal(50_000.0, Convert.ToDouble(info["cash"]), 6);
+    }
 }

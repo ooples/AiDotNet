@@ -602,22 +602,28 @@ public partial class FinancialPPOAgent<T> : TradingAgentBase<T>, IGradientComput
     }
 
     // (A - mean) / std, the population standard deviation as numpy's default.
-    private Tensor<T> Standardize(Tensor<T> values)
+    internal static Tensor<T> Standardize(Tensor<T> values)
     {
         var engine = AiDotNetEngine.Current;
-        T mean = engine.TensorMean(values);
-        var centered = engine.TensorSubtractScalar(values, mean);
+        var numOps = MathHelper.GetNumericOperations<T>();
+        // (A - mean) / std does not change when A is scaled, so A is first divided by its largest magnitude: the sum
+        // behind the mean then stays within the step count, where the raw sum of a rollout's advantages overflows a
+        // narrow T (Half tops out at 65504, so 100 advantages near 1000 already made the mean infinite).
+        T magnitude = engine.TensorMaxValue(engine.TensorAbs(values));
+        var unit = numOps.GreaterThan(magnitude, numOps.Zero) ? engine.TensorDivideScalar(values, magnitude) : values;
+        T mean = engine.TensorMean(unit);
+        var centered = engine.TensorSubtractScalar(unit, mean);
         // Divided by the largest deviation before squaring: (c / m) / std(c / m) = c / std(c), and the largest scaled
         // square is 1, so the variance cannot underflow to zero in a narrow T (Half flushes squares below ~3e-8) for
         // advantages that are close together but not equal. Only m = 0 -- every advantage equal -- is rejected.
         T largest = engine.TensorMaxValue(engine.TensorAbs(centered));
-        if (!NumOps.GreaterThan(largest, NumOps.Zero))
+        if (!numOps.GreaterThan(largest, numOps.Zero))
             throw new InvalidOperationException(
-                $"Every advantage in this rollout of {values.Length} steps equals {mean}, so standardizing them divides by "
+                $"Every advantage in this rollout of {values.Length} steps equals {values.GetFlat(0)}, so standardizing them divides by "
                 + "zero. PPO normalizes advantages by their standard deviation over the rollout; a rollout with no "
                 + "variation in reward or value gives it nothing to learn from.");
         var scaled = engine.TensorDivideScalar(centered, largest);
-        T std = NumOps.Sqrt(engine.TensorMean(engine.TensorMultiply(scaled, scaled)));
+        T std = numOps.Sqrt(engine.TensorMean(engine.TensorMultiply(scaled, scaled)));
         return engine.TensorDivideScalar(scaled, std);
     }
 

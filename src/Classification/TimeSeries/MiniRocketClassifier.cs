@@ -265,16 +265,19 @@ public partial class MiniRocketClassifier<T> : ClassifierBase<T>, ITimeSeriesCla
         return patterns.ToArray();
     }
 
+    /// <summary>The fitted dilations and the features each carries per kernel.</summary>
+    internal (int[] Dilations, int[] FeaturesPerDilation) DilationPlan =>
+        (_dilations ?? Array.Empty<int>(), _featuresPerDilation ?? Array.Empty<int>());
+
+    /// <summary>The fitted [kernels, features per dilation] bias table of each dilation, in dilation order.</summary>
+    internal IReadOnlyList<Tensor<T>> FittedBiases => _biases ?? new List<Tensor<T>>();
+
     /// <summary>
     /// MiniRocket's <c>_fit_dilations</c>: the features per kernel are shared over up to
     /// <see cref="MiniRocketOptions{T}.MaxDilationsPerKernel"/> exponentially spaced dilations
     /// <c>floor(2^x)</c>, <c>x</c> evenly spaced in <c>[0, log2((L - 1) / 8)]</c>; repeated dilations merge and
     /// carry proportionally more features, and the remainder goes round them one at a time.
     /// </summary>
-    /// <summary>The fitted dilations and the features each carries per kernel.</summary>
-    internal (int[] Dilations, int[] FeaturesPerDilation) DilationPlan =>
-        (_dilations ?? Array.Empty<int>(), _featuresPerDilation ?? Array.Empty<int>());
-
     private void GenerateKernelsAndDilations(int inputLength)
     {
         int numKernels = KernelPatterns.Length;
@@ -354,7 +357,7 @@ public partial class MiniRocketClassifier<T> : ClassifierBase<T>, ITimeSeriesCla
     /// (PPV). Kernels alternate between the zero-padded output and the valid part (padding when
     /// <c>(dilation index + kernel index)</c> is even), so half the features see the series ends.
     /// </summary>
-    private Matrix<T> Transform(Tensor<T> sequences)
+    internal Matrix<T> Transform(Tensor<T> sequences)
     {
         if (_dilations is null || _featuresPerDilation is null || _biases is null)
         {
@@ -388,11 +391,12 @@ public partial class MiniRocketClassifier<T> : ClassifierBase<T>, ITimeSeriesCla
                 var above = engine.TensorGreaterThan(
                     engine.TensorBroadcastTo(engine.Reshape(block, new[] { rows, numKernels, outputLength, 1 }), cube),
                     engine.TensorBroadcastTo(engine.Reshape(_biases[d], new[] { 1, numKernels, 1, count }), cube));
-                var full = engine.ReduceMean(above, new[] { 2 }, false);
+                // Counted in int (RocketClassifier.ProportionOfOnes): a 0/1 mean in Half stops counting at 2048.
+                var full = RocketClassifier<T>.ProportionOfOnes(above, 2, outputLength, false);
                 var valid = validLength > 0
-                    ? engine.ReduceMean(
+                    ? RocketClassifier<T>.ProportionOfOnes(
                         engine.TensorSlice(above, new[] { 0, 0, padding, 0 }, new[] { rows, numKernels, validLength, count }),
-                        new[] { 2 }, false)
+                        2, validLength, false)
                     : full;
                 var usesPadding = engine.TensorBroadcastTo(PaddedKernelMask(d), new[] { rows, numKernels, count });
                 pieces.Add(engine.Reshape(engine.TensorWhere(usesPadding, full, valid), new[] { rows, numKernels * count }));

@@ -174,29 +174,25 @@ public class PortfolioManagerEnvironment<T> : TradingEnvironment<T>
 
         var engine = Engine;
         var tradablePrices = prices.GetSubVector(0, _tradableCount);
-        // A non-finite price cannot be masked out of the cash reductions below (a zero quantity times NaN is NaN), and
-        // once cash is NaN every later step of the episode is too, so it is rejected before any cash moves.
-        int nonFinite = _tradableCount - engine.TensorSum(engine.TensorIsFinite(tradablePrices.AsTensor()).Cast<int>());
-        if (nonFinite > 0)
-        {
-            throw new ArgumentException(
-                $"{nonFinite} of the {_tradableCount} tradable prices are not finite; prices must be finite to trade.", nameof(prices));
-        }
-
         var positions = _positions.GetSubVector(0, _tradableCount);
         var zeros = new Tensor<T>(new[] { _tradableCount });
 
-        // Reconcile each position toward its exact target weight: delta = w * V / p - position. An asset without a
-        // positive price, or whose target is not finite, is not traded.
-        var desiredUnits = engine.Divide(engine.Multiply(weights, portfolioValue), tradablePrices);
+        // An asset without a finite positive price (a gap in the data) is not traded this step, as before. Its price
+        // is replaced by zero in every cash reduction below, so a NaN price never reaches the cash (0 * NaN is NaN);
+        // the post-trade marking still uses the real prices.
+        var priceTensor = tradablePrices.AsTensor();
+        var tradable = engine.TensorWhere(
+            engine.TensorIsFinite(priceTensor), engine.TensorGreaterThan(priceTensor, NumOps.Zero), zeros);
+        var tradePrices = engine.TensorWhere(tradable, priceTensor, zeros).ToVector();
+
+        // Reconcile each position toward its exact target weight: delta = w * V / p - position. An untradable asset,
+        // or one whose target is not finite, is not traded.
+        var desiredUnits = engine.Divide(engine.Multiply(weights, portfolioValue), tradePrices);
         var finiteDelta = engine.TensorWhere(
             engine.TensorIsFinite(desiredUnits.AsTensor()),
             engine.Subtract(desiredUnits, positions).AsTensor(),
             zeros);
-        var delta = engine.TensorWhere(
-            engine.TensorGreaterThan(tradablePrices.AsTensor(), NumOps.Zero),
-            finiteDelta,
-            zeros).ToVector();
+        var delta = engine.TensorWhere(tradable, finiteDelta, zeros).ToVector();
 
         // Sells run first (they free cash). With short selling off a sell never takes a position below zero.
         var buys = engine.ReLU(delta);
@@ -206,7 +202,7 @@ public class PortfolioManagerEnvironment<T> : TradingEnvironment<T>
             sells = engine.Max(sells, engine.Negate(engine.ReLU(positions)));
         }
 
-        T soldNotional = NumOps.Negate(engine.DotProduct(sells, tradablePrices));
+        T soldNotional = NumOps.Negate(engine.DotProduct(sells, tradePrices));
         _cash = NumOps.Add(_cash, NumOps.Multiply(soldNotional, NumOps.FromDouble(1.0 - TransactionCost)));
         positions = engine.Add(positions, sells);
 
@@ -214,7 +210,7 @@ public class PortfolioManagerEnvironment<T> : TradingEnvironment<T>
         // more than the cash on hand every buy is scaled by the same fraction, so the fill does not depend on the
         // order the assets are listed in (the old per-asset loop filled low-index assets first and starved the rest).
         T unitCostFactor = NumOps.FromDouble(1.0 + TransactionCost + _slippageCoefficient);
-        T required = NumOps.Multiply(engine.DotProduct(buys, tradablePrices), unitCostFactor);
+        T required = NumOps.Multiply(engine.DotProduct(buys, tradePrices), unitCostFactor);
         // The financing deduction below also charges slippage on the sells, so the buys may spend only the cash left
         // after that charge; otherwise funding buys from sells could end the step with negative cash.
         T buyCash = NumOps.Subtract(_cash, NumOps.Multiply(soldNotional, NumOps.FromDouble(_slippageCoefficient)));
@@ -224,7 +220,7 @@ public class PortfolioManagerEnvironment<T> : TradingEnvironment<T>
             buys = engine.Multiply(buys, fraction);
         }
 
-        T boughtNotional = engine.DotProduct(buys, tradablePrices);
+        T boughtNotional = engine.DotProduct(buys, tradePrices);
         _cash = NumOps.Subtract(_cash, NumOps.Multiply(boughtNotional, NumOps.FromDouble(1.0 + TransactionCost)));
         positions = engine.Add(positions, buys);
         positions.AsSpan().CopyTo(_positions.AsWritableSpan());

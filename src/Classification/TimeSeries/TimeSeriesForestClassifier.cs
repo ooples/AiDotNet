@@ -368,23 +368,63 @@ public partial class TimeSeriesForestClassifier<T> : ClassifierBase<T>, ITimeSer
     {
         var engine = AiDotNetEngine.Current;
         int n = oneHot.Shape[0], classes = oneHot.Shape[1];
-        var counts = engine.ReduceSum(oneHot, new[] { 0 }, false);
 
-        // Key = count * (n + 1) + (n - first row of the class): the largest count, then the earliest class.
+        // Counted in int: a 0/1 sum in a narrow T stops at 2048 (Half), which gave every class of a larger leaf the
+        // same count.
+        var labels = oneHot.Cast<int>();
+        var counts = engine.ReduceSum(labels, new[] { 0 }, false);
+
+        // The largest count, then the class whose first row comes earliest: lateness n - row, maximized per class.
         var lateness = engine.TensorBroadcastTo(
-            engine.Reshape(engine.TensorAddScalar(engine.TensorNegate(engine.TensorArange<T>(0, n, 1)), NumOps.FromDouble(n)), new[] { n, 1 }),
-            new[] { n, classes });
-        var earliness = engine.ReduceMax(engine.TensorMultiply(oneHot, lateness), new[] { 0 }, false);
-        var key = engine.TensorAdd(engine.TensorMultiplyScalar(counts, NumOps.FromDouble(n + 1)), earliness);
-        int majority = FirstArgMaxPerRow(engine.Reshape(key, new[] { 1, classes })).GetFlat(0);
+            new Tensor<int>(Enumerable.Range(0, n).Select(row => n - row).ToArray(), new[] { n, 1 }), new[] { n, classes });
+        var countValues = counts.ToArray();
+        var earliness = engine.ReduceMax(engine.TensorMultiply(labels, lateness), new[] { 0 }, false).ToArray();
+        int majority = Enumerable.Range(0, classes)
+            .OrderByDescending(c => countValues[c]).ThenByDescending(c => earliness[c]).First();
 
+        int shift = ScaleShift(Math.Max(1, n));
         return new DecisionTreeNode
         {
             IsLeaf = true,
             FeatureIndex = majority,
-            ClassProbabilities = engine.TensorDivideScalar(counts, NumOps.FromDouble(Math.Max(1, n))).ToVector()
+            ClassProbabilities = engine.TensorDivideScalar(ScaledCounts(counts, shift), ScaledCount(Math.Max(1, n), shift)).ToVector()
         };
     }
+
+    /// <summary>Integers up to 2^11 are exact in every supported T, Half included.</summary>
+    private const int ExactIntegerBits = 11;
+
+    /// <summary>The power of two that brings counts up to <paramref name="largest"/> under 2^11.</summary>
+    private static int ScaleShift(int largest)
+    {
+        int bits = 0;
+        while (bits < 31 && (largest >> bits) != 0) bits++;
+        return Math.Max(0, bits - ExactIntegerBits);
+    }
+
+    /// <summary>
+    /// <paramref name="counts"/> / 2^<paramref name="shift"/> in T as quotient + remainder * 2^-shift: both parts are
+    /// small, so no count overflows a narrow T (Half tops out at 65504), and a ratio of two counts scaled alike is the
+    /// ratio of the counts.
+    /// </summary>
+    private static Tensor<T> ScaledCounts(Tensor<int> counts, int shift)
+    {
+        if (shift == 0)
+            return counts.Cast<T>();
+
+        var engine = AiDotNetEngine.Current;
+        int mask = (1 << shift) - 1;
+        var values = counts.ToArray();
+        var quotient = new Tensor<int>(values.Select(c => c >> shift).ToArray(), counts.Shape.ToArray());
+        var remainder = new Tensor<int>(values.Select(c => c & mask).ToArray(), counts.Shape.ToArray());
+        return engine.TensorAdd(
+            quotient.Cast<T>(),
+            engine.TensorMultiplyScalar(remainder.Cast<T>(), MathHelper.GetNumericOperations<T>().FromDouble(1.0 / (1 << shift))));
+    }
+
+    /// <summary>One count / 2^<paramref name="shift"/> in T.</summary>
+    private static T ScaledCount(int count, int shift)
+        => MathHelper.GetNumericOperations<T>().FromDouble(count / (double)(1 << shift));
 
     private bool IsHomogeneous(Tensor<T> oneHot)
     {
@@ -398,47 +438,62 @@ public partial class TimeSeriesForestClassifier<T> : ClassifierBase<T>, ITimeSer
     /// The split with the largest entropy gain over every feature and every midpoint between consecutive distinct
     /// sorted values (the first such split on ties, features in order then thresholds ascending).
     /// </summary>
-    private (int Feature, T Threshold, bool Found) FindBestSplit(Tensor<T> x, Tensor<T> oneHot)
+    internal static (int Feature, T Threshold, bool Found) FindBestSplit(Tensor<T> x, Tensor<T> oneHot)
     {
         var engine = AiDotNetEngine.Current;
+        var numOps = MathHelper.GetNumericOperations<T>();
         int n = x.Shape[0], featureCount = x.Shape[1], classes = oneHot.Shape[1];
         int candidates = n - 1;
-        if (candidates <= 0) return (-1, NumOps.Zero, false);
+        if (candidates <= 0) return (-1, numOps.Zero, false);
 
-        // Sort every feature column; carry the one-hot labels into each column's order: [features, n, classes].
+        // Sort every feature column; carry the class labels into each column's order: [features, n, classes]. The
+        // class counts are integers: a running 0/1 sum in a narrow T stops at 2048 (Half).
         var (sorted, order) = engine.TensorSort(x, 0, false);
         var sortedT = engine.TensorTranspose(sorted);
+        var labels = oneHot.Cast<int>();
         var labelsByFeature = engine.Reshape(
-            engine.TensorGather(oneHot, engine.Reshape(engine.TensorTranspose(order), new[] { featureCount * n }), 0),
+            engine.TensorGather(labels, engine.Reshape(engine.TensorTranspose(order), new[] { featureCount * n }), 0),
             new[] { featureCount, n, classes });
 
         // Left side of candidate i holds the first i + 1 sorted rows.
         var leftCounts = engine.TensorSlice(
             engine.TensorCumSum(labelsByFeature, 1), new[] { 0, 0, 0 }, new[] { featureCount, candidates, classes });
-        var totals = engine.ReduceSum(oneHot, new[] { 0 }, false);
+        var totals = engine.ReduceSum(labels, new[] { 0 }, false);
         var rightCounts = engine.TensorSubtract(
             engine.TensorBroadcastTo(engine.Reshape(totals, new[] { 1, 1, classes }), new[] { featureCount, candidates, classes }),
             leftCounts);
-        var leftSizes = engine.TensorAddScalar(engine.TensorArange<T>(0, candidates, 1), NumOps.One);
-        var rightSizes = engine.TensorSubtract(
-            Filled(new[] { candidates }, NumOps.FromDouble(n)), leftSizes);
+        var leftSizes = engine.TensorArange<int>(1, n, 1);
+        var rightSizes = new Tensor<int>(Enumerable.Range(1, candidates).Select(size => n - size).ToArray(), new[] { candidates });
 
-        T parentEntropy = Entropy(engine.Reshape(totals, new[] { 1, 1, classes }), new Tensor<T>(new[] { NumOps.FromDouble(n) }, new[] { 1 })).GetFlat(0);
+        // Counts enter T scaled alike by a power of two, so every one is representable and their ratios are kept.
+        int shift = ScaleShift(n);
+        T scaledTotal = ScaledCount(n, shift);
+        var scaledLeftSizes = ScaledCounts(leftSizes, shift);
+        var scaledRightSizes = ScaledCounts(rightSizes, shift);
+        T parentEntropy = Entropy(
+            ScaledCounts(engine.Reshape(totals, new[] { 1, 1, classes }), shift), new Tensor<T>(new[] { scaledTotal }, new[] { 1 })).GetFlat(0);
         var gain = engine.TensorSubtract(
             Filled(new[] { featureCount, candidates }, parentEntropy),
             engine.TensorAdd(
-                engine.TensorMultiplyScalar(engine.TensorMultiply(Entropy(leftCounts, leftSizes), Row(leftSizes, featureCount)), NumOps.FromDouble(1.0 / n)),
-                engine.TensorMultiplyScalar(engine.TensorMultiply(Entropy(rightCounts, rightSizes), Row(rightSizes, featureCount)), NumOps.FromDouble(1.0 / n))));
+                engine.TensorMultiply(
+                    Entropy(ScaledCounts(leftCounts, shift), scaledLeftSizes),
+                    Row(engine.TensorDivideScalar(scaledLeftSizes, scaledTotal), featureCount)),
+                engine.TensorMultiply(
+                    Entropy(ScaledCounts(rightCounts, shift), scaledRightSizes),
+                    Row(engine.TensorDivideScalar(scaledRightSizes, scaledTotal), featureCount))));
 
-        // A candidate exists only between two distinct values.
-        var gaps = engine.TensorSubtract(
+        // A candidate exists only between two distinct values: a gap of at least 1e-10 and, since 1e-10 rounds to zero
+        // in Half, above zero (equal neighbours were otherwise scored as a split no threshold can make).
+        var gaps = engine.TensorAbs(engine.TensorSubtract(
             engine.TensorSlice(sortedT, new[] { 0, 1 }, new[] { featureCount, candidates }),
-            engine.TensorSlice(sortedT, new[] { 0, 0 }, new[] { featureCount, candidates }));
-        var distinct = engine.TensorGreaterEqual(engine.TensorAbs(gaps), Filled(new[] { featureCount, candidates }, NumOps.FromDouble(1e-10)));
+            engine.TensorSlice(sortedT, new[] { 0, 0 }, new[] { featureCount, candidates })));
+        var distinct = engine.TensorMultiply(
+            engine.TensorGreaterEqual(gaps, Filled(new[] { featureCount, candidates }, numOps.FromDouble(1e-10))),
+            engine.TensorGreaterThan(gaps, numOps.Zero));
         var usable = engine.TensorWhere(distinct, gain, new Tensor<T>(new[] { featureCount, candidates }));
 
         T best = engine.TensorMaxValue(usable);
-        if (!NumOps.GreaterThan(best, NumOps.Zero)) return (-1, NumOps.Zero, false);
+        if (!numOps.GreaterThan(best, numOps.Zero)) return (-1, numOps.Zero, false);
 
         int flat = FirstArgMaxPerRow(engine.Reshape(usable, new[] { 1, featureCount * candidates })).GetFlat(0);
         int feature = flat / candidates, position = flat % candidates;
@@ -446,9 +501,9 @@ public partial class TimeSeriesForestClassifier<T> : ClassifierBase<T>, ITimeSer
         // scikit-learn's splitter: the midpoint as a/2 + b/2 (no overflow near the type's maximum), and the lower value
         // when rounding lands the midpoint on the upper one, which would send both sides of the gap left.
         T lower = pair.GetFlat(0), upper = pair.GetFlat(1);
-        T half = NumOps.FromDouble(0.5);
-        T threshold = NumOps.Add(NumOps.Multiply(lower, half), NumOps.Multiply(upper, half));
-        if (!NumOps.LessThan(threshold, upper)) threshold = lower;
+        T half = numOps.FromDouble(0.5);
+        T threshold = numOps.Add(numOps.Multiply(lower, half), numOps.Multiply(upper, half));
+        if (!numOps.LessThan(threshold, upper)) threshold = lower;
         return (feature, threshold, true);
     }
 
