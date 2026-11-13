@@ -100,6 +100,7 @@ public class AUCROCMetric<T> : IProbabilisticClassificationMetric<T>
     {
         int n = actuals.Length;
         var engine = AiDotNetEngine.Current;
+        // Per-class AUCs are averaged in double: a T running sum loses the fractional parts in Half once it passes 512.
         var classAucs = new List<T>(numClasses);
         using var noGrad = new NoGradScope<T>();
         var probMatrix = engine.Reshape(EvaluationTensorOps<T>.ToTensor(probs), new[] { n, numClasses });
@@ -122,7 +123,8 @@ public class AUCROCMetric<T> : IProbabilisticClassificationMetric<T>
         }
 
         return classAucs.Count > 0
-            ? engine.TensorMean(new Tensor<T>(classAucs.ToArray(), new[] { classAucs.Count }))
+            ? NumOps.FromDouble(engine.TensorMean(
+                new Tensor<T>(classAucs.ToArray(), new[] { classAucs.Count }).Cast<double>()))
             : NumOps.FromDouble(0.5);
     }
 
